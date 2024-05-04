@@ -17,6 +17,8 @@ use self::{
 
 /// Polynomial opening proofs
 pub mod opener;
+/// Building constraints for interactions and logUp permutation check
+pub mod permutation;
 /// Computation of DEEP quotient polynomial and commitment
 pub mod quotient;
 /// Trace commitment computation
@@ -57,6 +59,10 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
 
         // TODO: preprocessed (aka proving key)
 
+        // Challenger must observe public values
+        for val in public_values.iter() {
+            challenger.observe(val.clone());
+        }
         // Challenger must observe all trace commitments
         for part in partition.iter() {
             challenger.observe(part.trace_data.commit.clone());

@@ -40,6 +40,10 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
         proof: PartitionedProof<SC>,
         public_values: &[Val<SC>],
     ) -> Result<(), VerificationError> {
+        // Challenger must observe public values
+        for val in public_values.iter() {
+            challenger.observe(val.clone());
+        }
         // Check shapes of traces and quotients
         let valid_shape = partitioned_airs
             .iter()
