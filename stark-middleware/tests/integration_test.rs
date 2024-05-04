@@ -1,7 +1,7 @@
 use fib_air::trace::generate_trace_rows;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use p3_middleware::prover::committer::trace::TraceCommitter;
+use p3_middleware::prover::trace::TraceCommitter;
 use p3_middleware::prover::types::ProvenMultiMatrixAirTrace;
 use p3_middleware::prover::PartitionProver;
 use p3_middleware::verifier::PartitionVerifier;

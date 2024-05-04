@@ -70,6 +70,12 @@ impl<'a, SC: StarkGenericConfig> Clone for ProvenMultiMatrixAirTrace<'a, SC> {
     }
 }
 
+impl<'a, SC: StarkGenericConfig> ProvenMultiMatrixAirTrace<'a, SC> {
+    pub fn new(trace_data: &'a ProverTraceData<SC>, airs: Vec<&'a dyn ProverAir<SC>>) -> Self {
+        Self { trace_data, airs }
+    }
+}
+
 /// Prover data for multi-matrix quotient polynomial commitment.
 /// Quotient polynomials for multiple AIRs that share a multi-matrix trace commitment
 /// are committed together into a single commitment.

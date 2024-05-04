@@ -10,13 +10,17 @@ use crate::{
 };
 
 use self::{
-    committer::quotient::QuotientCommitter,
     opener::OpeningProver,
+    quotient::QuotientCommitter,
     types::{Commitments, PartitionedProof, ProvenDataBeforeOpening, ProvenMultiMatrixAirTrace},
 };
 
-pub mod committer;
+/// Polynomial opening proofs
 pub mod opener;
+/// Computation of DEEP quotient polynomial and commitment
+pub mod quotient;
+/// Trace commitment computation
+pub mod trace;
 pub mod types;
 
 /// Proves a partition of multi-matrix AIRs.
