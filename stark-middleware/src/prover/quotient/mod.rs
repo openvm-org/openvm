@@ -1,7 +1,6 @@
 use std::cmp::min;
 
 use itertools::Itertools;
-use p3_air::Air;
 use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::{AbstractExtensionField, AbstractField, PackedValue};
 use p3_matrix::{
@@ -15,78 +14,113 @@ use p3_util::log2_strict_usize;
 use tracing::instrument;
 
 use crate::{
-    air_builders::prover::ProverConstraintFolder,
-    config::PcsProverData,
-    prover::types::{ProvenMultiMatrixAirTrace, ProverQuotientData},
+    air_builders::prover::ProverConstraintFolder, config::PcsProverData,
+    prover::types::ProverQuotientData, rap::Rap,
 };
+
+use super::{trace::ProvenSingleRapTraceView, types::ProverRap};
 
 pub struct QuotientCommitter<'pcs, SC: StarkGenericConfig> {
     pcs: &'pcs SC::Pcs,
+    perm_challenges: Vec<PackedChallenge<SC>>,
     alpha: SC::Challenge,
 }
 
 impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
-    pub fn new(pcs: &'pcs SC::Pcs, alpha: SC::Challenge) -> Self {
-        Self { pcs, alpha }
+    pub fn new(
+        pcs: &'pcs SC::Pcs,
+        perm_challenges: &[SC::Challenge],
+        alpha: SC::Challenge,
+    ) -> Self {
+        let packed_perm_challenges = perm_challenges
+            .iter()
+            .map(|c| PackedChallenge::<SC>::from_f(*c))
+            .collect();
+        Self {
+            pcs,
+            perm_challenges: packed_perm_challenges,
+            alpha,
+        }
     }
 
     /// Constructs quotient domains and computes the evaluation of the quotient polynomials
-    /// on the quotient domains of each AIR.
+    /// on the quotient domains of each RAP.
     ///
     /// ## Assumptions
-    /// - `quotient_degrees` is in the same order as AIRs in `proven.airs`.
-    ///   It is the factor to **multiply** the trace degree by to get the degree
+    /// - `raps`, `traces`, `quotient_degrees` are all the same length and in the same order.
+    /// - `quotient_degrees` is the factor to **multiply** the trace degree by to get the degree
     ///   of the quotient polynomial. This should be determined from the constraint degree
-    ///   of the AIR.
+    ///   of the RAP.
     #[instrument(name = "compute quotient values", skip_all)]
-    pub fn compute_quotient_values<'a>(
+    pub fn quotient_values<'a>(
         &self,
-        proven: ProvenMultiMatrixAirTrace<'a, SC>,
-        quotient_degrees: Vec<usize>,
+        raps: Vec<&'a dyn ProverRap<SC>>,
+        traces: Vec<ProvenSingleRapTraceView<'a, SC>>,
+        quotient_degrees: &'a [usize],
         public_values: &'a [Val<SC>],
-    ) -> MultiMatrixAirQuotientData<SC>
+    ) -> QuotientData<SC>
     where
         Domain<SC>: Send + Sync,
         SC::Pcs: Sync,
         PcsProverData<SC>: Sync,
     {
-        let traces_with_domains = &proven.trace_data.traces_with_domains;
-        let prover_data = &proven.trace_data.data;
-
-        let inner = traces_with_domains
-            .par_iter()
-            .zip_eq(proven.airs.into_par_iter())
-            .zip_eq(quotient_degrees.into_par_iter())
-            .enumerate()
-            .map(|(i, (((trace_domain, _), air), quotient_degree))| {
-                let quotient_domain =
-                    trace_domain.create_disjoint_domain(trace_domain.size() * quotient_degree);
-                let main_trace_on_quotient_domain = self
-                    .pcs
-                    .get_evaluations_on_domain(prover_data, i, quotient_domain)
-                    .to_row_major_matrix();
-                let trace_domain = traces_with_domains[i].0;
-                let quotient_values = compute_single_air_quotient_values(
-                    air,
-                    trace_domain,
-                    quotient_domain,
-                    main_trace_on_quotient_domain,
-                    self.alpha,
-                    public_values,
-                );
-                SingleAirQuotientData {
-                    quotient_degree,
-                    quotient_domain,
-                    quotient_values,
-                }
+        let inner = raps
+            .into_par_iter()
+            .zip_eq(traces.into_par_iter())
+            .zip_eq(quotient_degrees.par_iter())
+            .map(|((rap, trace), &quotient_degree)| {
+                self.single_rap_quotient_values(rap, trace, quotient_degree, public_values)
             })
             .collect();
-        MultiMatrixAirQuotientData { inner }
+        QuotientData { inner }
+    }
+
+    pub fn single_rap_quotient_values<'a, R>(
+        &self,
+        rap: &'a R,
+        trace: ProvenSingleRapTraceView<'a, SC>,
+        quotient_degree: usize,
+        public_values: &'a [Val<SC>],
+    ) -> SingleQuotientData<SC>
+    where
+        R: for<'b> Rap<ProverConstraintFolder<'b, SC>> + ?Sized,
+    {
+        let trace_domain = trace.main.domain;
+        let quotient_domain =
+            trace_domain.create_disjoint_domain(trace_domain.size() * quotient_degree);
+        let main_lde_on_quotient_domain = self
+            .pcs
+            .get_evaluations_on_domain(trace.main.data, trace.main.index, quotient_domain)
+            .to_row_major_matrix();
+        // Empty matrix if no permutation
+        let perm_lde_on_quotient_domain = if let Some(view) = trace.permutation {
+            self.pcs
+                .get_evaluations_on_domain(view.data, view.index, quotient_domain)
+                .to_row_major_matrix()
+        } else {
+            RowMajorMatrix::new(vec![], 0)
+        };
+        let quotient_values = compute_single_rap_quotient_values(
+            rap,
+            trace_domain,
+            quotient_domain,
+            main_lde_on_quotient_domain,
+            perm_lde_on_quotient_domain,
+            &self.perm_challenges,
+            self.alpha,
+            public_values,
+            &trace.permutation_exposed_values,
+        );
+        SingleQuotientData {
+            quotient_degree,
+            quotient_domain,
+            quotient_values,
+        }
     }
 
     // TODO: not sure this is the right function signature
     #[instrument(name = "commit to quotient poly chunks", skip_all)]
-    pub fn commit(&self, data: MultiMatrixAirQuotientData<SC>) -> ProverQuotientData<SC> {
+    pub fn commit(&self, data: QuotientData<SC>) -> ProverQuotientData<SC> {
         let quotient_degrees = data.inner.iter().map(|d| d.quotient_degree).collect();
         let quotient_domains_and_chunks = data
             .split()
@@ -102,21 +136,20 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
     }
 }
 
-/// The quotient polynomials from multiple AIRs, kept in the same order as the
-/// proven trace data.
-pub struct MultiMatrixAirQuotientData<SC: StarkGenericConfig> {
-    inner: Vec<SingleAirQuotientData<SC>>,
+/// The quotient polynomials from multiple RAP matrices.
+pub struct QuotientData<SC: StarkGenericConfig> {
+    inner: Vec<SingleQuotientData<SC>>,
 }
 
-impl<SC: StarkGenericConfig> MultiMatrixAirQuotientData<SC> {
+impl<SC: StarkGenericConfig> QuotientData<SC> {
     /// Splits the quotient polynomials from multiple AIRs into chunks of size equal to the trace domain size.
     pub fn split(self) -> impl IntoIterator<Item = QuotientChunk<SC>> {
         self.inner.into_iter().flat_map(|data| data.split())
     }
 }
 
-/// The quotient polynomial from a single matrix AIR, evaluated on the quotient domain.
-pub struct SingleAirQuotientData<SC: StarkGenericConfig> {
+/// The quotient polynomial from a single matrix RAP, evaluated on the quotient domain.
+pub struct SingleQuotientData<SC: StarkGenericConfig> {
     /// The factor by which the trace degree was multiplied to get the
     /// quotient domain size.
     quotient_degree: usize,
@@ -126,7 +159,7 @@ pub struct SingleAirQuotientData<SC: StarkGenericConfig> {
     quotient_values: Vec<SC::Challenge>,
 }
 
-impl<SC: StarkGenericConfig> SingleAirQuotientData<SC> {
+impl<SC: StarkGenericConfig> SingleQuotientData<SC> {
     /// The vector of evaluations of the quotient polynomial on the quotient domain,
     /// first flattened from vector of extension field elements to matrix of base field elements,
     /// and then split into chunks of size equal to the trace domain size (quotient domain size
@@ -160,33 +193,37 @@ pub struct QuotientChunk<SC: StarkGenericConfig> {
 }
 
 // Starting reference: p3_uni_stark::prover::quotient_values
+// TODO: make this into a trait that is auto-implemented so we can dynamic dispatch the trait
 /// Computes evaluation of DEEP quotient polynomial on the quotient domain for a single AIR (single trace matrix).
-#[instrument(name = "compute single AIR quotient polynomial", skip_all)]
-fn compute_single_air_quotient_values<'a, SC, A, Mat>(
-    air: &'a A,
-    // cumulative_sum: SC::Challenge,
+#[instrument(name = "compute single RAP quotient polynomial", skip_all)]
+pub fn compute_single_rap_quotient_values<'a, SC, R, Mat>(
+    rap: &'a R,
     trace_domain: Domain<SC>,
     quotient_domain: Domain<SC>,
     // preprocessed_trace_on_quotient_domain: Mat, // TODO: add back in
-    main_trace_on_quotient_domain: Mat,
-    // perm_trace_on_quotient_domain: Mat, // TODO: add back in
-    // perm_challenges: &[PackedChallenge<SC>], // TODO: add back in
+    main_lde_on_quotient_domain: Mat,
+    perm_lde_on_quotient_domain: Mat,
+    perm_challenges: &[PackedChallenge<SC>],
     alpha: SC::Challenge,
     public_values: &'a [Val<SC>],
+    perm_exposed_values: &'a [SC::Challenge],
 ) -> Vec<SC::Challenge>
 where
-    A: for<'b> Air<ProverConstraintFolder<'b, SC>> + ?Sized,
+    // TODO: avoid ?Sized to prevent dynamic dispatching because `eval` is called many many times
+    R: for<'b> Rap<ProverConstraintFolder<'b, SC>> + ?Sized,
     SC: StarkGenericConfig,
     Mat: Matrix<Val<SC>> + Sync,
 {
     let quotient_size = quotient_domain.size();
     // let preprocessed_width = preprocessed_trace_on_quotient_domain.width();
-    let main_width = main_trace_on_quotient_domain.width();
-    // let perm_width = perm_trace_on_quotient_domain.width();
+    let main_width = main_lde_on_quotient_domain.width();
+    let perm_width = perm_lde_on_quotient_domain.width(); // Width with extension field elements flattened
     let mut sels = trace_domain.selectors_on_coset(quotient_domain);
 
     let qdb = log2_strict_usize(quotient_size) - log2_strict_usize(trace_domain.size());
     let next_step = 1 << qdb;
+
+    let ext_degree = SC::Challenge::D;
 
     // assert!(quotient_size >= PackedVal::<SC>::WIDTH);
     // We take PackedVal::<SC>::WIDTH worth of values at a time from a quotient_size slice, so we need to
@@ -229,44 +266,48 @@ where
             let local: Vec<_> = (0..main_width)
                 .map(|col| {
                     PackedVal::<SC>::from_fn(|offset| {
-                        main_trace_on_quotient_domain.get(wrap(i_start + offset), col)
+                        main_lde_on_quotient_domain.get(wrap(i_start + offset), col)
                     })
                 })
                 .collect();
             let next: Vec<_> = (0..main_width)
                 .map(|col| {
                     PackedVal::<SC>::from_fn(|offset| {
-                        main_trace_on_quotient_domain.get(wrap(i_start + next_step + offset), col)
+                        main_lde_on_quotient_domain.get(wrap(i_start + next_step + offset), col)
                     })
                 })
                 .collect();
 
-            // let perm_local: Vec<_> = (0..perm_width)
-            //     .step_by(ext_degree)
-            //     .map(|col| {
-            //         PackedChallenge::<SC>::from_base_fn(|i| {
-            //             PackedVal::<SC>::from_fn(|offset| {
-            //                 permutation_trace_on_quotient_domain
-            //                     .get(wrap(i_start + offset), col + i)
-            //             })
-            //         })
-            //     })
-            //     .collect();
+            let perm_local: Vec<_> = (0..perm_width)
+                .step_by(ext_degree)
+                .map(|col| {
+                    PackedChallenge::<SC>::from_base_fn(|i| {
+                        PackedVal::<SC>::from_fn(|offset| {
+                            perm_lde_on_quotient_domain.get(wrap(i_start + offset), col + i)
+                        })
+                    })
+                })
+                .collect();
 
-            // let perm_next: Vec<_> = (0..perm_width)
-            //     .step_by(ext_degree)
-            //     .map(|col| {
-            //         PackedChallenge::<SC>::from_base_fn(|i| {
-            //             PackedVal::<SC>::from_fn(|offset| {
-            //                 permutation_trace_on_quotient_domain
-            //                     .get(wrap(i_start + next_step + offset), col + i)
-            //             })
-            //         })
-            //     })
-            //     .collect();
+            let perm_next: Vec<_> = (0..perm_width)
+                .step_by(ext_degree)
+                .map(|col| {
+                    PackedChallenge::<SC>::from_base_fn(|i| {
+                        PackedVal::<SC>::from_fn(|offset| {
+                            perm_lde_on_quotient_domain
+                                .get(wrap(i_start + next_step + offset), col + i)
+                        })
+                    })
+                })
+                .collect();
 
             let accumulator = PackedChallenge::<SC>::zero();
             let mut folder = ProverConstraintFolder {
+                // TODO:
+                preprocessed: VerticalPair::new(
+                    RowMajorMatrixView::new_row(&[]),
+                    RowMajorMatrixView::new_row(&[]),
+                ),
                 // preprocessed: VerticalPair::new(
                 //     RowMajorMatrixView::new_row(&prep_local),
                 //     RowMajorMatrixView::new_row(&prep_next),
@@ -275,20 +316,20 @@ where
                     RowMajorMatrixView::new_row(&local),
                     RowMajorMatrixView::new_row(&next),
                 ),
-                // perm: VerticalPair::new(
-                //     RowMajorMatrixView::new_row(&perm_local),
-                //     RowMajorMatrixView::new_row(&perm_next),
-                // ),
-                // perm_challenges,
-                // cumulative_sum,
+                perm: VerticalPair::new(
+                    RowMajorMatrixView::new_row(&perm_local),
+                    RowMajorMatrixView::new_row(&perm_next),
+                ),
+                perm_challenges,
                 is_first_row,
                 is_last_row,
                 is_transition,
                 alpha,
                 accumulator,
                 public_values,
+                perm_exposed_values,
             };
-            air.eval(&mut folder);
+            rap.eval(&mut folder);
 
             // quotient(x) = constraints(x) / Z_H(x)
             let quotient = folder.accumulator * inv_zeroifier;

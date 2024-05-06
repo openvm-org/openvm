@@ -1,9 +1,9 @@
 use p3_commit::Pcs;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_uni_stark::{StarkGenericConfig, Val};
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::info_span;
 
-use crate::prover::types::ProverTraceData;
+use crate::{config::PcsProverData, prover::types::ProverTraceData};
 
 /// Prover that commits to a batch of trace matrices, possibly of different heights.
 pub struct TraceCommitter<'pcs, SC: StarkGenericConfig> {
@@ -36,5 +36,48 @@ impl<'pcs, SC: StarkGenericConfig> TraceCommitter<'pcs, SC> {
                 data,
             }
         })
+    }
+}
+
+/// The PCS commits to multiple trace matrices at once, so this struct stores
+/// references to get all data relevant to a single AIR trace.
+pub struct ProvenSingleTraceView<'a, SC: StarkGenericConfig> {
+    /// Trace domain
+    pub domain: Domain<SC>,
+    /// Prover data, includes LDE matrix of trace and Merkle tree.
+    /// The prover data can commit to multiple trace matrices, so
+    /// `index` is needed to identify this trace.
+    pub data: &'a PcsProverData<SC>,
+    /// The index of the trace in the prover data.
+    pub index: usize,
+}
+
+/// The domain of `main` and `permutation` must be the same.
+pub struct ProvenSingleRapTraceView<'a, SC: StarkGenericConfig> {
+    /// Main trace data
+    pub main: ProvenSingleTraceView<'a, SC>,
+    /// Permutation trace data
+    pub permutation: Option<ProvenSingleTraceView<'a, SC>>,
+    /// Exposed values of the permutation
+    pub permutation_exposed_values: Vec<SC::Challenge>,
+}
+
+impl<'a, SC: StarkGenericConfig> Clone for ProvenSingleTraceView<'a, SC> {
+    fn clone(&self) -> Self {
+        Self {
+            domain: self.domain,
+            data: self.data,
+            index: self.index,
+        }
+    }
+}
+
+impl<'a, SC: StarkGenericConfig> Clone for ProvenSingleRapTraceView<'a, SC> {
+    fn clone(&self) -> Self {
+        Self {
+            main: self.main.clone(),
+            permutation: self.permutation.clone(),
+            permutation_exposed_values: self.permutation_exposed_values.clone(),
+        }
     }
 }

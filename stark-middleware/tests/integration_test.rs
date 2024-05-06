@@ -1,10 +1,10 @@
+use afs_middleware::{
+    prover::{trace::TraceCommitter, types::ProvenMultiMatrixAirTrace, PartitionProver},
+    verifier::PartitionVerifier,
+};
 use fib_air::trace::generate_trace_rows;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use p3_middleware::prover::trace::TraceCommitter;
-use p3_middleware::prover::types::ProvenMultiMatrixAirTrace;
-use p3_middleware::prover::PartitionProver;
-use p3_middleware::verifier::PartitionVerifier;
 use p3_uni_stark::StarkGenericConfig;
 use tracing_forest::util::LevelFilter;
 use tracing_forest::ForestLayer;
@@ -58,7 +58,7 @@ fn test_single_fib_stark() {
     let mut challenger = config::poseidon2::Challenger::new(perm.clone());
     let verifier = PartitionVerifier::new(prover.config);
     verifier
-        .verify(&mut challenger, vec![vec![&FibonacciAir]], proof, &pis)
+        .verify(&mut challenger, vec![&FibonacciAir], proof, &pis)
         .expect("Verification failed");
 }
 

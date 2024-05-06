@@ -1,9 +1,8 @@
-use itertools::{izip, Itertools};
-use p3_air::BaseAir;
+use itertools::Itertools;
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::AbstractExtensionField;
-use p3_uni_stark::{StarkGenericConfig, Val};
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 pub mod constraints;
 mod error;
@@ -12,11 +11,9 @@ pub mod types;
 pub use error::*;
 use tracing::instrument;
 
-use crate::{
-    prover::types::PartitionedProof, verifier::constraints::verify_single_air_constraints,
-};
+use crate::prover::{opener::AdjacentOpenedValues, types::Proof};
 
-use self::types::VerifierAir;
+use self::{constraints::verify_single_rap_constraints, types::VerifierRap};
 
 /// Verifies a partitioned proof of multi-matrix AIRs.
 // TODO: Interactions
@@ -29,145 +26,163 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
         Self { config }
     }
 
-    // TODO: partitioned_airs records the constraints of a partition multi-matrix AIRs.
     // It would be better to pass in only symbolic constraints, which can be serialized.
+    /// Ordering of `raps` and `proof.rap_data` should match.
     /// Public values is a global list shared across all AIRs.
     #[instrument(name = "PartitionVerifier::verify", level = "debug", skip_all)]
     pub fn verify(
         &self,
         challenger: &mut SC::Challenger,
-        partitioned_airs: Vec<Vec<&dyn VerifierAir<SC>>>,
-        proof: PartitionedProof<SC>,
+        raps: Vec<&dyn VerifierRap<SC>>,
+        proof: Proof<SC>,
         public_values: &[Val<SC>],
     ) -> Result<(), VerificationError> {
         // Challenger must observe public values
-        for val in public_values.iter() {
-            challenger.observe(val.clone());
+        challenger.observe_slice(public_values);
+
+        // TODO: valid shape check from verifying key
+
+        // Observe main trace commitments
+        challenger.observe_slice(&proof.commitments.main_trace);
+        // Sample permutation challenges
+        let perm_challenges = [(); 2].map(|_| challenger.sample_ext_element::<SC::Challenge>());
+
+        // Observe cumulative sums
+        for opt_cumulative_sum in &proof.cumulative_sums {
+            if let Some(cumulative_sum) = opt_cumulative_sum {
+                challenger.observe_slice(cumulative_sum.as_base_slice());
+            }
         }
-        // Check shapes of traces and quotients
-        let valid_shape = partitioned_airs
-            .iter()
-            .zip_eq(proof.commitments.iter())
-            .zip_eq(proof.opening_proofs.iter())
-            .all(|((airs, commitments), opening)| {
-                // In a single part of partition:
-                opening
-                    .values
-                    .per_air
-                    .iter()
-                    .zip_eq(airs.iter())
-                    .zip_eq(commitments.quotient.quotient_degrees.iter())
-                    .all(|((opened_values, &air), &quotient_degree)| {
-                        let air_width = BaseAir::<Val<SC>>::width(air);
-                        opened_values.trace.local.len() == air_width
-                            && opened_values.trace.next.len() == air_width
-                            && opened_values.quotient_chunks.len() == quotient_degree
-                            && opened_values.quotient_chunks.iter().all(|qc| {
-                                qc.len() == <SC::Challenge as AbstractExtensionField<Val<SC>>>::D
-                            })
-                    })
-            });
-        if !valid_shape {
-            return Err(VerificationError::InvalidProofShape);
+        // Observe permutation trace commitments
+        if let Some(perm_trace_commit) = &proof.commitments.perm_trace {
+            challenger.observe(perm_trace_commit.clone());
         }
 
-        // Observe trace commitments
-        for commitment in proof.commitments.iter() {
-            challenger.observe(commitment.main_trace.commit.clone());
-        }
         // Draw `alpha` challenge
         let alpha: SC::Challenge = challenger.sample_ext_element();
         tracing::debug!("alpha: {alpha:?}");
 
         // Observe quotient commitments
-        for commitment in proof.commitments.iter() {
-            challenger.observe(commitment.quotient.commit.clone());
-        }
+        challenger.observe(proof.commitments.quotient.clone());
+
         // Draw `zeta` challenge
         let zeta: SC::Challenge = challenger.sample_ext_element();
         tracing::debug!("zeta: {zeta:?}");
 
         let pcs = self.config.pcs();
-        // TODO: for now we go part by part, but this will change
-        for (commitments, (openings, airs)) in proof
-            .commitments
+        let opened_values = proof.opening.values;
+        // Partition to flat index lookup
+        let mut index_lookup_main = opened_values
+            .main
             .iter()
-            .zip_eq(proof.opening_proofs.iter().zip_eq(partitioned_airs))
-        {
-            // Verify all opening proofs
-            let (main_domains, quotient_chunks_domains): (Vec<_>, Vec<_>) = commitments
-                .main_trace
-                .degrees
-                .iter()
-                .zip_eq(commitments.quotient.quotient_degrees.iter())
-                .map(|(&degree, &quotient_degree)| {
-                    let domain = pcs.natural_domain_for_degree(degree);
-                    let quotient_domain = domain.create_disjoint_domain(degree * quotient_degree);
-                    let qc_domains = quotient_domain.split_domains(quotient_degree);
-                    (domain, qc_domains)
-                })
-                .unzip();
-            let main_domains_and_openings = main_domains
-                .iter()
-                .zip(openings.values.per_air.iter())
-                .map(|(&domain, opened_values)| {
-                    (
-                        domain,
-                        vec![
-                            (zeta, opened_values.trace.local.clone()),
-                            (
-                                domain.next_point(zeta).unwrap(),
-                                opened_values.trace.next.clone(),
-                            ),
-                        ],
-                    )
-                })
-                .collect_vec();
-            let quotient_chunks_domains_and_openings = quotient_chunks_domains
-                .iter()
-                .flatten()
-                .zip_eq(
-                    openings
-                        .values
-                        .per_air
-                        .iter()
-                        .flat_map(|opened_values| &opened_values.quotient_chunks),
+            .map(|part| vec![0; part.len()])
+            .collect_vec();
+        let mut index_lookup_perm = vec![0; opened_values.perm.as_ref().unwrap_or(&vec![]).len()];
+        // Build domains
+        let (domains, quotient_chunks_domains): (Vec<_>, Vec<Vec<_>>) = proof
+            .rap_data
+            .iter()
+            .map(|data| {
+                let degree = data.degree;
+                let quotient_degree = data.quotient_degree;
+                let domain = pcs.natural_domain_for_degree(degree);
+                let quotient_domain = domain.create_disjoint_domain(degree * quotient_degree);
+                let qc_domains = quotient_domain.split_domains(quotient_degree);
+                let (i, j) = data.main_trace_ptr;
+                // TODO: out of bounds error
+                index_lookup_main[i][j] = data.index;
+                if let Some(i) = data.perm_trace_index {
+                    index_lookup_perm[i] = data.index;
+                }
+                (domain, qc_domains)
+            })
+            .unzip();
+        // Verify all opening proofs
+        let trace_domain_and_openings =
+            |domain: Domain<SC>,
+             zeta: SC::Challenge,
+             values: &AdjacentOpenedValues<SC::Challenge>| {
+                (
+                    domain,
+                    vec![
+                        (zeta, values.local.clone()),
+                        (domain.next_point(zeta).unwrap(), values.next.clone()),
+                    ],
                 )
-                .map(|(&domain, opened_values)| (domain, vec![(zeta, opened_values.clone())]))
+            };
+        let mut rounds = opened_values
+            .main
+            .iter()
+            .enumerate()
+            .map(|(i, values_per_mat)| {
+                let domains_and_openings = values_per_mat
+                    .iter()
+                    .enumerate()
+                    .map(|(j, values)| {
+                        let domain = domains[index_lookup_main[i][j]];
+                        trace_domain_and_openings(domain, zeta, values)
+                    })
+                    .collect_vec();
+                (
+                    proof.commitments.main_trace[i].clone(),
+                    domains_and_openings,
+                )
+            })
+            .collect_vec();
+        if let Some(values_per_mat) = &opened_values.perm {
+            let domains_and_openings = values_per_mat
+                .iter()
+                .enumerate()
+                .map(|(j, values)| {
+                    let domain = domains[index_lookup_perm[j]];
+                    trace_domain_and_openings(domain, zeta, values)
+                })
                 .collect_vec();
+            rounds.push((proof.commitments.perm_trace.unwrap(), domains_and_openings));
+        }
+        let quotient_domains_and_openings = opened_values
+            .quotient
+            .iter()
+            .enumerate()
+            .flat_map(|(i, chunk)| {
+                chunk
+                    .iter()
+                    .enumerate()
+                    .map(|(j, values)| {
+                        (quotient_chunks_domains[i][j], vec![(zeta, values.clone())])
+                    })
+                    .collect_vec()
+            })
+            .collect_vec();
+        rounds.push((proof.commitments.quotient, quotient_domains_and_openings));
 
-            pcs.verify(
-                vec![
-                    (
-                        commitments.main_trace.commit.clone(),
-                        main_domains_and_openings,
-                    ),
-                    (
-                        commitments.quotient.commit.clone(),
-                        quotient_chunks_domains_and_openings,
-                    ),
-                ],
-                &openings.proof,
-                challenger,
-            )
+        pcs.verify(rounds, &proof.opening.proof, challenger)
             .map_err(|e| VerificationError::InvalidOpeningArgument(format!("{:?}", e)))?;
 
-            for (qc_domains, opened_values, &main_domain, air) in izip!(
-                quotient_chunks_domains.iter(),
-                openings.values.per_air.iter(),
-                main_domains.iter(),
-                airs
-            ) {
-                verify_single_air_constraints::<SC, _>(
-                    air,
-                    opened_values,
-                    main_domain,
-                    qc_domains,
-                    zeta,
-                    alpha,
-                    public_values,
-                )?;
-            }
+        // Verify each RAP's constraints
+        for (rap, data) in raps.into_iter().zip_eq(proof.rap_data) {
+            let (main_commit_index, main_mat_index) = data.main_trace_ptr;
+            let main_values = &opened_values.main[main_commit_index][main_mat_index];
+            let main_domain = domains[data.index];
+            let perm_values = data
+                .perm_trace_index
+                .map(|i| &opened_values.perm.as_ref().unwrap()[i]);
+            let quotient_chunks = &opened_values.quotient[data.index];
+            let qc_domains = &quotient_chunks_domains[data.index];
+            let perm_exposed_values = proof.cumulative_sums[data.index].as_slice();
+            verify_single_rap_constraints(
+                rap,
+                main_values,
+                perm_values,
+                quotient_chunks,
+                main_domain,
+                qc_domains,
+                zeta,
+                alpha,
+                &perm_challenges,
+                public_values,
+                perm_exposed_values,
+            )?;
         }
 
         Ok(())

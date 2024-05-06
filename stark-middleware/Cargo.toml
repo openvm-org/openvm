@@ -1,5 +1,5 @@
 [package]
-name = "p3-middleware"
+name = "afs-middleware"
 version = "0.1.0"
 edition = "2021"
 

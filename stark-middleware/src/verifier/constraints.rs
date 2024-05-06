@@ -10,25 +10,29 @@ use p3_uni_stark::Val;
 use tracing::instrument;
 
 use crate::air_builders::verifier::VerifierConstraintFolder;
-use crate::prover::opener::SingleAirOpenedValues;
+use crate::prover::opener::AdjacentOpenedValues;
+use crate::rap::Rap;
 
 use super::error::VerificationError;
 
+#[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
-pub fn verify_single_air_constraints<SC, A>(
-    air: &A,
-    opened_values: &SingleAirOpenedValues<SC::Challenge>,
-    // cumulative_sum: SC::Challenge,
+pub fn verify_single_rap_constraints<SC, R>(
+    rap: &R,
+    main_values: &AdjacentOpenedValues<SC::Challenge>,
+    perm_values: Option<&AdjacentOpenedValues<SC::Challenge>>,
+    quotient_chunks: &Vec<Vec<SC::Challenge>>,
     main_domain: Domain<SC>,
     qc_domains: &[Domain<SC>],
     zeta: SC::Challenge,
     alpha: SC::Challenge,
-    // permutation_challenges: &[SC::Challenge],
+    perm_challenges: &[SC::Challenge],
     public_values: &[Val<SC>],
+    perm_exposed_values: &[SC::Challenge],
 ) -> Result<(), VerificationError>
 where
     SC: StarkGenericConfig,
-    A: for<'b> Air<VerifierConstraintFolder<'b, SC>> + ?Sized,
+    R: for<'b> Rap<VerifierConstraintFolder<'b, SC>> + ?Sized,
 {
     let zps = qc_domains
         .iter()
@@ -46,8 +50,7 @@ where
         })
         .collect_vec();
 
-    let quotient = opened_values
-        .quotient_chunks
+    let quotient = quotient_chunks
         .iter()
         .enumerate()
         .map(|(ch_i, ch)| {
@@ -73,20 +76,35 @@ where
     let sels = main_domain.selectors_at_point(zeta);
 
     let main = VerticalPair::new(
-        RowMajorMatrixView::new_row(&opened_values.trace.local),
-        RowMajorMatrixView::new_row(&opened_values.trace.next),
+        RowMajorMatrixView::new_row(&main_values.local),
+        RowMajorMatrixView::new_row(&main_values.next),
+    );
+    let (perm_local, perm_next) = perm_values
+        .as_ref()
+        .map(|values| (unflatten(&values.local), unflatten(&values.next)))
+        .unwrap_or((vec![], vec![]));
+    let perm = VerticalPair::new(
+        RowMajorMatrixView::new_row(&perm_local),
+        RowMajorMatrixView::new_row(&perm_next),
     );
 
     let mut folder: VerifierConstraintFolder<'_, SC> = VerifierConstraintFolder {
+        preprocessed: VerticalPair::new(
+            RowMajorMatrixView::new(&[], 0),
+            RowMajorMatrixView::new(&[], 0),
+        ),
         main,
-        public_values,
+        perm,
         is_first_row: sels.is_first_row,
         is_last_row: sels.is_last_row,
         is_transition: sels.is_transition,
         alpha,
         accumulator: SC::Challenge::zero(),
+        perm_challenges,
+        public_values,
+        perm_exposed_values,
     };
-    air.eval(&mut folder);
+    rap.eval(&mut folder);
 
     let folded_constraints = folder.accumulator;
     // Finally, check that
