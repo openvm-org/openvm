@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     air_builders::{symbolic::SymbolicAirBuilder, verifier::VerifierConstraintFolder},
+    config::Com,
     rap::Rap,
 };
 
@@ -37,4 +38,10 @@ pub trait VerifierRap<SC: StarkGenericConfig>:
 impl<SC: StarkGenericConfig, T> VerifierRap<SC> for T where
     T: for<'a> Rap<VerifierConstraintFolder<'a, SC>> + Air<SymbolicAirBuilder<Val<SC>>>
 {
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct VerifyingKey<SC: StarkGenericConfig> {
+    /// PCS commitments to preprocessed traces
+    pub commit: Option<Com<SC>>,
 }

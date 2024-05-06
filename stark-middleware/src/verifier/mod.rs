@@ -13,7 +13,10 @@ use tracing::instrument;
 
 use crate::prover::{opener::AdjacentOpenedValues, types::Proof};
 
-use self::{constraints::verify_single_rap_constraints, types::VerifierRap};
+use self::{
+    constraints::verify_single_rap_constraints,
+    types::{VerifierRap, VerifyingKey},
+};
 
 /// Verifies a partitioned proof of multi-matrix AIRs.
 // TODO: Interactions
@@ -33,14 +36,18 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
     pub fn verify(
         &self,
         challenger: &mut SC::Challenger,
+        vk: &VerifyingKey<SC>,
         raps: Vec<&dyn VerifierRap<SC>>,
         proof: Proof<SC>,
         public_values: &[Val<SC>],
     ) -> Result<(), VerificationError> {
+        // TODO: valid shape check from verifying key
+        if let Some(prep_commit) = &vk.commit {
+            challenger.observe(prep_commit.clone());
+        }
+
         // Challenger must observe public values
         challenger.observe_slice(public_values);
-
-        // TODO: valid shape check from verifying key
 
         // Observe main trace commitments
         challenger.observe_slice(&proof.commitments.main_trace);

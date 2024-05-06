@@ -129,3 +129,12 @@ impl<SC: StarkGenericConfig, T> ProverRap<SC> for T where
         + for<'a> Rap<ProverConstraintFolder<'a, SC>>
 {
 }
+
+/// Common proving key for multiple AIRs that share a multi-matrix trace commitment.
+#[derive(Serialize, Deserialize)]
+pub struct ProvingKey<SC: StarkGenericConfig> {
+    /// Preprocessed traces
+    pub traces: Vec<Option<RowMajorMatrix<Val<SC>>>>,
+    /// PCS commitment to preprocessed traces
+    pub commit: Option<Com<SC>>,
+}

@@ -34,7 +34,7 @@ where
             assert_eq!(
                 exposed_values.len(),
                 1,
-                "Shoulde have one exposed value for cumulative_sum"
+                "Should have one exposed value for cumulative_sum"
             );
             let cumulative_sum = exposed_values[0];
             eval_permutation_constraints(self, builder, cumulative_sum);

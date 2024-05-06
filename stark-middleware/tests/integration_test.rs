@@ -1,6 +1,10 @@
 use afs_middleware::{
-    prover::{trace::TraceCommitter, types::ProvenMultiMatrixAirTrace, PartitionProver},
-    verifier::PartitionVerifier,
+    prover::{
+        trace::TraceCommitter,
+        types::{ProvenMultiMatrixAirTrace, ProvingKey},
+        PartitionProver,
+    },
+    verifier::{types::VerifyingKey, PartitionVerifier},
 };
 use fib_air::trace::generate_trace_rows;
 use p3_baby_bear::BabyBear;
@@ -51,14 +55,19 @@ fn test_single_fib_stark() {
 
     let prover = PartitionProver::new(config);
     let mut challenger = config::poseidon2::Challenger::new(perm.clone());
-    let proof = prover.prove(&mut challenger, vec![proven], &pis);
+    let pk = ProvingKey {
+        traces: vec![None],
+        commit: None,
+    };
+    let proof = prover.prove(&mut challenger, &pk, vec![proven], &pis);
 
     // Verify the proof:
     // Start from clean challenger
     let mut challenger = config::poseidon2::Challenger::new(perm.clone());
     let verifier = PartitionVerifier::new(prover.config);
+    let vk = VerifyingKey { commit: None };
     verifier
-        .verify(&mut challenger, vec![&FibonacciAir], proof, &pis)
+        .verify(&mut challenger, &vk, vec![&FibonacciAir], proof, &pis)
         .expect("Verification failed");
 }
 

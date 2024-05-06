@@ -17,7 +17,7 @@ use crate::{
 use self::{
     opener::OpeningProver,
     quotient::QuotientCommitter,
-    types::{Commitments, Proof, ProvenMultiMatrixAirTrace},
+    types::{Commitments, Proof, ProvenMultiMatrixAirTrace, ProvingKey},
 };
 
 /// Polynomial opening proofs
@@ -46,7 +46,7 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
     pub fn prove<'a>(
         &self,
         challenger: &mut SC::Challenger,
-        // TODO: proving key,
+        pk: &'a ProvingKey<SC>,
         partition: Vec<ProvenMultiMatrixAirTrace<'a, SC>>,
         public_values: &'a [Val<SC>],
     ) -> Proof<SC>
@@ -61,9 +61,13 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         let pcs = self.config.pcs();
 
         // TODO: preprocessed (aka proving key)
+        if let Some(prep_commit) = &pk.commit {
+            challenger.observe(prep_commit.clone());
+        }
 
         // Challenger must observe public values
         challenger.observe_slice(public_values);
+
         // Challenger must observe all trace commitments
         let main_trace_commitments = partition
             .iter()
