@@ -60,13 +60,15 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         PcsProof<SC>: Send + Sync,
     {
         let pcs = self.config.pcs();
+        // TODO: Move somewhere else
+        let num_airs = partition[0].airs.len();
+
+        // Challenger must observe public values
+        challenger.observe_slice(public_values);
 
         if let Some(data) = &pk.trace_data {
             challenger.observe(data.commit.clone());
         }
-
-        // Challenger must observe public values
-        challenger.observe_slice(public_values);
 
         // Challenger must observe all trace commitments
         let main_trace_commitments = partition
@@ -78,31 +80,7 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         // TODO: this is not needed if there are no interactions
         // Generate 2 permutation challenges
         let perm_challenges = [(); 2].map(|_| challenger.sample_ext_element::<SC::Challenge>());
-        // TODO: refactor this
-        // Flatten partitions and generate permutation traces
-        let (rap_mains, perm_traces): (Vec<_>, Vec<_>) =
-            tracing::info_span!("generate permutation traces").in_scope(|| {
-                partition
-                    .par_iter()
-                    .flat_map(|part| {
-                        part.airs
-                            .par_iter()
-                            .zip_eq(part.trace_data.traces_with_domains.par_iter())
-                            .enumerate()
-                            .map(|(index, (air, (domain, trace)))| {
-                                let main = ProvenSingleTraceView {
-                                    domain: *domain,
-                                    data: &part.trace_data.data,
-                                    index,
-                                };
-                                let perm_trace = air
-                                    .generate_permutation_trace(&trace.as_view(), perm_challenges);
-                                ((air, main), perm_trace)
-                            })
-                    })
-                    .unzip()
-            });
-        let num_airs = rap_mains.len();
+
         let (preprocessed_traces_with_domains, preps): (Vec<_>, Vec<_>) = (0..num_airs)
             .map(|index| {
                 pk.indices
@@ -120,21 +98,57 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
                     .unzip()
             })
             .unzip();
+
+        // TODO: refactor this
+        // Flatten partitions and generate permutation traces
+        let (rap_mains, perm_traces): (Vec<_>, Vec<_>) =
+            tracing::info_span!("generate permutation traces").in_scope(|| {
+                partition
+                    .par_iter()
+                    .flat_map(|part| {
+                        part.airs
+                            .par_iter()
+                            .zip_eq(part.trace_data.traces_with_domains.par_iter())
+                            .zip_eq(preprocessed_traces_with_domains.par_iter())
+                            .enumerate()
+                            .map(
+                                |(
+                                    index,
+                                    ((air, main_trace_with_domain), preprocessed_trace_with_domain),
+                                )| {
+                                    let (domain, trace) = main_trace_with_domain;
+                                    let main = ProvenSingleTraceView {
+                                        domain: *domain,
+                                        data: &part.trace_data.data,
+                                        index,
+                                    };
+                                    let preprocessed_trace = preprocessed_trace_with_domain
+                                        .as_ref()
+                                        .map(|(_, trace)| trace.as_view());
+                                    let perm_trace = air.generate_permutation_trace(
+                                        &trace.as_view(),
+                                        &preprocessed_trace,
+                                        perm_challenges,
+                                    );
+                                    ((air, main), perm_trace)
+                                },
+                            )
+                    })
+                    .unzip()
+            });
         // Skip matrices with no permutation traces
         let mut perm_traces_with_domains = Vec::new();
         let cumulative_sums_and_indices: Vec<Option<_>> = perm_traces
             .into_iter()
-            .map(|trace| {
-                if trace.width() != 0 && trace.height() != 0 {
+            .map(|mt| {
+                mt.map(|trace| {
                     let height = trace.height();
                     let sum = *trace.row_slice(height - 1).last().unwrap();
                     let domain = pcs.natural_domain_for_degree(height);
                     let index = perm_traces_with_domains.len();
                     perm_traces_with_domains.push((domain, trace.flatten_to_base()));
-                    Some((sum, index))
-                } else {
-                    None
-                }
+                    (sum, index)
+                })
             })
             .collect();
         let cumulative_sums = cumulative_sums_and_indices
@@ -167,7 +181,7 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         // Prepare the proven RAP trace views
         let (raps, trace_views): (Vec<_>, Vec<_>) = rap_mains
             .into_iter()
-            .zip_eq(preps)
+            .zip(std::iter::repeat(preps).flatten())
             .zip_eq(cumulative_sums_and_indices)
             .map(|(((rap, main), preprocessed), cumulative_sum_and_index)| {
                 let (permutation, exposed_values) =
@@ -199,7 +213,7 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         let quotient_committer = QuotientCommitter::new(pcs, &perm_challenges, alpha);
         let quotient_degrees = raps
             .iter()
-            .zip(preprocessed_traces_with_domains.iter())
+            .zip(std::iter::repeat(preprocessed_traces_with_domains.iter()).flatten())
             .map(|(&rap, prep_trace_with_domain)| {
                 let prep_width = prep_trace_with_domain
                     .as_ref()

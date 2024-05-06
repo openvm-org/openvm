@@ -41,13 +41,13 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
         proof: Proof<SC>,
         public_values: &[Val<SC>],
     ) -> Result<(), VerificationError> {
+        // Challenger must observe public values
+        challenger.observe_slice(public_values);
+
         // TODO: valid shape check from verifying key
         if let Some(prep_commit) = &vk.commit {
             challenger.observe(prep_commit.clone());
         }
-
-        // Challenger must observe public values
-        challenger.observe_slice(public_values);
 
         // Observe main trace commitments
         challenger.observe_slice(&proof.commitments.main_trace);

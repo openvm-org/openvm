@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::{borrow::Borrow, ops::Deref};
 
 use p3_field::{ExtensionField, Field};
 use p3_matrix::{
@@ -22,8 +22,9 @@ use super::{
 pub fn generate_permutation_trace<F, C, EF>(
     chip: &C,
     main: &RowMajorMatrixView<F>,
+    preprocessed: &Option<RowMajorMatrixView<F>>,
     permutation_randomness: [EF; 2],
-) -> RowMajorMatrix<EF>
+) -> Option<RowMajorMatrix<EF>>
 where
     F: Field,
     C: Chip<F> + ?Sized,
@@ -31,14 +32,12 @@ where
 {
     let all_interactions = chip.all_interactions();
     if all_interactions.is_empty() {
-        return RowMajorMatrix::new(vec![], 0);
+        return None;
     }
+
     let [alpha, beta] = permutation_randomness;
     let alphas = generate_rlc_elements(chip, alpha);
     let betas = beta.powers();
-
-    // TODO:
-    // let preprocessed = chip.preprocessed_trace();
 
     // Compute the reciprocal columns
     //
@@ -58,17 +57,17 @@ where
         let mut row = vec![EF::zero(); perm_width];
         for (m, (interaction, _)) in all_interactions.iter().enumerate() {
             let alpha_m = alphas[interaction.argument_index];
-            // let preprocessed_row = preprocessed
-            //     .as_ref()
-            //     .map(|preprocessed| {
-            //         let row = preprocessed.row_slice(n);
-            //         let row: &[_] = (*row).borrow();
-            //         row.to_vec()
-            //     })
-            //     .unwrap_or_default();
+            let preprocessed_row = preprocessed
+                .as_ref()
+                .map(|preprocessed| {
+                    let row = preprocessed.row_slice(n);
+                    let row: &[_] = (*row).borrow();
+                    row.to_vec()
+                })
+                .unwrap_or_default();
             row[m] = reduce_row(
                 main_row.deref(),
-                &[], // preprocessed_row.as_slice(),
+                preprocessed_row.as_slice(),
                 &interaction.fields,
                 alpha_m,
                 betas.clone(),
@@ -89,16 +88,14 @@ where
         if n > 0 {
             phi[n] = phi[n - 1];
         }
-        // TODO:
-        let preprocessed_row = &[];
-        // let preprocessed_row = preprocessed
-        //     .as_ref()
-        //     .map(|preprocessed| {
-        //         let row = preprocessed.row_slice(n);
-        //         let row: &[_] = (*row).borrow();
-        //         row.to_vec()
-        //     })
-        //     .unwrap_or_default();
+        let preprocessed_row = preprocessed
+            .as_ref()
+            .map(|preprocessed| {
+                let row = preprocessed.row_slice(n);
+                let row: &[_] = (*row).borrow();
+                row.to_vec()
+            })
+            .unwrap_or_default();
         for (m, (interaction, interaction_type)) in all_interactions.iter().enumerate() {
             let mult = interaction
                 .count
@@ -118,5 +115,5 @@ where
         *row.last_mut().unwrap() = phi[n];
     }
 
-    perm
+    Some(perm)
 }
