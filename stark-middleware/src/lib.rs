@@ -8,5 +8,6 @@ pub mod interaction;
 /// Prover implementation for partitioned multi-matrix AIRs.
 pub mod prover;
 pub mod rap;
+pub mod setup;
 pub mod utils;
 pub mod verifier;

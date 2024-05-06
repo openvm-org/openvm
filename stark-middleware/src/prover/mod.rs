@@ -11,13 +11,14 @@ use crate::{
     air_builders::symbolic::get_log_quotient_degree,
     config::{Com, PcsProof, PcsProverData},
     prover::trace::{ProvenSingleRapTraceView, ProvenSingleTraceView},
+    setup::types::ProvingKey,
     verifier::types::VerifierSingleRapMetadata,
 };
 
 use self::{
     opener::OpeningProver,
     quotient::QuotientCommitter,
-    types::{Commitments, Proof, ProvenMultiMatrixAirTrace, ProvingKey},
+    types::{Commitments, Proof, ProvenMultiMatrixAirTrace},
 };
 
 /// Polynomial opening proofs
@@ -61,7 +62,7 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         let pcs = self.config.pcs();
 
         // TODO: preprocessed (aka proving key)
-        if let Some(prep_commit) = &pk.commit {
+        if let Some(prep_commit) = &pk.trace_data.commit {
             challenger.observe(prep_commit.clone());
         }
 

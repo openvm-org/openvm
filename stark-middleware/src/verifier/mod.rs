@@ -3,20 +3,20 @@ use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::{AbstractExtensionField, AbstractField};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use tracing::instrument;
 
 pub mod constraints;
 mod error;
 pub mod types;
 
 pub use error::*;
-use tracing::instrument;
 
-use crate::prover::{opener::AdjacentOpenedValues, types::Proof};
-
-use self::{
-    constraints::verify_single_rap_constraints,
-    types::{VerifierRap, VerifyingKey},
+use crate::{
+    prover::{opener::AdjacentOpenedValues, types::Proof},
+    setup::types::VerifyingKey,
 };
+
+use self::{constraints::verify_single_rap_constraints, types::VerifierRap};
 
 /// Verifies a partitioned proof of multi-matrix AIRs.
 // TODO: Interactions
