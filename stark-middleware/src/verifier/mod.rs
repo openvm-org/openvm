@@ -36,7 +36,7 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
     pub fn verify(
         &self,
         challenger: &mut SC::Challenger,
-        vk: &VerifyingKey<SC>,
+        vk: VerifyingKey<SC>,
         raps: Vec<&dyn VerifierRap<SC>>,
         proof: Proof<SC>,
         public_values: &[Val<SC>],
@@ -144,7 +144,7 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
                     trace_domain_and_openings(domain, zeta, values)
                 })
                 .collect_vec();
-            rounds.push((vk.commit.clone().unwrap(), domains_and_openings));
+            rounds.push((vk.commit.unwrap(), domains_and_openings));
         }
         if let Some(values_per_mat) = &opened_values.perm {
             let domains_and_openings = values_per_mat

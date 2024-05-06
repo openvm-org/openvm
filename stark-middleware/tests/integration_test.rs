@@ -68,7 +68,7 @@ fn test_single_fib_stark() {
     let mut challenger = config::poseidon2::Challenger::new(perm.clone());
     let verifier = PartitionVerifier::new(prover.config);
     verifier
-        .verify(&mut challenger, &vk, vec![&air], proof, &pis)
+        .verify(&mut challenger, vk, vec![&air], proof, &pis)
         .expect("Verification failed");
 }
 
@@ -122,7 +122,7 @@ fn test_single_fib_selector_stark() {
     let mut challenger = config::poseidon2::Challenger::new(perm.clone());
     let verifier = PartitionVerifier::new(prover.config);
     verifier
-        .verify(&mut challenger, &vk, vec![&air], proof, &pis)
+        .verify(&mut challenger, vk, vec![&air], proof, &pis)
         .expect("Verification failed");
 }
 

@@ -147,7 +147,7 @@ pub struct OpenedValues<Challenge> {
     pub quotient: Vec<Vec<Vec<Challenge>>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct AdjacentOpenedValues<Challenge> {
     pub local: Vec<Challenge>,
     pub next: Vec<Challenge>,
