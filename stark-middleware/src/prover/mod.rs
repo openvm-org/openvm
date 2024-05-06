@@ -203,7 +203,6 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         // TODO: this should be in proving key gen
         let main_trace_ptrs = partition.iter().enumerate().flat_map(|(i, part)| {
             (0..part.trace_data.traces_with_domains.len())
-                .into_iter()
                 .map(|j| (i, j))
                 .collect_vec()
         });

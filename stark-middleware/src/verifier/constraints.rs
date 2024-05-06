@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use p3_air::Air;
 use p3_commit::PolynomialSpace;
 use p3_field::{AbstractExtensionField, AbstractField, Field};
 use p3_matrix::dense::RowMajorMatrixView;
@@ -21,7 +20,7 @@ pub fn verify_single_rap_constraints<SC, R>(
     rap: &R,
     main_values: &AdjacentOpenedValues<SC::Challenge>,
     perm_values: Option<&AdjacentOpenedValues<SC::Challenge>>,
-    quotient_chunks: &Vec<Vec<SC::Challenge>>,
+    quotient_chunks: &[Vec<SC::Challenge>],
     main_domain: Domain<SC>,
     qc_domains: &[Domain<SC>],
     zeta: SC::Challenge,

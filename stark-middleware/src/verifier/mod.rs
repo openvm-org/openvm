@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::{Pcs, PolynomialSpace};
-use p3_field::AbstractExtensionField;
+use p3_field::{AbstractExtensionField, AbstractField};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 pub mod constraints;
@@ -48,10 +48,8 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
         let perm_challenges = [(); 2].map(|_| challenger.sample_ext_element::<SC::Challenge>());
 
         // Observe cumulative sums
-        for opt_cumulative_sum in &proof.cumulative_sums {
-            if let Some(cumulative_sum) = opt_cumulative_sum {
-                challenger.observe_slice(cumulative_sum.as_base_slice());
-            }
+        for cumulative_sum in proof.cumulative_sums.iter().flatten() {
+            challenger.observe_slice(cumulative_sum.as_base_slice());
         }
         // Observe permutation trace commitments
         if let Some(perm_trace_commit) = &proof.commitments.perm_trace {
@@ -183,6 +181,15 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
                 public_values,
                 perm_exposed_values,
             )?;
+        }
+
+        let sum: SC::Challenge = proof
+            .cumulative_sums
+            .into_iter()
+            .map(|c| c.unwrap_or(SC::Challenge::zero()))
+            .sum();
+        if sum != SC::Challenge::zero() {
+            return Err(VerificationError::NonZeroCumulativeSum);
         }
 
         Ok(())

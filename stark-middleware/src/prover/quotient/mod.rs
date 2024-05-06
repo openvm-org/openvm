@@ -195,6 +195,7 @@ pub struct QuotientChunk<SC: StarkGenericConfig> {
 // Starting reference: p3_uni_stark::prover::quotient_values
 // TODO: make this into a trait that is auto-implemented so we can dynamic dispatch the trait
 /// Computes evaluation of DEEP quotient polynomial on the quotient domain for a single AIR (single trace matrix).
+#[allow(clippy::too_many_arguments)]
 #[instrument(name = "compute single RAP quotient polynomial", skip_all)]
 pub fn compute_single_rap_quotient_values<'a, SC, R, Mat>(
     rap: &'a R,

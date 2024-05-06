@@ -1,21 +1,17 @@
-use p3_air::{Air, BaseAir};
-use p3_commit::PolynomialSpace;
+use p3_air::Air;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     air_builders::{prover::ProverConstraintFolder, symbolic::SymbolicAirBuilder},
-    config::{Com, PcsProof, PcsProverData},
-    interaction::{Chip, InteractiveAir},
+    config::{Com, PcsProverData},
+    interaction::InteractiveAir,
     rap::Rap,
     verifier::types::VerifierSingleRapMetadata,
 };
 
-use super::{
-    opener::{OpenedValues, OpeningProof},
-    trace::ProvenSingleTraceView,
-};
+use super::{opener::OpeningProof, trace::ProvenSingleTraceView};
 
 /// Prover data for multi-matrix trace commitments.
 /// The data is for the traces committed into a single commitment.
@@ -36,7 +32,7 @@ impl<SC: StarkGenericConfig> ProverTraceData<SC> {
     pub fn get(&self, index: usize) -> Option<ProvenSingleTraceView<SC>> {
         self.traces_with_domains
             .get(index)
-            .map(|(domain, trace)| ProvenSingleTraceView {
+            .map(|(domain, _)| ProvenSingleTraceView {
                 domain: *domain,
                 data: &self.data,
                 index,
