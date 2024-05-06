@@ -92,6 +92,14 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
             .pcs
             .get_evaluations_on_domain(trace.main.data, trace.main.index, quotient_domain)
             .to_row_major_matrix();
+        // Empty matrix if no preprocessed trace
+        let preprocessed_lde_on_quotient_domain = if let Some(view) = trace.preprocessed {
+            self.pcs
+                .get_evaluations_on_domain(view.data, view.index, quotient_domain)
+                .to_row_major_matrix()
+        } else {
+            RowMajorMatrix::new(vec![], 0)
+        };
         // Empty matrix if no permutation
         let perm_lde_on_quotient_domain = if let Some(view) = trace.permutation {
             self.pcs
@@ -105,6 +113,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
             trace_domain,
             quotient_domain,
             main_lde_on_quotient_domain,
+            preprocessed_lde_on_quotient_domain,
             perm_lde_on_quotient_domain,
             &self.perm_challenges,
             self.alpha,
@@ -201,8 +210,8 @@ pub fn compute_single_rap_quotient_values<'a, SC, R, Mat>(
     rap: &'a R,
     trace_domain: Domain<SC>,
     quotient_domain: Domain<SC>,
-    // preprocessed_trace_on_quotient_domain: Mat, // TODO: add back in
     main_lde_on_quotient_domain: Mat,
+    preprocessed_trace_on_quotient_domain: Mat,
     perm_lde_on_quotient_domain: Mat,
     perm_challenges: &[PackedChallenge<SC>],
     alpha: SC::Challenge,
@@ -216,8 +225,8 @@ where
     Mat: Matrix<Val<SC>> + Sync,
 {
     let quotient_size = quotient_domain.size();
-    // let preprocessed_width = preprocessed_trace_on_quotient_domain.width();
     let main_width = main_lde_on_quotient_domain.width();
+    let preprocessed_width = preprocessed_trace_on_quotient_domain.width();
     let perm_width = perm_lde_on_quotient_domain.width(); // Width with extension field elements flattened
     let mut sels = trace_domain.selectors_on_coset(quotient_domain);
 
@@ -248,21 +257,21 @@ where
             let is_transition = *PackedVal::<SC>::from_slice(&sels.is_transition[i_range.clone()]);
             let inv_zeroifier = *PackedVal::<SC>::from_slice(&sels.inv_zeroifier[i_range.clone()]);
 
-            // let prep_local: Vec<_> = (0..prep_width)
-            //     .map(|col| {
-            //         PackedVal::<SC>::from_fn(|offset| {
-            //             preprocessed_trace_on_quotient_domain.get(wrap(i_start + offset), col)
-            //         })
-            //     })
-            //     .collect();
-            // let prep_next: Vec<_> = (0..prep_width)
-            //     .map(|col| {
-            //         PackedVal::<SC>::from_fn(|offset| {
-            //             preprocessed_trace_on_quotient_domain
-            //                 .get(wrap(i_start + next_step + offset), col)
-            //         })
-            //     })
-            //     .collect();
+            let prep_local: Vec<_> = (0..preprocessed_width)
+                .map(|col| {
+                    PackedVal::<SC>::from_fn(|offset| {
+                        preprocessed_trace_on_quotient_domain.get(wrap(i_start + offset), col)
+                    })
+                })
+                .collect();
+            let prep_next: Vec<_> = (0..preprocessed_width)
+                .map(|col| {
+                    PackedVal::<SC>::from_fn(|offset| {
+                        preprocessed_trace_on_quotient_domain
+                            .get(wrap(i_start + next_step + offset), col)
+                    })
+                })
+                .collect();
 
             let local: Vec<_> = (0..main_width)
                 .map(|col| {
@@ -304,15 +313,10 @@ where
 
             let accumulator = PackedChallenge::<SC>::zero();
             let mut folder = ProverConstraintFolder {
-                // TODO:
                 preprocessed: VerticalPair::new(
-                    RowMajorMatrixView::new_row(&[]),
-                    RowMajorMatrixView::new_row(&[]),
+                    RowMajorMatrixView::new_row(&prep_local),
+                    RowMajorMatrixView::new_row(&prep_next),
                 ),
-                // preprocessed: VerticalPair::new(
-                //     RowMajorMatrixView::new_row(&prep_local),
-                //     RowMajorMatrixView::new_row(&prep_next),
-                // ),
                 main: VerticalPair::new(
                     RowMajorMatrixView::new_row(&local),
                     RowMajorMatrixView::new_row(&next),

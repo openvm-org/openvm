@@ -27,6 +27,9 @@ impl<'pcs, SC: StarkGenericConfig> OpeningProver<'pcs, SC> {
         // For each main trace commitment, the prover data and
         // the domain of each matrix, in order
         main: Vec<(&PcsProverData<SC>, Vec<Domain<SC>>)>,
+        // Preprocessed trace commitment prover data, and the domain
+        // of each matrix, in order, if any preprocessed trace exists
+        preprocessed: Option<(&PcsProverData<SC>, Vec<Domain<SC>>)>,
         // Permutation trace commitment prover data, and the domain
         // of each matrix, in order, if permutation trace exists
         perm: Option<(&PcsProverData<SC>, Vec<Domain<SC>>)>,
@@ -39,6 +42,7 @@ impl<'pcs, SC: StarkGenericConfig> OpeningProver<'pcs, SC> {
 
         let mut rounds = main
             .iter()
+            .chain(preprocessed.iter())
             .chain(perm.iter())
             .map(|(data, domains)| {
                 let points_per_mat = domains
@@ -65,6 +69,14 @@ impl<'pcs, SC: StarkGenericConfig> OpeningProver<'pcs, SC> {
                 .expect("Should have permutation trace opening");
             collect_trace_openings(ops)
         });
+
+        let preprocessed_openings = preprocessed.is_some().then(|| {
+            let ops = opening_values
+                .pop()
+                .expect("Should have preprocessed trace opening");
+            collect_trace_openings(ops)
+        });
+
         let main_openings = opening_values;
         assert_eq!(
             main_openings.len(),
@@ -95,6 +107,7 @@ impl<'pcs, SC: StarkGenericConfig> OpeningProver<'pcs, SC> {
             proof: opening_proof,
             values: OpenedValues {
                 main: main_openings,
+                preprocessed: preprocessed_openings,
                 perm: perm_openings,
                 quotient: quotient_openings,
             },
@@ -124,6 +137,9 @@ pub struct OpenedValues<Challenge> {
     /// For each main trace commitment, for each matrix in commitment, the
     /// opened values
     pub main: Vec<Vec<AdjacentOpenedValues<Challenge>>>,
+    /// For each matrix in preprocessed trace commitment, the opened values,
+    /// if permutation trace commitment exists
+    pub preprocessed: Option<Vec<AdjacentOpenedValues<Challenge>>>,
     /// For each matrix in permutation trace commitment, the opened values,
     /// if permutation trace commitment exists
     pub perm: Option<Vec<AdjacentOpenedValues<Challenge>>>,
@@ -131,7 +147,7 @@ pub struct OpenedValues<Challenge> {
     pub quotient: Vec<Vec<Vec<Challenge>>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct AdjacentOpenedValues<Challenge> {
     pub local: Vec<Challenge>,
     pub next: Vec<Challenge>,

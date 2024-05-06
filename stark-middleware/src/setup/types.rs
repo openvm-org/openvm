@@ -1,6 +1,6 @@
 use p3_commit::Pcs;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_uni_stark::{StarkGenericConfig, Val};
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 use tracing::info_span;
 
@@ -24,27 +24,33 @@ impl<'pcs, SC: StarkGenericConfig> PreprocessedTraceCommitter<'pcs, SC> {
         maybe_traces: Vec<Option<RowMajorMatrix<Val<SC>>>>,
     ) -> ProverPreprocessedTraceData<SC> {
         info_span!("commit to preprocessed trace data").in_scope(|| {
-            let traces: Vec<_> = maybe_traces.iter().filter_map(|t| t.clone()).collect();
-
-            if !traces.is_empty() {
-                let traces_with_domains: Vec<_> = traces
-                    .into_iter()
-                    .map(|matrix| {
+            let maybe_traces_with_domains: Vec<_> = maybe_traces
+                .into_iter()
+                .map(|mt| {
+                    mt.map(|matrix| {
                         let height = matrix.height();
                         // Recomputing the domain is lightweight
                         let domain = self.pcs.natural_domain_for_degree(height);
                         (domain, matrix)
                     })
-                    .collect();
+                })
+                .collect();
+
+            let traces_with_domains: Vec<_> = maybe_traces_with_domains
+                .iter()
+                .filter_map(|t| t.clone())
+                .collect();
+
+            if !traces_with_domains.is_empty() {
                 let (commit, data) = self.pcs.commit(traces_with_domains);
                 ProverPreprocessedTraceData {
-                    traces: maybe_traces,
+                    traces_with_domains: maybe_traces_with_domains,
                     commit: Some(commit),
                     data: Some(data),
                 }
             } else {
                 ProverPreprocessedTraceData {
-                    traces: maybe_traces,
+                    traces_with_domains: maybe_traces_with_domains,
                     commit: None,
                     data: None,
                 }
@@ -53,13 +59,14 @@ impl<'pcs, SC: StarkGenericConfig> PreprocessedTraceCommitter<'pcs, SC> {
     }
 }
 
+// TODO: Merge with ProverTraceData
 /// Prover data for multi-matrix trace commitments.
 /// The data is for the traces committed into a single commitment.
 ///
 /// This data can be cached and attached to other multi-matrix traces.
 pub struct ProverPreprocessedTraceData<SC: StarkGenericConfig> {
     /// Trace matrices, possibly of different heights.
-    pub traces: Vec<Option<RowMajorMatrix<Val<SC>>>>,
+    pub traces_with_domains: Vec<Option<(Domain<SC>, RowMajorMatrix<Val<SC>>)>>,
     /// Commitment to the trace matrices.
     pub commit: Option<Com<SC>>,
     /// Prover data, such as a Merkle tree, for the trace commitment.
@@ -77,4 +84,9 @@ pub struct ProvingKey<SC: StarkGenericConfig> {
 pub struct VerifyingKey<SC: StarkGenericConfig> {
     /// PCS to preprocessed traces
     pub commit: Option<Com<SC>>,
+    /// Preprocessed trace heights
+    pub heights: Vec<usize>,
+    /// Mapping
+    // TODO: Add doc
+    pub indices_lookup: Vec<usize>,
 }

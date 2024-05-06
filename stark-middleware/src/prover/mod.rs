@@ -103,6 +103,21 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
                     })
                     .unzip()
             });
+        let preps = pk
+            .trace_data
+            .traces_with_domains
+            .iter()
+            .enumerate()
+            .map(|(index, mt)| {
+                mt.as_ref().map(|(domain, _)| {
+                    let preprocessed = ProvenSingleTraceView {
+                        domain: *domain,
+                        data: pk.trace_data.data.as_ref().unwrap(),
+                        index,
+                    };
+                    preprocessed
+                })
+            });
         // Skip matrices with no permutation traces
         let mut perm_traces_with_domains = Vec::new();
         let cumulative_sums_and_indices: Vec<Option<_>> = perm_traces
@@ -150,8 +165,9 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         // Prepare the proven RAP trace views
         let (raps, trace_views): (Vec<_>, Vec<_>) = rap_mains
             .into_iter()
+            .zip_eq(preps)
             .zip_eq(cumulative_sums_and_indices)
-            .map(|((rap, main), cumulative_sum_and_index)| {
+            .map(|(((rap, main), preprocessed), cumulative_sum_and_index)| {
                 let (permutation, exposed_values) =
                     if let Some((cumulative_sum, index)) = cumulative_sum_and_index {
                         let (data, domains) = perm_data.as_ref().unwrap();
@@ -165,6 +181,7 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
                         (None, vec![])
                     };
                 let trace_view = ProvenSingleRapTraceView {
+                    preprocessed,
                     main,
                     permutation,
                     permutation_exposed_values: exposed_values,
@@ -180,9 +197,13 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         let quotient_committer = QuotientCommitter::new(pcs, &perm_challenges, alpha);
         let quotient_degrees = raps
             .iter()
-            .map(|&rap| {
-                // TODO: preprocessed width
-                let d = get_log_quotient_degree::<Val<SC>, _>(rap, 0, public_values.len());
+            .zip(pk.trace_data.traces_with_domains.iter())
+            .map(|(&rap, prep_trace_with_domain)| {
+                let prep_width = prep_trace_with_domain
+                    .as_ref()
+                    .map(|(_, t)| t.width())
+                    .unwrap_or(0);
+                let d = get_log_quotient_degree::<Val<SC>, _>(rap, prep_width, public_values.len());
                 1 << d
             })
             .collect_vec();
@@ -232,6 +253,18 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         tracing::debug!("zeta: {zeta:?}");
 
         let opener = OpeningProver::new(pcs, zeta);
+        let preprocessed_domains = pk
+            .trace_data
+            .traces_with_domains
+            .iter()
+            .map(|mt| mt.as_ref().map(|(domain, _)| *domain))
+            .collect_vec();
+        let preprocessed_data = pk
+            .trace_data
+            .data
+            .as_ref()
+            .map(|data| (data, preprocessed_domains.into_iter().flatten().collect()));
+
         let main_data = partition
             .iter()
             .map(|part| {
@@ -249,6 +282,7 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         let opening = opener.open(
             challenger,
             main_data,
+            preprocessed_data,
             perm_data,
             &quotient_data.data,
             &quotient_degrees,

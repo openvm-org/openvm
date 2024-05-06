@@ -134,6 +134,18 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
                 )
             })
             .collect_vec();
+        if let Some(values_per_mat) = &opened_values.preprocessed {
+            let domains_and_openings = values_per_mat
+                .iter()
+                .enumerate()
+                .map(|(j, values)| {
+                    // TODO: Store in vkey?
+                    let domain = pcs.natural_domain_for_degree(vk.heights[j]);
+                    trace_domain_and_openings(domain, zeta, values)
+                })
+                .collect_vec();
+            rounds.push((vk.commit.clone().unwrap(), domains_and_openings));
+        }
         if let Some(values_per_mat) = &opened_values.perm {
             let domains_and_openings = values_per_mat
                 .iter()
@@ -165,10 +177,15 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
             .map_err(|e| VerificationError::InvalidOpeningArgument(format!("{:?}", e)))?;
 
         // Verify each RAP's constraints
-        for (rap, data) in raps.into_iter().zip_eq(proof.rap_data) {
+        for (i, (rap, data)) in raps.into_iter().zip_eq(proof.rap_data).enumerate() {
             let (main_commit_index, main_mat_index) = data.main_trace_ptr;
             let main_values = &opened_values.main[main_commit_index][main_mat_index];
             let main_domain = domains[data.index];
+            let preprocessed_values = vk
+                .indices_lookup
+                .iter()
+                .position(|&op_i| op_i == i)
+                .map(|op_i| &opened_values.preprocessed.as_ref().unwrap()[op_i]);
             let perm_values = data
                 .perm_trace_index
                 .map(|i| &opened_values.perm.as_ref().unwrap()[i]);
@@ -178,6 +195,7 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
             verify_single_rap_constraints(
                 rap,
                 main_values,
+                preprocessed_values,
                 perm_values,
                 quotient_chunks,
                 main_domain,
