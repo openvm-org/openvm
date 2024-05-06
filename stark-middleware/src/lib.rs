@@ -2,6 +2,7 @@
 
 /// AIR builders for prover and verifier, including support for cross-matrix permutation arguments.
 pub mod air_builders;
+pub mod check_constraints;
 /// Helper types associated to generic STARK config.
 pub mod config;
 pub mod interaction;

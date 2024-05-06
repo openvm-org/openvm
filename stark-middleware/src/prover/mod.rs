@@ -9,6 +9,7 @@ use tracing::instrument;
 
 use crate::{
     air_builders::symbolic::get_log_quotient_degree,
+    check_constraints::check_constraints,
     config::{Com, PcsProof, PcsProverData},
     prover::trace::{ProvenSingleRapTraceView, ProvenSingleTraceView},
     setup::types::ProvingKey,
@@ -99,8 +100,12 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
             })
             .unzip();
 
+        // Flatten partitions
+        let main_traces_with_domains: Vec<_> = partition
+            .par_iter()
+            .flat_map(|part| part.trace_data.traces_with_domains.iter())
+            .collect();
         // TODO: refactor this
-        // Flatten partitions and generate permutation traces
         let (rap_mains, perm_traces): (Vec<_>, Vec<_>) =
             tracing::info_span!("generate permutation traces").in_scope(|| {
                 partition
@@ -136,19 +141,27 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
                     })
                     .unzip()
             });
-        // Skip matrices with no permutation traces
-        let mut perm_traces_with_domains = Vec::new();
-        let cumulative_sums_and_indices: Vec<Option<_>> = perm_traces
-            .into_iter()
+        // TODO: Copy from main_domains
+        let perm_traces_with_domains: Vec<_> = perm_traces
+            .iter()
             .map(|mt| {
-                mt.map(|trace| {
+                mt.as_ref().map(|trace| {
+                    let height = trace.height();
+                    let domain = pcs.natural_domain_for_degree(height);
+                    (domain, trace)
+                })
+            })
+            .collect();
+        let cumulative_sums_and_indices: Vec<Option<_>> = perm_traces
+            .iter()
+            .scan(0usize, |count, mt| {
+                Some(mt.as_ref().map(|trace| {
                     let height = trace.height();
                     let sum = *trace.row_slice(height - 1).last().unwrap();
-                    let domain = pcs.natural_domain_for_degree(height);
-                    let index = perm_traces_with_domains.len();
-                    perm_traces_with_domains.push((domain, trace.flatten_to_base()));
+                    let index = *count;
+                    *count += 1;
                     (sum, index)
-                })
+                }))
             })
             .collect();
         let cumulative_sums = cumulative_sums_and_indices
@@ -160,16 +173,52 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
             challenger.observe_slice(cumulative_sum.as_base_slice());
         }
 
+        #[cfg(debug_assertions)]
+        for (
+            (
+                (((rap, _), main_trace_with_domain), preprocessed_trace_with_domain),
+                perm_trace_with_domain,
+            ),
+            cumulative_sum,
+        ) in rap_mains
+            .iter()
+            .zip_eq(main_traces_with_domains)
+            .zip(std::iter::repeat(preprocessed_traces_with_domains.iter()).flatten())
+            .zip_eq(perm_traces_with_domains.clone())
+            .zip_eq(cumulative_sums.clone())
+        {
+            let (_, main_trace) = main_trace_with_domain;
+            let preprocessed_trace = preprocessed_trace_with_domain
+                .as_ref()
+                .map(|(_, trace)| trace.clone());
+            let perm_trace = perm_trace_with_domain.map(|(_, trace)| trace.clone());
+
+            check_constraints(
+                *rap.clone(),
+                main_trace,
+                &preprocessed_trace,
+                &perm_trace,
+                &perm_challenges,
+                cumulative_sum,
+                public_values,
+            );
+        }
+
         // Commit to permutation traces
         // One shared commit for all permutation traces
         let perm_domains = perm_traces_with_domains
             .iter()
+            .flatten()
             .map(|(domain, _)| *domain)
             .collect_vec();
         let perm_pcs_data = tracing::info_span!("commit to permutation traces").in_scope(|| {
+            let flattened_traces_with_domains: Vec<_> = perm_traces_with_domains
+                .into_iter()
+                .flat_map(|mt| mt.map(|(domain, trace)| (domain, trace.flatten_to_base())))
+                .collect();
             // Only commit if there are permutation traces
-            if !perm_traces_with_domains.is_empty() {
-                let (commit, data) = pcs.commit(perm_traces_with_domains);
+            if !flattened_traces_with_domains.is_empty() {
+                let (commit, data) = pcs.commit(flattened_traces_with_domains);
                 challenger.observe(commit.clone());
                 Some((commit, data))
             } else {

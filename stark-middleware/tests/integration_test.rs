@@ -129,23 +129,23 @@ fn test_single_fib_selector_stark() {
 fn get_fib_number(n: usize) -> u32 {
     let mut a = 0;
     let mut b = 1;
-    for _ in 0..n {
+    for _ in 0..n - 1 {
         let c = a + b;
         a = b;
         b = c;
     }
-    a
+    b
 }
 
 fn get_conditional_fib_number(sels: &[bool]) -> u32 {
     let mut a = 0;
     let mut b = 1;
-    for &s in sels.iter() {
+    for &s in sels[0..sels.len() - 1].iter() {
         if s {
             let c = a + b;
             a = b;
             b = c;
         }
     }
-    a
+    b
 }

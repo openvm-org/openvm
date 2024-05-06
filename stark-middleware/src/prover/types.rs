@@ -4,7 +4,9 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    air_builders::{prover::ProverConstraintFolder, symbolic::SymbolicAirBuilder},
+    air_builders::{
+        debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicAirBuilder,
+    },
     config::{Com, PcsProverData},
     interaction::InteractiveAir,
     rap::Rap,
@@ -50,7 +52,7 @@ impl<SC: StarkGenericConfig> ProverTraceData<SC> {
 /// We use dynamic dispatch here for the extra flexibility. The overhead is small
 /// **if we ensure dynamic dispatch only once per AIR** (not true right now).
 ///
-/// The ordering of `trace_data.traces` and `airs` must match.
+/// The ordering of `trace_data.traces_with_domains` and `airs` must match.
 pub struct ProvenMultiMatrixAirTrace<'a, SC: StarkGenericConfig> {
     /// Proven trace data.
     pub trace_data: &'a ProverTraceData<SC>,
@@ -120,6 +122,7 @@ pub trait ProverRap<SC: StarkGenericConfig>:
 Air<SymbolicAirBuilder<Val<SC>>> // for quotient degree calculation
 + for<'a> InteractiveAir<ProverConstraintFolder<'a, SC>> // for permutation trace generation
     + for<'a> Rap<ProverConstraintFolder<'a, SC>> // for quotient polynomial calculation
+    + for<'a> Rap<DebugConstraintBuilder<'a, SC>> // for debugging
 {
 }
 
@@ -127,5 +130,6 @@ impl<SC: StarkGenericConfig, T> ProverRap<SC> for T where
     T: Air<SymbolicAirBuilder<Val<SC>>>
         + for<'a> InteractiveAir<ProverConstraintFolder<'a, SC>>
         + for<'a> Rap<ProverConstraintFolder<'a, SC>>
+        + for<'a> Rap<DebugConstraintBuilder<'a, SC>>
 {
 }

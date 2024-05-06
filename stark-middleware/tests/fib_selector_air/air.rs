@@ -4,7 +4,7 @@ use super::columns::FibonacciSelectorCols;
 use crate::fib_air::columns::{FibonacciCols, NUM_FIBONACCI_COLS};
 use afs_middleware::interaction::Chip;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder};
-use p3_field::Field;
+use p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 pub struct FibonacciSelectorAir {
@@ -47,14 +47,27 @@ impl<AB: AirBuilderWithPublicValues + PairBuilder> Air<AB> for FibonacciSelector
         when_first_row.assert_eq(local.left, a);
         when_first_row.assert_eq(local.right, b);
 
-        let mut when_transition = builder.when_transition();
-        let mut when_selector = when_transition.when(prep_local.sel);
-
         // a' <- b
-        when_selector.assert_eq(local.right, next.left);
+        builder
+            .when_transition()
+            .when(prep_local.sel)
+            .assert_eq(local.right, next.left);
+        // a' <- a
+        builder
+            .when_transition()
+            .when_ne(prep_local.sel, AB::Expr::one())
+            .assert_eq(local.left, next.left);
 
         // b' <- a + b
-        when_selector.assert_eq(local.left + local.right, next.right);
+        builder
+            .when_transition()
+            .when(prep_local.sel)
+            .assert_eq(local.left + local.right, next.right);
+        // b' <- b
+        builder
+            .when_transition()
+            .when_ne(prep_local.sel, AB::Expr::one())
+            .assert_eq(local.right, next.right);
 
         builder.when_last_row().assert_eq(local.right, x);
     }
