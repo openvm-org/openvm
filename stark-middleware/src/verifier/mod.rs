@@ -182,7 +182,7 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
             let main_values = &opened_values.main[main_commit_index][main_mat_index];
             let main_domain = domains[data.index];
             let preprocessed_values = vk
-                .indices_lookup
+                .indices
                 .iter()
                 .position(|&op_i| op_i == i)
                 .map(|op_i| &opened_values.preprocessed.as_ref().unwrap()[op_i]);

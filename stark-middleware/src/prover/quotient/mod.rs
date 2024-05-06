@@ -112,8 +112,8 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
             rap,
             trace_domain,
             quotient_domain,
-            main_lde_on_quotient_domain,
             preprocessed_lde_on_quotient_domain,
+            main_lde_on_quotient_domain,
             perm_lde_on_quotient_domain,
             &self.perm_challenges,
             self.alpha,
@@ -210,8 +210,8 @@ pub fn compute_single_rap_quotient_values<'a, SC, R, Mat>(
     rap: &'a R,
     trace_domain: Domain<SC>,
     quotient_domain: Domain<SC>,
-    main_lde_on_quotient_domain: Mat,
     preprocessed_trace_on_quotient_domain: Mat,
+    main_lde_on_quotient_domain: Mat,
     perm_lde_on_quotient_domain: Mat,
     perm_challenges: &[PackedChallenge<SC>],
     alpha: SC::Challenge,
@@ -257,14 +257,14 @@ where
             let is_transition = *PackedVal::<SC>::from_slice(&sels.is_transition[i_range.clone()]);
             let inv_zeroifier = *PackedVal::<SC>::from_slice(&sels.inv_zeroifier[i_range.clone()]);
 
-            let prep_local: Vec<_> = (0..preprocessed_width)
+            let preprocessed_local: Vec<_> = (0..preprocessed_width)
                 .map(|col| {
                     PackedVal::<SC>::from_fn(|offset| {
                         preprocessed_trace_on_quotient_domain.get(wrap(i_start + offset), col)
                     })
                 })
                 .collect();
-            let prep_next: Vec<_> = (0..preprocessed_width)
+            let preprocessed_next: Vec<_> = (0..preprocessed_width)
                 .map(|col| {
                     PackedVal::<SC>::from_fn(|offset| {
                         preprocessed_trace_on_quotient_domain
@@ -314,8 +314,8 @@ where
             let accumulator = PackedChallenge::<SC>::zero();
             let mut folder = ProverConstraintFolder {
                 preprocessed: VerticalPair::new(
-                    RowMajorMatrixView::new_row(&prep_local),
-                    RowMajorMatrixView::new_row(&prep_next),
+                    RowMajorMatrixView::new_row(&preprocessed_local),
+                    RowMajorMatrixView::new_row(&preprocessed_next),
                 ),
                 main: VerticalPair::new(
                     RowMajorMatrixView::new_row(&local),

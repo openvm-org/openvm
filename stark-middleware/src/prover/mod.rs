@@ -62,8 +62,8 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         let pcs = self.config.pcs();
 
         // TODO: preprocessed (aka proving key)
-        if let Some(prep_commit) = &pk.trace_data.commit {
-            challenger.observe(prep_commit.clone());
+        if let Some(data) = &pk.trace_data {
+            challenger.observe(data.commit.clone());
         }
 
         // Challenger must observe public values
@@ -103,21 +103,24 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
                     })
                     .unzip()
             });
-        let preps = pk
-            .trace_data
-            .traces_with_domains
-            .iter()
-            .enumerate()
-            .map(|(index, mt)| {
-                mt.as_ref().map(|(domain, _)| {
-                    let preprocessed = ProvenSingleTraceView {
-                        domain: *domain,
-                        data: pk.trace_data.data.as_ref().unwrap(),
-                        index,
-                    };
-                    preprocessed
-                })
-            });
+        let num_airs = rap_mains.len();
+        let (preprocessed_traces_with_domains, preps): (Vec<_>, Vec<_>) = (0..num_airs)
+            .map(|index| {
+                pk.indices
+                    .iter()
+                    .position(|&j| j == index)
+                    .map(|j| {
+                        let trace_data = pk.trace_data.as_ref().unwrap();
+                        let preprocessed = ProvenSingleTraceView {
+                            domain: trace_data.traces_with_domains[j].0,
+                            data: &trace_data.data,
+                            index,
+                        };
+                        (trace_data.traces_with_domains[j].clone(), preprocessed)
+                    })
+                    .unzip()
+            })
+            .unzip();
         // Skip matrices with no permutation traces
         let mut perm_traces_with_domains = Vec::new();
         let cumulative_sums_and_indices: Vec<Option<_>> = perm_traces
@@ -197,7 +200,7 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         let quotient_committer = QuotientCommitter::new(pcs, &perm_challenges, alpha);
         let quotient_degrees = raps
             .iter()
-            .zip(pk.trace_data.traces_with_domains.iter())
+            .zip(preprocessed_traces_with_domains.iter())
             .map(|(&rap, prep_trace_with_domain)| {
                 let prep_width = prep_trace_with_domain
                     .as_ref()
@@ -253,17 +256,16 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         tracing::debug!("zeta: {zeta:?}");
 
         let opener = OpeningProver::new(pcs, zeta);
-        let preprocessed_domains = pk
-            .trace_data
-            .traces_with_domains
+        let preprocessed_domains = preprocessed_traces_with_domains
             .iter()
             .map(|mt| mt.as_ref().map(|(domain, _)| *domain))
             .collect_vec();
-        let preprocessed_data = pk
-            .trace_data
-            .data
-            .as_ref()
-            .map(|data| (data, preprocessed_domains.into_iter().flatten().collect()));
+        let preprocessed_data = pk.trace_data.as_ref().map(|trace_data| {
+            (
+                &trace_data.data,
+                preprocessed_domains.into_iter().flatten().collect(),
+            )
+        });
 
         let main_data = partition
             .iter()

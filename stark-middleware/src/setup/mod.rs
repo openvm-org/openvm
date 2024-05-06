@@ -4,7 +4,9 @@ use tracing::instrument;
 
 pub mod types;
 
-use self::types::{PreprocessedTraceCommitter, ProvingKey, VerifyingKey};
+use crate::prover::{trace::TraceCommitter, types::ProverTraceData};
+
+use self::types::{ProvingKey, VerifyingKey};
 
 /// Calculates the Proving and Verifying keys for a partition of multi-matrix AIRs.
 pub struct PartitionSetup<'a, SC: StarkGenericConfig> {
@@ -23,25 +25,29 @@ impl<'a, SC: StarkGenericConfig> PartitionSetup<'a, SC> {
     ) -> (ProvingKey<SC>, VerifyingKey<SC>) {
         let pcs = self.config.pcs();
 
-        let heights: Vec<_> = maybe_traces
-            .iter()
-            .flat_map(|mt| mt.as_ref().map(|t| t.height()))
-            .collect();
-        let indices_lookup = maybe_traces
-            .iter()
+        let (indices, traces): (Vec<_>, Vec<_>) = maybe_traces
+            .into_iter()
             .enumerate()
-            .flat_map(|(i, mt)| mt.as_ref().map(|_| i))
-            .collect();
+            .flat_map(|(i, mt)| mt.map(|t| (i, t)))
+            .unzip();
+        let heights: Vec<_> = traces.iter().map(|t| t.height()).collect();
 
-        let trace_committer = PreprocessedTraceCommitter::new(pcs);
-        let proven_trace = trace_committer.commit(maybe_traces);
+        let (proven_trace, commit) = if !traces.is_empty() {
+            let trace_committer = TraceCommitter::new(pcs);
+            let proven_trace: ProverTraceData<SC> = trace_committer.commit(traces);
+            let commit = proven_trace.commit.clone();
+            (Some(proven_trace), Some(commit))
+        } else {
+            (None, None)
+        };
         let vk = VerifyingKey {
-            commit: proven_trace.commit.clone(),
+            commit,
             heights,
-            indices_lookup,
+            indices: indices.clone(),
         };
         let pk = ProvingKey {
             trace_data: proven_trace,
+            indices,
         };
 
         (pk, vk)

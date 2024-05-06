@@ -138,7 +138,7 @@ pub struct OpenedValues<Challenge> {
     /// opened values
     pub main: Vec<Vec<AdjacentOpenedValues<Challenge>>>,
     /// For each matrix in preprocessed trace commitment, the opened values,
-    /// if permutation trace commitment exists
+    /// if any preprocessed trace commitment exists
     pub preprocessed: Option<Vec<AdjacentOpenedValues<Challenge>>>,
     /// For each matrix in permutation trace commitment, the opened values,
     /// if permutation trace commitment exists
