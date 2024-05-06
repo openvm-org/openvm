@@ -61,7 +61,6 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
     {
         let pcs = self.config.pcs();
 
-        // TODO: preprocessed (aka proving key)
         if let Some(data) = &pk.trace_data {
             challenger.observe(data.commit.clone());
         }

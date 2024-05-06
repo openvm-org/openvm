@@ -9,8 +9,8 @@ use crate::rap::PermutationAirBuilderWithExposedValues;
 use super::ViewPair;
 
 pub struct VerifierConstraintFolder<'a, SC: StarkGenericConfig> {
-    pub preprocessed: ViewPair<'a, SC::Challenge>,
     pub main: ViewPair<'a, SC::Challenge>,
+    pub preprocessed: ViewPair<'a, SC::Challenge>,
     pub perm: ViewPair<'a, SC::Challenge>,
     pub perm_challenges: &'a [SC::Challenge],
     pub is_first_row: SC::Challenge,

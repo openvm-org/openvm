@@ -7,7 +7,6 @@ use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_uni_stark::StarkGenericConfig;
-use rand::random;
 use tracing_forest::util::LevelFilter;
 use tracing_forest::ForestLayer;
 use tracing_subscriber::layer::SubscriberExt;
@@ -97,7 +96,7 @@ fn test_single_fib_selector_stark() {
     let n = 1usize << log_trace_degree;
 
     type Val = BabyBear;
-    let sels: Vec<bool> = (0..n).map(|_| random()).collect();
+    let sels: Vec<bool> = (0..n).map(|i| i % 2 == 0).collect();
     let pis = [a, b, get_conditional_fib_number(&sels)].map(BabyBear::from_canonical_u32);
 
     let air = FibonacciSelectorAir { sels };

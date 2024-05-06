@@ -112,8 +112,8 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
             rap,
             trace_domain,
             quotient_domain,
-            preprocessed_lde_on_quotient_domain,
             main_lde_on_quotient_domain,
+            preprocessed_lde_on_quotient_domain,
             perm_lde_on_quotient_domain,
             &self.perm_challenges,
             self.alpha,
@@ -210,8 +210,8 @@ pub fn compute_single_rap_quotient_values<'a, SC, R, Mat>(
     rap: &'a R,
     trace_domain: Domain<SC>,
     quotient_domain: Domain<SC>,
-    preprocessed_trace_on_quotient_domain: Mat,
     main_lde_on_quotient_domain: Mat,
+    preprocessed_trace_on_quotient_domain: Mat,
     perm_lde_on_quotient_domain: Mat,
     perm_challenges: &[PackedChallenge<SC>],
     alpha: SC::Challenge,
@@ -313,13 +313,13 @@ where
 
             let accumulator = PackedChallenge::<SC>::zero();
             let mut folder = ProverConstraintFolder {
-                preprocessed: VerticalPair::new(
-                    RowMajorMatrixView::new_row(&preprocessed_local),
-                    RowMajorMatrixView::new_row(&preprocessed_next),
-                ),
                 main: VerticalPair::new(
                     RowMajorMatrixView::new_row(&local),
                     RowMajorMatrixView::new_row(&next),
+                ),
+                preprocessed: VerticalPair::new(
+                    RowMajorMatrixView::new_row(&preprocessed_local),
+                    RowMajorMatrixView::new_row(&preprocessed_next),
                 ),
                 perm: VerticalPair::new(
                     RowMajorMatrixView::new_row(&perm_local),
