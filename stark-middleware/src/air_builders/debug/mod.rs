@@ -8,6 +8,8 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::rap::PermutationAirBuilderWithExposedValues;
 
+pub mod check_constraints;
+
 /// An `AirBuilder` which asserts that each constraint is zero, allowing any failed constraints to
 /// be detected early.
 pub struct DebugConstraintBuilder<'a, SC: StarkGenericConfig> {

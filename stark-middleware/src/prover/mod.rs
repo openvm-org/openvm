@@ -8,8 +8,9 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::instrument;
 
 use crate::{
-    air_builders::symbolic::get_log_quotient_degree,
-    check_constraints::check_constraints,
+    air_builders::{
+        debug::check_constraints::check_constraints, symbolic::get_log_quotient_degree,
+    },
     config::{Com, PcsProof, PcsProverData},
     prover::trace::{ProvenSingleRapTraceView, ProvenSingleTraceView},
     setup::types::ProvingKey,
