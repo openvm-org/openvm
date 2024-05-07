@@ -31,14 +31,20 @@ impl<'a, SC: StarkGenericConfig> PartitionSetup<'a, SC> {
                 mt.map(|trace| {
                     let trace_committer = TraceCommitter::new(pcs);
                     let degree = trace.height();
-                    let proven_trace: ProverTraceData<SC> = trace_committer.commit(vec![trace]);
+                    let mut proven_trace: ProverTraceData<SC> = trace_committer.commit(vec![trace]);
+                    let (domain, trace) = proven_trace.traces_with_domains.remove(0);
 
                     let vdata = VerifierPreprocessedData {
                         commit: proven_trace.commit.clone(),
                         degree,
                     };
 
-                    let pdata = ProverPreprocessedData { data: proven_trace };
+                    let pdata = ProverPreprocessedData {
+                        domain,
+                        trace,
+                        commit: proven_trace.commit,
+                        data: proven_trace.data,
+                    };
 
                     (pdata, vdata)
                 })

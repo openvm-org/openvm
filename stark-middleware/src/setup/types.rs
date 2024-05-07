@@ -1,19 +1,25 @@
-use p3_uni_stark::StarkGenericConfig;
+use p3_matrix::dense::RowMajorMatrix;
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
-use crate::{config::Com, prover::types::ProverTraceData};
+use crate::config::{Com, PcsProverData};
 
 pub struct ProverPreprocessedData<SC: StarkGenericConfig> {
-    /// Prover data for PCS commitment to the preprocessed trace.
-    // TODO: Replace with struct that contains only single trace
-    pub data: ProverTraceData<SC>,
+    /// Domain the trace was commited with respect to.
+    pub domain: Domain<SC>,
+    /// Preprocessed trace matrix.
+    pub trace: RowMajorMatrix<Val<SC>>,
+    /// Commitment to the preprocessed trace.
+    pub commit: Com<SC>,
+    /// Prover data, such as a Merkle tree, for the trace commitment.
+    pub data: PcsProverData<SC>,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct VerifierPreprocessedData<SC: StarkGenericConfig> {
-    /// PCS commitment to the preprocessed trace.
+    /// Commitment to the preprocessed trace.
     pub commit: Com<SC>,
-    /// Height of trace matrix
+    /// Height of trace matrix.
     pub degree: usize,
 }
 

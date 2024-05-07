@@ -69,7 +69,7 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         let preprocessed_commits: Vec<_> = pk
             .preprocessed_data
             .iter()
-            .filter_map(|md| md.as_ref().map(|data| data.data.commit.clone()))
+            .filter_map(|md| md.as_ref().map(|data| data.commit.clone()))
             .collect();
         challenger.observe_slice(&preprocessed_commits);
 
@@ -90,9 +90,9 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
             .enumerate()
             .map(|(index, md)| {
                 md.as_ref()
-                    .map(|data| {
-                        let trace_data = &data.data;
-                        let (domain, trace) = trace_data.traces_with_domains[0].clone();
+                    .map(|trace_data| {
+                        let domain = trace_data.domain;
+                        let trace = trace_data.trace.clone();
                         let preprocessed = ProvenSingleTraceView {
                             domain,
                             data: &trace_data.data,
@@ -335,7 +335,7 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
                 maybe_data
                     .as_ref()
                     .zip(maybe_domain.as_ref())
-                    .map(|(trace_data, &domain)| (&trace_data.data.data, vec![domain]))
+                    .map(|(trace_data, &domain)| (&trace_data.data, vec![domain]))
             })
             .collect();
 
