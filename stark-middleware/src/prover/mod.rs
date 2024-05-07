@@ -174,6 +174,7 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
             challenger.observe_slice(cumulative_sum.as_base_slice());
         }
 
+        // TODO: Move to a separate MockProver
         #[cfg(debug_assertions)]
         for (
             (
