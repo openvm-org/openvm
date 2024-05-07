@@ -79,6 +79,7 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
 
         let pcs = self.config.pcs();
         let opened_values = proof.opening.values;
+        // Map from opening index -> AIR index
         let index_lookup_preprocessed: Vec<_> = vk
             .preprocessed_data
             .iter()
@@ -130,7 +131,6 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
             .enumerate()
             .map(|(i, values_per_mat)| {
                 let index = index_lookup_preprocessed[i];
-                // TODO: Remove option
                 let data = vk.preprocessed_data[index].as_ref().unwrap();
                 let height = data.degree;
                 let domains_and_openings = values_per_mat
