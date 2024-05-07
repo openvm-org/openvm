@@ -17,10 +17,10 @@ pub struct ProverPreprocessedData<SC: StarkGenericConfig> {
 
 #[derive(Serialize, Deserialize)]
 pub struct VerifierPreprocessedData<SC: StarkGenericConfig> {
-    /// Commitment to the preprocessed trace.
-    pub commit: Com<SC>,
     /// Height of trace matrix.
     pub degree: usize,
+    /// Commitment to the preprocessed trace.
+    pub commit: Com<SC>,
 }
 
 /// Common proving key for multiple AIRs.
