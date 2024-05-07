@@ -1,6 +1,6 @@
 use p3_air::BaseAir;
 use p3_field::AbstractField;
-use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
+use p3_matrix::dense::RowMajorMatrixView;
 use p3_matrix::stack::VerticalPair;
 use p3_matrix::Matrix;
 use p3_maybe_rayon::prelude::IntoParallelIterator;
@@ -12,9 +12,9 @@ use crate::rap::Rap;
 /// Check that all constraints vanish on the subgroup.
 pub fn check_constraints<A, SC>(
     rap: &A,
-    preprocessed: &Option<RowMajorMatrix<Val<SC>>>,
-    main: &RowMajorMatrix<Val<SC>>,
-    perm: &Option<RowMajorMatrix<SC::Challenge>>,
+    preprocessed: &Option<RowMajorMatrixView<Val<SC>>>,
+    main: &RowMajorMatrixView<Val<SC>>,
+    perm: &Option<RowMajorMatrixView<SC::Challenge>>,
     perm_challenges: &[SC::Challenge],
     cumulative_sum: Option<SC::Challenge>,
     public_values: &[Val<SC>],

@@ -181,24 +181,24 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
                 (((rap, _), main_trace_with_domain), preprocessed_trace_with_domain),
                 perm_trace_with_domain,
             ),
-            cumulative_sum,
+            &cumulative_sum,
         ) in rap_mains
             .iter()
             .zip_eq(main_traces_with_domains)
             .zip(std::iter::repeat(preprocessed_traces_with_domains.iter()).flatten())
-            .zip_eq(perm_traces_with_domains.clone())
-            .zip_eq(cumulative_sums.clone())
+            .zip_eq(&perm_traces_with_domains)
+            .zip_eq(&cumulative_sums)
         {
             let preprocessed_trace = preprocessed_trace_with_domain
                 .as_ref()
-                .map(|(_, trace)| trace.clone());
+                .map(|(_, trace)| trace.as_view());
             let (_, main_trace) = main_trace_with_domain;
-            let perm_trace = perm_trace_with_domain.map(|(_, trace)| trace.clone());
+            let perm_trace = perm_trace_with_domain.map(|(_, trace)| trace.as_view());
 
             check_constraints(
                 *rap.clone(),
                 &preprocessed_trace,
-                main_trace,
+                &main_trace.as_view(),
                 &perm_trace,
                 &perm_challenges,
                 cumulative_sum,
