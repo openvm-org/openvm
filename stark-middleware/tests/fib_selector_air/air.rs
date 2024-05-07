@@ -28,15 +28,15 @@ impl<F: Field> BaseAir<F> for FibonacciSelectorAir {
 impl<AB: AirBuilderWithPublicValues + PairBuilder> Air<AB> for FibonacciSelectorAir {
     fn eval(&self, builder: &mut AB) {
         let pis = builder.public_values();
-        let prep = builder.preprocessed();
+        let preprocessed = builder.preprocessed();
         let main = builder.main();
 
         let a = pis[0];
         let b = pis[1];
         let x = pis[2];
 
-        let prep_local = prep.row_slice(0);
-        let prep_local: &FibonacciSelectorCols<AB::Var> = (*prep_local).borrow();
+        let preprocessed_local = preprocessed.row_slice(0);
+        let preprocessed_local: &FibonacciSelectorCols<AB::Var> = (*preprocessed_local).borrow();
 
         let (local, next) = (main.row_slice(0), main.row_slice(1));
         let local: &FibonacciCols<AB::Var> = (*local).borrow();
@@ -47,26 +47,24 @@ impl<AB: AirBuilderWithPublicValues + PairBuilder> Air<AB> for FibonacciSelector
         when_first_row.assert_eq(local.left, a);
         when_first_row.assert_eq(local.right, b);
 
-        // a' <- b
+        // a' <- sel*b + (1 - sel)*a
         builder
             .when_transition()
-            .when(prep_local.sel)
+            .when(preprocessed_local.sel)
             .assert_eq(local.right, next.left);
-        // a' <- a
         builder
             .when_transition()
-            .when_ne(prep_local.sel, AB::Expr::one())
+            .when_ne(preprocessed_local.sel, AB::Expr::one())
             .assert_eq(local.left, next.left);
 
-        // b' <- a + b
+        // b' <- sel*(a + b) + (1 - sel)*b
         builder
             .when_transition()
-            .when(prep_local.sel)
+            .when(preprocessed_local.sel)
             .assert_eq(local.left + local.right, next.right);
-        // b' <- b
         builder
             .when_transition()
-            .when_ne(prep_local.sel, AB::Expr::one())
+            .when_ne(preprocessed_local.sel, AB::Expr::one())
             .assert_eq(local.right, next.right);
 
         builder.when_last_row().assert_eq(local.right, x);
