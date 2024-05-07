@@ -123,7 +123,6 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
                     .iter()
                     .enumerate()
                     .map(|(j, values)| {
-                        // TODO: Store in vkey?
                         let domain = pcs.natural_domain_for_degree(vk.heights[j]);
                         trace_domain_and_openings(domain, zeta, values)
                     })
@@ -187,8 +186,8 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
             let preprocessed_values = vk
                 .indices
                 .iter()
-                .position(|&op_i| op_i == i)
-                .map(|op_i| &opened_values.preprocessed.as_ref().unwrap()[op_i]);
+                .position(|&j| j == i)
+                .map(|k| &opened_values.preprocessed.as_ref().unwrap()[k]);
             let perm_values = data
                 .perm_trace_index
                 .map(|i| &opened_values.perm.as_ref().unwrap()[i]);

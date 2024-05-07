@@ -87,14 +87,14 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
                 pk.indices
                     .iter()
                     .position(|&j| j == index)
-                    .map(|j| {
+                    .map(|k| {
                         let trace_data = pk.trace_data.as_ref().unwrap();
                         let preprocessed = ProvenSingleTraceView {
-                            domain: trace_data.traces_with_domains[j].0,
+                            domain: trace_data.traces_with_domains[k].0,
                             data: &trace_data.data,
                             index,
                         };
-                        (trace_data.traces_with_domains[j].clone(), preprocessed)
+                        (trace_data.traces_with_domains[k].clone(), preprocessed)
                     })
                     .unzip()
             })
