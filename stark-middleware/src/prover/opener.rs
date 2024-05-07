@@ -40,9 +40,9 @@ impl<'pcs, SC: StarkGenericConfig> OpeningProver<'pcs, SC> {
     ) -> OpeningProof<SC> {
         let zeta = self.zeta;
 
-        let mut rounds = main
+        let mut rounds = preprocessed
             .iter()
-            .chain(preprocessed.iter())
+            .chain(main.iter())
             .chain(perm.iter())
             .map(|(data, domains)| {
                 let points_per_mat = domains
@@ -70,24 +70,23 @@ impl<'pcs, SC: StarkGenericConfig> OpeningProver<'pcs, SC> {
             collect_trace_openings(ops)
         });
 
-        let preprocessed_openings = preprocessed.is_some().then(|| {
-            let ops = opening_values
-                .pop()
-                .expect("Should have preprocessed trace opening");
-            collect_trace_openings(ops)
-        });
-
-        let main_openings = opening_values;
+        let main_openings = opening_values
+            .split_off(opening_values.len() - main.len())
+            .into_iter()
+            .map(collect_trace_openings)
+            .collect_vec();
         assert_eq!(
             main_openings.len(),
             main.len(),
             "Incorrect number of main trace openings"
         );
 
-        let main_openings = main_openings
-            .into_iter()
-            .map(collect_trace_openings)
-            .collect_vec();
+        let preprocessed_openings = preprocessed.is_some().then(|| {
+            let ops = opening_values
+                .pop()
+                .expect("Should have preprocessed trace opening");
+            collect_trace_openings(ops)
+        });
 
         // Unflatten quotient openings
         let quotient_openings = quotient_degrees

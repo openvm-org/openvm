@@ -115,11 +115,27 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
                     ],
                 )
             };
-        let mut rounds = opened_values
+        let mut rounds: Vec<_> = opened_values
+            .preprocessed
+            .as_ref()
+            .map(|values_per_mat| {
+                let domains_and_openings = values_per_mat
+                    .iter()
+                    .enumerate()
+                    .map(|(j, values)| {
+                        // TODO: Store in vkey?
+                        let domain = pcs.natural_domain_for_degree(vk.heights[j]);
+                        trace_domain_and_openings(domain, zeta, values)
+                    })
+                    .collect_vec();
+                vec![(vk.commit.unwrap(), domains_and_openings)]
+            })
+            .unwrap_or_default();
+        opened_values
             .main
             .iter()
             .enumerate()
-            .map(|(i, values_per_mat)| {
+            .for_each(|(i, values_per_mat)| {
                 let domains_and_openings = values_per_mat
                     .iter()
                     .enumerate()
@@ -128,24 +144,11 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
                         trace_domain_and_openings(domain, zeta, values)
                     })
                     .collect_vec();
-                (
+                rounds.push((
                     proof.commitments.main_trace[i].clone(),
                     domains_and_openings,
-                )
-            })
-            .collect_vec();
-        if let Some(values_per_mat) = &opened_values.preprocessed {
-            let domains_and_openings = values_per_mat
-                .iter()
-                .enumerate()
-                .map(|(j, values)| {
-                    // TODO: Store in vkey?
-                    let domain = pcs.natural_domain_for_degree(vk.heights[j]);
-                    trace_domain_and_openings(domain, zeta, values)
-                })
-                .collect_vec();
-            rounds.push((vk.commit.unwrap(), domains_and_openings));
-        }
+                ));
+            });
         if let Some(values_per_mat) = &opened_values.perm {
             let domains_and_openings = values_per_mat
                 .iter()
