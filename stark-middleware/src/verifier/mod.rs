@@ -194,8 +194,8 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
             let perm_exposed_values = proof.cumulative_sums[data.index].as_slice();
             verify_single_rap_constraints(
                 rap,
-                main_values,
                 preprocessed_values,
+                main_values,
                 perm_values,
                 quotient_chunks,
                 main_domain,

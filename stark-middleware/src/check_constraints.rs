@@ -12,8 +12,8 @@ use crate::rap::Rap;
 /// Check that all constraints vanish on the subgroup.
 pub fn check_constraints<A, SC>(
     rap: &A,
-    main: &RowMajorMatrix<Val<SC>>,
     preprocessed: &Option<RowMajorMatrix<Val<SC>>>,
+    main: &RowMajorMatrix<Val<SC>>,
     perm: &Option<RowMajorMatrix<SC::Challenge>>,
     perm_challenges: &[SC::Challenge],
     cumulative_sum: Option<SC::Challenge>,
@@ -31,7 +31,6 @@ pub fn check_constraints<A, SC>(
     (0..height).into_par_iter().for_each(|i| {
         let i_next = (i + 1) % height;
 
-        let (main_local, main_next) = (&*main.row_slice(i), &*main.row_slice(i_next));
         let (preprocessed_local, preprocessed_next) = preprocessed
             .as_ref()
             .map(|preprocessed| {
@@ -42,6 +41,8 @@ pub fn check_constraints<A, SC>(
             })
             .unwrap_or((vec![], vec![]));
 
+        let (main_local, main_next) = (&*main.row_slice(i), &*main.row_slice(i_next));
+
         let (perm_local, perm_next) = perm
             .as_ref()
             .map(|perm| (perm.row_slice(i).to_vec(), perm.row_slice(i_next).to_vec()))
@@ -50,13 +51,13 @@ pub fn check_constraints<A, SC>(
 
         let mut builder = DebugConstraintBuilder {
             row_index: i,
-            main: VerticalPair::new(
-                RowMajorMatrixView::new_row(main_local),
-                RowMajorMatrixView::new_row(main_next),
-            ),
             preprocessed: VerticalPair::new(
                 RowMajorMatrixView::new_row(preprocessed_local.as_slice()),
                 RowMajorMatrixView::new_row(preprocessed_next.as_slice()),
+            ),
+            main: VerticalPair::new(
+                RowMajorMatrixView::new_row(main_local),
+                RowMajorMatrixView::new_row(main_next),
             ),
             perm: VerticalPair::new(
                 RowMajorMatrixView::new_row(perm_local.as_slice()),

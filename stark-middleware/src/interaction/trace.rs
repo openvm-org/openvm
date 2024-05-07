@@ -21,8 +21,8 @@ use super::{
 /// Returns the permutation trace as a matrix of extension field elements.
 pub fn generate_permutation_trace<F, C, EF>(
     chip: &C,
-    main: &RowMajorMatrixView<F>,
     preprocessed: &Option<RowMajorMatrixView<F>>,
+    main: &RowMajorMatrixView<F>,
     permutation_randomness: [EF; 2],
 ) -> Option<RowMajorMatrix<EF>>
 where
@@ -66,8 +66,8 @@ where
                 })
                 .unwrap_or_default();
             row[m] = reduce_row(
-                main_row.deref(),
                 preprocessed_row.as_slice(),
+                main_row.deref(),
                 &interaction.fields,
                 alpha_m,
                 betas.clone(),

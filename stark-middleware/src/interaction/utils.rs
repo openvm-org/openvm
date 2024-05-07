@@ -25,8 +25,8 @@ pub fn generate_rlc_elements<F: Field, C: Chip<F> + ?Sized, AF: AbstractField>(
 // TODO: Use Var and Expr type bounds in place of concrete fields so that
 // this function can be used in `eval_permutation_constraints`.
 pub fn reduce_row<F, EF>(
-    main_row: &[F],
     preprocessed_row: &[F],
+    main_row: &[F],
     fields: &[VirtualPairCol<F>],
     alpha: EF,
     betas: Powers<EF>,

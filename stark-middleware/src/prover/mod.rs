@@ -131,8 +131,8 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
                                         .as_ref()
                                         .map(|(_, trace)| trace.as_view());
                                     let perm_trace = air.generate_permutation_trace(
-                                        &trace.as_view(),
                                         &preprocessed_trace,
+                                        &trace.as_view(),
                                         perm_challenges,
                                     );
                                     ((air, main), perm_trace)
@@ -187,16 +187,16 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
             .zip_eq(perm_traces_with_domains.clone())
             .zip_eq(cumulative_sums.clone())
         {
-            let (_, main_trace) = main_trace_with_domain;
             let preprocessed_trace = preprocessed_trace_with_domain
                 .as_ref()
                 .map(|(_, trace)| trace.clone());
+            let (_, main_trace) = main_trace_with_domain;
             let perm_trace = perm_trace_with_domain.map(|(_, trace)| trace.clone());
 
             check_constraints(
                 *rap.clone(),
-                main_trace,
                 &preprocessed_trace,
+                main_trace,
                 &perm_trace,
                 &perm_challenges,
                 cumulative_sum,
@@ -345,8 +345,8 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
 
         let opening = opener.open(
             challenger,
-            main_data,
             preprocessed_data,
+            main_data,
             perm_data,
             &quotient_data.data,
             &quotient_degrees,

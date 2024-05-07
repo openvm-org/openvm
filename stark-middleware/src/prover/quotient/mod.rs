@@ -88,10 +88,6 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
         let trace_domain = trace.main.domain;
         let quotient_domain =
             trace_domain.create_disjoint_domain(trace_domain.size() * quotient_degree);
-        let main_lde_on_quotient_domain = self
-            .pcs
-            .get_evaluations_on_domain(trace.main.data, trace.main.index, quotient_domain)
-            .to_row_major_matrix();
         // Empty matrix if no preprocessed trace
         let preprocessed_lde_on_quotient_domain = if let Some(view) = trace.preprocessed {
             self.pcs
@@ -100,6 +96,10 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
         } else {
             RowMajorMatrix::new(vec![], 0)
         };
+        let main_lde_on_quotient_domain = self
+            .pcs
+            .get_evaluations_on_domain(trace.main.data, trace.main.index, quotient_domain)
+            .to_row_major_matrix();
         // Empty matrix if no permutation
         let perm_lde_on_quotient_domain = if let Some(view) = trace.permutation {
             self.pcs
@@ -112,8 +112,8 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
             rap,
             trace_domain,
             quotient_domain,
-            main_lde_on_quotient_domain,
             preprocessed_lde_on_quotient_domain,
+            main_lde_on_quotient_domain,
             perm_lde_on_quotient_domain,
             &self.perm_challenges,
             self.alpha,
@@ -210,8 +210,8 @@ pub fn compute_single_rap_quotient_values<'a, SC, R, Mat>(
     rap: &'a R,
     trace_domain: Domain<SC>,
     quotient_domain: Domain<SC>,
-    main_lde_on_quotient_domain: Mat,
     preprocessed_trace_on_quotient_domain: Mat,
+    main_lde_on_quotient_domain: Mat,
     perm_lde_on_quotient_domain: Mat,
     perm_challenges: &[PackedChallenge<SC>],
     alpha: SC::Challenge,
@@ -225,8 +225,8 @@ where
     Mat: Matrix<Val<SC>> + Sync,
 {
     let quotient_size = quotient_domain.size();
-    let main_width = main_lde_on_quotient_domain.width();
     let preprocessed_width = preprocessed_trace_on_quotient_domain.width();
+    let main_width = main_lde_on_quotient_domain.width();
     let perm_width = perm_lde_on_quotient_domain.width(); // Width with extension field elements flattened
     let mut sels = trace_domain.selectors_on_coset(quotient_domain);
 
@@ -313,13 +313,13 @@ where
 
             let accumulator = PackedChallenge::<SC>::zero();
             let mut folder = ProverConstraintFolder {
-                main: VerticalPair::new(
-                    RowMajorMatrixView::new_row(&local),
-                    RowMajorMatrixView::new_row(&next),
-                ),
                 preprocessed: VerticalPair::new(
                     RowMajorMatrixView::new_row(&preprocessed_local),
                     RowMajorMatrixView::new_row(&preprocessed_next),
+                ),
+                main: VerticalPair::new(
+                    RowMajorMatrixView::new_row(&local),
+                    RowMajorMatrixView::new_row(&next),
                 ),
                 perm: VerticalPair::new(
                     RowMajorMatrixView::new_row(&perm_local),

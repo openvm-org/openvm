@@ -52,16 +52,16 @@ where
 {
     let rand_elems = builder.permutation_randomness().to_vec();
 
-    let main = builder.main();
-    let (main_local, main_next) = (main.row_slice(0), main.row_slice(1));
-    let main_local: &[AB::Var] = (*main_local).borrow();
-    let main_next: &[AB::Var] = (*main_next).borrow();
-
     let preprocessed = builder.preprocessed();
     let preprocessed_local = preprocessed.row_slice(0);
     let preprocessed_next = preprocessed.row_slice(1);
     let preprocessed_local = (*preprocessed_local).borrow();
     let preprocessed_next = (*preprocessed_next).borrow();
+
+    let main = builder.main();
+    let (main_local, main_next) = (main.row_slice(0), main.row_slice(1));
+    let main_local: &[AB::Var] = (*main_local).borrow();
+    let main_next: &[AB::Var] = (*main_next).borrow();
 
     let perm = builder.permutation();
     let perm_local = perm.row_slice(0);

@@ -24,12 +24,12 @@ impl<'pcs, SC: StarkGenericConfig> OpeningProver<'pcs, SC> {
     pub fn open(
         &self,
         challenger: &mut SC::Challenger,
-        // For each main trace commitment, the prover data and
-        // the domain of each matrix, in order
-        main: Vec<(&PcsProverData<SC>, Vec<Domain<SC>>)>,
         // Preprocessed trace commitment prover data, and the domain
         // of each matrix, in order, if any preprocessed trace exists
         preprocessed: Option<(&PcsProverData<SC>, Vec<Domain<SC>>)>,
+        // For each main trace commitment, the prover data and
+        // the domain of each matrix, in order
+        main: Vec<(&PcsProverData<SC>, Vec<Domain<SC>>)>,
         // Permutation trace commitment prover data, and the domain
         // of each matrix, in order, if permutation trace exists
         perm: Option<(&PcsProverData<SC>, Vec<Domain<SC>>)>,
@@ -106,8 +106,8 @@ impl<'pcs, SC: StarkGenericConfig> OpeningProver<'pcs, SC> {
         OpeningProof {
             proof: opening_proof,
             values: OpenedValues {
-                main: main_openings,
                 preprocessed: preprocessed_openings,
+                main: main_openings,
                 perm: perm_openings,
                 quotient: quotient_openings,
             },
@@ -134,12 +134,12 @@ pub struct OpeningProof<SC: StarkGenericConfig> {
 
 #[derive(Serialize, Deserialize)]
 pub struct OpenedValues<Challenge> {
-    /// For each main trace commitment, for each matrix in commitment, the
-    /// opened values
-    pub main: Vec<Vec<AdjacentOpenedValues<Challenge>>>,
     /// For each matrix in preprocessed trace commitment, the opened values,
     /// if any preprocessed trace commitment exists
     pub preprocessed: Option<Vec<AdjacentOpenedValues<Challenge>>>,
+    /// For each main trace commitment, for each matrix in commitment, the
+    /// opened values
+    pub main: Vec<Vec<AdjacentOpenedValues<Challenge>>>,
     /// For each matrix in permutation trace commitment, the opened values,
     /// if permutation trace commitment exists
     pub perm: Option<Vec<AdjacentOpenedValues<Challenge>>>,

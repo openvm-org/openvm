@@ -18,8 +18,8 @@ use super::error::VerificationError;
 #[instrument(skip_all)]
 pub fn verify_single_rap_constraints<SC, R>(
     rap: &R,
-    main_values: &AdjacentOpenedValues<SC::Challenge>,
     preprocessed_values: Option<&AdjacentOpenedValues<SC::Challenge>>,
+    main_values: &AdjacentOpenedValues<SC::Challenge>,
     perm_values: Option<&AdjacentOpenedValues<SC::Challenge>>,
     quotient_chunks: &[Vec<SC::Challenge>],
     main_domain: Domain<SC>,
@@ -75,10 +75,6 @@ where
 
     let sels = main_domain.selectors_at_point(zeta);
 
-    let main = VerticalPair::new(
-        RowMajorMatrixView::new_row(&main_values.local),
-        RowMajorMatrixView::new_row(&main_values.next),
-    );
     let (preprocessed_local, preprocessed_next) = preprocessed_values
         .as_ref()
         .map(|values| (values.local.as_slice(), values.next.as_slice()))
@@ -87,6 +83,12 @@ where
         RowMajorMatrixView::new_row(preprocessed_local),
         RowMajorMatrixView::new_row(preprocessed_next),
     );
+
+    let main = VerticalPair::new(
+        RowMajorMatrixView::new_row(&main_values.local),
+        RowMajorMatrixView::new_row(&main_values.next),
+    );
+
     let (perm_local, perm_next) = perm_values
         .as_ref()
         .map(|values| (unflatten(&values.local), unflatten(&values.next)))

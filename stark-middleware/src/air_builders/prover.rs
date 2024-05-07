@@ -11,9 +11,9 @@ use crate::rap::PermutationAirBuilderWithExposedValues;
 
 /// A folder for prover constraints.
 pub struct ProverConstraintFolder<'a, SC: StarkGenericConfig> {
-    pub main:
-        VerticalPair<RowMajorMatrixView<'a, PackedVal<SC>>, RowMajorMatrixView<'a, PackedVal<SC>>>,
     pub preprocessed:
+        VerticalPair<RowMajorMatrixView<'a, PackedVal<SC>>, RowMajorMatrixView<'a, PackedVal<SC>>>,
+    pub main:
         VerticalPair<RowMajorMatrixView<'a, PackedVal<SC>>, RowMajorMatrixView<'a, PackedVal<SC>>>,
     pub perm: VerticalPair<
         RowMajorMatrixView<'a, PackedChallenge<SC>>,

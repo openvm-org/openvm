@@ -27,9 +27,9 @@ impl<F: Field> BaseAir<F> for FibonacciSelectorAir {
 
 impl<AB: AirBuilderWithPublicValues + PairBuilder> Air<AB> for FibonacciSelectorAir {
     fn eval(&self, builder: &mut AB) {
-        let main = builder.main();
-        let prep = builder.preprocessed();
         let pis = builder.public_values();
+        let prep = builder.preprocessed();
+        let main = builder.main();
 
         let a = pis[0];
         let b = pis[1];
