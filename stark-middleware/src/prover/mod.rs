@@ -62,15 +62,16 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         PcsProof<SC>: Send + Sync,
     {
         let pcs = self.config.pcs();
-        // TODO: Move somewhere else
-        let num_airs = partition[0].airs.len();
 
         // Challenger must observe public values
         challenger.observe_slice(public_values);
 
-        if let Some(data) = &pk.trace_data {
-            challenger.observe(data.commit.clone());
-        }
+        let preprocessed_commits: Vec<_> = pk
+            .preprocessed_data
+            .iter()
+            .filter_map(|md| md.as_ref().map(|data| data.data.commit.clone()))
+            .collect();
+        challenger.observe_slice(&preprocessed_commits);
 
         // Challenger must observe all trace commitments
         let main_trace_commitments = partition
@@ -83,19 +84,21 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         // Generate 2 permutation challenges
         let perm_challenges = [(); 2].map(|_| challenger.sample_ext_element::<SC::Challenge>());
 
-        let (preprocessed_traces_with_domains, preps): (Vec<_>, Vec<_>) = (0..num_airs)
-            .map(|index| {
-                pk.indices
-                    .iter()
-                    .position(|&j| j == index)
-                    .map(|k| {
-                        let trace_data = pk.trace_data.as_ref().unwrap();
+        let (preprocessed_traces_with_domains, preps): (Vec<_>, Vec<_>) = pk
+            .preprocessed_data
+            .iter()
+            .enumerate()
+            .map(|(index, md)| {
+                md.as_ref()
+                    .map(|data| {
+                        let trace_data = &data.data;
+                        let (domain, trace) = trace_data.traces_with_domains[0].clone();
                         let preprocessed = ProvenSingleTraceView {
-                            domain: trace_data.traces_with_domains[k].0,
+                            domain,
                             data: &trace_data.data,
                             index,
                         };
-                        (trace_data.traces_with_domains[k].clone(), preprocessed)
+                        ((domain, trace), preprocessed)
                     })
                     .unzip()
             })
@@ -324,12 +327,17 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
             .iter()
             .map(|mt| mt.as_ref().map(|(domain, _)| *domain))
             .collect_vec();
-        let preprocessed_data = pk.trace_data.as_ref().map(|trace_data| {
-            (
-                &trace_data.data,
-                preprocessed_domains.into_iter().flatten().collect(),
-            )
-        });
+        let preprocessed_data: Vec<_> = pk
+            .preprocessed_data
+            .iter()
+            .zip(preprocessed_domains.iter())
+            .filter_map(|(maybe_data, maybe_domain)| {
+                maybe_data
+                    .as_ref()
+                    .zip(maybe_domain.as_ref())
+                    .map(|(trace_data, &domain)| (&trace_data.data.data, vec![domain]))
+            })
+            .collect();
 
         let main_data = partition
             .iter()

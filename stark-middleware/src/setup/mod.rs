@@ -6,7 +6,7 @@ pub mod types;
 
 use crate::prover::{trace::TraceCommitter, types::ProverTraceData};
 
-use self::types::{ProvingKey, VerifyingKey};
+use self::types::{ProverPreprocessedData, ProvingKey, VerifierPreprocessedData, VerifyingKey};
 
 /// Calculates the Proving and Verifying keys for a partition of multi-matrix AIRs.
 pub struct PartitionSetup<'a, SC: StarkGenericConfig> {
@@ -21,33 +21,36 @@ impl<'a, SC: StarkGenericConfig> PartitionSetup<'a, SC> {
     #[instrument(name = "PartitionSetup::setup", level = "debug", skip_all)]
     pub fn setup(
         &self,
-        maybe_traces: Vec<Option<RowMajorMatrix<Val<SC>>>>,
+        traces: Vec<Option<RowMajorMatrix<Val<SC>>>>,
     ) -> (ProvingKey<SC>, VerifyingKey<SC>) {
         let pcs = self.config.pcs();
 
-        let (indices, traces): (Vec<_>, Vec<_>) = maybe_traces
+        let (prover_data, verifier_data): (Vec<_>, Vec<_>) = traces
             .into_iter()
-            .enumerate()
-            .flat_map(|(i, mt)| mt.map(|t| (i, t)))
-            .unzip();
-        let heights: Vec<_> = traces.iter().map(|t| t.height()).collect();
+            .map(|mt| {
+                mt.map(|trace| {
+                    let trace_committer = TraceCommitter::new(pcs);
+                    let degree = trace.height();
+                    let proven_trace: ProverTraceData<SC> = trace_committer.commit(vec![trace]);
 
-        let (proven_trace, commit) = if !traces.is_empty() {
-            let trace_committer = TraceCommitter::new(pcs);
-            let proven_trace: ProverTraceData<SC> = trace_committer.commit(traces);
-            let commit = proven_trace.commit.clone();
-            (Some(proven_trace), Some(commit))
-        } else {
-            (None, None)
+                    let vdata = VerifierPreprocessedData {
+                        commit: proven_trace.commit.clone(),
+                        degree,
+                    };
+
+                    let pdata = ProverPreprocessedData { data: proven_trace };
+
+                    (pdata, vdata)
+                })
+                .unzip()
+            })
+            .unzip();
+
+        let pk = ProvingKey {
+            preprocessed_data: prover_data,
         };
         let vk = VerifyingKey {
-            commit,
-            heights,
-            indices: indices.clone(),
-        };
-        let pk = ProvingKey {
-            trace_data: proven_trace,
-            indices,
+            preprocessed_data: verifier_data,
         };
 
         (pk, vk)
