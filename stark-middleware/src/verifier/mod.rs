@@ -129,18 +129,12 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
             .preprocessed
             .iter()
             .enumerate()
-            .map(|(i, values_per_mat)| {
+            .map(|(i, values)| {
                 let index = index_lookup_preprocessed[i];
                 let data = vk.preprocessed_data[index].as_ref().unwrap();
-                let height = data.degree;
-                let domains_and_openings = values_per_mat
-                    .iter()
-                    .map(|values| {
-                        let domain = pcs.natural_domain_for_degree(height);
-                        trace_domain_and_openings(domain, zeta, values)
-                    })
-                    .collect_vec();
-                (data.commit.clone(), domains_and_openings)
+                let domain = pcs.natural_domain_for_degree(data.degree);
+                let domain_and_openings = trace_domain_and_openings(domain, zeta, values);
+                (data.commit.clone(), vec![domain_and_openings])
             })
             .collect();
         opened_values
@@ -199,7 +193,7 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
                     index_lookup_preprocessed
                         .iter()
                         .position(|&j| j == i)
-                        .map(|k| &opened_values.preprocessed[k][0])
+                        .map(|k| &opened_values.preprocessed[k])
                 })
                 .unwrap_or_default();
             let (main_commit_index, main_mat_index) = data.main_trace_ptr;

@@ -26,8 +26,8 @@ impl<'pcs, SC: StarkGenericConfig> OpeningProver<'pcs, SC> {
         &self,
         challenger: &mut SC::Challenger,
         // For each preprocessed trace commitment, the prover data and
-        // the domain of each matrix, in order
-        preprocessed: Vec<(&PcsProverData<SC>, Vec<Domain<SC>>)>,
+        // the domain of the matrix, in order
+        preprocessed: Vec<(&PcsProverData<SC>, Domain<SC>)>,
         // For each main trace commitment, the prover data and
         // the domain of each matrix, in order
         main: Vec<(&PcsProverData<SC>, Vec<Domain<SC>>)>,
@@ -39,8 +39,12 @@ impl<'pcs, SC: StarkGenericConfig> OpeningProver<'pcs, SC> {
         // Quotient degree for each RAP, flattened
         quotient_degrees: &[usize],
     ) -> OpeningProof<SC> {
-        let zeta = self.zeta;
+        let preprocessed: Vec<_> = preprocessed
+            .into_iter()
+            .map(|(data, domain)| (data, vec![domain]))
+            .collect();
 
+        let zeta = self.zeta;
         let mut rounds = preprocessed
             .iter()
             .chain(main.iter())
@@ -84,7 +88,12 @@ impl<'pcs, SC: StarkGenericConfig> OpeningProver<'pcs, SC> {
 
         let preprocessed_openings = opening_values
             .into_iter()
-            .map(collect_trace_openings)
+            .map(|values| {
+                let mut openings = collect_trace_openings(values);
+                openings
+                    .pop()
+                    .expect("Preprocessed trace should be opened at 1 point")
+            })
             .collect_vec();
         assert_eq!(
             preprocessed_openings.len(),
@@ -137,9 +146,8 @@ pub struct OpeningProof<SC: StarkGenericConfig> {
 
 #[derive(Serialize, Deserialize)]
 pub struct OpenedValues<Challenge> {
-    /// For each preprocessed trace commitment, for each matrix in commitment, the
-    /// opened values
-    pub preprocessed: Vec<Vec<AdjacentOpenedValues<Challenge>>>,
+    /// For each preprocessed trace commitment, the opened values
+    pub preprocessed: Vec<AdjacentOpenedValues<Challenge>>,
     /// For each main trace commitment, for each matrix in commitment, the
     /// opened values
     pub main: Vec<Vec<AdjacentOpenedValues<Challenge>>>,

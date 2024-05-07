@@ -181,7 +181,7 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         #[cfg(debug_assertions)]
         for (
             (
-                (((rap, _), main_trace_with_domain), preprocessed_trace_with_domain),
+                (((&rap, _), main_trace_with_domain), preprocessed_trace_with_domain),
                 perm_trace_with_domain,
             ),
             &cumulative_sum,
@@ -199,7 +199,7 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
             let perm_trace = perm_trace_with_domain.map(|(_, trace)| trace.as_view());
 
             check_constraints(
-                *rap.clone(),
+                rap,
                 &preprocessed_trace,
                 &main_trace.as_view(),
                 &perm_trace,
@@ -335,7 +335,7 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
                 maybe_data
                     .as_ref()
                     .zip(maybe_domain.as_ref())
-                    .map(|(trace_data, &domain)| (&trace_data.data, vec![domain]))
+                    .map(|(trace_data, &domain)| (&trace_data.data, domain))
             })
             .collect();
 

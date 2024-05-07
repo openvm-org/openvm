@@ -32,7 +32,10 @@ impl<'a, SC: StarkGenericConfig> PartitionSetup<'a, SC> {
                     let trace_committer = TraceCommitter::new(pcs);
                     let degree = trace.height();
                     let mut proven_trace: ProverTraceData<SC> = trace_committer.commit(vec![trace]);
-                    let (domain, trace) = proven_trace.traces_with_domains.remove(0);
+                    let (domain, trace) = proven_trace
+                        .traces_with_domains
+                        .pop()
+                        .expect("Expected a single preprocessed trace");
 
                     let vdata = VerifierPreprocessedData {
                         commit: proven_trace.commit.clone(),
