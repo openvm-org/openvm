@@ -1,4 +1,4 @@
-use p3_middleware_derive::AlignedBorrow;
+use afs_middleware_derive::AlignedBorrow;
 
 pub const NUM_FIBONACCI_COLS: usize = 2;
 
