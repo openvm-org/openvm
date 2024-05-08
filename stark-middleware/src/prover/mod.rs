@@ -11,9 +11,9 @@ use crate::{
     air_builders::{
         debug::check_constraints::check_constraints, symbolic::get_log_quotient_degree,
     },
-    commit::MatrixCommitmentGraph,
+    commit::{MatrixCommitmentGraph, ProvenSingleMatrixView},
     config::{Com, PcsProof, PcsProverData},
-    prover::trace::{ProvenSingleRapTraceView, ProvenSingleTraceView},
+    prover::trace::ProvenSingleRapTraceView,
     setup::types::ProvingKey,
     verifier::types::VerifierSingleRapMetadata,
 };
@@ -75,33 +75,13 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         challenger.observe_slice(&preprocessed_commits);
 
         // Challenger must observe all trace commitments
-        main_trace_data
-            .commits()
-            .for_each(|commit| challenger.observe(commit.clone()));
+        let main_trace_commitments = main_trace_data.commits().cloned().collect_vec();
+        assert_eq!(main_trace_commitments.len(), pk.num_main_trace_commitments);
+        challenger.observe_slice(&main_trace_commitments);
 
         // TODO: this is not needed if there are no interactions
         // Generate 2 permutation challenges
         let perm_challenges = [(); 2].map(|_| challenger.sample_ext_element::<SC::Challenge>());
-
-        let (preprocessed_traces_with_domains, preps): (Vec<_>, Vec<_>) = pk
-            .preprocessed_data
-            .iter()
-            .enumerate()
-            .map(|(index, md)| {
-                md.as_ref()
-                    .map(|trace_data| {
-                        let domain = trace_data.domain;
-                        let trace = trace_data.trace.clone();
-                        let preprocessed = ProvenSingleTraceView {
-                            domain,
-                            data: &trace_data.data,
-                            index,
-                        };
-                        ((domain, trace), preprocessed)
-                    })
-                    .unzip()
-            })
-            .unzip();
 
         // TODO: ===== Permutation Trace Generation should be moved to separate module ====
         // Generate permutation traces
@@ -120,24 +100,16 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
                     })
                     .collect()
             });
-        // TODO: Copy from main_domains
-        let perm_traces_with_domains: Vec<_> = perm_traces
-            .iter()
-            .map(|mt| {
-                mt.as_ref().map(|trace| {
-                    let height = trace.height();
-                    let domain = pcs.natural_domain_for_degree(height);
-                    (domain, trace)
-                })
-            })
-            .collect();
+
+        // Fore each RAP, build the perm trace view, and also create a MatrixCommitPtr for each
+        // perm trace that exists, assuming all perm trace are committed together
         let cumulative_sums_and_indices: Vec<Option<_>> = perm_traces
             .iter()
             .scan(0usize, |count, mt| {
                 Some(mt.as_ref().map(|trace| {
                     let height = trace.height();
                     let sum = *trace.row_slice(height - 1).last().unwrap();
-                    let index = *count;
+                    let matrix_index = *count;
                     *count += 1;
                     (sum, index)
                 }))

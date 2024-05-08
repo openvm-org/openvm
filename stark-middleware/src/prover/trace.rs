@@ -69,19 +69,11 @@ pub struct ProverTraceData<SC: StarkGenericConfig> {
 /// matrices need to be partitioned.
 #[derive(Clone)]
 pub struct ProvenSingleRapTraceView<'a, SC: StarkGenericConfig> {
-    /// Main trace data
-    pub main: ProvenSingleTraceView<'a, SC>,
-    /// Permutation trace data
-    pub permutation: Option<ProvenSingleTraceView<'a, SC>>,
-    /// Exposed values of the permutation
-    pub permutation_exposed_values: Vec<SC::Challenge>,
-}
     /// Domain of the trace matrices
     pub domain: Domain<SC>,
     // Maybe public values should be included in this struct
-
     /// Preprocessed trace data, if any
-    pub preprocessed: Option<ProvenSingleTraceView<'a, SC>>,
+    pub preprocessed: Option<ProvenSingleMatrixView<'a, SC>>,
     /// Main trace data, horizontally partitioned into multiple matrices
     pub partitioned_main: Vec<ProvenSingleMatrixView<'a, SC>>,
     /// `after_challenge[i] = (matrix, exposed_values)`

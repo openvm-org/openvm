@@ -1,8 +1,3 @@
-<<<<<<< HEAD
-use std::{borrow::Borrow, ops::Deref};
-
-=======
->>>>>>> 73b554a (wip: permutation trace from partitioned main)
 use p3_field::{ExtensionField, Field};
 use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
@@ -80,9 +75,8 @@ where
                 let preprocessed_row = preprocessed
                     .as_ref()
                     .map(|preprocessed| {
-                        let row = preprocessed.row_slice(n);
-                        let row: &[_] = (*row).borrow();
-                        row
+                        // manual implementation of row_slice because of a drop issue
+                        &preprocessed.values[n * preprocessed.width..(n + 1) * preprocessed.width]
                     })
                     .unwrap_or(&[]);
                 *row_j = reduce_row(
@@ -116,15 +110,12 @@ where
         let preprocessed_row = preprocessed
             .as_ref()
             .map(|preprocessed| {
-                let row = preprocessed.row_slice(n);
-                let row: &[_] = (*row).borrow();
-                row
+                // manual implementation of row_slice because of a drop issue
+                &preprocessed.values[n * preprocessed.width..(n + 1) * preprocessed.width]
             })
             .unwrap_or(&[]);
         for (m, (interaction, interaction_type)) in all_interactions.iter().enumerate() {
-            let mult = interaction
-                .count
-                .apply::<F, F>(preprocessed_row.as_slice(), &main_row);
+            let mult = interaction.count.apply::<F, F>(preprocessed_row, &main_row);
             match interaction_type {
                 InteractionType::Send => {
                     phi[n] += perm_row[m] * mult;

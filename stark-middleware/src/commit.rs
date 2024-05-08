@@ -1,4 +1,5 @@
 use p3_uni_stark::StarkGenericConfig;
+use serde::{Deserialize, Serialize};
 
 use crate::config::PcsProverData;
 
@@ -6,6 +7,7 @@ use crate::config::PcsProverData;
 /// as well as the index of the matrix within that commitment.
 ///
 /// The pointers are in reference to an implicit global list of commitments
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MatrixCommitmentGraph {
     /// For each matrix, the pointer
     pub matrix_ptrs: Vec<SingleMatrixCommitPtr>,
@@ -16,6 +18,7 @@ pub struct MatrixCommitmentGraph {
 /// of the matrix within that commitment.
 ///
 /// The pointer is in reference to an implicit global list of commitments
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct SingleMatrixCommitPtr {
     pub commit_index: usize,
     pub matrix_index: usize,

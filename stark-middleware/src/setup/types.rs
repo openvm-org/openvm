@@ -2,7 +2,10 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
-use crate::config::{Com, PcsProverData};
+use crate::{
+    commit::MatrixCommitmentGraph,
+    config::{Com, PcsProverData},
+};
 
 pub struct ProverPreprocessedData<SC: StarkGenericConfig> {
     /// Domain the trace was commited with respect to.
