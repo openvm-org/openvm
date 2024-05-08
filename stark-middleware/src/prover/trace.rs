@@ -3,7 +3,10 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::info_span;
 
-use crate::{config::PcsProverData, prover::types::ProverTraceData};
+use crate::{
+    commit::ProvenSingleMatrixView,
+    config::{Com, PcsProverData},
+};
 
 /// Prover that commits to a batch of trace matrices, possibly of different heights.
 pub struct TraceCommitter<'pcs, SC: StarkGenericConfig> {
@@ -39,23 +42,33 @@ impl<'pcs, SC: StarkGenericConfig> TraceCommitter<'pcs, SC> {
     }
 }
 
-/// The PCS commits to multiple trace matrices at once, so this struct stores
-/// references to get all data relevant to a single AIR trace.
-pub struct ProvenSingleTraceView<'a, SC: StarkGenericConfig> {
-    /// Trace domain
-    pub domain: Domain<SC>,
-    /// Prover data, includes LDE matrix of trace and Merkle tree.
-    /// The prover data can commit to multiple trace matrices, so
-    /// `index` is needed to identify this trace.
-    pub data: &'a PcsProverData<SC>,
-    /// The index of the trace in the prover data.
-    pub index: usize,
+/// Prover data for multi-matrix trace commitments.
+/// The data is for the traces committed into a single commitment.
+///
+/// This data can be cached and attached to other multi-matrix traces.
+pub struct ProverTraceData<SC: StarkGenericConfig> {
+    /// Trace matrices, possibly of different heights.
+    /// We store the domain each trace was committed with respect to.
+    // Memory optimization? PCS ProverData should be able to recover the domain.
+    pub traces_with_domains: Vec<(Domain<SC>, RowMajorMatrix<Val<SC>>)>,
+    /// Commitment to the trace matrices.
+    pub commit: Com<SC>,
+    /// Prover data, such as a Merkle tree, for the trace commitment.
+    pub data: PcsProverData<SC>,
 }
 
-/// The domain of `main` and `permutation` must be the same.
+/// The full RAP trace consists of horizontal concatenation of multiple matrices of the same height:
+/// - preprocessed trace matrix
+/// - the main trace matrix is horizontally partitioned into multiple matrices,
+///   where each matrix can belong to a separate matrix commitment.
+/// - after each round of challenges, a trace matrix for trace allowed to use those challenges
+/// Each of these matrices is allowed to be in a separate commitment.
+///
+/// Only the main trace matrix is allowed to be partitioned, so that different parts may belong to
+/// different commitments. We do not see any use cases where the `preprocessed` or `after_challenge`
+/// matrices need to be partitioned.
+#[derive(Clone)]
 pub struct ProvenSingleRapTraceView<'a, SC: StarkGenericConfig> {
-    /// Preprocessed trace data
-    pub preprocessed: Option<ProvenSingleTraceView<'a, SC>>,
     /// Main trace data
     pub main: ProvenSingleTraceView<'a, SC>,
     /// Permutation trace data
@@ -63,24 +76,17 @@ pub struct ProvenSingleRapTraceView<'a, SC: StarkGenericConfig> {
     /// Exposed values of the permutation
     pub permutation_exposed_values: Vec<SC::Challenge>,
 }
+    /// Domain of the trace matrices
+    pub domain: Domain<SC>,
+    // Maybe public values should be included in this struct
 
-impl<'a, SC: StarkGenericConfig> Clone for ProvenSingleTraceView<'a, SC> {
-    fn clone(&self) -> Self {
-        Self {
-            domain: self.domain,
-            data: self.data,
-            index: self.index,
-        }
-    }
-}
-
-impl<'a, SC: StarkGenericConfig> Clone for ProvenSingleRapTraceView<'a, SC> {
-    fn clone(&self) -> Self {
-        Self {
-            preprocessed: self.preprocessed.clone(),
-            main: self.main.clone(),
-            permutation: self.permutation.clone(),
-            permutation_exposed_values: self.permutation_exposed_values.clone(),
-        }
-    }
+    /// Preprocessed trace data, if any
+    pub preprocessed: Option<ProvenSingleTraceView<'a, SC>>,
+    /// Main trace data, horizontally partitioned into multiple matrices
+    pub partitioned_main: Vec<ProvenSingleMatrixView<'a, SC>>,
+    /// `after_challenge[i] = (matrix, exposed_values)`
+    /// where `matrix` is the trace matrix which uses challenges drawn
+    /// after observing commitments to `preprocessed`, `partitioned_main`, and `after_challenge[..i]`,
+    /// and `exposed_values` are certain values in this phase that are exposed to the verifier.
+    pub after_challenge: Vec<(ProvenSingleMatrixView<'a, SC>, Vec<SC::Challenge>)>,
 }

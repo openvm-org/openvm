@@ -31,6 +31,10 @@ pub struct ProvingKey<SC: StarkGenericConfig> {
     /// Prover data for the preprocessed trace for each AIR.
     /// None if AIR doesn't have a preprocessed trace.
     pub preprocessed_data: Vec<Option<ProverPreprocessedData<SC>>>,
+    /// For each AIR, the [MatrixCommitmentGraph] for the matrices that the main trace is partitioned into.
+    /// The length of `main_graph` is equal to the total number of AIRs.
+    pub main_graph: Vec<MatrixCommitmentGraph>,
+    pub num_main_trace_commitments: usize,
 }
 
 /// Common verifying key for multiple AIRs.
@@ -42,4 +46,7 @@ pub struct VerifyingKey<SC: StarkGenericConfig> {
     /// Verifier data for the preprocessed trace for each AIR.
     /// None if AIR doesn't have a preprocessed trace.
     pub preprocessed_data: Vec<Option<VerifierPreprocessedData<SC>>>,
+    /// For each AIR, the [MatrixCommitmentGraph] for the matrices that the main trace is partitioned into.
+    pub main_graph: Vec<MatrixCommitmentGraph>,
+    pub num_main_trace_commitments: usize,
 }

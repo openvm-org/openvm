@@ -13,65 +13,57 @@ use crate::{
     verifier::types::VerifierSingleRapMetadata,
 };
 
-use super::{opener::OpeningProof, trace::ProvenSingleTraceView};
+use super::opener::OpeningProof;
 
-/// Prover data for multi-matrix trace commitments.
-/// The data is for the traces committed into a single commitment.
-///
-/// This data can be cached and attached to other multi-matrix traces.
-pub struct ProverTraceData<SC: StarkGenericConfig> {
-    /// Trace matrices, possibly of different heights.
-    /// We store the domain each trace was committed with respect to.
-    // Memory optimization? PCS ProverData should be able to recover the domain.
-    pub traces_with_domains: Vec<(Domain<SC>, RowMajorMatrix<Val<SC>>)>,
-    /// Commitment to the trace matrices.
-    pub commit: Com<SC>,
-    /// Prover data, such as a Merkle tree, for the trace commitment.
-    pub data: PcsProverData<SC>,
+/// Prover trace data for multiple AIRs where each AIR has partitioned main trace.
+/// The different main trace parts can belong to different commitments.
+pub struct ProvenMultiAirTraceData<'a, SC: StarkGenericConfig> {
+    /// A list of multi-matrix commitments and their associated prover data.
+    pub pcs_data: Vec<(Com<SC>, PcsProverData<SC>)>,
+    // main trace, for each air, list of trace matrices and pointer to prover data for each
+    /// Proven trace data for each AIR.
+    pub air_traces: Vec<ProvenSingleAirTrace<'a, SC>>,
 }
 
-impl<SC: StarkGenericConfig> ProverTraceData<SC> {
-    pub fn get(&self, index: usize) -> Option<ProvenSingleTraceView<SC>> {
-        self.traces_with_domains
-            .get(index)
-            .map(|(domain, _)| ProvenSingleTraceView {
-                domain: *domain,
-                data: &self.data,
-                index,
-            })
+impl<'a, SC: StarkGenericConfig> ProvenMultiAirTraceData<'a, SC> {
+    pub fn get_commit(&self, commit_index: usize) -> Option<&Com<SC>> {
+        self.pcs_data.get(commit_index).map(|(commit, _)| commit)
+    }
+
+    pub fn commits(&self) -> impl Iterator<Item = &Com<SC>> {
+        self.pcs_data.iter().map(|(commit, _)| commit)
     }
 }
 
-/// Prover data for multiple AIRs that share a multi-matrix trace commitment.
-/// Each AIR owns a separate trace matrix of a different height, but these
-/// trace matrices have been committed together using the PCS.
-///
-/// This struct contains references to the AIRs themselves, which hold the constraint
-/// information. The AIRs must support the same [AirBuilder].
-///
-/// We use dynamic dispatch here for the extra flexibility. The overhead is small
-/// **if we ensure dynamic dispatch only once per AIR** (not true right now).
-///
-/// The ordering of `trace_data.traces_with_domains` and `airs` must match.
-pub struct ProvenMultiMatrixAirTrace<'a, SC: StarkGenericConfig> {
-    /// Proven trace data.
-    pub trace_data: &'a ProverTraceData<SC>,
-    /// The AIRs that share the trace commitment.
-    pub airs: Vec<&'a dyn ProverRap<SC>>,
-}
-
-impl<'a, SC: StarkGenericConfig> Clone for ProvenMultiMatrixAirTrace<'a, SC> {
+impl<'a, SC: StarkGenericConfig> Clone for ProvenMultiAirTraceData<'a, SC>
+where
+    PcsProverData<SC>: Clone,
+{
     fn clone(&self) -> Self {
         Self {
-            trace_data: self.trace_data,
-            airs: self.airs.clone(),
+            pcs_data: self.pcs_data.clone(),
+            air_traces: self.air_traces.clone(),
         }
     }
 }
 
-impl<'a, SC: StarkGenericConfig> ProvenMultiMatrixAirTrace<'a, SC> {
-    pub fn new(trace_data: &'a ProverTraceData<SC>, airs: Vec<&'a dyn ProverRap<SC>>) -> Self {
-        Self { trace_data, airs }
+/// Partitioned main trace data for a single AIR.
+///
+/// We use dynamic dispatch here for the extra flexibility. The overhead is small
+/// **if we ensure dynamic dispatch only once per AIR** (not true right now).
+pub struct ProvenSingleAirTrace<'a, SC: StarkGenericConfig> {
+    pub air: &'a dyn ProverRap<SC>,
+    pub domain: Domain<SC>,
+    pub partitioned_main_trace: Vec<RowMajorMatrix<Val<SC>>>,
+}
+
+impl<'a, SC: StarkGenericConfig> Clone for ProvenSingleAirTrace<'a, SC> {
+    fn clone(&self) -> Self {
+        Self {
+            air: self.air,
+            domain: self.domain,
+            partitioned_main_trace: self.partitioned_main_trace.clone(),
+        }
     }
 }
 

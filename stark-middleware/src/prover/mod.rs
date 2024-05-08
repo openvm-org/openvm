@@ -11,6 +11,7 @@ use crate::{
     air_builders::{
         debug::check_constraints::check_constraints, symbolic::get_log_quotient_degree,
     },
+    commit::MatrixCommitmentGraph,
     config::{Com, PcsProof, PcsProverData},
     prover::trace::{ProvenSingleRapTraceView, ProvenSingleTraceView},
     setup::types::ProvingKey,
@@ -20,7 +21,7 @@ use crate::{
 use self::{
     opener::OpeningProver,
     quotient::QuotientCommitter,
-    types::{Commitments, Proof, ProvenMultiMatrixAirTrace},
+    types::{Commitments, Proof, ProvenMultiAirTraceData},
 };
 
 /// Polynomial opening proofs
@@ -50,7 +51,7 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         &self,
         challenger: &mut SC::Challenger,
         pk: &'a ProvingKey<SC>,
-        partition: Vec<ProvenMultiMatrixAirTrace<'a, SC>>,
+        main_trace_data: ProvenMultiAirTraceData<'a, SC>,
         public_values: &'a [Val<SC>],
     ) -> Proof<SC>
     where
@@ -74,11 +75,9 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         challenger.observe_slice(&preprocessed_commits);
 
         // Challenger must observe all trace commitments
-        let main_trace_commitments = partition
-            .iter()
-            .map(|p| p.trace_data.commit.clone())
-            .collect_vec();
-        challenger.observe_slice(&main_trace_commitments);
+        main_trace_data
+            .commits()
+            .for_each(|commit| challenger.observe(commit.clone()));
 
         // TODO: this is not needed if there are no interactions
         // Generate 2 permutation challenges

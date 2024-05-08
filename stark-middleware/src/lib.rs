@@ -2,6 +2,8 @@
 
 /// AIR builders for prover and verifier, including support for cross-matrix permutation arguments.
 pub mod air_builders;
+/// Types for tracking matrix in system with multiple commitments, each to multiple matrices.
+pub mod commit;
 /// Helper types associated to generic STARK config.
 pub mod config;
 pub mod interaction;
