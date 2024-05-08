@@ -82,3 +82,9 @@ The constraints are:
 where $sum$ is exposed to the verifier.
 
 In summarize, we need 1 additional virtual column for each send or receive interaction, and 1 additional virtual column to track the partial sum. These columns are all virtual in the sense that they are only materialized by the prover, after the main trace was committed, because a random challenge is needed.
+
+# Conventions
+
+Following Valida, we will follow the convention that if an individual chip is the owner of some functionality, say `f(x) = y`, then the chip itself should add `receive`
+interactions to _receive_ requests with fields `(x, y)` and constrain correctness of `f(x) = y`. Any other chip in a system that wants to use this functionality should
+add `send` interactions to _send_ requests for this functionality.

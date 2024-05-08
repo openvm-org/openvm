@@ -1,7 +1,7 @@
 //! Plonky 3 type aliases associated to a [StarkGenericConfig].
 
 use p3_commit::Pcs;
-use p3_uni_stark::StarkGenericConfig;
+pub use p3_uni_stark::{StarkGenericConfig, Val};
 
 pub type Com<SC> = <<SC as StarkGenericConfig>::Pcs as Pcs<
     <SC as StarkGenericConfig>::Challenge,

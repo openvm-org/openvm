@@ -1,40 +1,43 @@
 [package]
 name = "afs-middleware"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "AFS proof system middleware built on top of Plonky3 backend."
 
 [dependencies]
 p3-air = { workspace = true }
-p3-baby-bear = { workspace = true }
 p3-challenger = { workspace = true }
 p3-commit = { workspace = true }
-p3-dft = { workspace = true }
 p3-field = { workspace = true }
-p3-fri = { workspace = true }
-p3-goldilocks = { workspace = true }
-p3-keccak = { workspace = true }
-p3-keccak-air = { workspace = true }
 p3-matrix = { workspace = true }
 p3-maybe-rayon = { workspace = true }
-p3-mds = { workspace = true }
-p3-merkle-tree = { workspace = true }
-p3-poseidon2 = { workspace = true }
-p3-symmetric = { workspace = true }
 p3-uni-stark = { workspace = true }
 p3-util = { workspace = true }
 
 itertools = "0.12.1"
-rand = "0.8.5"
 serde = { version = "1.0", default-features = false, features = [
     "derive",
     "alloc",
 ] }
 tracing = "0.1.37"
+
+[dev-dependencies]
+rand = "0.8.5"
 tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }
 tracing-forest = { version = "0.1.6", features = ["ansi", "smallvec"] }
 
-[dev-dependencies]
-p3-middleware-derive = { path = "derive" }
+p3-dft = { workspace = true }
+p3-merkle-tree = { workspace = true }
+p3-fri = { workspace = true }
+p3-baby-bear = { workspace = true }
+p3-poseidon2 = { workspace = true }
+p3-keccak = { workspace = true }
+p3-symmetric = { workspace = true }
+p3-mds = { workspace = true }
+p3-goldilocks = { workspace = true }
+
+afs-middleware-derive = { path = "derive" }
 
 [features]
 default = []
