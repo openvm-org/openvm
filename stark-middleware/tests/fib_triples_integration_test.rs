@@ -36,13 +36,12 @@ fn test_fib_triples_stark() {
     // Public inputs:
     let a = 0u32;
     let b = 1u32;
-    let c = 1u32;
     let n = 1usize << log_trace_degree;
 
     type Val = BabyBear;
-    let pis = [a, b, c, get_fib_number(n + 1)].map(BabyBear::from_canonical_u32);
+    let pis = [a, b, get_fib_number(n + 1)].map(BabyBear::from_canonical_u32);
 
-    let trace = generate_trace_rows::<Val>(a, b, c, n);
+    let trace = generate_trace_rows::<Val>(a, b, n);
     let trace_committer = TraceCommitter::<StarkConfigPoseidon2>::new(config.pcs());
     let proven_trace = trace_committer.commit(vec![trace]);
     let proven = ProvenMultiMatrixAirTrace {

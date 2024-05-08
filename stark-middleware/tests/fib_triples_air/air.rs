@@ -24,8 +24,7 @@ impl<AB: AirBuilderWithPublicValues> Air<AB> for FibonacciAir {
 
         let a = pis[0];
         let b = pis[1];
-        let c = pis[2];
-        let x = pis[3];
+        let x = pis[2];
 
         let (local, next) = (main.row_slice(0), main.row_slice(1));
         let local: &FibonacciCols<AB::Var> = (*local).borrow();
@@ -35,7 +34,7 @@ impl<AB: AirBuilderWithPublicValues> Air<AB> for FibonacciAir {
 
         when_first_row.assert_eq(local.left, a);
         when_first_row.assert_eq(local.middle, b);
-        when_first_row.assert_eq(local.right, c);
+        when_first_row.assert_eq(local.right, local.left + local.middle);
 
         let mut when_transition = builder.when_transition();
 
