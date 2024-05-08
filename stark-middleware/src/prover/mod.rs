@@ -103,46 +103,22 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
             })
             .unzip();
 
-        // Flatten partitions
-        let main_traces_with_domains: Vec<_> = partition
-            .par_iter()
-            .flat_map(|part| part.trace_data.traces_with_domains.iter())
-            .collect();
-        // TODO: refactor this
-        let (rap_mains, perm_traces): (Vec<_>, Vec<_>) =
+        // TODO: ===== Permutation Trace Generation should be moved to separate module ====
+        // Generate permutation traces
+        let perm_traces: Vec<_> =
             tracing::info_span!("generate permutation traces").in_scope(|| {
-                partition
+                pk.preprocessed_data
                     .par_iter()
-                    .flat_map(|part| {
-                        part.airs
-                            .par_iter()
-                            .zip_eq(part.trace_data.traces_with_domains.par_iter())
-                            .zip_eq(preprocessed_traces_with_domains.par_iter())
-                            .enumerate()
-                            .map(
-                                |(
-                                    index,
-                                    ((air, main_trace_with_domain), preprocessed_trace_with_domain),
-                                )| {
-                                    let (domain, trace) = main_trace_with_domain;
-                                    let main = ProvenSingleTraceView {
-                                        domain: *domain,
-                                        data: &part.trace_data.data,
-                                        index,
-                                    };
-                                    let preprocessed_trace = preprocessed_trace_with_domain
-                                        .as_ref()
-                                        .map(|(_, trace)| trace.as_view());
-                                    let perm_trace = air.generate_permutation_trace(
-                                        &preprocessed_trace,
-                                        &trace.as_view(),
-                                        perm_challenges,
-                                    );
-                                    ((air, main), perm_trace)
-                                },
-                            )
+                    .zip_eq(main_trace_data.air_traces.par_iter())
+                    .map(|(prep, main)| {
+                        let air = main.air;
+                        air.generate_permutation_trace(
+                            &prep.as_ref().map(|p| p.trace.as_view()),
+                            &main.partitioned_main_trace,
+                            perm_challenges,
+                        )
                     })
-                    .unzip()
+                    .collect()
             });
         // TODO: Copy from main_domains
         let perm_traces_with_domains: Vec<_> = perm_traces

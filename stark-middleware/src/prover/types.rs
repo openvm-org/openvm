@@ -1,5 +1,5 @@
 use p3_air::Air;
-use p3_matrix::dense::RowMajorMatrix;
+use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
@@ -54,7 +54,7 @@ where
 pub struct ProvenSingleAirTrace<'a, SC: StarkGenericConfig> {
     pub air: &'a dyn ProverRap<SC>,
     pub domain: Domain<SC>,
-    pub partitioned_main_trace: Vec<RowMajorMatrix<Val<SC>>>,
+    pub partitioned_main_trace: Vec<RowMajorMatrixView<'a, Val<SC>>>,
 }
 
 impl<'a, SC: StarkGenericConfig> Clone for ProvenSingleAirTrace<'a, SC> {

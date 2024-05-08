@@ -54,7 +54,7 @@ pub trait InteractiveAir<AB: AirBuilder>: Air<AB> + Chip<AB::F> {
     fn generate_permutation_trace(
         &self,
         preprocessed_trace: &Option<RowMajorMatrixView<AB::F>>,
-        main_trace: &RowMajorMatrixView<AB::F>,
+        partitioned_main_trace: &[RowMajorMatrixView<AB::F>],
         permutation_randomness: [AB::EF; 2],
     ) -> Option<RowMajorMatrix<AB::EF>>
     where
@@ -63,7 +63,7 @@ pub trait InteractiveAir<AB: AirBuilder>: Air<AB> + Chip<AB::F> {
         self::trace::generate_permutation_trace(
             self,
             preprocessed_trace,
-            main_trace,
+            partitioned_main_trace,
             permutation_randomness,
         )
     }
