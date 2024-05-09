@@ -31,19 +31,20 @@ For a given chip, the interface allows to specify sends and receives via the
 `Interaction` struct. A single interaction $\sigma$ specifies a [communication] bus
 to communicate over -- this bus is an abstract concept that is not explicitly materialized.
 The index of this bus is `argument_index`, which we call $i_\sigma$ in the following.
-The interaction specifies `fields` $(f_j)$ where each $f_j$ is a polynomial expression
-on the main trace polynomials with rotations. This means that we want to send the tuple $(f_1(\mathbf T),\dotsc,f_m(\mathbf T))$ to the $i$-th bus with multiplicity $m$ given by `count`, where $\mathbf T$ refers to the trace as polynomials (as well as rotations).
+The interaction specifies `fields` $(f_j)_j$ and `count` $m$ where each $f_j$ and $m$ is a polynomial expression
+on the main and preprocessed trace polynomials with rotations. This means that we want to send the tuple
+$(f_1(\mathbf T),\dotsc,f_{len}(\mathbf T))$ to the $i$-th bus with multiplicity $m(\mathbf T)$, where $\mathbf T$
+refers to the trace (including preprocessed columns) as polynomials (as well as rotations).
 
 The backend implementation of the prover will constrain the computation of a cumulative sum
 _for just this AIR_
-$$\sum_r \left(\sum_\sigma \frac {m_\sigma}{\alpha^{i_\sigma} + \sum_j \beta^j \cdot f_{\sigma,j}(\mathbf T[r])} - \sum_\tau \frac {m_\tau[r]}{\alpha^{i_\tau} + \sum_j \beta^j \cdot f_{\tau,j}(\mathbf T[r])} \right)$$
-where $r$ sums over all row indices, $\sigma$ sums over all sends, $\tau$ sums over all receives.
+$$\sum_r \left(\sum_\sigma sign(\sigma) \frac {m_\sigma[r]}{\alpha^{i_\sigma} + \sum_j \beta^j \cdot f_{\sigma,j}(\mathbf T[r])} \right)$$
+where $r$ sums over all row indices, $\sigma$ sums over all sends and receives, $sign(\sigma) = 1$ if $\sigma$ is a send, $sign(\sigma) = -1$ if $\sigma$ is a receive.
 
 - $\alpha,\beta$ are two random challenge extension field elements.
 - The reciprocal is the logUp logarithmic derivative argument.
 - $\alpha^{i_\sigma}$ is used to distinguish the bus index.
 - $\sum_j \beta^j \cdot f_{\sigma,j}$ is the RLC of the $(f_{\sigma,j})$ tuple.
-- Multiplicity $m_\sigma$ is constant (and non-zero).
 - Add the sends, subtract the receives.
 
 Globally, the prover will sum this per-AIR cumulative sum over all AIRs and lastly constrain that the sum is $0$. This will enforce that the sends and receives are balanced globally across all AIRs. Note that the multiplicity allows a single send to a bus to be received by multiple AIRs.
@@ -52,12 +53,12 @@ This enforces that:
 
 > for each bus, each row of a `VirtualPairCol` from a send coincides with some row of a `VirtualPairCol` of a receive.
 
-In other words, it enforces a cross-chip lookup of the concatenation of the send tables into the concatenation of the receive tables. 
+In other words, it enforces a cross-chip lookup of the concatenation of the send tables into the concatenation of the receive tables.
 
 ## Virtual columns and constraints
 
-In theory the $f_j$ can be any multi-variate polynomial expression. Currently plonky3 only supports linear expressions, which are constructed via the `VirtualPairCol` struct.
-A `VirtualPairCol` is a linear function over a set of columns of the form $f(\mathbf T) = b + \sum w_i T_i$.
+In theory the $f_j, m$ can be any multi-variate polynomial expression. Currently plonky3 only supports affine expressions (degree <= 1 polynomials), which are constructed via the `VirtualPairCol` struct.
+A `VirtualPairCol` is an affine function over a set of columns of the form $f(\mathbf T) = b + \sum w_i T_i$.
 
 ```rust
 pub struct VirtualPairCol<F: Field> {
@@ -69,10 +70,10 @@ pub struct VirtualPairCol<F: Field> {
 As such, the RLC $\sum_j \beta^j \cdot f_j$ is a linear polynomial.
 
 For each send/receive interaction, we must add one virtual column $q_\sigma$ with row $r$ equal to
-$$q_\sigma[r] = \frac {m_\sigma}{\alpha^{i_\sigma} + \sum_j \beta^j \cdot f_{\sigma,j}(\mathbf T[r])}$$
+$$q_\sigma[r] = \frac {m_\sigma[r]}{\alpha^{i_\sigma} + \sum_j \beta^j \cdot f_{\sigma,j}(\mathbf T[r])}$$
 The constraint is
-$$q_\sigma \cdot \left(\alpha^{i_\sigma} + \sum_j \beta^j \cdot f_{\sigma,j}(\mathbf T) \right) = m_\sigma$$
-has degree $1 + max_j deg(f_{\sigma,j})$ ($=2$ in the case $f_{\sigma,j}$ are linear).
+$$q_\sigma \cdot \left(\alpha^{i_\sigma} + \sum_j \beta^j \cdot f_{\sigma,j}(\mathbf T) \right) = m_\sigma(\mathbf T)$$
+has degree $max(1 + max_j deg(f_{\sigma,j}), deg(m_\sigma))$ ($=2$ in the case all functions are affine).
 
 Note: we could save columns by combining $q$ columns together, at the cost of increasing the constraint degree.
 
