@@ -49,7 +49,7 @@ where $r$ sums over all row indices, $\sigma$ sums over all sends and receives, 
 
 Globally, the prover will sum this per-AIR cumulative sum over all AIRs and lastly constrain that the sum is $0$. This will enforce that the sends and receives are balanced globally across all AIRs. Note that the multiplicity allows a single send to a bus to be received by multiple AIRs.
 
-If all row values for `count` for sends are small, this enforces that:
+If all row values for `count` for sends are small enough that no overflows are possible, this enforces that:
 
 > for each bus, each row of a `VirtualPairCol` with non-zero `count` from a send coincides with some row of a `VirtualPairCol` of a receive.
 
