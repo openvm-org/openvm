@@ -36,17 +36,23 @@ on the main trace polynomials with rotations. This means that we want to send th
 
 The backend implementation of the prover will constrain the computation of a cumulative sum
 _for just this AIR_
-$$\sum_r \left(\sum_\sigma \frac {m_\sigma}{\alpha^{i_\sigma} + \sum_j \beta^j \cdot f_{\sigma,j}(\mathbf T[r])} - \sum_\tau \frac {m_\tau}{\alpha^{i_\tau} + \sum_j \beta^j \cdot f_{\tau,j}(\mathbf T[r])} \right)$$
+$$\sum_r \left(\sum_\sigma \frac {m_\sigma}{\alpha^{i_\sigma} + \sum_j \beta^j \cdot f_{\sigma,j}(\mathbf T[r])} - \sum_\tau \frac {m_\tau[r]}{\alpha^{i_\tau} + \sum_j \beta^j \cdot f_{\tau,j}(\mathbf T[r])} \right)$$
 where $r$ sums over all row indices, $\sigma$ sums over all sends, $\tau$ sums over all receives.
 
 - $\alpha,\beta$ are two random challenge extension field elements.
 - The reciprocal is the logUp logarithmic derivative argument.
 - $\alpha^{i_\sigma}$ is used to distinguish the bus index.
 - $\sum_j \beta^j \cdot f_{\sigma,j}$ is the RLC of the $(f_{\sigma,j})$ tuple.
-- Multiplicity $m_\sigma$ is constant.
+- Multiplicity $m_\sigma$ is constant (and non-zero).
 - Add the sends, subtract the receives.
 
 Globally, the prover will sum this per-AIR cumulative sum over all AIRs and lastly constrain that the sum is $0$. This will enforce that the sends and receives are balanced globally across all AIRs. Note that the multiplicity allows a single send to a bus to be received by multiple AIRs.
+
+This enforces that:
+
+> for each bus, each row of a `VirtualPairCol` from a send coincides with some row of a `VirtualPairCol` of a receive.
+
+In other words, it enforces a cross-chip lookup of the concatenation of the send tables into the concatenation of the receive tables. 
 
 ## Virtual columns and constraints
 
