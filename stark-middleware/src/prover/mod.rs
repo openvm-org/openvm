@@ -188,7 +188,7 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         ) in rap_mains
             .iter()
             .zip_eq(main_traces_with_domains)
-            .zip(std::iter::repeat(preprocessed_traces_with_domains.iter()).flatten())
+            .zip(preprocessed_traces_with_domains.iter())
             .zip_eq(&perm_traces_with_domains)
             .zip_eq(&cumulative_sums)
         {
@@ -235,7 +235,7 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         // Prepare the proven RAP trace views
         let (raps, trace_views): (Vec<_>, Vec<_>) = rap_mains
             .into_iter()
-            .zip(std::iter::repeat(preps).flatten())
+            .zip(preps.into_iter())
             .zip_eq(cumulative_sums_and_indices)
             .map(|(((rap, main), preprocessed), cumulative_sum_and_index)| {
                 let (permutation, exposed_values) =
@@ -267,7 +267,7 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         let quotient_committer = QuotientCommitter::new(pcs, &perm_challenges, alpha);
         let quotient_degrees = raps
             .iter()
-            .zip(std::iter::repeat(preprocessed_traces_with_domains.iter()).flatten())
+            .zip(preprocessed_traces_with_domains.iter())
             .map(|(&rap, prep_trace_with_domain)| {
                 let prep_width = prep_trace_with_domain
                     .as_ref()
