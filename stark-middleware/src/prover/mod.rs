@@ -87,20 +87,22 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         let (preprocessed_traces_with_domains, preps): (Vec<_>, Vec<_>) = pk
             .preprocessed_data
             .iter()
-            .enumerate()
-            .map(|(index, md)| {
-                md.as_ref()
-                    .map(|trace_data| {
-                        let domain = trace_data.domain;
-                        let trace = trace_data.trace.clone();
-                        let preprocessed = ProvenSingleTraceView {
-                            domain,
-                            data: &trace_data.data,
-                            index,
-                        };
-                        ((domain, trace), preprocessed)
-                    })
-                    .unzip()
+            .scan(0usize, |count, md| {
+                Some(
+                    md.as_ref()
+                        .map(|trace_data| {
+                            let domain = trace_data.domain;
+                            let trace = trace_data.trace.clone();
+                            let preprocessed = ProvenSingleTraceView {
+                                domain,
+                                data: &trace_data.data,
+                                index: *count,
+                            };
+                            *count += 1;
+                            ((domain, trace), preprocessed)
+                        })
+                        .unzip(),
+                )
             })
             .unzip();
 
