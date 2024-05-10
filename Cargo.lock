@@ -24,6 +24,9 @@ dependencies = [
  "p3-symmetric",
  "p3-uni-stark",
  "p3-util",
+ "rand",
+ "tracing-forest",
+ "tracing-subscriber",
 ]
 
 [[package]]

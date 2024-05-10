@@ -12,6 +12,7 @@ p3-field = { workspace = true }
 p3-matrix = { workspace = true }
 p3-maybe-rayon = { workspace = true }
 p3-util = { workspace = true }
+rand = "0.8"
 
 afs-middleware = { path = "../stark-middleware" }
 afs-middleware-derive = { path = "../stark-middleware/derive" }
@@ -27,3 +28,5 @@ p3-keccak = { workspace = true }
 p3-merkle-tree = { workspace = true }
 p3-poseidon2 = { workspace = true }
 p3-symmetric = { workspace = true }
+tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }
+tracing-forest = { version = "0.1.6", features = ["ansi", "smallvec"] }
