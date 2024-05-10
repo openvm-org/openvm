@@ -75,7 +75,7 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
         assert_eq!(main_trace_commitments.len(), pk.num_main_trace_commitments);
         challenger.observe_slice(&main_trace_commitments);
 
-        // TODO: this is not needed if there are no interactions
+        // TODO: this is not needed if there are no interactions. Number of challenge rounds should be specified in proving key
         // Generate 2 permutation challenges
         let perm_challenges = [(); 2].map(|_| challenger.sample_ext_element::<SC::Challenge>());
 
@@ -139,7 +139,6 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
             );
         }
 
-        let mut perm_matrix_indices = Vec::new();
         // Commit to permutation traces: this means only 1 challenge round right now
         // One shared commit for all permutation traces
         let perm_pcs_data = tracing::info_span!("commit to permutation traces").in_scope(|| {
@@ -209,6 +208,12 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
                 (rap, trace_view)
             })
             .unzip();
+        // Either 0 or 1 after_challenge commits, depending on if there are any permutation traces
+        let after_challenge_commitments = perm_pcs_data
+            .as_ref()
+            .map(|(commit, _)| commit.clone())
+            .into_iter()
+            .collect_vec();
         // === END of logic specific to Interactions/permutations, we can now deal with general RAP ===
 
         // Generate `alpha` challenge
@@ -220,7 +225,7 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
             .iter()
             .map(|pk| pk.vk.quotient_degree)
             .collect_vec();
-        let quotient_committer = QuotientCommitter::new(pcs, &perm_challenges, alpha);
+        let quotient_committer = QuotientCommitter::new(pcs, &[&perm_challenges], alpha);
         let quotient_values = quotient_committer.quotient_values(
             raps,
             trace_views.clone(),
@@ -236,54 +241,29 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
         // Collect the commitments
         let commitments = Commitments {
             main_trace: main_trace_commitments,
-            perm_trace: perm_pcs_data.as_ref().map(|(commit, _)| commit.clone()),
+            after_challenge: after_challenge_commitments,
             quotient: quotient_data.commit.clone(),
         };
-        // Book-keeping, build verifier metadata.
-        // TODO: this should be in proving key gen
-        let main_trace_ptrs = partition.iter().enumerate().flat_map(|(i, part)| {
-            (0..part.trace_data.traces_with_domains.len())
-                .map(|j| (i, j))
-                .collect_vec()
-        });
-        let rap_data = trace_views
-            .into_iter()
-            .zip_eq(main_trace_ptrs)
-            .zip_eq(quotient_degrees.iter())
-            .enumerate()
-            .map(
-                |(index, ((view, main_trace_ptr), &quotient_degree))| VerifierSingleRapMetadata {
-                    degree: view.main.domain.size(),
-                    quotient_degree,
-                    main_trace_ptr,
-                    perm_trace_index: view.permutation.map(|p| p.index),
-                    index,
-                },
-            )
-            .collect::<Vec<_>>();
 
         // Draw `zeta` challenge
         let zeta: SC::Challenge = challenger.sample_ext_element();
         tracing::debug!("zeta: {zeta:?}");
 
         let opener = OpeningProver::new(pcs, zeta);
-        let preprocessed_domains = preprocessed_traces_with_domains
+        let preprocessed_data: Vec<_> = trace_views
             .iter()
-            .map(|mt| mt.as_ref().map(|(domain, _)| *domain))
-            .collect_vec();
-        let preprocessed_data: Vec<_> = pk
-            .preprocessed_data
-            .iter()
-            .zip(preprocessed_domains.iter())
-            .filter_map(|(maybe_data, maybe_domain)| {
-                maybe_data
+            .flat_map(|view| {
+                view.preprocessed
                     .as_ref()
-                    .zip(maybe_domain.as_ref())
-                    .map(|(trace_data, &domain)| (&trace_data.data, domain))
+                    .map(|view| (view.data, view.matrix_index))
             })
             .collect();
 
-        let main_data = partition
+        let main_data: Vec<_> =
+            main_trace_data.pcs_data.iter().enumerate(|(commit_idx, (data,commit))| {
+
+            })
+            partition
             .iter()
             .map(|part| {
                 let data = &part.trace_data.data;
@@ -301,7 +281,7 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
             challenger,
             preprocessed_data,
             main_data,
-            perm_data,
+            after_challenge,
             &quotient_data.data,
             &quotient_degrees,
         );

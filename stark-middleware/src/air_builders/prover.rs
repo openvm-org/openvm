@@ -16,18 +16,20 @@ pub struct ProverConstraintFolder<'a, SC: StarkGenericConfig> {
     pub partitioned_main: Vec<
         VerticalPair<RowMajorMatrixView<'a, PackedVal<SC>>, RowMajorMatrixView<'a, PackedVal<SC>>>,
     >,
-    pub perm: VerticalPair<
-        RowMajorMatrixView<'a, PackedChallenge<SC>>,
-        RowMajorMatrixView<'a, PackedChallenge<SC>>,
+    pub after_challenge: Vec<
+        VerticalPair<
+            RowMajorMatrixView<'a, PackedChallenge<SC>>,
+            RowMajorMatrixView<'a, PackedChallenge<SC>>,
+        >,
     >,
-    pub perm_challenges: &'a [PackedChallenge<SC>],
+    pub challenges: &'a [Vec<PackedChallenge<SC>>],
     pub is_first_row: PackedVal<SC>,
     pub is_last_row: PackedVal<SC>,
     pub is_transition: PackedVal<SC>,
     pub alpha: SC::Challenge,
     pub accumulator: PackedChallenge<SC>,
     pub public_values: &'a [Val<SC>],
-    pub perm_exposed_values: &'a [SC::Challenge],
+    pub exposed_values_after_challenge: &'a [&'a [SC::Challenge]],
 }
 
 impl<'a, SC> AirBuilder for ProverConstraintFolder<'a, SC>
@@ -94,6 +96,15 @@ where
     }
 }
 
+impl<'a, SC: StarkGenericConfig> AirBuilderWithPublicValues for ProverConstraintFolder<'a, SC> {
+    type PublicVar = Self::F;
+
+    fn public_values(&self) -> &[Self::F] {
+        self.public_values
+    }
+}
+
+// PermutationAirBuilder is just a special kind of RAP builder
 impl<'a, SC> PermutationAirBuilder for ProverConstraintFolder<'a, SC>
 where
     SC: StarkGenericConfig,
@@ -106,19 +117,20 @@ where
     type RandomVar = PackedChallenge<SC>;
 
     fn permutation(&self) -> Self::MP {
-        self.perm
+        self.after_challenge
+            .get(0)
+            .map(|m| *m)
+            .unwrap_or(VerticalPair::new(
+                RowMajorMatrixView::new(&[], 0),
+                RowMajorMatrixView::new(&[], 0),
+            ))
     }
 
     fn permutation_randomness(&self) -> &[Self::RandomVar] {
-        self.perm_challenges
-    }
-}
-
-impl<'a, SC: StarkGenericConfig> AirBuilderWithPublicValues for ProverConstraintFolder<'a, SC> {
-    type PublicVar = Self::F;
-
-    fn public_values(&self) -> &[Self::F] {
-        self.public_values
+        self.challenges
+            .get(0)
+            .map(|c| c.as_slice())
+            .unwrap_or(&[] as &[Self::RandomVar])
     }
 }
 
@@ -127,6 +139,9 @@ where
     SC: StarkGenericConfig,
 {
     fn permutation_exposed_values(&self) -> &[Self::EF] {
-        self.perm_exposed_values
+        self.exposed_values_after_challenge
+            .get(0)
+            .map(|c| *c)
+            .unwrap_or(&[] as &[Self::EF])
     }
 }

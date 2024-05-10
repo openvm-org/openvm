@@ -40,6 +40,11 @@ pub trait Chip<F: Field> {
             )
             .collect()
     }
+
+    /// Width of the permutation trace.
+    fn permutation_width(&self) -> usize {
+        self.sends().len() + self.receives().len() + 1
+    }
 }
 
 /// An interactive AIR is a AIR that can specify buses for sending and receiving data

@@ -10,7 +10,6 @@ use crate::{
     config::{Com, PcsProverData},
     interaction::InteractiveAir,
     rap::Rap,
-    verifier::types::VerifierSingleRapMetadata,
 };
 
 use super::opener::OpeningProof;
@@ -26,6 +25,10 @@ pub struct ProvenMultiAirTraceData<'a, SC: StarkGenericConfig> {
 }
 
 impl<'a, SC: StarkGenericConfig> ProvenMultiAirTraceData<'a, SC> {
+    pub fn get_domain(&self, air_index: usize) -> Domain<SC> {
+        self.air_traces[air_index].domain
+    }
+
     pub fn get_commit(&self, commit_index: usize) -> Option<&Com<SC>> {
         self.pcs_data.get(commit_index).map(|(commit, _)| commit)
     }
@@ -80,13 +83,17 @@ pub struct ProverQuotientData<SC: StarkGenericConfig> {
     pub data: PcsProverData<SC>,
 }
 
+/// All commitments to a multi-matrix STARK that are not preprocessed.
 #[derive(Serialize, Deserialize)]
 pub struct Commitments<SC: StarkGenericConfig> {
-    /// Multiple commitments, each committing to (possibly) multiple
-    /// main trace matrices
+    /// Multiple commitments for the main trace.
+    /// For each RAP, each part of a partitioned matrix trace matrix
+    /// must belong to one of these commitments.
     pub main_trace: Vec<Com<SC>>,
-    /// Shared commitment for all permutation trace matrices
-    pub perm_trace: Option<Com<SC>>,
+    /// One shared commitment for all trace matrices across all RAPs
+    /// in a single challenge phase `i` after observing the commits to
+    /// `preprocessed`, `main_trace`, and `after_challenge[..i]`
+    pub after_challenge: Vec<Com<SC>>,
     /// Shared commitment for all quotient polynomial evaluations
     pub quotient: Com<SC>,
 }
@@ -98,8 +105,6 @@ pub struct Commitments<SC: StarkGenericConfig> {
 ///
 /// Includes the quotient commitments and FRI opening proofs for the constraints as well.
 pub struct Proof<SC: StarkGenericConfig> {
-    // TODO: this should be in verifying key
-    pub rap_data: Vec<VerifierSingleRapMetadata>,
     /// The PCS commitments
     pub commitments: Commitments<SC>,
     // Opening proofs separated by partition, but this may change
