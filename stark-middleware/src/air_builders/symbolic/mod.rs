@@ -236,6 +236,7 @@ impl<F: Field> AirBuilderWithPublicValues for SymbolicAirBuilder<F> {
 }
 
 impl<F: Field> PermutationAirBuilderWithExposedValues for SymbolicAirBuilder<F> {
+    // TODO: Should this be Self::VarEF?
     fn permutation_exposed_values(&self) -> &[Self::EF] {
         &self.perm_exposed_values
     }
