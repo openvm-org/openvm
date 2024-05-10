@@ -126,6 +126,63 @@ fn test_single_fib_selector_stark() {
         .expect("Verification failed");
 }
 
+#[test]
+fn test_double_fib_starks() {
+    use fib_air::air::FibonacciAir;
+    use fib_selector_air::air::FibonacciSelectorAir;
+
+    // Set up tracing:
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::INFO.into())
+        .from_env_lossy();
+    let _ = Registry::default()
+        .with(env_filter)
+        .with(ForestLayer::default())
+        .try_init();
+
+    let log_trace_degree = 3;
+    let perm = config::poseidon2::random_perm();
+    let config = config::poseidon2::default_config(&perm, log_trace_degree);
+
+    // Public inputs:
+    let a = 0u32;
+    let b = 1u32;
+    let n = 1usize << log_trace_degree;
+
+    type Val = BabyBear;
+    let sels: Vec<bool> = (0..n).map(|_| true).collect(); // All 1s
+    let pis = [a, b, get_fib_number(n)].map(BabyBear::from_canonical_u32);
+
+    let air1 = FibonacciAir {};
+    let air2 = FibonacciSelectorAir { sels };
+
+    let prep_trace1 = air1.preprocessed_trace();
+    let prep_trace2 = air2.preprocessed_trace();
+    let setup = PartitionSetup::new(&config);
+    let (pk, vk) = setup.setup(vec![prep_trace1, prep_trace2]);
+
+    let trace1 = fib_air::trace::generate_trace_rows::<Val>(a, b, n);
+    let trace2 = fib_selector_air::trace::generate_trace_rows::<Val>(a, b, &air2.sels);
+    let trace_committer = TraceCommitter::<StarkConfigPoseidon2>::new(config.pcs());
+    let proven_trace = trace_committer.commit(vec![trace1, trace2]);
+    let proven = ProvenMultiMatrixAirTrace {
+        trace_data: &proven_trace,
+        airs: vec![&air1, &air2],
+    };
+
+    let prover = PartitionProver::new(config);
+    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let proof = prover.prove(&mut challenger, &pk, vec![proven], &pis);
+
+    // Verify the proof:
+    // Start from clean challenger
+    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let verifier = PartitionVerifier::new(prover.config);
+    verifier
+        .verify(&mut challenger, vk, vec![&air1, &air2], proof, &pis)
+        .expect("Verification failed");
+}
+
 fn get_fib_number(n: usize) -> u32 {
     let mut a = 0;
     let mut b = 1;
