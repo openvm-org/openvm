@@ -4,9 +4,7 @@ use tracing::instrument;
 
 pub mod types;
 
-use crate::prover::{trace::TraceCommitter, types::ProverTraceData};
-
-use self::types::{ProverPreprocessedData, ProvingKey, VerifierPreprocessedData, VerifyingKey};
+use crate::prover::trace::TraceCommitter;
 
 /// Calculates the Proving and Verifying keys for a partition of multi-matrix AIRs.
 pub struct PartitionSetup<'a, SC: StarkGenericConfig> {

@@ -7,9 +7,10 @@ pub mod commit;
 /// Helper types associated to generic STARK config.
 pub mod config;
 pub mod interaction;
+/// Proving and verifying key generation
+pub mod keygen;
 /// Prover implementation for partitioned multi-matrix AIRs.
 pub mod prover;
 pub mod rap;
-pub mod setup;
 pub mod utils;
 pub mod verifier;

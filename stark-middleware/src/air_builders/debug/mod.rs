@@ -16,7 +16,8 @@ pub struct DebugConstraintBuilder<'a, SC: StarkGenericConfig> {
     pub row_index: usize,
     pub preprocessed:
         VerticalPair<RowMajorMatrixView<'a, Val<SC>>, RowMajorMatrixView<'a, Val<SC>>>,
-    pub main: VerticalPair<RowMajorMatrixView<'a, Val<SC>>, RowMajorMatrixView<'a, Val<SC>>>,
+    pub partitioned_main:
+        Vec<VerticalPair<RowMajorMatrixView<'a, Val<SC>>, RowMajorMatrixView<'a, Val<SC>>>>,
     pub perm:
         VerticalPair<RowMajorMatrixView<'a, SC::Challenge>, RowMajorMatrixView<'a, SC::Challenge>>,
     pub perm_challenges: &'a [SC::Challenge],
@@ -37,7 +38,7 @@ where
     type M = VerticalPair<RowMajorMatrixView<'a, Val<SC>>, RowMajorMatrixView<'a, Val<SC>>>;
 
     fn main(&self) -> Self::M {
-        self.main
+        *self.partitioned_main.get(0).expect("No main trace")
     }
 
     fn is_first_row(&self) -> Self::Expr {

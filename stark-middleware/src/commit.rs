@@ -44,6 +44,12 @@ pub struct ProvenSingleMatrixView<'a, SC: StarkGenericConfig> {
     pub matrix_index: usize,
 }
 
+impl<'a, SC: StarkGenericConfig> ProvenSingleMatrixView<'a, SC> {
+    pub fn new(data: &'a PcsProverData<SC>, matrix_index: usize) -> Self {
+        Self { data, matrix_index }
+    }
+}
+
 impl<'a, SC: StarkGenericConfig> Clone for ProvenSingleMatrixView<'a, SC> {
     fn clone(&self) -> Self {
         Self {

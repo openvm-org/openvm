@@ -13,8 +13,9 @@ use crate::rap::PermutationAirBuilderWithExposedValues;
 pub struct ProverConstraintFolder<'a, SC: StarkGenericConfig> {
     pub preprocessed:
         VerticalPair<RowMajorMatrixView<'a, PackedVal<SC>>, RowMajorMatrixView<'a, PackedVal<SC>>>,
-    pub main:
+    pub partitioned_main: Vec<
         VerticalPair<RowMajorMatrixView<'a, PackedVal<SC>>, RowMajorMatrixView<'a, PackedVal<SC>>>,
+    >,
     pub perm: VerticalPair<
         RowMajorMatrixView<'a, PackedChallenge<SC>>,
         RowMajorMatrixView<'a, PackedChallenge<SC>>,
@@ -40,7 +41,7 @@ where
         VerticalPair<RowMajorMatrixView<'a, PackedVal<SC>>, RowMajorMatrixView<'a, PackedVal<SC>>>;
 
     fn main(&self) -> Self::M {
-        self.main
+        *self.partitioned_main.get(0).expect("No main trace")
     }
 
     fn is_first_row(&self) -> Self::Expr {
@@ -71,7 +72,6 @@ where
     SC: StarkGenericConfig,
 {
     fn preprocessed(&self) -> Self::M {
-        // TODO: Avoid clone?
         self.preprocessed
     }
 }

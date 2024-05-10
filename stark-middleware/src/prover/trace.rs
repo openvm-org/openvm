@@ -67,7 +67,6 @@ pub struct ProverTraceData<SC: StarkGenericConfig> {
 /// Only the main trace matrix is allowed to be partitioned, so that different parts may belong to
 /// different commitments. We do not see any use cases where the `preprocessed` or `after_challenge`
 /// matrices need to be partitioned.
-#[derive(Clone)]
 pub struct ProvenSingleRapTraceView<'a, SC: StarkGenericConfig> {
     /// Domain of the trace matrices
     pub domain: Domain<SC>,
@@ -81,4 +80,15 @@ pub struct ProvenSingleRapTraceView<'a, SC: StarkGenericConfig> {
     /// after observing commitments to `preprocessed`, `partitioned_main`, and `after_challenge[..i]`,
     /// and `exposed_values` are certain values in this phase that are exposed to the verifier.
     pub after_challenge: Vec<(ProvenSingleMatrixView<'a, SC>, Vec<SC::Challenge>)>,
+}
+
+impl<'a, SC: StarkGenericConfig> Clone for ProvenSingleRapTraceView<'a, SC> {
+    fn clone(&self) -> Self {
+        Self {
+            domain: self.domain,
+            preprocessed: self.preprocessed.clone(),
+            partitioned_main: self.partitioned_main.clone(),
+            after_challenge: self.after_challenge.clone(),
+        }
+    }
 }

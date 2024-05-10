@@ -13,7 +13,7 @@ use crate::rap::Rap;
 pub fn check_constraints<A, SC>(
     rap: &A,
     preprocessed: &Option<RowMajorMatrixView<Val<SC>>>,
-    main: &RowMajorMatrixView<Val<SC>>,
+    partitioned_main: &[RowMajorMatrixView<Val<SC>>],
     perm: &Option<RowMajorMatrixView<SC::Challenge>>,
     perm_challenges: &[SC::Challenge],
     cumulative_sum: Option<SC::Challenge>,
@@ -22,7 +22,8 @@ pub fn check_constraints<A, SC>(
     A: for<'a> Rap<DebugConstraintBuilder<'a, SC>> + BaseAir<Val<SC>> + ?Sized,
     SC: StarkGenericConfig,
 {
-    let height = main.height();
+    let height = partitioned_main[0].height();
+    assert!(partitioned_main.iter().all(|mat| mat.height() == height));
     if let Some(perm) = perm {
         assert_eq!(height, perm.height());
     }
@@ -41,24 +42,29 @@ pub fn check_constraints<A, SC>(
             })
             .unwrap_or((vec![], vec![]));
 
-        let (main_local, main_next) = (&*main.row_slice(i), &*main.row_slice(i_next));
-
         let (perm_local, perm_next) = perm
             .as_ref()
             .map(|perm| (perm.row_slice(i).to_vec(), perm.row_slice(i_next).to_vec()))
             .unwrap_or((vec![], vec![]));
         let perm_exposed_values = cumulative_sum.map(|s| vec![s]).unwrap_or_default();
 
+        let partitioned_main_row_pair = partitioned_main
+            .iter()
+            .map(|part| {
+                let (local, next) = (&*part.row_slice(i), &*part.row_slice(i_next));
+                VerticalPair::new(
+                    RowMajorMatrixView::new_row(local),
+                    RowMajorMatrixView::new_row(next),
+                )
+            })
+            .collect::<Vec<_>>();
         let mut builder = DebugConstraintBuilder {
             row_index: i,
             preprocessed: VerticalPair::new(
                 RowMajorMatrixView::new_row(preprocessed_local.as_slice()),
                 RowMajorMatrixView::new_row(preprocessed_next.as_slice()),
             ),
-            main: VerticalPair::new(
-                RowMajorMatrixView::new_row(main_local),
-                RowMajorMatrixView::new_row(main_next),
-            ),
+            partitioned_main: partitioned_main_row_pair,
             perm: VerticalPair::new(
                 RowMajorMatrixView::new_row(perm_local.as_slice()),
                 RowMajorMatrixView::new_row(perm_next.as_slice()),
