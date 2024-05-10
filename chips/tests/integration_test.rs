@@ -13,7 +13,6 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry};
 
-use rand::thread_rng;
 use std::sync::{Arc, Mutex};
 
 use afs_chips::list;
@@ -22,6 +21,8 @@ use afs_chips::range;
 mod config;
 
 use crate::config::poseidon2::StarkConfigPoseidon2;
+
+use rand::{rngs::StdRng, SeedableRng};
 
 #[test]
 fn test_list_range_checker() {
@@ -39,7 +40,8 @@ fn test_list_range_checker() {
         .with(ForestLayer::default())
         .try_init();
 
-    let mut rng = thread_rng();
+    let seed = [42; 32];
+    let mut rng = StdRng::from_seed(seed);
 
     let bus_index = 0;
 

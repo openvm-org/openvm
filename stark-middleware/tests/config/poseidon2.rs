@@ -9,7 +9,6 @@ use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 use p3_uni_stark::StarkConfig;
-use rand::thread_rng;
 
 type Val = BabyBear;
 type Perm = Poseidon2<Val, Poseidon2ExternalMatrixGeneral, DiffusionMatrixBabyBear, 16, 7>;
@@ -23,6 +22,8 @@ pub type Challenger = DuplexChallenger<Val, Perm, 16>;
 type Dft = Radix2DitParallel;
 type Pcs = TwoAdicFriPcs<Val, Dft, ValMmcs, ChallengeMmcs>;
 pub type StarkConfigPoseidon2 = StarkConfig<Pcs, Challenge, Challenger>;
+
+use rand::{rngs::StdRng, SeedableRng};
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
 pub fn default_config(perm: &Perm, pcs_log_degree: usize) -> StarkConfigPoseidon2 {
@@ -42,9 +43,11 @@ pub fn default_config(perm: &Perm, pcs_log_degree: usize) -> StarkConfigPoseidon
 }
 
 pub fn random_perm() -> Perm {
+    let seed = [42; 32];
+    let mut rng = StdRng::from_seed(seed);
     Perm::new_from_rng_128(
         Poseidon2ExternalMatrixGeneral,
         DiffusionMatrixBabyBear,
-        &mut thread_rng(),
+        &mut rng,
     )
 }
