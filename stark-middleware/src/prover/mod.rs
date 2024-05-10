@@ -34,11 +34,11 @@ pub mod types;
 
 /// Proves multiple chips with interactions together.
 /// This prover implementation is specialized for Interactive AIRs.
-pub struct ChipsetProver<SC: StarkGenericConfig> {
+pub struct MultiTraceStarkProver<SC: StarkGenericConfig> {
     pub config: SC,
 }
 
-impl<SC: StarkGenericConfig> ChipsetProver<SC> {
+impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
     pub fn new(config: SC) -> Self {
         Self { config }
     }
@@ -46,7 +46,7 @@ impl<SC: StarkGenericConfig> ChipsetProver<SC> {
     /// Assumes the traces have been generated already.
     ///
     /// Public values is a global list shared across all AIRs.
-    #[instrument(name = "ChipsetProver::prove", level = "debug", skip_all)]
+    #[instrument(name = "MultiTraceStarkProver::prove", level = "debug", skip_all)]
     pub fn prove<'a>(
         &self,
         challenger: &mut SC::Challenger,
@@ -230,7 +230,7 @@ impl<SC: StarkGenericConfig> ChipsetProver<SC> {
         // Commit to quotient polynomias. One shared commit for all quotient polynomials
         let quotient_data = quotient_committer.commit(quotient_values);
 
-        // Observe quotient commitments
+        // Observe quotient commitment
         challenger.observe(quotient_data.commit.clone());
 
         // Collect the commitments
