@@ -16,7 +16,8 @@ impl<const MAX: u32> RangeCheckerChip<MAX> {
             // FIXME: This is very inefficient when the range is large.
             // Iterate over key/val pairs instead in a separate loop.
             if let Some(c) = self.count.get(&(n as u32)) {
-                cols.mult = F::from_canonical_u32(c.load(std::sync::atomic::Ordering::Relaxed));
+                let cnt = c.load(std::sync::atomic::Ordering::Relaxed);
+                cols.mult = F::from_canonical_u32(cnt);
             }
         }
         RowMajorMatrix::new(rows.concat(), NUM_RANGE_COLS)
