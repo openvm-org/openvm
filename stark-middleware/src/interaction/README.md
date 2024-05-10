@@ -36,6 +36,20 @@ on the main and preprocessed trace polynomials with rotations. This means that w
 $(f_1(\mathbf T),\dotsc,f_{len}(\mathbf T))$ to the $i$-th bus with multiplicity $m(\mathbf T)$, where $\mathbf T$
 refers to the trace (including preprocessed columns) as polynomials (as well as rotations).
 
+### Outcome
+
+If all row values for `count` for sends are small enough that the sum of all `count` values across all `sends` is strictly smaller than the field characteristic (so no overflows are possible), this enforces that:
+
+> for each bus, each unique row of a `VirtualPairCol` occurs with the same total `count` in sends and receives across all chips.
+
+One important consequence is that:
+
+> for each bus, each row of a `VirtualPairCol` with non-zero `count` from a send coincides with some row of a `VirtualPairCol` of a receive (possibly in another chip).
+
+In other words, it enforces a cross-chip lookup of the rows of the send tables with non-zero `count` into the concatenation of the receive tables.
+
+### Backend implementation via logUp
+
 The backend implementation of the prover will constrain the computation of a cumulative sum
 _for just this AIR_
 $$\sum_r \left(\sum_\sigma sign(\sigma) \frac {m_\sigma[r]}{\alpha^{i_\sigma} + \sum_j \beta^j \cdot f_{\sigma,j}(\mathbf T[r])} \right)$$
@@ -48,12 +62,6 @@ where $r$ sums over all row indices, $\sigma$ sums over all sends and receives, 
 - Add the sends, subtract the receives.
 
 Globally, the prover will sum this per-AIR cumulative sum over all AIRs and lastly constrain that the sum is $0$. This will enforce that the sends and receives are balanced globally across all AIRs. Note that the multiplicity allows a single send to a bus to be received by multiple AIRs.
-
-If all row values for `count` for sends are small enough that no overflows are possible, this enforces that:
-
-> for each bus, each row of a `VirtualPairCol` with non-zero `count` from a send coincides with some row of a `VirtualPairCol` of a receive.
-
-In other words, it enforces a cross-chip lookup of the rows of the send tables with non-zero `count` into the concatenation of the receive tables.
 
 ## Virtual columns and constraints
 
