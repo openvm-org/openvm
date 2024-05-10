@@ -120,6 +120,7 @@ pub struct Proof<SC: StarkGenericConfig> {
 /// RAP trait for prover dynamic dispatch use
 pub trait ProverRap<SC: StarkGenericConfig>:
 Air<SymbolicAirBuilder<Val<SC>>> // for quotient degree calculation
++ Rap<SymbolicAirBuilder<Val<SC>>> // for quotient degree calculation
 + for<'a> InteractiveAir<ProverConstraintFolder<'a, SC>> // for permutation trace generation
     + for<'a> Rap<ProverConstraintFolder<'a, SC>> // for quotient polynomial calculation
     + for<'a> Rap<DebugConstraintBuilder<'a, SC>> // for debugging

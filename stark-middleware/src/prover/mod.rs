@@ -268,12 +268,14 @@ impl<SC: StarkGenericConfig> PartitionProver<SC> {
         let quotient_degrees = raps
             .iter()
             .zip(preprocessed_traces_with_domains.iter())
-            .map(|(&rap, prep_trace_with_domain)| {
+            .zip(perm_traces)
+            .map(|((&rap, prep_trace_with_domain), perm_trace)| {
                 let prep_width = prep_trace_with_domain
                     .as_ref()
                     .map(|(_, t)| t.width())
                     .unwrap_or(0);
-                let d = get_log_quotient_degree::<Val<SC>, _>(rap, prep_width, public_values.len());
+                let perm_width = perm_trace.as_ref().map(|t| t.width()).unwrap_or(0);
+                let d = get_log_quotient_degree(rap, prep_width, perm_width, public_values.len());
                 1 << d
             })
             .collect_vec();

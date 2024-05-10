@@ -6,8 +6,6 @@ use p3_matrix::dense::RowMajorMatrixView;
 use p3_matrix::stack::VerticalPair;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-pub mod check_constraints;
-
 use crate::rap::PermutationAirBuilderWithExposedValues;
 
 /// An `AirBuilder` which asserts that each constraint is zero, allowing any failed constraints to

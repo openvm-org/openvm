@@ -2,17 +2,12 @@ use afs_middleware_derive::AlignedBorrow;
 use core::mem::{size_of, transmute};
 use p3_util::indices_arr;
 
-#[cfg(feature = "debug-trace")]
-use p3_test_derive::Headers;
-
 #[derive(Default, AlignedBorrow)]
-#[cfg_attr(feature = "debug-trace", derive(Headers))]
 pub struct RangeCols<T> {
     pub mult: T,
 }
 
 #[derive(Default, AlignedBorrow)]
-#[cfg_attr(feature = "debug-trace", derive(Headers))]
 pub struct RangePreprocessedCols<T> {
     pub counter: T,
 }
