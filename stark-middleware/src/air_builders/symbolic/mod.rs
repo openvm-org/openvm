@@ -86,7 +86,6 @@ where
         num_public_values,
     );
     Rap::eval(rap, &mut builder);
-    // rap.eval(&mut builder);
     builder.constraints()
 }
 
