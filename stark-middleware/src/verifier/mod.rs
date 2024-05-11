@@ -11,10 +11,7 @@ pub mod types;
 
 pub use error::*;
 
-use crate::{
-    prover::{opener::AdjacentOpenedValues, types::Proof},
-    setup::types::VerifyingKey,
-};
+use crate::prover::{opener::AdjacentOpenedValues, types::Proof};
 
 use self::{constraints::verify_single_rap_constraints, types::VerifierRap};
 

@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use p3_challenger::{CanObserve, FieldChallenger};
-use p3_commit::{Pcs, PolynomialSpace};
+use p3_commit::Pcs;
 use p3_field::AbstractExtensionField;
 use p3_matrix::Matrix;
 use p3_maybe_rayon::prelude::*;
@@ -18,7 +18,7 @@ use crate::{
 use self::{
     opener::OpeningProver,
     quotient::QuotientCommitter,
-    types::{Commitments, Proof, ProvenMultiAirTraceData},
+    types::{Commitments, Proof, ProvenMultiAirTraceData, ProverRap},
 };
 
 /// Polynomial opening proofs
@@ -40,7 +40,9 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
         Self { config }
     }
 
-    /// Assumes the traces have been generated already.
+    /// Specialized prove for InteractiveAirs.
+    /// Handles trace generation of the permutation traces.
+    /// Assumes the main traces have been generated and committed already.
     ///
     /// Public values is a global list shared across all AIRs.
     #[instrument(name = "MultiTraceStarkProver::prove", level = "debug", skip_all)]
@@ -206,9 +208,55 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
             })
             .unzip();
         // Either 0 or 1 after_challenge commits, depending on if there are any permutation traces
-        let (after_challenge_commitments, after_challenge_prover_data): (Vec<_>, Vec<_>) =
-            perm_pcs_data.into_iter().unzip();
+        let after_challenge_pcs_data: Vec<_> = perm_pcs_data.into_iter().collect();
         // === END of logic specific to Interactions/permutations, we can now deal with general RAP ===
+
+        self.prove_raps_with_committed_traces(
+            challenger,
+            pk,
+            raps,
+            trace_views,
+            main_trace_data.pcs_data,
+            after_challenge_pcs_data,
+            &[&perm_challenges],
+            public_values,
+        )
+    }
+
+    /// Proves general RAP after all traces have been committed.
+    /// Soundness depends on `challenger` having already observed
+    /// public values, exposed values after challenge, and all
+    /// trace commitments.
+    ///
+    /// - `challenges`: for each trace challenge phase, the challenges sampled
+    ///
+    /// ## Assumptions
+    /// - `raps, trace_views` have same length and same order
+    /// - per challenge round, shared commitment for
+    /// all trace matrices, with matrices in increasing order of air index
+    #[instrument(level = "debug", skip_all)]
+    pub fn prove_raps_with_committed_traces<'a>(
+        &self,
+        challenger: &mut SC::Challenger,
+        pk: &'a MultiStarkProvingKey<SC>,
+        raps: Vec<&'a dyn ProverRap<SC>>,
+        trace_views: Vec<ProvenSingleRapTraceView<'a, SC>>,
+        main_pcs_data: Vec<(Com<SC>, PcsProverData<SC>)>,
+        after_challenge_pcs_data: Vec<(Com<SC>, PcsProverData<SC>)>,
+        challenges: &[&[SC::Challenge]],
+        public_values: &'a [Val<SC>],
+    ) -> Proof<SC>
+    where
+        SC::Pcs: Sync,
+        Domain<SC>: Send + Sync,
+        PcsProverData<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Challenge: Send + Sync,
+        PcsProof<SC>: Send + Sync,
+    {
+        let pcs = self.config.pcs();
+        let (after_challenge_commitments, after_challenge_prover_data): (Vec<_>, Vec<_>) =
+            after_challenge_pcs_data.into_iter().unzip();
 
         // Generate `alpha` challenge
         let alpha: SC::Challenge = challenger.sample_ext_element();
@@ -219,7 +267,7 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
             .iter()
             .map(|pk| pk.vk.quotient_degree)
             .collect_vec();
-        let quotient_committer = QuotientCommitter::new(pcs, &[&perm_challenges], alpha);
+        let quotient_committer = QuotientCommitter::new(pcs, challenges, alpha);
         let quotient_values = quotient_committer.quotient_values(
             raps,
             trace_views.clone(),
@@ -234,7 +282,10 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
 
         // Collect the commitments
         let commitments = Commitments {
-            main_trace: main_trace_commitments,
+            main_trace: main_pcs_data
+                .iter()
+                .map(|(commit, _)| commit.clone())
+                .collect(),
             after_challenge: after_challenge_commitments,
             quotient: quotient_data.commit.clone(),
         };
@@ -243,6 +294,7 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
         let zeta: SC::Challenge = challenger.sample_ext_element();
         tracing::debug!("zeta: {zeta:?}");
 
+        // Open all polynomials at random points using pcs
         let opener = OpeningProver::new(pcs, zeta);
         let preprocessed_data: Vec<_> = trace_views
             .iter()
@@ -253,8 +305,7 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
             })
             .collect();
 
-        let main_data: Vec<_> = main_trace_data
-            .pcs_data
+        let main_data: Vec<_> = main_pcs_data
             .iter()
             .zip_eq(&pk.main_commit_to_air_graph.commit_to_air_index)
             .map(|((_, data), mat_to_air_index)| {
@@ -266,7 +317,7 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
             })
             .collect();
 
-        // ASSUMING: per challenge round, shared commitment for all, with matrices in increasing order of air index
+        // ASSUMING: per challenge round, shared commitment for all trace matrices, with matrices in increasing order of air index
         let after_challenge_data: Vec<_> = after_challenge_prover_data
             .iter()
             .enumerate()
