@@ -1,7 +1,14 @@
+#![feature(trait_upcasting)]
+#![allow(incomplete_features)]
+
 use afs_middleware::{
-    prover::{trace::TraceCommitter, types::ProvenMultiMatrixAirTrace, PartitionProver},
+    prover::{
+        trace::TraceCommitter,
+        types::{ProvenMultiMatrixAirTrace, ProverRap},
+        PartitionProver,
+    },
     setup::PartitionSetup,
-    verifier::PartitionVerifier,
+    verifier::{types::VerifierRap, PartitionVerifier},
 };
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
@@ -18,10 +25,12 @@ use crate::config::poseidon2::StarkConfigPoseidon2;
 mod config;
 mod fib_air;
 mod fib_selector_air;
-mod sender_air;
 
 #[cfg(test)]
 mod interaction;
+
+trait ProverVerifierRap<SC: StarkGenericConfig>: ProverRap<SC> + VerifierRap<SC> {}
+impl<SC: StarkGenericConfig, RAP: ProverRap<SC> + VerifierRap<SC>> ProverVerifierRap<SC> for RAP {}
 
 #[test]
 fn test_single_fib_stark() {
