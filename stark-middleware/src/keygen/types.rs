@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
@@ -81,13 +82,29 @@ pub struct VerifierSinglePreprocessedData<SC: StarkGenericConfig> {
     serialize = "PcsProverData<SC>: Serialize",
     deserialize = "PcsProverData<SC>: Deserialize<'de>"
 ))]
-pub struct ChipsetProvingKey<SC: StarkGenericConfig> {
+pub struct MultiStarkProvingKey<SC: StarkGenericConfig> {
     pub per_air: Vec<StarkProvingKey<SC>>,
     /// Number of multi-matrix commitments that hold commitments to the partitioned main trace matrices across all AIRs.
     pub num_main_trace_commitments: usize,
+    /// Mapping from commit_idx to global AIR index for matrix in commitment, in oder.
+    pub main_commit_to_air_graph: CommitmentToAirGraph,
 }
 
-impl<SC: StarkGenericConfig> ChipsetProvingKey<SC> {
+impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
+    pub fn new(per_air: Vec<StarkProvingKey<SC>>, num_main_trace_commitments: usize) -> Self {
+        let air_matrices = per_air
+            .iter()
+            .map(|pk| pk.vk.main_graph.clone())
+            .collect_vec();
+        let main_commit_to_air_graph =
+            create_commit_to_air_graph(&air_matrices, num_main_trace_commitments);
+        Self {
+            per_air,
+            num_main_trace_commitments,
+            main_commit_to_air_graph,
+        }
+    }
+
     pub fn preprocessed_commits(&self) -> impl Iterator<Item = &Com<SC>> {
         self.per_air
             .iter()
@@ -115,8 +132,46 @@ impl<SC: StarkGenericConfig> ChipsetProvingKey<SC> {
     serialize = "Com<SC>: Serialize",
     deserialize = "Com<SC>: Deserialize<'de>"
 ))]
-pub struct ChipsetVerifyingKey<SC: StarkGenericConfig> {
+pub struct MultiStarkVerifyingKey<SC: StarkGenericConfig> {
     pub per_air: Vec<StarkVerifyingKey<SC>>,
     /// Number of multi-matrix commitments that hold commitments to the partitioned main trace matrices across all AIRs.
     pub num_main_trace_commitments: usize,
+    /// Mapping from commit_idx to global AIR index for matrix in commitment, in oder.
+    pub main_commit_to_air_graph: CommitmentToAirGraph,
+}
+
+impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
+    pub fn new(per_air: Vec<StarkVerifyingKey<SC>>, num_main_trace_commitments: usize) -> Self {
+        let air_matrices = per_air.iter().map(|vk| vk.main_graph.clone()).collect_vec();
+        let main_commit_to_air_graph =
+            create_commit_to_air_graph(&air_matrices, num_main_trace_commitments);
+        Self {
+            per_air,
+            num_main_trace_commitments,
+            main_commit_to_air_graph,
+        }
+    }
+}
+
+/// Assuming all AIRs are ordered and each have an index,
+/// then in a system with multiple multi-matrix commitments, then
+/// commit_to_air_index[commit_idx][matrix_idx] = global AIR index that the matrix corresponding to matrix_idx belongs to
+#[derive(Serialize, Deserialize)]
+pub struct CommitmentToAirGraph {
+    pub commit_to_air_index: Vec<Vec<usize>>,
+}
+
+fn create_commit_to_air_graph(
+    air_matrices: &[MatrixCommitmentGraph],
+    num_total_commitments: usize,
+) -> CommitmentToAirGraph {
+    let mut commit_to_air_index = vec![vec![0; air_matrices.len()]; num_total_commitments];
+    for (air_idx, m) in air_matrices.iter().enumerate() {
+        for ptr in &m.matrix_ptrs {
+            commit_to_air_index[ptr.commit_index][ptr.matrix_index] = air_idx;
+        }
+    }
+    CommitmentToAirGraph {
+        commit_to_air_index,
+    }
 }

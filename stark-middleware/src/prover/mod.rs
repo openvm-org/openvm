@@ -8,14 +8,11 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::instrument;
 
 use crate::{
-    air_builders::{
-        debug::check_constraints::check_constraints, symbolic::get_log_quotient_degree,
-    },
-    commit::{MatrixCommitmentGraph, ProvenSingleMatrixView, SingleMatrixCommitPtr},
+    air_builders::debug::check_constraints::check_constraints,
+    commit::ProvenSingleMatrixView,
     config::{Com, PcsProof, PcsProverData},
-    keygen::types::ChipsetProvingKey,
+    keygen::types::MultiStarkProvingKey,
     prover::trace::ProvenSingleRapTraceView,
-    verifier::types::VerifierSingleRapMetadata,
 };
 
 use self::{
@@ -50,7 +47,7 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
     pub fn prove<'a>(
         &self,
         challenger: &mut SC::Challenger,
-        pk: &'a ChipsetProvingKey<SC>,
+        pk: &'a MultiStarkProvingKey<SC>,
         main_trace_data: ProvenMultiAirTraceData<'a, SC>,
         public_values: &'a [Val<SC>],
     ) -> Proof<SC>
@@ -209,11 +206,8 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
             })
             .unzip();
         // Either 0 or 1 after_challenge commits, depending on if there are any permutation traces
-        let after_challenge_commitments = perm_pcs_data
-            .as_ref()
-            .map(|(commit, _)| commit.clone())
-            .into_iter()
-            .collect_vec();
+        let (after_challenge_commitments, after_challenge_prover_data): (Vec<_>, Vec<_>) =
+            perm_pcs_data.into_iter().unzip();
         // === END of logic specific to Interactions/permutations, we can now deal with general RAP ===
 
         // Generate `alpha` challenge
@@ -255,42 +249,59 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
             .flat_map(|view| {
                 view.preprocessed
                     .as_ref()
-                    .map(|view| (view.data, view.matrix_index))
+                    .map(|matrix| (matrix.data, view.domain))
             })
             .collect();
 
-        let main_data: Vec<_> =
-            main_trace_data.pcs_data.iter().enumerate(|(commit_idx, (data,commit))| {
-
-            })
-            partition
+        let main_data: Vec<_> = main_trace_data
+            .pcs_data
             .iter()
-            .map(|part| {
-                let data = &part.trace_data.data;
-                let domains = part
-                    .trace_data
-                    .traces_with_domains
+            .zip_eq(&pk.main_commit_to_air_graph.commit_to_air_index)
+            .map(|((_, data), mat_to_air_index)| {
+                let domains = mat_to_air_index
                     .iter()
-                    .map(|(domain, _)| *domain)
+                    .map(|i| trace_views[*i].domain)
                     .collect_vec();
                 (data, domains)
             })
-            .collect_vec();
+            .collect();
+
+        // ASSUMING: per challenge round, shared commitment for all, with matrices in increasing order of air index
+        let after_challenge_data: Vec<_> = after_challenge_prover_data
+            .iter()
+            .enumerate()
+            .map(|(round, data)| {
+                let domains = trace_views
+                    .iter()
+                    .flat_map(|view| (view.after_challenge.len() > round).then(|| view.domain))
+                    .collect_vec();
+                (data, domains)
+            })
+            .collect();
 
         let opening = opener.open(
             challenger,
             preprocessed_data,
             main_data,
-            after_challenge,
+            after_challenge_data,
             &quotient_data.data,
             &quotient_degrees,
         );
 
+        let exposed_values_after_challenge = trace_views
+            .into_iter()
+            .map(|view| {
+                view.after_challenge
+                    .into_iter()
+                    .map(|(_, values)| values)
+                    .collect_vec()
+            })
+            .collect_vec();
+
         Proof {
             commitments,
             opening,
-            rap_data,
-            cumulative_sums,
+            exposed_values_after_challenge,
         }
     }
 }

@@ -98,10 +98,8 @@ pub struct Commitments<SC: StarkGenericConfig> {
     pub quotient: Com<SC>,
 }
 
-/// The full STARK proof for a partition of multi-matrix AIRs.
-/// There are multiple AIR matrices, which are partitioned by the preimage of
-/// their trace commitments. In other words, multiple AIR trace matrices are committed
-/// into a single commitment, and these AIRs form one part of the partition.
+/// The full proof for multiple RAPs where trace matrices are committed into
+/// multiple commitments, where each commitment is multi-matrix.
 ///
 /// Includes the quotient commitments and FRI opening proofs for the constraints as well.
 pub struct Proof<SC: StarkGenericConfig> {
@@ -109,8 +107,9 @@ pub struct Proof<SC: StarkGenericConfig> {
     pub commitments: Commitments<SC>,
     // Opening proofs separated by partition, but this may change
     pub opening: OpeningProof<SC>,
-    /// For each AIR, the cumulative sum if the AIR has interactions
-    pub cumulative_sums: Vec<Option<SC::Challenge>>,
+    /// For each RAP, for each challenge phase with trace,
+    /// the values to expose to the verifier in that phase
+    pub exposed_values_after_challenge: Vec<Vec<Vec<SC::Challenge>>>,
     // Should we include public values here?
 }
 
