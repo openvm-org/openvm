@@ -20,7 +20,7 @@ pub struct VerifierConstraintFolder<'a, SC: StarkGenericConfig> {
     pub alpha: SC::Challenge,
     pub accumulator: SC::Challenge,
     pub public_values: &'a [Val<SC>],
-    pub exposed_values_after_challenge: &'a [&'a [SC::Challenge]],
+    pub exposed_values_after_challenge: &'a [Vec<SC::Challenge>],
 }
 
 impl<'a, SC: StarkGenericConfig> AirBuilder for VerifierConstraintFolder<'a, SC> {
@@ -129,7 +129,7 @@ where
     fn permutation_exposed_values(&self) -> &[Self::EF] {
         self.exposed_values_after_challenge
             .get(0)
-            .map(|c| *c)
+            .map(|c| c.as_slice())
             .unwrap_or(&[] as &[Self::EF])
     }
 }

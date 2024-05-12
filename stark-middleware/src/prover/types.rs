@@ -1,5 +1,5 @@
 use p3_air::Air;
-use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
+use p3_matrix::dense::RowMajorMatrixView;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
@@ -21,7 +21,7 @@ pub struct ProvenMultiAirTraceData<'a, SC: StarkGenericConfig> {
     pub pcs_data: Vec<(Com<SC>, PcsProverData<SC>)>,
     // main trace, for each air, list of trace matrices and pointer to prover data for each
     /// Proven trace data for each AIR.
-    pub air_traces: Vec<ProvenSingleAirTrace<'a, SC>>,
+    pub air_traces: Vec<SingleAirProvenTrace<'a, SC>>,
 }
 
 impl<'a, SC: StarkGenericConfig> ProvenMultiAirTraceData<'a, SC> {
@@ -54,13 +54,13 @@ where
 ///
 /// We use dynamic dispatch here for the extra flexibility. The overhead is small
 /// **if we ensure dynamic dispatch only once per AIR** (not true right now).
-pub struct ProvenSingleAirTrace<'a, SC: StarkGenericConfig> {
+pub struct SingleAirProvenTrace<'a, SC: StarkGenericConfig> {
     pub air: &'a dyn ProverRap<SC>,
     pub domain: Domain<SC>,
     pub partitioned_main_trace: Vec<RowMajorMatrixView<'a, Val<SC>>>,
 }
 
-impl<'a, SC: StarkGenericConfig> Clone for ProvenSingleAirTrace<'a, SC> {
+impl<'a, SC: StarkGenericConfig> Clone for SingleAirProvenTrace<'a, SC> {
     fn clone(&self) -> Self {
         Self {
             air: self.air,

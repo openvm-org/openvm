@@ -13,6 +13,12 @@ pub struct MatrixCommitmentGraph {
     pub matrix_ptrs: Vec<SingleMatrixCommitPtr>,
 }
 
+impl MatrixCommitmentGraph {
+    pub fn new(matrix_ptrs: Vec<SingleMatrixCommitPtr>) {
+        Self { matrix_ptrs }
+    }
+}
+
 /// When a single matrix belong to a multi-matrix commitment in some list of commitments,
 /// this pointer identifies the index of the commitment in the list, and then the index
 /// of the matrix within that commitment.

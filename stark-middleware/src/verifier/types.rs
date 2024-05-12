@@ -1,4 +1,4 @@
-use p3_uni_stark::{StarkGenericConfig, Val};
+use p3_uni_stark::StarkGenericConfig;
 
 use crate::{air_builders::verifier::VerifierConstraintFolder, rap::Rap};
 

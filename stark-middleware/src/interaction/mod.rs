@@ -42,8 +42,9 @@ pub trait Chip<F: Field> {
     }
 
     /// Width of the permutation trace.
-    fn permutation_width(&self) -> usize {
-        self.sends().len() + self.receives().len() + 1
+    fn permutation_width(&self) -> Option<usize> {
+        let num_interactions = self.sends().len() + self.receives().len();
+        (num_interactions != 0).then_some(num_interactions + 1)
     }
 }
 

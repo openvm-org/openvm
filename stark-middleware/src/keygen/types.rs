@@ -1,11 +1,15 @@
 use itertools::Itertools;
+use p3_air::{Air, BaseAir};
 use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    air_builders::symbolic::SymbolicAirBuilder,
     commit::MatrixCommitmentGraph,
     config::{Com, PcsProverData},
+    interaction::Chip,
+    rap::Rap,
 };
 
 /// Widths of different parts of trace matrix
@@ -100,7 +104,24 @@ pub struct MultiStarkProvingKey<SC: StarkGenericConfig> {
     pub main_commit_to_air_graph: CommitmentToAirGraph,
 }
 
+impl<SC: StarkGenericConfig> Default for MultiStarkProvingKey<SC> {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
 impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
+    /// Empty with 1 main trace commitment
+    pub fn empty() -> Self {
+        Self {
+            per_air: Vec::new(),
+            num_main_trace_commitments: 1,
+            main_commit_to_air_graph: CommitmentToAirGraph {
+                commit_to_air_index: vec![vec![]],
+            },
+        }
+    }
+
     pub fn new(per_air: Vec<StarkProvingKey<SC>>, num_main_trace_commitments: usize) -> Self {
         let air_matrices = per_air
             .iter()
@@ -112,6 +133,14 @@ impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
             per_air,
             num_main_trace_commitments,
             main_commit_to_air_graph,
+        }
+    }
+
+    pub fn into_vk(self) -> MultiStarkVerifyingKey<SC> {
+        MultiStarkVerifyingKey {
+            per_air: self.per_air.into_iter().map(|pk| pk.vk).collect(),
+            main_commit_to_air_graph: self.main_commit_to_air_graph,
+            num_main_trace_commitments: self.num_main_trace_commitments,
         }
     }
 
@@ -184,4 +213,15 @@ fn create_commit_to_air_graph(
     CommitmentToAirGraph {
         commit_to_air_index,
     }
+}
+
+/// RAP trait to extract fixed data about the RAP for keygen
+pub trait SymbolicRap<SC: StarkGenericConfig>:
+    BaseAir<Val<SC>> + Chip<Val<SC>> + Rap<SymbolicAirBuilder<Val<SC>>>
+{
+}
+
+impl<SC: StarkGenericConfig, T> SymbolicRap<SC> for T where
+    T: BaseAir<Val<SC>> + Chip<Val<SC>> + Rap<SymbolicAirBuilder<Val<SC>>>
+{
 }
