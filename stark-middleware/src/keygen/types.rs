@@ -8,6 +8,14 @@ use crate::{
     config::{Com, PcsProverData},
 };
 
+/// Widths of different parts of trace matrix
+#[derive(Serialize, Deserialize)]
+pub struct TraceWidth {
+    pub preprocessed: Option<usize>,
+    pub partitioned_main: Vec<usize>,
+    pub after_challenge: Vec<usize>,
+}
+
 /// Proving key for a single STARK (corresponding to single AIR matrix)
 ///
 /// !! This is not the full proving key right now. It is missing AIR constraints
@@ -36,6 +44,8 @@ pub struct StarkVerifyingKey<SC: StarkGenericConfig> {
     pub degree: usize,
     /// Preprocessed trace data, if any
     pub preprocessed_data: Option<VerifierSinglePreprocessedData<SC>>,
+    /// Trace sub-matrix widths
+    pub width: TraceWidth,
     /// [MatrixCommitmentGraph] for partitioned main trace matrix
     pub main_graph: MatrixCommitmentGraph,
     /// The factor to multiple the trace degree by to get the degree of the quotient polynomial. Determined from the max constraint degree of the AIR constraints.

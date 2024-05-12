@@ -42,8 +42,13 @@ where
     type M =
         VerticalPair<RowMajorMatrixView<'a, PackedVal<SC>>, RowMajorMatrixView<'a, PackedVal<SC>>>;
 
+    /// It is difficulty to horizontally concatenate matrices when the main trace is partitioned, so we disable this method in that case.
     fn main(&self) -> Self::M {
-        *self.partitioned_main.get(0).expect("No main trace")
+        if self.partitioned_main.len() == 1 {
+            self.partitioned_main[0]
+        } else {
+            panic!("Main trace is either empty or partitioned. This function should not be used.")
+        }
     }
 
     fn is_first_row(&self) -> Self::Expr {

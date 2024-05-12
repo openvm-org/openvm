@@ -223,7 +223,7 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
         )
     }
 
-    /// Proves general RAP after all traces have been committed.
+    /// Proves general RAPs after all traces have been committed.
     /// Soundness depends on `challenger` having already observed
     /// public values, exposed values after challenge, and all
     /// trace commitments.
