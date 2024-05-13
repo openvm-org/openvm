@@ -16,10 +16,7 @@ impl<F: Field> Chip<F> for FibonacciSelectorAir {
     fn receives(&self) -> Vec<Interaction<F>> {
         if self.enable_interactions {
             vec![Interaction::<F> {
-                fields: vec![VirtualPairCol::<F>::new_main(
-                    vec![(0, F::one()), (1, F::one())],
-                    F::zero(),
-                )],
+                fields: vec![VirtualPairCol::<F>::sum_main(vec![0, 1])],
                 count: VirtualPairCol::<F>::single_preprocessed(0),
                 argument_index: 0,
             }]

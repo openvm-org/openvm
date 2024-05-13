@@ -25,8 +25,6 @@ use crate::config::poseidon2::StarkConfigPoseidon2;
 mod config;
 mod fib_air;
 mod fib_selector_air;
-
-#[cfg(test)]
 mod interaction;
 
 trait ProverVerifierRap<SC: StarkGenericConfig>: ProverRap<SC> + VerifierRap<SC> {}
