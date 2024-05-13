@@ -11,6 +11,7 @@ use afs_middleware::{
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_matrix::dense::DenseMatrix;
+use p3_maybe_rayon::prelude::IntoParallelRefIterator;
 use p3_uni_stark::StarkGenericConfig;
 use tracing_forest::util::LevelFilter;
 use tracing_forest::ForestLayer;
@@ -85,12 +86,12 @@ fn test_list_range_checker() {
     let pis = [];
 
     let lists_prep_traces = lists
-        .iter()
+        .par_iter()
         .map(|list| list.preprocessed_trace())
         .collect::<Vec<Option<DenseMatrix<BabyBear>>>>();
 
     let lists_traces = lists
-        .iter()
+        .par_iter()
         .map(|list| list.generate_trace())
         .collect::<Vec<DenseMatrix<BabyBear>>>();
 
