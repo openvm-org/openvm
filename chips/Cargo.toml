@@ -13,6 +13,7 @@ p3-matrix = { workspace = true }
 p3-maybe-rayon = { workspace = true }
 p3-util = { workspace = true }
 rand = "0.8"
+rayon = "1.5.1"
 
 afs-middleware = { path = "../stark-middleware" }
 afs-middleware-derive = { path = "../stark-middleware/derive" }
