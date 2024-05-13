@@ -63,7 +63,7 @@ it is not difficult to add one.
 
 Instead, only a special type of RAP is supported: an AIR with Interactions.
 An AIR with preprocessed and main trace can be extended to a RAP
-with one challenge phase via the [Interactions API](./interaction/README.md).
+with one challenge phase via the [Interactions API](./src/interaction/README.md).
 
 The backend currently has special support for Interactive AIRs, and completely owns
 the generation of the trace in the challenge phase for these RAPs -- for reference,
