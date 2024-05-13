@@ -14,6 +14,7 @@ use tracing_subscriber::{EnvFilter, Registry};
 mod config;
 mod fib_air;
 mod fib_selector_air;
+mod fib_triples_air;
 
 fn tracing_setup() {
     // Set up tracing:
@@ -46,6 +47,55 @@ fn test_single_fib_stark() {
     let pis = [a, b, get_fib_number(n)]
         .map(BabyBear::from_canonical_u32)
         .to_vec();
+    let air = FibonacciAir;
+
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
+    keygen_builder.add_air(&air, n, pis.len());
+    let pk = keygen_builder.generate_pk();
+    let vk = pk.vk();
+
+    let trace = generate_trace_rows::<Val>(a, b, n);
+
+    let prover = MultiTraceStarkProver::new(config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.config.pcs());
+    trace_builder.load_trace(trace);
+    trace_builder.commit_current();
+
+    let main_trace_data = trace_builder.view(&vk, vec![&air]);
+
+    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &[pis.clone()]);
+
+    // Verify the proof:
+    // Start from clean challenger
+    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let verifier = MultiTraceStarkVerifier::new(prover.config);
+    verifier
+        .verify(&mut challenger, vk, vec![&air], proof, &[pis])
+        .expect("Verification failed");
+}
+
+#[test]
+fn test_single_fib_triples_stark() {
+    use fib_triples_air::air::FibonacciAir;
+    use fib_triples_air::trace::generate_trace_rows;
+
+    tracing_setup();
+
+    let log_trace_degree = 3;
+    let perm = config::poseidon2::random_perm();
+    let config = config::poseidon2::default_config(&perm, log_trace_degree);
+
+    // Public inputs:
+    let a = 0u32;
+    let b = 1u32;
+    let n = 1usize << log_trace_degree;
+
+    type Val = BabyBear;
+    let pis = [a, b, get_fib_number(n + 1)]
+        .map(BabyBear::from_canonical_u32)
+        .to_vec();
+
     let air = FibonacciAir;
 
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
