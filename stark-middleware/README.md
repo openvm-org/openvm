@@ -37,7 +37,7 @@ The backend supports the simultaenous proving of a system of multiple RAPs with 
 supports the notion of a Mixed Matrix Commitment Scheme (MMCS), which allows the
 simultaneous commitment to a set of matrices of different heights.
 
-![Multi RAPs](../assets/multi_trace_raps.pn)
+![Multi RAPs](../assets/multi_trace_raps.png)
 
 The backend currently supports the following:
 
