@@ -9,16 +9,16 @@ use tracing::instrument;
 
 use crate::{
     air_builders::debug::check_constraints::check_constraints,
-    commit::ProvenSingleMatrixView,
+    commit::CommittedSingleMatrixView,
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkProvingKey,
-    prover::trace::ProvenSingleRapTraceView,
+    prover::trace::SingleRapCommittedTraceView,
 };
 
 use self::{
     opener::OpeningProver,
     quotient::QuotientCommitter,
-    types::{Commitments, Proof, ProvenMultiAirTraceData, ProverRap},
+    types::{Commitments, MultiAirCommittedTraceData, Proof, ProverRap},
 };
 
 /// Polynomial opening proofs
@@ -44,14 +44,16 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
     /// Handles trace generation of the permutation traces.
     /// Assumes the main traces have been generated and committed already.
     ///
-    /// Public values is a global list shared across all AIRs.
+    /// Public values: for each AIR, a separate list of public values.
+    /// The prover can support global public values that are shared among all AIRs,
+    /// but we currently split public values per-AIR for modularity.
     #[instrument(name = "MultiTraceStarkProver::prove", level = "debug", skip_all)]
     pub fn prove<'a>(
         &self,
         challenger: &mut SC::Challenger,
         pk: &'a MultiStarkProvingKey<SC>,
-        main_trace_data: ProvenMultiAirTraceData<'a, SC>,
-        public_values: &'a [Val<SC>],
+        main_trace_data: MultiAirCommittedTraceData<'a, SC>,
+        public_values: &'a [Vec<Val<SC>>],
     ) -> Proof<SC>
     where
         SC::Pcs: Sync,
@@ -64,7 +66,9 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
         let pcs = self.config.pcs();
 
         // Challenger must observe public values
-        challenger.observe_slice(public_values);
+        for pis in public_values.iter() {
+            challenger.observe_slice(pis);
+        }
 
         let preprocessed_commits: Vec<_> = pk.preprocessed_commits().cloned().collect();
         challenger.observe_slice(&preprocessed_commits);
@@ -76,7 +80,17 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
 
         // TODO: this is not needed if there are no interactions. Number of challenge rounds should be specified in proving key
         // Generate 2 permutation challenges
-        let perm_challenges = [(); 2].map(|_| challenger.sample_ext_element::<SC::Challenge>());
+        assert!(pk.num_challenges_to_sample.len() <= 1);
+        let challenges: Vec<_> = pk
+            .num_challenges_to_sample
+            .iter()
+            .map(|&num_challenges| {
+                (0..num_challenges)
+                    .map(|_| challenger.sample_ext_element::<SC::Challenge>())
+                    .collect_vec()
+            })
+            .collect();
+        let perm_challenges = challenges.first().map(|c| c.as_slice()).unwrap_or(&[]);
 
         // TODO: ===== Permutation Trace Generation should be moved to separate module ====
         // Generate permutation traces
@@ -116,33 +130,32 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
         // TODO: Move to a separate MockProver
         // Debug check constraints
         #[cfg(debug_assertions)]
-        for (((preprocessed_trace, main_data), perm_trace), cumulative_sum_and_index) in pk
+        for ((((preprocessed_trace, main_data), perm_trace), cumulative_sum_and_index), pis) in pk
             .preprocessed_traces()
             .zip_eq(&main_trace_data.air_traces)
             .zip_eq(&perm_traces)
             .zip_eq(&cumulative_sums_and_indices)
+            .zip_eq(public_values)
         {
             let rap = main_data.air;
-            let partitioned_main_trace = main_data.partitioned_main_trace;
-            let perm_trace = perm_trace.map(|t| t.as_view());
+            let partitioned_main_trace = &main_data.partitioned_main_trace;
+            let perm_trace = perm_trace.as_ref().map(|t| t.as_view());
             let cumulative_sum = cumulative_sum_and_index.as_ref().map(|(sum, _)| *sum);
 
             check_constraints(
                 rap,
                 &preprocessed_trace,
-                &partitioned_main_trace,
+                partitioned_main_trace,
                 &perm_trace,
-                &perm_challenges,
+                perm_challenges,
                 cumulative_sum,
-                public_values,
+                pis,
             );
         }
 
         // Commit to permutation traces: this means only 1 challenge round right now
         // One shared commit for all permutation traces
         let perm_pcs_data = tracing::info_span!("commit to permutation traces").in_scope(|| {
-            let mut count = 0;
-
             let flattened_traces_with_domains: Vec<_> = perm_traces
                 .into_iter()
                 .zip_eq(&main_trace_data.air_traces)
@@ -160,6 +173,9 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
                 None
             }
         });
+        // Either 0 or 1 after_challenge commits, depending on if there are any permutation traces
+        let after_challenge_pcs_data: Vec<_> = perm_pcs_data.into_iter().collect();
+        let main_pcs_data = &main_trace_data.pcs_data;
 
         // Prepare the proven RAP trace views
         // Abstraction boundary: after this, we consider InteractiveAIR as a RAP with virtual columns included in the trace.
@@ -174,15 +190,15 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
                 let domain = main.domain;
                 let preprocessed = pk.preprocessed_data.as_ref().map(|p| {
                     // TODO: currently assuming each chip has it's own preprocessed commitment
-                    ProvenSingleMatrixView::new(&p.data, 0)
+                    CommittedSingleMatrixView::new(&p.data, 0)
                 });
                 let matrix_ptrs = &pk.vk.main_graph.matrix_ptrs;
                 assert_eq!(main.partitioned_main_trace.len(), matrix_ptrs.len());
                 let partitioned_main = matrix_ptrs
                     .iter()
                     .map(|ptr| {
-                        ProvenSingleMatrixView::new(
-                            &main_trace_data.pcs_data[ptr.commit_index].1,
+                        CommittedSingleMatrixView::new(
+                            main_pcs_data[ptr.commit_index].1,
                             ptr.matrix_index,
                         )
                     })
@@ -192,13 +208,13 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
                 let after_challenge =
                     if let Some((cumulative_sum, index)) = cumulative_sum_and_index {
                         let matrix =
-                            ProvenSingleMatrixView::new(&perm_pcs_data.as_ref().unwrap().1, index);
+                            CommittedSingleMatrixView::new(&after_challenge_pcs_data[0].1, index);
                         let exposed_values = vec![cumulative_sum];
                         vec![(matrix, exposed_values)]
                     } else {
                         Vec::new()
                     };
-                let trace_view = ProvenSingleRapTraceView {
+                let trace_view = SingleRapCommittedTraceView {
                     domain,
                     preprocessed,
                     partitioned_main,
@@ -207,8 +223,6 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
                 (rap, trace_view)
             })
             .unzip();
-        // Either 0 or 1 after_challenge commits, depending on if there are any permutation traces
-        let after_challenge_pcs_data: Vec<_> = perm_pcs_data.into_iter().collect();
         // === END of logic specific to Interactions/permutations, we can now deal with general RAP ===
 
         self.prove_raps_with_committed_traces(
@@ -216,9 +230,9 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
             pk,
             raps,
             trace_views,
-            main_trace_data.pcs_data,
-            after_challenge_pcs_data,
-            &[&perm_challenges],
+            main_pcs_data,
+            &after_challenge_pcs_data,
+            &challenges,
             public_values,
         )
     }
@@ -231,20 +245,21 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
     /// - `challenges`: for each trace challenge phase, the challenges sampled
     ///
     /// ## Assumptions
-    /// - `raps, trace_views` have same length and same order
+    /// - `raps, trace_views, public_values` have same length and same order
     /// - per challenge round, shared commitment for
     /// all trace matrices, with matrices in increasing order of air index
+    #[allow(clippy::too_many_arguments)]
     #[instrument(level = "debug", skip_all)]
     pub fn prove_raps_with_committed_traces<'a>(
         &self,
         challenger: &mut SC::Challenger,
         pk: &'a MultiStarkProvingKey<SC>,
         raps: Vec<&'a dyn ProverRap<SC>>,
-        trace_views: Vec<ProvenSingleRapTraceView<'a, SC>>,
-        main_pcs_data: Vec<(Com<SC>, PcsProverData<SC>)>,
-        after_challenge_pcs_data: Vec<(Com<SC>, PcsProverData<SC>)>,
-        challenges: &[&[SC::Challenge]],
-        public_values: &'a [Val<SC>],
+        trace_views: Vec<SingleRapCommittedTraceView<'a, SC>>,
+        main_pcs_data: &[(Com<SC>, &PcsProverData<SC>)],
+        after_challenge_pcs_data: &[(Com<SC>, PcsProverData<SC>)],
+        challenges: &[Vec<SC::Challenge>],
+        public_values: &'a [Vec<Val<SC>>],
     ) -> Proof<SC>
     where
         SC::Pcs: Sync,
@@ -255,8 +270,10 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
         PcsProof<SC>: Send + Sync,
     {
         let pcs = self.config.pcs();
-        let (after_challenge_commitments, after_challenge_prover_data): (Vec<_>, Vec<_>) =
-            after_challenge_pcs_data.into_iter().unzip();
+        let after_challenge_commitments: Vec<_> = after_challenge_pcs_data
+            .iter()
+            .map(|(commit, _)| commit.clone())
+            .collect();
 
         // Generate `alpha` challenge
         let alpha: SC::Challenge = challenger.sample_ext_element();
@@ -313,18 +330,18 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
                     .iter()
                     .map(|i| trace_views[*i].domain)
                     .collect_vec();
-                (data, domains)
+                (*data, domains)
             })
             .collect();
 
         // ASSUMING: per challenge round, shared commitment for all trace matrices, with matrices in increasing order of air index
-        let after_challenge_data: Vec<_> = after_challenge_prover_data
+        let after_challenge_data: Vec<_> = after_challenge_pcs_data
             .iter()
             .enumerate()
-            .map(|(round, data)| {
+            .map(|(round, (_, data))| {
                 let domains = trace_views
                     .iter()
-                    .flat_map(|view| (view.after_challenge.len() > round).then(|| view.domain))
+                    .flat_map(|view| (view.after_challenge.len() > round).then_some(view.domain))
                     .collect_vec();
                 (data, domains)
             })

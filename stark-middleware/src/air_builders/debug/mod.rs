@@ -8,18 +8,17 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::rap::PermutationAirBuilderWithExposedValues;
 
+use super::ViewPair;
+
 pub mod check_constraints;
 
 /// An `AirBuilder` which asserts that each constraint is zero, allowing any failed constraints to
 /// be detected early.
 pub struct DebugConstraintBuilder<'a, SC: StarkGenericConfig> {
     pub row_index: usize,
-    pub preprocessed:
-        VerticalPair<RowMajorMatrixView<'a, Val<SC>>, RowMajorMatrixView<'a, Val<SC>>>,
-    pub partitioned_main:
-        Vec<VerticalPair<RowMajorMatrixView<'a, Val<SC>>, RowMajorMatrixView<'a, Val<SC>>>>,
-    pub perm:
-        VerticalPair<RowMajorMatrixView<'a, SC::Challenge>, RowMajorMatrixView<'a, SC::Challenge>>,
+    pub preprocessed: ViewPair<'a, Val<SC>>,
+    pub partitioned_main: Vec<ViewPair<'a, Val<SC>>>,
+    pub perm: ViewPair<'a, SC::Challenge>,
     pub perm_challenges: &'a [SC::Challenge],
     pub is_first_row: Val<SC>,
     pub is_last_row: Val<SC>,
@@ -37,8 +36,13 @@ where
     type Var = Val<SC>;
     type M = VerticalPair<RowMajorMatrixView<'a, Val<SC>>, RowMajorMatrixView<'a, Val<SC>>>;
 
+    /// It is difficult to horizontally concatenate matrices when the main trace is partitioned, so we disable this method in that case.
     fn main(&self) -> Self::M {
-        *self.partitioned_main.get(0).expect("No main trace")
+        if self.partitioned_main.len() == 1 {
+            self.partitioned_main[0]
+        } else {
+            panic!("Main trace is either empty or partitioned. This function should not be used.")
+        }
     }
 
     fn is_first_row(&self) -> Self::Expr {
@@ -125,8 +129,7 @@ impl<'a, SC> PermutationAirBuilder for DebugConstraintBuilder<'a, SC>
 where
     SC: StarkGenericConfig,
 {
-    type MP =
-        VerticalPair<RowMajorMatrixView<'a, SC::Challenge>, RowMajorMatrixView<'a, SC::Challenge>>;
+    type MP = ViewPair<'a, SC::Challenge>;
 
     type RandomVar = SC::Challenge;
 

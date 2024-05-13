@@ -1,9 +1,7 @@
-use afs_middleware::{
-    prover::{trace::TraceCommitter, types::ProvenMultiMatrixAirTrace, PartitionProver},
-    setup::PartitionSetup,
-    verifier::PartitionVerifier,
-};
-use p3_air::BaseAir;
+use afs_middleware::keygen::MultiStarkKeygenBuilder;
+use afs_middleware::prover::trace::TraceCommitmentBuilder;
+use afs_middleware::prover::MultiTraceStarkProver;
+use afs_middleware::verifier::MultiTraceStarkVerifier;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_uni_stark::StarkGenericConfig;
@@ -13,17 +11,11 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry};
 
-use crate::config::poseidon2::StarkConfigPoseidon2;
-
 mod config;
 mod fib_air;
 mod fib_selector_air;
 
-#[test]
-fn test_single_fib_stark() {
-    use fib_air::air::FibonacciAir;
-    use fib_air::trace::generate_trace_rows;
-
+fn tracing_setup() {
     // Set up tracing:
     let env_filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::INFO.into())
@@ -32,6 +24,14 @@ fn test_single_fib_stark() {
         .with(env_filter)
         .with(ForestLayer::default())
         .try_init();
+}
+
+#[test]
+fn test_single_fib_stark() {
+    use fib_air::air::FibonacciAir;
+    use fib_air::trace::generate_trace_rows;
+
+    tracing_setup();
 
     let log_trace_degree = 3;
     let perm = config::poseidon2::random_perm();
@@ -43,32 +43,34 @@ fn test_single_fib_stark() {
     let n = 1usize << log_trace_degree;
 
     type Val = BabyBear;
-    let pis = [a, b, get_fib_number(n)].map(BabyBear::from_canonical_u32);
+    let pis = [a, b, get_fib_number(n)]
+        .map(BabyBear::from_canonical_u32)
+        .to_vec();
+    let air = FibonacciAir;
 
-    let air = FibonacciAir {};
-
-    let prep_trace = air.preprocessed_trace();
-    let setup = PartitionSetup::new(&config);
-    let (pk, vk) = setup.setup(vec![prep_trace]);
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
+    keygen_builder.add_air(&air, n, pis.len());
+    let pk = keygen_builder.generate_pk();
+    let vk = pk.vk();
 
     let trace = generate_trace_rows::<Val>(a, b, n);
-    let trace_committer = TraceCommitter::<StarkConfigPoseidon2>::new(config.pcs());
-    let proven_trace = trace_committer.commit(vec![trace]);
-    let proven = ProvenMultiMatrixAirTrace {
-        trace_data: &proven_trace,
-        airs: vec![&air],
-    };
 
-    let prover = PartitionProver::new(config);
+    let prover = MultiTraceStarkProver::new(config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.config.pcs());
+    trace_builder.load_trace(trace);
+    trace_builder.commit_current();
+
+    let main_trace_data = trace_builder.view(&vk, vec![&air]);
+
     let mut challenger = config::poseidon2::Challenger::new(perm.clone());
-    let proof = prover.prove(&mut challenger, &pk, vec![proven], &pis);
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &[pis.clone()]);
 
     // Verify the proof:
     // Start from clean challenger
     let mut challenger = config::poseidon2::Challenger::new(perm.clone());
-    let verifier = PartitionVerifier::new(prover.config);
+    let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier
-        .verify(&mut challenger, vk, vec![&air], proof, &pis)
+        .verify(&mut challenger, vk, vec![&air], proof, &[pis])
         .expect("Verification failed");
 }
 
@@ -77,14 +79,7 @@ fn test_single_fib_selector_stark() {
     use fib_selector_air::air::FibonacciSelectorAir;
     use fib_selector_air::trace::generate_trace_rows;
 
-    // Set up tracing:
-    let env_filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::INFO.into())
-        .from_env_lossy();
-    let _ = Registry::default()
-        .with(env_filter)
-        .with(ForestLayer::default())
-        .try_init();
+    tracing_setup();
 
     let log_trace_degree = 3;
     let perm = config::poseidon2::random_perm();
@@ -97,32 +92,95 @@ fn test_single_fib_selector_stark() {
 
     type Val = BabyBear;
     let sels: Vec<bool> = (0..n).map(|i| i % 2 == 0).collect();
-    let pis = [a, b, get_conditional_fib_number(&sels)].map(BabyBear::from_canonical_u32);
+    let pis = [a, b, get_conditional_fib_number(&sels)]
+        .map(BabyBear::from_canonical_u32)
+        .to_vec();
 
-    let air = FibonacciSelectorAir { sels };
+    let air = FibonacciSelectorAir::new(sels);
 
-    let prep_trace = air.preprocessed_trace();
-    let setup = PartitionSetup::new(&config);
-    let (pk, vk) = setup.setup(vec![prep_trace]);
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
+    keygen_builder.add_air(&air, n, pis.len());
+    let pk = keygen_builder.generate_pk();
+    let vk = pk.vk();
 
-    let trace = generate_trace_rows::<Val>(a, b, &air.sels);
-    let trace_committer = TraceCommitter::<StarkConfigPoseidon2>::new(config.pcs());
-    let proven_trace = trace_committer.commit(vec![trace]);
-    let proven = ProvenMultiMatrixAirTrace {
-        trace_data: &proven_trace,
-        airs: vec![&air],
-    };
+    let trace = generate_trace_rows::<Val>(a, b, air.sels());
 
-    let prover = PartitionProver::new(config);
+    let prover = MultiTraceStarkProver::new(config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.config.pcs());
+    trace_builder.load_trace(trace);
+    trace_builder.commit_current();
+
+    let main_trace_data = trace_builder.view(&vk, vec![&air]);
+
     let mut challenger = config::poseidon2::Challenger::new(perm.clone());
-    let proof = prover.prove(&mut challenger, &pk, vec![proven], &pis);
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &[pis.clone()]);
 
     // Verify the proof:
     // Start from clean challenger
     let mut challenger = config::poseidon2::Challenger::new(perm.clone());
-    let verifier = PartitionVerifier::new(prover.config);
+    let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier
-        .verify(&mut challenger, vk, vec![&air], proof, &pis)
+        .verify(&mut challenger, vk, vec![&air], proof, &[pis])
+        .expect("Verification failed");
+}
+
+#[test]
+fn test_double_fib_starks() {
+    use fib_air::air::FibonacciAir;
+    use fib_selector_air::air::FibonacciSelectorAir;
+
+    tracing_setup();
+
+    let log_n1 = 3;
+    let log_n2 = 5;
+    let perm = config::poseidon2::random_perm();
+    let config = config::poseidon2::default_config(&perm, log_n1.max(log_n2));
+
+    // Public inputs:
+    let a = 0u32;
+    let b = 1u32;
+    let n1 = 1usize << log_n1;
+    let n2 = 1usize << log_n2;
+
+    type Val = BabyBear;
+    let sels: Vec<bool> = (0..n2).map(|i| i % 2 == 0).collect(); // Evens
+    let pis1 = [a, b, get_fib_number(n1)]
+        .map(BabyBear::from_canonical_u32)
+        .to_vec();
+    let pis2 = [a, b, get_conditional_fib_number(&sels)]
+        .map(BabyBear::from_canonical_u32)
+        .to_vec();
+
+    let air1 = FibonacciAir;
+    let air2 = FibonacciSelectorAir::new(sels);
+
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
+    keygen_builder.add_air(&air1, n1, pis1.len());
+    keygen_builder.add_air(&air2, n2, pis2.len());
+    let pk = keygen_builder.generate_pk();
+    let vk = pk.vk();
+
+    let trace1 = fib_air::trace::generate_trace_rows::<Val>(a, b, n1);
+    let trace2 = fib_selector_air::trace::generate_trace_rows::<Val>(a, b, air2.sels());
+
+    let prover = MultiTraceStarkProver::new(config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.config.pcs());
+    trace_builder.load_trace(trace1);
+    trace_builder.load_trace(trace2);
+    trace_builder.commit_current();
+
+    let main_trace_data = trace_builder.view(&vk, vec![&air1, &air2]);
+    let pis_all = [pis1, pis2];
+
+    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis_all);
+
+    // Verify the proof:
+    // Start from clean challenger
+    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let verifier = MultiTraceStarkVerifier::new(prover.config);
+    verifier
+        .verify(&mut challenger, vk, vec![&air1, &air2], proof, &pis_all)
         .expect("Verification failed");
 }
 

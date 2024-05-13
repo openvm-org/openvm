@@ -7,11 +7,12 @@ use p3_uni_stark::{Domain, PackedChallenge, StarkGenericConfig, Val};
 use tracing::instrument;
 
 use crate::{
-    air_builders::prover::ProverConstraintFolder, config::PcsProverData,
-    prover::types::ProverQuotientData, rap::Rap,
+    air_builders::prover::ProverConstraintFolder,
+    config::{Com, PcsProverData},
+    rap::Rap,
 };
 
-use super::{trace::ProvenSingleRapTraceView, types::ProverRap};
+use super::{trace::SingleRapCommittedTraceView, types::ProverRap};
 
 use self::single::compute_single_rap_quotient_values;
 
@@ -25,7 +26,11 @@ pub struct QuotientCommitter<'pcs, SC: StarkGenericConfig> {
 }
 
 impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
-    pub fn new(pcs: &'pcs SC::Pcs, challenges: &[&[SC::Challenge]], alpha: SC::Challenge) -> Self {
+    pub fn new(
+        pcs: &'pcs SC::Pcs,
+        challenges: &[Vec<SC::Challenge>],
+        alpha: SC::Challenge,
+    ) -> Self {
         let packed_challenges = challenges
             .iter()
             .map(|challenges| {
@@ -54,9 +59,9 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
     pub fn quotient_values<'a>(
         &self,
         raps: Vec<&'a dyn ProverRap<SC>>,
-        traces: Vec<ProvenSingleRapTraceView<'a, SC>>,
+        traces: Vec<SingleRapCommittedTraceView<'a, SC>>,
         quotient_degrees: &'a [usize],
-        public_values: &'a [Val<SC>],
+        public_values: &'a [Vec<Val<SC>>],
     ) -> QuotientData<SC>
     where
         Domain<SC>: Send + Sync,
@@ -67,8 +72,9 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
             .into_par_iter()
             .zip_eq(traces.into_par_iter())
             .zip_eq(quotient_degrees.par_iter())
-            .map(|((rap, trace), &quotient_degree)| {
-                self.single_rap_quotient_values(rap, trace, quotient_degree, public_values)
+            .zip_eq(public_values.par_iter())
+            .map(|(((rap, trace), &quotient_degree), pis)| {
+                self.single_rap_quotient_values(rap, trace, quotient_degree, pis)
             })
             .collect();
         QuotientData { inner }
@@ -77,7 +83,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
     pub fn single_rap_quotient_values<'a, R>(
         &self,
         rap: &'a R,
-        trace: ProvenSingleRapTraceView<'a, SC>,
+        trace: SingleRapCommittedTraceView<'a, SC>,
         quotient_degree: usize,
         public_values: &'a [Val<SC>],
     ) -> SingleQuotientData<SC>
@@ -155,6 +161,19 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
             data,
         }
     }
+}
+
+/// Prover data for multi-matrix quotient polynomial commitment.
+/// Quotient polynomials for multiple RAP matrices are committed together into a single commitment.
+/// The quotient polynomials can be committed together even if the corresponding trace matrices
+/// are committed separately.
+pub struct ProverQuotientData<SC: StarkGenericConfig> {
+    /// For each AIR, the number of quotient chunks that were committed.
+    pub quotient_degrees: Vec<usize>,
+    /// Quotient commitment
+    pub commit: Com<SC>,
+    /// Prover data for the quotient commitment
+    pub data: PcsProverData<SC>,
 }
 
 /// The quotient polynomials from multiple RAP matrices.

@@ -10,8 +10,8 @@ use crate::air_builders::debug::DebugConstraintBuilder;
 use crate::rap::Rap;
 
 /// Check that all constraints vanish on the subgroup.
-pub fn check_constraints<A, SC>(
-    rap: &A,
+pub fn check_constraints<R, SC>(
+    rap: &R,
     preprocessed: &Option<RowMajorMatrixView<Val<SC>>>,
     partitioned_main: &[RowMajorMatrixView<Val<SC>>],
     perm: &Option<RowMajorMatrixView<SC::Challenge>>,
@@ -19,7 +19,7 @@ pub fn check_constraints<A, SC>(
     cumulative_sum: Option<SC::Challenge>,
     public_values: &[Val<SC>],
 ) where
-    A: for<'a> Rap<DebugConstraintBuilder<'a, SC>> + BaseAir<Val<SC>> + ?Sized,
+    R: for<'a> Rap<DebugConstraintBuilder<'a, SC>> + BaseAir<Val<SC>> + ?Sized,
     SC: StarkGenericConfig,
 {
     let height = partitioned_main[0].height();
@@ -50,8 +50,11 @@ pub fn check_constraints<A, SC>(
 
         let partitioned_main_row_pair = partitioned_main
             .iter()
-            .map(|part| {
-                let (local, next) = (&*part.row_slice(i), &*part.row_slice(i_next));
+            .map(|part| (part.row_slice(i), part.row_slice(i_next)))
+            .collect::<Vec<_>>();
+        let partitioned_main = partitioned_main_row_pair
+            .iter()
+            .map(|(local, next)| {
                 VerticalPair::new(
                     RowMajorMatrixView::new_row(local),
                     RowMajorMatrixView::new_row(next),
@@ -64,7 +67,7 @@ pub fn check_constraints<A, SC>(
                 RowMajorMatrixView::new_row(preprocessed_local.as_slice()),
                 RowMajorMatrixView::new_row(preprocessed_next.as_slice()),
             ),
-            partitioned_main: partitioned_main_row_pair,
+            partitioned_main,
             perm: VerticalPair::new(
                 RowMajorMatrixView::new_row(perm_local.as_slice()),
                 RowMajorMatrixView::new_row(perm_next.as_slice()),

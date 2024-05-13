@@ -20,25 +20,25 @@ use self::{constraints::verify_single_rap_constraints, types::VerifierRap};
 
 /// Verifies a partitioned proof of multi-matrix AIRs.
 // TODO: Interactions
-pub struct MultiStarkVerifier<SC: StarkGenericConfig> {
+pub struct MultiTraceStarkVerifier<SC: StarkGenericConfig> {
     config: SC,
 }
 
-impl<SC: StarkGenericConfig> MultiStarkVerifier<SC> {
+impl<SC: StarkGenericConfig> MultiTraceStarkVerifier<SC> {
     pub fn new(config: SC) -> Self {
         Self { config }
     }
 
     /// Verify collection of InteractiveAIRs and check the permutation
     /// cumulative sum is equal to zero across all AIRs.
-    #[instrument(name = "MultiStarkVerifier::verify", level = "debug", skip_all)]
+    #[instrument(name = "MultiTraceStarkVerifier::verify", level = "debug", skip_all)]
     pub fn verify(
         &self,
         challenger: &mut SC::Challenger,
         vk: MultiStarkVerifyingKey<SC>,
         raps: Vec<&dyn VerifierRap<SC>>,
         proof: Proof<SC>,
-        public_values: &[Val<SC>],
+        public_values: &[Vec<Val<SC>>],
     ) -> Result<(), VerificationError> {
         let cumulative_sums = proof
             .exposed_values_after_challenge
@@ -48,7 +48,7 @@ impl<SC: StarkGenericConfig> MultiStarkVerifier<SC> {
                     exposed_values.len() <= 1,
                     "Verifier does not support more than 1 challenge phase"
                 );
-                exposed_values.get(0).map(|values| {
+                exposed_values.first().map(|values| {
                     assert_eq!(
                         values.len(),
                         1,
@@ -59,7 +59,7 @@ impl<SC: StarkGenericConfig> MultiStarkVerifier<SC> {
             })
             .collect_vec();
 
-        self.verify_raps(challenger, vk, raps, proof, public_values, &[2])?;
+        self.verify_raps(challenger, vk, raps, proof, public_values)?;
 
         // Check cumulative sum
         let sum: SC::Challenge = cumulative_sums
@@ -86,11 +86,12 @@ impl<SC: StarkGenericConfig> MultiStarkVerifier<SC> {
         vk: MultiStarkVerifyingKey<SC>,
         raps: Vec<&dyn VerifierRap<SC>>,
         proof: Proof<SC>,
-        public_values: &[Val<SC>],
-        num_challenges_to_sample: &[usize],
+        public_values: &[Vec<Val<SC>>],
     ) -> Result<(), VerificationError> {
         // Challenger must observe public values
-        challenger.observe_slice(public_values);
+        for pis in public_values {
+            challenger.observe_slice(pis);
+        }
 
         // TODO: valid shape check from verifying key
 
@@ -106,10 +107,11 @@ impl<SC: StarkGenericConfig> MultiStarkVerifier<SC> {
         challenger.observe_slice(&proof.commitments.main_trace);
 
         let mut challenges = Vec::new();
-        for ((&num_to_sample, commit), exposed_values) in num_challenges_to_sample
+        for (phase_idx, (&num_to_sample, commit)) in vk
+            .num_challenges_to_sample
             .iter()
             .zip_eq(&proof.commitments.after_challenge)
-            .zip_eq(&proof.exposed_values_after_challenge)
+            .enumerate()
         {
             // Sample challenges needed in this phase
             challenges.push(
@@ -118,10 +120,12 @@ impl<SC: StarkGenericConfig> MultiStarkVerifier<SC> {
                     .collect_vec(),
             );
             // For each RAP, the exposed values in current phase
-            for values in exposed_values {
-                // Observe exposed values (in ext field)
-                for value in values {
-                    challenger.observe_slice(value.as_base_slice());
+            for exposed_values in &proof.exposed_values_after_challenge {
+                if let Some(values) = exposed_values.get(phase_idx) {
+                    // Observe exposed values (in ext field)
+                    for value in values {
+                        challenger.observe_slice(value.as_base_slice());
+                    }
                 }
             }
             // Observe single commitment to all trace matrices in this phase
@@ -240,15 +244,19 @@ impl<SC: StarkGenericConfig> MultiStarkVerifier<SC> {
             .map_err(|e| VerificationError::InvalidOpeningArgument(format!("{:?}", e)))?;
 
         let mut preprocessed_idx = 0usize; // preprocessed commit idx
-        let mut after_challenge_idx = vec![0usize; proof.commitments.after_challenge.len()];
+        let mut after_challenge_idx = vec![0usize; vk.num_challenges_to_sample.len()];
 
         // Verify each RAP's constraints
-        for (((((rap, domain), qc_domains), quotient_chunks), vk), exposed_values) in raps
+        for (
+            (((((rap, domain), qc_domains), quotient_chunks), vk), public_values),
+            exposed_values,
+        ) in raps
             .into_iter()
             .zip_eq(domains)
             .zip_eq(&quotient_chunks_domains)
             .zip_eq(&opened_values.quotient)
             .zip_eq(&vk.per_air)
+            .zip_eq(public_values)
             .zip_eq(&proof.exposed_values_after_challenge)
         {
             let preprocessed_values = vk.preprocessed_data.as_ref().map(|_| {

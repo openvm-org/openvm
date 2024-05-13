@@ -2,7 +2,6 @@ use p3_air::{
     AirBuilder, AirBuilderWithPublicValues, ExtensionBuilder, PairBuilder, PermutationAirBuilder,
 };
 use p3_field::AbstractField;
-use p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair};
 use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::rap::PermutationAirBuilderWithExposedValues;
@@ -29,7 +28,7 @@ impl<'a, SC: StarkGenericConfig> AirBuilder for VerifierConstraintFolder<'a, SC>
     type Var = SC::Challenge;
     type M = ViewPair<'a, SC::Challenge>;
 
-    /// It is difficulty to horizontally concatenate matrices when the main trace is partitioned, so we disable this method in that case.
+    /// It is difficult to horizontally concatenate matrices when the main trace is partitioned, so we disable this method in that case.
     fn main(&self) -> Self::M {
         if self.partitioned_main.len() == 1 {
             self.partitioned_main[0]
@@ -97,20 +96,17 @@ where
     type RandomVar = SC::Challenge;
 
     fn permutation(&self) -> Self::MP {
-        self.after_challenge
-            .get(0)
-            .map(|m| *m)
-            .unwrap_or(VerticalPair::new(
-                RowMajorMatrixView::new(&[], 0),
-                RowMajorMatrixView::new(&[], 0),
-            ))
+        *self
+            .after_challenge
+            .first()
+            .expect("Challenge phase not supported")
     }
 
     fn permutation_randomness(&self) -> &[Self::RandomVar] {
         self.challenges
-            .get(0)
+            .first()
             .map(|c| c.as_slice())
-            .unwrap_or(&[] as &[Self::RandomVar])
+            .expect("Challenge phase not supported")
     }
 }
 
@@ -128,8 +124,8 @@ where
 {
     fn permutation_exposed_values(&self) -> &[Self::EF] {
         self.exposed_values_after_challenge
-            .get(0)
+            .first()
             .map(|c| c.as_slice())
-            .unwrap_or(&[] as &[Self::EF])
+            .expect("Challenge phase not supported")
     }
 }

@@ -3,25 +3,17 @@ use p3_air::{
     AirBuilder, AirBuilderWithPublicValues, ExtensionBuilder, PairBuilder, PermutationAirBuilder,
 };
 use p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrixView;
-use p3_matrix::stack::VerticalPair;
 use p3_uni_stark::{PackedChallenge, PackedVal, StarkGenericConfig, Val};
 
 use crate::rap::PermutationAirBuilderWithExposedValues;
 
+use super::ViewPair;
+
 /// A folder for prover constraints.
 pub struct ProverConstraintFolder<'a, SC: StarkGenericConfig> {
-    pub preprocessed:
-        VerticalPair<RowMajorMatrixView<'a, PackedVal<SC>>, RowMajorMatrixView<'a, PackedVal<SC>>>,
-    pub partitioned_main: Vec<
-        VerticalPair<RowMajorMatrixView<'a, PackedVal<SC>>, RowMajorMatrixView<'a, PackedVal<SC>>>,
-    >,
-    pub after_challenge: Vec<
-        VerticalPair<
-            RowMajorMatrixView<'a, PackedChallenge<SC>>,
-            RowMajorMatrixView<'a, PackedChallenge<SC>>,
-        >,
-    >,
+    pub preprocessed: ViewPair<'a, PackedVal<SC>>,
+    pub partitioned_main: Vec<ViewPair<'a, PackedVal<SC>>>,
+    pub after_challenge: Vec<ViewPair<'a, PackedChallenge<SC>>>,
     pub challenges: &'a [Vec<PackedChallenge<SC>>],
     pub is_first_row: PackedVal<SC>,
     pub is_last_row: PackedVal<SC>,
@@ -39,10 +31,9 @@ where
     type F = Val<SC>;
     type Expr = PackedVal<SC>;
     type Var = PackedVal<SC>;
-    type M =
-        VerticalPair<RowMajorMatrixView<'a, PackedVal<SC>>, RowMajorMatrixView<'a, PackedVal<SC>>>;
+    type M = ViewPair<'a, PackedVal<SC>>;
 
-    /// It is difficulty to horizontally concatenate matrices when the main trace is partitioned, so we disable this method in that case.
+    /// It is difficult to horizontally concatenate matrices when the main trace is partitioned, so we disable this method in that case.
     fn main(&self) -> Self::M {
         if self.partitioned_main.len() == 1 {
             self.partitioned_main[0]
@@ -114,28 +105,22 @@ impl<'a, SC> PermutationAirBuilder for ProverConstraintFolder<'a, SC>
 where
     SC: StarkGenericConfig,
 {
-    type MP = VerticalPair<
-        RowMajorMatrixView<'a, PackedChallenge<SC>>,
-        RowMajorMatrixView<'a, PackedChallenge<SC>>,
-    >;
+    type MP = ViewPair<'a, PackedChallenge<SC>>;
 
     type RandomVar = PackedChallenge<SC>;
 
     fn permutation(&self) -> Self::MP {
-        self.after_challenge
-            .get(0)
-            .map(|m| *m)
-            .unwrap_or(VerticalPair::new(
-                RowMajorMatrixView::new(&[], 0),
-                RowMajorMatrixView::new(&[], 0),
-            ))
+        *self
+            .after_challenge
+            .first()
+            .expect("Challenge phase not supported")
     }
 
     fn permutation_randomness(&self) -> &[Self::RandomVar] {
         self.challenges
-            .get(0)
+            .first()
             .map(|c| c.as_slice())
-            .unwrap_or(&[] as &[Self::RandomVar])
+            .expect("Challenge phase not supported")
     }
 }
 
@@ -145,8 +130,7 @@ where
 {
     fn permutation_exposed_values(&self) -> &[Self::EF] {
         self.exposed_values_after_challenge
-            .get(0)
-            .map(|c| *c)
-            .unwrap_or(&[] as &[Self::EF])
+            .first()
+            .expect("Challenge phase not supported")
     }
 }

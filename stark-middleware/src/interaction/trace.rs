@@ -27,7 +27,7 @@ pub fn generate_permutation_trace<F, C, EF>(
     chip: &C,
     preprocessed: &Option<RowMajorMatrixView<F>>,
     partitioned_main: &[RowMajorMatrixView<F>],
-    permutation_randomness: [EF; 2],
+    permutation_randomness: &[EF],
 ) -> Option<RowMajorMatrix<EF>>
 where
     F: Field,
@@ -38,8 +38,14 @@ where
     if all_interactions.is_empty() {
         return None;
     }
+    assert_eq!(
+        permutation_randomness.len(),
+        2,
+        "No enough permutation challenges"
+    );
+    let alpha = permutation_randomness[0];
+    let beta = permutation_randomness[1];
 
-    let [alpha, beta] = permutation_randomness;
     let alphas = generate_rlc_elements(chip, alpha);
     let betas = beta.powers();
 

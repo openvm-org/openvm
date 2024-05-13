@@ -94,14 +94,20 @@ where
         })
         .collect();
 
-    let after_challenge = after_challenge_values
+    let after_challenge_ext_values: Vec<_> = after_challenge_values
         .into_iter()
         .map(|values| {
             let [local, next] = [&values.local, &values.next]
                 .map(|flattened_ext_values| unflatten(flattened_ext_values));
+            (local, next)
+        })
+        .collect();
+    let after_challenge = after_challenge_ext_values
+        .iter()
+        .map(|(local, next)| {
             VerticalPair::new(
-                RowMajorMatrixView::new_row(&local),
-                RowMajorMatrixView::new_row(&next),
+                RowMajorMatrixView::new_row(local),
+                RowMajorMatrixView::new_row(next),
             )
         })
         .collect();

@@ -24,12 +24,10 @@ where
         Air::eval(self, builder);
         // Constraints for the permutation trace:
         let num_interactions = self.all_interactions().len();
-        let exposed_values = builder.permutation_exposed_values();
         if num_interactions == 0 {
             // No interactions, no virtual columns are needed
-            // No cumulative sum is needed
-            assert!(exposed_values.is_empty());
         } else {
+            let exposed_values = builder.permutation_exposed_values();
             // There are interactions, add constraints for the virtual columns
             assert_eq!(
                 exposed_values.len(),

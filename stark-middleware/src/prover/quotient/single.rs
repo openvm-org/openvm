@@ -40,15 +40,6 @@ where
 {
     let quotient_size = quotient_domain.size();
     let preprocessed_width = preprocessed_trace_on_quotient_domain.width();
-    let partitioned_main_widths = partitioned_main_lde_on_quotient_domain
-        .iter()
-        .map(|m| m.width())
-        .collect_vec();
-    // Widths in base field with extension field elements flattened
-    let after_challenge_widths = after_challenge_lde_on_quotient_domain
-        .iter()
-        .map(|m| m.width())
-        .collect_vec();
     let mut sels = trace_domain.selectors_on_coset(quotient_domain);
 
     let qdb = log2_strict_usize(quotient_size) - log2_strict_usize(trace_domain.size());
@@ -138,8 +129,8 @@ where
                     .iter()
                     .map(|[local, next]| {
                         VerticalPair::new(
-                            RowMajorMatrixView::new_row(&local),
-                            RowMajorMatrixView::new_row(&next),
+                            RowMajorMatrixView::new_row(local),
+                            RowMajorMatrixView::new_row(next),
                         )
                     })
                     .collect(),
@@ -147,8 +138,8 @@ where
                     .iter()
                     .map(|[local, next]| {
                         VerticalPair::new(
-                            RowMajorMatrixView::new_row(&local),
-                            RowMajorMatrixView::new_row(&next),
+                            RowMajorMatrixView::new_row(local),
+                            RowMajorMatrixView::new_row(next),
                         )
                     })
                     .collect(),

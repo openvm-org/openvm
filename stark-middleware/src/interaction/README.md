@@ -36,6 +36,34 @@ on the main and preprocessed trace polynomials with rotations. This means that w
 $(f_1(\mathbf T),\dotsc,f_{len}(\mathbf T))$ to the $i$-th bus with multiplicity $m(\mathbf T)$, where $\mathbf T$
 refers to the trace (including preprocessed columns) as polynomials (as well as rotations).
 
+### Outcome
+
+If all row values for `count` for sends are small enough that the sum of all `count` values across all `sends` is strictly smaller than the field characteristic (so no overflows are possible), this enforces that:
+
+> for each bus, each unique row of `fields` occurs with the same total `count` in sends and receives across all chips.
+
+In other words, for each bus, there is a multiset equality between 
+
+> the multiset union of the rows of `fields` with multiplicity `count` across all sends
+
+and
+
+> the multiset union of the rows of `fields` with multiplicity `count` across all receives.
+
+One important consequence is that:
+
+> for each bus, each row of a `fields` with non-zero `count` from a send coincides with some row of a `fields` of a receive (possibly in another chip).
+
+In other words, it enforces a cross-chip lookup of the rows of the send tables with non-zero `count` into the concatenation of the receive tables.
+
+### Conventions
+
+Following Valida, we will follow the convention that if an individual chip is the owner of some functionality, say `f(x) = y`, then the chip itself should add `receive`
+interactions to _receive_ requests with fields `(x, y)` and constrain correctness of `f(x) = y`. Any other chip in a system that wants to use this functionality should
+add `send` interactions to _send_ requests for this functionality.
+
+## Backend implementation via logUp
+
 The backend implementation of the prover will constrain the computation of a cumulative sum
 _for just this AIR_
 $$\sum_r \left(\sum_\sigma sign(\sigma) \frac {m_\sigma[r]}{\alpha^{i_\sigma} + \sum_j \beta^j \cdot f_{\sigma,j}(\mathbf T[r])} \right)$$
@@ -49,13 +77,7 @@ where $r$ sums over all row indices, $\sigma$ sums over all sends and receives, 
 
 Globally, the prover will sum this per-AIR cumulative sum over all AIRs and lastly constrain that the sum is $0$. This will enforce that the sends and receives are balanced globally across all AIRs. Note that the multiplicity allows a single send to a bus to be received by multiple AIRs.
 
-If all row values for `count` for sends are small enough that no overflows are possible, this enforces that:
-
-> for each bus, each row of a `VirtualPairCol` with non-zero `count` from a send coincides with some row of a `VirtualPairCol` of a receive.
-
-In other words, it enforces a cross-chip lookup of the rows of the send tables with non-zero `count` into the concatenation of the receive tables.
-
-## Virtual columns and constraints
+### Virtual columns and constraints
 
 In theory the $f_j, m$ can be any multi-variate polynomial expression. Currently plonky3 only supports affine expressions (degree <= 1 polynomials), which are constructed via the `VirtualPairCol` struct.
 A `VirtualPairCol` is an affine function over a set of columns of the form $f(\mathbf T) = b + \sum w_i T_i$.
@@ -89,9 +111,3 @@ The constraints are:
 where $sum$ is exposed to the verifier.
 
 In summarize, we need 1 additional virtual column for each send or receive interaction, and 1 additional virtual column to track the partial sum. These columns are all virtual in the sense that they are only materialized by the prover, after the main trace was committed, because a random challenge is needed.
-
-# Conventions
-
-Following Valida, we will follow the convention that if an individual chip is the owner of some functionality, say `f(x) = y`, then the chip itself should add `receive`
-interactions to _receive_ requests with fields `(x, y)` and constrain correctness of `f(x) = y`. Any other chip in a system that wants to use this functionality should
-add `send` interactions to _send_ requests for this functionality.
