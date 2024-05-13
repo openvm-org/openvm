@@ -1,0 +1,15 @@
+use afs_middleware::interaction::{Chip, Interaction};
+use p3_air::VirtualPairCol;
+use p3_field::PrimeField64;
+
+use super::{columns::LIST_COL_MAP, ListChip};
+
+impl<F: PrimeField64, const MAX: u32> Chip<F> for ListChip<MAX> {
+    fn sends(&self) -> Vec<Interaction<F>> {
+        vec![Interaction {
+            fields: vec![VirtualPairCol::single_main(LIST_COL_MAP.val)],
+            count: VirtualPairCol::constant(F::one()),
+            argument_index: self.bus_index(),
+        }]
+    }
+}
