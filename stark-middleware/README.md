@@ -33,7 +33,7 @@ Currently we only see a use case for partitioning the main trace matrix, and non
 
 ## Multiple STARKs
 
-The backend supports the simultaenous proving of a system of multiple RAPs with trace matrices of different heights and widths. This brings additional nuance because Plonky3
+The backend supports the simultaneous proving of a system of multiple RAPs with trace matrices of different heights and widths. This brings additional nuance because Plonky3
 supports the notion of a Mixed Matrix Commitment Scheme (MMCS), which allows the
 simultaneous commitment to a set of matrices of different heights.
 
