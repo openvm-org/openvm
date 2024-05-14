@@ -8,6 +8,7 @@ use p3_field::AbstractField;
 use p3_matrix::Matrix;
 
 use crate::{
+    air_builders::PartitionedAirBuilder,
     interaction::InteractionType,
     rap::{PermutationAirBuilderWithExposedValues, Rap},
 };
@@ -17,19 +18,16 @@ use super::{utils::generate_rlc_elements, Chip, InteractiveAir};
 impl<AB, A> Rap<AB> for A
 where
     A: InteractiveAir<AB>,
-    AB: PairBuilder + PermutationAirBuilderWithExposedValues + Sync,
+    AB: PairBuilder + PermutationAirBuilderWithExposedValues + PartitionedAirBuilder + Sync,
 {
     fn eval(&self, builder: &mut AB) {
         // Constraits for the main trace:
         Air::eval(self, builder);
         // Constraints for the permutation trace:
         let num_interactions = self.all_interactions().len();
-        let exposed_values = builder.permutation_exposed_values();
-        if num_interactions == 0 {
-            // No interactions, no virtual columns are needed
-            // No cumulative sum is needed
-            assert!(exposed_values.is_empty());
-        } else {
+        // If no interactions, nothing to do
+        if num_interactions > 0 {
+            let exposed_values = builder.permutation_exposed_values();
             // There are interactions, add constraints for the virtual columns
             assert_eq!(
                 exposed_values.len(),
@@ -48,7 +46,7 @@ where
 pub fn eval_permutation_constraints<C, AB>(chip: &C, builder: &mut AB, cumulative_sum: AB::EF)
 where
     C: Chip<AB::F>,
-    AB: PairBuilder + PermutationAirBuilder,
+    AB: PairBuilder + PermutationAirBuilder + PartitionedAirBuilder,
 {
     let rand_elems = builder.permutation_randomness().to_vec();
 
@@ -58,10 +56,20 @@ where
     let preprocessed_local = (*preprocessed_local).borrow();
     let preprocessed_next = (*preprocessed_next).borrow();
 
-    let main = builder.main();
-    let (main_local, main_next) = (main.row_slice(0), main.row_slice(1));
-    let main_local: &[AB::Var] = (*main_local).borrow();
-    let main_next: &[AB::Var] = (*main_next).borrow();
+    let partitioned_main = builder.partitioned_main();
+    let (main_locals, main_nexts): (Vec<_>, Vec<_>) = partitioned_main
+        .iter()
+        .map(|mat| (mat.row_slice(0), mat.row_slice(1)))
+        .unzip();
+    // NEEDS OPTIMIZATION: VirtualPairCol::apply expects `main_local`.
+    // Without changin plonky3, we just need to copy and concatenate the partitioned slices together.
+    let [main_local, main_next] = [main_locals, main_nexts].map(|row_parts| {
+        row_parts
+            .iter()
+            .flat_map(|r| (*r).borrow() as &[_])
+            .copied()
+            .collect::<Vec<_>>()
+    });
 
     let perm = builder.permutation();
     let perm_local = perm.row_slice(0);
@@ -85,7 +93,7 @@ where
         // Reciprocal constraints
         let mut rlc = AB::ExprEF::zero();
         for (field, beta) in interaction.fields.iter().zip(betas.clone()) {
-            let elem = field.apply::<AB::Expr, AB::Var>(preprocessed_local, main_local);
+            let elem = field.apply::<AB::Expr, AB::Var>(preprocessed_local, &main_local);
             rlc += beta * elem;
         }
         rlc += alphas[interaction.argument_index].clone();
@@ -93,10 +101,10 @@ where
 
         let mult_local = interaction
             .count
-            .apply::<AB::Expr, AB::Var>(preprocessed_local, main_local);
+            .apply::<AB::Expr, AB::Var>(preprocessed_local, &main_local);
         let mult_next = interaction
             .count
-            .apply::<AB::Expr, AB::Var>(preprocessed_next, main_next);
+            .apply::<AB::Expr, AB::Var>(preprocessed_next, &main_next);
 
         // Build the RHS of the permutation constraint
         match interaction_type {

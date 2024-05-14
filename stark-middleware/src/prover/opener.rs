@@ -18,10 +18,10 @@ impl<'pcs, SC: StarkGenericConfig> OpeningProver<'pcs, SC> {
     }
 
     /// Opening proof for multiple RAP matrices, where
-    /// - permutation trace matrices have multiple commitments
+    /// - (for now) each preprocessed trace matrix has a separate commitment
     /// - main trace matrices can have multiple commitments
-    /// - permutation trace matrices all committed together if they exist
-    /// - quotient poly chunks all committed together
+    /// - for each after_challenge phase, all matrices in the phase share a commitment
+    /// - quotient poly chunks are all committed together
     pub fn open(
         &self,
         challenger: &mut SC::Challenger,
@@ -31,12 +31,11 @@ impl<'pcs, SC: StarkGenericConfig> OpeningProver<'pcs, SC> {
         // For each main trace commitment, the prover data and
         // the domain of each matrix, in order
         main: Vec<(&PcsProverData<SC>, Vec<Domain<SC>>)>,
-        // Permutation trace commitment prover data, and the domain
-        // of each matrix, in order, if permutation trace exists
-        perm: Option<(&PcsProverData<SC>, Vec<Domain<SC>>)>,
+        // after_challenge[i] has shared commitment prover data for all matrices in that phase, and domains of those matrices, in order
+        after_challenge: Vec<(&PcsProverData<SC>, Vec<Domain<SC>>)>,
         // Quotient poly commitment prover data
         quotient_data: &PcsProverData<SC>,
-        // Quotient degree for each RAP, flattened
+        // Quotient degree for each RAP committed in quotient_data, in order
         quotient_degrees: &[usize],
     ) -> OpeningProof<SC> {
         let preprocessed: Vec<_> = preprocessed
@@ -48,7 +47,7 @@ impl<'pcs, SC: StarkGenericConfig> OpeningProver<'pcs, SC> {
         let mut rounds = preprocessed
             .iter()
             .chain(main.iter())
-            .chain(perm.iter())
+            .chain(after_challenge.iter())
             .map(|(data, domains)| {
                 let points_per_mat = domains
                     .iter()
@@ -68,12 +67,17 @@ impl<'pcs, SC: StarkGenericConfig> OpeningProver<'pcs, SC> {
         // Unflatten opening_values
         let mut quotient_openings = opening_values.pop().expect("Should have quotient opening");
 
-        let perm_openings = perm.is_some().then(|| {
-            let ops = opening_values
-                .pop()
-                .expect("Should have permutation trace opening");
-            collect_trace_openings(ops)
-        });
+        let num_after_challenge = after_challenge.len();
+        let after_challenge_openings = opening_values
+            .split_off(opening_values.len() - num_after_challenge)
+            .into_iter()
+            .map(collect_trace_openings)
+            .collect_vec();
+        assert_eq!(
+            after_challenge_openings.len(),
+            num_after_challenge,
+            "Incorrect number of after challenge trace openings"
+        );
 
         let main_openings = opening_values
             .split_off(preprocessed.len())
@@ -120,7 +124,7 @@ impl<'pcs, SC: StarkGenericConfig> OpeningProver<'pcs, SC> {
             values: OpenedValues {
                 preprocessed: preprocessed_openings,
                 main: main_openings,
-                perm: perm_openings,
+                after_challenge: after_challenge_openings,
                 quotient: quotient_openings,
             },
         }
@@ -151,9 +155,9 @@ pub struct OpenedValues<Challenge> {
     /// For each main trace commitment, for each matrix in commitment, the
     /// opened values
     pub main: Vec<Vec<AdjacentOpenedValues<Challenge>>>,
-    /// For each matrix in permutation trace commitment, the opened values,
-    /// if permutation trace commitment exists
-    pub perm: Option<Vec<AdjacentOpenedValues<Challenge>>>,
+    /// For each phase after challenge, there is shared commitment.
+    /// For each commitment, if any, for each matrix in the commitment, the opened values,
+    pub after_challenge: Vec<Vec<AdjacentOpenedValues<Challenge>>>,
     /// For each RAP, for each quotient chunk in quotient poly, the opened values
     pub quotient: Vec<Vec<Vec<Challenge>>>,
 }

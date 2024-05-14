@@ -8,8 +8,21 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 pub struct FibonacciSelectorAir {
-    pub sels: Vec<bool>,
-    pub enable_interactions: bool,
+    sels: Vec<bool>,
+    enable_interactions: bool,
+}
+
+impl FibonacciSelectorAir {
+    pub fn new(sels: Vec<bool>, enable_interactions: bool) -> Self {
+        Self {
+            sels,
+            enable_interactions,
+        }
+    }
+
+    pub fn sels(&self) -> &[bool] {
+        &self.sels
+    }
 }
 
 impl<F: Field> Chip<F> for FibonacciSelectorAir {

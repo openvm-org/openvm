@@ -40,6 +40,12 @@ pub trait Chip<F: Field> {
             )
             .collect()
     }
+
+    /// Width of the permutation trace.
+    fn permutation_width(&self) -> Option<usize> {
+        let num_interactions = self.sends().len() + self.receives().len();
+        (num_interactions != 0).then_some(num_interactions + 1)
+    }
 }
 
 /// An interactive AIR is a AIR that can specify buses for sending and receiving data
@@ -54,8 +60,8 @@ pub trait InteractiveAir<AB: AirBuilder>: Air<AB> + Chip<AB::F> {
     fn generate_permutation_trace(
         &self,
         preprocessed_trace: &Option<RowMajorMatrixView<AB::F>>,
-        main_trace: &RowMajorMatrixView<AB::F>,
-        permutation_randomness: [AB::EF; 2],
+        partitioned_main_trace: &[RowMajorMatrixView<AB::F>],
+        permutation_randomness: &[AB::EF],
     ) -> Option<RowMajorMatrix<AB::EF>>
     where
         AB: PermutationAirBuilder,
@@ -63,7 +69,7 @@ pub trait InteractiveAir<AB: AirBuilder>: Air<AB> + Chip<AB::F> {
         self::trace::generate_permutation_trace(
             self,
             preprocessed_trace,
-            main_trace,
+            partitioned_main_trace,
             permutation_randomness,
         )
     }

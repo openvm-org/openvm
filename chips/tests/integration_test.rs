@@ -1,23 +1,14 @@
 use afs_middleware::{
-    prover::{
-        trace::TraceCommitter,
-        types::{ProvenMultiMatrixAirTrace, ProverRap},
-        PartitionProver,
-    },
-    setup::PartitionSetup,
-    verifier::{types::VerifierRap, PartitionVerifier},
+    keygen::MultiStarkKeygenBuilder,
+    prover::{trace::TraceCommitmentBuilder, types::ProverRap, MultiTraceStarkProver},
+    verifier::{types::VerifierRap, MultiTraceStarkVerifier},
 };
-use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_matrix::dense::DenseMatrix;
 use p3_maybe_rayon::prelude::IntoParallelRefIterator;
 use p3_uni_stark::StarkGenericConfig;
-use tracing_forest::util::LevelFilter;
-use tracing_forest::ForestLayer;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{EnvFilter, Registry};
 
+use std::iter;
 use std::sync::{Arc, Mutex};
 
 use afs_chips::{range, xor};
@@ -25,8 +16,6 @@ mod list;
 mod xor_requester;
 
 mod config;
-
-use crate::config::poseidon2::StarkConfigPoseidon2;
 
 use rand::{rngs::StdRng, SeedableRng};
 
@@ -36,15 +25,6 @@ fn test_list_range_checker() {
 
     use list::ListChip;
     use range::RangeCheckerChip;
-
-    let env_filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::INFO.into())
-        .from_env_lossy();
-
-    let _ = Registry::default()
-        .with(env_filter)
-        .with(ForestLayer::default())
-        .try_init();
 
     let seed = [42; 32];
     let mut rng = StdRng::from_seed(seed);
@@ -57,10 +37,10 @@ fn test_list_range_checker() {
     const LOG_TRACE_DEGREE_LIST: usize = 6;
     const LIST_LEN: usize = 1 << LOG_TRACE_DEGREE_LIST;
 
-    let trace_degree_max: usize = std::cmp::max(LOG_TRACE_DEGREE_LIST, LOG_TRACE_DEGREE_RANGE);
+    let log_trace_degree_max: usize = std::cmp::max(LOG_TRACE_DEGREE_LIST, LOG_TRACE_DEGREE_RANGE);
 
     let perm = config::poseidon2::random_perm();
-    let config = config::poseidon2::default_config(&perm, trace_degree_max);
+    let config = config::poseidon2::default_config(&perm, log_trace_degree_max);
 
     // Creating a RangeCheckerChip
     let range_checker = Arc::new(RangeCheckerChip::<MAX>::new(bus_index));
@@ -81,58 +61,58 @@ fn test_list_range_checker() {
         .map(|vals| ListChip::new(bus_index, vals.to_vec(), Arc::clone(&range_checker)))
         .collect::<Vec<ListChip<MAX>>>();
 
-    let pis = [];
-
-    let lists_prep_traces = lists
-        .par_iter()
-        .map(|list| list.preprocessed_trace())
-        .collect::<Vec<Option<DenseMatrix<BabyBear>>>>();
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
+    for list in &lists {
+        let n = list.vals().len();
+        keygen_builder.add_air(list, n, 0);
+    }
+    keygen_builder.add_air(&*range_checker, MAX as usize, 0);
+    let pk = keygen_builder.generate_pk();
+    let vk = pk.vk();
 
     let lists_traces = lists
         .par_iter()
         .map(|list| list.generate_trace())
         .collect::<Vec<DenseMatrix<BabyBear>>>();
 
-    let prep_trace_range = range_checker.preprocessed_trace();
-    let trace_range = range_checker.generate_trace();
+    let range_trace = range_checker.generate_trace();
 
-    let mut prep_traces = lists_prep_traces;
-    prep_traces.push(prep_trace_range);
+    let prover = MultiTraceStarkProver::new(config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.config.pcs());
+    for trace in lists_traces {
+        trace_builder.load_trace(trace)
+    }
+    trace_builder.load_trace(range_trace);
+    trace_builder.commit_current();
 
-    let setup = PartitionSetup::new(&config);
-    let (pk, vk) = setup.setup(prep_traces);
+    let main_trace_data = trace_builder.view(
+        &vk,
+        lists
+            .iter()
+            .map(|list| list as &dyn ProverRap<_>)
+            .chain(iter::once(&*range_checker as &dyn ProverRap<_>))
+            .collect(),
+    );
 
-    let mut traces = lists_traces;
-    traces.push(trace_range);
-
-    let trace_committer = TraceCommitter::<StarkConfigPoseidon2>::new(config.pcs());
-    let proven_trace = trace_committer.commit(traces);
-
-    let mut airs_prover: Vec<&dyn ProverRap<StarkConfigPoseidon2>> = lists
-        .iter()
-        .map(|list| list as &dyn ProverRap<StarkConfigPoseidon2>)
-        .collect();
-    airs_prover.push(&*range_checker);
-
-    let proven = ProvenMultiMatrixAirTrace {
-        trace_data: &proven_trace,
-        airs: airs_prover,
-    };
-
-    let prover = PartitionProver::new(config);
-    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
-    let proof = prover.prove(&mut challenger, &pk, vec![proven], &pis);
-
-    let mut airs_verifier: Vec<&dyn VerifierRap<StarkConfigPoseidon2>> = lists
-        .iter()
-        .map(|list| list as &dyn VerifierRap<StarkConfigPoseidon2>)
-        .collect();
-    airs_verifier.push(&*range_checker);
+    let pis = vec![vec![]; vk.per_air.len()];
 
     let mut challenger = config::poseidon2::Challenger::new(perm.clone());
-    let verifier = PartitionVerifier::new(prover.config);
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
+
+    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier
-        .verify(&mut challenger, vk, airs_verifier, proof, &pis)
+        .verify(
+            &mut challenger,
+            vk,
+            lists
+                .iter()
+                .map(|list| list as &dyn VerifierRap<_>)
+                .chain(iter::once(&*range_checker as &dyn VerifierRap<_>))
+                .collect(),
+            proof,
+            &pis,
+        )
         .expect("Verification failed");
 }
 
@@ -144,15 +124,6 @@ fn test_xor_chip() {
 
     use xor::XorChip;
     use xor_requester::XorRequesterChip;
-
-    let env_filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::INFO.into())
-        .from_env_lossy();
-
-    let _ = Registry::default()
-        .with(env_filter)
-        .with(ForestLayer::default())
-        .try_init();
 
     let bus_index = 0;
 
@@ -170,8 +141,6 @@ fn test_xor_chip() {
 
     let xor_chip = Arc::new(Mutex::new(XorChip::<BITS>::new(bus_index, vec![])));
 
-    let pis = [];
-
     let mut requesters = (0..NUM_REQUESTERS)
         .map(|_| XorRequesterChip::new(bus_index, vec![], Arc::clone(&xor_chip)))
         .collect::<Vec<XorRequesterChip<BITS>>>();
@@ -182,10 +151,17 @@ fn test_xor_chip() {
         }
     }
 
-    let requesters_prep_traces = requesters
-        .par_iter()
-        .map(|requester| requester.preprocessed_trace())
-        .collect::<Vec<Option<DenseMatrix<BabyBear>>>>();
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
+    for requester in &requesters {
+        let n = requester.requests.len();
+        keygen_builder.add_air(requester, n, 0);
+    }
+
+    let xor_chip_locked = xor_chip.lock().unwrap();
+    keygen_builder.add_air(&*xor_chip_locked, NUM_REQUESTERS * XOR_REQUESTS, 0);
+    drop(xor_chip_locked);
+    let pk = keygen_builder.generate_pk();
+    let vk = pk.vk();
 
     let requesters_traces = requesters
         .par_iter()
@@ -193,45 +169,43 @@ fn test_xor_chip() {
         .collect::<Vec<DenseMatrix<BabyBear>>>();
 
     let xor_chip_locked = xor_chip.lock().unwrap();
-    let prep_trace_xor_chip = xor_chip_locked.preprocessed_trace();
-    let trace_xor_chip = xor_chip_locked.generate_trace();
+    let xor_chip_trace = xor_chip_locked.generate_trace();
 
-    let mut prep_traces = requesters_prep_traces;
-    prep_traces.push(prep_trace_xor_chip);
+    let prover = MultiTraceStarkProver::new(config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.config.pcs());
+    for trace in requesters_traces {
+        trace_builder.load_trace(trace)
+    }
+    trace_builder.load_trace(xor_chip_trace);
+    trace_builder.commit_current();
 
-    let setup = PartitionSetup::new(&config);
-    let (pk, vk) = setup.setup(prep_traces);
+    let main_trace_data = trace_builder.view(
+        &vk,
+        requesters
+            .iter()
+            .map(|requester| requester as &dyn ProverRap<_>)
+            .chain(iter::once(&*xor_chip_locked as &dyn ProverRap<_>))
+            .collect(),
+    );
 
-    let mut traces = requesters_traces;
-    traces.push(trace_xor_chip);
-
-    let trace_committer = TraceCommitter::<StarkConfigPoseidon2>::new(config.pcs());
-    let proven_trace = trace_committer.commit(traces);
-
-    let mut airs_prover: Vec<&dyn ProverRap<StarkConfigPoseidon2>> = requesters
-        .iter()
-        .map(|requester| requester as &dyn ProverRap<StarkConfigPoseidon2>)
-        .collect();
-    airs_prover.push(&*xor_chip_locked);
-
-    let proven = ProvenMultiMatrixAirTrace {
-        trace_data: &proven_trace,
-        airs: airs_prover,
-    };
-
-    let prover = PartitionProver::new(config);
-    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
-    let proof = prover.prove(&mut challenger, &pk, vec![proven], &pis);
-
-    let mut airs_verifier: Vec<&dyn VerifierRap<StarkConfigPoseidon2>> = requesters
-        .iter()
-        .map(|requester| requester as &dyn VerifierRap<StarkConfigPoseidon2>)
-        .collect();
-    airs_verifier.push(&*xor_chip_locked);
+    let pis = vec![vec![]; vk.per_air.len()];
 
     let mut challenger = config::poseidon2::Challenger::new(perm.clone());
-    let verifier = PartitionVerifier::new(prover.config);
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
+
+    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier
-        .verify(&mut challenger, vk, airs_verifier, proof, &pis)
+        .verify(
+            &mut challenger,
+            vk,
+            requesters
+                .iter()
+                .map(|requester| requester as &dyn VerifierRap<_>)
+                .chain(iter::once(&*xor_chip_locked as &dyn VerifierRap<_>))
+                .collect(),
+            proof,
+            &pis,
+        )
         .expect("Verification failed");
 }

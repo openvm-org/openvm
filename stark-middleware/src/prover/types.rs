@@ -1,135 +1,112 @@
-use p3_air::Air;
-use p3_matrix::dense::RowMajorMatrix;
+use p3_matrix::dense::RowMajorMatrixView;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    air_builders::{
-        debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicAirBuilder,
-    },
+    air_builders::{debug::DebugConstraintBuilder, prover::ProverConstraintFolder},
     config::{Com, PcsProverData},
     interaction::InteractiveAir,
     rap::Rap,
-    verifier::types::VerifierSingleRapMetadata,
 };
 
-use super::{opener::OpeningProof, trace::ProvenSingleTraceView};
+use super::opener::OpeningProof;
 
-/// Prover data for multi-matrix trace commitments.
-/// The data is for the traces committed into a single commitment.
-///
-/// This data can be cached and attached to other multi-matrix traces.
-pub struct ProverTraceData<SC: StarkGenericConfig> {
-    /// Trace matrices, possibly of different heights.
-    /// We store the domain each trace was committed with respect to.
-    // Memory optimization? PCS ProverData should be able to recover the domain.
-    pub traces_with_domains: Vec<(Domain<SC>, RowMajorMatrix<Val<SC>>)>,
-    /// Commitment to the trace matrices.
-    pub commit: Com<SC>,
-    /// Prover data, such as a Merkle tree, for the trace commitment.
-    pub data: PcsProverData<SC>,
+/// Prover trace data for multiple AIRs where each AIR has partitioned main trace.
+/// The different main trace parts can belong to different commitments.
+pub struct MultiAirCommittedTraceData<'a, SC: StarkGenericConfig> {
+    /// A list of multi-matrix commitments and their associated prover data.
+    pub pcs_data: Vec<(Com<SC>, &'a PcsProverData<SC>)>,
+    // main trace, for each air, list of trace matrices and pointer to prover data for each
+    /// Proven trace data for each AIR.
+    pub air_traces: Vec<SingleAirCommittedTrace<'a, SC>>,
 }
 
-impl<SC: StarkGenericConfig> ProverTraceData<SC> {
-    pub fn get(&self, index: usize) -> Option<ProvenSingleTraceView<SC>> {
-        self.traces_with_domains
-            .get(index)
-            .map(|(domain, _)| ProvenSingleTraceView {
-                domain: *domain,
-                data: &self.data,
-                index,
-            })
+impl<'a, SC: StarkGenericConfig> MultiAirCommittedTraceData<'a, SC> {
+    pub fn get_domain(&self, air_index: usize) -> Domain<SC> {
+        self.air_traces[air_index].domain
+    }
+
+    pub fn get_commit(&self, commit_index: usize) -> Option<&Com<SC>> {
+        self.pcs_data.get(commit_index).map(|(commit, _)| commit)
+    }
+
+    pub fn commits(&self) -> impl Iterator<Item = &Com<SC>> {
+        self.pcs_data.iter().map(|(commit, _)| commit)
     }
 }
 
-/// Prover data for multiple AIRs that share a multi-matrix trace commitment.
-/// Each AIR owns a separate trace matrix of a different height, but these
-/// trace matrices have been committed together using the PCS.
-///
-/// This struct contains references to the AIRs themselves, which hold the constraint
-/// information. The AIRs must support the same [AirBuilder].
-///
-/// We use dynamic dispatch here for the extra flexibility. The overhead is small
-/// **if we ensure dynamic dispatch only once per AIR** (not true right now).
-///
-/// The ordering of `trace_data.traces_with_domains` and `airs` must match.
-pub struct ProvenMultiMatrixAirTrace<'a, SC: StarkGenericConfig> {
-    /// Proven trace data.
-    pub trace_data: &'a ProverTraceData<SC>,
-    /// The AIRs that share the trace commitment.
-    pub airs: Vec<&'a dyn ProverRap<SC>>,
-}
-
-impl<'a, SC: StarkGenericConfig> Clone for ProvenMultiMatrixAirTrace<'a, SC> {
+impl<'a, SC: StarkGenericConfig> Clone for MultiAirCommittedTraceData<'a, SC>
+where
+    PcsProverData<SC>: Clone,
+{
     fn clone(&self) -> Self {
         Self {
-            trace_data: self.trace_data,
-            airs: self.airs.clone(),
+            pcs_data: self.pcs_data.clone(),
+            air_traces: self.air_traces.clone(),
         }
     }
 }
 
-impl<'a, SC: StarkGenericConfig> ProvenMultiMatrixAirTrace<'a, SC> {
-    pub fn new(trace_data: &'a ProverTraceData<SC>, airs: Vec<&'a dyn ProverRap<SC>>) -> Self {
-        Self { trace_data, airs }
+/// Partitioned main trace data for a single AIR.
+///
+/// We use dynamic dispatch here for the extra flexibility. The overhead is small
+/// **if we ensure dynamic dispatch only once per AIR** (not true right now).
+pub struct SingleAirCommittedTrace<'a, SC: StarkGenericConfig> {
+    pub air: &'a dyn ProverRap<SC>,
+    pub domain: Domain<SC>,
+    pub partitioned_main_trace: Vec<RowMajorMatrixView<'a, Val<SC>>>,
+}
+
+impl<'a, SC: StarkGenericConfig> Clone for SingleAirCommittedTrace<'a, SC> {
+    fn clone(&self) -> Self {
+        Self {
+            air: self.air,
+            domain: self.domain,
+            partitioned_main_trace: self.partitioned_main_trace.clone(),
+        }
     }
 }
 
-/// Prover data for multi-matrix quotient polynomial commitment.
-/// Quotient polynomials for multiple RAP matrices are committed together into a single commitment.
-/// The quotient polynomials can be committed together even if the corresponding trace matrices
-/// are committed separately.
-pub struct ProverQuotientData<SC: StarkGenericConfig> {
-    /// For each AIR, the number of quotient chunks that were committed.
-    pub quotient_degrees: Vec<usize>,
-    /// Quotient commitment
-    pub commit: Com<SC>,
-    /// Prover data for the quotient commitment
-    pub data: PcsProverData<SC>,
-}
-
+/// All commitments to a multi-matrix STARK that are not preprocessed.
 #[derive(Serialize, Deserialize)]
 pub struct Commitments<SC: StarkGenericConfig> {
-    /// Multiple commitments, each committing to (possibly) multiple
-    /// main trace matrices
+    /// Multiple commitments for the main trace.
+    /// For each RAP, each part of a partitioned matrix trace matrix
+    /// must belong to one of these commitments.
     pub main_trace: Vec<Com<SC>>,
-    /// Shared commitment for all permutation trace matrices
-    pub perm_trace: Option<Com<SC>>,
+    /// One shared commitment for all trace matrices across all RAPs
+    /// in a single challenge phase `i` after observing the commits to
+    /// `preprocessed`, `main_trace`, and `after_challenge[..i]`
+    pub after_challenge: Vec<Com<SC>>,
     /// Shared commitment for all quotient polynomial evaluations
     pub quotient: Com<SC>,
 }
 
-/// The full STARK proof for a partition of multi-matrix AIRs.
-/// There are multiple AIR matrices, which are partitioned by the preimage of
-/// their trace commitments. In other words, multiple AIR trace matrices are committed
-/// into a single commitment, and these AIRs form one part of the partition.
+/// The full proof for multiple RAPs where trace matrices are committed into
+/// multiple commitments, where each commitment is multi-matrix.
 ///
 /// Includes the quotient commitments and FRI opening proofs for the constraints as well.
 pub struct Proof<SC: StarkGenericConfig> {
-    // TODO: this should be in verifying key
-    pub rap_data: Vec<VerifierSingleRapMetadata>,
     /// The PCS commitments
     pub commitments: Commitments<SC>,
     // Opening proofs separated by partition, but this may change
     pub opening: OpeningProof<SC>,
-    /// For each AIR, the cumulative sum if the AIR has interactions
-    pub cumulative_sums: Vec<Option<SC::Challenge>>,
+    /// For each RAP, for each challenge phase with trace,
+    /// the values to expose to the verifier in that phase
+    pub exposed_values_after_challenge: Vec<Vec<Vec<SC::Challenge>>>,
     // Should we include public values here?
 }
 
 /// RAP trait for prover dynamic dispatch use
 pub trait ProverRap<SC: StarkGenericConfig>:
-Air<SymbolicAirBuilder<Val<SC>>> // for quotient degree calculation
-+ Rap<SymbolicAirBuilder<Val<SC>>> // for quotient degree calculation
-+ for<'a> InteractiveAir<ProverConstraintFolder<'a, SC>> // for permutation trace generation
+for<'a> InteractiveAir<ProverConstraintFolder<'a, SC>> // for permutation trace generation
     + for<'a> Rap<ProverConstraintFolder<'a, SC>> // for quotient polynomial calculation
     + for<'a> Rap<DebugConstraintBuilder<'a, SC>> // for debugging
 {
 }
 
 impl<SC: StarkGenericConfig, T> ProverRap<SC> for T where
-    T: Air<SymbolicAirBuilder<Val<SC>>>
-        + for<'a> InteractiveAir<ProverConstraintFolder<'a, SC>>
+    T: for<'a> InteractiveAir<ProverConstraintFolder<'a, SC>>
         + for<'a> Rap<ProverConstraintFolder<'a, SC>>
         + for<'a> Rap<DebugConstraintBuilder<'a, SC>>
 {

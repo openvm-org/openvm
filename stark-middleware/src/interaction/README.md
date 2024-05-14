@@ -31,7 +31,7 @@ For a given chip, the interface allows to specify sends and receives via the
 `Interaction` struct. A single interaction $\sigma$ specifies a [communication] bus
 to communicate over -- this bus is an abstract concept that is not explicitly materialized.
 The index of this bus is `argument_index`, which we call $i_\sigma$ in the following.
-The interaction specifies `fields` $(f_j)_j$ and `count` $m$ where each $f_j$ and $m$ is a polynomial expression
+The interaction specifies `fields` $(f_j)$ and `count` $m$ where each $f_j$ and $m$ is a polynomial expression
 on the main and preprocessed trace polynomials with rotations. This means that we want to send the tuple
 $(f_1(\mathbf T),\dotsc,f_{len}(\mathbf T))$ to the $i$-th bus with multiplicity $m(\mathbf T)$, where $\mathbf T$
 refers to the trace (including preprocessed columns) as polynomials (as well as rotations).
@@ -42,7 +42,7 @@ If all row values for `count` for sends are small enough that the sum of all `co
 
 > for each bus, each unique row of `fields` occurs with the same total `count` in sends and receives across all chips.
 
-In other words, for each bus, there is a multiset equality between 
+In other words, for each bus, there is a multiset equality between
 
 > the multiset union of the rows of `fields` with multiplicity `count` across all sends
 

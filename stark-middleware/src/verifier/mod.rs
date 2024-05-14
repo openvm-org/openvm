@@ -12,58 +12,124 @@ pub mod types;
 pub use error::*;
 
 use crate::{
+    keygen::types::MultiStarkVerifyingKey,
     prover::{opener::AdjacentOpenedValues, types::Proof},
-    setup::types::VerifyingKey,
 };
 
 use self::{constraints::verify_single_rap_constraints, types::VerifierRap};
 
 /// Verifies a partitioned proof of multi-matrix AIRs.
 // TODO: Interactions
-pub struct PartitionVerifier<SC: StarkGenericConfig> {
+pub struct MultiTraceStarkVerifier<SC: StarkGenericConfig> {
     config: SC,
 }
 
-impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
+impl<SC: StarkGenericConfig> MultiTraceStarkVerifier<SC> {
     pub fn new(config: SC) -> Self {
         Self { config }
     }
 
-    // It would be better to pass in only symbolic constraints, which can be serialized.
-    /// Ordering of `raps` and `proof.rap_data` should match.
-    /// Public values is a global list shared across all AIRs.
-    #[instrument(name = "PartitionVerifier::verify", level = "debug", skip_all)]
+    /// Verify collection of InteractiveAIRs and check the permutation
+    /// cumulative sum is equal to zero across all AIRs.
+    #[instrument(name = "MultiTraceStarkVerifier::verify", level = "debug", skip_all)]
     pub fn verify(
         &self,
         challenger: &mut SC::Challenger,
-        vk: VerifyingKey<SC>,
+        vk: MultiStarkVerifyingKey<SC>,
         raps: Vec<&dyn VerifierRap<SC>>,
         proof: Proof<SC>,
-        public_values: &[Val<SC>],
+        public_values: &[Vec<Val<SC>>],
+    ) -> Result<(), VerificationError> {
+        let cumulative_sums = proof
+            .exposed_values_after_challenge
+            .iter()
+            .map(|exposed_values| {
+                assert!(
+                    exposed_values.len() <= 1,
+                    "Verifier does not support more than 1 challenge phase"
+                );
+                exposed_values.first().map(|values| {
+                    assert_eq!(
+                        values.len(),
+                        1,
+                        "Only exposed value should be cumulative sum"
+                    );
+                    values[0]
+                })
+            })
+            .collect_vec();
+
+        self.verify_raps(challenger, vk, raps, proof, public_values)?;
+
+        // Check cumulative sum
+        let sum: SC::Challenge = cumulative_sums
+            .into_iter()
+            .map(|c| c.unwrap_or(SC::Challenge::zero()))
+            .sum();
+        if sum != SC::Challenge::zero() {
+            return Err(VerificationError::NonZeroCumulativeSum);
+        }
+        Ok(())
+    }
+
+    // It would be better to pass in only symbolic constraints, which can be serialized.
+    /// Verify general RAPs without checking any relations (e.g., cumulative sum) between exposed values of different RAPs.
+    ///
+    /// Public values is a global list shared across all AIRs.
+    ///
+    /// - `num_challenges_to_sample[i]` is the number of challenges to sample in the trace challenge phase corresponding to `proof.commitments.after_challenge[i]`. This must have length equal
+    /// to `proof.commitments.after_challenge`.
+    #[instrument(level = "debug", skip_all)]
+    pub fn verify_raps(
+        &self,
+        challenger: &mut SC::Challenger,
+        vk: MultiStarkVerifyingKey<SC>,
+        raps: Vec<&dyn VerifierRap<SC>>,
+        proof: Proof<SC>,
+        public_values: &[Vec<Val<SC>>],
     ) -> Result<(), VerificationError> {
         // Challenger must observe public values
-        challenger.observe_slice(public_values);
+        for pis in public_values {
+            challenger.observe_slice(pis);
+        }
 
         // TODO: valid shape check from verifying key
-        let preprocessed_commits: Vec<_> = vk
-            .preprocessed_data
-            .iter()
-            .filter_map(|md| md.as_ref().map(|data| data.commit.clone()))
-            .collect();
-        challenger.observe_slice(&preprocessed_commits);
+
+        for preprocessed_commit in vk.per_air.iter().filter_map(|vk| {
+            vk.preprocessed_data
+                .as_ref()
+                .map(|data| data.commit.clone())
+        }) {
+            challenger.observe(preprocessed_commit);
+        }
 
         // Observe main trace commitments
         challenger.observe_slice(&proof.commitments.main_trace);
-        // Sample permutation challenges
-        let perm_challenges = [(); 2].map(|_| challenger.sample_ext_element::<SC::Challenge>());
 
-        // Observe cumulative sums
-        for cumulative_sum in proof.cumulative_sums.iter().flatten() {
-            challenger.observe_slice(cumulative_sum.as_base_slice());
-        }
-        // Observe permutation trace commitments
-        if let Some(perm_trace_commit) = &proof.commitments.perm_trace {
-            challenger.observe(perm_trace_commit.clone());
+        let mut challenges = Vec::new();
+        for (phase_idx, (&num_to_sample, commit)) in vk
+            .num_challenges_to_sample
+            .iter()
+            .zip_eq(&proof.commitments.after_challenge)
+            .enumerate()
+        {
+            // Sample challenges needed in this phase
+            challenges.push(
+                (0..num_to_sample)
+                    .map(|_| challenger.sample_ext_element::<SC::Challenge>())
+                    .collect_vec(),
+            );
+            // For each RAP, the exposed values in current phase
+            for exposed_values in &proof.exposed_values_after_challenge {
+                if let Some(values) = exposed_values.get(phase_idx) {
+                    // Observe exposed values (in ext field)
+                    for value in values {
+                        challenger.observe_slice(value.as_base_slice());
+                    }
+                }
+            }
+            // Observe single commitment to all trace matrices in this phase
+            challenger.observe(commit.clone());
         }
 
         // Draw `alpha` challenge
@@ -78,41 +144,21 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
         tracing::debug!("zeta: {zeta:?}");
 
         let pcs = self.config.pcs();
-        let opened_values = proof.opening.values;
-        // Map from opening index -> AIR index
-        let index_lookup_preprocessed: Vec<_> = vk
-            .preprocessed_data
-            .iter()
-            .enumerate()
-            .filter_map(|(i, md)| md.as_ref().map(|_| i))
-            .collect();
-        // Partition to flat index lookup
-        let mut index_lookup_main = opened_values
-            .main
-            .iter()
-            .map(|part| vec![0; part.len()])
-            .collect_vec();
-        let mut index_lookup_perm = vec![0; opened_values.perm.as_ref().unwrap_or(&vec![]).len()];
         // Build domains
-        let (domains, quotient_chunks_domains): (Vec<_>, Vec<Vec<_>>) = proof
-            .rap_data
+        let (domains, quotient_chunks_domains): (Vec<_>, Vec<Vec<_>>) = vk
+            .per_air
             .iter()
-            .map(|data| {
-                let degree = data.degree;
-                let quotient_degree = data.quotient_degree;
+            .map(|vk| {
+                let degree = vk.degree;
+                let quotient_degree = vk.quotient_degree;
                 let domain = pcs.natural_domain_for_degree(degree);
                 let quotient_domain = domain.create_disjoint_domain(degree * quotient_degree);
                 let qc_domains = quotient_domain.split_domains(quotient_degree);
-                let (i, j) = data.main_trace_ptr;
-                // TODO: out of bounds error
-                index_lookup_main[i][j] = data.index;
-                if let Some(i) = data.perm_trace_index {
-                    index_lookup_perm[i] = data.index;
-                }
                 (domain, qc_domains)
             })
             .unzip();
         // Verify all opening proofs
+        let opened_values = proof.opening.values;
         let trace_domain_and_openings =
             |domain: Domain<SC>,
              zeta: SC::Challenge,
@@ -125,47 +171,59 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
                     ],
                 )
             };
-        let mut rounds: Vec<_> = opened_values
-            .preprocessed
+        // Build the opening rounds
+        // 1. First the preprocessed trace openings
+        let mut rounds: Vec<_> = domains
             .iter()
-            .enumerate()
-            .map(|(i, values)| {
-                let index = index_lookup_preprocessed[i];
-                let data = vk.preprocessed_data[index].as_ref().unwrap();
-                let domain = pcs.natural_domain_for_degree(data.degree);
+            .zip_eq(&vk.per_air)
+            .flat_map(|(domain, vk)| {
+                vk.preprocessed_data
+                    .as_ref()
+                    .map(|data| (data.commit.clone(), *domain))
+            }) // Assumption: each AIR with preprocessed trace has its own commitment and opening values
+            .zip_eq(&opened_values.preprocessed)
+            .map(|((commit, domain), values)| {
                 let domain_and_openings = trace_domain_and_openings(domain, zeta, values);
-                (data.commit.clone(), vec![domain_and_openings])
+                (commit, vec![domain_and_openings])
             })
             .collect();
+        // 2. Then the main trace openings
         opened_values
             .main
             .iter()
+            .zip_eq(proof.commitments.main_trace)
             .enumerate()
-            .for_each(|(i, values_per_mat)| {
+            .for_each(|(commit_idx, (values_per_mat, commit))| {
                 let domains_and_openings = values_per_mat
                     .iter()
                     .enumerate()
-                    .map(|(j, values)| {
-                        let domain = domains[index_lookup_main[i][j]];
+                    .map(|(matrix_idx, values)| {
+                        let air_idx =
+                            vk.main_commit_to_air_graph.commit_to_air_index[commit_idx][matrix_idx];
+                        let domain = domains[air_idx];
                         trace_domain_and_openings(domain, zeta, values)
                     })
                     .collect_vec();
-                rounds.push((
-                    proof.commitments.main_trace[i].clone(),
-                    domains_and_openings,
-                ));
+                rounds.push((commit.clone(), domains_and_openings));
             });
-        if let Some(values_per_mat) = &opened_values.perm {
-            let domains_and_openings = values_per_mat
-                .iter()
-                .enumerate()
-                .map(|(j, values)| {
-                    let domain = domains[index_lookup_perm[j]];
-                    trace_domain_and_openings(domain, zeta, values)
-                })
-                .collect_vec();
-            rounds.push((proof.commitments.perm_trace.unwrap(), domains_and_openings));
-        }
+        // 3. Then after_challenge trace openings, one phase at a time
+        opened_values
+            .after_challenge
+            .iter()
+            .zip_eq(proof.commitments.after_challenge)
+            .enumerate()
+            .for_each(|(phase_idx, (values_per_mat, commit))| {
+                // Filter RAPs by those that have non-empty trace matrix in this phase
+                let domains = vk.per_air.iter().enumerate().flat_map(|(air_idx, vk)| {
+                    (*vk.width.after_challenge.get(phase_idx).unwrap_or(&0) > 0)
+                        .then(|| domains[air_idx])
+                });
+                let domains_and_openings = domains
+                    .zip_eq(values_per_mat)
+                    .map(|(domain, values)| trace_domain_and_openings(domain, zeta, values))
+                    .collect_vec();
+                rounds.push((commit.clone(), domains_and_openings));
+            });
         let quotient_domains_and_openings = opened_values
             .quotient
             .iter()
@@ -185,49 +243,55 @@ impl<SC: StarkGenericConfig> PartitionVerifier<SC> {
         pcs.verify(rounds, &proof.opening.proof, challenger)
             .map_err(|e| VerificationError::InvalidOpeningArgument(format!("{:?}", e)))?;
 
+        let mut preprocessed_idx = 0usize; // preprocessed commit idx
+        let mut after_challenge_idx = vec![0usize; vk.num_challenges_to_sample.len()];
+
         // Verify each RAP's constraints
-        for (i, (rap, data)) in raps.into_iter().zip_eq(proof.rap_data).enumerate() {
-            let preprocessed_values = vk.preprocessed_data[i]
-                .as_ref()
-                .map(|_| {
-                    index_lookup_preprocessed
-                        .iter()
-                        .position(|&j| j == i)
-                        .map(|k| &opened_values.preprocessed[k])
+        for (
+            (((((rap, domain), qc_domains), quotient_chunks), vk), public_values),
+            exposed_values,
+        ) in raps
+            .into_iter()
+            .zip_eq(domains)
+            .zip_eq(&quotient_chunks_domains)
+            .zip_eq(&opened_values.quotient)
+            .zip_eq(&vk.per_air)
+            .zip_eq(public_values)
+            .zip_eq(&proof.exposed_values_after_challenge)
+        {
+            let preprocessed_values = vk.preprocessed_data.as_ref().map(|_| {
+                let values = &opened_values.preprocessed[preprocessed_idx];
+                preprocessed_idx += 1;
+                values
+            });
+            let partitioned_main_values = vk
+                .main_graph
+                .matrix_ptrs
+                .iter()
+                .map(|ptr| &opened_values.main[ptr.commit_index][ptr.matrix_index])
+                .collect_vec();
+            // loop through challenge phases of this single RAP
+            let after_challenge_values = (0..vk.width.after_challenge.len())
+                .map(|phase_idx| {
+                    let matrix_idx = after_challenge_idx[phase_idx];
+                    after_challenge_idx[phase_idx] += 1;
+                    &opened_values.after_challenge[phase_idx][matrix_idx]
                 })
-                .unwrap_or_default();
-            let (main_commit_index, main_mat_index) = data.main_trace_ptr;
-            let main_values = &opened_values.main[main_commit_index][main_mat_index];
-            let main_domain = domains[data.index];
-            let perm_values = data
-                .perm_trace_index
-                .map(|i| &opened_values.perm.as_ref().unwrap()[i]);
-            let quotient_chunks = &opened_values.quotient[data.index];
-            let qc_domains = &quotient_chunks_domains[data.index];
-            let perm_exposed_values = proof.cumulative_sums[data.index].as_slice();
+                .collect_vec();
             verify_single_rap_constraints(
                 rap,
                 preprocessed_values,
-                main_values,
-                perm_values,
+                partitioned_main_values,
+                after_challenge_values,
                 quotient_chunks,
-                main_domain,
+                domain,
                 qc_domains,
                 zeta,
                 alpha,
-                &perm_challenges,
+                &challenges,
                 public_values,
-                perm_exposed_values,
+                exposed_values,
             )?;
-        }
-
-        let sum: SC::Challenge = proof
-            .cumulative_sums
-            .into_iter()
-            .map(|c| c.unwrap_or(SC::Challenge::zero()))
-            .sum();
-        if sum != SC::Challenge::zero() {
-            return Err(VerificationError::NonZeroCumulativeSum);
         }
 
         Ok(())

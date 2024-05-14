@@ -19,16 +19,16 @@ use super::error::VerificationError;
 pub fn verify_single_rap_constraints<SC, R>(
     rap: &R,
     preprocessed_values: Option<&AdjacentOpenedValues<SC::Challenge>>,
-    main_values: &AdjacentOpenedValues<SC::Challenge>,
-    perm_values: Option<&AdjacentOpenedValues<SC::Challenge>>,
+    partitioned_main_values: Vec<&AdjacentOpenedValues<SC::Challenge>>,
+    after_challenge_values: Vec<&AdjacentOpenedValues<SC::Challenge>>,
     quotient_chunks: &[Vec<SC::Challenge>],
-    main_domain: Domain<SC>,
+    domain: Domain<SC>, // trace domain
     qc_domains: &[Domain<SC>],
     zeta: SC::Challenge,
     alpha: SC::Challenge,
-    perm_challenges: &[SC::Challenge],
+    challenges: &[Vec<SC::Challenge>],
     public_values: &[Val<SC>],
-    perm_exposed_values: &[SC::Challenge],
+    exposed_values_after_challenge: &[Vec<SC::Challenge>],
 ) -> Result<(), VerificationError>
 where
     SC: StarkGenericConfig,
@@ -73,7 +73,7 @@ where
             .collect::<Vec<SC::Challenge>>()
     };
 
-    let sels = main_domain.selectors_at_point(zeta);
+    let sels = domain.selectors_at_point(zeta);
 
     let (preprocessed_local, preprocessed_next) = preprocessed_values
         .as_ref()
@@ -84,32 +84,46 @@ where
         RowMajorMatrixView::new_row(preprocessed_next),
     );
 
-    let main = VerticalPair::new(
-        RowMajorMatrixView::new_row(&main_values.local),
-        RowMajorMatrixView::new_row(&main_values.next),
-    );
+    let partitioned_main: Vec<_> = partitioned_main_values
+        .into_iter()
+        .map(|values| {
+            VerticalPair::new(
+                RowMajorMatrixView::new_row(&values.local),
+                RowMajorMatrixView::new_row(&values.next),
+            )
+        })
+        .collect();
 
-    let (perm_local, perm_next) = perm_values
-        .as_ref()
-        .map(|values| (unflatten(&values.local), unflatten(&values.next)))
-        .unwrap_or((vec![], vec![]));
-    let perm = VerticalPair::new(
-        RowMajorMatrixView::new_row(&perm_local),
-        RowMajorMatrixView::new_row(&perm_next),
-    );
+    let after_challenge_ext_values: Vec<_> = after_challenge_values
+        .into_iter()
+        .map(|values| {
+            let [local, next] = [&values.local, &values.next]
+                .map(|flattened_ext_values| unflatten(flattened_ext_values));
+            (local, next)
+        })
+        .collect();
+    let after_challenge = after_challenge_ext_values
+        .iter()
+        .map(|(local, next)| {
+            VerticalPair::new(
+                RowMajorMatrixView::new_row(local),
+                RowMajorMatrixView::new_row(next),
+            )
+        })
+        .collect();
 
     let mut folder: VerifierConstraintFolder<'_, SC> = VerifierConstraintFolder {
         preprocessed,
-        main,
-        perm,
+        partitioned_main,
+        after_challenge,
         is_first_row: sels.is_first_row,
         is_last_row: sels.is_last_row,
         is_transition: sels.is_transition,
         alpha,
         accumulator: SC::Challenge::zero(),
-        perm_challenges,
+        challenges,
         public_values,
-        perm_exposed_values,
+        exposed_values_after_challenge,
     };
     rap.eval(&mut folder);
 

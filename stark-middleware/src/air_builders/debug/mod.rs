@@ -8,23 +8,23 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::rap::PermutationAirBuilderWithExposedValues;
 
+use super::{PartitionedAirBuilder, ViewPair};
+
 pub mod check_constraints;
 
 /// An `AirBuilder` which asserts that each constraint is zero, allowing any failed constraints to
 /// be detected early.
 pub struct DebugConstraintBuilder<'a, SC: StarkGenericConfig> {
     pub row_index: usize,
-    pub preprocessed:
-        VerticalPair<RowMajorMatrixView<'a, Val<SC>>, RowMajorMatrixView<'a, Val<SC>>>,
-    pub main: VerticalPair<RowMajorMatrixView<'a, Val<SC>>, RowMajorMatrixView<'a, Val<SC>>>,
-    pub perm:
-        VerticalPair<RowMajorMatrixView<'a, SC::Challenge>, RowMajorMatrixView<'a, SC::Challenge>>,
-    pub perm_challenges: &'a [SC::Challenge],
+    pub preprocessed: ViewPair<'a, Val<SC>>,
+    pub partitioned_main: Vec<ViewPair<'a, Val<SC>>>,
+    pub after_challenge: Vec<ViewPair<'a, SC::Challenge>>,
+    pub challenges: &'a [Vec<SC::Challenge>],
     pub is_first_row: Val<SC>,
     pub is_last_row: Val<SC>,
     pub is_transition: Val<SC>,
     pub public_values: &'a [Val<SC>],
-    pub perm_exposed_values: &'a [SC::Challenge],
+    pub exposed_values_after_challenge: &'a [Vec<SC::Challenge>],
 }
 
 impl<'a, SC> AirBuilder for DebugConstraintBuilder<'a, SC>
@@ -36,8 +36,13 @@ where
     type Var = Val<SC>;
     type M = VerticalPair<RowMajorMatrixView<'a, Val<SC>>, RowMajorMatrixView<'a, Val<SC>>>;
 
+    /// It is difficult to horizontally concatenate matrices when the main trace is partitioned, so we disable this method in that case.
     fn main(&self) -> Self::M {
-        self.main
+        if self.partitioned_main.len() == 1 {
+            self.partitioned_main[0]
+        } else {
+            panic!("Main trace is either empty or partitioned. This function should not be used.")
+        }
     }
 
     fn is_first_row(&self) -> Self::Expr {
@@ -124,17 +129,21 @@ impl<'a, SC> PermutationAirBuilder for DebugConstraintBuilder<'a, SC>
 where
     SC: StarkGenericConfig,
 {
-    type MP =
-        VerticalPair<RowMajorMatrixView<'a, SC::Challenge>, RowMajorMatrixView<'a, SC::Challenge>>;
+    type MP = ViewPair<'a, SC::Challenge>;
 
     type RandomVar = SC::Challenge;
 
     fn permutation(&self) -> Self::MP {
-        self.perm
+        *self
+            .after_challenge
+            .first()
+            .expect("Challenge phase not supported")
     }
 
     fn permutation_randomness(&self) -> &[Self::EF] {
-        self.perm_challenges
+        self.challenges
+            .first()
+            .expect("Challenge phase not supported")
     }
 }
 
@@ -154,6 +163,17 @@ where
     SC: StarkGenericConfig,
 {
     fn permutation_exposed_values(&self) -> &[Self::EF] {
-        self.perm_exposed_values
+        self.exposed_values_after_challenge
+            .first()
+            .expect("Challenge phase not supported")
+    }
+}
+
+impl<'a, SC> PartitionedAirBuilder for DebugConstraintBuilder<'a, SC>
+where
+    SC: StarkGenericConfig,
+{
+    fn partitioned_main(&self) -> &[Self::M] {
+        &self.partitioned_main
     }
 }

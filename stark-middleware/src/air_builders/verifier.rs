@@ -6,20 +6,20 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::rap::PermutationAirBuilderWithExposedValues;
 
-use super::ViewPair;
+use super::{PartitionedAirBuilder, ViewPair};
 
 pub struct VerifierConstraintFolder<'a, SC: StarkGenericConfig> {
     pub preprocessed: ViewPair<'a, SC::Challenge>,
-    pub main: ViewPair<'a, SC::Challenge>,
-    pub perm: ViewPair<'a, SC::Challenge>,
-    pub perm_challenges: &'a [SC::Challenge],
+    pub partitioned_main: Vec<ViewPair<'a, SC::Challenge>>,
+    pub after_challenge: Vec<ViewPair<'a, SC::Challenge>>,
+    pub challenges: &'a [Vec<SC::Challenge>],
     pub is_first_row: SC::Challenge,
     pub is_last_row: SC::Challenge,
     pub is_transition: SC::Challenge,
     pub alpha: SC::Challenge,
     pub accumulator: SC::Challenge,
     pub public_values: &'a [Val<SC>],
-    pub perm_exposed_values: &'a [SC::Challenge],
+    pub exposed_values_after_challenge: &'a [Vec<SC::Challenge>],
 }
 
 impl<'a, SC: StarkGenericConfig> AirBuilder for VerifierConstraintFolder<'a, SC> {
@@ -28,8 +28,13 @@ impl<'a, SC: StarkGenericConfig> AirBuilder for VerifierConstraintFolder<'a, SC>
     type Var = SC::Challenge;
     type M = ViewPair<'a, SC::Challenge>;
 
+    /// It is difficult to horizontally concatenate matrices when the main trace is partitioned, so we disable this method in that case.
     fn main(&self) -> Self::M {
-        self.main
+        if self.partitioned_main.len() == 1 {
+            self.partitioned_main[0]
+        } else {
+            panic!("Main trace is either empty or partitioned. This function should not be used.")
+        }
     }
 
     fn is_first_row(&self) -> Self::Expr {
@@ -91,12 +96,17 @@ where
     type RandomVar = SC::Challenge;
 
     fn permutation(&self) -> Self::MP {
-        self.perm
+        *self
+            .after_challenge
+            .first()
+            .expect("Challenge phase not supported")
     }
 
     fn permutation_randomness(&self) -> &[Self::RandomVar] {
-        // TODO: implement
-        self.perm_challenges
+        self.challenges
+            .first()
+            .map(|c| c.as_slice())
+            .expect("Challenge phase not supported")
     }
 }
 
@@ -113,6 +123,18 @@ where
     SC: StarkGenericConfig,
 {
     fn permutation_exposed_values(&self) -> &[Self::EF] {
-        self.perm_exposed_values
+        self.exposed_values_after_challenge
+            .first()
+            .map(|c| c.as_slice())
+            .expect("Challenge phase not supported")
+    }
+}
+
+impl<'a, SC> PartitionedAirBuilder for VerifierConstraintFolder<'a, SC>
+where
+    SC: StarkGenericConfig,
+{
+    fn partitioned_main(&self) -> &[Self::M] {
+        &self.partitioned_main
     }
 }
