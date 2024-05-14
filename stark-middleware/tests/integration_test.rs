@@ -1,7 +1,14 @@
+#![feature(trait_upcasting)]
+#![allow(incomplete_features)]
+
 use afs_middleware::{
-    prover::{trace::TraceCommitter, types::ProvenMultiMatrixAirTrace, PartitionProver},
+    prover::{
+        trace::TraceCommitter,
+        types::{ProvenMultiMatrixAirTrace, ProverRap},
+        PartitionProver,
+    },
     setup::PartitionSetup,
-    verifier::PartitionVerifier,
+    verifier::{types::VerifierRap, PartitionVerifier},
 };
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
@@ -18,6 +25,10 @@ use crate::config::poseidon2::StarkConfigPoseidon2;
 mod config;
 mod fib_air;
 mod fib_selector_air;
+mod interaction;
+
+trait ProverVerifierRap<SC: StarkGenericConfig>: ProverRap<SC> + VerifierRap<SC> {}
+impl<SC: StarkGenericConfig, RAP: ProverRap<SC> + VerifierRap<SC>> ProverVerifierRap<SC> for RAP {}
 
 #[test]
 fn test_single_fib_stark() {
@@ -99,7 +110,10 @@ fn test_single_fib_selector_stark() {
     let sels: Vec<bool> = (0..n).map(|i| i % 2 == 0).collect();
     let pis = [a, b, get_conditional_fib_number(&sels)].map(BabyBear::from_canonical_u32);
 
-    let air = FibonacciSelectorAir { sels };
+    let air = FibonacciSelectorAir {
+        sels,
+        enable_interactions: false,
+    };
 
     let prep_trace = air.preprocessed_trace();
     let setup = PartitionSetup::new(&config);
@@ -154,7 +168,10 @@ fn test_double_fib_starks() {
     let pis = [a, b, get_fib_number(n)].map(BabyBear::from_canonical_u32);
 
     let air1 = FibonacciAir {};
-    let air2 = FibonacciSelectorAir { sels };
+    let air2 = FibonacciSelectorAir {
+        sels,
+        enable_interactions: false,
+    };
 
     let prep_trace1 = air1.preprocessed_trace();
     let prep_trace2 = air2.preprocessed_trace();

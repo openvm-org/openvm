@@ -2,17 +2,29 @@ use std::borrow::Borrow;
 
 use super::columns::FibonacciSelectorCols;
 use crate::fib_air::columns::{FibonacciCols, NUM_FIBONACCI_COLS};
-use afs_middleware::interaction::Chip;
-use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder};
+use afs_middleware::interaction::{Chip, Interaction};
+use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder, VirtualPairCol};
 use p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 pub struct FibonacciSelectorAir {
     pub sels: Vec<bool>,
+    pub enable_interactions: bool,
 }
 
-// No interactions
-impl<F: Field> Chip<F> for FibonacciSelectorAir {}
+impl<F: Field> Chip<F> for FibonacciSelectorAir {
+    fn receives(&self) -> Vec<Interaction<F>> {
+        if self.enable_interactions {
+            vec![Interaction::<F> {
+                fields: vec![VirtualPairCol::<F>::sum_main(vec![0, 1])],
+                count: VirtualPairCol::<F>::single_preprocessed(0),
+                argument_index: 0,
+            }]
+        } else {
+            vec![]
+        }
+    }
+}
 
 impl<F: Field> BaseAir<F> for FibonacciSelectorAir {
     fn width(&self) -> usize {
