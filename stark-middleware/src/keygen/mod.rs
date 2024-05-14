@@ -24,8 +24,9 @@ const NUM_PERM_EXPOSED_VALUES: usize = 1;
 /// for system of multiple RAPs with multiple multi-matrix commitments
 pub struct MultiStarkKeygenBuilder<'a, SC: StarkGenericConfig> {
     pub config: &'a SC,
-    /// Tracks how many matrices are in the i-th main trace commitment
-    num_mats_in_main_commit: Vec<usize>,
+    /// `placeholder_main_matrix_in_commit[commit_idx][mat_idx] =` matrix width, it is used to store
+    /// a placeholder of a main trace matrix that must be committed during proving
+    placeholder_main_matrix_in_commit: Vec<Vec<usize>>,
     pk: MultiStarkProvingKey<SC>,
 }
 
@@ -34,7 +35,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
         Self {
             config,
             pk: MultiStarkProvingKey::empty(),
-            num_mats_in_main_commit: vec![0],
+            placeholder_main_matrix_in_commit: vec![vec![]],
         }
     }
 
@@ -65,6 +66,11 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             })
             .collect();
 
+        if matches!(self.placeholder_main_matrix_in_commit.last(), Some(mats) if mats.is_empty()) {
+            self.placeholder_main_matrix_in_commit.pop();
+        }
+        pk.num_main_trace_commitments = self.placeholder_main_matrix_in_commit.len();
+        // Build commit->air graph
         let air_matrices = pk
             .per_air
             .iter()
@@ -72,25 +78,73 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             .collect_vec();
         pk.main_commit_to_air_graph =
             create_commit_to_air_graph(&air_matrices, pk.num_main_trace_commitments);
+        // reset state
+        self.placeholder_main_matrix_in_commit = vec![vec![]];
 
         pk
+    }
+
+    /// Creates abstract placeholder matrix and adds to current last trace commitment
+    pub fn add_main_matrix(&mut self, width: usize) -> SingleMatrixCommitPtr {
+        let commit_idx = self.placeholder_main_matrix_in_commit.len() - 1;
+        let mats = self.placeholder_main_matrix_in_commit.last_mut().unwrap();
+        let matrix_idx = mats.len();
+        mats.push(width);
+        SingleMatrixCommitPtr::new(commit_idx, matrix_idx)
+    }
+
+    /// Seals the current main trace commitment and starts a new one
+    pub fn seal_current_main_commitment(&mut self) {
+        self.placeholder_main_matrix_in_commit.push(vec![]);
+    }
+
+    /// Adds a single matrix to dedicated commitment and starts new commitment
+    pub fn add_cached_main_matrix(&mut self, width: usize) -> SingleMatrixCommitPtr {
+        assert!(
+            matches!(self.placeholder_main_matrix_in_commit.last(), Some(mats) if mats.is_empty()),
+            "Current commitment non-empty: cache may not have desired effect"
+        );
+        let ptr = self.add_main_matrix(width);
+        self.seal_current_main_commitment();
+        ptr
     }
 
     /// Default way to add a single Interactive AIR.
     /// DO NOT use this if the main trace needs to be partitioned.
     /// - `degree` is height of trace matrix
     /// - Generates preprocessed trace and creates a dedicated commitment for it.
-    /// - Adds main trace to the default shared main trace commitment.
+    /// - Adds main trace to the last main trace commitment.
     #[instrument(level = "debug", skip_all)]
     pub fn add_air(&mut self, air: &dyn SymbolicRap<SC>, degree: usize, num_public_values: usize) {
+        let main_width = air.width();
+        let ptr = self.add_main_matrix(main_width);
+        self.add_partitioned_air(air, degree, num_public_values, vec![ptr]);
+    }
+
+    /// Add a single Interactive AIR with partitioned main trace.
+    /// - `degree` is height of trace matrix
+    /// - Generates preprocessed trace and creates a dedicated commitment for it.
+    /// - The matrix pointers for partitioned main trace must be manually created ahead of time.
+    /// - `partitioned_main` is a list of (width, matrix_ptr) pairs.
+    #[instrument(level = "debug", skip_all)]
+    pub fn add_partitioned_air(
+        &mut self,
+        air: &dyn SymbolicRap<SC>,
+        degree: usize,
+        num_public_values: usize,
+        partitioned_main_ptrs: Vec<SingleMatrixCommitPtr>,
+    ) {
         let (prep_prover_data, prep_verifier_data): (Option<_>, Option<_>) =
             self.get_single_preprocessed_data(air).unzip();
         let preprocessed_width = prep_prover_data.as_ref().map(|d| d.trace.width());
-        let main_width = air.width();
         let perm_width = air.permutation_width();
+        let main_widths = partitioned_main_ptrs
+            .iter()
+            .map(|ptr| self.placeholder_main_matrix_in_commit[ptr.commit_index][ptr.matrix_index])
+            .collect();
         let width = TraceWidth {
             preprocessed: preprocessed_width,
-            partitioned_main: vec![main_width],
+            partitioned_main: main_widths,
             after_challenge: perm_width.into_iter().collect(),
         };
         let num_challenges_to_sample = if width.after_challenge.is_empty() {
@@ -111,17 +165,11 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             &num_exposed_values,
         );
         let quotient_degree = 1 << log_quotient_degree;
-        // ATTENTION: uses default shared main trace commitment
-        let commit_idx = 0;
-        let matrix_idx = self.num_mats_in_main_commit[commit_idx];
-        self.num_mats_in_main_commit[commit_idx] += 1;
         let vk = StarkVerifyingKey {
             degree,
             preprocessed_data: prep_verifier_data,
             width,
-            main_graph: MatrixCommitmentGraph::new(vec![SingleMatrixCommitPtr::new(
-                commit_idx, matrix_idx,
-            )]),
+            main_graph: MatrixCommitmentGraph::new(partitioned_main_ptrs),
             quotient_degree,
             num_public_values,
             num_exposed_values_after_challenge: num_exposed_values,

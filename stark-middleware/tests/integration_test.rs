@@ -12,11 +12,15 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_uni_stark::StarkGenericConfig;
 
+mod cached_lookup;
 mod config;
 mod fib_air;
 mod fib_selector_air;
 mod fib_triples_air;
-mod interaction;
+pub mod interaction;
+mod partitioned_sum_air;
+/// Test utils
+mod utils;
 
 trait ProverVerifierRap<SC: StarkGenericConfig>:
     ProverRap<SC> + VerifierRap<SC> + SymbolicRap<SC>

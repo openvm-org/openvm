@@ -6,7 +6,7 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::rap::PermutationAirBuilderWithExposedValues;
 
-use super::ViewPair;
+use super::{PartitionedAirBuilder, ViewPair};
 
 pub struct VerifierConstraintFolder<'a, SC: StarkGenericConfig> {
     pub preprocessed: ViewPair<'a, SC::Challenge>,
@@ -127,5 +127,14 @@ where
             .first()
             .map(|c| c.as_slice())
             .expect("Challenge phase not supported")
+    }
+}
+
+impl<'a, SC> PartitionedAirBuilder for VerifierConstraintFolder<'a, SC>
+where
+    SC: StarkGenericConfig,
+{
+    fn partitioned_main(&self) -> &[Self::M] {
+        &self.partitioned_main
     }
 }

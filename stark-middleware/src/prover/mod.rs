@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use itertools::Itertools;
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::Pcs;
@@ -28,6 +30,10 @@ pub mod quotient;
 /// Trace commitment computation
 pub mod trace;
 pub mod types;
+
+thread_local! {
+   pub static USE_DEBUG_BUILDER: Arc<Mutex<bool>> = Arc::new(Mutex::new(true));
+}
 
 /// Proves multiple chips with interactions together.
 /// This prover implementation is specialized for Interactive AIRs.
@@ -134,28 +140,35 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
         // TODO: Move to a separate MockProver
         // Debug check constraints
         #[cfg(debug_assertions)]
-        for ((((preprocessed_trace, main_data), perm_trace), cumulative_sum_and_index), pis) in pk
-            .preprocessed_traces()
-            .zip_eq(&main_trace_data.air_traces)
-            .zip_eq(&perm_traces)
-            .zip_eq(&cumulative_sums_and_indices)
-            .zip_eq(public_values)
-        {
-            let rap = main_data.air;
-            let partitioned_main_trace = &main_data.partitioned_main_trace;
-            let perm_trace = perm_trace.as_ref().map(|t| t.as_view());
-            let cumulative_sum = cumulative_sum_and_index.as_ref().map(|(sum, _)| *sum);
+        USE_DEBUG_BUILDER.with(|debug| {
+            if *debug.lock().unwrap() {
+                for (
+                    (((preprocessed_trace, main_data), perm_trace), cumulative_sum_and_index),
+                    pis,
+                ) in pk
+                    .preprocessed_traces()
+                    .zip_eq(&main_trace_data.air_traces)
+                    .zip_eq(&perm_traces)
+                    .zip_eq(&cumulative_sums_and_indices)
+                    .zip_eq(public_values)
+                {
+                    let rap = main_data.air;
+                    let partitioned_main_trace = &main_data.partitioned_main_trace;
+                    let perm_trace = perm_trace.as_ref().map(|t| t.as_view());
+                    let cumulative_sum = cumulative_sum_and_index.as_ref().map(|(sum, _)| *sum);
 
-            check_constraints(
-                rap,
-                &preprocessed_trace,
-                partitioned_main_trace,
-                perm_trace.as_slice(),
-                &challenges,
-                pis,
-                cumulative_sum.map(|c| vec![c]).as_slice(),
-            );
-        }
+                    check_constraints(
+                        rap,
+                        &preprocessed_trace,
+                        partitioned_main_trace,
+                        perm_trace.as_slice(),
+                        &challenges,
+                        pis,
+                        cumulative_sum.map(|c| vec![c]).as_slice(),
+                    );
+                }
+            }
+        });
 
         // Commit to permutation traces: this means only 1 challenge round right now
         // One shared commit for all permutation traces
