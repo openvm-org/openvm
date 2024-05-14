@@ -11,11 +11,6 @@ use afs_middleware::verifier::MultiTraceStarkVerifier;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_uni_stark::StarkGenericConfig;
-use tracing_forest::util::LevelFilter;
-use tracing_forest::ForestLayer;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{EnvFilter, Registry};
 
 mod config;
 mod fib_air;
@@ -32,23 +27,10 @@ impl<SC: StarkGenericConfig, RAP: ProverRap<SC> + VerifierRap<SC> + SymbolicRap<
 {
 }
 
-fn tracing_setup() {
-    // Set up tracing:
-    let env_filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::INFO.into())
-        .from_env_lossy();
-    let _ = Registry::default()
-        .with(env_filter)
-        .with(ForestLayer::default())
-        .try_init();
-}
-
 #[test]
 fn test_single_fib_stark() {
     use fib_air::air::FibonacciAir;
     use fib_air::trace::generate_trace_rows;
-
-    tracing_setup();
 
     let log_trace_degree = 3;
     let perm = config::poseidon2::random_perm();
@@ -95,8 +77,6 @@ fn test_single_fib_stark() {
 fn test_single_fib_triples_stark() {
     use fib_triples_air::air::FibonacciAir;
     use fib_triples_air::trace::generate_trace_rows;
-
-    tracing_setup();
 
     let log_trace_degree = 3;
     let perm = config::poseidon2::random_perm();
@@ -145,8 +125,6 @@ fn test_single_fib_selector_stark() {
     use fib_selector_air::air::FibonacciSelectorAir;
     use fib_selector_air::trace::generate_trace_rows;
 
-    tracing_setup();
-
     let log_trace_degree = 3;
     let perm = config::poseidon2::random_perm();
     let config = config::poseidon2::default_config(&perm, log_trace_degree);
@@ -194,8 +172,6 @@ fn test_single_fib_selector_stark() {
 fn test_double_fib_starks() {
     use fib_air::air::FibonacciAir;
     use fib_selector_air::air::FibonacciSelectorAir;
-
-    tracing_setup();
 
     let log_n1 = 3;
     let log_n2 = 5;

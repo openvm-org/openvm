@@ -11,7 +11,6 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 
-use crate::tracing_setup;
 use crate::{
     config::{self, poseidon2::StarkConfigPoseidon2},
     fib_selector_air::{air::FibonacciSelectorAir, trace::generate_trace_rows},
@@ -27,8 +26,6 @@ fn verify_interactions(
     airs: Vec<&dyn ProverVerifierRap<StarkConfigPoseidon2>>,
     pis: Vec<Vec<Val>>,
 ) -> Result<(), VerificationError> {
-    tracing_setup();
-
     let log_trace_degree = 3;
     let perm = config::poseidon2::random_perm();
     let config = config::poseidon2::default_config(&perm, log_trace_degree);
