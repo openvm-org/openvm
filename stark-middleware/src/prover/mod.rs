@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::sync::{Arc, Mutex};
 
 use itertools::Itertools;
 use p3_challenger::{CanObserve, FieldChallenger};
@@ -32,7 +32,7 @@ pub mod trace;
 pub mod types;
 
 thread_local! {
-   pub static USE_DEBUG_BUILDER: RefCell<bool> = const { RefCell::new(true) };
+   pub static USE_DEBUG_BUILDER: Arc<Mutex<bool>> = Arc::new(Mutex::new(true));
 }
 
 /// Proves multiple chips with interactions together.
@@ -140,8 +140,8 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
         // TODO: Move to a separate MockProver
         // Debug check constraints
         #[cfg(debug_assertions)]
-        USE_DEBUG_BUILDER.with_borrow(|debug| {
-            if *debug {
+        USE_DEBUG_BUILDER.with(|debug| {
+            if *debug.lock().unwrap() {
                 for (
                     (((preprocessed_trace, main_data), perm_trace), cumulative_sum_and_index),
                     pis,

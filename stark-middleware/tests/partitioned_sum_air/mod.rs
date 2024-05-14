@@ -85,8 +85,8 @@ fn test_partitioned_sum_air_happy_neg() {
         .map(|row| row.iter().fold(Val::zero(), |sum, x| sum + *x))
         .collect();
     x[0] = Val::zero();
-    USE_DEBUG_BUILDER.with_borrow_mut(|debug| {
-        *debug = false;
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
     });
     assert_eq!(
         prove_and_verify_sum_air(x, ys),
