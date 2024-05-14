@@ -9,9 +9,9 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_ceil_usize;
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{rngs::StdRng, SeedableRng};
 
-use crate::config;
+use crate::{config, utils::generate_random_matrix};
 
 pub mod air;
 
@@ -64,22 +64,11 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     verifier.verify(&mut challenger, vk, vec![&air], proof, &pis)
 }
 
-// Returns row major matrix
-fn generate_random_matrix(mut rng: impl Rng, height: usize, width: usize) -> Vec<Vec<Val>> {
-    (0..height)
-        .map(|_| {
-            (0..width)
-                .map(|_| Val::from_wrapped_u32(rng.gen()))
-                .collect_vec()
-        })
-        .collect_vec()
-}
-
 #[test]
 fn test_partitioned_sum_air_happy_path() {
     let rng = StdRng::seed_from_u64(0);
     let n = 1 << 3;
-    let ys = generate_random_matrix(rng, n, 5);
+    let ys = generate_random_matrix::<Val>(rng, n, 5);
     let x: Vec<Val> = ys
         .iter()
         .map(|row| row.iter().fold(Val::zero(), |sum, x| sum + *x))

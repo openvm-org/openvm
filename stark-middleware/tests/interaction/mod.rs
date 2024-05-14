@@ -11,6 +11,7 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 
+use crate::utils::to_field_vec;
 use crate::{
     config::{self, poseidon2::StarkConfigPoseidon2},
     fib_selector_air::{air::FibonacciSelectorAir, trace::generate_trace_rows},
@@ -107,10 +108,6 @@ fn test_interaction_fib_selector_happy_path() {
     .expect("Verification failed");
 }
 
-fn to_field_vec(v: Vec<u32>) -> Vec<Val> {
-    v.into_iter().map(Val::from_canonical_u32).collect()
-}
-
 #[test]
 fn test_interaction_stark_multi_rows_happy_path() {
     // Mul  Val
@@ -118,7 +115,8 @@ fn test_interaction_stark_multi_rows_happy_path() {
     //   7    4
     //   3    5
     // 546  889
-    let sender_trace = RowMajorMatrix::new(to_field_vec(vec![0, 1, 3, 5, 7, 4, 546, 889]), 2);
+    let sender_trace =
+        RowMajorMatrix::new(to_field_vec::<Val>(vec![0, 1, 3, 5, 7, 4, 546, 889]), 2);
     let sender_air = dummy_interaction_air::DummyInteractionAir { is_send: true };
 
     // Mul  Val
