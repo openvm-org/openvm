@@ -134,10 +134,10 @@ where
     type RandomVar = SC::Challenge;
 
     fn permutation(&self) -> Self::MP {
-        self.after_challenge
+        *self
+            .after_challenge
             .first()
             .expect("Challenge phase not supported")
-            .clone()
     }
 
     fn permutation_randomness(&self) -> &[Self::EF] {
