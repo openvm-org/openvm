@@ -34,9 +34,9 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     let air = SumAir(y_width);
 
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
-    let y_ptr = keygen_builder.add_cached_main_matrix();
-    let x_ptr = keygen_builder.add_main_matrix();
-    keygen_builder.add_partitioned_air(&air, degree, 0, vec![(1, x_ptr), (y_width, y_ptr)]);
+    let y_ptr = keygen_builder.add_cached_main_matrix(y_width);
+    let x_ptr = keygen_builder.add_main_matrix(1);
+    keygen_builder.add_partitioned_air(&air, degree, 0, vec![x_ptr, y_ptr]);
     let pk = keygen_builder.generate_pk();
     let vk = pk.vk();
 

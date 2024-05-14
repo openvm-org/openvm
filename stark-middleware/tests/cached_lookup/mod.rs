@@ -62,17 +62,14 @@ fn prove_and_verify_indexless_lookups(
 
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
     // Cached table pointer:
-    let recv_fields_ptr = keygen_builder.add_cached_main_matrix();
+    let recv_fields_ptr = keygen_builder.add_cached_main_matrix(receiver_air.field_width());
     // Everything else together
-    let recv_count_ptr = keygen_builder.add_main_matrix();
+    let recv_count_ptr = keygen_builder.add_main_matrix(1);
     keygen_builder.add_partitioned_air(
         &receiver_air,
         receiver_degree,
         0,
-        vec![
-            (1, recv_count_ptr),
-            (receiver_air.field_width(), recv_fields_ptr),
-        ],
+        vec![recv_count_ptr, recv_fields_ptr],
     );
     // Auto-adds sender matrix
     keygen_builder.add_air(&sender_air, sender_degree, 0);
