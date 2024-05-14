@@ -62,7 +62,7 @@ where
         .map(|mat| (mat.row_slice(0), mat.row_slice(1)))
         .unzip();
     // NEEDS OPTIMIZATION: VirtualPairCol::apply expects `main_local`.
-    // Without changin plonky3, we just need to copy and concatenate the partitioned slices together.
+    // Without changing plonky3, we just need to copy and concatenate the partitioned slices together.
     let [main_local, main_next] = [main_locals, main_nexts].map(|row_parts| {
         row_parts
             .iter()
