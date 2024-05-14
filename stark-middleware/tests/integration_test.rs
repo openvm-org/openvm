@@ -17,7 +17,7 @@ mod fib_air;
 mod fib_selector_air;
 mod fib_triples_air;
 mod interaction;
-mod partitioned_air;
+mod partitioned_sum_air;
 
 trait ProverVerifierRap<SC: StarkGenericConfig>:
     ProverRap<SC> + VerifierRap<SC> + SymbolicRap<SC>

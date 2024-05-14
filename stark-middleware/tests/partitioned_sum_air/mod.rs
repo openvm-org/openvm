@@ -11,9 +11,11 @@ use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_ceil_usize;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
-use crate::{config, partitioned_air::air::SumAir};
+use crate::config;
 
 pub mod air;
+
+use self::air::SumAir;
 
 type Val = BabyBear;
 
