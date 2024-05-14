@@ -1,6 +1,12 @@
+#![feature(trait_upcasting)]
+#![allow(incomplete_features)]
+
+use afs_middleware::keygen::types::SymbolicRap;
 use afs_middleware::keygen::MultiStarkKeygenBuilder;
 use afs_middleware::prover::trace::TraceCommitmentBuilder;
+use afs_middleware::prover::types::ProverRap;
 use afs_middleware::prover::MultiTraceStarkProver;
+use afs_middleware::verifier::types::VerifierRap;
 use afs_middleware::verifier::MultiTraceStarkVerifier;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -15,6 +21,16 @@ mod config;
 mod fib_air;
 mod fib_selector_air;
 mod fib_triples_air;
+mod interaction;
+
+trait ProverVerifierRap<SC: StarkGenericConfig>:
+    ProverRap<SC> + VerifierRap<SC> + SymbolicRap<SC>
+{
+}
+impl<SC: StarkGenericConfig, RAP: ProverRap<SC> + VerifierRap<SC> + SymbolicRap<SC>>
+    ProverVerifierRap<SC> for RAP
+{
+}
 
 fn tracing_setup() {
     // Set up tracing:
@@ -146,7 +162,7 @@ fn test_single_fib_selector_stark() {
         .map(BabyBear::from_canonical_u32)
         .to_vec();
 
-    let air = FibonacciSelectorAir::new(sels);
+    let air = FibonacciSelectorAir::new(sels, false);
 
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
     keygen_builder.add_air(&air, n, pis.len());
@@ -202,7 +218,7 @@ fn test_double_fib_starks() {
         .to_vec();
 
     let air1 = FibonacciAir;
-    let air2 = FibonacciSelectorAir::new(sels);
+    let air2 = FibonacciSelectorAir::new(sels, false);
 
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
     keygen_builder.add_air(&air1, n1, pis1.len());

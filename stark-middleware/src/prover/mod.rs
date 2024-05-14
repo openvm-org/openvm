@@ -40,6 +40,10 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
         Self { config }
     }
 
+    pub fn pcs(&self) -> &SC::Pcs {
+        self.config.pcs()
+    }
+
     /// Specialized prove for InteractiveAirs.
     /// Handles trace generation of the permutation traces.
     /// Assumes the main traces have been generated and committed already.

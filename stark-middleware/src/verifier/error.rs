@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum VerificationError {
     InvalidProofShape,
     /// An error occurred while verifying the claimed openings.
