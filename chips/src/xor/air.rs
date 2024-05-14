@@ -30,19 +30,19 @@ where
 
         let mut x_from_bits: AB::Expr = AB::Expr::zero();
         for i in 0..N {
-            x_from_bits = x_from_bits + xor_cols.x_bits[i] * AB::Expr::from_canonical_u64(1 << i);
+            x_from_bits += xor_cols.x_bits[i] * AB::Expr::from_canonical_u64(1 << i);
         }
         builder.assert_eq(x_from_bits, xor_cols.helper.x);
 
         let mut y_from_bits: AB::Expr = AB::Expr::zero();
         for i in 0..N {
-            y_from_bits = y_from_bits + xor_cols.y_bits[i] * AB::Expr::from_canonical_u64(1 << i);
+            y_from_bits += xor_cols.y_bits[i] * AB::Expr::from_canonical_u64(1 << i);
         }
         builder.assert_eq(y_from_bits, xor_cols.helper.y);
 
         let mut z_from_bits: AB::Expr = AB::Expr::zero();
         for i in 0..N {
-            z_from_bits = z_from_bits + xor_cols.z_bits[i] * AB::Expr::from_canonical_u64(1 << i);
+            z_from_bits += xor_cols.z_bits[i] * AB::Expr::from_canonical_u64(1 << i);
         }
         builder.assert_eq(z_from_bits, xor_cols.helper.z);
 
