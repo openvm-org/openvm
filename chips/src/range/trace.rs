@@ -13,11 +13,9 @@ impl<const MAX: u32> RangeCheckerChip<MAX> {
         let mut rows = vec![[F::zero(); NUM_RANGE_COLS]; MAX as usize];
         for (n, row) in rows.iter_mut().enumerate() {
             let cols: &mut RangeCols<F> = unsafe { transmute(row) };
-            // FIXME: This is very inefficient when the range is large.
-            // Iterate over key/val pairs instead in a separate loop.
-            if let Some(c) = self.count.get(&(n as u32)) {
-                cols.mult = F::from_canonical_u32(*c);
-            }
+
+            cols.mult =
+                F::from_canonical_u32(self.count[n].load(std::sync::atomic::Ordering::SeqCst));
         }
         RowMajorMatrix::new(rows.concat(), NUM_RANGE_COLS)
     }
