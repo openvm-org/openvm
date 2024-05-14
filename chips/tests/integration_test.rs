@@ -19,12 +19,10 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry};
 
-extern crate rayon;
-
 use std::sync::Arc;
 
-mod list;
 use afs_chips::range;
+mod list;
 
 mod config;
 
@@ -53,10 +51,10 @@ fn test_list_range_checker() {
 
     let bus_index = 0;
 
-    const LOG_TRACE_DEGREE_RANGE: usize = 2;
+    const LOG_TRACE_DEGREE_RANGE: usize = 3;
     const MAX: u32 = 1 << LOG_TRACE_DEGREE_RANGE;
 
-    const LOG_TRACE_DEGREE_LIST: usize = 3;
+    const LOG_TRACE_DEGREE_LIST: usize = 6;
     const LIST_LEN: usize = 1 << LOG_TRACE_DEGREE_LIST;
 
     let trace_degree_max: usize = std::cmp::max(LOG_TRACE_DEGREE_LIST, LOG_TRACE_DEGREE_RANGE);

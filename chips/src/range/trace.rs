@@ -15,7 +15,7 @@ impl<const MAX: u32> RangeCheckerChip<MAX> {
             let cols: &mut RangeCols<F> = unsafe { transmute(row) };
 
             cols.mult =
-                F::from_canonical_u32(self.count[n].load(std::sync::atomic::Ordering::Relaxed));
+                F::from_canonical_u32(self.count[n].load(std::sync::atomic::Ordering::SeqCst));
         }
         RowMajorMatrix::new(rows.concat(), NUM_RANGE_COLS)
     }
