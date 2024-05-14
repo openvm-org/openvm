@@ -34,9 +34,9 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     let air = SumAir(y_width);
 
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
-    let y_ptr = keygen_builder.add_cached_main_matrix();
-    let x_ptr = keygen_builder.add_main_matrix();
-    keygen_builder.add_partitioned_air(&air, degree, 0, vec![(1, x_ptr), (y_width, y_ptr)]);
+    let y_ptr = keygen_builder.add_cached_main_matrix(y_width);
+    let x_ptr = keygen_builder.add_main_matrix(1);
+    keygen_builder.add_partitioned_air(&air, degree, 0, vec![x_ptr, y_ptr]);
     let pk = keygen_builder.generate_pk();
     let vk = pk.vk();
 
@@ -85,8 +85,8 @@ fn test_partitioned_sum_air_happy_neg() {
         .map(|row| row.iter().fold(Val::zero(), |sum, x| sum + *x))
         .collect();
     x[0] = Val::zero();
-    USE_DEBUG_BUILDER.with_borrow_mut(|debug| {
-        *debug = false;
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
     });
     assert_eq!(
         prove_and_verify_sum_air(x, ys),
