@@ -15,7 +15,7 @@ use super::types::{MultiAirCommittedTraceData, ProverRap, SingleAirCommittedTrac
 
 /// Stateful builder to help with computing multi-stark trace commitments
 pub struct TraceCommitmentBuilder<'a, SC: StarkGenericConfig> {
-    committer: TraceCommitter<'a, SC>,
+    pub committer: TraceCommitter<'a, SC>,
     traces_to_commit: Vec<RowMajorMatrix<Val<SC>>>,
     committed_traces: Vec<Vec<RowMajorMatrix<Val<SC>>>>,
     data: Vec<(Com<SC>, PcsProverData<SC>)>,
@@ -41,6 +41,12 @@ impl<'a, SC: StarkGenericConfig> TraceCommitmentBuilder<'a, SC> {
         let data = self.committer.commit(traces.clone());
         self.data.push((data.commit, data.data));
         self.committed_traces.push(traces);
+    }
+
+    /// Loads `trace` assumed to have already been committed as single matrix commitment in `data`.
+    pub fn load_cached_trace(&mut self, trace: RowMajorMatrix<Val<SC>>, data: ProverTraceData<SC>) {
+        self.committed_traces.push(vec![trace]);
+        self.data.push((data.commit, data.data));
     }
 
     pub fn view<'b>(
