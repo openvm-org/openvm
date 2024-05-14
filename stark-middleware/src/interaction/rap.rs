@@ -24,9 +24,8 @@ where
         Air::eval(self, builder);
         // Constraints for the permutation trace:
         let num_interactions = self.all_interactions().len();
-        if num_interactions == 0 {
-            // No interactions, no virtual columns are needed
-        } else {
+        // If no interactions, nothing to do
+        if num_interactions > 0 {
             let exposed_values = builder.permutation_exposed_values();
             // There are interactions, add constraints for the virtual columns
             assert_eq!(
