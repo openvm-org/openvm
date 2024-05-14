@@ -8,7 +8,7 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::rap::PermutationAirBuilderWithExposedValues;
 
-use super::ViewPair;
+use super::{PartitionedAirBuilder, ViewPair};
 
 pub mod check_constraints;
 
@@ -166,5 +166,14 @@ where
         self.exposed_values_after_challenge
             .first()
             .expect("Challenge phase not supported")
+    }
+}
+
+impl<'a, SC> PartitionedAirBuilder for DebugConstraintBuilder<'a, SC>
+where
+    SC: StarkGenericConfig,
+{
+    fn partitioned_main(&self) -> &[Self::M] {
+        &self.partitioned_main
     }
 }

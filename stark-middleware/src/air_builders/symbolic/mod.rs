@@ -17,6 +17,8 @@ use self::symbolic_variable::{Entry, SymbolicVariable};
 use crate::keygen::types::TraceWidth;
 use crate::rap::{PermutationAirBuilderWithExposedValues, Rap};
 
+use super::PartitionedAirBuilder;
+
 #[instrument(name = "infer log of constraint degree", skip_all)]
 pub fn get_log_quotient_degree<F, R>(
     rap: &R,
@@ -275,5 +277,11 @@ impl<F: Field> PermutationAirBuilderWithExposedValues for SymbolicRapBuilder<F> 
             .first()
             .map(|c| c.as_slice())
             .expect("Challenge phase not supported")
+    }
+}
+
+impl<F: Field> PartitionedAirBuilder for SymbolicRapBuilder<F> {
+    fn partitioned_main(&self) -> &[Self::M] {
+        &self.partitioned_main
     }
 }

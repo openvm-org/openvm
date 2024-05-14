@@ -7,7 +7,7 @@ use p3_uni_stark::{PackedChallenge, PackedVal, StarkGenericConfig, Val};
 
 use crate::rap::PermutationAirBuilderWithExposedValues;
 
-use super::ViewPair;
+use super::{PartitionedAirBuilder, ViewPair};
 
 /// A folder for prover constraints.
 pub struct ProverConstraintFolder<'a, SC: StarkGenericConfig> {
@@ -132,5 +132,14 @@ where
         self.exposed_values_after_challenge
             .first()
             .expect("Challenge phase not supported")
+    }
+}
+
+impl<'a, SC> PartitionedAirBuilder for ProverConstraintFolder<'a, SC>
+where
+    SC: StarkGenericConfig,
+{
+    fn partitioned_main(&self) -> &[Self::M] {
+        &self.partitioned_main
     }
 }
