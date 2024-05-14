@@ -17,7 +17,7 @@ mod config;
 mod fib_air;
 mod fib_selector_air;
 mod fib_triples_air;
-mod interaction;
+pub mod interaction;
 mod partitioned_sum_air;
 /// Test utils
 mod utils;

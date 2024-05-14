@@ -7,7 +7,6 @@ use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_ceil_usize;
 use rand::{rngs::StdRng, SeedableRng};
 
@@ -43,7 +42,7 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
 
     let prover = MultiTraceStarkProver::new(config);
     // Must add trace matrices in the same order as above
-    let mut trace_builder = TraceCommitmentBuilder::new(prover.config.pcs());
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     // Demonstrate y is cached
     let y_data = trace_builder.committer.commit(vec![y_trace.clone()]);
     trace_builder.load_cached_trace(y_trace, y_data);

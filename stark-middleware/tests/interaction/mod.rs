@@ -18,7 +18,7 @@ use crate::{
     get_conditional_fib_number, ProverVerifierRap,
 };
 
-mod dummy_interaction_air;
+pub mod dummy_interaction_air;
 
 type Val = BabyBear;
 
@@ -99,7 +99,7 @@ fn test_interaction_fib_selector_happy_path() {
         vals.push(Val::from_canonical_u32(curr_b));
     }
     let sender_trace = RowMajorMatrix::new(vals, 2);
-    let sender_air = dummy_interaction_air::DummyInteractionAir { is_send: true };
+    let sender_air = dummy_interaction_air::DummyInteractionAir::new(1, true, 0);
     verify_interactions(
         vec![trace, sender_trace],
         vec![&air, &sender_air],
@@ -117,7 +117,7 @@ fn test_interaction_stark_multi_rows_happy_path() {
     // 546  889
     let sender_trace =
         RowMajorMatrix::new(to_field_vec::<Val>(vec![0, 1, 3, 5, 7, 4, 546, 889]), 2);
-    let sender_air = dummy_interaction_air::DummyInteractionAir { is_send: true };
+    let sender_air = dummy_interaction_air::DummyInteractionAir::new(1, true, 0);
 
     // Mul  Val
     //   1    5
@@ -134,7 +134,7 @@ fn test_interaction_stark_multi_rows_happy_path() {
         ]),
         2,
     );
-    let receiver_air = dummy_interaction_air::DummyInteractionAir { is_send: false };
+    let receiver_air = dummy_interaction_air::DummyInteractionAir::new(1, false, 0);
     verify_interactions(
         vec![sender_trace, receiver_trace],
         vec![&sender_air, &receiver_air],
@@ -151,7 +151,7 @@ fn test_interaction_stark_multi_rows_neg() {
     //   7    4
     // 546    0
     let sender_trace = RowMajorMatrix::new(to_field_vec(vec![0, 1, 3, 5, 7, 4, 546, 0]), 2);
-    let sender_air = dummy_interaction_air::DummyInteractionAir { is_send: true };
+    let sender_air = dummy_interaction_air::DummyInteractionAir::new(1, true, 0);
 
     // count of 0 is 545 != 546 in send.
     // Mul  Val
@@ -167,7 +167,7 @@ fn test_interaction_stark_multi_rows_neg() {
         to_field_vec(vec![1, 5, 3, 4, 4, 4, 2, 5, 0, 123, 545, 0, 0, 0, 0, 456]),
         2,
     );
-    let receiver_air = dummy_interaction_air::DummyInteractionAir { is_send: false };
+    let receiver_air = dummy_interaction_air::DummyInteractionAir::new(1, false, 0);
     let res = verify_interactions(
         vec![sender_trace, receiver_trace],
         vec![&sender_air, &receiver_air],
@@ -184,7 +184,7 @@ fn test_interaction_stark_all_0_sender_happy_path() {
     //   0    0
     //   0  589
     let sender_trace = RowMajorMatrix::new(to_field_vec(vec![0, 1, 0, 5, 0, 4, 0, 889]), 2);
-    let sender_air = dummy_interaction_air::DummyInteractionAir { is_send: true };
+    let sender_air = dummy_interaction_air::DummyInteractionAir::new(1, true, 0);
     verify_interactions(vec![sender_trace], vec![&sender_air], vec![vec![]])
         .expect("Verification failed");
 }
@@ -202,7 +202,7 @@ fn test_interaction_stark_multi_senders_happy_path() {
     // 213  889
     let sender_trace2 = RowMajorMatrix::new(to_field_vec(vec![1, 4, 213, 889]), 2);
 
-    let sender_air = dummy_interaction_air::DummyInteractionAir { is_send: true };
+    let sender_air = dummy_interaction_air::DummyInteractionAir::new(1, true, 0);
 
     // Mul  Val
     //   1    5
@@ -219,7 +219,7 @@ fn test_interaction_stark_multi_senders_happy_path() {
         ]),
         2,
     );
-    let receiver_air = dummy_interaction_air::DummyInteractionAir { is_send: false };
+    let receiver_air = dummy_interaction_air::DummyInteractionAir::new(1, false, 0);
     verify_interactions(
         vec![sender_trace1, sender_trace2, receiver_trace],
         vec![&sender_air, &sender_air, &receiver_air],
@@ -241,7 +241,7 @@ fn test_interaction_stark_multi_senders_neg() {
     // 213  889
     let sender_trace2 = RowMajorMatrix::new(to_field_vec(vec![1, 4, 213, 889]), 2);
 
-    let sender_air = dummy_interaction_air::DummyInteractionAir { is_send: true };
+    let sender_air = dummy_interaction_air::DummyInteractionAir::new(1, true, 0);
 
     // Mul  Val
     //   1    5
@@ -258,7 +258,7 @@ fn test_interaction_stark_multi_senders_neg() {
         ]),
         2,
     );
-    let receiver_air = dummy_interaction_air::DummyInteractionAir { is_send: false };
+    let receiver_air = dummy_interaction_air::DummyInteractionAir::new(1, false, 0);
     let res = verify_interactions(
         vec![sender_trace1, sender_trace2, receiver_trace],
         vec![&sender_air, &sender_air, &receiver_air],
@@ -280,7 +280,7 @@ fn test_interaction_stark_multi_sender_receiver_happy_path() {
     // 213  889
     let sender_trace2 = RowMajorMatrix::new(to_field_vec(vec![1, 4, 213, 889]), 2);
 
-    let sender_air = dummy_interaction_air::DummyInteractionAir { is_send: true };
+    let sender_air = dummy_interaction_air::DummyInteractionAir::new(1, true, 0);
 
     // Mul  Val
     //   1    5
@@ -301,7 +301,7 @@ fn test_interaction_stark_multi_sender_receiver_happy_path() {
     // Mul  Val
     //   1  889
     let receiver_trace2 = RowMajorMatrix::new(to_field_vec(vec![1, 889]), 2);
-    let receiver_air = dummy_interaction_air::DummyInteractionAir { is_send: false };
+    let receiver_air = dummy_interaction_air::DummyInteractionAir::new(1, false, 0);
     verify_interactions(
         vec![
             sender_trace1,
