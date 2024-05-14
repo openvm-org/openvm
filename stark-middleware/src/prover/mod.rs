@@ -146,10 +146,10 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
                 rap,
                 &preprocessed_trace,
                 partitioned_main_trace,
-                &perm_trace,
-                perm_challenges,
-                cumulative_sum,
+                perm_trace.as_slice(),
+                &challenges,
                 pis,
+                cumulative_sum.map(|c| vec![c]).as_slice(),
             );
         }
 

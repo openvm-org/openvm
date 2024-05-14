@@ -14,19 +14,17 @@ pub fn check_constraints<R, SC>(
     rap: &R,
     preprocessed: &Option<RowMajorMatrixView<Val<SC>>>,
     partitioned_main: &[RowMajorMatrixView<Val<SC>>],
-    perm: &Option<RowMajorMatrixView<SC::Challenge>>,
-    perm_challenges: &[SC::Challenge],
-    cumulative_sum: Option<SC::Challenge>,
+    after_challenge: &[RowMajorMatrixView<SC::Challenge>],
+    challenges: &[Vec<SC::Challenge>],
     public_values: &[Val<SC>],
+    exposed_values_after_challenge: &[Vec<SC::Challenge>],
 ) where
     R: for<'a> Rap<DebugConstraintBuilder<'a, SC>> + BaseAir<Val<SC>> + ?Sized,
     SC: StarkGenericConfig,
 {
     let height = partitioned_main[0].height();
     assert!(partitioned_main.iter().all(|mat| mat.height() == height));
-    if let Some(perm) = perm {
-        assert_eq!(height, perm.height());
-    }
+    assert!(after_challenge.iter().all(|mat| mat.height() == height));
 
     // Check that constraints are satisfied.
     (0..height).into_par_iter().for_each(|i| {
@@ -42,12 +40,6 @@ pub fn check_constraints<R, SC>(
             })
             .unwrap_or((vec![], vec![]));
 
-        let (perm_local, perm_next) = perm
-            .as_ref()
-            .map(|perm| (perm.row_slice(i).to_vec(), perm.row_slice(i_next).to_vec()))
-            .unwrap_or((vec![], vec![]));
-        let perm_exposed_values = cumulative_sum.map(|s| vec![s]).unwrap_or_default();
-
         let partitioned_main_row_pair = partitioned_main
             .iter()
             .map(|part| (part.row_slice(i), part.row_slice(i_next)))
@@ -61,6 +53,21 @@ pub fn check_constraints<R, SC>(
                 )
             })
             .collect::<Vec<_>>();
+
+        let after_challenge_row_pair = after_challenge
+            .iter()
+            .map(|mat| (mat.row_slice(i), mat.row_slice(i_next)))
+            .collect::<Vec<_>>();
+        let after_challenge = after_challenge_row_pair
+            .iter()
+            .map(|(local, next)| {
+                VerticalPair::new(
+                    RowMajorMatrixView::new_row(local),
+                    RowMajorMatrixView::new_row(next),
+                )
+            })
+            .collect::<Vec<_>>();
+
         let mut builder = DebugConstraintBuilder {
             row_index: i,
             preprocessed: VerticalPair::new(
@@ -68,13 +75,10 @@ pub fn check_constraints<R, SC>(
                 RowMajorMatrixView::new_row(preprocessed_next.as_slice()),
             ),
             partitioned_main,
-            perm: VerticalPair::new(
-                RowMajorMatrixView::new_row(perm_local.as_slice()),
-                RowMajorMatrixView::new_row(perm_next.as_slice()),
-            ),
-            perm_challenges,
+            after_challenge,
+            challenges,
             public_values,
-            perm_exposed_values: perm_exposed_values.as_slice(),
+            exposed_values_after_challenge,
             is_first_row: Val::<SC>::zero(),
             is_last_row: Val::<SC>::zero(),
             is_transition: Val::<SC>::one(),

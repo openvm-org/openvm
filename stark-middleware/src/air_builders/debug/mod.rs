@@ -18,13 +18,13 @@ pub struct DebugConstraintBuilder<'a, SC: StarkGenericConfig> {
     pub row_index: usize,
     pub preprocessed: ViewPair<'a, Val<SC>>,
     pub partitioned_main: Vec<ViewPair<'a, Val<SC>>>,
-    pub perm: ViewPair<'a, SC::Challenge>,
-    pub perm_challenges: &'a [SC::Challenge],
+    pub after_challenge: Vec<ViewPair<'a, SC::Challenge>>,
+    pub challenges: &'a [Vec<SC::Challenge>],
     pub is_first_row: Val<SC>,
     pub is_last_row: Val<SC>,
     pub is_transition: Val<SC>,
     pub public_values: &'a [Val<SC>],
-    pub perm_exposed_values: &'a [SC::Challenge],
+    pub exposed_values_after_challenge: &'a [Vec<SC::Challenge>],
 }
 
 impl<'a, SC> AirBuilder for DebugConstraintBuilder<'a, SC>
@@ -134,11 +134,16 @@ where
     type RandomVar = SC::Challenge;
 
     fn permutation(&self) -> Self::MP {
-        self.perm
+        self.after_challenge
+            .first()
+            .expect("Challenge phase not supported")
+            .clone()
     }
 
     fn permutation_randomness(&self) -> &[Self::EF] {
-        self.perm_challenges
+        self.challenges
+            .first()
+            .expect("Challenge phase not supported")
     }
 }
 
@@ -158,6 +163,8 @@ where
     SC: StarkGenericConfig,
 {
     fn permutation_exposed_values(&self) -> &[Self::EF] {
-        self.perm_exposed_values
+        self.exposed_values_after_challenge
+            .first()
+            .expect("Challenge phase not supported")
     }
 }
