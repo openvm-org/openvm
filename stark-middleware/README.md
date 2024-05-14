@@ -51,10 +51,19 @@ The backend currently supports the following:
   committed together.
 
 Due to the need to support cached trace, the backend does not fully own the
-trace commitment process, although it does provide simple APIs to assist the process.
+trace commitment process, although it does provide simple APIs to assist the process - see `TraceCommitmentBuilder`.
 
 Given RAPs with all traces committed, the backend prover handles computations
-and commitment of quotient polynomials and FRI commit and query phases.
+and commitment of quotient polynomials and FRI commit and query phases. This is
+done by `MultiTraceStarkProver::prove_raps_with_committed_traces`. This function
+should be able to support general RAPs as described in the previous section, but
+it does assume the `challenger` has already observed all trace commitments and public
+values.
+
+The general verifier is supported in `MultiTraceStarkVerifier::verify_raps`. This does
+handle all `challenger` observations of public values and trace commitments. The
+number of challenges to observe in between trace challenge phases is read from the
+partial verifying key.
 
 ## Interactive AIRs
 
@@ -68,9 +77,12 @@ with one challenge phase via the [Interactions API](./src/interaction/README.md)
 The backend currently has special support for Interactive AIRs, and completely owns
 the generation of the trace in the challenge phase for these RAPs -- for reference,
 Plonky3 refers to this phase's trace as the **permutation** trace.
+This is done in `MultiTraceStarkProver::prove`, which internally calls
+`prove_raps_with_committed_traces`.
 
 To fully support the Interaction API, the verifier also does a final cumulative
-sum check. This can be framed as an additional operation to perform on the per-RAP
+sum check. This is done in `MultiTraceStarkVerifier::verify`.
+This can be framed as an additional operation to perform on the per-RAP
 exposed values after the challenge phase.
 
 ## TODO
