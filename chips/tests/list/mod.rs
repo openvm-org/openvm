@@ -32,8 +32,4 @@ impl<const MAX: u32> ListChip<MAX> {
     pub fn bus_index(&self) -> usize {
         self.bus_index
     }
-
-    pub fn vals(&self) -> &Vec<u32> {
-        &self.vals
-    }
 }
