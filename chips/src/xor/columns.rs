@@ -7,16 +7,6 @@ pub struct XorIOCols<T> {
     pub z: T,
 }
 
-impl<T: Clone> XorIOCols<T> {
-    pub fn from_placeholder(placeholder: &T) -> Self {
-        Self {
-            x: placeholder.clone(),
-            y: placeholder.clone(),
-            z: placeholder.clone(),
-        }
-    }
-}
-
 pub struct XorCols<const N: usize, T> {
     pub io: XorIOCols<T>,
     pub x_bits: Vec<T>,
@@ -25,15 +15,6 @@ pub struct XorCols<const N: usize, T> {
 }
 
 impl<const N: usize, T: Clone> XorCols<N, T> {
-    pub fn from_placeholder(placeholder: T) -> Self {
-        Self {
-            io: XorIOCols::from_placeholder(&placeholder),
-            x_bits: vec![placeholder.clone(); N],
-            y_bits: vec![placeholder.clone(); N],
-            z_bits: vec![placeholder.clone(); N],
-        }
-    }
-
     pub fn from_slice(slc: &[T]) -> Self {
         let x = slc[0].clone();
         let y = slc[1].clone();
