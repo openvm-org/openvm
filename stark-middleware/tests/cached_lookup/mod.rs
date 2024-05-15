@@ -12,6 +12,8 @@ use p3_util::log2_ceil_usize;
 
 use crate::{config, interaction::dummy_interaction_air::DummyInteractionAir};
 
+mod instrumented;
+
 type Val = BabyBear;
 
 // Lookup table is cached, everything else (including counts) is committed together
