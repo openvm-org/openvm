@@ -4,6 +4,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry};
 
+pub mod instrument;
 pub mod poseidon2;
 
 #[allow(unused)]
