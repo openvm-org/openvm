@@ -6,12 +6,14 @@ use std::{
 
 use p3_symmetric::{CryptographicHasher, PseudoCompressionFunction};
 
+pub type InstrumentCounter = Arc<Mutex<HashMap<String, Vec<usize>>>>;
+
 /// Wrapper to instrument a type to count function calls.
 /// CAUTION: Performance may be impacted.
 #[derive(Clone, Debug)]
 pub struct Instrumented<T> {
     pub inner: T,
-    pub input_lens_by_type: Arc<Mutex<HashMap<String, Vec<usize>>>>,
+    pub input_lens_by_type: InstrumentCounter,
 }
 
 impl<T> Instrumented<T> {

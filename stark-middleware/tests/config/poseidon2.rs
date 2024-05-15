@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_challenger::DuplexChallenger;
 use p3_commit::ExtensionMmcs;
@@ -38,7 +40,7 @@ pub type InstrumentedStarkConfigPoseidon2 = StarkConfig<InstrPcs, Challenge, Cha
 
 use rand::{rngs::StdRng, SeedableRng};
 
-use super::instrument::Instrumented;
+use super::instrument::{InstrumentCounter, Instrumented};
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
 pub fn default_config(perm: &Perm, pcs_log_degree: usize) -> StarkConfigPoseidon2 {
@@ -63,9 +65,15 @@ pub fn instrumented_config(
     log_blowup: usize,
     num_queries: usize,
     proof_of_work_bits: usize,
-) -> InstrumentedStarkConfigPoseidon2 {
+) -> (
+    InstrumentedStarkConfigPoseidon2,
+    InstrumentCounter,
+    InstrumentCounter,
+) {
     let hash = Instrumented::new(MyHash::new(perm.clone()));
+    let hash_counter = Arc::clone(&hash.input_lens_by_type);
     let compress = Instrumented::new(MyCompress::new(perm.clone()));
+    let compress_counter = Arc::clone(&compress.input_lens_by_type);
     let val_mmcs = InstrValMmcs::new(hash, compress);
     let challenge_mmcs = InstrChallengeMmcs::new(val_mmcs.clone());
     let dft = Dft {};
@@ -76,7 +84,11 @@ pub fn instrumented_config(
         mmcs: challenge_mmcs,
     };
     let pcs = InstrPcs::new(pcs_log_degree, dft, val_mmcs, fri_config);
-    InstrumentedStarkConfigPoseidon2::new(pcs)
+    (
+        InstrumentedStarkConfigPoseidon2::new(pcs),
+        hash_counter,
+        compress_counter,
+    )
 }
 
 pub fn random_perm() -> Perm {
