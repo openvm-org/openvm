@@ -8,6 +8,7 @@ version = "0.1.0"
 dependencies = [
  "afs-middleware",
  "afs-middleware-derive",
+ "itertools",
  "p3-air",
  "p3-baby-bear",
  "p3-challenger",

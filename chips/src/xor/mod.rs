@@ -4,8 +4,14 @@ pub mod columns;
 pub mod trace;
 
 use columns::XorCols;
-use p3_air::{AirBuilder, AirBuilderWithPublicValues};
+use p3_air::AirBuilder;
 use p3_field::AbstractField;
+
+use afs_middleware::interaction::Interaction;
+use p3_air::VirtualPairCol;
+use p3_field::PrimeField64;
+
+use self::columns::XorIOCols;
 
 #[derive(Default)]
 pub struct XorChip<const N: usize> {
@@ -32,17 +38,16 @@ impl<const N: usize> XorChip<N> {
         self.calc_xor(a, b)
     }
 
-    /// Imposes AIR constraints within each row the trace
+    /// Imposes AIR constraints within each row of the trace
     /// Constraints x, y, z to be equal to their bit representation in x_bits, y_bits, z_bits.
     /// For each x_bit[i], y_bit[i], and z_bit[i], constraints x_bit[i] + y_bit[i] - 2 * x_bit[i] * y_bit[i] == z_bit[i],
     /// which is equivalent to ensuring that x_bit[i] ^ y_bit[i] == z_bit[i].
     /// Overall, this ensures that x^y == z.
-    pub fn impose_constraints<AB: AirBuilderWithPublicValues>(
+    pub fn impose_constraints<AB: AirBuilder>(
         &self,
         builder: &mut AB,
         xor_cols: XorCols<N, AB::Var>,
     ) where
-        AB: AirBuilder,
         AB::Var: Clone,
     {
         let mut x_from_bits: AB::Expr = AB::Expr::zero();
@@ -69,6 +74,18 @@ impl<const N: usize> XorChip<N> {
                     - AB::Expr::two() * xor_cols.x_bits[i] * xor_cols.y_bits[i],
                 xor_cols.z_bits[i],
             );
+        }
+    }
+
+    pub fn receives_custom<F: PrimeField64>(&self, cols: XorIOCols<usize>) -> Interaction<F> {
+        Interaction {
+            fields: vec![
+                VirtualPairCol::single_main(cols.x),
+                VirtualPairCol::single_main(cols.y),
+                VirtualPairCol::single_main(cols.z),
+            ],
+            count: VirtualPairCol::constant(F::one()),
+            argument_index: self.bus_index(),
         }
     }
 }

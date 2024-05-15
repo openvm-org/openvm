@@ -67,7 +67,11 @@ impl<const N: usize, T: Clone> XorCols<N, T> {
         3 * N + 3
     }
 
-    pub fn cols_to_send(cols: &[usize]) -> Vec<usize> {
-        vec![cols[0], cols[1], cols[2]]
+    pub fn cols_to_receive(cols: &[usize]) -> XorIOCols<usize> {
+        XorIOCols {
+            x: cols[0],
+            y: cols[1],
+            z: cols[2],
+        }
     }
 }
