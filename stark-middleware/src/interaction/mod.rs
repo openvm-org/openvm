@@ -61,7 +61,7 @@ pub trait InteractiveAir<AB: AirBuilder>: Air<AB> + Chip<AB::F> {
         &self,
         preprocessed_trace: &Option<RowMajorMatrixView<AB::F>>,
         partitioned_main_trace: &[RowMajorMatrixView<AB::F>],
-        permutation_randomness: &[AB::EF],
+        permutation_randomness: Option<[AB::EF; 2]>,
     ) -> Option<RowMajorMatrix<AB::EF>>
     where
         AB: PermutationAirBuilder,
