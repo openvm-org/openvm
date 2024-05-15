@@ -3,6 +3,10 @@ pub mod chip;
 pub mod columns;
 pub mod trace;
 
+use columns::XorCols;
+use p3_air::{AirBuilder, AirBuilderWithPublicValues};
+use p3_field::AbstractField;
+
 #[derive(Default)]
 pub struct XorChip<const N: usize> {
     bus_index: usize,
@@ -19,16 +23,52 @@ impl<const N: usize> XorChip<N> {
         self.bus_index
     }
 
-    pub fn get_width(&self) -> usize {
-        3 * N + 3
-    }
-
-    pub fn calc_xor(&self, a: u32, b: u32) -> u32 {
+    fn calc_xor(&self, a: u32, b: u32) -> u32 {
         a ^ b
     }
 
     pub fn request(&mut self, a: u32, b: u32) -> u32 {
         self.pairs.push((a, b));
         self.calc_xor(a, b)
+    }
+
+    /// Imposes AIR constraints within each row the trace
+    /// Constraints x, y, z to be equal to their bit representation in x_bits, y_bits, z_bits.
+    /// For each x_bit[i], y_bit[i], and z_bit[i], constraints x_bit[i] + y_bit[i] - 2 * x_bit[i] * y_bit[i] == z_bit[i],
+    /// which is equivalent to ensuring that x_bit[i] ^ y_bit[i] == z_bit[i].
+    /// Overall, this ensures that x^y == z.
+    pub fn impose_constraints<AB: AirBuilderWithPublicValues>(
+        &self,
+        builder: &mut AB,
+        xor_cols: XorCols<N, AB::Var>,
+    ) where
+        AB: AirBuilder,
+        AB::Var: Clone,
+    {
+        let mut x_from_bits: AB::Expr = AB::Expr::zero();
+        for i in 0..N {
+            x_from_bits += xor_cols.x_bits[i] * AB::Expr::from_canonical_u64(1 << i);
+        }
+        builder.assert_eq(x_from_bits, xor_cols.io.x);
+
+        let mut y_from_bits: AB::Expr = AB::Expr::zero();
+        for i in 0..N {
+            y_from_bits += xor_cols.y_bits[i] * AB::Expr::from_canonical_u64(1 << i);
+        }
+        builder.assert_eq(y_from_bits, xor_cols.io.y);
+
+        let mut z_from_bits: AB::Expr = AB::Expr::zero();
+        for i in 0..N {
+            z_from_bits += xor_cols.z_bits[i] * AB::Expr::from_canonical_u64(1 << i);
+        }
+        builder.assert_eq(z_from_bits, xor_cols.io.z);
+
+        for i in 0..N {
+            builder.assert_eq(
+                xor_cols.x_bits[i] + xor_cols.y_bits[i]
+                    - AB::Expr::two() * xor_cols.x_bits[i] * xor_cols.y_bits[i],
+                xor_cols.z_bits[i],
+            );
+        }
     }
 }

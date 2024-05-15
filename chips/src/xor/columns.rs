@@ -1,17 +1,13 @@
-use std::borrow::Borrow;
-
 use afs_middleware_derive::AlignedBorrow;
-use core::mem::{size_of, transmute};
-use p3_util::indices_arr;
 
 #[derive(Default, AlignedBorrow)]
-pub struct XorHelperCols<T> {
+pub struct XorIOCols<T> {
     pub x: T,
     pub y: T,
     pub z: T,
 }
 
-impl<T: Clone> XorHelperCols<T> {
+impl<T: Clone> XorIOCols<T> {
     pub fn from_placeholder(placeholder: &T) -> Self {
         Self {
             x: placeholder.clone(),
@@ -22,7 +18,7 @@ impl<T: Clone> XorHelperCols<T> {
 }
 
 pub struct XorCols<const N: usize, T> {
-    pub helper: XorHelperCols<T>,
+    pub io: XorIOCols<T>,
     pub x_bits: Vec<T>,
     pub y_bits: Vec<T>,
     pub z_bits: Vec<T>,
@@ -31,7 +27,7 @@ pub struct XorCols<const N: usize, T> {
 impl<const N: usize, T: Clone> XorCols<N, T> {
     pub fn from_placeholder(placeholder: T) -> Self {
         Self {
-            helper: XorHelperCols::from_placeholder(&placeholder),
+            io: XorIOCols::from_placeholder(&placeholder),
             x_bits: vec![placeholder.clone(); N],
             y_bits: vec![placeholder.clone(); N],
             z_bits: vec![placeholder.clone(); N],
@@ -48,7 +44,7 @@ impl<const N: usize, T: Clone> XorCols<N, T> {
         let z_bits = slc[3 + 2 * N..3 + 3 * N].to_vec();
 
         Self {
-            helper: XorHelperCols { x, y, z },
+            io: XorIOCols { x, y, z },
             x_bits,
             y_bits,
             z_bits,
@@ -57,33 +53,21 @@ impl<const N: usize, T: Clone> XorCols<N, T> {
 
     pub fn flatten(&self) -> Vec<T> {
         let mut flattened = vec![];
-        flattened.push(self.helper.x.clone());
-        flattened.push(self.helper.y.clone());
-        flattened.push(self.helper.z.clone());
 
-        flattened.extend(self.x_bits.iter().cloned());
-        flattened.extend(self.y_bits.iter().cloned());
-        flattened.extend(self.z_bits.iter().cloned());
+        flattened.extend_from_slice(&[self.io.x.clone(), self.io.y.clone(), self.io.z.clone()]);
+
+        flattened.extend_from_slice(&self.x_bits);
+        flattened.extend_from_slice(&self.y_bits);
+        flattened.extend_from_slice(&self.z_bits);
 
         flattened
     }
-}
 
-impl<const N: usize, T> Borrow<XorCols<N, T>> for [T] {
-    fn borrow(&self) -> &XorCols<N, T> {
-        debug_assert_eq!(self.len(), 3 + 3 * N);
-        let (prefix, shorts, suffix) = unsafe { self.align_to::<XorCols<N, T>>() };
-        debug_assert!(prefix.is_empty(), "Alignment should match");
-        debug_assert!(suffix.is_empty(), "Alignment should match");
-        debug_assert_eq!(shorts.len(), 1);
-        &shorts[0]
+    pub fn get_width() -> usize {
+        3 * N + 3
     }
-}
 
-pub const NUM_XOR_HELPER_COLS: usize = size_of::<XorHelperCols<u8>>();
-pub const XOR_HELPER_COL_MAP: XorHelperCols<usize> = make_col_map();
-
-const fn make_col_map() -> XorHelperCols<usize> {
-    let indices_arr = indices_arr::<NUM_XOR_HELPER_COLS>();
-    unsafe { transmute::<[usize; NUM_XOR_HELPER_COLS], XorHelperCols<usize>>(indices_arr) }
+    pub fn cols_to_send(cols: &[usize]) -> Vec<usize> {
+        vec![cols[0], cols[1], cols[2]]
+    }
 }
