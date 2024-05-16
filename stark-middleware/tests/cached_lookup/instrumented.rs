@@ -106,8 +106,9 @@ fn prove_and_verify(
 
     perm.input_lens_by_type.lock().unwrap().clear();
     perm.is_on = true;
+    let instr_config = config::poseidon2::config_from_perm(&perm, log_degree, fri_params);
     let mut challenger = config::poseidon2::Challenger::new(perm.clone());
-    let verifier = MultiTraceStarkVerifier::new(prover.config);
+    let verifier = MultiTraceStarkVerifier::new(instr_config);
     // Do not check cumulative sum
     verifier
         .verify_raps(&mut challenger, vk, vec![&air], proof, &pis)
