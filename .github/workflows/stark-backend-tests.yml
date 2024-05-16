@@ -1,4 +1,4 @@
-name: stark-middleware Tests
+name: stark-backend Tests
 
 on:
   push:
