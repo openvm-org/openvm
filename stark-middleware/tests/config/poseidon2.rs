@@ -1,4 +1,4 @@
-use std::{any::type_name, sync::Arc};
+use std::any::type_name;
 
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_challenger::DuplexChallenger;
@@ -10,7 +10,7 @@ use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{CryptographicPermutation, PaddingFreeSponge, TruncatedPermutation};
-use p3_uni_stark::{StarkConfig, StarkGenericConfig};
+use p3_uni_stark::StarkConfig;
 
 const RATE: usize = 8;
 // permutation width
