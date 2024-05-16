@@ -1,6 +1,6 @@
 use std::iter;
 
-use afs_middleware::{
+use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
     verifier::{MultiTraceStarkVerifier, VerificationError},
@@ -10,7 +10,8 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_util::log2_ceil_usize;
 
-use crate::{config, interaction::dummy_interaction_air::DummyInteractionAir};
+use crate::config;
+use crate::interaction::dummy_interaction_air::DummyInteractionAir;
 
 type Val = BabyBear;
 

@@ -1,4 +1,4 @@
-use afs_middleware_derive::AlignedBorrow;
+use afs_derive::AlignedBorrow;
 
 #[derive(Default, AlignedBorrow)]
 pub struct XorIOCols<T> {

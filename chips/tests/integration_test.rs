@@ -1,4 +1,4 @@
-use afs_middleware::{
+use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
     prover::{trace::TraceCommitmentBuilder, types::ProverRap, MultiTraceStarkProver},
     verifier::{types::VerifierRap, MultiTraceStarkVerifier},

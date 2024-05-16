@@ -7,7 +7,7 @@ use columns::XorCols;
 use p3_air::AirBuilder;
 use p3_field::AbstractField;
 
-use afs_middleware::interaction::Interaction;
+use afs_stark_backend::interaction::Interaction;
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 

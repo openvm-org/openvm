@@ -3,7 +3,7 @@
 //!
 //! Constrains x == a_0 + ... + a_w
 
-use afs_middleware::{air_builders::PartitionedAirBuilder, interaction::Chip};
+use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::Chip};
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
