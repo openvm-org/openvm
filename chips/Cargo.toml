@@ -13,7 +13,6 @@ p3-matrix = { workspace = true }
 p3-maybe-rayon = { workspace = true }
 p3-util = { workspace = true }
 rand = "0.8"
-itertools = "0.12.1"
 
 afs-stark-backend = { path = "../stark-backend" }
 afs-derive = { path = "../derive" }
