@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use tracing_forest::util::LevelFilter;
 use tracing_forest::ForestLayer;
 use tracing_subscriber::layer::SubscriberExt;
@@ -17,4 +18,11 @@ pub fn tracing_setup() {
         .with(env_filter)
         .with(ForestLayer::default())
         .try_init();
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct FriParameters {
+    pub log_blowup: usize,
+    pub num_queries: usize,
+    pub proof_of_work_bits: usize,
 }

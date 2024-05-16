@@ -4,7 +4,12 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use p3_symmetric::{CryptographicHasher, PseudoCompressionFunction};
+use p3_symmetric::{
+    CryptographicHasher, CryptographicPermutation, Permutation, PseudoCompressionFunction,
+};
+use serde::{Deserialize, Serialize};
+
+use super::FriParameters;
 
 pub type InstrumentCounter = Arc<Mutex<HashMap<String, Vec<usize>>>>;
 
@@ -34,6 +39,21 @@ impl<T> Instrumented<T> {
     }
 }
 
+impl<T: Clone, P: Permutation<T>> Permutation<T> for Instrumented<P> {
+    fn permute_mut(&self, input: &mut T) {
+        self.add_len_for_type::<T>(1);
+        self.inner.permute_mut(input);
+    }
+    fn permute(&self, input: T) -> T {
+        self.add_len_for_type::<T>(1);
+        self.inner.permute(input)
+    }
+}
+
+impl<T: Clone, P: CryptographicPermutation<T>> CryptographicPermutation<T> for Instrumented<P> {}
+
+// Note: this does not currently need to be used if the implemeation is derived from a CryptographicPermutation:
+// we can instrument the permutation itself
 impl<T, const N: usize, C: PseudoCompressionFunction<T, N>> PseudoCompressionFunction<T, N>
     for Instrumented<C>
 {
@@ -54,4 +74,20 @@ impl<Item: Clone, Out, H: CryptographicHasher<Item, Out>> CryptographicHasher<It
         self.add_len_for_type::<(Item, Out)>(input.len());
         self.inner.hash_iter(input)
     }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HashStatistics {
+    // pub cryptographic_hasher: usize,
+    // pub pseudo_compression_function: usize,
+    pub permutations: usize,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StarkHashStatistics<T> {
+    /// Identifier for the hash permutation
+    pub name: String,
+    pub stats: HashStatistics,
+    pub fri_params: FriParameters,
+    pub custom: T,
 }
