@@ -10,7 +10,7 @@ use super::{
 };
 
 impl MerkleTreeChip {
-    fn generate_trace<F: PrimeField32>(&self) -> RowMajorMatrix<F> {
+    pub fn generate_trace<F: PrimeField32>(&self) -> RowMajorMatrix<F> {
         let num_real_rows = self.siblings.iter().map(|s| s.len()).sum::<usize>();
         let num_rows = num_real_rows.next_power_of_two();
         let mut trace = RowMajorMatrix::new(
@@ -63,6 +63,7 @@ pub fn generate_trace_rows_for_leaf<F: PrimeField32>(
         .enumerate()
     {
         rows[0].is_first_step = F::one();
+        rows[0].bit_factor = F::one();
         for limb in 0..U64_LIMBS {
             let limb_range = limb * 2..(limb + 1) * 2;
             rows[0].node[x][limb] =
@@ -75,6 +76,7 @@ pub fn generate_trace_rows_for_leaf<F: PrimeField32>(
 
     for round in 1..rows.len() {
         // Copy previous row's output to next row's input.
+        rows[round].bit_factor = rows[round - 1].bit_factor.double();
         for x in 0..NUM_U64_HASH_ELEMS {
             for limb in 0..U64_LIMBS {
                 rows[round].node[x][limb] = rows[round - 1].output[x][limb];

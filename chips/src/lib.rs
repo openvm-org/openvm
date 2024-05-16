@@ -1,5 +1,4 @@
-pub mod page_controller;
-pub mod page_read;
+pub mod merkle_tree;
 /// Chip to range check a value has less than a fixed number of bits
 pub mod range;
 pub mod range_gate;

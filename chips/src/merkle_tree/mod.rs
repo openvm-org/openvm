@@ -1,6 +1,6 @@
 mod air;
 mod chip;
-mod columns;
+pub mod columns;
 mod trace;
 
 use self::columns::{MERKLE_TREE_DEPTH, NUM_MERKLE_TREE_COLS};
