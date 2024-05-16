@@ -7,7 +7,6 @@ use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_util::log2_ceil_usize;
 use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{config, utils::generate_random_matrix};
@@ -22,10 +21,9 @@ type Val = BabyBear;
 fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), VerificationError> {
     assert_eq!(x.len(), ys.len());
     let degree = x.len();
-    let log_degree = log2_ceil_usize(degree);
 
     let perm = config::poseidon2::random_perm();
-    let config = config::poseidon2::default_config(&perm, log_degree);
+    let config = config::poseidon2::default_config(&perm);
 
     let x_trace = RowMajorMatrix::new(x, 1);
     let y_width = ys[0].len();

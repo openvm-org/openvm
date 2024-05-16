@@ -38,7 +38,7 @@ fn test_single_fib_stark() {
 
     let log_trace_degree = 3;
     let perm = config::poseidon2::random_perm();
-    let config = config::poseidon2::default_config(&perm, log_trace_degree);
+    let config = config::poseidon2::default_config(&perm);
 
     // Public inputs:
     let a = 0u32;
@@ -84,7 +84,7 @@ fn test_single_fib_triples_stark() {
 
     let log_trace_degree = 3;
     let perm = config::poseidon2::random_perm();
-    let config = config::poseidon2::default_config(&perm, log_trace_degree);
+    let config = config::poseidon2::default_config(&perm);
 
     // Public inputs:
     let a = 0u32;
@@ -131,7 +131,7 @@ fn test_single_fib_selector_stark() {
 
     let log_trace_degree = 3;
     let perm = config::poseidon2::random_perm();
-    let config = config::poseidon2::default_config(&perm, log_trace_degree);
+    let config = config::poseidon2::default_config(&perm);
 
     // Public inputs:
     let a = 0u32;
@@ -180,7 +180,7 @@ fn test_double_fib_starks() {
     let log_n1 = 3;
     let log_n2 = 5;
     let perm = config::poseidon2::random_perm();
-    let config = config::poseidon2::default_config(&perm, log_n1.max(log_n2));
+    let config = config::poseidon2::default_config(&perm);
 
     // Public inputs:
     let a = 0u32;

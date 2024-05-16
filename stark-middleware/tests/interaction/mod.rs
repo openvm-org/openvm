@@ -27,9 +27,8 @@ fn verify_interactions(
     airs: Vec<&dyn ProverVerifierRap<StarkConfigPoseidon2>>,
     pis: Vec<Vec<Val>>,
 ) -> Result<(), VerificationError> {
-    let log_trace_degree = 3;
     let perm = config::poseidon2::random_perm();
-    let config = config::poseidon2::default_config(&perm, log_trace_degree);
+    let config = config::poseidon2::default_config(&perm);
 
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
     for ((air, trace), pis) in airs.iter().zip_eq(&traces).zip_eq(&pis) {

@@ -35,10 +35,8 @@ fn test_list_range_checker() {
     const LOG_TRACE_DEGREE_LIST: usize = 6;
     const LIST_LEN: usize = 1 << LOG_TRACE_DEGREE_LIST;
 
-    let log_trace_degree_max: usize = std::cmp::max(LOG_TRACE_DEGREE_LIST, LOG_TRACE_DEGREE_RANGE);
-
     let perm = config::poseidon2::random_perm();
-    let config = config::poseidon2::default_config(&perm, log_trace_degree_max);
+    let config = config::poseidon2::default_config(&perm);
 
     // Creating a RangeCheckerChip
     let range_checker = Arc::new(RangeCheckerChip::<MAX>::new(bus_index));

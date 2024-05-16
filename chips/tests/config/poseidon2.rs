@@ -18,7 +18,7 @@ type ValMmcs =
     FieldMerkleTreeMmcs<<Val as Field>::Packing, <Val as Field>::Packing, MyHash, MyCompress, 8>;
 type Challenge = BinomialExtensionField<Val, 4>;
 type ChallengeMmcs = ExtensionMmcs<Val, Challenge, ValMmcs>;
-pub type Challenger = DuplexChallenger<Val, Perm, 16>;
+pub type Challenger = DuplexChallenger<Val, Perm, 16, 8>;
 type Dft = Radix2DitParallel;
 type Pcs = TwoAdicFriPcs<Val, Dft, ValMmcs, ChallengeMmcs>;
 pub type StarkConfigPoseidon2 = StarkConfig<Pcs, Challenge, Challenger>;
@@ -26,7 +26,7 @@ pub type StarkConfigPoseidon2 = StarkConfig<Pcs, Challenge, Challenger>;
 use rand::{rngs::StdRng, SeedableRng};
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
-pub fn default_config(perm: &Perm, pcs_log_degree: usize) -> StarkConfigPoseidon2 {
+pub fn default_config(perm: &Perm) -> StarkConfigPoseidon2 {
     let hash = MyHash::new(perm.clone());
     let compress = MyCompress::new(perm.clone());
     let val_mmcs = ValMmcs::new(hash, compress);
@@ -38,7 +38,7 @@ pub fn default_config(perm: &Perm, pcs_log_degree: usize) -> StarkConfigPoseidon
         proof_of_work_bits: 8,
         mmcs: challenge_mmcs,
     };
-    let pcs = Pcs::new(pcs_log_degree, dft, val_mmcs, fri_config);
+    let pcs = Pcs::new(dft, val_mmcs, fri_config);
     StarkConfigPoseidon2::new(pcs)
 }
 
