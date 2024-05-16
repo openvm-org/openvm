@@ -1,8 +1,7 @@
 [workspace]
 members = [ "chips",
     "stark-middleware",
-    "stark-middleware/derive"
-]
+    "stark-middleware/derive"]
 resolver = "2"
 
 [workspace.package]

@@ -100,13 +100,13 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
                     .collect_vec()
             })
             .collect();
-        let perm_challenges = challenges.first().map(|c| c.as_slice()).unwrap_or(&[]);
 
         // TODO: ===== Permutation Trace Generation should be moved to separate module ====
         // Generate permutation traces
         let mut count = 0usize;
         let (perm_traces, cumulative_sums_and_indices): (Vec<Option<_>>, Vec<Option<_>>) =
             tracing::info_span!("generate permutation traces").in_scope(|| {
+                let perm_challenges = challenges.first().map(|c| [c[0], c[1]]); // must have 2 challenges
                 pk.per_air
                     .par_iter()
                     .zip_eq(main_trace_data.air_traces.par_iter())

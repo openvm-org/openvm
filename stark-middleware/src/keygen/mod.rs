@@ -7,7 +7,7 @@ pub mod types;
 
 use crate::{
     air_builders::symbolic::get_log_quotient_degree,
-    commit::{MatrixCommitmentGraph, SingleMatrixCommitPtr},
+    commit::{MatrixCommitmentPointers, SingleMatrixCommitPtr},
     prover::trace::TraceCommitter,
 };
 
@@ -169,7 +169,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             degree,
             preprocessed_data: prep_verifier_data,
             width,
-            main_graph: MatrixCommitmentGraph::new(partitioned_main_ptrs),
+            main_graph: MatrixCommitmentPointers::new(partitioned_main_ptrs),
             quotient_degree,
             num_public_values,
             num_exposed_values_after_challenge: num_exposed_values,

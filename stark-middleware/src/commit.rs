@@ -5,15 +5,16 @@ use crate::config::PcsProverData;
 
 /// In a multi-matrix system, we record a pointer from each matrix to the commitment its stored in
 /// as well as the index of the matrix within that commitment.
+/// The intended use case is to track the list of pointers for all main trace matrix parts in a single STARK.
 ///
 /// The pointers are in reference to an implicit global list of commitments
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MatrixCommitmentGraph {
+pub struct MatrixCommitmentPointers {
     /// For each matrix, the pointer
     pub matrix_ptrs: Vec<SingleMatrixCommitPtr>,
 }
 
-impl MatrixCommitmentGraph {
+impl MatrixCommitmentPointers {
     pub fn new(matrix_ptrs: Vec<SingleMatrixCommitPtr>) -> Self {
         Self { matrix_ptrs }
     }

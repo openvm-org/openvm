@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     air_builders::symbolic::SymbolicRapBuilder,
-    commit::MatrixCommitmentGraph,
+    commit::MatrixCommitmentPointers,
     config::{Com, PcsProverData},
     interaction::Chip,
     rap::Rap,
@@ -52,8 +52,8 @@ pub struct StarkVerifyingKey<SC: StarkGenericConfig> {
     pub preprocessed_data: Option<VerifierSinglePreprocessedData<SC>>,
     /// Trace sub-matrix widths
     pub width: TraceWidth,
-    /// [MatrixCommitmentGraph] for partitioned main trace matrix
-    pub main_graph: MatrixCommitmentGraph,
+    /// [MatrixCommitmentPointers] for partitioned main trace matrix
+    pub main_graph: MatrixCommitmentPointers,
     /// The factor to multiple the trace degree by to get the degree of the quotient polynomial. Determined from the max constraint degree of the AIR constraints.
     /// This is equivalently the number of chunks the quotient polynomial is split into.
     pub quotient_degree: usize,
@@ -228,7 +228,7 @@ pub struct CommitmentToAirGraph {
 }
 
 pub(super) fn create_commit_to_air_graph(
-    air_matrices: &[MatrixCommitmentGraph],
+    air_matrices: &[MatrixCommitmentPointers],
     num_total_commitments: usize,
 ) -> CommitmentToAirGraph {
     let mut commit_to_air_index = vec![vec![0; air_matrices.len()]; num_total_commitments];
