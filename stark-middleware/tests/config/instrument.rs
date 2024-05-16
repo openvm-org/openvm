@@ -17,6 +17,7 @@ pub type InstrumentCounter = Arc<Mutex<HashMap<String, Vec<usize>>>>;
 /// CAUTION: Performance may be impacted.
 #[derive(Clone, Debug)]
 pub struct Instrumented<T> {
+    pub is_on: bool,
     pub inner: T,
     pub input_lens_by_type: InstrumentCounter,
 }
@@ -24,12 +25,16 @@ pub struct Instrumented<T> {
 impl<T> Instrumented<T> {
     pub fn new(inner: T) -> Self {
         Self {
+            is_on: true,
             inner,
             input_lens_by_type: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
     fn add_len_for_type<A>(&self, len: usize) {
+        if !self.is_on {
+            return;
+        }
         self.input_lens_by_type
             .lock()
             .unwrap()
@@ -70,9 +75,13 @@ impl<Item: Clone, Out, H: CryptographicHasher<Item, Out>> CryptographicHasher<It
     where
         I: IntoIterator<Item = Item>,
     {
-        let input = input.into_iter().collect::<Vec<_>>();
-        self.add_len_for_type::<(Item, Out)>(input.len());
-        self.inner.hash_iter(input)
+        if self.is_on {
+            let input = input.into_iter().collect::<Vec<_>>();
+            self.add_len_for_type::<(Item, Out)>(input.len());
+            self.inner.hash_iter(input)
+        } else {
+            self.inner.hash_iter(input)
+        }
     }
 }
 

@@ -38,7 +38,8 @@ fn prove_and_verify(
     let degree = trace.len();
     let log_degree = log2_ceil_usize(degree);
 
-    let perm = config::poseidon2::random_instrumented_perm();
+    let mut perm = config::poseidon2::random_instrumented_perm();
+    perm.is_on = false;
     let config = config::poseidon2::config_from_perm(&perm, log_degree, fri_params);
 
     let air = DummyInteractionAir::new(trace[0].1.len(), false, 0);
@@ -104,6 +105,7 @@ fn prove_and_verify(
     let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
 
     perm.input_lens_by_type.lock().unwrap().clear();
+    perm.is_on = true;
     let mut challenger = config::poseidon2::Challenger::new(perm.clone());
     let verifier = MultiTraceStarkVerifier::new(prover.config);
     // Do not check cumulative sum
@@ -177,7 +179,7 @@ fn bench_comparison(
     }
 }
 
-// Run with `cargo t --release -- --ignored <test name>`
+// Run with `RUSTFLAGS="-Ctarget-cpu=native" cargo t --release -- --ignored <test name>`
 #[test]
 #[ignore = "bench"]
 fn bench_cached_trace() -> eyre::Result<()> {
