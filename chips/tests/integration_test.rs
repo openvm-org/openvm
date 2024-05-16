@@ -9,7 +9,7 @@ use p3_maybe_rayon::prelude::IntoParallelRefIterator;
 use p3_uni_stark::StarkGenericConfig;
 
 use std::iter;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use afs_chips::range;
 mod list;
