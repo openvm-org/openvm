@@ -247,6 +247,7 @@ fn bench_cached_trace() -> eyre::Result<()> {
         for (field_width, log_degree) in &data_sizes {
             let stats = bench_comparison(fri_param, *field_width, *log_degree);
             wtr.serialize(&stats)?;
+            wtr.flush()?;
             all_stats.push(stats);
         }
     }
