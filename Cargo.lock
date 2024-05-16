@@ -6,8 +6,8 @@ version = 3
 name = "afs-chips"
 version = "0.1.0"
 dependencies = [
- "afs-middleware",
- "afs-middleware-derive",
+ "afs-derive",
+ "afs-stark-backend",
  "p3-air",
  "p3-baby-bear",
  "p3-challenger",
@@ -30,10 +30,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "afs-middleware"
+name = "afs-derive"
 version = "0.1.0"
 dependencies = [
- "afs-middleware-derive",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "afs-stark-backend"
+version = "0.1.0"
+dependencies = [
+ "afs-derive",
  "derivative",
  "itertools",
  "p3-air",
@@ -58,15 +67,6 @@ dependencies = [
  "tracing",
  "tracing-forest",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "afs-middleware-derive"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]

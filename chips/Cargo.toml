@@ -14,8 +14,8 @@ p3-maybe-rayon = { workspace = true }
 p3-util = { workspace = true }
 rand = "0.8"
 
-afs-middleware = { path = "../stark-middleware" }
-afs-middleware-derive = { path = "../stark-middleware/derive" }
+afs-stark-backend = { path = "../stark-backend" }
+afs-derive = { path = "../derive" }
 
 [dev-dependencies]
 p3-uni-stark = { workspace = true }

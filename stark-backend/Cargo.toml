@@ -1,5 +1,5 @@
 [package]
-name = "afs-middleware"
+name = "afs-stark-backend"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -38,7 +38,7 @@ p3-symmetric = { workspace = true }
 p3-mds = { workspace = true }
 p3-goldilocks = { workspace = true }
 
-afs-middleware-derive = { path = "derive" }
+afs-derive = { path = "../derive" }
 
 [features]
 default = []

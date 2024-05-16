@@ -1,10 +1,10 @@
-use afs_middleware::keygen::types::SymbolicRap;
-use afs_middleware::keygen::MultiStarkKeygenBuilder;
-use afs_middleware::prover::trace::TraceCommitmentBuilder;
-use afs_middleware::prover::types::ProverRap;
-use afs_middleware::prover::MultiTraceStarkProver;
-use afs_middleware::verifier::types::VerifierRap;
-use afs_middleware::verifier::{MultiTraceStarkVerifier, VerificationError};
+use afs_stark_backend::keygen::types::SymbolicRap;
+use afs_stark_backend::keygen::MultiStarkKeygenBuilder;
+use afs_stark_backend::prover::trace::TraceCommitmentBuilder;
+use afs_stark_backend::prover::types::ProverRap;
+use afs_stark_backend::prover::MultiTraceStarkProver;
+use afs_stark_backend::verifier::types::VerifierRap;
+use afs_stark_backend::verifier::{MultiTraceStarkVerifier, VerificationError};
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
