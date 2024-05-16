@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: ["main", "develop"]
     paths:
-      - "stark-middleware/**"
+      - "stark-backend/**"
 
 env:
   CARGO_TERM_COLOR: always
@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Run stark-middleware tests
-        working-directory: "stark-middleware"
+      - name: Run stark-backend tests
+        working-directory: "stark-backend"
         run: |
           cargo test
