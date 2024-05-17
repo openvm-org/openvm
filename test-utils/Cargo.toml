@@ -1,5 +1,5 @@
 [package]
-name = "test-utils"
+name = "afs-test-utils"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -27,14 +27,11 @@ rand = "0.8.5"
 tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }
 tracing-forest = { version = "0.1.6", features = ["ansi", "smallvec"] }
 afs-stark-backend = { path = "../stark-backend" }
-afs-derive = { path = "../derive" }
 
 p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }
 p3-fri = { workspace = true }
 p3-baby-bear = { workspace = true }
 p3-poseidon2 = { workspace = true }
-p3-keccak = { workspace = true }
 p3-symmetric = { workspace = true }
 p3-mds = { workspace = true }
-p3-goldilocks = { workspace = true }

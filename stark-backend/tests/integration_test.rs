@@ -5,19 +5,18 @@ use afs_stark_backend::keygen::MultiStarkKeygenBuilder;
 use afs_stark_backend::prover::trace::TraceCommitmentBuilder;
 use afs_stark_backend::prover::MultiTraceStarkProver;
 use afs_stark_backend::verifier::MultiTraceStarkVerifier;
+/// Test utils
+use afs_test_utils::{config, utils};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_uni_stark::StarkGenericConfig;
 
+mod cached_lookup;
 mod fib_air;
 mod fib_selector_air;
 mod fib_triples_air;
 pub mod interaction;
 mod partitioned_sum_air;
-
-/// Test utils
-use test_utils::config;
-use test_utils::utils;
 
 #[test]
 fn test_single_fib_stark() {

@@ -27,7 +27,7 @@ derivative = "2.2.0"
 rand = "0.8.5"
 tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }
 tracing-forest = { version = "0.1.6", features = ["ansi", "smallvec"] }
-test-utils = { path = "../test-utils"}
+afs-test-utils = { path = "../test-utils"}
 
 p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }

@@ -1,4 +1,7 @@
 use afs_stark_backend::verifier::VerificationError;
+use afs_test_utils::interaction::{
+    dummy_interaction_air::DummyInteractionAir, verify_interactions,
+};
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -10,11 +13,7 @@ use crate::{
     get_conditional_fib_number,
 };
 
-use test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
-
 type Val = BabyBear;
-
-use test_utils::interaction::verify_interactions;
 
 #[test]
 fn test_interaction_fib_selector_happy_path() {
