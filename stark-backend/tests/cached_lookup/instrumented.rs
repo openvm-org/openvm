@@ -3,7 +3,7 @@ use std::{
     iter,
 };
 
-use afs_middleware::{
+use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
     verifier::MultiTraceStarkVerifier,
@@ -180,7 +180,7 @@ fn bench_comparison(
     }
 }
 
-// Run with `RUSTFLAGS="-Ctarget-cpu=native" cargo t --release -- --ignored <test name>`
+// Run with `RUSTFLAGS="-Ctarget-cpu=native" cargo t --release -- --ignored --nocapture <test name>`
 #[test]
 #[ignore = "bench"]
 fn bench_cached_trace() -> eyre::Result<()> {

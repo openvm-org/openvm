@@ -4,7 +4,7 @@
 //! Chip will either send or receive the fields with multiplicity count.
 //! The main Air has no constraints, the only constraints are specified by the Chip trait
 
-use afs_middleware::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{Chip, Interaction};
 use p3_air::{Air, AirBuilderWithPublicValues, BaseAir, PairBuilder, VirtualPairCol};
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;

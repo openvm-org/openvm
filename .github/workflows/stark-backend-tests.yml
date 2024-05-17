@@ -1,4 +1,4 @@
-name: stark-middleware Tests
+name: stark-backend Tests
 
 on:
   push:
@@ -6,7 +6,11 @@ on:
   pull_request:
     branches: ["main", "develop"]
     paths:
-      - "stark-middleware/**"
+      - "stark-backend/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -18,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Run stark-middleware tests
-        working-directory: "stark-middleware"
+      - name: Run stark-backend tests
+        working-directory: "stark-backend"
         run: |
           cargo test
