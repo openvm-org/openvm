@@ -8,6 +8,7 @@ version = "0.1.0"
 dependencies = [
  "afs-derive",
  "afs-stark-backend",
+ "afs-test-utils",
  "p3-air",
  "p3-baby-bear",
  "p3-challenger",
