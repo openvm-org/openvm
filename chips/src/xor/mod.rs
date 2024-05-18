@@ -1,8 +1,3 @@
-pub mod air;
-pub mod chip;
-pub mod columns;
-pub mod trace;
-
 use columns::XorCols;
 use p3_air::AirBuilder;
 use p3_field::AbstractField;
@@ -12,6 +7,11 @@ use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
 use self::columns::XorIOCols;
+
+pub mod air;
+pub mod chip;
+pub mod columns;
+pub mod trace;
 
 #[derive(Default)]
 pub struct XorChip<const N: usize> {

@@ -1,11 +1,11 @@
+use std::sync::Arc;
+
+use crate::range::RangeCheckerChip;
+
 pub mod air;
 pub mod chip;
 pub mod columns;
 pub mod trace;
-
-use crate::range::RangeCheckerChip;
-
-use std::sync::Arc;
 
 #[derive(Default)]
 pub struct ListChip<const MAX: u32> {

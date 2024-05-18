@@ -1,12 +1,11 @@
+use std::sync::{Arc, Mutex};
+
+use crate::xor::XorChip;
+
 pub mod air;
 pub mod chip;
 pub mod columns;
 pub mod trace;
-
-use crate::xor::XorChip;
-
-use std::sync::Arc;
-use std::sync::Mutex;
 
 #[derive(Default)]
 pub struct XorRequesterChip<const N: usize> {

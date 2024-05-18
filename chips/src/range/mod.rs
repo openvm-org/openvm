@@ -1,12 +1,11 @@
 // Adapted from Valida
 
+use std::sync::{atomic::AtomicU32, Arc};
+
 pub mod air;
 pub mod chip;
 pub mod columns;
 pub mod trace;
-
-use std::sync::atomic::AtomicU32;
-use std::sync::Arc;
 
 #[derive(Default)]
 pub struct RangeCheckerChip<const MAX: u32> {
