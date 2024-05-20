@@ -1,5 +1,6 @@
 use std::{iter, sync::Arc};
 
+use afs_test_utils::config;
 use rand::{rngs::StdRng, SeedableRng};
 
 use afs_chips::range;
@@ -11,9 +12,7 @@ use afs_stark_backend::{
 use p3_baby_bear::BabyBear;
 use p3_matrix::dense::DenseMatrix;
 use p3_maybe_rayon::prelude::IntoParallelRefIterator;
-use p3_uni_stark::StarkGenericConfig;
 
-mod config;
 mod list;
 
 #[test]
@@ -36,8 +35,8 @@ fn test_list_range_checker() {
 
     let log_trace_degree_max: usize = std::cmp::max(LOG_TRACE_DEGREE_LIST, LOG_TRACE_DEGREE_RANGE);
 
-    let perm = config::poseidon2::random_perm();
-    let config = config::poseidon2::default_config(&perm, log_trace_degree_max);
+    let perm = config::baby_bear_poseidon2::random_perm();
+    let config = config::baby_bear_poseidon2::default_config(&perm, log_trace_degree_max);
 
     // Creating a RangeCheckerChip
     let range_checker = Arc::new(RangeCheckerChip::<MAX>::new(bus_index));
@@ -75,7 +74,7 @@ fn test_list_range_checker() {
     let range_trace = range_checker.generate_trace();
 
     let prover = MultiTraceStarkProver::new(config);
-    let mut trace_builder = TraceCommitmentBuilder::new(prover.config.pcs());
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     for trace in lists_traces {
         trace_builder.load_trace(trace)
     }
@@ -93,10 +92,10 @@ fn test_list_range_checker() {
 
     let pis = vec![vec![]; vk.per_air.len()];
 
-    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
     let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
 
-    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
     let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier
         .verify(

@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::{
     self,
+    baby_bear_poseidon2::get_perm_count,
     instrument::{HashStatistics, StarkHashStatistics},
-    poseidon2::get_perm_count,
     FriParameters,
 };
 
@@ -36,9 +36,9 @@ fn prove_and_verify(
     let degree = trace.len();
     let log_degree = log2_ceil_usize(degree);
 
-    let mut perm = config::poseidon2::random_instrumented_perm();
+    let mut perm = config::baby_bear_poseidon2::random_instrumented_perm();
     perm.is_on = false;
-    let config = config::poseidon2::config_from_perm(&perm, log_degree, fri_params);
+    let config = config::baby_bear_poseidon2::config_from_perm(&perm, log_degree, fri_params);
 
     let air = DummyInteractionAir::new(trace[0].1.len(), false, 0);
 
@@ -99,13 +99,13 @@ fn prove_and_verify(
     let main_trace_data = trace_builder.view(&vk, vec![&air]);
     let pis = vec![vec![]];
 
-    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
     let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
 
     perm.input_lens_by_type.lock().unwrap().clear();
     perm.is_on = true;
-    let instr_config = config::poseidon2::config_from_perm(&perm, log_degree, fri_params);
-    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let instr_config = config::baby_bear_poseidon2::config_from_perm(&perm, log_degree, fri_params);
+    let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
     let verifier = MultiTraceStarkVerifier::new(instr_config);
     // Do not check cumulative sum
     verifier
@@ -147,7 +147,7 @@ pub struct BenchParams {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct BenchStatistics {
+pub struct VerifierStatistics {
     /// Identifier for the hash permutation
     pub name: String,
     pub fri_params: FriParameters,
@@ -160,7 +160,7 @@ fn bench_comparison(
     fri_params: FriParameters,
     field_width: usize,
     log_degree: usize,
-) -> BenchStatistics {
+) -> VerifierStatistics {
     let rng = StdRng::seed_from_u64(0);
     let trace = generate_random_trace(rng, field_width, 1 << log_degree);
     println!("Without cached trace:");
@@ -169,7 +169,7 @@ fn bench_comparison(
     println!("With cached trace:");
     let with_ct = prove_and_verify(fri_params, trace, true);
 
-    BenchStatistics {
+    VerifierStatistics {
         name: without_ct.name,
         fri_params: without_ct.fri_params,
         bench_params: without_ct.custom,
@@ -178,10 +178,10 @@ fn bench_comparison(
     }
 }
 
-// Run with `RUSTFLAGS="-Ctarget-cpu=native" cargo t --release -- --ignored --nocapture <test name>`
+// Run with `RUSTFLAGS="-Ctarget-cpu=native" cargo t --release -- --ignored --nocapture instrument_cached_trace_verifier`
 #[test]
 #[ignore = "bench"]
-fn bench_cached_trace() -> eyre::Result<()> {
+fn instrument_cached_trace_verifier() -> eyre::Result<()> {
     let fri_params = [
         FriParameters {
             log_blowup: 1,

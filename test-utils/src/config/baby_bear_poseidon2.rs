@@ -33,9 +33,9 @@ pub type Challenger<P> = DuplexChallenger<Val, P, WIDTH>;
 type Dft = Radix2DitParallel;
 type Pcs<P> = TwoAdicFriPcs<Val, Dft, ValMmcs<P>, ChallengeMmcs<P>>;
 
-pub type BabyBearPoseidon2Config<P> = StarkConfig<Pcs<P>, Challenge, Challenger<P>>;
+pub type BabyBearPermutationConfig<P> = StarkConfig<Pcs<P>, Challenge, Challenger<P>>;
 
-pub type StarkConfigPoseidon2 = BabyBearPoseidon2Config<Perm>;
+pub type BabyBearPoseidon2Config = BabyBearPermutationConfig<Perm>;
 
 use rand::{rngs::StdRng, SeedableRng};
 
@@ -45,7 +45,7 @@ use super::{
 };
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
-pub fn default_config(perm: &Perm, pcs_log_degree: usize) -> StarkConfigPoseidon2 {
+pub fn default_config(perm: &Perm, pcs_log_degree: usize) -> BabyBearPoseidon2Config {
     // target 100 bits of security, with conjectures:
     let fri_params = FriParameters {
         log_blowup: 4,
@@ -59,7 +59,7 @@ pub fn config_from_perm<P>(
     perm: &P,
     pcs_log_degree: usize,
     fri_params: FriParameters,
-) -> BabyBearPoseidon2Config<P>
+) -> BabyBearPermutationConfig<P>
 where
     P: CryptographicPermutation<[Val; WIDTH]>
         + CryptographicPermutation<[PackedVal; WIDTH]>
@@ -77,7 +77,7 @@ where
         mmcs: challenge_mmcs,
     };
     let pcs = Pcs::new(pcs_log_degree, dft, val_mmcs, fri_config);
-    BabyBearPoseidon2Config::new(pcs)
+    BabyBearPermutationConfig::new(pcs)
 }
 
 pub fn random_perm() -> Perm {

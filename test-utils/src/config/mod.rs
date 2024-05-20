@@ -5,8 +5,8 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry};
 
+pub mod baby_bear_poseidon2;
 pub mod instrument;
-pub mod poseidon2;
 
 pub fn setup_tracing() {
     // Set up tracing:

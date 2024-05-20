@@ -27,9 +27,11 @@ pub fn prove_and_verify_indexless_lookups(
     let [sender_log_degree, receiver_log_degree] =
         [sender_degree, receiver_degree].map(log2_ceil_usize);
 
-    let perm = config::poseidon2::random_perm();
-    let config =
-        config::poseidon2::default_config(&perm, sender_log_degree.max(receiver_log_degree));
+    let perm = config::baby_bear_poseidon2::random_perm();
+    let config = config::baby_bear_poseidon2::default_config(
+        &perm,
+        sender_log_degree.max(receiver_log_degree),
+    );
 
     let sender_air = DummyInteractionAir::new(sender[0].1.len(), true, 0);
     let receiver_air = DummyInteractionAir::new(receiver[0].1.len(), false, 0);
@@ -95,12 +97,12 @@ pub fn prove_and_verify_indexless_lookups(
     let main_trace_data = trace_builder.view(&vk, vec![&receiver_air, &sender_air]);
     let pis = vec![vec![]; 2];
 
-    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
     let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
 
     // Verify the proof:
     // Start from clean challenger
-    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
     let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier.verify(
         &mut challenger,

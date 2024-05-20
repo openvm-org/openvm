@@ -24,8 +24,8 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     let degree = x.len();
     let log_degree = log2_ceil_usize(degree);
 
-    let perm = config::poseidon2::random_perm();
-    let config = config::poseidon2::default_config(&perm, log_degree);
+    let perm = config::baby_bear_poseidon2::random_perm();
+    let config = config::baby_bear_poseidon2::default_config(&perm, log_degree);
 
     let x_trace = RowMajorMatrix::new(x, 1);
     let y_width = ys[0].len();
@@ -53,12 +53,12 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     let main_trace_data = trace_builder.view(&vk, vec![&air]);
     let pis = vec![vec![]];
 
-    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
     let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
 
     // Verify the proof:
     // Start from clean challenger
-    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
     let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier.verify(&mut challenger, vk, vec![&air], proof, &pis)
 }
