@@ -10,8 +10,7 @@ impl<const N: usize> XorRequesterChip<N> {
         for (x, y) in self.requests.iter() {
             let mut row = vec![];
 
-            let mut xor_chip_locked = self.xor_chip.lock().unwrap();
-            let z = xor_chip_locked.request(*x, *y);
+            let z = self.xor_chip.request(*x, *y);
 
             row.push(F::from_canonical_u32(*x));
             row.push(F::from_canonical_u32(*y));

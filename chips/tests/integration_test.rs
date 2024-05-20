@@ -1,7 +1,4 @@
-use std::{
-    iter,
-    sync::{Arc, Mutex},
-};
+use std::{iter, sync::Arc};
 
 use afs_chips::{range, xor};
 use afs_stark_backend::{
@@ -127,7 +124,7 @@ fn test_xor_chip() {
     let seed = [42; 32];
     let mut rng = StdRng::from_seed(seed);
 
-    use xor::XorChip;
+    use xor::XorBitsChip;
     use xor_requester::XorRequesterChip;
 
     let bus_index = 0;
@@ -144,7 +141,7 @@ fn test_xor_chip() {
     let perm = config::poseidon2::random_perm();
     let config = config::poseidon2::default_config(&perm, LOG_XOR_REQUESTS + LOG_NUM_REQUESTERS);
 
-    let xor_chip = Arc::new(Mutex::new(XorChip::<BITS>::new(bus_index, vec![])));
+    let xor_chip = Arc::new(XorBitsChip::<BITS>::new(bus_index, vec![]));
 
     let mut requesters = (0..NUM_REQUESTERS)
         .map(|_| XorRequesterChip::new(bus_index, vec![], Arc::clone(&xor_chip)))
@@ -162,9 +159,7 @@ fn test_xor_chip() {
         keygen_builder.add_air(requester, n, 0);
     }
 
-    let xor_chip_locked = xor_chip.lock().unwrap();
-    keygen_builder.add_air(&*xor_chip_locked, NUM_REQUESTERS * XOR_REQUESTS, 0);
-    drop(xor_chip_locked);
+    keygen_builder.add_air(&*xor_chip, NUM_REQUESTERS * XOR_REQUESTS, 0);
     let pk = keygen_builder.generate_pk();
     let vk = pk.vk();
 
@@ -173,8 +168,7 @@ fn test_xor_chip() {
         .map(|requester| requester.generate_trace())
         .collect::<Vec<DenseMatrix<BabyBear>>>();
 
-    let xor_chip_locked = xor_chip.lock().unwrap();
-    let xor_chip_trace = xor_chip_locked.generate_trace();
+    let xor_chip_trace = xor_chip.generate_trace();
 
     let prover = MultiTraceStarkProver::new(config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.config.pcs());
@@ -189,7 +183,7 @@ fn test_xor_chip() {
         requesters
             .iter()
             .map(|requester| requester as &dyn ProverRap<_>)
-            .chain(iter::once(&*xor_chip_locked as &dyn ProverRap<_>))
+            .chain(iter::once(&*xor_chip as &dyn ProverRap<_>))
             .collect(),
     );
 
@@ -207,7 +201,7 @@ fn test_xor_chip() {
             requesters
                 .iter()
                 .map(|requester| requester as &dyn VerifierRap<_>)
-                .chain(iter::once(&*xor_chip_locked as &dyn VerifierRap<_>))
+                .chain(iter::once(&*xor_chip as &dyn VerifierRap<_>))
                 .collect(),
             proof,
             &pis,
@@ -221,7 +215,7 @@ fn negative_test_xor_chip() {
     let seed = [42; 32];
     let mut rng = StdRng::from_seed(seed);
 
-    use xor::XorChip;
+    use xor::XorBitsChip;
 
     let bus_index = 0;
 
@@ -234,7 +228,7 @@ fn negative_test_xor_chip() {
     let perm = config::poseidon2::random_perm();
     let config = config::poseidon2::default_config(&perm, LOG_XOR_REQUESTS);
 
-    let xor_chip = Arc::new(Mutex::new(XorChip::<BITS>::new(bus_index, vec![])));
+    let xor_chip = Arc::new(XorBitsChip::<BITS>::new(bus_index, vec![]));
 
     let dummy_requester = DummyInteractionAir::new(3, true, 0);
 
@@ -242,21 +236,20 @@ fn negative_test_xor_chip() {
 
     keygen_builder.add_air(&dummy_requester, XOR_REQUESTS, 0);
 
-    let mut xor_chip_locked = xor_chip.lock().unwrap();
-    keygen_builder.add_air(&*xor_chip_locked, XOR_REQUESTS, 0);
+    keygen_builder.add_air(&*xor_chip, XOR_REQUESTS, 0);
 
     let mut reqs = vec![];
     for _ in 0..XOR_REQUESTS {
         let x = rng.gen::<u32>() % MAX;
         let y = rng.gen::<u32>() % MAX;
         reqs.push((1, vec![x, y, x ^ y]));
-        xor_chip_locked.request(x, y);
+        xor_chip.request(x, y);
     }
 
     // Modifying one of the values to send incompatible values
     reqs[0].1[2] = reqs[0].1[2] + 1;
 
-    let xor_chip_trace = xor_chip_locked.generate_trace();
+    let xor_chip_trace = xor_chip.generate_trace();
 
     let pk = keygen_builder.generate_pk();
     let vk = pk.vk();
@@ -275,7 +268,7 @@ fn negative_test_xor_chip() {
     trace_builder.load_trace(xor_chip_trace);
     trace_builder.commit_current();
 
-    let main_trace_data = trace_builder.view(&vk, vec![&dummy_requester, &*xor_chip_locked]);
+    let main_trace_data = trace_builder.view(&vk, vec![&dummy_requester, &*xor_chip]);
 
     let pis = vec![vec![]; vk.per_air.len()];
 
@@ -287,7 +280,7 @@ fn negative_test_xor_chip() {
     let result = verifier.verify(
         &mut challenger,
         vk,
-        vec![&dummy_requester, &*xor_chip_locked],
+        vec![&dummy_requester, &*xor_chip],
         proof,
         &pis,
     );

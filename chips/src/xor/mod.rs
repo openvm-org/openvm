@@ -1,10 +1,10 @@
+use afs_stark_backend::interaction::Interaction;
 use columns::XorCols;
 use p3_air::AirBuilder;
-use p3_field::AbstractField;
-
-use afs_stark_backend::interaction::Interaction;
 use p3_air::VirtualPairCol;
+use p3_field::AbstractField;
 use p3_field::PrimeField64;
+use parking_lot::Mutex;
 
 use self::columns::XorIOCols;
 
@@ -14,15 +14,19 @@ pub mod columns;
 pub mod trace;
 
 #[derive(Default)]
-pub struct XorChip<const N: usize> {
+pub struct XorBitsChip<const N: usize> {
     bus_index: usize,
 
-    pub pairs: Vec<(u32, u32)>,
+    pairs: Mutex<Vec<(u32, u32)>>,
 }
 
-impl<const N: usize> XorChip<N> {
+/// A chip that computes the xor of two numbers of at most N bits each
+impl<const N: usize> XorBitsChip<N> {
     pub fn new(bus_index: usize, pairs: Vec<(u32, u32)>) -> Self {
-        Self { bus_index, pairs }
+        Self {
+            bus_index,
+            pairs: Mutex::new(pairs),
+        }
     }
 
     pub fn bus_index(&self) -> usize {
@@ -33,8 +37,9 @@ impl<const N: usize> XorChip<N> {
         a ^ b
     }
 
-    pub fn request(&mut self, a: u32, b: u32) -> u32 {
-        self.pairs.push((a, b));
+    pub fn request(&self, a: u32, b: u32) -> u32 {
+        let mut pairs_locked = self.pairs.lock();
+        pairs_locked.push((a, b));
         self.calc_xor(a, b)
     }
 

@@ -1,6 +1,6 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use crate::xor::XorChip;
+use crate::xor::XorBitsChip;
 
 pub mod air;
 pub mod chip;
@@ -9,19 +9,15 @@ pub mod trace;
 
 #[derive(Default)]
 pub struct XorRequesterChip<const N: usize> {
-    /// The index for the Range Checker bus.
+    /// The index for the Xor Chip bus.
     bus_index: usize,
     pub requests: Vec<(u32, u32)>,
 
-    xor_chip: Arc<Mutex<XorChip<N>>>,
+    xor_chip: Arc<XorBitsChip<N>>,
 }
 
 impl<const N: usize> XorRequesterChip<N> {
-    pub fn new(
-        bus_index: usize,
-        requests: Vec<(u32, u32)>,
-        xor_chip: Arc<Mutex<XorChip<N>>>,
-    ) -> Self {
+    pub fn new(bus_index: usize, requests: Vec<(u32, u32)>, xor_chip: Arc<XorBitsChip<N>>) -> Self {
         Self {
             bus_index,
             requests,

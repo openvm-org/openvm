@@ -1,14 +1,15 @@
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::{columns::XorCols, XorChip};
+use super::{columns::XorCols, XorBitsChip};
 
-impl<const N: usize> XorChip<N> {
+impl<const N: usize> XorBitsChip<N> {
     pub fn generate_trace<F: PrimeField64>(&self) -> RowMajorMatrix<F> {
         let num_xor_cols: usize = XorCols::<N, F>::get_width();
 
-        let rows = self
-            .pairs
+        let pairs_locked = self.pairs.lock();
+
+        let rows = pairs_locked
             .iter()
             .map(|(x, y)| {
                 let z = self.calc_xor(*x, *y);
