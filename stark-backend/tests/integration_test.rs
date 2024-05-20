@@ -9,7 +9,6 @@ use afs_stark_backend::verifier::MultiTraceStarkVerifier;
 use afs_test_utils::{config, utils};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use p3_uni_stark::StarkGenericConfig;
 
 mod cached_lookup;
 mod fib_air;
@@ -45,8 +44,8 @@ fn test_single_fib_stark() {
 
     let trace = generate_trace_rows::<Val>(a, b, n);
 
-    let prover = MultiTraceStarkProver::new(config);
-    let mut trace_builder = TraceCommitmentBuilder::new(prover.config.pcs());
+    let prover = MultiTraceStarkProver::new(&config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     trace_builder.load_trace(trace);
     trace_builder.commit_current();
 
@@ -92,8 +91,8 @@ fn test_single_fib_triples_stark() {
 
     let trace = generate_trace_rows::<Val>(a, b, n);
 
-    let prover = MultiTraceStarkProver::new(config);
-    let mut trace_builder = TraceCommitmentBuilder::new(prover.config.pcs());
+    let prover = MultiTraceStarkProver::new(&config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     trace_builder.load_trace(trace);
     trace_builder.commit_current();
 
@@ -140,8 +139,8 @@ fn test_single_fib_selector_stark() {
 
     let trace = generate_trace_rows::<Val>(a, b, air.sels());
 
-    let prover = MultiTraceStarkProver::new(config);
-    let mut trace_builder = TraceCommitmentBuilder::new(prover.config.pcs());
+    let prover = MultiTraceStarkProver::new(&config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     trace_builder.load_trace(trace);
     trace_builder.commit_current();
 
@@ -196,8 +195,8 @@ fn test_double_fib_starks() {
     let trace1 = fib_air::trace::generate_trace_rows::<Val>(a, b, n1);
     let trace2 = fib_selector_air::trace::generate_trace_rows::<Val>(a, b, air2.sels());
 
-    let prover = MultiTraceStarkProver::new(config);
-    let mut trace_builder = TraceCommitmentBuilder::new(prover.config.pcs());
+    let prover = MultiTraceStarkProver::new(&config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     trace_builder.load_trace(trace1);
     trace_builder.load_trace(trace2);
     trace_builder.commit_current();

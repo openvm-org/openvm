@@ -19,13 +19,12 @@ use crate::{
 use self::{constraints::verify_single_rap_constraints, types::VerifierRap};
 
 /// Verifies a partitioned proof of multi-matrix AIRs.
-// TODO: Interactions
-pub struct MultiTraceStarkVerifier<SC: StarkGenericConfig> {
-    config: SC,
+pub struct MultiTraceStarkVerifier<'c, SC: StarkGenericConfig> {
+    config: &'c SC,
 }
 
-impl<SC: StarkGenericConfig> MultiTraceStarkVerifier<SC> {
-    pub fn new(config: SC) -> Self {
+impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
+    pub fn new(config: &'c SC) -> Self {
         Self { config }
     }
 

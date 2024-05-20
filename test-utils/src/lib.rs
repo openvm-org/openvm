@@ -5,6 +5,7 @@ use afs_stark_backend::{
 use p3_uni_stark::StarkGenericConfig;
 
 pub mod config;
+pub mod engine;
 pub mod interaction;
 pub mod utils;
 

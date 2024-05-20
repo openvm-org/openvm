@@ -34,25 +34,117 @@ type Dft = Radix2DitParallel;
 type Pcs<P> = TwoAdicFriPcs<Val, Dft, ValMmcs<P>, ChallengeMmcs<P>>;
 
 pub type BabyBearPermutationConfig<P> = StarkConfig<Pcs<P>, Challenge, Challenger<P>>;
-
 pub type BabyBearPoseidon2Config = BabyBearPermutationConfig<Perm>;
+pub type BabyBearPoseidon2Engine = BabyBearPermutationEngine<Perm>;
 
 use rand::{rngs::StdRng, SeedableRng};
 
+use crate::engine::{StarkEngine, StarkEngineWithHashInstrumentation};
+
 use super::{
-    instrument::{InstrumentCounter, Instrumented},
+    instrument::{HashStatistics, InstrumentCounter, Instrumented, StarkHashStatistics},
     FriParameters,
 };
+
+pub struct BabyBearPermutationEngine<P>
+where
+    P: CryptographicPermutation<[Val; WIDTH]>
+        + CryptographicPermutation<[PackedVal; WIDTH]>
+        + Clone,
+{
+    fri_params: FriParameters,
+    pub config: BabyBearPermutationConfig<P>,
+    pub perm: P,
+}
+
+impl<P> StarkEngine<BabyBearPermutationConfig<P>> for BabyBearPermutationEngine<P>
+where
+    P: CryptographicPermutation<[Val; WIDTH]>
+        + CryptographicPermutation<[PackedVal; WIDTH]>
+        + Clone,
+{
+    fn config(&self) -> &BabyBearPermutationConfig<P> {
+        &self.config
+    }
+
+    fn new_challenger(&self) -> Challenger<P> {
+        Challenger::new(self.perm.clone())
+    }
+}
+
+impl<P> StarkEngineWithHashInstrumentation<BabyBearPermutationConfig<Instrumented<P>>>
+    for BabyBearPermutationEngine<Instrumented<P>>
+where
+    P: CryptographicPermutation<[Val; WIDTH]>
+        + CryptographicPermutation<[PackedVal; WIDTH]>
+        + Clone,
+{
+    fn clear_instruments(&mut self) {
+        self.perm.input_lens_by_type.lock().unwrap().clear();
+    }
+    fn stark_hash_statistics<T>(&self, custom: T) -> StarkHashStatistics<T> {
+        let counter = self.perm.input_lens_by_type.lock().unwrap();
+        let permutations = counter.iter().fold(0, |total, (name, lens)| {
+            if name == type_name::<[Val; WIDTH]>() {
+                let count: usize = lens.iter().sum();
+                println!("Permutation: {name}, Count: {count}");
+                total + count
+            } else {
+                panic!("Permutation type not yet supported: {}", name);
+            }
+        });
+
+        StarkHashStatistics {
+            name: type_name::<P>().to_string(),
+            stats: HashStatistics { permutations },
+            fri_params: self.fri_params,
+            custom,
+        }
+    }
+}
+
+pub fn default_engine(pcs_log_degree: usize) -> BabyBearPoseidon2Engine {
+    let perm = random_perm();
+    let config = default_config(&perm, pcs_log_degree);
+    let fri_params = default_fri_params();
+    BabyBearPermutationEngine {
+        config,
+        perm,
+        fri_params,
+    }
+}
+
+fn default_fri_params() -> FriParameters {
+    FriParameters {
+        log_blowup: 4,
+        num_queries: 55,
+        proof_of_work_bits: 0,
+    }
+}
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
 pub fn default_config(perm: &Perm, pcs_log_degree: usize) -> BabyBearPoseidon2Config {
     // target 100 bits of security, with conjectures:
-    let fri_params = FriParameters {
-        log_blowup: 4,
-        num_queries: 55,
-        proof_of_work_bits: 0,
-    };
+    let fri_params = default_fri_params();
     config_from_perm(perm, pcs_log_degree, fri_params)
+}
+
+pub fn engine_from_perm<P>(
+    perm: P,
+    pcs_log_degree: usize,
+    fri_params: FriParameters,
+) -> BabyBearPermutationEngine<P>
+where
+    P: CryptographicPermutation<[Val; WIDTH]>
+        + CryptographicPermutation<[PackedVal; WIDTH]>
+        + Clone,
+{
+    let config = config_from_perm(&perm, pcs_log_degree, fri_params);
+    BabyBearPermutationEngine {
+        config,
+        perm,
+        fri_params,
+    }
 }
 
 pub fn config_from_perm<P>(
@@ -129,17 +221,4 @@ pub fn print_hash_counts(hash_counter: &InstrumentCounter, compress_counter: &In
     });
     let total_count = hash_count + compress_count;
     println!("Total Count: {total_count}");
-}
-
-pub fn get_perm_count(perm: &InstrPerm) -> usize {
-    let counter = perm.input_lens_by_type.lock().unwrap();
-    counter.iter().fold(0, |total, (name, lens)| {
-        if name == type_name::<[Val; WIDTH]>() {
-            let count: usize = lens.iter().sum();
-            println!("Permutation: {name}, Count: {count}");
-            total + count
-        } else {
-            panic!("Permutation type not yet supported: {}", name);
-        }
-    })
 }

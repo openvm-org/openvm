@@ -37,12 +37,12 @@ thread_local! {
 
 /// Proves multiple chips with interactions together.
 /// This prover implementation is specialized for Interactive AIRs.
-pub struct MultiTraceStarkProver<SC: StarkGenericConfig> {
-    pub config: SC,
+pub struct MultiTraceStarkProver<'c, SC: StarkGenericConfig> {
+    pub config: &'c SC,
 }
 
-impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
-    pub fn new(config: SC) -> Self {
+impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
+    pub fn new(config: &'c SC) -> Self {
         Self { config }
     }
 

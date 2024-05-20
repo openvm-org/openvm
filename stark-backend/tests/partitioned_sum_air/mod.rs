@@ -40,7 +40,7 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     let pk = keygen_builder.generate_pk();
     let vk = pk.vk();
 
-    let prover = MultiTraceStarkProver::new(config);
+    let prover = MultiTraceStarkProver::new(&config);
     // Must add trace matrices in the same order as above
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     // Demonstrate y is cached

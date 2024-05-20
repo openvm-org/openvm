@@ -35,7 +35,7 @@ pub fn verify_interactions(
     let pk = keygen_builder.generate_pk();
     let vk = pk.vk();
 
-    let prover = MultiTraceStarkProver::new(config);
+    let prover = MultiTraceStarkProver::new(&config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     for trace in traces {
         trace_builder.load_trace(trace);

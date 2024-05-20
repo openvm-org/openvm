@@ -4,41 +4,52 @@ use std::{
 };
 
 use afs_stark_backend::{
-    keygen::MultiStarkKeygenBuilder,
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
-    verifier::MultiTraceStarkVerifier,
+    config::{Com, PcsProof, PcsProverData},
+    keygen::types::MultiStarkVerifyingKey,
+    prover::{trace::TraceCommitmentBuilder, types::Proof},
 };
 
-use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
-use p3_baby_bear::BabyBear;
+use afs_test_utils::{
+    config::baby_bear_poseidon2::{self, engine_from_perm},
+    engine::{StarkEngine, StarkEngineWithHashInstrumentation},
+    interaction::dummy_interaction_air::DummyInteractionAir,
+};
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use p3_util::log2_ceil_usize;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
 use crate::config::{
-    self,
-    baby_bear_poseidon2::get_perm_count,
     instrument::{HashStatistics, StarkHashStatistics},
     FriParameters,
 };
 
-type Val = BabyBear;
+// type Val = BabyBear;
 
 // Lookup table is cached, everything else (including counts) is committed together
-fn prove_and_verify(
-    fri_params: FriParameters,
+#[allow(clippy::type_complexity)]
+fn prove<SC: StarkGenericConfig, E: StarkEngine<SC>>(
+    engine: &E,
     trace: Vec<(u32, Vec<u32>)>,
     partition: bool,
-) -> StarkHashStatistics<BenchParams> {
+) -> (
+    MultiStarkVerifyingKey<SC>,
+    DummyInteractionAir,
+    Proof<SC>,
+    Vec<Vec<Val<SC>>>,
+)
+where
+    SC::Pcs: Sync,
+    Domain<SC>: Send + Sync,
+    PcsProverData<SC>: Send + Sync,
+    Com<SC>: Send + Sync,
+    SC::Challenge: Send + Sync,
+    PcsProof<SC>: Send + Sync,
+{
     // tracing_setup();
     let degree = trace.len();
-    let log_degree = log2_ceil_usize(degree);
-
-    let mut perm = config::baby_bear_poseidon2::random_instrumented_perm();
-    perm.is_on = false;
-    let config = config::baby_bear_poseidon2::config_from_perm(&perm, log_degree, fri_params);
 
     let air = DummyInteractionAir::new(trace[0].1.len(), false, 0);
 
@@ -51,13 +62,15 @@ fn prove_and_verify(
                 assert_eq!(fields.len(), air.field_width());
                 iter::once(count).chain(fields)
             })
-            .map(Val::from_wrapped_u32)
+            .map(Val::<SC>::from_wrapped_u32)
             .collect(),
         air.field_width() + 1,
     );
     let (count, fields): (Vec<_>, Vec<_>) = trace.into_iter().unzip();
-    let part_count_trace =
-        RowMajorMatrix::new(count.into_iter().map(Val::from_wrapped_u32).collect(), 1);
+    let part_count_trace = RowMajorMatrix::new(
+        count.into_iter().map(Val::<SC>::from_wrapped_u32).collect(),
+        1,
+    );
     let part_fields_trace = RowMajorMatrix::new(
         fields
             .into_iter()
@@ -65,12 +78,12 @@ fn prove_and_verify(
                 assert_eq!(fields.len(), air.field_width());
                 fields
             })
-            .map(Val::from_wrapped_u32)
+            .map(Val::<SC>::from_wrapped_u32)
             .collect(),
         air.field_width(),
     );
 
-    let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
+    let mut keygen_builder = engine.keygen_builder();
     if partition {
         let fields_ptr = keygen_builder.add_cached_main_matrix(air.field_width());
         let count_ptr = keygen_builder.add_main_matrix(1);
@@ -81,7 +94,7 @@ fn prove_and_verify(
     let pk = keygen_builder.generate_pk();
     let vk = pk.vk();
 
-    let prover = MultiTraceStarkProver::new(config);
+    let prover = engine.prover();
     // Must add trace matrices in the same order as above
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     if partition {
@@ -99,30 +112,35 @@ fn prove_and_verify(
     let main_trace_data = trace_builder.view(&vk, vec![&air]);
     let pis = vec![vec![]];
 
-    let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
+    let mut challenger = engine.new_challenger();
     let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
 
-    perm.input_lens_by_type.lock().unwrap().clear();
-    perm.is_on = true;
-    let instr_config = config::baby_bear_poseidon2::config_from_perm(&perm, log_degree, fri_params);
-    let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
-    let verifier = MultiTraceStarkVerifier::new(instr_config);
+    (vk, air, proof, pis)
+}
+
+fn instrumented_verify<SC: StarkGenericConfig, E: StarkEngineWithHashInstrumentation<SC>>(
+    engine: &mut E,
+    vk: MultiStarkVerifyingKey<SC>,
+    air: DummyInteractionAir,
+    proof: Proof<SC>,
+    pis: Vec<Vec<Val<SC>>>,
+) -> StarkHashStatistics<BenchParams> {
+    let degree = vk.per_air[0].degree;
+    let log_degree = log2_ceil_usize(degree);
+
+    engine.clear_instruments();
+    let mut challenger = engine.new_challenger();
+    let verifier = engine.verifier();
     // Do not check cumulative sum
     verifier
         .verify_raps(&mut challenger, vk, vec![&air], proof, &pis)
         .unwrap();
 
-    let permutations = get_perm_count(&perm);
-
-    StarkHashStatistics {
-        name: "Poseidon2Perm16".to_string(),
-        stats: HashStatistics { permutations },
-        fri_params,
-        custom: BenchParams {
-            field_width: air.field_width(),
-            log_degree,
-        },
-    }
+    let bench_params = BenchParams {
+        field_width: air.field_width(),
+        log_degree,
+    };
+    engine.stark_hash_statistics(bench_params)
 }
 
 fn generate_random_trace(
@@ -156,7 +174,23 @@ pub struct VerifierStatistics {
     pub with_ct: HashStatistics,
 }
 
-fn bench_comparison(
+fn instrumented_prove_and_verify(
+    fri_params: FriParameters,
+    trace: Vec<(u32, Vec<u32>)>,
+    partition: bool,
+) -> StarkHashStatistics<BenchParams> {
+    let instr_perm = baby_bear_poseidon2::random_instrumented_perm();
+    let degree = trace.len();
+    let pcs_log_degree = log2_ceil_usize(degree);
+    let mut engine = engine_from_perm(instr_perm, pcs_log_degree, fri_params);
+    engine.perm.is_on = false;
+
+    let (vk, air, proof, pis) = prove(&engine, trace, partition);
+    engine.perm.is_on = true;
+    instrumented_verify(&mut engine, vk, air, proof, pis)
+}
+
+fn instrumented_verifier_comparison(
     fri_params: FriParameters,
     field_width: usize,
     log_degree: usize,
@@ -164,10 +198,10 @@ fn bench_comparison(
     let rng = StdRng::seed_from_u64(0);
     let trace = generate_random_trace(rng, field_width, 1 << log_degree);
     println!("Without cached trace:");
-    let without_ct = prove_and_verify(fri_params, trace.clone(), false);
+    let without_ct = instrumented_prove_and_verify(fri_params, trace.clone(), false);
 
     println!("With cached trace:");
-    let with_ct = prove_and_verify(fri_params, trace, true);
+    let with_ct = instrumented_prove_and_verify(fri_params, trace, true);
 
     VerifierStatistics {
         name: without_ct.name,
@@ -243,7 +277,7 @@ fn instrument_cached_trace_verifier() -> eyre::Result<()> {
     let mut all_stats = vec![];
     for fri_param in fri_params {
         for (field_width, log_degree) in &data_sizes {
-            let stats = bench_comparison(fri_param, *field_width, *log_degree);
+            let stats = instrumented_verifier_comparison(fri_param, *field_width, *log_degree);
             wtr.serialize(&stats)?;
             wtr.flush()?;
             all_stats.push(stats);

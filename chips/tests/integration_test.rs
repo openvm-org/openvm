@@ -73,7 +73,7 @@ fn test_list_range_checker() {
 
     let range_trace = range_checker.generate_trace();
 
-    let prover = MultiTraceStarkProver::new(config);
+    let prover = MultiTraceStarkProver::new(&config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     for trace in lists_traces {
         trace_builder.load_trace(trace)
