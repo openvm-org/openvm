@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::xor::XorBitsChip;
+use crate::xor_bits::XorBitsChip;
 
 pub mod air;
 pub mod chip;
