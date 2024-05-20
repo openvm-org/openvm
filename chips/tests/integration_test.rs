@@ -1,6 +1,6 @@
 use std::{iter, sync::Arc};
 
-use afs_chips::{range, xor};
+use afs_chips::{range, xor_bits};
 use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
     prover::{trace::TraceCommitmentBuilder, types::ProverRap, MultiTraceStarkProver},
@@ -124,7 +124,7 @@ fn test_xor_chip() {
     let seed = [42; 32];
     let mut rng = StdRng::from_seed(seed);
 
-    use xor::XorBitsChip;
+    use xor_bits::XorBitsChip;
     use xor_requester::XorRequesterChip;
 
     let bus_index = 0;
@@ -215,7 +215,7 @@ fn negative_test_xor_chip() {
     let seed = [42; 32];
     let mut rng = StdRng::from_seed(seed);
 
-    use xor::XorBitsChip;
+    use xor_bits::XorBitsChip;
 
     let bus_index = 0;
 
