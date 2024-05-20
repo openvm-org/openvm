@@ -1,35 +1,22 @@
 #![feature(trait_upcasting)]
 #![allow(incomplete_features)]
 
-use afs_stark_backend::keygen::types::SymbolicRap;
 use afs_stark_backend::keygen::MultiStarkKeygenBuilder;
 use afs_stark_backend::prover::trace::TraceCommitmentBuilder;
-use afs_stark_backend::prover::types::ProverRap;
 use afs_stark_backend::prover::MultiTraceStarkProver;
-use afs_stark_backend::verifier::types::VerifierRap;
 use afs_stark_backend::verifier::MultiTraceStarkVerifier;
+/// Test utils
+use afs_test_utils::{config, utils};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_uni_stark::StarkGenericConfig;
 
 mod cached_lookup;
-mod config;
 mod fib_air;
 mod fib_selector_air;
 mod fib_triples_air;
 pub mod interaction;
 mod partitioned_sum_air;
-/// Test utils
-mod utils;
-
-trait ProverVerifierRap<SC: StarkGenericConfig>:
-    ProverRap<SC> + VerifierRap<SC> + SymbolicRap<SC>
-{
-}
-impl<SC: StarkGenericConfig, RAP: ProverRap<SC> + VerifierRap<SC> + SymbolicRap<SC>>
-    ProverVerifierRap<SC> for RAP
-{
-}
 
 #[test]
 fn test_single_fib_stark() {

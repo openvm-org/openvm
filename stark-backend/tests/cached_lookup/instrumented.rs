@@ -9,6 +9,7 @@ use afs_stark_backend::{
     verifier::MultiTraceStarkVerifier,
 };
 
+use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
@@ -16,14 +17,11 @@ use p3_util::log2_ceil_usize;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    config::{
-        self,
-        instrument::{HashStatistics, StarkHashStatistics},
-        poseidon2::get_perm_count,
-        FriParameters,
-    },
-    interaction::dummy_interaction_air::DummyInteractionAir,
+use crate::config::{
+    self,
+    instrument::{HashStatistics, StarkHashStatistics},
+    poseidon2::get_perm_count,
+    FriParameters,
 };
 
 type Val = BabyBear;

@@ -5,19 +5,20 @@ use afs_stark_backend::{
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
     verifier::{MultiTraceStarkVerifier, VerificationError},
 };
+use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_util::log2_ceil_usize;
 
-use crate::{config, interaction::dummy_interaction_air::DummyInteractionAir};
+use crate::config;
 
 mod instrumented;
 
 type Val = BabyBear;
 
 // Lookup table is cached, everything else (including counts) is committed together
-fn prove_and_verify_indexless_lookups(
+pub fn prove_and_verify_indexless_lookups(
     sender: Vec<(u32, Vec<u32>)>,
     receiver: Vec<(u32, Vec<u32>)>,
 ) -> Result<(), VerificationError> {
@@ -110,6 +111,7 @@ fn prove_and_verify_indexless_lookups(
     )
 }
 
+/// tests for cached_lookup
 #[test]
 fn test_interaction_cached_trace_happy_path() {
     // count fields

@@ -1,3 +1,8 @@
+use std::{iter, sync::Arc};
+
+use rand::{rngs::StdRng, SeedableRng};
+
+use afs_chips::range;
 use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
     prover::{trace::TraceCommitmentBuilder, types::ProverRap, MultiTraceStarkProver},
@@ -8,14 +13,8 @@ use p3_matrix::dense::DenseMatrix;
 use p3_maybe_rayon::prelude::IntoParallelRefIterator;
 use p3_uni_stark::StarkGenericConfig;
 
-use std::{iter, sync::Arc};
-
-use afs_chips::range;
-mod list;
-
 mod config;
-
-use rand::{rngs::StdRng, SeedableRng};
+mod list;
 
 #[test]
 fn test_list_range_checker() {

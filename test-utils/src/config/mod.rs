@@ -8,8 +8,7 @@ use tracing_subscriber::{EnvFilter, Registry};
 pub mod instrument;
 pub mod poseidon2;
 
-#[allow(unused)]
-pub fn tracing_setup() {
+pub fn setup_tracing() {
     // Set up tracing:
     let env_filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::INFO.into())

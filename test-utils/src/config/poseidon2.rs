@@ -46,10 +46,11 @@ use super::{
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
 pub fn default_config(perm: &Perm, pcs_log_degree: usize) -> StarkConfigPoseidon2 {
+    // target 100 bits of security, with conjectures:
     let fri_params = FriParameters {
-        log_blowup: 1,
-        num_queries: 100,
-        proof_of_work_bits: 16,
+        log_blowup: 4,
+        num_queries: 55,
+        proof_of_work_bits: 0,
     };
     config_from_perm(perm, pcs_log_degree, fri_params)
 }

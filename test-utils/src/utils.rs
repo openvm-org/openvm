@@ -2,6 +2,20 @@ use itertools::Itertools;
 use p3_field::AbstractField;
 use rand::Rng;
 
+use afs_stark_backend::keygen::types::SymbolicRap;
+use afs_stark_backend::prover::types::ProverRap;
+use afs_stark_backend::verifier::types::VerifierRap;
+use p3_uni_stark::StarkGenericConfig;
+
+pub trait ProverVerifierRap<SC: StarkGenericConfig>:
+    ProverRap<SC> + VerifierRap<SC> + SymbolicRap<SC>
+{
+}
+impl<SC: StarkGenericConfig, RAP: ProverRap<SC> + VerifierRap<SC> + SymbolicRap<SC>>
+    ProverVerifierRap<SC> for RAP
+{
+}
+
 // Returns row major matrix
 pub fn generate_random_matrix<F: AbstractField>(
     mut rng: impl Rng,
