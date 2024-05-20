@@ -7,7 +7,8 @@ impl<const N: usize> XorBitsChip<N> {
     pub fn generate_trace<F: PrimeField64>(&self) -> RowMajorMatrix<F> {
         let num_xor_cols: usize = XorCols::<N, F>::get_width();
 
-        let pairs_locked = self.pairs.lock();
+        let mut pairs_locked = self.pairs.lock();
+        pairs_locked.sort();
 
         let rows = pairs_locked
             .iter()

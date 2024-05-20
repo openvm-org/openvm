@@ -14,13 +14,14 @@ pub mod columns;
 pub mod trace;
 
 #[derive(Default)]
+/// A chip that computes the xor of two numbers of at most N bits each
 pub struct XorBitsChip<const N: usize> {
     bus_index: usize,
 
+    /// List of all requests sent to the chip
     pairs: Mutex<Vec<(u32, u32)>>,
 }
 
-/// A chip that computes the xor of two numbers of at most N bits each
 impl<const N: usize> XorBitsChip<N> {
     pub fn new(bus_index: usize, pairs: Vec<(u32, u32)>) -> Self {
         Self {
