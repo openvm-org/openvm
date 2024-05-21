@@ -10,6 +10,9 @@ pub mod chip;
 pub mod columns;
 pub mod trace;
 
+/// This chip gets requests to compute the xor of two numbers x and y of at most N bits.
+/// It breaks down those numbers into limbs of at most M bits each, and computes the xor of
+/// those limbs by communicating with the `XorLookupChip`.
 #[derive(Default)]
 pub struct XorLimbsChip<const N: usize, const M: usize> {
     bus_index: usize,
