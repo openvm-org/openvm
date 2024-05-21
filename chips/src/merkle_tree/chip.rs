@@ -1,4 +1,4 @@
-use afs_middleware::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{Chip, Interaction};
 use p3_field::PrimeField32;
 
 use super::MerkleTreeChip;

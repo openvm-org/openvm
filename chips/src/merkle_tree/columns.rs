@@ -1,4 +1,4 @@
-use afs_middleware_derive::AlignedBorrow;
+use afs_derive::AlignedBorrow;
 use core::mem::{size_of, transmute};
 use p3_util::indices_arr;
 
