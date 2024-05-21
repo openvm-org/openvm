@@ -14,6 +14,7 @@ use p3_util::log2_ceil_usize;
 use crate::config;
 
 mod instrumented;
+pub mod prove;
 
 type Val = BabyBear;
 

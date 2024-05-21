@@ -6,6 +6,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry};
 
 pub mod baby_bear_poseidon2;
+pub mod fri_params;
 pub mod instrument;
 
 pub fn setup_tracing() {
