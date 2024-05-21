@@ -1,6 +1,6 @@
 use std::{iter, sync::Arc};
 
-use afs_chips::{range, xor_bits};
+use afs_chips::{range, range_gate, xor_bits};
 use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
     prover::{trace::TraceCommitmentBuilder, types::ProverRap, MultiTraceStarkProver},
@@ -57,7 +57,7 @@ fn test_list_range_checker() {
         })
         .collect::<Vec<Vec<u32>>>();
 
-    // define a bnach of ListChips
+    // define a bunch of ListChips
     let lists = lists_vals
         .iter()
         .map(|vals| ListChip::new(bus_index, vals.to_vec(), Arc::clone(&range_checker)))
@@ -290,4 +290,107 @@ fn negative_test_xor_chip() {
         Err(VerificationError::NonZeroCumulativeSum),
         "Expected verification to fail, but it passed"
     );
+}
+
+#[test]
+fn test_range_gate_chip() {
+    use rand::Rng;
+    let seed = [42; 32];
+    let mut rng = StdRng::from_seed(seed);
+
+    use range_gate::RangeCheckerGateChip;
+
+    let bus_index = 0;
+
+    const N: usize = 3;
+    const MAX: u32 = 1 << N;
+
+    const LOG_LIST_LEN: usize = 6;
+    const LIST_LEN: usize = 1 << LOG_LIST_LEN;
+
+    let log_trace_degree_max: usize = std::cmp::max(N, LOG_LIST_LEN);
+
+    let perm = config::poseidon2::random_perm();
+    let config = config::poseidon2::default_config(&perm, log_trace_degree_max);
+
+    let range_checker = RangeCheckerGateChip::<MAX>::new(bus_index);
+
+    // Generating random lists
+    let num_lists = 10;
+    let lists_vals = (0..num_lists)
+        .map(|_| {
+            (0..LIST_LEN)
+                .map(|_| rng.gen::<u32>() % MAX)
+                .collect::<Vec<u32>>()
+        })
+        .collect::<Vec<Vec<u32>>>();
+
+    let lists = (0..num_lists)
+        .map(|_| DummyInteractionAir::new(1, true, bus_index))
+        .collect::<Vec<DummyInteractionAir>>();
+
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
+    for list in &lists {
+        keygen_builder.add_air(list, LIST_LEN, 0);
+    }
+    keygen_builder.add_air(&range_checker, MAX as usize, 0);
+    let pk = keygen_builder.generate_pk();
+    let vk = pk.vk();
+
+    let lists_traces = lists_vals
+        .par_iter()
+        .map(|list| {
+            RowMajorMatrix::new(
+                list.clone()
+                    .into_iter()
+                    .flat_map(|v| {
+                        range_checker.add_count(v);
+                        iter::once(1).chain(iter::once(v))
+                    })
+                    .map(Val::from_wrapped_u32)
+                    .collect(),
+                2,
+            )
+        })
+        .collect::<Vec<DenseMatrix<BabyBear>>>();
+
+    let range_trace = range_checker.generate_trace();
+
+    let prover = MultiTraceStarkProver::new(config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.config.pcs());
+    for trace in lists_traces {
+        trace_builder.load_trace(trace)
+    }
+    trace_builder.load_trace(range_trace);
+    trace_builder.commit_current();
+
+    let main_trace_data = trace_builder.view(
+        &vk,
+        lists
+            .iter()
+            .map(|list| list as &dyn ProverRap<_>)
+            .chain(iter::once(&range_checker as &dyn ProverRap<_>))
+            .collect(),
+    );
+
+    let pis = vec![vec![]; vk.per_air.len()];
+
+    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
+
+    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let verifier = MultiTraceStarkVerifier::new(prover.config);
+    verifier
+        .verify(
+            &mut challenger,
+            vk,
+            lists
+                .iter()
+                .map(|list| list as &dyn VerifierRap<_>)
+                .chain(iter::once(&range_checker as &dyn VerifierRap<_>))
+                .collect(),
+            proof,
+            &pis,
+        )
+        .expect("Verification failed");
 }
