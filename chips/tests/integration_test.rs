@@ -1,6 +1,6 @@
 use std::{iter, sync::Arc};
 
-use afs_chips::{range, xor_bits};
+use afs_chips::{range, xor_bits, xor_limbs};
 use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
     prover::{trace::TraceCommitmentBuilder, types::ProverRap, MultiTraceStarkProver},
@@ -57,7 +57,7 @@ fn test_list_range_checker() {
         })
         .collect::<Vec<Vec<u32>>>();
 
-    // define a bnach of ListChips
+    // define a bunch of ListChips
     let lists = lists_vals
         .iter()
         .map(|vals| ListChip::new(bus_index, vals.to_vec(), Arc::clone(&range_checker)))
@@ -119,7 +119,7 @@ fn test_list_range_checker() {
 }
 
 #[test]
-fn test_xor_chip() {
+fn test_xor_bits_chip() {
     use rand::Rng;
     let seed = [42; 32];
     let mut rng = StdRng::from_seed(seed);
@@ -210,7 +210,7 @@ fn test_xor_chip() {
 }
 
 #[test]
-fn negative_test_xor_chip() {
+fn negative_test_xor_bits_chip() {
     use rand::Rng;
     let seed = [42; 32];
     let mut rng = StdRng::from_seed(seed);
@@ -235,7 +235,6 @@ fn negative_test_xor_chip() {
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
 
     keygen_builder.add_air(&dummy_requester, XOR_REQUESTS, 0);
-
     keygen_builder.add_air(&*xor_chip, XOR_REQUESTS, 0);
 
     let mut reqs = vec![];
@@ -247,7 +246,7 @@ fn negative_test_xor_chip() {
     }
 
     // Modifying one of the values to send incompatible values
-    reqs[0].1[2] = reqs[0].1[2] + 1;
+    reqs[0].1[2] += 1;
 
     let xor_chip_trace = xor_chip.generate_trace();
 
@@ -281,6 +280,230 @@ fn negative_test_xor_chip() {
         &mut challenger,
         vk,
         vec![&dummy_requester, &*xor_chip],
+        proof,
+        &pis,
+    );
+
+    assert_eq!(
+        result,
+        Err(VerificationError::NonZeroCumulativeSum),
+        "Expected verification to fail, but it passed"
+    );
+}
+
+#[test]
+fn test_xor_limbs_chip() {
+    use rand::Rng;
+    let seed = [42; 32];
+    let mut rng = StdRng::from_seed(seed);
+
+    use xor_limbs::XorLimbsChip;
+
+    let bus_index = 0;
+
+    const N: usize = 6;
+    const MAX_INPUT: u32 = 1 << N;
+
+    const M: usize = 2;
+    const MAX_LIMB: usize = 1 << M;
+
+    const LOG_XOR_REQUESTS: usize = 1;
+    const XOR_REQUESTS: usize = 1 << LOG_XOR_REQUESTS;
+
+    const LOG_NUM_REQUESTERS: usize = 2;
+    const NUM_REQUESTERS: usize = 1 << LOG_NUM_REQUESTERS;
+
+    let perm = config::poseidon2::random_perm();
+    let config = config::poseidon2::default_config(&perm, std::cmp::max(LOG_XOR_REQUESTS, M + M));
+
+    let xor_chip = XorLimbsChip::<N, M>::new(bus_index, vec![]);
+
+    let requesters_lists = (0..NUM_REQUESTERS)
+        .map(|_| {
+            (0..XOR_REQUESTS)
+                .map(|_| {
+                    let x = rng.gen::<u32>() % MAX_INPUT;
+                    let y = rng.gen::<u32>() % MAX_INPUT;
+
+                    (1, vec![x, y])
+                })
+                .collect::<Vec<(u32, Vec<u32>)>>()
+        })
+        .collect::<Vec<Vec<(u32, Vec<u32>)>>>();
+
+    let requesters = (0..NUM_REQUESTERS)
+        .map(|_| DummyInteractionAir::new(3, true, 0))
+        .collect::<Vec<DummyInteractionAir>>();
+
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
+
+    for i in 0..NUM_REQUESTERS {
+        keygen_builder.add_air(&requesters[i], requesters_lists[i].len(), 0);
+    }
+    keygen_builder.add_air(&xor_chip, NUM_REQUESTERS * XOR_REQUESTS, 0);
+    keygen_builder.add_air(&xor_chip.xor_lookup_chip, MAX_LIMB * MAX_LIMB, 0);
+
+    let pk = keygen_builder.generate_pk();
+    let vk = pk.vk();
+
+    let requesters_traces = requesters_lists
+        .par_iter()
+        .map(|list| {
+            RowMajorMatrix::new(
+                list.clone()
+                    .into_iter()
+                    .flat_map(|(count, fields)| {
+                        let x = fields[0];
+                        let y = fields[1];
+                        let z = xor_chip.request(x, y);
+                        iter::once(count).chain(fields).chain(iter::once(z))
+                    })
+                    .map(Val::from_wrapped_u32)
+                    .collect(),
+                4,
+            )
+        })
+        .collect::<Vec<DenseMatrix<BabyBear>>>();
+
+    let xor_limbs_chip_trace = xor_chip.generate_trace();
+    let xor_lookup_chip_trace = xor_chip.xor_lookup_chip.generate_trace();
+
+    let prover = MultiTraceStarkProver::new(config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.config.pcs());
+
+    for trace in requesters_traces {
+        trace_builder.load_trace(trace);
+    }
+    trace_builder.load_trace(xor_limbs_chip_trace);
+    trace_builder.load_trace(xor_lookup_chip_trace);
+
+    trace_builder.commit_current();
+
+    let main_trace_data = trace_builder.view(
+        &vk,
+        requesters
+            .iter()
+            .map(|requester| requester as &dyn ProverRap<_>)
+            .chain(iter::once(&xor_chip as &dyn ProverRap<_>))
+            .chain(iter::once(&xor_chip.xor_lookup_chip as &dyn ProverRap<_>))
+            .collect(),
+    );
+
+    let pis = vec![vec![]; vk.per_air.len()];
+
+    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
+
+    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let verifier = MultiTraceStarkVerifier::new(prover.config);
+    verifier
+        .verify(
+            &mut challenger,
+            vk,
+            requesters
+                .iter()
+                .map(|requester| requester as &dyn VerifierRap<_>)
+                .chain(iter::once(&xor_chip as &dyn VerifierRap<_>))
+                .chain(iter::once(&xor_chip.xor_lookup_chip as &dyn VerifierRap<_>))
+                .collect(),
+            proof,
+            &pis,
+        )
+        .expect("Verification failed");
+}
+
+#[test]
+fn negative_test_xor_limbs_chip() {
+    use rand::Rng;
+    let seed = [42; 32];
+    let mut rng = StdRng::from_seed(seed);
+
+    use xor_limbs::XorLimbsChip;
+
+    let bus_index = 0;
+
+    const N: usize = 6;
+    const MAX_INPUT: u32 = 1 << N;
+
+    const M: usize = 2;
+    const MAX_LIMB: usize = 1 << M;
+
+    const LOG_XOR_REQUESTS: usize = 1;
+    const XOR_REQUESTS: usize = 1 << LOG_XOR_REQUESTS;
+
+    let perm = config::poseidon2::random_perm();
+    let config = config::poseidon2::default_config(&perm, std::cmp::max(LOG_XOR_REQUESTS, M + M));
+
+    let xor_chip = XorLimbsChip::<N, M>::new(bus_index, vec![]);
+
+    let pairs = (0..XOR_REQUESTS)
+        .map(|_| {
+            let x = rng.gen::<u32>() % MAX_INPUT;
+            let y = rng.gen::<u32>() % MAX_INPUT;
+
+            (1, vec![x, y])
+        })
+        .collect::<Vec<(u32, Vec<u32>)>>();
+
+    let requester = DummyInteractionAir::new(3, true, 0);
+
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
+
+    keygen_builder.add_air(&requester, pairs.len(), 0);
+    keygen_builder.add_air(&xor_chip, pairs.len(), 0);
+    keygen_builder.add_air(&xor_chip.xor_lookup_chip, MAX_LIMB * MAX_LIMB, 0);
+
+    let pk = keygen_builder.generate_pk();
+    let vk = pk.vk();
+
+    let requester_trace = RowMajorMatrix::new(
+        pairs
+            .clone()
+            .into_iter()
+            .enumerate()
+            .flat_map(|(index, (count, fields))| {
+                let x = fields[0];
+                let y = fields[1];
+                let z = xor_chip.request(x, y);
+
+                if index == 0 {
+                    // Modifying one of the values to send incompatible values
+                    iter::once(count).chain(fields).chain(iter::once(z + 1))
+                } else {
+                    iter::once(count).chain(fields).chain(iter::once(z))
+                }
+            })
+            .map(Val::from_wrapped_u32)
+            .collect(),
+        4,
+    );
+
+    let xor_limbs_chip_trace = xor_chip.generate_trace();
+    let xor_lookup_chip_trace = xor_chip.xor_lookup_chip.generate_trace();
+
+    let prover = MultiTraceStarkProver::new(config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.config.pcs());
+
+    trace_builder.load_trace(requester_trace);
+    trace_builder.load_trace(xor_limbs_chip_trace);
+    trace_builder.load_trace(xor_lookup_chip_trace);
+
+    trace_builder.commit_current();
+
+    let main_trace_data =
+        trace_builder.view(&vk, vec![&requester, &xor_chip, &xor_chip.xor_lookup_chip]);
+
+    let pis = vec![vec![]; vk.per_air.len()];
+
+    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
+
+    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let verifier = MultiTraceStarkVerifier::new(prover.config);
+    let result = verifier.verify(
+        &mut challenger,
+        vk,
+        vec![&requester, &xor_chip, &xor_chip.xor_lookup_chip],
         proof,
         &pis,
     );

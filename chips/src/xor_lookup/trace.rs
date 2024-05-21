@@ -1,9 +1,9 @@
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::MBitXorChip;
+use super::XorLookupChip;
 
-impl<const M: usize> MBitXorChip<M> {
+impl<const M: usize> XorLookupChip<M> {
     pub fn generate_trace<F: PrimeField64>(&self) -> RowMajorMatrix<F> {
         let mut counts = vec![];
         for x in 0..(1 << M) {

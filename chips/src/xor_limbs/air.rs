@@ -1,20 +1,19 @@
-use core::num;
 use std::borrow::Borrow;
 
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::columns::NBitXorCols;
-use super::NBitXorChip;
+use super::columns::XorLimbsCols;
+use super::XorLimbsChip;
 
-impl<F: Field, const N: usize, const M: usize> BaseAir<F> for NBitXorChip<N, M> {
+impl<F: Field, const N: usize, const M: usize> BaseAir<F> for XorLimbsChip<N, M> {
     fn width(&self) -> usize {
-        NBitXorCols::<N, M, F>::get_width()
+        XorLimbsCols::<N, M, F>::get_width()
     }
 }
 
-impl<AB: AirBuilderWithPublicValues, const N: usize, const M: usize> Air<AB> for NBitXorChip<N, M>
+impl<AB: AirBuilderWithPublicValues, const N: usize, const M: usize> Air<AB> for XorLimbsChip<N, M>
 where
     AB: AirBuilder,
     AB::Var: Clone,
@@ -28,7 +27,7 @@ where
         let (local, _next) = (main.row_slice(0), main.row_slice(1));
         let local: &[AB::Var] = (*local).borrow();
 
-        let xor_cols = NBitXorCols::<N, M, AB::Var>::from_slice(local);
+        let xor_cols = XorLimbsCols::<N, M, AB::Var>::from_slice(local);
 
         let mut x_from_limbs: AB::Expr = AB::Expr::zero();
         for i in 0..num_limbs {
