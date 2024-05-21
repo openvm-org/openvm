@@ -6,6 +6,7 @@ use afs_middleware::{
 use p3_keccak::KeccakF;
 use p3_symmetric::{PseudoCompressionFunction, TruncatedPermutation};
 use p3_uni_stark::StarkGenericConfig;
+use p3_util::log2_ceil_usize;
 
 mod config;
 
@@ -54,7 +55,7 @@ fn test_merkle_tree_prove() {
         siblings: vec![siblings],
     };
 
-    let log_trace_degree_max: usize = MERKLE_TREE_DEPTH;
+    let log_trace_degree_max: usize = log2_ceil_usize(MERKLE_TREE_DEPTH);
 
     let perm = config::poseidon2::random_perm();
     let config = config::poseidon2::default_config(&perm, log_trace_degree_max);

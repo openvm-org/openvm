@@ -2,8 +2,8 @@ use afs_middleware_derive::AlignedBorrow;
 use core::mem::{size_of, transmute};
 use p3_util::indices_arr;
 
-pub const MERKLE_TREE_DEPTH: usize = 4;
-// pub const MERKLE_TREE_DEPTH: usize = 32; // PAGE_SIZE_BITS
+// pub const MERKLE_TREE_DEPTH: usize = 4;
+pub const MERKLE_TREE_DEPTH: usize = 8; // PAGE_SIZE_BITS
 pub const NUM_U64_HASH_ELEMS: usize = 4;
 pub const NUM_U16_LIMBS: usize = 4;
 
@@ -24,6 +24,8 @@ pub struct MerkleTreeCols<T> {
     pub is_right_child: T,
 
     pub bit_factor: T,
+
+    pub accumulated_index: T,
 
     pub index: T,
 
