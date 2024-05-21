@@ -17,6 +17,7 @@ rand = "0.8"
 afs-stark-backend = { path = "../stark-backend" }
 afs-derive = { path = "../derive" }
 afs-test-utils = { path = "../test-utils" }
+parking_lot = "0.12.2"
 
 [dev-dependencies]
 p3-uni-stark = { workspace = true }

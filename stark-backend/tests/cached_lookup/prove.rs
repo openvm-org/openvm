@@ -13,7 +13,7 @@ use afs_test_utils::{
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},
         fri_params::{fri_params_with_100_bits_of_security, fri_params_with_80_bits_of_security},
-        setup_tracing, FriParameters,
+        FriParameters,
     },
     engine::StarkEngine,
     interaction::dummy_interaction_air::DummyInteractionAir,
