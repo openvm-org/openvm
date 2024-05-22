@@ -1,3 +1,4 @@
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::{iter, sync::Arc};
 
 use afs_chips::{range, range_gate, xor_bits};
@@ -393,4 +394,58 @@ fn test_range_gate_chip() {
             &pis,
         )
         .expect("Verification failed");
+}
+
+#[test]
+fn negative_test_range_gate_chip() {
+    use range_gate::RangeCheckerGateChip;
+
+    let bus_index = 0;
+
+    const N: usize = 3;
+    const MAX: u32 = 1 << N;
+
+    let perm = config::poseidon2::random_perm();
+    let config = config::poseidon2::default_config(&perm, N);
+
+    let range_checker = RangeCheckerGateChip::<MAX>::new(bus_index);
+
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
+    keygen_builder.add_air(&range_checker, MAX as usize, 0);
+    let pk = keygen_builder.generate_pk();
+    let vk = pk.vk();
+
+    // generating a trace with a counter starting from 1
+    // instead of 0 to test the AIR constraints in range_checker
+    let range_trace = RowMajorMatrix::new(
+        (0..MAX)
+            .flat_map(|i| {
+                let count =
+                    range_checker.count[i as usize].load(std::sync::atomic::Ordering::Relaxed);
+                iter::once(i + 1).chain(iter::once(count))
+            })
+            .map(Val::from_wrapped_u32)
+            .collect(),
+        2,
+    );
+
+    let prover = MultiTraceStarkProver::new(config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.config.pcs());
+    trace_builder.load_trace(range_trace);
+    trace_builder.commit_current();
+
+    let main_trace_data = trace_builder.view(&vk, vec![&range_checker]);
+
+    let pis = vec![vec![]; vk.per_air.len()];
+
+    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let _proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
+    }));
+
+    assert!(
+        result.is_err(),
+        "Expected AIR constraints to be violated, but they passed"
+    );
 }

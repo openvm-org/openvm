@@ -27,7 +27,7 @@ where
 
         builder
             .when_first_row()
-            .assert_eq(local.counter + AB::Expr::one(), next.counter);
+            .assert_eq(local.counter, AB::Expr::zero());
         builder
             .when_transition()
             .assert_eq(local.counter + AB::Expr::one(), next.counter);

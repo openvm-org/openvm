@@ -9,12 +9,12 @@ impl<const MAX: u32> RangeCheckerGateChip<MAX> {
             .count
             .iter()
             .enumerate()
-            .map(|(i, count)| {
+            .flat_map(|(i, count)| {
                 let c = count.load(std::sync::atomic::Ordering::Relaxed);
                 vec![F::from_canonical_usize(i), F::from_canonical_u32(c)]
             })
-            .collect::<Vec<_>>();
+            .collect();
 
-        RowMajorMatrix::new(rows.concat(), NUM_RANGE_GATE_COLS)
+        RowMajorMatrix::new(rows, NUM_RANGE_GATE_COLS)
     }
 }
