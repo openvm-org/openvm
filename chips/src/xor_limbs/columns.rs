@@ -9,8 +9,12 @@ pub struct XorLimbsCols<const N: usize, const M: usize, T> {
 }
 
 impl<const N: usize, const M: usize, T: Clone> XorLimbsCols<N, M, T> {
+    fn num_limbs() -> usize {
+        (N + M - 1) / M
+    }
+
     pub fn from_slice(slc: &[T]) -> Self {
-        let num_limbs = (N + M - 1) / M;
+        let num_limbs = Self::num_limbs();
 
         let x = slc[0].clone();
         let y = slc[1].clone();
@@ -43,12 +47,12 @@ impl<const N: usize, const M: usize, T: Clone> XorLimbsCols<N, M, T> {
     }
 
     pub fn get_width() -> usize {
-        let num_limbs = (N + M - 1) / M;
+        let num_limbs = Self::num_limbs();
         3 + 3 * num_limbs
     }
 
     pub fn cols_numbered(cols: &[usize]) -> XorLimbsCols<N, M, usize> {
-        let num_limbs = (N + M - 1) / M;
+        let num_limbs = Self::num_limbs();
 
         let x = cols[0];
         let y = cols[1];
