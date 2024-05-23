@@ -41,6 +41,7 @@ pub fn to_field_vec<F: AbstractField>(v: Vec<u32>) -> Vec<F> {
     v.into_iter().map(F::from_canonical_u32).collect()
 }
 
+/// This function assumes that all chips have no public inputs
 pub fn run_simple_test(
     chips: Vec<&dyn ProverVerifierRap<StarkConfigPoseidon2>>,
     traces: Vec<DenseMatrix<BabyBear>>,
