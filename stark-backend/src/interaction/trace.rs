@@ -3,7 +3,7 @@ use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
     Matrix,
 };
-use p3_maybe_rayon::prelude::IntoParallelIterator;
+use p3_maybe_rayon::prelude::*;
 
 use crate::utils::batch_multiplicative_inverse_allowing_zero;
 

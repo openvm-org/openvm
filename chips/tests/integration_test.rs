@@ -9,9 +9,8 @@ use afs_stark_backend::{
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use p3_matrix::dense::DenseMatrix;
-use p3_matrix::dense::RowMajorMatrix;
-use p3_maybe_rayon::prelude::IntoParallelRefIterator;
+use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
+use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::StarkGenericConfig;
 use rand::{rngs::StdRng, SeedableRng};
 
