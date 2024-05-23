@@ -2,3 +2,5 @@
 pub mod range;
 pub mod range_gate;
 pub mod xor_bits;
+pub mod xor_limbs;
+pub mod xor_lookup;

@@ -88,7 +88,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
         public_values: &'a [Val<SC>],
     ) -> SingleQuotientData<SC>
     where
-        R: for<'b> Rap<ProverConstraintFolder<'b, SC>> + ?Sized,
+        R: for<'b> Rap<ProverConstraintFolder<'b, SC>> + Sync + ?Sized,
     {
         let trace_domain = trace.domain;
         let quotient_domain =
