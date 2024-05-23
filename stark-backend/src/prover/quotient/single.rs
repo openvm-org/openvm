@@ -34,7 +34,7 @@ pub fn compute_single_rap_quotient_values<'a, SC, R, Mat>(
 ) -> Vec<SC::Challenge>
 where
     // TODO: avoid ?Sized to prevent dynamic dispatching because `eval` is called many many times
-    R: for<'b> Rap<ProverConstraintFolder<'b, SC>> + ?Sized,
+    R: for<'b> Rap<ProverConstraintFolder<'b, SC>> + Sync + ?Sized,
     SC: StarkGenericConfig,
     Mat: Matrix<Val<SC>> + Sync,
 {

@@ -11,9 +11,8 @@ use afs_test_utils::{
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use p3_matrix::dense::DenseMatrix;
-use p3_matrix::dense::RowMajorMatrix;
-use p3_maybe_rayon::prelude::IntoParallelRefIterator;
+use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
+use p3_maybe_rayon::prelude::*;
 use rand::{rngs::StdRng, SeedableRng};
 
 mod list;

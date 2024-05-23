@@ -3,7 +3,7 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrixView;
 use p3_matrix::stack::VerticalPair;
 use p3_matrix::Matrix;
-use p3_maybe_rayon::prelude::IntoParallelIterator;
+use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::air_builders::debug::DebugConstraintBuilder;
