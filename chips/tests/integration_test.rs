@@ -9,7 +9,7 @@ use afs_stark_backend::{
 use afs_test_utils::{
     config::{self, poseidon2::StarkConfigPoseidon2},
     interaction::dummy_interaction_air::DummyInteractionAir,
-    utils::{proving_helper, ProverVerifierRap},
+    utils::{run_simple_test, ProverVerifierRap},
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -364,7 +364,7 @@ fn test_xor_limbs_chip() {
         .chain(iter::once(xor_lookup_chip_trace))
         .collect::<Vec<DenseMatrix<BabyBear>>>();
 
-    proving_helper(all_chips, all_traces).expect("Verification failed");
+    run_simple_test(all_chips, all_traces).expect("Verification failed");
 }
 
 #[test]
@@ -420,7 +420,7 @@ fn negative_test_xor_limbs_chip() {
     let xor_limbs_chip_trace = xor_chip.generate_trace();
     let xor_lookup_chip_trace = xor_chip.xor_lookup_chip.generate_trace();
 
-    let result = proving_helper(
+    let result = run_simple_test(
         vec![&requester, &xor_chip, &xor_chip.xor_lookup_chip],
         vec![requester_trace, xor_limbs_chip_trace, xor_lookup_chip_trace],
     );

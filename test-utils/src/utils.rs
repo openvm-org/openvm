@@ -1,5 +1,6 @@
 use itertools::Itertools;
 use p3_field::AbstractField;
+use p3_matrix::Matrix;
 use rand::Rng;
 
 use crate::config::{self, poseidon2::StarkConfigPoseidon2};
@@ -40,16 +41,13 @@ pub fn to_field_vec<F: AbstractField>(v: Vec<u32>) -> Vec<F> {
     v.into_iter().map(F::from_canonical_u32).collect()
 }
 
-pub fn proving_helper(
+pub fn run_simple_test(
     chips: Vec<&dyn ProverVerifierRap<StarkConfigPoseidon2>>,
     traces: Vec<DenseMatrix<BabyBear>>,
 ) -> Result<(), VerificationError> {
     assert_eq!(chips.len(), traces.len());
 
-    let mut max_trace_length = 0;
-    for trace in &traces {
-        max_trace_length = std::cmp::max(max_trace_length, trace.values.len() / trace.width);
-    }
+    let max_trace_length = traces.iter().map(|trace| trace.height()).max().unwrap_or(0);
     let log_trace_size = (max_trace_length as f64).log2().ceil() as usize;
 
     let perm = config::poseidon2::random_perm();
@@ -60,7 +58,7 @@ pub fn proving_helper(
     for i in 0..chips.len() {
         keygen_builder.add_air(
             chips[i] as &dyn SymbolicRap<StarkConfigPoseidon2>,
-            traces[i].values.len() / traces[i].width,
+            traces[i].height(),
             0,
         );
     }
