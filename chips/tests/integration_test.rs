@@ -246,7 +246,7 @@ fn negative_test_xor_chip() {
     }
 
     // Modifying one of the values to send incompatible values
-    reqs[0].1[2] = reqs[0].1[2] + 1;
+    reqs[0].1[2] += 1;
 
     let xor_chip_trace = xor_chip.generate_trace();
 
