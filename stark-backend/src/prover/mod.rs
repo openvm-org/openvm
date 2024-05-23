@@ -103,11 +103,11 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
 
         // TODO: ===== Permutation Trace Generation should be moved to separate module ====
         // Generate permutation traces
-        let mut count = 0usize;
         let (perm_traces, cumulative_sums_and_indices): (Vec<Option<_>>, Vec<Option<_>>) =
             tracing::info_span!("generate permutation traces").in_scope(|| {
                 let perm_challenges = challenges.first().map(|c| [c[0], c[1]]); // must have 2 challenges
-                pk.per_air
+                let perm_traces = pk
+                    .per_air
                     .par_iter()
                     .zip_eq(main_trace_data.air_traces.par_iter())
                     .map(|(pk, main)| {
@@ -119,17 +119,23 @@ impl<SC: StarkGenericConfig> MultiTraceStarkProver<SC> {
                             &main.partitioned_main_trace,
                             perm_challenges,
                         )
-                        .map(|trace| {
+                    })
+                    .collect::<Vec<_>>();
+                let mut count = 0usize;
+                let cumulative_sums_and_indices = perm_traces
+                    .iter()
+                    .map(|opt_trace| {
+                        opt_trace.as_ref().map(|trace| {
                             // The cumulative sum is the element in last row of phi, which is the last column in perm_trace
                             let cumulative_sum =
                                 *trace.row_slice(trace.height() - 1).last().unwrap();
                             let matrix_index = count;
                             count += 1;
-                            (trace, (cumulative_sum, matrix_index))
+                            (cumulative_sum, matrix_index)
                         })
-                        .unzip()
                     })
-                    .unzip()
+                    .collect();
+                (perm_traces, cumulative_sums_and_indices)
             });
 
         // Challenger needs to observe permutation_exposed_values (aka cumulative_sums)
