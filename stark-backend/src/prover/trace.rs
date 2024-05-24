@@ -31,6 +31,12 @@ impl<'a, SC: StarkGenericConfig> TraceCommitmentBuilder<'a, SC> {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.traces_to_commit.clear();
+        self.committed_traces.clear();
+        self.data.clear();
+    }
+
     /// Add trace to list of to-be-committed
     pub fn load_trace(&mut self, trace: RowMajorMatrix<Val<SC>>) {
         self.traces_to_commit.push(trace);

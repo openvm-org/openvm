@@ -1,17 +1,25 @@
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::{iter, sync::Arc};
 
-use afs_chips::{range, range_gate, xor_bits, xor_limbs};
-use afs_stark_backend::verifier::VerificationError;
+use afs_chips::{page_controller, range, range_gate, xor_bits, xor_limbs};
+use afs_stark_backend::{
+    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
+    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+    verifier::{MultiTraceStarkVerifier, VerificationError},
+};
+use afs_test_utils::config::poseidon2::Perm;
 use afs_test_utils::{
+    config,
     config::poseidon2::StarkConfigPoseidon2,
     interaction::dummy_interaction_air::DummyInteractionAir,
     utils::{run_simple_test, ProverVerifierRap},
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
+use p3_matrix::dense::DenseMatrix;
+use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
+use p3_uni_stark::StarkGenericConfig;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
 mod list;
@@ -417,5 +425,194 @@ fn negative_test_range_gate_chip() {
     assert!(
         result.is_err(),
         "Expected AIR constraints to be violated, but they passed"
+    );
+}
+
+use page_controller::PageController;
+
+fn load_page_test(
+    rng: &mut StdRng,
+    page_to_receive: &Vec<Vec<u32>>,
+    page_to_send: &Vec<Vec<u32>>,
+    page_controller: &mut PageController,
+    page_requester: &DummyInteractionAir,
+    prover: &MultiTraceStarkProver<StarkConfigPoseidon2>,
+    verifier: &MultiTraceStarkVerifier<StarkConfigPoseidon2>,
+    trace_builder: &mut TraceCommitmentBuilder<StarkConfigPoseidon2>,
+    pk: &MultiStarkProvingKey<StarkConfigPoseidon2>,
+    perm: &Perm,
+    num_requests: usize,
+) -> Result<(), VerificationError> {
+    let page_height = page_to_receive.len();
+    assert!(page_height > 0);
+    let page_width = page_to_receive[0].len();
+
+    let gen_page_trace_flat = |page: &Vec<Vec<u32>>, page_row_mult: &Vec<u32>| -> Vec<BabyBear> {
+        (0..page_height)
+            .flat_map(|idx| {
+                iter::once(page_row_mult[idx as usize] as u32)
+                    .chain(iter::once(idx as u32))
+                    .chain(page[idx as usize].clone().into_iter())
+            })
+            .map(Val::from_wrapped_u32)
+            .collect()
+    };
+
+    let requests = (0..num_requests)
+        .map(|_| rng.gen::<usize>() % page_height)
+        .collect::<Vec<usize>>();
+
+    let (page_data_trace, page_data_commitment) =
+        page_controller.load_page(&mut trace_builder.committer, page_to_receive.clone());
+
+    let mut page_row_mult = vec![0; page_height];
+    for &page_row in requests.iter() {
+        page_controller.request(page_row);
+        page_row_mult[page_row] += 1;
+    }
+
+    // [mult] | [index] | [page]
+    let requester_trace = RowMajorMatrix::new(
+        gen_page_trace_flat(&page_to_send, &page_row_mult),
+        2 + page_width,
+    );
+
+    let page_metadata_trace = page_controller.generate_trace();
+
+    trace_builder.reset();
+
+    trace_builder.load_cached_trace(page_data_trace, page_data_commitment);
+    trace_builder.load_trace(page_metadata_trace);
+    trace_builder.load_trace(requester_trace);
+
+    trace_builder.commit_current();
+
+    let vk = pk.vk();
+
+    let page_read_chip_locked = page_controller.page_read_chip.lock();
+
+    let main_trace_data = trace_builder.view(&vk, vec![&*page_read_chip_locked, page_requester]);
+
+    let pis = vec![vec![]; vk.per_air.len()];
+
+    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
+
+    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let result = verifier.verify(
+        &mut challenger,
+        vk,
+        vec![&*page_read_chip_locked, page_requester],
+        proof,
+        &pis,
+    );
+
+    result
+}
+
+#[test]
+fn page_read_chip_test() {
+    let mut rng = create_seeded_rng();
+    let bus_index = 0;
+
+    use page_controller::PageController;
+
+    let log_page_height = 2;
+
+    let page_width = 4;
+    let page_height = 1 << log_page_height;
+    let num_requests: usize = 1 << 1;
+
+    let pages = (0..2)
+        .map(|_| {
+            (0..page_height)
+                .map(|_| {
+                    (0..page_width)
+                        .map(|_| rng.gen::<u32>())
+                        .collect::<Vec<u32>>()
+                })
+                .collect::<Vec<Vec<u32>>>()
+        })
+        .collect::<Vec<Vec<Vec<u32>>>>();
+
+    let mut page_controller = PageController::new(bus_index);
+    let page_requester = DummyInteractionAir::new(1 + page_width, true, bus_index);
+
+    let perm = config::poseidon2::random_perm();
+    let config = config::poseidon2::default_config(&perm, log_page_height);
+
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
+
+    let page_read_chip_locked = page_controller.page_read_chip.lock();
+
+    let page_data_ptr = keygen_builder.add_cached_main_matrix(page_width);
+    let page_metadata_ptr = keygen_builder.add_main_matrix(2);
+    keygen_builder.add_partitioned_air(
+        &*page_read_chip_locked,
+        page_height,
+        0,
+        vec![page_data_ptr, page_metadata_ptr],
+    );
+    drop(page_read_chip_locked);
+
+    keygen_builder.add_air(&page_requester, page_height, 0);
+
+    let pk = keygen_builder.generate_pk();
+
+    let prover: MultiTraceStarkProver<StarkConfigPoseidon2> = MultiTraceStarkProver::new(config);
+    let mut trace_builder: TraceCommitmentBuilder<StarkConfigPoseidon2> =
+        TraceCommitmentBuilder::new(prover.config.pcs());
+
+    let config = config::poseidon2::default_config(&perm, log_page_height);
+    let verifier = MultiTraceStarkVerifier::new(config);
+
+    load_page_test(
+        &mut rng,
+        &pages[0],
+        &pages[0],
+        &mut page_controller,
+        &page_requester,
+        &prover,
+        &verifier,
+        &mut trace_builder,
+        &pk,
+        &perm,
+        num_requests,
+    )
+    .expect("Verification failed");
+
+    load_page_test(
+        &mut rng,
+        &pages[1],
+        &pages[1],
+        &mut page_controller,
+        &page_requester,
+        &prover,
+        &verifier,
+        &mut trace_builder,
+        &pk,
+        &perm,
+        num_requests,
+    )
+    .expect("Verification failed");
+
+    let result = load_page_test(
+        &mut rng,
+        &pages[0],
+        &pages[1],
+        &mut page_controller,
+        &page_requester,
+        &prover,
+        &verifier,
+        &mut trace_builder,
+        &pk,
+        &perm,
+        num_requests,
+    );
+
+    assert_eq!(
+        result,
+        Err(VerificationError::NonZeroCumulativeSum),
+        "Verification failed"
     );
 }
