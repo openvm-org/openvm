@@ -37,7 +37,7 @@ impl PageReadChip {
     }
 
     pub fn get_width(&self) -> usize {
-        return 2 + self.val_len;
+        2 + self.val_len
     }
 
     // receives: ([index] | [page] ) mult times
