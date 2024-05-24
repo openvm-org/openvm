@@ -8,7 +8,7 @@ impl PageReadChip {
     where
         Val<SC>: AbstractField,
     {
-        assert!(self.page_data.len() > 0);
+        assert!(!self.page_data.is_empty());
 
         let val_len = self.page_data[0].len();
         RowMajorMatrix::new(
