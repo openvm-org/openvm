@@ -10,10 +10,6 @@ impl<F: PrimeField64> Chip<F> for PageReadChip {
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
         let cols_numbered = PageReadCols::<F>::cols_numbered(&all_cols);
-        let inter = self.receives_custom(cols_numbered);
-
-        println!("inter: {:?}", inter);
-
-        inter
+        self.receives_custom(cols_numbered)
     }
 }

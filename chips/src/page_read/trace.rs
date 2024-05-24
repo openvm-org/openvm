@@ -10,14 +10,13 @@ impl PageReadChip {
     {
         assert!(!self.page_data.is_empty());
 
-        let val_len = self.page_data[0].len();
         RowMajorMatrix::new(
             self.page_data
                 .clone()
                 .into_iter()
                 .flat_map(|row| row.into_iter().map(Val::<SC>::from_wrapped_u32))
                 .collect(),
-            val_len,
+            self.val_len,
         )
     }
 }

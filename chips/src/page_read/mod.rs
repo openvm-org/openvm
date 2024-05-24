@@ -45,11 +45,6 @@ impl PageReadChip {
         &self,
         cols: PageReadCols<usize>,
     ) -> Vec<Interaction<F>> {
-        println!("here I'm in receives_custom");
-        println!("index: {:?}", cols.index);
-        println!("page_row: {:?}", cols.page_row);
-        println!("mult: {:?}", cols.mult);
-
         let mut virtual_cols: Vec<VirtualPairCol<F>> =
             vec![VirtualPairCol::single_main(cols.index)];
         for page_col in cols.page_row {

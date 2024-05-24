@@ -4,7 +4,7 @@ pub struct PageReadCols<T> {
     pub page_row: Vec<T>,
 }
 
-/// Columns are:
+/// Columns are
 /// [page] | [index] | [mult]
 impl<T> PageReadCols<T> {
     pub fn cols_numbered(cols: &[usize]) -> PageReadCols<usize> {

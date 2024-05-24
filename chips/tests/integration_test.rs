@@ -428,13 +428,11 @@ fn negative_test_range_gate_chip() {
     );
 }
 
-use page_controller::PageController;
-
 fn load_page_test(
     rng: &mut StdRng,
     page_to_receive: &Vec<Vec<u32>>,
     page_to_send: &Vec<Vec<u32>>,
-    page_controller: &mut PageController,
+    page_controller: &mut page_controller::PageController,
     page_requester: &DummyInteractionAir,
     prover: &MultiTraceStarkProver<StarkConfigPoseidon2>,
     verifier: &MultiTraceStarkVerifier<StarkConfigPoseidon2>,
@@ -490,7 +488,6 @@ fn load_page_test(
     let vk = pk.vk();
 
     let page_read_chip_locked = page_controller.page_read_chip.lock();
-
     let main_trace_data = trace_builder.view(&vk, vec![&*page_read_chip_locked, page_requester]);
 
     let pis = vec![vec![]; vk.per_air.len()];
