@@ -1,14 +1,9 @@
-use afs_stark_backend::{
-    keygen::MultiStarkKeygenBuilder,
-    prover::{trace::TraceCommitmentBuilder, types::ProverRap, MultiTraceStarkProver},
-    verifier::{types::VerifierRap, MultiTraceStarkVerifier},
+use afs_test_utils::{
+    config::poseidon2::StarkConfigPoseidon2,
+    utils::{run_simple_test, ProverVerifierRap},
 };
 use p3_keccak::KeccakF;
 use p3_symmetric::{PseudoCompressionFunction, TruncatedPermutation};
-use p3_uni_stark::StarkGenericConfig;
-use p3_util::log2_ceil_usize;
-
-mod config;
 
 use afs_chips::merkle_tree::{columns::MERKLE_TREE_DEPTH, MerkleTreeChip};
 
@@ -55,39 +50,10 @@ fn test_merkle_tree_prove() {
         siblings: vec![siblings],
     };
 
-    let log_trace_degree_max: usize = log2_ceil_usize(MERKLE_TREE_DEPTH);
-
-    let perm = config::poseidon2::random_perm();
-    let config = config::poseidon2::default_config(&perm, log_trace_degree_max);
-
-    let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
-    keygen_builder.add_air(&merkle_tree_air, MERKLE_TREE_DEPTH, 0);
-
-    let pk = keygen_builder.generate_pk();
-    let vk = pk.vk();
-
-    let prover = MultiTraceStarkProver::new(config);
-    let mut trace_builder = TraceCommitmentBuilder::new(prover.config.pcs());
     let trace = merkle_tree_air.generate_trace();
-    trace_builder.load_trace(trace);
-    trace_builder.commit_current();
 
-    let main_trace_data = trace_builder.view(&vk, vec![&merkle_tree_air as &dyn ProverRap<_>]);
+    let chips: Vec<&dyn ProverVerifierRap<StarkConfigPoseidon2>> = vec![&merkle_tree_air];
+    let traces = vec![trace];
 
-    let pis = vec![vec![]; vk.per_air.len()];
-
-    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
-    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
-
-    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
-    let verifier = MultiTraceStarkVerifier::new(prover.config);
-    verifier
-        .verify(
-            &mut challenger,
-            vk,
-            vec![&merkle_tree_air as &dyn VerifierRap<_>],
-            proof,
-            &pis,
-        )
-        .expect("Verification failed");
+    run_simple_test(chips, traces).expect("Verification failed");
 }
