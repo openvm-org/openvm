@@ -1,6 +1,6 @@
 use std::any::type_name;
 
-use afs_stark_backend::verifier::VerificationError;
+use afs_stark_backend::{rap::AnyRap, verifier::VerificationError};
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_challenger::DuplexChallenger;
 use p3_commit::ExtensionMmcs;
@@ -42,10 +42,7 @@ pub type BabyBearPoseidon2Engine = BabyBearPermutationEngine<Perm>;
 use p3_util::log2_strict_usize;
 use rand::{rngs::StdRng, SeedableRng};
 
-use crate::{
-    engine::{StarkEngine, StarkEngineWithHashInstrumentation},
-    utils::ProverVerifierRap,
-};
+use crate::engine::{StarkEngine, StarkEngineWithHashInstrumentation};
 
 use super::{
     instrument::{HashStatistics, InstrumentCounter, Instrumented, StarkHashStatistics},
@@ -194,7 +191,7 @@ pub fn random_instrumented_perm() -> InstrPerm {
 }
 
 pub fn run_simple_test(
-    chips: Vec<&dyn ProverVerifierRap<BabyBearPoseidon2Config>>,
+    chips: Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
     traces: Vec<DenseMatrix<BabyBear>>,
 ) -> Result<(), VerificationError> {
     let max_trace_height = traces.iter().map(|trace| trace.height()).max().unwrap();

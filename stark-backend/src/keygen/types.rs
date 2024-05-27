@@ -1,16 +1,12 @@
 use derivative::Derivative;
 use itertools::Itertools;
-use p3_air::BaseAir;
 use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    air_builders::symbolic::SymbolicRapBuilder,
     commit::MatrixCommitmentPointers,
     config::{Com, PcsProverData},
-    interaction::Chip,
-    rap::Rap,
 };
 
 /// Widths of different parts of trace matrix
@@ -240,15 +236,4 @@ pub(super) fn create_commit_to_air_graph(
     CommitmentToAirGraph {
         commit_to_air_index,
     }
-}
-
-/// RAP trait to extract fixed data about the RAP for keygen
-pub trait SymbolicRap<SC: StarkGenericConfig>:
-    BaseAir<Val<SC>> + Chip<Val<SC>> + Rap<SymbolicRapBuilder<Val<SC>>>
-{
-}
-
-impl<SC: StarkGenericConfig, T> SymbolicRap<SC> for T where
-    T: BaseAir<Val<SC>> + Chip<Val<SC>> + Rap<SymbolicRapBuilder<Val<SC>>>
-{
 }

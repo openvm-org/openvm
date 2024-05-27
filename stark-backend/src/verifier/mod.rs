@@ -7,16 +7,16 @@ use tracing::instrument;
 
 pub mod constraints;
 mod error;
-pub mod types;
 
 pub use error::*;
 
 use crate::{
     keygen::types::MultiStarkVerifyingKey,
     prover::{opener::AdjacentOpenedValues, types::Proof},
+    rap::AnyRap,
 };
 
-use self::{constraints::verify_single_rap_constraints, types::VerifierRap};
+use self::constraints::verify_single_rap_constraints;
 
 /// Verifies a partitioned proof of multi-matrix AIRs.
 pub struct MultiTraceStarkVerifier<'c, SC: StarkGenericConfig> {
@@ -35,7 +35,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
         &self,
         challenger: &mut SC::Challenger,
         vk: MultiStarkVerifyingKey<SC>,
-        raps: Vec<&dyn VerifierRap<SC>>,
+        raps: Vec<&dyn AnyRap<SC>>,
         proof: Proof<SC>,
         public_values: &[Vec<Val<SC>>],
     ) -> Result<(), VerificationError> {
@@ -83,7 +83,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
         &self,
         challenger: &mut SC::Challenger,
         vk: MultiStarkVerifyingKey<SC>,
-        raps: Vec<&dyn VerifierRap<SC>>,
+        raps: Vec<&dyn AnyRap<SC>>,
         proof: Proof<SC>,
         public_values: &[Vec<Val<SC>>],
     ) -> Result<(), VerificationError> {

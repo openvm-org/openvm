@@ -1,13 +1,14 @@
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
-    keygen::{types::SymbolicRap, MultiStarkKeygenBuilder},
-    prover::{trace::TraceCommitmentBuilder, types::ProverRap, MultiTraceStarkProver},
-    verifier::{types::VerifierRap, MultiTraceStarkVerifier, VerificationError},
+    keygen::MultiStarkKeygenBuilder,
+    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+    rap::AnyRap,
+    verifier::{MultiTraceStarkVerifier, VerificationError},
 };
 use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
-use crate::{config::instrument::StarkHashStatistics, utils::ProverVerifierRap};
+use crate::config::instrument::StarkHashStatistics;
 
 /// Testing engine
 pub trait StarkEngine<SC: StarkGenericConfig> {
@@ -32,7 +33,7 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
 
     fn run_simple_test(
         &self,
-        chips: Vec<&dyn ProverVerifierRap<SC>>,
+        chips: Vec<&dyn AnyRap<SC>>,
         traces: Vec<DenseMatrix<Val<SC>>>,
     ) -> Result<(), VerificationError>
     where
@@ -55,7 +56,7 @@ pub trait StarkEngineWithHashInstrumentation<SC: StarkGenericConfig>: StarkEngin
 /// This function assumes that all chips have no public inputs
 fn run_simple_test_impl<SC: StarkGenericConfig, E: StarkEngine<SC> + ?Sized>(
     engine: &E,
-    chips: Vec<&dyn ProverVerifierRap<SC>>,
+    chips: Vec<&dyn AnyRap<SC>>,
     traces: Vec<DenseMatrix<Val<SC>>>,
 ) -> Result<(), VerificationError>
 where
@@ -71,7 +72,7 @@ where
     let mut keygen_builder = engine.keygen_builder();
 
     for i in 0..chips.len() {
-        keygen_builder.add_air(chips[i] as &dyn SymbolicRap<SC>, traces[i].height(), 0);
+        keygen_builder.add_air(chips[i] as &dyn AnyRap<SC>, traces[i].height(), 0);
     }
 
     let pk = keygen_builder.generate_pk();
@@ -87,10 +88,7 @@ where
 
     let main_trace_data = trace_builder.view(
         &vk,
-        chips
-            .iter()
-            .map(|&chip| chip as &dyn ProverRap<SC>)
-            .collect(),
+        chips.iter().map(|&chip| chip as &dyn AnyRap<SC>).collect(),
     );
 
     let pis = vec![vec![]; vk.per_air.len()];
@@ -100,14 +98,5 @@ where
 
     let mut challenger = engine.new_challenger();
     let verifier = engine.verifier();
-    verifier.verify(
-        &mut challenger,
-        vk,
-        chips
-            .iter()
-            .map(|&chip| chip as &dyn VerifierRap<SC>)
-            .collect(),
-        proof,
-        &pis,
-    )
+    verifier.verify(&mut challenger, vk, chips, proof, &pis)
 }

@@ -3,10 +3,8 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    air_builders::{debug::DebugConstraintBuilder, prover::ProverConstraintFolder},
     config::{Com, PcsProverData},
-    interaction::InteractiveAir,
-    rap::Rap,
+    rap::AnyRap,
 };
 
 use super::opener::OpeningProof;
@@ -52,7 +50,7 @@ where
 /// We use dynamic dispatch here for the extra flexibility. The overhead is small
 /// **if we ensure dynamic dispatch only once per AIR** (not true right now).
 pub struct SingleAirCommittedTrace<'a, SC: StarkGenericConfig> {
-    pub air: &'a dyn ProverRap<SC>,
+    pub air: &'a dyn AnyRap<SC>,
     pub domain: Domain<SC>,
     pub partitioned_main_trace: Vec<RowMajorMatrixView<'a, Val<SC>>>,
 }
@@ -95,19 +93,4 @@ pub struct Proof<SC: StarkGenericConfig> {
     /// the values to expose to the verifier in that phase
     pub exposed_values_after_challenge: Vec<Vec<Vec<SC::Challenge>>>,
     // Should we include public values here?
-}
-
-/// RAP trait for prover dynamic dispatch use
-pub trait ProverRap<SC: StarkGenericConfig>:
-for<'a> InteractiveAir<ProverConstraintFolder<'a, SC>> // for permutation trace generation
-    + for<'a> Rap<ProverConstraintFolder<'a, SC>> // for quotient polynomial calculation
-    + for<'a> Rap<DebugConstraintBuilder<'a, SC>> // for debugging
-{
-}
-
-impl<SC: StarkGenericConfig, T> ProverRap<SC> for T where
-    T: for<'a> InteractiveAir<ProverConstraintFolder<'a, SC>>
-        + for<'a> Rap<ProverConstraintFolder<'a, SC>>
-        + for<'a> Rap<DebugConstraintBuilder<'a, SC>>
-{
 }

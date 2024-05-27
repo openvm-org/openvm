@@ -15,12 +15,13 @@ use crate::{
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkProvingKey,
     prover::trace::SingleRapCommittedTraceView,
+    rap::AnyRap,
 };
 
 use self::{
     opener::OpeningProver,
     quotient::QuotientCommitter,
-    types::{Commitments, MultiAirCommittedTraceData, Proof, ProverRap},
+    types::{Commitments, MultiAirCommittedTraceData, Proof},
 };
 
 /// Polynomial opening proofs
@@ -277,7 +278,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         &self,
         challenger: &mut SC::Challenger,
         pk: &'a MultiStarkProvingKey<SC>,
-        raps: Vec<&'a dyn ProverRap<SC>>,
+        raps: Vec<&'a dyn AnyRap<SC>>,
         trace_views: Vec<SingleRapCommittedTraceView<'a, SC>>,
         main_pcs_data: &[(Com<SC>, &PcsProverData<SC>)],
         after_challenge_pcs_data: &[(Com<SC>, PcsProverData<SC>)],

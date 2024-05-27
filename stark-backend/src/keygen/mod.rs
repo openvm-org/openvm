@@ -1,6 +1,7 @@
 use itertools::Itertools;
+use p3_air::BaseAir;
 use p3_matrix::Matrix;
-use p3_uni_stark::StarkGenericConfig;
+use p3_uni_stark::{StarkGenericConfig, Val};
 use tracing::instrument;
 
 pub mod types;
@@ -8,12 +9,14 @@ pub mod types;
 use crate::{
     air_builders::symbolic::get_log_quotient_degree,
     commit::{MatrixCommitmentPointers, SingleMatrixCommitPtr},
+    interaction::Chip,
     prover::trace::TraceCommitter,
+    rap::AnyRap,
 };
 
 use self::types::{
     create_commit_to_air_graph, MultiStarkProvingKey, ProverOnlySinglePreprocessedData,
-    StarkProvingKey, StarkVerifyingKey, SymbolicRap, TraceWidth, VerifierSinglePreprocessedData,
+    StarkProvingKey, StarkVerifyingKey, TraceWidth, VerifierSinglePreprocessedData,
 };
 
 /// Constants for interactive AIRs
@@ -115,8 +118,8 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     /// - Generates preprocessed trace and creates a dedicated commitment for it.
     /// - Adds main trace to the last main trace commitment.
     #[instrument(level = "debug", skip_all)]
-    pub fn add_air(&mut self, air: &dyn SymbolicRap<SC>, degree: usize, num_public_values: usize) {
-        let main_width = air.width();
+    pub fn add_air(&mut self, air: &dyn AnyRap<SC>, degree: usize, num_public_values: usize) {
+        let main_width = <dyn AnyRap<SC> as BaseAir<Val<SC>>>::width(air);
         let ptr = self.add_main_matrix(main_width);
         self.add_partitioned_air(air, degree, num_public_values, vec![ptr]);
     }
@@ -129,7 +132,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     #[instrument(level = "debug", skip_all)]
     pub fn add_partitioned_air(
         &mut self,
-        air: &dyn SymbolicRap<SC>,
+        air: &dyn AnyRap<SC>,
         degree: usize,
         num_public_values: usize,
         partitioned_main_ptrs: Vec<SingleMatrixCommitPtr>,
@@ -137,7 +140,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
         let (prep_prover_data, prep_verifier_data): (Option<_>, Option<_>) =
             self.get_single_preprocessed_data(air).unzip();
         let preprocessed_width = prep_prover_data.as_ref().map(|d| d.trace.width());
-        let perm_width = air.permutation_width();
+        let perm_width = <dyn AnyRap<SC> as Chip<Val<SC>>>::permutation_width(air);
         let main_widths = partitioned_main_ptrs
             .iter()
             .map(|ptr| self.placeholder_main_matrix_in_commit[ptr.commit_index][ptr.matrix_index])
@@ -191,7 +194,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     #[instrument(level = "debug", skip_all)]
     pub fn get_single_preprocessed_data(
         &mut self,
-        air: &dyn SymbolicRap<SC>,
+        air: &dyn AnyRap<SC>,
     ) -> Option<(
         ProverOnlySinglePreprocessedData<SC>,
         VerifierSinglePreprocessedData<SC>,

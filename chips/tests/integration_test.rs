@@ -2,11 +2,12 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::{iter, sync::Arc};
 
 use afs_chips::{range, range_gate, xor_bits, xor_limbs};
+use afs_stark_backend::rap::AnyRap;
 use afs_stark_backend::verifier::VerificationError;
 use afs_test_utils::utils::create_seeded_rng;
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test,
-    interaction::dummy_interaction_air::DummyInteractionAir, utils::ProverVerifierRap,
+    interaction::dummy_interaction_air::DummyInteractionAir,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -60,7 +61,7 @@ fn test_list_range_checker() {
 
     let range_trace = range_checker.generate_trace();
 
-    let mut all_chips: Vec<&dyn ProverVerifierRap<_>> = vec![];
+    let mut all_chips: Vec<&dyn AnyRap<_>> = vec![];
     for list in &lists {
         all_chips.push(list);
     }
@@ -111,7 +112,7 @@ fn test_xor_bits_chip() {
 
     let xor_chip_trace = xor_chip.generate_trace();
 
-    let mut all_chips: Vec<&dyn ProverVerifierRap<_>> = vec![];
+    let mut all_chips: Vec<&dyn AnyRap<_>> = vec![];
     for requester in &requesters {
         all_chips.push(requester);
     }
@@ -234,7 +235,7 @@ fn test_xor_limbs_chip() {
     let xor_limbs_chip_trace = xor_chip.generate_trace();
     let xor_lookup_chip_trace = xor_chip.xor_lookup_chip.generate_trace();
 
-    let mut all_chips: Vec<&dyn ProverVerifierRap<_>> = vec![];
+    let mut all_chips: Vec<&dyn AnyRap<_>> = vec![];
     for requester in &requesters {
         all_chips.push(requester);
     }
@@ -364,10 +365,10 @@ fn test_range_gate_chip() {
 
     let range_trace = range_checker.generate_trace();
 
-    let mut all_chips: Vec<&dyn ProverVerifierRap<_>> = vec![];
-    for list in &lists {
-        all_chips.push(list);
-    }
+    let mut all_chips = lists
+        .iter()
+        .map(|list| list as &dyn AnyRap<_>)
+        .collect::<Vec<_>>();
     all_chips.push(&range_checker);
 
     let all_traces = lists_traces
