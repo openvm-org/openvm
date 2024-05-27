@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use p3_field::AbstractField;
-use rand::Rng;
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 
 use afs_stark_backend::keygen::types::SymbolicRap;
 use afs_stark_backend::prover::types::ProverRap;
@@ -14,6 +15,12 @@ pub trait ProverVerifierRap<SC: StarkGenericConfig>:
 impl<SC: StarkGenericConfig, RAP: ProverRap<SC> + VerifierRap<SC> + SymbolicRap<SC>>
     ProverVerifierRap<SC> for RAP
 {
+}
+
+/// Deterministic seeded RNG, for testing use
+pub fn create_seeded_rng() -> StdRng {
+    let seed = [42; 32];
+    StdRng::from_seed(seed)
 }
 
 // Returns row major matrix

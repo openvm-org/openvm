@@ -1,5 +1,6 @@
 use std::any::type_name;
 
+use afs_stark_backend::verifier::VerificationError;
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_challenger::DuplexChallenger;
 use p3_commit::ExtensionMmcs;
@@ -7,6 +8,7 @@ use p3_dft::Radix2DitParallel;
 use p3_field::extension::BinomialExtensionField;
 use p3_field::Field;
 use p3_fri::{FriConfig, TwoAdicFriPcs};
+use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{CryptographicPermutation, PaddingFreeSponge, TruncatedPermutation};
@@ -37,9 +39,13 @@ pub type BabyBearPermutationConfig<P> = StarkConfig<Pcs<P>, Challenge, Challenge
 pub type BabyBearPoseidon2Config = BabyBearPermutationConfig<Perm>;
 pub type BabyBearPoseidon2Engine = BabyBearPermutationEngine<Perm>;
 
+use p3_util::log2_strict_usize;
 use rand::{rngs::StdRng, SeedableRng};
 
-use crate::engine::{StarkEngine, StarkEngineWithHashInstrumentation};
+use crate::{
+    engine::{StarkEngine, StarkEngineWithHashInstrumentation},
+    utils::ProverVerifierRap,
+};
 
 use super::{
     instrument::{HashStatistics, InstrumentCounter, Instrumented, StarkHashStatistics},
@@ -185,6 +191,16 @@ pub fn random_perm() -> Perm {
 pub fn random_instrumented_perm() -> InstrPerm {
     let perm = random_perm();
     Instrumented::new(perm)
+}
+
+pub fn run_simple_test(
+    chips: Vec<&dyn ProverVerifierRap<BabyBearPoseidon2Config>>,
+    traces: Vec<DenseMatrix<BabyBear>>,
+) -> Result<(), VerificationError> {
+    let max_trace_height = traces.iter().map(|trace| trace.height()).max().unwrap();
+    let max_log_degree = log2_strict_usize(max_trace_height);
+    let engine = default_engine(max_log_degree);
+    engine.run_simple_test(chips, traces)
 }
 
 /// Logs hash count statistics to stdout and returns as struct.
