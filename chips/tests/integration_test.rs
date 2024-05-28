@@ -1,10 +1,19 @@
 use std::{iter, sync::Arc};
 
-use afs_chips::{range, range_gate, xor_bits, xor_limbs};
+use afs_chips::{page_controller, range, range_gate, xor_bits, xor_limbs};
 use afs_stark_backend::prover::USE_DEBUG_BUILDER;
 use afs_stark_backend::rap::AnyRap;
 use afs_stark_backend::verifier::VerificationError;
+use afs_stark_backend::{
+    keygen::{types::MultiStarkPartialProvingKey, MultiStarkKeygenBuilder},
+    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+    verifier::MultiTraceStarkVerifier,
+};
+use afs_test_utils::config;
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
+use afs_test_utils::engine::StarkEngine;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
@@ -414,18 +423,19 @@ fn negative_test_range_gate_chip() {
 }
 
 fn load_page_test(
-    rng: &mut StdRng,
+    engine: &BabyBearPoseidon2Engine,
     page_to_receive: &Vec<Vec<u32>>,
     page_to_send: &Vec<Vec<u32>>,
     page_controller: &mut page_controller::PageController,
     page_requester: &DummyInteractionAir,
-    prover: &MultiTraceStarkProver<StarkConfigPoseidon2>,
-    verifier: &MultiTraceStarkVerifier<StarkConfigPoseidon2>,
-    trace_builder: &mut TraceCommitmentBuilder<StarkConfigPoseidon2>,
-    pk: &MultiStarkProvingKey<StarkConfigPoseidon2>,
-    perm: &Perm,
+    prover: &MultiTraceStarkProver<BabyBearPoseidon2Config>,
+    verifier: &MultiTraceStarkVerifier<BabyBearPoseidon2Config>,
+    trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
+    pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
     num_requests: usize,
 ) -> Result<(), VerificationError> {
+    let mut rng = create_seeded_rng();
+
     let page_height = page_to_receive.len();
     assert!(page_height > 0);
     let page_width = page_to_receive[0].len();
@@ -470,20 +480,21 @@ fn load_page_test(
 
     trace_builder.commit_current();
 
-    let vk = pk.vk();
+    let partial_vk = pk.partial_vk();
 
     let page_read_chip_locked = page_controller.page_read_chip.lock();
-    let main_trace_data = trace_builder.view(&vk, vec![&*page_read_chip_locked, page_requester]);
+    let main_trace_data =
+        trace_builder.view(&partial_vk, vec![&*page_read_chip_locked, page_requester]);
 
-    let pis = vec![vec![]; vk.per_air.len()];
+    let pis = vec![vec![]; partial_vk.per_air.len()];
 
-    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let mut challenger = engine.new_challenger();
     let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
 
-    let mut challenger = config::poseidon2::Challenger::new(perm.clone());
+    let mut challenger = engine.new_challenger();
     let result = verifier.verify(
         &mut challenger,
-        vk,
+        partial_vk,
         vec![&*page_read_chip_locked, page_requester],
         proof,
         &pis,
@@ -520,10 +531,9 @@ fn page_read_chip_test() {
     let mut page_controller = PageController::new(bus_index);
     let page_requester = DummyInteractionAir::new(1 + page_width, true, bus_index);
 
-    let perm = config::poseidon2::random_perm();
-    let config = config::poseidon2::default_config(&perm, log_page_height);
+    let engine = config::baby_bear_poseidon2::default_engine(log_page_height);
 
-    let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
     let page_read_chip_locked = page_controller.page_read_chip.lock();
 
@@ -539,17 +549,15 @@ fn page_read_chip_test() {
 
     keygen_builder.add_air(&page_requester, page_height, 0);
 
-    let pk = keygen_builder.generate_pk();
+    let partial_pk = keygen_builder.generate_partial_pk();
 
-    let prover: MultiTraceStarkProver<StarkConfigPoseidon2> = MultiTraceStarkProver::new(config);
-    let mut trace_builder: TraceCommitmentBuilder<StarkConfigPoseidon2> =
-        TraceCommitmentBuilder::new(prover.config.pcs());
+    let prover = MultiTraceStarkProver::new(&engine.config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-    let config = config::poseidon2::default_config(&perm, log_page_height);
-    let verifier = MultiTraceStarkVerifier::new(config);
+    let verifier = MultiTraceStarkVerifier::new(&engine.config);
 
     load_page_test(
-        &mut rng,
+        &engine,
         &pages[0],
         &pages[0],
         &mut page_controller,
@@ -557,14 +565,13 @@ fn page_read_chip_test() {
         &prover,
         &verifier,
         &mut trace_builder,
-        &pk,
-        &perm,
+        &partial_pk,
         num_requests,
     )
     .expect("Verification failed");
 
     load_page_test(
-        &mut rng,
+        &engine,
         &pages[1],
         &pages[1],
         &mut page_controller,
@@ -572,14 +579,13 @@ fn page_read_chip_test() {
         &prover,
         &verifier,
         &mut trace_builder,
-        &pk,
-        &perm,
+        &partial_pk,
         num_requests,
     )
     .expect("Verification failed");
 
     let result = load_page_test(
-        &mut rng,
+        &engine,
         &pages[0],
         &pages[1],
         &mut page_controller,
@@ -587,8 +593,7 @@ fn page_read_chip_test() {
         &prover,
         &verifier,
         &mut trace_builder,
-        &pk,
-        &perm,
+        &partial_pk,
         num_requests,
     );
 
