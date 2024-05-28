@@ -9,17 +9,19 @@ use afs_stark_backend::{
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
     verifier::MultiTraceStarkVerifier,
 };
-use afs_test_utils::config;
-use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
-use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
-use afs_test_utils::engine::StarkEngine;
-use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
-use afs_test_utils::utils::create_seeded_rng;
+use afs_test_utils::config::{
+    self,
+    baby_bear_poseidon2::{
+        run_simple_test_no_pis, BabyBearPoseidon2Config, BabyBearPoseidon2Engine,
+    },
+};
+use afs_test_utils::{
+    engine::StarkEngine, interaction::dummy_interaction_air::DummyInteractionAir,
+    utils::create_seeded_rng,
+};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use p3_matrix::dense::DenseMatrix;
-use p3_matrix::dense::RowMajorMatrix;
+use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
 use rand::Rng;
 
