@@ -1,14 +1,12 @@
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::{iter, sync::Arc};
 
 use afs_chips::{range, range_gate, xor_bits, xor_limbs};
+use afs_stark_backend::prover::USE_DEBUG_BUILDER;
 use afs_stark_backend::rap::AnyRap;
 use afs_stark_backend::verifier::VerificationError;
+use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::create_seeded_rng;
-use afs_test_utils::{
-    config::baby_bear_poseidon2::run_simple_test,
-    interaction::dummy_interaction_air::DummyInteractionAir,
-};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
@@ -72,7 +70,7 @@ fn test_list_range_checker() {
         .chain(iter::once(range_trace))
         .collect::<Vec<DenseMatrix<BabyBear>>>();
 
-    run_simple_test(all_chips, all_traces).expect("Verification failed");
+    run_simple_test_no_pis(all_chips, all_traces).expect("Verification failed");
 }
 
 #[test]
@@ -123,7 +121,7 @@ fn test_xor_bits_chip() {
         .chain(iter::once(xor_chip_trace))
         .collect::<Vec<DenseMatrix<BabyBear>>>();
 
-    run_simple_test(all_chips, all_traces).expect("Verification failed");
+    run_simple_test_no_pis(all_chips, all_traces).expect("Verification failed");
 }
 
 #[test]
@@ -165,7 +163,7 @@ fn negative_test_xor_bits_chip() {
         4,
     );
 
-    let result = run_simple_test(
+    let result = run_simple_test_no_pis(
         vec![&dummy_requester, &*xor_chip],
         vec![dummy_trace, xor_chip_trace],
     );
@@ -248,7 +246,7 @@ fn test_xor_limbs_chip() {
         .chain(iter::once(xor_lookup_chip_trace))
         .collect::<Vec<DenseMatrix<BabyBear>>>();
 
-    run_simple_test(all_chips, all_traces).expect("Verification failed");
+    run_simple_test_no_pis(all_chips, all_traces).expect("Verification failed");
 }
 
 #[test]
@@ -304,7 +302,7 @@ fn negative_test_xor_limbs_chip() {
     let xor_limbs_chip_trace = xor_chip.generate_trace();
     let xor_lookup_chip_trace = xor_chip.xor_lookup_chip.generate_trace();
 
-    let result = run_simple_test(
+    let result = run_simple_test_no_pis(
         vec![&requester, &xor_chip, &xor_chip.xor_lookup_chip],
         vec![requester_trace, xor_limbs_chip_trace, xor_lookup_chip_trace],
     );
@@ -376,7 +374,7 @@ fn test_range_gate_chip() {
         .chain(iter::once(range_trace))
         .collect::<Vec<DenseMatrix<BabyBear>>>();
 
-    run_simple_test(all_chips, all_traces).expect("Verification failed");
+    run_simple_test_no_pis(all_chips, all_traces).expect("Verification failed");
 }
 
 #[test]
@@ -404,12 +402,12 @@ fn negative_test_range_gate_chip() {
         2,
     );
 
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        run_simple_test(vec![&range_checker], vec![range_trace]).expect("Verification failed");
-    }));
-
-    assert!(
-        result.is_err(),
-        "Expected AIR constraints to be violated, but they passed"
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
+    assert_eq!(
+        run_simple_test_no_pis(vec![&range_checker], vec![range_trace]),
+        Err(VerificationError::OodEvaluationMismatch),
+        "Expected constraint to fail"
     );
 }

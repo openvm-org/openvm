@@ -1,8 +1,8 @@
 use afs_stark_backend::{
-    keygen::MultiStarkKeygenBuilder,
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver, USE_DEBUG_BUILDER},
+    prover::{trace::TraceCommitmentBuilder, USE_DEBUG_BUILDER},
     verifier::{MultiTraceStarkVerifier, VerificationError},
 };
+use afs_test_utils::{config::baby_bear_poseidon2::default_engine, engine::StarkEngine};
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -10,7 +10,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_util::log2_ceil_usize;
 use rand::{rngs::StdRng, SeedableRng};
 
-use crate::{config, utils::generate_random_matrix};
+use crate::utils::generate_random_matrix;
 
 pub mod air;
 
@@ -24,8 +24,7 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     let degree = x.len();
     let log_degree = log2_ceil_usize(degree);
 
-    let perm = config::baby_bear_poseidon2::random_perm();
-    let config = config::baby_bear_poseidon2::default_config(&perm, log_degree);
+    let engine = default_engine(log_degree);
 
     let x_trace = RowMajorMatrix::new(x, 1);
     let y_width = ys[0].len();
@@ -33,14 +32,14 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
 
     let air = SumAir(y_width);
 
-    let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
+    let mut keygen_builder = engine.keygen_builder();
     let y_ptr = keygen_builder.add_cached_main_matrix(y_width);
     let x_ptr = keygen_builder.add_main_matrix(1);
     keygen_builder.add_partitioned_air(&air, degree, 0, vec![x_ptr, y_ptr]);
-    let pk = keygen_builder.generate_pk();
-    let vk = pk.vk();
+    let partial_pk = keygen_builder.generate_partial_pk();
+    let partial_vk = partial_pk.partial_vk();
 
-    let prover = MultiTraceStarkProver::new(&config);
+    let prover = engine.prover();
     // Must add trace matrices in the same order as above
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     // Demonstrate y is cached
@@ -50,17 +49,17 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     trace_builder.load_trace(x_trace);
     trace_builder.commit_current();
 
-    let main_trace_data = trace_builder.view(&vk, vec![&air]);
+    let main_trace_data = trace_builder.view(&partial_vk, vec![&air]);
     let pis = vec![vec![]];
 
-    let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
-    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
+    let mut challenger = engine.new_challenger();
+    let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
 
     // Verify the proof:
     // Start from clean challenger
-    let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
+    let mut challenger = engine.new_challenger();
     let verifier = MultiTraceStarkVerifier::new(prover.config);
-    verifier.verify(&mut challenger, vk, vec![&air], proof, &pis)
+    verifier.verify(&mut challenger, partial_vk, vec![&air], proof, &pis)
 }
 
 #[test]

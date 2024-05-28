@@ -13,7 +13,7 @@ use crate::{
     air_builders::debug::check_constraints::check_constraints,
     commit::CommittedSingleMatrixView,
     config::{Com, PcsProof, PcsProverData},
-    keygen::types::MultiStarkProvingKey,
+    keygen::types::MultiStarkPartialProvingKey,
     prover::trace::SingleRapCommittedTraceView,
     rap::AnyRap,
 };
@@ -62,7 +62,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
     pub fn prove<'a>(
         &self,
         challenger: &mut SC::Challenger,
-        pk: &'a MultiStarkProvingKey<SC>,
+        pk: &'a MultiStarkPartialProvingKey<SC>,
         main_trace_data: MultiAirCommittedTraceData<'a, SC>,
         public_values: &'a [Vec<Val<SC>>],
     ) -> Proof<SC>
@@ -277,7 +277,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
     pub fn prove_raps_with_committed_traces<'a>(
         &self,
         challenger: &mut SC::Challenger,
-        pk: &'a MultiStarkProvingKey<SC>,
+        partial_pk: &'a MultiStarkPartialProvingKey<SC>,
         raps: Vec<&'a dyn AnyRap<SC>>,
         trace_views: Vec<SingleRapCommittedTraceView<'a, SC>>,
         main_pcs_data: &[(Com<SC>, &PcsProverData<SC>)],
@@ -303,7 +303,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         let alpha: SC::Challenge = challenger.sample_ext_element();
         tracing::debug!("alpha: {alpha:?}");
 
-        let quotient_degrees = pk
+        let quotient_degrees = partial_pk
             .per_air
             .iter()
             .map(|pk| pk.vk.quotient_degree)
@@ -348,7 +348,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
 
         let main_data: Vec<_> = main_pcs_data
             .iter()
-            .zip_eq(&pk.main_commit_to_air_graph.commit_to_air_index)
+            .zip_eq(&partial_pk.main_commit_to_air_graph.commit_to_air_index)
             .map(|((_, data), mat_to_air_index)| {
                 let domains = mat_to_air_index
                     .iter()

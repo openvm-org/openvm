@@ -11,7 +11,7 @@ mod error;
 pub use error::*;
 
 use crate::{
-    keygen::types::MultiStarkVerifyingKey,
+    keygen::types::MultiStarkPartialVerifyingKey,
     prover::{opener::AdjacentOpenedValues, types::Proof},
     rap::AnyRap,
 };
@@ -34,7 +34,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
     pub fn verify(
         &self,
         challenger: &mut SC::Challenger,
-        vk: MultiStarkVerifyingKey<SC>,
+        vk: MultiStarkPartialVerifyingKey<SC>,
         raps: Vec<&dyn AnyRap<SC>>,
         proof: Proof<SC>,
         public_values: &[Vec<Val<SC>>],
@@ -82,7 +82,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
     pub fn verify_raps(
         &self,
         challenger: &mut SC::Challenger,
-        vk: MultiStarkVerifyingKey<SC>,
+        vk: MultiStarkPartialVerifyingKey<SC>,
         raps: Vec<&dyn AnyRap<SC>>,
         proof: Proof<SC>,
         public_values: &[Vec<Val<SC>>],

@@ -190,14 +190,31 @@ pub fn random_instrumented_perm() -> InstrPerm {
     Instrumented::new(perm)
 }
 
+/// Runs a single end-to-end test for a given set of chips and traces.
+/// This includes proving/verifying key generation, creating a proof, and verifying the proof.
+/// This function should only be used on chips where the main trace is **not** partitioned.
+///
+/// Do not use this if you want to generate proofs for different traces with the same proving key.
+///
+/// - `chips`, `traces`, `public_values` should be zipped.
 pub fn run_simple_test(
     chips: Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
     traces: Vec<DenseMatrix<BabyBear>>,
+    public_values: Vec<Vec<BabyBear>>,
 ) -> Result<(), VerificationError> {
     let max_trace_height = traces.iter().map(|trace| trace.height()).max().unwrap();
     let max_log_degree = log2_strict_usize(max_trace_height);
     let engine = default_engine(max_log_degree);
-    engine.run_simple_test(chips, traces)
+    engine.run_simple_test(chips, traces, public_values)
+}
+
+/// [run_simple_test] without public values
+pub fn run_simple_test_no_pis(
+    chips: Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
+    traces: Vec<DenseMatrix<BabyBear>>,
+) -> Result<(), VerificationError> {
+    let num_chips = chips.len();
+    run_simple_test(chips, traces, vec![vec![]; num_chips])
 }
 
 /// Logs hash count statistics to stdout and returns as struct.

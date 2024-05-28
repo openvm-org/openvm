@@ -6,7 +6,7 @@ use std::{
 
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
-    keygen::types::MultiStarkVerifyingKey,
+    keygen::types::MultiStarkPartialVerifyingKey,
     prover::{trace::TraceCommitmentBuilder, types::Proof},
 };
 use afs_test_utils::{
@@ -31,7 +31,7 @@ pub fn prove<SC: StarkGenericConfig, E: StarkEngine<SC>>(
     trace: Vec<(u32, Vec<u32>)>,
     partition: bool,
 ) -> (
-    MultiStarkVerifyingKey<SC>,
+    MultiStarkPartialVerifyingKey<SC>,
     DummyInteractionAir,
     Proof<SC>,
     Vec<Vec<Val<SC>>>,
@@ -88,8 +88,8 @@ where
     } else {
         keygen_builder.add_air(&air, degree, 0);
     }
-    let pk = keygen_builder.generate_pk();
-    let vk = pk.vk();
+    let partial_pk = keygen_builder.generate_partial_pk();
+    let partial_vk = partial_pk.partial_vk();
 
     let mut benchmarks = ProverBenchmarks::default();
     let prover = engine.prover();
@@ -113,14 +113,14 @@ where
     benchmarks.main_commit_time = start.elapsed().as_micros();
 
     start = Instant::now();
-    let main_trace_data = trace_builder.view(&vk, vec![&air]);
+    let main_trace_data = trace_builder.view(&partial_vk, vec![&air]);
     let pis = vec![vec![]];
 
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
+    let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
     benchmarks.prove_time = start.elapsed().as_micros();
 
-    (vk, air, proof, pis, benchmarks)
+    (partial_vk, air, proof, pis, benchmarks)
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]

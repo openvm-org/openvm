@@ -15,8 +15,8 @@ use crate::{
 };
 
 use self::types::{
-    create_commit_to_air_graph, MultiStarkProvingKey, ProverOnlySinglePreprocessedData,
-    StarkProvingKey, StarkVerifyingKey, TraceWidth, VerifierSinglePreprocessedData,
+    create_commit_to_air_graph, MultiStarkPartialProvingKey, ProverOnlySinglePreprocessedData,
+    StarkPartialProvingKey, StarkPartialVerifyingKey, TraceWidth, VerifierSinglePreprocessedData,
 };
 
 /// Constants for interactive AIRs
@@ -30,22 +30,22 @@ pub struct MultiStarkKeygenBuilder<'a, SC: StarkGenericConfig> {
     /// `placeholder_main_matrix_in_commit[commit_idx][mat_idx] =` matrix width, it is used to store
     /// a placeholder of a main trace matrix that must be committed during proving
     placeholder_main_matrix_in_commit: Vec<Vec<usize>>,
-    pk: MultiStarkProvingKey<SC>,
+    partial_pk: MultiStarkPartialProvingKey<SC>,
 }
 
 impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     pub fn new(config: &'a SC) -> Self {
         Self {
             config,
-            pk: MultiStarkProvingKey::empty(),
+            partial_pk: MultiStarkPartialProvingKey::empty(),
             placeholder_main_matrix_in_commit: vec![vec![]],
         }
     }
 
     /// Generates proving key, resetting the state of the builder.
     /// The verifying key can be obtained from the proving key.
-    pub fn generate_pk(&mut self) -> MultiStarkProvingKey<SC> {
-        let mut pk = std::mem::take(&mut self.pk);
+    pub fn generate_partial_pk(&mut self) -> MultiStarkPartialProvingKey<SC> {
+        let mut pk = std::mem::take(&mut self.partial_pk);
         // Determine global num challenges to sample
         let num_phases = pk
             .per_air
@@ -168,7 +168,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             &num_exposed_values,
         );
         let quotient_degree = 1 << log_quotient_degree;
-        let vk = StarkVerifyingKey {
+        let vk = StarkPartialVerifyingKey {
             degree,
             preprocessed_data: prep_verifier_data,
             width,
@@ -178,12 +178,12 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             num_exposed_values_after_challenge: num_exposed_values,
             num_challenges_to_sample,
         };
-        let pk = StarkProvingKey {
+        let pk = StarkPartialProvingKey {
             vk,
             preprocessed_data: prep_prover_data,
         };
 
-        self.pk.per_air.push(pk);
+        self.partial_pk.per_air.push(pk);
     }
 
     /// Default way to add a single Interactive AIR.

@@ -1,6 +1,6 @@
 use std::fs::{self, File};
 
-use afs_stark_backend::{keygen::types::MultiStarkVerifyingKey, prover::types::Proof};
+use afs_stark_backend::{keygen::types::MultiStarkPartialVerifyingKey, prover::types::Proof};
 use afs_test_utils::{
     config::{
         baby_bear_poseidon2::{self, engine_from_perm},
@@ -26,7 +26,7 @@ use super::prove::{get_data_sizes, prove, BenchParams};
 
 fn instrumented_verify<SC: StarkGenericConfig, E: StarkEngineWithHashInstrumentation<SC>>(
     engine: &mut E,
-    vk: MultiStarkVerifyingKey<SC>,
+    vk: MultiStarkPartialVerifyingKey<SC>,
     air: DummyInteractionAir,
     proof: Proof<SC>,
     pis: Vec<Vec<Val<SC>>>,
