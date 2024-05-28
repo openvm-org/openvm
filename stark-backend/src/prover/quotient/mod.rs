@@ -9,10 +9,10 @@ use tracing::instrument;
 use crate::{
     air_builders::prover::ProverConstraintFolder,
     config::{Com, PcsProverData},
-    rap::Rap,
+    rap::{AnyRap, Rap},
 };
 
-use super::{trace::SingleRapCommittedTraceView, types::ProverRap};
+use super::trace::SingleRapCommittedTraceView;
 
 use self::single::compute_single_rap_quotient_values;
 
@@ -58,7 +58,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
     #[instrument(name = "compute quotient values", skip_all)]
     pub fn quotient_values<'a>(
         &self,
-        raps: Vec<&'a dyn ProverRap<SC>>,
+        raps: Vec<&'a dyn AnyRap<SC>>,
         traces: Vec<SingleRapCommittedTraceView<'a, SC>>,
         quotient_degrees: &'a [usize],
         public_values: &'a [Vec<Val<SC>>],

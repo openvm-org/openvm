@@ -1,7 +1,16 @@
 //! # RAP (Randomized Air with Preprocessing)
 //! See <https://hackmd.io/@aztec-network/plonk-arithmetiization-air> for formal definition.
 
-use p3_air::{PairBuilder, PermutationAirBuilder};
+use p3_air::{BaseAir, PairBuilder, PermutationAirBuilder};
+use p3_uni_stark::{StarkGenericConfig, Val};
+
+use crate::{
+    air_builders::{
+        debug::DebugConstraintBuilder, prover::ProverConstraintFolder,
+        symbolic::SymbolicRapBuilder, verifier::VerifierConstraintFolder,
+    },
+    interaction::{Chip, InteractiveAir},
+};
 
 /// An AIR that works with a particular `AirBuilder` which allows preprocessing
 /// and injected randomness.
@@ -29,4 +38,28 @@ where
 /// in cross-table permutation arguments.
 pub trait PermutationAirBuilderWithExposedValues: PermutationAirBuilder {
     fn permutation_exposed_values(&self) -> &[Self::EF];
+}
+
+/// RAP trait for all-purpose dynamic dispatch use.
+/// This trait is auto-implemented if you implement `Air` and `Chip` traits.
+pub trait AnyRap<SC: StarkGenericConfig>:
+for<'a> InteractiveAir<ProverConstraintFolder<'a, SC>> // for prover permutation trace generation
+    + for<'a> Rap<ProverConstraintFolder<'a, SC>> // for prover quotient polynomial calculation
+    + for<'a> Rap<VerifierConstraintFolder<'a, SC>> // for verifier quotient polynomial calculation
+    + for<'a> Rap<DebugConstraintBuilder<'a, SC>> // for debugging
+    + BaseAir<Val<SC>> + Chip<Val<SC>> + Rap<SymbolicRapBuilder<Val<SC>>> // for keygen to extract fixed data about the RAP
+{
+}
+
+impl<SC, T> AnyRap<SC> for T
+where
+    SC: StarkGenericConfig,
+    T: for<'a> InteractiveAir<ProverConstraintFolder<'a, SC>>
+        + for<'a> Rap<ProverConstraintFolder<'a, SC>>
+        + for<'a> Rap<VerifierConstraintFolder<'a, SC>>
+        + for<'a> Rap<DebugConstraintBuilder<'a, SC>>
+        + BaseAir<Val<SC>>
+        + Chip<Val<SC>>
+        + Rap<SymbolicRapBuilder<Val<SC>>>,
+{
 }

@@ -1,38 +1,23 @@
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::{iter, sync::Arc};
 
-use afs_chips::{page_controller, range, range_gate, xor_bits, xor_limbs};
-use afs_stark_backend::{
-    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
-    verifier::{MultiTraceStarkVerifier, VerificationError},
-};
-use afs_test_utils::config::poseidon2::Perm;
-use afs_test_utils::{
-    config,
-    config::poseidon2::StarkConfigPoseidon2,
-    interaction::dummy_interaction_air::DummyInteractionAir,
-    utils::{run_simple_test, ProverVerifierRap},
-};
+use afs_chips::{range, range_gate, xor_bits, xor_limbs};
+use afs_stark_backend::prover::USE_DEBUG_BUILDER;
+use afs_stark_backend::rap::AnyRap;
+use afs_stark_backend::verifier::VerificationError;
+use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
+use afs_test_utils::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::DenseMatrix;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
-use p3_uni_stark::StarkGenericConfig;
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::Rng;
 
 mod list;
 mod xor_requester;
 
 type Val = BabyBear;
-
-fn create_seeded_rng() -> StdRng {
-    let seed = [42; 32];
-    let rng = StdRng::from_seed(seed);
-
-    rng
-}
 
 #[test]
 fn test_list_range_checker() {
@@ -75,7 +60,7 @@ fn test_list_range_checker() {
 
     let range_trace = range_checker.generate_trace();
 
-    let mut all_chips: Vec<&dyn ProverVerifierRap<StarkConfigPoseidon2>> = vec![];
+    let mut all_chips: Vec<&dyn AnyRap<_>> = vec![];
     for list in &lists {
         all_chips.push(list);
     }
@@ -86,7 +71,7 @@ fn test_list_range_checker() {
         .chain(iter::once(range_trace))
         .collect::<Vec<DenseMatrix<BabyBear>>>();
 
-    run_simple_test(all_chips, all_traces).expect("Verification failed");
+    run_simple_test_no_pis(all_chips, all_traces).expect("Verification failed");
 }
 
 #[test]
@@ -126,7 +111,7 @@ fn test_xor_bits_chip() {
 
     let xor_chip_trace = xor_chip.generate_trace();
 
-    let mut all_chips: Vec<&dyn ProverVerifierRap<StarkConfigPoseidon2>> = vec![];
+    let mut all_chips: Vec<&dyn AnyRap<_>> = vec![];
     for requester in &requesters {
         all_chips.push(requester);
     }
@@ -137,7 +122,7 @@ fn test_xor_bits_chip() {
         .chain(iter::once(xor_chip_trace))
         .collect::<Vec<DenseMatrix<BabyBear>>>();
 
-    run_simple_test(all_chips, all_traces).expect("Verification failed");
+    run_simple_test_no_pis(all_chips, all_traces).expect("Verification failed");
 }
 
 #[test]
@@ -179,7 +164,7 @@ fn negative_test_xor_bits_chip() {
         4,
     );
 
-    let result = run_simple_test(
+    let result = run_simple_test_no_pis(
         vec![&dummy_requester, &*xor_chip],
         vec![dummy_trace, xor_chip_trace],
     );
@@ -249,7 +234,7 @@ fn test_xor_limbs_chip() {
     let xor_limbs_chip_trace = xor_chip.generate_trace();
     let xor_lookup_chip_trace = xor_chip.xor_lookup_chip.generate_trace();
 
-    let mut all_chips: Vec<&dyn ProverVerifierRap<StarkConfigPoseidon2>> = vec![];
+    let mut all_chips: Vec<&dyn AnyRap<_>> = vec![];
     for requester in &requesters {
         all_chips.push(requester);
     }
@@ -262,7 +247,7 @@ fn test_xor_limbs_chip() {
         .chain(iter::once(xor_lookup_chip_trace))
         .collect::<Vec<DenseMatrix<BabyBear>>>();
 
-    run_simple_test(all_chips, all_traces).expect("Verification failed");
+    run_simple_test_no_pis(all_chips, all_traces).expect("Verification failed");
 }
 
 #[test]
@@ -318,7 +303,7 @@ fn negative_test_xor_limbs_chip() {
     let xor_limbs_chip_trace = xor_chip.generate_trace();
     let xor_lookup_chip_trace = xor_chip.xor_lookup_chip.generate_trace();
 
-    let result = run_simple_test(
+    let result = run_simple_test_no_pis(
         vec![&requester, &xor_chip, &xor_chip.xor_lookup_chip],
         vec![requester_trace, xor_limbs_chip_trace, xor_lookup_chip_trace],
     );
@@ -379,10 +364,10 @@ fn test_range_gate_chip() {
 
     let range_trace = range_checker.generate_trace();
 
-    let mut all_chips: Vec<&dyn ProverVerifierRap<StarkConfigPoseidon2>> = vec![];
-    for list in &lists {
-        all_chips.push(list);
-    }
+    let mut all_chips = lists
+        .iter()
+        .map(|list| list as &dyn AnyRap<_>)
+        .collect::<Vec<_>>();
     all_chips.push(&range_checker);
 
     let all_traces = lists_traces
@@ -390,7 +375,7 @@ fn test_range_gate_chip() {
         .chain(iter::once(range_trace))
         .collect::<Vec<DenseMatrix<BabyBear>>>();
 
-    run_simple_test(all_chips, all_traces).expect("Verification failed");
+    run_simple_test_no_pis(all_chips, all_traces).expect("Verification failed");
 }
 
 #[test]
@@ -418,13 +403,13 @@ fn negative_test_range_gate_chip() {
         2,
     );
 
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        run_simple_test(vec![&range_checker], vec![range_trace]).expect("Verification failed");
-    }));
-
-    assert!(
-        result.is_err(),
-        "Expected AIR constraints to be violated, but they passed"
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
+    assert_eq!(
+        run_simple_test_no_pis(vec![&range_checker], vec![range_trace]),
+        Err(VerificationError::OodEvaluationMismatch),
+        "Expected constraint to fail"
     );
 }
 

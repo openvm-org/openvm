@@ -1,13 +1,15 @@
+use serde::{Deserialize, Serialize};
 use tracing_forest::util::LevelFilter;
 use tracing_forest::ForestLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry};
 
-pub mod poseidon2;
+pub mod baby_bear_poseidon2;
+pub mod fri_params;
+pub mod instrument;
 
-#[allow(unused)]
-pub fn tracing_setup() {
+pub fn setup_tracing() {
     // Set up tracing:
     let env_filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::INFO.into())
@@ -16,4 +18,11 @@ pub fn tracing_setup() {
         .with(env_filter)
         .with(ForestLayer::default())
         .try_init();
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct FriParameters {
+    pub log_blowup: usize,
+    pub num_queries: usize,
+    pub proof_of_work_bits: usize,
 }

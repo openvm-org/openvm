@@ -7,10 +7,10 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::utils::to_field_vec;
 use crate::{
     fib_selector_air::{air::FibonacciSelectorAir, trace::generate_trace_rows},
     get_conditional_fib_number,
+    utils::to_field_vec,
 };
 
 type Val = BabyBear;

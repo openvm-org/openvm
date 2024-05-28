@@ -1,6 +1,7 @@
 [workspace]
 members = [ "chips",
     "stark-backend",
+    "test-utils",
     "derive"
 ]
 resolver = "2"

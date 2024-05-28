@@ -8,10 +8,11 @@ use tracing::info_span;
 use crate::{
     commit::CommittedSingleMatrixView,
     config::{Com, PcsProverData},
-    keygen::types::MultiStarkVerifyingKey,
+    keygen::types::MultiStarkPartialVerifyingKey,
+    rap::AnyRap,
 };
 
-use super::types::{MultiAirCommittedTraceData, ProverRap, SingleAirCommittedTrace};
+use super::types::{MultiAirCommittedTraceData, SingleAirCommittedTrace};
 
 /// Stateful builder to help with computing multi-stark trace commitments
 pub struct TraceCommitmentBuilder<'a, SC: StarkGenericConfig> {
@@ -57,8 +58,8 @@ impl<'a, SC: StarkGenericConfig> TraceCommitmentBuilder<'a, SC> {
 
     pub fn view<'b>(
         &'b self,
-        vk: &MultiStarkVerifyingKey<SC>,
-        airs: Vec<&'b dyn ProverRap<SC>>,
+        vk: &MultiStarkPartialVerifyingKey<SC>,
+        airs: Vec<&'b dyn AnyRap<SC>>,
     ) -> MultiAirCommittedTraceData<'b, SC>
     where
         'a: 'b,
