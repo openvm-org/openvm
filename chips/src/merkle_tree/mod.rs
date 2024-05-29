@@ -1,6 +1,7 @@
 mod air;
 mod chip;
 pub mod columns;
+mod round_flags;
 mod trace;
 
 use self::columns::{MERKLE_TREE_DEPTH, NUM_MERKLE_TREE_COLS};

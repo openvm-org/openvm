@@ -12,18 +12,13 @@ pub const NUM_U16_LIMBS: usize = 4;
 pub struct MerkleTreeCols<T> {
     pub is_real: T,
 
-    // Ideally preprocessed or with periodic constraint
-    pub is_first_step: T,
-
-    pub is_final_step: T,
+    pub step_flags: [T; MERKLE_TREE_DEPTH],
 
     pub node: [[T; NUM_U16_LIMBS]; NUM_U64_HASH_ELEMS],
 
     pub sibling: [[T; NUM_U16_LIMBS]; NUM_U64_HASH_ELEMS],
 
     pub is_right_child: T,
-
-    pub bit_factor: T,
 
     pub accumulated_index: T,
 

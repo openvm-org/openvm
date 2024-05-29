@@ -62,8 +62,6 @@ pub fn generate_trace_rows_for_leaf<F: PrimeField32>(
         .chunks(NUM_U8_HASH_ELEMS / NUM_U64_HASH_ELEMS)
         .enumerate()
     {
-        rows[0].is_first_step = F::one();
-        rows[0].bit_factor = F::one();
         for limb in 0..U64_LIMBS {
             let limb_range = limb * 2..(limb + 1) * 2;
             rows[0].node[x][limb] =
@@ -73,6 +71,7 @@ pub fn generate_trace_rows_for_leaf<F: PrimeField32>(
 
     let mut node = generate_trace_row_for_round(
         &mut rows[0],
+        0,
         leaf_index & 1,
         leaf_index & 1,
         leaf_hash,
@@ -81,7 +80,6 @@ pub fn generate_trace_rows_for_leaf<F: PrimeField32>(
 
     for round in 1..rows.len() {
         // Copy previous row's output to next row's input.
-        rows[round].bit_factor = rows[round - 1].bit_factor.double();
         for x in 0..NUM_U64_HASH_ELEMS {
             for limb in 0..U64_LIMBS {
                 rows[round].node[x][limb] = rows[round - 1].output[x][limb];
@@ -91,24 +89,25 @@ pub fn generate_trace_rows_for_leaf<F: PrimeField32>(
         let mask = (1 << (round + 1)) - 1;
         node = generate_trace_row_for_round(
             &mut rows[round],
+            round,
             leaf_index & mask,
             (leaf_index >> round) & 1,
             &node,
             &siblings[round],
         );
     }
-
-    // Set the final step flag.
-    rows[MERKLE_TREE_DEPTH - 1].is_final_step = F::one();
 }
 
 pub fn generate_trace_row_for_round<F: PrimeField32>(
     row: &mut MerkleTreeCols<F>,
+    round: usize,
     accumulate_index: usize,
     is_right_child: usize,
     node: &[u8; NUM_U8_HASH_ELEMS],
     sibling: &[u8; NUM_U8_HASH_ELEMS],
 ) -> [u8; NUM_U8_HASH_ELEMS] {
+    row.step_flags[round] = F::one();
+
     let (left_node, right_node) = if is_right_child == 0 {
         (node, sibling)
     } else {
