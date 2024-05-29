@@ -1,3 +1,4 @@
+use derivative::Derivative;
 use p3_matrix::dense::RowMajorMatrixView;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
@@ -11,6 +12,8 @@ use super::opener::OpeningProof;
 
 /// Prover trace data for multiple AIRs where each AIR has partitioned main trace.
 /// The different main trace parts can belong to different commitments.
+#[derive(Derivative)]
+#[derivative(Clone(bound = "PcsProverData<SC>: Clone"))]
 pub struct MultiAirCommittedTraceData<'a, SC: StarkGenericConfig> {
     /// A list of multi-matrix commitments and their associated prover data.
     pub pcs_data: Vec<(Com<SC>, &'a PcsProverData<SC>)>,
@@ -30,18 +33,6 @@ impl<'a, SC: StarkGenericConfig> MultiAirCommittedTraceData<'a, SC> {
 
     pub fn commits(&self) -> impl Iterator<Item = &Com<SC>> {
         self.pcs_data.iter().map(|(commit, _)| commit)
-    }
-}
-
-impl<'a, SC: StarkGenericConfig> Clone for MultiAirCommittedTraceData<'a, SC>
-where
-    PcsProverData<SC>: Clone,
-{
-    fn clone(&self) -> Self {
-        Self {
-            pcs_data: self.pcs_data.clone(),
-            air_traces: self.air_traces.clone(),
-        }
     }
 }
 
