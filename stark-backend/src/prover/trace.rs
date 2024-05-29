@@ -125,6 +125,8 @@ impl<'pcs, SC: StarkGenericConfig> TraceCommitter<'pcs, SC> {
 
 /// Prover data for multi-matrix trace commitments.
 /// The data is for the traces committed into a single commitment.
+#[derive(Derivative)]
+#[derivative(Clone(bound = "PcsProverData<SC>: Clone"))]
 pub struct ProverTraceData<SC: StarkGenericConfig> {
     /// Commitment to the trace matrices.
     pub commit: Com<SC>,

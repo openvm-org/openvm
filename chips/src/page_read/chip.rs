@@ -8,7 +8,7 @@ use super::columns::PageReadCols;
 use super::PageReadChip;
 
 impl PageReadChip {
-    // receives: ([index] | [page] ) mult times
+    // receives: ([index] | [page]) mult times
     pub fn receives_custom<F: PrimeField64>(
         &self,
         cols: PageReadCols<usize>,
@@ -28,7 +28,7 @@ impl PageReadChip {
 
 impl<F: PrimeField64> Chip<F> for PageReadChip {
     fn receives(&self) -> Vec<Interaction<F>> {
-        let num_cols = self.page_width();
+        let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
         let cols_numbered = PageReadCols::<F>::cols_numbered(&all_cols);

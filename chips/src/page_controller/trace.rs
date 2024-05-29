@@ -1,9 +1,7 @@
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use p3_field::AbstractField;
-use p3_matrix::dense::DenseMatrix;
-use p3_uni_stark::{StarkGenericConfig, Val};
+use p3_uni_stark::StarkGenericConfig;
 
 use super::PageController;
 
@@ -23,13 +21,5 @@ impl<SC: StarkGenericConfig> PageController<SC> {
                 .collect(),
             2,
         )
-    }
-
-    /// Returns the trace of the page
-    pub fn get_page_trace(&self) -> DenseMatrix<Val<SC>>
-    where
-        Val<SC>: AbstractField,
-    {
-        self.page_trace.clone()
     }
 }

@@ -9,7 +9,7 @@ use super::PageReadChip;
 
 impl<F: Field> BaseAir<F> for PageReadChip {
     fn width(&self) -> usize {
-        self.page_width()
+        self.air_width()
     }
 }
 

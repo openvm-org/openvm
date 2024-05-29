@@ -1,14 +1,12 @@
 pub mod air;
 pub mod chip;
 pub mod columns;
-pub mod trace;
 
 pub struct PageReadChip {
     bus_index: usize,
 
     page_width: usize,
     page_height: usize,
-    page_data: Vec<Vec<u32>>,
 }
 
 impl PageReadChip {
@@ -19,7 +17,6 @@ impl PageReadChip {
             bus_index,
             page_width: page[0].len(),
             page_height: page.len(),
-            page_data: page,
         }
     }
 
@@ -32,6 +29,10 @@ impl PageReadChip {
     }
 
     pub fn page_width(&self) -> usize {
+        self.page_width
+    }
+
+    pub fn air_width(&self) -> usize {
         2 + self.page_width
     }
 }

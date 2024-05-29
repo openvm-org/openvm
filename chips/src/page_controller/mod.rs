@@ -1,9 +1,9 @@
 use crate::page_read::PageReadChip;
+use afs_stark_backend::config::Com;
 use afs_stark_backend::prover::trace::{ProverTraceData, TraceCommitter};
 use p3_field::AbstractField;
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
-use parking_lot::Mutex;
 use std::sync::{atomic::AtomicU32, Arc};
 
 #[cfg(test)]
@@ -12,10 +12,10 @@ pub mod tests;
 pub mod trace;
 
 pub struct PageController<SC: StarkGenericConfig> {
-    pub page_read_chip: Mutex<PageReadChip>,
+    pub page_read_chip: PageReadChip,
     request_count: Vec<Arc<AtomicU32>>,
-    page_trace: DenseMatrix<Val<SC>>,
-    page_commitment: ProverTraceData<SC>,
+    page_trace: Option<DenseMatrix<Val<SC>>>,
+    page_commitment: Option<Com<SC>>,
 }
 
 impl<SC: StarkGenericConfig> PageController<SC>
@@ -24,37 +24,42 @@ where
 {
     pub fn new(bus_index: usize) -> Self {
         PageController {
-            page_read_chip: Mutex::new(PageReadChip::new(bus_index, vec![vec![]])),
+            page_read_chip: PageReadChip::new(bus_index, vec![vec![]]),
             request_count: vec![],
-            page_trace: DenseMatrix::new_col(vec![]),
-            page_commitment: ProverTraceData::new(),
+            page_trace: None,
+            page_commitment: None,
         }
     }
 
-    pub fn load_page(&mut self, trace_committer: &mut TraceCommitter<SC>, page: Vec<Vec<u32>>) {
-        let mut page_read_chip_locked = self.page_read_chip.lock();
+    pub fn load_page(
+        &mut self,
+        trace_committer: &mut TraceCommitter<SC>,
+        page: Vec<Vec<u32>>,
+    ) -> (DenseMatrix<Val<SC>>, ProverTraceData<SC>) {
+        self.page_read_chip = PageReadChip::new(self.page_read_chip.bus_index(), page.clone());
 
-        *page_read_chip_locked = PageReadChip::new(page_read_chip_locked.bus_index(), page.clone());
-
-        let page_height = page_read_chip_locked.page_height();
-        let page_width = page_read_chip_locked.page_width();
+        let page_height = self.page_read_chip.page_height();
+        let page_width = self.page_read_chip.page_width();
         self.request_count = (0..page_height)
             .map(|_| Arc::new(AtomicU32::new(0)))
             .collect();
 
-        self.page_trace = RowMajorMatrix::new(
+        println!("here: {:?}, {:?}", page_width, page_height);
+        println!("dims {:?} {:?}", page.len(), page[0].len());
+        println!("page: {:?}", page);
+
+        self.page_trace = Some(RowMajorMatrix::new(
             page.clone()
                 .into_iter()
                 .flat_map(|row| row.into_iter().map(Val::<SC>::from_wrapped_u32))
                 .collect(),
             page_width,
-        );
+        ));
 
-        self.page_commitment = trace_committer.commit(vec![self.page_trace.clone()]);
-    }
+        let prover_data = trace_committer.commit(vec![self.page_trace.clone().unwrap()]);
+        self.page_commitment = Some(prover_data.commit.clone());
 
-    pub fn get_page_commitment(&self) -> ProverTraceData<SC> {
-        self.page_commitment.clone()
+        (self.page_trace.clone().unwrap(), prover_data)
     }
 
     pub fn request(&self, page_index: usize) {

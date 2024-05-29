@@ -37,34 +37,24 @@ fn load_page_test(
     assert!(page_height > 0);
     let page_width = page_to_receive[0].len();
 
-    let gen_page_trace_flat = |page: &Vec<Vec<u32>>, page_row_mult: &Vec<u32>| -> Vec<BabyBear> {
-        (0..page_height)
-            .flat_map(|idx| {
-                iter::once(page_row_mult[idx as usize] as u32)
-                    .chain(iter::once(idx as u32))
-                    .chain(page[idx as usize].clone().into_iter())
-            })
-            .map(Val::from_wrapped_u32)
-            .collect()
-    };
-
     let requests = (0..num_requests)
         .map(|_| rng.gen::<usize>() % page_height)
         .collect::<Vec<usize>>();
 
-    page_controller.load_page(&mut trace_builder.committer, page_to_receive.clone());
-    let page_trace = page_controller.get_page_trace();
-    let page_commitment = page_controller.get_page_commitment();
+    let (page_trace, prover_data) =
+        page_controller.load_page(&mut trace_builder.committer, page_to_receive.clone());
 
-    let mut page_row_mult = vec![0; page_height];
-    for &page_row in requests.iter() {
-        page_controller.request(page_row);
-        page_row_mult[page_row] += 1;
-    }
-
-    // [mult] | [index] | [page]
     let requester_trace = RowMajorMatrix::new(
-        gen_page_trace_flat(&page_to_send, &page_row_mult),
+        requests
+            .iter()
+            .flat_map(|i| {
+                page_controller.request(*i);
+                iter::once(1 as u32)
+                    .chain(iter::once(*i as u32))
+                    .chain(page_to_send[*i].clone())
+            })
+            .map(Val::from_wrapped_u32)
+            .collect(),
         2 + page_width,
     );
 
@@ -72,7 +62,7 @@ fn load_page_test(
 
     trace_builder.clear();
 
-    trace_builder.load_cached_trace(page_trace, page_commitment);
+    trace_builder.load_cached_trace(page_trace, prover_data);
     trace_builder.load_trace(page_metadata_trace);
     trace_builder.load_trace(requester_trace);
 
@@ -80,9 +70,10 @@ fn load_page_test(
 
     let partial_vk = partial_pk.partial_vk();
 
-    let page_read_chip_locked = page_controller.page_read_chip.lock();
-    let main_trace_data =
-        trace_builder.view(&partial_vk, vec![&*page_read_chip_locked, page_requester]);
+    let main_trace_data = trace_builder.view(
+        &partial_vk,
+        vec![&page_controller.page_read_chip, page_requester],
+    );
 
     let pis = vec![vec![]; partial_vk.per_air.len()];
 
@@ -96,7 +87,7 @@ fn load_page_test(
     let result = verifier.verify(
         &mut challenger,
         partial_vk,
-        vec![&*page_read_chip_locked, page_requester],
+        vec![&page_controller.page_read_chip, page_requester],
         proof,
         &pis,
     );
@@ -112,10 +103,11 @@ fn page_read_chip_test() {
     use page_controller::PageController;
 
     let log_page_height = 3;
+    let log_num_requests = 5;
 
     let page_width = 4;
     let page_height = 1 << log_page_height;
-    let num_requests: usize = 1 << 5;
+    let num_requests: usize = 1 << log_num_requests;
 
     let pages = (0..2)
         .map(|_| {
@@ -132,23 +124,20 @@ fn page_read_chip_test() {
     let mut page_controller = PageController::new(bus_index);
     let page_requester = DummyInteractionAir::new(1 + page_width, true, bus_index);
 
-    let engine = config::baby_bear_poseidon2::default_engine(log_page_height);
+    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(log_num_requests));
 
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
-
-    let page_read_chip_locked = page_controller.page_read_chip.lock();
 
     let page_data_ptr = keygen_builder.add_cached_main_matrix(page_width);
     let page_metadata_ptr = keygen_builder.add_main_matrix(2);
     keygen_builder.add_partitioned_air(
-        &*page_read_chip_locked,
+        &page_controller.page_read_chip,
         page_height,
         0,
         vec![page_data_ptr, page_metadata_ptr],
     );
-    drop(page_read_chip_locked);
 
-    keygen_builder.add_air(&page_requester, page_height, 0);
+    keygen_builder.add_air(&page_requester, num_requests, 0);
 
     let partial_pk = keygen_builder.generate_partial_pk();
 
