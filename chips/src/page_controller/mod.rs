@@ -44,9 +44,8 @@ where
             .map(|_| Arc::new(AtomicU32::new(0)))
             .collect();
 
-        println!("here: {:?}, {:?}", page_width, page_height);
-        println!("dims {:?} {:?}", page.len(), page[0].len());
-        println!("page: {:?}", page);
+        tracing::debug!("here: {:?}, {:?}", page_height, page_width);
+        tracing::debug!("page: {:?}", page);
 
         self.page_trace = Some(RowMajorMatrix::new(
             page.clone()
