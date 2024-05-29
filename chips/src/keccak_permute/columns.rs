@@ -3,7 +3,7 @@ use core::mem::{size_of, transmute};
 use afs_derive::AlignedBorrow;
 use p3_util::indices_arr;
 
-use super::{constants::R, NUM_ROUNDS, RATE_LIMBS, U64_LIMBS};
+use super::{constants::R, NUM_ROUNDS, U64_LIMBS};
 
 /// Note: The ordering of each array is based on the input mapping. As the spec says,
 ///
@@ -91,32 +91,6 @@ impl<T: Copy> KeccakCols<T> {
             self.a_prime_prime[y][x][limb]
         }
     }
-}
-
-pub fn input_limb(i: usize) -> usize {
-    debug_assert!(i < RATE_LIMBS);
-
-    let i_u64 = i / U64_LIMBS;
-    let limb_index = i % U64_LIMBS;
-
-    // The 5x5 state is treated as y-major, as per the Keccak spec.
-    let y = i_u64 / 5;
-    let x = i_u64 % 5;
-
-    KECCAK_COL_MAP.preimage[y][x][limb_index]
-}
-
-pub fn output_limb(i: usize) -> usize {
-    debug_assert!(i < RATE_LIMBS);
-
-    let i_u64 = i / U64_LIMBS;
-    let limb_index = i % U64_LIMBS;
-
-    // The 5x5 state is treated as y-major, as per the Keccak spec.
-    let y = i_u64 / 5;
-    let x = i_u64 % 5;
-
-    KECCAK_COL_MAP.a_prime_prime_prime(y, x, limb_index)
 }
 
 pub const NUM_KECCAK_COLS: usize = size_of::<KeccakCols<u8>>();

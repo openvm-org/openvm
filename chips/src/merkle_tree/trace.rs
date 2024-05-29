@@ -1,6 +1,5 @@
 use p3_field::PrimeField32;
 use p3_keccak::KeccakF;
-use p3_keccak_air::U64_LIMBS;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_symmetric::{PseudoCompressionFunction, TruncatedPermutation};
 
@@ -8,6 +7,7 @@ use super::{
     columns::{MerkleTreeCols, MERKLE_TREE_DEPTH, NUM_U64_HASH_ELEMS},
     MerkleTreeChip, NUM_MERKLE_TREE_COLS, NUM_U8_HASH_ELEMS,
 };
+use crate::keccak_permute::U64_LIMBS;
 
 impl MerkleTreeChip {
     pub fn generate_trace<F: PrimeField32>(&self) -> RowMajorMatrix<F> {
