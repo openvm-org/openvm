@@ -1,8 +1,10 @@
 use crate::is_zero::air::IsZeroAir;
-use crate::is_zero::trace::generate_trace_rows;
+use crate::is_zero::IsZeroChip;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
+use afs_stark_backend::prover::USE_DEBUG_BUILDER;
+use afs_stark_backend::verifier::VerificationError;
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test;
 
 #[test]
@@ -14,8 +16,9 @@ fn test_single_is_zero() {
     type Val = BabyBear;
     let pis = [x, is_zero].map(BabyBear::from_canonical_u32).to_vec();
     let air = IsZeroAir;
+    let chip = IsZeroChip::new(0, vec![x]); // Create an instance of IsZeroChip
 
-    let trace = generate_trace_rows::<Val>(x);
+    let trace = chip.generate_trace_rows::<Val>(); // Use the instance
 
     run_simple_test(vec![&air], vec![trace], vec![pis]).expect("Verification failed");
 }
@@ -29,8 +32,9 @@ fn test_single_is_zero2() {
     type Val = BabyBear;
     let pis = [x, is_zero].map(BabyBear::from_canonical_u32).to_vec();
     let air = IsZeroAir;
+    let chip = IsZeroChip::new(0, vec![x]); // Create an instance of IsZeroChip
 
-    let trace = generate_trace_rows::<Val>(x);
+    let trace = chip.generate_trace_rows::<Val>(); // Use the instance
 
     run_simple_test(vec![&air], vec![trace], vec![pis]).expect("Verification failed");
 }
@@ -44,10 +48,18 @@ fn test_single_is_zero_fail() {
     type Val = BabyBear;
     let pis = [x, is_zero].map(BabyBear::from_canonical_u32).to_vec();
     let air = IsZeroAir;
+    let chip = IsZeroChip::new(0, vec![x]); // Create an instance of IsZeroChip
 
-    let trace = generate_trace_rows::<Val>(x);
+    let trace = chip.generate_trace_rows::<Val>(); // Use the instance
 
-    run_simple_test(vec![&air], vec![trace], vec![pis]).expect("Verification failed");
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
+    assert_eq!(
+        run_simple_test(vec![&air], vec![trace], vec![pis]),
+        Err(VerificationError::OodEvaluationMismatch),
+        "Expected constraint to fail"
+    );
 }
 
 #[test]
@@ -59,8 +71,16 @@ fn test_single_is_zero_fail2() {
     type Val = BabyBear;
     let pis = [x, is_zero].map(BabyBear::from_canonical_u32).to_vec();
     let air = IsZeroAir;
+    let chip = IsZeroChip::new(0, vec![x]); // Create an instance of IsZeroChip
 
-    let trace = generate_trace_rows::<Val>(x);
+    let trace = chip.generate_trace_rows::<Val>(); // Use the instance
 
-    run_simple_test(vec![&air], vec![trace], vec![pis]).expect("Verification failed");
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
+    assert_eq!(
+        run_simple_test(vec![&air], vec![trace], vec![pis]),
+        Err(VerificationError::OodEvaluationMismatch),
+        "Expected constraint to fail"
+    );
 }
