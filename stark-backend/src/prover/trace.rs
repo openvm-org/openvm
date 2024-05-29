@@ -32,7 +32,7 @@ impl<'a, SC: StarkGenericConfig> TraceCommitmentBuilder<'a, SC> {
         }
     }
 
-    pub fn reset(&mut self) {
+    pub fn clear(&mut self) {
         self.traces_to_commit.clear();
         self.committed_traces.clear();
         self.data.clear();

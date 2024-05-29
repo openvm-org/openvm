@@ -16,7 +16,7 @@ impl PageReadChip {
                 .into_iter()
                 .flat_map(|row| row.into_iter().map(Val::<SC>::from_wrapped_u32))
                 .collect(),
-            self.val_len,
+            self.page_width,
         )
     }
 }

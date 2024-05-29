@@ -6,6 +6,7 @@ pub struct PageReadCols<T> {
 
 /// Columns are
 /// [page] | [index] | [mult]
+/// This gets partitioned into a chached trace part ([page]) and a main trace part ([index] | [mult])
 impl<T> PageReadCols<T> {
     pub fn cols_numbered(cols: &[usize]) -> PageReadCols<usize> {
         assert!(cols.len() >= 2);
