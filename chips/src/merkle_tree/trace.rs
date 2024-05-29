@@ -71,8 +71,13 @@ pub fn generate_trace_rows_for_leaf<F: PrimeField32>(
         }
     }
 
-    let mut node =
-        generate_trace_row_for_round(&mut rows[0], leaf_index & 1, leaf_hash, &siblings[0]);
+    let mut node = generate_trace_row_for_round(
+        &mut rows[0],
+        leaf_index & 1,
+        leaf_index & 1,
+        leaf_hash,
+        &siblings[0],
+    );
 
     for round in 1..rows.len() {
         // Copy previous row's output to next row's input.
@@ -83,8 +88,10 @@ pub fn generate_trace_rows_for_leaf<F: PrimeField32>(
             }
         }
 
+        let mask = (1 << (round + 1)) - 1;
         node = generate_trace_row_for_round(
             &mut rows[round],
+            leaf_index & mask,
             (leaf_index >> round) & 1,
             &node,
             &siblings[round],
@@ -97,6 +104,7 @@ pub fn generate_trace_rows_for_leaf<F: PrimeField32>(
 
 pub fn generate_trace_row_for_round<F: PrimeField32>(
     row: &mut MerkleTreeCols<F>,
+    accumulate_index: usize,
     is_right_child: usize,
     node: &[u8; NUM_U8_HASH_ELEMS],
     sibling: &[u8; NUM_U8_HASH_ELEMS],
@@ -111,6 +119,7 @@ pub fn generate_trace_row_for_round<F: PrimeField32>(
     let output = keccak.compress([*left_node, *right_node]);
 
     row.is_right_child = F::from_canonical_usize(is_right_child);
+    row.accumulated_index = F::from_canonical_usize(accumulate_index);
     for x in 0..NUM_U64_HASH_ELEMS {
         let offset = x * NUM_U8_HASH_ELEMS / NUM_U64_HASH_ELEMS;
         for limb in 0..U64_LIMBS {

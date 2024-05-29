@@ -26,12 +26,26 @@ impl<AB: AirBuilder> Air<AB> for MerkleTreeChip {
         builder.assert_bool(local.is_final_step);
         builder.assert_bool(local.is_right_child);
 
+        // TODO: is_first_step and is_final_step
+        // TODO: Without bit_factor
+
         builder
             .when(local.is_first_step)
             .assert_eq(local.bit_factor, AB::Expr::one());
         builder
             .when_ne(local.is_final_step, AB::Expr::one())
             .assert_eq(AB::Expr::two() * local.bit_factor, next.bit_factor);
+
+        // Accumulated index is computed correctly
+        builder
+            .when(local.is_first_step)
+            .assert_eq(local.accumulated_index, local.is_right_child);
+        builder
+            .when_ne(local.is_final_step, AB::Expr::one())
+            .assert_eq(
+                next.accumulated_index,
+                local.accumulated_index + local.bit_factor * local.is_right_child,
+            );
 
         // Left and right nodes are selected correctly.
         for i in 0..NUM_U64_HASH_ELEMS {

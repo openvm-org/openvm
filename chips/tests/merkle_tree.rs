@@ -1,7 +1,5 @@
-use afs_test_utils::{
-    config::poseidon2::StarkConfigPoseidon2,
-    utils::{run_simple_test, ProverVerifierRap},
-};
+use afs_stark_backend::rap::AnyRap;
+use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use p3_keccak::KeccakF;
 use p3_symmetric::{PseudoCompressionFunction, TruncatedPermutation};
 
@@ -45,6 +43,8 @@ fn test_merkle_tree_prove() {
         .unwrap();
 
     let merkle_tree_air = MerkleTreeChip {
+        bus_hash_input: 0,
+        bus_hash_output: 1,
         leaves: vec![leaf],
         leaf_indices: vec![leaf_index],
         siblings: vec![siblings],
@@ -52,8 +52,8 @@ fn test_merkle_tree_prove() {
 
     let trace = merkle_tree_air.generate_trace();
 
-    let chips: Vec<&dyn ProverVerifierRap<StarkConfigPoseidon2>> = vec![&merkle_tree_air];
+    let chips = vec![&merkle_tree_air as &dyn AnyRap<_>];
     let traces = vec![trace];
 
-    run_simple_test(chips, traces).expect("Verification failed");
+    run_simple_test_no_pis(chips, traces).expect("Verification failed");
 }
