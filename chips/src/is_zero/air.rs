@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use super::columns::{IsZeroCols, NUM_COLS};
 use afs_stark_backend::interaction::Chip;
-use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
+use p3_air::{Air, AirBuilderWithPublicValues, BaseAir};
 use p3_field::AbstractField;
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -29,13 +29,11 @@ impl<AB: AirBuilderWithPublicValues> Air<AB> for IsZeroAir {
         let local = main.row_slice(0);
         let local: &IsZeroCols<AB::Var> = (*local).borrow();
 
-        let mut when_first_row = builder.when_first_row();
+        builder.assert_eq(local.x, x);
+        builder.assert_eq(local.is_zero, is_zero);
 
-        when_first_row.assert_eq(local.x, x);
-        when_first_row.assert_eq(local.is_zero, is_zero);
-
-        when_first_row.assert_eq((local.x + local.is_zero) * local.inv, AB::F::one());
-        when_first_row.assert_eq(local.is_zero * local.is_zero, local.is_zero);
-        when_first_row.assert_eq(local.x * local.is_zero, AB::F::zero());
+        builder.assert_eq((local.x + local.is_zero) * local.inv, AB::F::one());
+        builder.assert_eq(local.is_zero * local.is_zero, local.is_zero);
+        builder.assert_eq(local.x * local.is_zero, AB::F::zero());
     }
 }
