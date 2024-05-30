@@ -2,12 +2,19 @@ pub mod air;
 pub mod columns;
 pub mod trace;
 
+use crate::is_zero::columns::IsZeroCols;
+use crate::sub_chip::AirConfig;
+
 #[derive(Default)]
 /// A chip that checks if a number equals 0
 pub struct IsZeroAir {
     bus_index: usize,
 
     pub x: Vec<u32>,
+}
+
+impl AirConfig for IsZeroAir {
+    type Cols<T> = IsZeroCols<T>;
 }
 
 impl IsZeroAir {
