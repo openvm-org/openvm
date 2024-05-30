@@ -9,4 +9,5 @@ pub mod xor_limbs;
 pub mod xor_lookup;
 
 pub mod is_equal;
+pub mod is_equal_vec;
 pub mod is_zero;
