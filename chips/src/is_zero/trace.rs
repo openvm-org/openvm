@@ -10,14 +10,9 @@ impl IsZeroAir {
         let rows = self
             .x
             .iter()
-            .map(|x| {
-                let answer = if *x == 0 { 1 } else { 0 };
-                let inv = F::from_canonical_u32(*x + answer).inverse();
-                vec![
-                    F::from_canonical_u32(*x),
-                    F::from_canonical_u32(answer),
-                    inv,
-                ]
+            .map(|&x| {
+                let iszerocols = self.generate_trace_row(x);
+                vec![iszerocols.x, iszerocols.is_zero, iszerocols.inv]
             })
             .collect::<Vec<_>>();
 
