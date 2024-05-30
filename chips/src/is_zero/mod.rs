@@ -32,7 +32,7 @@ impl IsZeroChip {
         }
     }
 
-    pub fn request(&self, x: Vec<u32>) -> Vec<u32> {
-        x.iter().map(|x| self.is_zero(*x)).collect()
+    pub fn request(&self, x: u32) -> u32 {
+        self.is_zero(x)
     }
 }
