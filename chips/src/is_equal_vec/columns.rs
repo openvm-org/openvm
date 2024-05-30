@@ -1,5 +1,5 @@
 #[derive(Default)]
-pub struct IsEqualVecCols<T: Clone> {
+pub struct IsEqualVecCols<T> {
     pub x: Vec<T>,
     pub y: Vec<T>,
     pub prods: Vec<T>,
@@ -16,14 +16,14 @@ impl<T: Clone> IsEqualVecCols<T> {
         Self { x, y, prods, invs }
     }
 
-    pub fn flatten(&self) -> Vec<T> {
-        let mut flattened = vec![];
-        flattened.extend(self.x.iter().cloned());
-        flattened.extend(self.y.iter().cloned());
-        flattened.extend(self.prods.iter().cloned());
-        flattened.extend(self.invs.iter().cloned());
-
-        flattened
+    pub fn to_vec(&self) -> Vec<T> {
+        self.x
+            .iter()
+            .chain(self.y.iter())
+            .chain(self.prods.iter())
+            .chain(self.invs.iter())
+            .cloned()
+            .collect()
     }
 
     pub fn get_width(&self) -> usize {

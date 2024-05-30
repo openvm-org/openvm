@@ -1,8 +1,11 @@
 use std::borrow::Borrow;
 
+use crate::sub_chip::SubAir;
+
 use super::columns::IsEqualVecCols;
 use super::IsEqualVecChip;
 use afs_stark_backend::interaction::Chip;
+use p3_air::AirBuilder;
 use p3_air::{Air, AirBuilderWithPublicValues, BaseAir};
 use p3_field::AbstractField;
 use p3_field::Field;
@@ -30,35 +33,43 @@ impl<F: Field> BaseAir<F> for IsEqualVecChip {
 /// When product does not change, inv is 0, when product changes, inverse is inverse of difference
 impl<AB: AirBuilderWithPublicValues> Air<AB> for IsEqualVecChip {
     fn eval(&self, builder: &mut AB) {
-        let vec_len = self.vec_len();
         let main = builder.main();
 
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
 
-        let local_cols = IsEqualVecCols::<AB::Var>::from_slice(local, vec_len);
+        let is_equal_vec_cols = IsEqualVecCols::<AB::Var>::from_slice(local, self.vec_len());
 
+        SubAir::<AB>::eval(self, builder, is_equal_vec_cols);
+    }
+}
+
+impl<AB: AirBuilder> SubAir<AB> for IsEqualVecChip {
+    fn eval(&self, builder: &mut AB, is_equal_vec_cols: Self::Cols<AB::Var>) {
+        let vec_len = self.vec_len();
         builder.assert_eq(
-            local_cols.prods[0] + (local_cols.x[0] - local_cols.y[0]) * local_cols.invs[0],
+            is_equal_vec_cols.prods[0]
+                + (is_equal_vec_cols.x[0] - is_equal_vec_cols.y[0]) * is_equal_vec_cols.invs[0],
             AB::F::one(),
         );
 
         for i in 0..vec_len {
             builder.assert_eq(
-                local_cols.prods[i] * (local_cols.x[i] - local_cols.y[i]),
+                is_equal_vec_cols.prods[i] * (is_equal_vec_cols.x[i] - is_equal_vec_cols.y[i]),
                 AB::F::zero(),
             );
         }
 
         for i in 0..vec_len - 1 {
             builder.assert_eq(
-                local_cols.prods[i] * local_cols.prods[i + 1],
-                local_cols.prods[i + 1],
+                is_equal_vec_cols.prods[i] * is_equal_vec_cols.prods[i + 1],
+                is_equal_vec_cols.prods[i + 1],
             );
             builder.assert_eq(
-                local_cols.prods[i + 1]
-                    + (local_cols.x[i + 1] - local_cols.y[i + 1]) * local_cols.invs[i + 1],
-                local_cols.prods[i],
+                is_equal_vec_cols.prods[i + 1]
+                    + (is_equal_vec_cols.x[i + 1] - is_equal_vec_cols.y[i + 1])
+                        * is_equal_vec_cols.invs[i + 1],
+                is_equal_vec_cols.prods[i],
             );
         }
     }

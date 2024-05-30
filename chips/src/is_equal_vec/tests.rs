@@ -14,9 +14,12 @@ fn test_single_is_equal_vec() {
 
     type Val = BabyBear;
     // let air = IsEqualVecChip;
-    let chip = IsEqualVecChip::new(0, vec![x], vec![y]); // Create an instance of IsEqualChip
+    let chip = IsEqualVecChip {
+        x: vec![x],
+        y: vec![y],
+    };
 
-    let trace = chip.generate_trace_rows::<Val>(); // Use the instance
+    let trace = chip.generate_trace::<Val>(); // Use the instance
 
     run_simple_test_no_pis(vec![&chip], vec![trace]).expect("Verification failed");
 }
@@ -29,9 +32,12 @@ fn test_single_is_equal_vec2() {
 
     type Val = BabyBear;
     // let air = IsEqualVecChip;
-    let chip = IsEqualVecChip::new(0, vec![x], vec![y]); // Create an instance of IsEqualChip
+    let chip = IsEqualVecChip {
+        x: vec![x],
+        y: vec![y],
+    };
 
-    let trace = chip.generate_trace_rows::<Val>(); // Use the instance
+    let trace = chip.generate_trace::<Val>(); // Use the instance
 
     run_simple_test_no_pis(vec![&chip], vec![trace]).expect("Verification failed");
 }
@@ -44,9 +50,12 @@ fn test_single_is_equal_vec3() {
 
     type Val = BabyBear;
     // let air = IsEqualVecChip;
-    let chip = IsEqualVecChip::new(0, vec![x], vec![y]); // Create an instance of IsEqualChip
+    let chip = IsEqualVecChip {
+        x: vec![x],
+        y: vec![y],
+    };
 
-    let trace = chip.generate_trace_rows::<Val>(); // Use the instance
+    let trace = chip.generate_trace::<Val>(); // Use the instance
 
     run_simple_test_no_pis(vec![&chip], vec![trace]).expect("Verification failed");
 }
@@ -65,9 +74,12 @@ fn test_single_is_equal_vec4() {
 
     type Val = BabyBear;
     // let air = IsEqualVecChip;
-    let chip = IsEqualVecChip::new(0, vec![x1, x2, x3, x4], vec![y1, y2, y3, y4]); // Create an instance of IsEqualChip
+    let chip = IsEqualVecChip {
+        x: vec![x1, x2, x3, x4],
+        y: vec![y1, y2, y3, y4],
+    };
 
-    let trace = chip.generate_trace_rows::<Val>(); // Use the instance
+    let trace = chip.generate_trace::<Val>(); // Use the instance
 
     run_simple_test_no_pis(vec![&chip], vec![trace]).expect("Verification failed");
 }
@@ -79,9 +91,12 @@ fn test_single_is_equal_vec_fail() {
     let y = vec![1, 2, 1];
 
     type Val = BabyBear;
-    let chip = IsEqualVecChip::new(0, vec![x], vec![y]); // Create an instance of IsEqualChip
+    let chip = IsEqualVecChip {
+        x: vec![x],
+        y: vec![y],
+    };
 
-    let mut trace = chip.generate_trace_rows::<Val>(); // Use the instance
+    let mut trace = chip.generate_trace::<Val>(); // Use the instance
 
     // let mut trace_values = trace.values;
     trace.values[0] = AbstractField::from_canonical_u32(2);
@@ -104,9 +119,12 @@ fn test_single_is_equal_vec_fail2() {
     let y = vec![1, 2, 1];
 
     type Val = BabyBear;
-    let chip = IsEqualVecChip::new(0, vec![x], vec![y]); // Create an instance of IsEqualChip
+    let chip = IsEqualVecChip {
+        x: vec![x],
+        y: vec![y],
+    };
 
-    let mut trace = chip.generate_trace_rows::<Val>(); // Use the instance
+    let mut trace = chip.generate_trace::<Val>(); // Use the instance
 
     // let mut trace_values = trace.values;
     trace.values[8] = AbstractField::from_canonical_u32(1);
