@@ -2,10 +2,10 @@ use std::borrow::Borrow;
 
 use super::columns::{IsEqualCols, NUM_COLS};
 use super::IsEqualChip;
+// use crate::is_zero::{IsZeroChip, IsZeroCols};
+use crate::sub_chip::SubAir;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::AbstractField;
-// use p3_field::Field;
-use crate::sub_chip::SubAir;
 use p3_matrix::Matrix;
 
 impl<F> BaseAir<F> for IsEqualChip {
