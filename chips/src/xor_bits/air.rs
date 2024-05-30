@@ -36,10 +36,10 @@ where
 /// For each x_bit[i], y_bit[i], and z_bit[i], constraints x_bit[i] + y_bit[i] - 2 * x_bit[i] * y_bit[i] == z_bit[i],
 /// which is equivalent to ensuring that x_bit[i] ^ y_bit[i] == z_bit[i].
 /// Overall, this ensures that x^y == z.
-impl<AB: AirBuilder, const N: usize> SubAir<AB> for XorBitsChip<N> {
+impl<const N: usize> SubAir for XorBitsChip<N> {
     type Cols<T> = XorCols<N, T>;
 
-    fn eval(&self, builder: &mut AB, xor_cols: Self::Cols<AB::Var>) {
+    fn eval<AB: AirBuilder>(&self, builder: &mut AB, xor_cols: Self::Cols<AB::Var>) {
         let mut x_from_bits: AB::Expr = AB::Expr::zero();
         for i in 0..N {
             x_from_bits += xor_cols.x_bits[i] * AB::Expr::from_canonical_u64(1 << i);
