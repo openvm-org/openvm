@@ -18,12 +18,15 @@ impl<F: Field> BaseAir<F> for IsEqualVecChip {
 }
 
 /// Imposes AIR constaints within each row
-/// Row split into four chunks, first two are vector input, third is cumulative
-/// equality AND, fourth is inverse used to constrain nonzero when equality holds
-/// At the first index naively implements is_equal constraints
+/// Indices are as follows:
+/// 0 - 2*vec_len-1: vector input
+/// 2*vec_len - 3*vec_len-1: cumulative equality AND (answer in index 3*vec_len-1)
+/// 3*vec_len - 4*vec_len-1: inverse used to constrain nonzero when equality holds
+///
+/// At first index naively implements is_equal constraints
 /// At every index constrains cumulative NAND difference
 /// At every transition index prohibits 0 followed by 1, and constrains
-/// 1 with difference of 0 must be followed by 0.
+/// 1 with equality must be followed by 1
 /// When product does not change, inv is 0, when product changes, inverse is inverse of difference
 impl<AB: AirBuilderWithPublicValues> Air<AB> for IsEqualVecChip {
     fn eval(&self, builder: &mut AB) {
