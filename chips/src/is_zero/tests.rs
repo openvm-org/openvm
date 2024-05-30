@@ -1,5 +1,4 @@
 use super::IsZeroChip;
-// use crate::is_zero::air::IsZeroChip;
 use p3_baby_bear::BabyBear;
 
 use afs_stark_backend::prover::USE_DEBUG_BUILDER;

@@ -24,11 +24,11 @@ impl<F: PrimeField32> LocalTraceInstructions<F> for IsZeroChip {
     type LocalInput = u32;
 
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
-        let answer = self.is_zero(local_input);
-        let inv = F::from_canonical_u32(local_input + answer).inverse();
+        let is_zero = self.is_zero(local_input);
+        let inv = F::from_canonical_u32(local_input + is_zero).inverse();
         IsZeroCols::<F>::new(
             F::from_canonical_u32(local_input),
-            F::from_canonical_u32(answer),
+            F::from_canonical_u32(is_zero),
             inv,
         )
     }
