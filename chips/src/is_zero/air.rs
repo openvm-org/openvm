@@ -7,6 +7,8 @@ use p3_field::AbstractField;
 use p3_field::Field;
 use p3_matrix::Matrix;
 
+use crate::sub_chip::AirConfig;
+
 pub struct IsZeroAir;
 
 // No interactions
@@ -16,6 +18,10 @@ impl<F> BaseAir<F> for IsZeroAir {
     fn width(&self) -> usize {
         NUM_COLS
     }
+}
+
+impl AirConfig for IsZeroAir {
+    type Cols<T> = IsZeroCols<T>;
 }
 
 impl<AB: AirBuilderWithPublicValues> Air<AB> for IsZeroAir {

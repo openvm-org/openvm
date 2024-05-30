@@ -1,18 +1,16 @@
-#[cfg(test)]
-pub mod tests;
-
 pub mod air;
 pub mod columns;
 pub mod trace;
 
 #[derive(Default)]
 /// A chip that checks if a number equals 0
-pub struct IsZeroChip {
+pub struct IsZeroAir {
     bus_index: usize,
+
     pub x: Vec<u32>,
 }
 
-impl IsZeroChip {
+impl IsZeroAir {
     pub fn new(bus_index: usize, x: Vec<u32>) -> Self {
         Self { bus_index, x }
     }

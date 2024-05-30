@@ -14,4 +14,8 @@ impl<F> IsZeroCols<F> {
     pub const fn new(x: F, is_zero: F, inv: F) -> IsZeroCols<F> {
         IsZeroCols { x, is_zero, inv }
     }
+
+    pub fn get_width() -> usize {
+        NUM_COLS
+    }
 }

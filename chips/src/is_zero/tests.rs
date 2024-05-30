@@ -1,5 +1,4 @@
 use crate::is_zero::air::IsZeroAir;
-use crate::is_zero::IsZeroChip;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
@@ -16,7 +15,7 @@ fn test_single_is_zero() {
     type Val = BabyBear;
     let pis = [x, is_zero].map(BabyBear::from_canonical_u32).to_vec();
     let air = IsZeroAir;
-    let chip = IsZeroChip::new(0, vec![x]); // Create an instance of IsZeroChip
+    let chip = IsZeroAir::new(0, vec![x]); // Create an instance of IsZeroChip
 
     let trace = chip.generate_trace_rows::<Val>(); // Use the instance
 
@@ -32,7 +31,7 @@ fn test_single_is_zero2() {
     type Val = BabyBear;
     let pis = [x, is_zero].map(BabyBear::from_canonical_u32).to_vec();
     let air = IsZeroAir;
-    let chip = IsZeroChip::new(0, vec![x]); // Create an instance of IsZeroChip
+    let chip = IsZeroAir::new(0, vec![x]); // Create an instance of IsZeroChip
 
     let trace = chip.generate_trace_rows::<Val>(); // Use the instance
 
@@ -48,7 +47,7 @@ fn test_single_is_zero_fail() {
     type Val = BabyBear;
     let pis = [x, is_zero].map(BabyBear::from_canonical_u32).to_vec();
     let air = IsZeroAir;
-    let chip = IsZeroChip::new(0, vec![x]); // Create an instance of IsZeroChip
+    let chip = IsZeroAir::new(0, vec![x]); // Create an instance of IsZeroChip
 
     let trace = chip.generate_trace_rows::<Val>(); // Use the instance
 
@@ -71,7 +70,7 @@ fn test_single_is_zero_fail2() {
     type Val = BabyBear;
     let pis = [x, is_zero].map(BabyBear::from_canonical_u32).to_vec();
     let air = IsZeroAir;
-    let chip = IsZeroChip::new(0, vec![x]); // Create an instance of IsZeroChip
+    let chip = IsZeroAir::new(0, vec![x]); // Create an instance of IsZeroChip
 
     let trace = chip.generate_trace_rows::<Val>(); // Use the instance
 
