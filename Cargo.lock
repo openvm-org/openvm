@@ -28,6 +28,7 @@ dependencies = [
  "p3-util",
  "parking_lot",
  "rand",
+ "tracing",
  "tracing-forest",
  "tracing-subscriber",
 ]

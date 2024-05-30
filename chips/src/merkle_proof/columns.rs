@@ -1,18 +1,16 @@
 use afs_derive::AlignedBorrow;
-use core::mem::{size_of, transmute};
-use p3_util::indices_arr;
+use core::mem::size_of;
+use std::mem::MaybeUninit;
 
-// pub const MERKLE_PROOF_DEPTH: usize = 4;
-pub const MERKLE_PROOF_DEPTH: usize = 8; // PAGE_SIZE_BITS
 pub const NUM_U64_HASH_ELEMS: usize = 4;
 pub const NUM_U16_LIMBS: usize = 4;
 
 #[repr(C)]
-#[derive(Default, AlignedBorrow)]
-pub struct MerkleProofCols<T> {
+#[derive(AlignedBorrow)]
+pub struct MerkleProofCols<T, const DEPTH: usize> {
     pub is_real: T,
 
-    pub step_flags: [T; MERKLE_PROOF_DEPTH],
+    pub step_flags: [T; DEPTH],
 
     pub node: [[T; NUM_U16_LIMBS]; NUM_U64_HASH_ELEMS],
 
@@ -31,12 +29,20 @@ pub struct MerkleProofCols<T> {
     pub output: [[T; NUM_U16_LIMBS]; NUM_U64_HASH_ELEMS],
 }
 
-impl<T: Copy> MerkleProofCols<T> {}
+impl<T: Copy, const DEPTH: usize> MerkleProofCols<T, DEPTH> {}
 
-pub(crate) const NUM_MERKLE_PROOF_COLS: usize = size_of::<MerkleProofCols<u8>>();
-pub(crate) const MERKLE_PROOF_COL_MAP: MerkleProofCols<usize> = make_col_map();
+pub(crate) const fn num_merkle_proof_cols<const DEPTH: usize>() -> usize {
+    size_of::<MerkleProofCols<u8, DEPTH>>()
+}
 
-const fn make_col_map() -> MerkleProofCols<usize> {
-    let indices_arr = indices_arr::<NUM_MERKLE_PROOF_COLS>();
-    unsafe { transmute::<[usize; NUM_MERKLE_PROOF_COLS], MerkleProofCols<usize>>(indices_arr) }
+pub(crate) fn merkle_proof_col_map<const DEPTH: usize>() -> MerkleProofCols<usize, DEPTH> {
+    let num_cols = num_merkle_proof_cols::<DEPTH>();
+    let indices_arr = (0..num_cols).collect::<Vec<usize>>();
+
+    unsafe {
+        let mut uninit = MaybeUninit::<MerkleProofCols<usize, DEPTH>>::uninit();
+        let ptr = uninit.as_mut_ptr() as *mut usize;
+        ptr.copy_from_nonoverlapping(indices_arr.as_ptr(), num_cols);
+        uninit.assume_init()
+    }
 }

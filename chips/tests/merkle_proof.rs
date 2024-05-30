@@ -3,10 +3,7 @@ use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use p3_keccak::KeccakF;
 use p3_symmetric::{PseudoCompressionFunction, TruncatedPermutation};
 
-use afs_chips::{
-    keccak_permute::KeccakPermuteChip,
-    merkle_proof::{columns::MERKLE_PROOF_DEPTH, MerkleProofChip},
-};
+use afs_chips::{keccak_permute::KeccakPermuteChip, merkle_proof::MerkleProofChip};
 
 fn generate_digests(leaf_hashes: Vec<[u8; 32]>) -> Vec<Vec<[u8; 32]>> {
     let keccak = TruncatedPermutation::new(KeccakF {});
@@ -30,16 +27,16 @@ fn generate_digests(leaf_hashes: Vec<[u8; 32]>) -> Vec<Vec<[u8; 32]>> {
 
 #[test]
 fn test_merkle_proof_prove() {
-    let leaf_hashes: Vec<[u8; 32]> = (0..2u64.pow(MERKLE_PROOF_DEPTH as u32))
-        .map(|_| [0; 32])
-        .collect();
+    const DEPTH: usize = 8;
+
+    let leaf_hashes: Vec<[u8; 32]> = (0..2u64.pow(DEPTH as u32)).map(|_| [0; 32]).collect();
 
     let digests = generate_digests(leaf_hashes);
 
     let leaf_index = 0;
     let leaf = digests[0][leaf_index];
 
-    let siblings = (0..MERKLE_PROOF_DEPTH)
+    let siblings: [[u8; 32]; DEPTH] = (0..DEPTH)
         .map(|i| digests[i][(leaf_index >> i) ^ 1])
         .collect::<Vec<[u8; 32]>>()
         .try_into()
