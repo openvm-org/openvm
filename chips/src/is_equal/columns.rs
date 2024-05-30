@@ -11,7 +11,7 @@ pub struct IsEqualCols<F> {
     pub inv: F,
 }
 
-impl<F> IsEqualCols<F> {
+impl<F: Clone> IsEqualCols<F> {
     pub const fn new(x: F, y: F, is_equal: F, inv: F) -> IsEqualCols<F> {
         IsEqualCols {
             x,
@@ -19,5 +19,18 @@ impl<F> IsEqualCols<F> {
             is_equal,
             inv,
         }
+    }
+
+    pub fn from_slice(slc: &[F]) -> IsEqualCols<F> {
+        IsEqualCols {
+            x: slc[0].clone(),
+            y: slc[1].clone(),
+            is_equal: slc[2].clone(),
+            inv: slc[3].clone(),
+        }
+    }
+
+    pub fn get_width() -> usize {
+        NUM_COLS
     }
 }

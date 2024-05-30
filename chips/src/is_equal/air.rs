@@ -1,24 +1,19 @@
 use std::borrow::Borrow;
 
 use super::columns::{IsEqualCols, NUM_COLS};
-use afs_stark_backend::interaction::Chip;
+use super::IsEqualChip;
 use p3_air::{Air, AirBuilderWithPublicValues, BaseAir};
 use p3_field::AbstractField;
-use p3_field::Field;
+// use p3_field::Field;
 use p3_matrix::Matrix;
 
-pub struct IsEqualAir;
-
-// No interactions
-impl<F: Field> Chip<F> for IsEqualAir {}
-
-impl<F> BaseAir<F> for IsEqualAir {
+impl<F> BaseAir<F> for IsEqualChip {
     fn width(&self) -> usize {
         NUM_COLS
     }
 }
 
-impl<AB: AirBuilderWithPublicValues> Air<AB> for IsEqualAir {
+impl<AB: AirBuilderWithPublicValues> Air<AB> for IsEqualChip {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let pis = builder.public_values();

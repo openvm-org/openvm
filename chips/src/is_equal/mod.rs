@@ -2,22 +2,26 @@
 pub mod tests;
 
 pub mod air;
+pub mod chip;
 pub mod columns;
 pub mod trace;
 
+use crate::is_equal::columns::IsEqualCols;
+use crate::sub_chip::AirConfig;
+
+#[derive(Default)]
 pub struct IsEqualChip {
-    bus_index: usize,
     pub x: Vec<u32>,
     pub y: Vec<u32>,
 }
 
-impl IsEqualChip {
-    pub fn new(bus_index: usize, x: Vec<u32>, y: Vec<u32>) -> Self {
-        Self { bus_index, x, y }
-    }
+impl AirConfig for IsEqualChip {
+    type Cols<T> = IsEqualCols<T>;
+}
 
-    pub fn bus_index(&self) -> usize {
-        self.bus_index
+impl IsEqualChip {
+    pub fn new(x: Vec<u32>, y: Vec<u32>) -> Self {
+        Self { x, y }
     }
 
     fn is_equal(&self, x: u32, y: u32) -> u32 {
