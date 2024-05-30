@@ -3,7 +3,10 @@ use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use p3_keccak::KeccakF;
 use p3_symmetric::{PseudoCompressionFunction, TruncatedPermutation};
 
-use afs_chips::{keccak_permute::KeccakPermuteChip, merkle_proof::MerkleProofChip};
+use afs_chips::{
+    keccak_permute::KeccakPermuteChip,
+    merkle_proof::{MerkleProofChip, MerkleProofOp},
+};
 
 fn generate_digests(leaf_hashes: Vec<[u8; 32]>) -> Vec<Vec<[u8; 32]>> {
     let keccak = TruncatedPermutation::new(KeccakF {});
@@ -34,13 +37,17 @@ fn test_merkle_proof_prove() {
     let digests = generate_digests(leaf_hashes);
 
     let leaf_index = 0;
-    let leaf = digests[0][leaf_index];
-
+    let leaf_hash = digests[0][leaf_index];
     let siblings: [[u8; 32]; DEPTH] = (0..DEPTH)
         .map(|i| digests[i][(leaf_index >> i) ^ 1])
         .collect::<Vec<[u8; 32]>>()
         .try_into()
         .unwrap();
+    let op = MerkleProofOp {
+        leaf_index,
+        leaf_hash,
+        siblings,
+    };
 
     let height = digests.len() - 1;
     let keccak_inputs = (0..height)
@@ -73,9 +80,7 @@ fn test_merkle_proof_prove() {
     let merkle_proof_air = MerkleProofChip {
         bus_hash_input: 0,
         bus_hash_output: 1,
-        leaves: vec![leaf],
-        leaf_indices: vec![leaf_index],
-        siblings: vec![siblings],
+        operations: vec![op],
     };
 
     let keccak_permute_air = KeccakPermuteChip {
@@ -84,7 +89,9 @@ fn test_merkle_proof_prove() {
         inputs: keccak_inputs,
     };
 
-    let merkle_proof_trace = merkle_proof_air.generate_trace();
+    let keccak_hasher = TruncatedPermutation::new(KeccakF {});
+
+    let merkle_proof_trace = merkle_proof_air.generate_trace(&keccak_hasher);
     let keccak_permute_trace = keccak_permute_air.generate_trace();
 
     let chips = vec![

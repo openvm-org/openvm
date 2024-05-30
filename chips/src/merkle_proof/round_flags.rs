@@ -9,11 +9,13 @@ use super::columns::MerkleProofCols;
 
 // TODO: Use sub-air builder
 #[inline]
-pub(crate) fn eval_round_flags<AB: AirBuilder, const DEPTH: usize>(builder: &mut AB) {
+pub(crate) fn eval_round_flags<AB: AirBuilder, const DEPTH: usize, const DIGEST_WIDTH: usize>(
+    builder: &mut AB,
+) {
     let main = builder.main();
     let (local, next) = (main.row_slice(0), main.row_slice(1));
-    let local: &MerkleProofCols<AB::Var, DEPTH> = (*local).borrow();
-    let next: &MerkleProofCols<AB::Var, DEPTH> = (*next).borrow();
+    let local: &MerkleProofCols<AB::Var, DEPTH, DIGEST_WIDTH> = (*local).borrow();
+    let next: &MerkleProofCols<AB::Var, DEPTH, DIGEST_WIDTH> = (*next).borrow();
 
     // Initially, the first step flag should be 1 while the others should be 0.
     builder.when_first_row().assert_one(local.step_flags[0]);

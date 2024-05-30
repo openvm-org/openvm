@@ -1,39 +1,40 @@
 use p3_field::PrimeField32;
-use p3_keccak::KeccakF;
-use p3_keccak_air::U64_LIMBS;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_symmetric::{PseudoCompressionFunction, TruncatedPermutation};
+use p3_symmetric::PseudoCompressionFunction;
+
+use crate::merkle_proof::MerkleProofOp;
 
 use super::{
-    columns::{num_merkle_proof_cols, MerkleProofCols, NUM_U64_HASH_ELEMS},
-    MerkleProofChip, NUM_U8_HASH_ELEMS,
+    columns::{num_merkle_proof_cols, MerkleProofCols},
+    MerkleProofChip,
 };
 
-impl<const DEPTH: usize> MerkleProofChip<DEPTH> {
-    pub fn generate_trace<F: PrimeField32>(&self) -> RowMajorMatrix<F> {
-        let num_merkle_proof_cols = num_merkle_proof_cols::<DEPTH>();
+// TODO: Make generic in T instead of u8. Requires From<T> for PrimeField32.
+impl<const DEPTH: usize, const DIGEST_WIDTH: usize> MerkleProofChip<u8, DEPTH, DIGEST_WIDTH> {
+    pub fn generate_trace<F, Compress>(&self, hasher: &Compress) -> RowMajorMatrix<F>
+    where
+        F: PrimeField32,
+        Compress: PseudoCompressionFunction<[u8; DIGEST_WIDTH], 2>,
+    {
+        let num_merkle_proof_cols = num_merkle_proof_cols::<DEPTH, DIGEST_WIDTH>();
 
-        let num_real_rows = self.siblings.iter().map(|s| s.len()).sum::<usize>();
+        let num_real_rows = self.operations.len() * DEPTH;
         let num_rows = num_real_rows.next_power_of_two();
         let mut trace = RowMajorMatrix::new(
             vec![F::zero(); num_rows * num_merkle_proof_cols],
             num_merkle_proof_cols,
         );
-        let (prefix, rows, suffix) =
-            unsafe { trace.values.align_to_mut::<MerkleProofCols<F, DEPTH>>() };
+        let (prefix, rows, suffix) = unsafe {
+            trace
+                .values
+                .align_to_mut::<MerkleProofCols<F, DEPTH, DIGEST_WIDTH>>()
+        };
         assert!(prefix.is_empty(), "Alignment should match");
         assert!(suffix.is_empty(), "Alignment should match");
         assert_eq!(rows.len(), num_rows);
 
-        for (i, ((leaf, &leaf_index), siblings)) in self
-            .leaves
-            .iter()
-            .zip(self.leaf_indices.iter())
-            .zip(self.siblings.iter())
-            .enumerate()
-        {
-            let leaf_rows = &mut rows[i * DEPTH..(i + 1) * DEPTH];
-            generate_trace_rows_for_leaf(leaf_rows, leaf, leaf_index, siblings);
+        for (leaf_rows, op) in rows.chunks_mut(DEPTH).zip(self.operations.iter()) {
+            generate_trace_rows_for_op(leaf_rows, op, hasher);
 
             for row in leaf_rows.iter_mut() {
                 row.is_real = F::one();
@@ -41,35 +42,32 @@ impl<const DEPTH: usize> MerkleProofChip<DEPTH> {
         }
 
         // Fill padding rows
-        for input_rows in rows.chunks_mut(1).skip(num_real_rows) {
-            generate_trace_rows_for_leaf(
-                input_rows,
-                &[0; NUM_U8_HASH_ELEMS],
-                0,
-                &[[0; NUM_U8_HASH_ELEMS]; DEPTH],
-            );
+        for input_rows in rows.chunks_mut(DEPTH).skip(num_real_rows) {
+            let op = MerkleProofOp::default();
+            generate_trace_rows_for_op(input_rows, &op, hasher);
         }
 
         trace
     }
 }
 
-pub fn generate_trace_rows_for_leaf<F: PrimeField32, const DEPTH: usize>(
-    rows: &mut [MerkleProofCols<F, DEPTH>],
-    leaf_hash: &[u8; NUM_U8_HASH_ELEMS],
-    leaf_index: usize,
-    siblings: &[[u8; NUM_U8_HASH_ELEMS]; DEPTH],
-) {
+pub fn generate_trace_rows_for_op<F, Compress, const DEPTH: usize, const DIGEST_WIDTH: usize>(
+    rows: &mut [MerkleProofCols<F, DEPTH, DIGEST_WIDTH>],
+    op: &MerkleProofOp<u8, DEPTH, DIGEST_WIDTH>,
+    hasher: &Compress,
+) where
+    F: PrimeField32,
+    Compress: PseudoCompressionFunction<[u8; DIGEST_WIDTH], 2>,
+{
+    let MerkleProofOp {
+        leaf_index,
+        leaf_hash,
+        siblings,
+    } = op;
+
     // Fill the first row with the leaf.
-    for (x, input) in leaf_hash
-        .chunks(NUM_U8_HASH_ELEMS / NUM_U64_HASH_ELEMS)
-        .enumerate()
-    {
-        for limb in 0..U64_LIMBS {
-            let limb_range = limb * 2..(limb + 1) * 2;
-            rows[0].node[x][limb] =
-                F::from_canonical_u16(u16::from_le_bytes(input[limb_range].try_into().unwrap()));
-        }
+    for (node_byte, &leaf_hash_byte) in rows[0].node.iter_mut().zip(leaf_hash.iter()) {
+        *node_byte = F::from_canonical_u8(leaf_hash_byte);
     }
 
     let mut node = generate_trace_row_for_round(
@@ -79,14 +77,13 @@ pub fn generate_trace_rows_for_leaf<F: PrimeField32, const DEPTH: usize>(
         leaf_index & 1,
         leaf_hash,
         &siblings[0],
+        hasher,
     );
 
     for round in 1..rows.len() {
         // Copy previous row's output to next row's input.
-        for x in 0..NUM_U64_HASH_ELEMS {
-            for limb in 0..U64_LIMBS {
-                rows[round].node[x][limb] = rows[round - 1].output[x][limb];
-            }
+        for i in 0..DIGEST_WIDTH {
+            rows[round].node[i] = rows[round - 1].output[i];
         }
 
         let mask = (1 << (round + 1)) - 1;
@@ -97,18 +94,24 @@ pub fn generate_trace_rows_for_leaf<F: PrimeField32, const DEPTH: usize>(
             (leaf_index >> round) & 1,
             &node,
             &siblings[round],
+            hasher,
         );
     }
 }
 
-pub fn generate_trace_row_for_round<F: PrimeField32, const DEPTH: usize>(
-    row: &mut MerkleProofCols<F, DEPTH>,
+pub fn generate_trace_row_for_round<F, Compress, const DEPTH: usize, const DIGEST_WIDTH: usize>(
+    row: &mut MerkleProofCols<F, DEPTH, DIGEST_WIDTH>,
     round: usize,
     accumulate_index: usize,
     is_right_child: usize,
-    node: &[u8; NUM_U8_HASH_ELEMS],
-    sibling: &[u8; NUM_U8_HASH_ELEMS],
-) -> [u8; NUM_U8_HASH_ELEMS] {
+    node: &[u8; DIGEST_WIDTH],
+    sibling: &[u8; DIGEST_WIDTH],
+    hasher: &Compress,
+) -> [u8; DIGEST_WIDTH]
+where
+    F: PrimeField32,
+    Compress: PseudoCompressionFunction<[u8; DIGEST_WIDTH], 2>,
+{
     row.step_flags[round] = F::one();
 
     let (left_node, right_node) = if is_right_child == 0 {
@@ -117,30 +120,17 @@ pub fn generate_trace_row_for_round<F: PrimeField32, const DEPTH: usize>(
         (sibling, node)
     };
 
-    let keccak = TruncatedPermutation::new(KeccakF {});
-    let output = keccak.compress([*left_node, *right_node]);
+    let output = hasher.compress([*left_node, *right_node]);
 
     row.is_right_child = F::from_canonical_usize(is_right_child);
     row.accumulated_index = F::from_canonical_usize(accumulate_index);
-    for x in 0..NUM_U64_HASH_ELEMS {
-        let offset = x * NUM_U8_HASH_ELEMS / NUM_U64_HASH_ELEMS;
-        for limb in 0..U64_LIMBS {
-            let limb_range = (offset + limb * 2)..(offset + (limb + 1) * 2);
+    for i in 0..DIGEST_WIDTH {
+        row.sibling[i] = F::from_canonical_u8(sibling[i]);
 
-            row.sibling[x][limb] = F::from_canonical_u16(u16::from_le_bytes(
-                sibling[limb_range.clone()].try_into().unwrap(),
-            ));
+        row.left_node[i] = F::from_canonical_u8(left_node[i]);
+        row.right_node[i] = F::from_canonical_u8(right_node[i]);
 
-            row.left_node[x][limb] = F::from_canonical_u16(u16::from_le_bytes(
-                left_node[limb_range.clone()].try_into().unwrap(),
-            ));
-            row.right_node[x][limb] = F::from_canonical_u16(u16::from_le_bytes(
-                right_node[limb_range.clone()].try_into().unwrap(),
-            ));
-
-            row.output[x][limb] =
-                F::from_canonical_u16(u16::from_le_bytes(output[limb_range].try_into().unwrap()));
-        }
+        row.output[i] = F::from_canonical_u8(output[i]);
     }
 
     output

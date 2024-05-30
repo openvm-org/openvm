@@ -4,25 +4,33 @@ use p3_field::AbstractField;
 use p3_matrix::Matrix;
 
 use super::{
-    columns::{num_merkle_proof_cols, MerkleProofCols, NUM_U16_LIMBS, NUM_U64_HASH_ELEMS},
+    columns::{num_merkle_proof_cols, MerkleProofCols},
     round_flags::eval_round_flags,
     MerkleProofChip,
 };
 
-impl<F, const DEPTH: usize> BaseAir<F> for MerkleProofChip<DEPTH> {
+impl<F, T, const DEPTH: usize, const DIGEST_WIDTH: usize> BaseAir<F>
+    for MerkleProofChip<T, DEPTH, DIGEST_WIDTH>
+where
+    T: Copy + Default + Send + Sync,
+{
     fn width(&self) -> usize {
-        num_merkle_proof_cols::<DEPTH>()
+        num_merkle_proof_cols::<DEPTH, DIGEST_WIDTH>()
     }
 }
 
-impl<AB: AirBuilder, const DEPTH: usize> Air<AB> for MerkleProofChip<DEPTH> {
+impl<AB: AirBuilder, T, const DEPTH: usize, const DIGEST_WIDTH: usize> Air<AB>
+    for MerkleProofChip<T, DEPTH, DIGEST_WIDTH>
+where
+    T: Copy + Default + Send + Sync,
+{
     fn eval(&self, builder: &mut AB) {
-        eval_round_flags::<_, DEPTH>(builder);
+        eval_round_flags::<_, DEPTH, DIGEST_WIDTH>(builder);
 
         let main = builder.main();
         let (local, next) = (main.row_slice(0), main.row_slice(1));
-        let local: &MerkleProofCols<AB::Var, DEPTH> = (*local).borrow();
-        let next: &MerkleProofCols<AB::Var, DEPTH> = (*next).borrow();
+        let local: &MerkleProofCols<AB::Var, DEPTH, DIGEST_WIDTH> = (*local).borrow();
+        let next: &MerkleProofCols<AB::Var, DEPTH, DIGEST_WIDTH> = (*next).borrow();
 
         builder.assert_bool(local.is_real);
         builder.assert_bool(local.is_right_child);
@@ -46,24 +54,20 @@ impl<AB: AirBuilder, const DEPTH: usize> Air<AB> for MerkleProofChip<DEPTH> {
         );
 
         // Left and right nodes are selected correctly.
-        for i in 0..NUM_U64_HASH_ELEMS {
-            for j in 0..NUM_U16_LIMBS {
-                let diff = local.node[i][j] - local.sibling[i][j];
-                let left = local.node[i][j] - local.is_right_child * diff.clone();
-                let right = local.sibling[i][j] + local.is_right_child * diff;
+        for i in 0..DIGEST_WIDTH {
+            let diff = local.node[i] - local.sibling[i];
+            let left = local.node[i] - local.is_right_child * diff.clone();
+            let right = local.sibling[i] + local.is_right_child * diff;
 
-                builder.assert_eq(left, local.left_node[i][j]);
-                builder.assert_eq(right, local.right_node[i][j]);
-            }
+            builder.assert_eq(left, local.left_node[i]);
+            builder.assert_eq(right, local.right_node[i]);
         }
 
         // Output is copied to the next row.
-        for i in 0..NUM_U64_HASH_ELEMS {
-            for j in 0..NUM_U16_LIMBS {
-                builder
-                    .when_ne(is_final_step, AB::Expr::one())
-                    .assert_eq(local.output[i][j], next.node[i][j]);
-            }
+        for i in 0..DIGEST_WIDTH {
+            builder
+                .when_ne(is_final_step, AB::Expr::one())
+                .assert_eq(local.output[i], next.node[i]);
         }
     }
 }

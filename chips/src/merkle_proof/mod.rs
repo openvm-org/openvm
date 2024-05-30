@@ -4,14 +4,37 @@ pub mod columns;
 mod round_flags;
 mod trace;
 
-pub(crate) const NUM_U8_HASH_ELEMS: usize = 32;
+#[derive(Clone)]
+pub struct MerkleProofOp<T, const DEPTH: usize, const DIGEST_WIDTH: usize>
+where
+    T: Default + Copy,
+{
+    pub leaf_index: usize,
+    pub leaf_hash: [T; DIGEST_WIDTH],
+    pub siblings: [[T; DIGEST_WIDTH]; DEPTH],
+}
 
-#[derive(Default, Clone)]
-pub struct MerkleProofChip<const DEPTH: usize> {
+impl<T, const DEPTH: usize, const DIGEST_WIDTH: usize> Default
+    for MerkleProofOp<T, DEPTH, DIGEST_WIDTH>
+where
+    T: Default + Copy,
+{
+    fn default() -> Self {
+        Self {
+            leaf_index: 0,
+            leaf_hash: [T::default(); DIGEST_WIDTH],
+            siblings: [[T::default(); DIGEST_WIDTH]; DEPTH],
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct MerkleProofChip<T, const DEPTH: usize, const DIGEST_WIDTH: usize>
+where
+    T: Default + Copy,
+{
     pub bus_hash_input: usize,
     pub bus_hash_output: usize,
 
-    pub leaves: Vec<[u8; NUM_U8_HASH_ELEMS]>,
-    pub leaf_indices: Vec<usize>,
-    pub siblings: Vec<[[u8; NUM_U8_HASH_ELEMS]; DEPTH]>,
+    pub operations: Vec<MerkleProofOp<T, DEPTH, DIGEST_WIDTH>>,
 }
