@@ -20,8 +20,7 @@ impl<AB: AirBuilderWithPublicValues> Air<AB> for IsZeroChip {
         let local = main.row_slice(0);
         let local: &IsZeroCols<AB::Var> = (*local).borrow();
 
-        builder.assert_eq((local.x + local.is_zero) * local.inv, AB::F::one());
-        builder.assert_eq(local.is_zero * local.is_zero, local.is_zero);
         builder.assert_eq(local.x * local.is_zero, AB::F::zero());
+        builder.assert_eq(local.is_zero + local.x * local.inv, AB::F::one());
     }
 }
