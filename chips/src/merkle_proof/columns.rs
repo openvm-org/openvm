@@ -5,6 +5,7 @@ use std::mem::MaybeUninit;
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct MerkleProofCols<T, const DEPTH: usize, const DIGEST_WIDTH: usize> {
+    // TODO: Add clk/timestamp
     pub is_real: T,
 
     pub step_flags: [T; DEPTH],
@@ -41,10 +42,10 @@ pub(crate) fn merkle_proof_col_map<const DEPTH: usize, const DIGEST_WIDTH: usize
     let num_cols = num_merkle_proof_cols::<DEPTH, DIGEST_WIDTH>();
     let indices_arr = (0..num_cols).collect::<Vec<usize>>();
 
+    let mut cols = MaybeUninit::<MerkleProofCols<usize, DEPTH, DIGEST_WIDTH>>::uninit();
+    let ptr = cols.as_mut_ptr() as *mut usize;
     unsafe {
-        let mut uninit = MaybeUninit::<MerkleProofCols<usize, DEPTH, DIGEST_WIDTH>>::uninit();
-        let ptr = uninit.as_mut_ptr() as *mut usize;
         ptr.copy_from_nonoverlapping(indices_arr.as_ptr(), num_cols);
-        uninit.assume_init()
+        cols.assume_init()
     }
 }
