@@ -1,7 +1,7 @@
 use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::sub_chip::SubAirLocalTraceInstructions;
+use crate::sub_chip::LocalTraceInstructions;
 
 use super::{
     columns::{XorCols, XorIOCols},
@@ -24,7 +24,7 @@ impl<const N: usize> XorBitsChip<N> {
     }
 }
 
-impl<const N: usize, F: AbstractField> SubAirLocalTraceInstructions<F> for XorBitsChip<N> {
+impl<const N: usize, F: AbstractField> LocalTraceInstructions<F> for XorBitsChip<N> {
     /// The input is (x, y) to be XOR-ed.
     type LocalInput = (u32, u32);
 

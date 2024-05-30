@@ -4,7 +4,7 @@ use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use crate::sub_chip::SubAir;
+use crate::sub_chip::{AirConfig, SubAir};
 
 use super::{columns::XorCols, XorBitsChip};
 
@@ -31,15 +31,17 @@ where
     }
 }
 
+impl<const N: usize> AirConfig for XorBitsChip<N> {
+    type Cols<T> = XorCols<N, T>;
+}
+
 /// Imposes AIR constraints within each row of the trace
 /// Constrains x, y, z to be equal to their bit representation in x_bits, y_bits, z_bits.
 /// For each x_bit[i], y_bit[i], and z_bit[i], constraints x_bit[i] + y_bit[i] - 2 * x_bit[i] * y_bit[i] == z_bit[i],
 /// which is equivalent to ensuring that x_bit[i] ^ y_bit[i] == z_bit[i].
 /// Overall, this ensures that x^y == z.
-impl<const N: usize> SubAir for XorBitsChip<N> {
-    type Cols<T> = XorCols<N, T>;
-
-    fn eval<AB: AirBuilder>(&self, builder: &mut AB, xor_cols: Self::Cols<AB::Var>) {
+impl<const N: usize, AB: AirBuilder> SubAir<AB> for XorBitsChip<N> {
+    fn eval(&self, builder: &mut AB, xor_cols: Self::Cols<AB::Var>) {
         let mut x_from_bits: AB::Expr = AB::Expr::zero();
         for i in 0..N {
             x_from_bits += xor_cols.x_bits[i] * AB::Expr::from_canonical_u64(1 << i);

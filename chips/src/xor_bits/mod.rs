@@ -1,9 +1,4 @@
-use afs_stark_backend::interaction::Interaction;
-use p3_air::VirtualPairCol;
-use p3_field::PrimeField64;
 use parking_lot::Mutex;
-
-use self::columns::XorIOCols;
 
 pub mod air;
 pub mod chip;
@@ -39,17 +34,5 @@ impl<const N: usize> XorBitsChip<N> {
         let mut pairs_locked = self.pairs.lock();
         pairs_locked.push((a, b));
         self.calc_xor(a, b)
-    }
-
-    pub fn receives_custom<F: PrimeField64>(&self, cols: XorIOCols<usize>) -> Interaction<F> {
-        Interaction {
-            fields: vec![
-                VirtualPairCol::single_main(cols.x),
-                VirtualPairCol::single_main(cols.y),
-                VirtualPairCol::single_main(cols.z),
-            ],
-            count: VirtualPairCol::constant(F::one()),
-            argument_index: self.bus_index(),
-        }
     }
 }
