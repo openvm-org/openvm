@@ -20,16 +20,15 @@ impl<F: PrimeField32> Chip<F> for MerkleProofChip {
     }
 
     fn receives(&self) -> Vec<Interaction<F>> {
-        // vec![Interaction {
-        //     fields: MERKLE_PROOF_COL_MAP
-        //         .output
-        //         .into_iter()
-        //         .flatten()
-        //         .map(VirtualPairCol::single_main)
-        //         .collect(),
-        //     count: VirtualPairCol::single_main(MERKLE_PROOF_COL_MAP.is_real),
-        //     argument_index: self.bus_hash_output,
-        // }]
-        vec![]
+        vec![Interaction {
+            fields: MERKLE_PROOF_COL_MAP
+                .output
+                .into_iter()
+                .flatten()
+                .map(VirtualPairCol::single_main)
+                .collect(),
+            count: VirtualPairCol::single_main(MERKLE_PROOF_COL_MAP.is_real),
+            argument_index: self.bus_hash_output,
+        }]
     }
 }
