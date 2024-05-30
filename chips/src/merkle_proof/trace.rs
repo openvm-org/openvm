@@ -1,23 +1,23 @@
 use p3_field::PrimeField32;
 use p3_keccak::KeccakF;
+use p3_keccak_air::U64_LIMBS;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_symmetric::{PseudoCompressionFunction, TruncatedPermutation};
 
 use super::{
-    columns::{MerkleTreeCols, MERKLE_TREE_DEPTH, NUM_U64_HASH_ELEMS},
-    MerkleTreeChip, NUM_MERKLE_TREE_COLS, NUM_U8_HASH_ELEMS,
+    columns::{MerkleProofCols, MERKLE_PROOF_DEPTH, NUM_U64_HASH_ELEMS},
+    MerkleProofChip, NUM_MERKLE_PROOF_COLS, NUM_U8_HASH_ELEMS,
 };
-use crate::keccak_permute::U64_LIMBS;
 
-impl MerkleTreeChip {
+impl MerkleProofChip {
     pub fn generate_trace<F: PrimeField32>(&self) -> RowMajorMatrix<F> {
         let num_real_rows = self.siblings.iter().map(|s| s.len()).sum::<usize>();
         let num_rows = num_real_rows.next_power_of_two();
         let mut trace = RowMajorMatrix::new(
-            vec![F::zero(); num_rows * NUM_MERKLE_TREE_COLS],
-            NUM_MERKLE_TREE_COLS,
+            vec![F::zero(); num_rows * NUM_MERKLE_PROOF_COLS],
+            NUM_MERKLE_PROOF_COLS,
         );
-        let (prefix, rows, suffix) = unsafe { trace.values.align_to_mut::<MerkleTreeCols<F>>() };
+        let (prefix, rows, suffix) = unsafe { trace.values.align_to_mut::<MerkleProofCols<F>>() };
         assert!(prefix.is_empty(), "Alignment should match");
         assert!(suffix.is_empty(), "Alignment should match");
         assert_eq!(rows.len(), num_rows);
@@ -29,7 +29,7 @@ impl MerkleTreeChip {
             .zip(self.siblings.iter())
             .enumerate()
         {
-            let leaf_rows = &mut rows[i * MERKLE_TREE_DEPTH..(i + 1) * MERKLE_TREE_DEPTH];
+            let leaf_rows = &mut rows[i * MERKLE_PROOF_DEPTH..(i + 1) * MERKLE_PROOF_DEPTH];
             generate_trace_rows_for_leaf(leaf_rows, leaf, leaf_index, siblings);
 
             for row in leaf_rows.iter_mut() {
@@ -43,7 +43,7 @@ impl MerkleTreeChip {
                 input_rows,
                 &[0; NUM_U8_HASH_ELEMS],
                 0,
-                &[[0; NUM_U8_HASH_ELEMS]; MERKLE_TREE_DEPTH],
+                &[[0; NUM_U8_HASH_ELEMS]; MERKLE_PROOF_DEPTH],
             );
         }
 
@@ -52,10 +52,10 @@ impl MerkleTreeChip {
 }
 
 pub fn generate_trace_rows_for_leaf<F: PrimeField32>(
-    rows: &mut [MerkleTreeCols<F>],
+    rows: &mut [MerkleProofCols<F>],
     leaf_hash: &[u8; NUM_U8_HASH_ELEMS],
     leaf_index: usize,
-    siblings: &[[u8; NUM_U8_HASH_ELEMS]; MERKLE_TREE_DEPTH],
+    siblings: &[[u8; NUM_U8_HASH_ELEMS]; MERKLE_PROOF_DEPTH],
 ) {
     // Fill the first row with the leaf.
     for (x, input) in leaf_hash
@@ -99,7 +99,7 @@ pub fn generate_trace_rows_for_leaf<F: PrimeField32>(
 }
 
 pub fn generate_trace_row_for_round<F: PrimeField32>(
-    row: &mut MerkleTreeCols<F>,
+    row: &mut MerkleProofCols<F>,
     round: usize,
     accumulate_index: usize,
     is_right_child: usize,

@@ -5,32 +5,33 @@ use p3_matrix::Matrix;
 
 use super::{
     columns::{
-        MerkleTreeCols, MERKLE_TREE_DEPTH, NUM_MERKLE_TREE_COLS, NUM_U16_LIMBS, NUM_U64_HASH_ELEMS,
+        MerkleProofCols, MERKLE_PROOF_DEPTH, NUM_MERKLE_PROOF_COLS, NUM_U16_LIMBS,
+        NUM_U64_HASH_ELEMS,
     },
     round_flags::eval_round_flags,
-    MerkleTreeChip,
+    MerkleProofChip,
 };
 
-impl<F> BaseAir<F> for MerkleTreeChip {
+impl<F> BaseAir<F> for MerkleProofChip {
     fn width(&self) -> usize {
-        NUM_MERKLE_TREE_COLS
+        NUM_MERKLE_PROOF_COLS
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for MerkleTreeChip {
+impl<AB: AirBuilder> Air<AB> for MerkleProofChip {
     fn eval(&self, builder: &mut AB) {
         eval_round_flags(builder);
 
         let main = builder.main();
         let (local, next) = (main.row_slice(0), main.row_slice(1));
-        let local: &MerkleTreeCols<AB::Var> = (*local).borrow();
-        let next: &MerkleTreeCols<AB::Var> = (*next).borrow();
+        let local: &MerkleProofCols<AB::Var> = (*local).borrow();
+        let next: &MerkleProofCols<AB::Var> = (*next).borrow();
 
         builder.assert_bool(local.is_real);
         builder.assert_bool(local.is_right_child);
 
         let is_first_step = local.step_flags[0];
-        let is_final_step = local.step_flags[MERKLE_TREE_DEPTH - 1];
+        let is_final_step = local.step_flags[MERKLE_PROOF_DEPTH - 1];
 
         // Accumulated index is computed correctly
         builder

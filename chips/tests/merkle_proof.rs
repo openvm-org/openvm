@@ -5,7 +5,7 @@ use p3_symmetric::{PseudoCompressionFunction, TruncatedPermutation};
 
 use afs_chips::{
     keccak_permute::KeccakPermuteChip,
-    merkle_tree::{columns::MERKLE_TREE_DEPTH, MerkleTreeChip},
+    merkle_proof::{columns::MERKLE_PROOF_DEPTH, MerkleProofChip},
 };
 
 fn generate_digests(leaf_hashes: Vec<[u8; 32]>) -> Vec<Vec<[u8; 32]>> {
@@ -29,8 +29,8 @@ fn generate_digests(leaf_hashes: Vec<[u8; 32]>) -> Vec<Vec<[u8; 32]>> {
 }
 
 #[test]
-fn test_merkle_tree_prove() {
-    let leaf_hashes: Vec<[u8; 32]> = (0..2u64.pow(MERKLE_TREE_DEPTH as u32))
+fn test_merkle_proof_prove() {
+    let leaf_hashes: Vec<[u8; 32]> = (0..2u64.pow(MERKLE_PROOF_DEPTH as u32))
         .map(|_| [0; 32])
         .collect();
 
@@ -39,7 +39,7 @@ fn test_merkle_tree_prove() {
     let leaf_index = 0;
     let leaf = digests[0][leaf_index];
 
-    let siblings = (0..MERKLE_TREE_DEPTH)
+    let siblings = (0..MERKLE_PROOF_DEPTH)
         .map(|i| digests[i][(leaf_index >> i) ^ 1])
         .collect::<Vec<[u8; 32]>>()
         .try_into()
@@ -73,7 +73,7 @@ fn test_merkle_tree_prove() {
         })
         .collect::<Vec<_>>();
 
-    let merkle_tree_air = MerkleTreeChip {
+    let merkle_proof_air = MerkleProofChip {
         bus_hash_input: 0,
         bus_hash_output: 1,
         leaves: vec![leaf],
@@ -83,20 +83,18 @@ fn test_merkle_tree_prove() {
 
     let keccak_permute_air = KeccakPermuteChip {
         bus_input: 0,
-        bus_output: 1, // Not needed, change to option
-        bus_output_digest: 1,
-        inputs_digest: keccak_inputs,
-        inputs_sponge: vec![],
+        bus_output: 1,
+        inputs: keccak_inputs,
     };
 
-    let merkle_tree_trace = merkle_tree_air.generate_trace();
+    let merkle_proof_trace = merkle_proof_air.generate_trace();
     let keccak_permute_trace = keccak_permute_air.generate_trace();
 
     let chips = vec![
-        &merkle_tree_air as &dyn AnyRap<_>,
+        &merkle_proof_air as &dyn AnyRap<_>,
         &keccak_permute_air as &dyn AnyRap<_>,
     ];
-    let traces = vec![merkle_tree_trace, keccak_permute_trace];
+    let traces = vec![merkle_proof_trace, keccak_permute_trace];
 
     run_simple_test_no_pis(chips, traces).expect("Verification failed");
 }
