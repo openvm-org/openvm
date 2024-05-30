@@ -1,4 +1,8 @@
+#[cfg(test)]
+pub mod tests;
+
 pub mod air;
+pub mod chip;
 pub mod columns;
 pub mod trace;
 
@@ -7,23 +11,17 @@ use crate::sub_chip::AirConfig;
 
 #[derive(Default)]
 /// A chip that checks if a number equals 0
-pub struct IsZeroAir {
-    bus_index: usize,
-
+pub struct IsZeroChip {
     pub x: Vec<u32>,
 }
 
-impl AirConfig for IsZeroAir {
+impl AirConfig for IsZeroChip {
     type Cols<T> = IsZeroCols<T>;
 }
 
-impl IsZeroAir {
-    pub fn new(bus_index: usize, x: Vec<u32>) -> Self {
-        Self { bus_index, x }
-    }
-
-    pub fn bus_index(&self) -> usize {
-        self.bus_index
+impl IsZeroChip {
+    pub fn new(x: Vec<u32>) -> Self {
+        Self { x }
     }
 
     fn is_zero(&self, x: u32) -> u32 {

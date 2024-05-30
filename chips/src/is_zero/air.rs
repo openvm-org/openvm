@@ -1,24 +1,19 @@
 use std::borrow::Borrow;
 
 use super::columns::{IsZeroCols, NUM_COLS};
-use afs_stark_backend::interaction::Chip;
+use super::IsZeroChip;
 use p3_air::{Air, AirBuilderWithPublicValues, BaseAir};
 use p3_field::AbstractField;
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-pub struct IsZeroAir;
-
-// No interactions
-impl<F: Field> Chip<F> for IsZeroAir {}
-
-impl<F> BaseAir<F> for IsZeroAir {
+impl<F: Field> BaseAir<F> for IsZeroChip {
     fn width(&self) -> usize {
         NUM_COLS
     }
 }
 
-impl<AB: AirBuilderWithPublicValues> Air<AB> for IsZeroAir {
+impl<AB: AirBuilderWithPublicValues> Air<AB> for IsZeroChip {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let pis = builder.public_values();
