@@ -17,6 +17,14 @@ impl<F: Field> BaseAir<F> for IsEqualVecChip {
     }
 }
 
+/// Imposes AIR constaints within each row
+/// Row split into four chunks, first two are vector input, third is cumulative
+/// equality AND, fourth is inverse used to constrain nonzero when equality holds
+/// At the first index naively implements is_equal constraints
+/// At every index constrains cumulative NAND difference
+/// At every transition index prohibits 0 followed by 1, and constrains
+/// 1 with difference of 0 must be followed by 0.
+/// When product does not change, inv is 0, when product changes, inverse is inverse of difference
 impl<AB: AirBuilderWithPublicValues> Air<AB> for IsEqualVecChip {
     fn eval(&self, builder: &mut AB) {
         let vec_len = self.vec_len();
@@ -28,15 +36,11 @@ impl<AB: AirBuilderWithPublicValues> Air<AB> for IsEqualVecChip {
         let local_cols = IsEqualVecCols::<AB::Var>::from_slice(local, vec_len);
 
         builder.assert_eq(
-            (local_cols.prods[0] + local_cols.x[0] - local_cols.y[0]) * local_cols.invs[0],
+            local_cols.prods[0] + (local_cols.x[0] - local_cols.y[0]) * local_cols.invs[0],
             AB::F::one(),
         );
 
         for i in 0..vec_len {
-            builder.assert_eq(
-                local_cols.prods[i] * local_cols.prods[i],
-                local_cols.prods[i],
-            );
             builder.assert_eq(
                 local_cols.prods[i] * (local_cols.x[i] - local_cols.y[i]),
                 AB::F::zero(),
@@ -48,13 +52,9 @@ impl<AB: AirBuilderWithPublicValues> Air<AB> for IsEqualVecChip {
                 local_cols.prods[i] * local_cols.prods[i + 1],
                 local_cols.prods[i + 1],
             );
-
             builder.assert_eq(
-                (local_cols.prods[i + 1] - local_cols.prods[i]
-                    + AB::F::one()
-                    + local_cols.x[i + 1]
-                    - local_cols.y[i + 1])
-                    * local_cols.invs[i + 1],
+                local_cols.prods[i + 1]
+                    + (local_cols.x[i + 1] - local_cols.y[i + 1]) * local_cols.invs[i + 1],
                 local_cols.prods[i],
             );
         }

@@ -9,40 +9,37 @@ impl IsEqualVecChip {
         let vec_len: usize = self.vec_len();
         let height: usize = self.x.len();
         assert!(height.is_power_of_two());
-        let mut rows = Vec::with_capacity(height);
+        // let mut rows = Vec::with_capacity(height);
 
         // TODO make sexy
-        for i in 0..height {
-            let mut row = self.x[i]
-                .iter()
-                .chain(self.y[i].iter())
-                .map(|&val| F::from_canonical_u32(val))
-                .chain(std::iter::repeat(F::one()).take(2 * vec_len))
-                .collect::<Vec<F>>();
-
-            let mut broken = false;
-            let mut post_broken = false;
-
-            for j in 0..vec_len {
-                if row[j] != row[j + vec_len] || broken {
-                    row[j + 2 * vec_len] = F::zero();
-                    broken = true;
+        let rows: Vec<Vec<F>> = self
+            .x
+            .iter()
+            .zip(self.y.iter())
+            .map(|(x_row, y_row)| {
+                let mut transition_index = 0;
+                while transition_index < vec_len
+                    && x_row[transition_index] == y_row[transition_index]
+                {
+                    transition_index += 1;
                 }
 
-                if !post_broken {
-                    row[j + 3 * vec_len] =
-                        (row[j] - row[j + vec_len] + row[j + 2 * vec_len]).inverse();
-                } else {
-                    row[j + 3 * vec_len] = F::zero();
+                let mut row = x_row
+                    .iter()
+                    .chain(y_row.iter())
+                    .map(|&val| F::from_canonical_u32(val))
+                    .chain(std::iter::repeat(F::one()).take(transition_index))
+                    .chain(std::iter::repeat(F::zero()).take(2 * vec_len - transition_index))
+                    .collect::<Vec<F>>();
+
+                if transition_index != vec_len {
+                    row[3 * vec_len + transition_index] =
+                        (row[transition_index] - row[transition_index + vec_len]).inverse();
                 }
 
-                if broken {
-                    post_broken = true;
-                }
-            }
-
-            rows.push(row.clone());
-        }
+                row
+            })
+            .collect();
 
         RowMajorMatrix::new(rows.concat(), width)
     }
