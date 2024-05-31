@@ -10,13 +10,13 @@ pub struct IsZeroCols<T> {
 }
 
 #[derive(Copy, Clone)]
-pub struct IsZeroIOCols<T> {
-    pub x: T,
-    pub is_zero: T,
+pub struct IsZeroIOCols<F> {
+    pub x: F,
+    pub is_zero: F,
 }
 
-impl<T: Clone> IsZeroCols<T> {
-    pub const fn new(x: T, is_zero: T, inv: T) -> IsZeroCols<T> {
+impl<F: Clone> IsZeroCols<F> {
+    pub const fn new(x: F, is_zero: F, inv: F) -> IsZeroCols<F> {
         IsZeroCols {
             io: IsZeroIOCols { x, is_zero },
             inv,

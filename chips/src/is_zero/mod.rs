@@ -9,16 +9,16 @@ use p3_field::Field;
 
 #[derive(Default)]
 /// A chip that checks if a number equals 0
-pub struct IsZeroChip {
-    pub x: Vec<u32>,
+pub struct IsZeroChip<F: Field> {
+    pub x: Vec<F>,
 }
 
-impl IsZeroChip {
-    pub fn new(x: Vec<u32>) -> Self {
+impl<F: Field> IsZeroChip<F> {
+    pub fn new(x: Vec<F>) -> Self {
         Self { x }
     }
 
-    pub fn request<F: Field>(&self, x: F) -> bool {
+    pub fn request(&self, x: F) -> bool {
         x == F::zero()
     }
 }

@@ -9,20 +9,20 @@ use p3_field::AbstractField;
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-impl<F: Field> BaseAir<F> for IsZeroChip {
+impl<F: Field> BaseAir<F> for IsZeroChip<F> {
     fn width(&self) -> usize {
         NUM_COLS
     }
 }
 
-impl AirConfig for IsZeroChip {
+impl<F: Field> AirConfig for IsZeroChip<F> {
     type Cols<T> = IsZeroCols<T>;
 }
 
 // No interactions
-impl<F: Field> Chip<F> for IsZeroChip {}
+impl<F: Field> Chip<F> for IsZeroChip<F> {}
 
-impl<AB: AirBuilderWithPublicValues> Air<AB> for IsZeroChip {
+impl<F: Field, AB: AirBuilderWithPublicValues<F = F>> Air<AB> for IsZeroChip<F> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -33,7 +33,7 @@ impl<AB: AirBuilderWithPublicValues> Air<AB> for IsZeroChip {
     }
 }
 
-impl<AB: AirBuilder> SubAir<AB> for IsZeroChip {
+impl<F: Field, AB: AirBuilder> SubAir<AB> for IsZeroChip<F> {
     type IoView = IsZeroIOCols<AB::Var>;
     type AuxView = AB::Var;
 

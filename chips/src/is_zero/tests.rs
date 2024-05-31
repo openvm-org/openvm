@@ -1,5 +1,4 @@
 use super::IsZeroChip;
-use p3_baby_bear::BabyBear;
 
 use afs_stark_backend::prover::USE_DEBUG_BUILDER;
 use afs_stark_backend::verifier::VerificationError;
@@ -10,10 +9,9 @@ use p3_field::AbstractField;
 fn test_single_is_zero() {
     let x = 97u32;
 
-    type Val = BabyBear;
-    let chip = IsZeroChip::new(vec![x]);
+    let chip = IsZeroChip::new(vec![AbstractField::from_canonical_u32(x)]);
 
-    let trace = chip.generate_trace::<Val>();
+    let trace = chip.generate_trace();
 
     assert_eq!(trace.values[1], AbstractField::from_canonical_u32(0));
 
@@ -24,10 +22,9 @@ fn test_single_is_zero() {
 fn test_single_is_zero2() {
     let x = 0u32;
 
-    type Val = BabyBear;
-    let chip = IsZeroChip::new(vec![x]);
+    let chip = IsZeroChip::new(vec![AbstractField::from_canonical_u32(x)]);
 
-    let trace = chip.generate_trace::<Val>();
+    let trace = chip.generate_trace();
 
     assert_eq!(trace.values[1], AbstractField::from_canonical_u32(1));
 
@@ -38,11 +35,9 @@ fn test_single_is_zero2() {
 fn test_single_is_zero_fail() {
     let x = 187u32;
 
-    type Val = BabyBear;
+    let chip = IsZeroChip::new(vec![AbstractField::from_canonical_u32(x)]);
 
-    let chip = IsZeroChip::new(vec![x]);
-
-    let mut trace = chip.generate_trace::<Val>();
+    let mut trace = chip.generate_trace();
     trace.values[1] = AbstractField::from_canonical_u32(1);
 
     USE_DEBUG_BUILDER.with(|debug| {
@@ -59,11 +54,9 @@ fn test_single_is_zero_fail() {
 fn test_single_is_zero_fail2() {
     let x = 0u32;
 
-    type Val = BabyBear;
+    let chip = IsZeroChip::new(vec![AbstractField::from_canonical_u32(x)]);
 
-    let chip = IsZeroChip::new(vec![x]);
-
-    let mut trace = chip.generate_trace::<Val>();
+    let mut trace = chip.generate_trace();
     trace.values[1] = AbstractField::from_canonical_u32(0);
 
     USE_DEBUG_BUILDER.with(|debug| {
