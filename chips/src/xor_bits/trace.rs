@@ -1,7 +1,12 @@
-use p3_field::PrimeField64;
+use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::{columns::XorCols, XorBitsChip};
+use crate::sub_chip::LocalTraceInstructions;
+
+use super::{
+    columns::{XorBitCols, XorCols, XorIOCols},
+    XorBitsChip,
+};
 
 impl<const N: usize> XorBitsChip<N> {
     pub fn generate_trace<F: PrimeField64>(&self) -> RowMajorMatrix<F> {
@@ -12,23 +17,34 @@ impl<const N: usize> XorBitsChip<N> {
 
         let rows = pairs_locked
             .iter()
-            .map(|(x, y)| {
-                let z = self.calc_xor(*x, *y);
+            .flat_map(|(x, y)| self.generate_trace_row((*x, *y)).flatten())
+            .collect();
 
-                let mut row = vec![
-                    F::from_canonical_u32(*x),
-                    F::from_canonical_u32(*y),
-                    F::from_canonical_u32(z),
-                ];
+        RowMajorMatrix::new(rows, num_xor_cols)
+    }
+}
 
-                row.extend((0..N).map(|i| (x >> i) & 1).map(F::from_canonical_u32));
-                row.extend((0..N).map(|i| (y >> i) & 1).map(F::from_canonical_u32));
-                row.extend((0..N).map(|i| (z >> i) & 1).map(F::from_canonical_u32));
+impl<const N: usize, F: AbstractField> LocalTraceInstructions<F> for XorBitsChip<N> {
+    /// The input is (x, y) to be XOR-ed.
+    type LocalInput = (u32, u32);
 
-                row
-            })
-            .collect::<Vec<_>>();
+    fn generate_trace_row(&self, (x, y): (u32, u32)) -> Self::Cols<F> {
+        let z = self.calc_xor(x, y);
+        let [x_bits, y_bits, z_bits] = [x, y, z].map(|x| {
+            (0..N)
+                .map(|i| (x >> i) & 1)
+                .map(F::from_canonical_u32)
+                .collect()
+        });
+        let [x, y, z] = [x, y, z].map(F::from_canonical_u32);
 
-        RowMajorMatrix::new(rows.concat(), num_xor_cols)
+        XorCols {
+            io: XorIOCols { x, y, z },
+            bits: XorBitCols {
+                x: x_bits,
+                y: y_bits,
+                z: z_bits,
+            },
+        }
     }
 }
