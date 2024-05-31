@@ -5,10 +5,9 @@ use crate::sub_chip::LocalTraceInstructions;
 
 use super::{columns::IsZeroCols, IsZeroChip};
 
-impl<F: Field> IsZeroChip<F> {
-    pub fn generate_trace(&self) -> RowMajorMatrix<F> {
-        let rows = self
-            .x
+impl IsZeroChip {
+    pub fn generate_trace<F: Field>(&self, x: Vec<F>) -> RowMajorMatrix<F> {
+        let rows = x
             .iter()
             .map(|&x| {
                 let is_zero_cols = self.generate_trace_row(x);
@@ -20,11 +19,11 @@ impl<F: Field> IsZeroChip<F> {
     }
 }
 
-impl<F: Field> LocalTraceInstructions<F> for IsZeroChip<F> {
+impl<F: Field> LocalTraceInstructions<F> for IsZeroChip {
     type LocalInput = F;
 
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
-        let is_zero = self.request(local_input);
+        let is_zero = IsZeroChip::request(local_input);
         let inv = if is_zero {
             F::zero()
         } else {

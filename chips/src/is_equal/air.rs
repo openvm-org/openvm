@@ -9,13 +9,13 @@ use p3_field::AbstractField;
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-impl<F> BaseAir<F> for IsEqualChip {
+impl<F: Field> BaseAir<F> for IsEqualChip {
     fn width(&self) -> usize {
         NUM_COLS
     }
 }
 
-impl<AB: AirBuilderWithPublicValues> Air<AB> for IsEqualChip {
+impl<F: Field, AB: AirBuilderWithPublicValues<F = F>> Air<AB> for IsEqualChip {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 

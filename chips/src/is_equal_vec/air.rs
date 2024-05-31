@@ -36,14 +36,14 @@ impl<F: Field> BaseAir<F> for IsEqualVecChip {
 /// At every transition index prohibits 0 followed by 1, and constrains
 /// 1 with equality must be followed by 1
 /// When product does not change, inv is 0, when product changes, inverse is inverse of difference
-impl<AB: AirBuilderWithPublicValues> Air<AB> for IsEqualVecChip {
+impl<F: Field, AB: AirBuilderWithPublicValues<F = F>> Air<AB> for IsEqualVecChip {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
 
-        let is_equal_vec_cols = IsEqualVecCols::<AB::Var>::from_slice(local, self.vec_len());
+        let is_equal_vec_cols = IsEqualVecCols::<AB::Var>::from_slice(local, self.vec_len);
 
         SubAir::<AB>::eval(self, builder, is_equal_vec_cols.io, is_equal_vec_cols.aux);
     }
@@ -54,7 +54,7 @@ impl<AB: AirBuilder> SubAir<AB> for IsEqualVecChip {
     type AuxView = IsEqualVecAuxCols<AB::Var>;
 
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
-        let vec_len = self.vec_len();
+        let vec_len = self.vec_len;
         builder.assert_eq(
             aux.prods[0] + (io.x[0] - io.y[0]) * aux.invs[0],
             AB::F::one(),

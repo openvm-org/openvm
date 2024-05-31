@@ -7,11 +7,11 @@ use p3_field::AbstractField;
 
 #[test]
 fn test_single_is_zero() {
-    let x = 97u32;
+    let x = AbstractField::from_canonical_u32(97);
 
-    let chip = IsZeroChip::new(vec![AbstractField::from_canonical_u32(x)]);
+    let chip = IsZeroChip {};
 
-    let trace = chip.generate_trace();
+    let trace = chip.generate_trace(vec![x]);
 
     assert_eq!(trace.values[1], AbstractField::from_canonical_u32(0));
 
@@ -20,11 +20,11 @@ fn test_single_is_zero() {
 
 #[test]
 fn test_single_is_zero2() {
-    let x = 0u32;
+    let x = AbstractField::from_canonical_u32(0);
 
-    let chip = IsZeroChip::new(vec![AbstractField::from_canonical_u32(x)]);
+    let chip = IsZeroChip {};
 
-    let trace = chip.generate_trace();
+    let trace = chip.generate_trace(vec![x]);
 
     assert_eq!(trace.values[1], AbstractField::from_canonical_u32(1));
 
@@ -33,11 +33,11 @@ fn test_single_is_zero2() {
 
 #[test]
 fn test_single_is_zero_fail() {
-    let x = 187u32;
+    let x = AbstractField::from_canonical_u32(187);
 
-    let chip = IsZeroChip::new(vec![AbstractField::from_canonical_u32(x)]);
+    let chip = IsZeroChip {};
 
-    let mut trace = chip.generate_trace();
+    let mut trace = chip.generate_trace(vec![x]);
     trace.values[1] = AbstractField::from_canonical_u32(1);
 
     USE_DEBUG_BUILDER.with(|debug| {
@@ -52,11 +52,11 @@ fn test_single_is_zero_fail() {
 
 #[test]
 fn test_single_is_zero_fail2() {
-    let x = 0u32;
+    let x = AbstractField::from_canonical_u32(0);
 
-    let chip = IsZeroChip::new(vec![AbstractField::from_canonical_u32(x)]);
+    let chip = IsZeroChip {};
 
-    let mut trace = chip.generate_trace();
+    let mut trace = chip.generate_trace(vec![x]);
     trace.values[1] = AbstractField::from_canonical_u32(0);
 
     USE_DEBUG_BUILDER.with(|debug| {
