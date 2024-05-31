@@ -27,11 +27,6 @@ pub struct MerkleProofCols<T, const DEPTH: usize, const DIGEST_WIDTH: usize> {
     pub output: [T; DIGEST_WIDTH],
 }
 
-impl<T: Copy, const DEPTH: usize, const DIGEST_WIDTH: usize>
-    MerkleProofCols<T, DEPTH, DIGEST_WIDTH>
-{
-}
-
 pub(crate) const fn num_merkle_proof_cols<const DEPTH: usize, const DIGEST_WIDTH: usize>() -> usize
 {
     size_of::<MerkleProofCols<u8, DEPTH, DIGEST_WIDTH>>()
