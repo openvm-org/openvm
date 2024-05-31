@@ -18,6 +18,17 @@ pub struct IsEqualVecCols<T> {
 }
 
 impl<T: Clone> IsEqualVecCols<T> {
+    pub fn new(x: Vec<T>, y: Vec<T>, prods: Vec<T>, invs: Vec<T>) -> Self {
+        Self {
+            io: IsEqualVecIOCols {
+                x,
+                y,
+                prod: prods[prods.len() - 1].clone(),
+            },
+            aux: IsEqualVecAuxCols { prods, invs },
+        }
+    }
+
     pub fn from_slice(slc: &[T], vec_len: usize) -> Self {
         let x = slc[0..vec_len].to_vec();
         let y = slc[vec_len..2 * vec_len].to_vec();

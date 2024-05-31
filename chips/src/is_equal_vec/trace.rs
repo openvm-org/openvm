@@ -1,4 +1,4 @@
-use p3_field::PrimeField32;
+use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::sub_chip::LocalTraceInstructions;
@@ -6,13 +6,11 @@ use crate::sub_chip::LocalTraceInstructions;
 use super::{columns::IsEqualVecCols, IsEqualVecChip};
 
 impl IsEqualVecChip {
-    pub fn generate_trace<F: PrimeField32>(&self) -> RowMajorMatrix<F> {
+    pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
         let width: usize = self.get_width();
         let height: usize = self.x.len();
         assert!(height.is_power_of_two());
-        // let mut rows = Vec::with_capacity(height);
 
-        // TODO make sexy
         let rows: Vec<Vec<F>> = self
             .x
             .iter()
@@ -27,7 +25,7 @@ impl IsEqualVecChip {
     }
 }
 
-impl<F: PrimeField32> LocalTraceInstructions<F> for IsEqualVecChip {
+impl<F: Field> LocalTraceInstructions<F> for IsEqualVecChip {
     type LocalInput = (Vec<u32>, Vec<u32>);
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> IsEqualVecCols<F> {
@@ -38,19 +36,26 @@ impl<F: PrimeField32> LocalTraceInstructions<F> for IsEqualVecChip {
             transition_index += 1;
         }
 
-        let mut row = x_row
-            .iter()
-            .chain(y_row.iter())
-            .map(|&val| F::from_canonical_u32(val))
-            .chain(std::iter::repeat(F::one()).take(transition_index))
-            .chain(std::iter::repeat(F::zero()).take(2 * vec_len - transition_index))
+        let prods = std::iter::repeat(F::one())
+            .take(transition_index)
+            .chain(std::iter::repeat(F::zero()).take(vec_len - transition_index))
+            .collect::<Vec<F>>();
+
+        let mut invs = std::iter::repeat(F::zero())
+            .take(vec_len)
             .collect::<Vec<F>>();
 
         if transition_index != vec_len {
-            row[3 * vec_len + transition_index] =
-                (row[transition_index] - row[transition_index + vec_len]).inverse();
+            invs[transition_index] = (F::from_canonical_u32(x_row[transition_index])
+                - F::from_canonical_u32(y_row[transition_index]))
+            .inverse();
         }
 
-        IsEqualVecCols::from_slice(&row, vec_len)
+        IsEqualVecCols::new(
+            x_row.iter().map(|x| F::from_canonical_u32(*x)).collect(),
+            y_row.iter().map(|y| F::from_canonical_u32(*y)).collect(),
+            prods,
+            invs,
+        )
     }
 }
