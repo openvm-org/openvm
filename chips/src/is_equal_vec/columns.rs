@@ -1,27 +1,43 @@
 #[derive(Default)]
-pub struct IsEqualVecCols<T> {
+pub struct IsEqualVecIOCols<T> {
     pub x: Vec<T>,
     pub y: Vec<T>,
+    pub prod: T,
+}
+
+#[derive(Default)]
+pub struct IsEqualVecAuxCols<T> {
     pub prods: Vec<T>,
     pub invs: Vec<T>,
+}
+
+#[derive(Default)]
+pub struct IsEqualVecCols<T> {
+    pub io: IsEqualVecIOCols<T>,
+    pub aux: IsEqualVecAuxCols<T>,
 }
 
 impl<T: Clone> IsEqualVecCols<T> {
     pub fn from_slice(slc: &[T], vec_len: usize) -> Self {
         let x = slc[0..vec_len].to_vec();
         let y = slc[vec_len..2 * vec_len].to_vec();
+        let prod = slc[3 * vec_len - 1].clone();
         let prods = slc[2 * vec_len..3 * vec_len].to_vec();
         let invs = slc[3 * vec_len..4 * vec_len].to_vec();
 
-        Self { x, y, prods, invs }
+        Self {
+            io: IsEqualVecIOCols { x, y, prod },
+            aux: IsEqualVecAuxCols { prods, invs },
+        }
     }
 
     pub fn to_vec(&self) -> Vec<T> {
-        self.x
+        self.io
+            .x
             .iter()
-            .chain(self.y.iter())
-            .chain(self.prods.iter())
-            .chain(self.invs.iter())
+            .chain(self.io.y.iter())
+            .chain(self.aux.prods.iter())
+            .chain(self.aux.invs.iter())
             .cloned()
             .collect()
     }
@@ -31,6 +47,6 @@ impl<T: Clone> IsEqualVecCols<T> {
     }
 
     pub fn vec_len(&self) -> usize {
-        self.x.len()
+        self.io.x.len()
     }
 }

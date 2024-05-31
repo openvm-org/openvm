@@ -5,19 +5,10 @@ pub mod air;
 pub mod columns;
 pub mod trace;
 
-// use p3_field::Field;
-
-use crate::is_equal_vec::columns::IsEqualVecCols;
-use crate::sub_chip::AirConfig;
-
 #[derive(Default)]
 pub struct IsEqualVecChip {
     pub x: Vec<Vec<u32>>,
     pub y: Vec<Vec<u32>>,
-}
-
-impl AirConfig for IsEqualVecChip {
-    type Cols<T> = IsEqualVecCols<T>;
 }
 
 impl IsEqualVecChip {

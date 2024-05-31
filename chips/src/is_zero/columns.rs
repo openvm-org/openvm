@@ -4,22 +4,22 @@ pub const NUM_COLS: usize = 3;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct IsZeroCols<F> {
-    pub x: F,
-    pub is_zero: F,
-    pub inv: F,
+pub struct IsZeroCols<T> {
+    pub io: IsZeroIOCols<T>,
+    pub inv: T,
 }
 
-impl<F: Clone> IsZeroCols<F> {
-    pub const fn new(x: F, is_zero: F, inv: F) -> IsZeroCols<F> {
-        IsZeroCols { x, is_zero, inv }
-    }
+#[derive(Copy, Clone)]
+pub struct IsZeroIOCols<T> {
+    pub x: T,
+    pub is_zero: T,
+}
 
-    pub fn from_slice(slc: &[F]) -> IsZeroCols<F> {
+impl<T: Clone> IsZeroCols<T> {
+    pub const fn new(x: T, is_zero: T, inv: T) -> IsZeroCols<T> {
         IsZeroCols {
-            x: slc[0].clone(),
-            is_zero: slc[1].clone(),
-            inv: slc[2].clone(),
+            io: IsZeroIOCols { x, is_zero },
+            inv,
         }
     }
 

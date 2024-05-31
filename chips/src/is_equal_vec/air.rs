@@ -2,8 +2,9 @@ use std::borrow::Borrow;
 
 use crate::sub_chip::SubAir;
 
-use super::columns::IsEqualVecCols;
+use super::columns::{IsEqualVecAuxCols, IsEqualVecCols, IsEqualVecIOCols};
 use super::IsEqualVecChip;
+use crate::sub_chip::AirConfig;
 use afs_stark_backend::interaction::Chip;
 use p3_air::AirBuilder;
 use p3_air::{Air, AirBuilderWithPublicValues, BaseAir};
@@ -13,6 +14,10 @@ use p3_matrix::Matrix;
 
 // No interactions
 impl<F: Field> Chip<F> for IsEqualVecChip {}
+
+impl AirConfig for IsEqualVecChip {
+    type Cols<T> = IsEqualVecCols<T>;
+}
 
 impl<F: Field> BaseAir<F> for IsEqualVecChip {
     fn width(&self) -> usize {
@@ -40,36 +45,30 @@ impl<AB: AirBuilderWithPublicValues> Air<AB> for IsEqualVecChip {
 
         let is_equal_vec_cols = IsEqualVecCols::<AB::Var>::from_slice(local, self.vec_len());
 
-        SubAir::<AB>::eval(self, builder, is_equal_vec_cols);
+        SubAir::<AB>::eval(self, builder, is_equal_vec_cols.io, is_equal_vec_cols.aux);
     }
 }
 
 impl<AB: AirBuilder> SubAir<AB> for IsEqualVecChip {
-    fn eval(&self, builder: &mut AB, is_equal_vec_cols: Self::Cols<AB::Var>) {
+    type IoView = IsEqualVecIOCols<AB::Var>;
+    type AuxView = IsEqualVecAuxCols<AB::Var>;
+
+    fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
         let vec_len = self.vec_len();
         builder.assert_eq(
-            is_equal_vec_cols.prods[0]
-                + (is_equal_vec_cols.x[0] - is_equal_vec_cols.y[0]) * is_equal_vec_cols.invs[0],
+            aux.prods[0] + (io.x[0] - io.y[0]) * aux.invs[0],
             AB::F::one(),
         );
 
         for i in 0..vec_len {
-            builder.assert_eq(
-                is_equal_vec_cols.prods[i] * (is_equal_vec_cols.x[i] - is_equal_vec_cols.y[i]),
-                AB::F::zero(),
-            );
+            builder.assert_eq(aux.prods[i] * (io.x[i] - io.y[i]), AB::F::zero());
         }
 
         for i in 0..vec_len - 1 {
+            builder.assert_eq(aux.prods[i] * aux.prods[i + 1], aux.prods[i + 1]);
             builder.assert_eq(
-                is_equal_vec_cols.prods[i] * is_equal_vec_cols.prods[i + 1],
-                is_equal_vec_cols.prods[i + 1],
-            );
-            builder.assert_eq(
-                is_equal_vec_cols.prods[i + 1]
-                    + (is_equal_vec_cols.x[i + 1] - is_equal_vec_cols.y[i + 1])
-                        * is_equal_vec_cols.invs[i + 1],
-                is_equal_vec_cols.prods[i],
+                aux.prods[i + 1] + (io.x[i + 1] - io.y[i + 1]) * aux.invs[i + 1],
+                aux.prods[i],
             );
         }
     }

@@ -12,6 +12,7 @@ impl IsEqualVecChip {
         assert!(height.is_power_of_two());
         // let mut rows = Vec::with_capacity(height);
 
+        // TODO make sexy
         let rows: Vec<Vec<F>> = self
             .x
             .iter()

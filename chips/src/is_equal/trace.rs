@@ -14,9 +14,9 @@ impl IsEqualChip {
             .map(|(i, _x)| {
                 let is_equal_cols = self.generate_trace_row((self.x[i], self.y[i]));
                 vec![
-                    is_equal_cols.x,
-                    is_equal_cols.y,
-                    is_equal_cols.is_equal,
+                    is_equal_cols.io.x,
+                    is_equal_cols.io.y,
+                    is_equal_cols.io.is_equal,
                     is_equal_cols.inv,
                 ]
             })

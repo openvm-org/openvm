@@ -1,4 +1,4 @@
-use p3_field::PrimeField32;
+use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix; // Import the constant from columns.rs
 
 use crate::sub_chip::LocalTraceInstructions;
@@ -6,13 +6,13 @@ use crate::sub_chip::LocalTraceInstructions;
 use super::{columns::IsZeroCols, IsZeroChip};
 
 impl IsZeroChip {
-    pub fn generate_trace<F: PrimeField32>(&self) -> RowMajorMatrix<F> {
+    pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
         let rows = self
             .x
             .iter()
             .map(|&x| {
-                let iszerocols = self.generate_trace_row(x);
-                vec![iszerocols.x, iszerocols.is_zero, iszerocols.inv]
+                let is_zero_cols = self.generate_trace_row(F::from_canonical_u32(x));
+                vec![is_zero_cols.io.x, is_zero_cols.io.is_zero, is_zero_cols.inv]
             })
             .collect::<Vec<_>>();
 
@@ -20,16 +20,16 @@ impl IsZeroChip {
     }
 }
 
-impl<F: PrimeField32> LocalTraceInstructions<F> for IsZeroChip {
-    type LocalInput = u32;
+impl<F: Field> LocalTraceInstructions<F> for IsZeroChip {
+    type LocalInput = F;
 
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
-        let is_zero = self.is_zero(local_input);
-        let inv = F::from_canonical_u32(local_input + is_zero).inverse();
-        IsZeroCols::<F>::new(
-            F::from_canonical_u32(local_input),
-            F::from_canonical_u32(is_zero),
-            inv,
-        )
+        let is_zero = self.request(local_input);
+        let inv = if is_zero {
+            F::zero()
+        } else {
+            local_input.inverse()
+        };
+        IsZeroCols::<F>::new(local_input, F::from_bool(is_zero), inv)
     }
 }
