@@ -1,12 +1,16 @@
-use std::borrow::Borrow;
+use std::{borrow::Borrow, iter::zip};
 
+use itertools::Itertools;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use crate::sub_chip::{AirConfig, SubAir};
 
-use super::{columns::XorCols, XorBitsChip};
+use super::{
+    columns::{XorBitCols, XorCols, XorIOCols},
+    XorBitsChip,
+};
 
 impl<F: Field, const N: usize> BaseAir<F> for XorBitsChip<N> {
     fn width(&self) -> usize {
@@ -27,7 +31,7 @@ where
 
         let xor_cols = XorCols::<N, AB::Var>::from_slice(local);
 
-        SubAir::eval(self, builder, xor_cols);
+        SubAir::eval(self, builder, xor_cols.io, xor_cols.bits);
     }
 }
 
@@ -41,31 +45,20 @@ impl<const N: usize> AirConfig for XorBitsChip<N> {
 /// which is equivalent to ensuring that x_bit[i] ^ y_bit[i] == z_bit[i].
 /// Overall, this ensures that x^y == z.
 impl<const N: usize, AB: AirBuilder> SubAir<AB> for XorBitsChip<N> {
-    fn eval(&self, builder: &mut AB, xor_cols: Self::Cols<AB::Var>) {
-        let mut x_from_bits: AB::Expr = AB::Expr::zero();
-        for i in 0..N {
-            x_from_bits += xor_cols.x_bits[i] * AB::Expr::from_canonical_u64(1 << i);
-        }
-        builder.assert_eq(x_from_bits, xor_cols.io.x);
+    type IoView = XorIOCols<AB::Var>;
+    type AuxView = XorBitCols<AB::Var>;
 
-        let mut y_from_bits: AB::Expr = AB::Expr::zero();
-        for i in 0..N {
-            y_from_bits += xor_cols.y_bits[i] * AB::Expr::from_canonical_u64(1 << i);
+    fn eval(&self, builder: &mut AB, io: Self::IoView, bits: Self::AuxView) {
+        for (x, bit_decomp) in zip([io.x, io.y, io.z], [&bits.x, &bits.y, &bits.z]) {
+            let mut from_bits = AB::Expr::zero();
+            for (i, &bit) in bit_decomp.iter().enumerate() {
+                from_bits += bit * AB::Expr::from_canonical_u32(1 << i);
+            }
+            builder.assert_eq(from_bits, x);
         }
-        builder.assert_eq(y_from_bits, xor_cols.io.y);
 
-        let mut z_from_bits: AB::Expr = AB::Expr::zero();
-        for i in 0..N {
-            z_from_bits += xor_cols.z_bits[i] * AB::Expr::from_canonical_u64(1 << i);
-        }
-        builder.assert_eq(z_from_bits, xor_cols.io.z);
-
-        for i in 0..N {
-            builder.assert_eq(
-                xor_cols.x_bits[i] + xor_cols.y_bits[i]
-                    - AB::Expr::two() * xor_cols.x_bits[i] * xor_cols.y_bits[i],
-                xor_cols.z_bits[i],
-            );
+        for ((x, y), z) in bits.x.into_iter().zip_eq(bits.y).zip_eq(bits.z) {
+            builder.assert_eq(x + y - AB::Expr::two() * x * y, z);
         }
     }
 }
