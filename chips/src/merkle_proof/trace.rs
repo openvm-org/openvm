@@ -9,7 +9,6 @@ use super::{
     MerkleProofChip,
 };
 
-// TODO: Make generic in T instead of u8. Requires From<T> for PrimeField32.
 impl<const DEPTH: usize, const DIGEST_WIDTH: usize> MerkleProofChip<DEPTH, DIGEST_WIDTH> {
     pub fn generate_trace<F, T, Compress>(
         &self,
