@@ -8,13 +8,12 @@ use p3_field::AbstractField;
 
 #[test]
 fn test_single_is_zero() {
-    // Public inputs:
     let x = 97u32;
 
     type Val = BabyBear;
-    let chip = IsZeroChip::new(vec![x]); // Create an instance of IsZeroChip
+    let chip = IsZeroChip::new(vec![x]);
 
-    let trace = chip.generate_trace::<Val>(); // Use the instance
+    let trace = chip.generate_trace::<Val>();
 
     assert_eq!(trace.values[1], AbstractField::from_canonical_u32(0));
 
@@ -23,13 +22,12 @@ fn test_single_is_zero() {
 
 #[test]
 fn test_single_is_zero2() {
-    // Public inputs:
     let x = 0u32;
 
     type Val = BabyBear;
-    let chip = IsZeroChip::new(vec![x]); // Create an instance of IsZeroChip
+    let chip = IsZeroChip::new(vec![x]);
 
-    let trace = chip.generate_trace::<Val>(); // Use the instance
+    let trace = chip.generate_trace::<Val>();
 
     assert_eq!(trace.values[1], AbstractField::from_canonical_u32(1));
 
@@ -38,14 +36,13 @@ fn test_single_is_zero2() {
 
 #[test]
 fn test_single_is_zero_fail() {
-    // Public inputs:
     let x = 187u32;
 
     type Val = BabyBear;
 
-    let chip = IsZeroChip::new(vec![x]); // Create an instance of IsZeroChip
+    let chip = IsZeroChip::new(vec![x]);
 
-    let mut trace = chip.generate_trace::<Val>(); // Use the instance
+    let mut trace = chip.generate_trace::<Val>();
     trace.values[1] = AbstractField::from_canonical_u32(1);
 
     USE_DEBUG_BUILDER.with(|debug| {
@@ -60,14 +57,13 @@ fn test_single_is_zero_fail() {
 
 #[test]
 fn test_single_is_zero_fail2() {
-    // Public inputs:
     let x = 0u32;
 
     type Val = BabyBear;
 
-    let chip = IsZeroChip::new(vec![x]); // Create an instance of IsZeroChip
+    let chip = IsZeroChip::new(vec![x]);
 
-    let mut trace = chip.generate_trace::<Val>(); // Use the instance
+    let mut trace = chip.generate_trace::<Val>();
     trace.values[1] = AbstractField::from_canonical_u32(0);
 
     USE_DEBUG_BUILDER.with(|debug| {
