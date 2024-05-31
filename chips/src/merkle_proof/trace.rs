@@ -2,7 +2,7 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_symmetric::PseudoCompressionFunction;
 
-use crate::merkle_proof::MerkleProofOp;
+use crate::{merkle_proof::MerkleProofOp, utils::FieldFrom};
 
 use super::{
     columns::{num_merkle_proof_cols, MerkleProofCols},
@@ -11,14 +11,15 @@ use super::{
 
 // TODO: Make generic in T instead of u8. Requires From<T> for PrimeField32.
 impl<const DEPTH: usize, const DIGEST_WIDTH: usize> MerkleProofChip<DEPTH, DIGEST_WIDTH> {
-    pub fn generate_trace<F, Compress>(
+    pub fn generate_trace<F, T, Compress>(
         &self,
-        operations: Vec<MerkleProofOp<u8, DEPTH, DIGEST_WIDTH>>,
+        operations: Vec<MerkleProofOp<T, DEPTH, DIGEST_WIDTH>>,
         hasher: &Compress,
     ) -> RowMajorMatrix<F>
     where
-        F: PrimeField32,
-        Compress: PseudoCompressionFunction<[u8; DIGEST_WIDTH], 2>,
+        F: PrimeField32 + FieldFrom<T>,
+        T: Default + Copy,
+        Compress: PseudoCompressionFunction<[T; DIGEST_WIDTH], 2>,
     {
         let num_merkle_proof_cols = num_merkle_proof_cols::<DEPTH, DIGEST_WIDTH>();
 
@@ -55,13 +56,14 @@ impl<const DEPTH: usize, const DIGEST_WIDTH: usize> MerkleProofChip<DEPTH, DIGES
     }
 }
 
-pub fn generate_trace_rows_for_op<F, Compress, const DEPTH: usize, const DIGEST_WIDTH: usize>(
+pub fn generate_trace_rows_for_op<F, T, Compress, const DEPTH: usize, const DIGEST_WIDTH: usize>(
     rows: &mut [MerkleProofCols<F, DEPTH, DIGEST_WIDTH>],
-    op: &MerkleProofOp<u8, DEPTH, DIGEST_WIDTH>,
+    op: &MerkleProofOp<T, DEPTH, DIGEST_WIDTH>,
     hasher: &Compress,
 ) where
-    F: PrimeField32,
-    Compress: PseudoCompressionFunction<[u8; DIGEST_WIDTH], 2>,
+    F: PrimeField32 + FieldFrom<T>,
+    T: Default + Copy,
+    Compress: PseudoCompressionFunction<[T; DIGEST_WIDTH], 2>,
 {
     let MerkleProofOp {
         leaf_index,
@@ -71,7 +73,7 @@ pub fn generate_trace_rows_for_op<F, Compress, const DEPTH: usize, const DIGEST_
 
     // Fill the first row with the leaf.
     for (node_byte, &leaf_hash_byte) in rows[0].node.iter_mut().zip(leaf_hash.iter()) {
-        *node_byte = F::from_canonical_u8(leaf_hash_byte);
+        *node_byte = F::from_val(leaf_hash_byte);
     }
 
     let mut node = generate_trace_row_for_round(
@@ -103,18 +105,19 @@ pub fn generate_trace_rows_for_op<F, Compress, const DEPTH: usize, const DIGEST_
     }
 }
 
-pub fn generate_trace_row_for_round<F, Compress, const DEPTH: usize, const DIGEST_WIDTH: usize>(
+pub fn generate_trace_row_for_round<F, T, Compress, const DEPTH: usize, const DIGEST_WIDTH: usize>(
     row: &mut MerkleProofCols<F, DEPTH, DIGEST_WIDTH>,
     round: usize,
     accumulate_index: usize,
     is_right_child: usize,
-    node: &[u8; DIGEST_WIDTH],
-    sibling: &[u8; DIGEST_WIDTH],
+    node: &[T; DIGEST_WIDTH],
+    sibling: &[T; DIGEST_WIDTH],
     hasher: &Compress,
-) -> [u8; DIGEST_WIDTH]
+) -> [T; DIGEST_WIDTH]
 where
-    F: PrimeField32,
-    Compress: PseudoCompressionFunction<[u8; DIGEST_WIDTH], 2>,
+    F: PrimeField32 + FieldFrom<T>,
+    T: Default + Copy,
+    Compress: PseudoCompressionFunction<[T; DIGEST_WIDTH], 2>,
 {
     row.step_flags[round] = F::one();
 
@@ -129,12 +132,12 @@ where
     row.is_right_child = F::from_canonical_usize(is_right_child);
     row.accumulated_index = F::from_canonical_usize(accumulate_index);
     for i in 0..DIGEST_WIDTH {
-        row.sibling[i] = F::from_canonical_u8(sibling[i]);
+        row.sibling[i] = F::from_val(sibling[i]);
 
-        row.left_node[i] = F::from_canonical_u8(left_node[i]);
-        row.right_node[i] = F::from_canonical_u8(right_node[i]);
+        row.left_node[i] = F::from_val(left_node[i]);
+        row.right_node[i] = F::from_val(right_node[i]);
 
-        row.output[i] = F::from_canonical_u8(output[i]);
+        row.output[i] = F::from_val(output[i]);
     }
 
     output
