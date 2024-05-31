@@ -2,9 +2,10 @@ use p3_field::PrimeField64;
 use p3_keccak_air::{generate_trace_rows, NUM_KECCAK_COLS, NUM_ROUNDS};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
-use crate::keccak_permute::columns::{KeccakPermuteCols, NUM_KECCAK_PERMUTE_COLS};
-
-use super::KeccakPermuteChip;
+use super::{
+    columns::{KECCAK_PERMUTE_COL_MAP, NUM_KECCAK_PERMUTE_COLS},
+    KeccakPermuteChip,
+};
 
 impl KeccakPermuteChip {
     pub fn generate_trace<F: PrimeField64>(&self, inputs: Vec<[u64; 25]>) -> RowMajorMatrix<F> {
@@ -20,17 +21,14 @@ impl KeccakPermuteChip {
             trace.row_mut(i)[..NUM_KECCAK_COLS].copy_from_slice(&keccak_trace.row_slice(i));
         }
 
-        let (prefix, rows, suffix) = unsafe { trace.values.align_to_mut::<KeccakPermuteCols<F>>() };
-        assert!(prefix.is_empty(), "Alignment should match");
-        assert!(suffix.is_empty(), "Alignment should match");
-        for (i, row) in rows.iter_mut().enumerate() {
+        for (i, row) in trace.rows_mut().enumerate() {
             if i < num_inputs * NUM_ROUNDS {
-                row.is_real = F::one();
+                row[KECCAK_PERMUTE_COL_MAP.is_real] = F::one();
                 if i % NUM_ROUNDS == 0 {
-                    row.is_real_input = F::one();
+                    row[KECCAK_PERMUTE_COL_MAP.is_real_input] = F::one();
                 }
                 if i % NUM_ROUNDS == NUM_ROUNDS - 1 {
-                    row.is_real_output = F::one();
+                    row[KECCAK_PERMUTE_COL_MAP.is_real_output] = F::one();
                 }
             }
         }
