@@ -4,7 +4,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use crate::sub_chip::LocalTraceInstructions;
 
 use super::{
-    columns::{XorCols, XorIOCols},
+    columns::{XorBitCols, XorCols, XorIOCols},
     XorBitsChip,
 };
 
@@ -40,9 +40,11 @@ impl<const N: usize, F: AbstractField> LocalTraceInstructions<F> for XorBitsChip
 
         XorCols {
             io: XorIOCols { x, y, z },
-            x_bits,
-            y_bits,
-            z_bits,
+            bits: XorBitCols {
+                x: x_bits,
+                y: y_bits,
+                z: z_bits,
+            },
         }
     }
 }

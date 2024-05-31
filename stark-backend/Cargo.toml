@@ -15,7 +15,7 @@ p3-maybe-rayon = { workspace = true }
 p3-uni-stark = { workspace = true }
 p3-util = { workspace = true }
 
-itertools = "0.12.1"
+itertools = "0.13.0"
 serde = { version = "1.0", default-features = false, features = [
     "derive",
     "alloc",

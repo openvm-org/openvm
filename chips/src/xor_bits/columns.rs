@@ -7,11 +7,16 @@ pub struct XorIOCols<T> {
     pub z: T,
 }
 
+/// Bit decompositions
+pub struct XorBitCols<T> {
+    pub x: Vec<T>,
+    pub y: Vec<T>,
+    pub z: Vec<T>,
+}
+
 pub struct XorCols<const N: usize, T> {
     pub io: XorIOCols<T>,
-    pub x_bits: Vec<T>,
-    pub y_bits: Vec<T>,
-    pub z_bits: Vec<T>,
+    pub bits: XorBitCols<T>,
 }
 
 impl<const N: usize, T: Clone> XorCols<N, T> {
@@ -26,9 +31,11 @@ impl<const N: usize, T: Clone> XorCols<N, T> {
 
         Self {
             io: XorIOCols { x, y, z },
-            x_bits,
-            y_bits,
-            z_bits,
+            bits: XorBitCols {
+                x: x_bits,
+                y: y_bits,
+                z: z_bits,
+            },
         }
     }
 
@@ -37,9 +44,9 @@ impl<const N: usize, T: Clone> XorCols<N, T> {
 
         flattened.extend_from_slice(&[self.io.x.clone(), self.io.y.clone(), self.io.z.clone()]);
 
-        flattened.extend_from_slice(&self.x_bits);
-        flattened.extend_from_slice(&self.y_bits);
-        flattened.extend_from_slice(&self.z_bits);
+        flattened.extend_from_slice(&self.bits.x);
+        flattened.extend_from_slice(&self.bits.y);
+        flattened.extend_from_slice(&self.bits.z);
 
         flattened
     }
