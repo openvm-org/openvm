@@ -3,7 +3,10 @@ use crate::is_equal_vec::IsEqualVecChip;
 use afs_stark_backend::prover::USE_DEBUG_BUILDER;
 use afs_stark_backend::verifier::VerificationError;
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use afs_test_utils::utils::create_seeded_rng;
+use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
+use rand::Rng;
 
 #[test]
 fn test_single_is_equal_vec() {
@@ -61,7 +64,6 @@ fn test_single_is_equal_vec3() {
 
 #[test]
 fn test_single_is_equal_vec4() {
-    // Public inputs:
     let x1 = vec![1, 2, 3];
     let y1 = vec![1, 2, 1];
     let x2 = vec![2, 2, 7];
@@ -147,4 +149,45 @@ fn test_single_is_equal_vec_fail2() {
         Err(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
     );
+}
+
+#[test]
+fn test_all_is_equal_vec_fail() {
+    let width = 4;
+    let height = 2;
+    let mut rng = create_seeded_rng();
+    let x: Vec<Vec<_>> = (0..height)
+        .map(|_| {
+            (0..width)
+                .map(|_| AbstractField::from_wrapped_u32(rng.gen::<u32>()))
+                .collect()
+        })
+        .collect();
+    let y: Vec<Vec<_>> = x.clone();
+    let chip = IsEqualVecChip { vec_len: width };
+
+    for i in 0..height {
+        for j in 0..width {
+            let mut trace = chip.generate_trace(x.clone(), y.clone());
+            trace.values[i * width + j] += AbstractField::from_wrapped_u32(rng.gen::<u32>() + 1);
+            USE_DEBUG_BUILDER.with(|debug| {
+                *debug.lock().unwrap() = false;
+            });
+            assert_eq!(
+                run_simple_test_no_pis(vec![&chip], vec![trace.clone()]),
+                Err(VerificationError::OodEvaluationMismatch),
+                "Expected constraint to fail"
+            );
+            trace.values[2 * width * height + i * width + j] =
+                BabyBear::one() - trace.values[2 * width * height + i * width + j];
+            USE_DEBUG_BUILDER.with(|debug| {
+                *debug.lock().unwrap() = false;
+            });
+            assert_eq!(
+                run_simple_test_no_pis(vec![&chip], vec![trace.clone()]),
+                Err(VerificationError::OodEvaluationMismatch),
+                "Expected constraint to fail"
+            );
+        }
+    }
 }
