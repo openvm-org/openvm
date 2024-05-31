@@ -10,15 +10,19 @@ use super::{
 };
 
 // TODO: Make generic in T instead of u8. Requires From<T> for PrimeField32.
-impl<const DEPTH: usize, const DIGEST_WIDTH: usize> MerkleProofChip<u8, DEPTH, DIGEST_WIDTH> {
-    pub fn generate_trace<F, Compress>(&self, hasher: &Compress) -> RowMajorMatrix<F>
+impl<const DEPTH: usize, const DIGEST_WIDTH: usize> MerkleProofChip<DEPTH, DIGEST_WIDTH> {
+    pub fn generate_trace<F, Compress>(
+        &self,
+        operations: Vec<MerkleProofOp<u8, DEPTH, DIGEST_WIDTH>>,
+        hasher: &Compress,
+    ) -> RowMajorMatrix<F>
     where
         F: PrimeField32,
         Compress: PseudoCompressionFunction<[u8; DIGEST_WIDTH], 2>,
     {
         let num_merkle_proof_cols = num_merkle_proof_cols::<DEPTH, DIGEST_WIDTH>();
 
-        let num_real_rows = self.operations.len() * DEPTH;
+        let num_real_rows = operations.len() * DEPTH;
         let num_rows = num_real_rows.next_power_of_two();
         let mut trace = RowMajorMatrix::new(
             vec![F::zero(); num_rows * num_merkle_proof_cols],
@@ -33,7 +37,7 @@ impl<const DEPTH: usize, const DIGEST_WIDTH: usize> MerkleProofChip<u8, DEPTH, D
         assert!(suffix.is_empty(), "Alignment should match");
         assert_eq!(rows.len(), num_rows);
 
-        for (leaf_rows, op) in rows.chunks_mut(DEPTH).zip(self.operations.iter()) {
+        for (leaf_rows, op) in rows.chunks_mut(DEPTH).zip(operations.iter()) {
             generate_trace_rows_for_op(leaf_rows, op, hasher);
 
             for row in leaf_rows.iter_mut() {

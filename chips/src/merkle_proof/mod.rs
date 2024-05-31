@@ -29,12 +29,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct MerkleProofChip<T, const DEPTH: usize, const DIGEST_WIDTH: usize>
-where
-    T: Default + Copy,
-{
+pub struct MerkleProofChip<const DEPTH: usize, const DIGEST_WIDTH: usize> {
     pub bus_hash_input: usize,
     pub bus_hash_output: usize,
-
-    pub operations: Vec<MerkleProofOp<T, DEPTH, DIGEST_WIDTH>>,
 }

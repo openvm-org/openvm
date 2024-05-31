@@ -7,8 +7,9 @@ use crate::keccak_permute::columns::{KeccakPermuteCols, NUM_KECCAK_PERMUTE_COLS}
 use super::KeccakPermuteChip;
 
 impl KeccakPermuteChip {
-    pub fn generate_trace<F: PrimeField64>(&self) -> RowMajorMatrix<F> {
-        let keccak_trace: RowMajorMatrix<F> = generate_trace_rows(self.inputs.clone());
+    pub fn generate_trace<F: PrimeField64>(&self, inputs: Vec<[u64; 25]>) -> RowMajorMatrix<F> {
+        let num_inputs = inputs.len();
+        let keccak_trace: RowMajorMatrix<F> = generate_trace_rows(inputs);
 
         let mut trace = RowMajorMatrix::new(
             vec![F::zero(); keccak_trace.height() * NUM_KECCAK_PERMUTE_COLS],
@@ -23,7 +24,7 @@ impl KeccakPermuteChip {
         assert!(prefix.is_empty(), "Alignment should match");
         assert!(suffix.is_empty(), "Alignment should match");
         for (i, row) in rows.iter_mut().enumerate() {
-            if i < self.inputs.len() * NUM_ROUNDS {
+            if i < num_inputs * NUM_ROUNDS {
                 row.is_real = F::one();
                 if i % NUM_ROUNDS == 0 {
                     row.is_real_input = F::one();

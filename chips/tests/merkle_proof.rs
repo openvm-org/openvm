@@ -80,19 +80,17 @@ fn test_merkle_proof_prove() {
     let merkle_proof_air = MerkleProofChip {
         bus_hash_input: 0,
         bus_hash_output: 1,
-        operations: vec![op],
     };
 
     let keccak_permute_air = KeccakPermuteChip {
         bus_input: 0,
         bus_output: 1,
-        inputs: keccak_inputs,
     };
 
     let keccak_hasher = TruncatedPermutation::new(KeccakF {});
 
-    let merkle_proof_trace = merkle_proof_air.generate_trace(&keccak_hasher);
-    let keccak_permute_trace = keccak_permute_air.generate_trace();
+    let merkle_proof_trace = merkle_proof_air.generate_trace(vec![op], &keccak_hasher);
+    let keccak_permute_trace = keccak_permute_air.generate_trace(keccak_inputs);
 
     let chips = vec![
         &merkle_proof_air as &dyn AnyRap<_>,

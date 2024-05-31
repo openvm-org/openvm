@@ -5,11 +5,10 @@ use p3_field::PrimeField32;
 use super::{columns::merkle_proof_col_map, MerkleProofChip};
 
 // TODO: Replace keccak pseudo permutation with full hash
-impl<F, T, const DEPTH: usize, const DIGEST_WIDTH: usize> Chip<F>
-    for MerkleProofChip<T, DEPTH, DIGEST_WIDTH>
+impl<F, const DEPTH: usize, const DIGEST_WIDTH: usize> Chip<F>
+    for MerkleProofChip<DEPTH, DIGEST_WIDTH>
 where
     F: PrimeField32,
-    T: Default + Copy,
 {
     fn sends(&self) -> Vec<Interaction<F>> {
         let merkle_proof_col_map = merkle_proof_col_map::<DEPTH, DIGEST_WIDTH>();

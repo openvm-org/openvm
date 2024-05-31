@@ -9,20 +9,16 @@ use super::{
     MerkleProofChip,
 };
 
-impl<F, T, const DEPTH: usize, const DIGEST_WIDTH: usize> BaseAir<F>
-    for MerkleProofChip<T, DEPTH, DIGEST_WIDTH>
-where
-    T: Copy + Default + Send + Sync,
+impl<F, const DEPTH: usize, const DIGEST_WIDTH: usize> BaseAir<F>
+    for MerkleProofChip<DEPTH, DIGEST_WIDTH>
 {
     fn width(&self) -> usize {
         num_merkle_proof_cols::<DEPTH, DIGEST_WIDTH>()
     }
 }
 
-impl<AB: AirBuilder, T, const DEPTH: usize, const DIGEST_WIDTH: usize> Air<AB>
-    for MerkleProofChip<T, DEPTH, DIGEST_WIDTH>
-where
-    T: Copy + Default + Send + Sync,
+impl<AB: AirBuilder, const DEPTH: usize, const DIGEST_WIDTH: usize> Air<AB>
+    for MerkleProofChip<DEPTH, DIGEST_WIDTH>
 {
     fn eval(&self, builder: &mut AB) {
         eval_round_flags::<_, DEPTH, DIGEST_WIDTH>(builder);

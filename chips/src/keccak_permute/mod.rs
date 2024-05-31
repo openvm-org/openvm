@@ -10,6 +10,4 @@ pub const NUM_U64_HASH_ELEMS: usize = 4;
 pub struct KeccakPermuteChip {
     pub bus_input: usize,
     pub bus_output: usize,
-
-    pub inputs: Vec<[u64; 25]>,
 }
