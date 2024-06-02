@@ -4,7 +4,7 @@ use super::columns::{IsEqualCols, IsEqualIOCols, NUM_COLS};
 use super::IsEqualChip;
 use crate::sub_chip::{AirConfig, SubAir};
 use afs_stark_backend::interaction::Chip;
-use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
+use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -15,7 +15,7 @@ impl<F: Field> BaseAir<F> for IsEqualChip {
     }
 }
 
-impl<F: Field, AB: AirBuilderWithPublicValues<F = F>> Air<AB> for IsEqualChip {
+impl<AB: AirBuilder> Air<AB> for IsEqualChip {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 

@@ -9,13 +9,13 @@ impl IsZeroChip {
     pub fn generate_trace<F: Field>(&self, x: Vec<F>) -> RowMajorMatrix<F> {
         let rows = x
             .iter()
-            .map(|&x| {
+            .flat_map(|&x| {
                 let is_zero_cols = self.generate_trace_row(x);
-                vec![is_zero_cols.io.x, is_zero_cols.io.is_zero, is_zero_cols.inv]
+                [is_zero_cols.io.x, is_zero_cols.io.is_zero, is_zero_cols.inv]
             })
             .collect::<Vec<_>>();
 
-        RowMajorMatrix::new(rows.concat(), IsZeroCols::<F>::get_width())
+        RowMajorMatrix::new(rows, IsZeroCols::<F>::get_width())
     }
 }
 

@@ -1,13 +1,17 @@
 use std::borrow::Borrow;
 
-use super::columns::{IsZeroCols, IsZeroIOCols, NUM_COLS};
-use super::IsZeroChip;
-use crate::sub_chip::{AirConfig, SubAir};
 use afs_stark_backend::interaction::Chip;
-use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
+use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
 use p3_field::Field;
 use p3_matrix::Matrix;
+
+use crate::sub_chip::{AirConfig, SubAir};
+
+use super::{
+    columns::{IsZeroCols, IsZeroIOCols, NUM_COLS},
+    IsZeroChip,
+};
 
 impl<F: Field> BaseAir<F> for IsZeroChip {
     fn width(&self) -> usize {
@@ -22,7 +26,7 @@ impl AirConfig for IsZeroChip {
 // No interactions
 impl<F: Field> Chip<F> for IsZeroChip {}
 
-impl<F: Field, AB: AirBuilderWithPublicValues<F = F>> Air<AB> for IsZeroChip {
+impl<AB: AirBuilder> Air<AB> for IsZeroChip {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 

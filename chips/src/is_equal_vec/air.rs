@@ -1,16 +1,18 @@
 use std::borrow::Borrow;
 
-use crate::sub_chip::SubAir;
-
-use super::columns::{IsEqualVecAuxCols, IsEqualVecCols, IsEqualVecIOCols};
-use super::IsEqualVecChip;
-use crate::sub_chip::AirConfig;
 use afs_stark_backend::interaction::Chip;
 use p3_air::AirBuilder;
-use p3_air::{Air, AirBuilderWithPublicValues, BaseAir};
+use p3_air::{Air, BaseAir};
 use p3_field::AbstractField;
 use p3_field::Field;
 use p3_matrix::Matrix;
+
+use crate::sub_chip::{AirConfig, SubAir};
+
+use super::{
+    columns::{IsEqualVecAuxCols, IsEqualVecCols, IsEqualVecIOCols},
+    IsEqualVecChip,
+};
 
 // No interactions
 impl<F: Field> Chip<F> for IsEqualVecChip {}
@@ -36,7 +38,7 @@ impl<F: Field> BaseAir<F> for IsEqualVecChip {
 /// At every transition index prohibits 0 followed by 1, and constrains
 /// 1 with equality must be followed by 1
 /// When product does not change, inv is 0, when product changes, inverse is inverse of difference
-impl<F: Field, AB: AirBuilderWithPublicValues<F = F>> Air<AB> for IsEqualVecChip {
+impl<AB: AirBuilder> Air<AB> for IsEqualVecChip {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -61,7 +63,7 @@ impl<AB: AirBuilder> SubAir<AB> for IsEqualVecChip {
         );
 
         for i in 0..vec_len {
-            builder.assert_eq(aux.prods[i] * (io.x[i] - io.y[i]), AB::F::zero());
+            builder.assert_zero(aux.prods[i] * (io.x[i] - io.y[i]));
         }
 
         for i in 0..vec_len - 1 {

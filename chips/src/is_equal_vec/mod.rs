@@ -11,7 +11,7 @@ pub struct IsEqualVecChip {
 }
 
 impl IsEqualVecChip {
-    pub fn request<F: Clone + PartialEq>(&self, x: Vec<F>, y: Vec<F>) -> bool {
+    pub fn request<F: Clone + PartialEq>(&self, x: &[F], y: &[F]) -> bool {
         x == y
     }
 

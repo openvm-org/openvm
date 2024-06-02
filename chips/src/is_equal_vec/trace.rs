@@ -1,3 +1,5 @@
+use std::iter::zip;
+
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -10,18 +12,16 @@ impl IsEqualVecChip {
         let width: usize = self.get_width();
         let height: usize = x.len();
         assert!(height.is_power_of_two());
-        assert!(x.len() == y.len());
+        assert_eq!(x.len(), y.len());
 
-        let rows: Vec<Vec<F>> = x
-            .iter()
-            .zip(y.iter())
-            .map(|(x_row, y_row)| {
-                let row = self.generate_trace_row((x_row.clone(), y_row.clone()));
+        let rows: Vec<_> = zip(x, y)
+            .flat_map(|(x_row, y_row)| {
+                let row = self.generate_trace_row((x_row, y_row));
                 row.to_vec()
             })
             .collect();
 
-        RowMajorMatrix::new(rows.concat(), width)
+        RowMajorMatrix::new(rows, width)
     }
 }
 

@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -8,11 +9,11 @@ use super::{columns::IsEqualCols, IsEqualChip};
 impl IsEqualChip {
     pub fn generate_trace<F: Field>(&self, x: Vec<F>, y: Vec<F>) -> RowMajorMatrix<F> {
         let rows = x
-            .iter()
-            .enumerate()
-            .map(|(i, _x)| {
-                let is_equal_cols = self.generate_trace_row((x[i], y[i]));
-                vec![
+            .into_iter()
+            .zip_eq(y)
+            .flat_map(|(x, y)| {
+                let is_equal_cols = self.generate_trace_row((x, y));
+                [
                     is_equal_cols.io.x,
                     is_equal_cols.io.y,
                     is_equal_cols.io.is_equal,
@@ -21,7 +22,7 @@ impl IsEqualChip {
             })
             .collect::<Vec<_>>();
 
-        RowMajorMatrix::new(rows.concat(), IsEqualCols::<F>::get_width())
+        RowMajorMatrix::new(rows, IsEqualCols::<F>::get_width())
     }
 }
 
