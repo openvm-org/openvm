@@ -17,7 +17,7 @@ impl IsEqualVecChip {
         let rows: Vec<_> = zip(x, y)
             .flat_map(|(x_row, y_row)| {
                 let row = self.generate_trace_row((x_row, y_row));
-                row.to_vec()
+                row.flatten()
             })
             .collect();
 

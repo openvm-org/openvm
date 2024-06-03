@@ -42,7 +42,7 @@ impl<T: Clone> IsEqualVecCols<T> {
         }
     }
 
-    pub fn to_vec(&self) -> Vec<T> {
+    pub fn flatten(&self) -> Vec<T> {
         self.io
             .x
             .iter()

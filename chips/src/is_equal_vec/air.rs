@@ -59,14 +59,18 @@ impl<AB: AirBuilder> SubAir<AB> for IsEqualVecChip {
         let IsEqualVecIOCols { x, y, prod: _ } = io;
         let IsEqualVecAuxCols { prods, invs } = aux;
         let vec_len = self.vec_len;
+        // initialize prods[0] = is_equal(x[0], y[0])
         builder.assert_eq(prods[0] + (x[0] - y[0]) * invs[0], AB::F::one());
 
         for i in 0..vec_len {
+            // constrain prods[i] = 0 if x[i] != y[i]
             builder.assert_zero(prods[i] * (x[i] - y[i]));
         }
 
         for i in 0..vec_len - 1 {
+            // if prod[i] == 0 all after are 0
             builder.assert_eq(prods[i] * prods[i + 1], prods[i + 1]);
+            // prods[i] == 1 forces prods[i+1] == is_equal(x[i+1], y[i+1])
             builder.assert_eq(prods[i + 1] + (x[i + 1] - y[i + 1]) * invs[i + 1], prods[i]);
         }
     }
