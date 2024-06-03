@@ -29,9 +29,9 @@ impl<F: Field> BaseAir<F> for IsEqualVecChip {
 
 /// Imposes AIR constaints within each row
 /// Indices are as follows:
-/// 0 - 2*vec_len-1: vector input
-/// 2*vec_len - 3*vec_len-1: cumulative equality AND (answer in index 3*vec_len-1)
-/// 3*vec_len - 4*vec_len-1: inverse used to constrain nonzero when equality holds
+/// 0..2*vec_len: vector input
+/// 2*vec_len..3*vec_len: cumulative equality AND (answer in index 3*vec_len-1)
+/// 3*vec_len..4*vec_len: inverse used to constrain nonzero when equality holds
 ///
 /// At first index naively implements is_equal constraints
 /// At every index constrains cumulative NAND difference
@@ -45,7 +45,7 @@ impl<AB: AirBuilder> Air<AB> for IsEqualVecChip {
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
 
-        let is_equal_vec_cols = IsEqualVecCols::<AB::Var>::from_slice(local, self.vec_len);
+        let is_equal_vec_cols = IsEqualVecCols::from_slice(local, self.vec_len);
 
         SubAir::<AB>::eval(self, builder, is_equal_vec_cols.io, is_equal_vec_cols.aux);
     }
@@ -56,22 +56,18 @@ impl<AB: AirBuilder> SubAir<AB> for IsEqualVecChip {
     type AuxView = IsEqualVecAuxCols<AB::Var>;
 
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
+        let IsEqualVecIOCols { x, y, prod: _ } = io;
+        let IsEqualVecAuxCols { prods, invs } = aux;
         let vec_len = self.vec_len;
-        builder.assert_eq(
-            aux.prods[0] + (io.x[0] - io.y[0]) * aux.invs[0],
-            AB::F::one(),
-        );
+        builder.assert_eq(prods[0] + (x[0] - y[0]) * invs[0], AB::F::one());
 
         for i in 0..vec_len {
-            builder.assert_zero(aux.prods[i] * (io.x[i] - io.y[i]));
+            builder.assert_zero(prods[i] * (x[i] - y[i]));
         }
 
         for i in 0..vec_len - 1 {
-            builder.assert_eq(aux.prods[i] * aux.prods[i + 1], aux.prods[i + 1]);
-            builder.assert_eq(
-                aux.prods[i + 1] + (io.x[i + 1] - io.y[i + 1]) * aux.invs[i + 1],
-                aux.prods[i],
-            );
+            builder.assert_eq(prods[i] * prods[i + 1], prods[i + 1]);
+            builder.assert_eq(prods[i + 1] + (x[i + 1] - y[i + 1]) * invs[i + 1], prods[i]);
         }
     }
 }
