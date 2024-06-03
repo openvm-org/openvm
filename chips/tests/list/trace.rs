@@ -3,7 +3,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use super::{columns::NUM_LIST_COLS, ListChip};
 
-impl<const MAX: u32> ListChip<MAX> {
+impl ListChip {
     pub fn generate_trace<F: PrimeField32>(&self) -> RowMajorMatrix<F> {
         let mut rows = vec![];
         for val in self.vals.iter() {

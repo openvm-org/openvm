@@ -8,13 +8,13 @@ use super::columns::RangeGateCols;
 use super::columns::NUM_RANGE_GATE_COLS;
 use super::RangeCheckerGateChip;
 
-impl<F: Field, const MAX: u32> BaseAir<F> for RangeCheckerGateChip<MAX> {
+impl<F: Field> BaseAir<F> for RangeCheckerGateChip {
     fn width(&self) -> usize {
         NUM_RANGE_GATE_COLS
     }
 }
 
-impl<AB, const MAX: u32> Air<AB> for RangeCheckerGateChip<MAX>
+impl<AB> Air<AB> for RangeCheckerGateChip
 where
     AB: AirBuilder,
 {

@@ -4,7 +4,7 @@ use p3_field::PrimeField32;
 
 use super::{columns::LIST_COL_MAP, ListChip};
 
-impl<F: PrimeField32, const MAX: u32> Chip<F> for ListChip<MAX> {
+impl<F: PrimeField32> Chip<F> for ListChip {
     fn sends(&self) -> Vec<Interaction<F>> {
         vec![Interaction {
             fields: vec![VirtualPairCol::single_main(LIST_COL_MAP.val)],

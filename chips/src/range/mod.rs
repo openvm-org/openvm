@@ -8,19 +8,24 @@ pub mod columns;
 pub mod trace;
 
 #[derive(Default)]
-pub struct RangeCheckerChip<const MAX: u32> {
+pub struct RangeCheckerChip {
     /// The index for the Range Checker bus.
     bus_index: usize,
+    range_max: u32,
     pub count: Vec<Arc<AtomicU32>>,
 }
 
-impl<const MAX: u32> RangeCheckerChip<MAX> {
-    pub fn new(bus_index: usize) -> Self {
+impl RangeCheckerChip {
+    pub fn new(bus_index: usize, range_max: u32) -> Self {
         let mut count = vec![];
-        for _ in 0..MAX {
+        for _ in 0..range_max {
             count.push(Arc::new(AtomicU32::new(0)));
         }
-        Self { bus_index, count }
+        Self {
+            bus_index,
+            range_max,
+            count,
+        }
     }
 
     pub fn bus_index(&self) -> usize {

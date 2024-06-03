@@ -5,18 +5,18 @@ use p3_matrix::dense::RowMajorMatrix;
 use super::columns::NUM_RANGE_COLS;
 use super::RangeCheckerChip;
 
-impl<F: Field, const MAX: u32> BaseAir<F> for RangeCheckerChip<MAX> {
+impl<F: Field> BaseAir<F> for RangeCheckerChip {
     fn width(&self) -> usize {
         NUM_RANGE_COLS
     }
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
-        let column = (0..MAX).map(F::from_canonical_u32).collect();
+        let column = (0..self.range_max).map(F::from_canonical_u32).collect();
         Some(RowMajorMatrix::new_col(column))
     }
 }
 
-impl<AB, const MAX: u32> Air<AB> for RangeCheckerChip<MAX>
+impl<AB> Air<AB> for RangeCheckerChip
 where
     AB: AirBuilder,
 {

@@ -7,7 +7,7 @@ use super::{
     RangeCheckerChip,
 };
 
-impl<F: PrimeField32, const MAX: u32> Chip<F> for RangeCheckerChip<MAX> {
+impl<F: PrimeField32> Chip<F> for RangeCheckerChip {
     fn receives(&self) -> Vec<Interaction<F>> {
         vec![Interaction {
             fields: vec![VirtualPairCol::single_preprocessed(
