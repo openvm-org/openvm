@@ -8,7 +8,7 @@ use super::{
     DummyHashChip,
 };
 
-impl<const N: usize, const R: usize> DummyHashChip<N, R> {
+impl DummyHashChip {
     pub fn generate_trace<F: Field>(
         &self,
         curr_state: Vec<Vec<F>>,
@@ -22,18 +22,18 @@ impl<const N: usize, const R: usize> DummyHashChip<N, R> {
                 cols.flatten()
             })
             .collect::<Vec<_>>();
-        RowMajorMatrix::new(rows, DummyHashCols::<F, N, R>::get_width())
+        RowMajorMatrix::new(rows, self.get_width())
     }
 }
 
-impl<F: Field, const N: usize, const R: usize> LocalTraceInstructions<F> for DummyHashChip<N, R> {
+impl<F: Field> LocalTraceInstructions<F> for DummyHashChip {
     type LocalInput = (Vec<F>, Vec<F>);
 
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
         let (curr_state, to_absorb) = local_input;
         let mut new_state = curr_state.clone();
 
-        for (new, b) in new_state.iter_mut().take(R).zip(to_absorb.iter()) {
+        for (new, b) in new_state.iter_mut().take(self.rate).zip(to_absorb.iter()) {
             *new += *b;
         }
 
@@ -44,6 +44,8 @@ impl<F: Field, const N: usize, const R: usize> LocalTraceInstructions<F> for Dum
                 new_state,
             },
             aux: DummyHashAuxCols {},
+            width: self.hash_width,
+            rate: self.rate,
         }
     }
 }

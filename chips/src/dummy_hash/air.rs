@@ -10,25 +10,26 @@ use super::{
     DummyHashChip,
 };
 
-impl<F: Field, const N: usize, const R: usize> BaseAir<F> for DummyHashChip<N, R> {
+impl<F: Field> BaseAir<F> for DummyHashChip {
     fn width(&self) -> usize {
-        2 * N + R
+        2 * self.hash_width + self.rate
     }
 }
 
-impl<const N: usize, const R: usize> AirConfig for DummyHashChip<N, R> {
-    type Cols<T> = DummyHashCols<T, N, R>;
+impl AirConfig for DummyHashChip {
+    type Cols<T> = DummyHashCols<T>;
 }
 
 // No interactions
-impl<F: Field, const N: usize, const R: usize> Chip<F> for DummyHashChip<N, R> {}
+impl<F: Field> Chip<F> for DummyHashChip {}
 
-impl<AB: AirBuilder, const N: usize, const R: usize> Air<AB> for DummyHashChip<N, R> {
+impl<AB: AirBuilder> Air<AB> for DummyHashChip {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
         let local = main.row_slice(0);
-        let dummy_hash_cols: &DummyHashCols<_, N, R> = &DummyHashCols::from_slice(local.as_ref());
+        let dummy_hash_cols: &DummyHashCols<_> =
+            &DummyHashCols::from_slice(local.as_ref(), self.hash_width, self.rate);
 
         SubAir::<AB>::eval(
             self,
@@ -39,15 +40,15 @@ impl<AB: AirBuilder, const N: usize, const R: usize> Air<AB> for DummyHashChip<N
     }
 }
 
-impl<AB: AirBuilder, const N: usize, const R: usize> SubAir<AB> for DummyHashChip<N, R> {
-    type IoView = DummyHashIOCols<AB::Var, N, R>;
+impl<AB: AirBuilder> SubAir<AB> for DummyHashChip {
+    type IoView = DummyHashIOCols<AB::Var>;
     type AuxView = DummyHashAuxCols;
 
     fn eval(&self, builder: &mut AB, io: Self::IoView, _aux: Self::AuxView) {
-        for i in 0..R {
+        for i in 0..self.rate {
             builder.assert_eq(io.curr_state[i] + io.to_absorb[i], io.new_state[i]);
         }
-        for i in R..N {
+        for i in self.rate..self.hash_width {
             builder.assert_eq(io.curr_state[i], io.new_state[i]);
         }
     }

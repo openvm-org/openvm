@@ -5,9 +5,9 @@ use p3_field::AbstractField;
 
 #[test]
 fn test_single_dummy_hash() {
-    let chip: DummyHashChip<5, 3> = DummyHashChip {
+    let chip: DummyHashChip = DummyHashChip {
         bus_index: 0,
-        width: 5,
+        hash_width: 5,
         rate: 3,
     };
     let x = [1, 2, 3, 4, 5]
