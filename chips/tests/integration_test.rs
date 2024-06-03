@@ -1,10 +1,10 @@
 use std::{iter, sync::Arc};
 
-use afs_chips::{range, range_gate, xor_bits, xor_limbs};
+use afs_chips::{range, range_gate, sum, xor_bits, xor_limbs};
 use afs_stark_backend::prover::USE_DEBUG_BUILDER;
 use afs_stark_backend::rap::AnyRap;
 use afs_stark_backend::verifier::VerificationError;
-use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use afs_test_utils::config::baby_bear_poseidon2::{run_simple_test, run_simple_test_no_pis};
 use afs_test_utils::{
     interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
 };
@@ -408,6 +408,87 @@ fn negative_test_range_gate_chip() {
     });
     assert_eq!(
         run_simple_test_no_pis(vec![&range_checker], vec![range_trace]),
+        Err(VerificationError::OodEvaluationMismatch),
+        "Expected constraint to fail"
+    );
+}
+
+#[test]
+fn test_sum_gate_chip() {
+    use sum::trace::generate_trace;
+    use sum::SumChip;
+
+    let mut rng = create_seeded_rng();
+
+    const NUM_VALUES: usize = 16;
+    const N: usize = 3;
+    const MAX: u64 = 1 << N;
+
+    let values = (0..NUM_VALUES)
+        .map(|_| rng.gen::<u64>() % MAX)
+        .collect::<Vec<u64>>();
+    let total_sum = values.iter().sum::<u64>();
+
+    let sum_chip = SumChip::new(0);
+    let trace = generate_trace(&values);
+    let pis = vec![BabyBear::from_canonical_u64(total_sum)];
+
+    let dummy_sender_chip = DummyInteractionAir::new(1, true, 0);
+    let dummy_trace = RowMajorMatrix::new(
+        values
+            .iter()
+            .flat_map(|&val| vec![BabyBear::one(), BabyBear::from_canonical_u64(val)])
+            .collect(),
+        2,
+    );
+
+    run_simple_test(
+        vec![&sum_chip, &dummy_sender_chip],
+        vec![trace, dummy_trace],
+        vec![pis, Vec::new()],
+    )
+    .expect("Verification failed");
+}
+
+#[test]
+fn negative_test_sum_gate_chip() {
+    use sum::trace::generate_trace;
+    use sum::SumChip;
+
+    let mut rng = create_seeded_rng();
+
+    const NUM_VALUES: usize = 16;
+    const N: usize = 3;
+    const MAX: u64 = 1 << N;
+
+    let values = (0..NUM_VALUES)
+        .map(|_| rng.gen::<u64>() % MAX)
+        .collect::<Vec<u64>>();
+    let total_sum = values.iter().sum::<u64>();
+
+    let sum_chip = SumChip::new(0);
+    let trace = generate_trace(&values);
+    // subtracting one from the sum to trigger the constraint
+    let pis = vec![BabyBear::from_canonical_u64(total_sum - 1)];
+
+    let dummy_sender_chip = DummyInteractionAir::new(1, true, 0);
+    let dummy_trace = RowMajorMatrix::new(
+        values
+            .iter()
+            .flat_map(|&val| vec![BabyBear::one(), BabyBear::from_canonical_u64(val)])
+            .collect(),
+        2,
+    );
+
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
+    assert_eq!(
+        run_simple_test(
+            vec![&sum_chip, &dummy_sender_chip],
+            vec![trace, dummy_trace],
+            vec![pis, Vec::new()],
+        ),
         Err(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
     );
