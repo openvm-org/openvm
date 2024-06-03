@@ -23,6 +23,10 @@ impl<F: Clone> IsZeroCols<F> {
         }
     }
 
+    pub fn flatten(&self) -> Vec<F> {
+        vec![self.io.x.clone(), self.io.is_zero.clone(), self.inv.clone()]
+    }
+
     pub fn get_width() -> usize {
         NUM_COLS
     }
