@@ -8,31 +8,20 @@ use rand::Rng;
 
 use crate::is_equal_vec::IsEqualVecChip;
 
-#[test]
-fn test_single_is_equal_vec() {
-    let x = vec![1, 2, 3]
+use test_case::test_case;
+
+#[test_case([1, 2, 3], [1, 2, 3], [1, 1, 1] ; "1, 2, 3 == 1, 2, 3")]
+#[test_case([1, 2, 3], [1, 2, 1], [1, 1, 0] ; "1, 2, 3 != 1, 2, 1")]
+#[test_case([2, 2, 7], [3, 5, 1], [0, 0, 0] ; "2, 2, 7 != 3, 5, 1")]
+#[test_case([17, 23, 4], [17, 23, 4], [1, 1, 1] ; "17, 23, 4 == 17, 23, 4")]
+#[test_case([92, 27, 32], [92, 27, 32], [1, 1, 1] ; "92, 27, 32 == 92, 27, 32")]
+#[test_case([1, 27, 4], [1, 2, 43], [1, 0, 0] ; "1, 27, 4 != 1, 2, 43")]
+fn test_vec_is_equal_vec(x: [u32; 3], y: [u32; 3], expected: [u32; 3]) {
+    let x = x
         .into_iter()
         .map(AbstractField::from_canonical_u32)
         .collect();
-    let y = vec![1, 2, 3]
-        .into_iter()
-        .map(AbstractField::from_canonical_u32)
-        .collect();
-
-    let chip = IsEqualVecChip { vec_len: 3 };
-
-    let trace = chip.generate_trace(vec![x], vec![y]);
-
-    run_simple_test_no_pis(vec![&chip], vec![trace]).expect("Verification failed");
-}
-
-#[test]
-fn test_single_is_equal_vec2() {
-    let x = vec![2, 2, 7]
-        .into_iter()
-        .map(AbstractField::from_canonical_u32)
-        .collect();
-    let y = vec![3, 5, 1]
+    let y = y
         .into_iter()
         .map(AbstractField::from_canonical_u32)
         .collect();
@@ -41,29 +30,18 @@ fn test_single_is_equal_vec2() {
 
     let trace = chip.generate_trace(vec![x], vec![y]);
 
-    run_simple_test_no_pis(vec![&chip], vec![trace]).expect("Verification failed");
-}
-
-#[test]
-fn test_single_is_equal_vec3() {
-    let x = vec![17, 23, 4]
-        .into_iter()
-        .map(AbstractField::from_canonical_u32)
-        .collect();
-    let y = vec![17, 23, 4]
-        .into_iter()
-        .map(AbstractField::from_canonical_u32)
-        .collect();
-
-    let chip = IsEqualVecChip { vec_len: 3 };
-
-    let trace = chip.generate_trace(vec![x], vec![y]);
+    for (i, value) in expected.iter().enumerate() {
+        assert_eq!(
+            trace.values[6 + i],
+            AbstractField::from_canonical_u32(*value)
+        );
+    }
 
     run_simple_test_no_pis(vec![&chip], vec![trace]).expect("Verification failed");
 }
 
 #[test]
-fn test_single_is_equal_vec4() {
+fn test_all_is_equal_vec() {
     let x1 = vec![1, 2, 3];
     let y1 = vec![1, 2, 1];
     let x2 = vec![2, 2, 7];
@@ -97,40 +75,18 @@ fn test_single_is_equal_vec4() {
     run_simple_test_no_pis(vec![&chip], vec![trace]).expect("Verification failed");
 }
 
-#[test]
-fn test_single_is_equal_vec_fail() {
-    let x = vec![1, 2, 3]
+#[test_case([1, 2, 3], [1, 2, 3], [1, 1, 1] ; "1, 2, 3 == 1, 2, 3")]
+#[test_case([1, 2, 3], [1, 2, 1], [1, 1, 0] ; "1, 2, 3 != 1, 2, 1")]
+#[test_case([2, 2, 7], [3, 5, 1], [0, 0, 0] ; "2, 2, 7 != 3, 5, 1")]
+#[test_case([17, 23, 4], [17, 23, 4], [1, 1, 1] ; "17, 23, 4 == 17, 23, 4")]
+#[test_case([92, 27, 32], [92, 27, 32], [1, 1, 1] ; "92, 27, 32 == 92, 27, 32")]
+#[test_case([1, 27, 4], [1, 2, 43], [1, 0, 0] ; "1, 27, 4 != 1, 2, 43")]
+fn test_single_is_equal_vec_fail(x: [u32; 3], y: [u32; 3], expected: [u32; 3]) {
+    let x: Vec<BabyBear> = x
         .into_iter()
         .map(AbstractField::from_canonical_u32)
         .collect();
-    let y = vec![1, 2, 1]
-        .into_iter()
-        .map(AbstractField::from_canonical_u32)
-        .collect();
-
-    let chip = IsEqualVecChip { vec_len: 3 };
-
-    let mut trace = chip.generate_trace(vec![x], vec![y]);
-
-    trace.values[0] = AbstractField::from_canonical_u32(2);
-
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
-    assert_eq!(
-        run_simple_test_no_pis(vec![&chip], vec![trace]),
-        Err(VerificationError::OodEvaluationMismatch),
-        "Expected constraint to fail"
-    );
-}
-
-#[test]
-fn test_single_is_equal_vec_fail2() {
-    let x = vec![1, 2, 3]
-        .into_iter()
-        .map(AbstractField::from_canonical_u32)
-        .collect();
-    let y = vec![1, 2, 1]
+    let y: Vec<BabyBear> = y
         .into_iter()
         .map(AbstractField::from_canonical_u32)
         .collect();
@@ -139,20 +95,22 @@ fn test_single_is_equal_vec_fail2() {
 
     let mut trace = chip.generate_trace(vec![x], vec![y]);
 
-    trace.values[8] = AbstractField::from_canonical_u32(1);
-
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
-    assert_eq!(
-        run_simple_test_no_pis(vec![&chip], vec![trace]),
-        Err(VerificationError::OodEvaluationMismatch),
-        "Expected constraint to fail"
-    );
+    for (i, _value) in expected.iter().enumerate() {
+        trace.values[6 + i] = BabyBear::one() - trace.values[6 + i];
+        USE_DEBUG_BUILDER.with(|debug| {
+            *debug.lock().unwrap() = false;
+        });
+        assert_eq!(
+            run_simple_test_no_pis(vec![&chip], vec![trace.clone()]),
+            Err(VerificationError::OodEvaluationMismatch),
+            "Expected constraint to fail"
+        );
+        trace.values[6 + i] = BabyBear::one() - trace.values[6 + i];
+    }
 }
 
 #[test]
-fn test_all_is_equal_vec_fail() {
+fn test_vec_is_equal_vec_fail() {
     let width = 4;
     let height = 2;
     let mut rng = create_seeded_rng();
