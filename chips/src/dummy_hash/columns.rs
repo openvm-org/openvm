@@ -1,18 +1,16 @@
-#[repr(C)]
-#[derive(Default)]
 pub struct DummyHashCols<T, const N: usize, const R: usize> {
     pub io: DummyHashIOCols<T, N, R>,
     pub aux: DummyHashAuxCols,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct DummyHashIOCols<F, const N: usize, const R: usize> {
     pub curr_state: Vec<F>,
     pub to_absorb: Vec<F>,
     pub new_state: Vec<F>,
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone)]
 pub struct DummyHashAuxCols {}
 
 impl<F: Clone, const N: usize, const R: usize> DummyHashCols<F, N, R> {

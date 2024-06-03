@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-
 use afs_stark_backend::interaction::Chip;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
