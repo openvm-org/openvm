@@ -4,13 +4,13 @@ use p3_field::Field;
 use super::columns::NUM_LIST_COLS;
 use super::ListChip;
 
-impl<F: Field, const MAX: u32> BaseAir<F> for ListChip<MAX> {
+impl<F: Field> BaseAir<F> for ListChip {
     fn width(&self) -> usize {
         NUM_LIST_COLS
     }
 }
 
-impl<AB, const MAX: u32> Air<AB> for ListChip<MAX>
+impl<AB> Air<AB> for ListChip
 where
     AB: AirBuilder,
 {

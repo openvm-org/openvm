@@ -35,7 +35,7 @@ fn test_list_range_checker() {
     const LIST_LEN: usize = 1 << LOG_TRACE_DEGREE_LIST;
 
     // Creating a RangeCheckerChip
-    let range_checker = Arc::new(RangeCheckerChip::<MAX>::new(bus_index));
+    let range_checker = Arc::new(RangeCheckerChip::new(bus_index, MAX));
 
     // Generating random lists
     let num_lists = 10;
@@ -50,8 +50,8 @@ fn test_list_range_checker() {
     // define a bunch of ListChips
     let lists = lists_vals
         .iter()
-        .map(|vals| ListChip::new(bus_index, vals.to_vec(), Arc::clone(&range_checker)))
-        .collect::<Vec<ListChip<MAX>>>();
+        .map(|vals| ListChip::new(bus_index, MAX, vals.to_vec(), Arc::clone(&range_checker)))
+        .collect::<Vec<ListChip>>();
 
     let lists_traces = lists
         .par_iter()
@@ -329,7 +329,7 @@ fn test_range_gate_chip() {
     const LOG_LIST_LEN: usize = 6;
     const LIST_LEN: usize = 1 << LOG_LIST_LEN;
 
-    let range_checker = RangeCheckerGateChip::<MAX>::new(bus_index);
+    let range_checker = RangeCheckerGateChip::new(bus_index, MAX);
 
     // Generating random lists
     let num_lists = 10;
@@ -387,7 +387,7 @@ fn negative_test_range_gate_chip() {
     const N: usize = 3;
     const MAX: u32 = 1 << N;
 
-    let range_checker = RangeCheckerGateChip::<MAX>::new(bus_index);
+    let range_checker = RangeCheckerGateChip::new(bus_index, MAX);
 
     // generating a trace with a counter starting from 1
     // instead of 0 to test the AIR constraints in range_checker

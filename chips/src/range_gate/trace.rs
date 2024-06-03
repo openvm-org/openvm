@@ -3,7 +3,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use super::{columns::NUM_RANGE_GATE_COLS, RangeCheckerGateChip};
 
-impl<const MAX: u32> RangeCheckerGateChip<MAX> {
+impl RangeCheckerGateChip {
     pub fn generate_trace<F: PrimeField64>(&self) -> RowMajorMatrix<F> {
         let rows = self
             .count
