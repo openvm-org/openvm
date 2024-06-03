@@ -178,8 +178,7 @@ fn test_all_is_equal_vec_fail() {
                 Err(VerificationError::OodEvaluationMismatch),
                 "Expected constraint to fail"
             );
-            trace.values[2 * width * height + i * width + j] =
-                BabyBear::one() - trace.values[2 * width * height + i * width + j];
+            trace.row_mut(i)[j] = BabyBear::one() - trace.row_mut(i)[j];
             USE_DEBUG_BUILDER.with(|debug| {
                 *debug.lock().unwrap() = false;
             });
