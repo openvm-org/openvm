@@ -1,8 +1,10 @@
 [workspace]
-members = [ "chips",
+members = [ 
+    "chips",
     "stark-backend",
     "test-utils",
-    "derive"
+    "derive",
+    "bin/afs",
 ]
 resolver = "2"
 

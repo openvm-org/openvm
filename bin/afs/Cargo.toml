@@ -1,0 +1,13 @@
+[package]
+name = "afs"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+clap = { version = "4.5.4", features = ["derive"] }
+color-eyre = "0.6.3"
+serde = "1.0.203"
+serde_derive = "1.0.203"
+tokio = { version = "1.38.0", features = ["rt", "macros"] }
+toml = "0.8.14"
