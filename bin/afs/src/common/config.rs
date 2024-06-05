@@ -30,7 +30,6 @@ pub struct Config {
 
 impl Config {
     pub fn read_config_file(file: &str) -> Config {
-        // let reader = std::fs::File::open(file).unwrap();
         let file_str = std::fs::read_to_string(file).unwrap();
         let config: Config = toml::from_str(file_str.as_str()).unwrap();
         config
