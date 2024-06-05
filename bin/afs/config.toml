@@ -1,8 +1,8 @@
 [page]
 width = 32
 height = 128
-mode = "ReadOnly"
-max_rw_ops = 10
+mode = "ReadWrite" # options: "ReadOnly", "ReadWrite"
+max_rw_ops = 10 
 
 [schema]
 key_length = 2

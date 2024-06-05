@@ -2,7 +2,8 @@ use afs::{
     cli, 
     commands::{
         cache::CacheCommand, keygen::KeygenCommand, prove::ProveCommand, verify::VerifyCommand
-    }, utils::Config
+    }, 
+    common::config::Config,
 };
 use clap::Parser;
 // use commands::{cache::CacheCommand, prove::ProveCommand};
