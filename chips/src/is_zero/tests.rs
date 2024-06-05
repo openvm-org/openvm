@@ -6,6 +6,7 @@ use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
+use p3_matrix::Matrix;
 use test_case::test_case;
 
 #[test_case(97 ; "97 => 0")]
@@ -17,7 +18,10 @@ fn test_single_is_zero(x: u32) {
 
     let trace = chip.generate_trace(vec![x]);
 
-    assert_eq!(trace.values[1], AbstractField::from_canonical_u32(0));
+    assert_eq!(
+        trace.get(0, 1),
+        AbstractField::from_bool(x == AbstractField::zero())
+    );
 
     run_simple_test_no_pis(vec![&chip], vec![trace]).expect("Verification failed");
 }
