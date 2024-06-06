@@ -7,9 +7,40 @@ pub struct IsLessThanIOCols<T> {
     pub less_than: T,
 }
 
+impl<T: Clone> IsLessThanIOCols<T> {
+    pub fn from_slice(slc: &[T]) -> Self {
+        Self {
+            x: slc[0].clone(),
+            y: slc[1].clone(),
+            less_than: slc[2].clone(),
+        }
+    }
+
+    pub fn flatten(&self) -> Vec<T> {
+        vec![self.x.clone(), self.y.clone(), self.less_than.clone()]
+    }
+}
+
 pub struct IsLessThanAuxCols<T> {
-    pub lower_bits: T,
-    pub lower_bits_decomp: Vec<T>,
+    pub lower: T,
+    // lower_decomp consists of lower decomposed into limbs of size decomp where we also shift
+    // the final limb and store it as the last element of lower decomp so we can range check
+    pub lower_decomp: Vec<T>,
+}
+
+impl<T: Clone> IsLessThanAuxCols<T> {
+    pub fn from_slice(slc: &[T]) -> Self {
+        Self {
+            lower: slc[0].clone(),
+            lower_decomp: slc[1..].to_vec(),
+        }
+    }
+
+    pub fn flatten(&self) -> Vec<T> {
+        let mut flattened = vec![self.lower.clone()];
+        flattened.extend(self.lower_decomp.iter().cloned());
+        flattened
+    }
 }
 
 pub struct IsLessThanCols<T> {
@@ -18,40 +49,16 @@ pub struct IsLessThanCols<T> {
 }
 
 impl<T: Clone> IsLessThanCols<T> {
-    pub fn from_slice(slc: &[T], limb_bits: usize, decomp: usize) -> Self {
-        // num_limbs is the number of limbs, not including the last shifted limb
-        let num_limbs = (limb_bits + decomp - 1) / decomp;
-
-        // the first and second elements are x and y, respectively
-        let x = slc[0].clone();
-        let y = slc[1].clone();
-        // the third element is the less_than indicator
-        let less_than = slc[2].clone();
-
-        // the next element is the value of the lower num_limbs bits of the intermediate sum
-        let lower_bits = slc[3].clone();
-
-        // the next num_limbs + 1 elements are the decomposed limbs of the lower bits of the
-        // intermediate sum
-        let lower_bits_decomp = slc[4..4 + num_limbs + 1].to_vec();
-
-        let io = IsLessThanIOCols { x, y, less_than };
-        let aux = IsLessThanAuxCols {
-            lower_bits,
-            lower_bits_decomp,
-        };
+    pub fn from_slice(slc: &[T]) -> Self {
+        let io = IsLessThanIOCols::from_slice(&slc[..3]);
+        let aux = IsLessThanAuxCols::from_slice(&slc[3..]);
 
         Self { io, aux }
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        let mut flattened = vec![
-            self.io.x.clone(),
-            self.io.y.clone(),
-            self.io.less_than.clone(),
-            self.aux.lower_bits.clone(),
-        ];
-        flattened.extend(self.aux.lower_bits_decomp.iter().cloned());
+        let mut flattened = self.io.flatten();
+        flattened.extend(self.aux.flatten());
         flattened
     }
 
@@ -61,9 +68,9 @@ impl<T: Clone> IsLessThanCols<T> {
         width += 2;
         // for the less_than indicator
         width += 1;
-        // for the lower_bits
+        // for the lower
         width += 1;
-        // for the decomposed lower_bits
+        // for the decomposed lower
         let num_limbs = (limb_bits + decomp - 1) / decomp;
         width += num_limbs + 1;
 

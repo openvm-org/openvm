@@ -8,30 +8,29 @@ use crate::sub_chip::{AirConfig, SubAir};
 
 use super::{
     columns::{IsLessThanAuxCols, IsLessThanCols, IsLessThanIOCols},
-    IsLessThanAir, IsLessThanChip,
+    IsLessThanAir,
 };
 
-impl AirConfig for IsLessThanChip {
+impl AirConfig for IsLessThanAir {
     type Cols<T> = IsLessThanCols<T>;
 }
 
-impl<F: Field> BaseAir<F> for IsLessThanChip {
+impl<F: Field> BaseAir<F> for IsLessThanAir {
     fn width(&self) -> usize {
-        IsLessThanCols::<F>::get_width(*self.air.limb_bits(), *self.air.decomp())
+        IsLessThanCols::<F>::get_width(*self.limb_bits(), *self.decomp())
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for IsLessThanChip {
+impl<AB: AirBuilder> Air<AB> for IsLessThanAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
 
-        let local_cols =
-            IsLessThanCols::<AB::Var>::from_slice(local, *self.air.limb_bits(), *self.air.decomp());
+        let local_cols = IsLessThanCols::<AB::Var>::from_slice(local);
 
-        SubAir::eval(&self.air, builder, local_cols.io, local_cols.aux);
+        SubAir::eval(self, builder, local_cols.io, local_cols.aux);
     }
 }
 
@@ -41,6 +40,7 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanAir {
     type AuxView = IsLessThanAuxCols<AB::Var>;
 
     // constrain that the result of x < y is given by less_than
+    // warning: send for range check must be included for the constraints to be sound
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
         let x = io.x;
         let y = io.y;
@@ -48,11 +48,8 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanAir {
 
         let local_aux = &aux;
 
-        // num_limbs is the number of limbs, not including the last shifted limb
-        let num_limbs = (self.limb_bits() + self.decomp() - 1) / self.decomp();
-
-        let lower_bits = local_aux.lower_bits;
-        let lower_bits_decomp = local_aux.lower_bits_decomp.clone();
+        let lower = local_aux.lower;
+        let lower_decomp = local_aux.lower_decomp.clone();
 
         // to range check the last limb of the decomposed lower_bits, we need to shift it to make sure it is in
         // the correct range
@@ -63,30 +60,32 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanAir {
             y - x + AB::Expr::from_canonical_u64(1 << self.limb_bits()) - AB::Expr::one();
 
         // constrain that the lower_bits + less_than * 2^limb_bits is the correct intermediate sum
-        let check_val =
-            lower_bits + less_than * AB::Expr::from_canonical_u64(1 << self.limb_bits());
+        // note that the intermediate value will be >= 2^limb_bits if and only if x < y, and check_val will therefore be
+        // the correct value if and only if less_than is the indicator for whether x < y
+        let check_val = lower + less_than * AB::Expr::from_canonical_u64(1 << self.limb_bits());
 
         builder.assert_eq(intermed_val, check_val);
 
         // constrain that the decomposition of lower_bits is correct
-        let lower_bits_from_decomp = lower_bits_decomp
+        // each limb will be range checked
+        let lower_from_decomp = lower_decomp
             .iter()
             .enumerate()
-            .take(num_limbs)
+            .take(*self.num_limbs())
             .fold(AB::Expr::zero(), |acc, (i, &val)| {
                 acc + val * AB::Expr::from_canonical_u64(1 << (i * self.decomp()))
             });
 
-        builder.assert_eq(lower_bits_from_decomp, lower_bits);
+        builder.assert_eq(lower_from_decomp, lower);
 
-        let shifted_val =
-            lower_bits_decomp[num_limbs - 1] * AB::Expr::from_canonical_u64(1 << last_limb_shift);
+        let shifted_val = lower_decomp[*self.num_limbs() - 1]
+            * AB::Expr::from_canonical_u64(1 << last_limb_shift);
 
         // constrain that the shifted last limb is shifted correctly
-        builder.assert_eq(lower_bits_decomp[num_limbs], shifted_val);
+        // this shifted last limb will also be range checked
+        builder.assert_eq(lower_decomp[*self.num_limbs()], shifted_val);
 
         // constrain that less_than is a boolean
-        let is_bool = less_than * (AB::Expr::one() - less_than);
-        builder.assert_zero(is_bool);
+        builder.assert_bool(less_than);
     }
 }

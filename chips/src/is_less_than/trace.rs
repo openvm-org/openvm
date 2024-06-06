@@ -1,58 +1,66 @@
+use std::sync::Arc;
+
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::sub_chip::LocalTraceInstructions;
+use crate::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 
 use super::{
     columns::{IsLessThanAuxCols, IsLessThanCols, IsLessThanIOCols},
-    IsLessThanChip,
+    IsLessThanAir, IsLessThanChip,
 };
 
 impl IsLessThanChip {
-    pub fn generate_trace<F: PrimeField64>(&self, x: u32, y: u32) -> RowMajorMatrix<F> {
+    pub fn generate_trace<F: PrimeField64>(&self, pairs: Vec<(u32, u32)>) -> RowMajorMatrix<F> {
         let num_cols: usize =
             IsLessThanCols::<F>::get_width(*self.air.limb_bits(), *self.air.decomp());
 
-        let row = self.generate_trace_row((x, y)).flatten();
+        let mut rows = vec![];
 
-        RowMajorMatrix::new(row, num_cols)
+        // generate a row for each pair of numbers to compare
+        for (x, y) in pairs {
+            let row: Vec<F> = self
+                .air
+                .generate_trace_row((x, y, self.range_checker.clone()))
+                .flatten();
+            rows.extend(row);
+        }
+
+        RowMajorMatrix::new(rows, num_cols)
     }
 }
 
-impl<F: PrimeField64> LocalTraceInstructions<F> for IsLessThanChip {
-    type LocalInput = (u32, u32);
+impl<F: PrimeField64> LocalTraceInstructions<F> for IsLessThanAir {
+    type LocalInput = (u32, u32, Arc<RangeCheckerGateChip>);
 
-    fn generate_trace_row(&self, input: (u32, u32)) -> Self::Cols<F> {
-        let (x, y) = input;
-        let less_than = self.calc_less_than(x, y);
+    fn generate_trace_row(&self, input: (u32, u32, Arc<RangeCheckerGateChip>)) -> Self::Cols<F> {
+        let (x, y, range_checker) = input;
+        let less_than = if x < y { 1 } else { 0 };
 
-        // num_limbs is the number of limbs, not including the last shifted limb
-        let num_limbs = (self.air.limb_bits() + self.air.decomp() - 1) / self.air.decomp();
         // to range check the last limb of the decomposed lower_bits, we need to shift it to make sure it is in
         // the correct range
-        let last_limb_shift =
-            (self.air.decomp() - (self.air.limb_bits() % self.air.decomp())) % self.air.decomp();
+        let last_limb_shift = (self.decomp() - (self.limb_bits() % self.decomp())) % self.decomp();
 
         // obtain the lower_bits
-        let check_less_than = (1 << self.air.limb_bits()) + y - x - 1;
-        let lower_bits = F::from_canonical_u32(check_less_than & ((1 << self.air.limb_bits()) - 1));
-        let lower_bits_u32 = check_less_than & ((1 << self.air.limb_bits()) - 1);
+        let check_less_than = (1 << self.limb_bits()) + y - x - 1;
+        let lower = F::from_canonical_u32(check_less_than & ((1 << self.limb_bits()) - 1));
+        let lower_u32 = check_less_than & ((1 << self.limb_bits()) - 1);
 
         // decompose lower_bits into limbs and range check
-        let mut lower_bits_decomp: Vec<F> = vec![];
-        for i in 0..num_limbs {
-            let bits = (lower_bits_u32 >> (i * self.air.decomp())) & ((1 << self.air.decomp()) - 1);
-            lower_bits_decomp.push(F::from_canonical_u32(bits));
-            self.range_checker_gate.add_count(bits);
+        let mut lower_decomp: Vec<F> = vec![];
+        for i in 0..*self.num_limbs() {
+            let bits = (lower_u32 >> (i * self.decomp())) & ((1 << self.decomp()) - 1);
+            lower_decomp.push(F::from_canonical_u32(bits));
+            range_checker.add_count(bits);
         }
 
         // shift the last limb and range check
-        let bits = (lower_bits_u32 >> ((num_limbs - 1) * self.air.decomp()))
-            & ((1 << self.air.decomp()) - 1);
-        if (bits << last_limb_shift) < *self.air.range_max() {
-            self.range_checker_gate.add_count(bits << last_limb_shift);
+        let bits =
+            (lower_u32 >> ((self.num_limbs() - 1) * self.decomp())) & ((1 << self.decomp()) - 1);
+        if (bits << last_limb_shift) < *self.range_max() {
+            range_checker.add_count(bits << last_limb_shift);
         }
-        lower_bits_decomp.push(F::from_canonical_u32(bits << last_limb_shift));
+        lower_decomp.push(F::from_canonical_u32(bits << last_limb_shift));
 
         let io = IsLessThanIOCols {
             x: F::from_canonical_u32(x),
@@ -60,8 +68,8 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for IsLessThanChip {
             less_than: F::from_canonical_u32(less_than),
         };
         let aux = IsLessThanAuxCols {
-            lower_bits,
-            lower_bits_decomp,
+            lower,
+            lower_decomp,
         };
 
         IsLessThanCols { io, aux }

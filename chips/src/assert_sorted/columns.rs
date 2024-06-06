@@ -1,111 +1,73 @@
 use afs_derive::AlignedBorrow;
 
-use crate::less_than::columns::{LessThanAuxCols, LessThanCols, LessThanIOCols};
+use crate::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 
 // Since AssertSortedChip contains a LessThanChip subchip, a subset of the columns are those of the
 // LessThanChip
 #[derive(AlignedBorrow)]
 pub struct AssertSortedCols<T> {
-    pub keys_decomp: Vec<Vec<T>>,
-    pub less_than_cols: LessThanCols<T>,
+    pub key: Vec<T>,
+    pub less_than_next_key: T,
+    pub is_less_than_tuple_aux: IsLessThanTupleAuxCols<T>,
 }
 
 impl<T: Clone> AssertSortedCols<T> {
-    pub fn from_slice(slc: &[T], limb_bits: usize, decomp: usize, key_vec_len: usize) -> Self {
-        // num_limbs is the number of sublimbs per limb, not including the shifted last sublimb
-        let num_limbs = (limb_bits + decomp - 1) / decomp;
-        let mut cur_start_idx = 0;
-        let mut cur_end_idx = key_vec_len;
+    pub fn from_slice(slc: &[T], limb_bits: Vec<usize>, decomp: usize, key_vec_len: usize) -> Self {
+        let mut curr_start_idx = 0;
+        let mut curr_end_idx = key_vec_len;
 
         // the first key_vec_len elements are the key itself
-        let key = slc[cur_start_idx..cur_end_idx].to_vec();
-        cur_start_idx = cur_end_idx;
-        cur_end_idx += key_vec_len * (num_limbs + 1);
+        let key = slc[curr_start_idx..curr_end_idx].to_vec();
 
-        // the next key_vec_len * (num_limbs + 1) elements are the decomposed keys (with each having
-        // an extra shifted last sublimb)
-        let keys_decomp = slc[cur_start_idx..cur_end_idx]
-            .chunks(num_limbs + 1)
-            .map(|chunk| chunk.to_vec())
-            .collect();
-        cur_start_idx = cur_end_idx;
-        cur_end_idx += key_vec_len;
+        curr_start_idx = curr_end_idx;
+        curr_end_idx += 1;
 
-        // the next key_vec_len elements are the values of the lower num_limbs bits of the intermediate sum
-        let lower_bits = slc[cur_start_idx..cur_end_idx].to_vec();
-        cur_start_idx = cur_end_idx;
-        cur_end_idx += key_vec_len;
+        // the next element is the indicator for whether the key is less than the next key
+        let less_than_next_key = slc[curr_start_idx].clone();
+        curr_start_idx = curr_end_idx;
 
-        // the next key_vec_len elements are the values of the upper bit of the intermediate sum; note that
-        // b > a <=> upper_bit = 1
-        let upper_bit = slc[cur_start_idx..cur_end_idx].to_vec();
-        cur_start_idx = cur_end_idx;
-        cur_end_idx += key_vec_len * (num_limbs + 1);
-
-        // the next key_vec_len * (num_limbs + 1) elements are the decomposed limbs of the lower bits of the
-        // intermediate sum
-        let lower_bits_decomp = slc[cur_start_idx..cur_end_idx]
-            .chunks(num_limbs + 1)
-            .map(|chunk| chunk.to_vec())
-            .collect();
-        cur_start_idx = cur_end_idx;
-        cur_end_idx += key_vec_len;
-
-        // the next key_vec_len elements are the difference between consecutive limbs of rows
-        let diff = slc[cur_start_idx..cur_end_idx].to_vec();
-        cur_start_idx = cur_end_idx;
-        cur_end_idx += key_vec_len;
-
-        // the next key_vec_len elements are the indicator whether the difference is zero; if difference is
-        // zero then the two limbs must be equal
-        let is_zero = slc[cur_start_idx..cur_end_idx].to_vec();
-        cur_start_idx = cur_end_idx;
-        cur_end_idx += key_vec_len;
-
-        // the next key_vec_len elements contain the inverses of the corresponding sum of diff and is_zero;
-        // note that this sum will always be nonzero so the inverse will exist
-        let inverses = slc[cur_start_idx..cur_end_idx].to_vec();
-
-        let io = LessThanIOCols { key };
-        let aux = LessThanAuxCols {
-            lower_bits,
-            upper_bit,
-            lower_bits_decomp,
-            diff,
-            is_zero,
-            inverses,
-        };
-
-        let less_than_cols = LessThanCols { io, aux };
+        let is_less_than_tuple_aux = IsLessThanTupleAuxCols::from_slice(
+            &slc[curr_start_idx..],
+            limb_bits,
+            decomp,
+            key_vec_len,
+        );
 
         Self {
-            keys_decomp,
-            less_than_cols,
+            key,
+            less_than_next_key,
+            is_less_than_tuple_aux,
         }
     }
 
-    pub fn get_width(limb_bits: usize, decomp: usize, key_vec_len: usize) -> usize {
-        // there are (limb_bits + decomp - 1) / decomp sublimbs per limb, we add 1 to
-        // account for the sublimb itself, and another 1 to account for the shifted
-        // last sublimb
+    pub fn get_width(limb_bits: Vec<usize>, decomp: usize, key_vec_len: usize) -> usize {
         let mut width = 0;
         // for the key itself
         width += key_vec_len;
-        // for the decomposed keys
-        let num_limbs = (limb_bits + decomp - 1) / decomp;
-        width += key_vec_len * (num_limbs + 1);
-        // for the lower_bits
+
+        // for the less than next key indicator
+        width += 1;
+
+        // for the less_than indicators
         width += key_vec_len;
-        // for the upper_bit
+
+        // for the lowers
         width += key_vec_len;
-        // for the decomposed lower_bits
-        width += key_vec_len * (num_limbs + 1);
-        // for the difference between consecutive rows
+
+        // for the decomposed lowers
+        for &limb_bit in limb_bits.iter() {
+            let num_limbs = (limb_bit + decomp - 1) / decomp;
+            width += num_limbs + 1;
+        }
+
+        // for the is_equal indicators
         width += key_vec_len;
-        // for the indicator whether difference is zero
+
+        // for the inverses
         width += key_vec_len;
-        // for the y such that y * (i + x) = 1
-        width += key_vec_len;
+
+        // for the cumulative is_equal and less_than
+        width += 2 * key_vec_len;
 
         width
     }

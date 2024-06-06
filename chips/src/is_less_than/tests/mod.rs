@@ -1,4 +1,9 @@
+use std::sync::Arc;
+
+use crate::range_gate::RangeCheckerGateChip;
+
 use super::super::is_less_than::IsLessThanChip;
+use super::columns::IsLessThanCols;
 
 use afs_stark_backend::prover::USE_DEBUG_BUILDER;
 use afs_stark_backend::verifier::VerificationError;
@@ -8,54 +13,38 @@ use p3_field::AbstractField;
 use p3_matrix::dense::DenseMatrix;
 
 #[test]
+fn test_flatten_fromslice_roundtrip() {
+    let limb_bits = 16;
+    let decomp = 8;
+
+    let num_cols = IsLessThanCols::<usize>::get_width(limb_bits, decomp);
+    let all_cols = (0..num_cols).collect::<Vec<usize>>();
+
+    let cols_numbered = IsLessThanCols::<usize>::from_slice(&all_cols);
+    let flattened = cols_numbered.flatten();
+
+    for (i, col) in flattened.iter().enumerate() {
+        assert_eq!(*col, all_cols[i]);
+    }
+
+    assert_eq!(num_cols, flattened.len());
+}
+
+#[test]
 fn test_is_less_than_chip_lt() {
-    const BUS_INDEX: usize = 0;
-    const LIMB_BITS: usize = 16;
-    const DECOMP: usize = 8;
-    const MAX: u32 = 1 << DECOMP;
+    let bus_index: usize = 0;
+    let limb_bits: usize = 16;
+    let decomp: usize = 8;
+    let range_max: u32 = 1 << decomp;
 
-    let chip = IsLessThanChip::new(BUS_INDEX, MAX, LIMB_BITS, DECOMP);
-    let trace = chip.generate_trace(14321, 26883);
-    let range_trace: DenseMatrix<BabyBear> = chip.range_checker_gate.generate_trace();
+    let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
 
-    run_simple_test_no_pis(
-        vec![&chip, &chip.range_checker_gate],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
-}
-
-#[test]
-fn test_is_less_than_chip_gt() {
-    const BUS_INDEX: usize = 0;
-    const LIMB_BITS: usize = 16;
-    const DECOMP: usize = 8;
-    const MAX: u32 = 1 << DECOMP;
-
-    let chip = IsLessThanChip::new(BUS_INDEX, MAX, LIMB_BITS, DECOMP);
-    let trace = chip.generate_trace(1, 0);
-    let range_trace: DenseMatrix<BabyBear> = chip.range_checker_gate.generate_trace();
+    let chip = IsLessThanChip::new(bus_index, range_max, limb_bits, decomp, range_checker);
+    let trace = chip.generate_trace(vec![(14321, 26883), (1, 0), (773, 773), (337, 456)]);
+    let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
 
     run_simple_test_no_pis(
-        vec![&chip, &chip.range_checker_gate],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
-}
-
-#[test]
-fn test_is_less_than_chip_eq() {
-    const BUS_INDEX: usize = 0;
-    const LIMB_BITS: usize = 16;
-    const DECOMP: usize = 8;
-    const MAX: u32 = 1 << DECOMP;
-
-    let chip = IsLessThanChip::new(BUS_INDEX, MAX, LIMB_BITS, DECOMP);
-    let trace = chip.generate_trace(773, 773);
-    let range_trace: DenseMatrix<BabyBear> = chip.range_checker_gate.generate_trace();
-
-    run_simple_test_no_pis(
-        vec![&chip, &chip.range_checker_gate],
+        vec![&chip.air, chip.range_checker.as_ref()],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -63,14 +52,16 @@ fn test_is_less_than_chip_eq() {
 
 #[test]
 fn test_is_less_than_negative() {
-    const BUS_INDEX: usize = 0;
-    const LIMB_BITS: usize = 16;
-    const DECOMP: usize = 8;
-    const MAX: u32 = 1 << DECOMP;
+    let bus_index: usize = 0;
+    let limb_bits: usize = 16;
+    let decomp: usize = 8;
+    let range_max: u32 = 1 << decomp;
 
-    let chip = IsLessThanChip::new(BUS_INDEX, MAX, LIMB_BITS, DECOMP);
-    let mut trace = chip.generate_trace(446, 553);
-    let range_trace = chip.range_checker_gate.generate_trace();
+    let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
+
+    let chip = IsLessThanChip::new(bus_index, range_max, limb_bits, decomp, range_checker);
+    let mut trace = chip.generate_trace(vec![(446, 553)]);
+    let range_trace = chip.range_checker.generate_trace();
 
     trace.values[2] = AbstractField::from_canonical_u64(0);
 
@@ -79,7 +70,7 @@ fn test_is_less_than_negative() {
     });
     assert_eq!(
         run_simple_test_no_pis(
-            vec![&chip, &chip.range_checker_gate],
+            vec![&chip.air, chip.range_checker.as_ref()],
             vec![trace, range_trace],
         ),
         Err(VerificationError::OodEvaluationMismatch),

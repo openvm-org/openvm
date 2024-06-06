@@ -5,7 +5,6 @@ pub mod is_less_than;
 pub mod is_less_than_tuple;
 pub mod is_zero;
 pub mod keccak_permute;
-pub mod less_than;
 pub mod merkle_proof;
 pub mod page_read;
 pub mod page_rw_checker;
