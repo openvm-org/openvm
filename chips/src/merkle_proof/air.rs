@@ -6,11 +6,11 @@ use p3_matrix::Matrix;
 use super::{
     columns::{num_merkle_proof_cols, MerkleProofCols},
     round_flags::eval_round_flags,
-    MerkleProofChip,
+    MerkleProofAir,
 };
 
 impl<F, const DEPTH: usize, const DIGEST_WIDTH: usize> BaseAir<F>
-    for MerkleProofChip<DEPTH, DIGEST_WIDTH>
+    for MerkleProofAir<DEPTH, DIGEST_WIDTH>
 {
     fn width(&self) -> usize {
         num_merkle_proof_cols::<DEPTH, DIGEST_WIDTH>()
@@ -18,7 +18,7 @@ impl<F, const DEPTH: usize, const DIGEST_WIDTH: usize> BaseAir<F>
 }
 
 impl<AB: AirBuilder, const DEPTH: usize, const DIGEST_WIDTH: usize> Air<AB>
-    for MerkleProofChip<DEPTH, DIGEST_WIDTH>
+    for MerkleProofAir<DEPTH, DIGEST_WIDTH>
 {
     fn eval(&self, builder: &mut AB) {
         eval_round_flags::<_, DEPTH, DIGEST_WIDTH>(builder);

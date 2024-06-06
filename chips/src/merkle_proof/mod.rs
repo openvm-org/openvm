@@ -1,5 +1,5 @@
 mod air;
-mod chip;
+mod bridge;
 pub mod columns;
 mod round_flags;
 mod trace;
@@ -29,7 +29,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct MerkleProofChip<const DEPTH: usize, const DIGEST_WIDTH: usize> {
+pub struct MerkleProofAir<const DEPTH: usize, const DIGEST_WIDTH: usize> {
     pub bus_hash_input: usize,
     pub bus_hash_output: usize,
 }
