@@ -25,6 +25,7 @@ afs-test-utils = { path = "../test-utils" }
 parking_lot = "0.12.2"
 tracing = "0.1.40"
 itertools = "0.13.0"
+getset = "0.1.2"
 
 [dev-dependencies]
 p3-uni-stark = { workspace = true }

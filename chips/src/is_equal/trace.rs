@@ -17,7 +17,7 @@ impl IsEqualChip {
                     is_equal_cols.io.x,
                     is_equal_cols.io.y,
                     is_equal_cols.io.is_equal,
-                    is_equal_cols.inv,
+                    is_equal_cols.aux.inv,
                 ]
             })
             .collect::<Vec<_>>();
