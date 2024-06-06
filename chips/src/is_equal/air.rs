@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use super::columns::{IsEqualCols, IsEqualIOCols, NUM_COLS};
-use super::IsEqualChip;
+use super::IsEqualAir;
 use crate::sub_chip::{AirConfig, SubAir};
 use afs_stark_backend::interaction::AirBridge;
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -9,13 +9,13 @@ use p3_field::AbstractField;
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-impl<F: Field> BaseAir<F> for IsEqualChip {
+impl<F: Field> BaseAir<F> for IsEqualAir {
     fn width(&self) -> usize {
         NUM_COLS
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for IsEqualChip {
+impl<AB: AirBuilder> Air<AB> for IsEqualAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -26,14 +26,14 @@ impl<AB: AirBuilder> Air<AB> for IsEqualChip {
     }
 }
 
-impl AirConfig for IsEqualChip {
+impl AirConfig for IsEqualAir {
     type Cols<T> = IsEqualCols<T>;
 }
 
 // No interactions
-impl<F: Field> AirBridge<F> for IsEqualChip {}
+impl<F: Field> AirBridge<F> for IsEqualAir {}
 
-impl<AB: AirBuilder> SubAir<AB> for IsEqualChip {
+impl<AB: AirBuilder> SubAir<AB> for IsEqualAir {
     type IoView = IsEqualIOCols<AB::Var>;
     type AuxView = AB::Var;
 
