@@ -5,7 +5,7 @@ use p3_symmetric::{PseudoCompressionFunction, TruncatedPermutation};
 
 use afs_chips::{
     keccak_permute::KeccakPermuteAir,
-    merkle_proof::{MerkleProofChip, MerkleProofOp},
+    merkle_proof::{MerkleProofAir, MerkleProofOp},
 };
 
 fn generate_digests(leaf_hashes: Vec<[u8; 32]>) -> Vec<Vec<[u8; 32]>> {
@@ -77,7 +77,7 @@ fn test_merkle_proof_prove() {
         })
         .collect::<Vec<_>>();
 
-    let merkle_proof_air = MerkleProofChip {
+    let merkle_proof_air = MerkleProofAir {
         bus_hash_input: 0,
         bus_hash_output: 1,
     };
