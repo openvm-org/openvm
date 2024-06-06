@@ -115,7 +115,7 @@ fn test_xor_bits_chip() {
     for requester in &requesters {
         all_chips.push(requester);
     }
-    all_chips.push(&*xor_chip);
+    all_chips.push(&xor_chip.air);
 
     let all_traces = requesters_traces
         .into_iter()
@@ -165,7 +165,7 @@ fn negative_test_xor_bits_chip() {
     );
 
     let result = run_simple_test_no_pis(
-        vec![&dummy_requester, &*xor_chip],
+        vec![&dummy_requester, &xor_chip.air],
         vec![dummy_trace, xor_chip_trace],
     );
 
