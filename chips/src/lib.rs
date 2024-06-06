@@ -2,6 +2,7 @@ pub mod keccak_permute;
 pub mod merkle_proof;
 pub mod page_controller;
 pub mod page_read;
+pub mod predicate;
 pub mod range;
 pub mod range_gate;
 pub mod sub_chip;
