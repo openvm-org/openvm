@@ -239,7 +239,7 @@ fn test_xor_limbs_chip() {
         all_chips.push(requester);
     }
     all_chips.push(&xor_chip);
-    all_chips.push(&xor_chip.xor_lookup_chip);
+    all_chips.push(&xor_chip.xor_lookup_chip.air);
 
     let all_traces = requesters_traces
         .into_iter()
@@ -304,7 +304,7 @@ fn negative_test_xor_limbs_chip() {
     let xor_lookup_chip_trace = xor_chip.xor_lookup_chip.generate_trace();
 
     let result = run_simple_test_no_pis(
-        vec![&requester, &xor_chip, &xor_chip.xor_lookup_chip],
+        vec![&requester, &xor_chip, &xor_chip.xor_lookup_chip.air],
         vec![requester_trace, xor_limbs_chip_trace, xor_lookup_chip_trace],
     );
 
