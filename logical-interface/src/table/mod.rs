@@ -1,7 +1,7 @@
 use color_eyre::eyre::{eyre, Result};
 use serde_derive::{Deserialize, Serialize};
 
-use crate::afs_input_file::AfsInputFile;
+use crate::afs_input_instructions::AfsInputInstructions;
 
 #[cfg(test)]
 mod tests;
@@ -19,7 +19,7 @@ pub struct Table<T: PartialEq + Clone, U> {
 impl<T: PartialEq + Clone, U> Table<T, U> {
     pub fn new(index: Vec<T>, data: Vec<U>) -> Self {
         if index.len() != data.len() {
-            panic!("Index and data must be of the same length");
+            panic!("Index and data vectors must be the same length");
         }
         Self::check_index_len(index.len());
 
@@ -35,7 +35,7 @@ impl<T: PartialEq + Clone, U> Table<T, U> {
     }
 
     pub fn new_from_file(path: String) -> Self {
-        let _file = AfsInputFile::new(path);
+        let instructions = AfsInputInstructions::from_file(path);
 
         Self::new(vec![], vec![])
     }
@@ -75,6 +75,14 @@ impl<T: PartialEq + Clone, U> Table<T, U> {
         } else {
             Err(eyre!("Index not found"))
         }
+    }
+
+    pub fn get_index_bytes(&self) -> usize {
+        self.index_bytes
+    }
+
+    pub fn get_data_bytes(&self) -> usize {
+        self.data_bytes
     }
 
     fn check_index_len(len: usize) {

@@ -11,11 +11,13 @@ use std::{
 };
 use types::{InputFileBodyOperation, InputFileHeaderOperation};
 
+pub const HEADER_SIZE: usize = 2;
+
 #[derive(Debug, Serialize, Deserialize)]
-pub struct AfsInputFile {
+pub struct AfsInputInstructions {
     pub file_path: String,
     pub header: AfsHeader,
-    pub contents: Vec<AfsOperation>,
+    pub operations: Vec<AfsOperation>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -26,19 +28,19 @@ pub struct AfsHeader {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AfsOperation {
-    pub op: InputFileBodyOperation,
+    pub operation: InputFileBodyOperation,
     pub args: Vec<String>,
 }
 
-impl AfsInputFile {
-    pub fn new(file_path: String) -> Self {
-        let (header, contents) = Self::parse(file_path.clone()).unwrap_or_else(|e| {
+impl AfsInputInstructions {
+    pub fn from_file(file_path: String) -> Self {
+        let (header, operations) = Self::parse(file_path.clone()).unwrap_or_else(|e| {
             panic!("Failed to parse AFS input file: {:?}", e);
         });
         Self {
             file_path,
             header,
-            contents,
+            operations,
         }
     }
 
@@ -52,7 +54,7 @@ impl AfsInputFile {
             data_bytes: 0,
         };
         // reader.lines().take(2).map(|line| {
-        for line in &lines[..2] {
+        for line in &lines[..HEADER_SIZE] {
             let parts: Vec<&str> = line.split_whitespace().collect();
             let operation = parts[0];
             let value = parts[1].parse::<usize>().unwrap();
@@ -69,26 +71,30 @@ impl AfsInputFile {
                     }
                 }
                 Err(e) => {
-                    panic!("Invalid operation: {:?}", e.to_string());
+                    panic!("Invalid operation on header: {:?}", e.to_string());
                 }
             }
         }
 
-        let afs_operations = lines[2..]
+        if afs_header.index_bytes == 0 || afs_header.data_bytes == 0 {
+            panic!("Index bytes and data bytes must be set in the header");
+        }
+
+        let afs_operations = lines[HEADER_SIZE..]
             .iter()
             .map(|line| {
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 let operation = parts[0];
                 match InputFileBodyOperation::from_str(operation) {
-                    Ok(op) => {
-                        println!("{:?}:{:?}", op, parts[1]);
+                    Ok(operation) => {
+                        println!("{:?}:{:?}", operation, parts[1]);
                         AfsOperation {
-                            op,
+                            operation,
                             args: parts[1..].iter().map(|s| s.to_string()).collect(),
                         }
                     }
                     Err(e) => {
-                        panic!("Invalid operation: {:?}", e.to_string());
+                        panic!("Invalid operation on body: {:?}", e.to_string());
                     }
                 }
             })
