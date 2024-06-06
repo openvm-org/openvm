@@ -5,15 +5,15 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::columns::XorLimbsCols;
-use super::XorLimbsChip;
+use super::XorLimbsAir;
 
-impl<F: Field, const N: usize, const M: usize> BaseAir<F> for XorLimbsChip<N, M> {
+impl<F: Field, const N: usize, const M: usize> BaseAir<F> for XorLimbsAir<N, M> {
     fn width(&self) -> usize {
         XorLimbsCols::<N, M, F>::get_width()
     }
 }
 
-impl<AB: AirBuilder, const N: usize, const M: usize> Air<AB> for XorLimbsChip<N, M> {
+impl<AB: AirBuilder, const N: usize, const M: usize> Air<AB> for XorLimbsAir<N, M> {
     fn eval(&self, builder: &mut AB) {
         let num_limbs = (N + M - 1) / M;
 
