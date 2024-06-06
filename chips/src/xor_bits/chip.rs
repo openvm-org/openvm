@@ -1,4 +1,4 @@
-use afs_stark_backend::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::{Field, PrimeField64};
 
@@ -6,7 +6,7 @@ use crate::sub_chip::SubAirWithInteractions;
 
 use super::{columns::XorCols, XorBitsChip};
 
-impl<F: PrimeField64, const N: usize> Chip<F> for XorBitsChip<N> {
+impl<F: PrimeField64, const N: usize> AirBridge<F> for XorBitsChip<N> {
     fn receives(&self) -> Vec<Interaction<F>> {
         let num_cols = XorCols::<N, F>::get_width();
         let indices = (0..num_cols).collect::<Vec<usize>>();

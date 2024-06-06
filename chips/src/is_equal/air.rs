@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use super::columns::{IsEqualCols, IsEqualIOCols, NUM_COLS};
 use super::IsEqualChip;
 use crate::sub_chip::{AirConfig, SubAir};
-use afs_stark_backend::interaction::Chip;
+use afs_stark_backend::interaction::AirBridge;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
 use p3_field::Field;
@@ -31,7 +31,7 @@ impl AirConfig for IsEqualChip {
 }
 
 // No interactions
-impl<F: Field> Chip<F> for IsEqualChip {}
+impl<F: Field> AirBridge<F> for IsEqualChip {}
 
 impl<AB: AirBuilder> SubAir<AB> for IsEqualChip {
     type IoView = IsEqualIOCols<AB::Var>;

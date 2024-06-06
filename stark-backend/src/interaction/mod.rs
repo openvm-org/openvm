@@ -21,7 +21,7 @@ pub struct Interaction<F: Field> {
     pub argument_index: usize,
 }
 
-pub trait Chip<F: Field> {
+pub trait AirBridge<F: Field> {
     fn sends(&self) -> Vec<Interaction<F>> {
         vec![]
     }
@@ -51,7 +51,7 @@ pub trait Chip<F: Field> {
 /// An interactive AIR is a AIR that can specify buses for sending and receiving data
 /// to other AIRs. The original AIR is augmented by virtual columns determined by
 /// the interactions to define a [RAP](crate::rap::Rap).
-pub trait InteractiveAir<AB: AirBuilder>: Air<AB> + Chip<AB::F> {
+pub trait InteractiveAir<AB: AirBuilder>: Air<AB> + AirBridge<AB::F> {
     /// Generates the permutation trace for the RAP given the main trace.
     /// The permutation trace depends on two random values which the challenger draws
     /// after committing to all parts of the main trace, including multiplicities.
@@ -78,6 +78,6 @@ pub trait InteractiveAir<AB: AirBuilder>: Air<AB> + Chip<AB::F> {
 impl<AB, A> InteractiveAir<AB> for A
 where
     AB: AirBuilder,
-    A: Air<AB> + Chip<AB::F>,
+    A: Air<AB> + AirBridge<AB::F>,
 {
 }

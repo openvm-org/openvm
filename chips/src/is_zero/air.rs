@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::interaction::Chip;
+use afs_stark_backend::interaction::AirBridge;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
 use p3_field::Field;
@@ -24,7 +24,7 @@ impl AirConfig for IsZeroChip {
 }
 
 // No interactions
-impl<F: Field> Chip<F> for IsZeroChip {}
+impl<F: Field> AirBridge<F> for IsZeroChip {}
 
 impl<AB: AirBuilder> Air<AB> for IsZeroChip {
     fn eval(&self, builder: &mut AB) {

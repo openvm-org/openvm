@@ -1,6 +1,6 @@
 use std::iter;
 
-use afs_stark_backend::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
@@ -26,7 +26,7 @@ impl PageReadChip {
     }
 }
 
-impl<F: PrimeField64> Chip<F> for PageReadChip {
+impl<F: PrimeField64> AirBridge<F> for PageReadChip {
     fn receives(&self) -> Vec<Interaction<F>> {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();

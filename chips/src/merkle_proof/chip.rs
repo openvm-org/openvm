@@ -1,11 +1,11 @@
-use afs_stark_backend::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField32;
 
 use super::{columns::merkle_proof_col_map, MerkleProofChip};
 
 // TODO: Replace keccak pseudo permutation with full hash
-impl<F, const DEPTH: usize, const DIGEST_WIDTH: usize> Chip<F>
+impl<F, const DEPTH: usize, const DIGEST_WIDTH: usize> AirBridge<F>
     for MerkleProofChip<DEPTH, DIGEST_WIDTH>
 where
     F: PrimeField32,

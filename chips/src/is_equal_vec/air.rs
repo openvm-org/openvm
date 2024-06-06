@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::interaction::Chip;
+use afs_stark_backend::interaction::AirBridge;
 use p3_air::AirBuilder;
 use p3_air::{Air, BaseAir};
 use p3_field::AbstractField;
@@ -15,7 +15,7 @@ use super::{
 };
 
 // No interactions
-impl<F: Field> Chip<F> for IsEqualVecChip {}
+impl<F: Field> AirBridge<F> for IsEqualVecChip {}
 
 impl AirConfig for IsEqualVecChip {
     type Cols<T> = IsEqualVecCols<T>;

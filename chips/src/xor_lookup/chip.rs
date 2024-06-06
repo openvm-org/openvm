@@ -1,4 +1,4 @@
-use afs_stark_backend::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
@@ -7,7 +7,7 @@ use super::{
     XorLookupChip,
 };
 
-impl<F: PrimeField64, const M: usize> Chip<F> for XorLookupChip<M> {
+impl<F: PrimeField64, const M: usize> AirBridge<F> for XorLookupChip<M> {
     fn receives(&self) -> Vec<Interaction<F>> {
         vec![Interaction {
             fields: vec![

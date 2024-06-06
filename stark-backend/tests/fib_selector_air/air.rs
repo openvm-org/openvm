@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use super::columns::FibonacciSelectorCols;
 use crate::fib_air::columns::{FibonacciCols, NUM_FIBONACCI_COLS};
-use afs_stark_backend::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder, VirtualPairCol};
 use p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -25,7 +25,7 @@ impl FibonacciSelectorAir {
     }
 }
 
-impl<F: Field> Chip<F> for FibonacciSelectorAir {
+impl<F: Field> AirBridge<F> for FibonacciSelectorAir {
     fn receives(&self) -> Vec<Interaction<F>> {
         if self.enable_interactions {
             vec![Interaction::<F> {
