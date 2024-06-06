@@ -1,5 +1,5 @@
 mod air;
-mod chip;
+mod bridge;
 mod columns;
 mod trace;
 
@@ -7,7 +7,7 @@ mod trace;
 pub const NUM_U64_HASH_ELEMS: usize = 4;
 
 #[derive(Clone)]
-pub struct KeccakPermuteChip {
+pub struct KeccakPermuteAir {
     pub bus_input: usize,
     pub bus_output: usize,
 }

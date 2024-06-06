@@ -4,10 +4,10 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use super::{
     columns::{KECCAK_PERMUTE_COL_MAP, NUM_KECCAK_PERMUTE_COLS},
-    KeccakPermuteChip,
+    KeccakPermuteAir,
 };
 
-impl KeccakPermuteChip {
+impl KeccakPermuteAir {
     pub fn generate_trace<F: PrimeField64>(&self, inputs: Vec<[u64; 25]>) -> RowMajorMatrix<F> {
         let num_inputs = inputs.len();
         let keccak_trace: RowMajorMatrix<F> = generate_trace_rows(inputs);

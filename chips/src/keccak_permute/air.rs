@@ -6,16 +6,16 @@ use p3_matrix::Matrix;
 
 use super::{
     columns::{KeccakPermuteCols, NUM_KECCAK_PERMUTE_COLS},
-    KeccakPermuteChip,
+    KeccakPermuteAir,
 };
 
-impl<F> BaseAir<F> for KeccakPermuteChip {
+impl<F> BaseAir<F> for KeccakPermuteAir {
     fn width(&self) -> usize {
         NUM_KECCAK_PERMUTE_COLS
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for KeccakPermuteChip {
+impl<AB: AirBuilder> Air<AB> for KeccakPermuteAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);

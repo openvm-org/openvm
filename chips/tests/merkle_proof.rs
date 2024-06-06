@@ -4,7 +4,7 @@ use p3_keccak::KeccakF;
 use p3_symmetric::{PseudoCompressionFunction, TruncatedPermutation};
 
 use afs_chips::{
-    keccak_permute::KeccakPermuteChip,
+    keccak_permute::KeccakPermuteAir,
     merkle_proof::{MerkleProofChip, MerkleProofOp},
 };
 
@@ -82,7 +82,7 @@ fn test_merkle_proof_prove() {
         bus_hash_output: 1,
     };
 
-    let keccak_permute_air = KeccakPermuteChip {
+    let keccak_permute_air = KeccakPermuteAir {
         bus_input: 0,
         bus_output: 1,
     };
