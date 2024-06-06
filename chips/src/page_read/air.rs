@@ -5,15 +5,15 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::PageReadChip;
+use super::PageReadAir;
 
-impl<F: Field> BaseAir<F> for PageReadChip {
+impl<F: Field> BaseAir<F> for PageReadAir {
     fn width(&self) -> usize {
-        self.air_width()
+        self.width
     }
 }
 
-impl<AB: PartitionedAirBuilder> Air<AB> for PageReadChip
+impl<AB: PartitionedAirBuilder> Air<AB> for PageReadAir
 where
     AB::Var: Clone,
     AB::M: Clone,

@@ -36,7 +36,7 @@ where
         trace_committer: &mut TraceCommitter<SC>,
         page: Vec<Vec<u32>>,
     ) -> (DenseMatrix<Val<SC>>, ProverTraceData<SC>) {
-        self.page_read_chip = PageReadChip::new(self.page_read_chip.bus_index(), page.clone());
+        self.page_read_chip = PageReadChip::new(self.page_read_chip.air.bus_index(), page.clone());
 
         let page_height = self.page_read_chip.page_height();
         let page_width = self.page_read_chip.page_width();
