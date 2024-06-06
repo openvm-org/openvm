@@ -3,33 +3,35 @@
 use std::sync::{atomic::AtomicU32, Arc};
 
 pub mod air;
-pub mod chip;
+pub mod bridge;
 pub mod columns;
 pub mod trace;
 
 #[derive(Default)]
+pub struct RangeCheckerAir {
+    pub bus_index: usize,
+    pub range_max: u32,
+}
+
+#[derive(Default)]
 pub struct RangeCheckerChip {
-    /// The index for the Range Checker bus.
-    bus_index: usize,
-    range_max: u32,
+    pub air: RangeCheckerAir,
     pub count: Vec<Arc<AtomicU32>>,
 }
 
 impl RangeCheckerChip {
     pub fn new(bus_index: usize, range_max: u32) -> Self {
-        let mut count = vec![];
-        for _ in 0..range_max {
-            count.push(Arc::new(AtomicU32::new(0)));
-        }
+        let count = (0..range_max)
+            .map(|_| Arc::new(AtomicU32::new(0)))
+            .collect();
+
         Self {
-            bus_index,
-            range_max,
+            air: RangeCheckerAir {
+                bus_index,
+                range_max,
+            },
             count,
         }
-    }
-
-    pub fn bus_index(&self) -> usize {
-        self.bus_index
     }
 
     pub fn add_count(&self, val: u32) {

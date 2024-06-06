@@ -64,7 +64,7 @@ fn test_list_range_checker() {
     for list in &lists {
         all_chips.push(list);
     }
-    all_chips.push(&*range_checker);
+    all_chips.push(&range_checker.air);
 
     let all_traces = lists_traces
         .into_iter()

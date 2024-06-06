@@ -10,7 +10,7 @@ use super::{
 
 impl RangeCheckerChip {
     pub fn generate_trace<F: PrimeField32>(&self) -> RowMajorMatrix<F> {
-        let mut rows = vec![[F::zero(); NUM_RANGE_COLS]; self.range_max as usize];
+        let mut rows = vec![[F::zero(); NUM_RANGE_COLS]; self.air.range_max as usize];
         for (n, row) in rows.iter_mut().enumerate() {
             let cols: &mut RangeCols<F> = unsafe { transmute(row) };
 
