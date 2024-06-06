@@ -368,7 +368,7 @@ fn test_range_gate_chip() {
         .iter()
         .map(|list| list as &dyn AnyRap<_>)
         .collect::<Vec<_>>();
-    all_chips.push(&range_checker);
+    all_chips.push(&range_checker.air);
 
     let all_traces = lists_traces
         .into_iter()
@@ -407,7 +407,7 @@ fn negative_test_range_gate_chip() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        run_simple_test_no_pis(vec![&range_checker], vec![range_trace]),
+        run_simple_test_no_pis(vec![&range_checker.air], vec![range_trace]),
         Err(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
     );
