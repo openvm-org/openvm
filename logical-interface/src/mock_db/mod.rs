@@ -1,15 +1,13 @@
 pub mod utils;
 
 use crate::afs_input_instructions::{types::InputFileBodyOperation, AfsInputInstructions};
-use color_eyre::eyre::{eyre, Result};
+use alloy_primitives::FixedBytes;
+use color_eyre::eyre::Result;
 use std::{
-    collections::{hash_map::Entry, HashMap},
-    fmt::{self, Debug, Error, Formatter},
+    collections::HashMap,
+    fmt::{Debug, Error, Formatter},
 };
 use utils::string_to_fixed_bytes_be;
-
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
-pub struct FixedBytes<const N: usize>([u8; N]);
 
 pub struct MockDb<const INDEX_BYTES: usize, const DATA_BYTES: usize> {
     pub map: HashMap<FixedBytes<INDEX_BYTES>, FixedBytes<DATA_BYTES>>,
@@ -28,12 +26,14 @@ impl<const INDEX_BYTES: usize, const DATA_BYTES: usize> MockDb<INDEX_BYTES, DATA
             match op.operation {
                 InputFileBodyOperation::Read => {}
                 InputFileBodyOperation::Insert | InputFileBodyOperation::Write => {
-                    let index = FixedBytes::<INDEX_BYTES>(string_to_fixed_bytes_be::<INDEX_BYTES>(
-                        op.args[0].clone(),
-                    ));
-                    let data = FixedBytes::<DATA_BYTES>(string_to_fixed_bytes_be::<DATA_BYTES>(
-                        op.args[1].clone(),
-                    ));
+                    let index_input = op.args[0].clone();
+                    let index = FixedBytes::<INDEX_BYTES>::from(string_to_fixed_bytes_be::<
+                        INDEX_BYTES,
+                    >(index_input));
+                    let data_input = op.args[1].clone();
+                    let data = FixedBytes::<DATA_BYTES>::from(
+                        string_to_fixed_bytes_be::<DATA_BYTES>(data_input),
+                    );
                     map.insert(index, data);
                 }
             };
@@ -67,17 +67,17 @@ impl<const INDEX_BYTES: usize, const DATA_BYTES: usize> Default
     }
 }
 
-impl<const N: usize> AsRef<[u8]> for FixedBytes<N> {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
+// impl<const N: usize> AsRef<[u8]> for FixedBytes<N> {
+//     fn as_ref(&self) -> &[u8] {
+//         &self.0
+//     }
+// }
 
-impl<const N: usize> Debug for FixedBytes<N> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "0x{}", hex::encode(self))
-    }
-}
+// impl<const N: usize> Debug for FixedBytes<N> {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+//         write!(f, "0x{}", hex::encode(self))
+//     }
+// }
 
 impl<const INDEX_BYTES: usize, const DATA_BYTES: usize> Debug for MockDb<INDEX_BYTES, DATA_BYTES> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {

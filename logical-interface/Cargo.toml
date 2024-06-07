@@ -6,6 +6,7 @@ edition.workspace = true
 description = "User-facing logical interface for AFS."
 
 [dependencies]
+alloy-primitives = "0.7.5"
 color-eyre = "0.6.3"
 hex = "0.4.3"
 primitive-types = "0.12.2"

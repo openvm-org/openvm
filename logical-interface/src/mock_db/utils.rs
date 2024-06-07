@@ -11,7 +11,9 @@ pub fn bytes_to_fixed_bytes_be<const N: usize>(bytes: &[u8]) -> [u8; N] {
 /// If the string does not start with "0x", it is parsed as a number or string
 pub fn string_to_fixed_bytes_be<const N: usize>(s: String) -> [u8; N] {
     if s.starts_with("0x") {
-        let bytes = s.strip_prefix("0x").unwrap().as_bytes();
+        let hex_str = s.strip_prefix("0x").unwrap();
+        let bytes_vec = hex::decode(hex_str).unwrap();
+        let bytes = bytes_vec.as_slice();
         bytes_to_fixed_bytes_be(bytes)
     } else {
         let num = s.parse::<u64>();
