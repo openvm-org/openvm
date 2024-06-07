@@ -18,8 +18,6 @@ pub struct MerkleProofCols<T, const DEPTH: usize, const DIGEST_WIDTH: usize> {
 
     pub accumulated_index: T,
 
-    pub index: T,
-
     pub left_node: [T; DIGEST_WIDTH],
 
     pub right_node: [T; DIGEST_WIDTH],

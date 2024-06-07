@@ -30,6 +30,7 @@ dependencies = [
  "parking_lot",
  "rand",
  "test-case",
+ "tiny-keccak",
  "tracing",
  "tracing-forest",
  "tracing-subscriber",

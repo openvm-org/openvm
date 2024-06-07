@@ -38,7 +38,7 @@ impl<AB: AirBuilder, const DEPTH: usize, const DIGEST_WIDTH: usize> Air<AB>
         builder
             .when(is_first_step)
             .assert_eq(local.accumulated_index, local.is_right_child);
-        let bit_factor: AB::Expr = local
+        let bit_factor: AB::Expr = next
             .step_flags
             .iter()
             .enumerate()
@@ -46,7 +46,7 @@ impl<AB: AirBuilder, const DEPTH: usize, const DIGEST_WIDTH: usize> Air<AB>
             .sum();
         builder.when_ne(is_final_step, AB::Expr::one()).assert_eq(
             next.accumulated_index,
-            local.accumulated_index + bit_factor * local.is_right_child,
+            bit_factor * next.is_right_child + local.accumulated_index,
         );
 
         // Left and right nodes are selected correctly.
@@ -62,6 +62,7 @@ impl<AB: AirBuilder, const DEPTH: usize, const DIGEST_WIDTH: usize> Air<AB>
         // Output is copied to the next row.
         for i in 0..DIGEST_WIDTH {
             builder
+                .when_transition()
                 .when_ne(is_final_step, AB::Expr::one())
                 .assert_eq(local.output[i], next.node[i]);
         }

@@ -1,4 +1,4 @@
-use p3_field::PrimeField64;
+use p3_field::PrimeField32;
 use p3_keccak_air::{generate_trace_rows, NUM_KECCAK_COLS, NUM_ROUNDS};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
@@ -8,7 +8,7 @@ use super::{
 };
 
 impl KeccakPermuteChip {
-    pub fn generate_trace<F: PrimeField64>(&self, inputs: Vec<[u64; 25]>) -> RowMajorMatrix<F> {
+    pub fn generate_trace<F: PrimeField32>(&self, inputs: Vec<[u64; 25]>) -> RowMajorMatrix<F> {
         let num_inputs = inputs.len();
         let keccak_trace: RowMajorMatrix<F> = generate_trace_rows(inputs);
 

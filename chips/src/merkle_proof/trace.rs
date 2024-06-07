@@ -1,8 +1,8 @@
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_symmetric::PseudoCompressionFunction;
+use p3_symmetric::CompressionFunction;
 
-use crate::{merkle_proof::MerkleProofOp, utils::FieldFrom};
+use crate::merkle_proof::MerkleProofOp;
 
 use super::{
     columns::{num_merkle_proof_cols, MerkleProofCols},
@@ -16,18 +16,15 @@ impl<const DEPTH: usize, const DIGEST_WIDTH: usize> MerkleProofChip<DEPTH, DIGES
         hasher: &Compress,
     ) -> RowMajorMatrix<F>
     where
-        F: PrimeField32 + FieldFrom<T>,
-        T: Default + Copy,
-        Compress: PseudoCompressionFunction<[T; DIGEST_WIDTH], 2>,
+        F: PrimeField32,
+        T: Default + Copy + Into<u32>,
+        Compress: CompressionFunction<[T; DIGEST_WIDTH], 2>,
     {
-        let num_merkle_proof_cols = num_merkle_proof_cols::<DEPTH, DIGEST_WIDTH>();
+        let num_cols = num_merkle_proof_cols::<DEPTH, DIGEST_WIDTH>();
 
         let num_real_rows = operations.len() * DEPTH;
         let num_rows = num_real_rows.next_power_of_two();
-        let mut trace = RowMajorMatrix::new(
-            vec![F::zero(); num_rows * num_merkle_proof_cols],
-            num_merkle_proof_cols,
-        );
+        let mut trace = RowMajorMatrix::new(vec![F::zero(); num_rows * num_cols], num_cols);
         let (prefix, rows, suffix) = unsafe {
             trace
                 .values
@@ -46,7 +43,7 @@ impl<const DEPTH: usize, const DIGEST_WIDTH: usize> MerkleProofChip<DEPTH, DIGES
         }
 
         // Fill padding rows
-        for input_rows in rows.chunks_mut(DEPTH).skip(num_real_rows) {
+        for input_rows in rows.chunks_mut(DEPTH).skip(operations.len()) {
             let op = MerkleProofOp::default();
             generate_trace_rows_for_op(input_rows, &op, hasher);
         }
@@ -60,9 +57,9 @@ pub fn generate_trace_rows_for_op<F, T, Compress, const DEPTH: usize, const DIGE
     op: &MerkleProofOp<T, DEPTH, DIGEST_WIDTH>,
     hasher: &Compress,
 ) where
-    F: PrimeField32 + FieldFrom<T>,
-    T: Default + Copy,
-    Compress: PseudoCompressionFunction<[T; DIGEST_WIDTH], 2>,
+    F: PrimeField32,
+    T: Default + Copy + Into<u32>,
+    Compress: CompressionFunction<[T; DIGEST_WIDTH], 2>,
 {
     let MerkleProofOp {
         leaf_index,
@@ -72,7 +69,7 @@ pub fn generate_trace_rows_for_op<F, T, Compress, const DEPTH: usize, const DIGE
 
     // Fill the first row with the leaf.
     for (node_byte, &leaf_hash_byte) in rows[0].node.iter_mut().zip(leaf_hash.iter()) {
-        *node_byte = F::from_val(leaf_hash_byte);
+        *node_byte = F::from_canonical_u32(leaf_hash_byte.into());
     }
 
     let mut node = generate_trace_row_for_round(
@@ -107,16 +104,16 @@ pub fn generate_trace_rows_for_op<F, T, Compress, const DEPTH: usize, const DIGE
 pub fn generate_trace_row_for_round<F, T, Compress, const DEPTH: usize, const DIGEST_WIDTH: usize>(
     row: &mut MerkleProofCols<F, DEPTH, DIGEST_WIDTH>,
     round: usize,
-    accumulate_index: usize,
+    accumulated_index: usize,
     is_right_child: usize,
     node: &[T; DIGEST_WIDTH],
     sibling: &[T; DIGEST_WIDTH],
     hasher: &Compress,
 ) -> [T; DIGEST_WIDTH]
 where
-    F: PrimeField32 + FieldFrom<T>,
-    T: Default + Copy,
-    Compress: PseudoCompressionFunction<[T; DIGEST_WIDTH], 2>,
+    F: PrimeField32,
+    T: Default + Copy + Into<u32>,
+    Compress: CompressionFunction<[T; DIGEST_WIDTH], 2>,
 {
     row.step_flags[round] = F::one();
 
@@ -129,14 +126,14 @@ where
     let output = hasher.compress([*left_node, *right_node]);
 
     row.is_right_child = F::from_canonical_usize(is_right_child);
-    row.accumulated_index = F::from_canonical_usize(accumulate_index);
+    row.accumulated_index = F::from_canonical_usize(accumulated_index);
     for i in 0..DIGEST_WIDTH {
-        row.sibling[i] = F::from_val(sibling[i]);
+        row.sibling[i] = F::from_canonical_u32(sibling[i].into());
 
-        row.left_node[i] = F::from_val(left_node[i]);
-        row.right_node[i] = F::from_val(right_node[i]);
+        row.left_node[i] = F::from_canonical_u32(left_node[i].into());
+        row.right_node[i] = F::from_canonical_u32(right_node[i].into());
 
-        row.output[i] = F::from_val(output[i]);
+        row.output[i] = F::from_canonical_u32(output[i].into());
     }
 
     output
