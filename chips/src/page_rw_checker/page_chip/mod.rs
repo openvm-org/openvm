@@ -7,17 +7,14 @@ pub struct PageChip {
     bus_index: usize,
     idx_len: usize,
     data_len: usize,
-
-    is_send: bool,
 }
 
 impl PageChip {
-    pub fn new(bus_index: usize, idx_len: usize, data_len: usize, is_send: bool) -> Self {
+    pub fn new(bus_index: usize, idx_len: usize, data_len: usize) -> Self {
         Self {
             bus_index,
             idx_len,
             data_len,
-            is_send,
         }
     }
 

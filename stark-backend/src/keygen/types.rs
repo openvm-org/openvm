@@ -105,7 +105,7 @@ pub struct MultiStarkPartialProvingKey<SC: StarkGenericConfig> {
     pub per_air: Vec<StarkPartialProvingKey<SC>>,
     /// Number of multi-matrix commitments that hold commitments to the partitioned main trace matrices across all AIRs.
     pub num_main_trace_commitments: usize,
-    /// Mapping from commit_idx to global AIR index for matrix in commitment, in oder.
+    /// Mapping from commit_idx to global AIR index for matrix in commitment, in order.
     pub main_commit_to_air_graph: CommitmentToAirGraph,
     /// The number of challenges to sample in each challenge phase.
     /// The length determines the global number of challenge phases.
@@ -190,7 +190,7 @@ pub struct MultiStarkPartialVerifyingKey<SC: StarkGenericConfig> {
     pub per_air: Vec<StarkPartialVerifyingKey<SC>>,
     /// Number of multi-matrix commitments that hold commitments to the partitioned main trace matrices across all AIRs.
     pub num_main_trace_commitments: usize,
-    /// Mapping from commit_idx to global AIR index for matrix in commitment, in oder.
+    /// Mapping from commit_idx to global AIR index for matrix in commitment, in order.
     pub main_commit_to_air_graph: CommitmentToAirGraph,
     /// The number of challenges to sample in each challenge phase.
     /// The length determines the global number of challenge phases.

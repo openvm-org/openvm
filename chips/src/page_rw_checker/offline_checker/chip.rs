@@ -6,6 +6,8 @@ use super::columns::OfflineCheckerCols;
 use super::OfflineChecker;
 use crate::sub_chip::SubAirWithInteractions;
 
+// TODO: send the operations on a different bus
+
 impl<F: PrimeField64> SubAirWithInteractions<F> for OfflineChecker {
     fn receives(&self, col_indices: OfflineCheckerCols<usize>) -> Vec<Interaction<F>> {
         let virtual_cols = col_indices

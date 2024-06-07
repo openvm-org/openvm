@@ -5,8 +5,7 @@ use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_matrix::Matrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use super::offline_checker::OfflineChecker;
-use super::page_chip::PageChip;
+use super::{final_page_chip::FinalPageChip, offline_checker::OfflineChecker, page_chip::PageChip};
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum OpType {
@@ -39,7 +38,7 @@ where
 {
     pub init_chip: PageChip,
     pub offline_checker: OfflineChecker,
-    pub final_chip: PageChip,
+    pub final_chip: FinalPageChip,
 
     init_chip_trace: Option<DenseMatrix<Val<SC>>>,
     pub offline_checker_trace: Option<DenseMatrix<Val<SC>>>,
@@ -50,11 +49,25 @@ where
 }
 
 impl<SC: StarkGenericConfig> PageController<SC> {
-    pub fn new(bus_index: usize, idx_len: usize, data_len: usize) -> Self {
+    pub fn new(
+        page_bus_index: usize,
+        sorted_bus_idx: usize,
+        idx_len: usize,
+        data_len: usize,
+        idx_limb_bits: usize,
+        idx_decomp: usize,
+    ) -> Self {
         Self {
-            init_chip: PageChip::new(bus_index, idx_len, data_len, true),
-            offline_checker: OfflineChecker::new(bus_index, idx_len, data_len),
-            final_chip: PageChip::new(bus_index, idx_len, data_len, false),
+            init_chip: PageChip::new(page_bus_index, idx_len, data_len),
+            offline_checker: OfflineChecker::new(page_bus_index, idx_len, data_len),
+            final_chip: FinalPageChip::new(
+                page_bus_index,
+                sorted_bus_idx,
+                idx_len,
+                data_len,
+                idx_limb_bits,
+                idx_decomp,
+            ),
 
             init_chip_trace: None,
             offline_checker_trace: None,
@@ -88,6 +101,8 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         mut page: Vec<Vec<u32>>,
         idx_len: usize,
         data_len: usize,
+        idx_limb_bits: usize,
+        idx_decomp: usize,
         ops: Vec<Operation>,
         trace_degree: usize,
         trace_committer: &mut TraceCommitter<SC>,
@@ -95,15 +110,24 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         assert!(!page.is_empty());
         self.init_chip_trace = Some(self.get_page_trace(page.clone()));
 
-        let bus_index = self.offline_checker.bus_index();
+        // TODO: make bus_index public
+        let page_bus_index = self.init_chip.bus_index();
+        let sorted_bus_index = self.final_chip.sorted_bus_index;
 
-        self.init_chip = PageChip::new(bus_index, idx_len, data_len, true);
+        self.init_chip = PageChip::new(page_bus_index, idx_len, data_len);
         self.init_chip_trace = Some(self.get_page_trace(page.clone()));
 
-        self.offline_checker = OfflineChecker::new(bus_index, idx_len, data_len);
+        self.offline_checker = OfflineChecker::new(page_bus_index, idx_len, data_len);
         self.offline_checker_trace = Some(self.gen_ops_trace(&mut page, &ops, trace_degree));
 
-        self.final_chip = PageChip::new(bus_index, idx_len, data_len, false);
+        self.final_chip = FinalPageChip::new(
+            page_bus_index,
+            sorted_bus_index,
+            idx_len,
+            data_len,
+            idx_limb_bits,
+            idx_decomp,
+        );
         self.final_chip_trace = Some(self.get_page_trace(page.clone()));
 
         let prover_data = vec![

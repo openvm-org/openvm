@@ -144,7 +144,9 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
 
         flattened
     }
+}
 
+impl<T> IsLessThanTupleAuxCols<T> {
     pub fn get_width(limb_bits: Vec<usize>, decomp: usize, tuple_len: usize) -> usize {
         let mut width = 0;
         // for the less than indicator
