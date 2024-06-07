@@ -12,7 +12,7 @@ pub struct KeccakSpongeOp {
 }
 
 #[derive(Default, Clone)]
-pub struct KeccakSpongeChip {
+pub struct KeccakSpongeAir {
     pub bus_input: usize,
     pub bus_output: usize,
 

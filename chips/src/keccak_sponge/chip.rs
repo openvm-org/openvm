@@ -7,11 +7,11 @@ use p3_field::Field;
 
 use super::{
     columns::{KECCAK_DIGEST_BYTES, KECCAK_RATE_BYTES, KECCAK_SPONGE_COL_MAP},
-    KeccakSpongeChip,
+    KeccakSpongeAir,
 };
 
 // TODO: Add interaction with xor chip
-impl<F: Field> Chip<F> for KeccakSpongeChip {
+impl<F: Field> Chip<F> for KeccakSpongeAir {
     fn sends(&self) -> Vec<Interaction<F>> {
         let col_map = KECCAK_SPONGE_COL_MAP;
 

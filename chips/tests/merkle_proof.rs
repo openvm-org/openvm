@@ -9,7 +9,7 @@ use afs_chips::{
     keccak_permute::KeccakPermuteChip,
     keccak_sponge::{
         columns::{KECCAK_RATE_BYTES, KECCAK_WIDTH_BYTES},
-        KeccakSpongeChip, KeccakSpongeOp,
+        KeccakSpongeAir, KeccakSpongeOp,
     },
     merkle_proof::{MerkleProofChip, MerkleProofOp},
 };
@@ -107,7 +107,7 @@ fn test_merkle_proof_prove() {
         bus_hash_input: 0,
         bus_hash_output: 1,
     };
-    let keccak_sponge_air = KeccakSpongeChip {
+    let keccak_sponge_air = KeccakSpongeAir {
         bus_input: 0,
         bus_output: 1,
 

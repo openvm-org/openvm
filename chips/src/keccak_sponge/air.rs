@@ -7,15 +7,15 @@ use super::columns::{
     KeccakSpongeCols, KECCAK_DIGEST_U16S, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
     NUM_KECCAK_SPONGE_COLS,
 };
-use super::KeccakSpongeChip;
+use super::KeccakSpongeAir;
 
-impl<F> BaseAir<F> for KeccakSpongeChip {
+impl<F> BaseAir<F> for KeccakSpongeAir {
     fn width(&self) -> usize {
         NUM_KECCAK_SPONGE_COLS
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for KeccakSpongeChip {
+impl<AB: AirBuilder> Air<AB> for KeccakSpongeAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);

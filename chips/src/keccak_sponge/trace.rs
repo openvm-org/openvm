@@ -8,10 +8,10 @@ use super::{
         KECCAK_WIDTH_U16S, NUM_KECCAK_SPONGE_COLS,
     },
     util::keccakf_u16s,
-    KeccakSpongeChip, KeccakSpongeOp,
+    KeccakSpongeAir, KeccakSpongeOp,
 };
 
-impl KeccakSpongeChip {
+impl KeccakSpongeAir {
     pub fn generate_trace<F: PrimeField32>(
         &self,
         inputs: Vec<KeccakSpongeOp>,
