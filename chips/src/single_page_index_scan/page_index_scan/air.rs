@@ -6,18 +6,22 @@ use p3_matrix::Matrix;
 
 use crate::{
     is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
-    sub_chip::SubAir,
+    sub_chip::{AirConfig, SubAir},
 };
 
 use super::{columns::PageIndexScanCols, PageIndexScanAir};
+
+impl AirConfig for PageIndexScanAir {
+    type Cols<T> = PageIndexScanCols<T>;
+}
 
 impl<F: Field> BaseAir<F> for PageIndexScanAir {
     fn width(&self) -> usize {
         PageIndexScanCols::<F>::get_width(
             self.idx_len,
             self.data_len,
-            self.limb_bits.clone(),
-            self.decomp,
+            self.is_less_than_tuple_air.limb_bits().clone(),
+            *self.is_less_than_tuple_air.decomp(),
         )
     }
 }
@@ -33,8 +37,8 @@ impl<AB: AirBuilder> Air<AB> for PageIndexScanAir {
             local,
             self.idx_len,
             self.data_len,
-            self.decomp,
-            self.limb_bits.clone(),
+            *self.is_less_than_tuple_air.decomp(),
+            self.is_less_than_tuple_air.limb_bits().clone(),
         );
 
         let is_less_than_tuple_cols = IsLessThanTupleCols {
@@ -45,6 +49,12 @@ impl<AB: AirBuilder> Air<AB> for PageIndexScanAir {
             },
             aux: local_cols.is_less_than_tuple_aux,
         };
+
+        builder.assert_eq(
+            local_cols.is_alloc * local_cols.satisfies_pred,
+            local_cols.send_row,
+        );
+        builder.assert_bool(local_cols.send_row);
 
         // constrain the indicator that we used to check wheter key < x is correct
         SubAir::eval(
