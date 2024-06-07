@@ -25,6 +25,10 @@ impl<T: Clone> IsLessThanTupleIOCols<T> {
         flattened.push(self.tuple_less_than.clone());
         flattened
     }
+
+    pub fn get_width(tuple_len: usize) -> usize {
+        tuple_len + tuple_len + 1
+    }
 }
 
 pub struct IsLessThanTupleAuxCols<T> {
@@ -140,6 +144,27 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
 
         flattened
     }
+
+    pub fn get_width(limb_bits: Vec<usize>, decomp: usize, tuple_len: usize) -> usize {
+        let mut width = 0;
+        // for the less than indicator
+        width += tuple_len;
+        // for the lowers
+        width += tuple_len;
+        // for the decomposed lowers
+        for &limb_bit in limb_bits.iter() {
+            let num_limbs = (limb_bit + decomp - 1) / decomp;
+            width += num_limbs + 1;
+        }
+        // for the indicator whether difference is zero
+        width += tuple_len;
+        // for the inverses k such that k * (diff[i] + is_zero[i]) = 1
+        width += tuple_len;
+        // for the cumulative is_equal and less_than
+        width += 2 * tuple_len;
+
+        width
+    }
 }
 
 pub struct IsLessThanTupleCols<T> {
@@ -167,30 +192,7 @@ impl<T: Clone> IsLessThanTupleCols<T> {
     }
 
     pub fn get_width(limb_bits: Vec<usize>, decomp: usize, tuple_len: usize) -> usize {
-        let mut width = 0;
-        // for the x and y tuples
-        width += 2 * tuple_len;
-        // for the tuple less than indicator
-        width += 1;
-        // for the less than indicator
-        width += tuple_len;
-        // for the lowers
-        width += tuple_len;
-
-        // for the decomposed lowers
-        for &limb_bit in limb_bits.iter() {
-            let num_limbs = (limb_bit + decomp - 1) / decomp;
-            width += num_limbs + 1;
-        }
-
-        // for the indicator whether difference is zero
-        width += tuple_len;
-        // for the inverses k such that k * (diff[i] + is_zero[i]) = 1
-        width += tuple_len;
-
-        // for the cumulative is_equal and less_than
-        width += 2 * tuple_len;
-
-        width
+        IsLessThanTupleIOCols::<T>::get_width(tuple_len)
+            + IsLessThanTupleAuxCols::<T>::get_width(limb_bits, decomp, tuple_len)
     }
 }
