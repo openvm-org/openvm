@@ -19,6 +19,10 @@ impl<T: Clone> IsLessThanIOCols<T> {
     pub fn flatten(&self) -> Vec<T> {
         vec![self.x.clone(), self.y.clone(), self.less_than.clone()]
     }
+
+    pub fn get_width() -> usize {
+        3
+    }
 }
 
 pub struct IsLessThanAuxCols<T> {
@@ -40,6 +44,17 @@ impl<T: Clone> IsLessThanAuxCols<T> {
         let mut flattened = vec![self.lower.clone()];
         flattened.extend(self.lower_decomp.iter().cloned());
         flattened
+    }
+
+    pub fn get_width(limb_bits: usize, decomp: usize) -> usize {
+        let mut width = 0;
+        // for the lower
+        width += 1;
+        // for the decomposed lower
+        let num_limbs = (limb_bits + decomp - 1) / decomp;
+        width += num_limbs + 1;
+
+        width
     }
 }
 
@@ -63,17 +78,6 @@ impl<T: Clone> IsLessThanCols<T> {
     }
 
     pub fn get_width(limb_bits: usize, decomp: usize) -> usize {
-        let mut width = 0;
-        // for the x and y
-        width += 2;
-        // for the less_than indicator
-        width += 1;
-        // for the lower
-        width += 1;
-        // for the decomposed lower
-        let num_limbs = (limb_bits + decomp - 1) / decomp;
-        width += num_limbs + 1;
-
-        width
+        IsLessThanIOCols::<T>::get_width() + IsLessThanAuxCols::<T>::get_width(limb_bits, decomp)
     }
 }
