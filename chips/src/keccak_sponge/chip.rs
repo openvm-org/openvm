@@ -1,3 +1,5 @@
+use std::iter::once;
+
 use afs_stark_backend::interaction::{Chip, Interaction};
 use itertools::Itertools;
 use p3_air::VirtualPairCol;
@@ -78,8 +80,11 @@ impl<F: Field> Chip<F> for KeccakSpongeChip {
             // TODO: Only send non padding bytes. Interaction field should be
             //       is_padding_byte[i] * block_bytes[i] but requires degree 2 fields
             vec![Interaction {
-                fields: (0..KECCAK_RATE_BYTES)
-                    .map(|i| VirtualPairCol::single_main(col_map.block_bytes[i]))
+                fields: once(VirtualPairCol::single_main(col_map.is_full_input_block))
+                    .chain(
+                        (0..KECCAK_RATE_BYTES)
+                            .map(|i| VirtualPairCol::single_main(col_map.block_bytes[i])),
+                    )
                     .collect_vec(),
                 count: is_real.clone(),
                 argument_index: self.bus_input,

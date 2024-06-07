@@ -121,7 +121,6 @@ fn generate_full_input_row<F: PrimeField32>(
     sponge_state: [u16; KECCAK_WIDTH_U16S],
     block: [u8; KECCAK_RATE_BYTES],
 ) {
-    // TODO: This is unconstrained
     row.is_full_input_block = F::one();
     row.block_bytes = block.map(F::from_canonical_u8);
 

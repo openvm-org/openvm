@@ -1,3 +1,5 @@
+use std::iter::once;
+
 use afs_stark_backend::interaction::{Chip, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField32;
@@ -14,23 +16,26 @@ where
         let col_map = merkle_proof_col_map::<DEPTH, DIGEST_WIDTH>();
 
         vec![Interaction {
-            fields: col_map
-                .left_node
-                .into_iter()
-                .chain(col_map.right_node.into_iter())
-                .map(|elem| VirtualPairCol::single_main(elem))
-                // TODO: Don't send padding bytes
-                .chain((2 * DIGEST_WIDTH..KECCAK_RATE_BYTES).map(|i| {
-                    VirtualPairCol::constant({
-                        if i == 2 * DIGEST_WIDTH {
-                            F::one()
-                        } else if i == KECCAK_RATE_BYTES - 1 {
-                            F::from_canonical_u8(0b10000000)
-                        } else {
-                            F::zero()
-                        }
-                    })
-                }))
+            fields: once(VirtualPairCol::constant(F::zero()))
+                .chain(
+                    col_map
+                        .left_node
+                        .into_iter()
+                        .chain(col_map.right_node.into_iter())
+                        .map(|elem| VirtualPairCol::single_main(elem))
+                        // TODO: Don't send padding bytes
+                        .chain((2 * DIGEST_WIDTH..KECCAK_RATE_BYTES).map(|i| {
+                            VirtualPairCol::constant({
+                                if i == 2 * DIGEST_WIDTH {
+                                    F::one()
+                                } else if i == KECCAK_RATE_BYTES - 1 {
+                                    F::from_canonical_u8(0b10000000)
+                                } else {
+                                    F::zero()
+                                }
+                            })
+                        })),
+                )
                 .collect(),
             count: VirtualPairCol::single_main(col_map.is_real),
             argument_index: self.bus_hash_input,
