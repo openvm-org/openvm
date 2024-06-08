@@ -8,8 +8,6 @@ pub mod trace;
 #[cfg(test)]
 pub mod tests;
 
-// TODO: rename limbs_bits to idX_limb_bits?
-
 pub struct FinalPageChip {
     page_bus_index: usize,
     pub sorted_bus_index: usize,

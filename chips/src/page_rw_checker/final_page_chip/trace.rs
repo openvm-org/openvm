@@ -1,10 +1,10 @@
-use std::{iter, sync::Arc};
+use std::sync::Arc;
 
 use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use super::FinalPageChip;
+use super::{columns::FinalPageAuxCols, FinalPageChip};
 use crate::{
     is_less_than_tuple::{columns::IsLessThanTupleCols, IsLessThanTupleAir},
     range_gate::RangeCheckerGateChip,
@@ -20,13 +20,6 @@ impl FinalPageChip {
     where
         Val<SC>: AbstractField,
     {
-        println!(
-            "in final page trace: {} {} {}",
-            page.len(),
-            page[0].len(),
-            self.page_width()
-        );
-
         RowMajorMatrix::new(
             page.into_iter()
                 .flat_map(|row| {
@@ -54,30 +47,30 @@ impl FinalPageChip {
             self.idx_decomp,
         );
 
-        let mut rows: Vec<Vec<Val<SC>>> = vec![vec![Val::<SC>::zero(); self.aux_width()]];
+        let mut rows: Vec<Vec<Val<SC>>> = vec![];
 
-        for i in 1..page.len() {
-            let mut prv_r = page[i - 1][0..1 + self.idx_len].to_vec();
+        for i in 0..page.len() {
+            let mut prv_r = if i == 0 {
+                vec![0; 1 + self.idx_len]
+            } else {
+                page[i - 1][0..1 + self.idx_len].to_vec()
+            };
             let mut cur_r = page[i][0..1 + self.idx_len].to_vec();
-
-            println!("ok here: {} {}", prv_r[0], cur_r[0]);
 
             prv_r[0] = 1 - prv_r[0];
             cur_r[0] = 1 - cur_r[0];
 
-            let cols: IsLessThanTupleCols<Val<SC>> = LocalTraceInstructions::generate_trace_row(
+            let lt_cols: IsLessThanTupleCols<Val<SC>> = LocalTraceInstructions::generate_trace_row(
                 &lt_chip,
                 (prv_r, cur_r, range_checker.clone()),
             );
 
-            rows.push(
-                cols.aux
-                    .flatten()
-                    .iter()
-                    .chain(iter::once(&cols.io.tuple_less_than))
-                    .cloned()
-                    .collect(),
-            );
+            let page_aux_cols = FinalPageAuxCols {
+                lt_cols: lt_cols.aux,
+                lt_out: lt_cols.io.tuple_less_than,
+            };
+
+            rows.push(page_aux_cols.flatten());
         }
 
         RowMajorMatrix::new(rows.concat(), self.aux_width())

@@ -33,10 +33,6 @@ where
     AB::M: Clone,
 {
     fn eval(&self, builder: &mut AB) {
-        // TODO: consider deleting this
-        let conv_to_expr =
-            |slc: &[AB::Var]| slc.iter().map(|x| (*x).into()).collect::<Vec<AB::Expr>>();
-
         let page_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[0].clone();
         let aux_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[1].clone();
 
@@ -47,12 +43,12 @@ where
         let page_next_cols =
             PageCols::<AB::Var>::from_slice(&page_next, self.idx_len, self.data_len);
 
-        // TODO: fix limb_bits
-        // TODO: consider renaming aux to sort or something
-
         // The auxiliary columns to compare local index and next index are stored in the next row
         let aux_next = aux_trace.row_slice(1);
-        let aux_next = conv_to_expr(&aux_next);
+        let aux_next = &aux_next
+            .iter()
+            .map(|x| (*x).into())
+            .collect::<Vec<AB::Expr>>();
 
         let aux_next_cols = FinalPageAuxCols::<AB::Expr>::from_slice(
             &aux_next,
@@ -61,26 +57,40 @@ where
             1 + self.idx_len,
         );
 
-        // Ensuring that is_alloc is always bool
-        builder.assert_bool(page_local_cols.is_alloc);
+        SubAir::eval(
+            self,
+            builder,
+            [page_local_cols, page_next_cols],
+            aux_next_cols,
+        );
+    }
+}
 
-        // TODO: maybe add a general helper to convert to AB::Expr?
+impl<AB: AirBuilder> SubAir<AB> for FinalPageChip {
+    type IoView = [PageCols<AB::Var>; 2];
+    type AuxView = FinalPageAuxCols<AB::Expr>;
+
+    fn eval(&self, builder: &mut AB, io: Self::IoView, aux_next: Self::AuxView) {
+        let page_local = &io[0];
+        let page_next = &io[1];
+
+        // Ensuring that is_alloc is always bool
+        builder.assert_bool(page_local.is_alloc);
 
         // Ensuring that rows are sorted by (1-is_alloc, idx)
         let lt_cols = IsLessThanTupleCols {
             io: IsLessThanTupleIOCols {
-                x: iter::once(AB::Expr::one() - page_local_cols.is_alloc)
-                    .chain(page_local_cols.idx.iter().map(|x| (*x).into()))
+                x: iter::once(AB::Expr::one() - page_local.is_alloc)
+                    .chain(page_local.idx.iter().map(|x| (*x).into()))
                     .collect(),
-                y: iter::once(AB::Expr::one() - page_next_cols.is_alloc)
-                    .chain(page_next_cols.idx.iter().map(|x| (*x).into()))
+                y: iter::once(AB::Expr::one() - page_next.is_alloc)
+                    .chain(page_next.idx.iter().map(|x| (*x).into()))
                     .collect(),
-                tuple_less_than: aux_next_cols.lt_out.clone(),
+                tuple_less_than: aux_next.lt_out.clone().into(),
             },
-            aux: aux_next_cols.lt_cols,
+            aux: aux_next.lt_cols,
         };
 
-        // TODO: why is there a bus_index here?
         let lt_air = IsLessThanTupleAir::new(
             self.sorted_bus_index,
             1 << self.idx_limb_bits,
@@ -99,12 +109,8 @@ where
         let or = |a: AB::Expr, b: AB::Expr| a.clone() + b.clone() - a * b;
 
         // Ensuring the keys are strictly sorted (for allocated rows)
-        builder.when_transition().assert_one(or(
-            AB::Expr::one() - page_local_cols.is_alloc,
-            or(
-                AB::Expr::one() - page_next_cols.is_alloc,
-                aux_next_cols.lt_out,
-            ),
-        ));
+        builder
+            .when_transition()
+            .assert_one(or(AB::Expr::one() - page_next.is_alloc, aux_next.lt_out));
     }
 }

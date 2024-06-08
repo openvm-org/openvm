@@ -64,13 +64,6 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanTupleAir {
         let x = io.x.clone();
         let y = io.y.clone();
 
-        println!(
-            "here in eval of less than tuple: {} {} {}",
-            x.len(),
-            y.len(),
-            aux.less_than.len()
-        );
-
         // here we constrain that less_than[i] indicates whether x[i] < y[i] using the IsLessThan subchip for each i
         for i in 0..x.len() {
             let x_val = x[i].clone();

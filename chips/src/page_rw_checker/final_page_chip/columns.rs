@@ -1,3 +1,5 @@
+use std::iter;
+
 use crate::{
     is_less_than_tuple::columns::IsLessThanTupleAuxCols,
     page_rw_checker::page_chip::columns::PageCols,
@@ -34,7 +36,6 @@ pub struct FinalPageAuxCols<T> {
 }
 
 impl<T: Clone> FinalPageAuxCols<T> {
-    // TODO: pass here a vector limb_bits
     pub fn from_slice(
         slc: &[T],
         limb_bits: usize,
@@ -50,5 +51,13 @@ impl<T: Clone> FinalPageAuxCols<T> {
             ),
             lt_out: slc[slc.len() - 1].clone(),
         }
+    }
+
+    pub fn flatten(&self) -> Vec<T> {
+        self.lt_cols
+            .flatten()
+            .into_iter()
+            .chain(iter::once(self.lt_out.clone()))
+            .collect()
     }
 }

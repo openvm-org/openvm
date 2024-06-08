@@ -15,8 +15,6 @@ impl RangeCheckerGateChip {
             })
             .collect();
 
-        println!("range gate trace {:?}", rows);
-
         RowMajorMatrix::new(rows, NUM_RANGE_GATE_COLS)
     }
 }
