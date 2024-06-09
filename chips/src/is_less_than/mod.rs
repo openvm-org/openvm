@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::range_gate::RangeCheckerGateChip;
-use getset::Getters;
+use getset::{CopyGetters, Getters};
 
 #[cfg(test)]
 pub mod tests;
@@ -11,22 +11,19 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-#[derive(Default, Clone, Getters)]
+#[derive(Default, Clone, CopyGetters)]
+#[getset(get_copy = "pub")]
 pub struct IsLessThanAir {
     // The bus index for sends to range chip
-    #[getset(get = "pub")]
     bus_index: usize,
     // The maximum range for the range checker
-    #[getset(get = "pub")]
     range_max: u32,
     // The maximum number of bits for the numbers to compare
-    #[getset(get = "pub")]
     limb_bits: usize,
     // The number of bits to decompose each number into, for less than checking
-    #[getset(get = "pub")]
     decomp: usize,
     // num_limbs is the number of limbs we decompose each input into, not including the last shifted limb
-    #[getset(get)]
+    #[getset(get_copy)]
     num_limbs: usize,
 }
 

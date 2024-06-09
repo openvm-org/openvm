@@ -17,7 +17,7 @@ impl AirConfig for IsLessThanAir {
 
 impl<F: Field> BaseAir<F> for IsLessThanAir {
     fn width(&self) -> usize {
-        IsLessThanCols::<F>::get_width(*self.limb_bits(), *self.decomp())
+        IsLessThanCols::<F>::get_width(self.limb_bits(), self.decomp())
     }
 }
 
@@ -71,19 +71,19 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanAir {
         let lower_from_decomp = lower_decomp
             .iter()
             .enumerate()
-            .take(*self.num_limbs())
+            .take(self.num_limbs())
             .fold(AB::Expr::zero(), |acc, (i, &val)| {
                 acc + val * AB::Expr::from_canonical_u64(1 << (i * self.decomp()))
             });
 
         builder.assert_eq(lower_from_decomp, lower);
 
-        let shifted_val = lower_decomp[*self.num_limbs() - 1]
-            * AB::Expr::from_canonical_u64(1 << last_limb_shift);
+        let shifted_val =
+            lower_decomp[self.num_limbs() - 1] * AB::Expr::from_canonical_u64(1 << last_limb_shift);
 
         // constrain that the shifted last limb is shifted correctly
         // this shifted last limb will also be range checked
-        builder.assert_eq(lower_decomp[*self.num_limbs()], shifted_val);
+        builder.assert_eq(lower_decomp[self.num_limbs()], shifted_val);
 
         // constrain that less_than is a boolean
         builder.assert_bool(less_than);
