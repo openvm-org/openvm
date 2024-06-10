@@ -32,21 +32,17 @@ impl<AB: AirBuilder> Air<AB> for IsZeroChip {
 
         let local = main.row_slice(0);
         let is_zero_cols: &IsZeroCols<_> = (*local).borrow();
-        let io = IsZeroIOCols {
-            x: is_zero_cols.io.x.into(),
-            is_zero: is_zero_cols.io.is_zero.into(),
-        };
 
-        SubAir::eval(self, builder, io, is_zero_cols.inv.into());
+        SubAir::<AB>::eval(self, builder, is_zero_cols.io, is_zero_cols.inv);
     }
 }
 
 impl<AB: AirBuilder> SubAir<AB> for IsZeroChip {
-    type IoView = IsZeroIOCols<AB::Expr>;
-    type AuxView = AB::Expr;
+    type IoView = IsZeroIOCols<AB::Var>;
+    type AuxView = AB::Var;
 
     fn eval(&self, builder: &mut AB, io: Self::IoView, inv: Self::AuxView) {
-        builder.assert_eq(io.x.clone() * io.is_zero.clone(), AB::F::zero());
+        builder.assert_eq(io.x * io.is_zero, AB::F::zero());
         builder.assert_eq(io.is_zero + io.x * inv, AB::F::one());
     }
 }
