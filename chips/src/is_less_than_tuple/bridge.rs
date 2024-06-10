@@ -11,7 +11,7 @@ impl<F: PrimeField64> AirBridge<F> for IsLessThanTupleAir {
     fn sends(&self) -> Vec<Interaction<F>> {
         let num_cols = IsLessThanTupleCols::<F>::get_width(
             self.limb_bits().clone(),
-            *self.decomp(),
+            self.decomp(),
             self.tuple_len(),
         );
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
@@ -19,7 +19,7 @@ impl<F: PrimeField64> AirBridge<F> for IsLessThanTupleAir {
         let cols_numbered = IsLessThanTupleCols::<usize>::from_slice(
             &all_cols,
             self.limb_bits().clone(),
-            *self.decomp(),
+            self.decomp(),
             self.tuple_len(),
         );
 

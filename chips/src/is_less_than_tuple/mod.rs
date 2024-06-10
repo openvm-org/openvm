@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use getset::Getters;
+use getset::CopyGetters;
 
 use crate::{is_less_than::IsLessThanAir, range_gate::RangeCheckerGateChip};
 
@@ -12,19 +12,17 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-#[derive(Default, Getters)]
+#[derive(Default, CopyGetters)]
+#[getset(get_copy = "pub")]
 pub struct IsLessThanTupleAir {
     // The bus index for sends to range chip
-    #[getset(get = "pub")]
     bus_index: usize,
     // The maximum range for the range checker
-    #[getset(get = "pub")]
     range_max: u32,
     // The number of bits to decompose each number into, for less than checking
-    #[getset(get = "pub")]
     decomp: usize,
     // IsLessThanAirs for each tuple element
-    #[getset(get = "pub")]
+    #[getset(skip)]
     is_less_than_airs: Vec<IsLessThanAir>,
 }
 
@@ -50,7 +48,7 @@ impl IsLessThanTupleAir {
     pub fn limb_bits(&self) -> Vec<usize> {
         self.is_less_than_airs
             .iter()
-            .map(|air| *air.limb_bits())
+            .map(|air| air.limb_bits())
             .collect()
     }
 }
@@ -63,7 +61,7 @@ impl IsLessThanTupleAir {
  * The IsLessThanTupleChip uses the IsLessThanChip as a subchip to check whether individual tuple elements
  * are less than each other.
  */
-#[derive(Default, Getters)]
+#[derive(Default)]
 pub struct IsLessThanTupleChip {
     pub air: IsLessThanTupleAir,
 

@@ -26,7 +26,7 @@ impl<F: Field> BaseAir<F> for IsLessThanTupleAir {
     fn width(&self) -> usize {
         IsLessThanTupleCols::<F>::get_width(
             self.limb_bits().clone(),
-            *self.decomp(),
+            self.decomp(),
             self.tuple_len(),
         )
     }
@@ -42,7 +42,7 @@ impl<AB: AirBuilder> Air<AB> for IsLessThanTupleAir {
         let local_cols = IsLessThanTupleCols::<AB::Var>::from_slice(
             local,
             self.limb_bits().clone(),
-            *self.decomp(),
+            self.decomp(),
             self.tuple_len(),
         );
 

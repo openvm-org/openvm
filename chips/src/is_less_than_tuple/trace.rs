@@ -22,7 +22,7 @@ impl IsLessThanTupleChip {
     ) -> RowMajorMatrix<F> {
         let num_cols: usize = IsLessThanTupleCols::<F>::get_width(
             self.air.limb_bits().clone(),
-            *self.air.decomp(),
+            self.air.decomp(),
             self.air.tuple_len(),
         );
 
@@ -57,10 +57,10 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for IsLessThanTupleAir {
         // use subchip to generate relevant columns
         for i in 0..x.len() {
             let is_less_than_chip = IsLessThanChip::new(
-                *self.bus_index(),
-                *self.range_max(),
+                self.bus_index(),
+                self.range_max(),
                 self.limb_bits()[i],
-                *self.decomp(),
+                self.decomp(),
                 range_checker.clone(),
             );
 
