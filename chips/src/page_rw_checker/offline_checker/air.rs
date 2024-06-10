@@ -190,6 +190,12 @@ where
             AB::Expr::one() - local_cols.is_final,
         ));
 
+        // next.is_final => local.is_internal
+        builder.when_transition().assert_one(implies(
+            next_cols.is_final.into(),
+            local_cols.is_internal.into(),
+        ));
+
         // Making sure is_extra rows are at the bottom
         builder.when_transition().assert_one(implies(
             AB::Expr::one() - next_cols.is_extra,

@@ -138,8 +138,9 @@ fn page_read_write_test() {
     let mut rng = create_seeded_rng();
 
     let page_bus_index = 0;
-    let range_bus_index = 1;
-    let ops_bus_index = 2;
+    let checker_final_bus_index = 1;
+    let range_bus_index = 2;
+    let ops_bus_index = 3;
 
     use page_rw_checker::page_controller::PageController;
 
@@ -222,6 +223,7 @@ fn page_read_write_test() {
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
         page_bus_index,
+        checker_final_bus_index,
         range_bus_index,
         ops_bus_index,
         idx_len,

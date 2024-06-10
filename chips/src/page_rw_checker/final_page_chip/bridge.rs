@@ -35,20 +35,36 @@ impl<F: PrimeField64> SubAirBridge<F> for FinalPageChip {
     }
 
     /// Receives page rows (idx, data) for every allocated row on page_bus
+    /// Receives all indices in rows tagged with is_internal on checker_final_bus
     fn receives(&self, col_indices: FinalPageCols<usize>) -> Vec<Interaction<F>> {
         let page_cols = col_indices
             .page_cols
             .idx
-            .into_iter()
+            .iter()
+            .copied()
             .chain(col_indices.page_cols.data)
             .map(VirtualPairCol::single_main)
             .collect::<Vec<_>>();
 
-        vec![Interaction {
-            fields: page_cols,
-            count: VirtualPairCol::single_main(col_indices.page_cols.is_alloc),
-            argument_index: self.page_bus_index,
-        }]
+        let idx_cols = col_indices
+            .page_cols
+            .idx
+            .into_iter()
+            .map(VirtualPairCol::single_main)
+            .collect();
+
+        vec![
+            Interaction {
+                fields: page_cols,
+                count: VirtualPairCol::single_main(col_indices.page_cols.is_alloc),
+                argument_index: self.page_bus_index,
+            },
+            Interaction {
+                fields: idx_cols,
+                count: VirtualPairCol::single_main(col_indices.aux_cols.is_in_ops),
+                argument_index: self.checker_final_bus_index,
+            },
+        ]
     }
 }
 

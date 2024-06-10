@@ -10,6 +10,7 @@ pub mod tests;
 
 pub struct FinalPageChip {
     page_bus_index: usize,
+    checker_final_bus_index: usize,
     pub range_bus_index: usize,
 
     idx_len: usize,
@@ -22,6 +23,7 @@ pub struct FinalPageChip {
 impl FinalPageChip {
     pub fn new(
         page_bus_index: usize,
+        checker_final_bus_index: usize,
         range_bus_index: usize,
         idx_len: usize,
         data_len: usize,
@@ -30,6 +32,7 @@ impl FinalPageChip {
     ) -> Self {
         Self {
             page_bus_index,
+            checker_final_bus_index,
             range_bus_index,
             idx_len,
             data_len,
@@ -47,7 +50,7 @@ impl FinalPageChip {
             vec![self.idx_limb_bits; self.idx_len],
             self.idx_decomp,
             self.idx_len,
-        ) + 1
+        ) + 2
     }
 
     pub fn air_width(&self) -> usize {

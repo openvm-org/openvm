@@ -57,6 +57,7 @@ where
 impl<SC: StarkGenericConfig> PageController<SC> {
     pub fn new(
         page_bus_index: usize,
+        checker_final_bus_index: usize,
         range_bus_index: usize,
         ops_bus_index: usize,
         idx_len: usize,
@@ -71,6 +72,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             init_chip: PageChip::new(page_bus_index, idx_len, data_len),
             offline_checker: OfflineChecker::new(
                 page_bus_index,
+                checker_final_bus_index,
                 range_bus_index,
                 ops_bus_index,
                 idx_len,
@@ -81,6 +83,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             ),
             final_chip: FinalPageChip::new(
                 page_bus_index,
+                checker_final_bus_index,
                 range_bus_index,
                 idx_len,
                 data_len,
@@ -161,6 +164,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         self.init_chip_trace = Some(self.get_page_trace(page.clone()));
 
         let page_bus_index = self.offline_checker.page_bus_index;
+        let checker_final_bus_index = self.offline_checker.checker_final_bus_index;
         let range_bus_index = self.offline_checker.range_bus_index;
         let ops_bus_index = self.offline_checker.ops_bus_index;
 
@@ -169,6 +173,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
 
         self.offline_checker = OfflineChecker::new(
             page_bus_index,
+            checker_final_bus_index,
             range_bus_index,
             ops_bus_index,
             idx_len,
@@ -183,8 +188,12 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         // Sorting the page by (1-is_alloc, idx)
         page.sort_by_key(|row| (1 - row[0], row[1..1 + idx_len].to_vec()));
 
+        // HashSet of all indices used in operations
+        let internal_indices = ops.iter().map(|op| op.idx.clone()).collect();
+
         self.final_chip = FinalPageChip::new(
             page_bus_index,
+            checker_final_bus_index,
             range_bus_index,
             idx_len,
             data_len,
@@ -192,10 +201,11 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             idx_decomp,
         );
         self.final_chip_trace = Some(self.get_page_trace(page.clone()));
-        self.final_page_aux_trace = Some(
-            self.final_chip
-                .gen_aux_trace::<SC>(page.clone(), self.range_checker.clone()),
-        );
+        self.final_page_aux_trace = Some(self.final_chip.gen_aux_trace::<SC>(
+            page.clone(),
+            self.range_checker.clone(),
+            internal_indices,
+        ));
 
         let prover_data = vec![
             trace_committer.commit(vec![self.init_chip_trace.clone().unwrap()]),

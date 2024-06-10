@@ -7,6 +7,7 @@ mod trace;
 
 pub struct OfflineChecker {
     pub page_bus_index: usize,
+    pub checker_final_bus_index: usize,
     pub range_bus_index: usize,
     pub ops_bus_index: usize,
 
@@ -19,6 +20,7 @@ pub struct OfflineChecker {
 impl OfflineChecker {
     pub fn new(
         page_bus_index: usize,
+        checker_final_bus_index: usize,
         range_bus_index: usize,
         ops_bus_index: usize,
         idx_len: usize,
@@ -29,6 +31,7 @@ impl OfflineChecker {
     ) -> Self {
         Self {
             page_bus_index,
+            checker_final_bus_index,
             range_bus_index,
             ops_bus_index,
             idx_len,

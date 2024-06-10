@@ -37,8 +37,11 @@ fn test_single_page(
     let page_trace = final_page_chip.gen_page_trace::<BabyBearPoseidon2Config>(page.clone());
     let page_prover_data = trace_builder.committer.commit(vec![page_trace.clone()]);
 
-    let aux_trace = final_page_chip
-        .gen_aux_trace::<BabyBearPoseidon2Config>(page.clone(), range_checker.clone());
+    let aux_trace = final_page_chip.gen_aux_trace::<BabyBearPoseidon2Config>(
+        page.clone(),
+        range_checker.clone(),
+        HashSet::new(),
+    );
     let range_checker_trace = range_checker.generate_trace();
 
     let page_receiver_trace = RowMajorMatrix::new(
@@ -91,7 +94,8 @@ fn test_single_page(
 fn final_page_chip_test() {
     let mut rng = create_seeded_rng();
     let page_bus_index = 0;
-    let sorted_bus_index = 1;
+    let checker_final_bus_index = 1;
+    let sorted_bus_index = 2;
 
     use super::FinalPageChip;
 
@@ -139,6 +143,7 @@ fn final_page_chip_test() {
 
     let final_page_chip = FinalPageChip::new(
         page_bus_index,
+        checker_final_bus_index,
         sorted_bus_index,
         idx_len,
         data_len,

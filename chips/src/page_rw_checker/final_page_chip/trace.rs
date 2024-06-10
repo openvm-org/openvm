@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use p3_field::{AbstractField, PrimeField};
 use p3_matrix::dense::RowMajorMatrix;
@@ -36,10 +36,13 @@ impl FinalPageChip {
         &self,
         page: Vec<Vec<u32>>,
         range_checker: Arc<RangeCheckerGateChip>,
+        internal_indices: HashSet<Vec<u32>>,
     ) -> RowMajorMatrix<Val<SC>>
     where
         Val<SC>: PrimeField,
     {
+        println!("internal_indices: {:?}", internal_indices);
+
         let lt_chip = IsLessThanTupleAir::new(
             self.range_bus_index,
             1 << self.idx_limb_bits,
@@ -60,12 +63,15 @@ impl FinalPageChip {
 
             let lt_cols: IsLessThanTupleCols<Val<SC>> = LocalTraceInstructions::generate_trace_row(
                 &lt_chip,
-                (prv_idx, cur_idx, range_checker.clone()),
+                (prv_idx, cur_idx.clone(), range_checker.clone()),
             );
 
             let page_aux_cols = FinalPageAuxCols {
                 lt_cols: lt_cols.aux,
                 lt_out: lt_cols.io.tuple_less_than,
+                is_in_ops: Val::<SC>::from_canonical_u8(
+                    (internal_indices.contains(&cur_idx) && page[i][0] == 1) as u8,
+                ),
             };
 
             rows.push(page_aux_cols.flatten());

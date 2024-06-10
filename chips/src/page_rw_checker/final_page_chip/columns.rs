@@ -31,8 +31,9 @@ impl<T: Clone> FinalPageCols<T> {
 }
 
 pub struct FinalPageAuxCols<T> {
-    pub lt_cols: IsLessThanTupleAuxCols<T>,
-    pub lt_out: T,
+    pub lt_cols: IsLessThanTupleAuxCols<T>, // auxiliary columns used for lt_out
+    pub lt_out: T, // this bit indicates whether the idx in this row is greater than the idx in the previous row
+    pub is_in_ops: T, // this bit indicates whether the idx in this row has appears in the operations list
 }
 
 impl<T: Clone> FinalPageAuxCols<T> {
@@ -44,12 +45,13 @@ impl<T: Clone> FinalPageAuxCols<T> {
     ) -> FinalPageAuxCols<T> {
         FinalPageAuxCols {
             lt_cols: IsLessThanTupleAuxCols::from_slice(
-                &slc[..slc.len() - 1],
+                &slc[..slc.len() - 2],
                 vec![limb_bits; tuple_len],
                 decomp,
                 tuple_len,
             ),
-            lt_out: slc[slc.len() - 1].clone(),
+            lt_out: slc[slc.len() - 2].clone(),
+            is_in_ops: slc[slc.len() - 1].clone(),
         }
     }
 
@@ -58,6 +60,7 @@ impl<T: Clone> FinalPageAuxCols<T> {
             .flatten()
             .into_iter()
             .chain(iter::once(self.lt_out.clone()))
+            .chain(iter::once(self.is_in_ops.clone()))
             .collect()
     }
 }
