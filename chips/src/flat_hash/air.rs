@@ -1,4 +1,3 @@
-use afs_stark_backend::interaction::Chip;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -10,20 +9,17 @@ use super::{
     FlatHashChip,
 };
 
-impl<F: Field, const N: usize, const R: usize> BaseAir<F> for FlatHashChip<N, R> {
+impl<F: Field> BaseAir<F> for FlatHashChip {
     fn width(&self) -> usize {
-        self.page_width * (self.hash_width / self.hash_rate + 1)
+        self.page_width + (self.page_width / self.hash_rate + 1) * self.hash_width
     }
 }
 
-impl<const N: usize, const R: usize> AirConfig for FlatHashChip<N, R> {
+impl AirConfig for FlatHashChip {
     type Cols<T> = FlatHashCols<T>;
 }
 
-// No interactions
-impl<F: Field, const N: usize, const R: usize> Chip<F> for FlatHashChip<N, R> {}
-
-impl<AB: AirBuilder, const N: usize, const R: usize> Air<AB> for FlatHashChip<N, R> {
+impl<AB: AirBuilder> Air<AB> for FlatHashChip {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 

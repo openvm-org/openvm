@@ -1,4 +1,3 @@
-use afs_stark_backend::interaction::Chip;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -19,9 +18,6 @@ impl<F: Field> BaseAir<F> for DummyHashChip {
 impl AirConfig for DummyHashChip {
     type Cols<T> = DummyHashCols<T>;
 }
-
-// No interactions
-impl<F: Field> Chip<F> for DummyHashChip {}
 
 impl<AB: AirBuilder> Air<AB> for DummyHashChip {
     fn eval(&self, builder: &mut AB) {

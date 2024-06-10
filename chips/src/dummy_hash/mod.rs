@@ -2,6 +2,7 @@
 pub mod tests;
 
 pub mod air;
+pub mod bridge;
 pub mod columns;
 pub mod trace;
 
@@ -16,6 +17,14 @@ pub struct DummyHashChip {
 }
 
 impl DummyHashChip {
+    pub fn new(bus_index: usize, rate: usize, hash_width: usize) -> Self {
+        Self {
+            bus_index,
+            rate,
+            hash_width,
+        }
+    }
+
     pub fn request<F: Field>(&self, curr_state: Vec<F>, to_absorb: Vec<F>) -> Vec<F> {
         let mut new_state = curr_state.clone();
 

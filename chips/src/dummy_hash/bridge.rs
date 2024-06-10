@@ -1,14 +1,16 @@
-use afs_stark_backend::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::Field;
 
-use super::{columns::DummyHashCols, DummyHashChip};
+use super::DummyHashChip;
 
-impl<F: Field, const N: usize, const R: usize> Chip<F> for DummyHashChip<F, N, R> {
+impl<F: Field> AirBridge<F> for DummyHashChip {
     fn receives(&self) -> Vec<Interaction<F>> {
-        let fields = (0..N).map(|i| VirtualPairCol::single_main(i)).collect();
+        let fields = (0..self.hash_width)
+            .map(|i| VirtualPairCol::single_main(i))
+            .collect();
 
-        let count = VirtualPairCol::const_one();
+        let count = VirtualPairCol::one();
 
         vec![Interaction {
             fields,
@@ -18,11 +20,13 @@ impl<F: Field, const N: usize, const R: usize> Chip<F> for DummyHashChip<F, N, R
     }
 
     fn sends(&self) -> Vec<Interaction<F>> {
-        let fields = (N + R..2 * N + R)
+        let n = self.hash_width;
+        let r = self.rate;
+        let fields = (n + r..2 * n + r)
             .map(|i| VirtualPairCol::single_main(i))
             .collect();
 
-        let count = vec![VirtualPairCol::constant(F::one()); N];
+        let count = VirtualPairCol::constant(F::one());
 
         vec![Interaction {
             fields,

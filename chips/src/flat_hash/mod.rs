@@ -2,6 +2,7 @@
 pub mod tests;
 
 pub mod air;
+pub mod bridge;
 pub mod columns;
 pub mod trace;
 
