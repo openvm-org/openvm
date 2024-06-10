@@ -65,30 +65,30 @@ fn test_single_is_zero() {
     run_simple_test_no_pis(all_chips, all_traces).expect("Verification failed");
 }
 
-// #[test]
-// fn test_single_is_zero_fail() {
-//     let chip = FlatHashChip::new(10, 4, 5, 2, 3, 0, 1);
+#[test]
+fn test_single_is_zero_fail() {
+    let chip = FlatHashChip::new(10, 4, 5, 2, 3, 0, 1);
 
-//     let mut rng = create_seeded_rng();
-//     let x = (0..chip.page_height)
-//         .map(|_| {
-//             (0..chip.page_width)
-//                 .map(|_| BabyBear::from_canonical_u32(rng.gen_range(0..100)))
-//                 .collect()
-//         })
-//         .collect();
+    let mut rng = create_seeded_rng();
+    let x = (0..chip.page_height)
+        .map(|_| {
+            (0..chip.page_width)
+                .map(|_| BabyBear::from_canonical_u32(rng.gen_range(0..100)))
+                .collect()
+        })
+        .collect();
 
-//     let mut trace = chip.generate_trace(x);
-//     trace.values[1] = AbstractField::from_canonical_u32(1);
+    let mut trace = chip.generate_trace(x);
+    trace.values[1] = AbstractField::from_canonical_u32(1);
 
-//     // assert_eq!(trace.values[1], AbstractField::from_canonical_u32(0));
+    // assert_eq!(trace.values[1], AbstractField::from_canonical_u32(0));
 
-//     USE_DEBUG_BUILDER.with(|debug| {
-//         *debug.lock().unwrap() = false;
-//     });
-//     assert_eq!(
-//         run_simple_test_no_pis(vec![&chip], vec![trace]),
-//         Err(VerificationError::OodEvaluationMismatch),
-//         "Expected constraint to fail"
-//     );
-// }
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
+    assert_eq!(
+        run_simple_test_no_pis(vec![&chip], vec![trace]),
+        Err(VerificationError::NonZeroCumulativeSum),
+        "Expected constraint to fail"
+    );
+}
