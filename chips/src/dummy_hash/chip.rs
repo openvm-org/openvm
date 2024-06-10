@@ -8,7 +8,7 @@ impl<F: Field, const N: usize, const R: usize> Chip<F> for DummyHashChip<F, N, R
     fn receives(&self) -> Vec<Interaction<F>> {
         let fields = (0..N).map(|i| VirtualPairCol::single_main(i)).collect();
 
-        let count = vec![VirtualPairCol::constant(F::one()); N];
+        let count = VirtualPairCol::const_one();
 
         vec![Interaction {
             fields,

@@ -31,11 +31,7 @@ impl<F: Field> LocalTraceInstructions<F> for DummyHashChip {
 
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
         let (curr_state, to_absorb) = local_input;
-        let mut new_state = curr_state.clone();
-
-        for (new, b) in new_state.iter_mut().take(self.rate).zip(to_absorb.iter()) {
-            *new += *b;
-        }
+        let new_state = DummyHashChip::request(curr_state.clone(), to_absorb.clone());
 
         DummyHashCols {
             io: DummyHashIOCols {
