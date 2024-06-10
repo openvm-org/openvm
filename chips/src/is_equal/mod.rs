@@ -8,7 +8,7 @@ pub mod trace;
 use p3_field::Field;
 
 #[derive(Default)]
-pub struct IsEqualAir {}
+pub struct IsEqualAir;
 
 impl IsEqualAir {
     pub fn request<F: Field>(&self, x: F, y: F) -> bool {
