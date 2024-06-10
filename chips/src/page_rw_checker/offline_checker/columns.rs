@@ -2,6 +2,7 @@ use crate::{
     is_equal_vec::columns::IsEqualVecAuxCols, is_less_than_tuple::columns::IsLessThanTupleAuxCols,
 };
 
+#[derive(Debug)]
 pub struct OfflineCheckerCols<T> {
     pub is_initial: T,  // this bit indicates if this row comes from the initial page
     pub is_final: T, // this bit indicates if this row should go to the final page (last row for the index)

@@ -5,7 +5,7 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use super::PageAir;
 
 impl PageAir {
-    // The trace is the whole page (including the is_alloc column)
+    /// The trace is the whole page (including the is_alloc column)
     pub fn generate_trace<SC: StarkGenericConfig>(
         &self,
         page: Vec<Vec<u32>>,

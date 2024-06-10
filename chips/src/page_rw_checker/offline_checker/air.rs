@@ -27,7 +27,12 @@ impl<AB: PartitionedAirBuilder> Air<AB> for OfflineChecker
 where
     AB::M: Clone,
 {
-    /// This imposes constraints to make sure rows follow the format that we want (outlined in trace.rs)
+    /// This imposes the following constraints extra rows to be at the bottom and the following on non-extra rows:
+    /// Every row is tagged with exactly one of is_initial, is_internal, is_final
+    /// is_initial rows must be writes, is_final rows must be reads, and is_internal rows can be either
+    /// same_idx, same_data, lt_bit is correct (see definition in columns.rs)
+    /// An internal read is preceded by a write (initial or internal) with the same index and data
+    /// Every key block ends in an is_final row preceded by an is_internal row
     fn eval(&self, builder: &mut AB) {
         let main = &builder.partitioned_main()[0].clone();
 
@@ -51,6 +56,11 @@ where
             self.idx_clk_limb_bits.clone(),
             self.idx_decomp,
         );
+
+        // Some helpers
+        let and = |a: AB::Expr, b: AB::Expr| a * b;
+        let or = |a: AB::Expr, b: AB::Expr| a.clone() + b.clone() - a * b;
+        let implies = |a: AB::Expr, b: AB::Expr| or(AB::Expr::one() - a, b);
 
         // Making sure bits are bools
         builder.assert_bool(local_cols.is_initial);
@@ -127,9 +137,10 @@ where
             next_cols.lt_aux,
         );
 
-        let and = |a: AB::Expr, b: AB::Expr| a * b;
-        let or = |a: AB::Expr, b: AB::Expr| a.clone() + b.clone() - a * b;
-        let implies = |a: AB::Expr, b: AB::Expr| or(AB::Expr::one() - a, b);
+        // Ensuring lt_bit is on
+        builder
+            .when_transition()
+            .assert_one(or(next_cols.is_extra.into(), next_cols.lt_bit.into()));
 
         // Making sure every idx block starts with a write
         // not same_idx => write
@@ -196,6 +207,12 @@ where
             local_cols.is_internal.into(),
         ));
 
+        // Ensuring at least one of is_initial, is_internal, is_final is on
+        builder.assert_one(or(
+            or(local_cols.is_extra.into(), local_cols.is_initial.into()),
+            or(local_cols.is_internal.into(), local_cols.is_final.into()),
+        ));
+
         // Making sure is_extra rows are at the bottom
         builder.when_transition().assert_one(implies(
             AB::Expr::one() - next_cols.is_extra,
@@ -205,6 +222,9 @@ where
         // Note that the following is implied:
         // - for every row: (is_initial => write) because is_initial => not same_idx => write
         // - for every row: (is_initial => not is_final) because is_final => read and is_initial => not same_idx => write
+        // - for every row: exactly one of is_initial, is_internal, is_final is on because we know at least one of them
+        //   is on, and we know each of them implies the other two are off
+        // - for every row: read => same_idx because not same_idx => write
         // - there is at most 1 is_initial per index block because every row is sent at most once from the inital page chip
         // - there is exactly 1 is_final per index block because every row is received at most once from the final page chip
         //   and we make sure that is_final is the last row in the block

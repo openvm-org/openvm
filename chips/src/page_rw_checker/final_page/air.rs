@@ -64,6 +64,8 @@ impl<AB: AirBuilder> SubAir<AB> for FinalPageAir {
     type IoView = [PageCols<AB::Var>; 2];
     type AuxView = FinalPageAuxCols<AB::Var>;
 
+    /// Ensuring the page is in the proper format: allocated rows come first
+    /// and are sorted by idx, which are distinct
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux_next: Self::AuxView) {
         let page_local = &io[0];
         let page_next = &io[1];

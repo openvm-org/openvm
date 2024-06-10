@@ -31,6 +31,7 @@ impl<T: Clone> IsLessThanTupleIOCols<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct IsLessThanTupleAuxCols<T> {
     pub less_than: Vec<T>,
     pub less_than_aux: Vec<IsLessThanAuxCols<T>>,

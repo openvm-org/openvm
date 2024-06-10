@@ -14,15 +14,15 @@ use crate::range_gate::RangeCheckerGateChip;
 use crate::sub_chip::LocalTraceInstructions;
 
 impl OfflineChecker {
-    // Each row in the trace follow the same order as the Cols struct:
-    // [is_initial, is_final, clk, page_row, op_type, same_idx, same_data, is_extra, is_equal_idx_aux, is_equal_data_aux]
-    //
-    // The trace consists of a row for every read/write operation plus some extra rows
-    // The trace is sorted by index (in page_row) and then by clk, so every index has a block of consective rows in the trace with the following structure
-    // If the index exists in the initial page, the block starts with a row of the initial data with is_initial=1
-    // Then, a row is added to the trace for every read/write operation with the corresponding data
-    // Then, a row is added with the final data for that index with is_final=1
-    // The trace is padded at the end to be of height trace_degree
+    /// Each row in the trace follow the same order as the Cols struct:
+    /// [is_initial, is_final, is_internal, clk, page_row, op_type, same_idx, same_data, lt_bit, is_extra, is_equal_idx_aux, is_equal_data_aux, lt_aux]
+    ///
+    /// The trace consists of a row for every read/write operation plus some extra rows
+    /// The trace is sorted by index (in page_row) and then by clk, so every index has a block of consective rows in the trace with the following structure
+    /// If the index exists in the initial page, the block starts with a row of the initial data with is_initial=1
+    /// Then, a row is added to the trace for every read/write operation with the corresponding data with is_internal=1
+    /// Then, a row is added with the final data for that index with is_final=1
+    /// The trace is padded at the end to be of height trace_degree
     pub fn generate_trace<SC: StarkGenericConfig>(
         &self,
         page: &mut Vec<Vec<u32>>,
@@ -64,6 +64,9 @@ impl OfflineChecker {
                 .collect::<Vec<Val<SC>>>()
         };
 
+        // This takes the information for the current row and references for the last row
+        // It uses those values to generate the new row in the trace, and it updates the references
+        // to the new row's information
         let gen_row = |is_first_row: &mut bool,
                        page: &mut Vec<Vec<u32>>,
                        idx: usize,
@@ -121,9 +124,6 @@ impl OfflineChecker {
                     range_checker.clone(),
                 ),
             );
-
-            // let same_idx = cur_idx == last_idx;
-            // let same_data = cur_data == last_data;
 
             let last_idx = conv_to_f(last_idx);
             let cur_idx = conv_to_f(cur_idx);
@@ -262,6 +262,19 @@ impl OfflineChecker {
                 &mut last_clk,
                 1,
             ));
+        }
+
+        tracing::debug!("Offline Checker trace by row: ");
+        for row in &rows {
+            let cols = OfflineCheckerCols::from_slice(
+                row,
+                self.page_width(),
+                self.idx_len,
+                self.data_len,
+                self.idx_clk_limb_bits.clone(),
+                self.idx_decomp,
+            );
+            tracing::debug!("{:?}", cols);
         }
 
         RowMajorMatrix::new(rows.concat(), self.air_width())

@@ -35,7 +35,7 @@ impl<F: PrimeField64> SubAirBridge<F> for FinalPageAir {
     }
 
     /// Receives page rows (idx, data) for every allocated row on page_bus
-    /// Receives all indices in rows tagged with is_internal on checker_final_bus
+    /// Receives all indices in rows tagged with is_in_ops on checker_final_bus
     fn receives(&self, col_indices: FinalPageCols<usize>) -> Vec<Interaction<F>> {
         let page_cols = col_indices
             .page_cols

@@ -12,7 +12,7 @@ use crate::{
 };
 
 impl FinalPageAir {
-    // The trace is the whole page (including the is_alloc column)
+    /// The trace is the whole page (including the is_alloc column)
     pub fn gen_page_trace<SC: StarkGenericConfig>(
         &self,
         page: Vec<Vec<u32>>,
@@ -32,6 +32,10 @@ impl FinalPageAir {
         )
     }
 
+    /// This generates the auxiliary trace required to ensure proper formating
+    /// of the page. Moreover, it generated the is_in_ops column, which is on
+    /// only when the index is in internal_indices and is allocated in the page
+    /// Here, internal_indices is a set of indices that appear in the operations
     pub fn gen_aux_trace<SC: StarkGenericConfig>(
         &self,
         page: Vec<Vec<u32>>,
@@ -41,8 +45,6 @@ impl FinalPageAir {
     where
         Val<SC>: PrimeField,
     {
-        println!("internal_indices: {:?}", internal_indices);
-
         let lt_chip = IsLessThanTupleAir::new(
             self.range_bus_index,
             1 << self.idx_limb_bits,
