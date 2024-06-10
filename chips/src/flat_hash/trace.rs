@@ -27,6 +27,19 @@ impl<const N: usize, const R: usize> FlatHashChip<N, R> {
 
         RowMajorMatrix::new(rows.concat(), self.get_width())
     }
+
+    // pub fn generate_chips_traces_pis<F: Field>(
+    //     &self,
+    //     x: Vec<Vec<F>>,
+    // ) -> (Vec<RowMajorMatrix<F>>, Vec<Vec<F>>) {
+    //     let num_hashes = self.page_width / self.hash_rate;
+    //     let mut chips = vec![];
+    //     let mut pis = vec![];
+    //     for _ in 0..num_hashes {
+    //         chips.push(self.clone());
+    //         pis.push(vec![F::zero(); self.hash_width]);
+    //     }
+    // }
 }
 
 // impl<F: Field> LocalTraceInstructions<F> for FlatHashChip {

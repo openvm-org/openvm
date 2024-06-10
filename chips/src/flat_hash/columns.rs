@@ -1,3 +1,4 @@
+use crate::flat_hash::FlatHashChip;
 use afs_derive::AlignedBorrow;
 
 pub const NUM_COLS: usize = 3;
@@ -99,23 +100,16 @@ impl<T: Clone> FlatHashCols<T> {
         }
     }
 
-    pub fn from_slice(
-        slice: &[T],
-        page_width: usize,
-        page_height: usize,
-        hash_width: usize,
-        hash_rate: usize,
-        digest_width: usize,
-    ) -> Self {
-        let (page, hashes) = slice.split_at(page_width);
+    pub fn from_slice(slice: &[T], chip: &FlatHashChip) -> Self {
+        let (page, hashes) = slice.split_at(chip.page_width);
         Self::new(
-            page_width,
-            page_height,
-            hash_width,
-            hash_rate,
+            chip.page_width,
+            chip.page_height,
+            chip.hash_width,
+            chip.hash_rate,
             page.to_vec(),
             hashes.to_vec(),
-            digest_width,
+            chip.digest_width,
         )
     }
 
