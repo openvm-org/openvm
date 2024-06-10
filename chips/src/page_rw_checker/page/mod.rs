@@ -3,13 +3,13 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-pub struct PageChip {
+pub struct PageAir {
     page_bus: usize,
     idx_len: usize,
     data_len: usize,
 }
 
-impl PageChip {
+impl PageAir {
     pub fn new(page_bus: usize, idx_len: usize, data_len: usize) -> Self {
         Self {
             page_bus,

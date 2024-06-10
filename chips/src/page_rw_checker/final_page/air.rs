@@ -5,28 +5,28 @@ use p3_matrix::Matrix;
 
 use super::{
     columns::{FinalPageAuxCols, FinalPageCols},
-    FinalPageChip,
+    FinalPageAir,
 };
 use crate::{
     is_less_than_tuple::{
         columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
         IsLessThanTupleAir,
     },
-    page_rw_checker::page_chip::columns::PageCols,
+    page_rw_checker::page::columns::PageCols,
     sub_chip::{AirConfig, SubAir},
 };
 
-impl<F: Field> BaseAir<F> for FinalPageChip {
+impl<F: Field> BaseAir<F> for FinalPageAir {
     fn width(&self) -> usize {
         self.air_width()
     }
 }
 
-impl AirConfig for FinalPageChip {
+impl AirConfig for FinalPageAir {
     type Cols<T> = FinalPageCols<T>;
 }
 
-impl<AB: PartitionedAirBuilder> Air<AB> for FinalPageChip
+impl<AB: PartitionedAirBuilder> Air<AB> for FinalPageAir
 where
     AB::M: Clone,
 {
@@ -60,7 +60,7 @@ where
     }
 }
 
-impl<AB: AirBuilder> SubAir<AB> for FinalPageChip {
+impl<AB: AirBuilder> SubAir<AB> for FinalPageAir {
     type IoView = [PageCols<AB::Var>; 2];
     type AuxView = FinalPageAuxCols<AB::Var>;
 

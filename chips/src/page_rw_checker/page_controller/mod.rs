@@ -7,7 +7,7 @@ use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_matrix::Matrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use super::{final_page_chip::FinalPageChip, offline_checker::OfflineChecker, page_chip::PageChip};
+use super::{final_page::FinalPageAir, offline_checker::OfflineChecker, page::PageAir};
 use crate::range_gate::RangeCheckerGateChip;
 
 #[derive(PartialEq, Clone, Debug)]
@@ -39,9 +39,9 @@ pub struct PageController<SC: StarkGenericConfig>
 where
     Val<SC>: AbstractField,
 {
-    pub init_chip: PageChip,
+    pub init_chip: PageAir,
     pub offline_checker: OfflineChecker,
-    pub final_chip: FinalPageChip,
+    pub final_chip: FinalPageAir,
 
     init_chip_trace: Option<DenseMatrix<Val<SC>>>,
     offline_checker_trace: Option<DenseMatrix<Val<SC>>>,
@@ -70,7 +70,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         Val<SC>: Field,
     {
         Self {
-            init_chip: PageChip::new(page_bus_index, idx_len, data_len),
+            init_chip: PageAir::new(page_bus_index, idx_len, data_len),
             offline_checker: OfflineChecker::new(
                 page_bus_index,
                 checker_final_bus_index,
@@ -82,7 +82,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
                 Val::<SC>::bits() - 1,
                 idx_decomp,
             ),
-            final_chip: FinalPageChip::new(
+            final_chip: FinalPageAir::new(
                 page_bus_index,
                 checker_final_bus_index,
                 range_bus_index,
@@ -170,7 +170,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         let range_bus_index = self.offline_checker.range_bus_index;
         let ops_bus_index = self.offline_checker.ops_bus_index;
 
-        self.init_chip = PageChip::new(page_bus_index, idx_len, data_len);
+        self.init_chip = PageAir::new(page_bus_index, idx_len, data_len);
         self.init_chip_trace = Some(self.get_page_trace(page.clone()));
 
         self.offline_checker = OfflineChecker::new(
@@ -193,7 +193,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         // HashSet of all indices used in operations
         let internal_indices = ops.iter().map(|op| op.idx.clone()).collect();
 
-        self.final_chip = FinalPageChip::new(
+        self.final_chip = FinalPageAir::new(
             page_bus_index,
             checker_final_bus_index,
             range_bus_index,

@@ -2,9 +2,9 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use super::PageChip;
+use super::PageAir;
 
-impl PageChip {
+impl PageAir {
     // The trace is the whole page (including the is_alloc column)
     pub fn generate_trace<SC: StarkGenericConfig>(
         &self,

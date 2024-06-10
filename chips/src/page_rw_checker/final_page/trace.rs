@@ -4,14 +4,14 @@ use p3_field::{AbstractField, PrimeField};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use super::{columns::FinalPageAuxCols, FinalPageChip};
+use super::{columns::FinalPageAuxCols, FinalPageAir};
 use crate::{
     is_less_than_tuple::{columns::IsLessThanTupleCols, IsLessThanTupleAir},
     range_gate::RangeCheckerGateChip,
     sub_chip::LocalTraceInstructions,
 };
 
-impl FinalPageChip {
+impl FinalPageAir {
     // The trace is the whole page (including the is_alloc column)
     pub fn gen_page_trace<SC: StarkGenericConfig>(
         &self,

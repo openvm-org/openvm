@@ -1,8 +1,7 @@
 use std::iter;
 
 use crate::{
-    is_less_than_tuple::columns::IsLessThanTupleAuxCols,
-    page_rw_checker::page_chip::columns::PageCols,
+    is_less_than_tuple::columns::IsLessThanTupleAuxCols, page_rw_checker::page::columns::PageCols,
 };
 
 pub struct FinalPageCols<T> {

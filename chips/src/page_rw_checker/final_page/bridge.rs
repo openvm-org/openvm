@@ -2,7 +2,7 @@ use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
-use super::{columns::FinalPageCols, FinalPageChip};
+use super::{columns::FinalPageCols, FinalPageAir};
 use crate::{
     is_less_than_tuple::{
         columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
@@ -11,7 +11,7 @@ use crate::{
     sub_chip::SubAirBridge,
 };
 
-impl<F: PrimeField64> SubAirBridge<F> for FinalPageChip {
+impl<F: PrimeField64> SubAirBridge<F> for FinalPageAir {
     /// Sends interactions required by IsLessThanTuple SubAir
     fn sends(&self, col_indices: FinalPageCols<usize>) -> Vec<Interaction<F>> {
         let lt_air = IsLessThanTupleAir::new(
@@ -68,7 +68,7 @@ impl<F: PrimeField64> SubAirBridge<F> for FinalPageChip {
     }
 }
 
-impl<F: PrimeField64> AirBridge<F> for FinalPageChip {
+impl<F: PrimeField64> AirBridge<F> for FinalPageAir {
     fn sends(&self) -> Vec<Interaction<F>> {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();

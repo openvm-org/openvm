@@ -26,7 +26,7 @@ type Val = BabyBear;
 fn test_single_page(
     engine: &BabyBearPoseidon2Engine,
     page: Vec<Vec<u32>>,
-    final_page_chip: &super::FinalPageChip,
+    final_page_chip: &super::FinalPageAir,
     range_checker: Arc<RangeCheckerGateChip>,
     page_sender: &DummyInteractionAir,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
@@ -97,7 +97,7 @@ fn final_page_chip_test() {
     let checker_final_bus_index = 1;
     let sorted_bus_index = 2;
 
-    use super::FinalPageChip;
+    use super::FinalPageAir;
 
     let log_page_height = 3;
 
@@ -141,7 +141,7 @@ fn final_page_chip_test() {
         })
         .collect();
 
-    let final_page_chip = FinalPageChip::new(
+    let final_page_chip = FinalPageAir::new(
         page_bus_index,
         checker_final_bus_index,
         sorted_bus_index,

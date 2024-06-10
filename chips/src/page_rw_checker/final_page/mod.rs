@@ -8,7 +8,7 @@ pub mod trace;
 #[cfg(test)]
 pub mod tests;
 
-pub struct FinalPageChip {
+pub struct FinalPageAir {
     page_bus_index: usize,
     checker_final_bus_index: usize,
     pub range_bus_index: usize,
@@ -20,7 +20,7 @@ pub struct FinalPageChip {
     idx_decomp: usize,
 }
 
-impl FinalPageChip {
+impl FinalPageAir {
     pub fn new(
         page_bus_index: usize,
         checker_final_bus_index: usize,
