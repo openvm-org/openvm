@@ -1,8 +1,5 @@
-use std::error::Error;
-
-use alloy_primitives::{FixedBytes, U32, U64};
-
 use crate::mock_db::utils::string_to_fixed_bytes_be;
+use std::error::Error;
 
 use super::Table;
 

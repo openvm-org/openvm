@@ -11,16 +11,22 @@ use crate::{
 };
 use alloy_primitives::wrap_fixed_bytes;
 use color_eyre::eyre::{eyre, Result};
-use num_traits::ToBytes;
+use num_traits::{FromBytes, ToBytes};
 
 pub const MAX_OPS: usize = 128;
 
 wrap_fixed_bytes!(pub struct TableId<32>;);
 
-pub struct Table<T, U, const INDEX_BYTES: usize, const DATA_BYTES: usize>
-where
-    T: ToBytes + Hash + Eq + PartialEq + Clone + for<'a> TryFrom<&'a [u8], Error = Box<dyn Error>>,
-    U: ToBytes + Clone + for<'a> TryFrom<&'a [u8], Error = Box<dyn Error>>,
+pub struct Table<
+    T,
+    U,
+    const SIZE_T: usize,
+    const SIZE_U: usize,
+    const INDEX_BYTES: usize,
+    const DATA_BYTES: usize,
+> where
+    T: ToBytes + FromBytes<Bytes = [u8; SIZE_T]> + Sized + Hash + Eq + PartialEq + Clone,
+    U: ToBytes + FromBytes<Bytes = [u8; SIZE_U]> + Sized + Clone,
 {
     pub id: TableId,
     // pub rows: Vec<TableRow<T, U, E>>,
@@ -28,11 +34,21 @@ where
     // pub db_ref: &'a MockDb<INDEX_BYTES, DATA_BYTES>,
 }
 
-impl<T, U, const INDEX_BYTES: usize, const DATA_BYTES: usize> Table<T, U, INDEX_BYTES, DATA_BYTES>
+impl<
+        T,
+        U,
+        const SIZE_T: usize,
+        const SIZE_U: usize,
+        const INDEX_BYTES: usize,
+        const DATA_BYTES: usize,
+    > Table<T, U, SIZE_T, SIZE_U, INDEX_BYTES, DATA_BYTES>
 where
-    T: ToBytes + Hash + Eq + PartialEq + Clone + for<'a> TryFrom<&'a [u8], Error = Box<dyn Error>>,
-    U: ToBytes + Clone + for<'a> TryFrom<&'a [u8], Error = Box<dyn Error>>,
+    T: ToBytes + FromBytes<Bytes = [u8; SIZE_T]> + Sized + Hash + Eq + PartialEq + Clone,
+    U: ToBytes + FromBytes<Bytes = [u8; SIZE_U]> + Sized + Clone,
 {
+    const SIZE_T: usize = std::mem::size_of::<T>();
+    const SIZE_U: usize = std::mem::size_of::<U>();
+
     pub fn new() -> Self {
         Self {
             id: TableId::random(),
@@ -47,10 +63,9 @@ where
             .items
             .iter()
             .map(|(k, v)| {
-                let index =
-                    FixedBytesCodec::<T, U, INDEX_BYTES, DATA_BYTES>::fixed_bytes_to_index(*k);
-                let data =
-                    FixedBytesCodec::<T, U, INDEX_BYTES, DATA_BYTES>::fixed_bytes_to_data(*v);
+                let codec = FixedBytesCodec::<T, U, SIZE_T, SIZE_U>::new(INDEX_BYTES, DATA_BYTES);
+                let index = codec.fixed_bytes_to_index(k.to_vec());
+                let data = codec.fixed_bytes_to_data(v.to_vec());
                 (index, data)
             })
             .collect::<HashMap<T, U>>();
@@ -168,11 +183,17 @@ where
     // }
 }
 
-impl<T, U, const INDEX_BYTES: usize, const DATA_BYTES: usize> Default
-    for Table<T, U, INDEX_BYTES, DATA_BYTES>
+impl<
+        T,
+        U,
+        const SIZE_T: usize,
+        const SIZE_U: usize,
+        const INDEX_BYTES: usize,
+        const DATA_BYTES: usize,
+    > Default for Table<T, U, SIZE_T, SIZE_U, INDEX_BYTES, DATA_BYTES>
 where
-    T: ToBytes + Hash + Eq + PartialEq + Clone + for<'a> TryFrom<&'a [u8], Error = Box<dyn Error>>,
-    U: ToBytes + Clone + for<'a> TryFrom<&'a [u8], Error = Box<dyn Error>>,
+    T: ToBytes + FromBytes<Bytes = [u8; SIZE_T]> + Sized + Hash + Eq + PartialEq + Clone,
+    U: ToBytes + FromBytes<Bytes = [u8; SIZE_U]> + Sized + Clone,
 {
     fn default() -> Self {
         Self::new()

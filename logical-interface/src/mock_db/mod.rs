@@ -2,7 +2,7 @@ pub mod utils;
 
 use crate::table::TableId;
 use alloy_primitives::FixedBytes;
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{eyre, Result};
 use std::collections::HashMap;
 
 pub struct MockDb<const INDEX_BYTES: usize, const DATA_BYTES: usize> {
@@ -42,53 +42,77 @@ impl<const INDEX_BYTES: usize, const DATA_BYTES: usize> MockDb<INDEX_BYTES, DATA
     //     Self { map }
     // }
 
-    pub fn get_table(&mut self, table_id: TableId) -> &MockDbTable<INDEX_BYTES, DATA_BYTES> {
-        self.tables.entry(table_id).or_insert_with(|| MockDbTable {
-            id: table_id,
-            items: HashMap::new(),
-        })
+    pub fn get_table(&self, table_id: TableId) -> Option<&MockDbTable<INDEX_BYTES, DATA_BYTES>> {
+        self.tables.get(&table_id)
     }
 
-    pub fn insert_table(&mut self, table_id: TableId) {
+    pub fn create_table(
+        &mut self,
+        table_id: TableId,
+    ) -> Option<MockDbTable<INDEX_BYTES, DATA_BYTES>> {
         if self.tables.contains_key(&table_id) {
-            return;
+            return None;
         }
-        self.tables.insert(
+        let table = self.tables.insert(
             table_id,
             MockDbTable {
                 id: table_id,
                 items: HashMap::new(),
             },
-        );
+        )?;
+        Some(table)
     }
 
-    pub fn get_data(
-        &self,
-        table_id: TableId,
-        key: FixedBytes<INDEX_BYTES>,
-    ) -> Option<&FixedBytes<DATA_BYTES>> {
-        let tables = self.tables.get(&table_id).unwrap();
-        tables.items.get(&key)
+    pub fn get_data(&self, table_id: TableId, key: Vec<u8>) -> Option<Vec<u8>> {
+        let table = self.get_table(table_id)?;
+        let index = FixedBytes::<INDEX_BYTES>::from_slice(key.as_slice());
+        let value = table.items.get(&index)?;
+        Some(value.to_vec())
     }
 
-    pub fn insert_data(
-        &mut self,
-        table_id: TableId,
-        key: FixedBytes<INDEX_BYTES>,
-        value: FixedBytes<DATA_BYTES>,
-    ) -> Result<()> {
-        let tables = self.tables.get_mut(&table_id).unwrap();
-        tables.items.insert(key, value).unwrap();
-        Ok(())
+    pub fn insert_data(&mut self, table_id: TableId, key: Vec<u8>, value: Vec<u8>) -> Option<()> {
+        let mut table = self.tables.get_mut(&table_id);
+        if table.is_none() {
+            self.create_table(table_id)?;
+            table = self.tables.get_mut(&table_id);
+        }
+        let table = table?;
+        let index = FixedBytes::<INDEX_BYTES>::from_slice(key.as_slice());
+        if table.items.contains_key(&index) {
+            None
+        } else {
+            let value = FixedBytes::<DATA_BYTES>::from_slice(value.as_slice());
+            table.items.insert(index, value).unwrap();
+            Some(())
+        }
     }
 
-    pub fn remove_data(
-        &mut self,
-        table_id: TableId,
-        key: FixedBytes<INDEX_BYTES>,
-    ) -> Option<FixedBytes<DATA_BYTES>> {
-        let tables = self.tables.get_mut(&table_id).unwrap();
-        tables.items.remove(&key)
+    pub fn write_data(&mut self, table_id: TableId, key: Vec<u8>, value: Vec<u8>) -> Option<()> {
+        let mut table = self.tables.get_mut(&table_id);
+        if table.is_none() {
+            self.create_table(table_id)?;
+            table = self.tables.get_mut(&table_id);
+        }
+        let table = table?;
+        let index = FixedBytes::<INDEX_BYTES>::from_slice(key.as_slice());
+        if !table.items.contains_key(&index) {
+            None
+        } else {
+            let value = FixedBytes::<DATA_BYTES>::from_slice(value.as_slice());
+            table.items.insert(index, value).unwrap();
+            Some(())
+        }
+    }
+
+    pub fn remove_data(&mut self, table_id: TableId, key: Vec<u8>) -> Option<()> {
+        let table = self.tables.get_mut(&table_id)?;
+        let index = FixedBytes::<INDEX_BYTES>::from_slice(key.as_slice());
+        let removed = table.items.remove(&index);
+        if removed.is_none() {
+            return None;
+        } else {
+            Some(())
+        }
     }
 }
 
