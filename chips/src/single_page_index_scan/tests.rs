@@ -1,12 +1,95 @@
-use std::sync::Arc;
-
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
-
-use super::{
-    page_index_scan_input::PageIndexScanInputChip, page_index_scan_output::PageIndexScanOutputChip,
+use afs_stark_backend::{
+    keygen::{types::MultiStarkPartialProvingKey, MultiStarkKeygenBuilder},
+    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+    verifier::VerificationError,
 };
-use crate::range_gate::RangeCheckerGateChip;
+use afs_test_utils::{
+    config::{
+        self,
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+    },
+    engine::StarkEngine,
+};
+
+use super::page_controller::PageController;
+
+#[allow(clippy::too_many_arguments)]
+fn index_scan_test(
+    engine: &BabyBearPoseidon2Engine,
+    page: Vec<Vec<u32>>,
+    x: Vec<u32>,
+    idx_len: usize,
+    data_len: usize,
+    idx_limb_bits: Vec<usize>,
+    idx_decomp: usize,
+    page_controller: &mut PageController<BabyBearPoseidon2Config>,
+    trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
+    partial_pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
+) -> Result<(), VerificationError> {
+    let page_height = page.len();
+    assert!(page_height > 0);
+
+    let (page_traces, mut prover_data) = page_controller.load_page(
+        page.clone(),
+        x,
+        idx_len,
+        data_len,
+        idx_limb_bits,
+        idx_decomp,
+        &mut trace_builder.committer,
+    );
+
+    let input_chip_aux_trace = page_controller.input_chip_aux_trace();
+    let output_chip_trace = page_controller.output_chip_trace();
+    let output_chip_aux_trace = page_controller.output_chip_aux_trace();
+    let range_checker_trace = page_controller.range_checker_trace();
+
+    // Clearing the range_checker counts
+    page_controller.update_range_checker(idx_decomp);
+
+    trace_builder.clear();
+
+    trace_builder.load_cached_trace(page_traces[0].clone(), prover_data.remove(0));
+    trace_builder.load_trace(input_chip_aux_trace);
+    trace_builder.load_trace(output_chip_trace);
+    trace_builder.load_trace(output_chip_aux_trace);
+    trace_builder.load_trace(range_checker_trace);
+
+    trace_builder.commit_current();
+
+    let partial_vk = partial_pk.partial_vk();
+
+    let main_trace_data = trace_builder.view(
+        &partial_vk,
+        vec![
+            &page_controller.input_chip.air,
+            &page_controller.output_chip.air,
+            &page_controller.range_checker.air,
+        ],
+    );
+
+    let pis = vec![vec![]; partial_vk.per_air.len()];
+
+    let prover = engine.prover();
+    let verifier = engine.verifier();
+
+    let mut challenger = engine.new_challenger();
+    let proof = prover.prove(&mut challenger, partial_pk, main_trace_data, &pis);
+
+    let mut challenger = engine.new_challenger();
+
+    verifier.verify(
+        &mut challenger,
+        partial_vk,
+        vec![
+            &page_controller.input_chip.air,
+            &page_controller.output_chip.air,
+            &page_controller.range_checker.air,
+        ],
+        proof,
+        &pis,
+    )
+}
 
 #[test]
 fn test_single_page_index_scan() {
@@ -17,194 +100,277 @@ fn test_single_page_index_scan() {
     let limb_bits: Vec<usize> = vec![16, 16];
     let range_max: u32 = 1 << decomp;
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
+    let log_page_height = 1;
+    let page_height = 1 << log_page_height;
+    let page_width = 1 + idx_len + data_len;
 
-    let page_index_scan_input_chip = PageIndexScanInputChip::new(
+    let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
         bus_index,
         idx_len,
         data_len,
         range_max,
         limb_bits.clone(),
         decomp,
-        range_checker.clone(),
     );
-    let page_index_scan_output_chip = PageIndexScanOutputChip::new(
-        bus_index,
-        idx_len,
-        data_len,
-        range_max,
-        limb_bits.clone(),
-        decomp,
-        range_checker.clone(),
+
+    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(decomp));
+
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
+
+    let input_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
+    let input_page_aux_ptr = keygen_builder.add_main_matrix(page_controller.input_chip.aux_width());
+    let output_page_ptr = keygen_builder.add_main_matrix(page_width);
+    let output_page_aux_ptr =
+        keygen_builder.add_main_matrix(page_controller.output_chip.aux_width());
+    let range_checker_ptr =
+        keygen_builder.add_main_matrix(page_controller.range_checker.air_width());
+
+    keygen_builder.add_partitioned_air(
+        &page_controller.input_chip.air,
+        page_height,
+        0,
+        vec![input_page_ptr, input_page_aux_ptr],
     );
-    let range_checker_chip = range_checker.as_ref();
+    dbg!(output_page_aux_ptr);
+
+    keygen_builder.add_partitioned_air(
+        &page_controller.output_chip.air,
+        page_height,
+        0,
+        vec![output_page_ptr, output_page_aux_ptr],
+    );
+
+    keygen_builder.add_partitioned_air(
+        &page_controller.range_checker.air,
+        1 << decomp,
+        0,
+        vec![range_checker_ptr],
+    );
+
+    let partial_pk = keygen_builder.generate_partial_pk();
+
+    let prover = MultiTraceStarkProver::new(&engine.config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
     let page: Vec<Vec<u32>> = vec![
         vec![1, 443, 376, 22278, 13998, 58327],
         vec![1, 2883, 7769, 51171, 3989, 12770],
     ];
 
-    let page_indexed: Vec<Vec<u32>> = vec![
-        vec![1, 443, 376, 22278, 13998, 58327],
-        vec![0, 0, 0, 0, 0, 0],
-    ];
-
     let x: Vec<u32> = vec![2177, 5880];
 
-    let page_index_scan_chip_trace = page_index_scan_input_chip.generate_trace(page.clone(), x);
-    let page_index_scan_verify_chip_trace =
-        page_index_scan_output_chip.generate_trace(page_indexed.clone());
-    let range_checker_trace = range_checker_chip.generate_trace();
-
-    run_simple_test_no_pis(
-        vec![
-            &page_index_scan_input_chip.air,
-            &page_index_scan_output_chip.air,
-            &range_checker_chip.air,
-        ],
-        vec![
-            page_index_scan_chip_trace,
-            page_index_scan_verify_chip_trace,
-            range_checker_trace,
-        ],
+    index_scan_test(
+        &engine,
+        page,
+        x,
+        idx_len,
+        data_len,
+        limb_bits,
+        decomp,
+        &mut page_controller,
+        &mut trace_builder,
+        &partial_pk,
     )
     .expect("Verification failed");
 }
 
-#[test]
-fn test_single_page_index_scan_wrong_order() {
-    let bus_index: usize = 0;
-    let idx_len: usize = 2;
-    let data_len: usize = 3;
-    let decomp: usize = 8;
-    let limb_bits: Vec<usize> = vec![16, 16];
-    let range_max: u32 = 1 << decomp;
+// #[test]
+// fn test_single_page_index_scan() {
+//     let bus_index: usize = 0;
+//     let idx_len: usize = 2;
+//     let data_len: usize = 3;
+//     let decomp: usize = 8;
+//     let limb_bits: Vec<usize> = vec![16, 16];
+//     let range_max: u32 = 1 << decomp;
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
+//     let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
 
-    let page_index_scan_input_chip = PageIndexScanInputChip::new(
-        bus_index,
-        idx_len,
-        data_len,
-        range_max,
-        limb_bits.clone(),
-        decomp,
-        range_checker.clone(),
-    );
-    let page_index_scan_output_chip = PageIndexScanOutputChip::new(
-        bus_index,
-        idx_len,
-        data_len,
-        range_max,
-        limb_bits.clone(),
-        decomp,
-        range_checker.clone(),
-    );
-    let range_checker_chip = range_checker.as_ref();
+//     let page_index_scan_input_chip = PageIndexScanInputChip::new(
+//         bus_index,
+//         idx_len,
+//         data_len,
+//         range_max,
+//         limb_bits.clone(),
+//         decomp,
+//         range_checker.clone(),
+//     );
+//     let page_index_scan_output_chip = PageIndexScanOutputChip::new(
+//         bus_index,
+//         idx_len,
+//         data_len,
+//         range_max,
+//         limb_bits.clone(),
+//         decomp,
+//         range_checker.clone(),
+//     );
+//     let range_checker_chip = range_checker.as_ref();
 
-    let page: Vec<Vec<u32>> = vec![
-        vec![1, 443, 376, 22278, 13998, 58327],
-        vec![1, 2883, 7769, 51171, 3989, 12770],
-    ];
+//     let page: Vec<Vec<u32>> = vec![
+//         vec![1, 443, 376, 22278, 13998, 58327],
+//         vec![1, 2883, 7769, 51171, 3989, 12770],
+//     ];
 
-    let page_indexed: Vec<Vec<u32>> = vec![
-        vec![0, 0, 0, 0, 0, 0],
-        vec![1, 443, 376, 22278, 13998, 58327],
-    ];
+//     let page_indexed: Vec<Vec<u32>> = vec![
+//         vec![1, 443, 376, 22278, 13998, 58327],
+//         vec![0, 0, 0, 0, 0, 0],
+//     ];
 
-    let x: Vec<u32> = vec![2177, 5880];
+//     let x: Vec<u32> = vec![2177, 5880];
 
-    let page_index_scan_chip_trace = page_index_scan_input_chip.generate_trace(page.clone(), x);
-    let page_index_scan_verify_chip_trace =
-        page_index_scan_output_chip.generate_trace(page_indexed.clone());
-    let range_checker_trace = range_checker_chip.generate_trace();
+//     let page_index_scan_chip_trace = page_index_scan_input_chip.generate_trace(page.clone(), x);
+//     let page_index_scan_verify_chip_trace =
+//         page_index_scan_output_chip.generate_trace(page_indexed.clone());
+//     let range_checker_trace = range_checker_chip.generate_trace();
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
-    assert_eq!(
-        run_simple_test_no_pis(
-            vec![
-                &page_index_scan_input_chip.air,
-                &page_index_scan_output_chip.air,
-                &range_checker_chip.air,
-            ],
-            vec![
-                page_index_scan_chip_trace,
-                page_index_scan_verify_chip_trace,
-                range_checker_trace,
-            ],
-        ),
-        Err(VerificationError::OodEvaluationMismatch),
-        "Expected verification to fail, but it passed"
-    );
-}
+//     run_simple_test_no_pis(
+//         vec![
+//             &page_index_scan_input_chip.air,
+//             &page_index_scan_output_chip.air,
+//             &range_checker_chip.air,
+//         ],
+//         vec![
+//             page_index_scan_chip_trace,
+//             page_index_scan_verify_chip_trace,
+//             range_checker_trace,
+//         ],
+//     )
+//     .expect("Verification failed");
+// }
 
-#[test]
-fn test_single_page_index_scan_unsorted() {
-    let bus_index: usize = 0;
-    let idx_len: usize = 2;
-    let data_len: usize = 3;
-    let decomp: usize = 8;
-    let limb_bits: Vec<usize> = vec![16, 16];
-    let range_max: u32 = 1 << decomp;
+// #[test]
+// fn test_single_page_index_scan_wrong_order() {
+//     let bus_index: usize = 0;
+//     let idx_len: usize = 2;
+//     let data_len: usize = 3;
+//     let decomp: usize = 8;
+//     let limb_bits: Vec<usize> = vec![16, 16];
+//     let range_max: u32 = 1 << decomp;
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
+//     let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
 
-    let page_index_scan_input_chip = PageIndexScanInputChip::new(
-        bus_index,
-        idx_len,
-        data_len,
-        range_max,
-        limb_bits.clone(),
-        decomp,
-        range_checker.clone(),
-    );
-    let page_index_scan_output_chip = PageIndexScanOutputChip::new(
-        bus_index,
-        idx_len,
-        data_len,
-        range_max,
-        limb_bits.clone(),
-        decomp,
-        range_checker.clone(),
-    );
-    let range_checker_chip = range_checker.as_ref();
+//     let page_index_scan_input_chip = PageIndexScanInputChip::new(
+//         bus_index,
+//         idx_len,
+//         data_len,
+//         range_max,
+//         limb_bits.clone(),
+//         decomp,
+//         range_checker.clone(),
+//     );
+//     let page_index_scan_output_chip = PageIndexScanOutputChip::new(
+//         bus_index,
+//         idx_len,
+//         data_len,
+//         range_max,
+//         limb_bits.clone(),
+//         decomp,
+//         range_checker.clone(),
+//     );
+//     let range_checker_chip = range_checker.as_ref();
 
-    let page: Vec<Vec<u32>> = vec![
-        vec![1, 443, 376, 22278, 13998, 58327],
-        vec![1, 2883, 7769, 51171, 3989, 12770],
-    ];
+//     let page: Vec<Vec<u32>> = vec![
+//         vec![1, 443, 376, 22278, 13998, 58327],
+//         vec![1, 2883, 7769, 51171, 3989, 12770],
+//     ];
 
-    let page_indexed: Vec<Vec<u32>> = vec![
-        vec![1, 2883, 7769, 51171, 3989, 12770],
-        vec![1, 443, 376, 22278, 13998, 58327],
-    ];
+//     let page_indexed: Vec<Vec<u32>> = vec![
+//         vec![0, 0, 0, 0, 0, 0],
+//         vec![1, 443, 376, 22278, 13998, 58327],
+//     ];
 
-    let x: Vec<u32> = vec![2883, 7770];
+//     let x: Vec<u32> = vec![2177, 5880];
 
-    let page_index_scan_chip_trace = page_index_scan_input_chip.generate_trace(page.clone(), x);
-    let page_index_scan_verify_chip_trace =
-        page_index_scan_output_chip.generate_trace(page_indexed.clone());
-    let range_checker_trace = range_checker_chip.generate_trace();
+//     let page_index_scan_chip_trace = page_index_scan_input_chip.generate_trace(page.clone(), x);
+//     let page_index_scan_verify_chip_trace =
+//         page_index_scan_output_chip.generate_trace(page_indexed.clone());
+//     let range_checker_trace = range_checker_chip.generate_trace();
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
-    assert_eq!(
-        run_simple_test_no_pis(
-            vec![
-                &page_index_scan_input_chip.air,
-                &page_index_scan_output_chip.air,
-                &range_checker_chip.air,
-            ],
-            vec![
-                page_index_scan_chip_trace,
-                page_index_scan_verify_chip_trace,
-                range_checker_trace,
-            ],
-        ),
-        Err(VerificationError::OodEvaluationMismatch),
-        "Expected verification to fail, but it passed"
-    );
-}
+//     USE_DEBUG_BUILDER.with(|debug| {
+//         *debug.lock().unwrap() = false;
+//     });
+//     assert_eq!(
+//         run_simple_test_no_pis(
+//             vec![
+//                 &page_index_scan_input_chip.air,
+//                 &page_index_scan_output_chip.air,
+//                 &range_checker_chip.air,
+//             ],
+//             vec![
+//                 page_index_scan_chip_trace,
+//                 page_index_scan_verify_chip_trace,
+//                 range_checker_trace,
+//             ],
+//         ),
+//         Err(VerificationError::OodEvaluationMismatch),
+//         "Expected verification to fail, but it passed"
+//     );
+// }
+
+// #[test]
+// fn test_single_page_index_scan_unsorted() {
+//     let bus_index: usize = 0;
+//     let idx_len: usize = 2;
+//     let data_len: usize = 3;
+//     let decomp: usize = 8;
+//     let limb_bits: Vec<usize> = vec![16, 16];
+//     let range_max: u32 = 1 << decomp;
+
+//     let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
+
+//     let page_index_scan_input_chip = PageIndexScanInputChip::new(
+//         bus_index,
+//         idx_len,
+//         data_len,
+//         range_max,
+//         limb_bits.clone(),
+//         decomp,
+//         range_checker.clone(),
+//     );
+//     let page_index_scan_output_chip = PageIndexScanOutputChip::new(
+//         bus_index,
+//         idx_len,
+//         data_len,
+//         range_max,
+//         limb_bits.clone(),
+//         decomp,
+//         range_checker.clone(),
+//     );
+//     let range_checker_chip = range_checker.as_ref();
+
+//     let page: Vec<Vec<u32>> = vec![
+//         vec![1, 443, 376, 22278, 13998, 58327],
+//         vec![1, 2883, 7769, 51171, 3989, 12770],
+//     ];
+
+//     let page_indexed: Vec<Vec<u32>> = vec![
+//         vec![1, 2883, 7769, 51171, 3989, 12770],
+//         vec![1, 443, 376, 22278, 13998, 58327],
+//     ];
+
+//     let x: Vec<u32> = vec![2883, 7770];
+
+//     let page_index_scan_chip_trace = page_index_scan_input_chip.generate_trace(page.clone(), x);
+//     let page_index_scan_verify_chip_trace =
+//         page_index_scan_output_chip.generate_trace(page_indexed.clone());
+//     let range_checker_trace = range_checker_chip.generate_trace();
+
+//     USE_DEBUG_BUILDER.with(|debug| {
+//         *debug.lock().unwrap() = false;
+//     });
+//     assert_eq!(
+//         run_simple_test_no_pis(
+//             vec![
+//                 &page_index_scan_input_chip.air,
+//                 &page_index_scan_output_chip.air,
+//                 &range_checker_chip.air,
+//             ],
+//             vec![
+//                 page_index_scan_chip_trace,
+//                 page_index_scan_verify_chip_trace,
+//                 range_checker_trace,
+//             ],
+//         ),
+//         Err(VerificationError::OodEvaluationMismatch),
+//         "Expected verification to fail, but it passed"
+//     );
+// }

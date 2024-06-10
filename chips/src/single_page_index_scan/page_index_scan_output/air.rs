@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 
+use afs_stark_backend::air_builders::PartitionedAirBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -26,14 +27,35 @@ impl<F: Field> BaseAir<F> for PageIndexScanOutputAir {
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for PageIndexScanOutputAir {
+impl<AB: PartitionedAirBuilder> Air<AB> for PageIndexScanOutputAir
+where
+    AB::M: Clone,
+{
     fn eval(&self, builder: &mut AB) {
-        let main = builder.main();
+        let page_main = &builder.partitioned_main()[0].clone();
+        let aux_main = &builder.partitioned_main()[1].clone();
 
         // get the current row and the next row
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
-        let local: &[AB::Var] = (*local).borrow();
-        let next: &[AB::Var] = (*next).borrow();
+        let (local_page, next_page) = (page_main.row_slice(0), page_main.row_slice(1));
+        let local_page: &[AB::Var] = (*local_page).borrow();
+        let next_page: &[AB::Var] = (*next_page).borrow();
+
+        let (local_aux, next_aux) = (aux_main.row_slice(0), aux_main.row_slice(1));
+        let local_aux: &[AB::Var] = (*local_aux).borrow();
+        let next_aux: &[AB::Var] = (*next_aux).borrow();
+
+        let local_vec = local_page
+            .iter()
+            .chain(local_aux.iter())
+            .cloned()
+            .collect::<Vec<AB::Var>>();
+        let local = local_vec.as_slice();
+        let next_vec = next_page
+            .iter()
+            .chain(next_aux.iter())
+            .cloned()
+            .collect::<Vec<AB::Var>>();
+        let next = next_vec.as_slice();
 
         let local_cols = PageIndexScanOutputCols::<AB::Var>::from_slice(
             local,

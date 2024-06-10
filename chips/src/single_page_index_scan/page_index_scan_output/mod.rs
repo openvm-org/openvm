@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use getset::Getters;
 
-use crate::{is_less_than_tuple::IsLessThanTupleAir, range_gate::RangeCheckerGateChip};
+use crate::{
+    is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
+    range_gate::RangeCheckerGateChip,
+};
 
 pub mod air;
 pub mod bridge;
@@ -40,7 +43,7 @@ impl PageIndexScanOutputChip {
         idx_len: usize,
         data_len: usize,
         range_max: u32,
-        limb_bits: Vec<usize>,
+        idx_limb_bits: Vec<usize>,
         decomp: usize,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
@@ -50,10 +53,29 @@ impl PageIndexScanOutputChip {
                 idx_len,
                 data_len,
                 is_less_than_tuple_air: IsLessThanTupleAir::new(
-                    bus_index, range_max, limb_bits, decomp,
+                    bus_index,
+                    range_max,
+                    idx_limb_bits,
+                    decomp,
                 ),
             },
             range_checker,
         }
+    }
+
+    pub fn page_width(&self) -> usize {
+        1 + self.air.idx_len + self.air.data_len
+    }
+
+    pub fn aux_width(&self) -> usize {
+        1 + IsLessThanTupleAuxCols::<usize>::get_width(
+            self.air.is_less_than_tuple_air().limb_bits(),
+            self.air.is_less_than_tuple_air().decomp(),
+            self.air.idx_len,
+        )
+    }
+
+    pub fn air_width(&self) -> usize {
+        self.page_width() + self.aux_width()
     }
 }

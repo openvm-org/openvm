@@ -17,7 +17,7 @@ impl<T: Clone> PageIndexScanInputCols<T> {
         slc: &[T],
         idx_len: usize,
         data_len: usize,
-        limb_bits: Vec<usize>,
+        idx_limb_bits: Vec<usize>,
         decomp: usize,
     ) -> Self {
         Self {
@@ -29,7 +29,7 @@ impl<T: Clone> PageIndexScanInputCols<T> {
             send_row: slc[2 * idx_len + data_len + 2].clone(),
             is_less_than_tuple_aux: IsLessThanTupleAuxCols::from_slice(
                 &slc[2 * idx_len + data_len + 3..],
-                limb_bits,
+                idx_limb_bits,
                 decomp,
                 idx_len,
             ),
@@ -39,7 +39,7 @@ impl<T: Clone> PageIndexScanInputCols<T> {
     pub fn get_width(
         idx_len: usize,
         data_len: usize,
-        limb_bits: Vec<usize>,
+        idx_limb_bits: Vec<usize>,
         decomp: usize,
     ) -> usize {
         1 + idx_len
@@ -47,6 +47,6 @@ impl<T: Clone> PageIndexScanInputCols<T> {
             + idx_len
             + 1
             + 1
-            + IsLessThanTupleAuxCols::<T>::get_width(limb_bits, decomp, idx_len)
+            + IsLessThanTupleAuxCols::<T>::get_width(idx_limb_bits, decomp, idx_len)
     }
 }

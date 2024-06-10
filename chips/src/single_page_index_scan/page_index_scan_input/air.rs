@@ -1,6 +1,5 @@
-use std::borrow::Borrow;
-
-use p3_air::{Air, AirBuilder, BaseAir};
+use afs_stark_backend::air_builders::PartitionedAirBuilder;
+use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
@@ -26,12 +25,22 @@ impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for PageIndexScanInputAir {
+impl<AB: PartitionedAirBuilder> Air<AB> for PageIndexScanInputAir
+where
+    AB::M: Clone,
+{
     fn eval(&self, builder: &mut AB) {
-        let main = builder.main();
+        let page_main = &builder.partitioned_main()[0].clone();
+        let aux_main = &builder.partitioned_main()[1].clone();
 
-        let local = main.row_slice(0);
-        let local: &[AB::Var] = (*local).borrow();
+        let local_page = page_main.row_slice(0);
+        let local_aux = aux_main.row_slice(0);
+        let local_vec = local_page
+            .iter()
+            .chain(local_aux.iter())
+            .cloned()
+            .collect::<Vec<AB::Var>>();
+        let local = local_vec.as_slice();
 
         let local_cols = PageIndexScanInputCols::<AB::Var>::from_slice(
             local,
