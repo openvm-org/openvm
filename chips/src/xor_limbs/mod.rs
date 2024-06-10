@@ -6,44 +6,16 @@ use p3_field::PrimeField64;
 use parking_lot::Mutex;
 
 pub mod air;
-pub mod chip;
+pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-/// This chip gets requests to compute the xor of two numbers x and y of at most N bits.
-/// It breaks down those numbers into limbs of at most M bits each, and computes the xor of
-/// those limbs by communicating with the `XorLookupChip`.
 #[derive(Default)]
-pub struct XorLimbsChip<const N: usize, const M: usize> {
+pub struct XorLimbsAir<const N: usize, const M: usize> {
     bus_index: usize,
-
-    pairs: Mutex<Vec<(u32, u32)>>,
-    pub xor_lookup_chip: XorLookupChip<M>,
 }
 
-impl<const N: usize, const M: usize> XorLimbsChip<N, M> {
-    pub fn new(bus_index: usize, pairs: Vec<(u32, u32)>) -> Self {
-        Self {
-            bus_index,
-            pairs: Mutex::new(pairs),
-            xor_lookup_chip: XorLookupChip::<M>::new(bus_index),
-        }
-    }
-
-    pub fn bus_index(&self) -> usize {
-        self.bus_index
-    }
-
-    fn calc_xor(&self, a: u32, b: u32) -> u32 {
-        a ^ b
-    }
-
-    pub fn request(&self, a: u32, b: u32) -> u32 {
-        let mut pairs_locked = self.pairs.lock();
-        pairs_locked.push((a, b));
-        self.calc_xor(a, b)
-    }
-
+impl<const N: usize, const M: usize> XorLimbsAir<N, M> {
     pub fn sends_custom<F: PrimeField64>(
         &self,
         cols: XorLimbsCols<N, M, usize>,
@@ -60,7 +32,7 @@ impl<const N: usize, const M: usize> XorLimbsChip<N, M> {
                     VirtualPairCol::single_main(cols.z_limbs[i]),
                 ],
                 count: VirtualPairCol::constant(F::one()),
-                argument_index: self.bus_index(),
+                argument_index: self.bus_index,
             });
         }
 
@@ -78,7 +50,38 @@ impl<const N: usize, const M: usize> XorLimbsChip<N, M> {
                 VirtualPairCol::single_main(cols.z),
             ],
             count: VirtualPairCol::constant(F::one()),
-            argument_index: self.bus_index(),
+            argument_index: self.bus_index,
         }]
+    }
+}
+
+/// This chip gets requests to compute the xor of two numbers x and y of at most N bits.
+/// It breaks down those numbers into limbs of at most M bits each, and computes the xor of
+/// those limbs by communicating with the `XorLookupChip`.
+#[derive(Default)]
+pub struct XorLimbsChip<const N: usize, const M: usize> {
+    pub air: XorLimbsAir<N, M>,
+
+    pairs: Mutex<Vec<(u32, u32)>>,
+    pub xor_lookup_chip: XorLookupChip<M>,
+}
+
+impl<const N: usize, const M: usize> XorLimbsChip<N, M> {
+    pub fn new(bus_index: usize, pairs: Vec<(u32, u32)>) -> Self {
+        Self {
+            air: XorLimbsAir { bus_index },
+            pairs: Mutex::new(pairs),
+            xor_lookup_chip: XorLookupChip::<M>::new(bus_index),
+        }
+    }
+
+    fn calc_xor(&self, a: u32, b: u32) -> u32 {
+        a ^ b
+    }
+
+    pub fn request(&self, a: u32, b: u32) -> u32 {
+        let mut pairs_locked = self.pairs.lock();
+        pairs_locked.push((a, b));
+        self.calc_xor(a, b)
     }
 }

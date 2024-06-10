@@ -1,11 +1,11 @@
-use afs_stark_backend::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField32;
 use p3_keccak_air::U64_LIMBS;
 
-use super::{columns::KECCAK_PERMUTE_COL_MAP, KeccakPermuteChip, NUM_U64_HASH_ELEMS};
+use super::{columns::KECCAK_PERMUTE_COL_MAP, KeccakPermuteAir, NUM_U64_HASH_ELEMS};
 
-impl<F: PrimeField32> Chip<F> for KeccakPermuteChip {
+impl<F: PrimeField32> AirBridge<F> for KeccakPermuteAir {
     fn sends(&self) -> Vec<Interaction<F>> {
         vec![Interaction {
             fields: (0..NUM_U64_HASH_ELEMS)

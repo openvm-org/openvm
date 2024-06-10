@@ -7,7 +7,7 @@ use p3_matrix::Matrix;
 use crate::{
     is_equal::{
         columns::{IsEqualAuxCols, IsEqualCols, IsEqualIOCols},
-        IsEqualChip,
+        IsEqualAir,
     },
     is_less_than::columns::{IsLessThanAuxCols, IsLessThanCols, IsLessThanIOCols},
     sub_chip::{AirConfig, SubAir},
@@ -90,7 +90,6 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanTupleAir {
             let is_equal = aux.is_equal[i];
             let inv = aux.is_equal_aux[i].inv;
 
-            let is_equal_chip = IsEqualChip {};
             let is_equal_cols = IsEqualCols {
                 io: IsEqualIOCols {
                     x: x[i],
@@ -100,7 +99,7 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanTupleAir {
                 aux: IsEqualAuxCols { inv },
             };
 
-            SubAir::eval(&is_equal_chip, builder, is_equal_cols.io, is_equal_cols.aux);
+            SubAir::eval(&IsEqualAir, builder, is_equal_cols.io, is_equal_cols.aux);
         }
 
         // here, we constrain that is_equal_cumulative and less_than_cumulative are the correct values

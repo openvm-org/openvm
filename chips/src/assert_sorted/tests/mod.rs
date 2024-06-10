@@ -62,7 +62,7 @@ fn test_assert_sorted_chip_small_positive() {
     let range_checker_trace = assert_sorted_chip.range_checker.generate_trace();
 
     run_simple_test_no_pis(
-        vec![&assert_sorted_chip.air, range_checker_chip],
+        vec![&assert_sorted_chip.air, &range_checker_chip.air],
         vec![assert_sorted_chip_trace, range_checker_trace],
     )
     .expect("Verification failed");
@@ -100,7 +100,7 @@ fn test_assert_sorted_chip_large_positive() {
     let range_checker_trace = assert_sorted_chip.range_checker.generate_trace();
 
     run_simple_test_no_pis(
-        vec![&assert_sorted_chip.air, range_checker_chip],
+        vec![&assert_sorted_chip.air, &range_checker_chip.air],
         vec![assert_sorted_chip_trace, range_checker_trace],
     )
     .expect("Verification failed");
@@ -143,7 +143,7 @@ fn test_assert_sorted_chip_unsorted_negative() {
     });
     assert_eq!(
         run_simple_test_no_pis(
-            vec![&assert_sorted_chip.air, range_checker_chip],
+            vec![&assert_sorted_chip.air, &range_checker_chip.air],
             vec![assert_sorted_chip_trace, range_checker_trace],
         ),
         Err(VerificationError::OodEvaluationMismatch),

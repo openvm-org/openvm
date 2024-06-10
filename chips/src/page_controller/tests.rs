@@ -72,7 +72,7 @@ fn load_page_test(
 
     let main_trace_data = trace_builder.view(
         &partial_vk,
-        vec![&page_controller.page_read_chip, page_requester],
+        vec![&page_controller.page_read_chip.air, page_requester],
     );
 
     let pis = vec![vec![]; partial_vk.per_air.len()];
@@ -87,7 +87,7 @@ fn load_page_test(
     let result = verifier.verify(
         &mut challenger,
         partial_vk,
-        vec![&page_controller.page_read_chip, page_requester],
+        vec![&page_controller.page_read_chip.air, page_requester],
         proof,
         &pis,
     );
@@ -131,7 +131,7 @@ fn page_read_chip_test() {
     let page_data_ptr = keygen_builder.add_cached_main_matrix(page_width);
     let page_metadata_ptr = keygen_builder.add_main_matrix(2);
     keygen_builder.add_partitioned_air(
-        &page_controller.page_read_chip,
+        &page_controller.page_read_chip.air,
         page_height,
         0,
         vec![page_data_ptr, page_metadata_ptr],

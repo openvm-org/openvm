@@ -9,7 +9,7 @@ pub mod types;
 use crate::{
     air_builders::symbolic::get_log_quotient_degree,
     commit::{MatrixCommitmentPointers, SingleMatrixCommitPtr},
-    interaction::Chip,
+    interaction::AirBridge,
     prover::trace::TraceCommitter,
     rap::AnyRap,
 };
@@ -140,7 +140,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
         let (prep_prover_data, prep_verifier_data): (Option<_>, Option<_>) =
             self.get_single_preprocessed_data(air).unzip();
         let preprocessed_width = prep_prover_data.as_ref().map(|d| d.trace.width());
-        let perm_width = <dyn AnyRap<SC> as Chip<Val<SC>>>::permutation_width(air);
+        let perm_width = <dyn AnyRap<SC> as AirBridge<Val<SC>>>::permutation_width(air);
         let main_widths = partitioned_main_ptrs
             .iter()
             .map(|ptr| self.placeholder_main_matrix_in_commit[ptr.commit_index][ptr.matrix_index])

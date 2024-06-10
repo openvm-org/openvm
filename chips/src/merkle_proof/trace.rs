@@ -6,10 +6,10 @@ use crate::{merkle_proof::MerkleProofOp, utils::FieldFrom};
 
 use super::{
     columns::{num_merkle_proof_cols, MerkleProofCols},
-    MerkleProofChip,
+    MerkleProofAir,
 };
 
-impl<const DEPTH: usize, const DIGEST_WIDTH: usize> MerkleProofChip<DEPTH, DIGEST_WIDTH> {
+impl<const DEPTH: usize, const DIGEST_WIDTH: usize> MerkleProofAir<DEPTH, DIGEST_WIDTH> {
     pub fn generate_trace<F, T, Compress>(
         &self,
         operations: Vec<MerkleProofOp<T, DEPTH, DIGEST_WIDTH>>,

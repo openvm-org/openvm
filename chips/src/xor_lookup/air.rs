@@ -3,9 +3,9 @@ use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::columns::NUM_XOR_LOOKUP_COLS;
-use super::XorLookupChip;
+use super::XorLookupAir;
 
-impl<F: Field, const M: usize> BaseAir<F> for XorLookupChip<M> {
+impl<F: Field, const M: usize> BaseAir<F> for XorLookupAir<M> {
     fn width(&self) -> usize {
         NUM_XOR_LOOKUP_COLS
     }
@@ -28,7 +28,7 @@ impl<F: Field, const M: usize> BaseAir<F> for XorLookupChip<M> {
     }
 }
 
-impl<AB, const M: usize> Air<AB> for XorLookupChip<M>
+impl<AB, const M: usize> Air<AB> for XorLookupAir<M>
 where
     AB: AirBuilder,
 {

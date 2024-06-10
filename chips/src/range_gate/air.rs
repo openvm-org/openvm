@@ -6,15 +6,15 @@ use p3_matrix::Matrix;
 
 use super::columns::RangeGateCols;
 use super::columns::NUM_RANGE_GATE_COLS;
-use super::RangeCheckerGateChip;
+use super::RangeCheckerGateAir;
 
-impl<F: Field> BaseAir<F> for RangeCheckerGateChip {
+impl<F: Field> BaseAir<F> for RangeCheckerGateAir {
     fn width(&self) -> usize {
         NUM_RANGE_GATE_COLS
     }
 }
 
-impl<AB> Air<AB> for RangeCheckerGateChip
+impl<AB> Air<AB> for RangeCheckerGateAir
 where
     AB: AirBuilder,
 {

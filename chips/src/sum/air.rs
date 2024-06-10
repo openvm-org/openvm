@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, VirtualPairCol};
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -10,7 +10,7 @@ use super::{
     SumChip,
 };
 
-impl<F: Field> Chip<F> for SumChip {
+impl<F: Field> AirBridge<F> for SumChip {
     fn receives(&self) -> Vec<Interaction<F>> {
         vec![Interaction {
             fields: vec![VirtualPairCol::single_main(0)],

@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::interaction::Chip;
+use afs_stark_backend::interaction::AirBridge;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
 use p3_field::Field;
@@ -10,43 +10,39 @@ use crate::sub_chip::{AirConfig, SubAir};
 
 use super::{
     columns::{IsZeroCols, IsZeroIOCols, NUM_COLS},
-    IsZeroChip,
+    IsZeroAir,
 };
 
-impl<F: Field> BaseAir<F> for IsZeroChip {
+impl<F: Field> BaseAir<F> for IsZeroAir {
     fn width(&self) -> usize {
         NUM_COLS
     }
 }
 
-impl AirConfig for IsZeroChip {
+impl AirConfig for IsZeroAir {
     type Cols<T> = IsZeroCols<T>;
 }
 
 // No interactions
-impl<F: Field> Chip<F> for IsZeroChip {}
+impl<F: Field> AirBridge<F> for IsZeroAir {}
 
-impl<AB: AirBuilder> Air<AB> for IsZeroChip {
+impl<AB: AirBuilder> Air<AB> for IsZeroAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
         let local = main.row_slice(0);
         let is_zero_cols: &IsZeroCols<_> = (*local).borrow();
-        let io = IsZeroIOCols {
-            x: is_zero_cols.io.x.into(),
-            is_zero: is_zero_cols.io.is_zero.into(),
-        };
 
-        SubAir::eval(self, builder, io, is_zero_cols.inv.into());
+        SubAir::<AB>::eval(self, builder, is_zero_cols.io, is_zero_cols.inv);
     }
 }
 
-impl<AB: AirBuilder> SubAir<AB> for IsZeroChip {
-    type IoView = IsZeroIOCols<AB::Expr>;
-    type AuxView = AB::Expr;
+impl<AB: AirBuilder> SubAir<AB> for IsZeroAir {
+    type IoView = IsZeroIOCols<AB::Var>;
+    type AuxView = AB::Var;
 
     fn eval(&self, builder: &mut AB, io: Self::IoView, inv: Self::AuxView) {
-        builder.assert_eq(io.x.clone() * io.is_zero.clone(), AB::F::zero());
+        builder.assert_eq(io.x * io.is_zero, AB::F::zero());
         builder.assert_eq(io.is_zero + io.x * inv, AB::F::one());
     }
 }

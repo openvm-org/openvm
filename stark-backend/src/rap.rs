@@ -9,7 +9,7 @@ use crate::{
         debug::DebugConstraintBuilder, prover::ProverConstraintFolder,
         symbolic::SymbolicRapBuilder, verifier::VerifierConstraintFolder,
     },
-    interaction::{Chip, InteractiveAir},
+    interaction::{AirBridge, InteractiveAir},
 };
 
 /// An AIR that works with a particular `AirBuilder` which allows preprocessing
@@ -47,7 +47,7 @@ for<'a> InteractiveAir<ProverConstraintFolder<'a, SC>> // for prover permutation
     + for<'a> Rap<ProverConstraintFolder<'a, SC>> // for prover quotient polynomial calculation
     + for<'a> Rap<VerifierConstraintFolder<'a, SC>> // for verifier quotient polynomial calculation
     + for<'a> Rap<DebugConstraintBuilder<'a, SC>> // for debugging
-    + BaseAir<Val<SC>> + Chip<Val<SC>> + Rap<SymbolicRapBuilder<Val<SC>>> // for keygen to extract fixed data about the RAP
+    + BaseAir<Val<SC>> + AirBridge<Val<SC>> + Rap<SymbolicRapBuilder<Val<SC>>> // for keygen to extract fixed data about the RAP
 {
 }
 
@@ -59,7 +59,7 @@ where
         + for<'a> Rap<VerifierConstraintFolder<'a, SC>>
         + for<'a> Rap<DebugConstraintBuilder<'a, SC>>
         + BaseAir<Val<SC>>
-        + Chip<Val<SC>>
+        + AirBridge<Val<SC>>
         + Rap<SymbolicRapBuilder<Val<SC>>>,
 {
 }

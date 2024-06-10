@@ -1,16 +1,21 @@
 pub mod air;
-pub mod chip;
+pub mod bridge;
 pub mod columns;
 pub mod trace;
 
 use std::sync::atomic::AtomicU32;
+
+#[derive(Default)]
+pub struct XorLookupAir<const M: usize> {
+    bus_index: usize,
+}
 
 /// This chip gets requests to compute the xor of two numbers x and y of at most M bits.
 /// It generates a preprocessed table with a row for each possible triple (x, y, x^y)
 /// and keeps count of the number of times each triple is requested for the single main trace column.
 #[derive(Default)]
 pub struct XorLookupChip<const M: usize> {
-    bus_index: usize,
+    pub air: XorLookupAir<M>,
     pub count: Vec<Vec<AtomicU32>>,
 }
 
@@ -24,11 +29,10 @@ impl<const M: usize> XorLookupChip<M> {
             }
             count.push(row);
         }
-        Self { bus_index, count }
-    }
-
-    pub fn bus_index(&self) -> usize {
-        self.bus_index
+        Self {
+            air: XorLookupAir { bus_index },
+            count,
+        }
     }
 
     fn calc_xor(&self, x: u32, y: u32) -> u32 {

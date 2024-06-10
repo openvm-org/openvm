@@ -44,7 +44,7 @@ fn test_is_less_than_chip_lt() {
     let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
 
     run_simple_test_no_pis(
-        vec![&chip.air, chip.range_checker.as_ref()],
+        vec![&chip.air, &chip.range_checker.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
@@ -70,7 +70,7 @@ fn test_is_less_than_negative() {
     });
     assert_eq!(
         run_simple_test_no_pis(
-            vec![&chip.air, chip.range_checker.as_ref()],
+            vec![&chip.air, &chip.range_checker.air],
             vec![trace, range_trace],
         ),
         Err(VerificationError::OodEvaluationMismatch),
