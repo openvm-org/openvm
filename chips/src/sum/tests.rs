@@ -67,10 +67,11 @@ fn test_generate_trace() {
 }
 
 fn assert_verification_error(
-    result: Result<(), VerificationError>,
+    result: impl FnOnce() -> Result<(), VerificationError>,
     expected_error: VerificationError,
 ) {
-    assert_eq!(result, Err(expected_error));
+    USE_DEBUG_BUILDER.with(|debug| *debug.lock().unwrap() = false);
+    assert_eq!(result(), Err(expected_error));
 }
 
 /// Tests whether a trace passes the interal constraints of sum air verification (i.e., not bus constraints).
@@ -140,10 +141,6 @@ fn run_sum_air_trace_test(sum_trace_u32: &[(u32, u32, u32, u32)]) -> Result<(), 
 
     let range_checker_trace = sum_chip.is_lt_chip.range_checker.generate_trace();
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
-
     run_simple_test_no_pis(
         vec![
             &sum_chip.air,
@@ -194,7 +191,7 @@ fn test_sum_air_trace_one_key_wrong_sum() {
         (0, 4, 14, 1), // wrong
     ];
     assert_verification_error(
-        run_sum_air_trace_test(sum_trace),
+        || run_sum_air_trace_test(sum_trace),
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -208,7 +205,7 @@ fn test_sum_air_trace_one_key_initial_sum_wrong() {
         (0, 4, 9, 1),
     ];
     assert_verification_error(
-        run_sum_air_trace_test(sum_trace),
+        || run_sum_air_trace_test(sum_trace),
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -226,7 +223,7 @@ fn test_sum_air_trace_one_key_no_final() {
         (0, 8, 36, 0), // wrong: is_final not set
     ];
     assert_verification_error(
-        run_sum_air_trace_test(sum_trace),
+        || run_sum_air_trace_test(sum_trace),
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -235,7 +232,7 @@ fn test_sum_air_trace_one_key_no_final() {
 fn test_sum_air_trace_is_final_not_bool() {
     let sum_trace = &[(0, 1, 1, 0), (0, 1, 2, 2), (1, 2, 2, 0), (1, 3, 5, 1)];
     assert_verification_error(
-        run_sum_air_trace_test(sum_trace),
+        || run_sum_air_trace_test(sum_trace),
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -253,7 +250,7 @@ fn test_sum_air_trace_many_keys_wrong_sum() {
         (10, 8, 8, 1),
     ];
     assert_verification_error(
-        run_sum_air_trace_test(sum_trace),
+        || run_sum_air_trace_test(sum_trace),
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -265,7 +262,7 @@ fn test_sum_air_trace_two_groups_same_key() {
         (0, 1, 1, 1),
     ];
     assert_verification_error(
-        run_sum_air_trace_test(sum_trace),
+        || run_sum_air_trace_test(sum_trace),
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -277,7 +274,7 @@ fn test_sum_air_trace_keys_increasing() {
         (5, 1, 1, 1),
     ];
     assert_verification_error(
-        run_sum_air_trace_test(sum_trace),
+        || run_sum_air_trace_test(sum_trace),
         VerificationError::OodEvaluationMismatch,
     )
 }
