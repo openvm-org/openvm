@@ -8,7 +8,7 @@ pub mod rap;
 pub mod trace;
 mod utils;
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum InteractionType {
     Send,
     Receive,
