@@ -18,6 +18,7 @@ pub struct OfflineChecker {
 }
 
 impl OfflineChecker {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         page_bus_index: usize,
         checker_final_bus_index: usize,

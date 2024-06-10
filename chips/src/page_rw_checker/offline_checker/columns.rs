@@ -26,6 +26,7 @@ impl<T> OfflineCheckerCols<T>
 where
     T: Clone,
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         is_initial: T,
         is_final: T,

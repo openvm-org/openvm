@@ -55,6 +55,7 @@ where
 }
 
 impl<SC: StarkGenericConfig> PageController<SC> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         page_bus_index: usize,
         checker_final_bus_index: usize,
@@ -143,6 +144,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         ));
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn load_page_and_ops(
         &mut self,
         mut page: Vec<Vec<u32>>,

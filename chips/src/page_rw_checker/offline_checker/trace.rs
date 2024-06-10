@@ -177,7 +177,12 @@ impl OfflineChecker {
             }
 
             let idx;
-            if idx_i_map.contains_key(&cur_idx) {
+            if let std::collections::hash_map::Entry::Vacant(e) = idx_i_map.entry(cur_idx.clone()) {
+                assert!(rows_allocated < page.len());
+                idx = rows_allocated;
+                e.insert(idx);
+                rows_allocated += 1;
+            } else {
                 // Adding the is_initial row to the trace
                 idx = *idx_i_map.get(&cur_idx).unwrap();
 
@@ -195,11 +200,6 @@ impl OfflineChecker {
                     &mut last_clk,
                     0,
                 ));
-            } else {
-                assert!(rows_allocated < page.len());
-                idx = rows_allocated;
-                idx_i_map.insert(cur_idx, idx);
-                rows_allocated += 1;
             }
 
             for op in ops.iter().take(j).skip(i) {
