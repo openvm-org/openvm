@@ -6,7 +6,6 @@ use afs_stark_backend::{
 };
 use p3_field::{AbstractField, PrimeField, PrimeField64};
 use p3_matrix::dense::DenseMatrix;
-use p3_matrix::Matrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::range_gate::RangeCheckerGateChip;
@@ -28,6 +27,7 @@ where
     output_chip_aux_trace: Option<DenseMatrix<Val<SC>>>,
 
     input_commitment: Option<Com<SC>>,
+    output_commitment: Option<Com<SC>>,
 
     pub range_checker: Arc<RangeCheckerGateChip>,
 }
@@ -69,6 +69,7 @@ where
             output_chip_trace: None,
             output_chip_aux_trace: None,
             input_commitment: None,
+            output_commitment: None,
             range_checker,
         }
     }
@@ -103,10 +104,58 @@ where
         ));
     }
 
+    pub fn gen_output(
+        &self,
+        page: Vec<Vec<u32>>,
+        x: Vec<u32>,
+        idx_len: usize,
+        page_width: usize,
+    ) -> Vec<Vec<u32>> {
+        let mut output: Vec<Vec<u32>> = vec![];
+
+        for page_row in &page {
+            let is_alloc = page_row[0];
+            let idx = page_row[1..1 + idx_len].to_vec();
+            let data = page_row[1 + idx_len..].to_vec();
+
+            let mut less_than = false;
+            for (&idx_val, &x_val) in idx.iter().zip(x.iter()) {
+                use std::cmp::Ordering;
+                match idx_val.cmp(&x_val) {
+                    Ordering::Less => {
+                        less_than = true;
+                        break;
+                    }
+                    Ordering::Greater => {
+                        break;
+                    }
+                    Ordering::Equal => {}
+                }
+            }
+
+            if less_than {
+                output.push(
+                    vec![is_alloc]
+                        .into_iter()
+                        .chain(idx.iter().cloned())
+                        .chain(data.iter().cloned())
+                        .collect(),
+                );
+            }
+        }
+
+        let num_remaining = page.len() - output.len();
+
+        output.extend((0..num_remaining).map(|_| vec![0; page_width]));
+
+        output
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn load_page(
         &mut self,
-        page: Vec<Vec<u32>>,
+        page_input: Vec<Vec<u32>>,
+        page_output: Vec<Vec<u32>>,
         x: Vec<u32>,
         idx_len: usize,
         data_len: usize,
@@ -120,7 +169,7 @@ where
         // idx_decomp can't change between different pages since range_checker depends on it
         assert!(1 << idx_decomp == self.range_checker.range_max());
 
-        assert!(!page.is_empty());
+        assert!(!page_input.is_empty());
 
         let bus_index = self.input_chip.air.bus_index;
 
@@ -133,9 +182,11 @@ where
             idx_decomp,
             self.range_checker.clone(),
         );
-        self.input_chip_trace = Some(self.input_chip.gen_page_trace::<SC>(page.clone()));
-        self.input_chip_aux_trace =
-            Some(self.input_chip.gen_aux_trace::<SC>(page.clone(), x.clone()));
+        self.input_chip_trace = Some(self.input_chip.gen_page_trace::<SC>(page_input.clone()));
+        self.input_chip_aux_trace = Some(
+            self.input_chip
+                .gen_aux_trace::<SC>(page_input.clone(), x.clone()),
+        );
 
         self.output_chip = PageIndexScanOutputChip::new(
             bus_index,
@@ -147,27 +198,24 @@ where
             self.range_checker.clone(),
         );
 
-        let page_result = self.input_chip.gen_output(page.clone(), x.clone());
-
-        println!("page_result: {:?}", page_result);
-
-        self.output_chip_trace = Some(self.output_chip.gen_page_trace::<SC>(page_result.clone()));
+        self.output_chip_trace = Some(self.output_chip.gen_page_trace::<SC>(page_output.clone()));
         self.output_chip_aux_trace =
-            Some(self.output_chip.gen_aux_trace::<SC>(page_result.clone()));
+            Some(self.output_chip.gen_aux_trace::<SC>(page_output.clone()));
 
-        let prover_data =
-            vec![trace_committer.commit(vec![self.input_chip_trace.clone().unwrap()])];
+        let prover_data = vec![
+            trace_committer.commit(vec![self.input_chip_trace.clone().unwrap()]),
+            trace_committer.commit(vec![self.output_chip_trace.clone().unwrap()]),
+        ];
 
         self.input_commitment = Some(prover_data[0].commit.clone());
+        self.output_commitment = Some(prover_data[1].commit.clone());
 
-        tracing::debug!(
-            "heights of all traces: {} {} {} {}",
-            self.input_chip_trace.as_ref().unwrap().height(),
-            self.input_chip_aux_trace.as_ref().unwrap().height(),
-            self.output_chip_trace.as_ref().unwrap().height(),
-            self.output_chip_aux_trace.as_ref().unwrap().height()
-        );
-
-        (vec![self.input_chip_trace.clone().unwrap()], prover_data)
+        (
+            vec![
+                self.input_chip_trace.clone().unwrap(),
+                self.output_chip_trace.clone().unwrap(),
+            ],
+            prover_data,
+        )
     }
 }

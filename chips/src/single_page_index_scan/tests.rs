@@ -1,6 +1,6 @@
 use afs_stark_backend::{
     keygen::{types::MultiStarkPartialProvingKey, MultiStarkKeygenBuilder},
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver, USE_DEBUG_BUILDER},
     verifier::VerificationError,
 };
 use afs_test_utils::{
@@ -17,6 +17,7 @@ use super::page_controller::PageController;
 fn index_scan_test(
     engine: &BabyBearPoseidon2Engine,
     page: Vec<Vec<u32>>,
+    page_output: Vec<Vec<u32>>,
     x: Vec<u32>,
     idx_len: usize,
     data_len: usize,
@@ -31,6 +32,7 @@ fn index_scan_test(
 
     let (page_traces, mut prover_data) = page_controller.load_page(
         page.clone(),
+        page_output.clone(),
         x,
         idx_len,
         data_len,
@@ -40,7 +42,6 @@ fn index_scan_test(
     );
 
     let input_chip_aux_trace = page_controller.input_chip_aux_trace();
-    let output_chip_trace = page_controller.output_chip_trace();
     let output_chip_aux_trace = page_controller.output_chip_aux_trace();
     let range_checker_trace = page_controller.range_checker_trace();
 
@@ -50,8 +51,8 @@ fn index_scan_test(
     trace_builder.clear();
 
     trace_builder.load_cached_trace(page_traces[0].clone(), prover_data.remove(0));
+    trace_builder.load_cached_trace(page_traces[1].clone(), prover_data.remove(0));
     trace_builder.load_trace(input_chip_aux_trace);
-    trace_builder.load_trace(output_chip_trace);
     trace_builder.load_trace(output_chip_aux_trace);
     trace_builder.load_trace(range_checker_trace);
 
@@ -118,8 +119,8 @@ fn test_single_page_index_scan() {
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
     let input_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
+    let output_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
     let input_page_aux_ptr = keygen_builder.add_main_matrix(page_controller.input_chip.aux_width());
-    let output_page_ptr = keygen_builder.add_main_matrix(page_width);
     let output_page_aux_ptr =
         keygen_builder.add_main_matrix(page_controller.output_chip.aux_width());
     let range_checker_ptr =
@@ -131,7 +132,6 @@ fn test_single_page_index_scan() {
         0,
         vec![input_page_ptr, input_page_aux_ptr],
     );
-    dbg!(output_page_aux_ptr);
 
     keygen_builder.add_partitioned_air(
         &page_controller.output_chip.air,
@@ -159,9 +159,12 @@ fn test_single_page_index_scan() {
 
     let x: Vec<u32> = vec![2177, 5880];
 
+    let page_output = page_controller.gen_output(page.clone(), x.clone(), idx_len, page_width);
+
     index_scan_test(
         &engine,
         page,
+        page_output,
         x,
         idx_len,
         data_len,
@@ -174,203 +177,190 @@ fn test_single_page_index_scan() {
     .expect("Verification failed");
 }
 
-// #[test]
-// fn test_single_page_index_scan() {
-//     let bus_index: usize = 0;
-//     let idx_len: usize = 2;
-//     let data_len: usize = 3;
-//     let decomp: usize = 8;
-//     let limb_bits: Vec<usize> = vec![16, 16];
-//     let range_max: u32 = 1 << decomp;
+#[test]
+fn test_single_page_index_scan_wrong_order() {
+    let bus_index: usize = 0;
+    let idx_len: usize = 2;
+    let data_len: usize = 3;
+    let decomp: usize = 8;
+    let limb_bits: Vec<usize> = vec![16, 16];
+    let range_max: u32 = 1 << decomp;
 
-//     let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
+    let log_page_height = 1;
+    let page_height = 1 << log_page_height;
+    let page_width = 1 + idx_len + data_len;
 
-//     let page_index_scan_input_chip = PageIndexScanInputChip::new(
-//         bus_index,
-//         idx_len,
-//         data_len,
-//         range_max,
-//         limb_bits.clone(),
-//         decomp,
-//         range_checker.clone(),
-//     );
-//     let page_index_scan_output_chip = PageIndexScanOutputChip::new(
-//         bus_index,
-//         idx_len,
-//         data_len,
-//         range_max,
-//         limb_bits.clone(),
-//         decomp,
-//         range_checker.clone(),
-//     );
-//     let range_checker_chip = range_checker.as_ref();
+    let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
+        bus_index,
+        idx_len,
+        data_len,
+        range_max,
+        limb_bits.clone(),
+        decomp,
+    );
 
-//     let page: Vec<Vec<u32>> = vec![
-//         vec![1, 443, 376, 22278, 13998, 58327],
-//         vec![1, 2883, 7769, 51171, 3989, 12770],
-//     ];
+    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(decomp));
 
-//     let page_indexed: Vec<Vec<u32>> = vec![
-//         vec![1, 443, 376, 22278, 13998, 58327],
-//         vec![0, 0, 0, 0, 0, 0],
-//     ];
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-//     let x: Vec<u32> = vec![2177, 5880];
+    let input_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
+    let output_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
+    let input_page_aux_ptr = keygen_builder.add_main_matrix(page_controller.input_chip.aux_width());
+    let output_page_aux_ptr =
+        keygen_builder.add_main_matrix(page_controller.output_chip.aux_width());
+    let range_checker_ptr =
+        keygen_builder.add_main_matrix(page_controller.range_checker.air_width());
 
-//     let page_index_scan_chip_trace = page_index_scan_input_chip.generate_trace(page.clone(), x);
-//     let page_index_scan_verify_chip_trace =
-//         page_index_scan_output_chip.generate_trace(page_indexed.clone());
-//     let range_checker_trace = range_checker_chip.generate_trace();
+    keygen_builder.add_partitioned_air(
+        &page_controller.input_chip.air,
+        page_height,
+        0,
+        vec![input_page_ptr, input_page_aux_ptr],
+    );
 
-//     run_simple_test_no_pis(
-//         vec![
-//             &page_index_scan_input_chip.air,
-//             &page_index_scan_output_chip.air,
-//             &range_checker_chip.air,
-//         ],
-//         vec![
-//             page_index_scan_chip_trace,
-//             page_index_scan_verify_chip_trace,
-//             range_checker_trace,
-//         ],
-//     )
-//     .expect("Verification failed");
-// }
+    keygen_builder.add_partitioned_air(
+        &page_controller.output_chip.air,
+        page_height,
+        0,
+        vec![output_page_ptr, output_page_aux_ptr],
+    );
 
-// #[test]
-// fn test_single_page_index_scan_wrong_order() {
-//     let bus_index: usize = 0;
-//     let idx_len: usize = 2;
-//     let data_len: usize = 3;
-//     let decomp: usize = 8;
-//     let limb_bits: Vec<usize> = vec![16, 16];
-//     let range_max: u32 = 1 << decomp;
+    keygen_builder.add_partitioned_air(
+        &page_controller.range_checker.air,
+        1 << decomp,
+        0,
+        vec![range_checker_ptr],
+    );
 
-//     let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
+    let partial_pk = keygen_builder.generate_partial_pk();
 
-//     let page_index_scan_input_chip = PageIndexScanInputChip::new(
-//         bus_index,
-//         idx_len,
-//         data_len,
-//         range_max,
-//         limb_bits.clone(),
-//         decomp,
-//         range_checker.clone(),
-//     );
-//     let page_index_scan_output_chip = PageIndexScanOutputChip::new(
-//         bus_index,
-//         idx_len,
-//         data_len,
-//         range_max,
-//         limb_bits.clone(),
-//         decomp,
-//         range_checker.clone(),
-//     );
-//     let range_checker_chip = range_checker.as_ref();
+    let prover = MultiTraceStarkProver::new(&engine.config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-//     let page: Vec<Vec<u32>> = vec![
-//         vec![1, 443, 376, 22278, 13998, 58327],
-//         vec![1, 2883, 7769, 51171, 3989, 12770],
-//     ];
+    let page: Vec<Vec<u32>> = vec![
+        vec![1, 443, 376, 22278, 13998, 58327],
+        vec![1, 2883, 7769, 51171, 3989, 12770],
+    ];
 
-//     let page_indexed: Vec<Vec<u32>> = vec![
-//         vec![0, 0, 0, 0, 0, 0],
-//         vec![1, 443, 376, 22278, 13998, 58327],
-//     ];
+    let x: Vec<u32> = vec![2177, 5880];
 
-//     let x: Vec<u32> = vec![2177, 5880];
+    let page_output = vec![
+        vec![0, 0, 0, 0, 0, 0],
+        vec![1, 443, 376, 22278, 13998, 58327],
+    ];
 
-//     let page_index_scan_chip_trace = page_index_scan_input_chip.generate_trace(page.clone(), x);
-//     let page_index_scan_verify_chip_trace =
-//         page_index_scan_output_chip.generate_trace(page_indexed.clone());
-//     let range_checker_trace = range_checker_chip.generate_trace();
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
+    assert_eq!(
+        index_scan_test(
+            &engine,
+            page,
+            page_output,
+            x,
+            idx_len,
+            data_len,
+            limb_bits,
+            decomp,
+            &mut page_controller,
+            &mut trace_builder,
+            &partial_pk,
+        ),
+        Err(VerificationError::OodEvaluationMismatch),
+        "Expected verification to fail, but it passed"
+    );
+}
 
-//     USE_DEBUG_BUILDER.with(|debug| {
-//         *debug.lock().unwrap() = false;
-//     });
-//     assert_eq!(
-//         run_simple_test_no_pis(
-//             vec![
-//                 &page_index_scan_input_chip.air,
-//                 &page_index_scan_output_chip.air,
-//                 &range_checker_chip.air,
-//             ],
-//             vec![
-//                 page_index_scan_chip_trace,
-//                 page_index_scan_verify_chip_trace,
-//                 range_checker_trace,
-//             ],
-//         ),
-//         Err(VerificationError::OodEvaluationMismatch),
-//         "Expected verification to fail, but it passed"
-//     );
-// }
+#[test]
+fn test_single_page_index_scan_unsorted() {
+    let bus_index: usize = 0;
+    let idx_len: usize = 2;
+    let data_len: usize = 3;
+    let decomp: usize = 8;
+    let limb_bits: Vec<usize> = vec![16, 16];
+    let range_max: u32 = 1 << decomp;
 
-// #[test]
-// fn test_single_page_index_scan_unsorted() {
-//     let bus_index: usize = 0;
-//     let idx_len: usize = 2;
-//     let data_len: usize = 3;
-//     let decomp: usize = 8;
-//     let limb_bits: Vec<usize> = vec![16, 16];
-//     let range_max: u32 = 1 << decomp;
+    let log_page_height = 1;
+    let page_height = 1 << log_page_height;
+    let page_width = 1 + idx_len + data_len;
 
-//     let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
+    let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
+        bus_index,
+        idx_len,
+        data_len,
+        range_max,
+        limb_bits.clone(),
+        decomp,
+    );
 
-//     let page_index_scan_input_chip = PageIndexScanInputChip::new(
-//         bus_index,
-//         idx_len,
-//         data_len,
-//         range_max,
-//         limb_bits.clone(),
-//         decomp,
-//         range_checker.clone(),
-//     );
-//     let page_index_scan_output_chip = PageIndexScanOutputChip::new(
-//         bus_index,
-//         idx_len,
-//         data_len,
-//         range_max,
-//         limb_bits.clone(),
-//         decomp,
-//         range_checker.clone(),
-//     );
-//     let range_checker_chip = range_checker.as_ref();
+    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(decomp));
 
-//     let page: Vec<Vec<u32>> = vec![
-//         vec![1, 443, 376, 22278, 13998, 58327],
-//         vec![1, 2883, 7769, 51171, 3989, 12770],
-//     ];
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-//     let page_indexed: Vec<Vec<u32>> = vec![
-//         vec![1, 2883, 7769, 51171, 3989, 12770],
-//         vec![1, 443, 376, 22278, 13998, 58327],
-//     ];
+    let input_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
+    let output_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
+    let input_page_aux_ptr = keygen_builder.add_main_matrix(page_controller.input_chip.aux_width());
+    let output_page_aux_ptr =
+        keygen_builder.add_main_matrix(page_controller.output_chip.aux_width());
+    let range_checker_ptr =
+        keygen_builder.add_main_matrix(page_controller.range_checker.air_width());
 
-//     let x: Vec<u32> = vec![2883, 7770];
+    keygen_builder.add_partitioned_air(
+        &page_controller.input_chip.air,
+        page_height,
+        0,
+        vec![input_page_ptr, input_page_aux_ptr],
+    );
 
-//     let page_index_scan_chip_trace = page_index_scan_input_chip.generate_trace(page.clone(), x);
-//     let page_index_scan_verify_chip_trace =
-//         page_index_scan_output_chip.generate_trace(page_indexed.clone());
-//     let range_checker_trace = range_checker_chip.generate_trace();
+    keygen_builder.add_partitioned_air(
+        &page_controller.output_chip.air,
+        page_height,
+        0,
+        vec![output_page_ptr, output_page_aux_ptr],
+    );
 
-//     USE_DEBUG_BUILDER.with(|debug| {
-//         *debug.lock().unwrap() = false;
-//     });
-//     assert_eq!(
-//         run_simple_test_no_pis(
-//             vec![
-//                 &page_index_scan_input_chip.air,
-//                 &page_index_scan_output_chip.air,
-//                 &range_checker_chip.air,
-//             ],
-//             vec![
-//                 page_index_scan_chip_trace,
-//                 page_index_scan_verify_chip_trace,
-//                 range_checker_trace,
-//             ],
-//         ),
-//         Err(VerificationError::OodEvaluationMismatch),
-//         "Expected verification to fail, but it passed"
-//     );
-// }
+    keygen_builder.add_partitioned_air(
+        &page_controller.range_checker.air,
+        1 << decomp,
+        0,
+        vec![range_checker_ptr],
+    );
+
+    let partial_pk = keygen_builder.generate_partial_pk();
+
+    let prover = MultiTraceStarkProver::new(&engine.config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
+
+    let page: Vec<Vec<u32>> = vec![
+        vec![1, 2883, 7769, 51171, 3989, 12770],
+        vec![1, 443, 376, 22278, 13998, 58327],
+    ];
+
+    let x: Vec<u32> = vec![2177, 5880];
+
+    let page_output = vec![
+        vec![0, 0, 0, 0, 0, 0],
+        vec![1, 443, 376, 22278, 13998, 58327],
+    ];
+
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
+    assert_eq!(
+        index_scan_test(
+            &engine,
+            page,
+            page_output,
+            x,
+            idx_len,
+            data_len,
+            limb_bits,
+            decomp,
+            &mut page_controller,
+            &mut trace_builder,
+            &partial_pk,
+        ),
+        Err(VerificationError::OodEvaluationMismatch),
+        "Expected verification to fail, but it passed"
+    );
+}
