@@ -1,11 +1,11 @@
-use super::DummyHashChip;
+use super::DummyHashAir;
 
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use p3_field::AbstractField;
 
 #[test]
 fn test_single_dummy_hash() {
-    let chip: DummyHashChip = DummyHashChip {
+    let chip: DummyHashAir = DummyHashAir {
         bus_index: 0,
         hash_width: 5,
         rate: 3,

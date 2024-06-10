@@ -6,7 +6,7 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-use crate::dummy_hash::DummyHashChip;
+use crate::dummy_hash::DummyHashAir;
 
 #[derive(Default)]
 /// A chip that checks if a number equals 0
@@ -19,8 +19,8 @@ pub struct FlatHashChip<const N: usize, const R: usize> {
     pub hash_rate: usize,
     pub digest_width: usize,
 
-    hashchip: DummyHashChip,
-    bus_index: usize,
+    pub hash_chip: DummyHashAir,
+    pub bus_index: usize,
 }
 
 impl<const N: usize, const R: usize> FlatHashChip<N, R> {
@@ -41,11 +41,7 @@ impl<const N: usize, const R: usize> FlatHashChip<N, R> {
             hash_rate,
             digest_width,
             bus_index,
-            hashchip: DummyHashChip {
-                bus_index: hashchip_bus_index,
-                hash_width,
-                rate: hash_rate,
-            },
+            hash_chip: DummyHashAir::new(hashchip_bus_index, hash_width, hash_rate),
         }
     }
 

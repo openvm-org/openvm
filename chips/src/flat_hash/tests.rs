@@ -8,7 +8,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::Rng;
 
-use crate::dummy_hash::DummyHashChip;
+use crate::dummy_hash::DummyHashAir;
 
 #[test]
 fn test_single_is_zero() {
@@ -34,7 +34,7 @@ fn test_single_is_zero() {
             hash_chip_states.push(state.clone());
             let slice = row[width * chip.hash_rate..(width + 1) * chip.hash_rate].to_vec();
             hash_chip_slices.push(slice.clone());
-            state = DummyHashChip::request(&chip.hash_chip, state, slice);
+            state = DummyHashAir::request(&chip.hash_chip, state, slice);
         }
     }
 

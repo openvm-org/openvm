@@ -10,14 +10,27 @@ use p3_field::Field;
 
 #[derive(Default)]
 /// A chip that checks if a number equals 0
-pub struct DummyHashChip {
+pub struct DummyHashAir {
     pub bus_index: usize,
     pub rate: usize,
     pub hash_width: usize,
+    // pub hash_in_states: Vec<Vec<F>>,
+    // pub hash_out_states: Vec<Vec<F>>,
+    // pub hash_slices: Vec<Vec<F>>,
 }
 
-impl DummyHashChip {
-    pub fn new(bus_index: usize, rate: usize, hash_width: usize) -> Self {
+// #[derive(Default)]
+// pub struct DummyHashChip<F: Field> {
+//     pub bus_index: usize,
+//     pub rate: usize,
+//     pub hash_width: usize,
+//     pub hash_in_states: Vec<Vec<F>>,
+//     pub hash_out_states: Vec<Vec<F>>,
+//     pub hash_slices: Vec<Vec<F>>,
+// }
+
+impl DummyHashAir {
+    pub fn new(bus_index: usize, hash_width: usize, rate: usize) -> Self {
         Self {
             bus_index,
             rate,

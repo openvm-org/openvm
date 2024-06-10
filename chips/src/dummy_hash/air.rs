@@ -6,20 +6,20 @@ use crate::sub_chip::{AirConfig, SubAir};
 
 use super::{
     columns::{DummyHashAuxCols, DummyHashCols, DummyHashIOCols},
-    DummyHashChip,
+    DummyHashAir,
 };
 
-impl<F: Field> BaseAir<F> for DummyHashChip {
+impl<F: Field> BaseAir<F> for DummyHashAir {
     fn width(&self) -> usize {
         2 * self.hash_width + self.rate
     }
 }
 
-impl AirConfig for DummyHashChip {
+impl AirConfig for DummyHashAir {
     type Cols<T> = DummyHashCols<T>;
 }
 
-impl<AB: AirBuilder> Air<AB> for DummyHashChip {
+impl<AB: AirBuilder> Air<AB> for DummyHashAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -36,7 +36,7 @@ impl<AB: AirBuilder> Air<AB> for DummyHashChip {
     }
 }
 
-impl<AB: AirBuilder> SubAir<AB> for DummyHashChip {
+impl<AB: AirBuilder> SubAir<AB> for DummyHashAir {
     type IoView = DummyHashIOCols<AB::Var>;
     type AuxView = DummyHashAuxCols;
 

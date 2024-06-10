@@ -2,9 +2,9 @@ use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::Field;
 
-use super::DummyHashChip;
+use super::DummyHashAir;
 
-impl<F: Field> AirBridge<F> for DummyHashChip {
+impl<F: Field> AirBridge<F> for DummyHashAir {
     fn receives(&self) -> Vec<Interaction<F>> {
         let n = self.hash_width;
         let r = self.rate;

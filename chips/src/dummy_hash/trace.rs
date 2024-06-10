@@ -5,10 +5,10 @@ use crate::sub_chip::LocalTraceInstructions;
 
 use super::{
     columns::{DummyHashAuxCols, DummyHashCols, DummyHashIOCols},
-    DummyHashChip,
+    DummyHashAir,
 };
 
-impl DummyHashChip {
+impl DummyHashAir {
     pub fn generate_trace<F: Field>(
         &self,
         curr_state: Vec<Vec<F>>,
@@ -26,7 +26,7 @@ impl DummyHashChip {
     }
 }
 
-impl<F: Field> LocalTraceInstructions<F> for DummyHashChip {
+impl<F: Field> LocalTraceInstructions<F> for DummyHashAir {
     type LocalInput = (Vec<F>, Vec<F>);
 
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
