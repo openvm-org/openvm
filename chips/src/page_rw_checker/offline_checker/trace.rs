@@ -1,13 +1,16 @@
+use std::sync::Arc;
 use std::{collections::HashMap, iter};
 
-use p3_field::AbstractField;
+use p3_field::{AbstractField, PrimeField};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
 use super::columns::OfflineCheckerCols;
 use super::OfflineChecker;
 use crate::is_equal_vec::IsEqualVecChip;
+use crate::is_less_than_tuple::IsLessThanTupleAir;
 use crate::page_rw_checker::page_controller::Operation;
+use crate::range_gate::RangeCheckerGateChip;
 use crate::sub_chip::LocalTraceInstructions;
 
 impl OfflineChecker {
@@ -24,13 +27,21 @@ impl OfflineChecker {
         &self,
         page: &mut Vec<Vec<u32>>,
         mut ops: Vec<Operation>,
+        range_checker: Arc<RangeCheckerGateChip>,
         trace_degree: usize,
     ) -> RowMajorMatrix<Val<SC>>
     where
-        Val<SC>: AbstractField,
+        Val<SC>: PrimeField,
     {
         let is_equal_idx = IsEqualVecChip::new(self.idx_len);
         let is_equal_data = IsEqualVecChip::new(self.data_len);
+
+        let lt_chip = IsLessThanTupleAir::new(
+            usize::MAX,
+            1 << self.idx_decomp,
+            self.idx_clk_limb_bits.clone(),
+            self.idx_decomp,
+        );
 
         let mut rows_allocated = 0;
         while rows_allocated < page.len() && page[rows_allocated][0] == 1 {
@@ -58,10 +69,12 @@ impl OfflineChecker {
                        idx: usize,
                        is_initial: u8,
                        is_final: u8,
+                       is_internal: u8,
                        clk: usize,
                        op_type: u8,
                        last_idx: &mut Vec<u32>,
                        last_data: &mut Vec<u32>,
+                       last_clk: &mut usize,
                        is_extra: u8| {
             // Make sure the row in the page is allocated
             assert!(page[idx][0] == 1);
@@ -82,15 +95,35 @@ impl OfflineChecker {
 
             let my_last_idx = last_idx.clone();
             let my_last_data = last_data.clone();
+            let my_last_clk = *last_clk;
 
             last_idx.clone_from(&cur_idx);
             last_data.clone_from(&cur_data);
+            *last_clk = clk;
 
             let last_idx = my_last_idx;
             let last_data = my_last_data;
+            let last_clk = my_last_clk;
 
-            let same_idx = cur_idx == last_idx;
-            let same_data = cur_data == last_data;
+            let lt_cols = LocalTraceInstructions::generate_trace_row(
+                &lt_chip,
+                (
+                    last_idx
+                        .iter()
+                        .copied()
+                        .chain(iter::once(last_clk as u32))
+                        .collect(),
+                    cur_idx
+                        .iter()
+                        .copied()
+                        .chain(iter::once(clk as u32))
+                        .collect(),
+                    range_checker.clone(),
+                ),
+            );
+
+            // let same_idx = cur_idx == last_idx;
+            // let same_data = cur_data == last_data;
 
             let last_idx = conv_to_f(last_idx);
             let cur_idx = conv_to_f(cur_idx);
@@ -107,6 +140,7 @@ impl OfflineChecker {
             let cols = OfflineCheckerCols::new(
                 Val::<SC>::from_canonical_u8(is_initial),
                 Val::<SC>::from_canonical_u8(is_final),
+                Val::<SC>::from_canonical_u8(is_internal),
                 Val::<SC>::from_canonical_usize(clk),
                 page[idx]
                     .iter()
@@ -114,11 +148,13 @@ impl OfflineChecker {
                     .map(Val::<SC>::from_canonical_u32)
                     .collect(),
                 Val::<SC>::from_canonical_u8(op_type),
-                Val::<SC>::from_canonical_u8(same_idx as u8),
-                Val::<SC>::from_canonical_u8(same_data as u8),
+                idx_equal_cols.io.prod,
+                data_equal_cols.io.prod,
+                lt_cols.io.tuple_less_than,
                 Val::<SC>::from_canonical_u8(is_extra),
                 idx_equal_cols.aux,
                 data_equal_cols.aux,
+                lt_cols.aux,
             );
 
             cols.flatten()
@@ -128,6 +164,7 @@ impl OfflineChecker {
 
         let mut last_idx = vec![0; self.idx_len];
         let mut last_data = vec![0; self.data_len];
+        let mut last_clk = 0;
         let mut is_first_row = true;
 
         let mut i = 0;
@@ -151,9 +188,11 @@ impl OfflineChecker {
                     1,
                     0,
                     0,
+                    0,
                     1,
                     &mut last_idx,
                     &mut last_data,
+                    &mut last_clk,
                     0,
                 ));
             } else {
@@ -175,10 +214,12 @@ impl OfflineChecker {
                     idx,
                     0,
                     0,
+                    1,
                     op.clk,
                     op.op_type.clone() as u8,
                     &mut last_idx,
                     &mut last_data,
+                    &mut last_clk,
                     0,
                 ));
             }
@@ -190,10 +231,12 @@ impl OfflineChecker {
                 idx,
                 0,
                 1,
+                0,
                 max_clk,
                 0,
                 &mut last_idx,
                 &mut last_data,
+                &mut last_clk,
                 0,
             ));
 
@@ -213,17 +256,12 @@ impl OfflineChecker {
                 0,
                 0,
                 0,
+                0,
                 &mut last_idx,
                 &mut last_data,
+                &mut last_clk,
                 1,
             ));
-        }
-
-        tracing::debug!("Offline Checker trace by row");
-        for (i, row) in rows.iter().enumerate() {
-            let cols =
-                OfflineCheckerCols::from_slice(row, self.page_width(), self.idx_len, self.data_len);
-            tracing::debug!("row {}: {:?}", i, cols);
         }
 
         RowMajorMatrix::new(rows.concat(), self.air_width())

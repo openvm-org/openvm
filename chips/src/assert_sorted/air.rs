@@ -30,21 +30,14 @@ impl<AB: AirBuilder> Air<AB> for AssertSortedAir {
         let next: &[AB::Var] = (*next).borrow();
 
         let local_cols = AssertSortedCols::from_slice(
-            local
-                .iter()
-                .map(|x| (*x).into())
-                .collect::<Vec<AB::Expr>>()
-                .as_slice(),
+            local,
             self.is_less_than_tuple_air().limb_bits().clone(),
             *self.is_less_than_tuple_air().decomp(),
             self.is_less_than_tuple_air().tuple_len(),
         );
 
         let next_cols = AssertSortedCols::from_slice(
-            next.iter()
-                .map(|x| (*x).into())
-                .collect::<Vec<AB::Expr>>()
-                .as_slice(),
+            next,
             self.is_less_than_tuple_air().limb_bits().clone(),
             *self.is_less_than_tuple_air().decomp(),
             self.is_less_than_tuple_air().tuple_len(),

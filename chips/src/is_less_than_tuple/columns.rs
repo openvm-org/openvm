@@ -43,6 +43,8 @@ pub struct IsLessThanTupleAuxCols<T> {
 
 impl<T: Clone> IsLessThanTupleAuxCols<T> {
     pub fn from_slice(slc: &[T], limb_bits: Vec<usize>, decomp: usize, tuple_len: usize) -> Self {
+        assert!(limb_bits.len() == tuple_len);
+
         let mut curr_start_idx = 0;
         let mut curr_end_idx = tuple_len;
 

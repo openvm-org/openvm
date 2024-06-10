@@ -1,5 +1,3 @@
-use std::iter;
-
 use afs_stark_backend::interaction::{Chip, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
@@ -14,11 +12,12 @@ use crate::{
 };
 
 impl<F: PrimeField64> SubAirWithInteractions<F> for FinalPageChip {
+    /// Sends interactions required by IsLessThanTuple SubAir
     fn sends(&self, col_indices: FinalPageCols<usize>) -> Vec<Interaction<F>> {
         let lt_air = IsLessThanTupleAir::new(
-            self.sorted_bus_index,
-            1 << self.idx_limb_bits,
-            vec![self.idx_limb_bits; 1 + self.idx_len],
+            self.range_bus_index,
+            1 << self.idx_decomp,
+            vec![self.idx_limb_bits; self.idx_len],
             self.idx_decomp,
         );
 
@@ -35,15 +34,18 @@ impl<F: PrimeField64> SubAirWithInteractions<F> for FinalPageChip {
         )
     }
 
+    /// Receives page rows (idx, data) for every allocated row on page_bus
     fn receives(&self, col_indices: FinalPageCols<usize>) -> Vec<Interaction<F>> {
-        let virtual_cols = iter::once(col_indices.page_cols.is_alloc)
-            .chain(col_indices.page_cols.idx)
+        let page_cols = col_indices
+            .page_cols
+            .idx
+            .into_iter()
             .chain(col_indices.page_cols.data)
             .map(VirtualPairCol::single_main)
             .collect::<Vec<_>>();
 
         vec![Interaction {
-            fields: virtual_cols,
+            fields: page_cols,
             count: VirtualPairCol::single_main(col_indices.page_cols.is_alloc),
             argument_index: self.page_bus_index,
         }]

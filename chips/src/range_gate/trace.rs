@@ -1,10 +1,10 @@
-use p3_field::PrimeField64;
+use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{columns::NUM_RANGE_GATE_COLS, RangeCheckerGateChip};
 
 impl RangeCheckerGateChip {
-    pub fn generate_trace<F: PrimeField64>(&self) -> RowMajorMatrix<F> {
+    pub fn generate_trace<F: PrimeField>(&self) -> RowMajorMatrix<F> {
         let rows = self
             .count
             .iter()

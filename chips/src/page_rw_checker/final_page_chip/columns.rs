@@ -24,7 +24,7 @@ impl<T: Clone> FinalPageCols<T> {
                 &slc[1 + idx_len + data_len..],
                 limb_bits,
                 decomp,
-                idx_len + 1,
+                idx_len,
             ),
         }
     }

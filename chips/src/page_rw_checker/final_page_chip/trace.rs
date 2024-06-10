@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use p3_field::{AbstractField, PrimeField64};
+use p3_field::{AbstractField, PrimeField};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
@@ -38,31 +38,29 @@ impl FinalPageChip {
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> RowMajorMatrix<Val<SC>>
     where
-        Val<SC>: PrimeField64,
+        Val<SC>: PrimeField,
     {
         let lt_chip = IsLessThanTupleAir::new(
-            self.sorted_bus_index,
+            self.range_bus_index,
             1 << self.idx_limb_bits,
-            vec![self.idx_limb_bits; 1 + self.idx_len],
+            vec![self.idx_limb_bits; self.idx_len],
             self.idx_decomp,
         );
 
         let mut rows: Vec<Vec<Val<SC>>> = vec![];
 
         for i in 0..page.len() {
-            let mut prv_r = if i == 0 {
-                vec![0; 1 + self.idx_len]
+            let prv_idx = if i == 0 {
+                vec![0; self.idx_len]
             } else {
-                page[i - 1][0..1 + self.idx_len].to_vec()
+                page[i - 1][1..1 + self.idx_len].to_vec()
             };
-            let mut cur_r = page[i][0..1 + self.idx_len].to_vec();
 
-            prv_r[0] = 1 - prv_r[0];
-            cur_r[0] = 1 - cur_r[0];
+            let cur_idx = page[i][1..1 + self.idx_len].to_vec();
 
             let lt_cols: IsLessThanTupleCols<Val<SC>> = LocalTraceInstructions::generate_trace_row(
                 &lt_chip,
-                (prv_r, cur_r, range_checker.clone()),
+                (prv_idx, cur_idx, range_checker.clone()),
             );
 
             let page_aux_cols = FinalPageAuxCols {

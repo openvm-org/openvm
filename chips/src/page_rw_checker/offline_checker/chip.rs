@@ -1,40 +1,78 @@
+use std::iter;
+
 use afs_stark_backend::interaction::{Chip, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
 use super::columns::OfflineCheckerCols;
 use super::OfflineChecker;
+use crate::is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols};
+use crate::is_less_than_tuple::IsLessThanTupleAir;
 use crate::sub_chip::SubAirWithInteractions;
 
-// TODO: send the operations on a different bus
-
 impl<F: PrimeField64> SubAirWithInteractions<F> for OfflineChecker {
+    /// Receives page rows (idx, data) for rows tagged with is_initial on page_bus
+    /// Receives operations (clk, idx, data, op_type) for rows tagged with is_internal on ops_bus
     fn receives(&self, col_indices: OfflineCheckerCols<usize>) -> Vec<Interaction<F>> {
-        let virtual_cols = col_indices
-            .page_row
+        let page_cols = col_indices.page_row[1..]
             .iter()
             .map(|col| VirtualPairCol::single_main(*col))
             .collect::<Vec<_>>();
 
-        vec![Interaction {
-            fields: virtual_cols,
-            count: VirtualPairCol::single_main(col_indices.is_initial),
-            argument_index: self.bus_index(),
-        }]
+        let op_cols: Vec<VirtualPairCol<F>> = iter::once(col_indices.clk)
+            .chain(col_indices.page_row[1..].iter().copied())
+            .chain(iter::once(col_indices.op_type))
+            .map(VirtualPairCol::single_main)
+            .collect();
+
+        vec![
+            Interaction {
+                fields: page_cols,
+                count: VirtualPairCol::single_main(col_indices.is_initial),
+                argument_index: self.page_bus_index,
+            },
+            Interaction {
+                fields: op_cols,
+                count: VirtualPairCol::single_main(col_indices.is_internal),
+                argument_index: self.ops_bus_index,
+            },
+        ]
     }
 
+    /// Sends page rows (idx, data) for rows tagged with is_final on page_bus
+    /// Sends interactions required by IsLessThanTuple SubAir
     fn sends(&self, col_indices: OfflineCheckerCols<usize>) -> Vec<Interaction<F>> {
-        let virtual_cols = col_indices
-            .page_row
+        let page_cols = col_indices.page_row[1..]
             .iter()
             .map(|col| VirtualPairCol::single_main(*col))
             .collect::<Vec<_>>();
 
-        vec![Interaction {
-            fields: virtual_cols,
+        let mut interactions = vec![Interaction {
+            fields: page_cols,
             count: VirtualPairCol::single_main(col_indices.is_final),
-            argument_index: self.bus_index(),
-        }]
+            argument_index: self.page_bus_index,
+        }];
+
+        let lt_air = IsLessThanTupleAir::new(
+            self.range_bus_index,
+            1 << self.idx_decomp,
+            self.idx_clk_limb_bits.clone(),
+            self.idx_decomp,
+        );
+
+        interactions.extend(SubAirWithInteractions::sends(
+            &lt_air,
+            IsLessThanTupleCols {
+                io: IsLessThanTupleIOCols {
+                    x: vec![usize::MAX; 1 + self.idx_len],
+                    y: vec![usize::MAX; 1 + self.idx_len],
+                    tuple_less_than: usize::MAX,
+                },
+                aux: col_indices.lt_aux,
+            },
+        ));
+
+        interactions
     }
 }
 
@@ -48,6 +86,8 @@ impl<F: PrimeField64> Chip<F> for OfflineChecker {
             self.page_width(),
             self.idx_len,
             self.data_len,
+            self.idx_clk_limb_bits.clone(),
+            self.idx_decomp,
         );
         SubAirWithInteractions::receives(self, cols_to_receive)
     }
@@ -61,6 +101,8 @@ impl<F: PrimeField64> Chip<F> for OfflineChecker {
             self.page_width(),
             self.idx_len,
             self.data_len,
+            self.idx_clk_limb_bits.clone(),
+            self.idx_decomp,
         );
         SubAirWithInteractions::sends(self, cols_to_send)
     }

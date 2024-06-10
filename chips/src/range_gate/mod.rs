@@ -13,19 +13,19 @@ pub mod trace;
 pub struct RangeCheckerGateChip {
     /// The index for the Range Checker bus.
     bus_index: usize,
-    _range_max: u32,
+    pub range_max: u32,
     pub count: Vec<Arc<AtomicU32>>,
 }
 
 impl RangeCheckerGateChip {
     pub fn new(bus_index: usize, range_max: u32) -> Self {
-        let mut count = vec![];
-        for _ in 0..range_max {
-            count.push(Arc::new(AtomicU32::new(0)));
-        }
+        let count = (0..range_max)
+            .map(|_| Arc::new(AtomicU32::new(0)))
+            .collect();
+
         Self {
             bus_index,
-            _range_max: range_max,
+            range_max,
             count,
         }
     }
@@ -34,7 +34,12 @@ impl RangeCheckerGateChip {
         self.bus_index
     }
 
+    pub fn air_width(&self) -> usize {
+        2
+    }
+
     pub fn add_count(&self, val: u32) {
+        assert!(val < self.range_max);
         let val_atomic = &self.count[val as usize];
         val_atomic.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }

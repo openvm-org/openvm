@@ -44,13 +44,13 @@ fn test_single_page(
     let page_receiver_trace = RowMajorMatrix::new(
         page.iter()
             .flat_map(|row| {
-                iter::once(row[0])
-                    .chain(row.iter().cloned())
+                row.iter()
+                    .cloned()
                     .map(Val::from_canonical_u32)
                     .collect::<Vec<Val>>()
             })
             .collect(),
-        1 + page_width,
+        page_width,
     );
 
     trace_builder.clear();
@@ -149,7 +149,7 @@ fn final_page_chip_test() {
         sorted_bus_index,
         1 << idx_limb_bits,
     ));
-    let page_sender = DummyInteractionAir::new(page_width, true, page_bus_index);
+    let page_sender = DummyInteractionAir::new(page_width - 1, true, page_bus_index);
 
     let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(idx_limb_bits));
 

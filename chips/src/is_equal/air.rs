@@ -23,13 +23,7 @@ impl<AB: AirBuilder> Air<AB> for IsEqualChip {
         let local = main.row_slice(0);
         let is_equal_cols: &[AB::Var] = (*local).borrow();
 
-        let is_equal_cols = IsEqualCols::from_slice(
-            is_equal_cols
-                .iter()
-                .map(|x| (*x).into())
-                .collect::<Vec<AB::Expr>>()
-                .as_slice(),
-        );
+        let is_equal_cols = IsEqualCols::from_slice(is_equal_cols);
 
         SubAir::<AB>::eval(self, builder, is_equal_cols.io, is_equal_cols.aux);
     }
@@ -43,8 +37,8 @@ impl AirConfig for IsEqualChip {
 impl<F: Field> Chip<F> for IsEqualChip {}
 
 impl<AB: AirBuilder> SubAir<AB> for IsEqualChip {
-    type IoView = IsEqualIOCols<AB::Expr>;
-    type AuxView = IsEqualAuxCols<AB::Expr>;
+    type IoView = IsEqualIOCols<AB::Var>;
+    type AuxView = IsEqualAuxCols<AB::Var>;
 
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
         let is_zero_io = IsZeroIOCols {

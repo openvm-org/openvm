@@ -28,13 +28,7 @@ impl<AB: AirBuilder> Air<AB> for IsLessThanAir {
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
 
-        let local_cols = IsLessThanCols::<AB::Expr>::from_slice(
-            local
-                .iter()
-                .map(|x| (*x).into())
-                .collect::<Vec<AB::Expr>>()
-                .as_slice(),
-        );
+        let local_cols = IsLessThanCols::<AB::Var>::from_slice(local);
 
         SubAir::eval(self, builder, local_cols.io, local_cols.aux);
     }
@@ -42,8 +36,8 @@ impl<AB: AirBuilder> Air<AB> for IsLessThanAir {
 
 // sub-chip with constraints to check whether one number is less than another
 impl<AB: AirBuilder> SubAir<AB> for IsLessThanAir {
-    type IoView = IsLessThanIOCols<AB::Expr>;
-    type AuxView = IsLessThanAuxCols<AB::Expr>;
+    type IoView = IsLessThanIOCols<AB::Var>;
+    type AuxView = IsLessThanAuxCols<AB::Var>;
 
     // constrain that the result of x < y is given by less_than
     // warning: send for range check must be included for the constraints to be sound

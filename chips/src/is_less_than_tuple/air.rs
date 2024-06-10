@@ -39,12 +39,8 @@ impl<AB: AirBuilder> Air<AB> for IsLessThanTupleAir {
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
 
-        let local_cols = IsLessThanTupleCols::<AB::Expr>::from_slice(
-            local
-                .into_iter()
-                .map(|x| (*x).into())
-                .collect::<Vec<AB::Expr>>()
-                .as_slice(),
+        let local_cols = IsLessThanTupleCols::<AB::Var>::from_slice(
+            local,
             self.limb_bits().clone(),
             *self.decomp(),
             self.tuple_len(),
@@ -56,8 +52,8 @@ impl<AB: AirBuilder> Air<AB> for IsLessThanTupleAir {
 
 // sub-chip with constraints to check whether one tuple is less than the another
 impl<AB: AirBuilder> SubAir<AB> for IsLessThanTupleAir {
-    type IoView = IsLessThanTupleIOCols<AB::Expr>;
-    type AuxView = IsLessThanTupleAuxCols<AB::Expr>;
+    type IoView = IsLessThanTupleIOCols<AB::Var>;
+    type AuxView = IsLessThanTupleAuxCols<AB::Var>;
 
     // constrain that x < y lexicographically
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {

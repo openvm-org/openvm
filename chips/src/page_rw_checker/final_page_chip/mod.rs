@@ -10,7 +10,7 @@ pub mod tests;
 
 pub struct FinalPageChip {
     page_bus_index: usize,
-    pub sorted_bus_index: usize,
+    pub range_bus_index: usize,
 
     idx_len: usize,
     data_len: usize,
@@ -22,7 +22,7 @@ pub struct FinalPageChip {
 impl FinalPageChip {
     pub fn new(
         page_bus_index: usize,
-        sorted_bus_index: usize,
+        range_bus_index: usize,
         idx_len: usize,
         data_len: usize,
         idx_limb_bits: usize,
@@ -30,7 +30,7 @@ impl FinalPageChip {
     ) -> Self {
         Self {
             page_bus_index,
-            sorted_bus_index,
+            range_bus_index,
             idx_len,
             data_len,
             idx_limb_bits,
@@ -44,9 +44,9 @@ impl FinalPageChip {
 
     pub fn aux_width(&self) -> usize {
         IsLessThanTupleAuxCols::<usize>::get_width(
-            vec![self.idx_limb_bits; 1 + self.idx_len],
+            vec![self.idx_limb_bits; self.idx_len],
             self.idx_decomp,
-            1 + self.idx_len,
+            self.idx_len,
         ) + 1
     }
 

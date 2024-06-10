@@ -1,4 +1,5 @@
 use std::borrow::Borrow;
+use std::iter;
 
 use afs_stark_backend::air_builders::PartitionedAirBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -8,6 +9,7 @@ use p3_matrix::Matrix;
 use super::{columns::OfflineCheckerCols, OfflineChecker};
 use crate::{
     is_equal_vec::{columns::IsEqualVecCols, IsEqualVecChip},
+    is_less_than_tuple::{columns::IsLessThanTupleIOCols, IsLessThanTupleAir},
     sub_chip::{AirConfig, SubAir},
 };
 
@@ -21,11 +23,11 @@ impl<F: Field> BaseAir<F> for OfflineChecker {
     }
 }
 
-/// This imposes constraints to make sure rows follow the format that we want (outlined in trace.rs)
 impl<AB: PartitionedAirBuilder> Air<AB> for OfflineChecker
 where
     AB::M: Clone,
 {
+    /// This imposes constraints to make sure rows follow the format that we want (outlined in trace.rs)
     fn eval(&self, builder: &mut AB) {
         let main = &builder.partitioned_main()[0].clone();
 
@@ -33,14 +35,27 @@ where
         let local: &[AB::Var] = (*local).borrow();
         let next: &[AB::Var] = (*next).borrow();
 
-        let local_cols =
-            OfflineCheckerCols::from_slice(local, self.page_width(), self.idx_len, self.data_len);
-        let next_cols =
-            OfflineCheckerCols::from_slice(next, self.page_width(), self.idx_len, self.data_len);
+        let local_cols = OfflineCheckerCols::from_slice(
+            local,
+            self.page_width(),
+            self.idx_len,
+            self.data_len,
+            self.idx_clk_limb_bits.clone(),
+            self.idx_decomp,
+        );
+        let next_cols = OfflineCheckerCols::from_slice(
+            next,
+            self.page_width(),
+            self.idx_len,
+            self.data_len,
+            self.idx_clk_limb_bits.clone(),
+            self.idx_decomp,
+        );
 
         // Making sure bits are bools
         builder.assert_bool(local_cols.is_initial);
         builder.assert_bool(local_cols.is_final);
+        builder.assert_bool(local_cols.is_internal);
         builder.assert_bool(local_cols.op_type);
         builder.assert_bool(local_cols.same_idx);
         builder.assert_bool(local_cols.same_data);
@@ -51,13 +66,13 @@ where
         builder.when_first_row().assert_zero(local_cols.same_data);
 
         // Making sure same_idx is correct across rows
-        let is_equal_idx_vec = local_cols.page_row[1..self.idx_len + 1]
-            .iter()
-            .copied()
-            .chain(next_cols.page_row[1..self.idx_len + 1].to_vec())
-            .chain(next_cols.is_equal_idx_aux.flatten())
-            .collect::<Vec<AB::Var>>();
-        let is_equal_idx = IsEqualVecCols::from_slice(&is_equal_idx_vec, self.idx_len);
+        let is_equal_idx = IsEqualVecCols::new(
+            local_cols.page_row[1..self.idx_len + 1].to_vec(),
+            next_cols.page_row[1..self.idx_len + 1].to_vec(),
+            next_cols.is_equal_idx_aux.prods,
+            next_cols.is_equal_idx_aux.invs,
+        );
+
         let is_equal_idx_chip = IsEqualVecChip::new(self.idx_len);
 
         SubAir::eval(
@@ -68,13 +83,12 @@ where
         );
 
         // Making sure same_data is correct across rows
-        let is_equal_data_vec = local_cols.page_row[self.idx_len + 1..]
-            .iter()
-            .copied()
-            .chain(next_cols.page_row[self.idx_len + 1..].to_vec())
-            .chain(next_cols.is_equal_data_aux.flatten())
-            .collect::<Vec<AB::Var>>();
-        let is_equal_data = IsEqualVecCols::from_slice(&is_equal_data_vec, self.data_len);
+        let is_equal_data = IsEqualVecCols::new(
+            local_cols.page_row[self.idx_len + 1..].to_vec(),
+            next_cols.page_row[self.idx_len + 1..].to_vec(),
+            next_cols.is_equal_data_aux.prods,
+            next_cols.is_equal_data_aux.invs,
+        );
         let is_equal_data_chip = IsEqualVecChip::new(self.data_len);
 
         SubAir::eval(
@@ -84,9 +98,35 @@ where
             is_equal_data.aux,
         );
 
-        // TODO: make sure all rows are sorted
+        // Ensuring all rows are sorted by (key, clk)
+        let lt_io_cols = IsLessThanTupleIOCols::<AB::Var> {
+            x: local_cols.page_row[1..self.idx_len + 1]
+                .to_vec()
+                .into_iter()
+                .chain(iter::once(local_cols.clk))
+                .collect(),
+            y: next_cols.page_row[1..self.idx_len + 1]
+                .to_vec()
+                .into_iter()
+                .chain(iter::once(next_cols.clk))
+                .collect(),
+            tuple_less_than: next_cols.lt_bit,
+        };
 
-        // Some helpers
+        let lt_chip = IsLessThanTupleAir::new(
+            self.range_bus_index,
+            1 << self.idx_decomp,
+            self.idx_clk_limb_bits.clone(),
+            self.idx_decomp,
+        );
+
+        SubAir::eval(
+            &lt_chip,
+            &mut builder.when_transition(),
+            lt_io_cols,
+            next_cols.lt_aux,
+        );
+
         let and = |a: AB::Expr, b: AB::Expr| a * b;
         let or = |a: AB::Expr, b: AB::Expr| a.clone() + b.clone() - a * b;
         let implies = |a: AB::Expr, b: AB::Expr| or(AB::Expr::one() - a, b);
@@ -136,6 +176,18 @@ where
                 local_cols.is_final.into(),
                 AB::Expr::one() - local_cols.op_type.into(),
             ),
+        ));
+
+        // is_internal => not is_initial
+        builder.assert_one(implies(
+            local_cols.is_internal.into(),
+            AB::Expr::one() - local_cols.is_initial,
+        ));
+
+        // is_internal => not is_final
+        builder.assert_one(implies(
+            local_cols.is_internal.into(),
+            AB::Expr::one() - local_cols.is_final,
         ));
 
         // Making sure is_extra rows are at the bottom

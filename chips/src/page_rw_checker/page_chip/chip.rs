@@ -1,5 +1,3 @@
-use std::iter;
-
 use afs_stark_backend::interaction::{Chip, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
@@ -9,17 +7,19 @@ use super::PageChip;
 use crate::sub_chip::SubAirWithInteractions;
 
 impl<F: PrimeField64> SubAirWithInteractions<F> for PageChip {
+    /// Sends page rows (idx, data) for every allocated row on page_bus
     fn sends(&self, col_indices: PageCols<usize>) -> Vec<Interaction<F>> {
-        let virtual_cols = iter::once(col_indices.is_alloc)
-            .chain(col_indices.idx)
+        let page_cols = col_indices
+            .idx
+            .into_iter()
             .chain(col_indices.data)
             .map(VirtualPairCol::single_main)
             .collect::<Vec<_>>();
 
         vec![Interaction {
-            fields: virtual_cols,
+            fields: page_cols,
             count: VirtualPairCol::single_main(col_indices.is_alloc),
-            argument_index: self.bus_index(),
+            argument_index: self.page_bus,
         }]
     }
 }
