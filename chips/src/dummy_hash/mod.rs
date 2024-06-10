@@ -16,7 +16,7 @@ pub struct DummyHashChip {
 }
 
 impl DummyHashChip {
-    pub fn request<F: Field>(curr_state: Vec<F>, to_absorb: Vec<F>) -> Vec<F> {
+    pub fn request<F: Field>(&self, curr_state: Vec<F>, to_absorb: Vec<F>) -> Vec<F> {
         let mut new_state = curr_state.clone();
 
         for (new, b) in new_state
