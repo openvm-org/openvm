@@ -13,7 +13,7 @@ impl<F: PrimeField64> AirBridge<F> for AssertSortedAir {
     fn sends(&self) -> Vec<Interaction<F>> {
         let num_cols = AssertSortedCols::<F>::get_width(
             self.is_less_than_tuple_air().limb_bits().clone(),
-            *self.is_less_than_tuple_air().decomp(),
+            self.is_less_than_tuple_air().decomp(),
             self.is_less_than_tuple_air().tuple_len(),
         );
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
@@ -21,7 +21,7 @@ impl<F: PrimeField64> AirBridge<F> for AssertSortedAir {
         let cols_numbered = AssertSortedCols::<usize>::from_slice(
             &all_cols,
             self.is_less_than_tuple_air().limb_bits().clone(),
-            *self.is_less_than_tuple_air().decomp(),
+            self.is_less_than_tuple_air().decomp(),
             self.is_less_than_tuple_air().tuple_len(),
         );
 
