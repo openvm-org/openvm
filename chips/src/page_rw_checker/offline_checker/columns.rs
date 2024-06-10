@@ -57,12 +57,7 @@ where
             lt_aux,
         }
     }
-}
 
-impl<T> OfflineCheckerCols<T>
-where
-    T: Clone,
-{
     pub fn flatten(&self) -> Vec<T> {
         let mut flattened = vec![
             self.is_initial.clone(),
@@ -86,7 +81,6 @@ where
         flattened
     }
 
-    // TODO: change the 30 here
     pub fn from_slice(
         slc: &[T],
         page_width: usize,

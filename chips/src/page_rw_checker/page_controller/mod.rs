@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use afs_stark_backend::config::Com;
 use afs_stark_backend::prover::trace::{ProverTraceData, TraceCommitter};
-use p3_field::{AbstractField, PrimeField};
+use p3_field::{AbstractField, Field, PrimeField};
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_matrix::Matrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
@@ -63,7 +63,10 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         data_len: usize,
         idx_limb_bits: usize,
         idx_decomp: usize,
-    ) -> Self {
+    ) -> Self
+    where
+        Val<SC>: Field,
+    {
         Self {
             init_chip: PageChip::new(page_bus_index, idx_len, data_len),
             offline_checker: OfflineChecker::new(
@@ -73,7 +76,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
                 idx_len,
                 data_len,
                 idx_limb_bits,
-                30,
+                Val::<SC>::bits() - 1,
                 idx_decomp,
             ),
             final_chip: FinalPageChip::new(
@@ -171,7 +174,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             idx_len,
             data_len,
             idx_limb_bits,
-            30,
+            Val::<SC>::bits() - 1,
             idx_decomp,
         );
         self.offline_checker_trace =

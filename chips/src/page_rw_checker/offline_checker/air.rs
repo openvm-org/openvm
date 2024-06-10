@@ -101,13 +101,13 @@ where
         // Ensuring all rows are sorted by (key, clk)
         let lt_io_cols = IsLessThanTupleIOCols::<AB::Var> {
             x: local_cols.page_row[1..self.idx_len + 1]
-                .to_vec()
-                .into_iter()
+                .iter()
+                .copied()
                 .chain(iter::once(local_cols.clk))
                 .collect(),
             y: next_cols.page_row[1..self.idx_len + 1]
-                .to_vec()
-                .into_iter()
+                .iter()
+                .copied()
                 .chain(iter::once(next_cols.clk))
                 .collect(),
             tuple_less_than: next_cols.lt_bit,

@@ -57,22 +57,22 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanTupleAir {
 
     // constrain that x < y lexicographically
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
-        let x = io.x.clone();
-        let y = io.y.clone();
+        let x = io.x;
+        let y = io.y;
 
         // here we constrain that less_than[i] indicates whether x[i] < y[i] using the IsLessThan subchip for each i
         for i in 0..x.len() {
-            let x_val = x[i].clone();
-            let y_val = y[i].clone();
+            let x_val = x[i];
+            let y_val = y[i];
 
             let is_less_than_cols = IsLessThanCols {
                 io: IsLessThanIOCols {
                     x: x_val,
                     y: y_val,
-                    less_than: aux.less_than[i].clone(),
+                    less_than: aux.less_than[i],
                 },
                 aux: IsLessThanAuxCols {
-                    lower: aux.less_than_aux[i].lower.clone(),
+                    lower: aux.less_than_aux[i].lower,
                     lower_decomp: aux.less_than_aux[i].lower_decomp.clone(),
                 },
             };
@@ -87,14 +87,14 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanTupleAir {
 
         // here, we constrain that is_equal is the indicator for whether diff == 0, i.e. x[i] = y[i]
         for i in 0..x.len() {
-            let is_equal = aux.is_equal[i].clone();
-            let inv = aux.is_equal_aux[i].inv.clone();
+            let is_equal = aux.is_equal[i];
+            let inv = aux.is_equal_aux[i].inv;
 
             let is_equal_chip = IsEqualChip {};
             let is_equal_cols = IsEqualCols {
                 io: IsEqualIOCols {
-                    x: x[i].clone(),
-                    y: y[i].clone(),
+                    x: x[i],
+                    y: y[i],
                     is_equal,
                 },
                 aux: IsEqualAuxCols { inv },
@@ -104,32 +104,28 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanTupleAir {
         }
 
         // here, we constrain that is_equal_cumulative and less_than_cumulative are the correct values
-        let is_equal_cumulative = aux.is_equal_cumulative.clone();
-        let less_than_cumulative = aux.less_than_cumulative.clone();
+        let is_equal_cumulative = aux.is_equal_cumulative;
+        let less_than_cumulative = aux.less_than_cumulative;
 
-        builder.assert_eq(is_equal_cumulative[0].clone(), aux.is_equal[0].clone());
-        builder.assert_eq(less_than_cumulative[0].clone(), aux.less_than[0].clone());
+        builder.assert_eq(is_equal_cumulative[0], aux.is_equal[0]);
+        builder.assert_eq(less_than_cumulative[0], aux.less_than[0]);
 
         for i in 1..x.len() {
             // this constrains that is_equal_cumulative[i] indicates whether the first i elements of x and y are equal
             builder.assert_eq(
-                is_equal_cumulative[i].clone(),
-                is_equal_cumulative[i - 1].clone() * aux.is_equal[i].clone(),
+                is_equal_cumulative[i],
+                is_equal_cumulative[i - 1] * aux.is_equal[i],
             );
             // this constrains that less_than_cumulative[i] indicates whether the first i elements of x are less than
             // the first i elements of y, lexicographically
             // note that less_than_cumulative[i - 1] and is_equal_cumulative[i - 1] are never both 1
             builder.assert_eq(
-                less_than_cumulative[i].clone(),
-                less_than_cumulative[i - 1].clone()
-                    + aux.less_than[i].clone() * is_equal_cumulative[i - 1].clone(),
+                less_than_cumulative[i],
+                less_than_cumulative[i - 1] + aux.less_than[i] * is_equal_cumulative[i - 1],
             );
         }
 
         // constrain that the tuple_less_than does indicate whether x < y, lexicographically
-        builder.assert_eq(
-            io.tuple_less_than,
-            less_than_cumulative[x.len() - 1].clone(),
-        );
+        builder.assert_eq(io.tuple_less_than, less_than_cumulative[x.len() - 1]);
     }
 }

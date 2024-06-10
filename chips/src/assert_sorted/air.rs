@@ -38,7 +38,7 @@ impl<AB: AirBuilder> Air<AB> for AssertSortedAir {
 
         let next_cols = AssertSortedCols::from_slice(
             next,
-            self.is_less_than_tuple_air().limb_bits().clone(),
+            self.is_less_than_tuple_air().limb_bits(),
             *self.is_less_than_tuple_air().decomp(),
             self.is_less_than_tuple_air().tuple_len(),
         );
@@ -46,7 +46,7 @@ impl<AB: AirBuilder> Air<AB> for AssertSortedAir {
         // constrain that the current key is less than the next
         builder
             .when_transition()
-            .assert_one(local_cols.less_than_next_key.clone());
+            .assert_one(local_cols.less_than_next_key);
 
         let is_less_than_tuple_cols = IsLessThanTupleCols {
             io: IsLessThanTupleIOCols {
