@@ -11,7 +11,7 @@ use std::{
 };
 use types::{InputFileBodyOperation, InputFileHeaderOperation};
 
-pub const HEADER_SIZE: usize = 2;
+pub const HEADER_SIZE: usize = 3;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AfsInputInstructions {
@@ -22,6 +22,7 @@ pub struct AfsInputInstructions {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AfsHeader {
+    pub table_id: String,
     pub index_bytes: usize,
     pub data_bytes: usize,
 }
@@ -50,6 +51,7 @@ impl AfsInputInstructions {
         let lines: Vec<String> = reader.lines().collect::<Result<Vec<String>, _>>()?;
 
         let mut afs_header = AfsHeader {
+            table_id: String::new(),
             index_bytes: 0,
             data_bytes: 0,
         };
@@ -62,6 +64,9 @@ impl AfsInputInstructions {
                 Ok(op) => {
                     println!("header {:?}:{:?}", op, parts[1]);
                     match op {
+                        InputFileHeaderOperation::TableId => {
+                            afs_header.table_id = parts[1].to_string();
+                        }
                         InputFileHeaderOperation::IndexBytes => {
                             afs_header.index_bytes = value;
                         }
