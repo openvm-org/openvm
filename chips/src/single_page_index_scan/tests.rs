@@ -49,7 +49,7 @@ fn test_single_page_index_scan() {
         vec![
             &page_index_scan_chip.air,
             &page_index_scan_verify_chip.air,
-            range_checker,
+            &range_checker.air,
         ],
         vec![
             page_index_scan_chip_trace,

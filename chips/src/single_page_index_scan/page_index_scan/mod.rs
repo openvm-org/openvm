@@ -5,7 +5,7 @@ use getset::Getters;
 use crate::{is_less_than_tuple::IsLessThanTupleAir, range_gate::RangeCheckerGateChip};
 
 pub mod air;
-pub mod chip;
+pub mod bridge;
 pub mod columns;
 pub mod trace;
 

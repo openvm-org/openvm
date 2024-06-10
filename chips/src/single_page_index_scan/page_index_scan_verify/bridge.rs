@@ -1,11 +1,11 @@
 use super::columns::PageIndexScanVerifyCols;
-use afs_stark_backend::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
 use super::PageIndexScanVerifyAir;
 
-impl<F: PrimeField64> Chip<F> for PageIndexScanVerifyAir {
+impl<F: PrimeField64> AirBridge<F> for PageIndexScanVerifyAir {
     fn receives(&self) -> Vec<Interaction<F>> {
         let num_cols = PageIndexScanVerifyCols::<F>::get_width(*self.idx_len(), *self.data_len());
         let all_cols = (0..num_cols).collect::<Vec<usize>>();

@@ -1,7 +1,7 @@
 use getset::Getters;
 
 pub mod air;
-pub mod chip;
+pub mod bridge;
 pub mod columns;
 pub mod trace;
 

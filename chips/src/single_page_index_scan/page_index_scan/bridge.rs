@@ -1,16 +1,16 @@
 use crate::{
     is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
-    sub_chip::SubAirWithInteractions,
+    sub_chip::SubAirBridge,
 };
 
 use super::columns::PageIndexScanCols;
-use afs_stark_backend::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
 use super::PageIndexScanAir;
 
-impl<F: PrimeField64> Chip<F> for PageIndexScanAir {
+impl<F: PrimeField64> AirBridge<F> for PageIndexScanAir {
     fn sends(&self) -> Vec<Interaction<F>> {
         let num_cols = PageIndexScanCols::<F>::get_width(
             *self.idx_len(),
@@ -53,10 +53,8 @@ impl<F: PrimeField64> Chip<F> for PageIndexScanAir {
             argument_index: *self.bus_index(),
         }];
 
-        let mut subchip_interactions = SubAirWithInteractions::<F>::sends(
-            self.is_less_than_tuple_air(),
-            is_less_than_tuple_cols,
-        );
+        let mut subchip_interactions =
+            SubAirBridge::<F>::sends(self.is_less_than_tuple_air(), is_less_than_tuple_cols);
 
         interactions.append(&mut subchip_interactions);
 
