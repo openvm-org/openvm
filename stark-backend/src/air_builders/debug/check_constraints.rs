@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use itertools::Itertools;
 use p3_air::BaseAir;
-use p3_field::{AbstractField, ExtensionField, Field};
+use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrixView;
 use p3_matrix::stack::VerticalPair;
 use p3_matrix::Matrix;
@@ -10,6 +10,7 @@ use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::air_builders::debug::DebugConstraintBuilder;
+use crate::interaction::{AirBridge, InteractionType};
 use crate::rap::{AnyRap, Rap};
 
 /// Check that all constraints vanish on the subgroup.
@@ -107,21 +108,22 @@ pub fn check_cumulative_sums<SC: StarkGenericConfig>(
 ) {
     let mut sums = BTreeMap::new();
     for (i, air) in airs.iter().enumerate() {
-        for (j, (interaction, interaction_type)) in air.all_interactions().iter().enumerate() {
+        for (j, (interaction, interaction_type)) in AirBridge::<Val<SC>>::all_interactions(*air)
+            .into_iter()
+            .enumerate()
+        {
             if let Some(permutation) = permutation[i].as_ref() {
                 for (n, perm_row) in permutation.rows().enumerate() {
                     let preprocessed_row = preprocessed[i]
                         .as_ref()
-                        .map(|preprocessed| {
-                            preprocessed.row_slice(n).to_vec();
-                        })
+                        .map(|preprocessed| preprocessed.row_slice(n).to_vec())
                         .unwrap_or_default();
                     let main_row = partitioned_main[i]
                         .iter()
                         .flat_map(|main_part| main_part.row_slice(n).to_vec())
                         .collect_vec();
                     let perm_row: Vec<_> = perm_row.collect();
-                    let mult = interaction
+                    let mult: SC::Challenge = interaction
                         .count
                         .apply::<_, _>(&preprocessed_row, &main_row);
                     let val = match interaction_type {
@@ -138,17 +140,20 @@ pub fn check_cumulative_sums<SC: StarkGenericConfig>(
     for (i, sum) in sums {
         assert_eq!(
             sum,
-            EF::zero(),
-            "{} bus cumulative sum is not zero",
-            B::from(i)
+            SC::Challenge::zero(),
+            "bus {i} cumulative sum is not zero",
         );
     }
 
     // Check cumulative sums
-    let sum: EF = permutation
+    let sum: SC::Challenge = permutation
         .iter()
         .flatten()
         .map(|perm| *perm.row_slice(perm.height() - 1).last().unwrap())
         .sum();
-    assert_eq!(sum, EF::zero());
+    assert_eq!(
+        sum,
+        SC::Challenge::zero(),
+        "Interaction cumulative sum is not zero"
+    );
 }
