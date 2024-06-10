@@ -1,15 +1,15 @@
 use crate::{
     is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
-    sub_chip::SubAirWithInteractions,
+    sub_chip::SubAirBridge,
 };
 
 use super::columns::AssertSortedCols;
-use afs_stark_backend::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_field::PrimeField64;
 
 use super::AssertSortedAir;
 
-impl<F: PrimeField64> Chip<F> for AssertSortedAir {
+impl<F: PrimeField64> AirBridge<F> for AssertSortedAir {
     fn sends(&self) -> Vec<Interaction<F>> {
         let num_cols = AssertSortedCols::<F>::get_width(
             self.is_less_than_tuple_air().limb_bits().clone(),
@@ -35,10 +35,8 @@ impl<F: PrimeField64> Chip<F> for AssertSortedAir {
             aux: cols_numbered.is_less_than_tuple_aux,
         };
 
-        let subchip_interactions = SubAirWithInteractions::<F>::sends(
-            self.is_less_than_tuple_air(),
-            is_less_than_tuple_cols,
-        );
+        let subchip_interactions =
+            SubAirBridge::<F>::sends(self.is_less_than_tuple_air(), is_less_than_tuple_cols);
 
         subchip_interactions
     }

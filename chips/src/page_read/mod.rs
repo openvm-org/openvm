@@ -1,16 +1,16 @@
 pub mod air;
-pub mod chip;
+pub mod bridge;
 pub mod columns;
 pub mod page_controller;
 
-pub struct PageReadChip {
+pub struct PageReadAir {
     bus_index: usize,
 
     page_width: usize,
     page_height: usize,
 }
 
-impl PageReadChip {
+impl PageReadAir {
     pub fn new(bus_index: usize, page_width: usize, page_height: usize) -> Self {
         Self {
             bus_index,

@@ -66,7 +66,7 @@ fn test_single_page(
 
     let main_trace_data = trace_builder.view(
         &partial_vk,
-        vec![final_page_chip, &*range_checker, page_sender],
+        vec![final_page_chip, &range_checker.air, page_sender],
     );
 
     let pis = vec![vec![]; partial_vk.per_air.len()];
@@ -81,7 +81,7 @@ fn test_single_page(
     verifier.verify(
         &mut challenger,
         partial_vk,
-        vec![final_page_chip, &*range_checker, page_sender],
+        vec![final_page_chip, &range_checker.air, page_sender],
         proof,
         &pis,
     )
@@ -164,7 +164,7 @@ fn final_page_chip_test() {
         vec![page_data_ptr, page_aux_ptr],
     );
 
-    keygen_builder.add_air(&*range_checker, 1 << idx_limb_bits, 0);
+    keygen_builder.add_air(&range_checker.air, 1 << idx_limb_bits, 0);
     keygen_builder.add_air(&page_sender, page_height, 0);
 
     let partial_pk = keygen_builder.generate_partial_pk();

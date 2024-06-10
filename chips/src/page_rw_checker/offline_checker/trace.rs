@@ -7,7 +7,7 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 
 use super::columns::OfflineCheckerCols;
 use super::OfflineChecker;
-use crate::is_equal_vec::IsEqualVecChip;
+use crate::is_equal_vec::IsEqualVecAir;
 use crate::is_less_than_tuple::IsLessThanTupleAir;
 use crate::page_rw_checker::page_controller::Operation;
 use crate::range_gate::RangeCheckerGateChip;
@@ -33,8 +33,8 @@ impl OfflineChecker {
     where
         Val<SC>: PrimeField,
     {
-        let is_equal_idx = IsEqualVecChip::new(self.idx_len);
-        let is_equal_data = IsEqualVecChip::new(self.data_len);
+        let is_equal_idx = IsEqualVecAir::new(self.idx_len);
+        let is_equal_data = IsEqualVecAir::new(self.data_len);
 
         let lt_chip = IsLessThanTupleAir::new(
             usize::MAX,

@@ -1,6 +1,6 @@
 use std::iter;
 
-use afs_stark_backend::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
@@ -8,9 +8,9 @@ use super::columns::OfflineCheckerCols;
 use super::OfflineChecker;
 use crate::is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols};
 use crate::is_less_than_tuple::IsLessThanTupleAir;
-use crate::sub_chip::SubAirWithInteractions;
+use crate::sub_chip::SubAirBridge;
 
-impl<F: PrimeField64> SubAirWithInteractions<F> for OfflineChecker {
+impl<F: PrimeField64> SubAirBridge<F> for OfflineChecker {
     /// Receives page rows (idx, data) for rows tagged with is_initial on page_bus
     /// Receives operations (clk, idx, data, op_type) for rows tagged with is_internal on ops_bus
     fn receives(&self, col_indices: OfflineCheckerCols<usize>) -> Vec<Interaction<F>> {
@@ -60,7 +60,7 @@ impl<F: PrimeField64> SubAirWithInteractions<F> for OfflineChecker {
             self.idx_decomp,
         );
 
-        interactions.extend(SubAirWithInteractions::sends(
+        interactions.extend(SubAirBridge::sends(
             &lt_air,
             IsLessThanTupleCols {
                 io: IsLessThanTupleIOCols {
@@ -76,7 +76,7 @@ impl<F: PrimeField64> SubAirWithInteractions<F> for OfflineChecker {
     }
 }
 
-impl<F: PrimeField64> Chip<F> for OfflineChecker {
+impl<F: PrimeField64> AirBridge<F> for OfflineChecker {
     fn receives(&self) -> Vec<Interaction<F>> {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
@@ -89,7 +89,7 @@ impl<F: PrimeField64> Chip<F> for OfflineChecker {
             self.idx_clk_limb_bits.clone(),
             self.idx_decomp,
         );
-        SubAirWithInteractions::receives(self, cols_to_receive)
+        SubAirBridge::receives(self, cols_to_receive)
     }
 
     fn sends(&self) -> Vec<Interaction<F>> {
@@ -104,6 +104,6 @@ impl<F: PrimeField64> Chip<F> for OfflineChecker {
             self.idx_clk_limb_bits.clone(),
             self.idx_decomp,
         );
-        SubAirWithInteractions::sends(self, cols_to_send)
+        SubAirBridge::sends(self, cols_to_send)
     }
 }

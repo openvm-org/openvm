@@ -1,12 +1,12 @@
-use afs_stark_backend::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
 use super::columns::PageCols;
 use super::PageChip;
-use crate::sub_chip::SubAirWithInteractions;
+use crate::sub_chip::SubAirBridge;
 
-impl<F: PrimeField64> SubAirWithInteractions<F> for PageChip {
+impl<F: PrimeField64> SubAirBridge<F> for PageChip {
     /// Sends page rows (idx, data) for every allocated row on page_bus
     fn sends(&self, col_indices: PageCols<usize>) -> Vec<Interaction<F>> {
         let page_cols = col_indices
@@ -24,12 +24,12 @@ impl<F: PrimeField64> SubAirWithInteractions<F> for PageChip {
     }
 }
 
-impl<F: PrimeField64> Chip<F> for PageChip {
+impl<F: PrimeField64> AirBridge<F> for PageChip {
     fn sends(&self) -> Vec<Interaction<F>> {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
         let cols_to_send = PageCols::<usize>::from_slice(&all_cols, self.idx_len, self.data_len);
-        SubAirWithInteractions::sends(self, cols_to_send)
+        SubAirBridge::sends(self, cols_to_send)
     }
 }

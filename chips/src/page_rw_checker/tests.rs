@@ -27,6 +27,7 @@ use crate::page_rw_checker::{
 
 type Val = BabyBear;
 
+#[allow(clippy::too_many_arguments)]
 fn load_page_test(
     engine: &BabyBearPoseidon2Engine,
     page_init: Vec<Vec<u32>>,
@@ -101,7 +102,7 @@ fn load_page_test(
             &page_controller.init_chip,
             &page_controller.final_chip,
             &page_controller.offline_checker,
-            page_controller.range_checker.as_ref(),
+            &page_controller.range_checker.air,
             ops_sender,
         ],
     );
@@ -122,7 +123,7 @@ fn load_page_test(
             &page_controller.init_chip,
             &page_controller.final_chip,
             &page_controller.offline_checker,
-            page_controller.range_checker.as_ref(),
+            &page_controller.range_checker.air,
             ops_sender,
         ],
         proof,
@@ -264,7 +265,7 @@ fn page_read_write_test() {
     );
 
     keygen_builder.add_partitioned_air(
-        page_controller.range_checker.as_ref(),
+        &page_controller.range_checker.air,
         1 << idx_decomp,
         0,
         vec![range_checker_ptr],

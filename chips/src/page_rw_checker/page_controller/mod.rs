@@ -155,7 +155,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         Val<SC>: PrimeField,
     {
         // idx_decomp can't change between different pages since range_checker depends on it
-        assert!(1 << idx_decomp == self.range_checker.range_max);
+        assert!(1 << idx_decomp == self.range_checker.range_max());
 
         assert!(!page.is_empty());
         self.init_chip_trace = Some(self.get_page_trace(page.clone()));

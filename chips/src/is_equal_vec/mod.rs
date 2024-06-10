@@ -6,11 +6,11 @@ pub mod columns;
 pub mod trace;
 
 #[derive(Default)]
-pub struct IsEqualVecChip {
+pub struct IsEqualVecAir {
     vec_len: usize,
 }
 
-impl IsEqualVecChip {
+impl IsEqualVecAir {
     pub fn new(vec_len: usize) -> Self {
         Self { vec_len }
     }

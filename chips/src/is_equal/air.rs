@@ -1,22 +1,26 @@
 use std::borrow::Borrow;
 
-use super::columns::{IsEqualAuxCols, IsEqualCols, IsEqualIOCols, NUM_COLS};
-use super::IsEqualChip;
-use crate::is_zero::columns::IsZeroIOCols;
-use crate::is_zero::IsZeroChip;
-use crate::sub_chip::{AirConfig, SubAir};
-use afs_stark_backend::interaction::Chip;
+use afs_stark_backend::interaction::AirBridge;
 use p3_air::{Air, AirBuilder, BaseAir};
+use p3_field::AbstractField;
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-impl<F: Field> BaseAir<F> for IsEqualChip {
+use crate::sub_chip::{AirConfig, SubAir};
+
+use super::columns::IsEqualAuxCols;
+use super::{
+    columns::{IsEqualCols, IsEqualIOCols, NUM_COLS},
+    IsEqualAir,
+};
+
+impl<F: Field> BaseAir<F> for IsEqualAir {
     fn width(&self) -> usize {
         NUM_COLS
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for IsEqualChip {
+impl<AB: AirBuilder> Air<AB> for IsEqualAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -29,22 +33,19 @@ impl<AB: AirBuilder> Air<AB> for IsEqualChip {
     }
 }
 
-impl AirConfig for IsEqualChip {
+impl AirConfig for IsEqualAir {
     type Cols<T> = IsEqualCols<T>;
 }
 
 // No interactions
-impl<F: Field> Chip<F> for IsEqualChip {}
+impl<F: Field> AirBridge<F> for IsEqualAir {}
 
-impl<AB: AirBuilder> SubAir<AB> for IsEqualChip {
+impl<AB: AirBuilder> SubAir<AB> for IsEqualAir {
     type IoView = IsEqualIOCols<AB::Var>;
     type AuxView = IsEqualAuxCols<AB::Var>;
 
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
-        let is_zero_io = IsZeroIOCols {
-            x: io.x - io.y,
-            is_zero: io.is_equal.into(),
-        };
-        SubAir::eval(&IsZeroChip, builder, is_zero_io, aux.inv.into());
+        builder.assert_eq((io.x - io.y) * aux.inv + io.is_equal, AB::F::one());
+        builder.assert_eq((io.x - io.y) * io.is_equal, AB::F::zero());
     }
 }

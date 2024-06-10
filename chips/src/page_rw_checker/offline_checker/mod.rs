@@ -1,7 +1,7 @@
 use crate::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 
 mod air;
-mod chip;
+mod bridge;
 mod columns;
 mod trace;
 

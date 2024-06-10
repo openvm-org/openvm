@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::interaction::Chip;
+use afs_stark_backend::interaction::AirBridge;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
 use p3_field::Field;
@@ -10,17 +10,17 @@ use crate::sub_chip::{AirConfig, SubAir};
 
 use super::{
     columns::{IsEqualVecAuxCols, IsEqualVecCols, IsEqualVecIOCols},
-    IsEqualVecChip,
+    IsEqualVecAir,
 };
 
 // No interactions
-impl<F: Field> Chip<F> for IsEqualVecChip {}
+impl<F: Field> AirBridge<F> for IsEqualVecAir {}
 
-impl AirConfig for IsEqualVecChip {
+impl AirConfig for IsEqualVecAir {
     type Cols<T> = IsEqualVecCols<T>;
 }
 
-impl<F: Field> BaseAir<F> for IsEqualVecChip {
+impl<F: Field> BaseAir<F> for IsEqualVecAir {
     fn width(&self) -> usize {
         self.get_width()
     }
@@ -37,7 +37,7 @@ impl<F: Field> BaseAir<F> for IsEqualVecChip {
 /// At every transition index prohibits 0 followed by 1, and constrains
 /// 1 with equality must be followed by 1
 /// When product does not change, inv is 0, when product changes, inverse is inverse of difference
-impl<AB: AirBuilder> Air<AB> for IsEqualVecChip {
+impl<AB: AirBuilder> Air<AB> for IsEqualVecAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -50,7 +50,7 @@ impl<AB: AirBuilder> Air<AB> for IsEqualVecChip {
     }
 }
 
-impl<AB: AirBuilder> SubAir<AB> for IsEqualVecChip {
+impl<AB: AirBuilder> SubAir<AB> for IsEqualVecAir {
     type IoView = IsEqualVecIOCols<AB::Var>;
     type AuxView = IsEqualVecAuxCols<AB::Var>;
 

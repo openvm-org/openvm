@@ -1,4 +1,4 @@
-use afs_stark_backend::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
@@ -8,10 +8,10 @@ use crate::{
         columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
         IsLessThanTupleAir,
     },
-    sub_chip::SubAirWithInteractions,
+    sub_chip::SubAirBridge,
 };
 
-impl<F: PrimeField64> SubAirWithInteractions<F> for FinalPageChip {
+impl<F: PrimeField64> SubAirBridge<F> for FinalPageChip {
     /// Sends interactions required by IsLessThanTuple SubAir
     fn sends(&self, col_indices: FinalPageCols<usize>) -> Vec<Interaction<F>> {
         let lt_air = IsLessThanTupleAir::new(
@@ -21,7 +21,7 @@ impl<F: PrimeField64> SubAirWithInteractions<F> for FinalPageChip {
             self.idx_decomp,
         );
 
-        SubAirWithInteractions::sends(
+        SubAirBridge::sends(
             &lt_air,
             IsLessThanTupleCols {
                 io: IsLessThanTupleIOCols {
@@ -52,7 +52,7 @@ impl<F: PrimeField64> SubAirWithInteractions<F> for FinalPageChip {
     }
 }
 
-impl<F: PrimeField64> Chip<F> for FinalPageChip {
+impl<F: PrimeField64> AirBridge<F> for FinalPageChip {
     fn sends(&self) -> Vec<Interaction<F>> {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
@@ -65,7 +65,7 @@ impl<F: PrimeField64> Chip<F> for FinalPageChip {
             self.idx_decomp,
         );
 
-        SubAirWithInteractions::sends(self, cols_to_send)
+        SubAirBridge::sends(self, cols_to_send)
     }
 
     fn receives(&self) -> Vec<Interaction<F>> {
@@ -80,6 +80,6 @@ impl<F: PrimeField64> Chip<F> for FinalPageChip {
             self.idx_decomp,
         );
 
-        SubAirWithInteractions::receives(self, cols_to_send)
+        SubAirBridge::receives(self, cols_to_send)
     }
 }

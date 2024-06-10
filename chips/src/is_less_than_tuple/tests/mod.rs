@@ -51,7 +51,7 @@ fn test_is_less_than_tuple_chip() {
     let range_checker_trace = range_checker.generate_trace();
 
     run_simple_test_no_pis(
-        vec![&chip.air, range_checker],
+        vec![&chip.air, &range_checker.air],
         vec![trace, range_checker_trace],
     )
     .expect("Verification failed");
@@ -78,7 +78,7 @@ fn test_is_less_than_tuple_chip_negative() {
     });
     assert_eq!(
         run_simple_test_no_pis(
-            vec![&chip.air, range_checker],
+            vec![&chip.air, &range_checker.air],
             vec![trace, range_checker_trace]
         ),
         Err(VerificationError::OodEvaluationMismatch),

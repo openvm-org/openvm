@@ -28,7 +28,7 @@ pub trait LocalTraceInstructions<F>: AirConfig {
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F>;
 }
 
-pub trait SubAirWithInteractions<F: Field>: AirConfig {
+pub trait SubAirBridge<F: Field>: AirConfig {
     fn sends(&self, col_indices: Self::Cols<usize>) -> Vec<Interaction<F>> {
         let _ = col_indices;
         vec![]

@@ -8,7 +8,7 @@ use crate::{is_less_than::IsLessThanAir, range_gate::RangeCheckerGateChip};
 pub mod tests;
 
 pub mod air;
-pub mod chip;
+pub mod bridge;
 pub mod columns;
 pub mod trace;
 

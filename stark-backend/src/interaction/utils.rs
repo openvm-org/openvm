@@ -1,9 +1,9 @@
 use p3_air::VirtualPairCol;
 use p3_field::{AbstractField, ExtensionField, Field, Powers};
 
-use super::Chip;
+use super::AirBridge;
 
-pub fn generate_rlc_elements<F: Field, C: Chip<F> + ?Sized, AF: AbstractField>(
+pub fn generate_rlc_elements<F: Field, C: AirBridge<F> + ?Sized, AF: AbstractField>(
     chip: &C,
     random_element: AF,
 ) -> Vec<AF> {

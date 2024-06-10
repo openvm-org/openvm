@@ -1,22 +1,23 @@
-use crate::sub_chip::SubAirWithInteractions;
-
-use super::{columns::IsLessThanCols, IsLessThanAir};
-use afs_stark_backend::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
-impl<F: PrimeField64> Chip<F> for IsLessThanAir {
+use crate::sub_chip::SubAirBridge;
+
+use super::{columns::IsLessThanCols, IsLessThanAir};
+
+impl<F: PrimeField64> AirBridge<F> for IsLessThanAir {
     fn sends(&self) -> Vec<Interaction<F>> {
         let num_cols = IsLessThanCols::<F>::get_width(*self.limb_bits(), *self.decomp());
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
         let cols_numbered = IsLessThanCols::<usize>::from_slice(&all_cols);
 
-        SubAirWithInteractions::sends(self, cols_numbered)
+        SubAirBridge::sends(self, cols_numbered)
     }
 }
 
-impl<F: PrimeField64> SubAirWithInteractions<F> for IsLessThanAir {
+impl<F: PrimeField64> SubAirBridge<F> for IsLessThanAir {
     fn sends(&self, col_indices: IsLessThanCols<usize>) -> Vec<Interaction<F>> {
         let mut interactions = vec![];
 

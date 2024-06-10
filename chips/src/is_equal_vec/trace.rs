@@ -5,9 +5,9 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::sub_chip::LocalTraceInstructions;
 
-use super::{columns::IsEqualVecCols, IsEqualVecChip};
+use super::{columns::IsEqualVecCols, IsEqualVecAir};
 
-impl IsEqualVecChip {
+impl IsEqualVecAir {
     pub fn generate_trace<F: Field>(&self, x: Vec<Vec<F>>, y: Vec<Vec<F>>) -> RowMajorMatrix<F> {
         let width: usize = self.get_width();
         let height: usize = x.len();
@@ -25,7 +25,7 @@ impl IsEqualVecChip {
     }
 }
 
-impl<F: Field> LocalTraceInstructions<F> for IsEqualVecChip {
+impl<F: Field> LocalTraceInstructions<F> for IsEqualVecAir {
     type LocalInput = (Vec<F>, Vec<F>);
 
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {

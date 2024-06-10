@@ -8,7 +8,7 @@ use p3_matrix::Matrix;
 
 use super::{columns::OfflineCheckerCols, OfflineChecker};
 use crate::{
-    is_equal_vec::{columns::IsEqualVecCols, IsEqualVecChip},
+    is_equal_vec::{columns::IsEqualVecCols, IsEqualVecAir},
     is_less_than_tuple::{columns::IsLessThanTupleIOCols, IsLessThanTupleAir},
     sub_chip::{AirConfig, SubAir},
 };
@@ -73,10 +73,10 @@ where
             next_cols.is_equal_idx_aux.invs,
         );
 
-        let is_equal_idx_chip = IsEqualVecChip::new(self.idx_len);
+        let is_equal_idx_air = IsEqualVecAir::new(self.idx_len);
 
         SubAir::eval(
-            &is_equal_idx_chip,
+            &is_equal_idx_air,
             &mut builder.when_transition(),
             is_equal_idx.io,
             is_equal_idx.aux,
@@ -89,10 +89,10 @@ where
             next_cols.is_equal_data_aux.prods,
             next_cols.is_equal_data_aux.invs,
         );
-        let is_equal_data_chip = IsEqualVecChip::new(self.data_len);
+        let is_equal_data_air = IsEqualVecAir::new(self.data_len);
 
         SubAir::eval(
-            &is_equal_data_chip,
+            &is_equal_data_air,
             &mut builder.when_transition(),
             is_equal_data.io,
             is_equal_data.aux,
