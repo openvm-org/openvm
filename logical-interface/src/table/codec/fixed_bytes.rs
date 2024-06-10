@@ -98,11 +98,7 @@ where
         }
 
         // Get least significant size_t bytes (big endian)
-        // let bytes_slice = &bytes[bytes_len - Self::SIZE_U..];
-        // U::from_be_bytes(bytes_slice)
-        let bytes_slice = &bytes[bytes_len - Self::SIZE_U..bytes_len];
-        let mut data_bytes = vec![0; std::mem::size_of::<U>()];
-        data_bytes.copy_from_slice(bytes_slice); // Copy the slice into the array
+        let bytes_slice = &bytes[bytes_len - Self::SIZE_U..];
         let bytes_slice: &[u8; SIZE_U] = bytes_slice.try_into().unwrap();
         U::from_be_bytes(bytes_slice)
     }

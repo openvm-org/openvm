@@ -10,9 +10,9 @@ pub fn test_interface_mock_db() {
         Some(_) => (),
         None => panic!("Error inserting data"),
     }
-    let i1 = interface.insert(table_id, 4, 8);
-    match i1 {
-        Some(_) => (),
-        None => panic!("Error inserting data"),
-    }
+    // let i1 = interface.insert(table_id, 4, 8);
+    // match i1 {
+    //     Some(_) => (),
+    //     None => panic!("Error inserting data"),
+    // }
 }

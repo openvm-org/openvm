@@ -2,8 +2,7 @@ pub mod utils;
 
 use crate::table::TableId;
 use alloy_primitives::FixedBytes;
-use color_eyre::eyre::{eyre, Result};
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 
 pub struct MockDb<const INDEX_BYTES: usize, const DATA_BYTES: usize> {
     pub tables: HashMap<TableId, MockDbTable<INDEX_BYTES, DATA_BYTES>>,
@@ -55,10 +54,7 @@ impl<const INDEX_BYTES: usize, const DATA_BYTES: usize> MockDb<INDEX_BYTES, DATA
         }
         let table = self.tables.insert(
             table_id,
-            MockDbTable {
-                id: table_id,
-                items: HashMap::new(),
-            },
+            MockDbTable::<INDEX_BYTES, DATA_BYTES>::new(table_id),
         )?;
         Some(table)
     }
@@ -78,12 +74,13 @@ impl<const INDEX_BYTES: usize, const DATA_BYTES: usize> MockDb<INDEX_BYTES, DATA
         }
         let table = table?;
         let index = FixedBytes::<INDEX_BYTES>::from_slice(key.as_slice());
-        if table.items.contains_key(&index) {
-            None
-        } else {
-            let value = FixedBytes::<DATA_BYTES>::from_slice(value.as_slice());
-            table.items.insert(index, value).unwrap();
-            Some(())
+        match table.items.entry(index) {
+            Entry::Occupied(_) => None,
+            Entry::Vacant(entry) => {
+                let value = FixedBytes::<DATA_BYTES>::from_slice(value.as_slice());
+                entry.insert(value);
+                Some(())
+            }
         }
     }
 
@@ -95,12 +92,13 @@ impl<const INDEX_BYTES: usize, const DATA_BYTES: usize> MockDb<INDEX_BYTES, DATA
         }
         let table = table?;
         let index = FixedBytes::<INDEX_BYTES>::from_slice(key.as_slice());
-        if !table.items.contains_key(&index) {
-            None
-        } else {
-            let value = FixedBytes::<DATA_BYTES>::from_slice(value.as_slice());
-            table.items.insert(index, value).unwrap();
-            Some(())
+        match table.items.entry(index) {
+            Entry::Occupied(mut entry) => {
+                let value = FixedBytes::<DATA_BYTES>::from_slice(value.as_slice());
+                entry.insert(value);
+                Some(())
+            }
+            Entry::Vacant(_) => None,
         }
     }
 
@@ -109,7 +107,7 @@ impl<const INDEX_BYTES: usize, const DATA_BYTES: usize> MockDb<INDEX_BYTES, DATA
         let index = FixedBytes::<INDEX_BYTES>::from_slice(key.as_slice());
         let removed = table.items.remove(&index);
         if removed.is_none() {
-            return None;
+            None
         } else {
             Some(())
         }
@@ -121,6 +119,15 @@ impl<const INDEX_BYTES: usize, const DATA_BYTES: usize> Default
 {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl<const INDEX_BYTES: usize, const DATA_BYTES: usize> MockDbTable<INDEX_BYTES, DATA_BYTES> {
+    pub fn new(table_id: TableId) -> Self {
+        Self {
+            id: table_id,
+            items: HashMap::new(),
+        }
     }
 }
 
