@@ -3,19 +3,19 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::sub_chip::LocalTraceInstructions;
 
-use super::{columns::PageIndexScanCols, PageIndexScanChip};
+use super::{columns::PageIndexScanInputCols, PageIndexScanInputChip};
 
-impl PageIndexScanChip {
+impl PageIndexScanInputChip {
     pub fn generate_trace<F: PrimeField64>(
         &self,
         page: Vec<Vec<u32>>,
         x: Vec<u32>,
     ) -> RowMajorMatrix<F> {
-        let num_cols: usize = PageIndexScanCols::<F>::get_width(
+        let num_cols: usize = PageIndexScanInputCols::<F>::get_width(
             self.air.idx_len,
             self.air.data_len,
             self.air.is_less_than_tuple_air.limb_bits(),
-            *self.air.is_less_than_tuple_air.decomp(),
+            self.air.is_less_than_tuple_air.decomp(),
         );
 
         let mut rows: Vec<F> = vec![];

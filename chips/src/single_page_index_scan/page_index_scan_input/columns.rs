@@ -1,6 +1,6 @@
 use crate::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 
-pub struct PageIndexScanCols<T> {
+pub struct PageIndexScanInputCols<T> {
     pub is_alloc: T,
     pub idx: Vec<T>,
     pub data: Vec<T>,
@@ -12,13 +12,13 @@ pub struct PageIndexScanCols<T> {
     pub is_less_than_tuple_aux: IsLessThanTupleAuxCols<T>,
 }
 
-impl<T: Clone> PageIndexScanCols<T> {
+impl<T: Clone> PageIndexScanInputCols<T> {
     pub fn from_slice(
         slc: &[T],
         idx_len: usize,
         data_len: usize,
-        decomp: usize,
         limb_bits: Vec<usize>,
+        decomp: usize,
     ) -> Self {
         Self {
             is_alloc: slc[0].clone(),

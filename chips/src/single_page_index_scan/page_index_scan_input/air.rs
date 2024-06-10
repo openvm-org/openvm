@@ -9,36 +9,36 @@ use crate::{
     sub_chip::{AirConfig, SubAir},
 };
 
-use super::{columns::PageIndexScanCols, PageIndexScanAir};
+use super::{columns::PageIndexScanInputCols, PageIndexScanInputAir};
 
-impl AirConfig for PageIndexScanAir {
-    type Cols<T> = PageIndexScanCols<T>;
+impl AirConfig for PageIndexScanInputAir {
+    type Cols<T> = PageIndexScanInputCols<T>;
 }
 
-impl<F: Field> BaseAir<F> for PageIndexScanAir {
+impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
     fn width(&self) -> usize {
-        PageIndexScanCols::<F>::get_width(
+        PageIndexScanInputCols::<F>::get_width(
             self.idx_len,
             self.data_len,
             self.is_less_than_tuple_air.limb_bits().clone(),
-            *self.is_less_than_tuple_air.decomp(),
+            self.is_less_than_tuple_air.decomp(),
         )
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for PageIndexScanAir {
+impl<AB: AirBuilder> Air<AB> for PageIndexScanInputAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
 
-        let local_cols = PageIndexScanCols::<AB::Var>::from_slice(
+        let local_cols = PageIndexScanInputCols::<AB::Var>::from_slice(
             local,
             self.idx_len,
             self.data_len,
-            *self.is_less_than_tuple_air.decomp(),
             self.is_less_than_tuple_air.limb_bits().clone(),
+            self.is_less_than_tuple_air.decomp(),
         );
 
         let is_less_than_tuple_cols = IsLessThanTupleCols {

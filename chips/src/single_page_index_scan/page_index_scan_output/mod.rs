@@ -20,24 +20,21 @@ pub enum Comp {
 }
 
 #[derive(Default, Getters)]
-pub struct PageIndexScanAir {
-    #[getset(get = "pub")]
+pub struct PageIndexScanOutputAir {
     pub bus_index: usize,
-    #[getset(get = "pub")]
     pub idx_len: usize,
-    #[getset(get = "pub")]
     pub data_len: usize,
 
     #[getset(get = "pub")]
     is_less_than_tuple_air: IsLessThanTupleAir,
 }
 
-pub struct PageIndexScanChip {
-    pub air: PageIndexScanAir,
+pub struct PageIndexScanOutputChip {
+    pub air: PageIndexScanOutputAir,
     pub range_checker: Arc<RangeCheckerGateChip>,
 }
 
-impl PageIndexScanChip {
+impl PageIndexScanOutputChip {
     pub fn new(
         bus_index: usize,
         idx_len: usize,
@@ -48,15 +45,12 @@ impl PageIndexScanChip {
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
         Self {
-            air: PageIndexScanAir {
+            air: PageIndexScanOutputAir {
                 bus_index,
                 idx_len,
                 data_len,
                 is_less_than_tuple_air: IsLessThanTupleAir::new(
-                    bus_index,
-                    range_max,
-                    limb_bits.clone(),
-                    decomp,
+                    bus_index, range_max, limb_bits, decomp,
                 ),
             },
             range_checker,
