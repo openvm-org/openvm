@@ -15,13 +15,13 @@ pub mod trace;
 #[derive(Default, CopyGetters)]
 #[getset(get_copy = "pub")]
 pub struct IsLessThanTupleAir {
-    // The bus index for sends to range chip
+    /// The bus index for sends to range chip
     bus_index: usize,
-    // The maximum range for the range checker
+    /// The maximum range for the range checker
     range_max: u32,
-    // The number of bits to decompose each number into, for less than checking
+    /// The number of bits to decompose each number into, for less than checking
     decomp: usize,
-    // IsLessThanAirs for each tuple element
+    /// IsLessThanAirs for each tuple element
     #[getset(skip)]
     is_less_than_airs: Vec<IsLessThanAir>,
 }
@@ -53,14 +53,12 @@ impl IsLessThanTupleAir {
     }
 }
 
-/**
- * This chip computes whether one tuple is lexicographically less than another. Each element of the
- * tuple has its own max number of bits, given by the limb_bits array. The chip assumes that each limb
- * is within its given max limb_bits.
- *
- * The IsLessThanTupleChip uses the IsLessThanChip as a subchip to check whether individual tuple elements
- * are less than each other.
- */
+/// This chip computes whether one tuple is lexicographically less than another. Each element of the
+/// tuple has its own max number of bits, given by the limb_bits array. The chip assumes that each limb
+/// is within its given max limb_bits.
+///
+/// The IsLessThanTupleChip uses the IsLessThanChip as a subchip to check whether individual tuple elements
+/// are less than each other.
 #[derive(Default)]
 pub struct IsLessThanTupleChip {
     pub air: IsLessThanTupleAir,
