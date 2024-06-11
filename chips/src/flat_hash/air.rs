@@ -6,20 +6,20 @@ use crate::sub_chip::AirConfig;
 
 use super::{
     columns::{FlatHashCols, FlatHashInternalCols},
-    FlatHashChip,
+    FlatHashAir,
 };
 
-impl<F: Field> BaseAir<F> for FlatHashChip {
+impl<F: Field> BaseAir<F> for FlatHashAir {
     fn width(&self) -> usize {
         self.page_width + (self.page_width / self.hash_rate + 1) * self.hash_width
     }
 }
 
-impl AirConfig for FlatHashChip {
+impl AirConfig for FlatHashAir {
     type Cols<T> = FlatHashCols<T>;
 }
 
-impl<AB: AirBuilderWithPublicValues> Air<AB> for FlatHashChip {
+impl<AB: AirBuilderWithPublicValues> Air<AB> for FlatHashAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let pis = builder.public_values();

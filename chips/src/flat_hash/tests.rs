@@ -1,4 +1,4 @@
-use crate::flat_hash::FlatHashChip;
+use crate::flat_hash::FlatHashAir;
 
 use afs_stark_backend::prover::USE_DEBUG_BUILDER;
 use afs_stark_backend::rap::AnyRap;
@@ -10,46 +10,59 @@ use rand::Rng;
 
 use crate::dummy_hash::DummyHashAir;
 
+use super::PageController;
+
 #[test]
 fn test_single_is_zero() {
-    let chip = FlatHashChip::new(8, 4, 5, 2, 3, 0, 1);
-    let num_hashchips = chip.page_width / chip.hash_rate;
+    // let chip = PageController::new(8, 4, 5, 2, 3, 0, 1);
+    let chip = PageController::new(4, 1, 2, 1, 2, 0, 0);
+    // let num_hashchips = chip.air.page_width / chip.air.hash_rate;
 
     let mut rng = create_seeded_rng();
-    let x = (0..chip.page_height)
+    let x = (0..chip.air.page_height)
         .map(|_| {
-            (0..chip.page_width)
-                .map(|_| BabyBear::from_canonical_u32(rng.gen_range(0..100)))
+            (0..chip.air.page_width)
+                // .map(|_| BabyBear::from_canonical_u32(rng.gen_range(0..100)))
+                .map(|_| BabyBear::from_canonical_u32(rng.gen_range(0..3)))
                 .collect()
         })
         .collect::<Vec<Vec<BabyBear>>>();
 
-    let mut hash_chip_states = vec![];
-    let mut hash_chip_slices = vec![];
+    // let mut hash_chip_states = vec![];
+    // let mut hash_chip_slices = vec![];
 
-    let mut state = vec![BabyBear::zero(); chip.hash_width];
+    // let mut state = vec![BabyBear::zero(); chip.air.hash_width];
 
-    for row in &x {
-        for width in 0..num_hashchips {
-            hash_chip_states.push(state.clone());
-            let slice = row[width * chip.hash_rate..(width + 1) * chip.hash_rate].to_vec();
-            hash_chip_slices.push(slice.clone());
-            state = DummyHashAir::request(&chip.hash_chip, state, slice);
-        }
-    }
+    // for row in &x {
+    //     for width in 0..num_hashchips {
+    //         hash_chip_states.push(state.clone());
+    //         let slice = row[width * chip.hash_rate..(width + 1) * chip.hash_rate].to_vec();
+    //         hash_chip_slices.push(slice.clone());
+    //         // state = DummyHashChip::request(&chip.hash_chip, state, slice);
+    //     }
+    // }
 
-    let hash_chip_trace = chip
-        .hash_chip
-        .generate_trace(hash_chip_states.clone(), hash_chip_slices.clone());
+    let pageread_trace = chip.generate_trace(x);
+    let hash_chip = chip.hash_chip.lock();
+    let hash_chip_trace = hash_chip.generate_cached_trace();
+    drop(hash_chip);
 
-    let trace = chip.generate_trace(x);
-    let all_chips: Vec<&dyn AnyRap<_>> = vec![&chip, &chip.hash_chip];
+    // let hash_chip_trace = chip
+    //     .hash_chip
+    //     .generate_trace(hash_chip_states.clone(), hash_chip_slices.clone());
 
-    let all_traces = vec![trace, hash_chip_trace];
+    let hash_chip = chip.hash_chip.lock();
+    let all_chips: Vec<&dyn AnyRap<_>> = vec![&chip.air, &hash_chip.air];
 
-    let pis = state
+    let all_traces = vec![pageread_trace.clone(), hash_chip_trace.clone()];
+
+    let pis = pageread_trace
+        .values
         .iter()
-        .take(chip.digest_width)
+        .rev()
+        .take(chip.air.hash_width)
+        .rev()
+        .take(chip.air.digest_width)
         .cloned()
         .collect::<Vec<_>>();
     let all_pis = vec![pis, vec![]];

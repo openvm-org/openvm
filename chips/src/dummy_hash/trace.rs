@@ -5,8 +5,22 @@ use crate::sub_chip::LocalTraceInstructions;
 
 use super::{
     columns::{DummyHashAuxCols, DummyHashCols, DummyHashIOCols},
-    DummyHashAir,
+    DummyHashAir, DummyHashChip,
 };
+
+impl<F: Field> DummyHashChip<F> {
+    pub fn generate_cached_trace(&self) -> RowMajorMatrix<F> {
+        let rows = (0..self.hash_in_states.len())
+            .flat_map(|i| {
+                let mut combined = self.hash_in_states[i].clone();
+                combined.extend(self.hash_slices[i].clone());
+                combined.extend(self.hash_out_states[i].clone());
+                combined.into_iter()
+            })
+            .collect::<Vec<_>>();
+        RowMajorMatrix::new(rows, self.air.get_width())
+    }
+}
 
 impl DummyHashAir {
     pub fn generate_trace<F: Field>(
@@ -31,7 +45,7 @@ impl<F: Field> LocalTraceInstructions<F> for DummyHashAir {
 
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
         let (curr_state, to_absorb) = local_input;
-        let new_state = self.request(curr_state.clone(), to_absorb.clone());
+        let new_state = DummyHashAir::hash(curr_state.clone(), to_absorb.clone());
 
         DummyHashCols {
             io: DummyHashIOCols {

@@ -2,11 +2,9 @@ use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::Field;
 
-use crate::flat_hash::FlatHashChip;
+use super::{columns::FlatHashCols, FlatHashAir};
 
-use super::columns::FlatHashCols;
-
-impl<F: Field> AirBridge<F> for FlatHashChip {
+impl<F: Field> AirBridge<F> for FlatHashAir {
     fn sends(&self) -> Vec<Interaction<F>> {
         let col_indices =
             FlatHashCols::<F>::hash_col_indices(self.page_width, self.hash_width, self.hash_rate);
@@ -25,7 +23,7 @@ impl<F: Field> AirBridge<F> for FlatHashChip {
             interactions.push(Interaction {
                 fields,
                 count: VirtualPairCol::one(),
-                argument_index: self.hashchip_bus_index,
+                argument_index: self.hash_chip_bus_index,
             });
         }
 

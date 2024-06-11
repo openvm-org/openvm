@@ -14,20 +14,15 @@ pub struct DummyHashAir {
     pub bus_index: usize,
     pub rate: usize,
     pub hash_width: usize,
-    // pub hash_in_states: Vec<Vec<F>>,
-    // pub hash_out_states: Vec<Vec<F>>,
-    // pub hash_slices: Vec<Vec<F>>,
 }
 
-// #[derive(Default)]
-// pub struct DummyHashChip<F: Field> {
-//     pub bus_index: usize,
-//     pub rate: usize,
-//     pub hash_width: usize,
-//     pub hash_in_states: Vec<Vec<F>>,
-//     pub hash_out_states: Vec<Vec<F>>,
-//     pub hash_slices: Vec<Vec<F>>,
-// }
+#[derive(Default)]
+pub struct DummyHashChip<F: Field> {
+    pub air: DummyHashAir,
+    pub hash_in_states: Vec<Vec<F>>,
+    pub hash_slices: Vec<Vec<F>>,
+    pub hash_out_states: Vec<Vec<F>>,
+}
 
 impl DummyHashAir {
     pub fn new(bus_index: usize, hash_width: usize, rate: usize) -> Self {
@@ -38,7 +33,7 @@ impl DummyHashAir {
         }
     }
 
-    pub fn request<F: Field>(&self, curr_state: Vec<F>, to_absorb: Vec<F>) -> Vec<F> {
+    pub fn hash<F: Field>(curr_state: Vec<F>, to_absorb: Vec<F>) -> Vec<F> {
         let mut new_state = curr_state.clone();
 
         for (new, b) in new_state
@@ -58,5 +53,26 @@ impl DummyHashAir {
 
     pub fn bus_index(&self) -> usize {
         self.bus_index
+    }
+}
+
+impl<F: Field> DummyHashChip<F> {
+    pub fn new(bus_index: usize, hash_width: usize, rate: usize) -> Self {
+        Self {
+            air: DummyHashAir::new(bus_index, hash_width, rate),
+            hash_in_states: vec![],
+            hash_slices: vec![],
+            hash_out_states: vec![],
+        }
+    }
+
+    pub fn request(&mut self, curr_state: Vec<F>, to_absorb: Vec<F>) -> Vec<F> {
+        let new_state = DummyHashAir::hash(curr_state.clone(), to_absorb.clone());
+
+        self.hash_in_states.push(curr_state);
+        self.hash_slices.push(to_absorb);
+        self.hash_out_states.push(new_state.clone());
+
+        new_state
     }
 }

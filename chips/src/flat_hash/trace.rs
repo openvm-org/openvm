@@ -5,10 +5,16 @@ use p3_matrix::dense::RowMajorMatrix; // Import the constant from columns.rs
 
 // use crate::sub_chip::LocalTraceInstructions;
 
-use super::FlatHashChip;
+use super::FlatHashAir;
+use super::PageController;
+use crate::dummy_hash::DummyHashChip;
 
-impl<const N: usize, const R: usize> FlatHashChip<N, R> {
-    pub fn generate_trace<F: Field>(&self, x: Vec<Vec<F>>) -> RowMajorMatrix<F> {
+impl FlatHashAir {
+    pub fn generate_trace<F: Field>(
+        &self,
+        x: Vec<Vec<F>>,
+        hash_chip: &mut DummyHashChip<F>,
+    ) -> RowMajorMatrix<F> {
         let mut state = vec![F::zero(); self.hash_width];
         let mut rows = vec![];
         let num_hashes = self.page_width / self.hash_rate;
@@ -19,7 +25,7 @@ impl<const N: usize, const R: usize> FlatHashChip<N, R> {
                 let start = hash_index * self.hash_rate;
                 let end = (hash_index + 1) * self.hash_rate;
                 let row_slice = &row[start..end];
-                state = self.hashchip.request(state.clone(), row_slice.to_vec());
+                state = hash_chip.request(state.clone(), row_slice.to_vec());
                 new_row.extend(state.iter());
             }
             rows.push([row.clone(), new_row].concat());
@@ -40,6 +46,13 @@ impl<const N: usize, const R: usize> FlatHashChip<N, R> {
     //         pis.push(vec![F::zero(); self.hash_width]);
     //     }
     // }
+}
+
+impl<F: Field> PageController<F> {
+    pub fn generate_trace(&self, x: Vec<Vec<F>>) -> RowMajorMatrix<F> {
+        let mut hash_chip = self.hash_chip.lock();
+        self.air.generate_trace(x, &mut *hash_chip)
+    }
 }
 
 // impl<F: Field> LocalTraceInstructions<F> for FlatHashChip {
