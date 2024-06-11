@@ -1,5 +1,5 @@
 use afs_stark_backend::air_builders::PartitionedAirBuilder;
-use p3_air::{Air, BaseAir};
+use p3_air::{Air, AirBuilderWithPublicValues, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
@@ -25,13 +25,17 @@ impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
     }
 }
 
-impl<AB: PartitionedAirBuilder> Air<AB> for PageIndexScanInputAir
+impl<AB: PartitionedAirBuilder + AirBuilderWithPublicValues> Air<AB> for PageIndexScanInputAir
 where
     AB::M: Clone,
 {
     fn eval(&self, builder: &mut AB) {
         let page_main = &builder.partitioned_main()[0].clone();
         let aux_main = &builder.partitioned_main()[1].clone();
+
+        // get the public value x
+        let pis = builder.public_values();
+        let x = pis[..self.idx_len].to_vec();
 
         let local_page = page_main.row_slice(0);
         let local_aux = aux_main.row_slice(0);
@@ -53,12 +57,18 @@ where
         let is_less_than_tuple_cols = IsLessThanTupleCols {
             io: IsLessThanTupleIOCols {
                 x: local_cols.idx,
-                y: local_cols.x,
+                y: local_cols.x.clone(),
                 tuple_less_than: local_cols.satisfies_pred,
             },
             aux: local_cols.is_less_than_tuple_aux,
         };
 
+        // constrain that the public value x is the same as the column x
+        for (&local_x, &pub_x) in local_cols.x.iter().zip(x.iter()) {
+            builder.assert_eq(local_x, pub_x);
+        }
+
+        // constrain that we send the row iff the row is allocated and satisfies the predicate
         builder.assert_eq(
             local_cols.is_alloc * local_cols.satisfies_pred,
             local_cols.send_row,

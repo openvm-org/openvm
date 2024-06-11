@@ -24,14 +24,22 @@ pub enum Comp {
 
 #[derive(Default, Getters)]
 pub struct PageIndexScanOutputAir {
+    /// The bus index for sends to range chip
     pub bus_index: usize,
+    /// The length of each index in the page table
     pub idx_len: usize,
+    /// The length of each data entry in the page table
     pub data_len: usize,
 
     #[getset(get = "pub")]
     is_less_than_tuple_air: IsLessThanTupleAir,
 }
 
+/// This chip receives rows from the PageIndexScanInputChip and constrains that:
+///
+/// 1. All allocated rows are before unallocated rows
+/// 2. The allocated rows are sorted in ascending order by index
+/// 3. The allocated rows of the new page are exactly the result of the index scan (via interactions)
 pub struct PageIndexScanOutputChip {
     pub air: PageIndexScanOutputAir,
     pub range_checker: Arc<RangeCheckerGateChip>,

@@ -7,6 +7,7 @@ use crate::sub_chip::LocalTraceInstructions;
 use super::PageIndexScanInputChip;
 
 impl PageIndexScanInputChip {
+    /// Generate the trace for the page table
     pub fn gen_page_trace<SC: StarkGenericConfig>(
         &self,
         page: Vec<Vec<u32>>,
@@ -26,6 +27,7 @@ impl PageIndexScanInputChip {
         )
     }
 
+    /// Generate the trace for the auxiliary columns
     pub fn gen_aux_trace<SC: StarkGenericConfig>(
         &self,
         page: Vec<Vec<u32>>,
@@ -65,46 +67,5 @@ impl PageIndexScanInputChip {
         }
 
         RowMajorMatrix::new(rows, self.aux_width())
-    }
-
-    pub fn gen_output(&self, page: Vec<Vec<u32>>, x: Vec<u32>) -> Vec<Vec<u32>> {
-        let mut output: Vec<Vec<u32>> = vec![];
-
-        for page_row in &page {
-            let is_alloc = page_row[0];
-            let idx = page_row[1..1 + self.air.idx_len].to_vec();
-            let data = page_row[1 + self.air.idx_len..].to_vec();
-
-            let mut less_than = false;
-            for (&idx_val, &x_val) in idx.iter().zip(x.iter()) {
-                use std::cmp::Ordering;
-                match idx_val.cmp(&x_val) {
-                    Ordering::Less => {
-                        less_than = true;
-                        break;
-                    }
-                    Ordering::Greater => {
-                        break;
-                    }
-                    Ordering::Equal => {}
-                }
-            }
-
-            if less_than {
-                output.push(
-                    vec![is_alloc]
-                        .into_iter()
-                        .chain(idx.iter().cloned())
-                        .chain(data.iter().cloned())
-                        .collect(),
-                );
-            }
-        }
-
-        let num_remaining = page.len() - output.len();
-
-        output.extend((0..num_remaining).map(|_| vec![0; self.page_width()]));
-
-        output
     }
 }

@@ -11,6 +11,7 @@ use p3_field::PrimeField64;
 use super::PageIndexScanOutputAir;
 
 impl<F: PrimeField64> AirBridge<F> for PageIndexScanOutputAir {
+    // we receive the rows that satisfy the predicate
     fn receives(&self) -> Vec<Interaction<F>> {
         let num_cols = PageIndexScanOutputCols::<F>::get_width(
             self.idx_len,
@@ -45,6 +46,7 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanOutputAir {
         }]
     }
 
+    // we send range checks that are from the IsLessThanTuple subchip
     fn sends(&self) -> Vec<Interaction<F>> {
         let num_cols = PageIndexScanOutputCols::<F>::get_width(
             self.idx_len,

@@ -24,14 +24,22 @@ pub enum Comp {
 
 #[derive(Default, Getters)]
 pub struct PageIndexScanInputAir {
+    /// The bus index
     pub bus_index: usize,
+    /// The length of each index in the page table
     pub idx_len: usize,
+    /// The length of each data entry in the page table
     pub data_len: usize,
 
     #[getset(skip)]
     is_less_than_tuple_air: IsLessThanTupleAir,
 }
 
+/// Given a fixed predicate of the form index OP x, where OP is one of {<, <=, =, >=, >}
+/// and x is a private input, the PageIndexScanInputChip implements a chip such that the chip:
+///
+/// 1. Has public value x
+/// 2. Sends all rows of the page that match the predicate index OP x where x is the public value
 pub struct PageIndexScanInputChip {
     pub air: PageIndexScanInputAir,
     pub range_checker: Arc<RangeCheckerGateChip>,

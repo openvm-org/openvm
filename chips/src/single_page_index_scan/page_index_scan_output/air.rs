@@ -100,7 +100,7 @@ where
             is_less_than_tuple_cols.aux,
         );
 
-        // if the next row exists, then the current row index must be less than the next row index
+        // if the next row is allocated, then the current row index must be less than the next row index
         builder
             .when_transition()
             .assert_zero(next_cols.is_alloc * (AB::Expr::one() - local_cols.less_than_next_idx));

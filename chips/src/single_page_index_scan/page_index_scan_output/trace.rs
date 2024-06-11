@@ -7,6 +7,7 @@ use crate::sub_chip::LocalTraceInstructions;
 use super::PageIndexScanOutputChip;
 
 impl PageIndexScanOutputChip {
+    /// Generate the trace for the page table
     pub fn gen_page_trace<SC: StarkGenericConfig>(
         &self,
         page: Vec<Vec<u32>>,
@@ -26,6 +27,7 @@ impl PageIndexScanOutputChip {
         )
     }
 
+    /// Generate the trace for the auxiliary columns
     pub fn gen_aux_trace<SC: StarkGenericConfig>(
         &self,
         page: Vec<Vec<u32>>,

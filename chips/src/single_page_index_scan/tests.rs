@@ -10,6 +10,8 @@ use afs_test_utils::{
     },
     engine::StarkEngine,
 };
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
 
 use super::page_controller::PageController;
 
@@ -33,7 +35,7 @@ fn index_scan_test(
     let (page_traces, mut prover_data) = page_controller.load_page(
         page.clone(),
         page_output.clone(),
-        x,
+        x.clone(),
         idx_len,
         data_len,
         idx_limb_bits,
@@ -69,7 +71,11 @@ fn index_scan_test(
         ],
     );
 
-    let pis = vec![vec![]; partial_vk.per_air.len()];
+    let pis = vec![
+        x.iter().map(|x| BabyBear::from_canonical_u32(*x)).collect(),
+        vec![],
+        vec![],
+    ];
 
     let prover = engine.prover();
     let verifier = engine.verifier();
@@ -129,7 +135,7 @@ fn test_single_page_index_scan() {
     keygen_builder.add_partitioned_air(
         &page_controller.input_chip.air,
         page_height,
-        0,
+        idx_len,
         vec![input_page_ptr, input_page_aux_ptr],
     );
 
@@ -214,7 +220,7 @@ fn test_single_page_index_scan_wrong_order() {
     keygen_builder.add_partitioned_air(
         &page_controller.input_chip.air,
         page_height,
-        0,
+        idx_len,
         vec![input_page_ptr, input_page_aux_ptr],
     );
 
@@ -308,7 +314,7 @@ fn test_single_page_index_scan_unsorted() {
     keygen_builder.add_partitioned_air(
         &page_controller.input_chip.air,
         page_height,
-        0,
+        idx_len,
         vec![input_page_ptr, input_page_aux_ptr],
     );
 

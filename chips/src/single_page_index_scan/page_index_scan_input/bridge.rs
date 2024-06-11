@@ -37,6 +37,7 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
             aux: cols_numbered.is_less_than_tuple_aux,
         };
 
+        // construct the row to send
         let mut cols = vec![];
         cols.push(cols_numbered.is_alloc);
         cols.extend(cols_numbered.idx);
@@ -47,6 +48,7 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
             .map(|col| VirtualPairCol::single_main(*col))
             .collect::<Vec<_>>();
 
+        // sends with count given by send_row indicator
         let mut interactions = vec![Interaction {
             fields: virtual_cols,
             count: VirtualPairCol::single_main(cols_numbered.send_row),
