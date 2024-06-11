@@ -227,10 +227,18 @@ pub(super) fn create_commit_to_air_graph(
     air_matrices: &[MatrixCommitmentPointers],
     num_total_commitments: usize,
 ) -> CommitmentToAirGraph {
-    let mut commit_to_air_index = vec![vec![0; air_matrices.len()]; num_total_commitments];
+    let mut commit_to_air_index = vec![vec![]; num_total_commitments];
     for (air_idx, m) in air_matrices.iter().enumerate() {
         for ptr in &m.matrix_ptrs {
-            commit_to_air_index[ptr.commit_index][ptr.matrix_index] = air_idx;
+            let commit_mats = commit_to_air_index
+                .get_mut(ptr.commit_index)
+                .expect("commit_index exceeds num_total_commitments");
+            if let Some(mat_air_idx) = commit_mats.get_mut(ptr.matrix_index) {
+                *mat_air_idx = air_idx;
+            } else {
+                commit_mats.resize(ptr.matrix_index + 1, air_matrices.len() + 1); // allocate out-of-bounds first
+                commit_mats[ptr.matrix_index] = air_idx;
+            }
         }
     }
     CommitmentToAirGraph {

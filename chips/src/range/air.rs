@@ -3,9 +3,9 @@ use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::columns::NUM_RANGE_COLS;
-use super::RangeCheckerChip;
+use super::RangeCheckerAir;
 
-impl<F: Field> BaseAir<F> for RangeCheckerChip {
+impl<F: Field> BaseAir<F> for RangeCheckerAir {
     fn width(&self) -> usize {
         NUM_RANGE_COLS
     }
@@ -16,7 +16,7 @@ impl<F: Field> BaseAir<F> for RangeCheckerChip {
     }
 }
 
-impl<AB> Air<AB> for RangeCheckerChip
+impl<AB> Air<AB> for RangeCheckerAir
 where
     AB: AirBuilder,
 {

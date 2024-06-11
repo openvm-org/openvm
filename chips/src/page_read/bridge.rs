@@ -1,13 +1,13 @@
 use std::iter;
 
-use afs_stark_backend::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
 use super::columns::PageReadCols;
-use super::PageReadChip;
+use super::PageReadAir;
 
-impl PageReadChip {
+impl PageReadAir {
     // receives: ([index] | [page]) mult times
     pub fn receives_custom<F: PrimeField64>(
         &self,
@@ -21,14 +21,14 @@ impl PageReadChip {
         vec![Interaction {
             fields: virtual_cols,
             count: VirtualPairCol::single_main(cols.mult),
-            argument_index: self.bus_index(),
+            argument_index: self.bus_index,
         }]
     }
 }
 
-impl<F: PrimeField64> Chip<F> for PageReadChip {
+impl<F: PrimeField64> AirBridge<F> for PageReadAir {
     fn receives(&self) -> Vec<Interaction<F>> {
-        let num_cols = self.air_width();
+        let num_cols = self.width;
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
         let cols_numbered = PageReadCols::<F>::cols_numbered(&all_cols);

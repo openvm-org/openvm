@@ -1,10 +1,10 @@
-use afs_stark_backend::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
 use super::{columns::XOR_REQUESTER_COL_MAP, XorRequesterChip};
 
-impl<F: PrimeField64, const N: usize> Chip<F> for XorRequesterChip<N> {
+impl<F: PrimeField64, const N: usize> AirBridge<F> for XorRequesterChip<N> {
     fn sends(&self) -> Vec<Interaction<F>> {
         vec![Interaction {
             fields: vec![

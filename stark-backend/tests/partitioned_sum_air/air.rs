@@ -3,7 +3,7 @@
 //!
 //! Constrains x == a_0 + ... + a_w
 
-use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::Chip};
+use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::AirBridge};
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -11,7 +11,7 @@ use p3_matrix::Matrix;
 /// Inner value is width of y-submatrix
 pub struct SumAir(pub usize);
 
-impl<F: Field> Chip<F> for SumAir {}
+impl<F: Field> AirBridge<F> for SumAir {}
 
 impl<F> BaseAir<F> for SumAir {
     fn width(&self) -> usize {

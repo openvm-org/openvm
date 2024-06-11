@@ -9,20 +9,20 @@ use crate::sub_chip::{AirConfig, SubAir};
 
 use super::{
     columns::{XorBitCols, XorCols, XorIOCols},
-    XorBitsAir, XorBitsChip,
+    XorBitsAir,
 };
 
-impl<const N: usize> AirConfig for XorBitsChip<N> {
+impl<const N: usize> AirConfig for XorBitsAir<N> {
     type Cols<T> = XorCols<N, T>;
 }
 
-impl<F: Field, const N: usize> BaseAir<F> for XorBitsChip<N> {
+impl<F: Field, const N: usize> BaseAir<F> for XorBitsAir<N> {
     fn width(&self) -> usize {
         XorCols::<N, F>::get_width()
     }
 }
 
-impl<AB: AirBuilder, const N: usize> Air<AB> for XorBitsChip<N> {
+impl<AB: AirBuilder, const N: usize> Air<AB> for XorBitsAir<N> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -31,7 +31,7 @@ impl<AB: AirBuilder, const N: usize> Air<AB> for XorBitsChip<N> {
 
         let xor_cols = XorCols::<N, AB::Var>::from_slice(local);
 
-        SubAir::eval(&self.air, builder, xor_cols.io, xor_cols.bits);
+        SubAir::eval(self, builder, xor_cols.io, xor_cols.bits);
     }
 }
 

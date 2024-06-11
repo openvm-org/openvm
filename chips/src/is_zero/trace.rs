@@ -3,9 +3,9 @@ use p3_matrix::dense::RowMajorMatrix; // Import the constant from columns.rs
 
 use crate::sub_chip::LocalTraceInstructions;
 
-use super::{columns::IsZeroCols, IsZeroChip};
+use super::{columns::IsZeroCols, IsZeroAir};
 
-impl IsZeroChip {
+impl IsZeroAir {
     pub fn generate_trace<F: Field>(&self, x: Vec<F>) -> RowMajorMatrix<F> {
         let rows = x
             .iter()
@@ -19,11 +19,11 @@ impl IsZeroChip {
     }
 }
 
-impl<F: Field> LocalTraceInstructions<F> for IsZeroChip {
+impl<F: Field> LocalTraceInstructions<F> for IsZeroAir {
     type LocalInput = F;
 
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
-        let is_zero = IsZeroChip::request(local_input);
+        let is_zero = IsZeroAir::request(local_input);
         let inv = if is_zero {
             F::zero()
         } else {
