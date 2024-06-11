@@ -8,6 +8,8 @@ pub struct OfflineCheckerCols<T> {
     pub is_final: T, // this bit indicates if this row should go to the final page (last row for the index)
     pub is_internal: T, // this bit indicates if this row refers to an internal operation
 
+    pub is_final_x3: T, // this is just is_final * 3 (used for interactions)
+
     pub clk: T,           // timestamp for the operation
     pub page_row: Vec<T>, // the row of the page: starts with is_alloc bit, then index, then data
     pub op_type: T,       // 0 for read, 1 for write
@@ -32,6 +34,7 @@ where
         is_initial: T,
         is_final: T,
         is_internal: T,
+        is_final_x3: T,
         clk: T,
         page_row: Vec<T>,
         op_type: T,
@@ -47,6 +50,7 @@ where
             is_initial,
             is_final,
             is_internal,
+            is_final_x3,
             clk,
             page_row,
             op_type,
@@ -65,6 +69,7 @@ where
             self.is_initial.clone(),
             self.is_final.clone(),
             self.is_internal.clone(),
+            self.is_final_x3.clone(),
             self.clk.clone(),
         ];
         flattened.extend(self.page_row.clone());
@@ -95,23 +100,24 @@ where
             is_initial: slc[0].clone(),
             is_final: slc[1].clone(),
             is_internal: slc[2].clone(),
-            clk: slc[3].clone(),
-            page_row: slc[4..4 + page_width].to_vec(),
-            op_type: slc[4 + page_width].clone(),
-            same_idx: slc[5 + page_width].clone(),
-            same_data: slc[6 + page_width].clone(),
-            lt_bit: slc[7 + page_width].clone(),
-            is_extra: slc[8 + page_width].clone(),
+            is_final_x3: slc[3].clone(),
+            clk: slc[4].clone(),
+            page_row: slc[5..5 + page_width].to_vec(),
+            op_type: slc[5 + page_width].clone(),
+            same_idx: slc[6 + page_width].clone(),
+            same_data: slc[7 + page_width].clone(),
+            lt_bit: slc[8 + page_width].clone(),
+            is_extra: slc[9 + page_width].clone(),
             is_equal_idx_aux: IsEqualVecAuxCols::from_slice(
-                &slc[9 + page_width..9 + page_width + 2 * idx_len],
+                &slc[10 + page_width..10 + page_width + 2 * idx_len],
                 idx_len,
             ),
             is_equal_data_aux: IsEqualVecAuxCols::from_slice(
-                &slc[9 + page_width + 2 * idx_len..9 + page_width + 2 * idx_len + 2 * data_len],
+                &slc[10 + page_width + 2 * idx_len..10 + page_width + 2 * idx_len + 2 * data_len],
                 data_len,
             ),
             lt_aux: IsLessThanTupleAuxCols::from_slice(
-                &slc[9 + page_width + 2 * idx_len + 2 * data_len..],
+                &slc[10 + page_width + 2 * idx_len + 2 * data_len..],
                 idx_clk_limb_bits,
                 idx_decomp,
                 idx_len + 1,

@@ -10,7 +10,6 @@ pub mod tests;
 
 pub struct FinalPageAir {
     page_bus_index: usize,
-    checker_final_bus_index: usize,
     range_bus_index: usize,
 
     idx_len: usize,
@@ -23,7 +22,6 @@ pub struct FinalPageAir {
 impl FinalPageAir {
     pub fn new(
         page_bus_index: usize,
-        checker_final_bus_index: usize,
         range_bus_index: usize,
         idx_len: usize,
         data_len: usize,
@@ -32,7 +30,6 @@ impl FinalPageAir {
     ) -> Self {
         Self {
             page_bus_index,
-            checker_final_bus_index,
             range_bus_index,
             idx_len,
             data_len,

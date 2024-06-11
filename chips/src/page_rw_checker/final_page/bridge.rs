@@ -34,8 +34,7 @@ impl<F: PrimeField64> SubAirBridge<F> for FinalPageAir {
         )
     }
 
-    /// Receives page rows (idx, data) for every allocated row on page_bus
-    /// Receives all indices in rows tagged with is_in_ops on checker_final_bus
+    /// Receives page rows (idx, data) for every allocated row on page_bus with multiplicity rcv_mult
     fn receives(&self, col_indices: FinalPageCols<usize>) -> Vec<Interaction<F>> {
         let page_cols = col_indices
             .page_cols
@@ -46,25 +45,11 @@ impl<F: PrimeField64> SubAirBridge<F> for FinalPageAir {
             .map(VirtualPairCol::single_main)
             .collect::<Vec<_>>();
 
-        let idx_cols = col_indices
-            .page_cols
-            .idx
-            .into_iter()
-            .map(VirtualPairCol::single_main)
-            .collect();
-
-        vec![
-            Interaction {
-                fields: page_cols,
-                count: VirtualPairCol::single_main(col_indices.page_cols.is_alloc),
-                argument_index: self.page_bus_index,
-            },
-            Interaction {
-                fields: idx_cols,
-                count: VirtualPairCol::single_main(col_indices.aux_cols.is_in_ops),
-                argument_index: self.checker_final_bus_index,
-            },
-        ]
+        vec![Interaction {
+            fields: page_cols,
+            count: VirtualPairCol::single_main(col_indices.aux_cols.rcv_mult),
+            argument_index: self.page_bus_index,
+        }]
     }
 }
 

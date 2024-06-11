@@ -42,9 +42,16 @@ where
             PageCols::<AB::Var>::from_slice(&page_next, self.idx_len, self.data_len);
 
         // The auxiliary columns to compare local index and next index are stored in the next row
-        let aux_next = aux_trace.row_slice(1);
+        let (aux_local, aux_next) = (aux_trace.row_slice(0), aux_trace.row_slice(1));
 
-        let aux_next_cols = FinalPageAuxCols::<AB::Var>::from_slice(
+        let aux_local_cols = FinalPageAuxCols::from_slice(
+            &aux_local,
+            self.idx_limb_bits,
+            self.idx_decomp,
+            self.idx_len,
+        );
+
+        let aux_next_cols = FinalPageAuxCols::from_slice(
             &aux_next,
             self.idx_limb_bits,
             self.idx_decomp,
@@ -55,24 +62,31 @@ where
             self,
             builder,
             [page_local_cols, page_next_cols],
-            aux_next_cols,
+            [aux_local_cols, aux_next_cols],
         );
     }
 }
 
 impl<AB: AirBuilder> SubAir<AB> for FinalPageAir {
     type IoView = [PageCols<AB::Var>; 2];
-    type AuxView = FinalPageAuxCols<AB::Var>;
+    type AuxView = [FinalPageAuxCols<AB::Var>; 2];
 
     /// Ensuring the page is in the proper format: allocated rows come first
     /// and are sorted by idx, which are distinct
-    fn eval(&self, builder: &mut AB, io: Self::IoView, aux_next: Self::AuxView) {
-        let page_local = &io[0];
-        let page_next = &io[1];
+    fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
+        let (page_local, page_next) = (&io[0], &io[1]);
+        let (aux_local, aux_next) = (&aux[0], &aux[1]);
 
         // Helpers
         let or = |a: AB::Expr, b: AB::Expr| a.clone() + b.clone() - a * b;
         let implies = |a: AB::Expr, b: AB::Expr| or(AB::Expr::one() - a, b);
+
+        // Ensuring rcv_mult is always 0, 1, or 3
+        builder.assert_zero(
+            aux_local.rcv_mult
+                * (aux_local.rcv_mult - AB::Expr::one())
+                * (aux_local.rcv_mult - AB::Expr::from_canonical_u8(3)),
+        );
 
         // Ensuring that is_alloc is always bool
         builder.assert_bool(page_local.is_alloc);
@@ -90,7 +104,7 @@ impl<AB: AirBuilder> SubAir<AB> for FinalPageAir {
                 y: page_next.idx.clone(),
                 tuple_less_than: aux_next.lt_out,
             },
-            aux: aux_next.lt_cols,
+            aux: aux_next.lt_cols.clone(),
         };
 
         let lt_air = IsLessThanTupleAir::new(

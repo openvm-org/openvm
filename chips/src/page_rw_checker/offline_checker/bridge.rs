@@ -39,8 +39,7 @@ impl<F: PrimeField64> SubAirBridge<F> for OfflineChecker {
         ]
     }
 
-    /// Sends page rows (idx, data) for rows tagged with is_final on page_bus
-    /// Sends idx for all rows tagged with is_final to indicate it was used in an internal operation on checker_final_bus
+    /// Sends page rows (idx, data) for rows tagged with is_final on page_bus with multiplicity is_final_x3
     /// Sends interactions required by IsLessThanTuple SubAir
     fn sends(&self, col_indices: OfflineCheckerCols<usize>) -> Vec<Interaction<F>> {
         let page_cols = col_indices.page_row[1..]
@@ -48,23 +47,11 @@ impl<F: PrimeField64> SubAirBridge<F> for OfflineChecker {
             .map(|col| VirtualPairCol::single_main(*col))
             .collect::<Vec<_>>();
 
-        let idx_cols = col_indices.page_row[1..self.idx_len + 1]
-            .iter()
-            .map(|col| VirtualPairCol::single_main(*col))
-            .collect();
-
-        let mut interactions = vec![
-            Interaction {
-                fields: page_cols,
-                count: VirtualPairCol::single_main(col_indices.is_final),
-                argument_index: self.page_bus_index,
-            },
-            Interaction {
-                fields: idx_cols,
-                count: VirtualPairCol::single_main(col_indices.is_final),
-                argument_index: self.checker_final_bus_index,
-            },
-        ];
+        let mut interactions = vec![Interaction {
+            fields: page_cols,
+            count: VirtualPairCol::single_main(col_indices.is_final_x3),
+            argument_index: self.page_bus_index,
+        }];
 
         let lt_air = IsLessThanTupleAir::new(
             self.range_bus_index,

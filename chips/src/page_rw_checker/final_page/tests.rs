@@ -94,8 +94,7 @@ fn test_single_page(
 fn final_page_chip_test() {
     let mut rng = create_seeded_rng();
     let page_bus_index = 0;
-    let checker_final_bus_index = 1;
-    let sorted_bus_index = 2;
+    let range_bus_index = 1;
 
     use super::FinalPageAir;
 
@@ -143,15 +142,14 @@ fn final_page_chip_test() {
 
     let final_page_chip = FinalPageAir::new(
         page_bus_index,
-        checker_final_bus_index,
-        sorted_bus_index,
+        range_bus_index,
         idx_len,
         data_len,
         idx_limb_bits,
         idx_decomp,
     );
     let range_checker = Arc::new(RangeCheckerGateChip::new(
-        sorted_bus_index,
+        range_bus_index,
         1 << idx_limb_bits,
     ));
     let page_sender = DummyInteractionAir::new(page_width - 1, true, page_bus_index);

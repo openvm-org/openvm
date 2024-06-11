@@ -71,8 +71,12 @@ impl FinalPageAir {
             let page_aux_cols = FinalPageAuxCols {
                 lt_cols: lt_cols.aux,
                 lt_out: lt_cols.io.tuple_less_than,
-                is_in_ops: Val::<SC>::from_canonical_u8(
-                    (internal_indices.contains(&cur_idx) && page[i][0] == 1) as u8,
+                rcv_mult: Val::<SC>::from_canonical_u8(
+                    if internal_indices.contains(&cur_idx) && page[i][0] == 1 {
+                        3
+                    } else {
+                        page[i][0] as u8
+                    },
                 ),
             };
 

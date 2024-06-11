@@ -138,13 +138,12 @@ fn page_read_write_test() {
     let mut rng = create_seeded_rng();
 
     let page_bus_index = 0;
-    let checker_final_bus_index = 1;
-    let range_bus_index = 2;
-    let ops_bus_index = 3;
+    let range_bus_index = 1;
+    let ops_bus_index = 2;
 
     use page_rw_checker::page_controller::PageController;
 
-    const MAX_VAL: u32 = 0x78000001 / 8; // The prime used by BabyBear
+    const MAX_VAL: u32 = 0x78000001 / 2; // The prime used by BabyBear / 2
 
     let log_page_height = 4;
     let log_num_ops = 3;
@@ -223,7 +222,6 @@ fn page_read_write_test() {
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
         page_bus_index,
-        checker_final_bus_index,
         range_bus_index,
         ops_bus_index,
         idx_len,
@@ -457,7 +455,7 @@ fn page_read_write_test() {
     for _ in 0..page_height + 1 {
         let mut idx: Vec<u32>;
         loop {
-            idx = (0..idx_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect();
+            idx = (0..idx_len).map(|_| rng.gen::<u32>() % max_idx).collect();
             if !idx_map.contains(&idx) {
                 break;
             }

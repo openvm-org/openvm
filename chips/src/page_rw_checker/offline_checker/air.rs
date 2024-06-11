@@ -71,6 +71,12 @@ where
         builder.assert_bool(local_cols.same_data);
         builder.assert_bool(local_cols.is_extra);
 
+        // Ensuring is_final_x3 is correct
+        builder.assert_eq(
+            local_cols.is_final_x3,
+            local_cols.is_final * AB::Expr::from_canonical_u8(3),
+        );
+
         // Making sure first row starts with same_idx, same_data being false
         builder.when_first_row().assert_zero(local_cols.same_idx);
         builder.when_first_row().assert_zero(local_cols.same_data);

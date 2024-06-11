@@ -141,6 +141,7 @@ impl OfflineChecker {
                 Val::<SC>::from_canonical_u8(is_initial),
                 Val::<SC>::from_canonical_u8(is_final),
                 Val::<SC>::from_canonical_u8(is_internal),
+                Val::<SC>::from_canonical_u8(is_final * 3),
                 Val::<SC>::from_canonical_usize(clk),
                 page[idx]
                     .iter()

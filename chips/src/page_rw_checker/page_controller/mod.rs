@@ -58,7 +58,6 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         page_bus_index: usize,
-        checker_final_bus_index: usize,
         range_bus_index: usize,
         ops_bus_index: usize,
         idx_len: usize,
@@ -73,7 +72,6 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             init_chip: PageAir::new(page_bus_index, idx_len, data_len),
             offline_checker: OfflineChecker::new(
                 page_bus_index,
-                checker_final_bus_index,
                 range_bus_index,
                 ops_bus_index,
                 idx_len,
@@ -84,7 +82,6 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             ),
             final_chip: FinalPageAir::new(
                 page_bus_index,
-                checker_final_bus_index,
                 range_bus_index,
                 idx_len,
                 data_len,
@@ -166,7 +163,6 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         self.init_chip_trace = Some(self.get_page_trace(page.clone()));
 
         let page_bus_index = self.offline_checker.page_bus_index;
-        let checker_final_bus_index = self.offline_checker.checker_final_bus_index;
         let range_bus_index = self.offline_checker.range_bus_index;
         let ops_bus_index = self.offline_checker.ops_bus_index;
 
@@ -175,7 +171,6 @@ impl<SC: StarkGenericConfig> PageController<SC> {
 
         self.offline_checker = OfflineChecker::new(
             page_bus_index,
-            checker_final_bus_index,
             range_bus_index,
             ops_bus_index,
             idx_len,
@@ -195,7 +190,6 @@ impl<SC: StarkGenericConfig> PageController<SC> {
 
         self.final_chip = FinalPageAir::new(
             page_bus_index,
-            checker_final_bus_index,
             range_bus_index,
             idx_len,
             data_len,
