@@ -27,7 +27,7 @@ impl<AB: PartitionedAirBuilder> Air<AB> for OfflineChecker
 where
     AB::M: Clone,
 {
-    /// This imposes the following constraints extra rows to be at the bottom and the following on non-extra rows:
+    /// This constrains extra rows to be at the bottom and the following on non-extra rows:
     /// Every row is tagged with exactly one of is_initial, is_internal, is_final
     /// is_initial rows must be writes, is_final rows must be reads, and is_internal rows can be either
     /// same_idx, same_data, lt_bit is correct (see definition in columns.rs)
