@@ -46,6 +46,18 @@ impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
             PageIndexScanInputAir::Eq {
                 idx_len, data_len, ..
             } => PageIndexScanInputCols::<F>::get_width(*idx_len, *data_len, vec![], 0, Comp::Eq),
+            PageIndexScanInputAir::Gte {
+                idx_len,
+                data_len,
+                is_less_than_tuple_air,
+                ..
+            } => PageIndexScanInputCols::<F>::get_width(
+                *idx_len,
+                *data_len,
+                is_less_than_tuple_air.limb_bits().clone(),
+                is_less_than_tuple_air.decomp(),
+                Comp::Gte,
+            ),
             PageIndexScanInputAir::Gt {
                 idx_len,
                 data_len,
@@ -144,6 +156,11 @@ where
                     PageIndexScanInputCols::Eq { .. } => {
                         panic!(
                             "expected PageIndexScanInputCols::Lt, got PageIndexScanInputCols::Eq"
+                        );
+                    }
+                    PageIndexScanInputCols::Gte { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Lt, got PageIndexScanInputCols::Gte"
                         );
                     }
                     PageIndexScanInputCols::Gt { .. } => {
@@ -257,6 +274,11 @@ where
                             "expected PageIndexScanInputCols::Lte, got PageIndexScanInputCols::Eq"
                         );
                     }
+                    PageIndexScanInputCols::Gte { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Lte, got PageIndexScanInputCols::Gte"
+                        );
+                    }
                     PageIndexScanInputCols::Gt { .. } => {
                         panic!(
                             "expected PageIndexScanInputCols::Lte, got PageIndexScanInputCols::Gt"
@@ -342,9 +364,130 @@ where
                             is_equal_vec_cols.aux,
                         );
                     }
+                    PageIndexScanInputCols::Gte { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Eq, got PageIndexScanInputCols::Gte"
+                        );
+                    }
                     PageIndexScanInputCols::Gt { .. } => {
                         panic!(
                             "expected PageIndexScanInputCols::Eq, got PageIndexScanInputCols::Gt"
+                        );
+                    }
+                }
+            }
+            PageIndexScanInputAir::Gte {
+                idx_len,
+                data_len,
+                is_less_than_tuple_air,
+                is_equal_vec_air,
+                ..
+            } => {
+                let page_main = &builder.partitioned_main()[0].clone();
+                let aux_main = &builder.partitioned_main()[1].clone();
+
+                // get the public value x
+                let pis = builder.public_values();
+                let public_x = pis[..*idx_len].to_vec();
+
+                let local_page = page_main.row_slice(0);
+                let local_aux = aux_main.row_slice(0);
+                let local_vec = local_page
+                    .iter()
+                    .chain(local_aux.iter())
+                    .cloned()
+                    .collect::<Vec<AB::Var>>();
+                let local = local_vec.as_slice();
+
+                let local_cols = PageIndexScanInputCols::<AB::Var>::from_slice(
+                    local,
+                    *idx_len,
+                    *data_len,
+                    is_less_than_tuple_air.limb_bits().clone(),
+                    is_less_than_tuple_air.decomp(),
+                    Comp::Gte,
+                );
+
+                match local_cols {
+                    PageIndexScanInputCols::Lt { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Gte, got PageIndexScanInputCols::Lt"
+                        );
+                    }
+                    PageIndexScanInputCols::Lte { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Gte, got PageIndexScanInputCols::Lte"
+                        );
+                    }
+                    PageIndexScanInputCols::Eq { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Gte, got PageIndexScanInputCols::Eq"
+                        );
+                    }
+                    PageIndexScanInputCols::Gte {
+                        is_alloc,
+                        idx,
+                        x,
+                        greater_than_x,
+                        eq_to_x,
+                        satisfies_pred,
+                        send_row,
+                        is_less_than_tuple_aux,
+                        is_equal_vec_aux,
+                        ..
+                    } => {
+                        // here, we are checking if idx <= x
+                        let is_less_than_tuple_cols = IsLessThanTupleCols {
+                            io: IsLessThanTupleIOCols {
+                                x: x.clone(),
+                                y: idx.clone(),
+                                tuple_less_than: greater_than_x,
+                            },
+                            aux: is_less_than_tuple_aux,
+                        };
+
+                        // constrain the indicator that we used to check wheter key < x is correct
+                        SubAir::eval(
+                            is_less_than_tuple_air,
+                            &mut builder.when_transition(),
+                            is_less_than_tuple_cols.io,
+                            is_less_than_tuple_cols.aux,
+                        );
+
+                        // here, we are checking if idx = x
+                        let is_equal_vec_cols = IsEqualVecCols {
+                            io: IsEqualVecIOCols {
+                                x: idx.clone(),
+                                y: x.clone(),
+                                prod: eq_to_x,
+                            },
+                            aux: is_equal_vec_aux,
+                        };
+
+                        // constrain the indicator that we used to check wheter key = x is correct
+                        SubAir::eval(
+                            is_equal_vec_air,
+                            builder,
+                            is_equal_vec_cols.io,
+                            is_equal_vec_cols.aux,
+                        );
+
+                        // constrain that it satisfies predicate if either less than or equal, and that satisfies is bool
+                        builder.assert_eq(greater_than_x + eq_to_x, satisfies_pred);
+                        builder.assert_bool(satisfies_pred);
+
+                        // constrain that the public value x is the same as the column x
+                        for (&local_x, &pub_x) in x.iter().zip(public_x.iter()) {
+                            builder.assert_eq(local_x, pub_x);
+                        }
+
+                        // constrain that we send the row iff the row is allocated and satisfies the predicate
+                        builder.assert_eq(is_alloc * satisfies_pred, send_row);
+                        builder.assert_bool(send_row);
+                    }
+                    PageIndexScanInputCols::Gt { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Gte, got PageIndexScanInputCols::Gt"
                         );
                     }
                 }
@@ -394,6 +537,11 @@ where
                     PageIndexScanInputCols::Eq { .. } => {
                         panic!(
                             "expected PageIndexScanInputCols::Gt, got PageIndexScanInputCols::Eq"
+                        );
+                    }
+                    PageIndexScanInputCols::Gte { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Gt, got PageIndexScanInputCols::Gte"
                         );
                     }
                     PageIndexScanInputCols::Gt {

@@ -93,6 +93,11 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                             "expected PageIndexScanInputCols::Lt, got PageIndexScanInputCols::Eq"
                         );
                     }
+                    PageIndexScanInputCols::Gte { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Lt, got PageIndexScanInputCols::Gte"
+                        );
+                    }
                     PageIndexScanInputCols::Gt { .. } => {
                         panic!(
                             "expected PageIndexScanInputCols::Lt, got PageIndexScanInputCols::Gt"
@@ -182,6 +187,11 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                             "expected PageIndexScanInputCols::Lte, got PageIndexScanInputCols::Eq"
                         );
                     }
+                    PageIndexScanInputCols::Gte { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Lte, got PageIndexScanInputCols::Gte"
+                        );
+                    }
                     PageIndexScanInputCols::Gt { .. } => {
                         panic!(
                             "expected PageIndexScanInputCols::Lte, got PageIndexScanInputCols::Gt"
@@ -252,9 +262,108 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                             argument_index: *bus_index,
                         });
                     }
+                    PageIndexScanInputCols::Gte { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Eq, got PageIndexScanInputCols::Gte"
+                        );
+                    }
                     PageIndexScanInputCols::Gt { .. } => {
                         panic!(
                             "expected PageIndexScanInputCols::Eq, got PageIndexScanInputCols::Gt"
+                        );
+                    }
+                }
+
+                interactions
+            }
+            PageIndexScanInputAir::Gte {
+                bus_index,
+                idx_len,
+                data_len,
+                is_less_than_tuple_air,
+                ..
+            } => {
+                let num_cols = PageIndexScanInputCols::<F>::get_width(
+                    *idx_len,
+                    *data_len,
+                    is_less_than_tuple_air.limb_bits(),
+                    is_less_than_tuple_air.decomp(),
+                    Comp::Gte,
+                );
+
+                let all_cols = (0..num_cols).collect::<Vec<usize>>();
+
+                let cols_numbered = PageIndexScanInputCols::<usize>::from_slice(
+                    &all_cols,
+                    *idx_len,
+                    *data_len,
+                    is_less_than_tuple_air.limb_bits(),
+                    is_less_than_tuple_air.decomp(),
+                    Comp::Gte,
+                );
+
+                match cols_numbered {
+                    PageIndexScanInputCols::Lt { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Gte, got PageIndexScanInputCols::Lt"
+                        );
+                    }
+                    PageIndexScanInputCols::Lte { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Gte, got PageIndexScanInputCols::Lte"
+                        );
+                    }
+                    PageIndexScanInputCols::Eq { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Gte, got PageIndexScanInputCols::Eq"
+                        );
+                    }
+                    PageIndexScanInputCols::Gte {
+                        is_alloc,
+                        idx,
+                        data,
+                        x,
+                        satisfies_pred,
+                        send_row,
+                        is_less_than_tuple_aux,
+                        ..
+                    } => {
+                        let is_less_than_tuple_cols = IsLessThanTupleCols {
+                            io: IsLessThanTupleIOCols {
+                                x: x.clone(),
+                                y: idx.clone(),
+                                tuple_less_than: satisfies_pred,
+                            },
+                            aux: is_less_than_tuple_aux,
+                        };
+
+                        // construct the row to send
+                        let mut cols = vec![];
+                        cols.push(is_alloc);
+                        cols.extend(idx);
+                        cols.extend(data);
+
+                        let virtual_cols = cols
+                            .iter()
+                            .map(|col| VirtualPairCol::single_main(*col))
+                            .collect::<Vec<_>>();
+
+                        interactions.push(Interaction {
+                            fields: virtual_cols,
+                            count: VirtualPairCol::single_main(send_row),
+                            argument_index: *bus_index,
+                        });
+
+                        let mut subchip_interactions = SubAirBridge::<F>::sends(
+                            is_less_than_tuple_air,
+                            is_less_than_tuple_cols,
+                        );
+
+                        interactions.append(&mut subchip_interactions);
+                    }
+                    PageIndexScanInputCols::Gt { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Gte, got PageIndexScanInputCols::Gt"
                         );
                     }
                 }
@@ -299,6 +408,11 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                     PageIndexScanInputCols::Eq { .. } => {
                         panic!(
                             "expected PageIndexScanInputCols::Gt, got PageIndexScanInputCols::Eq"
+                        );
+                    }
+                    PageIndexScanInputCols::Gte { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Gt, got PageIndexScanInputCols::Gte"
                         );
                     }
                     PageIndexScanInputCols::Gt {

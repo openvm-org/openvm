@@ -17,6 +17,7 @@ pub enum Comp {
     Lt,
     Lte,
     Eq,
+    Gte,
     Gt,
 }
 
@@ -50,6 +51,17 @@ pub enum PageIndexScanInputAir {
         /// The length of each data entry in the page table
         data_len: usize,
 
+        is_equal_vec_air: IsEqualVecAir,
+    },
+    Gte {
+        /// The bus index
+        bus_index: usize,
+        /// The length of each index in the page table
+        idx_len: usize,
+        /// The length of each data entry in the page table
+        data_len: usize,
+
+        is_less_than_tuple_air: IsLessThanTupleAir,
         is_equal_vec_air: IsEqualVecAir,
     },
     Gt {
@@ -129,6 +141,22 @@ impl PageIndexScanInputChip {
                 range_checker,
                 cmp,
             },
+            Comp::Gte => Self {
+                air: PageIndexScanInputAir::Gte {
+                    bus_index,
+                    idx_len,
+                    data_len,
+                    is_less_than_tuple_air: IsLessThanTupleAir::new(
+                        bus_index,
+                        range_max,
+                        idx_limb_bits.clone(),
+                        decomp,
+                    ),
+                    is_equal_vec_air: IsEqualVecAir::new(idx_len),
+                },
+                range_checker,
+                cmp,
+            },
             Comp::Gt => Self {
                 air: PageIndexScanInputAir::Gt {
                     bus_index,
@@ -156,6 +184,9 @@ impl PageIndexScanInputChip {
                 idx_len, data_len, ..
             } => 1 + idx_len + data_len,
             PageIndexScanInputAir::Eq {
+                idx_len, data_len, ..
+            } => 1 + idx_len + data_len,
+            PageIndexScanInputAir::Gte {
                 idx_len, data_len, ..
             } => 1 + idx_len + data_len,
             PageIndexScanInputAir::Gt {
@@ -198,6 +229,23 @@ impl PageIndexScanInputChip {
                     + 2 * idx_len
             }
             PageIndexScanInputAir::Eq { idx_len, .. } => idx_len + 1 + 1 + 2 * idx_len,
+            PageIndexScanInputAir::Gte {
+                idx_len,
+                is_less_than_tuple_air,
+                ..
+            } => {
+                idx_len
+                    + 1
+                    + 1
+                    + 1
+                    + 1
+                    + IsLessThanTupleAuxCols::<usize>::get_width(
+                        is_less_than_tuple_air.limb_bits(),
+                        is_less_than_tuple_air.decomp(),
+                        *idx_len,
+                    )
+                    + 2 * idx_len
+            }
             PageIndexScanInputAir::Gt {
                 idx_len,
                 is_less_than_tuple_air,

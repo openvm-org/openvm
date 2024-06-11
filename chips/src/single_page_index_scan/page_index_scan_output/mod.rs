@@ -12,16 +12,6 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-#[derive(Default)]
-pub enum Comp {
-    #[default]
-    Lt,
-    Lte,
-    Eq,
-    Gte,
-    Gt,
-}
-
 #[derive(Default, Getters)]
 pub struct PageIndexScanOutputAir {
     /// The bus index for sends to range chip
