@@ -3,28 +3,33 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
     is_equal::{columns::IsEqualAuxCols, IsEqualAir},
-    is_less_than_bits::{columns::IsLessThanBitsAuxCols, IsLessThanBitsAir},
+    is_less_than_bits::{columns::IsLessThanBitsAuxCols, IsLessThanBitsChip},
     sub_chip::LocalTraceInstructions,
 };
 
 use super::{
     columns::{IsLessThanTupleBitsAuxCols, IsLessThanTupleBitsCols, IsLessThanTupleBitsIOCols},
-    IsLessThanTupleBitsAir,
+    IsLessThanTupleBitsAir, IsLessThanTupleBitsChip,
 };
 
-impl IsLessThanTupleBitsAir {
+impl IsLessThanTupleBitsChip {
     pub fn generate_trace<F: PrimeField64>(
         &self,
         tuple_pairs: Vec<(Vec<u32>, Vec<u32>)>,
     ) -> RowMajorMatrix<F> {
-        let num_cols: usize =
-            IsLessThanTupleBitsCols::<F>::get_width(self.limb_bits().clone(), self.tuple_len());
+        let num_cols: usize = IsLessThanTupleBitsCols::<F>::get_width(
+            self.air.limb_bits().clone(),
+            self.air.tuple_len(),
+        );
 
         let mut rows: Vec<F> = vec![];
 
         // for each tuple pair, generate the trace row
         for (x, y) in tuple_pairs {
-            let row: Vec<F> = self.generate_trace_row((x.clone(), y.clone())).flatten();
+            let row: Vec<F> = self
+                .air
+                .generate_trace_row((x.clone(), y.clone()))
+                .flatten();
             rows.extend(row);
         }
 
@@ -45,9 +50,11 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for IsLessThanTupleBitsAir {
         let mut less_than_cumulative: Vec<F> = vec![];
 
         for i in 0..x.len() {
-            let is_less_than_bits_air = IsLessThanBitsAir::new(self.limb_bits()[i]);
-            let curr_less_than_row =
-                LocalTraceInstructions::generate_trace_row(&is_less_than_bits_air, (x[i], y[i]));
+            let is_less_than_bits_chip = IsLessThanBitsChip::new(self.limb_bits()[i]);
+            let curr_less_than_row = LocalTraceInstructions::generate_trace_row(
+                &is_less_than_bits_chip.air,
+                (x[i], y[i]),
+            );
             less_than.push(curr_less_than_row.io.is_less_than);
             less_than_aux.push(curr_less_than_row.aux);
 

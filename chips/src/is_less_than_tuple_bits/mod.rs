@@ -40,3 +40,31 @@ impl IsLessThanTupleBitsAir {
             .collect()
     }
 }
+
+/**
+ * This chip computes whether one tuple is lexicographically less than another. Each element of the
+ * tuple has its own max number of bits, given by the limb_bits array. The chip assumes that each limb
+ * is within its given max limb_bits.
+ *
+ * The IsLessThanTupleChip uses the IsLessThanChip as a subchip to check whether individual tuple elements
+ * are less than each other.
+ */
+#[derive(Default)]
+pub struct IsLessThanTupleBitsChip {
+    pub air: IsLessThanTupleBitsAir,
+}
+
+impl IsLessThanTupleBitsChip {
+    pub fn new(limb_bits: Vec<usize>) -> Self {
+        let is_less_than_bits_airs = limb_bits
+            .iter()
+            .map(|&limb_bit| IsLessThanBitsAir::new(limb_bit))
+            .collect::<Vec<_>>();
+
+        let air = IsLessThanTupleBitsAir {
+            is_less_than_bits_airs,
+        };
+
+        Self { air }
+    }
+}
