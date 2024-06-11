@@ -29,4 +29,15 @@ impl<F: Field> AirBridge<F> for FlatHashAir {
 
         interactions
     }
+
+    fn receives(&self) -> Vec<Interaction<F>> {
+        let fields = (0..self.page_width)
+            .map(|i| VirtualPairCol::single_main(i))
+            .collect();
+        vec![Interaction {
+            fields,
+            count: VirtualPairCol::one(),
+            argument_index: self.bus_index,
+        }]
+    }
 }
