@@ -13,7 +13,7 @@ use afs_test_utils::{
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
-use super::page_controller::PageController;
+use super::{page_controller::PageController, page_index_scan_input::Comp};
 
 #[allow(clippy::too_many_arguments)]
 fn index_scan_test(
@@ -111,6 +111,8 @@ fn test_single_page_index_scan() {
     let page_height = 1 << log_page_height;
     let page_width = 1 + idx_len + data_len;
 
+    let cmp = Comp::Lt;
+
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
         bus_index,
         idx_len,
@@ -118,6 +120,7 @@ fn test_single_page_index_scan() {
         range_max,
         limb_bits.clone(),
         decomp,
+        cmp,
     );
 
     let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(decomp));
@@ -196,6 +199,8 @@ fn test_single_page_index_scan_wrong_order() {
     let page_height = 1 << log_page_height;
     let page_width = 1 + idx_len + data_len;
 
+    let cmp = Comp::Lt;
+
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
         bus_index,
         idx_len,
@@ -203,6 +208,7 @@ fn test_single_page_index_scan_wrong_order() {
         range_max,
         limb_bits.clone(),
         decomp,
+        cmp,
     );
 
     let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(decomp));
@@ -290,6 +296,8 @@ fn test_single_page_index_scan_unsorted() {
     let page_height = 1 << log_page_height;
     let page_width = 1 + idx_len + data_len;
 
+    let cmp = Comp::Lt;
+
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
         bus_index,
         idx_len,
@@ -297,6 +305,7 @@ fn test_single_page_index_scan_unsorted() {
         range_max,
         limb_bits.clone(),
         decomp,
+        cmp,
     );
 
     let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(decomp));

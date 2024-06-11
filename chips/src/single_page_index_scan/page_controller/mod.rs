@@ -8,10 +8,14 @@ use p3_field::{AbstractField, PrimeField, PrimeField64};
 use p3_matrix::dense::DenseMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::range_gate::RangeCheckerGateChip;
+use crate::{
+    range_gate::RangeCheckerGateChip,
+    single_page_index_scan::page_index_scan_input::PageIndexScanInputAir,
+};
 
 use super::{
-    page_index_scan_input::PageIndexScanInputChip, page_index_scan_output::PageIndexScanOutputChip,
+    page_index_scan_input::{Comp, PageIndexScanInputChip},
+    page_index_scan_output::PageIndexScanOutputChip,
 };
 
 pub struct PageController<SC: StarkGenericConfig>
@@ -43,6 +47,7 @@ where
         range_max: u32,
         idx_limb_bits: Vec<usize>,
         idx_decomp: usize,
+        cmp: Comp,
     ) -> Self {
         let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, 1 << idx_decomp));
         Self {
@@ -54,6 +59,7 @@ where
                 idx_limb_bits.clone(),
                 idx_decomp,
                 range_checker.clone(),
+                cmp,
             ),
             output_chip: PageIndexScanOutputChip::new(
                 bus_index,
@@ -171,7 +177,9 @@ where
 
         assert!(!page_input.is_empty());
 
-        let bus_index = self.input_chip.air.bus_index;
+        let bus_index = match self.input_chip.air {
+            PageIndexScanInputAir::Lt { bus_index, .. } => bus_index,
+        };
 
         self.input_chip = PageIndexScanInputChip::new(
             bus_index,
@@ -181,6 +189,7 @@ where
             idx_limb_bits.clone(),
             idx_decomp,
             self.range_checker.clone(),
+            self.input_chip.cmp.clone(),
         );
         self.input_chip_trace = Some(self.input_chip.gen_page_trace::<SC>(page_input.clone()));
         self.input_chip_aux_trace = Some(

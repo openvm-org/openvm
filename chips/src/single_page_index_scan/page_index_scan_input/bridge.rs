@@ -3,7 +3,7 @@ use crate::{
     sub_chip::SubAirBridge,
 };
 
-use super::columns::PageIndexScanInputCols;
+use super::{columns::PageIndexScanInputCols, Comp};
 use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
@@ -12,54 +12,80 @@ use super::PageIndexScanInputAir;
 
 impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
     fn sends(&self) -> Vec<Interaction<F>> {
-        let num_cols = PageIndexScanInputCols::<F>::get_width(
-            self.idx_len,
-            self.data_len,
-            self.is_less_than_tuple_air.limb_bits(),
-            self.is_less_than_tuple_air.decomp(),
-        );
-        let all_cols = (0..num_cols).collect::<Vec<usize>>();
+        match &self {
+            PageIndexScanInputAir::Lt {
+                bus_index,
+                idx_len,
+                data_len,
+                is_less_than_tuple_air,
+                ..
+            } => {
+                let num_cols = PageIndexScanInputCols::<F>::get_width(
+                    *idx_len,
+                    *data_len,
+                    is_less_than_tuple_air.limb_bits(),
+                    is_less_than_tuple_air.decomp(),
+                    Comp::Lt,
+                );
+                let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-        let cols_numbered = PageIndexScanInputCols::<usize>::from_slice(
-            &all_cols,
-            self.idx_len,
-            self.data_len,
-            self.is_less_than_tuple_air.limb_bits(),
-            self.is_less_than_tuple_air.decomp(),
-        );
+                let cols_numbered = PageIndexScanInputCols::<usize>::from_slice(
+                    &all_cols,
+                    *idx_len,
+                    *data_len,
+                    is_less_than_tuple_air.limb_bits(),
+                    is_less_than_tuple_air.decomp(),
+                    Comp::Lt,
+                );
 
-        let is_less_than_tuple_cols = IsLessThanTupleCols {
-            io: IsLessThanTupleIOCols {
-                x: cols_numbered.idx.clone(),
-                y: cols_numbered.x.clone(),
-                tuple_less_than: cols_numbered.satisfies_pred,
-            },
-            aux: cols_numbered.is_less_than_tuple_aux,
-        };
+                let mut interactions: Vec<Interaction<F>> = vec![];
 
-        // construct the row to send
-        let mut cols = vec![];
-        cols.push(cols_numbered.is_alloc);
-        cols.extend(cols_numbered.idx);
-        cols.extend(cols_numbered.data);
+                match cols_numbered {
+                    PageIndexScanInputCols::Lt {
+                        is_alloc,
+                        idx,
+                        data,
+                        send_row,
+                        is_less_than_tuple_aux,
+                        ..
+                    } => {
+                        let is_less_than_tuple_cols = IsLessThanTupleCols {
+                            io: IsLessThanTupleIOCols {
+                                x: idx.clone(),
+                                y: data.clone(),
+                                tuple_less_than: send_row,
+                            },
+                            aux: is_less_than_tuple_aux,
+                        };
 
-        let virtual_cols = cols
-            .iter()
-            .map(|col| VirtualPairCol::single_main(*col))
-            .collect::<Vec<_>>();
+                        // construct the row to send
+                        let mut cols = vec![];
+                        cols.push(is_alloc);
+                        cols.extend(idx);
+                        cols.extend(data);
 
-        // sends with count given by send_row indicator
-        let mut interactions = vec![Interaction {
-            fields: virtual_cols,
-            count: VirtualPairCol::single_main(cols_numbered.send_row),
-            argument_index: self.bus_index,
-        }];
+                        let virtual_cols = cols
+                            .iter()
+                            .map(|col| VirtualPairCol::single_main(*col))
+                            .collect::<Vec<_>>();
 
-        let mut subchip_interactions =
-            SubAirBridge::<F>::sends(&self.is_less_than_tuple_air, is_less_than_tuple_cols);
+                        interactions.push(Interaction {
+                            fields: virtual_cols,
+                            count: VirtualPairCol::single_main(send_row),
+                            argument_index: *bus_index,
+                        });
 
-        interactions.append(&mut subchip_interactions);
+                        let mut subchip_interactions = SubAirBridge::<F>::sends(
+                            is_less_than_tuple_air,
+                            is_less_than_tuple_cols,
+                        );
 
-        interactions
+                        interactions.append(&mut subchip_interactions);
+                    }
+                }
+
+                interactions
+            }
+        }
     }
 }

@@ -8,7 +8,7 @@ use crate::{
     sub_chip::{AirConfig, SubAir},
 };
 
-use super::{columns::PageIndexScanInputCols, PageIndexScanInputAir};
+use super::{columns::PageIndexScanInputCols, Comp, PageIndexScanInputAir};
 
 impl AirConfig for PageIndexScanInputAir {
     type Cols<T> = PageIndexScanInputCols<T>;
@@ -16,12 +16,20 @@ impl AirConfig for PageIndexScanInputAir {
 
 impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
     fn width(&self) -> usize {
-        PageIndexScanInputCols::<F>::get_width(
-            self.idx_len,
-            self.data_len,
-            self.is_less_than_tuple_air.limb_bits().clone(),
-            self.is_less_than_tuple_air.decomp(),
-        )
+        match &self {
+            PageIndexScanInputAir::Lt {
+                idx_len,
+                data_len,
+                is_less_than_tuple_air,
+                ..
+            } => PageIndexScanInputCols::<F>::get_width(
+                *idx_len,
+                *data_len,
+                is_less_than_tuple_air.limb_bits().clone(),
+                is_less_than_tuple_air.decomp(),
+                Comp::Lt,
+            ),
+        }
     }
 }
 
@@ -30,57 +38,76 @@ where
     AB::M: Clone,
 {
     fn eval(&self, builder: &mut AB) {
-        let page_main = &builder.partitioned_main()[0].clone();
-        let aux_main = &builder.partitioned_main()[1].clone();
+        match &self {
+            PageIndexScanInputAir::Lt {
+                idx_len,
+                data_len,
+                is_less_than_tuple_air,
+                ..
+            } => {
+                let page_main = &builder.partitioned_main()[0].clone();
+                let aux_main = &builder.partitioned_main()[1].clone();
 
-        // get the public value x
-        let pis = builder.public_values();
-        let x = pis[..self.idx_len].to_vec();
+                // get the public value x
+                let pis = builder.public_values();
+                let public_x = pis[..*idx_len].to_vec();
 
-        let local_page = page_main.row_slice(0);
-        let local_aux = aux_main.row_slice(0);
-        let local_vec = local_page
-            .iter()
-            .chain(local_aux.iter())
-            .cloned()
-            .collect::<Vec<AB::Var>>();
-        let local = local_vec.as_slice();
+                let local_page = page_main.row_slice(0);
+                let local_aux = aux_main.row_slice(0);
+                let local_vec = local_page
+                    .iter()
+                    .chain(local_aux.iter())
+                    .cloned()
+                    .collect::<Vec<AB::Var>>();
+                let local = local_vec.as_slice();
 
-        let local_cols = PageIndexScanInputCols::<AB::Var>::from_slice(
-            local,
-            self.idx_len,
-            self.data_len,
-            self.is_less_than_tuple_air.limb_bits().clone(),
-            self.is_less_than_tuple_air.decomp(),
-        );
+                let local_cols = PageIndexScanInputCols::<AB::Var>::from_slice(
+                    local,
+                    *idx_len,
+                    *data_len,
+                    is_less_than_tuple_air.limb_bits().clone(),
+                    is_less_than_tuple_air.decomp(),
+                    Comp::Lt,
+                );
 
-        let is_less_than_tuple_cols = IsLessThanTupleCols {
-            io: IsLessThanTupleIOCols {
-                x: local_cols.idx,
-                y: local_cols.x.clone(),
-                tuple_less_than: local_cols.satisfies_pred,
-            },
-            aux: local_cols.is_less_than_tuple_aux,
-        };
+                match local_cols {
+                    PageIndexScanInputCols::Lt {
+                        is_alloc,
+                        idx,
+                        x,
+                        satisfies_pred,
+                        send_row,
+                        is_less_than_tuple_aux,
+                        ..
+                    } => {
+                        let is_less_than_tuple_cols = IsLessThanTupleCols {
+                            io: IsLessThanTupleIOCols {
+                                x: idx,
+                                y: x.clone(),
+                                tuple_less_than: satisfies_pred,
+                            },
+                            aux: is_less_than_tuple_aux,
+                        };
 
-        // constrain that the public value x is the same as the column x
-        for (&local_x, &pub_x) in local_cols.x.iter().zip(x.iter()) {
-            builder.assert_eq(local_x, pub_x);
+                        // constrain that the public value x is the same as the column x
+                        for (&local_x, &pub_x) in x.iter().zip(public_x.iter()) {
+                            builder.assert_eq(local_x, pub_x);
+                        }
+
+                        // constrain that we send the row iff the row is allocated and satisfies the predicate
+                        builder.assert_eq(is_alloc * satisfies_pred, send_row);
+                        builder.assert_bool(send_row);
+
+                        // constrain the indicator that we used to check wheter key < x is correct
+                        SubAir::eval(
+                            is_less_than_tuple_air,
+                            &mut builder.when_transition(),
+                            is_less_than_tuple_cols.io,
+                            is_less_than_tuple_cols.aux,
+                        );
+                    }
+                }
+            }
         }
-
-        // constrain that we send the row iff the row is allocated and satisfies the predicate
-        builder.assert_eq(
-            local_cols.is_alloc * local_cols.satisfies_pred,
-            local_cols.send_row,
-        );
-        builder.assert_bool(local_cols.send_row);
-
-        // constrain the indicator that we used to check wheter key < x is correct
-        SubAir::eval(
-            &self.is_less_than_tuple_air,
-            &mut builder.when_transition(),
-            is_less_than_tuple_cols.io,
-            is_less_than_tuple_cols.aux,
-        );
     }
 }
