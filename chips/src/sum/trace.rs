@@ -9,6 +9,7 @@ use super::SumChip;
 impl SumChip {
     pub fn generate_trace<F: PrimeField64>(&self, inputs: &[(u32, u32)]) -> RowMajorMatrix<F> {
         let n = inputs.len();
+        assert!(n.is_power_of_two());
 
         let mut sorted_inputs = inputs.to_vec();
         sorted_inputs.sort_by(|a, b| a.0.cmp(&b.0));
@@ -29,8 +30,8 @@ impl SumChip {
             // wrapping around seems easiest
             let next_key = sorted_inputs[(i + 1) % n].0;
             let is_less_than_row: IsLessThanCols<F> = LocalTraceInstructions::generate_trace_row(
-                &self.is_lt_chip.air,
-                (key, next_key, self.is_lt_chip.range_checker.clone()),
+                &self.air.is_lt_air,
+                (key, next_key, self.range_checker.clone()),
             );
 
             row.push(is_less_than_row.aux.lower);

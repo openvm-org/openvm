@@ -11,11 +11,14 @@ use p3_field::AbstractField;
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 
 use crate::{
-    is_less_than::{columns::IsLessThanCols, IsLessThanChip},
-    range_gate::RangeCheckerGateChip,
-    sub_chip::LocalTraceInstructions,
-    sum::{SumAir, SumChip},
+    is_less_than::columns::IsLessThanCols, range_gate::RangeCheckerGateChip,
+    sub_chip::LocalTraceInstructions, sum::SumChip,
 };
+
+const INPUT_BUS: usize = 0;
+const OUTPUT_BUS: usize = 1;
+const RANGE_BUS: usize = 2;
+const RANGE_MAX: u32 = 16;
 
 #[test]
 fn test_generate_trace() {
@@ -45,23 +48,8 @@ fn test_generate_trace() {
         7,
     );
 
-    let range_bus = 2;
-    let is_lt_chip = IsLessThanChip::new(
-        range_bus,
-        16,
-        4,
-        4,
-        Arc::new(RangeCheckerGateChip::new(range_bus, 16)),
-    );
-
-    let sum_chip = SumChip {
-        air: SumAir {
-            input_bus: 0,
-            output_bus: 1,
-            is_lt_air: is_lt_chip.air.clone(),
-        },
-        is_lt_chip,
-    };
+    let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_BUS, RANGE_MAX));
+    let sum_chip = SumChip::new(INPUT_BUS, OUTPUT_BUS, 4, 4, range_checker);
     let trace = sum_chip.generate_trace(inputs);
     assert_eq!(trace, expected_trace);
 }
@@ -102,21 +90,8 @@ fn run_sum_air_trace_test(sum_trace_u32: &[(u32, u32, u32, u32)]) -> Result<(), 
         receiver_air.field_width() + 1,
     );
 
-    let is_lt_chip = IsLessThanChip::new(
-        range_bus,
-        16,
-        4,
-        4,
-        Arc::new(RangeCheckerGateChip::new(range_bus, 16)),
-    );
-    let sum_chip = SumChip {
-        air: SumAir {
-            input_bus: sum_input_bus,
-            output_bus: sum_output_bus,
-            is_lt_air: is_lt_chip.air.clone(),
-        },
-        is_lt_chip,
-    };
+    let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_BUS, RANGE_MAX));
+    let sum_chip = SumChip::new(INPUT_BUS, OUTPUT_BUS, 4, 4, range_checker);
 
     let mut rows: Vec<Vec<BabyBear>> = Vec::new();
     for i in 0..sum_trace_u32.len() {
@@ -128,8 +103,8 @@ fn run_sum_air_trace_test(sum_trace_u32: &[(u32, u32, u32, u32)]) -> Result<(), 
         let mut row: Vec<BabyBear> = row.into_iter().map(BabyBear::from_canonical_u32).collect();
 
         let is_less_than_row: IsLessThanCols<BabyBear> = LocalTraceInstructions::generate_trace_row(
-            &sum_chip.is_lt_chip.air,
-            (key, next_key, sum_chip.is_lt_chip.range_checker.clone()),
+            &sum_chip.air.is_lt_air,
+            (key, next_key, sum_chip.range_checker.clone()),
         );
         row.push(is_less_than_row.aux.lower);
         row.extend(is_less_than_row.aux.lower_decomp);
@@ -139,12 +114,12 @@ fn run_sum_air_trace_test(sum_trace_u32: &[(u32, u32, u32, u32)]) -> Result<(), 
     let width = BaseAir::<BabyBear>::width(&sum_chip.air);
     let sum_trace = DenseMatrix::new(rows.concat(), width);
 
-    let range_checker_trace = sum_chip.is_lt_chip.range_checker.generate_trace();
+    let range_checker_trace = sum_chip.range_checker.generate_trace();
 
     run_simple_test_no_pis(
         vec![
             &sum_chip.air,
-            &sum_chip.is_lt_chip.range_checker.air,
+            &sum_chip.range_checker.air,
             &sender_air,
             &receiver_air,
         ],

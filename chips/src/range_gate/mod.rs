@@ -7,8 +7,8 @@ pub mod trace;
 
 #[derive(Default)]
 pub struct RangeCheckerGateAir {
-    bus_index: usize,
-    _range_max: u32,
+    pub bus_index: usize,
+    pub range_max: u32,
 }
 
 /// This chip gets requests to verify that a number is in the range
@@ -30,7 +30,7 @@ impl RangeCheckerGateChip {
         Self {
             air: RangeCheckerGateAir {
                 bus_index,
-                _range_max: range_max,
+                range_max,
             },
             count,
         }
