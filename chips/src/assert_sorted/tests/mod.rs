@@ -11,7 +11,7 @@ use assert_sorted::AssertSortedChip;
 use p3_baby_bear::BabyBear;
 use p3_matrix::dense::DenseMatrix;
 
-/**
+/*
  * Testing strategy for the assert sorted chip:
  *     partition on limb_bits:
  *         limb_bits < 20

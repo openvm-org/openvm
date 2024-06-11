@@ -15,21 +15,19 @@ pub mod trace;
 pub struct AssertSortedAir {
     #[getset(get = "pub")]
     is_less_than_tuple_air: IsLessThanTupleAir,
-    // The keys to check for sortedness
+    /// The keys to check for sortedness
     #[getset(get = "pub")]
     keys: Vec<Vec<u32>>,
 }
 
-/**
- * This chip constrains that consecutive rows are sorted lexicographically.
- *
- * Each row consists of a key decomposed into limbs. Each limb has its own max number of
- * bits, given by the limb_bits array. The chip assumes that each limb is within its
- * given max limb_bits.
- *
- * The AssertSortedChip uses the IsLessThanTupleChip as a subchip to check that the rows
- * are sorted lexicographically.
- */
+/// This chip constrains that consecutive rows are sorted lexicographically.
+///
+/// Each row consists of a key decomposed into limbs. Each limb has its own max number of
+/// bits, given by the limb_bits array. The chip assumes that each limb is within its
+/// given max limb_bits.
+///
+/// The AssertSortedChip uses the IsLessThanTupleChip as a subchip to check that the rows
+/// are sorted lexicographically.
 #[derive(Default)]
 pub struct AssertSortedChip {
     air: AssertSortedAir,
