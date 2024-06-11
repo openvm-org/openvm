@@ -45,18 +45,13 @@ impl<const INDEX_BYTES: usize, const DATA_BYTES: usize> MockDb<INDEX_BYTES, DATA
         self.tables.get(&table_id)
     }
 
-    pub fn create_table(
-        &mut self,
-        table_id: TableId,
-    ) -> Option<MockDbTable<INDEX_BYTES, DATA_BYTES>> {
+    pub fn create_table(&mut self, table_id: TableId) -> Option<()> {
         if self.tables.contains_key(&table_id) {
             return None;
         }
-        let table = self.tables.insert(
-            table_id,
-            MockDbTable::<INDEX_BYTES, DATA_BYTES>::new(table_id),
-        )?;
-        Some(table)
+        let table = MockDbTable::<INDEX_BYTES, DATA_BYTES>::new(table_id);
+        self.tables.insert(table_id, table);
+        Some(())
     }
 
     pub fn get_data(&self, table_id: TableId, key: Vec<u8>) -> Option<Vec<u8>> {
