@@ -2,51 +2,59 @@
 pub mod tests;
 use crate::{
     mock_db::MockDb,
-    table::{codec::fixed_bytes::FixedBytesCodec, Table, TableId},
+    table::{codec::fixed_bytes::FixedBytesCodec, types::TableId, Table},
+    types::{Data, Index},
 };
-use num_traits::{FromBytes, ToBytes};
-use std::hash::Hash;
 
-pub struct AfsInterface<
-    'a,
-    T: ToBytes + FromBytes<Bytes = [u8; SIZE_T]> + Sized + Hash + Eq + PartialEq + Clone,
-    U: ToBytes + FromBytes<Bytes = [u8; SIZE_U]> + Sized + Clone,
-    const SIZE_T: usize,
-    const SIZE_U: usize,
-    const INDEX_BYTES: usize,
-    const DATA_BYTES: usize,
-> {
-    pub db_ref: &'a mut MockDb<INDEX_BYTES, DATA_BYTES>,
-    pub current_table: Option<Table<T, U, SIZE_T, SIZE_U, INDEX_BYTES, DATA_BYTES>>,
+pub struct AfsInterface<'a, I: Index, D: Data> {
+    db_ref: &'a mut MockDb,
+    current_table: Option<Table<I, D>>,
 }
 
-impl<
-        'a,
-        T: ToBytes + FromBytes<Bytes = [u8; SIZE_T]> + Sized + Hash + Eq + PartialEq + Clone,
-        U: ToBytes + FromBytes<Bytes = [u8; SIZE_U]> + Sized + Clone,
-        const SIZE_T: usize,
-        const SIZE_U: usize,
-        const INDEX_BYTES: usize,
-        const DATA_BYTES: usize,
-    > AfsInterface<'a, T, U, SIZE_T, SIZE_U, INDEX_BYTES, DATA_BYTES>
-{
-    pub fn new(db_ref: &'a mut MockDb<INDEX_BYTES, DATA_BYTES>) -> Self {
+impl<'a, I: Index, D: Data> AfsInterface<'a, I, D> {
+    const SIZE_I: usize = std::mem::size_of::<I>();
+    const SIZE_D: usize = std::mem::size_of::<D>();
+
+    pub fn new(db_ref: &'a mut MockDb) -> Self {
         Self {
             db_ref,
             current_table: None,
         }
     }
 
-    pub fn get_table(
-        &mut self,
-        table_id: TableId,
-    ) -> Option<&Table<T, U, SIZE_T, SIZE_U, INDEX_BYTES, DATA_BYTES>> {
+    // pub fn load_afi(path: String) -> Self {
+    //     let instructions = AfsInputInstructions::from_file(path);
+
+    //     for op in &instructions.operations {
+    //         match op.operation {
+    //             InputFileBodyOperation::Read => {}
+    //             InputFileBodyOperation::Insert | InputFileBodyOperation::Write => {
+    //                 let index_input = op.args[0].clone();
+    //                 let index = Vec::<u8>::from(string_to_fixed_bytes_be_vec(index_input));
+    //                 let data_input = op.args[1].clone();
+    //                 let data =
+    //                     Vec::<u8>::from(string_to_fixed_bytes_be_vec::<DATA_BYTES>(data_input));
+    //                 map.insert(index, data);
+    //             }
+    //         };
+    //     }
+    // }
+
+    pub fn get_db_ref(&mut self) -> &mut MockDb {
+        self.db_ref
+    }
+
+    pub fn get_current_table(&self) -> Option<&Table<I, D>> {
+        self.current_table.as_ref()
+    }
+
+    pub fn get_table(&mut self, table_id: TableId) -> Option<&Table<I, D>> {
         let db_table = self.db_ref.get_table(table_id)?;
         self.current_table = Some(Table::from_db_table(db_table));
         self.current_table.as_ref()
     }
 
-    pub fn read(&mut self, table_id: TableId, index: T) -> Option<U> {
+    pub fn read(&mut self, table_id: TableId, index: I) -> Option<D> {
         if let Some(table) = self.current_table.as_ref() {
             let id = table.id;
             if id != table_id {
@@ -58,16 +66,18 @@ impl<
         self.current_table.as_ref().unwrap().read(index)
     }
 
-    pub fn insert(&mut self, table_id: TableId, index: T, data: U) -> Option<()> {
-        let codec = FixedBytesCodec::<T, U, SIZE_T, SIZE_U>::new(INDEX_BYTES, DATA_BYTES);
+    pub fn insert(&mut self, table_id: TableId, index: I, data: D) -> Option<()> {
+        let metadata = self.db_ref.get_table_metadata(table_id)?;
+        let codec = FixedBytesCodec::<I, D>::new(metadata.index_bytes, metadata.data_bytes);
         let index_bytes = codec.index_to_fixed_bytes(index);
         let data_bytes = codec.data_to_fixed_bytes(data);
         self.db_ref.insert_data(table_id, index_bytes, data_bytes)?;
         Some(())
     }
 
-    pub fn write(&mut self, table_id: TableId, index: T, data: U) -> Option<()> {
-        let codec = FixedBytesCodec::<T, U, SIZE_T, SIZE_U>::new(INDEX_BYTES, DATA_BYTES);
+    pub fn write(&mut self, table_id: TableId, index: I, data: D) -> Option<()> {
+        let metadata = self.db_ref.get_table_metadata(table_id)?;
+        let codec = FixedBytesCodec::<I, D>::new(metadata.index_bytes, metadata.data_bytes);
         let index_bytes = codec.index_to_fixed_bytes(index);
         let data_bytes = codec.data_to_fixed_bytes(data);
         self.db_ref.write_data(table_id, index_bytes, data_bytes)?;

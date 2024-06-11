@@ -1,105 +1,96 @@
 pub mod utils;
 
-use crate::table::TableId;
-use alloy_primitives::FixedBytes;
+use crate::table::types::{TableId, TableMetadata};
 use std::collections::{hash_map::Entry, HashMap};
 
-pub struct MockDb<const INDEX_BYTES: usize, const DATA_BYTES: usize> {
-    pub tables: HashMap<TableId, MockDbTable<INDEX_BYTES, DATA_BYTES>>,
+pub struct MockDb {
+    /// Default metadata for tables created in this database
+    pub default_table_metadata: TableMetadata,
+    /// Map of table id to table
+    pub tables: HashMap<TableId, MockDbTable>,
 }
 
-pub struct MockDbTable<const INDEX_BYTES: usize, const DATA_BYTES: usize> {
+pub struct MockDbTable {
+    /// Table id
     pub id: TableId,
-    pub items: HashMap<FixedBytes<INDEX_BYTES>, FixedBytes<DATA_BYTES>>,
+    /// Metadata containing byte sizes for the db table index and data
+    pub db_table_metadata: TableMetadata,
+    /// Map of index to data
+    pub items: HashMap<Vec<u8>, Vec<u8>>,
 }
 
-impl<const INDEX_BYTES: usize, const DATA_BYTES: usize> MockDb<INDEX_BYTES, DATA_BYTES> {
-    pub fn new() -> Self {
+impl MockDbTable {
+    pub fn new(table_id: TableId, metadata: TableMetadata) -> Self {
         Self {
+            id: table_id,
+            db_table_metadata: metadata,
+            items: HashMap::new(),
+        }
+    }
+}
+
+impl MockDb {
+    pub fn new(metadata: TableMetadata) -> Self {
+        Self {
+            default_table_metadata: metadata,
             tables: HashMap::new(),
         }
     }
 
-    // pub fn new_from_afi(afi: &AfsInputInstructions) -> Self {
-    //     let mut map = HashMap::new();
-    //     for op in &afi.operations {
-    //         match op.operation {
-    //             InputFileBodyOperation::Read => {}
-    //             InputFileBodyOperation::Insert | InputFileBodyOperation::Write => {
-    //                 let index_input = op.args[0].clone();
-    //                 let index = FixedBytes::<INDEX_BYTES>::from(string_to_fixed_bytes_be::<
-    //                     INDEX_BYTES,
-    //                 >(index_input));
-    //                 let data_input = op.args[1].clone();
-    //                 let data = FixedBytes::<DATA_BYTES>::from(
-    //                     string_to_fixed_bytes_be::<DATA_BYTES>(data_input),
-    //                 );
-    //                 map.insert(index, data);
-    //             }
-    //         };
-    //     }
-    //     Self { map }
-    // }
-
-    pub fn get_table(&self, table_id: TableId) -> Option<&MockDbTable<INDEX_BYTES, DATA_BYTES>> {
+    pub fn get_table(&self, table_id: TableId) -> Option<&MockDbTable> {
         self.tables.get(&table_id)
     }
 
-    pub fn create_table(&mut self, table_id: TableId) -> Option<()> {
+    pub fn get_table_metadata(&self, table_id: TableId) -> Option<TableMetadata> {
+        let table = self.tables.get(&table_id)?;
+        Some(table.db_table_metadata.clone())
+    }
+
+    pub fn create_table(&mut self, table_id: TableId, metadata: TableMetadata) -> Option<()> {
         if self.tables.contains_key(&table_id) {
             return None;
         }
-        let table = MockDbTable::<INDEX_BYTES, DATA_BYTES>::new(table_id);
+        let table = MockDbTable::new(table_id, metadata);
         self.tables.insert(table_id, table);
         Some(())
     }
 
-    pub fn get_data(&self, table_id: TableId, key: Vec<u8>) -> Option<Vec<u8>> {
+    pub fn get_data(&self, table_id: TableId, index: Vec<u8>) -> Option<Vec<u8>> {
+        self.check_index_size(&index);
         let table = self.get_table(table_id)?;
-        let index = FixedBytes::<INDEX_BYTES>::from_slice(key.as_slice());
-        let value = table.items.get(&index)?;
-        Some(value.to_vec())
+        let data = table.items.get(&index)?;
+        Some(data.to_vec())
     }
 
-    pub fn insert_data(&mut self, table_id: TableId, key: Vec<u8>, value: Vec<u8>) -> Option<()> {
-        let mut table = self.tables.get_mut(&table_id);
-        if table.is_none() {
-            self.create_table(table_id)?;
-            table = self.tables.get_mut(&table_id);
-        }
-        let table = table?;
-        let index = FixedBytes::<INDEX_BYTES>::from_slice(key.as_slice());
+    pub fn insert_data(&mut self, table_id: TableId, index: Vec<u8>, data: Vec<u8>) -> Option<()> {
+        self.check_index_size(&index);
+        self.check_data_size(&data);
+        let table = self.tables.get_mut(&table_id)?;
         match table.items.entry(index) {
             Entry::Occupied(_) => None,
             Entry::Vacant(entry) => {
-                let value = FixedBytes::<DATA_BYTES>::from_slice(value.as_slice());
-                entry.insert(value);
+                entry.insert(data);
                 Some(())
             }
         }
     }
 
-    pub fn write_data(&mut self, table_id: TableId, key: Vec<u8>, value: Vec<u8>) -> Option<()> {
-        let mut table = self.tables.get_mut(&table_id);
-        if table.is_none() {
-            self.create_table(table_id)?;
-            table = self.tables.get_mut(&table_id);
-        }
-        let table = table?;
-        let index = FixedBytes::<INDEX_BYTES>::from_slice(key.as_slice());
+    pub fn write_data(&mut self, table_id: TableId, index: Vec<u8>, data: Vec<u8>) -> Option<()> {
+        self.check_index_size(&index);
+        self.check_data_size(&data);
+        let table = self.tables.get_mut(&table_id)?;
         match table.items.entry(index) {
             Entry::Occupied(mut entry) => {
-                let value = FixedBytes::<DATA_BYTES>::from_slice(value.as_slice());
-                entry.insert(value);
+                entry.insert(data);
                 Some(())
             }
             Entry::Vacant(_) => None,
         }
     }
 
-    pub fn remove_data(&mut self, table_id: TableId, key: Vec<u8>) -> Option<()> {
+    pub fn remove_data(&mut self, table_id: TableId, index: Vec<u8>) -> Option<()> {
+        self.check_index_size(&index);
         let table = self.tables.get_mut(&table_id)?;
-        let index = FixedBytes::<INDEX_BYTES>::from_slice(key.as_slice());
         let removed = table.items.remove(&index);
         if removed.is_none() {
             None
@@ -107,30 +98,16 @@ impl<const INDEX_BYTES: usize, const DATA_BYTES: usize> MockDb<INDEX_BYTES, DATA
             Some(())
         }
     }
-}
 
-impl<const INDEX_BYTES: usize, const DATA_BYTES: usize> Default
-    for MockDb<INDEX_BYTES, DATA_BYTES>
-{
-    fn default() -> Self {
-        Self::new()
+    fn check_index_size(&self, index: &[u8]) {
+        if index.len() != self.default_table_metadata.index_bytes {
+            panic!("Invalid index size: {}", index.len());
+        }
     }
-}
 
-impl<const INDEX_BYTES: usize, const DATA_BYTES: usize> MockDbTable<INDEX_BYTES, DATA_BYTES> {
-    pub fn new(table_id: TableId) -> Self {
-        Self {
-            id: table_id,
-            items: HashMap::new(),
+    fn check_data_size(&self, data: &[u8]) {
+        if data.len() != self.default_table_metadata.data_bytes {
+            panic!("Invalid data size: {}", data.len());
         }
     }
 }
-
-// impl<const INDEX_BYTES: usize, const DATA_BYTES: usize> Debug for MockDb<INDEX_BYTES, DATA_BYTES> {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-//         self.map.keys().for_each(|k| {
-//             writeln!(f, "{:?}: {:?}", k, self.map.get(k).unwrap()).unwrap();
-//         });
-//         Ok(())
-//     }
-// }

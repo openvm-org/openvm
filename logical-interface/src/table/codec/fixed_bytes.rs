@@ -1,33 +1,28 @@
-use num_traits::{FromBytes, ToBytes};
 use serde_derive::{Deserialize, Serialize};
 use std::fmt::Debug;
 
+use crate::types::{Data, Index};
+
 #[derive(Debug, Deserialize, Serialize)]
-pub struct FixedBytesCodec<T, U, const SIZE_T: usize, const SIZE_U: usize>
+pub struct FixedBytesCodec<I, D>
 where
-    T: ToBytes + FromBytes<Bytes = [u8; SIZE_T]> + Sized + PartialEq + Clone,
-    U: ToBytes + FromBytes<Bytes = [u8; SIZE_U]> + Sized + Clone,
+    I: Index,
+    D: Data,
 {
     pub db_size_index: usize,
     pub db_size_data: usize,
-    _phantom: std::marker::PhantomData<(T, U)>,
+    _phantom: std::marker::PhantomData<(I, D)>,
 }
 
-impl<T, U, const SIZE_T: usize, const SIZE_U: usize> FixedBytesCodec<T, U, SIZE_T, SIZE_U>
+impl<I, D> FixedBytesCodec<I, D>
 where
-    T: ToBytes + FromBytes<Bytes = [u8; SIZE_T]> + Sized + PartialEq + Clone,
-    U: ToBytes + FromBytes<Bytes = [u8; SIZE_U]> + Sized + Clone,
+    I: Index,
+    D: Data,
 {
-    const SIZE_T: usize = std::mem::size_of::<T>();
-    const SIZE_U: usize = std::mem::size_of::<U>();
+    const SIZE_I: usize = std::mem::size_of::<I>();
+    const SIZE_D: usize = std::mem::size_of::<D>();
 
     pub fn new(db_size_index: usize, db_size_data: usize) -> Self {
-        if std::mem::size_of::<T>() != SIZE_T {
-            panic!("Index size is invalid for this codec");
-        }
-        if std::mem::size_of::<U>() != SIZE_U {
-            panic!("Data size is invalid for this codec");
-        }
         Self {
             db_size_index,
             db_size_data,
@@ -35,9 +30,9 @@ where
         }
     }
 
-    pub fn index_to_fixed_bytes(&self, index: T) -> Vec<u8> {
+    pub fn index_to_fixed_bytes(&self, index: I) -> Vec<u8> {
         let index_bytes = index.to_be_bytes();
-        let mut index_bytes = index_bytes.as_ref().to_vec();
+        let mut index_bytes = index_bytes.to_vec();
         if index_bytes.len() > self.db_size_index {
             panic!("Index size exceeds the maximum size");
         }
@@ -54,9 +49,9 @@ where
         db_index
     }
 
-    pub fn data_to_fixed_bytes(&self, data: U) -> Vec<u8> {
+    pub fn data_to_fixed_bytes(&self, data: D) -> Vec<u8> {
         let data_bytes = data.to_be_bytes();
-        let mut data_bytes = data_bytes.as_ref().to_vec();
+        let mut data_bytes = data_bytes.to_vec();
         if data_bytes.len() > self.db_size_data {
             panic!("Data size exceeds the maximum size");
         }
@@ -73,33 +68,42 @@ where
         db_data
     }
 
-    pub fn fixed_bytes_to_index(&self, bytes: Vec<u8>) -> T {
-        let bytes_len = bytes.len();
+    pub fn fixed_bytes_to_index(&self, fixed_bytes: Vec<u8>) -> I {
+        let bytes_len = fixed_bytes.len();
         if bytes_len != self.db_size_index {
-            panic!("Index size is invalid for this codec");
+            panic!(
+                "Index size ({}) is invalid for this codec (requires {})",
+                bytes_len, self.db_size_index
+            );
         }
-        if Self::SIZE_T > bytes_len {
-            panic!("Index size is less than the expected size");
+        if Self::SIZE_I > bytes_len {
+            panic!(
+                "Index size ({}) is less than the expected size ({})",
+                bytes_len,
+                Self::SIZE_I
+            );
         }
 
-        // Get least significant size_t bytes (big endian)
-        let bytes_slice = &bytes[bytes_len - Self::SIZE_T..];
-        let bytes_slice: &[u8; SIZE_T] = bytes_slice.try_into().unwrap();
-        T::from_be_bytes(bytes_slice)
+        // Get least significant len(T) bytes (big endian)
+        let bytes_slice = &fixed_bytes[bytes_len - Self::SIZE_I..];
+        let bytes_vec = bytes_slice.to_vec();
+        I::from_be_bytes(&bytes_vec).unwrap()
+        // let bytes_slice: &[u8; SIZE_T] = bytes_slice.try_into().unwrap();
+        // T::from(bytes_slice)
     }
 
-    pub fn fixed_bytes_to_data(&self, bytes: Vec<u8>) -> U {
-        let bytes_len = bytes.len();
+    pub fn fixed_bytes_to_data(&self, fixed_bytes: Vec<u8>) -> D {
+        let bytes_len = fixed_bytes.len();
         if bytes_len != self.db_size_data {
             panic!("Data size is invalid for this codec");
         }
-        if Self::SIZE_U > bytes_len {
+        if Self::SIZE_D > bytes_len {
             panic!("Data size is less than the expected size");
         }
 
         // Get least significant size_t bytes (big endian)
-        let bytes_slice = &bytes[bytes_len - Self::SIZE_U..];
-        let bytes_slice: &[u8; SIZE_U] = bytes_slice.try_into().unwrap();
-        U::from_be_bytes(bytes_slice)
+        let bytes_slice = &fixed_bytes[bytes_len - Self::SIZE_D..];
+        let bytes_vec = bytes_slice.to_vec();
+        D::from_be_bytes(&bytes_vec).unwrap()
     }
 }

@@ -12,6 +12,7 @@ use std::{
 use types::{InputFileBodyOperation, InputFileHeaderOperation};
 
 pub const HEADER_SIZE: usize = 3;
+pub const MAX_OPS: usize = 128;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AfsInputInstructions {
@@ -55,7 +56,7 @@ impl AfsInputInstructions {
             index_bytes: 0,
             data_bytes: 0,
         };
-        // reader.lines().take(2).map(|line| {
+
         for line in &lines[..HEADER_SIZE] {
             let parts: Vec<&str> = line.split_whitespace().collect();
             let operation = parts[0];
@@ -85,7 +86,10 @@ impl AfsInputInstructions {
             panic!("Index bytes and data bytes must be set in the header");
         }
 
-        let afs_operations = lines[HEADER_SIZE..]
+        let op_lines = &lines[HEADER_SIZE..];
+        Self::check_num_ops(op_lines.len());
+
+        let afs_operations = op_lines
             .iter()
             .map(|line| {
                 let parts: Vec<&str> = line.split_whitespace().collect();
@@ -106,5 +110,14 @@ impl AfsInputInstructions {
             .collect();
 
         Ok((afs_header, afs_operations))
+    }
+
+    fn check_num_ops(num_ops: usize) {
+        if num_ops > MAX_OPS {
+            panic!(
+                "Number of operations ({}) exceeds maximum ({})",
+                num_ops, MAX_OPS
+            );
+        }
     }
 }
