@@ -13,7 +13,7 @@ use p3_field::Field;
 use parking_lot::Mutex;
 
 #[derive(Default)]
-/// A chip that checks if a number equals 0
+/// The AIR for the flat hash chip
 pub struct FlatHashAir {
     pub hash_chip_bus_index: usize,
 
@@ -23,7 +23,6 @@ pub struct FlatHashAir {
     pub hash_rate: usize,
     pub digest_width: usize,
 
-    // pub hash_chip: DummyHashAir,
     pub bus_index: usize,
 }
 
@@ -50,7 +49,6 @@ impl FlatHashAir {
             hash_rate,
             digest_width,
             bus_index,
-            // hash_chip: DummyHashAir::new(hashchip_bus_index, hash_width, hash_rate),
         }
     }
 

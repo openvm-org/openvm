@@ -9,7 +9,7 @@ pub mod trace;
 use p3_field::Field;
 
 #[derive(Default)]
-/// A chip that checks if a number equals 0
+/// The AIR for the dummy hash chip
 pub struct DummyHashAir {
     pub bus_index: usize,
     pub rate: usize,

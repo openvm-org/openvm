@@ -1,9 +1,5 @@
 use p3_field::Field;
-use p3_matrix::dense::RowMajorMatrix; // Import the constant from columns.rs
-
-// use crate::dummy_hash::DummyHashChip;
-
-// use crate::sub_chip::LocalTraceInstructions;
+use p3_matrix::dense::RowMajorMatrix;
 
 use super::FlatHashAir;
 use super::PageController;
@@ -33,19 +29,6 @@ impl FlatHashAir {
 
         RowMajorMatrix::new(rows.concat(), self.get_width())
     }
-
-    // pub fn generate_chips_traces_pis<F: Field>(
-    //     &self,
-    //     x: Vec<Vec<F>>,
-    // ) -> (Vec<RowMajorMatrix<F>>, Vec<Vec<F>>) {
-    //     let num_hashes = self.page_width / self.hash_rate;
-    //     let mut chips = vec![];
-    //     let mut pis = vec![];
-    //     for _ in 0..num_hashes {
-    //         chips.push(self.clone());
-    //         pis.push(vec![F::zero(); self.hash_width]);
-    //     }
-    // }
 }
 
 impl<F: Field> PageController<F> {
@@ -54,17 +37,3 @@ impl<F: Field> PageController<F> {
         self.air.generate_trace(x, &mut *hash_chip)
     }
 }
-
-// impl<F: Field> LocalTraceInstructions<F> for FlatHashChip {
-//     type LocalInput = F;
-
-//     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
-//         let is_zero = FlatHashChip::request(local_input);
-//         let inv = if is_zero {
-//             F::zero()
-//         } else {
-//             local_input.inverse()
-//         };
-//         FlatHashCols::<F>::new(local_input, F::from_bool(is_zero), inv)
-//     }
-// }

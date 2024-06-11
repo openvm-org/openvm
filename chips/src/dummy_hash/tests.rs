@@ -1,6 +1,5 @@
 use super::DummyHashAir;
 
-// use afs_stark_backend::interaction::InteractiveAir;
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_field::AbstractField;
@@ -29,10 +28,6 @@ fn test_single_dummy_hash() {
     for i in 1..=chip.get_width() {
         dummy_trace.values[i] = hash_trace.values[i - 1];
     }
-    // let dummy_trace = RowMajorMatrix(vec![vec![AbstractField::from_canonical_u32(1)]
-    //     .into_iter()
-    //     .chain(hash_trace.iter().cloned())
-    //     .collect()]);
 
     run_simple_test_no_pis(vec![&chip, &requester], vec![hash_trace, dummy_trace])
         .expect("Verification failed");
