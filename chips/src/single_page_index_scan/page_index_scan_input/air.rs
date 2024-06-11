@@ -4,6 +4,7 @@ use p3_field::Field;
 use p3_matrix::Matrix;
 
 use crate::{
+    is_equal_vec::columns::{IsEqualVecCols, IsEqualVecIOCols},
     is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
     sub_chip::{AirConfig, SubAir},
 };
@@ -29,6 +30,10 @@ impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
                 is_less_than_tuple_air.decomp(),
                 Comp::Lt,
             ),
+            // there is no idx_limb_bits or decomp, so we supply an empty vec and 0, respectively
+            PageIndexScanInputAir::Eq {
+                idx_len, data_len, ..
+            } => PageIndexScanInputCols::<F>::get_width(*idx_len, *data_len, vec![], 0, Comp::Eq),
             PageIndexScanInputAir::Gt {
                 idx_len,
                 data_len,
@@ -119,9 +124,94 @@ where
                             is_less_than_tuple_cols.aux,
                         );
                     }
+                    PageIndexScanInputCols::Eq { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Lt, got PageIndexScanInputCols::Eq"
+                        );
+                    }
                     PageIndexScanInputCols::Gt { .. } => {
                         panic!(
                             "expected PageIndexScanInputCols::Lt, got PageIndexScanInputCols::Gt"
+                        );
+                    }
+                }
+            }
+            PageIndexScanInputAir::Eq {
+                idx_len,
+                data_len,
+                is_equal_vec_air,
+                ..
+            } => {
+                let page_main = &builder.partitioned_main()[0].clone();
+                let aux_main = &builder.partitioned_main()[1].clone();
+
+                // get the public value x
+                let pis = builder.public_values();
+                let public_x = pis[..*idx_len].to_vec();
+
+                let local_page = page_main.row_slice(0);
+                let local_aux = aux_main.row_slice(0);
+                let local_vec = local_page
+                    .iter()
+                    .chain(local_aux.iter())
+                    .cloned()
+                    .collect::<Vec<AB::Var>>();
+                let local = local_vec.as_slice();
+
+                let local_cols = PageIndexScanInputCols::<AB::Var>::from_slice(
+                    local,
+                    *idx_len,
+                    *data_len,
+                    vec![],
+                    0,
+                    Comp::Eq,
+                );
+
+                match local_cols {
+                    PageIndexScanInputCols::Lt { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Gt, got PageIndexScanInputCols::Lt"
+                        );
+                    }
+                    PageIndexScanInputCols::Eq {
+                        is_alloc,
+                        idx,
+                        x,
+                        satisfies_pred,
+                        send_row,
+                        is_equal_vec_aux,
+                        ..
+                    } => {
+                        // here, we are checking if idx = x
+                        let is_equal_vec_cols = IsEqualVecCols {
+                            io: IsEqualVecIOCols {
+                                x: idx,
+                                y: x.clone(),
+                                prod: satisfies_pred,
+                            },
+                            aux: is_equal_vec_aux,
+                        };
+
+                        // constrain that the public value x is the same as the column x
+                        for (&local_x, &pub_x) in x.iter().zip(public_x.iter()) {
+                            builder.assert_eq(local_x, pub_x);
+                        }
+
+                        // constrain that we send the row iff the row is allocated and satisfies the predicate
+                        builder.assert_eq(is_alloc * satisfies_pred, send_row);
+                        builder.assert_bool(send_row);
+
+                        // constrain the indicator that we used to check wheter key = x is correct
+                        SubAir::eval(
+                            is_equal_vec_air,
+                            builder,
+                            is_equal_vec_cols.io,
+                            is_equal_vec_cols.aux,
+                        );
+                    }
+                    PageIndexScanInputCols::Gt { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Eq, got PageIndexScanInputCols::Gt"
                         );
                     }
                 }
@@ -160,7 +250,12 @@ where
                 match local_cols {
                     PageIndexScanInputCols::Lt { .. } => {
                         panic!(
-                            "expected PageIndexScanInputCols::Lt, got PageIndexScanInputCols::Gt"
+                            "expected PageIndexScanInputCols::Gt, got PageIndexScanInputCols::Lt"
+                        );
+                    }
+                    PageIndexScanInputCols::Eq { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Gt, got PageIndexScanInputCols::Eq"
                         );
                     }
                     PageIndexScanInputCols::Gt {

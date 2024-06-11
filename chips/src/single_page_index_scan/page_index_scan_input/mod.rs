@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
+    is_equal_vec::IsEqualVecAir,
     is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
     range_gate::RangeCheckerGateChip,
 };
@@ -14,6 +15,7 @@ pub mod trace;
 pub enum Comp {
     #[default]
     Lt,
+    Eq,
     Gt,
 }
 
@@ -27,6 +29,16 @@ pub enum PageIndexScanInputAir {
         data_len: usize,
 
         is_less_than_tuple_air: IsLessThanTupleAir,
+    },
+    Eq {
+        /// The bus index
+        bus_index: usize,
+        /// The length of each index in the page table
+        idx_len: usize,
+        /// The length of each data entry in the page table
+        data_len: usize,
+
+        is_equal_vec_air: IsEqualVecAir,
     },
     Gt {
         /// The bus index
@@ -79,6 +91,16 @@ impl PageIndexScanInputChip {
                 range_checker,
                 cmp,
             },
+            Comp::Eq => Self {
+                air: PageIndexScanInputAir::Eq {
+                    bus_index,
+                    idx_len,
+                    data_len,
+                    is_equal_vec_air: IsEqualVecAir::new(idx_len),
+                },
+                range_checker,
+                cmp,
+            },
             Comp::Gt => Self {
                 air: PageIndexScanInputAir::Gt {
                     bus_index,
@@ -100,6 +122,9 @@ impl PageIndexScanInputChip {
     pub fn page_width(&self) -> usize {
         match &self.air {
             PageIndexScanInputAir::Lt {
+                idx_len, data_len, ..
+            } => 1 + idx_len + data_len,
+            PageIndexScanInputAir::Eq {
                 idx_len, data_len, ..
             } => 1 + idx_len + data_len,
             PageIndexScanInputAir::Gt {
@@ -125,6 +150,12 @@ impl PageIndexScanInputChip {
                         *idx_len,
                     )
             }
+            PageIndexScanInputAir::Eq {
+                bus_index: _,
+                idx_len,
+                data_len: _,
+                is_equal_vec_air: _,
+            } => idx_len + 1 + 1 + 2 * idx_len,
             PageIndexScanInputAir::Gt {
                 bus_index: _,
                 idx_len,

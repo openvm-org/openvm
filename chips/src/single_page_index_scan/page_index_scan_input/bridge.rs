@@ -18,7 +18,6 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                 idx_len,
                 data_len,
                 is_less_than_tuple_air,
-                ..
             } => {
                 let num_cols = PageIndexScanInputCols::<F>::get_width(
                     *idx_len,
@@ -45,6 +44,8 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                         is_alloc,
                         idx,
                         data,
+                        x,
+                        satisfies_pred,
                         send_row,
                         is_less_than_tuple_aux,
                         ..
@@ -52,8 +53,8 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                         let is_less_than_tuple_cols = IsLessThanTupleCols {
                             io: IsLessThanTupleIOCols {
                                 x: idx.clone(),
-                                y: data.clone(),
-                                tuple_less_than: send_row,
+                                y: x.clone(),
+                                tuple_less_than: satisfies_pred,
                             },
                             aux: is_less_than_tuple_aux,
                         };
@@ -82,6 +83,11 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
 
                         interactions.append(&mut subchip_interactions);
                     }
+                    PageIndexScanInputCols::Eq { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Lt, got PageIndexScanInputCols::Eq"
+                        );
+                    }
                     PageIndexScanInputCols::Gt { .. } => {
                         panic!(
                             "expected PageIndexScanInputCols::Lt, got PageIndexScanInputCols::Gt"
@@ -97,7 +103,6 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                 idx_len,
                 data_len,
                 is_less_than_tuple_air,
-                ..
             } => {
                 let num_cols = PageIndexScanInputCols::<F>::get_width(
                     *idx_len,
@@ -122,22 +127,29 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                 match cols_numbered {
                     PageIndexScanInputCols::Lt { .. } => {
                         panic!(
-                            "expected PageIndexScanInputCols::Lt, got PageIndexScanInputCols::Gt"
+                            "expected PageIndexScanInputCols::Gt, got PageIndexScanInputCols::Lt"
+                        );
+                    }
+                    PageIndexScanInputCols::Eq { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Gt, got PageIndexScanInputCols::Eq"
                         );
                     }
                     PageIndexScanInputCols::Gt {
                         is_alloc,
                         idx,
                         data,
+                        x,
                         send_row,
+                        satisfies_pred,
                         is_less_than_tuple_aux,
                         ..
                     } => {
                         let is_less_than_tuple_cols = IsLessThanTupleCols {
                             io: IsLessThanTupleIOCols {
-                                x: idx.clone(),
-                                y: data.clone(),
-                                tuple_less_than: send_row,
+                                x: x.clone(),
+                                y: idx.clone(),
+                                tuple_less_than: satisfies_pred,
                             },
                             aux: is_less_than_tuple_aux,
                         };
@@ -165,6 +177,73 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                         );
 
                         interactions.append(&mut subchip_interactions);
+                    }
+                }
+
+                interactions
+            }
+            PageIndexScanInputAir::Eq {
+                bus_index,
+                idx_len,
+                data_len,
+                ..
+            } => {
+                // There is no limb_bits or decomp for IsEqualVec, so we can just pass in an empty vec and 0, respectively
+                let num_cols = PageIndexScanInputCols::<F>::get_width(
+                    *idx_len,
+                    *data_len,
+                    vec![],
+                    0,
+                    Comp::Eq,
+                );
+
+                let all_cols = (0..num_cols).collect::<Vec<usize>>();
+
+                let cols_numbered = PageIndexScanInputCols::<usize>::from_slice(
+                    &all_cols,
+                    *idx_len,
+                    *data_len,
+                    vec![],
+                    0,
+                    Comp::Eq,
+                );
+
+                let mut interactions: Vec<Interaction<F>> = vec![];
+
+                match cols_numbered {
+                    PageIndexScanInputCols::Lt { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Eq, got PageIndexScanInputCols::Lt"
+                        );
+                    }
+                    PageIndexScanInputCols::Eq {
+                        is_alloc,
+                        idx,
+                        data,
+                        send_row,
+                        ..
+                    } => {
+                        // construct the row to send
+                        let mut cols = vec![];
+                        cols.push(is_alloc);
+                        cols.extend(idx);
+                        cols.extend(data);
+
+                        let virtual_cols = cols
+                            .iter()
+                            .map(|col| VirtualPairCol::single_main(*col))
+                            .collect::<Vec<_>>();
+
+                        interactions.push(Interaction {
+                            fields: virtual_cols,
+                            count: VirtualPairCol::single_main(send_row),
+                            argument_index: *bus_index,
+                        });
+                    }
+                    PageIndexScanInputCols::Gt { .. } => {
+                        panic!(
+                            "expected PageIndexScanInputCols::Eq, got PageIndexScanInputCols::Gt"
+                        );
                     }
                 }
 

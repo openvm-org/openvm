@@ -151,6 +151,24 @@ where
                         );
                     }
                 }
+                Comp::Eq => {
+                    let mut eq = true;
+                    for (&idx_val, &x_val) in idx.iter().zip(x.iter()) {
+                        if idx_val != x_val {
+                            eq = false;
+                            break;
+                        }
+                    }
+                    if eq {
+                        output.push(
+                            vec![is_alloc]
+                                .into_iter()
+                                .chain(idx.iter().cloned())
+                                .chain(data.iter().cloned())
+                                .collect(),
+                        );
+                    }
+                }
                 Comp::Gt => {
                     let mut greater_than = false;
                     for (&idx_val, &x_val) in idx.iter().zip(x.iter()) {
@@ -208,6 +226,7 @@ where
 
         let bus_index = match self.input_chip.air {
             PageIndexScanInputAir::Lt { bus_index, .. } => bus_index,
+            PageIndexScanInputAir::Eq { bus_index, .. } => bus_index,
             PageIndexScanInputAir::Gt { bus_index, .. } => bus_index,
         };
 
