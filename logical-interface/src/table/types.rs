@@ -1,6 +1,13 @@
 use alloy_primitives::wrap_fixed_bytes;
 
+use crate::utils::string_to_fixed_bytes_be_vec;
+
 wrap_fixed_bytes!(pub struct TableId<32>;);
+
+pub fn string_to_table_id(s: String) -> TableId {
+    let bytes = string_to_fixed_bytes_be_vec(s, 32);
+    TableId::from_slice(bytes.as_slice())
+}
 
 #[derive(Debug, Clone)]
 pub struct TableMetadata {

@@ -1,3 +1,4 @@
+use alloy_primitives::{U256, U512};
 use std::hash::Hash;
 
 pub trait Data: Sized + Clone {
@@ -47,7 +48,40 @@ impl Data for u64 {
     }
 }
 
+impl Data for u128 {
+    fn to_be_bytes(&self) -> Vec<u8> {
+        (*self).to_be_bytes().to_vec()
+    }
+
+    fn from_be_bytes(bytes: &[u8]) -> Option<Self> {
+        Some(u128::from_be_bytes(bytes.try_into().ok()?))
+    }
+}
+
+impl Data for U256 {
+    fn to_be_bytes(&self) -> Vec<u8> {
+        (*self).to_be_bytes::<32>().to_vec()
+    }
+
+    fn from_be_bytes(bytes: &[u8]) -> Option<Self> {
+        Some(U256::from_be_bytes::<32>(bytes.try_into().ok()?))
+    }
+}
+
+impl Data for U512 {
+    fn to_be_bytes(&self) -> Vec<u8> {
+        (*self).to_be_bytes::<64>().to_vec()
+    }
+
+    fn from_be_bytes(bytes: &[u8]) -> Option<Self> {
+        Some(U512::from_be_bytes::<64>(bytes.try_into().ok()?))
+    }
+}
+
 impl Index for u8 {}
 impl Index for u16 {}
 impl Index for u32 {}
 impl Index for u64 {}
+impl Index for u128 {}
+impl Index for U256 {}
+impl Index for U512 {}

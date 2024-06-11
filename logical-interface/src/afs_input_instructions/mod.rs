@@ -35,15 +35,13 @@ pub struct AfsOperation {
 }
 
 impl AfsInputInstructions {
-    pub fn from_file(file_path: String) -> Self {
-        let (header, operations) = Self::parse(file_path.clone()).unwrap_or_else(|e| {
-            panic!("Failed to parse AFS input file: {:?}", e);
-        });
-        Self {
+    pub fn from_file(file_path: String) -> Result<Self> {
+        let (header, operations) = Self::parse(file_path.clone())?;
+        Ok(Self {
             file_path,
             header,
             operations,
-        }
+        })
     }
 
     pub fn parse(file_path: String) -> Result<(AfsHeader, Vec<AfsOperation>)> {
@@ -60,19 +58,19 @@ impl AfsInputInstructions {
         for line in &lines[..HEADER_SIZE] {
             let parts: Vec<&str> = line.split_whitespace().collect();
             let operation = parts[0];
-            let value = parts[1].parse::<usize>().unwrap();
+            let value = parts[1];
             match InputFileHeaderOperation::from_str(operation) {
                 Ok(op) => {
                     println!("header {:?}:{:?}", op, parts[1]);
                     match op {
                         InputFileHeaderOperation::TableId => {
-                            afs_header.table_id = parts[1].to_string();
+                            afs_header.table_id = value.to_string();
                         }
                         InputFileHeaderOperation::IndexBytes => {
-                            afs_header.index_bytes = value;
+                            afs_header.index_bytes = value.parse::<usize>().unwrap();
                         }
                         InputFileHeaderOperation::DataBytes => {
-                            afs_header.data_bytes = value;
+                            afs_header.data_bytes = value.parse::<usize>().unwrap();
                         }
                     }
                 }
@@ -96,7 +94,7 @@ impl AfsInputInstructions {
                 let operation = parts[0];
                 match InputFileBodyOperation::from_str(operation) {
                     Ok(operation) => {
-                        println!("{:?}:{:?}", operation, parts[1]);
+                        println!("{:?}:{:?}", operation, parts[1..].to_vec());
                         AfsOperation {
                             operation,
                             args: parts[1..].iter().map(|s| s.to_string()).collect(),

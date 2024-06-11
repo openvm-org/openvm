@@ -1,5 +1,3 @@
-pub mod utils;
-
 use crate::table::types::{TableId, TableMetadata};
 use std::collections::{hash_map::Entry, HashMap};
 
@@ -30,9 +28,9 @@ impl MockDbTable {
 }
 
 impl MockDb {
-    pub fn new(metadata: TableMetadata) -> Self {
+    pub fn new(default_table_metadata: TableMetadata) -> Self {
         Self {
-            default_table_metadata: metadata,
+            default_table_metadata,
             tables: HashMap::new(),
         }
     }
