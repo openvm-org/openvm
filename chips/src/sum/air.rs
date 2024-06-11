@@ -4,10 +4,7 @@ use p3_air::{Air, AirBuilder};
 use p3_field::AbstractField;
 use p3_matrix::Matrix;
 
-use crate::{
-    is_less_than::columns::{IsLessThanCols, IsLessThanIOCols},
-    sub_chip::SubAir,
-};
+use crate::{is_less_than::columns::IsLessThanIOCols, sub_chip::SubAir};
 
 use super::{columns::SumCols, SumAir};
 
@@ -43,19 +40,16 @@ impl<AB: AirBuilder> Air<AB> for SumAir {
         when_not_final.assert_eq(local.key, next.key);
         when_not_final.assert_eq(next.partial_sum, local.partial_sum + next.value);
 
-        let is_lt_cols = IsLessThanCols {
-            io: IsLessThanIOCols {
-                x: local.key,
-                y: next.key,
-                less_than: local.is_final,
-            },
-            aux: local.is_lt_aux_cols,
+        let is_lt_io_cols = IsLessThanIOCols {
+            x: local.key,
+            y: next.key,
+            less_than: local.is_final,
         };
         SubAir::eval(
             &self.is_lt_air,
             &mut when_transition,
-            is_lt_cols.io,
-            is_lt_cols.aux,
+            is_lt_io_cols,
+            local.is_lt_aux_cols,
         );
     }
 }
