@@ -15,6 +15,7 @@ pub mod trace;
 pub enum Comp {
     #[default]
     Lt,
+    Lte,
     Eq,
     Gt,
 }
@@ -29,6 +30,17 @@ pub enum PageIndexScanInputAir {
         data_len: usize,
 
         is_less_than_tuple_air: IsLessThanTupleAir,
+    },
+    Lte {
+        /// The bus index
+        bus_index: usize,
+        /// The length of each index in the page table
+        idx_len: usize,
+        /// The length of each data entry in the page table
+        data_len: usize,
+
+        is_less_than_tuple_air: IsLessThanTupleAir,
+        is_equal_vec_air: IsEqualVecAir,
     },
     Eq {
         /// The bus index
@@ -91,6 +103,22 @@ impl PageIndexScanInputChip {
                 range_checker,
                 cmp,
             },
+            Comp::Lte => Self {
+                air: PageIndexScanInputAir::Lte {
+                    bus_index,
+                    idx_len,
+                    data_len,
+                    is_less_than_tuple_air: IsLessThanTupleAir::new(
+                        bus_index,
+                        range_max,
+                        idx_limb_bits.clone(),
+                        decomp,
+                    ),
+                    is_equal_vec_air: IsEqualVecAir::new(idx_len),
+                },
+                range_checker,
+                cmp,
+            },
             Comp::Eq => Self {
                 air: PageIndexScanInputAir::Eq {
                     bus_index,
@@ -124,6 +152,9 @@ impl PageIndexScanInputChip {
             PageIndexScanInputAir::Lt {
                 idx_len, data_len, ..
             } => 1 + idx_len + data_len,
+            PageIndexScanInputAir::Lte {
+                idx_len, data_len, ..
+            } => 1 + idx_len + data_len,
             PageIndexScanInputAir::Eq {
                 idx_len, data_len, ..
             } => 1 + idx_len + data_len,
@@ -136,10 +167,9 @@ impl PageIndexScanInputChip {
     pub fn aux_width(&self) -> usize {
         match &self.air {
             PageIndexScanInputAir::Lt {
-                bus_index: _,
                 idx_len,
-                data_len: _,
                 is_less_than_tuple_air,
+                ..
             } => {
                 idx_len
                     + 1
@@ -150,17 +180,28 @@ impl PageIndexScanInputChip {
                         *idx_len,
                     )
             }
-            PageIndexScanInputAir::Eq {
-                bus_index: _,
+            PageIndexScanInputAir::Lte {
                 idx_len,
-                data_len: _,
-                is_equal_vec_air: _,
-            } => idx_len + 1 + 1 + 2 * idx_len,
-            PageIndexScanInputAir::Gt {
-                bus_index: _,
-                idx_len,
-                data_len: _,
                 is_less_than_tuple_air,
+                ..
+            } => {
+                idx_len
+                    + 1
+                    + 1
+                    + 1
+                    + 1
+                    + IsLessThanTupleAuxCols::<usize>::get_width(
+                        is_less_than_tuple_air.limb_bits(),
+                        is_less_than_tuple_air.decomp(),
+                        *idx_len,
+                    )
+                    + 2 * idx_len
+            }
+            PageIndexScanInputAir::Eq { idx_len, .. } => idx_len + 1 + 1 + 2 * idx_len,
+            PageIndexScanInputAir::Gt {
+                idx_len,
+                is_less_than_tuple_air,
+                ..
             } => {
                 idx_len
                     + 1
