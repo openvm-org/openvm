@@ -64,11 +64,7 @@ fn assert_verification_error(
 
 /// Tests whether a trace passes the interal constraints of sum air verification (i.e., not bus constraints).
 fn run_sum_air_trace_test(sum_trace_u32: &[(u32, u32, u32, u32)]) -> Result<(), VerificationError> {
-    let sum_input_bus = 0;
-    let sum_output_bus = 1;
-    let range_bus = 2;
-
-    let sender_air = DummyInteractionAir::new(2, true, sum_input_bus);
+    let sender_air = DummyInteractionAir::new(2, true, INPUT_BUS);
     let sender_trace = RowMajorMatrix::new(
         to_field_vec(
             sum_trace_u32
@@ -79,7 +75,7 @@ fn run_sum_air_trace_test(sum_trace_u32: &[(u32, u32, u32, u32)]) -> Result<(), 
         sender_air.field_width() + 1,
     );
 
-    let receiver_air = DummyInteractionAir::new(2, false, sum_output_bus);
+    let receiver_air = DummyInteractionAir::new(2, false, OUTPUT_BUS);
     let receiver_trace = RowMajorMatrix::new(
         to_field_vec(
             sum_trace_u32

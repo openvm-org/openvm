@@ -14,7 +14,7 @@ impl<F: PrimeField64> AirBridge<F> for SumAir {
         let cols = SumCols::<F>::index_map(self.is_lt_air.limb_bits(), self.is_lt_air.decomp());
 
         let is_lt_cols = IsLessThanCols {
-            // io is unused in the IsLessThan subchip
+            // io is unused in the IsLessThan bridge
             io: IsLessThanIOCols {
                 x: usize::MAX,
                 y: usize::MAX,
