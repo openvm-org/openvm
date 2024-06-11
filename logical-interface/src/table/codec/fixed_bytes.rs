@@ -88,8 +88,6 @@ where
         let bytes_slice = &fixed_bytes[bytes_len - Self::SIZE_I..];
         let bytes_vec = bytes_slice.to_vec();
         I::from_be_bytes(&bytes_vec).unwrap()
-        // let bytes_slice: &[u8; SIZE_T] = bytes_slice.try_into().unwrap();
-        // T::from(bytes_slice)
     }
 
     pub fn fixed_bytes_to_data(&self, fixed_bytes: Vec<u8>) -> D {

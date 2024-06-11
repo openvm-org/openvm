@@ -16,17 +16,3 @@ pub fn test_convert_to_db() {
     data_slice_cmp[255] = 0x03;
     assert_eq!(data_slice, data_slice_cmp);
 }
-
-// #[test]
-// pub fn test_convert_from_db() {
-//     let fbc = FixedBytesCodec::<u32, u128>::new(64, 256);
-// }
-
-// #[test]
-// pub fn test_fixed_gen() {
-//     let a: u32 = 5;
-//     const N: usize = 10;
-//     let mut b: [u8; N] = [0; N];
-//     b.copy_from_slice(&a.to_be_bytes());
-//     assert_eq!(b, FixedBytes::<N>::left_padding_from(a));
-// }

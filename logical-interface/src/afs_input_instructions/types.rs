@@ -2,7 +2,7 @@ use color_eyre::eyre::{eyre, Result};
 use serde_derive::{Deserialize, Serialize};
 use std::str::FromStr;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum InputFileHeaderOperation {
     TableId,
@@ -10,7 +10,7 @@ pub enum InputFileHeaderOperation {
     DataBytes,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum InputFileBodyOperation {
     Read,

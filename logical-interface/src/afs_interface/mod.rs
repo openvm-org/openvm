@@ -15,7 +15,9 @@ use crate::{
 };
 
 pub struct AfsInterface<'a, I: Index, D: Data> {
+    /// Reference to the mock database
     db_ref: &'a mut MockDb,
+    /// Stores current table in memory for faster reads
     current_table: Option<Table<I, D>>,
 }
 
@@ -27,7 +29,7 @@ impl<'a, I: Index, D: Data> AfsInterface<'a, I, D> {
         }
     }
 
-    pub fn load_input_file(&mut self, path: String) -> Result<()> {
+    pub fn load_input_file(&mut self, path: String) -> Result<&Table<I, D>> {
         let instructions = AfsInputInstructions::from_file(path)?;
 
         let table_id = string_to_table_id(instructions.header.table_id);
@@ -82,12 +84,11 @@ impl<'a, I: Index, D: Data> AfsInterface<'a, I, D> {
             };
         }
 
-        let get = self.get_table(table_id);
-        if get.is_none() {
-            return Err(eyre!("Error getting table"));
+        let get_table = self.get_table(table_id);
+        match get_table {
+            Some(table) => Ok(table),
+            None => Err(eyre!("Error getting table")),
         }
-
-        Ok(())
     }
 
     pub fn get_db_ref(&mut self) -> &mut MockDb {

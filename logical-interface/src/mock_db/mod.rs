@@ -45,12 +45,13 @@ impl MockDb {
     }
 
     pub fn create_table(&mut self, table_id: TableId, metadata: TableMetadata) -> Option<()> {
-        if self.tables.contains_key(&table_id) {
-            return None;
+        match self.tables.entry(table_id) {
+            Entry::Occupied(_) => None,
+            Entry::Vacant(entry) => {
+                entry.insert(MockDbTable::new(table_id, metadata));
+                Some(())
+            }
         }
-        let table = MockDbTable::new(table_id, metadata);
-        self.tables.insert(table_id, table);
-        Some(())
     }
 
     pub fn get_data(&self, table_id: TableId, index: Vec<u8>) -> Option<Vec<u8>> {
@@ -89,12 +90,7 @@ impl MockDb {
     pub fn remove_data(&mut self, table_id: TableId, index: Vec<u8>) -> Option<()> {
         self.check_index_size(&index);
         let table = self.tables.get_mut(&table_id)?;
-        let removed = table.items.remove(&index);
-        if removed.is_none() {
-            None
-        } else {
-            Some(())
-        }
+        table.items.remove(&index).map(|_| ())
     }
 
     fn check_index_size(&self, index: &[u8]) {

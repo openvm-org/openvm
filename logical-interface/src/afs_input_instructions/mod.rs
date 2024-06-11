@@ -14,6 +14,7 @@ use types::{InputFileBodyOperation, InputFileHeaderOperation};
 pub const HEADER_SIZE: usize = 3;
 pub const MAX_OPS: usize = 128;
 
+/// Instructions for reading an AFS input file
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AfsInputInstructions {
     pub file_path: String,
@@ -21,6 +22,7 @@ pub struct AfsInputInstructions {
     pub operations: Vec<AfsOperation>,
 }
 
+/// Header of an AFS input file, which corresponds to the first 3 lines of the file
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AfsHeader {
     pub table_id: String,
@@ -28,6 +30,7 @@ pub struct AfsHeader {
     pub data_bytes: usize,
 }
 
+/// Represents a single operation in an AFS input file
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AfsOperation {
     pub operation: InputFileBodyOperation,
@@ -44,7 +47,7 @@ impl AfsInputInstructions {
         })
     }
 
-    pub fn parse(file_path: String) -> Result<(AfsHeader, Vec<AfsOperation>)> {
+    fn parse(file_path: String) -> Result<(AfsHeader, Vec<AfsOperation>)> {
         let file = File::open(file_path)?;
         let reader = BufReader::new(file);
         let lines: Vec<String> = reader.lines().collect::<Result<Vec<String>, _>>()?;

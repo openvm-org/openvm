@@ -11,9 +11,13 @@ use crate::{
 use std::collections::HashMap;
 use types::{TableId, TableMetadata};
 
+/// Read-only Table object that returns an underlying database table as simple types
 pub struct Table<I: Index, D: Data> {
+    /// Unique identifier for the table
     pub id: TableId,
+    /// Metadata for the table
     pub metadata: TableMetadata,
+    /// Body of the table, mapping index to data
     pub body: HashMap<I, D>,
 }
 
@@ -21,15 +25,7 @@ impl<I: Index, D: Data> Table<I, D> {
     const SIZE_I: usize = std::mem::size_of::<I>();
     const SIZE_D: usize = std::mem::size_of::<D>();
 
-    pub fn new(metadata: TableMetadata) -> Self {
-        Self {
-            id: TableId::random(),
-            metadata,
-            body: HashMap::new(),
-        }
-    }
-
-    pub fn new_with_id(id: TableId, metadata: TableMetadata) -> Self {
+    pub fn new(id: TableId, metadata: TableMetadata) -> Self {
         Self {
             id,
             metadata,
