@@ -48,7 +48,7 @@ impl DummyHashAir {
     }
 
     pub fn get_width(&self) -> usize {
-        2 * self.hash_width + self.rate
+        2 * self.hash_width + self.rate + 1
     }
 
     pub fn bus_index(&self) -> usize {

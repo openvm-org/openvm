@@ -12,7 +12,7 @@ impl<F: Field> AirBridge<F> for DummyHashAir {
             .map(|i| VirtualPairCol::single_main(i))
             .collect();
 
-        let count = VirtualPairCol::one();
+        let count = VirtualPairCol::single_main(2 * n + r);
 
         vec![Interaction {
             fields,

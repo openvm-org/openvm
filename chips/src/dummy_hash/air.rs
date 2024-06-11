@@ -11,7 +11,7 @@ use super::{
 
 impl<F: Field> BaseAir<F> for DummyHashAir {
     fn width(&self) -> usize {
-        2 * self.hash_width + self.rate
+        2 * self.hash_width + self.rate + 1
     }
 }
 

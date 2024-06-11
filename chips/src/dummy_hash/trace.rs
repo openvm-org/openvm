@@ -15,10 +15,19 @@ impl<F: Field> DummyHashChip<F> {
                 let mut combined = self.hash_in_states[i].clone();
                 combined.extend(self.hash_slices[i].clone());
                 combined.extend(self.hash_out_states[i].clone());
+                combined.push(F::one());
                 combined.into_iter()
             })
             .collect::<Vec<_>>();
-        RowMajorMatrix::new(rows, self.air.get_width())
+        let mut padded_rows = rows.clone();
+        let current_len = self.hash_in_states.len();
+        let next_power_of_two = current_len.next_power_of_two();
+        if next_power_of_two > current_len {
+            let width = self.air.get_width();
+            let zero_row = vec![F::zero(); width * (next_power_of_two - current_len)];
+            padded_rows.extend(zero_row);
+        }
+        RowMajorMatrix::new(padded_rows, self.air.get_width())
     }
 }
 
@@ -52,6 +61,7 @@ impl<F: Field> LocalTraceInstructions<F> for DummyHashAir {
                 curr_state: curr_state.clone(),
                 to_absorb: to_absorb.clone(),
                 new_state,
+                count: vec![F::one()],
             },
             aux: DummyHashAuxCols {},
             width: self.hash_width,

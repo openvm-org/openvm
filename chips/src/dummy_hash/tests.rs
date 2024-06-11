@@ -12,7 +12,7 @@ fn test_single_dummy_hash() {
         hash_width: 5,
         rate: 3,
     };
-    let requester = DummyInteractionAir::new(chip.get_width(), true, 0);
+    let requester = DummyInteractionAir::new(chip.get_width() - 1, true, 0);
     let x = [1, 2, 3, 4, 5]
         .iter()
         .map(|x| AbstractField::from_canonical_u32(*x))
@@ -23,9 +23,9 @@ fn test_single_dummy_hash() {
         .collect();
 
     let hash_trace = chip.generate_trace(vec![x], vec![y]);
-    let mut dummy_trace = RowMajorMatrix::default(chip.get_width() + 1, 1);
+    let mut dummy_trace = RowMajorMatrix::default(chip.get_width(), 1);
     dummy_trace.values[0] = AbstractField::from_canonical_u32(1);
-    for i in 1..=chip.get_width() {
+    for i in 1..=chip.get_width() - 1 {
         dummy_trace.values[i] = hash_trace.values[i - 1];
     }
 

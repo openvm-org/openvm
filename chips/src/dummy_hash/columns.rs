@@ -10,6 +10,7 @@ pub struct DummyHashIOCols<F> {
     pub curr_state: Vec<F>,
     pub to_absorb: Vec<F>,
     pub new_state: Vec<F>,
+    pub count: Vec<F>,
 }
 
 #[derive(Copy, Clone)]
@@ -28,6 +29,7 @@ impl<F: Clone> DummyHashCols<F> {
                 curr_state,
                 to_absorb,
                 new_state,
+                count: vec![],
             },
             aux: DummyHashAuxCols {},
             width,
@@ -40,6 +42,7 @@ impl<F: Clone> DummyHashCols<F> {
         result.extend_from_slice(&self.io.curr_state);
         result.extend_from_slice(&self.io.to_absorb);
         result.extend_from_slice(&self.io.new_state);
+        result.extend_from_slice(&self.io.count);
         result
     }
 
@@ -51,12 +54,14 @@ impl<F: Clone> DummyHashCols<F> {
         let curr_state = slc[0..width].to_vec();
         let to_absorb = slc[width..width + rate].to_vec();
         let new_state = slc[width + rate..2 * width + rate].to_vec();
+        let count = slc[2 * width + rate..2 * width + rate + 1].to_vec();
 
         Self {
             io: DummyHashIOCols {
                 curr_state,
                 to_absorb,
                 new_state,
+                count,
             },
             aux: DummyHashAuxCols {},
             width,

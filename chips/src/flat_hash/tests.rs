@@ -12,7 +12,7 @@ use super::PageController;
 
 #[test]
 fn test_single_is_zero() {
-    let chip = PageController::new(8, 4, 5, 2, 3, 0, 1);
+    let chip = PageController::new(10, 4, 5, 2, 3, 0, 1);
 
     let mut rng = create_seeded_rng();
     let x = (0..chip.air.page_height)
