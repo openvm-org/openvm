@@ -23,6 +23,12 @@ impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
                 data_len,
                 is_less_than_tuple_air,
                 ..
+            }
+            | PageIndexScanInputAir::Gt {
+                idx_len,
+                data_len,
+                is_less_than_tuple_air,
+                ..
             } => PageIndexScanInputCols::<F>::get_width(
                 *idx_len,
                 *data_len,
@@ -31,6 +37,12 @@ impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
                 Comp::Lt,
             ),
             PageIndexScanInputAir::Lte {
+                idx_len,
+                data_len,
+                is_less_than_tuple_air,
+                ..
+            }
+            | PageIndexScanInputAir::Gte {
                 idx_len,
                 data_len,
                 is_less_than_tuple_air,
@@ -46,30 +58,6 @@ impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
             PageIndexScanInputAir::Eq {
                 idx_len, data_len, ..
             } => PageIndexScanInputCols::<F>::get_width(*idx_len, *data_len, vec![], 0, Comp::Eq),
-            PageIndexScanInputAir::Gte {
-                idx_len,
-                data_len,
-                is_less_than_tuple_air,
-                ..
-            } => PageIndexScanInputCols::<F>::get_width(
-                *idx_len,
-                *data_len,
-                is_less_than_tuple_air.limb_bits().clone(),
-                is_less_than_tuple_air.decomp(),
-                Comp::Gte,
-            ),
-            PageIndexScanInputAir::Gt {
-                idx_len,
-                data_len,
-                is_less_than_tuple_air,
-                ..
-            } => PageIndexScanInputCols::<F>::get_width(
-                *idx_len,
-                *data_len,
-                is_less_than_tuple_air.limb_bits().clone(),
-                is_less_than_tuple_air.decomp(),
-                Comp::Gt,
-            ),
         }
     }
 }
