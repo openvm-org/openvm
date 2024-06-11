@@ -69,6 +69,34 @@ impl PageIndexScanInputChip {
 
                     row.extend_from_slice(&is_less_than_tuple_trace[2 * *idx_len + 1..]);
                 }
+                PageIndexScanInputAir::Gt {
+                    idx_len,
+                    is_less_than_tuple_air,
+                    ..
+                } => {
+                    let is_alloc = Val::<SC>::from_canonical_u32(page_row[0]);
+                    let idx = page_row[1..1 + *idx_len].to_vec();
+
+                    let x_trace: Vec<Val<SC>> = x
+                        .iter()
+                        .map(|x| Val::<SC>::from_canonical_u32(*x))
+                        .collect();
+                    row.extend(x_trace);
+
+                    // we want to check if idx > x
+                    let is_less_than_tuple_trace: Vec<Val<SC>> =
+                        LocalTraceInstructions::generate_trace_row(
+                            is_less_than_tuple_air,
+                            (x.clone(), idx.clone(), self.range_checker.clone()),
+                        )
+                        .flatten();
+
+                    row.push(is_less_than_tuple_trace[2 * *idx_len]);
+                    let send_row = is_less_than_tuple_trace[2 * *idx_len] * is_alloc;
+                    row.push(send_row);
+
+                    row.extend_from_slice(&is_less_than_tuple_trace[2 * *idx_len + 1..]);
+                }
             }
 
             rows.extend_from_slice(&row);

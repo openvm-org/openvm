@@ -116,6 +116,7 @@ where
         x: Vec<u32>,
         idx_len: usize,
         page_width: usize,
+        cmp: Comp,
     ) -> Vec<Vec<u32>> {
         let mut output: Vec<Vec<u32>> = vec![];
 
@@ -124,29 +125,57 @@ where
             let idx = page_row[1..1 + idx_len].to_vec();
             let data = page_row[1 + idx_len..].to_vec();
 
-            let mut less_than = false;
-            for (&idx_val, &x_val) in idx.iter().zip(x.iter()) {
-                use std::cmp::Ordering;
-                match idx_val.cmp(&x_val) {
-                    Ordering::Less => {
-                        less_than = true;
-                        break;
+            match cmp {
+                Comp::Lt => {
+                    let mut less_than = false;
+                    for (&idx_val, &x_val) in idx.iter().zip(x.iter()) {
+                        use std::cmp::Ordering;
+                        match idx_val.cmp(&x_val) {
+                            Ordering::Less => {
+                                less_than = true;
+                                break;
+                            }
+                            Ordering::Greater => {
+                                break;
+                            }
+                            Ordering::Equal => {}
+                        }
                     }
-                    Ordering::Greater => {
-                        break;
+                    if less_than {
+                        output.push(
+                            vec![is_alloc]
+                                .into_iter()
+                                .chain(idx.iter().cloned())
+                                .chain(data.iter().cloned())
+                                .collect(),
+                        );
                     }
-                    Ordering::Equal => {}
                 }
-            }
-
-            if less_than {
-                output.push(
-                    vec![is_alloc]
-                        .into_iter()
-                        .chain(idx.iter().cloned())
-                        .chain(data.iter().cloned())
-                        .collect(),
-                );
+                Comp::Gt => {
+                    let mut greater_than = false;
+                    for (&idx_val, &x_val) in idx.iter().zip(x.iter()) {
+                        use std::cmp::Ordering;
+                        match idx_val.cmp(&x_val) {
+                            Ordering::Greater => {
+                                greater_than = true;
+                                break;
+                            }
+                            Ordering::Less => {
+                                break;
+                            }
+                            Ordering::Equal => {}
+                        }
+                    }
+                    if greater_than {
+                        output.push(
+                            vec![is_alloc]
+                                .into_iter()
+                                .chain(idx.iter().cloned())
+                                .chain(data.iter().cloned())
+                                .collect(),
+                        );
+                    }
+                }
             }
         }
 
@@ -179,6 +208,7 @@ where
 
         let bus_index = match self.input_chip.air {
             PageIndexScanInputAir::Lt { bus_index, .. } => bus_index,
+            PageIndexScanInputAir::Gt { bus_index, .. } => bus_index,
         };
 
         self.input_chip = PageIndexScanInputChip::new(

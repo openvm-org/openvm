@@ -12,6 +12,16 @@ pub enum PageIndexScanInputCols<T> {
         send_row: T,
         is_less_than_tuple_aux: IsLessThanTupleAuxCols<T>,
     },
+
+    Gt {
+        is_alloc: T,
+        idx: Vec<T>,
+        data: Vec<T>,
+        x: Vec<T>,
+        satisfies_pred: T,
+        send_row: T,
+        is_less_than_tuple_aux: IsLessThanTupleAuxCols<T>,
+    },
 }
 
 impl<T: Clone> PageIndexScanInputCols<T> {
@@ -38,6 +48,20 @@ impl<T: Clone> PageIndexScanInputCols<T> {
                     idx_len,
                 ),
             },
+            Comp::Gt => Self::Gt {
+                is_alloc: slc[0].clone(),
+                idx: slc[1..idx_len + 1].to_vec(),
+                data: slc[idx_len + 1..idx_len + data_len + 1].to_vec(),
+                x: slc[idx_len + data_len + 1..2 * idx_len + data_len + 1].to_vec(),
+                satisfies_pred: slc[2 * idx_len + data_len + 1].clone(),
+                send_row: slc[2 * idx_len + data_len + 2].clone(),
+                is_less_than_tuple_aux: IsLessThanTupleAuxCols::from_slice(
+                    &slc[2 * idx_len + data_len + 3..],
+                    idx_limb_bits,
+                    decomp,
+                    idx_len,
+                ),
+            },
         }
     }
 
@@ -50,6 +74,14 @@ impl<T: Clone> PageIndexScanInputCols<T> {
     ) -> usize {
         match cmp {
             Comp::Lt => {
+                1 + idx_len
+                    + data_len
+                    + idx_len
+                    + 1
+                    + 1
+                    + IsLessThanTupleAuxCols::<T>::get_width(idx_limb_bits, decomp, idx_len)
+            }
+            Comp::Gt => {
                 1 + idx_len
                     + data_len
                     + idx_len

@@ -14,10 +14,21 @@ pub mod trace;
 pub enum Comp {
     #[default]
     Lt,
+    Gt,
 }
 
 pub enum PageIndexScanInputAir {
     Lt {
+        /// The bus index
+        bus_index: usize,
+        /// The length of each index in the page table
+        idx_len: usize,
+        /// The length of each data entry in the page table
+        data_len: usize,
+
+        is_less_than_tuple_air: IsLessThanTupleAir,
+    },
+    Gt {
         /// The bus index
         bus_index: usize,
         /// The length of each index in the page table
@@ -52,20 +63,37 @@ impl PageIndexScanInputChip {
         range_checker: Arc<RangeCheckerGateChip>,
         cmp: Comp,
     ) -> Self {
-        Self {
-            air: PageIndexScanInputAir::Lt {
-                bus_index,
-                idx_len,
-                data_len,
-                is_less_than_tuple_air: IsLessThanTupleAir::new(
+        match cmp {
+            Comp::Lt => Self {
+                air: PageIndexScanInputAir::Lt {
                     bus_index,
-                    range_max,
-                    idx_limb_bits.clone(),
-                    decomp,
-                ),
+                    idx_len,
+                    data_len,
+                    is_less_than_tuple_air: IsLessThanTupleAir::new(
+                        bus_index,
+                        range_max,
+                        idx_limb_bits.clone(),
+                        decomp,
+                    ),
+                },
+                range_checker,
+                cmp,
             },
-            range_checker,
-            cmp,
+            Comp::Gt => Self {
+                air: PageIndexScanInputAir::Gt {
+                    bus_index,
+                    idx_len,
+                    data_len,
+                    is_less_than_tuple_air: IsLessThanTupleAir::new(
+                        bus_index,
+                        range_max,
+                        idx_limb_bits.clone(),
+                        decomp,
+                    ),
+                },
+                range_checker,
+                cmp,
+            },
         }
     }
 
@@ -74,12 +102,30 @@ impl PageIndexScanInputChip {
             PageIndexScanInputAir::Lt {
                 idx_len, data_len, ..
             } => 1 + idx_len + data_len,
+            PageIndexScanInputAir::Gt {
+                idx_len, data_len, ..
+            } => 1 + idx_len + data_len,
         }
     }
 
     pub fn aux_width(&self) -> usize {
         match &self.air {
             PageIndexScanInputAir::Lt {
+                bus_index: _,
+                idx_len,
+                data_len: _,
+                is_less_than_tuple_air,
+            } => {
+                idx_len
+                    + 1
+                    + 1
+                    + IsLessThanTupleAuxCols::<usize>::get_width(
+                        is_less_than_tuple_air.limb_bits(),
+                        is_less_than_tuple_air.decomp(),
+                        *idx_len,
+                    )
+            }
+            PageIndexScanInputAir::Gt {
                 bus_index: _,
                 idx_len,
                 data_len: _,
