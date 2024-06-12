@@ -4,12 +4,21 @@ use p3_field::Field;
 use p3_matrix::Matrix;
 
 use crate::{
-    is_equal_vec::columns::{IsEqualVecCols, IsEqualVecIOCols},
-    is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
+    is_equal_vec::columns::{IsEqualVecAuxCols, IsEqualVecCols, IsEqualVecIOCols},
+    is_less_than_tuple::columns::{
+        IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupleIOCols,
+    },
     sub_chip::{AirConfig, SubAir},
 };
 
-use super::{columns::PageIndexScanInputCols, Comp, PageIndexScanInputAir};
+use super::{
+    columns::{
+        EqCompAuxCols, NonStrictCompAuxCols, PageIndexScanInputAuxCols, PageIndexScanInputCols,
+        StrictCompAuxCols,
+    },
+    Comp, EqCompAir, NonStrictCompAir, PageIndexScanInputAir, PageIndexScanInputAirVariants,
+    StrictCompAir,
+};
 
 impl AirConfig for PageIndexScanInputAir {
     type Cols<T> = PageIndexScanInputCols<T>;
@@ -17,47 +26,44 @@ impl AirConfig for PageIndexScanInputAir {
 
 impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
     fn width(&self) -> usize {
-        match &self {
-            PageIndexScanInputAir::Lt {
-                idx_len,
-                data_len,
+        match &self.subair {
+            PageIndexScanInputAirVariants::Lt(StrictCompAir {
                 is_less_than_tuple_air,
                 ..
-            }
-            | PageIndexScanInputAir::Gt {
-                idx_len,
-                data_len,
+            })
+            | PageIndexScanInputAirVariants::Gt(StrictCompAir {
                 is_less_than_tuple_air,
                 ..
-            } => PageIndexScanInputCols::<F>::get_width(
-                *idx_len,
-                *data_len,
+            }) => PageIndexScanInputCols::<F>::get_width(
+                self.idx_len,
+                self.data_len,
                 is_less_than_tuple_air.limb_bits().clone(),
                 is_less_than_tuple_air.decomp(),
                 Comp::Lt,
             ),
-            PageIndexScanInputAir::Lte {
-                idx_len,
-                data_len,
+            PageIndexScanInputAirVariants::Lte(NonStrictCompAir {
                 is_less_than_tuple_air,
                 ..
-            }
-            | PageIndexScanInputAir::Gte {
-                idx_len,
-                data_len,
+            })
+            | PageIndexScanInputAirVariants::Gte(NonStrictCompAir {
                 is_less_than_tuple_air,
                 ..
-            } => PageIndexScanInputCols::<F>::get_width(
-                *idx_len,
-                *data_len,
+            }) => PageIndexScanInputCols::<F>::get_width(
+                self.idx_len,
+                self.data_len,
                 is_less_than_tuple_air.limb_bits().clone(),
                 is_less_than_tuple_air.decomp(),
                 Comp::Lte,
             ),
-            // there is no idx_limb_bits or decomp, so we supply an empty vec and 0, respectively
-            PageIndexScanInputAir::Eq {
-                idx_len, data_len, ..
-            } => PageIndexScanInputCols::<F>::get_width(*idx_len, *data_len, vec![], 0, Comp::Eq),
+            PageIndexScanInputAirVariants::Eq(EqCompAir { .. }) => {
+                PageIndexScanInputCols::<F>::get_width(
+                    self.idx_len,
+                    self.data_len,
+                    vec![],
+                    0,
+                    Comp::Eq,
+                )
+            }
         }
     }
 }
@@ -67,158 +73,162 @@ where
     AB::M: Clone,
 {
     fn eval(&self, builder: &mut AB) {
-        match &self {
-            PageIndexScanInputAir::Lt {
-                idx_len,
-                data_len,
+        let page_main = &builder.partitioned_main()[0].clone();
+        let aux_main = &builder.partitioned_main()[1].clone();
+
+        // get the public value x
+        let pis = builder.public_values();
+        let public_x = pis[..self.idx_len].to_vec();
+
+        let local_page = page_main.row_slice(0);
+        let local_aux = aux_main.row_slice(0);
+        let local_vec = local_page
+            .iter()
+            .chain(local_aux.iter())
+            .cloned()
+            .collect::<Vec<AB::Var>>();
+        let local = local_vec.as_slice();
+
+        let (idx_limb_bits, decomp) = match &self.subair {
+            PageIndexScanInputAirVariants::Lt(StrictCompAir {
                 is_less_than_tuple_air,
                 ..
-            } => {
-                let page_main = &builder.partitioned_main()[0].clone();
-                let aux_main = &builder.partitioned_main()[1].clone();
+            })
+            | PageIndexScanInputAirVariants::Gt(StrictCompAir {
+                is_less_than_tuple_air,
+                ..
+            })
+            | PageIndexScanInputAirVariants::Lte(NonStrictCompAir {
+                is_less_than_tuple_air,
+                ..
+            })
+            | PageIndexScanInputAirVariants::Gte(NonStrictCompAir {
+                is_less_than_tuple_air,
+                ..
+            }) => (
+                is_less_than_tuple_air.limb_bits(),
+                is_less_than_tuple_air.decomp(),
+            ),
+            PageIndexScanInputAirVariants::Eq(EqCompAir { .. }) => (vec![], 0),
+        };
 
-                // get the public value x
-                let pis = builder.public_values();
-                let public_x = pis[..*idx_len].to_vec();
+        let cmp = match &self.subair {
+            PageIndexScanInputAirVariants::Lt(..) => Comp::Lt,
+            PageIndexScanInputAirVariants::Gt(..) => Comp::Gt,
+            PageIndexScanInputAirVariants::Lte(..) => Comp::Lte,
+            PageIndexScanInputAirVariants::Gte(..) => Comp::Gte,
+            PageIndexScanInputAirVariants::Eq(..) => Comp::Eq,
+        };
 
-                let local_page = page_main.row_slice(0);
-                let local_aux = aux_main.row_slice(0);
-                let local_vec = local_page
-                    .iter()
-                    .chain(local_aux.iter())
-                    .cloned()
-                    .collect::<Vec<AB::Var>>();
-                let local = local_vec.as_slice();
+        let local_cols = PageIndexScanInputCols::<AB::Var>::from_slice(
+            local,
+            self.idx_len,
+            self.data_len,
+            idx_limb_bits.clone(),
+            decomp,
+            cmp,
+        );
 
-                let local_cols = PageIndexScanInputCols::<AB::Var>::from_slice(
-                    local,
-                    *idx_len,
-                    *data_len,
-                    is_less_than_tuple_air.limb_bits().clone(),
-                    is_less_than_tuple_air.decomp(),
-                    Comp::Lt,
+        // constrain that the public value x is the same as the column x
+        for (&local_x, &pub_x) in local_cols.x.iter().zip(public_x.iter()) {
+            builder.assert_eq(local_x, pub_x);
+        }
+        // constrain that we send the row iff the row is allocated and satisfies the predicate
+        builder.assert_eq(
+            local_cols.page_cols.is_alloc * local_cols.satisfies_pred,
+            local_cols.send_row,
+        );
+        // constrain that satisfies_pred and send_row are boolean indicators
+        builder.assert_bool(local_cols.satisfies_pred);
+        builder.assert_bool(local_cols.send_row);
+
+        let is_less_than_tuple_aux_flattened = match &local_cols.aux_cols {
+            PageIndexScanInputAuxCols::Lt(StrictCompAuxCols {
+                is_less_than_tuple_aux,
+                ..
+            })
+            | PageIndexScanInputAuxCols::Gt(StrictCompAuxCols {
+                is_less_than_tuple_aux,
+                ..
+            })
+            | PageIndexScanInputAuxCols::Lte(NonStrictCompAuxCols {
+                is_less_than_tuple_aux,
+                ..
+            })
+            | PageIndexScanInputAuxCols::Gte(NonStrictCompAuxCols {
+                is_less_than_tuple_aux,
+                ..
+            }) => is_less_than_tuple_aux.flatten(),
+            PageIndexScanInputAuxCols::Eq(EqCompAuxCols { .. }) => vec![],
+        };
+
+        let is_equal_vec_aux_flattened = match &local_cols.aux_cols {
+            PageIndexScanInputAuxCols::Eq(EqCompAuxCols {
+                is_equal_vec_aux, ..
+            })
+            | PageIndexScanInputAuxCols::Lte(NonStrictCompAuxCols {
+                is_equal_vec_aux, ..
+            })
+            | PageIndexScanInputAuxCols::Gte(NonStrictCompAuxCols {
+                is_equal_vec_aux, ..
+            }) => is_equal_vec_aux.flatten(),
+            _ => vec![],
+        };
+
+        match &self.subair {
+            PageIndexScanInputAirVariants::Lt(StrictCompAir {
+                is_less_than_tuple_air,
+                ..
+            }) => {
+                // here, we are checking if idx < x
+                let is_less_than_tuple_cols = IsLessThanTupleCols {
+                    io: IsLessThanTupleIOCols {
+                        x: local_cols.page_cols.idx.clone(),
+                        y: local_cols.x.clone(),
+                        tuple_less_than: local_cols.satisfies_pred,
+                    },
+                    aux: IsLessThanTupleAuxCols::from_slice(
+                        &is_less_than_tuple_aux_flattened,
+                        idx_limb_bits.clone(),
+                        decomp,
+                        self.idx_len,
+                    ),
+                };
+
+                // constrain the indicator that we used to check whether key < x is correct
+                SubAir::eval(
+                    is_less_than_tuple_air,
+                    &mut builder.when_transition(),
+                    is_less_than_tuple_cols.io,
+                    is_less_than_tuple_cols.aux,
                 );
-
-                match local_cols {
-                    PageIndexScanInputCols::Lt {
-                        is_alloc,
-                        idx,
-                        x,
-                        satisfies_pred,
-                        send_row,
-                        is_less_than_tuple_aux,
+            }
+            PageIndexScanInputAirVariants::Lte(NonStrictCompAir {
+                is_less_than_tuple_air,
+                is_equal_vec_air,
+            }) => {
+                match &local_cols.aux_cols {
+                    PageIndexScanInputAuxCols::Lte(NonStrictCompAuxCols {
+                        satisfies_strict,
+                        satisfies_eq,
                         ..
-                    } => {
+                    }) => {
                         // here, we are checking if idx < x
                         let is_less_than_tuple_cols = IsLessThanTupleCols {
                             io: IsLessThanTupleIOCols {
-                                x: idx,
-                                y: x.clone(),
-                                tuple_less_than: satisfies_pred,
+                                x: local_cols.page_cols.idx.clone(),
+                                y: local_cols.x.clone(),
+                                tuple_less_than: *satisfies_strict,
                             },
-                            aux: is_less_than_tuple_aux,
+                            aux: IsLessThanTupleAuxCols::from_slice(
+                                &is_less_than_tuple_aux_flattened,
+                                idx_limb_bits,
+                                decomp,
+                                self.idx_len,
+                            ),
                         };
 
-                        // constrain that the public value x is the same as the column x
-                        for (&local_x, &pub_x) in x.iter().zip(public_x.iter()) {
-                            builder.assert_eq(local_x, pub_x);
-                        }
-
-                        // constrain that we send the row iff the row is allocated and satisfies the predicate
-                        builder.assert_eq(is_alloc * satisfies_pred, send_row);
-                        builder.assert_bool(send_row);
-
-                        // constrain the indicator that we used to check wheter key < x is correct
-                        SubAir::eval(
-                            is_less_than_tuple_air,
-                            &mut builder.when_transition(),
-                            is_less_than_tuple_cols.io,
-                            is_less_than_tuple_cols.aux,
-                        );
-                    }
-                    PageIndexScanInputCols::Lte { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Lt, got PageIndexScanInputCols::Lte"
-                        );
-                    }
-                    PageIndexScanInputCols::Eq { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Lt, got PageIndexScanInputCols::Eq"
-                        );
-                    }
-                    PageIndexScanInputCols::Gte { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Lt, got PageIndexScanInputCols::Gte"
-                        );
-                    }
-                    PageIndexScanInputCols::Gt { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Lt, got PageIndexScanInputCols::Gt"
-                        );
-                    }
-                }
-            }
-            PageIndexScanInputAir::Lte {
-                idx_len,
-                data_len,
-                is_less_than_tuple_air,
-                is_equal_vec_air,
-                ..
-            } => {
-                let page_main = &builder.partitioned_main()[0].clone();
-                let aux_main = &builder.partitioned_main()[1].clone();
-
-                // get the public value x
-                let pis = builder.public_values();
-                let public_x = pis[..*idx_len].to_vec();
-
-                let local_page = page_main.row_slice(0);
-                let local_aux = aux_main.row_slice(0);
-                let local_vec = local_page
-                    .iter()
-                    .chain(local_aux.iter())
-                    .cloned()
-                    .collect::<Vec<AB::Var>>();
-                let local = local_vec.as_slice();
-
-                let local_cols = PageIndexScanInputCols::<AB::Var>::from_slice(
-                    local,
-                    *idx_len,
-                    *data_len,
-                    is_less_than_tuple_air.limb_bits().clone(),
-                    is_less_than_tuple_air.decomp(),
-                    Comp::Lte,
-                );
-
-                match local_cols {
-                    PageIndexScanInputCols::Lt { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Lte, got PageIndexScanInputCols::Lt"
-                        );
-                    }
-                    PageIndexScanInputCols::Lte {
-                        is_alloc,
-                        idx,
-                        x,
-                        less_than_x,
-                        eq_to_x,
-                        satisfies_pred,
-                        send_row,
-                        is_less_than_tuple_aux,
-                        is_equal_vec_aux,
-                        ..
-                    } => {
-                        // here, we are checking if idx <= x
-                        let is_less_than_tuple_cols = IsLessThanTupleCols {
-                            io: IsLessThanTupleIOCols {
-                                x: idx.clone(),
-                                y: x.clone(),
-                                tuple_less_than: less_than_x,
-                            },
-                            aux: is_less_than_tuple_aux,
-                        };
-
-                        // constrain the indicator that we used to check wheter key < x is correct
+                        // constrain the indicator that we used to check whether idx < x is correct
                         SubAir::eval(
                             is_less_than_tuple_air,
                             &mut builder.when_transition(),
@@ -229,14 +239,17 @@ where
                         // here, we are checking if idx = x
                         let is_equal_vec_cols = IsEqualVecCols {
                             io: IsEqualVecIOCols {
-                                x: idx.clone(),
-                                y: x.clone(),
-                                prod: eq_to_x,
+                                x: local_cols.page_cols.idx.clone(),
+                                y: local_cols.x.clone(),
+                                prod: *satisfies_eq,
                             },
-                            aux: is_equal_vec_aux,
+                            aux: IsEqualVecAuxCols::from_slice(
+                                &is_equal_vec_aux_flattened,
+                                self.idx_len,
+                            ),
                         };
 
-                        // constrain the indicator that we used to check wheter key = x is correct
+                        // constrain the indicator that we used to check whether idx = x is correct
                         SubAir::eval(
                             is_equal_vec_air,
                             builder,
@@ -244,331 +257,123 @@ where
                             is_equal_vec_cols.aux,
                         );
 
-                        // constrain that it satisfies predicate if either less than or equal, and that satisfies is bool
-                        builder.assert_eq(less_than_x + eq_to_x, satisfies_pred);
-                        builder.assert_bool(satisfies_pred);
-
-                        // constrain that the public value x is the same as the column x
-                        for (&local_x, &pub_x) in x.iter().zip(public_x.iter()) {
-                            builder.assert_eq(local_x, pub_x);
-                        }
-
-                        // constrain that we send the row iff the row is allocated and satisfies the predicate
-                        builder.assert_eq(is_alloc * satisfies_pred, send_row);
-                        builder.assert_bool(send_row);
-                    }
-                    PageIndexScanInputCols::Eq { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Lte, got PageIndexScanInputCols::Eq"
+                        // constrain that satisfies_pred indicates whether idx <= x
+                        builder.assert_eq(
+                            *satisfies_strict + *satisfies_eq,
+                            local_cols.satisfies_pred,
                         );
                     }
-                    PageIndexScanInputCols::Gte { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Lte, got PageIndexScanInputCols::Gte"
-                        );
-                    }
-                    PageIndexScanInputCols::Gt { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Lte, got PageIndexScanInputCols::Gt"
-                        );
-                    }
+                    _ => panic!("Unexpected aux cols"),
                 }
             }
-            PageIndexScanInputAir::Eq {
-                idx_len,
-                data_len,
-                is_equal_vec_air,
-                ..
-            } => {
-                let page_main = &builder.partitioned_main()[0].clone();
-                let aux_main = &builder.partitioned_main()[1].clone();
+            PageIndexScanInputAirVariants::Eq(EqCompAir { is_equal_vec_air }) => {
+                // here, we are checking if idx = x
+                let is_equal_vec_cols = IsEqualVecCols {
+                    io: IsEqualVecIOCols {
+                        x: local_cols.page_cols.idx.clone(),
+                        y: local_cols.x.clone(),
+                        prod: local_cols.satisfies_pred,
+                    },
+                    aux: IsEqualVecAuxCols::from_slice(&is_equal_vec_aux_flattened, self.idx_len),
+                };
 
-                // get the public value x
-                let pis = builder.public_values();
-                let public_x = pis[..*idx_len].to_vec();
-
-                let local_page = page_main.row_slice(0);
-                let local_aux = aux_main.row_slice(0);
-                let local_vec = local_page
-                    .iter()
-                    .chain(local_aux.iter())
-                    .cloned()
-                    .collect::<Vec<AB::Var>>();
-                let local = local_vec.as_slice();
-
-                let local_cols = PageIndexScanInputCols::<AB::Var>::from_slice(
-                    local,
-                    *idx_len,
-                    *data_len,
-                    vec![],
-                    0,
-                    Comp::Eq,
+                // constrain the indicator that we used to check whether idx = x is correct
+                SubAir::eval(
+                    is_equal_vec_air,
+                    builder,
+                    is_equal_vec_cols.io,
+                    is_equal_vec_cols.aux,
                 );
-
-                match local_cols {
-                    PageIndexScanInputCols::Lt { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Eq, got PageIndexScanInputCols::Lt"
-                        );
-                    }
-                    PageIndexScanInputCols::Lte { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Eq, got PageIndexScanInputCols::Lte"
-                        );
-                    }
-                    PageIndexScanInputCols::Eq {
-                        is_alloc,
-                        idx,
-                        x,
-                        satisfies_pred,
-                        send_row,
-                        is_equal_vec_aux,
-                        ..
-                    } => {
-                        // here, we are checking if idx = x
-                        let is_equal_vec_cols = IsEqualVecCols {
-                            io: IsEqualVecIOCols {
-                                x: idx,
-                                y: x.clone(),
-                                prod: satisfies_pred,
-                            },
-                            aux: is_equal_vec_aux,
-                        };
-
-                        // constrain that the public value x is the same as the column x
-                        for (&local_x, &pub_x) in x.iter().zip(public_x.iter()) {
-                            builder.assert_eq(local_x, pub_x);
-                        }
-
-                        // constrain that we send the row iff the row is allocated and satisfies the predicate
-                        builder.assert_eq(is_alloc * satisfies_pred, send_row);
-                        builder.assert_bool(send_row);
-
-                        // constrain the indicator that we used to check wheter key = x is correct
-                        SubAir::eval(
-                            is_equal_vec_air,
-                            builder,
-                            is_equal_vec_cols.io,
-                            is_equal_vec_cols.aux,
-                        );
-                    }
-                    PageIndexScanInputCols::Gte { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Eq, got PageIndexScanInputCols::Gte"
-                        );
-                    }
-                    PageIndexScanInputCols::Gt { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Eq, got PageIndexScanInputCols::Gt"
-                        );
-                    }
-                }
             }
-            PageIndexScanInputAir::Gte {
-                idx_len,
-                data_len,
+            PageIndexScanInputAirVariants::Gte(NonStrictCompAir {
                 is_less_than_tuple_air,
                 is_equal_vec_air,
-                ..
-            } => {
-                let page_main = &builder.partitioned_main()[0].clone();
-                let aux_main = &builder.partitioned_main()[1].clone();
-
-                // get the public value x
-                let pis = builder.public_values();
-                let public_x = pis[..*idx_len].to_vec();
-
-                let local_page = page_main.row_slice(0);
-                let local_aux = aux_main.row_slice(0);
-                let local_vec = local_page
-                    .iter()
-                    .chain(local_aux.iter())
-                    .cloned()
-                    .collect::<Vec<AB::Var>>();
-                let local = local_vec.as_slice();
-
-                let local_cols = PageIndexScanInputCols::<AB::Var>::from_slice(
-                    local,
-                    *idx_len,
-                    *data_len,
-                    is_less_than_tuple_air.limb_bits().clone(),
-                    is_less_than_tuple_air.decomp(),
-                    Comp::Gte,
-                );
-
-                match local_cols {
-                    PageIndexScanInputCols::Lt { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Gte, got PageIndexScanInputCols::Lt"
-                        );
-                    }
-                    PageIndexScanInputCols::Lte { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Gte, got PageIndexScanInputCols::Lte"
-                        );
-                    }
-                    PageIndexScanInputCols::Eq { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Gte, got PageIndexScanInputCols::Eq"
-                        );
-                    }
-                    PageIndexScanInputCols::Gte {
-                        is_alloc,
-                        idx,
-                        x,
-                        greater_than_x,
-                        eq_to_x,
-                        satisfies_pred,
-                        send_row,
-                        is_less_than_tuple_aux,
-                        is_equal_vec_aux,
+            }) => {
+                match &local_cols.aux_cols {
+                    PageIndexScanInputAuxCols::Gte(NonStrictCompAuxCols {
+                        satisfies_strict,
+                        satisfies_eq,
                         ..
-                    } => {
-                        // here, we are checking if idx <= x
-                        let is_less_than_tuple_cols = IsLessThanTupleCols {
-                            io: IsLessThanTupleIOCols {
-                                x: x.clone(),
-                                y: idx.clone(),
-                                tuple_less_than: greater_than_x,
-                            },
-                            aux: is_less_than_tuple_aux,
-                        };
-
-                        // constrain the indicator that we used to check wheter key < x is correct
-                        SubAir::eval(
-                            is_less_than_tuple_air,
-                            &mut builder.when_transition(),
-                            is_less_than_tuple_cols.io,
-                            is_less_than_tuple_cols.aux,
-                        );
-
-                        // here, we are checking if idx = x
-                        let is_equal_vec_cols = IsEqualVecCols {
-                            io: IsEqualVecIOCols {
-                                x: idx.clone(),
-                                y: x.clone(),
-                                prod: eq_to_x,
-                            },
-                            aux: is_equal_vec_aux,
-                        };
-
-                        // constrain the indicator that we used to check wheter key = x is correct
-                        SubAir::eval(
-                            is_equal_vec_air,
-                            builder,
-                            is_equal_vec_cols.io,
-                            is_equal_vec_cols.aux,
-                        );
-
-                        // constrain that it satisfies predicate if either less than or equal, and that satisfies is bool
-                        builder.assert_eq(greater_than_x + eq_to_x, satisfies_pred);
-                        builder.assert_bool(satisfies_pred);
-
-                        // constrain that the public value x is the same as the column x
-                        for (&local_x, &pub_x) in x.iter().zip(public_x.iter()) {
-                            builder.assert_eq(local_x, pub_x);
-                        }
-
-                        // constrain that we send the row iff the row is allocated and satisfies the predicate
-                        builder.assert_eq(is_alloc * satisfies_pred, send_row);
-                        builder.assert_bool(send_row);
-                    }
-                    PageIndexScanInputCols::Gt { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Gte, got PageIndexScanInputCols::Gt"
-                        );
-                    }
-                }
-            }
-            PageIndexScanInputAir::Gt {
-                idx_len,
-                data_len,
-                is_less_than_tuple_air,
-                ..
-            } => {
-                let page_main = &builder.partitioned_main()[0].clone();
-                let aux_main = &builder.partitioned_main()[1].clone();
-
-                // get the public value x
-                let pis = builder.public_values();
-                let public_x = pis[..*idx_len].to_vec();
-
-                let local_page = page_main.row_slice(0);
-                let local_aux = aux_main.row_slice(0);
-                let local_vec = local_page
-                    .iter()
-                    .chain(local_aux.iter())
-                    .cloned()
-                    .collect::<Vec<AB::Var>>();
-                let local = local_vec.as_slice();
-
-                let local_cols = PageIndexScanInputCols::<AB::Var>::from_slice(
-                    local,
-                    *idx_len,
-                    *data_len,
-                    is_less_than_tuple_air.limb_bits().clone(),
-                    is_less_than_tuple_air.decomp(),
-                    Comp::Gt,
-                );
-
-                match local_cols {
-                    PageIndexScanInputCols::Lt { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Gt, got PageIndexScanInputCols::Lt"
-                        );
-                    }
-                    PageIndexScanInputCols::Lte { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Gt, got PageIndexScanInputCols::Lte"
-                        );
-                    }
-                    PageIndexScanInputCols::Eq { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Gt, got PageIndexScanInputCols::Eq"
-                        );
-                    }
-                    PageIndexScanInputCols::Gte { .. } => {
-                        panic!(
-                            "expected PageIndexScanInputCols::Gt, got PageIndexScanInputCols::Gte"
-                        );
-                    }
-                    PageIndexScanInputCols::Gt {
-                        is_alloc,
-                        idx,
-                        x,
-                        satisfies_pred,
-                        send_row,
-                        is_less_than_tuple_aux,
-                        ..
-                    } => {
+                    }) => {
                         // here, we are checking if idx > x
                         let is_less_than_tuple_cols = IsLessThanTupleCols {
                             io: IsLessThanTupleIOCols {
-                                x: x.clone(),
-                                y: idx,
-                                tuple_less_than: satisfies_pred,
+                                x: local_cols.x.clone(),
+                                y: local_cols.page_cols.idx.clone(),
+                                tuple_less_than: *satisfies_strict,
                             },
-                            aux: is_less_than_tuple_aux,
+                            aux: IsLessThanTupleAuxCols::from_slice(
+                                &is_less_than_tuple_aux_flattened,
+                                idx_limb_bits,
+                                decomp,
+                                self.idx_len,
+                            ),
                         };
 
-                        // constrain that the public value x is the same as the column x
-                        for (&local_x, &pub_x) in x.iter().zip(public_x.iter()) {
-                            builder.assert_eq(local_x, pub_x);
-                        }
-
-                        // constrain that we send the row iff the row is allocated and satisfies the predicate
-                        builder.assert_eq(is_alloc * satisfies_pred, send_row);
-                        builder.assert_bool(send_row);
-
-                        // constrain the indicator that we used to check wheter key < x is correct
+                        // constrain the indicator that we used to check whether idx > x is correct
                         SubAir::eval(
                             is_less_than_tuple_air,
                             &mut builder.when_transition(),
                             is_less_than_tuple_cols.io,
                             is_less_than_tuple_cols.aux,
                         );
+
+                        // here, we are checking if idx = x
+                        let is_equal_vec_cols = IsEqualVecCols {
+                            io: IsEqualVecIOCols {
+                                x: local_cols.page_cols.idx.clone(),
+                                y: local_cols.x.clone(),
+                                prod: *satisfies_eq,
+                            },
+                            aux: IsEqualVecAuxCols::from_slice(
+                                &is_equal_vec_aux_flattened,
+                                self.idx_len,
+                            ),
+                        };
+
+                        // constrain the indicator that we used to check whether idx = x is correct
+                        SubAir::eval(
+                            is_equal_vec_air,
+                            builder,
+                            is_equal_vec_cols.io,
+                            is_equal_vec_cols.aux,
+                        );
+
+                        builder.assert_eq(
+                            *satisfies_strict + *satisfies_eq,
+                            local_cols.satisfies_pred,
+                        );
+                        builder.assert_bool(local_cols.satisfies_pred);
                     }
+                    _ => panic!("Unexpected aux cols"),
                 }
+            }
+            PageIndexScanInputAirVariants::Gt(StrictCompAir {
+                is_less_than_tuple_air,
+                ..
+            }) => {
+                // here, we are checking if idx > x
+                let is_less_than_tuple_cols = IsLessThanTupleCols {
+                    io: IsLessThanTupleIOCols {
+                        x: local_cols.x.clone(),
+                        y: local_cols.page_cols.idx.clone(),
+                        tuple_less_than: local_cols.satisfies_pred,
+                    },
+                    aux: IsLessThanTupleAuxCols::from_slice(
+                        &is_less_than_tuple_aux_flattened,
+                        idx_limb_bits,
+                        decomp,
+                        self.idx_len,
+                    ),
+                };
+
+                // constrain the indicator that we used to check whether idx > x is correct
+                SubAir::eval(
+                    is_less_than_tuple_air,
+                    &mut builder.when_transition(),
+                    is_less_than_tuple_cols.io,
+                    is_less_than_tuple_cols.aux,
+                );
             }
         }
     }

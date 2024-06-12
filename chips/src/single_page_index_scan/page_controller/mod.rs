@@ -8,10 +8,7 @@ use p3_field::{AbstractField, PrimeField, PrimeField64};
 use p3_matrix::dense::DenseMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::{
-    range_gate::RangeCheckerGateChip,
-    single_page_index_scan::page_index_scan_input::PageIndexScanInputAir,
-};
+use crate::range_gate::RangeCheckerGateChip;
 
 use super::{
     page_index_scan_input::{Comp, PageIndexScanInputChip},
@@ -292,13 +289,7 @@ where
 
         assert!(!page_input.is_empty());
 
-        let bus_index = match self.input_chip.air {
-            PageIndexScanInputAir::Lt { bus_index, .. } => bus_index,
-            PageIndexScanInputAir::Lte { bus_index, .. } => bus_index,
-            PageIndexScanInputAir::Eq { bus_index, .. } => bus_index,
-            PageIndexScanInputAir::Gte { bus_index, .. } => bus_index,
-            PageIndexScanInputAir::Gt { bus_index, .. } => bus_index,
-        };
+        let bus_index = self.input_chip.air.bus_index;
 
         self.input_chip = PageIndexScanInputChip::new(
             bus_index,
