@@ -15,7 +15,7 @@ use crate::sub_chip::LocalTraceInstructions;
 
 impl OfflineChecker {
     /// Each row in the trace follow the same order as the Cols struct:
-    /// [is_initial, is_final, is_internal, clk, page_row, op_type, same_idx, same_data, lt_bit, is_extra, is_equal_idx_aux, is_equal_data_aux, lt_aux]
+    /// [is_initial, is_final, is_internal, is_final_x3, clk, page_row, op_type, same_idx, same_data, lt_bit, is_extra, is_equal_idx_aux, is_equal_data_aux, lt_aux]
     ///
     /// The trace consists of a row for every read/write operation plus some extra rows
     /// The trace is sorted by index (in page_row) and then by clk, so every index has a block of consective rows in the trace with the following structure
