@@ -9,5 +9,6 @@ description = "User-facing logical interface for AFS."
 alloy-primitives = { version = "0.7.5", features = ["getrandom"] }
 color-eyre = "0.6.3"
 hex = "0.4.3"
+itertools = "0.13.0"
 serde = "1.0.203"
 serde_derive = "1.0.203"

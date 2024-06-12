@@ -1,4 +1,7 @@
-use crate::table::types::{string_to_table_id, TableId, TableMetadata};
+use crate::{
+    afs_interface::utils::string_to_table_id,
+    table::types::{TableId, TableMetadata},
+};
 
 use super::Table;
 

@@ -950,6 +950,7 @@ dependencies = [
  "alloy-primitives",
  "color-eyre",
  "hex",
+ "itertools 0.13.0",
  "serde",
  "serde_derive",
 ]

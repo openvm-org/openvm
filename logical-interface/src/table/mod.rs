@@ -22,8 +22,8 @@ pub struct Table<I: Index, D: Data> {
 }
 
 impl<I: Index, D: Data> Table<I, D> {
-    const SIZE_I: usize = std::mem::size_of::<I>();
-    const SIZE_D: usize = std::mem::size_of::<D>();
+    const SIZE_I: usize = I::MEMORY_SIZE;
+    const SIZE_D: usize = D::MEMORY_SIZE;
 
     pub fn new(id: TableId, metadata: TableMetadata) -> Self {
         Self {

@@ -1,3 +1,33 @@
+use alloy_primitives::{U256, U512};
+
+pub trait MemorySize {
+    const MEMORY_SIZE: usize;
+}
+
+macro_rules! impl_memory_size_for_uint {
+    ($($t:ty),*) => {
+        $(
+            impl MemorySize for $t {
+                const MEMORY_SIZE: usize = std::mem::size_of::<$t>();
+            }
+        )*
+    }
+}
+
+impl_memory_size_for_uint!(u8, u16, u32, u64, u128, U256, U512);
+
+macro_rules! impl_memory_size_for_array {
+    ($($t:ty),*) => {
+        $(
+            impl<const N: usize> MemorySize for [$t; N] {
+                const MEMORY_SIZE: usize = N * std::mem::size_of::<$t>();
+            }
+        )*
+    }
+}
+
+impl_memory_size_for_array!(u8, u16, u32, u64, u128, U256, U512);
+
 /// Converts byte vector to a byte vector of a target size, big-endian, left-padded with zeros.
 pub fn bytes_to_fixed_bytes_be_vec(bytes: &[u8], target_bytes: usize) -> Vec<u8> {
     let bytes_len = bytes.len();

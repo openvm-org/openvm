@@ -19,8 +19,8 @@ where
     I: Index,
     D: Data,
 {
-    const SIZE_I: usize = std::mem::size_of::<I>();
-    const SIZE_D: usize = std::mem::size_of::<D>();
+    const SIZE_I: usize = I::MEMORY_SIZE;
+    const SIZE_D: usize = D::MEMORY_SIZE;
 
     pub fn new(db_size_index: usize, db_size_data: usize) -> Self {
         Self {
@@ -84,7 +84,7 @@ where
             );
         }
 
-        // Get least significant len(T) bytes (big endian)
+        // Get least significant size(I) bytes (big endian)
         let bytes_slice = &fixed_bytes[bytes_len - Self::SIZE_I..];
         let bytes_vec = bytes_slice.to_vec();
         I::from_be_bytes(&bytes_vec).unwrap()
@@ -99,7 +99,7 @@ where
             panic!("Data size is less than the expected size");
         }
 
-        // Get least significant size_t bytes (big endian)
+        // Get least significant size(D) bytes (big endian)
         let bytes_slice = &fixed_bytes[bytes_len - Self::SIZE_D..];
         let bytes_vec = bytes_slice.to_vec();
         D::from_be_bytes(&bytes_vec).unwrap()

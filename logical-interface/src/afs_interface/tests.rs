@@ -1,6 +1,5 @@
 use crate::{
-    mock_db::MockDb,
-    table::types::{string_to_table_id, TableMetadata},
+    afs_interface::utils::string_to_table_id, mock_db::MockDb, table::types::TableMetadata,
 };
 
 use super::AfsInterface;

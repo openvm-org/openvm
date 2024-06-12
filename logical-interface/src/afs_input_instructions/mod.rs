@@ -83,6 +83,10 @@ impl AfsInputInstructions {
             }
         }
 
+        if afs_header.table_id.is_empty() {
+            panic!("Table ID must be set in the header");
+        }
+
         if afs_header.index_bytes == 0 || afs_header.data_bytes == 0 {
             panic!("Index bytes and data bytes must be set in the header");
         }

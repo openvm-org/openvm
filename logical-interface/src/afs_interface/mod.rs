@@ -1,18 +1,16 @@
 #[cfg(test)]
 pub mod tests;
-use color_eyre::eyre::{eyre, Result};
+pub mod utils;
 
 use crate::{
     afs_input_instructions::{types::InputFileBodyOperation, AfsInputInstructions},
     mock_db::MockDb,
-    table::{
-        codec::fixed_bytes::FixedBytesCodec,
-        types::{string_to_table_id, TableId, TableMetadata},
-        Table,
-    },
+    table::{codec::fixed_bytes::FixedBytesCodec, types::TableMetadata, Table},
     types::{Data, Index},
     utils::string_to_fixed_bytes_be_vec,
 };
+use color_eyre::eyre::{eyre, Result};
+use utils::string_to_table_id;
 
 pub struct AfsInterface<'a, I: Index, D: Data> {
     /// Reference to the mock database
@@ -32,7 +30,8 @@ impl<'a, I: Index, D: Data> AfsInterface<'a, I, D> {
     pub fn load_input_file(&mut self, path: String) -> Result<&Table<I, D>> {
         let instructions = AfsInputInstructions::from_file(path)?;
 
-        let table_id = string_to_table_id(instructions.header.table_id);
+        let table_id = instructions.header.table_id;
+        let table_id_bytes = string_to_table_id(table_id.clone());
 
         for op in &instructions.operations {
             match op.operation {
@@ -47,17 +46,17 @@ impl<'a, I: Index, D: Data> AfsInterface<'a, I, D> {
                     let data_input = op.args[1].clone();
                     let data =
                         string_to_fixed_bytes_be_vec(data_input, instructions.header.data_bytes);
-                    let table = self.db_ref.get_table(table_id);
+                    let table = self.db_ref.get_table(table_id_bytes);
                     if table.is_none() {
                         self.db_ref.create_table(
-                            table_id,
+                            table_id_bytes,
                             TableMetadata::new(
                                 instructions.header.index_bytes,
                                 instructions.header.data_bytes,
                             ),
                         );
                     }
-                    self.db_ref.insert_data(table_id, index, data);
+                    self.db_ref.insert_data(table_id_bytes, index, data);
                 }
                 InputFileBodyOperation::Write => {
                     if op.args.len() != 2 {
@@ -69,17 +68,17 @@ impl<'a, I: Index, D: Data> AfsInterface<'a, I, D> {
                     let data_input = op.args[1].clone();
                     let data =
                         string_to_fixed_bytes_be_vec(data_input, instructions.header.data_bytes);
-                    let table = self.db_ref.get_table(table_id);
+                    let table = self.db_ref.get_table(table_id_bytes);
                     if table.is_none() {
                         self.db_ref.create_table(
-                            table_id,
+                            table_id_bytes,
                             TableMetadata::new(
                                 instructions.header.index_bytes,
                                 instructions.header.data_bytes,
                             ),
                         );
                     }
-                    self.db_ref.write_data(table_id, index, data);
+                    self.db_ref.write_data(table_id_bytes, index, data);
                 }
             };
         }
@@ -99,16 +98,23 @@ impl<'a, I: Index, D: Data> AfsInterface<'a, I, D> {
         self.current_table.as_ref()
     }
 
-    pub fn get_table(&mut self, table_id: TableId) -> Option<&Table<I, D>> {
-        let db_table = self.db_ref.get_table(table_id)?;
+    pub fn create_table(&mut self, table_id: String, metadata: TableMetadata) -> Option<()> {
+        let table_id_bytes = string_to_table_id(table_id);
+        self.db_ref.create_table(table_id_bytes, metadata)
+    }
+
+    pub fn get_table(&mut self, table_id: String) -> Option<&Table<I, D>> {
+        let table_id_bytes = string_to_table_id(table_id);
+        let db_table = self.db_ref.get_table(table_id_bytes)?;
         self.current_table = Some(Table::from_db_table(db_table));
         self.current_table.as_ref()
     }
 
-    pub fn read(&mut self, table_id: TableId, index: I) -> Option<D> {
+    pub fn read(&mut self, table_id: String, index: I) -> Option<D> {
         if let Some(table) = self.current_table.as_ref() {
             let id = table.id;
-            if id != table_id {
+            let table_id_bytes = string_to_table_id(table_id.clone());
+            if id != table_id_bytes {
                 self.get_table(table_id);
             }
         } else {
@@ -117,21 +123,25 @@ impl<'a, I: Index, D: Data> AfsInterface<'a, I, D> {
         self.current_table.as_ref().unwrap().read(index)
     }
 
-    pub fn insert(&mut self, table_id: TableId, index: I, data: D) -> Option<()> {
-        let metadata = self.db_ref.get_table_metadata(table_id)?;
+    pub fn insert(&mut self, table_id: String, index: I, data: D) -> Option<()> {
+        let table_id_bytes = string_to_table_id(table_id);
+        let metadata = self.db_ref.get_table_metadata(table_id_bytes)?;
         let codec = FixedBytesCodec::<I, D>::new(metadata.index_bytes, metadata.data_bytes);
         let index_bytes = codec.index_to_fixed_bytes(index);
         let data_bytes = codec.data_to_fixed_bytes(data);
-        self.db_ref.insert_data(table_id, index_bytes, data_bytes)?;
+        self.db_ref
+            .insert_data(table_id_bytes, index_bytes, data_bytes)?;
         Some(())
     }
 
-    pub fn write(&mut self, table_id: TableId, index: I, data: D) -> Option<()> {
-        let metadata = self.db_ref.get_table_metadata(table_id)?;
+    pub fn write(&mut self, table_id: String, index: I, data: D) -> Option<()> {
+        let table_id_bytes = string_to_table_id(table_id);
+        let metadata = self.db_ref.get_table_metadata(table_id_bytes)?;
         let codec = FixedBytesCodec::<I, D>::new(metadata.index_bytes, metadata.data_bytes);
         let index_bytes = codec.index_to_fixed_bytes(index);
         let data_bytes = codec.data_to_fixed_bytes(data);
-        self.db_ref.write_data(table_id, index_bytes, data_bytes)?;
+        self.db_ref
+            .write_data(table_id_bytes, index_bytes, data_bytes)?;
         Some(())
     }
 }
