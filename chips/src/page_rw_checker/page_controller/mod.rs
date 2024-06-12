@@ -3,8 +3,10 @@ use std::sync::Arc;
 use afs_stark_backend::config::Com;
 use afs_stark_backend::prover::trace::{ProverTraceData, TraceCommitter};
 use p3_field::{AbstractField, Field, PrimeField};
-use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
-use p3_matrix::Matrix;
+use p3_matrix::{
+    dense::{DenseMatrix, RowMajorMatrix},
+    Matrix,
+};
 use p3_uni_stark::{StarkGenericConfig, Val};
 
 use super::{final_page::FinalPageAir, offline_checker::OfflineChecker, page::PageAir};
@@ -136,7 +138,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
 
     pub fn update_range_checker(&mut self, idx_decomp: usize) {
         self.range_checker = Arc::new(RangeCheckerGateChip::new(
-            self.range_checker.bus_index(),
+            self.range_checker.air.bus_index,
             1 << idx_decomp,
         ));
     }
