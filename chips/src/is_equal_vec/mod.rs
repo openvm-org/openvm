@@ -11,6 +11,10 @@ pub struct IsEqualVecAir {
 }
 
 impl IsEqualVecAir {
+    pub fn new(vec_len: usize) -> Self {
+        Self { vec_len }
+    }
+
     pub fn request<F: Clone + PartialEq>(&self, x: &[F], y: &[F]) -> bool {
         x == y
     }
