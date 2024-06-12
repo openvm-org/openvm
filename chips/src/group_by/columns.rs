@@ -7,6 +7,7 @@ use crate::is_equal_vec::columns::IsEqualVecAuxCols;
 // columns are those of the LessThanChip and IsEqualVecChip
 #[derive(AlignedBorrow)]
 pub struct GroupByCols<T> {
+    pub is_allocated: T,
     pub page: Vec<T>,
     pub sorted_group_by: Vec<T>,
     pub aggregated: T,
@@ -17,6 +18,7 @@ pub struct GroupByCols<T> {
 }
 
 pub struct GroupByColsIndexMap {
+    pub allocated_idx: usize,
     pub page_start: usize,
     pub page_end: usize,
     pub sorted_group_by_start: usize,
@@ -33,6 +35,7 @@ impl<T: Clone> GroupByCols<T> {
     pub fn from_slice(slc: &[T], group_by_air: &GroupByAir) -> Self {
         let index_map = GroupByCols::<T>::index_map(group_by_air);
 
+        let is_allocated = slc[index_map.allocated_idx].clone();
         let page = slc[index_map.page_start..index_map.page_end].to_vec();
         let sorted_group_by =
             slc[index_map.sorted_group_by_start..index_map.sorted_group_by_end].to_vec();
@@ -46,6 +49,7 @@ impl<T: Clone> GroupByCols<T> {
         );
 
         Self {
+            is_allocated,
             page,
             sorted_group_by,
             aggregated,
@@ -60,7 +64,8 @@ impl<T: Clone> GroupByCols<T> {
         let num_group_by = group_by_air.group_by_cols.len();
         let eq_vec_width = IsEqualVecAuxCols::<T>::get_width(num_group_by);
 
-        let page_idxs = (0, group_by_air.page_width);
+        let allocated_idx = 0;
+        let page_idxs = (allocated_idx + 1, group_by_air.page_width + 1);
         let sorted_group_by_idxs = (page_idxs.1, page_idxs.1 + num_group_by);
         let aggregated_idx = sorted_group_by_idxs.1;
         let partial_aggregated_idx = aggregated_idx + 1;
@@ -69,6 +74,7 @@ impl<T: Clone> GroupByCols<T> {
         let is_equal_vec_aux_idxs = (eq_next_idx + 1, eq_next_idx + 1 + eq_vec_width);
 
         GroupByColsIndexMap {
+            allocated_idx,
             page_start: page_idxs.0,
             page_end: page_idxs.1,
             sorted_group_by_start: sorted_group_by_idxs.0,

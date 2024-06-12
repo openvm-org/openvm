@@ -25,7 +25,7 @@ pub struct GroupByAir {
 
 impl GroupByAir {
     pub fn get_width(&self) -> usize {
-        3 * self.page_width + self.group_by_cols.len() + 3
+        3 * self.page_width + self.group_by_cols.len() + 4
     }
 }
 
