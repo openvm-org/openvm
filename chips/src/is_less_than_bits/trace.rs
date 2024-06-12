@@ -3,18 +3,17 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use super::columns::{IsLessThanBitsAuxCols, IsLessThanBitsCols, IsLessThanBitsIOCols};
 use super::IsLessThanBitsAir;
-use super::IsLessThanBitsChip;
 use crate::sub_chip::LocalTraceInstructions;
 
-impl IsLessThanBitsChip {
+impl IsLessThanBitsAir {
     pub fn generate_trace<F: PrimeField64>(&self, pairs: Vec<(u32, u32)>) -> RowMajorMatrix<F> {
-        let num_cols: usize = IsLessThanBitsCols::<F>::get_width(self.air.limb_bits);
+        let num_cols: usize = IsLessThanBitsCols::<F>::get_width(self.limb_bits);
 
         let mut rows = vec![];
 
         // generate a row for each pair of numbers to compare
         for (x, y) in pairs {
-            let row: Vec<F> = self.air.generate_trace_row((x, y)).flatten();
+            let row: Vec<F> = self.generate_trace_row((x, y)).flatten();
             rows.extend(row);
         }
 
@@ -41,11 +40,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for IsLessThanBitsAir {
         for d in 1..=self.limb_bits {
             let x_prefix = x & ((1 << d) - 1);
             let y_prefix = y & ((1 << d) - 1);
-            comparisons.push(F::from_canonical_u32(if x_prefix < y_prefix {
-                1
-            } else {
-                0
-            }));
+            comparisons.push(F::from_bool(x_prefix < y_prefix));
         }
 
         let io = IsLessThanBitsIOCols {
