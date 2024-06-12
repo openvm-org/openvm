@@ -22,7 +22,8 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
     fn sends(&self) -> Vec<Interaction<F>> {
         let mut interactions: Vec<Interaction<F>> = vec![];
 
-        let (idx_limb_bits, decomp) = match &self.subair {
+        // when comparator is = we can use dummy values for idx_limb_bits and decomp
+        let (idx_limb_bits, decomp) = match &self.variant_air {
             PageIndexScanInputAirVariants::Lt(StrictCompAir {
                 is_less_than_tuple_air,
                 ..
@@ -45,7 +46,7 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
             PageIndexScanInputAirVariants::Eq(EqCompAir { .. }) => (vec![], 0),
         };
 
-        let cmp = match &self.subair {
+        let cmp = match &self.variant_air {
             PageIndexScanInputAirVariants::Lt(..) => Comp::Lt,
             PageIndexScanInputAirVariants::Gt(..) => Comp::Gt,
             PageIndexScanInputAirVariants::Lte(..) => Comp::Lte,
@@ -88,6 +89,8 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
             argument_index: self.bus_index,
         });
 
+        // here, we generate the flattened aux columns for IsLessThanTuple, and get the indicator associated with the strict comparison
+        // when the comparator is =, we can just generate dummy values
         let (is_less_than_tuple_aux_flattened, strict_comp_ind) = match cols_numbered.aux_cols {
             PageIndexScanInputAuxCols::Lt(StrictCompAuxCols {
                 is_less_than_tuple_aux,
@@ -101,19 +104,20 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                 cols_numbered.satisfies_pred,
             ),
             PageIndexScanInputAuxCols::Lte(NonStrictCompAuxCols {
-                satisfies_strict,
+                satisfies_strict_comp,
                 is_less_than_tuple_aux,
                 ..
             })
             | PageIndexScanInputAuxCols::Gte(NonStrictCompAuxCols {
-                satisfies_strict,
+                satisfies_strict_comp,
                 is_less_than_tuple_aux,
                 ..
-            }) => (is_less_than_tuple_aux.flatten(), satisfies_strict),
+            }) => (is_less_than_tuple_aux.flatten(), satisfies_strict_comp),
             PageIndexScanInputAuxCols::Eq(EqCompAuxCols { .. }) => (vec![], 0),
         };
 
-        let mut subchip_interactions = match &self.subair {
+        // get interactions from IsLessThanTuple subchip
+        let mut subchip_interactions = match &self.variant_air {
             PageIndexScanInputAirVariants::Lt(StrictCompAir {
                 is_less_than_tuple_air,
                 ..

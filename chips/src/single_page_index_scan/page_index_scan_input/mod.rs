@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    is_equal_vec::IsEqualVecAir,
+    is_equal_vec::{columns::IsEqualVecIOCols, IsEqualVecAir},
     is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
     range_gate::RangeCheckerGateChip,
 };
@@ -47,7 +47,7 @@ pub struct PageIndexScanInputAir {
     pub idx_len: usize,
     pub data_len: usize,
 
-    subair: PageIndexScanInputAirVariants,
+    variant_air: PageIndexScanInputAirVariants,
 }
 
 /// Given a fixed predicate of the form index OP x, where OP is one of {<, <=, =, >=, >}
@@ -73,7 +73,7 @@ impl PageIndexScanInputChip {
         range_checker: Arc<RangeCheckerGateChip>,
         cmp: Comp,
     ) -> Self {
-        let subair = match cmp {
+        let variant_air = match cmp {
             Comp::Lt => PageIndexScanInputAirVariants::Lt(StrictCompAir {
                 is_less_than_tuple_air: IsLessThanTupleAir::new(
                     bus_index,
@@ -117,7 +117,7 @@ impl PageIndexScanInputChip {
             bus_index,
             idx_len,
             data_len,
-            subair,
+            variant_air,
         };
 
         Self {
@@ -132,7 +132,7 @@ impl PageIndexScanInputChip {
     }
 
     pub fn aux_width(&self) -> usize {
-        match &self.air.subair {
+        match &self.air.variant_air {
             PageIndexScanInputAirVariants::Lt(StrictCompAir {
                 is_less_than_tuple_air,
                 ..
@@ -141,6 +141,7 @@ impl PageIndexScanInputChip {
                 is_less_than_tuple_air,
                 ..
             }) => {
+                // x, satisfies_pred, send_row, is_less_than_tuple_aux_cols
                 self.air.idx_len
                     + 1
                     + 1
@@ -158,6 +159,8 @@ impl PageIndexScanInputChip {
                 is_less_than_tuple_air,
                 ..
             }) => {
+                // x, satisfies_pred, send_row, satisfies_strict_comp, satisfies_eq_comp,
+                // is_less_than_tuple_aux_cols, is_equal_vec_aux_cols
                 self.air.idx_len
                     + 1
                     + 1
@@ -168,10 +171,11 @@ impl PageIndexScanInputChip {
                         is_less_than_tuple_air.decomp(),
                         self.air.idx_len,
                     )
-                    + 2 * self.air.idx_len
+                    + IsEqualVecIOCols::<usize>::get_width(self.air.idx_len)
             }
             PageIndexScanInputAirVariants::Eq(EqCompAir { .. }) => {
-                self.air.idx_len + 1 + 1 + 2 * self.air.idx_len
+                // x, satisfies_pred, send_row, is_equal_vec_aux_cols
+                self.air.idx_len + 1 + 1 + IsEqualVecIOCols::<usize>::get_width(self.air.idx_len)
             }
         }
     }

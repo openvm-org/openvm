@@ -26,7 +26,7 @@ impl AirConfig for PageIndexScanInputAir {
 
 impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
     fn width(&self) -> usize {
-        match &self.subair {
+        match &self.variant_air {
             PageIndexScanInputAirVariants::Lt(StrictCompAir {
                 is_less_than_tuple_air,
                 ..
@@ -56,6 +56,7 @@ impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
                 Comp::Lte,
             ),
             PageIndexScanInputAirVariants::Eq(EqCompAir { .. }) => {
+                // since get_width doesn't use idx_limb_bits and decomp for when comparator is =, we can pass in dummy values
                 PageIndexScanInputCols::<F>::get_width(
                     self.idx_len,
                     self.data_len,
@@ -89,7 +90,8 @@ where
             .collect::<Vec<AB::Var>>();
         let local = local_vec.as_slice();
 
-        let (idx_limb_bits, decomp) = match &self.subair {
+        // when comparator is = we can use dummy values for idx_limb_bits and decomp
+        let (idx_limb_bits, decomp) = match &self.variant_air {
             PageIndexScanInputAirVariants::Lt(StrictCompAir {
                 is_less_than_tuple_air,
                 ..
@@ -112,7 +114,7 @@ where
             PageIndexScanInputAirVariants::Eq(EqCompAir { .. }) => (vec![], 0),
         };
 
-        let cmp = match &self.subair {
+        let cmp = match &self.variant_air {
             PageIndexScanInputAirVariants::Lt(..) => Comp::Lt,
             PageIndexScanInputAirVariants::Gt(..) => Comp::Gt,
             PageIndexScanInputAirVariants::Lte(..) => Comp::Lte,
@@ -142,6 +144,7 @@ where
         builder.assert_bool(local_cols.satisfies_pred);
         builder.assert_bool(local_cols.send_row);
 
+        // generate flattened aux columns for IsLessThanTuple and IsEqualVec
         let is_less_than_tuple_aux_flattened = match &local_cols.aux_cols {
             PageIndexScanInputAuxCols::Lt(StrictCompAuxCols {
                 is_less_than_tuple_aux,
@@ -175,7 +178,7 @@ where
             _ => vec![],
         };
 
-        match &self.subair {
+        match &self.variant_air {
             PageIndexScanInputAirVariants::Lt(StrictCompAir {
                 is_less_than_tuple_air,
                 ..
@@ -195,7 +198,7 @@ where
                     ),
                 };
 
-                // constrain the indicator that we used to check whether key < x is correct
+                // constrain the indicator that we used to check whether idx < x is correct
                 SubAir::eval(
                     is_less_than_tuple_air,
                     &mut builder.when_transition(),
@@ -209,8 +212,8 @@ where
             }) => {
                 match &local_cols.aux_cols {
                     PageIndexScanInputAuxCols::Lte(NonStrictCompAuxCols {
-                        satisfies_strict,
-                        satisfies_eq,
+                        satisfies_strict_comp,
+                        satisfies_eq_comp,
                         ..
                     }) => {
                         // here, we are checking if idx < x
@@ -218,7 +221,7 @@ where
                             io: IsLessThanTupleIOCols {
                                 x: local_cols.page_cols.idx.clone(),
                                 y: local_cols.x.clone(),
-                                tuple_less_than: *satisfies_strict,
+                                tuple_less_than: *satisfies_strict_comp,
                             },
                             aux: IsLessThanTupleAuxCols::from_slice(
                                 &is_less_than_tuple_aux_flattened,
@@ -241,7 +244,7 @@ where
                             io: IsEqualVecIOCols {
                                 x: local_cols.page_cols.idx.clone(),
                                 y: local_cols.x.clone(),
-                                prod: *satisfies_eq,
+                                prod: *satisfies_eq_comp,
                             },
                             aux: IsEqualVecAuxCols::from_slice(
                                 &is_equal_vec_aux_flattened,
@@ -259,7 +262,7 @@ where
 
                         // constrain that satisfies_pred indicates whether idx <= x
                         builder.assert_eq(
-                            *satisfies_strict + *satisfies_eq,
+                            *satisfies_strict_comp + *satisfies_eq_comp,
                             local_cols.satisfies_pred,
                         );
                     }
@@ -291,8 +294,8 @@ where
             }) => {
                 match &local_cols.aux_cols {
                     PageIndexScanInputAuxCols::Gte(NonStrictCompAuxCols {
-                        satisfies_strict,
-                        satisfies_eq,
+                        satisfies_strict_comp,
+                        satisfies_eq_comp,
                         ..
                     }) => {
                         // here, we are checking if idx > x
@@ -300,7 +303,7 @@ where
                             io: IsLessThanTupleIOCols {
                                 x: local_cols.x.clone(),
                                 y: local_cols.page_cols.idx.clone(),
-                                tuple_less_than: *satisfies_strict,
+                                tuple_less_than: *satisfies_strict_comp,
                             },
                             aux: IsLessThanTupleAuxCols::from_slice(
                                 &is_less_than_tuple_aux_flattened,
@@ -323,7 +326,7 @@ where
                             io: IsEqualVecIOCols {
                                 x: local_cols.page_cols.idx.clone(),
                                 y: local_cols.x.clone(),
-                                prod: *satisfies_eq,
+                                prod: *satisfies_eq_comp,
                             },
                             aux: IsEqualVecAuxCols::from_slice(
                                 &is_equal_vec_aux_flattened,
@@ -339,11 +342,11 @@ where
                             is_equal_vec_cols.aux,
                         );
 
+                        // constrain that satisfies_pred indicates whether idx >= x
                         builder.assert_eq(
-                            *satisfies_strict + *satisfies_eq,
+                            *satisfies_strict_comp + *satisfies_eq_comp,
                             local_cols.satisfies_pred,
                         );
-                        builder.assert_bool(local_cols.satisfies_pred);
                     }
                     _ => panic!("Unexpected aux cols"),
                 }
