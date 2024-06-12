@@ -6,7 +6,7 @@ use crate::sub_chip::LocalTraceInstructions;
 use super::{columns::AssertSortedCols, AssertSortedChip};
 
 impl AssertSortedChip {
-    pub fn generate_trace<F: PrimeField64>(&self) -> RowMajorMatrix<F> {
+    pub fn generate_trace<F: PrimeField64>(&self, keys: Vec<Vec<u32>>) -> RowMajorMatrix<F> {
         let num_cols: usize = AssertSortedCols::<F>::get_width(
             self.air.is_less_than_tuple_air().limb_bits().clone(),
             self.air.is_less_than_tuple_air().decomp(),
@@ -14,12 +14,12 @@ impl AssertSortedChip {
         );
 
         let mut rows: Vec<F> = vec![];
-        for i in 0..self.air.keys().len() {
-            let key = self.air.keys()[i].clone();
-            let next_key: Vec<u32> = if i == self.air.keys().len() - 1 {
+        for i in 0..keys.len() {
+            let key = keys[i].clone();
+            let next_key: Vec<u32> = if i == keys.len() - 1 {
                 vec![0; self.air.is_less_than_tuple_air().tuple_len()]
             } else {
-                self.air.keys()[i + 1].clone()
+                keys[i + 1].clone()
             };
 
             let is_less_than_tuple_trace = LocalTraceInstructions::generate_trace_row(
