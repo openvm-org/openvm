@@ -42,7 +42,7 @@ impl<T: Clone> IsEqualVecAuxCols<T> {
     }
 
     pub fn get_width(vec_len: usize) -> usize {
-        2 * vec_len
+        vec_len + vec_len
     }
 }
 

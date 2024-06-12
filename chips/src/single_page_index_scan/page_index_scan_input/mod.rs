@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    is_equal_vec::{columns::IsEqualVecIOCols, IsEqualVecAir},
+    is_equal_vec::{columns::IsEqualVecAuxCols, IsEqualVecAir},
     is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
     range_gate::RangeCheckerGateChip,
 };
@@ -171,11 +171,11 @@ impl PageIndexScanInputChip {
                         is_less_than_tuple_air.decomp(),
                         self.air.idx_len,
                     )
-                    + IsEqualVecIOCols::<usize>::get_width(self.air.idx_len)
+                    + IsEqualVecAuxCols::<usize>::get_width(self.air.idx_len)
             }
             PageIndexScanInputAirVariants::Eq(EqCompAir { .. }) => {
                 // x, satisfies_pred, send_row, is_equal_vec_aux_cols
-                self.air.idx_len + 1 + 1 + IsEqualVecIOCols::<usize>::get_width(self.air.idx_len)
+                self.air.idx_len + 1 + 1 + IsEqualVecAuxCols::<usize>::get_width(self.air.idx_len)
             }
         }
     }

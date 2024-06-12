@@ -1,6 +1,5 @@
 use crate::{
-    is_equal_vec::columns::{IsEqualVecAuxCols, IsEqualVecIOCols},
-    is_less_than_tuple::columns::IsLessThanTupleAuxCols,
+    is_equal_vec::columns::IsEqualVecAuxCols, is_less_than_tuple::columns::IsLessThanTupleAuxCols,
 };
 
 use super::Comp;
@@ -168,10 +167,15 @@ impl<T: Clone> PageIndexScanInputCols<T> {
                     + 1
                     + 1
                     + IsLessThanTupleAuxCols::<T>::get_width(idx_limb_bits, decomp, idx_len)
-                    + IsEqualVecIOCols::<T>::get_width(idx_len)
+                    + IsEqualVecAuxCols::<T>::get_width(idx_len)
             }
             Comp::Eq => {
-                1 + idx_len + data_len + idx_len + 1 + 1 + IsEqualVecIOCols::<T>::get_width(idx_len)
+                1 + idx_len
+                    + data_len
+                    + idx_len
+                    + 1
+                    + 1
+                    + IsEqualVecAuxCols::<T>::get_width(idx_len)
             }
         }
     }
