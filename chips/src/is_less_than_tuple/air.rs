@@ -1,14 +1,10 @@
 use std::borrow::Borrow;
 
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::Field;
+use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use crate::{
-    is_equal::{
-        columns::{IsEqualAuxCols, IsEqualCols, IsEqualIOCols},
-        IsEqualAir,
-    },
     is_less_than::columns::{IsLessThanAuxCols, IsLessThanCols, IsLessThanIOCols},
     sub_chip::{AirConfig, SubAir},
 };
@@ -85,42 +81,35 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanTupleAir {
             );
         }
 
-        // here, we constrain that is_equal is the indicator for whether diff == 0, i.e. x[i] = y[i]
+        let prods = aux.is_equal_vec_aux.prods.clone();
+        let invs = aux.is_equal_vec_aux.invs.clone();
+
+        // initialize prods[0] = is_equal(x[0], y[0])
+        builder.assert_eq(prods[0] + (x[0] - y[0]) * invs[0], AB::Expr::one());
+
         for i in 0..x.len() {
-            let is_equal = aux.is_equal[i];
-            let inv = aux.is_equal_aux[i].inv;
-
-            let is_equal_cols = IsEqualCols {
-                io: IsEqualIOCols {
-                    x: x[i],
-                    y: y[i],
-                    is_equal,
-                },
-                aux: IsEqualAuxCols { inv },
-            };
-
-            SubAir::eval(&IsEqualAir, builder, is_equal_cols.io, is_equal_cols.aux);
+            // constrain prods[i] = 0 if x[i] != y[i]
+            builder.assert_zero(prods[i] * (x[i] - y[i]));
         }
 
-        // here, we constrain that is_equal_cumulative and less_than_cumulative are the correct values
-        let is_equal_cumulative = aux.is_equal_cumulative.clone();
+        for i in 0..x.len() - 1 {
+            // if prod[i] == 0 all after are 0
+            builder.assert_eq(prods[i] * prods[i + 1], prods[i + 1]);
+            // prods[i] == 1 forces prods[i+1] == is_equal(x[i+1], y[i+1])
+            builder.assert_eq(prods[i + 1] + (x[i + 1] - y[i + 1]) * invs[i + 1], prods[i]);
+        }
+
         let less_than_cumulative = aux.less_than_cumulative.clone();
 
-        builder.assert_eq(is_equal_cumulative[0], aux.is_equal[0]);
         builder.assert_eq(less_than_cumulative[0], aux.less_than[0]);
 
         for i in 1..x.len() {
-            // this constrains that is_equal_cumulative[i] indicates whether the first i elements of x and y are equal
-            builder.assert_eq(
-                is_equal_cumulative[i],
-                is_equal_cumulative[i - 1] * aux.is_equal[i],
-            );
             // this constrains that less_than_cumulative[i] indicates whether the first i elements of x are less than
             // the first i elements of y, lexicographically
-            // note that less_than_cumulative[i - 1] and is_equal_cumulative[i - 1] are never both 1
+            // note that less_than_cumulative[i - 1] and prods[i - 1] are never both 1
             builder.assert_eq(
                 less_than_cumulative[i],
-                less_than_cumulative[i - 1] + aux.less_than[i] * is_equal_cumulative[i - 1],
+                less_than_cumulative[i - 1] + aux.less_than[i] * prods[i - 1],
             );
         }
 

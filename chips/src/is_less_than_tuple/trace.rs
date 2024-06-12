@@ -4,7 +4,7 @@ use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
-    is_equal::columns::IsEqualAuxCols,
+    is_equal_vec::columns::IsEqualVecAuxCols,
     is_less_than::{columns::IsLessThanAuxCols, IsLessThanChip},
     range_gate::RangeCheckerGateChip,
     sub_chip::LocalTraceInstructions,
@@ -74,16 +74,26 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for IsLessThanTupleAir {
             lower_decomp_vec.push(curr_less_than_row[4..].to_vec());
         }
 
-        // compute is_equal_cumulative
+        // compute prods and invs
         let mut transition_index = 0;
         while transition_index < x.len() && x[transition_index] == y[transition_index] {
             transition_index += 1;
         }
 
-        let is_equal_cumulative = std::iter::repeat(F::one())
+        let prods = std::iter::repeat(F::one())
             .take(transition_index)
             .chain(std::iter::repeat(F::zero()).take(x.len() - transition_index))
             .collect::<Vec<F>>();
+
+        let mut invs = std::iter::repeat(F::zero())
+            .take(x.len())
+            .collect::<Vec<F>>();
+
+        if transition_index != x.len() {
+            invs[transition_index] = (F::from_canonical_u32(x[transition_index])
+                - F::from_canonical_u32(y[transition_index]))
+            .inverse();
+        }
 
         let mut less_than_cumulative: Vec<F> = vec![];
 
@@ -95,7 +105,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for IsLessThanTupleAir {
                 F::zero()
             };
 
-            if x[i] < y[i] && (i == 0 || is_equal_cumulative[i - 1] == F::one()) {
+            if x[i] < y[i] && (i == 0 || prods[i - 1] == F::one()) {
                 less_than_curr = F::one();
             }
 
@@ -108,29 +118,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for IsLessThanTupleAir {
             less_than_cumulative.push(less_than_curr);
         }
 
-        // contains indicator whether difference is zero
-        let mut is_equal: Vec<F> = vec![];
-        // contains y such that y * (i + x) = 1
-        let mut inverses: Vec<F> = vec![];
-
-        // we compute the indicators, which only matter if the row is not the last
-        for (i, &val) in x.iter().enumerate() {
-            let next_val = y[i];
-
-            // the difference between the two limbs
-            let curr_diff = F::from_canonical_u32(val) - F::from_canonical_u32(next_val);
-
-            // compute the equal indicator and inverses
-            if next_val == val {
-                is_equal.push(F::one());
-                inverses.push((curr_diff + F::one()).inverse());
-            } else {
-                is_equal.push(F::zero());
-                inverses.push(curr_diff.inverse());
-            }
-        }
-
-        // compute less_than_aux and is_equal_aux
+        // compute less_than_aux and is_equal_vec_aux
         let mut less_than_aux: Vec<IsLessThanAuxCols<F>> = vec![];
         for i in 0..x.len() {
             let less_than_col = IsLessThanAuxCols {
@@ -140,11 +128,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for IsLessThanTupleAir {
             less_than_aux.push(less_than_col);
         }
 
-        let mut is_equal_aux: Vec<IsEqualAuxCols<F>> = vec![];
-        for inverse in &inverses {
-            let is_equal_col = IsEqualAuxCols { inv: *inverse };
-            is_equal_aux.push(is_equal_col);
-        }
+        let is_equal_vec_aux = IsEqualVecAuxCols { prods, invs };
 
         let io = IsLessThanTupleIOCols {
             x: x.into_iter().map(F::from_canonical_u32).collect(),
@@ -154,9 +138,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for IsLessThanTupleAir {
         let aux = IsLessThanTupleAuxCols {
             less_than,
             less_than_aux,
-            is_equal,
-            is_equal_aux,
-            is_equal_cumulative,
+            is_equal_vec_aux,
             less_than_cumulative,
         };
 
