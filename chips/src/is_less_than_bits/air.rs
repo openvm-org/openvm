@@ -61,11 +61,14 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanBitsAir {
         builder.assert_eq(sum_bits_x, x);
         builder.assert_eq(sum_bits_y, y);
 
+        // comparisons[d] = whether x and y are equal when considering d + 1 least significant bits
         builder.assert_eq(comparisons[0], (AB::Expr::one() - x_bits[0]) * y_bits[0]);
         for d in 1..self.limb_bits {
-            let comparison_check = ((AB::Expr::one()
-                - ((x_bits[d] - y_bits[d]) * (x_bits[d] - y_bits[d])))
-                * comparisons[d - 1])
+            // comparison_check is 1 if x_bits[d] < y_bits[d], comparisons[d - 1] if x_bits[d] == y_bits[d], and 0 otherwise
+            let comparison_check = 
+                // (1 - (x_bits[d] - y_bits[d])^2) is bool = (x_bits[d] == y_bits[d])
+                ((AB::Expr::one() - ((x_bits[d] - y_bits[d]) * (x_bits[d] - y_bits[d]))) * comparisons[d - 1])
+                // (1 - x_bits[d]) * y_bits[d] is bool = (x_bits[d] < y_bits[d])
                 + (AB::Expr::one() - x_bits[d]) * y_bits[d];
             builder.assert_eq(comparisons[d], comparison_check);
         }
