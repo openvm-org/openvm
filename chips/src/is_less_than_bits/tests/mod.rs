@@ -41,7 +41,7 @@ fn test_is_less_than_negative_1() {
     let air = IsLessThanBitsAir { limb_bits };
     let mut trace = air.generate_trace(vec![(446, 553)]);
 
-    trace.values[2] = AbstractField::from_canonical_u64(0);
+    trace.row_mut(0)[2] = AbstractField::from_canonical_u64(0);
 
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
@@ -60,9 +60,9 @@ fn test_is_less_than_negative_2() {
     let air = IsLessThanBitsAir { limb_bits };
     let mut trace = air.generate_trace(vec![(446, 447)]);
 
-    trace.values[2] = AbstractField::from_canonical_u64(0);
+    trace.row_mut(0)[2] = AbstractField::from_canonical_u64(0);
     for d in 3 + (2 * limb_bits)..3 + (3 * limb_bits) {
-        trace.values[d] = AbstractField::from_canonical_u64(0);
+        trace.row_mut(0)[d] = AbstractField::from_canonical_u64(0);
     }
 
     USE_DEBUG_BUILDER.with(|debug| {
@@ -82,13 +82,13 @@ fn test_is_less_than_negative_3() {
     let air = IsLessThanBitsAir { limb_bits };
     let mut trace = air.generate_trace(vec![(0, 2)]);
 
-    trace.values[3 + limb_bits] = AbstractField::from_canonical_u64(2);
-    trace.values[3 + limb_bits + 1] = AbstractField::from_canonical_u64(0);
+    trace.row_mut(0)[3 + limb_bits] = AbstractField::from_canonical_u64(2);
+    trace.row_mut(0)[3 + limb_bits + 1] = AbstractField::from_canonical_u64(0);
 
-    trace.values[3 + (2 * limb_bits)] = AbstractField::from_canonical_u64(2);
-    trace.values[3 + (2 * limb_bits) + 1] = AbstractField::from_canonical_u64(2);
+    trace.row_mut(0)[3 + (2 * limb_bits)] = AbstractField::from_canonical_u64(2);
+    trace.row_mut(0)[3 + (2 * limb_bits) + 1] = AbstractField::from_canonical_u64(2);
 
-    trace.values[2] = AbstractField::from_canonical_u64(2);
+    trace.row_mut(0)[2] = AbstractField::from_canonical_u64(2);
 
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
@@ -107,9 +107,9 @@ fn test_is_less_than_negative_4() {
     let air = IsLessThanBitsAir { limb_bits };
     let mut trace = air.generate_trace(vec![(1, 0)]);
 
-    trace.values[3 + (2 * limb_bits) + 1] = AbstractField::from_canonical_u64(1);
+    trace.row_mut(0)[3 + (2 * limb_bits) + 1] = AbstractField::from_canonical_u64(1);
 
-    trace.values[2] = AbstractField::from_canonical_u64(1);
+    trace.row_mut(0)[2] = AbstractField::from_canonical_u64(1);
 
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
