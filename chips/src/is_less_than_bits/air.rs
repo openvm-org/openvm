@@ -49,17 +49,11 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanBitsAir {
         let comparisons = aux.comparisons;
 
         for d in 0..self.limb_bits {
-            builder.assert_eq(
-                x_bits[d] * (x_bits[d] - AB::Expr::from_canonical_u64(1)),
-                AB::Expr::from_canonical_u64(0),
-            );
-            builder.assert_eq(
-                y_bits[d] * (y_bits[d] - AB::Expr::from_canonical_u64(1)),
-                AB::Expr::from_canonical_u64(0),
-            );
+            builder.assert_bool(x_bits[d] * (x_bits[d] - AB::Expr::one()));
+            builder.assert_bool(y_bits[d] * (y_bits[d] - AB::Expr::one()));
         }
-        let mut sum_bits_x = AB::Expr::from_canonical_u64(0);
-        let mut sum_bits_y = AB::Expr::from_canonical_u64(0);
+        let mut sum_bits_x = AB::Expr::zero();
+        let mut sum_bits_y = AB::Expr::zero();
         for d in 0..self.limb_bits {
             sum_bits_x += AB::Expr::from_canonical_u64(1 << d) * x_bits[d];
             sum_bits_y += AB::Expr::from_canonical_u64(1 << d) * y_bits[d];
@@ -67,15 +61,12 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanBitsAir {
         builder.assert_eq(sum_bits_x, x);
         builder.assert_eq(sum_bits_y, y);
 
-        builder.assert_eq(
-            comparisons[0],
-            (AB::Expr::from_canonical_u64(1) - x_bits[0]) * y_bits[0],
-        );
+        builder.assert_eq(comparisons[0], (AB::Expr::one() - x_bits[0]) * y_bits[0]);
         for d in 1..self.limb_bits {
-            let comparison_check = ((AB::Expr::from_canonical_u64(1)
+            let comparison_check = ((AB::Expr::one()
                 - ((x_bits[d] - y_bits[d]) * (x_bits[d] - y_bits[d])))
-                * comparisons[d])
-                + (AB::Expr::from_canonical_u64(1) - x_bits[d]) * y_bits[d];
+                * comparisons[d - 1])
+                + (AB::Expr::one() - x_bits[d]) * y_bits[d];
             builder.assert_eq(comparisons[d], comparison_check);
         }
 

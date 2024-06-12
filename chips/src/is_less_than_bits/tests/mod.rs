@@ -99,3 +99,24 @@ fn test_is_less_than_negative_3() {
         "Expected verification to fail, but it passed"
     );
 }
+
+#[test]
+fn test_is_less_than_negative_4() {
+    let limb_bits: usize = 2;
+
+    let chip = IsLessThanBitsChip::new(limb_bits);
+    let mut trace = chip.generate_trace(vec![(1, 0)]);
+
+    trace.values[3 + (2 * limb_bits) + 1] = AbstractField::from_canonical_u64(1);
+
+    trace.values[2] = AbstractField::from_canonical_u64(1);
+
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
+    assert_eq!(
+        run_simple_test_no_pis(vec![&chip.air], vec![trace],),
+        Err(VerificationError::OodEvaluationMismatch),
+        "Expected verification to fail, but it passed"
+    );
+}
