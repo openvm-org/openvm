@@ -11,7 +11,6 @@ pub mod trace;
 
 #[derive(Default, Getters)]
 pub struct GroupByAir {
-    input_bus: usize,
     internal_bus: usize,
     output_bus: usize,
 
@@ -49,13 +48,11 @@ impl GroupByChip {
         page_width: usize,
         group_by_cols: Vec<usize>,
         aggregated_col: usize,
-        input_bus: usize,
         internal_bus: usize,
         output_bus: usize,
     ) -> Self {
         Self {
             air: GroupByAir {
-                input_bus,
                 internal_bus,
                 output_bus,
                 page_width,
