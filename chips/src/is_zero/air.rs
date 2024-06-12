@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::interaction::Chip;
+use afs_stark_backend::interaction::AirBridge;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
 use p3_field::Field;
@@ -10,23 +10,23 @@ use crate::sub_chip::{AirConfig, SubAir};
 
 use super::{
     columns::{IsZeroCols, IsZeroIOCols, NUM_COLS},
-    IsZeroChip,
+    IsZeroAir,
 };
 
-impl<F: Field> BaseAir<F> for IsZeroChip {
+impl<F: Field> BaseAir<F> for IsZeroAir {
     fn width(&self) -> usize {
         NUM_COLS
     }
 }
 
-impl AirConfig for IsZeroChip {
+impl AirConfig for IsZeroAir {
     type Cols<T> = IsZeroCols<T>;
 }
 
 // No interactions
-impl<F: Field> Chip<F> for IsZeroChip {}
+impl<F: Field> AirBridge<F> for IsZeroAir {}
 
-impl<AB: AirBuilder> Air<AB> for IsZeroChip {
+impl<AB: AirBuilder> Air<AB> for IsZeroAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -37,7 +37,7 @@ impl<AB: AirBuilder> Air<AB> for IsZeroChip {
     }
 }
 
-impl<AB: AirBuilder> SubAir<AB> for IsZeroChip {
+impl<AB: AirBuilder> SubAir<AB> for IsZeroAir {
     type IoView = IsZeroIOCols<AB::Var>;
     type AuxView = AB::Var;
 

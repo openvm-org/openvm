@@ -1,4 +1,4 @@
-use super::IsEqualChip;
+use super::IsEqualAir;
 use p3_field::AbstractField;
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
@@ -15,7 +15,7 @@ fn test_single_is_equal(x: u32, y: u32) {
     let x = AbstractField::from_canonical_u32(x);
     let y = AbstractField::from_canonical_u32(y);
 
-    let chip = IsEqualChip {};
+    let chip = IsEqualAir {};
 
     let trace = chip.generate_trace(vec![x], vec![y]);
 
@@ -30,7 +30,7 @@ fn test_single_is_zero_fail(x: u32, y: u32) {
     let x = AbstractField::from_canonical_u32(x);
     let y = AbstractField::from_canonical_u32(y);
 
-    let chip = IsEqualChip {};
+    let chip = IsEqualAir {};
 
     let mut trace = chip.generate_trace(vec![x], vec![y]);
     trace.values[2] = if trace.values[2] == AbstractField::one() {

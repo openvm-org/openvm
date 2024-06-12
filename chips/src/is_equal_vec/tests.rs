@@ -6,7 +6,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::Rng;
 
-use crate::is_equal_vec::IsEqualVecChip;
+use crate::is_equal_vec::IsEqualVecAir;
 
 use test_case::test_case;
 
@@ -26,7 +26,7 @@ fn test_vec_is_equal_vec(x: [u32; 3], y: [u32; 3], expected: [u32; 3]) {
         .map(AbstractField::from_canonical_u32)
         .collect();
 
-    let chip = IsEqualVecChip { vec_len: 3 };
+    let chip = IsEqualVecAir { vec_len: 3 };
 
     let trace = chip.generate_trace(vec![x], vec![y]);
 
@@ -51,7 +51,7 @@ fn test_all_is_equal_vec() {
     let x4 = vec![1, 2, 3];
     let y4 = vec![1, 2, 1];
 
-    let chip = IsEqualVecChip { vec_len: 3 };
+    let chip = IsEqualVecAir { vec_len: 3 };
 
     let trace = chip.generate_trace(
         vec![x1, x2, x3, x4]
@@ -91,7 +91,7 @@ fn test_single_is_equal_vec_fail(x: [u32; 3], y: [u32; 3], expected: [u32; 3]) {
         .map(AbstractField::from_canonical_u32)
         .collect();
 
-    let chip = IsEqualVecChip { vec_len: 3 };
+    let chip = IsEqualVecAir { vec_len: 3 };
 
     let mut trace = chip.generate_trace(vec![x], vec![y]);
 
@@ -122,7 +122,7 @@ fn test_vec_is_equal_vec_fail() {
         })
         .collect();
     let y: Vec<Vec<_>> = x.clone();
-    let chip = IsEqualVecChip { vec_len: width };
+    let chip = IsEqualVecAir { vec_len: width };
 
     for i in 0..height {
         for j in 0..width {

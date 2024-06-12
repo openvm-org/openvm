@@ -9,7 +9,7 @@ use crate::utils::batch_multiplicative_inverse_allowing_zero;
 
 use super::{
     utils::{generate_rlc_elements, reduce_row},
-    Chip, InteractionType,
+    AirBridge, InteractionType,
 };
 
 // Copied from valida/machine/src/chip.rs, modified to allow partitioned main trace
@@ -31,7 +31,7 @@ pub fn generate_permutation_trace<F, C, EF>(
 ) -> Option<RowMajorMatrix<EF>>
 where
     F: Field,
-    C: Chip<F> + ?Sized,
+    C: AirBridge<F> + ?Sized,
     EF: ExtensionField<F>,
 {
     let all_interactions = chip.all_interactions();

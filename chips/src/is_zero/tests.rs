@@ -1,4 +1,4 @@
-use super::IsZeroChip;
+use super::IsZeroAir;
 
 use afs_stark_backend::prover::USE_DEBUG_BUILDER;
 use afs_stark_backend::verifier::VerificationError;
@@ -14,7 +14,7 @@ use test_case::test_case;
 fn test_single_is_zero(x: u32) {
     let x = AbstractField::from_canonical_u32(x);
 
-    let chip = IsZeroChip {};
+    let chip = IsZeroAir {};
 
     let trace = chip.generate_trace(vec![x]);
 
@@ -34,7 +34,7 @@ fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
         .map(|x| AbstractField::from_canonical_u32(*x))
         .collect();
 
-    let chip = IsZeroChip {};
+    let chip = IsZeroAir {};
 
     let trace = chip.generate_trace(x_vec);
 
@@ -53,7 +53,7 @@ fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
 fn test_single_is_zero_fail(x: u32) {
     let x = AbstractField::from_canonical_u32(x);
 
-    let chip = IsZeroChip {};
+    let chip = IsZeroAir {};
 
     let mut trace = chip.generate_trace(vec![x]);
     trace.values[1] = BabyBear::one() - trace.values[1];
@@ -76,7 +76,7 @@ fn test_vec_is_zero_fail(x_vec: [u32; 4], expected: [u32; 4]) {
         .map(|x| BabyBear::from_canonical_u32(*x))
         .collect();
 
-    let chip = IsZeroChip {};
+    let chip = IsZeroAir {};
 
     let mut trace = chip.generate_trace(x_vec);
 

@@ -1,10 +1,10 @@
 use super::columns::XorLimbsCols;
-use afs_stark_backend::interaction::{Chip, Interaction};
+use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_field::PrimeField64;
 
-use super::XorLimbsChip;
+use super::XorLimbsAir;
 
-impl<F: PrimeField64, const N: usize, const M: usize> Chip<F> for XorLimbsChip<N, M> {
+impl<F: PrimeField64, const N: usize, const M: usize> AirBridge<F> for XorLimbsAir<N, M> {
     fn sends(&self) -> Vec<Interaction<F>> {
         let num_cols = XorLimbsCols::<N, M, F>::get_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();

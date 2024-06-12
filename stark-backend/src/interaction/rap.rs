@@ -13,7 +13,7 @@ use crate::{
     rap::{PermutationAirBuilderWithExposedValues, Rap},
 };
 
-use super::{utils::generate_rlc_elements, Chip, InteractiveAir};
+use super::{utils::generate_rlc_elements, AirBridge, InteractiveAir};
 
 impl<AB, A> Rap<AB> for A
 where
@@ -45,7 +45,7 @@ where
 /// and one virtual column for the partial sum of log derivative.
 pub fn eval_permutation_constraints<C, AB>(chip: &C, builder: &mut AB, cumulative_sum: AB::EF)
 where
-    C: Chip<AB::F>,
+    C: AirBridge<AB::F>,
     AB: PairBuilder + PermutationAirBuilder + PartitionedAirBuilder,
 {
     let rand_elems = builder.permutation_randomness().to_vec();
