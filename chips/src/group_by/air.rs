@@ -4,23 +4,19 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use crate::is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols};
+use crate::is_equal_vec::columns::{IsEqualVecCols, IsEqualVecIOCols};
 use crate::sub_chip::SubAir;
 
-use super::columns::AssertSortedCols;
-use super::AssertSortedAir;
+use super::columns::GroupByCols;
+use super::GroupByAir;
 
-impl<F: Field> BaseAir<F> for AssertSortedAir {
+impl<F: Field> BaseAir<F> for GroupByAir {
     fn width(&self) -> usize {
-        AssertSortedCols::<F>::get_width(
-            self.is_less_than_tuple_air().limb_bits().clone(),
-            self.is_less_than_tuple_air().decomp(),
-            self.is_less_than_tuple_air().tuple_len(),
-        )
+        GroupByCols::<F>::get_width(self)
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for AssertSortedAir {
+impl<AB: AirBuilder> Air<AB> for GroupByAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -29,40 +25,33 @@ impl<AB: AirBuilder> Air<AB> for AssertSortedAir {
         let local: &[AB::Var] = (*local).borrow();
         let next: &[AB::Var] = (*next).borrow();
 
-        let local_cols = AssertSortedCols::<AB::Var>::from_slice(
-            local,
-            self.is_less_than_tuple_air().limb_bits().clone(),
-            self.is_less_than_tuple_air().decomp(),
-            self.is_less_than_tuple_air().tuple_len(),
-        );
+        let local_cols = GroupByCols::<AB::Var>::from_slice(local, self);
 
-        let next_cols = AssertSortedCols::<AB::Var>::from_slice(
-            next,
-            self.is_less_than_tuple_air().limb_bits().clone(),
-            self.is_less_than_tuple_air().decomp(),
-            self.is_less_than_tuple_air().tuple_len(),
-        );
+        let next_cols = GroupByCols::<AB::Var>::from_slice(next, self);
 
-        // constrain that the current key is less than the next
-        builder
-            .when_transition()
-            .assert_one(local_cols.less_than_next_key);
-
-        let is_less_than_tuple_cols = IsLessThanTupleCols {
-            io: IsLessThanTupleIOCols {
-                x: local_cols.key,
-                y: next_cols.key,
-                tuple_less_than: local_cols.less_than_next_key,
+        let is_equal_vec_cols = IsEqualVecCols {
+            io: IsEqualVecIOCols {
+                x: local_cols.sorted_group_by,
+                y: next_cols.sorted_group_by,
+                prod: local_cols.eq_next,
             },
-            aux: local_cols.is_less_than_tuple_aux,
+            aux: local_cols.is_equal_vec_aux,
         };
 
-        // constrain the indicator that we used to check whether the current key < next key is correct
+        // constrain eq_next to hold the correct value
         SubAir::eval(
-            self.is_less_than_tuple_air(),
+            &self.is_equal_vec_air,
             &mut builder.when_transition(),
-            is_less_than_tuple_cols.io,
-            is_less_than_tuple_cols.aux,
+            is_equal_vec_cols.io,
+            is_equal_vec_cols.aux,
+        );
+        builder.when_last_row().assert_zero(local_cols.eq_next);
+
+        builder.assert_one(local_cols.eq_next + local_cols.is_final);
+
+        builder.when_transition().assert_eq(
+            next_cols.partial_aggregated,
+            local_cols.eq_next * local_cols.partial_aggregated + local_cols.aggregated,
         );
     }
 }

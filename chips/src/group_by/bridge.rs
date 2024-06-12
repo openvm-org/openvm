@@ -1,43 +1,41 @@
-use crate::{
-    is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
-    sub_chip::SubAirBridge,
-};
-
-use super::columns::AssertSortedCols;
 use afs_stark_backend::interaction::{AirBridge, Interaction};
+use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
-use super::AssertSortedAir;
+use super::GroupByAir;
 
-impl<F: PrimeField64> AirBridge<F> for AssertSortedAir {
+impl<F: PrimeField64> AirBridge<F> for GroupByAir {
     fn sends(&self) -> Vec<Interaction<F>> {
-        let num_cols = AssertSortedCols::<F>::get_width(
-            self.is_less_than_tuple_air().limb_bits().clone(),
-            self.is_less_than_tuple_air().decomp(),
-            self.is_less_than_tuple_air().tuple_len(),
-        );
-        let all_cols = (0..num_cols).collect::<Vec<usize>>();
+        let internal_sent_fields = (0..self.page_width)
+            .map(|i| VirtualPairCol::single_main(i))
+            .collect();
+        let output_sent_fields = (self.page_width..self.page_width + self.group_by_cols.len() + 1)
+            .map(|i| VirtualPairCol::single_main(i))
+            .collect();
 
-        let cols_numbered = AssertSortedCols::<usize>::from_slice(
-            &all_cols,
-            self.is_less_than_tuple_air().limb_bits().clone(),
-            self.is_less_than_tuple_air().decomp(),
-            self.is_less_than_tuple_air().tuple_len(),
-        );
-
-        // range check the decompositions of x within aux columns; here the io doesn't matter
-        let is_less_than_tuple_cols = IsLessThanTupleCols {
-            io: IsLessThanTupleIOCols {
-                x: cols_numbered.key.clone(),
-                y: cols_numbered.key.clone(),
-                tuple_less_than: cols_numbered.less_than_next_key,
+        vec![
+            Interaction {
+                fields: internal_sent_fields,
+                count: VirtualPairCol::one(),
+                argument_index: self.internal_bus,
             },
-            aux: cols_numbered.is_less_than_tuple_aux,
-        };
+            Interaction {
+                fields: output_sent_fields,
+                count: VirtualPairCol::single_main(self.page_width + self.group_by_cols.len() + 1),
+                argument_index: self.output_bus,
+            },
+        ]
+    }
 
-        let subchip_interactions =
-            SubAirBridge::<F>::sends(self.is_less_than_tuple_air(), is_less_than_tuple_cols);
-
-        subchip_interactions
+    fn receives(&self) -> Vec<Interaction<F>> {
+        let internal_received_fields = (self.page_width
+            ..self.page_width + self.group_by_cols.len())
+            .map(|i| VirtualPairCol::single_main(i))
+            .collect();
+        vec![Interaction {
+            fields: internal_received_fields,
+            count: VirtualPairCol::one(),
+            argument_index: self.internal_bus,
+        }]
     }
 }

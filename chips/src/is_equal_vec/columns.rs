@@ -22,6 +22,10 @@ impl<T: Clone> IsEqualVecAuxCols<T> {
 
         Self { prods, invs }
     }
+
+    pub fn flatten(&self) -> Vec<T> {
+        self.prods.iter().chain(self.invs.iter()).cloned().collect()
+    }
 }
 
 #[derive(Default)]
