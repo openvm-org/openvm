@@ -1,14 +1,16 @@
-use afs_chips::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
-use afs_stark_backend::{
-    keygen::MultiStarkKeygenBuilder,
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+use std::{
+    fs::{self, File},
+    io::{BufWriter, Write},
 };
+
+use afs_chips::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
+use afs_stark_backend::keygen::MultiStarkKeygenBuilder;
 use afs_test_utils::config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config};
 use clap::Parser;
 use color_eyre::eyre::Result;
 use p3_util::log2_strict_usize;
 
-use crate::common::config::Config;
+use crate::common::config::{Config, PageMode};
 
 /// `afs keygen` command
 /// Uses information from config.toml to generate partial proving and verifying keys and
@@ -27,9 +29,18 @@ pub struct KeygenCommand {
 
 impl KeygenCommand {
     /// Execute the `keygen` command
-    pub fn execute(self, _config: &Config) -> Result<()> {
+    pub fn execute(self, config: &Config) -> Result<()> {
         // WIP: Wait for ReadWrite chip in https://github.com/axiom-crypto/afs-prototype/pull/45
-        match Config
+        match config.page.mode {
+            PageMode::ReadWrite => self.execute_rw(
+                config.page.idx_len as usize,
+                config.page.data_len as usize,
+                config.page.max_rw_ops as usize,
+                config.page.height as usize,
+                config.schema.limb_size as usize,
+            )?,
+            PageMode::ReadOnly => panic!(),
+        }
         Ok(())
     }
 
@@ -40,7 +51,7 @@ impl KeygenCommand {
         max_ops: usize,
         height: usize,
         limb_bits: usize,
-    ) {
+    ) -> Result<()> {
         let page_bus_index = 0;
         let checker_final_bus_index = 1;
         let range_bus_index = 2;
@@ -116,5 +127,20 @@ impl KeygenCommand {
 
         let partial_pk = keygen_builder.generate_partial_pk();
         let partial_vk = partial_pk.partial_vk();
+        let encoded_pk: Vec<u8> = bincode::serialize(&partial_pk)?;
+        let encoded_vk: Vec<u8> = bincode::serialize(&partial_vk)?;
+        let pk_path = self.output_folder.clone() + "/partial.pk";
+        let vk_path = self.output_folder.clone() + "/partial.vk";
+        fs::create_dir_all(self.output_folder).unwrap();
+        write_bytes(&encoded_pk, pk_path).unwrap();
+        write_bytes(&encoded_vk, vk_path).unwrap();
+        Ok(())
     }
+}
+
+fn write_bytes(bytes: &Vec<u8>, path: String) -> Result<()> {
+    let file = File::create(path).unwrap();
+    let mut writer = BufWriter::new(file);
+    writer.write(bytes).unwrap();
+    Ok(())
 }
