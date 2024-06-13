@@ -11,14 +11,15 @@ pub enum PageMode {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PageConfig {
     pub height: u32,
-    pub width: u32,
+    pub idx_len: u32,
+    pub data_len: u32,
     pub mode: PageMode,
     pub max_rw_ops: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SchemaConfig {
-    pub key_length: u32,
+    pub idx_len: u32,
     pub limb_size: u32,
 }
 

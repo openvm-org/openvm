@@ -16,3 +16,9 @@ serde_derive = "1.0.203"
 serde_json = "1.0.117"
 tokio = { version = "1.38.0", features = ["rt", "macros"] }
 toml = "0.8.14"
+p3-baby-bear = { workspace = true }
+p3-util = { workspace = true }
+afs-stark-backend = { path = "../../stark-backend" }
+afs-derive = { path = "../../derive" }
+afs-test-utils = { path = "../../test-utils" }
+afs-chips = { path = "../../chips"}

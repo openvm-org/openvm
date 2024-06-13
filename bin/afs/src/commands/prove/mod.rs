@@ -19,7 +19,7 @@ pub struct ProveCommand {
         required = false,
         default_value = "output/prove.bin"
     )]
-    pub output_file: String
+    pub output_file: String,
 }
 
 impl ProveCommand {
