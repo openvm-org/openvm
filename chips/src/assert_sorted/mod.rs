@@ -34,16 +34,13 @@ pub struct AssertSortedChip {
 impl AssertSortedChip {
     pub fn new(
         bus_index: usize,
-        range_max: u32,
         limb_bits: Vec<usize>,
         decomp: usize,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
         Self {
             air: AssertSortedAir {
-                is_less_than_tuple_air: IsLessThanTupleAir::new(
-                    bus_index, range_max, limb_bits, decomp,
-                ),
+                is_less_than_tuple_air: IsLessThanTupleAir::new(bus_index, limb_bits, decomp),
             },
             range_checker,
         }

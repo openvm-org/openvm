@@ -16,8 +16,6 @@ pub mod trace;
 pub struct IsLessThanAir {
     /// The bus index for sends to range chip
     bus_index: usize,
-    /// The maximum range for the range checker
-    range_max: u32,
     /// The maximum number of bits for the numbers to compare
     limb_bits: usize,
     /// The number of bits to decompose each number into, for less than checking
@@ -28,10 +26,9 @@ pub struct IsLessThanAir {
 }
 
 impl IsLessThanAir {
-    pub fn new(bus_index: usize, range_max: u32, limb_bits: usize, decomp: usize) -> Self {
+    pub fn new(bus_index: usize, limb_bits: usize, decomp: usize) -> Self {
         Self {
             bus_index,
-            range_max,
             limb_bits,
             decomp,
             num_limbs: (limb_bits + decomp - 1) / decomp,
@@ -53,14 +50,12 @@ pub struct IsLessThanChip {
 impl IsLessThanChip {
     pub fn new(
         bus_index: usize,
-        range_max: u32,
         limb_bits: usize,
         decomp: usize,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
         let air = IsLessThanAir {
             bus_index,
-            range_max,
             limb_bits,
             decomp,
             num_limbs: (limb_bits + decomp - 1) / decomp,
