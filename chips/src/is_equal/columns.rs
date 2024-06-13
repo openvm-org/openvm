@@ -16,6 +16,7 @@ pub struct IsEqualIOCols<T> {
     pub is_equal: T,
 }
 
+#[derive(Debug)]
 pub struct IsEqualAuxCols<T> {
     pub inv: T,
 }

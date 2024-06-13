@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use p3_field::PrimeField64;
+use p3_field::{PrimeField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
@@ -29,7 +29,7 @@ impl IsLessThanChip {
     }
 }
 
-impl<F: PrimeField64> LocalTraceInstructions<F> for IsLessThanAir {
+impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanAir {
     type LocalInput = (u32, u32, Arc<RangeCheckerGateChip>);
 
     fn generate_trace_row(&self, input: (u32, u32, Arc<RangeCheckerGateChip>)) -> Self::Cols<F> {
@@ -50,6 +50,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for IsLessThanAir {
         for i in 0..self.num_limbs() {
             let bits = (lower_u32 >> (i * self.decomp)) & ((1 << self.decomp) - 1);
             lower_decomp.push(F::from_canonical_u32(bits));
+
             range_checker.add_count(bits);
         }
 

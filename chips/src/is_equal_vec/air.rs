@@ -1,8 +1,7 @@
 use std::borrow::Borrow;
 
 use afs_stark_backend::interaction::AirBridge;
-use p3_air::AirBuilder;
-use p3_air::{Air, BaseAir};
+use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
 use p3_field::Field;
 use p3_matrix::Matrix;

@@ -31,6 +31,7 @@ impl<T: Clone> IsLessThanTupleIOCols<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct IsLessThanTupleAuxCols<T> {
     pub less_than: Vec<T>,
     pub less_than_aux: Vec<IsLessThanAuxCols<T>>,
@@ -40,6 +41,8 @@ pub struct IsLessThanTupleAuxCols<T> {
 
 impl<T: Clone> IsLessThanTupleAuxCols<T> {
     pub fn from_slice(slc: &[T], limb_bits: Vec<usize>, decomp: usize, tuple_len: usize) -> Self {
+        assert!(limb_bits.len() == tuple_len);
+
         let mut curr_start_idx = 0;
         let mut curr_end_idx = tuple_len;
 
@@ -126,7 +129,9 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
 
         flattened
     }
+}
 
+impl<T> IsLessThanTupleAuxCols<T> {
     pub fn get_width(limb_bits: Vec<usize>, decomp: usize, tuple_len: usize) -> usize {
         let mut width = 0;
         // for the less than indicator
