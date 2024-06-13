@@ -7,7 +7,7 @@ use logical_interface::{
 };
 
 #[derive(Debug, Parser)]
-pub struct InterfaceCommand {
+pub struct ReadCommand {
     #[arg(
         long = "afi-file",
         short = 'f',
@@ -36,9 +36,9 @@ pub struct InterfaceCommand {
     pub print: bool,
 }
 
-/// `mock interface` subcommand
-impl InterfaceCommand {
-    /// Execute the `mock interface` command
+/// `mock read` subcommand
+impl ReadCommand {
+    /// Execute the `mock read` command
     pub fn execute(self) -> Result<()> {
         println!("afi_file_path: {}", self.afi_file_path);
         let _instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
@@ -59,7 +59,7 @@ impl InterfaceCommand {
             Some(table) => {
                 if self.print {
                     println!("Table ID: {}", table.id);
-                    println!("Table Metadata {:?}", table.metadata);
+                    println!("{:?}", table.metadata);
                     for (index, data) in table.body.iter() {
                         println!("{:?}: {:?}", index, data);
                     }

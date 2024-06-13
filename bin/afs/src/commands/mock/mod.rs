@@ -1,5 +1,5 @@
 mod afi;
-mod interface;
+mod read;
 
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::Result;
@@ -15,8 +15,8 @@ pub enum MockSubcommands {
     /// `afi` subcommand
     Afi(afi::AfiCommand),
 
-    /// `interface` subcommand
-    Interface(interface::InterfaceCommand),
+    /// `read` subcommand
+    Read(read::ReadCommand),
 }
 
 impl MockCommand {
@@ -29,12 +29,12 @@ impl MockCommand {
                 };
                 cmd.execute()
             }
-            MockSubcommands::Interface(interface) => {
-                let cmd = interface::InterfaceCommand {
-                    afi_file_path: interface.afi_file_path.clone(),
-                    db_file_path: interface.db_file_path.clone(),
-                    table_id: interface.table_id.clone(),
-                    print: interface.print,
+            MockSubcommands::Read(read) => {
+                let cmd = read::ReadCommand {
+                    afi_file_path: read.afi_file_path.clone(),
+                    db_file_path: read.db_file_path.clone(),
+                    table_id: read.table_id.clone(),
+                    print: read.print,
                 };
                 cmd.execute()
             }
