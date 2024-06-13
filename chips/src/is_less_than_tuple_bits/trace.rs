@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -65,12 +67,16 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for IsLessThanTupleBitsAir {
             is_equal.push(curr_is_equal_row.io.is_equal);
             is_equal_aux.push(curr_is_equal_row.aux);
 
-            let less_than_here = if x[i] < y[i] {
-                F::one()
-            } else if x[i] == y[i] && i > 0 {
-                less_than_cumulative[i - 1]
-            } else {
-                F::zero()
+            let less_than_here = match x[i].cmp(&y[i]) {
+                Ordering::Less => F::one(),
+                Ordering::Equal => {
+                    if i > 0 {
+                        less_than_cumulative[i - 1]
+                    } else {
+                        F::zero()
+                    }
+                }
+                Ordering::Greater => F::zero(),
             };
 
             less_than_cumulative.push(less_than_here);

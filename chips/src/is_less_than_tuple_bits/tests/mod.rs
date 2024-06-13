@@ -9,6 +9,7 @@ use p3_field::AbstractField;
 
 #[test]
 fn test_flatten_fromslice_roundtrip() {
+    std::env::set_var("RUST_BACKTRACE", "1");
     let limb_bits = vec![16, 8, 20, 20];
     let tuple_len = 4;
 
