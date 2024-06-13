@@ -1,0 +1,9 @@
+[page]
+width = 32
+height = 128
+mode = "ReadWrite" # options: "ReadOnly", "ReadWrite"
+max_rw_ops = 128
+
+[schema]
+key_length = 2
+limb_size = 4

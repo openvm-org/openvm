@@ -60,14 +60,14 @@ impl<T: Clone> AssertSortedCols<T> {
             width += num_limbs + 1;
         }
 
-        // for the is_equal indicators
+        // prods
         width += key_vec_len;
 
         // for the inverses
         width += key_vec_len;
 
-        // for the cumulative is_equal and less_than
-        width += 2 * key_vec_len;
+        // for the cumulative less_than
+        width += key_vec_len;
 
         width
     }

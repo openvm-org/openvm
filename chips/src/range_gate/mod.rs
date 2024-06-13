@@ -7,7 +7,7 @@ pub mod trace;
 
 #[derive(Default)]
 pub struct RangeCheckerGateAir {
-    bus_index: usize,
+    pub bus_index: usize,
     pub range_max: u32,
 }
 
