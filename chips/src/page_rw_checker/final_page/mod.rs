@@ -1,25 +1,18 @@
-use crate::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
+use crate::final_page::FinalPageAir;
 
 pub mod air;
 pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-#[cfg(test)]
-pub mod tests;
-
-pub struct FinalPageAir {
+#[derive(Clone)]
+pub struct MyFinalPageAir {
     page_bus_index: usize,
-    range_bus_index: usize,
 
-    idx_len: usize,
-    data_len: usize,
-
-    idx_limb_bits: usize,
-    idx_decomp: usize,
+    final_air: FinalPageAir,
 }
 
-impl FinalPageAir {
+impl MyFinalPageAir {
     pub fn new(
         page_bus_index: usize,
         range_bus_index: usize,
@@ -30,24 +23,22 @@ impl FinalPageAir {
     ) -> Self {
         Self {
             page_bus_index,
-            range_bus_index,
-            idx_len,
-            data_len,
-            idx_limb_bits,
-            idx_decomp,
+            final_air: FinalPageAir::new(
+                range_bus_index,
+                idx_len,
+                data_len,
+                idx_limb_bits,
+                idx_decomp,
+            ),
         }
     }
 
     pub fn page_width(&self) -> usize {
-        1 + self.idx_len + self.data_len
+        self.final_air.page_width()
     }
 
     pub fn aux_width(&self) -> usize {
-        IsLessThanTupleAuxCols::<usize>::get_width(
-            vec![self.idx_limb_bits; self.idx_len],
-            self.idx_decomp,
-            self.idx_len,
-        ) + 2
+        self.final_air.aux_width() + 1
     }
 
     pub fn air_width(&self) -> usize {

@@ -9,7 +9,7 @@ use p3_matrix::{
 };
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use super::{final_page::FinalPageAir, offline_checker::OfflineChecker, page::PageAir};
+use super::{final_page::MyFinalPageAir, offline_checker::OfflineChecker, page::PageAir};
 use crate::range_gate::RangeCheckerGateChip;
 
 #[derive(PartialEq, Clone, Debug)]
@@ -43,7 +43,7 @@ where
 {
     pub init_chip: PageAir,
     pub offline_checker: OfflineChecker,
-    pub final_chip: FinalPageAir,
+    pub final_chip: MyFinalPageAir,
 
     init_chip_trace: Option<DenseMatrix<Val<SC>>>,
     offline_checker_trace: Option<DenseMatrix<Val<SC>>>,
@@ -82,7 +82,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
                 Val::<SC>::bits() - 1,
                 idx_decomp,
             ),
-            final_chip: FinalPageAir::new(
+            final_chip: MyFinalPageAir::new(
                 page_bus_index,
                 range_bus_index,
                 idx_len,
@@ -190,7 +190,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         // HashSet of all indices used in operations
         let internal_indices = ops.iter().map(|op| op.idx.clone()).collect();
 
-        self.final_chip = FinalPageAir::new(
+        self.final_chip = MyFinalPageAir::new(
             page_bus_index,
             range_bus_index,
             idx_len,

@@ -13,64 +13,37 @@ use afs_test_utils::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
     },
     engine::StarkEngine,
-    interaction::dummy_interaction_air::DummyInteractionAir,
     utils::create_seeded_rng,
 };
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
-
-type Val = BabyBear;
 
 fn test_single_page(
     engine: &BabyBearPoseidon2Engine,
     page: Vec<Vec<u32>>,
     final_page_chip: &super::FinalPageAir,
     range_checker: Arc<RangeCheckerGateChip>,
-    page_sender: &DummyInteractionAir,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
     partial_pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
 ) -> Result<(), VerificationError> {
-    let page_width = page[0].len();
-
     let page_trace = final_page_chip.gen_page_trace::<BabyBearPoseidon2Config>(page.clone());
     let page_prover_data = trace_builder.committer.commit(vec![page_trace.clone()]);
 
-    let aux_trace = final_page_chip.gen_aux_trace::<BabyBearPoseidon2Config>(
-        page.clone(),
-        range_checker.clone(),
-        HashSet::new(),
-    );
+    let aux_trace = final_page_chip
+        .gen_aux_trace::<BabyBearPoseidon2Config>(page.clone(), range_checker.clone());
     let range_checker_trace = range_checker.generate_trace();
-
-    let page_receiver_trace = RowMajorMatrix::new(
-        page.iter()
-            .flat_map(|row| {
-                row.iter()
-                    .cloned()
-                    .map(Val::from_canonical_u32)
-                    .collect::<Vec<Val>>()
-            })
-            .collect(),
-        page_width,
-    );
 
     trace_builder.clear();
 
     trace_builder.load_cached_trace(page_trace, page_prover_data);
     trace_builder.load_trace(aux_trace);
     trace_builder.load_trace(range_checker_trace);
-    trace_builder.load_trace(page_receiver_trace);
 
     trace_builder.commit_current();
 
     let partial_vk = partial_pk.partial_vk();
 
-    let main_trace_data = trace_builder.view(
-        &partial_vk,
-        vec![final_page_chip, &range_checker.air, page_sender],
-    );
+    let main_trace_data =
+        trace_builder.view(&partial_vk, vec![final_page_chip, &range_checker.air]);
 
     let pis = vec![vec![]; partial_vk.per_air.len()];
 
@@ -84,7 +57,7 @@ fn test_single_page(
     verifier.verify(
         &mut challenger,
         partial_vk,
-        vec![final_page_chip, &range_checker.air, page_sender],
+        vec![final_page_chip, &range_checker.air],
         proof,
         &pis,
     )
@@ -93,8 +66,7 @@ fn test_single_page(
 #[test]
 fn final_page_chip_test() {
     let mut rng = create_seeded_rng();
-    let page_bus_index = 0;
-    let range_bus_index = 1;
+    let range_bus_index = 0;
 
     use super::FinalPageAir;
 
@@ -109,7 +81,7 @@ fn final_page_chip_test() {
     let idx_limb_bits = 5;
     let idx_decomp = 2;
 
-    let max_val: u32 = 1 << idx_limb_bits;
+    let max_idx: u32 = 1 << idx_limb_bits;
 
     let allocated_rows = ((page_height as f64) * (3.0 / 4.0)) as usize;
 
@@ -118,7 +90,7 @@ fn final_page_chip_test() {
     while all_idx.len() < allocated_rows {
         all_idx.insert(
             (0..idx_len)
-                .map(|_| (rng.gen::<u32>() % max_val))
+                .map(|_| (rng.gen::<u32>() % max_idx))
                 .collect::<Vec<u32>>(),
         );
     }
@@ -130,31 +102,26 @@ fn final_page_chip_test() {
             if x < allocated_rows {
                 iter::once(1)
                     .chain(all_idx[x].iter().cloned())
-                    .chain((0..data_len).map(|_| (rng.gen::<u32>() % max_val)))
+                    .chain((0..data_len).map(|_| (rng.gen::<u32>() % max_idx)))
                     .collect()
             } else {
                 iter::once(0)
-                    .chain((0..idx_len + data_len).map(|_| (rng.gen::<u32>() % max_val)))
+                    .chain((0..idx_len + data_len).map(|_| (rng.gen::<u32>() % max_idx)))
                     .collect()
             }
         })
         .collect();
 
     let final_page_chip = FinalPageAir::new(
-        page_bus_index,
         range_bus_index,
         idx_len,
         data_len,
         idx_limb_bits,
         idx_decomp,
     );
-    let range_checker = Arc::new(RangeCheckerGateChip::new(
-        range_bus_index,
-        1 << idx_limb_bits,
-    ));
-    let page_sender = DummyInteractionAir::new(page_width - 1, true, page_bus_index);
+    let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus_index, 1 << idx_decomp));
 
-    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(idx_limb_bits));
+    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(idx_decomp));
 
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
@@ -167,8 +134,7 @@ fn final_page_chip_test() {
         vec![page_data_ptr, page_aux_ptr],
     );
 
-    keygen_builder.add_air(&range_checker.air, 1 << idx_limb_bits, 0);
-    keygen_builder.add_air(&page_sender, page_height, 0);
+    keygen_builder.add_air(&range_checker.air, 1 << idx_decomp, 0);
 
     let partial_pk = keygen_builder.generate_partial_pk();
 
@@ -180,7 +146,6 @@ fn final_page_chip_test() {
         page.clone(),
         &final_page_chip,
         range_checker.clone(),
-        &page_sender,
         &mut trace_builder,
         &partial_pk,
     )
@@ -198,7 +163,6 @@ fn final_page_chip_test() {
             page,
             &final_page_chip,
             range_checker.clone(),
-            &page_sender,
             &mut trace_builder,
             &partial_pk,
         ),
