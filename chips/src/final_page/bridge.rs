@@ -15,7 +15,6 @@ impl<F: PrimeField64> SubAirBridge<F> for FinalPageAir {
     fn sends(&self, col_indices: FinalPageCols<usize>) -> Vec<Interaction<F>> {
         let lt_air = IsLessThanTupleAir::new(
             self.range_bus_index,
-            1 << self.idx_decomp,
             vec![self.idx_limb_bits; self.idx_len],
             self.idx_decomp,
         );

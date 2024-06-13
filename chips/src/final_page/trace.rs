@@ -44,7 +44,6 @@ impl FinalPageAir {
     {
         let lt_chip = IsLessThanTupleAir::new(
             self.range_bus_index,
-            1 << self.idx_limb_bits,
             vec![self.idx_limb_bits; self.idx_len],
             self.idx_decomp,
         );

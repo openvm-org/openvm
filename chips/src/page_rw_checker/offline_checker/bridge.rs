@@ -55,7 +55,6 @@ impl<F: PrimeField64> SubAirBridge<F> for OfflineChecker {
 
         let lt_air = IsLessThanTupleAir::new(
             self.range_bus_index,
-            1 << self.idx_decomp,
             self.idx_clk_limb_bits.clone(),
             self.idx_decomp,
         );

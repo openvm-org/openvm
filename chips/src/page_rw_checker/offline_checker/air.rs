@@ -131,7 +131,6 @@ where
 
         let lt_chip = IsLessThanTupleAir::new(
             self.range_bus_index,
-            1 << self.idx_decomp,
             self.idx_clk_limb_bits.clone(),
             self.idx_decomp,
         );

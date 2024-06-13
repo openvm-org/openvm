@@ -36,12 +36,8 @@ impl OfflineChecker {
         let is_equal_idx = IsEqualVecAir::new(self.idx_len);
         let is_equal_data = IsEqualVecAir::new(self.data_len);
 
-        let lt_chip = IsLessThanTupleAir::new(
-            usize::MAX,
-            1 << self.idx_decomp,
-            self.idx_clk_limb_bits.clone(),
-            self.idx_decomp,
-        );
+        let lt_chip =
+            IsLessThanTupleAir::new(usize::MAX, self.idx_clk_limb_bits.clone(), self.idx_decomp);
 
         let mut rows_allocated = 0;
         while rows_allocated < page.len() && page[rows_allocated][0] == 1 {
