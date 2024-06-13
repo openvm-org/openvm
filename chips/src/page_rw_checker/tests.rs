@@ -299,8 +299,6 @@ fn page_read_write_test() {
     // Testing a partially-allocated page
     let rows_allocated = rng.gen::<usize>() % (page_height + 1);
     for i in rows_allocated..page_height {
-        page[i][0] = 0;
-
         // Making sure the first operation using this index is a write
         let idx = page[i][1..idx_len + 1].to_vec();
         for op in ops.iter_mut() {
@@ -309,6 +307,9 @@ fn page_read_write_test() {
                 break;
             }
         }
+
+        // Zeroing out the row
+        page[i] = vec![0; idx_len + data_len + 1];
     }
 
     load_page_test(
@@ -339,9 +340,7 @@ fn page_read_write_test() {
             }
         }
 
-        let idx: Vec<u32> = (0..idx_len).map(|_| rng.gen::<u32>() % max_idx).collect();
-        let data: Vec<u32> = (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect();
-        page[i] = iter::once(0).chain(idx).chain(data).collect();
+        page[i] = vec![0; 1 + idx_len + data_len];
     }
 
     load_page_test(
