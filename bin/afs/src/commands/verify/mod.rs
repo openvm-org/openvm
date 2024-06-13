@@ -26,7 +26,7 @@ pub struct VerifyCommand {
 
 impl VerifyCommand {
     /// Execute the `verify` command
-    pub fn execute(self) -> Result<()> {
+    pub fn execute(&self) -> Result<()> {
         println!("Verifying proof file: {}", self.proof_file);
         // verify::verify_ops(&self.proof_file).await?;
         Ok(())

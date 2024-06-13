@@ -63,17 +63,10 @@ impl Cli {
                 cmd.execute().unwrap();
             }
             CliCommand::Prove(prove) => {
-                let cmd = ProveCommand {
-                    ops_file: prove.ops_file.clone(),
-                    output_file: prove.output_file.clone(),
-                };
-                cmd.execute().unwrap();
+                prove.execute(config).unwrap();
             }
             CliCommand::Verify(verify) => {
-                let cmd = VerifyCommand {
-                    proof_file: verify.proof_file.clone(),
-                };
-                cmd.execute().unwrap();
+                verify.execute().unwrap();
             }
         }
         cli

@@ -70,7 +70,7 @@ pub struct ProveCommand {
 
 impl ProveCommand {
     /// Execute the `prove` command
-    pub fn execute(self, config: &Config) -> Result<()> {
+    pub fn execute(&self, config: &Config) -> Result<()> {
         println!("Proving ops file: {}", self.afi_file_path);
         // prove::prove_ops(&self.ops_file).await?;
         let instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
@@ -179,8 +179,9 @@ impl ProveCommand {
         let prover = engine.prover();
 
         let mut challenger = engine.new_challenger();
-        let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
+        let proof: = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
         let encoded_proof: Vec<u8> = bincode::serialize(&proof).unwrap();
+        p3_dft::radix_2_dit_parallel::Radix2DitParallel;
         Ok(())
     }
 }
