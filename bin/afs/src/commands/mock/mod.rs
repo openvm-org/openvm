@@ -1,6 +1,6 @@
 mod afi;
 mod read;
-// mod write;
+mod write;
 
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::Result;
@@ -18,6 +18,9 @@ pub enum MockSubcommands {
 
     /// `read` subcommand
     Read(read::ReadCommand),
+
+    /// `write` subcommand
+    Write(write::WriteCommand),
 }
 
 impl MockCommand {
@@ -37,7 +40,15 @@ impl MockCommand {
                     print: read.print,
                 };
                 cmd.execute()
-            } // MockSubcommands::Write()
+            }
+            MockSubcommands::Write(write) => {
+                let cmd = write::WriteCommand {
+                    afi_file_path: write.afi_file_path.clone(),
+                    db_file_path: write.db_file_path.clone(),
+                    print: write.print,
+                };
+                cmd.execute()
+            }
         }
     }
 }

@@ -2,8 +2,7 @@ use alloy_primitives::U256;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{
-    afs_input_instructions::AfsInputInstructions, afs_interface::AfsInterface, mock_db::MockDb,
-    table::types::TableMetadata,
+    afs_interface::AfsInterface, mock_db::MockDb, table::types::TableMetadata,
 };
 
 #[derive(Debug, Parser)]

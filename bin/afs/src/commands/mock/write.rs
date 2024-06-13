@@ -16,9 +16,6 @@ pub struct WriteCommand {
     )]
     pub afi_file_path: String,
 
-    #[arg(long = "table-id", short = 't', help = "The table ID", required = true)]
-    pub table_id: String,
-
     #[arg(
         long = "db-file",
         short = 'd',
@@ -26,10 +23,43 @@ pub struct WriteCommand {
         required = false
     )]
     pub db_file_path: Option<String>,
+
+    #[arg(
+        long = "print",
+        short = 'p',
+        help = "Print the table",
+        required = false
+    )]
+    pub print: bool,
 }
 
 /// `mock read` subcommand
 impl WriteCommand {
     /// Execute the `mock read` command
-    pub fn execute(self) -> Result<()> {}
+    pub fn execute(self) -> Result<()> {
+        let mut db = if let Some(db_file_path) = self.db_file_path {
+            println!("db_file_path: {}", db_file_path);
+            MockDb::from_file(&db_file_path)
+        } else {
+            let default_table_metadata = TableMetadata::new(32, 1024);
+            MockDb::new(default_table_metadata)
+        };
+
+        println!("afi_file_path: {}", self.afi_file_path);
+        let instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
+        let table_id = instructions.header.table_id.clone();
+
+        let mut interface = AfsInterface::<U256, U256>::new(&mut db);
+        interface.load_input_file(&self.afi_file_path)?;
+        let table = interface.get_table(table_id).unwrap();
+        if self.print {
+            println!("Table ID: {}", table.id);
+            println!("{:?}", table.metadata);
+            for (index, data) in table.body.iter() {
+                println!("{:?}: {:?}", index, data);
+            }
+        }
+
+        Ok(())
+    }
 }
