@@ -1,14 +1,20 @@
-use afs_derive::AlignedBorrow;
-
 use super::GroupByAir;
 use crate::is_equal_vec::columns::IsEqualVecAuxCols;
+// use std::ops::Range;
 
 // Since GroupByChip contains a LessThanChip subchip and an IsEqualVecChip subchip, a subset of the
 // columns are those of the LessThanChip and IsEqualVecChip
-#[derive(AlignedBorrow)]
 pub struct GroupByCols<T> {
+    pub io: GroupByIOCols<T>,
+    pub aux: GroupByAuxCols<T>,
+}
+
+pub struct GroupByIOCols<T> {
     pub is_allocated: T,
     pub page: Vec<T>,
+}
+
+pub struct GroupByAuxCols<T> {
     pub sorted_group_by: Vec<T>,
     pub aggregated: T,
     pub partial_aggregated: T,
@@ -49,14 +55,15 @@ impl<T: Clone> GroupByCols<T> {
         );
 
         Self {
-            is_allocated,
-            page,
-            sorted_group_by,
-            aggregated,
-            partial_aggregated,
-            is_final,
-            eq_next,
-            is_equal_vec_aux,
+            io: GroupByIOCols { is_allocated, page },
+            aux: GroupByAuxCols {
+                sorted_group_by,
+                aggregated,
+                partial_aggregated,
+                is_final,
+                eq_next,
+                is_equal_vec_aux,
+            },
         }
     }
 
@@ -72,6 +79,9 @@ impl<T: Clone> GroupByCols<T> {
         let is_final_idx = partial_aggregated_idx + 1;
         let eq_next_idx = is_final_idx + 1;
         let is_equal_vec_aux_idxs = (eq_next_idx + 1, eq_next_idx + 1 + eq_vec_width);
+
+        // TODO replace with Range
+        // let page_range = Range::new(page_idxs.0, page_idxs.1);
 
         GroupByColsIndexMap {
             allocated_idx,

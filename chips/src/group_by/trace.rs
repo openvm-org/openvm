@@ -21,16 +21,6 @@ impl GroupByChip {
             })
             .collect();
 
-        // grouped_page.sort_by(|a, b| {
-        //     for &col_index in &self.air.group_by_cols {
-        //         match a[col_index].cmp(&b[col_index]) {
-        //             std::cmp::Ordering::Equal => continue,
-        //             non_eq => return non_eq,
-        //         }
-        //     }
-        //     std::cmp::Ordering::Equal
-        // });
-
         grouped_page.sort();
 
         let mut is_equal: Vec<Vec<F>> = grouped_page

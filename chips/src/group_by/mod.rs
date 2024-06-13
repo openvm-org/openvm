@@ -16,6 +16,7 @@ pub struct GroupByAir {
 
     is_equal_vec_air: IsEqualVecAir,
 
+    // does not include is_allocated column
     page_width: usize,
     group_by_cols: Vec<usize>,
     aggregated_col: usize,
