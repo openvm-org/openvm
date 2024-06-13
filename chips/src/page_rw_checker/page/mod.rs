@@ -5,7 +5,7 @@ pub mod trace;
 
 pub struct PageAir {
     page_bus: usize,
-    idx_len: usize,
+    pub idx_len: usize,
     data_len: usize,
 }
 

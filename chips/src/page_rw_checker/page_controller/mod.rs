@@ -143,14 +143,9 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         ));
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn load_page_and_ops(
         &mut self,
         mut page: Vec<Vec<u32>>,
-        idx_len: usize,
-        data_len: usize,
-        idx_limb_bits: usize,
-        idx_decomp: usize,
         ops: Vec<Operation>,
         trace_degree: usize,
         trace_committer: &mut TraceCommitter<SC>,
@@ -158,46 +153,20 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     where
         Val<SC>: PrimeField,
     {
-        // idx_decomp can't change between different pages since range_checker depends on it
-        assert!(1 << idx_decomp == self.range_checker.range_max());
-
         assert!(!page.is_empty());
         self.init_chip_trace = Some(self.get_page_trace(page.clone()));
 
-        let page_bus_index = self.offline_checker.page_bus_index;
-        let range_bus_index = self.offline_checker.range_bus_index;
-        let ops_bus_index = self.offline_checker.ops_bus_index;
-
-        self.init_chip = PageAir::new(page_bus_index, idx_len, data_len);
         self.init_chip_trace = Some(self.get_page_trace(page.clone()));
 
-        self.offline_checker = OfflineChecker::new(
-            page_bus_index,
-            range_bus_index,
-            ops_bus_index,
-            idx_len,
-            data_len,
-            idx_limb_bits,
-            Val::<SC>::bits() - 1,
-            idx_decomp,
-        );
         self.offline_checker_trace =
             Some(self.gen_ops_trace(&mut page, &ops, self.range_checker.clone(), trace_degree));
 
         // Sorting the page by (1-is_alloc, idx)
-        page.sort_by_key(|row| (1 - row[0], row[1..1 + idx_len].to_vec()));
+        page.sort_by_key(|row| (1 - row[0], row[1..1 + self.init_chip.idx_len].to_vec()));
 
         // HashSet of all indices used in operations
         let internal_indices = ops.iter().map(|op| op.idx.clone()).collect();
 
-        self.final_chip = MyFinalPageAir::new(
-            page_bus_index,
-            range_bus_index,
-            idx_len,
-            data_len,
-            idx_limb_bits,
-            idx_decomp,
-        );
         self.final_chip_trace = Some(self.get_page_trace(page.clone()));
         self.final_page_aux_trace = Some(self.final_chip.gen_aux_trace::<SC>(
             page.clone(),

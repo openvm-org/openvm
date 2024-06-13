@@ -31,9 +31,6 @@ type Val = BabyBear;
 fn load_page_test(
     engine: &BabyBearPoseidon2Engine,
     page_init: Vec<Vec<u32>>,
-    idx_len: usize,
-    data_len: usize,
-    idx_limb_bits: usize,
     idx_decomp: usize,
     ops: &Vec<Operation>,
     page_controller: &mut page_controller::PageController<BabyBearPoseidon2Config>,
@@ -48,10 +45,6 @@ fn load_page_test(
 
     let (page_traces, mut prover_data) = page_controller.load_page_and_ops(
         page_init.clone(),
-        idx_len,
-        data_len,
-        idx_limb_bits,
-        idx_decomp,
         ops.clone(),
         trace_degree,
         &mut trace_builder.committer,
@@ -282,9 +275,6 @@ fn page_read_write_test() {
     load_page_test(
         &engine,
         page.clone(),
-        idx_len,
-        data_len,
-        idx_limb_bits,
         idx_decomp,
         &ops,
         &mut page_controller,
@@ -315,9 +305,6 @@ fn page_read_write_test() {
     load_page_test(
         &engine,
         page.clone(),
-        idx_len,
-        data_len,
-        idx_limb_bits,
         idx_decomp,
         &ops,
         &mut page_controller,
@@ -346,9 +333,6 @@ fn page_read_write_test() {
     load_page_test(
         &engine,
         page.clone(),
-        idx_len,
-        data_len,
-        idx_limb_bits,
         idx_decomp,
         &ops,
         &mut page_controller,
@@ -371,9 +355,6 @@ fn page_read_write_test() {
     load_page_test(
         &engine,
         page.clone(),
-        idx_len,
-        data_len,
-        idx_limb_bits,
         idx_decomp,
         &ops,
         &mut page_controller,
@@ -402,9 +383,6 @@ fn page_read_write_test() {
         load_page_test(
             &engine,
             page.clone(),
-            idx_len,
-            data_len,
-            idx_limb_bits,
             idx_decomp,
             &ops,
             &mut page_controller,
@@ -433,9 +411,6 @@ fn page_read_write_test() {
         load_page_test(
             &engine,
             page.clone(),
-            idx_len,
-            data_len,
-            idx_limb_bits,
             idx_decomp,
             &ops,
             &mut page_controller,
@@ -478,9 +453,6 @@ fn page_read_write_test() {
         let _ = load_page_test(
             engine_ref,
             page.clone(),
-            idx_len,
-            data_len,
-            idx_limb_bits,
             idx_decomp,
             &ops,
             &mut page_controller,
