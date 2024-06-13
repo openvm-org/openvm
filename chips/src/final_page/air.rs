@@ -65,7 +65,8 @@ impl<AB: AirBuilder> SubAir<AB> for FinalPageAir {
     type AuxView = FinalPageAuxCols<AB::Var>;
 
     /// Ensuring the page is in the proper format: allocated rows come first
-    /// and are sorted by idx, which are distinct
+    /// and are sorted by idx, which are distinct. Moreover `idx` and `data`
+    /// for unallocated rows should be all zeros.
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux_next: Self::AuxView) {
         let (page_local, page_next) = (&io[0], &io[1]);
 
@@ -111,5 +112,14 @@ impl<AB: AirBuilder> SubAir<AB> for FinalPageAir {
             AB::Expr::one() - page_next.is_alloc,
             aux_next.lt_out.into(),
         ));
+
+        // Making sure `idx` and `data` for unallocated rows are all zeros
+        for i in 0..page_local.idx.len() {
+            builder.assert_zero((AB::Expr::one() - page_local.is_alloc) * page_local.idx[i]);
+        }
+
+        for i in 0..page_local.data.len() {
+            builder.assert_zero((AB::Expr::one() - page_local.is_alloc) * page_local.data[i]);
+        }
     }
 }

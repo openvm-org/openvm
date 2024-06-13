@@ -105,9 +105,7 @@ fn final_page_chip_test() {
                     .chain((0..data_len).map(|_| (rng.gen::<u32>() % max_idx)))
                     .collect()
             } else {
-                iter::once(0)
-                    .chain((0..idx_len + data_len).map(|_| (rng.gen::<u32>() % max_idx)))
-                    .collect()
+                vec![0; idx_len + data_len + 1]
             }
         })
         .collect();
