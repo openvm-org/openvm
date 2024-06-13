@@ -24,13 +24,14 @@ where
     pub t2_chip: TableAir,
     pub final_chip: FinalPageAir,
 
-    init_chip_trace: Option<DenseMatrix<Val<SC>>>,
-    offline_checker_trace: Option<DenseMatrix<Val<SC>>>,
-    final_chip_trace: Option<DenseMatrix<Val<SC>>>,
-    final_page_aux_trace: Option<DenseMatrix<Val<SC>>>,
+    t1_trace: Option<DenseMatrix<Val<SC>>>,
+    t2_trace: Option<DenseMatrix<Val<SC>>>,
+    output_main_trace: Option<DenseMatrix<Val<SC>>>,
+    output_aux_trace: Option<DenseMatrix<Val<SC>>>,
 
-    init_page_commitment: Option<Com<SC>>,
-    final_page_commitment: Option<Com<SC>>,
+    t1_commitment: Option<Com<SC>>,
+    t2_commitment: Option<Com<SC>>,
+    output_commitment: Option<Com<SC>>,
 
     pub range_checker: Arc<RangeCheckerGateChip>,
 }
@@ -46,9 +47,10 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         t2_output_bus_index: usize,
         fkey_start: usize,
         fkey_end: usize,
-        ops_bus_index: usize,
-        idx_len: usize,
-        data_len: usize,
+        t1_idx_len: usize,
+        t1_data_len: usize,
+        t2_idx_len: usize,
+        t2_data_len: usize,
         idx_limb_bits: usize,
         idx_decomp: usize,
     ) -> Self
@@ -57,16 +59,16 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     {
         Self {
             t1_chip: TableAir::new(
-                idx_len,
-                data_len,
+                t1_idx_len,
+                t1_data_len,
                 TableType::T1 {
                     t1_intersector_bus_index,
                     t1_output_bus_index,
                 },
             ),
             t2_chip: TableAir::new(
-                idx_len,
-                data_len,
+                t2_idx_len,
+                t2_data_len,
                 TableType::T2 {
                     fkey_start,
                     fkey_end,
@@ -75,16 +77,29 @@ impl<SC: StarkGenericConfig> PageController<SC> {
                     t2_output_bus_index,
                 },
             ),
-            final_chip: FinalPageAir::new {},
+            final_chip: FinalPageAir::new(
+                range_bus_index,
+                t2_idx_len,
+                t1_data_len + t2_data_len,
+                idx_limb_bits,
+                idx_decomp,
+            ),
+
+            t1_trace: None,
+            t2_trace: None,
+            output_main_trace: None,
+            output_aux_trace: None,
+
+            t1_commitment: None,
+            t2_commitment: None,
+            output_commitment: None,
+
+            range_checker: Arc::new(RangeCheckerGateChip::new(range_bus_index, 1 << idx_decomp)),
         }
     }
 
-    pub fn offline_checker_trace(&self) -> DenseMatrix<Val<SC>> {
-        self.offline_checker_trace.clone().unwrap()
-    }
-
-    pub fn final_page_aux_trace(&self) -> DenseMatrix<Val<SC>> {
-        self.final_page_aux_trace.clone().unwrap()
+    pub fn output_aux_trace(&self) -> DenseMatrix<Val<SC>> {
+        self.output_aux_trace.clone().unwrap()
     }
 
     pub fn range_checker_trace(&self) -> DenseMatrix<Val<SC>>
@@ -94,8 +109,11 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         self.range_checker.generate_trace()
     }
 
-    fn get_page_trace(&self, page: Vec<Vec<u32>>) -> DenseMatrix<Val<SC>> {
-        self.init_chip.generate_trace::<SC>(page)
+    fn gen_table_trace(&self, page: Vec<Vec<u32>>) -> DenseMatrix<Val<SC>>
+    where
+        Val<SC>: PrimeField,
+    {
+        self.t1_chip.gen_table_trace::<Val<SC>>(page)
     }
 
     fn gen_ops_trace(
@@ -119,26 +137,19 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         ));
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn load_page_and_ops(
+    pub fn load_tables(
         &mut self,
-        mut page: Vec<Vec<u32>>,
-        idx_len: usize,
-        data_len: usize,
-        idx_limb_bits: usize,
-        idx_decomp: usize,
-        ops: Vec<Operation>,
+        mut t1: Vec<Vec<u32>>,
+        mut t2: Vec<Vec<u32>>,
         trace_degree: usize,
         trace_committer: &mut TraceCommitter<SC>,
     ) -> (Vec<DenseMatrix<Val<SC>>>, Vec<ProverTraceData<SC>>)
     where
         Val<SC>: PrimeField,
     {
-        // idx_decomp can't change between different pages since range_checker depends on it
-        assert!(1 << idx_decomp == self.range_checker.range_max());
-
-        assert!(!page.is_empty());
-        self.init_chip_trace = Some(self.get_page_trace(page.clone()));
+        assert!(!t1.is_empty());
+        self.t1_trace = Some(self.gen_table_trace(t1.clone()));
+        self.t2_trace = Some(self.gen_table_trace(t2.clone()));
 
         let page_bus_index = self.offline_checker.page_bus_index;
         let range_bus_index = self.offline_checker.range_bus_index;

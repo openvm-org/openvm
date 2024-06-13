@@ -2,42 +2,50 @@ use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
-use super::{columns::MyFinalPageCols, MyFinalPageAir};
-use crate::sub_chip::SubAirBridge;
+use super::MyFinalTableAir;
+use crate::final_page::columns::FinalPageCols;
 
-impl<F: PrimeField64> AirBridge<F> for MyFinalPageAir {
+impl<F: PrimeField64> AirBridge<F> for MyFinalTableAir {
     fn sends(&self) -> Vec<Interaction<F>> {
-        let num_cols = self.air_width();
-        let all_cols = (0..num_cols).collect::<Vec<usize>>();
-
-        let my_final_page_cols =
-            MyFinalPageCols::<usize>::from_slice(&all_cols, self.final_air.clone());
-
-        SubAirBridge::sends(&self.final_air, my_final_page_cols.final_page_cols)
+        // Sends the same thing as FinalPageAir
+        AirBridge::sends(&self.final_air)
     }
 
     fn receives(&self) -> Vec<Interaction<F>> {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-        let my_final_page_cols =
-            MyFinalPageCols::<usize>::from_slice(&all_cols, self.final_air.clone());
+        let table_cols = FinalPageCols::<usize>::from_slice(
+            &all_cols,
+            self.final_air.idx_len,
+            self.final_air.data_len,
+            self.final_air.idx_limb_bits,
+            self.final_air.idx_decomp,
+        );
 
-        let page_cols = my_final_page_cols.final_page_cols.page_cols;
-        let rcv_mult = my_final_page_cols.rcv_mult;
+        let t1_cols = table_cols.page_cols.data[self.fkey_start..self.fkey_end]
+            .iter()
+            .chain(table_cols.page_cols.data[..self.t2_data_len].iter())
+            .copied();
 
-        let page_cols = page_cols
+        let t2_cols = table_cols
+            .page_cols
             .idx
             .iter()
-            .copied()
-            .chain(page_cols.data)
-            .map(VirtualPairCol::single_main)
-            .collect::<Vec<_>>();
+            .chain(table_cols.page_cols.data[self.t2_data_len..].iter())
+            .copied();
 
-        vec![Interaction {
-            fields: page_cols,
-            count: VirtualPairCol::single_main(rcv_mult),
-            argument_index: self.page_bus_index,
-        }]
+        vec![
+            Interaction {
+                fields: t1_cols.map(VirtualPairCol::single_main).collect(),
+                count: VirtualPairCol::single_main(table_cols.page_cols.is_alloc),
+                argument_index: self.t1_output_bus_index,
+            },
+            Interaction {
+                fields: t2_cols.map(VirtualPairCol::single_main).collect(),
+                count: VirtualPairCol::single_main(table_cols.page_cols.is_alloc),
+                argument_index: self.t2_output_bus_index,
+            },
+        ]
     }
 }
