@@ -30,11 +30,11 @@ impl<AB: PartitionedAirBuilder> Air<AB> for FinalPageAir
 where
     AB::M: Clone,
 {
-    // This function assume that there are (at least) two partitions for the trace.
+    // This function assumes that there are (at least) two partitions for the trace.
     // The first partition is the page itself, and the first self.aux_with() columns of the
     // second partition correspond to the auxiliary columns necessary for sorting.
     // Under this assumption, this function can be called directly from a superair (without needing
-    // to construct the columns mantually before calling SubAir)
+    // to construct the columns manually before calling SubAir)
     fn eval(&self, builder: &mut AB) {
         let page_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[0].clone();
         let aux_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[1].clone();
