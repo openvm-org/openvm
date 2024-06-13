@@ -5,6 +5,9 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
+#[cfg(test)]
+pub mod tests;
+
 #[derive(Clone, Getters)]
 pub struct ExecutionAir {
     #[getset(get = "pub")]

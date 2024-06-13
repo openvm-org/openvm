@@ -12,20 +12,14 @@ use afs_test_utils::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
     },
     engine::StarkEngine,
-    interaction::dummy_interaction_air::DummyInteractionAir,
     utils::create_seeded_rng,
 };
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrix;
+use itertools::Itertools;
 use rand::Rng;
 
-use crate::page_rw_checker::{
-    self,
-    page_controller::{self, OpType, Operation},
-};
-
-type Val = BabyBear;
+use crate::execution_air::ExecutionAir;
+use crate::page_rw_checker;
+use crate::page_rw_checker::page_controller::{self, OpType, Operation};
 
 #[allow(clippy::too_many_arguments)]
 fn load_page_test(
@@ -37,11 +31,12 @@ fn load_page_test(
     idx_decomp: usize,
     ops: &Vec<Operation>,
     page_controller: &mut page_controller::PageController<BabyBearPoseidon2Config>,
-    ops_sender: &DummyInteractionAir,
+    ops_sender: &ExecutionAir,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
     partial_pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
     trace_degree: usize,
-    num_ops: usize,
+    exec_trace_degree: usize,
+    spacing: usize,
 ) -> Result<(), VerificationError> {
     let page_height = page_init.len();
     assert!(page_height > 0);
@@ -62,24 +57,8 @@ fn load_page_test(
     let range_checker_trace = page_controller.range_checker_trace();
 
     // Generating trace for ops_sender and making sure it has height num_ops
-    let ops_sender_trace = RowMajorMatrix::new(
-        ops.iter()
-            .flat_map(|op| {
-                iter::once(Val::one())
-                    .chain(iter::once(Val::from_canonical_usize(op.clk)))
-                    .chain(op.idx.iter().map(|x| Val::from_canonical_u32(*x)))
-                    .chain(op.data.iter().map(|x| Val::from_canonical_u32(*x)))
-                    .chain(iter::once(Val::from_canonical_u8(op.op_type.clone() as u8)))
-            })
-            .chain(
-                iter::repeat_with(|| iter::repeat(Val::zero()).take(1 + ops_sender.field_width()))
-                    .take(num_ops - ops.len())
-                    .flatten(),
-            )
-            .collect(),
-        1 + ops_sender.field_width(),
-    );
-
+    let ops_sender_trace = ops_sender.generate_trace_testing(ops, exec_trace_degree, spacing);
+    // panic!();
     // Clearing the range_checker counts
     page_controller.update_range_checker(idx_decomp);
 
@@ -181,12 +160,7 @@ fn page_read_write_test() {
     }
 
     // Generating random sorted distinct timestamps for operations
-    let mut clks = HashSet::new();
-    while clks.len() < num_ops {
-        clks.insert(rng.gen::<usize>() % (MAX_VAL as usize - 2) + 1);
-    }
-    let mut clks: Vec<usize> = clks.into_iter().collect();
-    clks.sort();
+    let clks = (1..num_ops + 1).collect_vec();
 
     let mut ops: Vec<Operation> = vec![];
     for i in 0..num_ops {
@@ -231,7 +205,7 @@ fn page_read_write_test() {
         idx_limb_bits,
         idx_decomp,
     );
-    let ops_sender = DummyInteractionAir::new(idx_len + data_len + 2, true, ops_bus_index);
+    let ops_sender = ExecutionAir::new(ops_bus_index, idx_len, data_len);
 
     let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(3 + log_num_ops));
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
@@ -243,7 +217,7 @@ fn page_read_write_test() {
         keygen_builder.add_main_matrix(page_controller.offline_checker.air_width());
     let range_checker_ptr =
         keygen_builder.add_main_matrix(page_controller.range_checker.air_width());
-    let ops_sender_ptr = keygen_builder.add_main_matrix(1 + ops_sender.field_width());
+    let ops_sender_ptr = keygen_builder.add_main_matrix(ops_sender.air_width());
 
     keygen_builder.add_partitioned_air(
         &page_controller.init_chip,
@@ -273,7 +247,7 @@ fn page_read_write_test() {
         vec![range_checker_ptr],
     );
 
-    keygen_builder.add_partitioned_air(&ops_sender, num_ops, 0, vec![ops_sender_ptr]);
+    keygen_builder.add_partitioned_air(&ops_sender, 4 * num_ops, 0, vec![ops_sender_ptr]);
 
     let partial_pk = keygen_builder.generate_partial_pk();
 
@@ -294,7 +268,8 @@ fn page_read_write_test() {
         &mut trace_builder,
         &partial_pk,
         trace_degree,
-        num_ops,
+        4 * num_ops,
+        2,
     )
     .expect("Verification failed");
 
@@ -326,7 +301,8 @@ fn page_read_write_test() {
         &mut trace_builder,
         &partial_pk,
         trace_degree,
-        num_ops,
+        4 * num_ops,
+        4,
     )
     .expect("Verification failed");
 
@@ -359,13 +335,14 @@ fn page_read_write_test() {
         &mut trace_builder,
         &partial_pk,
         trace_degree,
-        num_ops,
+        4 * num_ops,
+        1,
     )
     .expect("Verification failed");
 
     // Testing writing only 1 index into an unallocated page
     ops = vec![Operation::new(
-        10,
+        1,
         (0..idx_len).map(|_| rng.gen::<u32>() % max_idx).collect(),
         (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect(),
         OpType::Write,
@@ -384,7 +361,8 @@ fn page_read_write_test() {
         &mut trace_builder,
         &partial_pk,
         trace_degree,
-        num_ops,
+        4 * num_ops,
+        1,
     )
     .expect("Verification failed");
 
@@ -415,7 +393,8 @@ fn page_read_write_test() {
             &mut trace_builder,
             &partial_pk,
             trace_degree,
-            num_ops,
+            4 * num_ops,
+            1
         ),
         Err(VerificationError::OodEvaluationMismatch),
         "Expected constraints to fail"
@@ -446,7 +425,8 @@ fn page_read_write_test() {
             &mut trace_builder,
             &partial_pk,
             trace_degree,
-            num_ops,
+            4 * num_ops,
+            1
         ),
         Err(VerificationError::OodEvaluationMismatch),
         "Expected constraints to fail"
@@ -491,7 +471,8 @@ fn page_read_write_test() {
             &mut trace_builder,
             &partial_pk,
             trace_degree,
-            num_ops,
+            4 * num_ops,
+            1,
         );
     });
 

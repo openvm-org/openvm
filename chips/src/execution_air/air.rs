@@ -40,6 +40,6 @@ where
         // clk goes up by 1 when mult is 1
         builder
             .when_transition()
-            .assert_eq(next_cols.clk, local_cols.clk + local_cols.mult);
+            .assert_eq(next_cols.clk, local_cols.clk + next_cols.mult);
     }
 }
