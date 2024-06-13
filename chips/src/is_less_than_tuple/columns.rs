@@ -1,6 +1,6 @@
 use afs_derive::AlignedBorrow;
 
-use crate::{is_equal::columns::IsEqualAuxCols, is_less_than::columns::IsLessThanAuxCols};
+use crate::{is_equal_vec::columns::IsEqualVecAuxCols, is_less_than::columns::IsLessThanAuxCols};
 
 #[derive(Default, AlignedBorrow)]
 pub struct IsLessThanTupleIOCols<T> {
@@ -34,10 +34,7 @@ impl<T: Clone> IsLessThanTupleIOCols<T> {
 pub struct IsLessThanTupleAuxCols<T> {
     pub less_than: Vec<T>,
     pub less_than_aux: Vec<IsLessThanAuxCols<T>>,
-    pub is_equal: Vec<T>,
-    pub is_equal_aux: Vec<IsEqualAuxCols<T>>,
-
-    pub is_equal_cumulative: Vec<T>,
+    pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
     pub less_than_cumulative: Vec<T>,
 }
 
@@ -74,26 +71,7 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
         curr_start_idx = curr_end_idx;
         curr_end_idx += tuple_len;
 
-        // get whether y[i] - x[i] == 0
-        let is_equal = slc[curr_start_idx..curr_end_idx].to_vec();
-
-        curr_start_idx = curr_end_idx;
-        curr_end_idx += tuple_len;
-
-        // get the inverses k such that k * (diff[i] + is_zero[i]) = 1
-        let inverses = slc[curr_start_idx..curr_end_idx].to_vec();
-
-        curr_start_idx = curr_end_idx;
-        curr_end_idx += tuple_len;
-
-        let is_equal_cumulative = slc[curr_start_idx..curr_end_idx].to_vec();
-
-        curr_start_idx = curr_end_idx;
-        curr_end_idx += tuple_len;
-
-        let less_than_cumulative = slc[curr_start_idx..curr_end_idx].to_vec();
-
-        // generate the less_than_aux and is_equal_aux columns
+        // generate the less_than_aux columns
         let mut less_than_aux: Vec<IsLessThanAuxCols<T>> = vec![];
         for i in 0..tuple_len {
             let less_than_col = IsLessThanAuxCols {
@@ -104,18 +82,26 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
             less_than_aux.push(less_than_col);
         }
 
-        let mut is_equal_aux: Vec<IsEqualAuxCols<T>> = vec![];
-        for inv in inverses.iter() {
-            let is_equal_col = IsEqualAuxCols { inv: inv.clone() };
-            is_equal_aux.push(is_equal_col);
-        }
+        // prods[i] indicates whether x[i] == y[i] up to the i-th index
+        let prods = slc[curr_start_idx..curr_end_idx].to_vec();
+
+        curr_start_idx = curr_end_idx;
+        curr_end_idx += tuple_len;
+
+        // get invs
+        let invs = slc[curr_start_idx..curr_end_idx].to_vec();
+
+        curr_start_idx = curr_end_idx;
+        curr_end_idx += tuple_len;
+
+        let is_equal_vec_aux = IsEqualVecAuxCols { prods, invs };
+
+        let less_than_cumulative = slc[curr_start_idx..curr_end_idx].to_vec();
 
         Self {
             less_than,
             less_than_aux,
-            is_equal,
-            is_equal_aux,
-            is_equal_cumulative,
+            is_equal_vec_aux,
             less_than_cumulative,
         }
     }
@@ -133,13 +119,9 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
             flattened.extend_from_slice(&self.less_than_aux[i].lower_decomp);
         }
 
-        flattened.extend_from_slice(&self.is_equal);
+        flattened.extend_from_slice(&self.is_equal_vec_aux.prods);
+        flattened.extend_from_slice(&self.is_equal_vec_aux.invs);
 
-        for i in 0..self.is_equal_aux.len() {
-            flattened.push(self.is_equal_aux[i].inv.clone());
-        }
-
-        flattened.extend_from_slice(&self.is_equal_cumulative);
         flattened.extend_from_slice(&self.less_than_cumulative);
 
         flattened
@@ -156,12 +138,12 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
             let num_limbs = (limb_bit + decomp - 1) / decomp;
             width += num_limbs + 1;
         }
-        // for the indicator whether difference is zero
+        // for the prods
         width += tuple_len;
-        // for the inverses k such that k * (diff[i] + is_zero[i]) = 1
+        // for the invs
         width += tuple_len;
-        // for the cumulative is_equal and less_than
-        width += 2 * tuple_len;
+        // for the cumulative less_than
+        width += tuple_len;
 
         width
     }

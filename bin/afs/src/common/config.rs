@@ -1,5 +1,5 @@
 // use serde::Serialize;
-use serde_derive::{Serialize, Deserialize};
+use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -30,9 +30,12 @@ pub struct Config {
 
 impl Config {
     pub fn read_config_file(file: &str) -> Config {
-        let file_str = std::fs::read_to_string(file).unwrap();
-        let config: Config = toml::from_str(file_str.as_str()).unwrap();
+        let file_str = std::fs::read_to_string(file).unwrap_or_else(|_| {
+            panic!("`config.toml` is required in the root directory of the project");
+        });
+        let config: Config = toml::from_str(file_str.as_str()).unwrap_or_else(|_| {
+            panic!("Failed to parse config file: {}", file);
+        });
         config
     }
 }
-
