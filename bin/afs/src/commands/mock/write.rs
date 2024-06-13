@@ -25,6 +25,14 @@ pub struct WriteCommand {
     pub db_file_path: Option<String>,
 
     #[arg(
+        long = "output-db-file",
+        short = 'o',
+        help = "Output DB file path (default: no output file saved)",
+        required = false
+    )]
+    pub output_db_file_path: Option<String>,
+
+    #[arg(
         long = "print",
         short = 'p',
         help = "Print the table",
@@ -58,6 +66,10 @@ impl WriteCommand {
             for (index, data) in table.body.iter() {
                 println!("{:?}: {:?}", index, data);
             }
+        }
+
+        if let Some(output_db_file_path) = self.output_db_file_path {
+            db.save_to_file(&output_db_file_path)?;
         }
 
         Ok(())

@@ -45,6 +45,7 @@ impl MockCommand {
                 let cmd = write::WriteCommand {
                     afi_file_path: write.afi_file_path.clone(),
                     db_file_path: write.db_file_path.clone(),
+                    output_db_file_path: write.output_db_file_path.clone(),
                     print: write.print,
                 };
                 cmd.execute()
