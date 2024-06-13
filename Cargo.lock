@@ -21,9 +21,12 @@ checksum = "f26201604c87b1e01bd3d98f8d5d9a8fcbb815e8cedb41ffccbeb4bf593a35fe"
 name = "afs"
 version = "0.1.0"
 dependencies = [
+ "alloy-primitives",
  "bincode",
  "clap",
  "color-eyre",
+ "logical-interface",
+ "rand",
  "serde",
  "serde_derive",
  "serde_json",
@@ -1078,6 +1081,7 @@ name = "logical-interface"
 version = "0.1.0"
 dependencies = [
  "alloy-primitives",
+ "bincode",
  "color-eyre",
  "hex",
  "itertools 0.13.0",

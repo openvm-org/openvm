@@ -50,7 +50,7 @@ pub fn test_interface_get_table() {
 }
 
 #[test]
-pub fn test_interface_large_table() {
+pub fn test_interface_large_values() {
     let default_table_metadata = TableMetadata::new(32, 1024);
     let mut mock_db = MockDb::new(default_table_metadata.clone());
     let mut interface = AfsInterface::<U256, U256>::new(&mut mock_db);
@@ -93,6 +93,15 @@ pub fn test_interface_large_table() {
     let table = interface.get_table(table_id).expect("Error getting table");
     let read2 = table.read(U256::from(1000));
     assert_eq!(read2, Some(U256::from(2000)));
+
+    mock_db.save_to_file("afs_db.mockdb").unwrap();
+}
+
+#[test]
+pub fn test_interface_large_tables() {
+    let default_table_metadata = TableMetadata::new(32, 1024);
+    let mut mock_db = MockDb::new(default_table_metadata.clone());
+    let mut interface = AfsInterface::<U256, U256>::new(&mut mock_db);
 }
 
 #[test]

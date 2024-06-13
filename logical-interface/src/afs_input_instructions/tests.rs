@@ -5,7 +5,7 @@ use super::AfsInputInstructions;
 #[test]
 pub fn test_read_file() {
     let file_path = "tests/data/test_input_file_32_1024.afi";
-    let instructions = AfsInputInstructions::from_file(file_path.to_string()).unwrap();
+    let instructions = AfsInputInstructions::from_file(file_path).unwrap();
     let header = instructions.header;
     assert_eq!(
         header.table_id,

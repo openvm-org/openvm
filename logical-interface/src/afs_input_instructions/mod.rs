@@ -38,16 +38,16 @@ pub struct AfsOperation {
 }
 
 impl AfsInputInstructions {
-    pub fn from_file(file_path: String) -> Result<Self> {
+    pub fn from_file(file_path: &str) -> Result<Self> {
         let (header, operations) = Self::parse(file_path.clone())?;
         Ok(Self {
-            file_path,
+            file_path: file_path.to_string(),
             header,
             operations,
         })
     }
 
-    fn parse(file_path: String) -> Result<(AfsHeader, Vec<AfsOperation>)> {
+    fn parse(file_path: &str) -> Result<(AfsHeader, Vec<AfsOperation>)> {
         let file = File::open(file_path)?;
         let reader = BufReader::new(file);
         let lines: Vec<String> = reader.lines().collect::<Result<Vec<String>, _>>()?;

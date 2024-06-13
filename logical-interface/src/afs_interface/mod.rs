@@ -27,7 +27,7 @@ impl<'a, I: Index, D: Data> AfsInterface<'a, I, D> {
         }
     }
 
-    pub fn load_input_file(&mut self, path: String) -> Result<&Table<I, D>> {
+    pub fn load_input_file(&mut self, path: &str) -> Result<&Table<I, D>> {
         let instructions = AfsInputInstructions::from_file(path)?;
 
         let table_id = instructions.header.table_id;
