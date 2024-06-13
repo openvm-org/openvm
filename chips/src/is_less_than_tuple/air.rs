@@ -53,8 +53,8 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanTupleAir {
 
     // constrain that x < y lexicographically
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
-        let x = io.x.clone();
-        let y = io.y.clone();
+        let x = io.x;
+        let y = io.y;
 
         // here we constrain that less_than[i] indicates whether x[i] < y[i] using the IsLessThan subchip for each i
         for i in 0..x.len() {
