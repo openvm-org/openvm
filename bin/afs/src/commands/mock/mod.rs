@@ -30,6 +30,7 @@ impl MockCommand {
                 let cmd = afi::AfiCommand {
                     afi_file_path: afi.afi_file_path.clone(),
                     db_file_path: afi.db_file_path.clone(),
+                    print: afi.print,
                 };
                 cmd.execute()
             }

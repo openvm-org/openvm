@@ -19,6 +19,14 @@ pub struct AfiCommand {
         required = false
     )]
     pub db_file_path: Option<String>,
+
+    #[arg(
+        long = "print",
+        short = 'p',
+        help = "Print the afs instruction set",
+        required = false
+    )]
+    pub print: bool,
 }
 
 /// `mock afi` subcommand
@@ -26,7 +34,13 @@ impl AfiCommand {
     /// Execute the `mock afi` command
     pub fn execute(self) -> Result<()> {
         println!("afi_file_path: {}", self.afi_file_path);
-        let _instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
+        let instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
+        if (self.print) {
+            println!("{:?}", instructions.header);
+            for op in instructions.operations {
+                println!("{:?}", op);
+            }
+        }
         Ok(())
     }
 }
