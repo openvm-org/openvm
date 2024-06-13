@@ -8,14 +8,6 @@ use logical_interface::{
 
 #[derive(Debug, Parser)]
 pub struct ReadCommand {
-    #[arg(
-        long = "afi-file",
-        short = 'f',
-        help = "The .afi file input",
-        required = true
-    )]
-    pub afi_file_path: String,
-
     #[arg(long = "table-id", short = 't', help = "The table ID", required = true)]
     pub table_id: String,
 
@@ -40,9 +32,6 @@ pub struct ReadCommand {
 impl ReadCommand {
     /// Execute the `mock read` command
     pub fn execute(self) -> Result<()> {
-        println!("afi_file_path: {}", self.afi_file_path);
-        let _instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
-
         let mut db = if let Some(db_file_path) = self.db_file_path {
             println!("db_file_path: {}", db_file_path);
             MockDb::from_file(&db_file_path)

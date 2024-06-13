@@ -1,5 +1,6 @@
 mod afi;
 mod read;
+// mod write;
 
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::Result;
@@ -31,13 +32,12 @@ impl MockCommand {
             }
             MockSubcommands::Read(read) => {
                 let cmd = read::ReadCommand {
-                    afi_file_path: read.afi_file_path.clone(),
                     db_file_path: read.db_file_path.clone(),
                     table_id: read.table_id.clone(),
                     print: read.print,
                 };
                 cmd.execute()
-            }
+            } // MockSubcommands::Write()
         }
     }
 }
