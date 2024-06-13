@@ -1,66 +1,21 @@
-use std::iter;
+use crate::final_page::{columns::FinalPageCols, FinalPageAir};
 
-use crate::{
-    is_less_than_tuple::columns::IsLessThanTupleAuxCols, page_rw_checker::page::columns::PageCols,
-};
-
-pub struct FinalPageCols<T> {
-    pub page_cols: PageCols<T>,
-    pub aux_cols: FinalPageAuxCols<T>,
+pub struct MyFinalPageCols<T> {
+    pub final_page_cols: FinalPageCols<T>,
+    pub rcv_mult: T,
 }
 
-impl<T: Clone> FinalPageCols<T> {
-    pub fn from_slice(
-        slc: &[T],
-        idx_len: usize,
-        data_len: usize,
-        limb_bits: usize,
-        decomp: usize,
-    ) -> FinalPageCols<T> {
-        FinalPageCols {
-            page_cols: PageCols::from_slice(&slc[..1 + idx_len + data_len], idx_len, data_len),
-            aux_cols: FinalPageAuxCols::from_slice(
-                &slc[1 + idx_len + data_len..],
-                limb_bits,
-                decomp,
-                idx_len,
+impl<T: Clone> MyFinalPageCols<T> {
+    pub fn from_slice(slc: &[T], final_air: FinalPageAir) -> Self {
+        Self {
+            final_page_cols: FinalPageCols::from_slice(
+                &slc[..slc.len() - 1],
+                final_air.idx_len,
+                final_air.data_len,
+                final_air.idx_limb_bits,
+                final_air.idx_decomp,
             ),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct FinalPageAuxCols<T> {
-    pub lt_cols: IsLessThanTupleAuxCols<T>, // auxiliary columns used for lt_out
-    pub lt_out: T, // this bit indicates whether the idx in this row is greater than the idx in the previous row
-    pub rcv_mult: T, // this indicates the multiplicity with which data in this column should be received
-}
-
-impl<T: Clone> FinalPageAuxCols<T> {
-    pub fn from_slice(
-        slc: &[T],
-        limb_bits: usize,
-        decomp: usize,
-        tuple_len: usize,
-    ) -> FinalPageAuxCols<T> {
-        FinalPageAuxCols {
-            lt_cols: IsLessThanTupleAuxCols::from_slice(
-                &slc[..slc.len() - 2],
-                vec![limb_bits; tuple_len],
-                decomp,
-                tuple_len,
-            ),
-            lt_out: slc[slc.len() - 2].clone(),
             rcv_mult: slc[slc.len() - 1].clone(),
         }
-    }
-
-    pub fn flatten(&self) -> Vec<T> {
-        self.lt_cols
-            .flatten()
-            .into_iter()
-            .chain(iter::once(self.lt_out.clone()))
-            .chain(iter::once(self.rcv_mult.clone()))
-            .collect()
     }
 }

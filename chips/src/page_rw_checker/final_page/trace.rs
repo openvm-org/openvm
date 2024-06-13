@@ -4,14 +4,10 @@ use p3_field::{AbstractField, PrimeField};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use super::{columns::FinalPageAuxCols, FinalPageAir};
-use crate::{
-    is_less_than_tuple::{columns::IsLessThanTupleCols, IsLessThanTupleAir},
-    range_gate::RangeCheckerGateChip,
-    sub_chip::LocalTraceInstructions,
-};
+use super::MyFinalPageAir;
+use crate::range_gate::RangeCheckerGateChip;
 
-impl FinalPageAir {
+impl MyFinalPageAir {
     /// The trace is the whole page (including the is_alloc column)
     pub fn gen_page_trace<SC: StarkGenericConfig>(
         &self,
@@ -20,20 +16,11 @@ impl FinalPageAir {
     where
         Val<SC>: AbstractField,
     {
-        RowMajorMatrix::new(
-            page.into_iter()
-                .flat_map(|row| {
-                    row.into_iter()
-                        .map(Val::<SC>::from_wrapped_u32)
-                        .collect::<Vec<Val<SC>>>()
-                })
-                .collect(),
-            self.page_width(),
-        )
+        self.final_air.gen_page_trace::<SC>(page)
     }
 
     /// This generates the auxiliary trace required to ensure proper formating
-    /// of the page. Moreover, it generated the is_in_ops column, which is on
+    /// of the page using FinalPageAir. Moreover, it generates the rcv_mult column, which is on
     /// only when the index is in internal_indices and is allocated in the page
     /// Here, internal_indices is a set of indices that appear in the operations
     pub fn gen_aux_trace<SC: StarkGenericConfig>(
@@ -45,44 +32,25 @@ impl FinalPageAir {
     where
         Val<SC>: PrimeField,
     {
-        let lt_chip = IsLessThanTupleAir::new(
-            self.range_bus_index,
-            1 << self.idx_limb_bits,
-            vec![self.idx_limb_bits; self.idx_len],
-            self.idx_decomp,
-        );
+        let mut final_page_aux_trace = self
+            .final_air
+            .gen_aux_trace::<SC>(page.clone(), range_checker);
 
-        let mut rows: Vec<Vec<Val<SC>>> = vec![];
+        let mut aux_trace_flat: Vec<Val<SC>> = vec![];
+        for (r, page_row) in page.iter().enumerate() {
+            let fp_aux_row = final_page_aux_trace.row_mut(r);
+            aux_trace_flat.extend_from_slice(fp_aux_row);
 
-        for i in 0..page.len() {
-            let prv_idx = if i == 0 {
-                vec![0; self.idx_len]
-            } else {
-                page[i - 1][1..1 + self.idx_len].to_vec()
-            };
-
-            let cur_idx = page[i][1..1 + self.idx_len].to_vec();
-
-            let lt_cols: IsLessThanTupleCols<Val<SC>> = LocalTraceInstructions::generate_trace_row(
-                &lt_chip,
-                (prv_idx, cur_idx.clone(), range_checker.clone()),
-            );
-
-            let page_aux_cols = FinalPageAuxCols {
-                lt_cols: lt_cols.aux,
-                lt_out: lt_cols.io.tuple_less_than,
-                rcv_mult: Val::<SC>::from_canonical_u8(
-                    if internal_indices.contains(&cur_idx) && page[i][0] == 1 {
-                        3
-                    } else {
-                        page[i][0] as u8
-                    },
-                ),
-            };
-
-            rows.push(page_aux_cols.flatten());
+            let cur_idx = page_row[1..1 + self.final_air.idx_len].to_vec();
+            aux_trace_flat.push(Val::<SC>::from_canonical_u8(
+                if internal_indices.contains(&cur_idx) && page[r][0] == 1 {
+                    3
+                } else {
+                    page[r][0] as u8
+                },
+            ));
         }
 
-        RowMajorMatrix::new(rows.concat(), self.aux_width())
+        RowMajorMatrix::new(aux_trace_flat, self.aux_width())
     }
 }
