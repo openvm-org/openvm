@@ -5,7 +5,23 @@ pub struct IsEqualVecIOCols<T> {
     pub prod: T,
 }
 
-#[derive(Default)]
+impl<T: Clone> IsEqualVecIOCols<T> {
+    pub fn new(x: Vec<T>, y: Vec<T>, prod: T) -> Self {
+        Self { x, y, prod }
+    }
+
+    // Note that the slice this function takes is of an unusual
+    // slc should be a whole row of the trace
+    pub fn from_slice(slc: &[T], vec_len: usize) -> Self {
+        Self {
+            x: slc[0..vec_len].to_vec(),
+            y: slc[vec_len..2 * vec_len].to_vec(),
+            prod: slc[3 * vec_len - 1].clone(),
+        }
+    }
+}
+
+#[derive(Default, Debug)]
 pub struct IsEqualVecAuxCols<T> {
     pub prods: Vec<T>,
     pub invs: Vec<T>,
@@ -20,6 +36,10 @@ impl<T: Clone> IsEqualVecAuxCols<T> {
         let prods = slc[0..vec_len].to_vec();
         let invs = slc[vec_len..2 * vec_len].to_vec();
 
+        Self { prods, invs }
+    }
+
+    pub fn new(prods: Vec<T>, invs: Vec<T>) -> Self {
         Self { prods, invs }
     }
 
@@ -47,15 +67,9 @@ impl<T: Clone> IsEqualVecCols<T> {
     }
 
     pub fn from_slice(slc: &[T], vec_len: usize) -> Self {
-        let x = slc[0..vec_len].to_vec();
-        let y = slc[vec_len..2 * vec_len].to_vec();
-        let prod = slc[3 * vec_len - 1].clone();
-        let prods = slc[2 * vec_len..3 * vec_len].to_vec();
-        let invs = slc[3 * vec_len..4 * vec_len].to_vec();
-
         Self {
-            io: IsEqualVecIOCols { x, y, prod },
-            aux: IsEqualVecAuxCols { prods, invs },
+            io: IsEqualVecIOCols::from_slice(slc, vec_len),
+            aux: IsEqualVecAuxCols::from_slice(&slc[2 * vec_len..], vec_len),
         }
     }
 
@@ -64,8 +78,7 @@ impl<T: Clone> IsEqualVecCols<T> {
             .x
             .iter()
             .chain(self.io.y.iter())
-            .chain(self.aux.prods.iter())
-            .chain(self.aux.invs.iter())
+            .chain(self.aux.flatten().iter())
             .cloned()
             .collect()
     }

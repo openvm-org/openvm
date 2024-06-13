@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use p3_field::PrimeField64;
+use p3_field::{PrimeField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
@@ -41,7 +41,7 @@ impl IsLessThanTupleChip {
     }
 }
 
-impl<F: PrimeField64> LocalTraceInstructions<F> for IsLessThanTupleAir {
+impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanTupleAir {
     type LocalInput = (Vec<u32>, Vec<u32>, Arc<RangeCheckerGateChip>);
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {

@@ -1,6 +1,6 @@
 use std::iter;
 
-use crate::page_controller;
+use crate::page_read::page_controller;
 use afs_stark_backend::verifier::VerificationError;
 use afs_stark_backend::{
     keygen::{types::MultiStarkPartialProvingKey, MultiStarkKeygenBuilder},
