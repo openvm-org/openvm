@@ -63,20 +63,17 @@ impl AfsInputInstructions {
             let operation = parts[0];
             let value = parts[1];
             match InputFileHeaderOperation::from_str(operation) {
-                Ok(op) => {
-                    println!("header {:?}:{:?}", op, parts[1]);
-                    match op {
-                        InputFileHeaderOperation::TableId => {
-                            afs_header.table_id = value.to_string();
-                        }
-                        InputFileHeaderOperation::IndexBytes => {
-                            afs_header.index_bytes = value.parse::<usize>().unwrap();
-                        }
-                        InputFileHeaderOperation::DataBytes => {
-                            afs_header.data_bytes = value.parse::<usize>().unwrap();
-                        }
+                Ok(op) => match op {
+                    InputFileHeaderOperation::TableId => {
+                        afs_header.table_id = value.to_string();
                     }
-                }
+                    InputFileHeaderOperation::IndexBytes => {
+                        afs_header.index_bytes = value.parse::<usize>().unwrap();
+                    }
+                    InputFileHeaderOperation::DataBytes => {
+                        afs_header.data_bytes = value.parse::<usize>().unwrap();
+                    }
+                },
                 Err(e) => {
                     panic!("Invalid operation on header: {:?}", e.to_string());
                 }
@@ -100,13 +97,10 @@ impl AfsInputInstructions {
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 let operation = parts[0];
                 match InputFileBodyOperation::from_str(operation) {
-                    Ok(operation) => {
-                        println!("{:?}:{:?}", operation, parts[1..].to_vec());
-                        AfsOperation {
-                            operation,
-                            args: parts[1..].iter().map(|s| s.to_string()).collect(),
-                        }
-                    }
+                    Ok(operation) => AfsOperation {
+                        operation,
+                        args: parts[1..].iter().map(|s| s.to_string()).collect(),
+                    },
                     Err(e) => {
                         panic!("Invalid operation on body: {:?}", e.to_string());
                     }
