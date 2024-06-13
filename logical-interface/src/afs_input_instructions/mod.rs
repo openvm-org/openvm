@@ -39,7 +39,7 @@ pub struct AfsOperation {
 
 impl AfsInputInstructions {
     pub fn from_file(file_path: &str) -> Result<Self> {
-        let (header, operations) = Self::parse(file_path.clone())?;
+        let (header, operations) = Self::parse(file_path)?;
         Ok(Self {
             file_path: file_path.to_string(),
             header,

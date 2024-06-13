@@ -20,7 +20,7 @@ pub struct KeygenCommand {
 
 impl KeygenCommand {
     /// Execute the `keygen` command
-    pub fn execute(self, config: &Config) -> Result<()> {
+    pub fn execute(self, _config: &Config) -> Result<()> {
         // WIP: Wait for ReadWrite chip in https://github.com/axiom-crypto/afs-prototype/pull/45
         Ok(())
     }
