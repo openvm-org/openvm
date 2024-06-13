@@ -46,12 +46,12 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanBitsAir {
         let is_less_than = io.is_less_than;
         let source_bits = aux.source_bits;
 
-        for d in 0..=self.limb_bits {
-            builder.assert_bool(source_bits[d]);
+        for source_bit in &source_bits {
+            builder.assert_bool(*source_bit);
         }
         let mut sum_source_bits = AB::Expr::zero();
-        for d in 0..=self.limb_bits {
-            sum_source_bits += AB::Expr::from_canonical_u64(1 << d) * source_bits[d];
+        for (d, &source_bit) in source_bits.iter().enumerate().take(self.limb_bits + 1) {
+            sum_source_bits += AB::Expr::from_canonical_u64(1 << d) * source_bit;
         }
         builder.assert_eq(
             sum_source_bits,
