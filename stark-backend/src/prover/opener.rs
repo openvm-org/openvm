@@ -143,6 +143,7 @@ fn collect_trace_openings<Challenge: Debug>(
 }
 
 /// PCS opening proof with opened values for multi-matrix AIR.
+#[derive(Serialize, Deserialize)]
 pub struct OpeningProof<SC: StarkGenericConfig> {
     pub proof: PcsProof<SC>,
     pub values: OpenedValues<SC::Challenge>,

@@ -64,8 +64,9 @@ impl KeygenCommand {
 
         let idx_limb_bits = limb_bits;
 
-        let max_log_degree =
-            log2_strict_usize(checker_trace_degree).max(log2_strict_usize(page_height));
+        let max_log_degree = log2_strict_usize(checker_trace_degree)
+            .max(log2_strict_usize(page_height))
+            .max(8);
 
         let idx_decomp = 8;
 

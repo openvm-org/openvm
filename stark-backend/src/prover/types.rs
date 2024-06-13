@@ -75,6 +75,7 @@ pub struct Commitments<SC: StarkGenericConfig> {
 /// multiple commitments, where each commitment is multi-matrix.
 ///
 /// Includes the quotient commitments and FRI opening proofs for the constraints as well.
+#[derive(Serialize, Deserialize)]
 pub struct Proof<SC: StarkGenericConfig> {
     /// The PCS commitments
     pub commitments: Commitments<SC>,
