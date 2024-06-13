@@ -52,7 +52,7 @@ impl<T: Clone> IsLessThanTupleBitsAuxCols<T> {
             curr_start_idx = curr_end_idx;
             curr_end_idx += IsLessThanBitsAuxCols::<T>::get_width(limb_bit);
             let less_than_aux_col =
-                IsLessThanBitsAuxCols::from_slice(limb_bit, &slc[curr_start_idx..curr_end_idx]);
+                IsLessThanBitsAuxCols::from_slice(&slc[curr_start_idx..curr_end_idx]);
             less_than_aux.push(less_than_aux_col);
         }
 
