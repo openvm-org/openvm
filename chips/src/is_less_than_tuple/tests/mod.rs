@@ -39,7 +39,7 @@ fn test_is_less_than_tuple_chip() {
 
     let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
 
-    let chip = IsLessThanTupleChip::new(bus_index, range_max, limb_bits, decomp, range_checker);
+    let chip = IsLessThanTupleChip::new(bus_index, limb_bits, decomp, range_checker);
     let range_checker = chip.range_checker.as_ref();
 
     let trace = chip.generate_trace(vec![
@@ -66,7 +66,7 @@ fn test_is_less_than_tuple_chip_negative() {
 
     let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
 
-    let chip = IsLessThanTupleChip::new(bus_index, range_max, limb_bits, decomp, range_checker);
+    let chip = IsLessThanTupleChip::new(bus_index, limb_bits, decomp, range_checker);
     let range_checker = chip.range_checker.as_ref();
     let mut trace = chip.generate_trace(vec![(vec![14321, 123], vec![26678, 233])]);
     let range_checker_trace = range_checker.generate_trace();

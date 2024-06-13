@@ -58,7 +58,6 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for IsLessThanTupleAir {
         for i in 0..x.len() {
             let is_less_than_chip = IsLessThanChip::new(
                 self.bus_index(),
-                self.range_max(),
                 self.limb_bits()[i],
                 self.decomp(),
                 range_checker.clone(),
