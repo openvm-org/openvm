@@ -19,7 +19,7 @@ impl<F: Field> AirBridge<F> for IsLessThanBitsAir {}
 
 impl<F> BaseAir<F> for IsLessThanBitsAir {
     fn width(&self) -> usize {
-        3 + (self.limb_bits * 3)
+        3 + (self.limb_bits + 1)
     }
 }
 
@@ -30,7 +30,7 @@ impl<AB: AirBuilder> Air<AB> for IsLessThanBitsAir {
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
 
-        let local_cols = IsLessThanBitsCols::<AB::Var>::from_slice(self.limb_bits, local);
+        let local_cols = IsLessThanBitsCols::<AB::Var>::from_slice(local);
 
         SubAir::eval(self, builder, local_cols.io, local_cols.aux);
     }
@@ -44,35 +44,21 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanBitsAir {
         let x = io.x;
         let y = io.y;
         let is_less_than = io.is_less_than;
-        let x_bits = aux.x_bits;
-        let y_bits = aux.y_bits;
-        let comparisons = aux.comparisons;
+        let source_bits = aux.source_bits;
 
-        for d in 0..self.limb_bits {
-            builder.assert_bool(x_bits[d] * (x_bits[d] - AB::Expr::one()));
-            builder.assert_bool(y_bits[d] * (y_bits[d] - AB::Expr::one()));
+        for d in 0..=self.limb_bits {
+            builder.assert_bool(source_bits[d]);
         }
-        let mut sum_bits_x = AB::Expr::zero();
-        let mut sum_bits_y = AB::Expr::zero();
-        for d in 0..self.limb_bits {
-            sum_bits_x += AB::Expr::from_canonical_u64(1 << d) * x_bits[d];
-            sum_bits_y += AB::Expr::from_canonical_u64(1 << d) * y_bits[d];
+        let mut sum_source_bits = AB::Expr::zero();
+        for d in 0..=self.limb_bits {
+            sum_source_bits += AB::Expr::from_canonical_u64(1 << d) * source_bits[d];
         }
-        builder.assert_eq(sum_bits_x, x);
-        builder.assert_eq(sum_bits_y, y);
+        builder.assert_eq(
+            sum_source_bits,
+            x - y + AB::Expr::from_canonical_u64(1 << self.limb_bits),
+        );
 
-        // comparisons[d] = whether x and y are equal when considering d + 1 least significant bits
-        builder.assert_eq(comparisons[0], (AB::Expr::one() - x_bits[0]) * y_bits[0]);
-        for d in 1..self.limb_bits {
-            // comparison_check is 1 if x_bits[d] < y_bits[d], comparisons[d - 1] if x_bits[d] == y_bits[d], and 0 otherwise
-            let comparison_check = 
-                // (1 - (x_bits[d] - y_bits[d])^2) is bool = (x_bits[d] == y_bits[d])
-                ((AB::Expr::one() - ((x_bits[d] - y_bits[d]) * (x_bits[d] - y_bits[d]))) * comparisons[d - 1])
-                // (1 - x_bits[d]) * y_bits[d] is bool = (x_bits[d] < y_bits[d])
-                + (AB::Expr::one() - x_bits[d]) * y_bits[d];
-            builder.assert_eq(comparisons[d], comparison_check);
-        }
-
-        builder.assert_eq(is_less_than, comparisons[self.limb_bits - 1]);
+        let most_significant = source_bits[self.limb_bits];
+        builder.assert_eq(is_less_than, AB::Expr::one() - most_significant);
     }
 }

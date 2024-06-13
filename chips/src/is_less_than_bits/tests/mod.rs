@@ -13,7 +13,7 @@ fn test_flatten_fromslice_roundtrip() {
     let num_cols = IsLessThanBitsCols::<usize>::get_width(limb_bits);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-    let cols_numbered = IsLessThanBitsCols::<usize>::from_slice(limb_bits, &all_cols);
+    let cols_numbered = IsLessThanBitsCols::<usize>::from_slice(&all_cols);
     let flattened = cols_numbered.flatten();
 
     for (i, col) in flattened.iter().enumerate() {
@@ -25,6 +25,7 @@ fn test_flatten_fromslice_roundtrip() {
 
 #[test]
 fn test_is_less_than_bits_chip_lt() {
+    std::env::set_var("RUST_BACKTRACE", "1");
     let limb_bits: usize = 16;
 
     let air = IsLessThanBitsAir { limb_bits };
@@ -58,10 +59,53 @@ fn test_is_less_than_negative_2() {
     let limb_bits: usize = 16;
 
     let air = IsLessThanBitsAir { limb_bits };
+    let mut trace = air.generate_trace(vec![(446, 342)]);
+
+    trace.row_mut(0)[2] = AbstractField::from_canonical_u64(1);
+    for d in 3..=3 + limb_bits {
+        trace.row_mut(0)[d] = AbstractField::from_canonical_u64(0);
+    }
+
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
+    assert_eq!(
+        run_simple_test_no_pis(vec![&air], vec![trace],),
+        Err(VerificationError::OodEvaluationMismatch),
+        "Expected verification to fail, but it passed"
+    );
+}
+
+#[test]
+fn test_is_less_than_negative_3() {
+    let limb_bits: usize = 1;
+
+    let air = IsLessThanBitsAir { limb_bits };
+    let mut trace = air.generate_trace(vec![(1, 1)]);
+
+    trace.row_mut(0)[2] = AbstractField::from_canonical_u64(1);
+    trace.row_mut(0)[3] = AbstractField::from_canonical_u64(2);
+    trace.row_mut(0)[4] = AbstractField::from_canonical_u64(0);
+
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
+    assert_eq!(
+        run_simple_test_no_pis(vec![&air], vec![trace],),
+        Err(VerificationError::OodEvaluationMismatch),
+        "Expected verification to fail, but it passed"
+    );
+}
+
+/*#[test]
+fn test_is_less_than_negative_2() {
+    let limb_bits: usize = 16;
+
+    let air = IsLessThanBitsAir { limb_bits };
     let mut trace = air.generate_trace(vec![(446, 447)]);
 
     trace.row_mut(0)[2] = AbstractField::from_canonical_u64(0);
-    for d in 3 + (2 * limb_bits)..3 + (3 * limb_bits) {
+    for d in 3 + limb_bits..3 + (2 * limb_bits) {
         trace.row_mut(0)[d] = AbstractField::from_canonical_u64(0);
     }
 
@@ -82,13 +126,13 @@ fn test_is_less_than_negative_3() {
     let air = IsLessThanBitsAir { limb_bits };
     let mut trace = air.generate_trace(vec![(0, 2)]);
 
+    trace.row_mut(0)[3] = AbstractField::from_canonical_u64(2);
+    trace.row_mut(0)[3 + 1] = AbstractField::from_canonical_u64(0);
+
     trace.row_mut(0)[3 + limb_bits] = AbstractField::from_canonical_u64(2);
-    trace.row_mut(0)[3 + limb_bits + 1] = AbstractField::from_canonical_u64(0);
+    trace.row_mut(0)[3 + limb_bits + 1] = AbstractField::from_canonical_u64(2);
 
-    trace.row_mut(0)[3 + (2 * limb_bits)] = AbstractField::from_canonical_u64(2);
-    trace.row_mut(0)[3 + (2 * limb_bits) + 1] = AbstractField::from_canonical_u64(2);
-
-    trace.row_mut(0)[2] = AbstractField::from_canonical_u64(2);
+    trace.row_mut(0)[2] = AbstractField::from_canonical_u64(3);
 
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
@@ -107,7 +151,7 @@ fn test_is_less_than_negative_4() {
     let air = IsLessThanBitsAir { limb_bits };
     let mut trace = air.generate_trace(vec![(1, 0)]);
 
-    trace.row_mut(0)[3 + (2 * limb_bits) + 1] = AbstractField::from_canonical_u64(1);
+    trace.row_mut(0)[3 + limb_bits + 1] = AbstractField::from_canonical_u64(1);
 
     trace.row_mut(0)[2] = AbstractField::from_canonical_u64(1);
 
@@ -119,4 +163,4 @@ fn test_is_less_than_negative_4() {
         Err(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
-}
+}*/
