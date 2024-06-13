@@ -13,8 +13,8 @@ impl<F: PrimeField64> AirBridge<F> for TableAir {
 
         match self.table_type {
             TableType::T1 {
-                t1_intersector,
-                t1_output,
+                t1_intersector_bus_index,
+                t1_output_bus_index,
             } => {
                 vec![
                     Interaction {
@@ -25,7 +25,7 @@ impl<F: PrimeField64> AirBridge<F> for TableAir {
                             .map(VirtualPairCol::single_main)
                             .collect(),
                         count: VirtualPairCol::single_main(table_cols.is_alloc),
-                        argument_index: t1_intersector,
+                        argument_index: t1_intersector_bus_index,
                     },
                     Interaction {
                         fields: table_cols
@@ -36,13 +36,13 @@ impl<F: PrimeField64> AirBridge<F> for TableAir {
                             .map(VirtualPairCol::single_main)
                             .collect(),
                         count: VirtualPairCol::single_main(table_cols.mult),
-                        argument_index: t1_output,
+                        argument_index: t1_output_bus_index,
                     },
                 ]
             }
             TableType::T2 {
-                t2_intersector,
-                t2_output,
+                t2_intersector_bus_index,
+                t2_output_bus_index,
                 fkey_start,
                 fkey_end,
                 ..
@@ -55,7 +55,7 @@ impl<F: PrimeField64> AirBridge<F> for TableAir {
                             .map(VirtualPairCol::single_main)
                             .collect(),
                         count: VirtualPairCol::single_main(table_cols.is_alloc),
-                        argument_index: t2_intersector,
+                        argument_index: t2_intersector_bus_index,
                     },
                     Interaction {
                         fields: table_cols
@@ -66,7 +66,7 @@ impl<F: PrimeField64> AirBridge<F> for TableAir {
                             .map(VirtualPairCol::single_main)
                             .collect(),
                         count: VirtualPairCol::single_main(table_cols.mult),
-                        argument_index: t2_output,
+                        argument_index: t2_output_bus_index,
                     },
                 ]
             }
@@ -80,7 +80,7 @@ impl<F: PrimeField64> AirBridge<F> for TableAir {
         let table_cols = TableCols::<usize>::from_slice(&all_cols, self.idx_len, self.data_len);
 
         if let TableType::T2 {
-            intersector_t2,
+            intersector_t2_bus_index,
             fkey_start,
             fkey_end,
             ..
@@ -93,7 +93,7 @@ impl<F: PrimeField64> AirBridge<F> for TableAir {
                     .map(VirtualPairCol::single_main)
                     .collect(),
                 count: VirtualPairCol::single_main(table_cols.mult),
-                argument_index: intersector_t2,
+                argument_index: intersector_t2_bus_index,
             }]
         } else {
             vec![]

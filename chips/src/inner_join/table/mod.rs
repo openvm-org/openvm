@@ -4,18 +4,18 @@ pub mod columns;
 pub mod trace;
 
 // A enum for the different table types and their bus indices
-enum TableType {
+pub enum TableType {
     T1 {
-        t1_intersector: usize,
-        t1_output: usize,
+        t1_intersector_bus_index: usize,
+        t1_output_bus_index: usize,
     },
     T2 {
         fkey_start: usize,
         fkey_end: usize,
 
-        t2_intersector: usize,
-        intersector_t2: usize,
-        t2_output: usize,
+        t2_intersector_bus_index: usize,
+        intersector_t2_bus_index: usize,
+        t2_output_bus_index: usize,
     },
 }
 

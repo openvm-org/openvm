@@ -9,40 +9,19 @@ use p3_matrix::{
 };
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use super::{intersector::IntersectorAir, table::TableAir};
+use super::{
+    intersector::IntersectorAir,
+    table::{TableAir, TableType},
+};
+use crate::final_page::FinalPageAir;
 use crate::range_gate::RangeCheckerGateChip;
-
-#[derive(PartialEq, Clone, Debug)]
-pub enum OpType {
-    Read = 0,
-    Write = 1,
-}
-
-#[derive(Clone, Debug)]
-pub struct Operation {
-    pub clk: usize,
-    pub idx: Vec<u32>,
-    pub data: Vec<u32>,
-    pub op_type: OpType,
-}
-
-impl Operation {
-    pub fn new(clk: usize, idx: Vec<u32>, data: Vec<u32>, op_type: OpType) -> Self {
-        Self {
-            clk,
-            idx,
-            data,
-            op_type,
-        }
-    }
-}
 
 pub struct PageController<SC: StarkGenericConfig>
 where
     Val<SC>: AbstractField,
 {
-    pub t1_chip: PageAir,
-    pub t2_chip: OfflineChecker,
+    pub t1_chip: TableAir,
+    pub t2_chip: TableAir,
     pub final_chip: FinalPageAir,
 
     init_chip_trace: Option<DenseMatrix<Val<SC>>>,
@@ -59,8 +38,14 @@ where
 impl<SC: StarkGenericConfig> PageController<SC> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        page_bus_index: usize,
         range_bus_index: usize,
+        t1_intersector_bus_index: usize,
+        t2_intersector_bus_index: usize,
+        intersector_t2_bus_index: usize,
+        t1_output_bus_index: usize,
+        t2_output_bus_index: usize,
+        fkey_start: usize,
+        fkey_end: usize,
         ops_bus_index: usize,
         idx_len: usize,
         data_len: usize,
@@ -71,35 +56,26 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         Val<SC>: Field,
     {
         Self {
-            init_chip: PageAir::new(page_bus_index, idx_len, data_len),
-            offline_checker: OfflineChecker::new(
-                page_bus_index,
-                range_bus_index,
-                ops_bus_index,
+            t1_chip: TableAir::new(
                 idx_len,
                 data_len,
-                idx_limb_bits,
-                Val::<SC>::bits() - 1,
-                idx_decomp,
+                TableType::T1 {
+                    t1_intersector_bus_index,
+                    t1_output_bus_index,
+                },
             ),
-            final_chip: FinalPageAir::new(
-                page_bus_index,
-                range_bus_index,
+            t2_chip: TableAir::new(
                 idx_len,
                 data_len,
-                idx_limb_bits,
-                idx_decomp,
+                TableType::T2 {
+                    fkey_start,
+                    fkey_end,
+                    t2_intersector_bus_index,
+                    intersector_t2_bus_index,
+                    t2_output_bus_index,
+                },
             ),
-
-            init_chip_trace: None,
-            offline_checker_trace: None,
-            final_chip_trace: None,
-            final_page_aux_trace: None,
-
-            init_page_commitment: None,
-            final_page_commitment: None,
-
-            range_checker: Arc::new(RangeCheckerGateChip::new(range_bus_index, 1 << idx_decomp)),
+            final_chip: FinalPageAir::new {},
         }
     }
 
