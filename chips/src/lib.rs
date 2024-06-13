@@ -1,4 +1,5 @@
 pub mod assert_sorted;
+pub mod inner_join;
 pub mod is_equal;
 pub mod is_equal_vec;
 pub mod is_less_than;
