@@ -57,31 +57,53 @@ impl<I: Index, D: Data> Table<I, D> {
     }
 
     pub fn to_page(&self, page_size: usize) -> Vec<Vec<u32>> {
+        if self.body.len() > page_size {
+            panic!(
+                "Table size {} cannot be bigger than `page_size` {}",
+                self.body.len(),
+                page_size
+            );
+        }
         let codec =
             FixedBytesCodec::<I, D>::new(self.metadata.index_bytes, self.metadata.data_bytes);
-        self.body
+        let mut page: Vec<Vec<u32>> = self
+            .body
             .iter()
             .enumerate()
             .map(|(i, (index, data))| {
-                let enabled: Vec<u32> = if i >= page_size { vec![0] } else { vec![1] };
+                let included: Vec<u32> = vec![1];
                 let index_bytes = codec.index_to_fixed_bytes(index.clone());
                 let index_fields = fixed_bytes_to_field_vec(index_bytes);
                 let data_bytes = codec.data_to_fixed_bytes(data.clone());
                 let data_fields = fixed_bytes_to_field_vec(data_bytes);
-                let mut page = enabled;
+                let mut page = included;
                 page.extend(index_fields);
                 page.extend(data_fields);
                 page
             })
-            .collect()
+            .collect();
+        let zeros: Vec<u32> =
+            vec![0; 1 + self.metadata.index_bytes / 2 + self.metadata.data_bytes / 2];
+        for _ in 0..page_size - self.body.len() {
+            page.push(zeros.clone());
+        }
+        page
     }
 
-    pub fn get_id(&self) -> TableId {
+    pub fn id(&self) -> TableId {
         self.id
     }
 
-    pub fn get_id_hex(&self) -> String {
+    pub fn id_hex(&self) -> String {
         "0x".to_string() + &self.id.to_string()
+    }
+
+    pub fn len(&self) -> usize {
+        self.body.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.body.is_empty()
     }
 
     /// Reads directly from the table
@@ -89,11 +111,11 @@ impl<I: Index, D: Data> Table<I, D> {
         self.body.get(&index).cloned()
     }
 
-    pub fn get_index_bytes(&self) -> usize {
+    pub fn size_of_index(&self) -> usize {
         std::mem::size_of::<I>()
     }
 
-    pub fn get_data_bytes(&self) -> usize {
+    pub fn size_of_data(&self) -> usize {
         std::mem::size_of::<D>()
     }
 }
