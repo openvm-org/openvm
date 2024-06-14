@@ -1,10 +1,8 @@
 use crate::commands::{cache, keygen, mock, prove, verify};
-use crate::{
-    commands::{
-        cache::CacheCommand, keygen::KeygenCommand, prove::ProveCommand, verify::VerifyCommand,
-    },
-    common::config::Config,
+use crate::commands::{
+    cache::CacheCommand, keygen::KeygenCommand, prove::ProveCommand, verify::VerifyCommand,
 };
+use afs_test_utils::page_config::PageConfig;
 use clap::Parser;
 use clap::Subcommand;
 
@@ -43,7 +41,7 @@ pub enum CliCommand {
 }
 
 impl Cli {
-    pub fn run(config: &Config) -> Self {
+    pub fn run(config: &PageConfig) -> Self {
         let cli = Self::parse();
         match &cli.command {
             CliCommand::Mock(mock) => {

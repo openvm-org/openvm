@@ -1,5 +1,5 @@
-use afs::cli::Cli;
 use afs_test_utils::page_config::PageConfig;
+use predicate::cli::Cli;
 
 fn main() {
     if std::env::var_os("RUST_BACKTRACE").is_none() {

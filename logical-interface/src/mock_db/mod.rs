@@ -2,7 +2,7 @@ use serde_derive::{Deserialize, Serialize};
 
 use crate::table::types::{TableId, TableMetadata};
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{btree_map::Entry, BTreeMap},
     fs::File,
     io::{Read, Write},
 };
@@ -12,7 +12,7 @@ pub struct MockDb {
     /// Default metadata for tables created in this database
     pub default_table_metadata: TableMetadata,
     /// Map of table id to table
-    pub tables: HashMap<TableId, MockDbTable>,
+    pub tables: BTreeMap<TableId, MockDbTable>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -22,7 +22,7 @@ pub struct MockDbTable {
     /// Metadata containing byte sizes for the db table index and data
     pub db_table_metadata: TableMetadata,
     /// Map of index to data
-    pub items: HashMap<Vec<u8>, Vec<u8>>,
+    pub items: BTreeMap<Vec<u8>, Vec<u8>>,
 }
 
 impl MockDbTable {
@@ -30,7 +30,7 @@ impl MockDbTable {
         Self {
             id: table_id,
             db_table_metadata: metadata,
-            items: HashMap::new(),
+            items: BTreeMap::new(),
         }
     }
 }
@@ -39,7 +39,7 @@ impl MockDb {
     pub fn new(default_table_metadata: TableMetadata) -> Self {
         Self {
             default_table_metadata,
-            tables: HashMap::new(),
+            tables: BTreeMap::new(),
         }
     }
 

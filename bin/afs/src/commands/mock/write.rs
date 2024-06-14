@@ -33,12 +33,12 @@ pub struct WriteCommand {
     pub output_db_file_path: Option<String>,
 
     #[arg(
-        long = "print",
-        short = 'p',
-        help = "Print the table",
+        long = "silent",
+        short = 's',
+        help = "Don't print the output to stdout",
         required = false
     )]
-    pub print: bool,
+    pub silent: bool,
 }
 
 /// `mock read` subcommand
@@ -60,7 +60,7 @@ impl WriteCommand {
         let mut interface = AfsInterface::<U256, U256>::new(&mut db);
         interface.load_input_file(&self.afi_file_path)?;
         let table = interface.get_table(table_id).unwrap();
-        if self.print {
+        if !self.silent {
             println!("Table ID: {}", table.id);
             println!("{:?}", table.metadata);
             for (index, data) in table.body.iter() {

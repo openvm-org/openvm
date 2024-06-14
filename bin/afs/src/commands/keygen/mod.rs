@@ -6,6 +6,7 @@ use std::{
 use afs_chips::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
 use afs_stark_backend::keygen::MultiStarkKeygenBuilder;
 use afs_test_utils::config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config};
+use afs_test_utils::page_config::PageConfig;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use p3_util::log2_strict_usize;
