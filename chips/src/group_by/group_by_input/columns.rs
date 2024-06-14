@@ -72,7 +72,7 @@ impl<T: Clone> GroupByCols<T> {
         let eq_vec_width = IsEqualVecAuxCols::<T>::get_width(num_group_by);
 
         let allocated_idx = 0;
-        let page_idxs = (allocated_idx + 1, group_by_air.page_width + 1);
+        let page_idxs = (allocated_idx + 1, group_by_air.page_width);
         let sorted_group_by_idxs = (page_idxs.1, page_idxs.1 + num_group_by);
         let aggregated_idx = sorted_group_by_idxs.1;
         let partial_aggregated_idx = aggregated_idx + 1;
@@ -101,5 +101,17 @@ impl<T: Clone> GroupByCols<T> {
     pub fn get_width(group_by_air: &GroupByAir) -> usize {
         let index_map = GroupByCols::<T>::index_map(group_by_air);
         index_map.is_equal_vec_aux_end
+    }
+}
+
+impl<T> GroupByIOCols<T> {
+    pub fn get_width(&self) -> usize {
+        self.page.len() + 1
+    }
+}
+
+impl<T: Clone> GroupByAuxCols<T> {
+    pub fn get_width(&self) -> usize {
+        self.sorted_group_by.len() + 4 + self.is_equal_vec_aux.get_self_width()
     }
 }

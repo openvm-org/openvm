@@ -28,6 +28,10 @@ pub struct IsEqualVecAuxCols<T> {
 }
 
 impl<T: Clone> IsEqualVecAuxCols<T> {
+    pub fn get_self_width(&self) -> usize {
+        2 * self.prods.len()
+    }
+
     pub fn get_width(vec_len: usize) -> usize {
         2 * vec_len
     }

@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 
+use afs_stark_backend::air_builders::PartitionedAirBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -16,14 +17,24 @@ impl<F: Field> BaseAir<F> for GroupByAir {
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for GroupByAir {
+impl<AB: PartitionedAirBuilder> Air<AB> for GroupByAir
+where
+    AB::M: Clone,
+{
     fn eval(&self, builder: &mut AB) {
-        let main = builder.main();
+        let page_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[0].clone();
+        let aux_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[1].clone();
 
         // get the current row and the next row
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
-        let local: &[AB::Var] = (*local).borrow();
-        let next: &[AB::Var] = (*next).borrow();
+        let (local_page, next_page) = (page_trace.row_slice(0), page_trace.row_slice(1));
+        let (local_aux, next_aux) = (aux_trace.row_slice(0), aux_trace.row_slice(1));
+        let local_page: &[AB::Var] = (*local_page).borrow();
+        let next_page: &[AB::Var] = (*next_page).borrow();
+        let local_aux: &[AB::Var] = (*local_aux).borrow();
+        let next_aux: &[AB::Var] = (*next_aux).borrow();
+
+        let local: &[AB::Var] = &[local_page, local_aux].concat();
+        let next: &[AB::Var] = &[next_page, next_aux].concat();
 
         let local_cols = GroupByCols::<AB::Var>::from_slice(local, self);
 
@@ -42,7 +53,7 @@ impl AirConfig for GroupByAir {
     type Cols<T> = GroupByCols<T>;
 }
 
-impl<AB: AirBuilder> SubAir<AB> for GroupByAir {
+impl<AB: PartitionedAirBuilder> SubAir<AB> for GroupByAir {
     // io.0 is local.io, io.1 is next.io
     type IoView = (GroupByIOCols<AB::Var>, GroupByIOCols<AB::Var>);
     // aux.0 is local.aux, aux.1 is next.aux
