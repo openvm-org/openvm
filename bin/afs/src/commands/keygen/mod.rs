@@ -1,7 +1,6 @@
+use afs_test_utils::page_config::PageConfig;
 use clap::Parser;
 use color_eyre::eyre::Result;
-
-use crate::common::config::Config;
 
 /// `afs keygen` command
 /// Uses information from config.toml to generate partial proving and verifying keys and
@@ -20,7 +19,7 @@ pub struct KeygenCommand {
 
 impl KeygenCommand {
     /// Execute the `keygen` command
-    pub fn execute(self, _config: &Config) -> Result<()> {
+    pub fn execute(self, _config: &PageConfig) -> Result<()> {
         // WIP: Wait for ReadWrite chip in https://github.com/axiom-crypto/afs-prototype/pull/45
         Ok(())
     }

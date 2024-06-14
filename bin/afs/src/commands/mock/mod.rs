@@ -30,7 +30,7 @@ impl MockCommand {
                 let cmd = afi::AfiCommand {
                     afi_file_path: afi.afi_file_path.clone(),
                     db_file_path: afi.db_file_path.clone(),
-                    print: afi.print,
+                    silent: afi.silent,
                 };
                 cmd.execute()
             }
@@ -38,7 +38,7 @@ impl MockCommand {
                 let cmd = read::ReadCommand {
                     db_file_path: read.db_file_path.clone(),
                     table_id: read.table_id.clone(),
-                    print: read.print,
+                    silent: read.silent,
                 };
                 cmd.execute()
             }
@@ -47,7 +47,7 @@ impl MockCommand {
                     afi_file_path: write.afi_file_path.clone(),
                     db_file_path: write.db_file_path.clone(),
                     output_db_file_path: write.output_db_file_path.clone(),
-                    print: write.print,
+                    silent: write.silent,
                 };
                 cmd.execute()
             }

@@ -1,5 +1,7 @@
 [page]
-width = 32
+index_bytes = 32
+data_bytes = 32
+bits_per_fe = 16
 height = 128
 mode = "ReadWrite" # options: "ReadOnly", "ReadWrite"
 max_rw_ops = 128

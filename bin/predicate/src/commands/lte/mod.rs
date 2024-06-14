@@ -8,22 +8,22 @@ use crate::utils::get_table_from_db;
 use super::common::CommonCommands;
 
 #[derive(Debug, Parser)]
-pub struct EqCommand {
+pub struct LteCommand {
     #[command(flatten)]
     pub args: CommonCommands,
 }
 
-/// `eq` command
-impl EqCommand {
-    /// Execute the `eq` command
+/// `lte` command
+impl LteCommand {
+    /// Execute the `lte` command
     pub fn execute(self, config: &PageConfig) -> Result<()> {
         println!(
-            "Running `index == {}` command on table: {}",
+            "Running `index < {}` command on table: {}",
             self.args.value, self.args.table_id
         );
         let table = get_table_from_db::<U256, U256>(self.args.table_id, self.args.db_file_path);
         let _page = table.to_page(config.page.height);
-        let _predicate = "==";
+        let _predicate = "<=";
 
         // Handle the page and predicate in ZK and get the resulting page back
 

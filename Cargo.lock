@@ -21,6 +21,7 @@ checksum = "f26201604c87b1e01bd3d98f8d5d9a8fcbb815e8cedb41ffccbeb4bf593a35fe"
 name = "afs"
 version = "0.1.0"
 dependencies = [
+ "afs-test-utils",
  "alloy-primitives",
  "bincode",
  "clap",
@@ -136,6 +137,7 @@ dependencies = [
  "p3-util",
  "rand",
  "serde",
+ "toml",
  "tracing",
  "tracing-forest",
  "tracing-subscriber",
@@ -1511,6 +1513,7 @@ name = "predicate"
 version = "0.1.0"
 dependencies = [
  "afs-chips",
+ "afs-test-utils",
  "alloy-primitives",
  "bincode",
  "clap",

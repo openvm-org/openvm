@@ -19,12 +19,12 @@ pub struct ReadCommand {
     pub db_file_path: Option<String>,
 
     #[arg(
-        long = "print",
-        short = 'p',
-        help = "Print the table",
+        long = "silent",
+        short = 's',
+        help = "Don't print the output to stdout",
         required = false
     )]
-    pub print: bool,
+    pub silent: bool,
 }
 
 /// `mock read` subcommand
@@ -45,7 +45,7 @@ impl ReadCommand {
         let table = interface.get_table(table_id.clone());
         match table {
             Some(table) => {
-                if self.print {
+                if !self.silent {
                     println!("Table ID: {}", table.id);
                     println!("{:?}", table.metadata);
                     for (index, data) in table.body.iter() {

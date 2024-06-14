@@ -9,10 +9,12 @@ use crate::{
     types::{Data, Index},
     utils::fixed_bytes_to_field_vec,
 };
+use serde_derive::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use types::{TableId, TableMetadata};
 
 /// Read-only Table object that returns an underlying database table as simple types
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Table<I: Index, D: Data> {
     /// Unique identifier for the table
     pub id: TableId,
@@ -148,17 +150,16 @@ impl<I: Index, D: Data> Table<I, D> {
         "0x".to_string() + &self.id.to_string()
     }
 
+    pub fn read(&self, index: I) -> Option<D> {
+        self.body.get(&index).cloned()
+    }
+
     pub fn len(&self) -> usize {
         self.body.len()
     }
 
     pub fn is_empty(&self) -> bool {
         self.body.is_empty()
-    }
-
-    /// Reads directly from the table
-    pub fn read(&self, index: I) -> Option<D> {
-        self.body.get(&index).cloned()
     }
 
     pub fn size_of_index(&self) -> usize {
