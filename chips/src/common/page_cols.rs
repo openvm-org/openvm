@@ -1,3 +1,6 @@
+use std::iter;
+
+#[derive(Clone)]
 pub struct PageCols<T> {
     pub is_alloc: T, // indicates if row is allocated
     pub idx: Vec<T>,
@@ -11,5 +14,12 @@ impl<T: Clone> PageCols<T> {
             idx: cols[1..idx_len + 1].to_vec(),
             data: cols[idx_len + 1..idx_len + data_len + 1].to_vec(),
         }
+    }
+
+    pub fn to_vec(&self) -> Vec<T> {
+        iter::once(self.is_alloc.clone())
+            .chain(self.idx.clone())
+            .chain(self.data.clone())
+            .collect()
     }
 }

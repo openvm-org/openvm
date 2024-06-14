@@ -5,10 +5,13 @@ mod bridge;
 mod columns;
 mod trace;
 
+#[cfg(test)]
+mod tests;
+
 pub struct OfflineChecker {
-    pub page_bus_index: usize,
-    pub range_bus_index: usize,
-    pub ops_bus_index: usize,
+    page_bus_index: usize,
+    range_bus_index: usize,
+    ops_bus_index: usize,
 
     idx_len: usize,
     data_len: usize,

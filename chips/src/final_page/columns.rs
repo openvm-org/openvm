@@ -1,11 +1,11 @@
 use std::iter;
 
-use crate::{
-    is_less_than_tuple::columns::IsLessThanTupleAuxCols, page_rw_checker::page::columns::PageCols,
-};
+use crate::{common::page_cols::PageCols, is_less_than_tuple::columns::IsLessThanTupleAuxCols};
 
 pub struct FinalPageCols<T> {
+    /// The columns for the page itself
     pub page_cols: PageCols<T>,
+    /// The auxiliary columns used for ensuring sorting
     pub aux_cols: FinalPageAuxCols<T>,
 }
 

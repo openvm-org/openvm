@@ -1,4 +1,5 @@
 pub mod assert_sorted;
+pub mod common;
 pub mod final_page;
 pub mod inner_join;
 pub mod is_equal;
