@@ -3,7 +3,6 @@ use itertools::Itertools;
 use p3_commit::Pcs;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
-use serde::{Deserialize, Serialize};
 use tracing::info_span;
 
 use crate::{
