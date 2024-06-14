@@ -14,6 +14,8 @@ use clap::Parser;
 use color_eyre::eyre::Result;
 use p3_util::log2_strict_usize;
 
+use super::create_prefix;
+
 /// `afs keygen` command
 /// Uses information from config.toml to generate partial proving and verifying keys and
 /// saves them to the specified `output-folder` as *.partial.pk and *.partial.vk.
@@ -24,7 +26,7 @@ pub struct KeygenCommand {
         short = 'o',
         help = "The folder to output the keys to",
         required = false,
-        default_value = "output"
+        default_value = "keys"
     )]
     pub output_folder: String,
 }
@@ -33,13 +35,15 @@ impl KeygenCommand {
     /// Execute the `keygen` command
     pub fn execute(self, config: &PageConfig) -> Result<()> {
         // WIP: Wait for ReadWrite chip in https://github.com/axiom-crypto/afs-prototype/pull/45
+        let prefix = create_prefix(&config);
         match config.page.mode {
             PageMode::ReadWrite => self.execute_rw(
                 (config.page.index_bytes + 1) / 2 as usize,
                 (config.page.data_bytes + 1) / 2 as usize,
                 config.page.max_rw_ops as usize,
                 config.page.height as usize,
-                16,
+                config.page.bits_per_fe,
+                prefix,
             )?,
             PageMode::ReadOnly => panic!(),
         }
@@ -53,6 +57,7 @@ impl KeygenCommand {
         max_ops: usize,
         height: usize,
         limb_bits: usize,
+        prefix: String,
     ) -> Result<()> {
         let page_bus_index = 0;
         let checker_final_bus_index = 1;
@@ -132,8 +137,8 @@ impl KeygenCommand {
         let partial_vk = partial_pk.partial_vk();
         let encoded_pk: Vec<u8> = bincode::serialize(&partial_pk)?;
         let encoded_vk: Vec<u8> = bincode::serialize(&partial_vk)?;
-        let pk_path = self.output_folder.clone() + "/partial.pk";
-        let vk_path = self.output_folder.clone() + "/partial.vk";
+        let pk_path = self.output_folder.clone() + "/" + &prefix.clone() + ".partial.pk";
+        let vk_path = self.output_folder.clone() + "/" + &prefix.clone() + ".partial.vk";
         fs::create_dir_all(self.output_folder).unwrap();
         write_bytes(&encoded_pk, pk_path).unwrap();
         write_bytes(&encoded_vk, vk_path).unwrap();

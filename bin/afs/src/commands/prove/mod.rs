@@ -4,12 +4,15 @@ use afs_chips::{
 };
 use afs_stark_backend::{
     keygen::types::MultiStarkPartialProvingKey,
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+    prover::{
+        trace::{ProverTraceData, TraceCommitmentBuilder},
+        MultiTraceStarkProver,
+    },
 };
 use afs_test_utils::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
     engine::StarkEngine,
-    page_config::PageConfig,
+    page_config::{PageConfig, PageMode},
 };
 use alloy_primitives::U256;
 use clap::Parser;
@@ -18,7 +21,7 @@ use logical_interface::{
     afs_input_instructions::{types::InputFileBodyOperation, AfsInputInstructions, AfsOperation},
     afs_interface::AfsInterface,
     mock_db::MockDb,
-    table::{codec::fixed_bytes::FixedBytesCodec, types::TableMetadata},
+    table::codec::fixed_bytes::FixedBytesCodec,
     types::{Data, Index},
     utils::{fixed_bytes_to_field_vec, string_to_fixed_bytes_be_vec},
 };
@@ -26,14 +29,13 @@ use p3_util::log2_strict_usize;
 
 use crate::commands::{read_from_path, write_bytes};
 
+use super::create_prefix;
+
 /// `afs prove` command
 /// Uses information from config.toml to generate a proof of the changes made by a .afi file to a table
 /// saves the proof in `output-folder` as */prove.bin.
 #[derive(Debug, Parser)]
 pub struct ProveCommand {
-    #[arg(long = "table-id", short = 't', help = "The table ID", required = true)]
-    pub table_id: String,
-
     #[arg(
         long = "afi-file",
         short = 'f',
@@ -46,58 +48,67 @@ pub struct ProveCommand {
         long = "db-file",
         short = 'd',
         help = "DB file input (default: new empty DB)",
-        required = false
+        required = true
     )]
-    pub db_file_path: Option<String>,
+    pub db_file_path: String,
 
     #[arg(
-        long = "output-folder",
-        short = 'o',
-        help = "The folder to output the keys to",
+        long = "keys-folder",
+        short = 'k',
+        help = "The folder that contains keys",
         required = false,
-        default_value = "output"
+        default_value = "keys"
     )]
-    pub output_folder: String,
+    pub keys_folder: String,
+
+    #[arg(
+        long = "cache-folder",
+        short = 'c',
+        help = "The folder that contains cached traces",
+        required = false,
+        default_value = "cache"
+    )]
+    pub cache_folder: String,
+
+    #[arg(
+        long = "silent",
+        short = 's',
+        help = "Don't print the output to stdout",
+        required = false
+    )]
+    pub silent: bool,
 }
 
 impl ProveCommand {
     /// Execute the `prove` command
     pub fn execute(&self, config: &PageConfig) -> Result<()> {
+        let prefix = create_prefix(&config);
+        match config.page.mode {
+            PageMode::ReadWrite => self.execute_rw(config, prefix)?,
+            PageMode::ReadOnly => panic!(),
+        }
+        Ok(())
+    }
+
+    pub fn execute_rw(&self, config: &PageConfig, prefix: String) -> Result<()> {
         println!("Proving ops file: {}", self.afi_file_path);
-        // prove::prove_ops(&self.ops_file).await?;
         let instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
-        let mut db = if let Some(db_file_path) = &self.db_file_path {
-            println!("db_file_path: {}", db_file_path);
-            MockDb::from_file(&db_file_path)
-        } else {
-            let default_table_metadata = TableMetadata::new(32, 1024);
-            MockDb::new(default_table_metadata)
-        };
-        let idx_len = (db.default_table_metadata.index_bytes + 1) / 2;
-        let data_len = (db.default_table_metadata.data_bytes + 1) / 2;
+        let mut db = MockDb::from_file(&self.db_file_path);
+        let idx_len = (config.page.index_bytes + 1) / 2;
+        let data_len = (config.page.data_bytes + 1) / 2;
         let height = config.page.height;
-        assert_eq!(
-            db.default_table_metadata.index_bytes,
-            config.page.index_bytes as usize
-        );
-        assert_eq!(
-            db.default_table_metadata.data_bytes,
-            config.page.data_bytes as usize
-        );
-        let codec = FixedBytesCodec::new(
-            db.default_table_metadata.index_bytes,
-            db.default_table_metadata.data_bytes,
-        );
+        let codec = FixedBytesCodec::new(config.page.index_bytes, config.page.data_bytes);
         let mut interface = AfsInterface::<U256, U256>::new(&mut db);
+        let table_id = instructions.header.table_id;
         let page_init = interface
-            .get_table(self.table_id.clone())
+            .get_table(table_id.clone())
             .unwrap()
             .to_page(height);
         let zk_ops = instructions
             .operations
             .iter()
             .enumerate()
-            .map(|(i, op)| afi_op_conv(op, self.table_id.clone(), &mut interface, i + 1, &codec))
+            .map(|(i, op)| afi_op_conv(op, table_id.clone(), &mut interface, i + 1, &codec))
             .collect::<Vec<_>>();
 
         assert!(height > 0);
@@ -108,7 +119,7 @@ impl ProveCommand {
 
         let checker_trace_degree = config.page.max_rw_ops as usize * 4;
 
-        let idx_limb_bits = config.schema.limb_size as usize;
+        let idx_limb_bits = config.page.bits_per_fe as usize;
 
         let max_log_degree = log2_strict_usize(checker_trace_degree)
             .max(log2_strict_usize(height))
@@ -131,6 +142,10 @@ impl ProveCommand {
         let prover = MultiTraceStarkProver::new(&engine.config);
         let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
+        let init_prover_data_encoded =
+            read_from_path(self.cache_folder.clone() + "/" + &table_id + ".cache.bin").unwrap();
+        let init_prover_data: ProverTraceData<BabyBearPoseidon2Config> =
+            bincode::deserialize(&init_prover_data_encoded).unwrap();
         let (page_traces, mut prover_data) = page_controller.load_page_and_ops(
             page_init.clone(),
             idx_len,
@@ -140,8 +155,8 @@ impl ProveCommand {
             zk_ops.clone(),
             checker_trace_degree,
             &mut trace_builder.committer,
+            false,
         );
-
         let offline_checker_trace = page_controller.offline_checker_trace();
         let final_page_aux_trace = page_controller.final_page_aux_trace();
         let range_checker_trace = page_controller.range_checker_trace();
@@ -155,7 +170,7 @@ impl ProveCommand {
 
         trace_builder.clear();
 
-        trace_builder.load_cached_trace(page_traces[0].clone(), prover_data.remove(0));
+        trace_builder.load_cached_trace(page_traces[0].clone(), init_prover_data);
         trace_builder.load_cached_trace(page_traces[1].clone(), prover_data.remove(0));
         trace_builder.load_trace(final_page_aux_trace);
         trace_builder.load_trace(offline_checker_trace.clone());
@@ -163,7 +178,8 @@ impl ProveCommand {
         trace_builder.load_trace(ops_sender_trace);
 
         trace_builder.commit_current();
-        let encoded_pk = read_from_path(self.output_folder.clone() + "/partial.pk").unwrap();
+        let encoded_pk =
+            read_from_path(self.keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
         let partial_pk: MultiStarkPartialProvingKey<BabyBearPoseidon2Config> =
             bincode::deserialize(&encoded_pk).unwrap();
         let partial_vk = partial_pk.partial_vk();
@@ -185,9 +201,17 @@ impl ProveCommand {
         let mut challenger = engine.new_challenger();
         let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
         let encoded_proof: Vec<u8> = bincode::serialize(&proof).unwrap();
-        let proof_path = self.output_folder.clone() + "/prove.bin";
+        let table = interface.get_table(table_id.clone()).unwrap();
+        if !self.silent {
+            println!("Table ID: {}", table_id);
+            println!("{:?}", table.metadata);
+            for (index, data) in table.body.iter() {
+                println!("{:?}: {:?}", index, data);
+            }
+        }
+        let proof_path = self.db_file_path.clone() + ".prove.bin";
         write_bytes(&encoded_proof, proof_path).unwrap();
-        db.save_to_file(&(self.output_folder.clone() + "/final_db.mockdb"))?;
+        db.save_to_file(&(self.db_file_path.clone() + ".0"))?;
         Ok(())
     }
 }
@@ -239,7 +263,7 @@ where
             let data_u8 = string_to_fixed_bytes_be_vec(afi_op.args[1].clone(), codec.db_size_data);
             let data_u16 = fixed_bytes_to_field_vec(data_u8.clone());
             let data = codec.fixed_bytes_to_data(data_u8);
-            interface.insert(table_id, idx, data);
+            interface.write(table_id, idx, data);
             Operation {
                 clk,
                 idx: idx_u16,

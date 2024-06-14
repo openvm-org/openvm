@@ -40,7 +40,6 @@ impl ExecutionAir {
             blank_row[1] += 1;
         }
         rows.resize(trace_degree, blank_row.clone());
-        println!("ROWS: {:?}", rows);
         let rows: Vec<Vec<F>> = rows
             .iter()
             .map(|row| row.iter().map(|u| F::from_canonical_u32(*u)).collect())

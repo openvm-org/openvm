@@ -155,6 +155,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         ops: Vec<Operation>,
         trace_degree: usize,
         trace_committer: &mut TraceCommitter<SC>,
+        commit_init_trace: bool,
     ) -> (Vec<DenseMatrix<Val<SC>>>, Vec<ProverTraceData<SC>>)
     where
         Val<SC>: PrimeField,
@@ -209,10 +210,14 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             internal_indices,
         ));
 
-        let prover_data = vec![
-            trace_committer.commit(vec![self.init_chip_trace.clone().unwrap()]),
-            trace_committer.commit(vec![self.final_chip_trace.clone().unwrap()]),
-        ];
+        let prover_data = if commit_init_trace {
+            vec![
+                trace_committer.commit(vec![self.init_chip_trace.clone().unwrap()]),
+                trace_committer.commit(vec![self.final_chip_trace.clone().unwrap()]),
+            ]
+        } else {
+            vec![trace_committer.commit(vec![self.final_chip_trace.clone().unwrap()])]
+        };
 
         self.init_page_commitment = Some(prover_data[0].commit.clone());
         self.final_page_commitment = Some(prover_data[1].commit.clone());
