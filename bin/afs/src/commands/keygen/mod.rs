@@ -5,13 +5,14 @@ use std::{
 
 use afs_chips::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
 use afs_stark_backend::keygen::MultiStarkKeygenBuilder;
-use afs_test_utils::config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config};
 use afs_test_utils::page_config::PageConfig;
+use afs_test_utils::{
+    config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
+    page_config::PageMode,
+};
 use clap::Parser;
 use color_eyre::eyre::Result;
 use p3_util::log2_strict_usize;
-
-use crate::common::config::{Config, PageMode};
 
 /// `afs keygen` command
 /// Uses information from config.toml to generate partial proving and verifying keys and
@@ -30,15 +31,15 @@ pub struct KeygenCommand {
 
 impl KeygenCommand {
     /// Execute the `keygen` command
-    pub fn execute(self, config: &Config) -> Result<()> {
+    pub fn execute(self, config: &PageConfig) -> Result<()> {
         // WIP: Wait for ReadWrite chip in https://github.com/axiom-crypto/afs-prototype/pull/45
         match config.page.mode {
             PageMode::ReadWrite => self.execute_rw(
-                config.page.idx_len as usize,
-                config.page.data_len as usize,
+                (config.page.index_bytes + 1) / 2 as usize,
+                (config.page.data_bytes + 1) / 2 as usize,
                 config.page.max_rw_ops as usize,
                 config.page.height as usize,
-                config.schema.limb_size as usize,
+                16,
             )?,
             PageMode::ReadOnly => panic!(),
         }
