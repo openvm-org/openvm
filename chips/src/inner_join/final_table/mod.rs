@@ -10,6 +10,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::{
+    common::page::Page,
     final_page::{columns::FinalPageCols, FinalPageAir},
     range_gate::RangeCheckerGateChip,
     sub_chip::AirConfig,
@@ -65,23 +66,22 @@ impl MyFinalTableAir {
     }
 
     // Trace generation
-    pub fn gen_page_trace<SC: StarkGenericConfig>(
-        &self,
-        page: Vec<Vec<u32>>,
-    ) -> RowMajorMatrix<Val<SC>> {
-        self.final_air.gen_page_trace::<SC>(page)
+    pub fn gen_page_trace<SC: StarkGenericConfig>(&self, page: &Page) -> RowMajorMatrix<Val<SC>>
+    where
+        Val<SC>: PrimeField,
+    {
+        page.gen_trace()
     }
 
     pub fn gen_aux_trace<SC: StarkGenericConfig>(
         &self,
-        page: Vec<Vec<u32>>,
+        page: &Page,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> RowMajorMatrix<Val<SC>>
     where
         Val<SC>: PrimeField,
     {
-        self.final_air
-            .gen_aux_trace::<SC>(page.clone(), range_checker)
+        self.final_air.gen_aux_trace::<SC>(page, range_checker)
     }
 }
 

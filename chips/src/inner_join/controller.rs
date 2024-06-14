@@ -16,6 +16,17 @@ use super::{
 use crate::final_page::FinalPageAir;
 use crate::range_gate::RangeCheckerGateChip;
 
+struct TableCommitments<SC: StarkGenericConfig> {
+    t1_trace: DenseMatrix<Val<SC>>,
+    t2_trace: DenseMatrix<Val<SC>>,
+    output_main_trace: DenseMatrix<Val<SC>>,
+    output_aux_trace: DenseMatrix<Val<SC>>,
+
+    t1_commitment: Com<SC>,
+    t2_commitment: Com<SC>,
+    output_commitment: Com<SC>,
+}
+
 pub struct PageController<SC: StarkGenericConfig>
 where
     Val<SC>: AbstractField,
@@ -24,14 +35,7 @@ where
     pub t2_chip: TableAir,
     pub final_chip: FinalPageAir,
 
-    t1_trace: Option<DenseMatrix<Val<SC>>>,
-    t2_trace: Option<DenseMatrix<Val<SC>>>,
-    output_main_trace: Option<DenseMatrix<Val<SC>>>,
-    output_aux_trace: Option<DenseMatrix<Val<SC>>>,
-
-    t1_commitment: Option<Com<SC>>,
-    t2_commitment: Option<Com<SC>>,
-    output_commitment: Option<Com<SC>>,
+    table_commitments: TableCommitments<SC>,
 
     pub range_checker: Arc<RangeCheckerGateChip>,
 }
