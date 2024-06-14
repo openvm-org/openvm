@@ -56,6 +56,56 @@ impl<I: Index, D: Data> Table<I, D> {
         }
     }
 
+    pub fn from_page(id: TableId, page: Vec<Vec<u32>>) -> Self {
+        let row_size = 1 + Self::SIZE_I / 2 + Self::SIZE_D / 2;
+
+        let codec = FixedBytesCodec::<I, D>::new(Self::SIZE_I, Self::SIZE_D);
+
+        let mut body = page
+            .iter()
+            .map(|row| {
+                if row.len() != row_size {
+                    panic!(
+                        "Invalid row size: {} for this codec, expected: {}",
+                        row.len(),
+                        row_size
+                    );
+                }
+                let index_bytes: Vec<u8> = row
+                    .iter()
+                    .skip(1)
+                    .take(Self::SIZE_I / 2)
+                    .flat_map(|&x| {
+                        let bytes = x.to_be_bytes();
+                        bytes[2..4].to_vec()
+                    })
+                    .collect::<Vec<u8>>();
+                let data_bytes: Vec<u8> = row
+                    .iter()
+                    .skip(1 + Self::SIZE_I / 2)
+                    .take(Self::SIZE_D / 2)
+                    .flat_map(|&x| {
+                        let bytes = x.to_be_bytes();
+                        bytes[2..4].to_vec()
+                    })
+                    .collect::<Vec<u8>>();
+                let index = codec.fixed_bytes_to_index(index_bytes);
+                let data = codec.fixed_bytes_to_data(data_bytes);
+                (index, data)
+            })
+            .collect::<BTreeMap<I, D>>();
+
+        // Remove the 0 index which is from the padding
+        let index_zero: Vec<u8> = vec![0; Self::SIZE_I];
+        body.remove(&I::from_be_bytes(&index_zero).unwrap());
+
+        Self {
+            id,
+            metadata: TableMetadata::new(Self::SIZE_I, Self::SIZE_D),
+            body,
+        }
+    }
+
     pub fn to_page(&self, page_size: usize) -> Vec<Vec<u32>> {
         if self.body.len() > page_size {
             panic!(
