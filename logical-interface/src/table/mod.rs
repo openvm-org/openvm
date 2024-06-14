@@ -8,7 +8,7 @@ use crate::{
     table::codec::fixed_bytes::FixedBytesCodec,
     types::{Data, Index},
 };
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use types::{TableId, TableMetadata};
 
 /// Read-only Table object that returns an underlying database table as simple types
@@ -18,7 +18,7 @@ pub struct Table<I: Index, D: Data> {
     /// Metadata for the table
     pub metadata: TableMetadata,
     /// Body of the table, mapping index to data
-    pub body: HashMap<I, D>,
+    pub body: BTreeMap<I, D>,
 }
 
 impl<I: Index, D: Data> Table<I, D> {
@@ -29,7 +29,7 @@ impl<I: Index, D: Data> Table<I, D> {
         Self {
             id,
             metadata,
-            body: HashMap::new(),
+            body: BTreeMap::new(),
         }
     }
 
@@ -46,7 +46,7 @@ impl<I: Index, D: Data> Table<I, D> {
                 let data = codec.fixed_bytes_to_data(v.to_vec());
                 (index, data)
             })
-            .collect::<HashMap<I, D>>();
+            .collect::<BTreeMap<I, D>>();
 
         Self {
             id: db_table.id,

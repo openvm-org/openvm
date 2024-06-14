@@ -1,15 +1,10 @@
-use crate::commands::{cache, keygen, mock, prove, verify};
-use crate::{
-    commands::{
-        cache::CacheCommand, keygen::KeygenCommand, prove::ProveCommand, verify::VerifyCommand,
-    },
-    common::config::Config,
-};
 use clap::Parser;
 use clap::Subcommand;
 
+use crate::commands::eq;
+
 #[derive(Debug, Parser)]
-#[command(author, version, about = "AFS CLI")]
+#[command(author, version, about = "AFS Predicate CLI")]
 #[command(propagate_version = true)]
 pub struct Cli {
     #[command(subcommand)]
@@ -18,63 +13,49 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum CliCommand {
-    #[command(name = "mock", about = "Mock functions")]
-    /// Mock functions
-    Mock(mock::MockCommand),
+    #[command(name = "eq", about = "Get data in a Table that is equal to the input")]
+    /// Get data in a Table that is equal to the input
+    Eq(eq::EqCommand),
+    // #[command(name = "gt", about = "Get data in a Table that is greater than the input")]
+    // /// Get data in a Table that is greater than the input
+    // Gt(gt::GtCommand),
 
-    #[command(name = "keygen", about = "Generate partial proving and verifying keys")]
-    /// Generate partial proving and verifying keys
-    Keygen(keygen::KeygenCommand),
+    // #[command(name = "gte", about = "Get data in a Table that is greater than or equal to the input")]
+    // /// Get data in a Table that is greater than or equal to the input
+    // Gte(gte::GteCommand),
 
-    #[command(
-        name = "cache",
-        about = "Create the cached trace of a page from a page file"
-    )]
-    /// Create cached trace of a page from a page file
-    Cache(cache::CacheCommand),
+    // #[command(name = "lt", about = "Get data in a Table that is less than the input")]
+    // /// Get data in a Table that is less than the input
+    // Lt(lt::LtCommand),
 
-    #[command(name = "prove", about = "Generates a multi-STARK proof")]
-    /// Generates a multi-STARK proof
-    Prove(prove::ProveCommand),
-
-    #[command(name = "verify", about = "Verifies a multi-STARK proof")]
-    /// Verifies a multi-STARK proof
-    Verify(verify::VerifyCommand),
+    // #[command(name = "lte", about = "Get data in a Table that is less than or equal to the input")]
+    // /// Get data in a Table that is less than or equal to the input
+    // Lte(lte::LteCommand),
 }
 
 impl Cli {
-    pub fn run(config: &Config) -> Self {
+    pub fn run() -> Self {
         let cli = Self::parse();
         match &cli.command {
-            CliCommand::Mock(mock) => {
-                mock.execute().unwrap();
-            }
-            CliCommand::Keygen(keygen) => {
-                let cmd = KeygenCommand {
-                    output_folder: keygen.output_folder.clone(),
-                };
-                cmd.execute(config).unwrap();
-            }
-            CliCommand::Cache(cache) => {
-                let cmd = CacheCommand {
-                    page_file: cache.page_file.clone(),
-                    output_file: cache.output_file.clone(),
+            CliCommand::Eq(eq) => {
+                let cmd = eq::EqCommand {
+                    table_id: eq.table_id.clone(),
+                    value: eq.value.clone(),
+                    output_file: eq.output_file.clone(),
                 };
                 cmd.execute().unwrap();
-            }
-            CliCommand::Prove(prove) => {
-                let cmd = ProveCommand {
-                    ops_file: prove.ops_file.clone(),
-                    output_file: prove.output_file.clone(),
-                };
-                cmd.execute().unwrap();
-            }
-            CliCommand::Verify(verify) => {
-                let cmd = VerifyCommand {
-                    proof_file: verify.proof_file.clone(),
-                };
-                cmd.execute().unwrap();
-            }
+            } // CliCommand::Gt(gt) => {
+              //     gt.execute().unwrap();
+              // }
+              // CliCommand::Gte(gte) => {
+              //     gte.execute().unwrap();
+              // }
+              // CliCommand::Lt(lt) => {
+              //     lt.execute().unwrap();
+              // }
+              // CliCommand::Lte(lte) => {
+              //     lte.execute().unwrap();
+              // }
         }
         cli
     }

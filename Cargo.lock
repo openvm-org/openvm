@@ -1515,6 +1515,7 @@ dependencies = [
  "bincode",
  "clap",
  "color-eyre",
+ "logical-interface",
  "serde",
  "serde_derive",
 ]

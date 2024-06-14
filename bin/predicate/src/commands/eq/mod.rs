@@ -9,7 +9,7 @@ pub struct EqCommand {
         help = "The table id to run the predicate on",
         required = true
     )]
-    table_id: String,
+    pub table_id: String,
 
     #[arg(
         long = "value",
@@ -17,7 +17,7 @@ pub struct EqCommand {
         help = "The value to compare against",
         required = true
     )]
-    value: String,
+    pub value: String,
 
     #[arg(
         long = "output-file",

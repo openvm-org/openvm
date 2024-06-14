@@ -10,6 +10,8 @@ cargo run --bin afs -- --help
 
 ## Mock commands
 
+Run these commands from the root of the repository.
+
 ### Read
 
 Read from a local mock database file. Set the --db-file (-d), --table-id (-t), and print to stdout with the --print (-p) flag.
