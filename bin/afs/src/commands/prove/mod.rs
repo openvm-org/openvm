@@ -1,8 +1,3 @@
-use std::{
-    fs::File,
-    io::{BufReader, BufWriter, Read, Write},
-};
-
 use afs_chips::{
     execution_air::ExecutionAir,
     page_rw_checker::page_controller::{OpType, Operation, PageController},
@@ -14,25 +9,22 @@ use afs_stark_backend::{
 use afs_test_utils::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
     engine::StarkEngine,
+    page_config::PageConfig,
 };
-use alloy_primitives::{Uint, U256};
+use alloy_primitives::U256;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{
     afs_input_instructions::{types::InputFileBodyOperation, AfsInputInstructions, AfsOperation},
     afs_interface::AfsInterface,
     mock_db::MockDb,
-    table::{
-        codec::{self, fixed_bytes::FixedBytesCodec},
-        types::TableMetadata,
-        Table,
-    },
+    table::{codec::fixed_bytes::FixedBytesCodec, types::TableMetadata},
     types::{Data, Index},
-    utils::string_to_fixed_bytes_be_vec,
+    utils::{fixed_bytes_to_field_vec, string_to_fixed_bytes_be_vec},
 };
 use p3_util::log2_strict_usize;
 
-use crate::common::config::Config;
+use crate::commands::{read_from_path, write_bytes};
 
 /// `afs prove` command
 /// Uses information from config.toml to generate a proof of the changes made by a .afi file to a table
@@ -70,23 +62,37 @@ pub struct ProveCommand {
 
 impl ProveCommand {
     /// Execute the `prove` command
-    pub fn execute(&self, config: &Config) -> Result<()> {
+    pub fn execute(&self, config: &PageConfig) -> Result<()> {
         println!("Proving ops file: {}", self.afi_file_path);
         // prove::prove_ops(&self.ops_file).await?;
         let instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
-        let mut db = if let Some(db_file_path) = self.db_file_path {
+        let mut db = if let Some(db_file_path) = &self.db_file_path {
             println!("db_file_path: {}", db_file_path);
             MockDb::from_file(&db_file_path)
         } else {
             let default_table_metadata = TableMetadata::new(32, 1024);
             MockDb::new(default_table_metadata)
         };
-        let idx_len = db.default_table_metadata.index_bytes;
-        let data_len = db.default_table_metadata.data_bytes;
-        assert!(idx_len == config.page.idx_len as usize);
-        assert!(data_len == config.page.data_len as usize);
-        let codec = FixedBytesCodec::new(idx_len, db.default_table_metadata.data_bytes);
-        let mut interface = AfsInterface::new(&mut db);
+        let idx_len = (db.default_table_metadata.index_bytes + 1) / 2;
+        let data_len = (db.default_table_metadata.data_bytes + 1) / 2;
+        let height = config.page.height;
+        assert_eq!(
+            db.default_table_metadata.index_bytes,
+            config.page.index_bytes as usize
+        );
+        assert_eq!(
+            db.default_table_metadata.data_bytes,
+            config.page.data_bytes as usize
+        );
+        let codec = FixedBytesCodec::new(
+            db.default_table_metadata.index_bytes,
+            db.default_table_metadata.data_bytes,
+        );
+        let mut interface = AfsInterface::<U256, U256>::new(&mut db);
+        let page_init = interface
+            .get_table(self.table_id.clone())
+            .unwrap()
+            .to_page(height);
         let zk_ops = instructions
             .operations
             .iter()
@@ -94,26 +100,23 @@ impl ProveCommand {
             .map(|(i, op)| afi_op_conv(op, self.table_id.clone(), &mut interface, i + 1, &codec))
             .collect::<Vec<_>>();
 
-        let page_height = 10000;
-        assert!(page_height > 0);
+        assert!(height > 0);
         let page_bus_index = 0;
         let checker_final_bus_index = 1;
         let range_bus_index = 2;
         let ops_bus_index = 3;
-
-        let page_width = 1 + idx_len + data_len;
 
         let checker_trace_degree = config.page.max_rw_ops as usize * 4;
 
         let idx_limb_bits = config.schema.limb_size as usize;
 
         let max_log_degree = log2_strict_usize(checker_trace_degree)
-            .max(log2_strict_usize(page_height))
+            .max(log2_strict_usize(height))
             .max(8);
 
         let idx_decomp = 8;
 
-        let page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
+        let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
             page_bus_index,
             checker_final_bus_index,
             range_bus_index,
@@ -127,6 +130,7 @@ impl ProveCommand {
         let engine = config::baby_bear_poseidon2::default_engine(max_log_degree);
         let prover = MultiTraceStarkProver::new(&engine.config);
         let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
+
         let (page_traces, mut prover_data) = page_controller.load_page_and_ops(
             page_init.clone(),
             idx_len,
@@ -179,9 +183,11 @@ impl ProveCommand {
         let prover = engine.prover();
 
         let mut challenger = engine.new_challenger();
-        let proof: = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
+        let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
         let encoded_proof: Vec<u8> = bincode::serialize(&proof).unwrap();
-        p3_dft::radix_2_dit_parallel::Radix2DitParallel;
+        let proof_path = self.output_folder.clone() + "/prove.bin";
+        write_bytes(&encoded_proof, proof_path).unwrap();
+        db.save_to_file(&(self.output_folder.clone() + "/final_db.mockdb"))?;
         Ok(())
     }
 }
@@ -197,8 +203,8 @@ where
     I: Index,
     D: Data,
 {
-    let idx_u8 = string_to_fixed_bytes_be_vec(afi_op.args[0].clone(), 32);
-    let idx_u16 = vec_u8_to_vec_u16(&idx_u8);
+    let idx_u8 = string_to_fixed_bytes_be_vec(afi_op.args[0].clone(), codec.db_size_index);
+    let idx_u16 = fixed_bytes_to_field_vec(idx_u8.clone());
     let idx = codec.fixed_bytes_to_index(idx_u8.clone());
     match afi_op.operation {
         InputFileBodyOperation::Read => {
@@ -207,7 +213,7 @@ where
                 .read(table_id, codec.fixed_bytes_to_index(idx_u8))
                 .unwrap();
             let data_bytes = codec.data_to_fixed_bytes(data.clone());
-            let data_u16 = vec_u8_to_vec_u16(&data_bytes);
+            let data_u16 = fixed_bytes_to_field_vec(data_bytes);
             Operation {
                 clk,
                 idx: idx_u16,
@@ -217,8 +223,8 @@ where
         }
         InputFileBodyOperation::Insert => {
             assert!(afi_op.args.len() == 2);
-            let data_u8 = string_to_fixed_bytes_be_vec(afi_op.args[1].clone(), D::MEMORY_SIZE);
-            let data_u16 = vec_u8_to_vec_u16(&data_u8);
+            let data_u8 = string_to_fixed_bytes_be_vec(afi_op.args[1].clone(), codec.db_size_data);
+            let data_u16 = fixed_bytes_to_field_vec(data_u8.clone());
             let data = codec.fixed_bytes_to_data(data_u8);
             interface.insert(table_id, idx, data);
             Operation {
@@ -230,8 +236,8 @@ where
         }
         InputFileBodyOperation::Write => {
             assert!(afi_op.args.len() == 2);
-            let data_u8 = string_to_fixed_bytes_be_vec(afi_op.args[1].clone(), D::MEMORY_SIZE);
-            let data_u16 = vec_u8_to_vec_u16(&data_u8);
+            let data_u8 = string_to_fixed_bytes_be_vec(afi_op.args[1].clone(), codec.db_size_data);
+            let data_u16 = fixed_bytes_to_field_vec(data_u8.clone());
             let data = codec.fixed_bytes_to_data(data_u8);
             interface.insert(table_id, idx, data);
             Operation {
@@ -242,34 +248,4 @@ where
             }
         }
     }
-}
-
-// while the output is u32, each element is less than 2 << 16.
-fn vec_u8_to_vec_u16(bytes: &Vec<u8>) -> Vec<u32> {
-    let mut ans = vec![];
-    for i in 0..(bytes.len() + 1) / 2 {
-        if bytes.len() % 2 == 1 && i == 0 {
-            ans.push(bytes[0] as u32);
-        } else {
-            ans.push((256 * bytes[2 * i + 1] + bytes[2 * i]) as u32);
-        }
-    }
-    ans
-}
-
-// fn table_to_page
-
-fn read_from_path(path: String) -> Option<Vec<u8>> {
-    let file = File::open(path).unwrap();
-    let mut reader = BufReader::new(file);
-    let mut buf = vec![];
-    reader.read_to_end(&mut buf).unwrap();
-    Some(buf)
-}
-
-fn write_bytes(bytes: &Vec<u8>, path: String) -> Result<()> {
-    let file = File::create(path).unwrap();
-    let mut writer = BufWriter::new(file);
-    writer.write(bytes).unwrap();
-    Ok(())
 }
