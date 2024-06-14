@@ -17,7 +17,7 @@ fn create_table() -> Table<u32, u64> {
     table.body.insert(64, 128);
     table.body.insert(128, 256);
     table.body.insert(1000, 65536);
-    table.body.insert(2000, 65792);
+    table.body.insert(65791, 65792);
     table
 }
 
@@ -32,7 +32,7 @@ fn create_page() -> Vec<Vec<u32>> {
         vec![1, 0, 64, 0, 0, 0, 128],
         vec![1, 0, 128, 0, 0, 0, 256],
         vec![1, 0, 1000, 0, 0, 1, 0],
-        vec![1, 0, 2000, 0, 0, 1, 256],
+        vec![1, 1, 255, 0, 0, 1, 256],
         vec![0, 0, 0, 0, 0, 0, 0],
         vec![0, 0, 0, 0, 0, 0, 0],
         vec![0, 0, 0, 0, 0, 0, 0],
@@ -79,4 +79,25 @@ pub fn test_convert_from_page() {
     println!("{:?}", table.body);
     let comparison_table = create_table();
     assert_eq!(table.body, comparison_table.body);
+}
+
+#[test]
+pub fn test_unordered_table() {
+    let table_id = TableId::new([0; 32]);
+    let mut table = Table::<u32, u64>::new(table_id, TableMetadata::new(4, 8));
+    table.body.insert(16, 32);
+    table.body.insert(2, 4);
+    table.body.insert(128, 256);
+    table.body.insert(1000, 65536);
+    table.body.insert(65791, 65792);
+    table.body.insert(4, 8);
+    table.body.insert(64, 128);
+    table.body.insert(8, 16);
+    table.body.insert(1, 2);
+    table.body.insert(32, 64);
+    let comparison_table = create_table();
+    assert_eq!(table.body, comparison_table.body);
+    let page = table.to_page(16);
+    let comparison_page = create_page();
+    assert_eq!(page, comparison_page);
 }

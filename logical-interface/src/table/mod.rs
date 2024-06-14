@@ -119,14 +119,13 @@ impl<I: Index, D: Data> Table<I, D> {
         let mut page: Vec<Vec<u32>> = self
             .body
             .iter()
-            .enumerate()
-            .map(|(i, (index, data))| {
-                let included: Vec<u32> = vec![1];
+            .map(|(index, data)| {
+                let is_alloc: Vec<u32> = vec![1];
                 let index_bytes = codec.index_to_fixed_bytes(index.clone());
                 let index_fields = fixed_bytes_to_field_vec(index_bytes);
                 let data_bytes = codec.data_to_fixed_bytes(data.clone());
                 let data_fields = fixed_bytes_to_field_vec(data_bytes);
-                let mut page = included;
+                let mut page = is_alloc;
                 page.extend(index_fields);
                 page.extend(data_fields);
                 page
@@ -134,7 +133,8 @@ impl<I: Index, D: Data> Table<I, D> {
             .collect();
         let zeros: Vec<u32> =
             vec![0; 1 + self.metadata.index_bytes / 2 + self.metadata.data_bytes / 2];
-        for _ in 0..page_size - self.body.len() {
+        let remaining_rows = page_size - self.body.len();
+        for _ in 0..remaining_rows {
             page.push(zeros.clone());
         }
         page
