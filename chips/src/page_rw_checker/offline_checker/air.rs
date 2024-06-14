@@ -40,22 +40,8 @@ where
         let local: &[AB::Var] = (*local).borrow();
         let next: &[AB::Var] = (*next).borrow();
 
-        let local_cols = OfflineCheckerCols::from_slice(
-            local,
-            self.page_width(),
-            self.idx_len,
-            self.data_len,
-            self.idx_clk_limb_bits.clone(),
-            self.idx_decomp,
-        );
-        let next_cols = OfflineCheckerCols::from_slice(
-            next,
-            self.page_width(),
-            self.idx_len,
-            self.data_len,
-            self.idx_clk_limb_bits.clone(),
-            self.idx_decomp,
-        );
+        let local_cols = OfflineCheckerCols::from_slice(local, self);
+        let next_cols = OfflineCheckerCols::from_slice(next, self);
 
         // Some helpers
         let and = |a: AB::Expr, b: AB::Expr| a * b;
@@ -149,16 +135,19 @@ where
 
         // Making sure every idx block starts with a write
         // not same_idx => write
+        // NOTE: constraint degree is 3
         builder.assert_one(or(
             local_cols.is_extra.into(),
             or(local_cols.same_idx.into(), local_cols.op_type.into()),
         ));
 
         // Making sure every idx block ends with a is_final
+        // NOTE: constraint degree is 3
         builder.when_transition().assert_one(or(
             local_cols.is_extra.into(),
             or(next_cols.same_idx.into(), local_cols.is_final.into()),
         ));
+        // NOTE: constraint degree is 3
         builder.when_transition().assert_one(implies(
             and(
                 AB::Expr::one() - local_cols.is_extra.into(),
@@ -180,12 +169,14 @@ where
 
         // Making sure that every read uses the same data as the last operation
         // read => same_data
+        // NOTE: constraint degree is 3
         builder.assert_one(or(
             local_cols.is_extra.into(),
             or(local_cols.op_type.into(), local_cols.same_data.into()),
         ));
 
         // is_final => read
+        // NOTE: constraint degree is 3
         builder.assert_one(or(
             local_cols.is_extra.into(),
             implies(
@@ -213,10 +204,11 @@ where
         ));
 
         // Ensuring at least one of is_initial, is_internal, is_final is on
-        builder.assert_one(or(
-            or(local_cols.is_extra.into(), local_cols.is_initial.into()),
-            or(local_cols.is_internal.into(), local_cols.is_final.into()),
-        ));
+        builder.assert_zero(
+            (AB::Expr::one() - local_cols.is_extra)
+                * (local_cols.is_initial + local_cols.is_internal + local_cols.is_final
+                    - AB::Expr::one()),
+        );
 
         // Making sure is_extra rows are at the bottom
         builder.when_transition().assert_one(implies(
