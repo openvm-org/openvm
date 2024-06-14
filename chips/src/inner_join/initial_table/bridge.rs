@@ -2,9 +2,9 @@ use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
-use super::{columns::TableCols, TableAir, TableType};
+use super::{columns::TableCols, MyInitialTableAir, TableType};
 
-impl<F: PrimeField64> AirBridge<F> for TableAir {
+impl<F: PrimeField64> AirBridge<F> for MyInitialTableAir {
     fn sends(&self) -> Vec<Interaction<F>> {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();

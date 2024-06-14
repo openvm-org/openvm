@@ -44,8 +44,16 @@ impl Page {
         }
     }
 
+    pub fn idx_len(&self) -> usize {
+        self.rows[0].idx.len()
+    }
+
+    pub fn data_len(&self) -> usize {
+        self.rows[0].data.len()
+    }
+
     pub fn width(&self) -> usize {
-        1 + self.rows[0].idx.len() + self.rows[0].data.len()
+        1 + self.idx_len() + self.data_len()
     }
 
     pub fn height(&self) -> usize {

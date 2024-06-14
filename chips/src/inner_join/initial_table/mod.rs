@@ -19,14 +19,14 @@ pub enum TableType {
     },
 }
 
-pub struct TableAir {
+pub struct MyInitialTableAir {
     idx_len: usize,
     data_len: usize,
 
-    table_type: TableType,
+    pub table_type: TableType,
 }
 
-impl TableAir {
+impl MyInitialTableAir {
     pub fn new(idx_len: usize, data_len: usize, table_type: TableType) -> Self {
         Self {
             idx_len,

@@ -3,20 +3,20 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use super::{columns::TableCols, TableAir};
+use super::{columns::TableCols, MyInitialTableAir};
 use crate::sub_chip::AirConfig;
 
-impl<F: Field> BaseAir<F> for TableAir {
+impl<F: Field> BaseAir<F> for MyInitialTableAir {
     fn width(&self) -> usize {
         self.air_width()
     }
 }
 
-impl AirConfig for TableAir {
+impl AirConfig for MyInitialTableAir {
     type Cols<T> = TableCols<T>;
 }
 
-impl<AB: PartitionedAirBuilder> Air<AB> for TableAir
+impl<AB: PartitionedAirBuilder> Air<AB> for MyInitialTableAir
 where
     AB::M: Clone,
 {

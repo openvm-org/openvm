@@ -1,46 +1,54 @@
+use std::collections::HashMap;
+use std::iter;
 use std::sync::Arc;
 
 use afs_stark_backend::config::Com;
 use afs_stark_backend::prover::trace::{ProverTraceData, TraceCommitter};
 use p3_field::{AbstractField, Field, PrimeField};
-use p3_matrix::{
-    dense::{DenseMatrix, RowMajorMatrix},
-    Matrix,
-};
+use p3_matrix::dense::DenseMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
 use super::{
+    initial_table::{MyInitialTableAir, TableType},
     intersector::IntersectorAir,
-    table::{TableAir, TableType},
 };
+use crate::common::page::Page;
 use crate::final_page::FinalPageAir;
 use crate::range_gate::RangeCheckerGateChip;
 
-struct TableCommitments<SC: StarkGenericConfig> {
-    t1_trace: DenseMatrix<Val<SC>>,
-    t2_trace: DenseMatrix<Val<SC>>,
-    output_main_trace: DenseMatrix<Val<SC>>,
-    output_aux_trace: DenseMatrix<Val<SC>>,
+#[derive(Clone)]
+#[allow(dead_code)]
+pub struct TableTraces<F: AbstractField> {
+    t1_trace: DenseMatrix<F>,
+    t2_trace: DenseMatrix<F>,
+    output_main_trace: DenseMatrix<F>,
+    output_aux_trace: DenseMatrix<F>,
+    intersector_trace: DenseMatrix<F>,
+}
 
+#[allow(dead_code)]
+struct TableCommitments<SC: StarkGenericConfig> {
     t1_commitment: Com<SC>,
     t2_commitment: Com<SC>,
     output_commitment: Com<SC>,
 }
 
-pub struct PageController<SC: StarkGenericConfig>
+pub struct InnerJoinController<SC: StarkGenericConfig>
 where
     Val<SC>: AbstractField,
 {
-    pub t1_chip: TableAir,
-    pub t2_chip: TableAir,
+    pub t1_chip: MyInitialTableAir,
+    pub t2_chip: MyInitialTableAir,
     pub final_chip: FinalPageAir,
+    pub intersector_chip: IntersectorAir,
 
-    table_commitments: TableCommitments<SC>,
+    table_traces: Option<TableTraces<Val<SC>>>,
+    table_commitments: Option<TableCommitments<SC>>,
 
     pub range_checker: Arc<RangeCheckerGateChip>,
 }
 
-impl<SC: StarkGenericConfig> PageController<SC> {
+impl<SC: StarkGenericConfig> InnerJoinController<SC> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         range_bus_index: usize,
@@ -62,7 +70,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         Val<SC>: Field,
     {
         Self {
-            t1_chip: TableAir::new(
+            t1_chip: MyInitialTableAir::new(
                 t1_idx_len,
                 t1_data_len,
                 TableType::T1 {
@@ -70,7 +78,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
                     t1_output_bus_index,
                 },
             ),
-            t2_chip: TableAir::new(
+            t2_chip: MyInitialTableAir::new(
                 t2_idx_len,
                 t2_data_len,
                 TableType::T2 {
@@ -88,50 +96,25 @@ impl<SC: StarkGenericConfig> PageController<SC> {
                 idx_limb_bits,
                 idx_decomp,
             ),
+            intersector_chip: IntersectorAir::new(
+                t1_intersector_bus_index,
+                t2_intersector_bus_index,
+                intersector_t2_bus_index,
+                t1_idx_len,
+            ),
 
-            t1_trace: None,
-            t2_trace: None,
-            output_main_trace: None,
-            output_aux_trace: None,
-
-            t1_commitment: None,
-            t2_commitment: None,
-            output_commitment: None,
+            table_traces: None,
+            table_commitments: None,
 
             range_checker: Arc::new(RangeCheckerGateChip::new(range_bus_index, 1 << idx_decomp)),
         }
     }
 
-    pub fn output_aux_trace(&self) -> DenseMatrix<Val<SC>> {
-        self.output_aux_trace.clone().unwrap()
-    }
-
-    pub fn range_checker_trace(&self) -> DenseMatrix<Val<SC>>
+    fn gen_table_trace(&self, page: &Page) -> DenseMatrix<Val<SC>>
     where
         Val<SC>: PrimeField,
     {
-        self.range_checker.generate_trace()
-    }
-
-    fn gen_table_trace(&self, page: Vec<Vec<u32>>) -> DenseMatrix<Val<SC>>
-    where
-        Val<SC>: PrimeField,
-    {
-        self.t1_chip.gen_table_trace::<Val<SC>>(page)
-    }
-
-    fn gen_ops_trace(
-        &self,
-        page: &mut Vec<Vec<u32>>,
-        ops: &[Operation],
-        range_checker: Arc<RangeCheckerGateChip>,
-        trace_degree: usize,
-    ) -> RowMajorMatrix<Val<SC>>
-    where
-        Val<SC>: PrimeField,
-    {
-        self.offline_checker
-            .generate_trace::<SC>(page, ops.to_owned(), range_checker, trace_degree)
+        page.gen_trace::<Val<SC>>()
     }
 
     pub fn update_range_checker(&mut self, idx_decomp: usize) {
@@ -143,80 +126,89 @@ impl<SC: StarkGenericConfig> PageController<SC> {
 
     pub fn load_tables(
         &mut self,
-        mut t1: Vec<Vec<u32>>,
-        mut t2: Vec<Vec<u32>>,
-        trace_degree: usize,
+        t1: &Page,
+        t2: &Page,
+        intersector_trace_degree: usize,
         trace_committer: &mut TraceCommitter<SC>,
-    ) -> (Vec<DenseMatrix<Val<SC>>>, Vec<ProverTraceData<SC>>)
+    ) -> (TableTraces<Val<SC>>, Vec<ProverTraceData<SC>>)
     where
         Val<SC>: PrimeField,
     {
-        assert!(!t1.is_empty());
-        self.t1_trace = Some(self.gen_table_trace(t1.clone()));
-        self.t2_trace = Some(self.gen_table_trace(t2.clone()));
+        let (fkey_start, fkey_end) = match self.t2_chip.table_type {
+            TableType::T2 {
+                fkey_start,
+                fkey_end,
+                ..
+            } => (fkey_start, fkey_end),
+            _ => panic!("t2 must be of TableType T2"),
+        };
 
-        let page_bus_index = self.offline_checker.page_bus_index;
-        let range_bus_index = self.offline_checker.range_bus_index;
-        let ops_bus_index = self.offline_checker.ops_bus_index;
+        let output_table = self.inner_join(t1, t2, fkey_start, fkey_end);
 
-        self.init_chip = PageAir::new(page_bus_index, idx_len, data_len);
-        self.init_chip_trace = Some(self.get_page_trace(page.clone()));
-
-        self.offline_checker = OfflineChecker::new(
-            page_bus_index,
-            range_bus_index,
-            ops_bus_index,
-            idx_len,
-            data_len,
-            idx_limb_bits,
-            Val::<SC>::bits() - 1,
-            idx_decomp,
+        let t1_trace = self.gen_table_trace(t1);
+        let t2_trace = self.gen_table_trace(t2);
+        let intersector_trace = self.intersector_chip.generate_trace(
+            t1,
+            t2,
+            fkey_start,
+            fkey_end,
+            intersector_trace_degree,
         );
-        self.offline_checker_trace =
-            Some(self.gen_ops_trace(&mut page, &ops, self.range_checker.clone(), trace_degree));
-
-        // Sorting the page by (1-is_alloc, idx)
-        page.sort_by_key(|row| (1 - row[0], row[1..1 + idx_len].to_vec()));
-
-        // HashSet of all indices used in operations
-        let internal_indices = ops.iter().map(|op| op.idx.clone()).collect();
-
-        self.final_chip = FinalPageAir::new(
-            page_bus_index,
-            range_bus_index,
-            idx_len,
-            data_len,
-            idx_limb_bits,
-            idx_decomp,
-        );
-        self.final_chip_trace = Some(self.get_page_trace(page.clone()));
-        self.final_page_aux_trace = Some(self.final_chip.gen_aux_trace::<SC>(
-            page.clone(),
-            self.range_checker.clone(),
-            internal_indices,
-        ));
+        let output_main_trace = self.gen_table_trace(&output_table);
+        let output_aux_trace = self
+            .final_chip
+            .gen_aux_trace::<SC>(&output_table, self.range_checker.clone());
 
         let prover_data = vec![
-            trace_committer.commit(vec![self.init_chip_trace.clone().unwrap()]),
-            trace_committer.commit(vec![self.final_chip_trace.clone().unwrap()]),
+            trace_committer.commit(vec![t1_trace.clone()]),
+            trace_committer.commit(vec![t2_trace.clone()]),
+            trace_committer.commit(vec![output_main_trace.clone()]),
         ];
 
-        self.init_page_commitment = Some(prover_data[0].commit.clone());
-        self.final_page_commitment = Some(prover_data[1].commit.clone());
+        self.table_commitments = Some(TableCommitments {
+            t1_commitment: prover_data[0].commit.clone(),
+            t2_commitment: prover_data[1].commit.clone(),
+            output_commitment: prover_data[2].commit.clone(),
+        });
 
-        tracing::debug!(
-            "heights of all traces: {} {} {}",
-            self.init_chip_trace.as_ref().unwrap().height(),
-            self.offline_checker_trace.as_ref().unwrap().height(),
-            self.final_chip_trace.as_ref().unwrap().height()
-        );
+        self.table_traces = Some(TableTraces {
+            t1_trace,
+            t2_trace,
+            output_main_trace,
+            output_aux_trace,
+            intersector_trace,
+        });
 
-        (
-            vec![
-                self.init_chip_trace.clone().unwrap(),
-                self.final_chip_trace.clone().unwrap(),
-            ],
-            prover_data,
-        )
+        (self.table_traces.clone().unwrap(), prover_data)
+    }
+
+    fn inner_join(&self, t1: &Page, t2: &Page, fkey_start: usize, fkey_end: usize) -> Page {
+        let mut output_table = vec![];
+
+        let mut t1_map: HashMap<Vec<u32>, Vec<u32>> = HashMap::new();
+        for row in t1.rows.iter() {
+            t1_map.insert(row.idx.clone(), row.data.clone());
+        }
+
+        for row in t2.rows.iter() {
+            if row.is_alloc == 0 {
+                continue;
+            }
+
+            let fkey = row.data[fkey_start..fkey_end].to_vec();
+            if t1_map.contains_key(&fkey) == false {
+                continue;
+            } else {
+                let out_row: Vec<u32> = iter::once(1)
+                    .chain(row.idx.clone())
+                    .chain(row.data.clone())
+                    .chain(t1_map[&fkey].clone())
+                    .collect();
+
+                output_table.push(out_row);
+            }
+        }
+
+        Page::from_2d_vec(&output_table, t2.idx_len(), t2.data_len() + t1.data_len())
     }
 }

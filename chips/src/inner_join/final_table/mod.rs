@@ -65,14 +65,6 @@ impl MyFinalTableAir {
         self.final_air.air_width()
     }
 
-    // Trace generation
-    pub fn gen_page_trace<SC: StarkGenericConfig>(&self, page: &Page) -> RowMajorMatrix<Val<SC>>
-    where
-        Val<SC>: PrimeField,
-    {
-        page.gen_trace()
-    }
-
     pub fn gen_aux_trace<SC: StarkGenericConfig>(
         &self,
         page: &Page,
