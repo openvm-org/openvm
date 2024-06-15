@@ -21,10 +21,11 @@ use rand::Rng;
 
 type Val = BabyBear;
 
+#[allow(clippy::too_many_arguments)]
 fn load_page_test(
     engine: &BabyBearPoseidon2Engine,
-    page_to_receive: &Vec<Vec<u32>>,
-    page_to_send: &Vec<Vec<u32>>,
+    page_to_receive: &[Vec<u32>],
+    page_to_send: &[Vec<u32>],
     page_controller: &mut page_controller::PageController<BabyBearPoseidon2Config>,
     page_requester: &DummyInteractionAir,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
@@ -42,14 +43,14 @@ fn load_page_test(
         .collect::<Vec<usize>>();
 
     let (page_trace, prover_data) =
-        page_controller.load_page(&mut trace_builder.committer, page_to_receive.clone());
+        page_controller.load_page(&mut trace_builder.committer, page_to_receive.to_vec());
 
     let requester_trace = RowMajorMatrix::new(
         requests
             .iter()
             .flat_map(|i| {
                 page_controller.request(*i);
-                iter::once(1 as u32)
+                iter::once(1)
                     .chain(iter::once(*i as u32))
                     .chain(page_to_send[*i].clone())
             })
@@ -81,18 +82,16 @@ fn load_page_test(
     let verifier = engine.verifier();
 
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
+    let proof = prover.prove(&mut challenger, partial_pk, main_trace_data, &pis);
 
     let mut challenger = engine.new_challenger();
-    let result = verifier.verify(
+    verifier.verify(
         &mut challenger,
         partial_vk,
         vec![&page_controller.page_read_chip.air, page_requester],
         proof,
         &pis,
-    );
-
-    result
+    )
 }
 
 #[test]

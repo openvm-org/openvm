@@ -34,7 +34,7 @@ fn load_page_test(
     engine: &BabyBearPoseidon2Engine,
     page_init: &Page,
     idx_decomp: usize,
-    ops: &Vec<Operation>,
+    ops: &[Operation],
     page_controller: &mut page_controller::PageController<BabyBearPoseidon2Config>,
     ops_sender: &DummyInteractionAir,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
@@ -46,8 +46,8 @@ fn load_page_test(
     assert!(page_height > 0);
 
     let (page_traces, mut prover_data) = page_controller.load_page_and_ops(
-        &page_init,
-        ops.clone(),
+        page_init,
+        ops.to_vec(),
         trace_degree,
         &mut trace_builder.committer,
     );
@@ -108,10 +108,10 @@ fn load_page_test(
     let verifier = engine.verifier();
 
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
+    let proof = prover.prove(&mut challenger, partial_pk, main_trace_data, &pis);
 
     let mut challenger = engine.new_challenger();
-    let result = verifier.verify(
+    verifier.verify(
         &mut challenger,
         partial_vk,
         vec![
@@ -123,9 +123,7 @@ fn load_page_test(
         ],
         proof,
         &pis,
-    );
-
-    result
+    )
 }
 
 #[test]
@@ -185,8 +183,7 @@ fn page_read_write_test() {
     clks.sort();
 
     let mut ops: Vec<Operation> = vec![];
-    for i in 0..num_ops {
-        let clk = clks[i];
+    for &clk in clks.iter() {
         let idx = idx_data_map
             .iter()
             .nth(rng.gen::<usize>() % idx_data_map.len())
