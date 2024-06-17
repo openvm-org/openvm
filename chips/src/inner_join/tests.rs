@@ -21,14 +21,14 @@ fn load_tables_test(
     engine: &BabyBearPoseidon2Engine,
     t1: &Page,
     t2: &Page,
-    idx_decomp: usize,
+    decomp: usize,
     ij_controller: &mut controller::InnerJoinController<BabyBearPoseidon2Config>,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
     partial_pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
     intersector_trace_degree: usize,
 ) -> Result<(), VerificationError> {
     // Clearing the range_checker counts
-    ij_controller.update_range_checker(idx_decomp);
+    ij_controller.update_range_checker(decomp);
 
     let (table_traces, mut prover_data) = ij_controller.load_tables(
         t1,
@@ -113,8 +113,6 @@ fn inner_join_test() {
     let t2_idx_len = rng.gen::<usize>() % 2 + 2;
     let t2_data_len = rng.gen::<usize>() % 2 + t1_idx_len;
 
-    let t1_width = t1_idx_len + t1_data_len;
-    let t2_width = t2_idx_len + t2_data_len;
     let t1_height = 1 << log_t1_height;
     let t2_height = 1 << log_t2_height;
 
@@ -124,7 +122,7 @@ fn inner_join_test() {
     let fkey_end = fkey_start + t1_idx_len;
 
     let idx_limb_bits = 10;
-    let idx_decomp = 4;
+    let decomp = 4;
     let max_idx = 1 << idx_limb_bits;
 
     // Generating a fully-allocated random table t1 with primary key
@@ -168,11 +166,11 @@ fn inner_join_test() {
         t2_idx_len,
         t2_data_len,
         idx_limb_bits,
-        idx_decomp,
+        decomp,
     );
 
     let engine = config::baby_bear_poseidon2::default_engine(
-        idx_decomp.max(log_t1_height.max(log_t2_height) + 1),
+        decomp.max(log_t1_height.max(log_t2_height) + 1),
     );
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
@@ -206,7 +204,7 @@ fn inner_join_test() {
     );
 
     keygen_builder.add_air(&ij_controller.intersector_chip, intersector_trace_degree, 0);
-    keygen_builder.add_air(&ij_controller.range_checker.air, 1 << idx_decomp, 0);
+    keygen_builder.add_air(&ij_controller.range_checker.air, 1 << decomp, 0);
 
     let partial_pk = keygen_builder.generate_partial_pk();
 
@@ -218,7 +216,94 @@ fn inner_join_test() {
         &engine,
         &t1,
         &t2,
-        idx_decomp,
+        decomp,
+        &mut ij_controller,
+        &mut trace_builder,
+        &partial_pk,
+        intersector_trace_degree,
+    )
+    .expect("Verification failed");
+
+    // Making a test where foreign key sometimes doesn't exist in t1
+    for row in t2.rows.iter_mut() {
+        if rng.gen::<bool>() {
+            row.data[fkey_start..fkey_end].clone_from_slice(
+                (fkey_start..fkey_end)
+                    .map(|_| rng.gen::<u32>() % MAX_VAL)
+                    .collect::<Vec<u32>>()
+                    .as_slice(),
+            );
+        }
+    }
+
+    load_tables_test(
+        &engine,
+        &t1,
+        &t2,
+        decomp,
+        &mut ij_controller,
+        &mut trace_builder,
+        &partial_pk,
+        intersector_trace_degree,
+    )
+    .expect("Verification failed");
+
+    // Making a test where foreign key always doens't exist in t1
+    // This should produce a fully-unallocated output page
+    for row in t2.rows.iter_mut() {
+        row.data[fkey_start..fkey_end].clone_from_slice(
+            (fkey_start..fkey_end)
+                .map(|_| rng.gen::<u32>() % MAX_VAL)
+                .collect::<Vec<u32>>()
+                .as_slice(),
+        );
+    }
+
+    load_tables_test(
+        &engine,
+        &t1,
+        &t2,
+        decomp,
+        &mut ij_controller,
+        &mut trace_builder,
+        &partial_pk,
+        intersector_trace_degree,
+    )
+    .expect("Verification failed");
+
+    // Testing partially-allocated t1 and t2, where foreign key sometimes
+    // doesn't exist in t1
+    let t1 = Page::random(
+        &mut rng,
+        t1_idx_len,
+        t1_data_len,
+        max_idx,
+        MAX_VAL,
+        t1_height,
+        t1_height / 2,
+    );
+
+    let mut t2 = Page::random(
+        &mut rng,
+        t2_idx_len,
+        t2_data_len,
+        max_idx,
+        MAX_VAL,
+        t2_height,
+        t2_height / 2,
+    );
+
+    for row in t2.rows.iter_mut() {
+        if rng.gen::<bool>() {
+            row.data[fkey_start..fkey_end].clone_from_slice(&t1.get_random_idx(&mut rng));
+        }
+    }
+
+    load_tables_test(
+        &engine,
+        &t1,
+        &t2,
+        decomp,
         &mut ij_controller,
         &mut trace_builder,
         &partial_pk,

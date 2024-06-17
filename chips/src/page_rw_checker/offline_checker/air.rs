@@ -11,6 +11,7 @@ use crate::{
     is_equal_vec::{columns::IsEqualVecCols, IsEqualVecAir},
     is_less_than_tuple::{columns::IsLessThanTupleIOCols, IsLessThanTupleAir},
     sub_chip::{AirConfig, SubAir},
+    utils::{and, implies, or},
 };
 
 impl AirConfig for OfflineChecker {
@@ -44,9 +45,9 @@ where
         let next_cols = OfflineCheckerCols::from_slice(next, self);
 
         // Some helpers
-        let and = |a: AB::Expr, b: AB::Expr| a * b;
-        let or = |a: AB::Expr, b: AB::Expr| a.clone() + b.clone() - a * b;
-        let implies = |a: AB::Expr, b: AB::Expr| or(AB::Expr::one() - a, b);
+        let and = and::<AB>;
+        let or = or::<AB>;
+        let implies = implies::<AB>;
 
         // Making sure bits are bools
         builder.assert_bool(local_cols.is_initial);

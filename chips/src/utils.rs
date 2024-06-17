@@ -1,4 +1,4 @@
-use p3_air::VirtualPairCol;
+use p3_air::{AirBuilder, VirtualPairCol};
 use p3_field::Field;
 
 // TODO: Ideally upstream PrimeField implements From<T>
@@ -30,4 +30,18 @@ pub fn to_vcols<F: Field>(cols: &[usize]) -> Vec<VirtualPairCol<F>> {
         .copied()
         .map(VirtualPairCol::single_main)
         .collect()
+}
+
+pub fn and<AB: AirBuilder>(a: AB::Expr, b: AB::Expr) -> AB::Expr {
+    a.clone() * b.clone()
+}
+
+/// Assumes that a and b are boolean
+pub fn or<AB: AirBuilder>(a: AB::Expr, b: AB::Expr) -> AB::Expr {
+    a.clone() + b.clone() - and::<AB>(a, b)
+}
+
+/// Assumes that a and b are boolean
+pub fn implies<AB: AirBuilder>(a: AB::Expr, b: AB::Expr) -> AB::Expr {
+    or::<AB>(AB::Expr::one() - a, b)
 }

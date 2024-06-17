@@ -13,10 +13,10 @@ use super::{
 };
 use crate::{common::page::Page, range_gate::RangeCheckerGateChip};
 
-// TODO: change the name of this struct
+/// A struct to keep track of the traces of the chips
+/// owned by the inner join controller
 #[derive(Clone)]
-#[allow(dead_code)]
-pub struct TableTraces<F: AbstractField> {
+pub struct IJTraces<F: AbstractField> {
     pub t1_main_trace: DenseMatrix<F>,
     pub t1_aux_trace: DenseMatrix<F>,
     pub t2_main_trace: DenseMatrix<F>,
@@ -42,7 +42,7 @@ where
     pub output_chip: MyFinalTableAir,
     pub intersector_chip: IntersectorAir,
 
-    table_traces: Option<TableTraces<Val<SC>>>,
+    table_traces: Option<IJTraces<Val<SC>>>,
     table_commitments: Option<TableCommitments<SC>>,
 
     pub range_checker: Arc<RangeCheckerGateChip>,
@@ -64,7 +64,7 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
         t2_idx_len: usize,
         t2_data_len: usize,
         idx_limb_bits: usize,
-        idx_decomp: usize,
+        decomp: usize,
     ) -> Self
     where
         Val<SC>: Field,
@@ -99,28 +99,31 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
                 fkey_start,
                 fkey_end,
                 idx_limb_bits,
-                idx_decomp,
+                decomp,
             ),
             intersector_chip: IntersectorAir::new(
+                range_bus_index,
                 t1_intersector_bus_index,
                 t2_intersector_bus_index,
                 intersector_t2_bus_index,
                 t1_idx_len,
+                Val::<SC>::bits() - 1,
+                decomp,
             ),
 
             table_traces: None,
             table_commitments: None,
 
-            range_checker: Arc::new(RangeCheckerGateChip::new(range_bus_index, 1 << idx_decomp)),
+            range_checker: Arc::new(RangeCheckerGateChip::new(range_bus_index, 1 << decomp)),
         }
     }
 
-    /// This function creates a new range checker (using idx_decomp).
+    /// This function creates a new range checker (using decomp).
     /// Helpful for clearing range_checker counts
-    pub fn update_range_checker(&mut self, idx_decomp: usize) {
+    pub fn update_range_checker(&mut self, decomp: usize) {
         self.range_checker = Arc::new(RangeCheckerGateChip::new(
             self.range_checker.air.bus_index,
-            1 << idx_decomp,
+            1 << decomp,
         ));
     }
 
@@ -140,7 +143,7 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
         t2: &Page,
         intersector_trace_degree: usize,
         trace_committer: &mut TraceCommitter<SC>,
-    ) -> (TableTraces<Val<SC>>, Vec<ProverTraceData<SC>>)
+    ) -> (IJTraces<Val<SC>>, Vec<ProverTraceData<SC>>)
     where
         Val<SC>: PrimeField,
     {
@@ -196,6 +199,7 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
             t2,
             fkey_start,
             fkey_end,
+            self.range_checker.clone(),
             intersector_trace_degree,
         );
         let output_main_trace = self.gen_table_trace(&output_table);
@@ -215,7 +219,7 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
             output_commitment: prover_data[2].commit.clone(),
         });
 
-        self.table_traces = Some(TableTraces {
+        self.table_traces = Some(IJTraces {
             t1_main_trace,
             t1_aux_trace,
             t2_main_trace,
@@ -251,6 +255,12 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
                 output_table.push(out_row);
             }
         }
+
+        // Padding the output page with unallocated rows so that it has the same height as t2
+        output_table.resize(
+            t2.height(),
+            vec![0; 1 + t2.idx_len() + t2.data_len() + t1.data_len()],
+        );
 
         Page::from_2d_vec(&output_table, t2.idx_len(), t2.data_len() + t1.data_len())
     }

@@ -44,7 +44,7 @@ impl MyFinalTableAir {
         fkey_start: usize,
         fkey_end: usize,
         idx_limb_bits: usize,
-        idx_decomp: usize,
+        decomp: usize,
     ) -> Self {
         Self {
             t1_output_bus_index,
@@ -57,7 +57,7 @@ impl MyFinalTableAir {
                 idx_len,
                 t1_data_len + t2_data_len,
                 idx_limb_bits,
-                idx_decomp,
+                decomp,
             ),
         }
     }

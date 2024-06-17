@@ -3,42 +3,45 @@ use p3_air::VirtualPairCol;
 use p3_field::PrimeField;
 
 use super::{columns::IntersectorCols, IntersectorAir};
-use crate::sub_chip::SubAirBridge;
+use crate::{
+    is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
+    sub_chip::SubAirBridge,
+    utils::to_vcols,
+};
 
 impl<F: PrimeField> SubAirBridge<F> for IntersectorAir {
     fn sends(&self, col_indices: IntersectorCols<usize>) -> Vec<Interaction<F>> {
-        vec![Interaction {
-            fields: col_indices
-                .idx
-                .iter()
-                .copied()
-                .map(VirtualPairCol::single_main)
-                .collect(),
-            count: VirtualPairCol::single_main(col_indices.out_mult),
+        let mut interactions = SubAirBridge::<F>::sends(
+            &self.lt_chip,
+            IsLessThanTupleCols {
+                io: IsLessThanTupleIOCols {
+                    x: vec![usize::MAX; 1 + self.idx_len],
+                    y: vec![usize::MAX; 1 + self.idx_len],
+                    tuple_less_than: usize::MAX,
+                },
+                aux: col_indices.aux.lt_aux,
+            },
+        );
+
+        interactions.push(Interaction {
+            fields: to_vcols(&col_indices.io.idx),
+            count: VirtualPairCol::single_main(col_indices.io.out_mult),
             argument_index: self.intersector_t2_bus_index,
-        }]
+        });
+
+        interactions
     }
 
     fn receives(&self, col_indices: IntersectorCols<usize>) -> Vec<Interaction<F>> {
         vec![
             Interaction {
-                fields: col_indices
-                    .idx
-                    .iter()
-                    .copied()
-                    .map(VirtualPairCol::single_main)
-                    .collect(),
-                count: VirtualPairCol::single_main(col_indices.t1_mult),
+                fields: to_vcols(&col_indices.io.idx),
+                count: VirtualPairCol::single_main(col_indices.io.t1_mult),
                 argument_index: self.t1_intersector_bus_index,
             },
             Interaction {
-                fields: col_indices
-                    .idx
-                    .iter()
-                    .copied()
-                    .map(VirtualPairCol::single_main)
-                    .collect(),
-                count: VirtualPairCol::single_main(col_indices.t2_mult),
+                fields: to_vcols(&col_indices.io.idx),
+                count: VirtualPairCol::single_main(col_indices.io.t2_mult),
                 argument_index: self.t2_intersector_bus_index,
             },
         ]
@@ -50,7 +53,7 @@ impl<F: PrimeField> AirBridge<F> for IntersectorAir {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-        let intersector_cols = IntersectorCols::<usize>::from_slice(&all_cols, self.idx_len);
+        let intersector_cols = IntersectorCols::<usize>::from_slice(&all_cols, self);
 
         SubAirBridge::sends(self, intersector_cols)
     }
@@ -59,7 +62,7 @@ impl<F: PrimeField> AirBridge<F> for IntersectorAir {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-        let intersector_cols = IntersectorCols::<usize>::from_slice(&all_cols, self.idx_len);
+        let intersector_cols = IntersectorCols::<usize>::from_slice(&all_cols, self);
 
         SubAirBridge::receives(self, intersector_cols)
     }

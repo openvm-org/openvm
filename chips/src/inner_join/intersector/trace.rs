@@ -1,14 +1,20 @@
 use std::{
     collections::{HashMap, HashSet},
-    iter,
+    sync::Arc,
 };
 
+use afs_test_utils::utils::to_field_vec;
 use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::common::page::Page;
+use crate::{
+    common::page::Page, range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions,
+};
 
-use super::IntersectorAir;
+use super::{
+    columns::{IntersectorAuxCols, IntersectorCols, IntersectorIOCols},
+    IntersectorAir,
+};
 
 impl IntersectorAir {
     pub fn generate_trace<F: PrimeField>(
@@ -17,6 +23,7 @@ impl IntersectorAir {
         t2: &Page,
         fkey_start: usize,
         fkey_end: usize,
+        range_checker: Arc<RangeCheckerGateChip>,
         trace_degree: usize,
     ) -> RowMajorMatrix<F> {
         let mut t1_idx_mult = HashMap::new();
@@ -45,27 +52,66 @@ impl IntersectorAir {
         all_indices.sort();
 
         let mut rows: Vec<Vec<F>> = vec![];
+        let mut prv_idx = vec![0; self.idx_len];
         for idx in all_indices {
             let t1_mult = *t1_idx_mult.get(&idx).unwrap_or(&0);
             let t2_mult = *t2_idx_mult.get(&idx).unwrap_or(&0);
             let out_mult = t1_mult * t2_mult;
 
-            rows.push(
-                idx.iter()
-                    .copied()
-                    .chain(iter::once(t1_mult))
-                    .chain(iter::once(t2_mult))
-                    .chain(iter::once(out_mult))
-                    .chain(iter::once(0)) // non-extra row
-                    .map(F::from_canonical_u32)
-                    .collect(),
+            let lt_cols = LocalTraceInstructions::generate_trace_row(
+                &self.lt_chip,
+                (prv_idx.clone(), idx.clone(), range_checker.clone()),
             );
+
+            prv_idx.clone_from(&idx);
+
+            let inter_cols = IntersectorCols {
+                io: IntersectorIOCols {
+                    idx: to_field_vec::<F>(idx),
+                    t1_mult: F::from_canonical_u32(t1_mult),
+                    t2_mult: F::from_canonical_u32(t2_mult),
+                    out_mult: F::from_canonical_u32(out_mult),
+                    is_extra: F::zero(),
+                },
+                aux: IntersectorAuxCols {
+                    lt_aux: lt_cols.aux,
+                    lt_out: lt_cols.io.tuple_less_than,
+                },
+            };
+
+            rows.push(inter_cols.flatten());
         }
 
-        let width = t1.idx_len() + 4;
-        let extra_row = [vec![F::zero(); width - 1], vec![F::one()]].concat();
-        rows.resize(trace_degree, extra_row);
+        // Padding the trace to be of degree trace_degree
+        rows.resize_with(trace_degree, || {
+            let lt_cols = LocalTraceInstructions::generate_trace_row(
+                &self.lt_chip,
+                (
+                    prv_idx.clone(),
+                    vec![0; self.idx_len],
+                    range_checker.clone(),
+                ),
+            );
 
-        RowMajorMatrix::new(rows.concat(), width)
+            prv_idx = vec![0; self.idx_len];
+
+            let inter_cols = IntersectorCols {
+                io: IntersectorIOCols {
+                    idx: vec![F::zero(); self.idx_len],
+                    t1_mult: F::zero(),
+                    t2_mult: F::zero(),
+                    out_mult: F::zero(),
+                    is_extra: F::one(),
+                },
+                aux: IntersectorAuxCols {
+                    lt_aux: lt_cols.aux,
+                    lt_out: lt_cols.io.tuple_less_than,
+                },
+            };
+
+            inter_cols.flatten()
+        });
+
+        RowMajorMatrix::new(rows.concat(), self.air_width())
     }
 }
