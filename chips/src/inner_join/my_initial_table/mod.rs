@@ -3,7 +3,7 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-// A enum for the different table types and their bus indices
+// An enum for the different table types and their bus indices
 pub enum TableType {
     T1 {
         t1_intersector_bus_index: usize,

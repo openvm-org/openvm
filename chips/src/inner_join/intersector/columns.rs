@@ -50,6 +50,18 @@ pub struct IntersectorAuxCols<T> {
 }
 
 impl<T: Clone> IntersectorAuxCols<T> {
+    pub fn from_slice(slc: &[T], intersector_air: &IntersectorAir) -> Self {
+        Self {
+            lt_aux: IsLessThanTupleAuxCols::from_slice(
+                &slc[..slc.len() - 1],
+                intersector_air.lt_chip.limb_bits(),
+                intersector_air.lt_chip.decomp(),
+                intersector_air.lt_chip.tuple_len(),
+            ),
+            lt_out: slc[slc.len() - 1].clone(),
+        }
+    }
+
     pub fn flatten(&self) -> Vec<T> {
         self.lt_aux
             .flatten()
@@ -72,16 +84,7 @@ impl<T: Clone> IntersectorCols<T> {
 
         Self {
             io: IntersectorIOCols::from_slice(&slc[..idx_len + 4], intersector_air),
-            aux: IntersectorAuxCols {
-                lt_aux: IsLessThanTupleAuxCols::from_slice(
-                    // Note: if we start using passing an AIR reference to the from_slice everywhere, I can pass in intersector_air.lt_chip here
-                    &slc[idx_len + 4..],
-                    intersector_air.lt_chip.limb_bits(),
-                    intersector_air.lt_chip.decomp(),
-                    intersector_air.lt_chip.tuple_len(),
-                ),
-                lt_out: slc[slc.len() - 1].clone(),
-            },
+            aux: IntersectorAuxCols::from_slice(&slc[idx_len + 4..], intersector_air),
         }
     }
 

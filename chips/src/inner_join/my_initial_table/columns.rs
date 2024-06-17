@@ -4,6 +4,7 @@ use crate::common::page_cols::PageCols;
 pub struct TableCols<T> {
     pub page_cols: PageCols<T>,
 
+    /// The multiplicity with which we will send (idx, data) to output_chip
     pub out_mult: T,
 }
 

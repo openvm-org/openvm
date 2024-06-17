@@ -86,13 +86,14 @@ where
     pub output_chip: MyFinalTableAir,
     pub intersector_chip: IntersectorAir,
 
-    table_traces: Option<IJTraces<Val<SC>>>,
+    traces: Option<IJTraces<Val<SC>>>,
     table_commitments: Option<TableCommitments<SC>>,
 
     pub range_checker: Arc<RangeCheckerGateChip>,
 }
 
 impl<SC: StarkGenericConfig> InnerJoinController<SC> {
+    /// [fkey_start, fkey_end) is the range of the foreign key within the data part of T2
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         range_bus_index: usize,
@@ -151,11 +152,11 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
                 t2_intersector_bus_index,
                 intersector_t2_bus_index,
                 t1_idx_len,
-                Val::<SC>::bits() - 1,
+                Val::<SC>::bits() - 1, // Here, we use the full range of the field because there's no guarantee that the foreign key is in the idx_limb_bits range
                 decomp,
             ),
 
-            table_traces: None,
+            traces: None,
             table_commitments: None,
 
             range_checker: Arc::new(RangeCheckerGateChip::new(range_bus_index, 1 << decomp)),
@@ -202,6 +203,7 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
 
         let output_table = self.inner_join(t1, t2, fkey_start, fkey_end);
 
+        // Calculating the multiplicity with which T1 indices appear in the output_table
         let mut t1_out_mult = vec![];
         for row in t1.rows.iter() {
             if row.is_alloc == 1 {
@@ -219,6 +221,7 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
             }
         }
 
+        // Figuring out whether each row of T2 appears in the output_table
         let mut t2_fkey_present = vec![];
         for row in t2.rows.iter() {
             if row.is_alloc == 1 {
@@ -263,7 +266,7 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
             output_commitment: prover_data[2].commit.clone(),
         });
 
-        self.table_traces = Some(IJTraces {
+        self.traces = Some(IJTraces {
             t1_main_trace,
             t1_aux_trace,
             t2_main_trace,
@@ -273,7 +276,7 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
             intersector_trace,
         });
 
-        (self.table_traces.clone().unwrap(), prover_data)
+        (self.traces.clone().unwrap(), prover_data)
     }
 
     /// This function takes two tables T1 and T2 and the range of the foreign key in T2
