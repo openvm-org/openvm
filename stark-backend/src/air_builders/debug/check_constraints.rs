@@ -101,14 +101,14 @@ pub fn check_constraints<R, SC>(
 
 // TODO: Check number of virtual columns in bus are same
 pub fn check_cumulative_sums<SC: StarkGenericConfig>(
-    airs: &[&dyn AnyRap<SC>],
+    raps: &[&dyn AnyRap<SC>],
     preprocessed: &[Option<RowMajorMatrixView<Val<SC>>>],
     partitioned_main: &[&[RowMajorMatrixView<Val<SC>>]],
     permutation: &[Option<RowMajorMatrixView<SC::Challenge>>],
 ) {
     let mut sums = BTreeMap::new();
-    for (i, air) in airs.iter().enumerate() {
-        for (j, (interaction, interaction_type)) in AirBridge::<Val<SC>>::all_interactions(*air)
+    for (i, rap) in raps.iter().enumerate() {
+        for (j, (interaction, interaction_type)) in AirBridge::<Val<SC>>::all_interactions(*rap)
             .into_iter()
             .enumerate()
         {
