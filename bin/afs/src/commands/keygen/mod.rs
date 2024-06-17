@@ -1,6 +1,7 @@
 use std::{
     fs::{self, File},
     io::{BufWriter, Write},
+    time::Instant,
 };
 
 use afs_chips::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
@@ -34,7 +35,7 @@ pub struct KeygenCommand {
 impl KeygenCommand {
     /// Execute the `keygen` command
     pub fn execute(self, config: &PageConfig) -> Result<()> {
-        // WIP: Wait for ReadWrite chip in https://github.com/axiom-crypto/afs-prototype/pull/45
+        let start = Instant::now();
         let prefix = create_prefix(&config);
         match config.page.mode {
             PageMode::ReadWrite => self.execute_rw(
@@ -47,6 +48,9 @@ impl KeygenCommand {
             )?,
             PageMode::ReadOnly => panic!(),
         }
+
+        let duration = start.elapsed();
+        println!("Generated keys in {:?}", duration);
         Ok(())
     }
 

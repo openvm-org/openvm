@@ -1,6 +1,7 @@
 use std::{
     fs::{remove_file, File},
     io::{copy, BufReader, BufWriter},
+    time::Instant,
 };
 
 use afs_chips::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
@@ -52,11 +53,16 @@ pub struct VerifyCommand {
 impl VerifyCommand {
     /// Execute the `verify` command
     pub fn execute(&self, config: &PageConfig) -> Result<()> {
-        let prefix = create_prefix(&config);
+        let start = Instant::now();
+        let prefix = create_prefix(config);
         match config.page.mode {
             PageMode::ReadWrite => self.execute_rw(config, prefix)?,
             PageMode::ReadOnly => panic!(),
         }
+
+        let duration = start.elapsed();
+        println!("Verified table operations in {:?}", duration);
+
         Ok(())
     }
 
@@ -121,7 +127,7 @@ impl VerifyCommand {
             println!("Verification Succeeded!");
             println!("Updates Committed");
             {
-                let init_file = File::open(self.init_db_file_path.clone()).unwrap();
+                let init_file = File::create(self.init_db_file_path.clone()).unwrap();
                 let new_file = File::open(self.init_db_file_path.clone() + ".0").unwrap();
                 let mut reader = BufReader::new(new_file);
                 let mut writer = BufWriter::new(init_file);

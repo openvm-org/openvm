@@ -6,13 +6,13 @@ use color_eyre::eyre::Result;
 use serde_derive::{Deserialize, Serialize};
 use std::{
     fs::File,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Write},
     str::FromStr,
 };
 use types::{InputFileBodyOperation, InputFileHeaderOperation};
 
 pub const HEADER_SIZE: usize = 3;
-pub const MAX_OPS: usize = 128;
+pub const MAX_OPS: usize = 1_048_576; // 2^20
 
 /// Instructions for reading an AFS input file
 #[derive(Debug, Serialize, Deserialize)]
@@ -38,6 +38,24 @@ pub struct AfsOperation {
 }
 
 impl AfsInputInstructions {
+    pub fn new(file_path: &str, table_id: &str, index_bytes: usize, data_bytes: usize) -> Self {
+        if table_id.is_empty() {
+            panic!("`table_id` must not be empty");
+        }
+        if index_bytes == 0 || data_bytes == 0 {
+            panic!("index/data bytes must not be 0");
+        }
+        Self {
+            file_path: file_path.to_string(),
+            header: AfsHeader {
+                table_id: table_id.to_string().to_lowercase(),
+                index_bytes,
+                data_bytes,
+            },
+            operations: Vec::new(),
+        }
+    }
+
     pub fn from_file(file_path: &str) -> Result<Self> {
         let (header, operations) = Self::parse(file_path)?;
         Ok(Self {
@@ -45,6 +63,28 @@ impl AfsInputInstructions {
             header,
             operations,
         })
+    }
+
+    pub fn save_to_file(&self) -> Result<()> {
+        let mut writer = File::create(&self.file_path)?;
+        writeln!(writer, "TABLE_ID {}", self.header.table_id)?;
+        writeln!(writer, "INDEX_BYTES {}", self.header.index_bytes)?;
+        writeln!(writer, "DATA_BYTES {}", self.header.data_bytes)?;
+        for operation in &self.operations {
+            writeln!(
+                writer,
+                "{} {}",
+                operation.operation,
+                operation.args.join(" ")
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn add_operations(&mut self, operations: Vec<AfsOperation>) {
+        let total_ops = self.operations.len() + operations.len();
+        Self::check_num_ops(total_ops);
+        self.operations.extend(operations);
     }
 
     fn parse(file_path: &str) -> Result<(AfsHeader, Vec<AfsOperation>)> {

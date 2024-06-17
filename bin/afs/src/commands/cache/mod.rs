@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use afs_chips::common::page::Page;
 use afs_stark_backend::prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver};
 use afs_test_utils::{
@@ -44,7 +46,8 @@ impl CacheCommand {
     /// Execute the `cache` command
     pub fn execute(&self, config: &PageConfig) -> Result<()> {
         println!("Caching table {} from {}", self.table_id, self.db_file_path);
-        // prove::prove_ops(&self.ops_file).await?;
+
+        let start = Instant::now();
         let mut db = MockDb::from_file(&self.db_file_path);
         let height = config.page.height;
         let mut interface = AfsInterface::<U256, U256>::new(&mut db);
@@ -69,6 +72,10 @@ impl CacheCommand {
         let encoded_data = bincode::serialize(&trace_prover_data).unwrap();
         let path = self.output_folder.clone() + "/" + &self.table_id + ".cache.bin";
         write_bytes(&encoded_data, path).unwrap();
+
+        let duration = start.elapsed();
+        println!("Cached table {} in {:?}", self.table_id, duration);
+
         Ok(())
     }
 

@@ -1,6 +1,6 @@
 use crate::afs_input_instructions::types::InputFileBodyOperation;
 
-use super::AfsInputInstructions;
+use super::{AfsInputInstructions, AfsOperation};
 
 #[test]
 pub fn test_read_file() {
@@ -32,4 +32,27 @@ pub fn test_read_file() {
         ["19000051", "0xe76a90E3069c9d86e666DcC687e76fcecf4429cF"]
     );
     assert_eq!(operations[4].args, ["19000051"]);
+}
+
+#[test]
+pub fn test_generate_large_afi_rw() {
+    let file_path = "tests/data/256_write_32_1024.afi";
+    let mut instructions = AfsInputInstructions::new(file_path, "0x0a", 32, 1024);
+    for i in 0..256 {
+        instructions.add_operations(vec![AfsOperation {
+            operation: InputFileBodyOperation::Insert,
+            args: vec![format!("0x{:08x}", i), format!("0x{:08x}", i * 2)],
+        }]);
+    }
+    instructions.save_to_file().unwrap();
+
+    let file_path = "tests/data/256_read_32_1024.afi";
+    let mut instructions = AfsInputInstructions::new(file_path, "0x0a", 32, 1024);
+    for i in 0..256 {
+        instructions.add_operations(vec![AfsOperation {
+            operation: InputFileBodyOperation::Read,
+            args: vec![format!("0x{:08x}", i)],
+        }]);
+    }
+    instructions.save_to_file().unwrap();
 }

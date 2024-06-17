@@ -1,13 +1,11 @@
 # AFS Query Binary
 
-A useful binary to help with querying 
-
 ## Instructions
 
 Display help:
 
 ```bash
-cargo run --bin afs -- --help
+cargo run --release --bin afs -- --help
 ```
 
 ## Configuration
@@ -23,7 +21,7 @@ Commands to generate keys, cache traces, prove, and verify. Run these commands f
 Generate partial proving and verifying keys.
 
 ```bash
-cargo run --bin afs -- keygen -o bin/afs/tests
+cargo run --release --bin afs -- keygen --output-folder bin/afs/tests/data
 ```
 
 ### cache
@@ -31,7 +29,7 @@ cargo run --bin afs -- keygen -o bin/afs/tests
 Cache a trace of a table.
 
 ```bash
-cargo run --bin afs -- cache -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -d bin/afs/tests/input_file_32_1024.mockdb -o bin/afs/tests
+cargo run --release --bin afs -- cache -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 --db-file bin/afs/tests/data/input_file_32_1024.mockdb --output-file bin/afs/tests/data
 ```
 
 ### prove
@@ -39,7 +37,7 @@ cargo run --bin afs -- cache -t 0x155687649d5789a399211641b38bb93139f8ceca042466
 Prove a set of instructions.
 
 ```bash
-cargo run --bin afs -- prove -f bin/afs/tests/test_input_file_32_1024.afi -d bin/afs/tests/input_file_32_1024.mockdb -c bin/afs/tests -k bin/afs/tests
+cargo run --release --bin afs -- prove --afi-file bin/afs/tests/data/test_input_file_32_1024.afi --db-file bin/afs/tests/data/input_file_32_1024.mockdb --cache-folder bin/afs/tests/data --keys-folder bin/afs/tests/data
 ```
 
 ### verify
@@ -47,19 +45,19 @@ cargo run --bin afs -- prove -f bin/afs/tests/test_input_file_32_1024.afi -d bin
 Verify the proof
 
 ```bash
-cargo run --bin afs -- verify -f bin/afs/tests/input_file_32_1024.mockdb.prove.bin -d '/Users/yujiang/axiom/afs-prototype/bin/afs/tests/input_file_32_1024.mockdb' -k bin/afs/tests
+cargo run --release --bin afs -- verify --proof-file bin/afs/tests/data/input_file_32_1024.mockdb.prove.bin --db-file bin/afs/tests/data/input_file_32_1024.mockdb --keys-folder bin/afs/tests/data
 ```
 
 ## Mock commands
 
-Useful for reading/writing the .mockdb files. Run these commands from the root of the repository. 
+Useful for reading/writing the .mockdb files. Run these commands from the root of the repository.
 
 ### Read
 
 Read from a local mock database file. Set the --db-file (-d), --table-id (-t), and print to stdout with the --print (-p) flag.
 
 ```bash
-cargo run --bin afs -- mock read -d bin/afs/tests/afs_db.mockdb -t 5
+cargo run --release --bin afs -- mock read -d bin/afs/tests/data/afs_db.mockdb -t 5
 ```
 
 ### Write
@@ -67,7 +65,7 @@ cargo run --bin afs -- mock read -d bin/afs/tests/afs_db.mockdb -t 5
 Write to a local mock database file using an AFS Instruction file. Set the --afi-file (-f), --db-file (-d) to write the AFI file into the mock database. Optionally set --print (-p) to print to stdout and --output-db-file (-o) to save the new mock database to file.
 
 ```bash
-cargo run --bin afs -- mock write -f bin/afs/tests/test_input_file_32_1024.afi -d bin/afs/tests/afs_db.mockdb -o bin/afs/tests/afs_db1.mockdb
+cargo run --release --bin afs -- mock write -f bin/afs/tests/data/test_input_file_32_1024.afi -d bin/afs/tests/data/afs_db.mockdb -o bin/afs/tests/data/afs_db1.mockdb
 ```
 
 ### AFI
@@ -75,19 +73,19 @@ cargo run --bin afs -- mock write -f bin/afs/tests/test_input_file_32_1024.afi -
 Print the afs instruction set to file.
 
 ```bash
-cargo run --bin afs -- mock afi -f bin/afs/tests/test_input_file_32_1024.afi
+cargo run --release --bin afs -- mock afi -f bin/afs/tests/data/test_input_file_32_1024.afi
 ```
 
 ## Full test
 
 ```bash
-cargo run --bin afs -- mock write -f bin/afs/tests/test_input_file_32_1024.afi -o bin/afs/tests/input_file_32_1024.mockdb
+cargo run --release --bin afs -- mock write -f bin/afs/tests/data/test_input_file_32_1024.afi -o bin/afs/tests/data/input_file_32_1024.mockdb
 
-cargo run --bin afs -- keygen -o bin/afs/tests       
+cargo run --release --bin afs -- keygen --output-folder bin/afs/tests/data
 
-cargo run --bin afs -- cache -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -d bin/afs/tests/input_file_32_1024.mockdb -o bin/afs/tests
+cargo run --release --bin afs -- cache -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 --db-file bin/afs/tests/data/input_file_32_1024.mockdb --output-file bin/afs/tests/data
 
-cargo run --bin afs -- prove -f bin/afs/tests/test_input_file_32_1024.afi -d bin/afs/tests/input_file_32_1024.mockdb -c bin/afs/tests -k bin/afs/tests
+cargo run --release --bin afs -- prove --afi-file bin/afs/tests/data/test_input_file_32_1024.afi --db-file bin/afs/tests/data/input_file_32_1024.mockdb --cache-folder bin/afs/tests/data --keys-folder bin/afs/tests/data
 
-cargo run --bin afs -- verify -f bin/afs/tests/input_file_32_1024.mockdb.prove.bin -d '/Users/yujiang/axiom/afs-prototype/bin/afs/tests/input_file_32_1024.mockdb' -k bin/afs/tests
+cargo run --release --bin afs -- verify --proof-file bin/afs/tests/data/input_file_32_1024.mockdb.prove.bin --db-file bin/afs/tests/data/input_file_32_1024.mockdb --keys-folder bin/afs/tests/data
 ```

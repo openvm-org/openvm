@@ -13,14 +13,6 @@ pub struct AfiCommand {
     pub afi_file_path: String,
 
     #[arg(
-        long = "db-file",
-        short = 'd',
-        help = "Mock DB file input (default: new empty DB)",
-        required = false
-    )]
-    pub db_file_path: Option<String>,
-
-    #[arg(
         long = "silent",
         short = 's',
         help = "Don't print the output to stdout",

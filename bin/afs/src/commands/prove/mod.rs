@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use afs_chips::{
     execution_air::ExecutionAir,
     page_rw_checker::page_controller::{OpType, Operation, PageController},
@@ -82,11 +84,16 @@ pub struct ProveCommand {
 impl ProveCommand {
     /// Execute the `prove` command
     pub fn execute(&self, config: &PageConfig) -> Result<()> {
-        let prefix = create_prefix(&config);
+        let start = Instant::now();
+        let prefix = create_prefix(config);
         match config.page.mode {
             PageMode::ReadWrite => self.execute_rw(config, prefix)?,
             PageMode::ReadOnly => panic!(),
         }
+
+        let duration = start.elapsed();
+        println!("Proved table operations in {:?}", duration);
+
         Ok(())
     }
 

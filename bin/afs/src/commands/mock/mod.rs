@@ -29,7 +29,6 @@ impl MockCommand {
             MockSubcommands::Afi(afi) => {
                 let cmd = afi::AfiCommand {
                     afi_file_path: afi.afi_file_path.clone(),
-                    db_file_path: afi.db_file_path.clone(),
                     silent: afi.silent,
                 };
                 cmd.execute()
