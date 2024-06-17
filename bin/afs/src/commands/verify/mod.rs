@@ -66,7 +66,6 @@ impl VerifyCommand {
         let proof: Proof<BabyBearPoseidon2Config> = bincode::deserialize(&encoded_proof).unwrap();
         let page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
             page_bus_index,
-            checker_final_bus_index,
             range_bus_index,
             ops_bus_index,
             idx_len,

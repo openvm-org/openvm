@@ -5,11 +5,13 @@ mod bridge;
 mod columns;
 mod trace;
 
+#[cfg(test)]
+mod tests;
+
 pub struct OfflineChecker {
-    pub page_bus_index: usize,
-    pub checker_final_bus_index: usize,
-    pub range_bus_index: usize,
-    pub ops_bus_index: usize,
+    page_bus_index: usize,
+    range_bus_index: usize,
+    ops_bus_index: usize,
 
     idx_len: usize,
     data_len: usize,
@@ -21,7 +23,6 @@ impl OfflineChecker {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         page_bus_index: usize,
-        checker_final_bus_index: usize,
         range_bus_index: usize,
         ops_bus_index: usize,
         idx_len: usize,
@@ -32,7 +33,6 @@ impl OfflineChecker {
     ) -> Self {
         Self {
             page_bus_index,
-            checker_final_bus_index,
             range_bus_index,
             ops_bus_index,
             idx_len,
@@ -47,7 +47,7 @@ impl OfflineChecker {
     }
 
     pub fn air_width(&self) -> usize {
-        9 + self.page_width()
+        10 + self.page_width()
             + 2 * (self.idx_len + self.data_len)
             + IsLessThanTupleAuxCols::<usize>::get_width(
                 self.idx_clk_limb_bits.clone(),

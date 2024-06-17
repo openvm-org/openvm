@@ -118,7 +118,6 @@ impl ProveCommand {
 
         let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
             page_bus_index,
-            checker_final_bus_index,
             range_bus_index,
             ops_bus_index,
             idx_len,
@@ -132,11 +131,7 @@ impl ProveCommand {
         let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
         let (page_traces, mut prover_data) = page_controller.load_page_and_ops(
-            page_init.clone(),
-            idx_len,
-            data_len,
-            idx_limb_bits,
-            idx_decomp,
+            &page_init,
             zk_ops.clone(),
             checker_trace_degree,
             &mut trace_builder.committer,

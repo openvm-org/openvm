@@ -9,6 +9,7 @@ use crate::{
     types::{Data, Index},
     utils::fixed_bytes_to_field_vec,
 };
+use afs_chips::common::{page::Page, page_cols::PageCols};
 use serde_derive::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use types::{TableId, TableMetadata};
@@ -58,34 +59,28 @@ impl<I: Index, D: Data> Table<I, D> {
         }
     }
 
-    pub fn from_page(id: TableId, page: Vec<Vec<u32>>) -> Self {
-        let row_size = 1 + Self::SIZE_I / 2 + Self::SIZE_D / 2;
-
+    pub fn from_page(id: TableId, page: Page) -> Self {
         let codec = FixedBytesCodec::<I, D>::new(Self::SIZE_I, Self::SIZE_D);
-
         let mut body = page
+            .rows
             .iter()
-            .map(|row| {
-                if row.len() != row_size {
-                    panic!(
-                        "Invalid row size: {} for this codec, expected: {}",
-                        row.len(),
-                        row_size
-                    );
+            .filter_map(|row| {
+                let is_alloc_bytes = row.is_alloc.to_be_bytes();
+                let is_alloc = u32::from_be_bytes(is_alloc_bytes);
+                if is_alloc == 0 {
+                    return None;
                 }
                 let index_bytes: Vec<u8> = row
+                    .idx
                     .iter()
-                    .skip(1)
-                    .take(Self::SIZE_I / 2)
                     .flat_map(|&x| {
                         let bytes = x.to_be_bytes();
                         bytes[2..4].to_vec()
                     })
                     .collect::<Vec<u8>>();
                 let data_bytes: Vec<u8> = row
+                    .data
                     .iter()
-                    .skip(1 + Self::SIZE_I / 2)
-                    .take(Self::SIZE_D / 2)
                     .flat_map(|&x| {
                         let bytes = x.to_be_bytes();
                         bytes[2..4].to_vec()
@@ -93,7 +88,7 @@ impl<I: Index, D: Data> Table<I, D> {
                     .collect::<Vec<u8>>();
                 let index = codec.fixed_bytes_to_index(index_bytes);
                 let data = codec.fixed_bytes_to_data(data_bytes);
-                (index, data)
+                Some((index, data))
             })
             .collect::<BTreeMap<I, D>>();
 
@@ -108,7 +103,7 @@ impl<I: Index, D: Data> Table<I, D> {
         }
     }
 
-    pub fn to_page(&self, page_size: usize) -> Vec<Vec<u32>> {
+    pub fn to_page(&self, page_size: usize) -> Page {
         if self.body.len() > page_size {
             panic!(
                 "Table size {} cannot be bigger than `page_size` {}",
@@ -118,28 +113,32 @@ impl<I: Index, D: Data> Table<I, D> {
         }
         let codec =
             FixedBytesCodec::<I, D>::new(self.metadata.index_bytes, self.metadata.data_bytes);
-        let mut page: Vec<Vec<u32>> = self
+        let mut rows: Vec<PageCols<u32>> = self
             .body
             .iter()
             .map(|(index, data)| {
-                let is_alloc: Vec<u32> = vec![1];
+                let is_alloc: u32 = 1;
                 let index_bytes = codec.index_to_fixed_bytes(index.clone());
                 let index_fields = fixed_bytes_to_field_vec(index_bytes);
                 let data_bytes = codec.data_to_fixed_bytes(data.clone());
                 let data_fields = fixed_bytes_to_field_vec(data_bytes);
-                let mut page = is_alloc;
-                page.extend(index_fields);
-                page.extend(data_fields);
-                page
+                PageCols {
+                    is_alloc,
+                    idx: index_fields,
+                    data: data_fields,
+                }
             })
-            .collect();
-        let zeros: Vec<u32> =
-            vec![0; 1 + self.metadata.index_bytes / 2 + self.metadata.data_bytes / 2];
+            .collect::<Vec<PageCols<u32>>>();
+        let zeros: PageCols<u32> = PageCols {
+            is_alloc: 0,
+            idx: vec![0; Self::SIZE_I / 2],
+            data: vec![0; Self::SIZE_D / 2],
+        };
         let remaining_rows = page_size - self.body.len();
         for _ in 0..remaining_rows {
-            page.push(zeros.clone());
+            rows.push(zeros.clone());
         }
-        page
+        Page { rows }
     }
 
     pub fn id(&self) -> TableId {
