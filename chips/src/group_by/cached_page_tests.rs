@@ -88,11 +88,11 @@ fn group_by_test() {
 
     const MAX_VAL: usize = 0x78000001 / 2; // The prime used by BabyBear / 2
 
-    let log_page_height = 0;
+    let log_page_height = 3;
 
-    let page_width = 4;
-    // let num_groups = rng.gen::<usize>() % (page_width - 2) + 1;
-    let num_groups = 1;
+    let page_width = 20;
+    let num_groups = rng.gen::<usize>() % (page_width - 2) + 1;
+    // let num_groups = 1;
     let page_height = 1 << log_page_height;
 
     let idx_len = page_width - 1;
@@ -113,15 +113,13 @@ fn group_by_test() {
 
     let page = Page::from_2d_vec(&page, idx_len, 0);
 
-    // let mut group_by_cols = vec![];
-    // while group_by_cols.len() < num_groups + 1 {
-    //     let col = rng.gen::<usize>() % (page_width - 1) + 1;
-    //     if !group_by_cols.contains(&col) {
-    //         group_by_cols.push(col);
-    //     }
-    // }
-
-    let mut group_by_cols = vec![1, 2];
+    let mut group_by_cols = vec![];
+    while group_by_cols.len() < num_groups + 1 {
+        let col = rng.gen::<usize>() % (page_width - 2) + 1;
+        if !group_by_cols.contains(&col) {
+            group_by_cols.push(col);
+        }
+    }
 
     let aggregated_col = group_by_cols.pop().unwrap();
 

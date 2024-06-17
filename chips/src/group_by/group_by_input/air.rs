@@ -87,9 +87,13 @@ impl<AB: PartitionedAirBuilder> SubAir<AB> for GroupByAir {
 
         builder.assert_one(aux.0.eq_next + aux.0.is_final);
 
+        builder
+            .when_first_row()
+            .assert_eq(aux.0.partial_aggregated, aux.0.aggregated);
+
         builder.when_transition().assert_eq(
-            aux.1.aggregated,
-            aux.0.eq_next * aux.0.aggregated + aux.0.aggregated,
+            aux.1.partial_aggregated,
+            aux.0.eq_next * aux.0.partial_aggregated + aux.1.aggregated,
         );
     }
 }
