@@ -91,7 +91,10 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
 
         // here, we generate the flattened aux columns for IsLessThanTuple, and get the indicator associated with the strict comparison
         // when the comparator is =, we can just generate dummy values
-        let (is_less_than_tuple_aux_flattened, strict_comp_ind) = match cols_numbered.aux_cols {
+        let (is_less_than_tuple_aux_flattened, strict_comp_ind): (
+            Option<Vec<usize>>,
+            Option<usize>,
+        ) = match cols_numbered.aux_cols {
             PageIndexScanInputAuxCols::Lt(StrictCompAuxCols {
                 is_less_than_tuple_aux,
                 ..
@@ -100,8 +103,8 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                 is_less_than_tuple_aux,
                 ..
             }) => (
-                is_less_than_tuple_aux.flatten(),
-                cols_numbered.satisfies_pred,
+                Some(is_less_than_tuple_aux.flatten()),
+                Some(cols_numbered.satisfies_pred),
             ),
             PageIndexScanInputAuxCols::Lte(NonStrictCompAuxCols {
                 satisfies_strict_comp,
@@ -112,8 +115,11 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                 satisfies_strict_comp,
                 is_less_than_tuple_aux,
                 ..
-            }) => (is_less_than_tuple_aux.flatten(), satisfies_strict_comp),
-            PageIndexScanInputAuxCols::Eq(EqCompAuxCols { .. }) => (vec![], 0),
+            }) => (
+                Some(is_less_than_tuple_aux.flatten()),
+                Some(satisfies_strict_comp),
+            ),
+            PageIndexScanInputAuxCols::Eq(EqCompAuxCols { .. }) => (None, None),
         };
 
         // get interactions from IsLessThanTuple subchip
@@ -130,10 +136,10 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                     io: IsLessThanTupleIOCols {
                         x: cols_numbered.page_cols.idx.clone(),
                         y: cols_numbered.x.clone(),
-                        tuple_less_than: strict_comp_ind,
+                        tuple_less_than: strict_comp_ind.unwrap(),
                     },
                     aux: IsLessThanTupleAuxCols::from_slice(
-                        &is_less_than_tuple_aux_flattened,
+                        &is_less_than_tuple_aux_flattened.unwrap(),
                         idx_limb_bits,
                         decomp,
                         self.idx_len,
@@ -154,10 +160,10 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                     io: IsLessThanTupleIOCols {
                         x: cols_numbered.x.clone(),
                         y: cols_numbered.page_cols.idx.clone(),
-                        tuple_less_than: strict_comp_ind,
+                        tuple_less_than: strict_comp_ind.unwrap(),
                     },
                     aux: IsLessThanTupleAuxCols::from_slice(
-                        &is_less_than_tuple_aux_flattened,
+                        &is_less_than_tuple_aux_flattened.unwrap(),
                         idx_limb_bits,
                         decomp,
                         self.idx_len,

@@ -50,10 +50,50 @@ pub struct PageIndexScanInputAir {
     variant_air: PageIndexScanInputAirVariants,
 }
 
+impl PageIndexScanInputAir {
+    pub fn new(
+        bus_index: usize,
+        idx_len: usize,
+        data_len: usize,
+        idx_limb_bits: Vec<usize>,
+        decomp: usize,
+        cmp: Comp,
+    ) -> Self {
+        let is_less_than_tuple_air =
+            IsLessThanTupleAir::new(bus_index, idx_limb_bits.clone(), decomp);
+        let is_equal_vec_air = IsEqualVecAir::new(idx_len);
+
+        let variant_air = match cmp {
+            Comp::Lt => PageIndexScanInputAirVariants::Lt(StrictCompAir {
+                is_less_than_tuple_air,
+            }),
+            Comp::Lte => PageIndexScanInputAirVariants::Lte(NonStrictCompAir {
+                is_less_than_tuple_air,
+                is_equal_vec_air,
+            }),
+            Comp::Eq => PageIndexScanInputAirVariants::Eq(EqCompAir { is_equal_vec_air }),
+            Comp::Gte => PageIndexScanInputAirVariants::Gte(NonStrictCompAir {
+                is_less_than_tuple_air,
+                is_equal_vec_air,
+            }),
+            Comp::Gt => PageIndexScanInputAirVariants::Gt(StrictCompAir {
+                is_less_than_tuple_air,
+            }),
+        };
+
+        Self {
+            bus_index,
+            idx_len,
+            data_len,
+            variant_air,
+        }
+    }
+}
+
 /// Given a fixed predicate of the form index OP x, where OP is one of {<, <=, =, >=, >}
 /// and x is a private input, the PageIndexScanInputChip implements a chip such that the chip:
 ///
-/// 1. Has public value x
+/// 1. Has public value x and OP given by cmp (Lt, Lte, Eq, Gte, or Gt)
 /// 2. Sends all rows of the page that match the predicate index OP x where x is the public value
 pub struct PageIndexScanInputChip {
     pub air: PageIndexScanInputAir,
@@ -72,48 +112,14 @@ impl PageIndexScanInputChip {
         range_checker: Arc<RangeCheckerGateChip>,
         cmp: Comp,
     ) -> Self {
-        let variant_air = match cmp {
-            Comp::Lt => PageIndexScanInputAirVariants::Lt(StrictCompAir {
-                is_less_than_tuple_air: IsLessThanTupleAir::new(
-                    bus_index,
-                    idx_limb_bits.clone(),
-                    decomp,
-                ),
-            }),
-            Comp::Lte => PageIndexScanInputAirVariants::Lte(NonStrictCompAir {
-                is_less_than_tuple_air: IsLessThanTupleAir::new(
-                    bus_index,
-                    idx_limb_bits.clone(),
-                    decomp,
-                ),
-                is_equal_vec_air: IsEqualVecAir::new(idx_len),
-            }),
-            Comp::Eq => PageIndexScanInputAirVariants::Eq(EqCompAir {
-                is_equal_vec_air: IsEqualVecAir::new(idx_len),
-            }),
-            Comp::Gte => PageIndexScanInputAirVariants::Gte(NonStrictCompAir {
-                is_less_than_tuple_air: IsLessThanTupleAir::new(
-                    bus_index,
-                    idx_limb_bits.clone(),
-                    decomp,
-                ),
-                is_equal_vec_air: IsEqualVecAir::new(idx_len),
-            }),
-            Comp::Gt => PageIndexScanInputAirVariants::Gt(StrictCompAir {
-                is_less_than_tuple_air: IsLessThanTupleAir::new(
-                    bus_index,
-                    idx_limb_bits.clone(),
-                    decomp,
-                ),
-            }),
-        };
-
-        let air = PageIndexScanInputAir {
+        let air = PageIndexScanInputAir::new(
             bus_index,
             idx_len,
             data_len,
-            variant_air,
-        };
+            idx_limb_bits,
+            decomp,
+            cmp.clone(),
+        );
 
         Self {
             air,

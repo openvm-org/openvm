@@ -2,47 +2,32 @@ use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::sub_chip::LocalTraceInstructions;
+use crate::{common::page::Page, sub_chip::LocalTraceInstructions};
 
 use super::PageIndexScanOutputChip;
 
 impl PageIndexScanOutputChip {
     /// Generate the trace for the page table
-    pub fn gen_page_trace<SC: StarkGenericConfig>(
-        &self,
-        page: Vec<Vec<u32>>,
-    ) -> RowMajorMatrix<Val<SC>>
+    pub fn gen_page_trace<SC: StarkGenericConfig>(&self, page: &Page) -> RowMajorMatrix<Val<SC>>
     where
-        Val<SC>: AbstractField,
+        Val<SC>: AbstractField + PrimeField64,
     {
-        RowMajorMatrix::new(
-            page.into_iter()
-                .flat_map(|row| {
-                    row.into_iter()
-                        .map(Val::<SC>::from_wrapped_u32)
-                        .collect::<Vec<Val<SC>>>()
-                })
-                .collect(),
-            self.page_width(),
-        )
+        page.gen_trace()
     }
 
     /// Generate the trace for the auxiliary columns
-    pub fn gen_aux_trace<SC: StarkGenericConfig>(
-        &self,
-        page: Vec<Vec<u32>>,
-    ) -> RowMajorMatrix<Val<SC>>
+    pub fn gen_aux_trace<SC: StarkGenericConfig>(&self, page: &Page) -> RowMajorMatrix<Val<SC>>
     where
         Val<SC>: AbstractField + PrimeField64,
     {
         let mut rows: Vec<Val<SC>> = vec![];
 
-        for i in 0..page.len() {
+        for i in 0..page.rows.len() {
             let page_row = page[i].clone();
-            let next_page: Vec<u32> = if i == page.len() - 1 {
+            let next_page: Vec<u32> = if i == page.rows.len() - 1 {
                 vec![0; 1 + self.air.idx_len + self.air.data_len]
             } else {
-                page[i + 1].clone()
+                page.rows[i + 1].to_vec()
             };
 
             let mut row: Vec<Val<SC>> = vec![];
@@ -50,7 +35,7 @@ impl PageIndexScanOutputChip {
             let is_less_than_tuple_trace = LocalTraceInstructions::generate_trace_row(
                 self.air.is_less_than_tuple_air(),
                 (
-                    page_row[1..1 + self.air.idx_len].to_vec(),
+                    page_row.to_vec()[1..1 + self.air.idx_len].to_vec(),
                     next_page[1..1 + self.air.idx_len].to_vec(),
                     self.range_checker.clone(),
                 ),
