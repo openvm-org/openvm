@@ -1,12 +1,21 @@
 use std::sync::Arc;
 
 use afs_stark_backend::{
-    config::Com,
-    prover::trace::{ProverTraceData, TraceCommitter},
+    config::{Com, PcsProof, PcsProverData},
+    keygen::{
+        types::{MultiStarkPartialProvingKey, MultiStarkPartialVerifyingKey},
+        MultiStarkKeygenBuilder,
+    },
+    prover::{
+        trace::{ProverTraceData, TraceCommitmentBuilder, TraceCommitter},
+        types::Proof,
+    },
+    verifier::VerificationError,
 };
+use afs_test_utils::engine::StarkEngine;
 use p3_field::{AbstractField, PrimeField, PrimeField64};
 use p3_matrix::dense::DenseMatrix;
-use p3_uni_stark::{StarkGenericConfig, Val};
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 use crate::{common::page::Page, range_gate::RangeCheckerGateChip};
 
@@ -29,6 +38,9 @@ where
 
     input_commitment: Option<Com<SC>>,
     output_commitment: Option<Com<SC>>,
+
+    page_traces: Vec<DenseMatrix<Val<SC>>>,
+    prover_data: Vec<ProverTraceData<SC>>,
 
     pub range_checker: Arc<RangeCheckerGateChip>,
 }
@@ -73,6 +85,8 @@ where
             output_chip_aux_trace: None,
             input_commitment: None,
             output_commitment: None,
+            page_traces: vec![],
+            prover_data: vec![],
             range_checker,
         }
     }
@@ -262,6 +276,139 @@ where
         Page::from_2d_vec(&output, page.rows[0].idx.len(), page.rows[0].data.len())
     }
 
+    pub fn set_up_keygen_builder(
+        &self,
+        keygen_builder: &mut MultiStarkKeygenBuilder<SC>,
+        page_width: usize,
+        page_height: usize,
+        idx_len: usize,
+        decomp: usize,
+    ) {
+        let input_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
+        let output_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
+        let input_page_aux_ptr = keygen_builder.add_main_matrix(self.input_chip.aux_width());
+        let output_page_aux_ptr = keygen_builder.add_main_matrix(self.output_chip.aux_width());
+        let range_checker_ptr = keygen_builder.add_main_matrix(self.range_checker.air_width());
+
+        keygen_builder.add_partitioned_air(
+            &self.input_chip.air,
+            page_height,
+            idx_len,
+            vec![input_page_ptr, input_page_aux_ptr],
+        );
+
+        keygen_builder.add_partitioned_air(
+            &self.output_chip.air,
+            page_height,
+            0,
+            vec![output_page_ptr, output_page_aux_ptr],
+        );
+
+        keygen_builder.add_partitioned_air(
+            &self.range_checker.air,
+            1 << decomp,
+            0,
+            vec![range_checker_ptr],
+        );
+    }
+
+    pub fn prove(
+        &mut self,
+        engine: &dyn StarkEngine<SC>,
+        partial_pk: &MultiStarkPartialProvingKey<SC>,
+        trace_builder: &mut TraceCommitmentBuilder<SC>,
+        x: Vec<u32>,
+        idx_decomp: usize,
+    ) -> Proof<SC>
+    where
+        Val<SC>: PrimeField,
+        Domain<SC>: Send + Sync,
+        SC::Pcs: Sync,
+        Domain<SC>: Send + Sync,
+        PcsProverData<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Challenge: Send + Sync,
+        PcsProof<SC>: Send + Sync,
+    {
+        let page_traces = self.page_traces.clone();
+
+        let input_chip_aux_trace = self.input_chip_aux_trace();
+        let output_chip_aux_trace = self.output_chip_aux_trace();
+        let range_checker_trace = self.range_checker_trace();
+
+        // Clearing the range_checker counts
+        self.update_range_checker(idx_decomp);
+
+        trace_builder.clear();
+
+        trace_builder.load_cached_trace(page_traces[0].clone(), self.prover_data.remove(0));
+        trace_builder.load_cached_trace(page_traces[1].clone(), self.prover_data.remove(0));
+        trace_builder.load_trace(input_chip_aux_trace);
+        trace_builder.load_trace(output_chip_aux_trace);
+        trace_builder.load_trace(range_checker_trace);
+
+        trace_builder.commit_current();
+
+        let partial_vk = partial_pk.partial_vk();
+
+        let main_trace_data = trace_builder.view(
+            &partial_vk,
+            vec![
+                &self.input_chip.air,
+                &self.output_chip.air,
+                &self.range_checker.air,
+            ],
+        );
+
+        let pis = vec![
+            x.iter()
+                .map(|x| Val::<SC>::from_canonical_u32(*x))
+                .collect(),
+            vec![],
+            vec![],
+        ];
+
+        let prover = engine.prover();
+        let mut challenger = engine.new_challenger();
+
+        prover.prove(&mut challenger, partial_pk, main_trace_data, &pis)
+    }
+
+    /// This function takes a proof (returned by the prove function) and verifies it
+    pub fn verify(
+        &self,
+        engine: &dyn StarkEngine<SC>,
+        partial_vk: MultiStarkPartialVerifyingKey<SC>,
+        proof: Proof<SC>,
+        x: Vec<u32>,
+    ) -> Result<(), VerificationError>
+    where
+        Val<SC>: PrimeField,
+    {
+        let verifier = engine.verifier();
+
+        let pis = vec![
+            x.iter()
+                .map(|x| Val::<SC>::from_canonical_u32(*x))
+                .collect(),
+            vec![],
+            vec![],
+        ];
+
+        let mut challenger = engine.new_challenger();
+        verifier.verify(
+            &mut challenger,
+            partial_vk,
+            vec![
+                &self.input_chip.air,
+                &self.output_chip.air,
+                &self.range_checker.air,
+            ],
+            proof,
+            &pis,
+        )
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn load_page(
         &mut self,
@@ -273,8 +420,7 @@ where
         idx_limb_bits: usize,
         idx_decomp: usize,
         trace_committer: &mut TraceCommitter<SC>,
-    ) -> (Vec<DenseMatrix<Val<SC>>>, Vec<ProverTraceData<SC>>)
-    where
+    ) where
         Val<SC>: PrimeField,
     {
         // idx_decomp can't change between different pages since range_checker depends on it
@@ -317,12 +463,10 @@ where
         self.input_commitment = Some(prover_data[0].commit.clone());
         self.output_commitment = Some(prover_data[1].commit.clone());
 
-        (
-            vec![
-                self.input_chip_trace.clone().unwrap(),
-                self.output_chip_trace.clone().unwrap(),
-            ],
-            prover_data,
-        )
+        self.page_traces = vec![
+            self.input_chip_trace.clone().unwrap(),
+            self.output_chip_trace.clone().unwrap(),
+        ];
+        self.prover_data = prover_data;
     }
 }
