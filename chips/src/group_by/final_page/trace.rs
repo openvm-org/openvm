@@ -1,6 +1,7 @@
+use crate::common::page::Page;
 use std::sync::Arc;
 
-use p3_field::{AbstractField, PrimeField};
+use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
@@ -9,12 +10,9 @@ use crate::range_gate::RangeCheckerGateChip;
 
 impl MyFinalPageAir {
     /// The trace is the whole page (including the is_alloc column)
-    pub fn gen_page_trace<SC: StarkGenericConfig>(
-        &self,
-        page: Vec<Vec<u32>>,
-    ) -> RowMajorMatrix<Val<SC>>
+    pub fn gen_page_trace<SC: StarkGenericConfig>(&self, page: &Page) -> RowMajorMatrix<Val<SC>>
     where
-        Val<SC>: AbstractField,
+        Val<SC>: PrimeField,
     {
         self.final_air.gen_page_trace::<SC>(page)
     }
@@ -25,14 +23,13 @@ impl MyFinalPageAir {
     /// Here, internal_indices is a set of indices that appear in the operations
     pub fn gen_aux_trace<SC: StarkGenericConfig>(
         &self,
-        page: Vec<Vec<u32>>,
+        page: &Page,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> RowMajorMatrix<Val<SC>>
     where
         Val<SC>: PrimeField,
     {
-        self.final_air
-            .gen_aux_trace::<SC>(page.clone(), range_checker)
+        self.final_air.gen_aux_trace::<SC>(page, range_checker)
 
         // let mut aux_trace_flat: Vec<Val<SC>> = vec![];
         // for (r, page_row) in page.iter().enumerate() {

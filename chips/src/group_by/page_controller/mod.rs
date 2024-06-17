@@ -1,3 +1,4 @@
+use crate::common::page::Page;
 use crate::group_by::final_page::MyFinalPageAir;
 use crate::group_by::group_by_input::GroupByAir;
 use crate::range_gate::RangeCheckerGateChip;
@@ -7,6 +8,7 @@ use afs_stark_backend::prover::trace::TraceCommitter;
 use p3_field::{AbstractField, PrimeField};
 use p3_matrix::dense::DenseMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 pub struct PageController<SC: StarkGenericConfig>
@@ -16,13 +18,25 @@ where
     pub group_by: GroupByAir,
     pub range_checker: Arc<RangeCheckerGateChip>,
     pub final_chip: MyFinalPageAir,
+    _marker: PhantomData<SC>,
+}
 
-    group_by_trace: Option<DenseMatrix<Val<SC>>>,
-    final_page_trace: Option<DenseMatrix<Val<SC>>>,
-    final_page_aux_trace: Option<DenseMatrix<Val<SC>>>,
+pub struct GroupByTraces<SC: StarkGenericConfig>
+where
+    Val<SC>: AbstractField,
+{
+    pub group_by_trace: DenseMatrix<Val<SC>>,
+    pub group_by_aux_trace: DenseMatrix<Val<SC>>,
+    pub final_page_trace: DenseMatrix<Val<SC>>,
+    pub final_page_aux_trace: DenseMatrix<Val<SC>>,
+}
 
-    group_by_commitment: Option<Com<SC>>,
-    final_page_commitment: Option<Com<SC>>,
+pub struct GroupByCommitments<SC: StarkGenericConfig>
+where
+    Val<SC>: AbstractField,
+{
+    pub group_by_commitment: Com<SC>,
+    pub final_page_commitment: Com<SC>,
 }
 
 impl<SC: StarkGenericConfig> PageController<SC> {
@@ -57,76 +71,51 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             group_by,
             range_checker,
             final_chip,
-            group_by_trace: None,
-            final_page_trace: None,
-            final_page_aux_trace: None,
-            group_by_commitment: None,
-            final_page_commitment: None,
+            _marker: PhantomData,
         }
     }
 
     pub fn load_page(
         &mut self,
-        page: Vec<Vec<u32>>,
+        page: &Page,
         trace_committer: &TraceCommitter<SC>,
-    ) -> (Vec<DenseMatrix<Val<SC>>>, Vec<ProverTraceData<SC>>)
+    ) -> (
+        GroupByTraces<SC>,
+        GroupByCommitments<SC>,
+        Vec<ProverTraceData<SC>>,
+    )
     where
         Val<SC>: PrimeField,
     {
-        self.group_by_trace = Some(self.group_by.gen_page_trace(page.clone()));
+        let group_by_trace = page.gen_trace();
 
-        let mut grouped_page: Vec<Vec<u32>> = page
-            .iter()
-            .map(|row| {
-                let mut selected_row: Vec<u32> = self
-                    .group_by
-                    .group_by_cols
-                    .iter()
-                    .map(|&col_index| row[col_index])
-                    .collect();
-                selected_row.push(row[self.group_by.aggregated_col]);
-                selected_row
-            })
-            .collect();
+        let grouped_page = self.group_by.request(page);
+        let group_by_aux_trace: DenseMatrix<Val<SC>> = self.group_by.gen_aux_trace(&grouped_page);
 
-        grouped_page.sort();
-
-        let mut sums_by_key: std::collections::HashMap<Vec<u32>, u32> =
-            std::collections::HashMap::new();
-        for row in grouped_page.iter() {
-            let (value, index) = row.split_last().unwrap();
-            *sums_by_key.entry(index.to_vec()).or_insert(0) += value;
-        }
-        // Convert the hashmap back to a sorted vector for further processing
-        let mut grouped_sums: Vec<Vec<u32>> = sums_by_key
-            .into_iter()
-            .map(|(mut key, sum)| {
-                key.insert(0, 1);
-                key.push(sum);
-                key
-            })
-            .collect();
-        grouped_sums.sort();
-
-        self.final_page_trace = Some(self.final_chip.gen_page_trace::<SC>(grouped_sums.clone()));
-        self.final_page_aux_trace = Some(
-            self.final_chip
-                .gen_aux_trace::<SC>(grouped_sums, self.range_checker.clone()),
-        );
+        let final_page_trace = grouped_page.gen_trace();
+        let final_page_aux_trace = self
+            .final_chip
+            .gen_aux_trace::<SC>(&grouped_page, self.range_checker.clone());
 
         let prover_data = vec![
-            trace_committer.commit(vec![self.group_by_trace.clone().unwrap()]),
-            trace_committer.commit(vec![self.final_page_trace.clone().unwrap()]),
+            trace_committer.commit(vec![group_by_trace.clone()]),
+            trace_committer.commit(vec![final_page_trace.clone()]),
         ];
 
-        self.group_by_commitment = Some(prover_data[0].commit.clone());
-        self.final_page_commitment = Some(prover_data[1].commit.clone());
+        let group_by_commitment = prover_data[0].commit.clone();
+        let final_page_commitment = prover_data[1].commit.clone();
 
         (
-            vec![
-                self.group_by_trace.clone().unwrap(),
-                self.final_page_trace.clone().unwrap(),
-            ],
+            GroupByTraces {
+                group_by_trace,
+                group_by_aux_trace,
+                final_page_trace,
+                final_page_aux_trace,
+            },
+            GroupByCommitments {
+                group_by_commitment,
+                final_page_commitment,
+            },
             prover_data,
         )
     }

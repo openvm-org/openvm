@@ -1,4 +1,5 @@
 use super::page_controller::PageController;
+use crate::common::page::Page;
 use std::iter;
 
 use afs_stark_backend::{
@@ -14,39 +15,27 @@ use afs_test_utils::{
     engine::StarkEngine,
     utils::create_seeded_rng,
 };
-use p3_baby_bear::BabyBear;
 use rand::Rng;
 
 #[allow(clippy::too_many_arguments)]
 fn load_page_test(
     engine: &BabyBearPoseidon2Engine,
-    page_init: Vec<Vec<u32>>,
+    page_init: &Page,
     page_controller: &mut PageController<BabyBearPoseidon2Config>,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
     partial_pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
 ) -> Result<(), VerificationError> {
-    let page_height = page_init.len();
-    assert!(page_height > 0);
+    let (group_by_traces, _group_by_commitments, mut prover_data) =
+        page_controller.load_page(page_init, &trace_builder.committer);
 
-    let (page_traces, mut prover_data) =
-        page_controller.load_page(page_init.clone(), &trace_builder.committer);
-
-    let group_by_trace: p3_matrix::dense::DenseMatrix<BabyBear> =
-        page_controller.group_by.gen_aux_trace(page_init.clone());
-    let final_page_aux_trace = page_controller
-        .final_chip
-        .gen_aux_trace::<BabyBearPoseidon2Config>(
-            page_init.clone(),
-            page_controller.range_checker.clone(),
-        );
     let range_checker_trace = page_controller.range_checker.generate_trace();
 
     trace_builder.clear();
 
-    trace_builder.load_cached_trace(page_traces[0].clone(), prover_data.remove(0));
-    trace_builder.load_cached_trace(page_traces[1].clone(), prover_data.remove(0));
-    trace_builder.load_trace(group_by_trace);
-    trace_builder.load_trace(final_page_aux_trace);
+    trace_builder.load_cached_trace(group_by_traces.group_by_trace, prover_data.remove(0));
+    trace_builder.load_cached_trace(group_by_traces.final_page_trace, prover_data.remove(0));
+    trace_builder.load_trace(group_by_traces.group_by_aux_trace);
+    trace_builder.load_trace(group_by_traces.final_page_aux_trace);
     trace_builder.load_trace(range_checker_trace);
 
     trace_builder.commit_current();
@@ -117,6 +106,8 @@ fn group_by_test() {
         page.push(iter::once(1).chain(idx).collect());
     }
 
+    let page = Page::from_2d_vec(&page, idx_len, 1);
+
     // let mut group_by_cols = vec![];
     // while group_by_cols.len() < num_groups + 1 {
     //     let col = rng.gen::<usize>() % (page_width - 1) + 1;
@@ -124,6 +115,7 @@ fn group_by_test() {
     //         group_by_cols.push(col);
     //     }
     // }
+
     let mut group_by_cols = vec![1, 2];
 
     let aggregated_col = group_by_cols.pop().unwrap();
@@ -180,7 +172,7 @@ fn group_by_test() {
     // Testing a fully allocated page
     load_page_test(
         &engine,
-        page.clone(),
+        &page,
         &mut page_controller,
         &mut trace_builder,
         &partial_pk,
