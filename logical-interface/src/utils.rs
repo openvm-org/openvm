@@ -79,3 +79,23 @@ pub fn string_to_fixed_bytes_be_vec(s: String, target_bytes: usize) -> Vec<u8> {
         }
     }
 }
+
+/// Converts a byte vector to a vector of Page elements, where each Page element is a u32
+/// that represents a 31-bit field element and contains 2 big-endian bytes from the byte vector.
+/// 2 MSBs of each Page element are set to 0 and 2 LSBs are set to two
+/// bytes from the byte vector.
+pub fn fixed_bytes_to_field_vec(value: Vec<u8>) -> Vec<u32> {
+    if value.len() == 1 {
+        return vec![value[0] as u32];
+    } else if value.len() % 2 != 0 {
+        panic!("Invalid field size: {}", value.len());
+    }
+    value
+        .chunks(2)
+        .map(|chunk| {
+            let mut bytes = [0u8; 2];
+            bytes.copy_from_slice(chunk);
+            u16::from_be_bytes(bytes) as u32
+        })
+        .collect()
+}

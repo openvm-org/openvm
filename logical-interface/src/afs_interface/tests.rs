@@ -13,7 +13,7 @@ pub fn test_initialize_interface() {
 
 #[test]
 pub fn test_initialize_interface_from_file() {
-    let file_path = String::from("tests/data/test_input_file_8_8.afi");
+    let file_path = "tests/data/test_input_file_8_8.afi";
     let default_table_metadata = TableMetadata::new(8, 8);
     let mut db = MockDb::new(default_table_metadata);
     let mut interface = AfsInterface::<u32, u64>::new(&mut db);

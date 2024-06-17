@@ -5,7 +5,7 @@ use std::hash::Hash;
 
 // Note: the Data trait will likely change in the future to include more methods for accessing
 // different sections of the underlying data in an more expressive way.
-pub trait Data: Sized + Clone + MemorySize {
+pub trait Data: Sized + Clone + Ord + MemorySize {
     fn to_be_bytes(&self) -> Vec<u8>;
     fn from_be_bytes(bytes: &[u8]) -> Option<Self>;
 }

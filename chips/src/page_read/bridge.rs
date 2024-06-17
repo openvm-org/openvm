@@ -28,7 +28,7 @@ impl PageReadAir {
 
 impl<F: PrimeField64> AirBridge<F> for PageReadAir {
     fn receives(&self) -> Vec<Interaction<F>> {
-        let num_cols = self.width;
+        let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
         let cols_numbered = PageReadCols::<F>::cols_numbered(&all_cols);

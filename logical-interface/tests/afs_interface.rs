@@ -1,4 +1,4 @@
-use alloy_primitives::U256;
+use alloy_primitives::{FixedBytes, U256};
 use logical_interface::{
     afs_interface::AfsInterface,
     mock_db::MockDb,
@@ -50,7 +50,7 @@ pub fn test_interface_get_table() {
 }
 
 #[test]
-pub fn test_interface_large_table() {
+pub fn test_interface_large_values() {
     let default_table_metadata = TableMetadata::new(32, 1024);
     let mut mock_db = MockDb::new(default_table_metadata.clone());
     let mut interface = AfsInterface::<U256, U256>::new(&mut mock_db);
@@ -93,6 +93,24 @@ pub fn test_interface_large_table() {
     let table = interface.get_table(table_id).expect("Error getting table");
     let read2 = table.read(U256::from(1000));
     assert_eq!(read2, Some(U256::from(2000)));
+}
+
+#[test]
+pub fn test_interface_large_tables() {
+    let default_table_metadata = TableMetadata::new(32, 1024);
+    let mut mock_db = MockDb::new(default_table_metadata.clone());
+    let mut interface = AfsInterface::<U256, U256>::new(&mut mock_db);
+
+    for table_id in 0..10 {
+        let create = interface.create_table(table_id.to_string(), default_table_metadata.clone());
+        assert!(create.is_some());
+        for i in 0..128 {
+            let value: U256 = FixedBytes::<32>::random().into();
+            insert_data::<U256, U256>(&mut interface, table_id.to_string(), U256::from(i), value);
+        }
+    }
+
+    mock_db.save_to_file("tests/data/afs_db.mockdb").unwrap();
 }
 
 #[test]
