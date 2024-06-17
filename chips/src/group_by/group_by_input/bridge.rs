@@ -6,6 +6,20 @@ use p3_field::PrimeField64;
 use super::columns::GroupByCols;
 use super::GroupByAir;
 
+impl<F: PrimeField64> AirBridge<F> for GroupByAir {
+    fn sends(&self) -> Vec<Interaction<F>> {
+        let col_indices_vec: Vec<usize> = (0..self.get_width()).collect();
+        let col_indices = GroupByCols::from_slice(&col_indices_vec, self);
+        SubAirBridge::sends(self, col_indices)
+    }
+
+    fn receives(&self) -> Vec<Interaction<F>> {
+        let col_indices_vec: Vec<usize> = (0..self.get_width()).collect();
+        let col_indices = GroupByCols::from_slice(&col_indices_vec, self);
+        SubAirBridge::receives(self, col_indices)
+    }
+}
+
 impl<F: PrimeField64> SubAirBridge<F> for GroupByAir {
     fn sends(&self, col_indices: GroupByCols<usize>) -> Vec<Interaction<F>> {
         let internal_sent_fields = self
@@ -54,13 +68,5 @@ impl<F: PrimeField64> SubAirBridge<F> for GroupByAir {
             count: internal_count,
             argument_index: self.internal_bus,
         }]
-    }
-}
-
-impl<F: PrimeField64> AirBridge<F> for GroupByAir {
-    fn sends(&self) -> Vec<Interaction<F>> {
-        let col_indices_vec: Vec<usize> = (0..self.get_width()).collect();
-        let col_indices = GroupByCols::from_slice(&col_indices_vec, self);
-        SubAirBridge::sends(self, col_indices)
     }
 }

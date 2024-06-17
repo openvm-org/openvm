@@ -60,6 +60,11 @@ fn load_page_test(
     let proof = prover.prove(&mut challenger, partial_pk, main_trace_data, &pis);
 
     let mut challenger = engine.new_challenger();
+
+    // We expect failure, so we turn off debug assertions
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
     verifier.verify(
         &mut challenger,
         partial_vk,
