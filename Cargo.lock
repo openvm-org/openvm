@@ -31,6 +31,7 @@ dependencies = [
  "color-eyre",
  "logical-interface",
  "p3-baby-bear",
+ "p3-uni-stark",
  "p3-util",
  "rand",
  "serde",

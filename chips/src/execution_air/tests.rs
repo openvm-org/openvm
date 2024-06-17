@@ -45,7 +45,6 @@ fn load_page_test(
         ops.clone(),
         trace_degree,
         &mut trace_builder.committer,
-        true,
     );
 
     let offline_checker_trace = page_controller.offline_checker_trace();

@@ -21,4 +21,5 @@ p3-util = { workspace = true }
 afs-stark-backend = { path = "../../stark-backend" }
 afs-derive = { path = "../../derive" }
 afs-test-utils = { path = "../../test-utils" }
-afs-chips = { path = "../../chips"}
+afs-chips = { path = "../../chips" }
+p3-uni-stark = { workspace = true }

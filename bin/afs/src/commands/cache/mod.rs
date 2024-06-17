@@ -1,5 +1,8 @@
-use afs_chips::{common::page::Page, page_rw_checker::page::PageAir};
-use afs_stark_backend::prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver};
+use afs_chips::common::page::Page;
+use afs_stark_backend::{
+    config::{Com, PcsProverData},
+    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+};
 use afs_test_utils::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
     page_config::PageConfig,
@@ -8,6 +11,7 @@ use alloy_primitives::U256;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{afs_interface::AfsInterface, mock_db::MockDb};
+use p3_baby_bear::BabyBear;
 use p3_util::log2_strict_usize;
 
 use crate::commands::write_bytes;
@@ -63,14 +67,15 @@ impl CacheCommand {
             .max(log2_strict_usize(height))
             .max(8);
 
-        let page_chip = PageAir::new(page_bus_index, idx_len, data_len);
-        let trace = page_chip.generate_trace::<BabyBearPoseidon2Config>(page);
+        let trace = page.gen_trace::<BabyBear>();
         let engine = config::baby_bear_poseidon2::default_engine(max_log_degree);
         let prover = MultiTraceStarkProver::new(&engine.config);
         let trace_builder = TraceCommitmentBuilder::<BabyBearPoseidon2Config>::new(prover.pcs());
         let trace_prover_data = trace_builder.committer.commit(vec![trace]);
+        let commit: Com<BabyBearPoseidon2Config> = trace_prover_data.commit;
+        let data: PcsProverData<BabyBearPoseidon2Config> = trace_prover_data.data;
         // dummy value for now
-        let encoded_data = bincode::serialize(&page_bus_index).unwrap();
+        let encoded_data = bincode::serialize(&(commit, data)).unwrap();
         let path = self.output_folder.clone() + "/" + &self.table_id + ".cache.bin";
         write_bytes(&encoded_data, path).unwrap();
         Ok(())
@@ -78,14 +83,14 @@ impl CacheCommand {
 
     pub fn read_page_file(&self) -> Result<Page> {
         let path = self.output_folder.clone() + "/" + &self.table_id + ".cache.bin";
-        let page_file = std::fs::read(&path)?;
+        let page_file = std::fs::read(path)?;
         let page_file: Page = serde_json::from_slice(&page_file)?;
         Ok(page_file)
     }
 
     pub fn write_output_file(&self, output: Vec<u8>) -> Result<()> {
         let path = self.output_folder.clone() + "/" + &self.table_id + ".cache.bin";
-        std::fs::write(&path, output)?;
+        std::fs::write(path, output)?;
         Ok(())
     }
 }
