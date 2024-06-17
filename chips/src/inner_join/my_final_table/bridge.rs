@@ -6,11 +6,13 @@ use super::MyFinalTableAir;
 use crate::{final_page::columns::FinalPageCols, utils::to_vcols};
 
 impl<F: PrimeField64> AirBridge<F> for MyFinalTableAir {
+    /// Sends the same thing as FinalPageAir
     fn sends(&self) -> Vec<Interaction<F>> {
-        // Sends the same thing as FinalPageAir
         AirBridge::sends(&self.final_air)
     }
 
+    /// Receives (idx, data) of T1 for every allocated row on t1_output_bus (sent by t1_chip)
+    /// Receives (idx, data) of T2 for every allocated row on t2_output_bus (sent by t2_chip)
     fn receives(&self) -> Vec<Interaction<F>> {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();

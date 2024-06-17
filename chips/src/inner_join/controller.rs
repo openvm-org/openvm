@@ -33,6 +33,50 @@ struct TableCommitments<SC: StarkGenericConfig> {
     output_commitment: Com<SC>,
 }
 
+/// This is a controller the Inner Join operation on tables T1 (with primary key) and T2 (which foreign key).
+/// This controller owns four chips: t1_chip, t2_chip, output_chip, and intersector_chip. A trace partition
+/// of t1_chip is T1, a trace partition of t2_chip is T2, and a trace partition of output_chip is the output table.
+/// The goal is to prove that the output table is the result of performing the Inner Join operation on T1 and T2.
+///
+/// Note that we assume that T1 and T2 are given in a proper format: allocated rows come first, indices in allocated
+/// rows are sorted and distinct, and unallocated rows are all zeros.
+///
+/// High level overview:
+/// We do this by introducing the intersector_chip, which helps us verify the multiplicity of each index as foreign key in
+/// the output table. The intersector chip receives all primary keys in T1 (with t1_mult) and all foreign keys in T2 (with t2_mult).
+/// It then computes out_mult as t1_mult*t2_mult, which should be exactly the number of times index appears (in place of foreign key)
+/// in the output table. The intersector chip then sends each index with multiplicity out_mult to the t2_chip, and this allows the t2
+/// chip to verify if each row makes it to the output table or not.
+/// Using this information, t1_chip and t2_chip then send the necessary data to the output_chip to verify the correctness
+/// of the output table.
+/// Note that we use different buses for those interactions to ensure soundness.
+///
+/// Exact protocol:
+/// We have four chips: one for T1, one for T2, one for the output table, and one helper we call the intersector chip.
+/// The traces for T1 and T2 should be cached. We will use five buses: T1_intersector, T2_intersector, intersector_T2, T1_output, and T2_output
+/// (bus a_b is sent to by only a and received from by only b). Here is an outline of the interactions and the constraints:
+/// - T1 sends primary key (idx) on T1_intersector with multiplicity is_alloc
+/// - T2 sends foreign key on T2_intersector with multiplicity is_alloc
+/// - The intersector chip should do the following:
+///     - Every row in the trace has an index (of width idx_len of T1) and a few extra columns: T1_mult, T2_mult, and out_mult.
+///     - There should be a row for every index that appears as a primary key of T1 or a foreign key in T2
+///     - Receives idx with multiplicity T1_mult on T1_intersector bus
+///     - Receives idx with multiplicity T2_mult on T2_intersector bus
+///     - out_mult should be the multiplication of T1_mult and T2_mult
+///     - Sends idx with multiplicity out_mult on intersector_T2 bus
+///     - The indices in the trace should be sorted in strict increasing order (using the less than chip).
+///         - This is important to make sure the out_mult is calculated correctly for every idx
+/// - T2 should have an extra column fkey_present in another partition of the trace. The value in that column
+///   should be 1 if the foreign key in the row of T2 appears in T1 as a primary key, and it should be 0 otherwise
+/// - T2 receives foreign key with multiplicity fkey_present on intersector_T2 bus
+/// - T2 sends each row (idx and data) with multiplicity fkey_present on T2_output bus
+/// - T1 should have an extra column out_mult which should be the number of times the primary key in that row appears in the output
+/// - T1 sends each row (idx and data) with multiplicity out_mult on T1_output bus
+/// - Output page receives idx and data of T1 on T1_output bus with multiplicity is_alloc
+/// - Output page receives idx and data of T2 on T2_output bus with multiplicity is_alloc (Note that the this receive
+///   shares with the previous receive the same columns that correspond to the key of T1)
+/// - We need to ensure that all the multiplicity columns (out_mult in T1, fkey_present in T2, out_mult in intersector chip)
+///   are 0 if is_alloc or is_extra (described below) is 0.
 pub struct InnerJoinController<SC: StarkGenericConfig>
 where
     Val<SC>: AbstractField,

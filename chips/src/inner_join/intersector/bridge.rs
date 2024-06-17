@@ -10,6 +10,8 @@ use crate::{
 };
 
 impl<F: PrimeField> SubAirBridge<F> for IntersectorAir {
+    /// Sends interactions required by the IsLessThanTuple SubAir
+    /// Sends idx with multiplicity out_mult on the intersector_t2_bus (received by t2_chip)
     fn sends(&self, col_indices: IntersectorCols<usize>) -> Vec<Interaction<F>> {
         let mut interactions = SubAirBridge::<F>::sends(
             &self.lt_chip,
@@ -32,6 +34,8 @@ impl<F: PrimeField> SubAirBridge<F> for IntersectorAir {
         interactions
     }
 
+    /// Receives idx with multiplicity t1_mult on the t1_intersector_bus (sent by t1_chip)
+    /// Receives idx with multiplicity t2_mult on the t2_intersector_bus (sent by t2_chip)
     fn receives(&self, col_indices: IntersectorCols<usize>) -> Vec<Interaction<F>> {
         vec![
             Interaction {

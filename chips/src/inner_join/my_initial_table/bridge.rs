@@ -7,6 +7,12 @@ use crate::utils::to_vcols;
 use super::{columns::TableCols, MyInitialTableAir, TableType};
 
 impl<F: PrimeField64> AirBridge<F> for MyInitialTableAir {
+    /// For T1:
+    /// - Sends idx (primary key) with multiplicity is_alloc on t1_intersector_bus (received by intersector_chip)
+    /// - Sends (idx, data) with multiplicity out_mult on t1_output_bus (received by output_chip)
+    /// For T2:
+    /// - Sends foreign key with multiplicity is_alloc on t2_intersector_bus (received by intersector_chip)
+    /// - Sends (idx, data) with multiplicity out_mult on t2_output_bus (received by output_chip)
     fn sends(&self) -> Vec<Interaction<F>> {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
@@ -58,6 +64,8 @@ impl<F: PrimeField64> AirBridge<F> for MyInitialTableAir {
         }
     }
 
+    /// For T2:
+    /// - Receives foreign key with multiplicity out_mult on intersector_t2_bus (sent by intersector_chip)
     fn receives(&self) -> Vec<Interaction<F>> {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();

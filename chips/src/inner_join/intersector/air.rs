@@ -44,6 +44,9 @@ impl<AB: AirBuilder> SubAir<AB> for IntersectorAir {
     type IoView = [IntersectorIOCols<AB::Var>; 2];
     type AuxView = [IntersectorAuxCols<AB::Var>; 2];
 
+    /// Ensured indices in non-extra rows are sorted and distinct,
+    /// that out_mult is correct, and that multiplicity are zero for
+    /// non-extra rows
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
         let (local_io_cols, next_io_cols) = (&io[0], &io[1]);
         let next_aux_cols = &aux[1];
