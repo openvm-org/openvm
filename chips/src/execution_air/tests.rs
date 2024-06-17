@@ -126,7 +126,8 @@ fn load_page_test(
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
     partial_pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
     trace_degree: usize,
-    num_ops: usize,
+    exec_trace_degree: usize,
+    spacing: usize,
 ) -> Result<(), VerificationError> {
     let page_height = page_init.height();
     assert!(page_height > 0);
@@ -144,24 +145,7 @@ fn load_page_test(
     let range_checker_trace = page_controller.range_checker_trace();
 
     // Generating trace for ops_sender and making sure it has height num_ops
-    let ops_sender_trace = RowMajorMatrix::new(
-        ops.iter()
-            .flat_map(|op| {
-                iter::once(Val::one())
-                    .chain(iter::once(Val::from_canonical_usize(op.clk)))
-                    .chain(op.idx.iter().map(|x| Val::from_canonical_u32(*x)))
-                    .chain(op.data.iter().map(|x| Val::from_canonical_u32(*x)))
-                    .chain(iter::once(Val::from_canonical_u8(op.op_type.clone() as u8)))
-            })
-            .chain(
-                iter::repeat_with(|| iter::repeat(Val::zero()).take(ops_sender.air_width()))
-                    .take(num_ops - ops.len())
-                    .flatten(),
-            )
-            .collect(),
-        ops_sender.air_width(),
-    );
-
+    let ops_sender_trace = ops_sender.generate_trace_testing(ops, exec_trace_degree, spacing);
     // Clearing the range_checker counts
     page_controller.update_range_checker(idx_decomp);
 
@@ -370,6 +354,7 @@ fn page_read_write_test() {
         &partial_pk,
         trace_degree,
         4 * num_ops,
+        2,
     )
     .expect("Verification failed");
 
@@ -397,6 +382,7 @@ fn page_read_write_test() {
         &partial_pk,
         trace_degree,
         4 * num_ops,
+        4,
     )
     .expect("Verification failed");
 
@@ -429,6 +415,7 @@ fn page_read_write_test() {
         &partial_pk,
         trace_degree,
         4 * num_ops,
+        1,
     )
     .expect("Verification failed");
 
@@ -451,6 +438,7 @@ fn page_read_write_test() {
         &partial_pk,
         trace_degree,
         4 * num_ops,
+        1,
     )
     .expect("Verification failed");
 
@@ -479,6 +467,7 @@ fn page_read_write_test() {
             &partial_pk,
             trace_degree,
             4 * num_ops,
+            1,
         ),
         Err(VerificationError::OodEvaluationMismatch),
         "Expected constraints to fail"
@@ -507,6 +496,7 @@ fn page_read_write_test() {
             &partial_pk,
             trace_degree,
             4 * num_ops,
+            1,
         ),
         Err(VerificationError::OodEvaluationMismatch),
         "Expected constraints to fail"
@@ -549,6 +539,7 @@ fn page_read_write_test() {
             &partial_pk,
             trace_degree,
             4 * num_ops,
+            1,
         );
     });
 

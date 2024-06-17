@@ -138,75 +138,75 @@ impl ProveCommand {
         );
         let ops_sender = ExecutionAir::new(ops_bus_index, idx_len, data_len);
         let engine = config::baby_bear_poseidon2::default_engine(max_log_degree);
-        let prover = MultiTraceStarkProver::new(&engine.config);
-        let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
+        // let prover = MultiTraceStarkProver::new(&engine.config);
+        // let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-        let init_prover_data_encoded =
-            read_from_path(self.cache_folder.clone() + "/" + &table_id + ".cache.bin").unwrap();
-        let init_prover_data: ProverTraceData<BabyBearPoseidon2Config> =
-            bincode::deserialize(&init_prover_data_encoded).unwrap();
-        let (page_traces, mut prover_data) = page_controller.load_page_and_ops(
-            &page_init,
-            zk_ops.clone(),
-            checker_trace_degree,
-            &mut trace_builder.committer,
-            false,
-        );
-        let offline_checker_trace = page_controller.offline_checker_trace();
-        let final_page_aux_trace = page_controller.final_page_aux_trace();
-        let range_checker_trace = page_controller.range_checker_trace();
+        // let init_prover_data_encoded =
+        //     read_from_path(self.cache_folder.clone() + "/" + &table_id + ".cache.bin").unwrap();
+        // let init_prover_data: ProverTraceData<BabyBearPoseidon2Config> =
+        //     bincode::deserialize(&init_prover_data_encoded).unwrap();
+        // let (page_traces, mut prover_data) = page_controller.load_page_and_ops(
+        //     &page_init,
+        //     zk_ops.clone(),
+        //     checker_trace_degree,
+        //     &mut trace_builder.committer,
+        //     false,
+        // );
+        // let offline_checker_trace = page_controller.offline_checker_trace();
+        // let final_page_aux_trace = page_controller.final_page_aux_trace();
+        // let range_checker_trace = page_controller.range_checker_trace();
 
-        // Generating trace for ops_sender and making sure it has height num_ops
-        let ops_sender_trace =
-            ops_sender.generate_trace_testing(&zk_ops, config.page.max_rw_ops as usize, 1);
+        // // Generating trace for ops_sender and making sure it has height num_ops
+        // let ops_sender_trace =
+        //     ops_sender.generate_trace_testing(&zk_ops, config.page.max_rw_ops as usize, 1);
 
-        // Clearing the range_checker counts
-        page_controller.update_range_checker(idx_decomp);
+        // // Clearing the range_checker counts
+        // page_controller.update_range_checker(idx_decomp);
 
-        trace_builder.clear();
+        // trace_builder.clear();
 
-        trace_builder.load_cached_trace(page_traces[0].clone(), init_prover_data);
-        trace_builder.load_cached_trace(page_traces[1].clone(), prover_data.remove(0));
-        trace_builder.load_trace(final_page_aux_trace);
-        trace_builder.load_trace(offline_checker_trace.clone());
-        trace_builder.load_trace(range_checker_trace);
-        trace_builder.load_trace(ops_sender_trace);
+        // trace_builder.load_cached_trace(page_traces[0].clone(), init_prover_data);
+        // trace_builder.load_cached_trace(page_traces[1].clone(), prover_data.remove(0));
+        // trace_builder.load_trace(final_page_aux_trace);
+        // trace_builder.load_trace(offline_checker_trace.clone());
+        // trace_builder.load_trace(range_checker_trace);
+        // trace_builder.load_trace(ops_sender_trace);
 
-        trace_builder.commit_current();
-        let encoded_pk =
-            read_from_path(self.keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
-        let partial_pk: MultiStarkPartialProvingKey<BabyBearPoseidon2Config> =
-            bincode::deserialize(&encoded_pk).unwrap();
-        let partial_vk = partial_pk.partial_vk();
-        let main_trace_data = trace_builder.view(
-            &partial_vk,
-            vec![
-                &page_controller.init_chip,
-                &page_controller.final_chip,
-                &page_controller.offline_checker,
-                &page_controller.range_checker.air,
-                &ops_sender,
-            ],
-        );
+        // trace_builder.commit_current();
+        // let encoded_pk =
+        //     read_from_path(self.keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
+        // let partial_pk: MultiStarkPartialProvingKey<BabyBearPoseidon2Config> =
+        //     bincode::deserialize(&encoded_pk).unwrap();
+        // let partial_vk = partial_pk.partial_vk();
+        // let main_trace_data = trace_builder.view(
+        //     &partial_vk,
+        //     vec![
+        //         &page_controller.init_chip,
+        //         &page_controller.final_chip,
+        //         &page_controller.offline_checker,
+        //         &page_controller.range_checker.air,
+        //         &ops_sender,
+        //     ],
+        // );
 
-        let pis = vec![vec![]; partial_vk.per_air.len()];
+        // let pis = vec![vec![]; partial_vk.per_air.len()];
 
-        let prover = engine.prover();
+        // let prover = engine.prover();
 
-        let mut challenger = engine.new_challenger();
-        let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
-        let encoded_proof: Vec<u8> = bincode::serialize(&proof).unwrap();
-        let table = interface.get_table(table_id.clone()).unwrap();
-        if !self.silent {
-            println!("Table ID: {}", table_id);
-            println!("{:?}", table.metadata);
-            for (index, data) in table.body.iter() {
-                println!("{:?}: {:?}", index, data);
-            }
-        }
-        let proof_path = self.db_file_path.clone() + ".prove.bin";
-        write_bytes(&encoded_proof, proof_path).unwrap();
-        db.save_to_file(&(self.db_file_path.clone() + ".0"))?;
+        // let mut challenger = engine.new_challenger();
+        // let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
+        // let encoded_proof: Vec<u8> = bincode::serialize(&proof).unwrap();
+        // let table = interface.get_table(table_id.clone()).unwrap();
+        // if !self.silent {
+        //     println!("Table ID: {}", table_id);
+        //     println!("{:?}", table.metadata);
+        //     for (index, data) in table.body.iter() {
+        //         println!("{:?}: {:?}", index, data);
+        //     }
+        // }
+        // let proof_path = self.db_file_path.clone() + ".prove.bin";
+        // write_bytes(&encoded_proof, proof_path).unwrap();
+        // db.save_to_file(&(self.db_file_path.clone() + ".0"))?;
         Ok(())
     }
 }
