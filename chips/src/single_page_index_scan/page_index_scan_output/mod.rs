@@ -40,7 +40,6 @@ impl PageIndexScanOutputChip {
         bus_index: usize,
         idx_len: usize,
         data_len: usize,
-        range_max: u32,
         idx_limb_bits: Vec<usize>,
         decomp: usize,
         range_checker: Arc<RangeCheckerGateChip>,
@@ -50,12 +49,7 @@ impl PageIndexScanOutputChip {
                 bus_index,
                 idx_len,
                 data_len,
-                is_less_than_tuple_air: IsLessThanTupleAir::new(
-                    bus_index,
-                    range_max,
-                    idx_limb_bits,
-                    decomp,
-                ),
+                is_less_than_tuple_air: IsLessThanTupleAir::new(bus_index, idx_limb_bits, decomp),
             },
             range_checker,
         }

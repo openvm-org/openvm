@@ -46,13 +46,12 @@ where
         idx_decomp: usize,
         cmp: Comp,
     ) -> Self {
-        let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, 1 << idx_decomp));
+        let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
         Self {
             input_chip: PageIndexScanInputChip::new(
                 bus_index,
                 idx_len,
                 data_len,
-                range_max,
                 idx_limb_bits.clone(),
                 idx_decomp,
                 range_checker.clone(),
@@ -62,7 +61,6 @@ where
                 bus_index,
                 idx_len,
                 data_len,
-                range_max,
                 idx_limb_bits.clone(),
                 idx_decomp,
                 range_checker.clone(),
@@ -295,7 +293,6 @@ where
             bus_index,
             idx_len,
             data_len,
-            self.range_checker.range_max(),
             idx_limb_bits.clone(),
             idx_decomp,
             self.range_checker.clone(),
@@ -311,7 +308,6 @@ where
             bus_index,
             idx_len,
             data_len,
-            self.range_checker.range_max(),
             idx_limb_bits.clone(),
             idx_decomp,
             self.range_checker.clone(),

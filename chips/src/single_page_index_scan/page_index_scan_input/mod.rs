@@ -67,7 +67,6 @@ impl PageIndexScanInputChip {
         bus_index: usize,
         idx_len: usize,
         data_len: usize,
-        range_max: u32,
         idx_limb_bits: Vec<usize>,
         decomp: usize,
         range_checker: Arc<RangeCheckerGateChip>,
@@ -77,7 +76,6 @@ impl PageIndexScanInputChip {
             Comp::Lt => PageIndexScanInputAirVariants::Lt(StrictCompAir {
                 is_less_than_tuple_air: IsLessThanTupleAir::new(
                     bus_index,
-                    range_max,
                     idx_limb_bits.clone(),
                     decomp,
                 ),
@@ -85,7 +83,6 @@ impl PageIndexScanInputChip {
             Comp::Lte => PageIndexScanInputAirVariants::Lte(NonStrictCompAir {
                 is_less_than_tuple_air: IsLessThanTupleAir::new(
                     bus_index,
-                    range_max,
                     idx_limb_bits.clone(),
                     decomp,
                 ),
@@ -97,7 +94,6 @@ impl PageIndexScanInputChip {
             Comp::Gte => PageIndexScanInputAirVariants::Gte(NonStrictCompAir {
                 is_less_than_tuple_air: IsLessThanTupleAir::new(
                     bus_index,
-                    range_max,
                     idx_limb_bits.clone(),
                     decomp,
                 ),
@@ -106,7 +102,6 @@ impl PageIndexScanInputChip {
             Comp::Gt => PageIndexScanInputAirVariants::Gt(StrictCompAir {
                 is_less_than_tuple_air: IsLessThanTupleAir::new(
                     bus_index,
-                    range_max,
                     idx_limb_bits.clone(),
                     decomp,
                 ),

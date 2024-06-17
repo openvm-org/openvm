@@ -430,6 +430,8 @@ fn test_single_page_index_scan_gte() {
     let page_output =
         page_controller.gen_output(page.clone(), x.clone(), idx_len, page_width, Comp::Gte);
 
+    println!("{:?}", page_output);
+
     index_scan_test(
         &engine,
         page,
