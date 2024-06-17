@@ -3,7 +3,7 @@ use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
 use super::MyFinalTableAir;
-use crate::final_page::columns::FinalPageCols;
+use crate::{final_page::columns::FinalPageCols, utils::to_vcols};
 
 impl<F: PrimeField64> AirBridge<F> for MyFinalTableAir {
     fn sends(&self) -> Vec<Interaction<F>> {
@@ -25,24 +25,26 @@ impl<F: PrimeField64> AirBridge<F> for MyFinalTableAir {
 
         let t1_cols = table_cols.page_cols.data[self.fkey_start..self.fkey_end]
             .iter()
-            .chain(table_cols.page_cols.data[..self.t2_data_len].iter())
-            .copied();
+            .chain(table_cols.page_cols.data[self.t2_data_len..].iter())
+            .copied()
+            .collect::<Vec<usize>>();
 
         let t2_cols = table_cols
             .page_cols
             .idx
             .iter()
-            .chain(table_cols.page_cols.data[self.t2_data_len..].iter())
-            .copied();
+            .chain(table_cols.page_cols.data[..self.t2_data_len].iter())
+            .copied()
+            .collect::<Vec<usize>>();
 
         vec![
             Interaction {
-                fields: t1_cols.map(VirtualPairCol::single_main).collect(),
+                fields: to_vcols(&t1_cols),
                 count: VirtualPairCol::single_main(table_cols.page_cols.is_alloc),
                 argument_index: self.t1_output_bus_index,
             },
             Interaction {
-                fields: t2_cols.map(VirtualPairCol::single_main).collect(),
+                fields: to_vcols(&t2_cols),
                 count: VirtualPairCol::single_main(table_cols.page_cols.is_alloc),
                 argument_index: self.t2_output_bus_index,
             },

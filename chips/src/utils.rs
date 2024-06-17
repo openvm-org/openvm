@@ -1,3 +1,6 @@
+use p3_air::VirtualPairCol;
+use p3_field::Field;
+
 // TODO: Ideally upstream PrimeField implements From<T>
 pub trait FieldFrom<T> {
     fn from_val(value: T) -> Self;
@@ -20,4 +23,11 @@ impl FieldFrom<BabyBear> for BabyBear {
     fn from_val(value: BabyBear) -> Self {
         value
     }
+}
+
+pub fn to_vcols<F: Field>(cols: &[usize]) -> Vec<VirtualPairCol<F>> {
+    cols.iter()
+        .copied()
+        .map(VirtualPairCol::single_main)
+        .collect()
 }

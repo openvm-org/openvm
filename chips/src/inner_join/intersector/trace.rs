@@ -41,10 +41,13 @@ impl IntersectorAir {
             all_indices.insert(fkey);
         }
 
+        let mut all_indices: Vec<Vec<u32>> = all_indices.into_iter().collect();
+        all_indices.sort();
+
         let mut rows: Vec<Vec<F>> = vec![];
         for idx in all_indices {
-            let t1_mult = *t1_idx_mult.get(&idx).unwrap();
-            let t2_mult = *t2_idx_mult.get(&idx).unwrap();
+            let t1_mult = *t1_idx_mult.get(&idx).unwrap_or(&0);
+            let t2_mult = *t2_idx_mult.get(&idx).unwrap_or(&0);
             let out_mult = t1_mult * t2_mult;
 
             rows.push(
@@ -60,7 +63,8 @@ impl IntersectorAir {
         }
 
         let width = t1.idx_len() + 4;
-        rows.resize_with(trace_degree, || vec![F::one(); width]);
+        let extra_row = [vec![F::zero(); width - 1], vec![F::one()]].concat();
+        rows.resize(trace_degree, extra_row);
 
         RowMajorMatrix::new(rows.concat(), width)
     }

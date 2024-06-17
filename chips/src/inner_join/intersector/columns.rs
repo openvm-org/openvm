@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub struct IntersectorCols<T> {
     pub idx: Vec<T>,
     pub t1_mult: T,

@@ -2,6 +2,8 @@ use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
+use crate::utils::to_vcols;
+
 use super::{columns::TableCols, MyInitialTableAir, TableType};
 
 impl<F: PrimeField64> AirBridge<F> for MyInitialTableAir {
@@ -18,24 +20,15 @@ impl<F: PrimeField64> AirBridge<F> for MyInitialTableAir {
             } => {
                 vec![
                     Interaction {
-                        fields: table_cols
-                            .idx
-                            .iter()
-                            .copied()
-                            .map(VirtualPairCol::single_main)
-                            .collect(),
-                        count: VirtualPairCol::single_main(table_cols.is_alloc),
+                        fields: to_vcols(&table_cols.page_cols.idx),
+                        count: VirtualPairCol::single_main(table_cols.page_cols.is_alloc),
                         argument_index: t1_intersector_bus_index,
                     },
                     Interaction {
-                        fields: table_cols
-                            .idx
-                            .iter()
-                            .chain(table_cols.data.iter())
-                            .copied()
-                            .map(VirtualPairCol::single_main)
-                            .collect(),
-                        count: VirtualPairCol::single_main(table_cols.mult),
+                        fields: to_vcols(
+                            &[table_cols.page_cols.idx, table_cols.page_cols.data].concat(),
+                        ),
+                        count: VirtualPairCol::single_main(table_cols.out_mult),
                         argument_index: t1_output_bus_index,
                     },
                 ]
@@ -49,23 +42,15 @@ impl<F: PrimeField64> AirBridge<F> for MyInitialTableAir {
             } => {
                 vec![
                     Interaction {
-                        fields: table_cols.data[fkey_start..fkey_end]
-                            .iter()
-                            .copied()
-                            .map(VirtualPairCol::single_main)
-                            .collect(),
-                        count: VirtualPairCol::single_main(table_cols.is_alloc),
+                        fields: to_vcols(&table_cols.page_cols.data[fkey_start..fkey_end]),
+                        count: VirtualPairCol::single_main(table_cols.page_cols.is_alloc),
                         argument_index: t2_intersector_bus_index,
                     },
                     Interaction {
-                        fields: table_cols
-                            .idx
-                            .iter()
-                            .chain(table_cols.data.iter())
-                            .copied()
-                            .map(VirtualPairCol::single_main)
-                            .collect(),
-                        count: VirtualPairCol::single_main(table_cols.mult),
+                        fields: to_vcols(
+                            &[table_cols.page_cols.idx, table_cols.page_cols.data].concat(),
+                        ),
+                        count: VirtualPairCol::single_main(table_cols.out_mult),
                         argument_index: t2_output_bus_index,
                     },
                 ]
@@ -87,12 +72,8 @@ impl<F: PrimeField64> AirBridge<F> for MyInitialTableAir {
         } = self.table_type
         {
             vec![Interaction {
-                fields: table_cols.data[fkey_start..fkey_end]
-                    .iter()
-                    .copied()
-                    .map(VirtualPairCol::single_main)
-                    .collect(),
-                count: VirtualPairCol::single_main(table_cols.mult),
+                fields: to_vcols(&table_cols.page_cols.data[fkey_start..fkey_end]),
+                count: VirtualPairCol::single_main(table_cols.out_mult),
                 argument_index: intersector_t2_bus_index,
             }]
         } else {

@@ -26,11 +26,11 @@ fn test_single_page(
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
     partial_pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
 ) -> Result<(), VerificationError> {
-    let page_trace = final_page_chip.gen_page_trace::<BabyBearPoseidon2Config>(&page);
+    let page_trace = final_page_chip.gen_page_trace::<BabyBearPoseidon2Config>(page);
     let page_prover_data = trace_builder.committer.commit(vec![page_trace.clone()]);
 
     let aux_trace =
-        final_page_chip.gen_aux_trace::<BabyBearPoseidon2Config>(&page, range_checker.clone());
+        final_page_chip.gen_aux_trace::<BabyBearPoseidon2Config>(page, range_checker.clone());
     let range_checker_trace = range_checker.generate_trace();
 
     trace_builder.clear();
@@ -52,7 +52,7 @@ fn test_single_page(
     let verifier = engine.verifier();
 
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
+    let proof = prover.prove(&mut challenger, partial_pk, main_trace_data, &pis);
 
     let mut challenger = engine.new_challenger();
     verifier.verify(

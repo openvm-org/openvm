@@ -39,7 +39,11 @@ impl MyInitialTableAir {
         1 + self.idx_len + self.data_len
     }
 
+    pub fn aux_width(&self) -> usize {
+        1
+    }
+
     pub fn air_width(&self) -> usize {
-        1 + self.table_width()
+        self.table_width() + self.aux_width()
     }
 }

@@ -33,6 +33,7 @@ pub struct MyFinalTableAir {
 }
 
 impl MyFinalTableAir {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         t1_output_bus_index: usize,
         t2_output_bus_index: usize,
@@ -59,6 +60,14 @@ impl MyFinalTableAir {
                 idx_decomp,
             ),
         }
+    }
+
+    pub fn table_width(&self) -> usize {
+        self.final_air.page_width()
+    }
+
+    pub fn aux_width(&self) -> usize {
+        self.final_air.aux_width()
     }
 
     pub fn air_width(&self) -> usize {

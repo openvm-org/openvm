@@ -26,12 +26,12 @@ where
 
         let (table_local, aux_local) = (table_trace.row_slice(0), aux_trace.row_slice(0));
 
-        let is_alloc = table_local[0].clone();
-        let mult_cnt = aux_local[0].clone();
+        let is_alloc = table_local[0];
+        let mult_cnt = aux_local[0];
 
         // Ensuring that mult_cnt is zero if is_alloc is zero
         // This is important because we never want to send/receive data if
         // the row in unallocated
-        builder.assert_eq(is_alloc, mult_cnt * is_alloc);
+        builder.assert_eq(mult_cnt, mult_cnt * is_alloc);
     }
 }
