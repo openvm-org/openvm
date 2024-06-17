@@ -53,9 +53,9 @@ impl GroupByAir {
                 let mut selected_row: Vec<u32> = self
                     .group_by_cols
                     .iter()
-                    .map(|&col_index| row.data[col_index])
+                    .map(|&col_index| row.idx[col_index])
                     .collect();
-                selected_row.push(row.data[self.aggregated_col]);
+                selected_row.push(row.idx[self.aggregated_col]);
                 selected_row
             })
             .collect();

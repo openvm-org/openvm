@@ -106,7 +106,7 @@ fn group_by_test() {
         page.push(iter::once(1).chain(idx).collect());
     }
 
-    let page = Page::from_2d_vec(&page, idx_len, 1);
+    let page = Page::from_2d_vec(&page, idx_len, 0);
 
     // let mut group_by_cols = vec![];
     // while group_by_cols.len() < num_groups + 1 {

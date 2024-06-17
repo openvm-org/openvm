@@ -38,12 +38,13 @@ impl GroupByAir {
             .collect::<Vec<Vec<F>>>();
 
         let index_cols_map = GroupByCols::<u32>::index_map(self);
+        let agg_idx = index_cols_map.aggregated - index_cols_map.page_end;
         let mut partial_sums: Vec<Vec<F>> = vec![vec![F::zero()]; page_f.len()];
         if !page_f.is_empty() {
-            partial_sums[0][0] = page_f[0][index_cols_map.aggregated]; // Initialize with the first aggregated value
+            partial_sums[0][0] = page_f[0][agg_idx]; // Initialize with the first aggregated value
             for i in 1..page_f.len() {
-                partial_sums[i][0] = partial_sums[i - 1][0] * is_equal[i - 1][0]
-                    + page_f[i][index_cols_map.aggregated];
+                partial_sums[i][0] =
+                    partial_sums[i - 1][0] * is_equal[i - 1][0] + page_f[i][agg_idx];
             }
         }
 

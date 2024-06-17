@@ -23,21 +23,22 @@ impl<F: PrimeField64> AirBridge<F> for MyFinalPageAir {
         let my_final_page_cols =
             MyFinalPageCols::<usize>::from_slice(&all_cols, self.final_air.clone());
 
-        // let page_cols = my_final_page_cols.final_page_cols.page_cols;
+        let page_cols = my_final_page_cols.final_page_cols.page_cols;
+        let alloc_idx = page_cols.is_alloc;
 
-        // let page_cols = page_cols
-        //     .idx
+        let page_cols = page_cols
+            .idx
+            .iter()
+            .copied()
+            .chain(page_cols.data)
+            .map(VirtualPairCol::single_main)
+            .collect::<Vec<_>>();
+
+        // let page_cols = [1, 2]
         //     .iter()
-        //     .copied()
-        //     .chain(page_cols.data)
-        //     .map(VirtualPairCol::single_main)
+        //     .map(|&x| VirtualPairCol::single_main(x))
         //     .collect::<Vec<_>>();
 
-        let page_cols = [1, 2]
-            .iter()
-            .map(|&x| VirtualPairCol::single_main(x))
-            .collect::<Vec<_>>();
-        let alloc_idx = my_final_page_cols.final_page_cols.page_cols.is_alloc;
         let input_count = VirtualPairCol::single_main(alloc_idx);
 
         vec![Interaction {

@@ -30,22 +30,5 @@ impl MyFinalPageAir {
         Val<SC>: PrimeField,
     {
         self.final_air.gen_aux_trace::<SC>(page, range_checker)
-
-        // let mut aux_trace_flat: Vec<Val<SC>> = vec![];
-        // for (r, page_row) in page.iter().enumerate() {
-        //     let fp_aux_row = final_page_aux_trace.row_mut(r);
-        //     aux_trace_flat.extend_from_slice(fp_aux_row);
-
-        //     let cur_idx = page_row[1..1 + self.final_air.idx_len].to_vec();
-        //     aux_trace_flat.push(Val::<SC>::from_canonical_u8(
-        //         if internal_indices.contains(&cur_idx) && page[r][0] == 1 {
-        //             3
-        //         } else {
-        //             page[r][0] as u8
-        //         },
-        //     ));
-        // }
-
-        // RowMajorMatrix::new(aux_trace_flat, self.aux_width())
     }
 }
