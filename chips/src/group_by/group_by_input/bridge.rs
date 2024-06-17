@@ -12,7 +12,7 @@ impl<F: PrimeField64> SubAirBridge<F> for GroupByAir {
             .group_by_cols
             .iter()
             .chain(std::iter::once(&self.aggregated_col))
-            .map(|i| VirtualPairCol::single_main(*i))
+            .map(|i| VirtualPairCol::single_main(col_indices.io.page[*i]))
             .collect();
         let internal_count = VirtualPairCol::single_main(col_indices.io.is_allocated);
 
