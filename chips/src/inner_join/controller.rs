@@ -1,10 +1,13 @@
 use std::{iter, sync::Arc};
 
 use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
-use afs_stark_backend::keygen::types::MultiStarkPartialProvingKey;
+use afs_stark_backend::keygen::types::{
+    MultiStarkPartialProvingKey, MultiStarkPartialVerifyingKey,
+};
 use afs_stark_backend::keygen::MultiStarkKeygenBuilder;
 use afs_stark_backend::prover::trace::{ProverTraceData, TraceCommitmentBuilder, TraceCommitter};
 use afs_stark_backend::prover::types::Proof;
+use afs_stark_backend::verifier::VerificationError;
 use afs_test_utils::engine::StarkEngine;
 use p3_field::{AbstractField, Field, PrimeField};
 use p3_matrix::dense::DenseMatrix;
@@ -351,6 +354,7 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
         PcsProof<SC>: Send + Sync,
     {
         assert!(cached_traces_prover_data.len() == 3);
+
         let traces = self.traces.as_ref().unwrap();
 
         trace_builder.clear();
@@ -394,6 +398,36 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
 
         let mut challenger = engine.new_challenger();
         prover.prove(&mut challenger, partial_pk, main_trace_data, &pis)
+    }
+
+    /// This function takes a proof (returned by the prove function) and verifies it
+    pub fn verify(
+        &self,
+        engine: &dyn StarkEngine<SC>,
+        partial_vk: MultiStarkPartialVerifyingKey<SC>,
+        proof: Proof<SC>,
+    ) -> Result<(), VerificationError>
+    where
+        Val<SC>: PrimeField,
+    {
+        let verifier = engine.verifier();
+
+        let pis = vec![vec![]; partial_vk.per_air.len()];
+
+        let mut challenger = engine.new_challenger();
+        verifier.verify(
+            &mut challenger,
+            partial_vk,
+            vec![
+                &self.t1_chip,
+                &self.t2_chip,
+                &self.output_chip,
+                &self.intersector_chip,
+                &self.range_checker.air,
+            ],
+            proof,
+            &pis,
+        )
     }
 
     /// This function takes two tables T1 and T2 and the range of the foreign key in T2

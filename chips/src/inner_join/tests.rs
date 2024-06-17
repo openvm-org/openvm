@@ -8,7 +8,6 @@ use afs_test_utils::{
         self,
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
     },
-    engine::StarkEngine,
     utils::create_seeded_rng,
 };
 use rand::Rng;
@@ -38,26 +37,7 @@ fn load_tables_test(
     );
 
     let proof = ij_controller.prove(engine, partial_pk, trace_builder, prover_data);
-
-    let verifier = engine.verifier();
-    let partial_vk = partial_pk.partial_vk();
-
-    let pis = vec![vec![]; partial_vk.per_air.len()];
-
-    let mut challenger = engine.new_challenger();
-    verifier.verify(
-        &mut challenger,
-        partial_vk,
-        vec![
-            &ij_controller.t1_chip,
-            &ij_controller.t2_chip,
-            &ij_controller.output_chip,
-            &ij_controller.intersector_chip,
-            &ij_controller.range_checker.air,
-        ],
-        proof,
-        &pis,
-    )
+    ij_controller.verify(engine, partial_pk.partial_vk(), proof)
 }
 
 #[test]
