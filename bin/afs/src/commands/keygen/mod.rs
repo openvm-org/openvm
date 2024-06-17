@@ -60,7 +60,6 @@ impl KeygenCommand {
         prefix: String,
     ) -> Result<()> {
         let page_bus_index = 0;
-        let checker_final_bus_index = 1;
         let range_bus_index = 2;
         let ops_bus_index = 3;
 

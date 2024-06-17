@@ -3,7 +3,6 @@ use afs_chips::{
     page_rw_checker::page_controller::{OpType, Operation, PageController},
 };
 use afs_stark_backend::{
-    config::{Com, PcsProverData, StarkGenericConfig},
     keygen::types::MultiStarkPartialProvingKey,
     prover::{
         trace::{ProverTraceData, TraceCommitmentBuilder},
@@ -114,7 +113,6 @@ impl ProveCommand {
 
         assert!(height > 0);
         let page_bus_index = 0;
-        let checker_final_bus_index = 1;
         let range_bus_index = 2;
         let ops_bus_index = 3;
 
@@ -144,14 +142,8 @@ impl ProveCommand {
 
         let init_prover_data_encoded =
             read_from_path(self.cache_folder.clone() + "/" + &table_id + ".cache.bin").unwrap();
-        let init_prover_data: (
-            Com<BabyBearPoseidon2Config>,
-            PcsProverData<BabyBearPoseidon2Config>,
-        ) = bincode::deserialize(&init_prover_data_encoded).unwrap();
-        let init_prover_data = ProverTraceData {
-            commit: init_prover_data.0,
-            data: init_prover_data.1,
-        };
+        let init_prover_data: ProverTraceData<BabyBearPoseidon2Config> =
+            bincode::deserialize(&init_prover_data_encoded).unwrap();
 
         let (page_traces, mut prover_data) = page_controller.load_page_and_ops(
             &page_init,

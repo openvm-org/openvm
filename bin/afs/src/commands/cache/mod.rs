@@ -1,8 +1,5 @@
 use afs_chips::common::page::Page;
-use afs_stark_backend::{
-    config::{Com, PcsProverData},
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
-};
+use afs_stark_backend::prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver};
 use afs_test_utils::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
     page_config::PageConfig,
@@ -49,8 +46,6 @@ impl CacheCommand {
         println!("Caching table {} from {}", self.table_id, self.db_file_path);
         // prove::prove_ops(&self.ops_file).await?;
         let mut db = MockDb::from_file(&self.db_file_path);
-        let idx_len = (config.page.index_bytes + 1) / 2;
-        let data_len = (config.page.data_bytes + 1) / 2;
         let height = config.page.height;
         let mut interface = AfsInterface::<U256, U256>::new(&mut db);
         let page = interface
@@ -59,7 +54,6 @@ impl CacheCommand {
             .to_page(height);
 
         assert!(height > 0);
-        let page_bus_index = 0;
 
         let checker_trace_degree = config.page.max_rw_ops as usize * 4;
 
@@ -72,10 +66,7 @@ impl CacheCommand {
         let prover = MultiTraceStarkProver::new(&engine.config);
         let trace_builder = TraceCommitmentBuilder::<BabyBearPoseidon2Config>::new(prover.pcs());
         let trace_prover_data = trace_builder.committer.commit(vec![trace]);
-        let commit: Com<BabyBearPoseidon2Config> = trace_prover_data.commit;
-        let data: PcsProverData<BabyBearPoseidon2Config> = trace_prover_data.data;
-        // dummy value for now
-        let encoded_data = bincode::serialize(&(commit, data)).unwrap();
+        let encoded_data = bincode::serialize(&trace_prover_data).unwrap();
         let path = self.output_folder.clone() + "/" + &self.table_id + ".cache.bin";
         write_bytes(&encoded_data, path).unwrap();
         Ok(())
