@@ -8,11 +8,11 @@ use super::{
     FinalPageAir,
 };
 use crate::{
+    common::page_cols::PageCols,
     is_less_than_tuple::{
         columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
         IsLessThanTupleAir,
     },
-    page_rw_checker::page::columns::PageCols,
     sub_chip::{AirConfig, SubAir},
 };
 
@@ -30,7 +30,14 @@ impl<AB: PartitionedAirBuilder> Air<AB> for FinalPageAir
 where
     AB::M: Clone,
 {
+    // This function assumes that there are (at least) two partitions for the trace.
+    // The first partition is the page itself, and the first self.aux_width() columns of the
+    // second partition correspond to the auxiliary columns necessary for sorting.
+    // Under this assumption, this function can be called directly from a superair (without needing
+    // to construct the columns manually before calling SubAir)
     fn eval(&self, builder: &mut AB) {
+        assert!(builder.partitioned_main().len() >= 2);
+
         let page_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[0].clone();
         let aux_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[1].clone();
 
@@ -45,7 +52,7 @@ where
         let aux_next = aux_trace.row_slice(1);
 
         let aux_next_cols = FinalPageAuxCols::from_slice(
-            &aux_next,
+            &aux_next[0..self.aux_width()],
             self.idx_limb_bits,
             self.idx_decomp,
             self.idx_len,
@@ -95,7 +102,6 @@ impl<AB: AirBuilder> SubAir<AB> for FinalPageAir {
 
         let lt_air = IsLessThanTupleAir::new(
             self.range_bus_index,
-            1 << self.idx_limb_bits,
             vec![self.idx_limb_bits; self.idx_len],
             self.idx_decomp,
         );

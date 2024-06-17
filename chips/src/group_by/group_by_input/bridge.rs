@@ -16,8 +16,10 @@ impl<F: PrimeField64> SubAirBridge<F> for GroupByAir {
             .collect();
         let internal_count = VirtualPairCol::single_main(col_indices.io.is_allocated);
 
-        let output_sent_fields: Vec<VirtualPairCol<F>> = std::iter::once(&col_indices.aux.is_final)
-            .chain(col_indices.aux.sorted_group_by.iter())
+        let output_sent_fields: Vec<VirtualPairCol<F>> = col_indices
+            .aux
+            .sorted_group_by
+            .iter()
             .chain(std::iter::once(&col_indices.aux.aggregated))
             .map(|&i| VirtualPairCol::single_main(i))
             .collect();

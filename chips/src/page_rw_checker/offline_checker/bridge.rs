@@ -11,7 +11,7 @@ use crate::is_less_than_tuple::IsLessThanTupleAir;
 use crate::sub_chip::SubAirBridge;
 
 impl<F: PrimeField64> SubAirBridge<F> for OfflineChecker {
-    /// Receives page rows (idx, data) for rows tagged with is_initial on page_bus
+    /// Receives page rows (idx, data) for rows tagged with is_initial on page_bus (sent from PageRWAir)
     /// Receives operations (clk, idx, data, op_type) for rows tagged with is_internal on ops_bus
     fn receives(&self, col_indices: OfflineCheckerCols<usize>) -> Vec<Interaction<F>> {
         let page_cols = col_indices.page_row[1..]
@@ -39,7 +39,7 @@ impl<F: PrimeField64> SubAirBridge<F> for OfflineChecker {
         ]
     }
 
-    /// Sends page rows (idx, data) for rows tagged with is_final on page_bus with multiplicity is_final_x3
+    /// Sends page rows (idx, data) for rows tagged with is_final on page_bus with multiplicity is_final_x3 (received by MyFinalPageAir)
     /// Sends interactions required by IsLessThanTuple SubAir
     fn sends(&self, col_indices: OfflineCheckerCols<usize>) -> Vec<Interaction<F>> {
         let page_cols = col_indices.page_row[1..]
@@ -55,7 +55,6 @@ impl<F: PrimeField64> SubAirBridge<F> for OfflineChecker {
 
         let lt_air = IsLessThanTupleAir::new(
             self.range_bus_index,
-            1 << self.idx_decomp,
             self.idx_clk_limb_bits.clone(),
             self.idx_decomp,
         );
@@ -81,14 +80,7 @@ impl<F: PrimeField64> AirBridge<F> for OfflineChecker {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-        let cols_to_receive = OfflineCheckerCols::<usize>::from_slice(
-            &all_cols,
-            self.page_width(),
-            self.idx_len,
-            self.data_len,
-            self.idx_clk_limb_bits.clone(),
-            self.idx_decomp,
-        );
+        let cols_to_receive = OfflineCheckerCols::<usize>::from_slice(&all_cols, self);
         SubAirBridge::receives(self, cols_to_receive)
     }
 
@@ -96,14 +88,7 @@ impl<F: PrimeField64> AirBridge<F> for OfflineChecker {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-        let cols_to_send = OfflineCheckerCols::<usize>::from_slice(
-            &all_cols,
-            self.page_width(),
-            self.idx_len,
-            self.data_len,
-            self.idx_clk_limb_bits.clone(),
-            self.idx_decomp,
-        );
+        let cols_to_send = OfflineCheckerCols::<usize>::from_slice(&all_cols, self);
         SubAirBridge::sends(self, cols_to_send)
     }
 }

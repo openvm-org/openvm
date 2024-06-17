@@ -1,4 +1,4 @@
-use crate::is_equal_vec::IsEqualVecAir;
+use crate::{group_by::group_by_input::columns::GroupByCols, is_equal_vec::IsEqualVecAir};
 
 pub mod air;
 pub mod bridge;

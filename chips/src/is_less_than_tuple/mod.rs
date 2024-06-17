@@ -17,8 +17,6 @@ pub mod trace;
 pub struct IsLessThanTupleAir {
     /// The bus index for sends to range chip
     bus_index: usize,
-    /// The maximum range for the range checker
-    range_max: u32,
     /// The number of bits to decompose each number into, for less than checking
     decomp: usize,
     /// IsLessThanAirs for each tuple element
@@ -27,15 +25,14 @@ pub struct IsLessThanTupleAir {
 }
 
 impl IsLessThanTupleAir {
-    pub fn new(bus_index: usize, range_max: u32, limb_bits: Vec<usize>, decomp: usize) -> Self {
+    pub fn new(bus_index: usize, limb_bits: Vec<usize>, decomp: usize) -> Self {
         let is_less_than_airs = limb_bits
             .iter()
-            .map(|&limb_bit| IsLessThanAir::new(bus_index, range_max, limb_bit, decomp))
+            .map(|&limb_bit| IsLessThanAir::new(bus_index, limb_bit, decomp))
             .collect::<Vec<_>>();
 
         Self {
             bus_index,
-            range_max,
             decomp,
             is_less_than_airs,
         }
@@ -69,19 +66,17 @@ pub struct IsLessThanTupleChip {
 impl IsLessThanTupleChip {
     pub fn new(
         bus_index: usize,
-        range_max: u32,
         limb_bits: Vec<usize>,
         decomp: usize,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
         let is_less_than_airs = limb_bits
             .iter()
-            .map(|&limb_bit| IsLessThanAir::new(bus_index, range_max, limb_bit, decomp))
+            .map(|&limb_bit| IsLessThanAir::new(bus_index, limb_bit, decomp))
             .collect::<Vec<_>>();
 
         let air = IsLessThanTupleAir {
             bus_index,
-            range_max,
             decomp,
             is_less_than_airs,
         };

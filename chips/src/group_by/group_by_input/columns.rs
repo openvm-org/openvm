@@ -107,7 +107,7 @@ impl<T: Clone> GroupByCols<T> {
 
     pub fn get_width(group_by_air: &GroupByAir) -> usize {
         let index_map = GroupByCols::<T>::index_map(group_by_air);
-        index_map.is_equal_vec_aux_end - 1
+        index_map.is_equal_vec_aux_end
     }
 }
 

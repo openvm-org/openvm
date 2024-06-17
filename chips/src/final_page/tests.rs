@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::{iter, sync::Arc};
 
+use crate::common::page::Page;
 use crate::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{
     keygen::{types::MultiStarkPartialProvingKey, MultiStarkKeygenBuilder},
@@ -19,17 +20,17 @@ use rand::Rng;
 
 fn test_single_page(
     engine: &BabyBearPoseidon2Engine,
-    page: Vec<Vec<u32>>,
+    page: &Page,
     final_page_chip: &super::FinalPageAir,
     range_checker: Arc<RangeCheckerGateChip>,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
     partial_pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
 ) -> Result<(), VerificationError> {
-    let page_trace = final_page_chip.gen_page_trace::<BabyBearPoseidon2Config>(page.clone());
+    let page_trace = final_page_chip.gen_page_trace::<BabyBearPoseidon2Config>(page);
     let page_prover_data = trace_builder.committer.commit(vec![page_trace.clone()]);
 
-    let aux_trace = final_page_chip
-        .gen_aux_trace::<BabyBearPoseidon2Config>(page.clone(), range_checker.clone());
+    let aux_trace =
+        final_page_chip.gen_aux_trace::<BabyBearPoseidon2Config>(page, range_checker.clone());
     let range_checker_trace = range_checker.generate_trace();
 
     trace_builder.clear();
@@ -51,7 +52,7 @@ fn test_single_page(
     let verifier = engine.verifier();
 
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
+    let proof = prover.prove(&mut challenger, partial_pk, main_trace_data, &pis);
 
     let mut challenger = engine.new_challenger();
     verifier.verify(
@@ -97,7 +98,7 @@ fn final_page_chip_test() {
     let mut all_idx: Vec<Vec<u32>> = all_idx.into_iter().collect();
     all_idx.sort();
 
-    let mut page: Vec<Vec<u32>> = (0..page_height)
+    let page: Vec<Vec<u32>> = (0..page_height)
         .map(|x| {
             if x < allocated_rows {
                 iter::once(1)
@@ -109,6 +110,8 @@ fn final_page_chip_test() {
             }
         })
         .collect();
+
+    let mut page = Page::from_2d_vec(&page, idx_len, data_len);
 
     let final_page_chip = FinalPageAir::new(
         range_bus_index,
@@ -141,7 +144,7 @@ fn final_page_chip_test() {
 
     test_single_page(
         &engine,
-        page.clone(),
+        &page,
         &final_page_chip,
         range_checker.clone(),
         &mut trace_builder,
@@ -150,7 +153,7 @@ fn final_page_chip_test() {
     .expect("Verification Failed");
 
     // Swap the first two rows of the page so it's no longer sorted
-    page.swap(0, 1);
+    page.rows.swap(0, 1);
 
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
@@ -158,7 +161,7 @@ fn final_page_chip_test() {
     assert_eq!(
         test_single_page(
             &engine,
-            page,
+            &page,
             &final_page_chip,
             range_checker.clone(),
             &mut trace_builder,

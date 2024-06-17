@@ -1,12 +1,14 @@
 use std::sync::Arc;
 use std::{collections::HashMap, iter};
 
+use afs_test_utils::utils::to_field_vec;
 use p3_field::{AbstractField, PrimeField};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
 use super::columns::OfflineCheckerCols;
 use super::OfflineChecker;
+use crate::common::page::Page;
 use crate::is_equal_vec::IsEqualVecAir;
 use crate::is_less_than_tuple::IsLessThanTupleAir;
 use crate::page_rw_checker::page_controller::Operation;
@@ -25,7 +27,7 @@ impl OfflineChecker {
     /// The trace is padded at the end to be of height trace_degree
     pub fn generate_trace<SC: StarkGenericConfig>(
         &self,
-        page: &mut Vec<Vec<u32>>,
+        page: &mut Page,
         mut ops: Vec<Operation>,
         range_checker: Arc<RangeCheckerGateChip>,
         trace_degree: usize,
@@ -36,21 +38,17 @@ impl OfflineChecker {
         let is_equal_idx = IsEqualVecAir::new(self.idx_len);
         let is_equal_data = IsEqualVecAir::new(self.data_len);
 
-        let lt_chip = IsLessThanTupleAir::new(
-            usize::MAX,
-            1 << self.idx_decomp,
-            self.idx_clk_limb_bits.clone(),
-            self.idx_decomp,
-        );
+        let lt_chip =
+            IsLessThanTupleAir::new(usize::MAX, self.idx_clk_limb_bits.clone(), self.idx_decomp);
 
         let mut rows_allocated = 0;
-        while rows_allocated < page.len() && page[rows_allocated][0] == 1 {
+        while rows_allocated < page.height() && page[rows_allocated].is_alloc == 1 {
             rows_allocated += 1;
         }
 
         let mut idx_i_map = HashMap::new();
-        for (i, row) in page.iter().enumerate().take(rows_allocated) {
-            idx_i_map.insert(row[1..self.idx_len + 1].to_vec(), i);
+        for (i, row) in page.rows.iter().enumerate().take(rows_allocated) {
+            idx_i_map.insert(row.idx.clone(), i);
         }
 
         // Creating a timestamp bigger than all others
@@ -58,17 +56,11 @@ impl OfflineChecker {
 
         ops.sort_by_key(|op| (op.idx.clone(), op.clk));
 
-        let conv_to_f = |v: Vec<u32>| {
-            v.iter()
-                .map(|x| Val::<SC>::from_canonical_u32(*x))
-                .collect::<Vec<Val<SC>>>()
-        };
-
         // This takes the information for the current row and references for the last row
         // It uses those values to generate the new row in the trace, and it updates the references
         // to the new row's information
         let gen_row = |is_first_row: &mut bool,
-                       page: &mut Vec<Vec<u32>>,
+                       page: &mut Page,
                        idx: usize,
                        is_initial: u8,
                        is_final: u8,
@@ -80,10 +72,10 @@ impl OfflineChecker {
                        last_clk: &mut usize,
                        is_extra: u8| {
             // Make sure the row in the page is allocated
-            assert!(page[idx][0] == 1);
+            assert!(page[idx].is_alloc == 1);
 
-            let cur_idx = page[idx][1..self.idx_len + 1].to_vec();
-            let cur_data = page[idx][self.idx_len + 1..].to_vec();
+            let cur_idx = page[idx].idx.clone();
+            let cur_data = page[idx].data.clone();
 
             if *is_first_row {
                 // Making sure the last_idx and last_data are different from current when its the first row
@@ -125,11 +117,11 @@ impl OfflineChecker {
                 ),
             );
 
-            let last_idx = conv_to_f(last_idx);
-            let cur_idx = conv_to_f(cur_idx);
+            let last_idx = to_field_vec(last_idx);
+            let cur_idx = to_field_vec(cur_idx);
 
-            let last_data = conv_to_f(last_data);
-            let cur_data = conv_to_f(cur_data);
+            let last_data = to_field_vec(last_data);
+            let cur_data = to_field_vec(cur_data);
 
             let idx_equal_cols =
                 LocalTraceInstructions::generate_trace_row(&is_equal_idx, (last_idx, cur_idx));
@@ -144,6 +136,7 @@ impl OfflineChecker {
                 Val::<SC>::from_canonical_u8(is_final * 3),
                 Val::<SC>::from_canonical_usize(clk),
                 page[idx]
+                    .to_vec()
                     .iter()
                     .copied()
                     .map(Val::<SC>::from_canonical_u32)
@@ -179,7 +172,7 @@ impl OfflineChecker {
 
             let idx;
             if let std::collections::hash_map::Entry::Vacant(e) = idx_i_map.entry(cur_idx.clone()) {
-                assert!(rows_allocated < page.len());
+                assert!(rows_allocated < page.height());
                 idx = rows_allocated;
                 e.insert(idx);
                 rows_allocated += 1;
@@ -204,10 +197,9 @@ impl OfflineChecker {
             }
 
             for op in ops.iter().take(j).skip(i) {
-                page[idx] = iter::once(1)
-                    .chain(op.idx.clone())
-                    .chain(op.data.clone())
-                    .collect();
+                page[idx].is_alloc = 1;
+                page[idx].idx.clone_from(&op.idx);
+                page[idx].data.clone_from(&op.data);
 
                 rows.push(gen_row(
                     &mut is_first_row,
@@ -248,8 +240,8 @@ impl OfflineChecker {
         assert!(trace_degree > 0 && trace_degree & (trace_degree - 1) == 0);
 
         // Adding rows to the trace to make the height trace_degree
-        while rows.len() < trace_degree {
-            rows.push(gen_row(
+        rows.resize_with(trace_degree, || {
+            gen_row(
                 &mut is_first_row,
                 page,
                 0,
@@ -262,19 +254,12 @@ impl OfflineChecker {
                 &mut last_data,
                 &mut last_clk,
                 1,
-            ));
-        }
+            )
+        });
 
         tracing::debug!("Offline Checker trace by row: ");
         for row in &rows {
-            let cols = OfflineCheckerCols::from_slice(
-                row,
-                self.page_width(),
-                self.idx_len,
-                self.data_len,
-                self.idx_clk_limb_bits.clone(),
-                self.idx_decomp,
-            );
+            let cols = OfflineCheckerCols::from_slice(row, self);
             tracing::debug!("{:?}", cols);
         }
 
