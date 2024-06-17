@@ -138,11 +138,11 @@ pub fn test_convert_to_page() {
 
     // Save page as Json
     let serialized = serde_json::to_string(&page).unwrap();
-    std::fs::write("page.json", serialized).unwrap();
+    std::fs::write("tests/data/page.json", serialized).unwrap();
 
-    // // Save page to file
+    // Save page as binary
     // let serialized = bincode::serialize(&page).unwrap();
-    // std::fs::write("page.afp", serialized).unwrap();
+    // std::fs::write("tests/data/page.afp", serialized).unwrap();
 }
 
 #[test]

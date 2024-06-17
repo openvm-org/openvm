@@ -15,9 +15,6 @@ use afs_test_utils::{
     utils::create_seeded_rng,
 };
 use itertools::Itertools;
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 
 use crate::common::page::Page;
@@ -25,95 +22,6 @@ use crate::common::page_cols::PageCols;
 use crate::execution_air::ExecutionAir;
 use crate::page_rw_checker;
 use crate::page_rw_checker::page_controller::{self, OpType, Operation};
-
-type Val = BabyBear;
-
-// #[allow(clippy::too_many_arguments)]
-// fn load_page_test(
-//     engine: &BabyBearPoseidon2Engine,
-//     page_init: &Page,
-//     idx_len: usize,
-//     data_len: usize,
-//     idx_limb_bits: usize,
-//     idx_decomp: usize,
-//     ops: &Vec<Operation>,
-//     page_controller: &mut page_controller::PageController<BabyBearPoseidon2Config>,
-//     ops_sender: &ExecutionAir,
-//     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
-//     partial_pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
-//     trace_degree: usize,
-//     exec_trace_degree: usize,
-//     spacing: usize,
-// ) -> Result<(), VerificationError> {
-//     let page_height = page_init.len();
-//     assert!(page_height > 0);
-
-//     let (page_traces, mut prover_data) = page_controller.load_page_and_ops(
-//         page_init.clone(),
-//         ops.clone(),
-//         trace_degree,
-//         &mut trace_builder.committer,
-//     );
-
-//     let offline_checker_trace = page_controller.offline_checker_trace();
-//     let final_page_aux_trace = page_controller.final_page_aux_trace();
-//     let range_checker_trace = page_controller.range_checker_trace();
-
-//     // Generating trace for ops_sender and making sure it has height num_ops
-//     let ops_sender_trace = ops_sender.generate_trace_testing(ops, exec_trace_degree, spacing);
-//     // panic!();
-//     // Clearing the range_checker counts
-//     page_controller.update_range_checker(idx_decomp);
-
-//     trace_builder.clear();
-
-//     trace_builder.load_cached_trace(page_traces[0].clone(), prover_data.remove(0));
-//     trace_builder.load_cached_trace(page_traces[1].clone(), prover_data.remove(0));
-//     trace_builder.load_trace(final_page_aux_trace);
-//     trace_builder.load_trace(offline_checker_trace.clone());
-//     trace_builder.load_trace(range_checker_trace);
-//     trace_builder.load_trace(ops_sender_trace);
-
-//     trace_builder.commit_current();
-
-//     let partial_vk = partial_pk.partial_vk();
-
-//     let main_trace_data = trace_builder.view(
-//         &partial_vk,
-//         vec![
-//             &page_controller.init_chip,
-//             &page_controller.final_chip,
-//             &page_controller.offline_checker,
-//             &page_controller.range_checker.air,
-//             ops_sender,
-//         ],
-//     );
-
-//     let pis = vec![vec![]; partial_vk.per_air.len()];
-
-//     let prover = engine.prover();
-//     let verifier = engine.verifier();
-
-//     let mut challenger = engine.new_challenger();
-//     let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
-
-//     let mut challenger = engine.new_challenger();
-//     let result = verifier.verify(
-//         &mut challenger,
-//         partial_vk,
-//         vec![
-//             &page_controller.init_chip,
-//             &page_controller.final_chip,
-//             &page_controller.offline_checker,
-//             &page_controller.range_checker.air,
-//             ops_sender,
-//         ],
-//         proof,
-//         &pis,
-//     );
-
-//     result
-// }
 
 #[allow(clippy::too_many_arguments)]
 fn load_page_test(
@@ -204,7 +112,6 @@ fn page_read_write_test() {
     let mut rng = create_seeded_rng();
 
     let page_bus_index = 0;
-    let checker_final_bus_index = 1;
     let range_bus_index = 2;
     let ops_bus_index = 3;
 
