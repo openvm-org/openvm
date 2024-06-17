@@ -46,7 +46,6 @@ impl SumChip {
                 output_bus,
                 is_lt_air: IsLessThanAir::new(
                     range_checker.air.bus_index,
-                    range_checker.air.range_max,
                     key_limb_bits,
                     key_decomp,
                 ),

@@ -10,6 +10,8 @@ impl<T: Clone> IsEqualVecIOCols<T> {
         Self { x, y, prod }
     }
 
+    // Note that the slice this function takes is of an unusual
+    // slc should be a whole row of the trace
     pub fn from_slice(slc: &[T], vec_len: usize) -> Self {
         Self {
             x: slc[0..vec_len].to_vec(),
@@ -19,7 +21,7 @@ impl<T: Clone> IsEqualVecIOCols<T> {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct IsEqualVecAuxCols<T> {
     pub prods: Vec<T>,
     pub invs: Vec<T>,

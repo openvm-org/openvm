@@ -2,12 +2,13 @@ use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
-use super::columns::PageCols;
-use super::PageAir;
+use super::MyInitialPageAir;
+use crate::common::page_cols::PageCols;
 use crate::sub_chip::SubAirBridge;
 
-impl<F: PrimeField64> SubAirBridge<F> for PageAir {
+impl<F: PrimeField64> SubAirBridge<F> for MyInitialPageAir {
     /// Sends page rows (idx, data) for every allocated row on page_bus
+    /// Some of this is received by OfflineChecker and some by MyFinalPageChip
     fn sends(&self, col_indices: PageCols<usize>) -> Vec<Interaction<F>> {
         let page_cols = col_indices
             .idx
@@ -24,7 +25,7 @@ impl<F: PrimeField64> SubAirBridge<F> for PageAir {
     }
 }
 
-impl<F: PrimeField64> AirBridge<F> for PageAir {
+impl<F: PrimeField64> AirBridge<F> for MyInitialPageAir {
     fn sends(&self) -> Vec<Interaction<F>> {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();

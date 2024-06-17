@@ -110,7 +110,7 @@ pub fn test_interface_large_tables() {
         }
     }
 
-    mock_db.save_to_file("afs_db.mockdb").unwrap();
+    mock_db.save_to_file("tests/data/afs_db.mockdb").unwrap();
 }
 
 #[test]

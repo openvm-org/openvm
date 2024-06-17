@@ -35,3 +35,17 @@ Print the afs instruction set to file.
 ```bash
 cargo run --bin afs -- mock afi -f bin/afs/tests/test_input_file_32_1024.afi
 ```
+
+## Full test
+
+```bash
+cargo run --bin afs -- mock write -f bin/afs/tests/test_input_file_32_1024.afi -o bin/afs/tests/input_file_32_1024.mockdb
+
+cargo run --bin afs -- keygen -o bin/afs/tests       
+
+cargo run --bin afs -- cache -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -d bin/afs/tests/input_file_32_1024.mockdb -o bin/afs/tests
+
+cargo run --bin afs -- prove -f bin/afs/tests/test_input_file_32_1024.afi -d bin/afs/tests/input_file_32_1024.mockdb -c bin/afs/tests -k bin/afs/tests
+
+cargo run --bin afs -- verify -f bin/afs/tests/input_file_32_1024.mockdb.prove.bin -d '/Users/yujiang/axiom/afs-prototype/bin/afs/tests/input_file_32_1024.mockdb' -k bin/afs/tests
+```

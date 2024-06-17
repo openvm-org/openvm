@@ -113,7 +113,6 @@ impl ProveCommand {
 
         assert!(height > 0);
         let page_bus_index = 0;
-        let checker_final_bus_index = 1;
         let range_bus_index = 2;
         let ops_bus_index = 3;
 
@@ -129,7 +128,6 @@ impl ProveCommand {
 
         let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
             page_bus_index,
-            checker_final_bus_index,
             range_bus_index,
             ops_bus_index,
             idx_len,
@@ -146,16 +144,12 @@ impl ProveCommand {
             read_from_path(self.cache_folder.clone() + "/" + &table_id + ".cache.bin").unwrap();
         let init_prover_data: ProverTraceData<BabyBearPoseidon2Config> =
             bincode::deserialize(&init_prover_data_encoded).unwrap();
+
         let (page_traces, mut prover_data) = page_controller.load_page_and_ops(
-            page_init.clone(),
-            idx_len,
-            data_len,
-            idx_limb_bits,
-            idx_decomp,
+            &page_init,
             zk_ops.clone(),
             checker_trace_degree,
             &mut trace_builder.committer,
-            false,
         );
         let offline_checker_trace = page_controller.offline_checker_trace();
         let final_page_aux_trace = page_controller.final_page_aux_trace();

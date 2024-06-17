@@ -17,6 +17,8 @@ use afs_test_utils::{
 use itertools::Itertools;
 use rand::Rng;
 
+use crate::common::page::Page;
+use crate::common::page_cols::PageCols;
 use crate::execution_air::ExecutionAir;
 use crate::page_rw_checker;
 use crate::page_rw_checker::page_controller::{self, OpType, Operation};
@@ -24,10 +26,7 @@ use crate::page_rw_checker::page_controller::{self, OpType, Operation};
 #[allow(clippy::too_many_arguments)]
 fn load_page_test(
     engine: &BabyBearPoseidon2Engine,
-    page_init: Vec<Vec<u32>>,
-    idx_len: usize,
-    data_len: usize,
-    idx_limb_bits: usize,
+    page_init: &Page,
     idx_decomp: usize,
     ops: &Vec<Operation>,
     page_controller: &mut page_controller::PageController<BabyBearPoseidon2Config>,
@@ -38,19 +37,14 @@ fn load_page_test(
     exec_trace_degree: usize,
     spacing: usize,
 ) -> Result<(), VerificationError> {
-    let page_height = page_init.len();
+    let page_height = page_init.height();
     assert!(page_height > 0);
 
     let (page_traces, mut prover_data) = page_controller.load_page_and_ops(
-        page_init.clone(),
-        idx_len,
-        data_len,
-        idx_limb_bits,
-        idx_decomp,
+        page_init,
         ops.clone(),
         trace_degree,
         &mut trace_builder.committer,
-        true,
     );
 
     let offline_checker_trace = page_controller.offline_checker_trace();
@@ -59,7 +53,6 @@ fn load_page_test(
 
     // Generating trace for ops_sender and making sure it has height num_ops
     let ops_sender_trace = ops_sender.generate_trace_testing(ops, exec_trace_degree, spacing);
-    // panic!();
     // Clearing the range_checker counts
     page_controller.update_range_checker(idx_decomp);
 
@@ -118,7 +111,6 @@ fn page_read_write_test() {
     let mut rng = create_seeded_rng();
 
     let page_bus_index = 0;
-    let checker_final_bus_index = 1;
     let range_bus_index = 2;
     let ops_bus_index = 3;
 
@@ -160,6 +152,8 @@ fn page_read_write_test() {
         page.push(iter::once(1).chain(idx).chain(data).collect());
     }
 
+    let mut page = Page::from_2d_vec(&page, idx_len, data_len);
+
     // Generating random sorted distinct timestamps for operations
     let clks = (1..num_ops + 1).collect_vec();
 
@@ -198,7 +192,6 @@ fn page_read_write_test() {
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
         page_bus_index,
-        checker_final_bus_index,
         range_bus_index,
         ops_bus_index,
         idx_len,
@@ -258,10 +251,7 @@ fn page_read_write_test() {
     // Testing a fully allocated page
     load_page_test(
         &engine,
-        page.clone(),
-        idx_len,
-        data_len,
-        idx_limb_bits,
+        &page,
         idx_decomp,
         &ops,
         &mut page_controller,
@@ -277,10 +267,8 @@ fn page_read_write_test() {
     // Testing a partially-allocated page
     let rows_allocated = rng.gen::<usize>() % (page_height + 1);
     for i in rows_allocated..page_height {
-        page[i][0] = 0;
-
         // Making sure the first operation using this index is a write
-        let idx = page[i][1..idx_len + 1].to_vec();
+        let idx = page.rows[i].idx.clone();
         for op in ops.iter_mut() {
             if op.idx == idx {
                 op.op_type = OpType::Write;
@@ -291,10 +279,7 @@ fn page_read_write_test() {
 
     load_page_test(
         &engine,
-        page.clone(),
-        idx_len,
-        data_len,
-        idx_limb_bits,
+        &page,
         idx_decomp,
         &ops,
         &mut page_controller,
@@ -310,7 +295,7 @@ fn page_read_write_test() {
     // Testing a fully unallocated page
     for i in 0..page_height {
         // Making sure the first operation that uses every index is a write
-        let idx = page[i][1..idx_len + 1].to_vec();
+        let idx = page[i].idx.clone();
         for op in ops.iter_mut() {
             if op.idx == idx {
                 op.op_type = OpType::Write;
@@ -318,17 +303,16 @@ fn page_read_write_test() {
             }
         }
 
-        let idx: Vec<u32> = (0..idx_len).map(|_| rng.gen::<u32>() % max_idx).collect();
-        let data: Vec<u32> = (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect();
-        page[i] = iter::once(0).chain(idx).chain(data).collect();
+        page.rows[i] = PageCols::from_slice(
+            vec![0; 1 + idx_len + data_len].as_slice(),
+            idx_len,
+            data_len,
+        );
     }
 
     load_page_test(
         &engine,
-        page.clone(),
-        idx_len,
-        data_len,
-        idx_limb_bits,
+        &page,
         idx_decomp,
         &ops,
         &mut page_controller,
@@ -351,10 +335,7 @@ fn page_read_write_test() {
 
     load_page_test(
         &engine,
-        page.clone(),
-        idx_len,
-        data_len,
-        idx_limb_bits,
+        &page,
         idx_decomp,
         &ops,
         &mut page_controller,
@@ -383,10 +364,7 @@ fn page_read_write_test() {
     assert_eq!(
         load_page_test(
             &engine,
-            page.clone(),
-            idx_len,
-            data_len,
-            idx_limb_bits,
+            &page,
             idx_decomp,
             &ops,
             &mut page_controller,
@@ -395,7 +373,7 @@ fn page_read_write_test() {
             &partial_pk,
             trace_degree,
             4 * num_ops,
-            1
+            1,
         ),
         Err(VerificationError::OodEvaluationMismatch),
         "Expected constraints to fail"
@@ -415,10 +393,7 @@ fn page_read_write_test() {
     assert_eq!(
         load_page_test(
             &engine,
-            page.clone(),
-            idx_len,
-            data_len,
-            idx_limb_bits,
+            &page,
             idx_decomp,
             &ops,
             &mut page_controller,
@@ -427,7 +402,7 @@ fn page_read_write_test() {
             &partial_pk,
             trace_degree,
             4 * num_ops,
-            1
+            1,
         ),
         Err(VerificationError::OodEvaluationMismatch),
         "Expected constraints to fail"
@@ -461,10 +436,7 @@ fn page_read_write_test() {
     let result = panic::catch_unwind(move || {
         let _ = load_page_test(
             engine_ref,
-            page.clone(),
-            idx_len,
-            data_len,
-            idx_limb_bits,
+            &page,
             idx_decomp,
             &ops,
             &mut page_controller,

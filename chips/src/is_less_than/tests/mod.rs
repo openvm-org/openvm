@@ -39,7 +39,7 @@ fn test_is_less_than_chip_lt() {
 
     let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
 
-    let chip = IsLessThanChip::new(bus_index, range_max, limb_bits, decomp, range_checker);
+    let chip = IsLessThanChip::new(bus_index, limb_bits, decomp, range_checker);
     let trace = chip.generate_trace(vec![(14321, 26883), (1, 0), (773, 773), (337, 456)]);
     let range_trace: DenseMatrix<BabyBear> = chip.range_checker.generate_trace();
 
@@ -59,7 +59,7 @@ fn test_is_less_than_negative() {
 
     let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
 
-    let chip = IsLessThanChip::new(bus_index, range_max, limb_bits, decomp, range_checker);
+    let chip = IsLessThanChip::new(bus_index, limb_bits, decomp, range_checker);
     let mut trace = chip.generate_trace(vec![(446, 553)]);
     let range_trace = chip.range_checker.generate_trace();
 

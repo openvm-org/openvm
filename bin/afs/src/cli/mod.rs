@@ -1,5 +1,5 @@
+use crate::commands::keygen::KeygenCommand;
 use crate::commands::{cache, keygen, mock, prove, verify};
-use crate::commands::{cache::CacheCommand, keygen::KeygenCommand};
 use afs_test_utils::page_config::PageConfig;
 use clap::Parser;
 use clap::Subcommand;
@@ -52,7 +52,7 @@ impl Cli {
                 cmd.execute(config).unwrap();
             }
             CliCommand::Cache(cache) => {
-                cache.execute(&config).unwrap();
+                cache.execute(config).unwrap();
             }
             CliCommand::Prove(prove) => {
                 prove.execute(config).unwrap();
