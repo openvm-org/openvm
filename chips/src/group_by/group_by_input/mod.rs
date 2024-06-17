@@ -13,8 +13,8 @@ pub struct GroupByAir {
 
     // does not include is_allocated column
     page_width: usize,
-    group_by_cols: Vec<usize>,
-    aggregated_col: usize,
+    pub group_by_cols: Vec<usize>,
+    pub aggregated_col: usize,
     // for now, will default to addition
     // operation: SubAir::eval,
 }
@@ -37,10 +37,10 @@ impl GroupByAir {
         }
     }
     pub fn get_width(&self) -> usize {
-        self.page_width + 3 * self.group_by_cols.len() + 4
+        self.page_width + 3 * self.group_by_cols.len() + 5
     }
     pub fn aux_width(&self) -> usize {
-        3 * self.group_by_cols.len() + 4
+        3 * self.group_by_cols.len() + 5
     }
 }
 

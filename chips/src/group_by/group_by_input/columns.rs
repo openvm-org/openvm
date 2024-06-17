@@ -27,6 +27,7 @@ pub struct GroupByColsIndexMap {
     pub allocated_idx: usize,
     pub page_start: usize,
     pub page_end: usize,
+    pub sorted_group_by_alloc: usize,
     pub sorted_group_by_start: usize,
     pub sorted_group_by_end: usize,
     pub aggregated: usize,
@@ -39,6 +40,7 @@ pub struct GroupByColsIndexMap {
 
 impl<T: Clone> GroupByCols<T> {
     pub fn from_slice(slc: &[T], group_by_air: &GroupByAir) -> Self {
+        assert!(slc.len() == group_by_air.get_width());
         let index_map = GroupByCols::<T>::index_map(group_by_air);
 
         let is_allocated = slc[index_map.allocated_idx].clone();
@@ -73,7 +75,11 @@ impl<T: Clone> GroupByCols<T> {
 
         let allocated_idx = 0;
         let page_idxs = (allocated_idx + 1, group_by_air.page_width);
-        let sorted_group_by_idxs = (page_idxs.1, page_idxs.1 + num_group_by);
+        let sorted_group_by_alloc = page_idxs.1;
+        let sorted_group_by_idxs = (
+            sorted_group_by_alloc + 1,
+            sorted_group_by_alloc + 1 + num_group_by,
+        );
         let aggregated_idx = sorted_group_by_idxs.1;
         let partial_aggregated_idx = aggregated_idx + 1;
         let is_final_idx = partial_aggregated_idx + 1;
@@ -87,6 +93,7 @@ impl<T: Clone> GroupByCols<T> {
             allocated_idx,
             page_start: page_idxs.0,
             page_end: page_idxs.1,
+            sorted_group_by_alloc,
             sorted_group_by_start: sorted_group_by_idxs.0,
             sorted_group_by_end: sorted_group_by_idxs.1,
             aggregated: aggregated_idx,
@@ -100,7 +107,7 @@ impl<T: Clone> GroupByCols<T> {
 
     pub fn get_width(group_by_air: &GroupByAir) -> usize {
         let index_map = GroupByCols::<T>::index_map(group_by_air);
-        index_map.is_equal_vec_aux_end
+        index_map.is_equal_vec_aux_end - 1
     }
 }
 

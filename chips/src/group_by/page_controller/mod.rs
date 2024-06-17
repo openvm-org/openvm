@@ -48,7 +48,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         let final_chip = MyFinalPageAir::new(
             output_bus,
             range_bus,
-            group_by_cols.len() + 1,
+            group_by_cols.len(),
             1,
             limb_bits,
             decomp,
@@ -74,10 +74,44 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         Val<SC>: PrimeField,
     {
         self.group_by_trace = Some(self.group_by.gen_page_trace(page.clone()));
-        self.final_page_trace = Some(self.final_chip.gen_page_trace::<SC>(page.clone()));
+
+        let mut grouped_page: Vec<Vec<u32>> = page
+            .iter()
+            .map(|row| {
+                let mut selected_row: Vec<u32> = self
+                    .group_by
+                    .group_by_cols
+                    .iter()
+                    .map(|&col_index| row[col_index])
+                    .collect();
+                selected_row.push(row[self.group_by.aggregated_col]);
+                selected_row
+            })
+            .collect();
+
+        grouped_page.sort();
+
+        let mut sums_by_key: std::collections::HashMap<Vec<u32>, u32> =
+            std::collections::HashMap::new();
+        for row in grouped_page.iter() {
+            let (value, index) = row.split_last().unwrap();
+            *sums_by_key.entry(index.to_vec()).or_insert(0) += value;
+        }
+        // Convert the hashmap back to a sorted vector for further processing
+        let mut grouped_sums: Vec<Vec<u32>> = sums_by_key
+            .into_iter()
+            .map(|(mut key, sum)| {
+                key.insert(0, 1);
+                key.push(sum);
+                key
+            })
+            .collect();
+        grouped_sums.sort();
+
+        self.final_page_trace = Some(self.final_chip.gen_page_trace::<SC>(grouped_sums.clone()));
         self.final_page_aux_trace = Some(
             self.final_chip
-                .gen_aux_trace::<SC>(page, self.range_checker.clone()),
+                .gen_aux_trace::<SC>(grouped_sums, self.range_checker.clone()),
         );
 
         let prover_data = vec![

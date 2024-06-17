@@ -36,6 +36,13 @@ where
         let local: &[AB::Var] = &[local_page, local_aux].concat();
         let next: &[AB::Var] = &[next_page, next_aux].concat();
 
+        if local.len() != next.len() {
+            panic!("Local and next lengths do not match.");
+        }
+        if local.len() != self.get_width() {
+            panic!("Local length does not match the expected width.");
+        }
+
         let local_cols = GroupByCols::<AB::Var>::from_slice(local, self);
 
         let next_cols = GroupByCols::<AB::Var>::from_slice(next, self);

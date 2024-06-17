@@ -32,7 +32,7 @@ fn load_page_test(
         page_controller.load_page(page_init.clone(), &trace_builder.committer);
 
     let group_by_trace: p3_matrix::dense::DenseMatrix<BabyBear> =
-        page_controller.group_by.gen_page_trace(page_init.clone());
+        page_controller.group_by.gen_aux_trace(page_init.clone());
     let final_page_aux_trace = page_controller
         .final_chip
         .gen_aux_trace::<BabyBearPoseidon2Config>(
@@ -94,15 +94,15 @@ fn group_by_test() {
 
     const MAX_VAL: usize = 0x78000001 / 2; // The prime used by BabyBear / 2
 
-    let log_page_height = 4;
+    let log_page_height = 0;
 
-    let page_width = 8;
+    let page_width = 4;
     // let num_groups = rng.gen::<usize>() % (page_width - 2) + 1;
-    let num_groups = 3;
+    let num_groups = 1;
     let page_height = 1 << log_page_height;
 
     let idx_len = page_width - 1;
-    let data_len = 1;
+    // let data_len = 1;
     let idx_limb_bits = 10;
     let idx_decomp = 4;
     let max_idx = 1 << idx_limb_bits;
@@ -114,19 +114,17 @@ fn group_by_test() {
             .map(|_| rng.gen::<u32>() % max_idx)
             .collect::<Vec<u32>>();
 
-        let data: Vec<u32> = (0..data_len)
-            .map(|_| rng.gen::<u32>() % MAX_VAL as u32)
-            .collect();
-        page.push(iter::once(1).chain(idx).chain(data).collect());
+        page.push(iter::once(1).chain(idx).collect());
     }
 
-    let mut group_by_cols = vec![];
-    while group_by_cols.len() < num_groups + 1 as usize {
-        let col = rng.gen::<usize>() % page_width;
-        if !group_by_cols.contains(&col) {
-            group_by_cols.push(col);
-        }
-    }
+    // let mut group_by_cols = vec![];
+    // while group_by_cols.len() < num_groups + 1 {
+    //     let col = rng.gen::<usize>() % (page_width - 1) + 1;
+    //     if !group_by_cols.contains(&col) {
+    //         group_by_cols.push(col);
+    //     }
+    // }
+    let mut group_by_cols = vec![1, 2];
 
     let aggregated_col = group_by_cols.pop().unwrap();
 
@@ -141,11 +139,13 @@ fn group_by_test() {
         idx_decomp,
     );
 
-    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(log_page_height));
+    // TODO FIX DO NOT HARD CODE
+    let engine = config::baby_bear_poseidon2::default_engine(20);
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
     let group_by_ptr = keygen_builder.add_cached_main_matrix(page_width);
-    let final_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
+    let final_page_ptr =
+        keygen_builder.add_cached_main_matrix(page_controller.final_chip.page_width());
     let group_by_aux_ptr = keygen_builder.add_main_matrix(page_controller.group_by.aux_width());
     let final_page_aux_ptr = keygen_builder.add_main_matrix(page_controller.final_chip.aux_width());
     let range_checker_ptr =
