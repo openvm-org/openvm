@@ -1,3 +1,4 @@
+use afs_chips::common::page::Page;
 use clap::Parser;
 use color_eyre::eyre::Result;
 
@@ -33,9 +34,9 @@ impl CacheCommand {
         Ok(())
     }
 
-    pub fn read_page_file(&self) -> Result<Vec<Vec<u32>>> {
+    pub fn read_page_file(&self) -> Result<Page> {
         let page_file = std::fs::read(&self.page_file)?;
-        let page_file: Vec<Vec<u32>> = serde_json::from_slice(&page_file)?;
+        let page_file: Page = serde_json::from_slice(&page_file)?;
         Ok(page_file)
     }
 

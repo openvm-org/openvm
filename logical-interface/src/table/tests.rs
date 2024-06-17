@@ -135,6 +135,14 @@ pub fn test_convert_to_page() {
         assert_eq!(row.idx, comparison_page.rows[i].idx);
         assert_eq!(row.data, comparison_page.rows[i].data);
     }
+
+    // Save page as Json
+    let serialized = serde_json::to_string(&page).unwrap();
+    std::fs::write("page.json", serialized).unwrap();
+
+    // // Save page to file
+    // let serialized = bincode::serialize(&page).unwrap();
+    // std::fs::write("page.afp", serialized).unwrap();
 }
 
 #[test]

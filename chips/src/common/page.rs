@@ -5,6 +5,7 @@ use std::{
 
 use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
+use serde::{Deserialize, Serialize};
 
 use super::page_cols::PageCols;
 
@@ -12,7 +13,7 @@ use super::page_cols::PageCols;
 /// | is_alloc | idx | data |
 ///
 /// It should be of a fixed height page.len(), which should be a power of 2.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Page {
     pub rows: Vec<PageCols<u32>>,
 }

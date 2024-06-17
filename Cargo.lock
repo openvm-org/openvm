@@ -68,6 +68,7 @@ dependencies = [
  "p3-util",
  "parking_lot",
  "rand",
+ "serde",
  "test-case",
  "tracing",
  "tracing-forest",
@@ -1095,6 +1096,7 @@ dependencies = [
  "itertools 0.13.0",
  "serde",
  "serde_derive",
+ "serde_json",
 ]
 
 [[package]]
