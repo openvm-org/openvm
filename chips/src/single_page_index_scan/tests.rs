@@ -25,7 +25,7 @@ fn index_scan_test(
     x: Vec<u32>,
     idx_len: usize,
     data_len: usize,
-    idx_limb_bits: Vec<usize>,
+    idx_limb_bits: usize,
     idx_decomp: usize,
     page_controller: &mut PageController<BabyBearPoseidon2Config>,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
@@ -151,11 +151,12 @@ fn generate_pk(
 
 #[test]
 fn test_single_page_index_scan_lt() {
-    let bus_index: usize = 0;
+    let page_bus_index: usize = 0;
+    let range_bus_index: usize = 1;
     let idx_len: usize = 2;
     let data_len: usize = 3;
     let decomp: usize = 8;
-    let limb_bits: Vec<usize> = vec![16, 16];
+    let limb_bits: usize = 16;
     let range_max: u32 = 1 << decomp;
 
     let log_page_height = 1;
@@ -163,11 +164,12 @@ fn test_single_page_index_scan_lt() {
     let page_width = 1 + idx_len + data_len;
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
-        bus_index,
+        page_bus_index,
+        range_bus_index,
         idx_len,
         data_len,
         range_max,
-        limb_bits.clone(),
+        limb_bits,
         decomp,
         Comp::Lt,
     );
@@ -212,11 +214,12 @@ fn test_single_page_index_scan_lt() {
 
 #[test]
 fn test_single_page_index_scan_lte() {
-    let bus_index: usize = 0;
+    let page_bus_index: usize = 0;
+    let range_bus_index: usize = 1;
     let idx_len: usize = 2;
     let data_len: usize = 3;
     let decomp: usize = 8;
-    let limb_bits: Vec<usize> = vec![16, 16];
+    let limb_bits: usize = 16;
     let range_max: u32 = 1 << decomp;
 
     let log_page_height = 1;
@@ -224,11 +227,12 @@ fn test_single_page_index_scan_lte() {
     let page_width = 1 + idx_len + data_len;
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
-        bus_index,
+        page_bus_index,
+        range_bus_index,
         idx_len,
         data_len,
         range_max,
-        limb_bits.clone(),
+        limb_bits,
         decomp,
         Comp::Lte,
     );
@@ -273,11 +277,12 @@ fn test_single_page_index_scan_lte() {
 
 #[test]
 fn test_single_page_index_scan_eq() {
-    let bus_index: usize = 0;
+    let page_bus_index: usize = 0;
+    let range_bus_index: usize = 1;
     let idx_len: usize = 2;
     let data_len: usize = 3;
     let decomp: usize = 8;
-    let limb_bits: Vec<usize> = vec![16, 16];
+    let limb_bits: usize = 16;
     let range_max: u32 = 1 << decomp;
 
     let log_page_height = 1;
@@ -285,11 +290,12 @@ fn test_single_page_index_scan_eq() {
     let page_width = 1 + idx_len + data_len;
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
-        bus_index,
+        page_bus_index,
+        range_bus_index,
         idx_len,
         data_len,
         range_max,
-        limb_bits.clone(),
+        limb_bits,
         decomp,
         Comp::Eq,
     );
@@ -334,11 +340,12 @@ fn test_single_page_index_scan_eq() {
 
 #[test]
 fn test_single_page_index_scan_gte() {
-    let bus_index: usize = 0;
+    let page_bus_index: usize = 0;
+    let range_bus_index: usize = 1;
     let idx_len: usize = 2;
     let data_len: usize = 3;
     let decomp: usize = 8;
-    let limb_bits: Vec<usize> = vec![16, 16];
+    let limb_bits: usize = 16;
     let range_max: u32 = 1 << decomp;
 
     let log_page_height = 1;
@@ -346,11 +353,12 @@ fn test_single_page_index_scan_gte() {
     let page_width = 1 + idx_len + data_len;
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
-        bus_index,
+        page_bus_index,
+        range_bus_index,
         idx_len,
         data_len,
         range_max,
-        limb_bits.clone(),
+        limb_bits,
         decomp,
         Comp::Gte,
     );
@@ -395,11 +403,12 @@ fn test_single_page_index_scan_gte() {
 
 #[test]
 fn test_single_page_index_scan_gt() {
-    let bus_index: usize = 0;
+    let page_bus_index: usize = 0;
+    let range_bus_index: usize = 1;
     let idx_len: usize = 2;
     let data_len: usize = 3;
     let decomp: usize = 8;
-    let limb_bits: Vec<usize> = vec![16, 16];
+    let limb_bits: usize = 16;
     let range_max: u32 = 1 << decomp;
 
     let log_page_height = 1;
@@ -407,11 +416,12 @@ fn test_single_page_index_scan_gt() {
     let page_width = 1 + idx_len + data_len;
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
-        bus_index,
+        page_bus_index,
+        range_bus_index,
         idx_len,
         data_len,
         range_max,
-        limb_bits.clone(),
+        limb_bits,
         decomp,
         Comp::Gt,
     );
@@ -456,11 +466,12 @@ fn test_single_page_index_scan_gt() {
 
 #[test]
 fn test_single_page_index_scan_wrong_order() {
-    let bus_index: usize = 0;
+    let page_bus_index: usize = 0;
+    let range_bus_index: usize = 1;
     let idx_len: usize = 2;
     let data_len: usize = 3;
     let decomp: usize = 8;
-    let limb_bits: Vec<usize> = vec![16, 16];
+    let limb_bits: usize = 16;
     let range_max: u32 = 1 << decomp;
 
     let log_page_height = 1;
@@ -470,11 +481,12 @@ fn test_single_page_index_scan_wrong_order() {
     let cmp = Comp::Lt;
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
-        bus_index,
+        page_bus_index,
+        range_bus_index,
         idx_len,
         data_len,
         range_max,
-        limb_bits.clone(),
+        limb_bits,
         decomp,
         cmp,
     );
@@ -529,11 +541,12 @@ fn test_single_page_index_scan_wrong_order() {
 
 #[test]
 fn test_single_page_index_scan_unsorted() {
-    let bus_index: usize = 0;
+    let page_bus_index: usize = 0;
+    let range_bus_index: usize = 1;
     let idx_len: usize = 2;
     let data_len: usize = 3;
     let decomp: usize = 8;
-    let limb_bits: Vec<usize> = vec![16, 16];
+    let limb_bits: usize = 16;
     let range_max: u32 = 1 << decomp;
 
     let log_page_height = 1;
@@ -543,11 +556,12 @@ fn test_single_page_index_scan_unsorted() {
     let cmp = Comp::Lt;
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
-        bus_index,
+        page_bus_index,
+        range_bus_index,
         idx_len,
         data_len,
         range_max,
-        limb_bits.clone(),
+        limb_bits,
         decomp,
         cmp,
     );
@@ -596,6 +610,81 @@ fn test_single_page_index_scan_unsorted() {
             &partial_pk,
         ),
         Err(VerificationError::OodEvaluationMismatch),
+        "Expected verification to fail, but it passed"
+    );
+}
+
+#[test]
+fn test_single_page_index_scan_wrong_answer() {
+    let page_bus_index: usize = 0;
+    let range_bus_index: usize = 1;
+    let idx_len: usize = 2;
+    let data_len: usize = 3;
+    let decomp: usize = 8;
+    let limb_bits: usize = 16;
+    let range_max: u32 = 1 << decomp;
+
+    let log_page_height = 1;
+    let page_height = 1 << log_page_height;
+    let page_width = 1 + idx_len + data_len;
+
+    let cmp = Comp::Lt;
+
+    let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
+        page_bus_index,
+        range_bus_index,
+        idx_len,
+        data_len,
+        range_max,
+        limb_bits,
+        decomp,
+        cmp,
+    );
+
+    let page: Vec<Vec<u32>> = vec![
+        vec![1, 2883, 7769, 51171, 3989, 12770],
+        vec![1, 443, 376, 22278, 13998, 58327],
+    ];
+    let page = Page::from_2d_vec(&page, idx_len, data_len);
+
+    let x: Vec<u32> = vec![2177, 5880];
+
+    let page_output = vec![
+        vec![1, 2883, 7769, 51171, 3989, 12770],
+        vec![0, 0, 0, 0, 0, 0],
+    ];
+    let page_output = Page::from_2d_vec(&page_output, idx_len, data_len);
+
+    let (engine, partial_pk) = generate_pk(
+        &mut page_controller,
+        log_page_height,
+        page_width,
+        page_height,
+        idx_len,
+        decomp,
+    );
+
+    let prover = MultiTraceStarkProver::new(&engine.config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
+
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
+    assert_eq!(
+        index_scan_test(
+            &engine,
+            page,
+            page_output,
+            x,
+            idx_len,
+            data_len,
+            limb_bits,
+            decomp,
+            &mut page_controller,
+            &mut trace_builder,
+            &partial_pk,
+        ),
+        Err(VerificationError::NonZeroCumulativeSum),
         "Expected verification to fail, but it passed"
     );
 }

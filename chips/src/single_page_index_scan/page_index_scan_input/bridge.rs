@@ -86,7 +86,7 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
         interactions.push(Interaction {
             fields: virtual_cols,
             count: VirtualPairCol::single_main(cols_numbered.send_row),
-            argument_index: self.bus_index,
+            argument_index: self.page_bus_index,
         });
 
         // here, we generate the flattened aux columns for IsLessThanTuple, and get the indicator associated with the strict comparison

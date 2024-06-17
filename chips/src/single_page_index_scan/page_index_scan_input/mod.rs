@@ -43,7 +43,7 @@ pub enum PageIndexScanInputAirVariants {
 }
 
 pub struct PageIndexScanInputAir {
-    pub bus_index: usize,
+    pub page_bus_index: usize,
     pub idx_len: usize,
     pub data_len: usize,
 
@@ -52,15 +52,16 @@ pub struct PageIndexScanInputAir {
 
 impl PageIndexScanInputAir {
     pub fn new(
-        bus_index: usize,
+        page_bus_index: usize,
+        range_bus_index: usize,
         idx_len: usize,
         data_len: usize,
-        idx_limb_bits: Vec<usize>,
+        idx_limb_bits: usize,
         decomp: usize,
         cmp: Comp,
     ) -> Self {
         let is_less_than_tuple_air =
-            IsLessThanTupleAir::new(bus_index, idx_limb_bits.clone(), decomp);
+            IsLessThanTupleAir::new(range_bus_index, vec![idx_limb_bits; idx_len], decomp);
         let is_equal_vec_air = IsEqualVecAir::new(idx_len);
 
         let variant_air = match cmp {
@@ -82,7 +83,7 @@ impl PageIndexScanInputAir {
         };
 
         Self {
-            bus_index,
+            page_bus_index,
             idx_len,
             data_len,
             variant_air,
@@ -104,16 +105,17 @@ pub struct PageIndexScanInputChip {
 impl PageIndexScanInputChip {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        bus_index: usize,
+        page_bus_index: usize,
         idx_len: usize,
         data_len: usize,
-        idx_limb_bits: Vec<usize>,
+        idx_limb_bits: usize,
         decomp: usize,
         range_checker: Arc<RangeCheckerGateChip>,
         cmp: Comp,
     ) -> Self {
         let air = PageIndexScanInputAir::new(
-            bus_index,
+            page_bus_index,
+            range_checker.bus_index(),
             idx_len,
             data_len,
             idx_limb_bits,

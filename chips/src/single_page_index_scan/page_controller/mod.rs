@@ -37,31 +37,33 @@ impl<SC: StarkGenericConfig> PageController<SC>
 where
     Val<SC>: AbstractField + PrimeField64,
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        bus_index: usize,
+        page_bus_index: usize,
+        range_bus_index: usize,
         idx_len: usize,
         data_len: usize,
         range_max: u32,
-        idx_limb_bits: Vec<usize>,
+        idx_limb_bits: usize,
         idx_decomp: usize,
         cmp: Comp,
     ) -> Self {
-        let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
+        let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus_index, range_max));
         Self {
             input_chip: PageIndexScanInputChip::new(
-                bus_index,
+                page_bus_index,
                 idx_len,
                 data_len,
-                idx_limb_bits.clone(),
+                idx_limb_bits,
                 idx_decomp,
                 range_checker.clone(),
                 cmp,
             ),
             output_chip: PageIndexScanOutputChip::new(
-                bus_index,
+                page_bus_index,
                 idx_len,
                 data_len,
-                idx_limb_bits.clone(),
+                idx_limb_bits,
                 idx_decomp,
                 range_checker.clone(),
             ),
@@ -268,7 +270,7 @@ where
         x: Vec<u32>,
         idx_len: usize,
         data_len: usize,
-        idx_limb_bits: Vec<usize>,
+        idx_limb_bits: usize,
         idx_decomp: usize,
         trace_committer: &mut TraceCommitter<SC>,
     ) -> (Vec<DenseMatrix<Val<SC>>>, Vec<ProverTraceData<SC>>)
@@ -280,13 +282,13 @@ where
 
         assert!(!page_input.rows.is_empty());
 
-        let bus_index = self.input_chip.air.bus_index;
+        let bus_index = self.input_chip.air.page_bus_index;
 
         self.input_chip = PageIndexScanInputChip::new(
             bus_index,
             idx_len,
             data_len,
-            idx_limb_bits.clone(),
+            idx_limb_bits,
             idx_decomp,
             self.range_checker.clone(),
             self.input_chip.cmp.clone(),
@@ -299,7 +301,7 @@ where
             bus_index,
             idx_len,
             data_len,
-            idx_limb_bits.clone(),
+            idx_limb_bits,
             idx_decomp,
             self.range_checker.clone(),
         );

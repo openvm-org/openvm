@@ -2,27 +2,19 @@ use std::sync::Arc;
 
 use getset::Getters;
 
-use crate::{
-    is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
-    range_gate::RangeCheckerGateChip,
-};
+use crate::{final_page::FinalPageAir, range_gate::RangeCheckerGateChip};
 
 pub mod air;
 pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-#[derive(Default, Getters)]
+#[derive(Getters)]
 pub struct PageIndexScanOutputAir {
-    /// The bus index for sends to range chip
-    pub bus_index: usize,
-    /// The length of each index in the page table
-    pub idx_len: usize,
-    /// The length of each data entry in the page table
-    pub data_len: usize,
+    /// The bus index for page row receives
+    pub page_bus_index: usize,
 
-    #[getset(get = "pub")]
-    is_less_than_tuple_air: IsLessThanTupleAir,
+    pub final_page_air: FinalPageAir,
 }
 
 /// This chip receives rows from the PageIndexScanInputChip and constrains that:
@@ -37,34 +29,34 @@ pub struct PageIndexScanOutputChip {
 
 impl PageIndexScanOutputChip {
     pub fn new(
-        bus_index: usize,
+        page_bus_index: usize,
         idx_len: usize,
         data_len: usize,
-        idx_limb_bits: Vec<usize>,
+        idx_limb_bits: usize,
         decomp: usize,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
         Self {
             air: PageIndexScanOutputAir {
-                bus_index,
-                idx_len,
-                data_len,
-                is_less_than_tuple_air: IsLessThanTupleAir::new(bus_index, idx_limb_bits, decomp),
+                page_bus_index,
+                final_page_air: FinalPageAir::new(
+                    range_checker.bus_index(),
+                    idx_len,
+                    data_len,
+                    idx_limb_bits,
+                    decomp,
+                ),
             },
             range_checker,
         }
     }
 
     pub fn page_width(&self) -> usize {
-        1 + self.air.idx_len + self.air.data_len
+        1 + self.air.final_page_air.idx_len + self.air.final_page_air.data_len
     }
 
     pub fn aux_width(&self) -> usize {
-        1 + IsLessThanTupleAuxCols::<usize>::get_width(
-            self.air.is_less_than_tuple_air().limb_bits(),
-            self.air.is_less_than_tuple_air().decomp(),
-            self.air.idx_len,
-        )
+        self.air.final_page_air.aux_width()
     }
 
     pub fn air_width(&self) -> usize {

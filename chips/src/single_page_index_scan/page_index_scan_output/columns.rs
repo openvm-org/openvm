@@ -1,45 +1,33 @@
-use crate::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
+use crate::{
+    final_page::{columns::FinalPageCols, FinalPageAir},
+    is_less_than_tuple::columns::IsLessThanTupleAuxCols,
+};
 
 pub struct PageIndexScanOutputCols<T> {
-    pub is_alloc: T,
-    pub idx: Vec<T>,
-    pub data: Vec<T>,
-
-    pub less_than_next_idx: T,
-    pub is_less_than_tuple_aux: IsLessThanTupleAuxCols<T>,
+    pub final_page_cols: FinalPageCols<T>,
 }
 
 impl<T: Clone> PageIndexScanOutputCols<T> {
-    pub fn from_slice(
-        slc: &[T],
-        idx_len: usize,
-        data_len: usize,
-        idx_limb_bits: Vec<usize>,
-        decomp: usize,
-    ) -> Self {
+    pub fn from_slice(slc: &[T], final_page_air: FinalPageAir) -> Self {
         Self {
-            is_alloc: slc[0].clone(),
-            idx: slc[1..idx_len + 1].to_vec(),
-            data: slc[idx_len + 1..idx_len + data_len + 1].to_vec(),
-            less_than_next_idx: slc[idx_len + data_len + 1].clone(),
-            is_less_than_tuple_aux: IsLessThanTupleAuxCols::from_slice(
-                &slc[idx_len + data_len + 2..],
-                idx_limb_bits,
-                decomp,
-                idx_len,
+            final_page_cols: FinalPageCols::from_slice(
+                slc,
+                final_page_air.idx_len,
+                final_page_air.data_len,
+                final_page_air.idx_limb_bits,
+                final_page_air.idx_decomp,
             ),
         }
     }
 
-    pub fn get_width(
-        idx_len: usize,
-        data_len: usize,
-        idx_limb_bits: Vec<usize>,
-        decomp: usize,
-    ) -> usize {
-        1 + idx_len
-            + data_len
+    pub fn get_width(final_page_air: FinalPageAir) -> usize {
+        1 + final_page_air.idx_len
+            + final_page_air.data_len
             + 1
-            + IsLessThanTupleAuxCols::<T>::get_width(idx_limb_bits, decomp, idx_len)
+            + IsLessThanTupleAuxCols::<T>::get_width(
+                vec![final_page_air.idx_limb_bits; final_page_air.idx_len],
+                final_page_air.idx_decomp,
+                final_page_air.idx_len,
+            )
     }
 }
