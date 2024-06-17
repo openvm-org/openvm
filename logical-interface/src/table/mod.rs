@@ -103,12 +103,12 @@ impl<I: Index, D: Data> Table<I, D> {
         }
     }
 
-    pub fn to_page(&self, page_size: usize) -> Page {
-        if self.body.len() > page_size {
+    pub fn to_page(&self, height: usize) -> Page {
+        if self.body.len() > height {
             panic!(
-                "Table size {} cannot be bigger than `page_size` {}",
+                "Table height {} cannot be bigger than `height` {}",
                 self.body.len(),
-                page_size
+                height
             );
         }
         let codec =
@@ -134,7 +134,7 @@ impl<I: Index, D: Data> Table<I, D> {
             idx: vec![0; Self::SIZE_I / 2],
             data: vec![0; Self::SIZE_D / 2],
         };
-        let remaining_rows = page_size - self.body.len();
+        let remaining_rows = height - self.body.len();
         for _ in 0..remaining_rows {
             rows.push(zeros.clone());
         }

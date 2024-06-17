@@ -52,11 +52,7 @@ impl Cli {
                 cmd.execute(config).unwrap();
             }
             CliCommand::Cache(cache) => {
-                let cmd = CacheCommand {
-                    page_file: cache.page_file.clone(),
-                    output_file: cache.output_file.clone(),
-                };
-                cmd.execute().unwrap();
+                cache.execute(&config).unwrap();
             }
             CliCommand::Prove(prove) => {
                 prove.execute(config).unwrap();

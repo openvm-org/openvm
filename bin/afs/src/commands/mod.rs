@@ -1,3 +1,4 @@
+use afs_test_utils::page_config::PageConfig;
 use color_eyre::eyre::Result;
 use std::{
     fs::File,
@@ -23,4 +24,16 @@ fn write_bytes(bytes: &Vec<u8>, path: String) -> Result<()> {
     let mut writer = BufWriter::new(file);
     writer.write_all(bytes)?;
     Ok(())
+}
+
+fn create_prefix(config: &PageConfig) -> String {
+    format!(
+        "{:?}_{}_{}_{}_{}_{}",
+        config.page.mode,
+        config.page.index_bytes,
+        config.page.data_bytes,
+        config.page.height,
+        config.page.bits_per_fe,
+        config.page.max_rw_ops
+    )
 }

@@ -1,15 +1,22 @@
+use std::{
+    fs::{remove_file, File},
+    io::{copy, BufReader, BufWriter},
+};
+
 use afs_chips::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
 use afs_stark_backend::{keygen::types::MultiStarkPartialVerifyingKey, prover::types::Proof};
 use afs_test_utils::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
     engine::StarkEngine,
-    page_config::PageConfig,
+    page_config::{PageConfig, PageMode},
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
 use p3_util::log2_strict_usize;
 
 use crate::commands::read_from_path;
+
+use super::create_prefix;
 
 /// `afs verify` command
 /// Uses information from config.toml to verify a proof using the verifying key in `output-folder`
@@ -25,18 +32,35 @@ pub struct VerifyCommand {
     pub proof_file: String,
 
     #[arg(
-        long = "output-folder",
-        short = 'o',
-        help = "The folder to output the keys to",
-        required = false,
-        default_value = "output"
+        long = "db-file",
+        short = 'd',
+        help = "DB file input (default: new empty DB)",
+        required = true
     )]
-    pub output_folder: String,
+    pub init_db_file_path: String,
+
+    #[arg(
+        long = "keys-folder",
+        short = 'k',
+        help = "The folder that contains keys",
+        required = false,
+        default_value = "keys"
+    )]
+    pub keys_folder: String,
 }
 
 impl VerifyCommand {
     /// Execute the `verify` command
     pub fn execute(&self, config: &PageConfig) -> Result<()> {
+        let prefix = create_prefix(&config);
+        match config.page.mode {
+            PageMode::ReadWrite => self.execute_rw(config, prefix)?,
+            PageMode::ReadOnly => panic!(),
+        }
+        Ok(())
+    }
+
+    pub fn execute_rw(&self, config: &PageConfig, prefix: String) -> Result<()> {
         let idx_len = (config.page.index_bytes + 1) / 2;
         let data_len = (config.page.data_bytes + 1) / 2;
         let height = config.page.height;
@@ -49,7 +73,7 @@ impl VerifyCommand {
 
         let checker_trace_degree = config.page.max_rw_ops as usize * 4;
 
-        let idx_limb_bits = config.schema.limb_size as usize;
+        let idx_limb_bits = config.page.bits_per_fe as usize;
 
         let max_log_degree = log2_strict_usize(checker_trace_degree)
             .max(log2_strict_usize(height))
@@ -58,7 +82,8 @@ impl VerifyCommand {
         let idx_decomp = 8;
         println!("Verifying proof file: {}", self.proof_file);
         // verify::verify_ops(&self.proof_file).await?;
-        let encoded_vk = read_from_path(self.output_folder.clone() + "/partial.pk").unwrap();
+        let encoded_vk =
+            read_from_path(self.keys_folder.clone() + "/" + &prefix + ".partial.vk").unwrap();
         let partial_vk: MultiStarkPartialVerifyingKey<BabyBearPoseidon2Config> =
             bincode::deserialize(&encoded_vk).unwrap();
 
@@ -91,7 +116,20 @@ impl VerifyCommand {
             proof,
             &pis,
         );
-        result.unwrap();
+        if result.is_err() {
+            println!("Verification Unsuccessful");
+        } else {
+            println!("Verification Succeeded!");
+            println!("Updates Committed");
+            {
+                let init_file = File::open(self.init_db_file_path.clone()).unwrap();
+                let new_file = File::open(self.init_db_file_path.clone() + ".0").unwrap();
+                let mut reader = BufReader::new(new_file);
+                let mut writer = BufWriter::new(init_file);
+                copy(&mut reader, &mut writer).unwrap();
+            }
+            remove_file(self.init_db_file_path.clone() + ".0").unwrap();
+        }
         Ok(())
     }
 }
