@@ -1,5 +1,7 @@
 # AFS Query Binary
 
+A useful binary to help with querying 
+
 ## Instructions
 
 Display help:
@@ -8,9 +10,49 @@ Display help:
 cargo run --bin afs -- --help
 ```
 
+## Configuration
+
+All configuration is handled via the `cargo.toml` file at the root of the repository.
+
+## Commands
+
+Commands to generate keys, cache traces, prove, and verify. Run these commands from the root of the repository.
+
+### keygen
+
+Generate partial proving and verifying keys.
+
+```bash
+cargo run --bin afs -- keygen -o bin/afs/tests
+```
+
+### cache
+
+Cache a trace of a table.
+
+```bash
+cargo run --bin afs -- cache -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -d bin/afs/tests/input_file_32_1024.mockdb -o bin/afs/tests
+```
+
+### prove
+
+Prove a set of instructions.
+
+```bash
+cargo run --bin afs -- prove -f bin/afs/tests/test_input_file_32_1024.afi -d bin/afs/tests/input_file_32_1024.mockdb -c bin/afs/tests -k bin/afs/tests
+```
+
+### verify
+
+Verify the proof
+
+```bash
+cargo run --bin afs -- verify -f bin/afs/tests/input_file_32_1024.mockdb.prove.bin -d '/Users/yujiang/axiom/afs-prototype/bin/afs/tests/input_file_32_1024.mockdb' -k bin/afs/tests
+```
+
 ## Mock commands
 
-Run these commands from the root of the repository.
+Useful for reading/writing the .mockdb files. Run these commands from the root of the repository. 
 
 ### Read
 
