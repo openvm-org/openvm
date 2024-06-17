@@ -30,48 +30,19 @@ fn load_tables_test(
     // Clearing the range_checker counts
     ij_controller.update_range_checker(decomp);
 
-    let (table_traces, mut prover_data) = ij_controller.load_tables(
+    let prover_data = ij_controller.load_tables(
         t1,
         t2,
         intersector_trace_degree,
         &mut trace_builder.committer,
     );
 
-    let range_checker_trace = ij_controller.range_checker.generate_trace();
+    let proof = ij_controller.prove(engine, partial_pk, trace_builder, prover_data);
 
-    trace_builder.clear();
-
-    trace_builder.load_cached_trace(table_traces.t1_main_trace, prover_data.remove(0));
-    trace_builder.load_cached_trace(table_traces.t2_main_trace, prover_data.remove(0));
-    trace_builder.load_cached_trace(table_traces.output_main_trace, prover_data.remove(0));
-    trace_builder.load_trace(table_traces.t1_aux_trace);
-    trace_builder.load_trace(table_traces.t2_aux_trace);
-    trace_builder.load_trace(table_traces.output_aux_trace);
-    trace_builder.load_trace(table_traces.intersector_trace);
-    trace_builder.load_trace(range_checker_trace);
-
-    trace_builder.commit_current();
-
+    let verifier = engine.verifier();
     let partial_vk = partial_pk.partial_vk();
 
-    let main_trace_data = trace_builder.view(
-        &partial_vk,
-        vec![
-            &ij_controller.t1_chip,
-            &ij_controller.t2_chip,
-            &ij_controller.output_chip,
-            &ij_controller.intersector_chip,
-            &ij_controller.range_checker.air,
-        ],
-    );
-
     let pis = vec![vec![]; partial_vk.per_air.len()];
-
-    let prover = engine.prover();
-    let verifier = engine.verifier();
-
-    let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, partial_pk, main_trace_data, &pis);
 
     let mut challenger = engine.new_challenger();
     verifier.verify(
@@ -174,37 +145,12 @@ fn inner_join_test() {
     );
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-    let t1_main_ptr = keygen_builder.add_cached_main_matrix(ij_controller.t1_chip.table_width());
-    let t2_main_ptr = keygen_builder.add_cached_main_matrix(ij_controller.t2_chip.table_width());
-    let output_main_ptr =
-        keygen_builder.add_cached_main_matrix(ij_controller.output_chip.table_width());
-    let t1_aux_ptr = keygen_builder.add_main_matrix(ij_controller.t1_chip.aux_width());
-    let t2_aux_ptr = keygen_builder.add_main_matrix(ij_controller.t2_chip.aux_width());
-    let output_aux_ptr = keygen_builder.add_main_matrix(ij_controller.output_chip.aux_width());
-
-    keygen_builder.add_partitioned_air(
-        &ij_controller.t1_chip,
+    ij_controller.set_up_keygen_builder(
+        &mut keygen_builder,
         t1_height,
-        0,
-        vec![t1_main_ptr, t1_aux_ptr],
-    );
-
-    keygen_builder.add_partitioned_air(
-        &ij_controller.t2_chip,
         t2_height,
-        0,
-        vec![t2_main_ptr, t2_aux_ptr],
+        intersector_trace_degree,
     );
-
-    keygen_builder.add_partitioned_air(
-        &ij_controller.output_chip,
-        t2_height,
-        0,
-        vec![output_main_ptr, output_aux_ptr],
-    );
-
-    keygen_builder.add_air(&ij_controller.intersector_chip, intersector_trace_degree, 0);
-    keygen_builder.add_air(&ij_controller.range_checker.air, 1 << decomp, 0);
 
     let partial_pk = keygen_builder.generate_partial_pk();
 

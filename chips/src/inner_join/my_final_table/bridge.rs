@@ -1,11 +1,11 @@
 use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
-use p3_field::PrimeField64;
+use p3_field::PrimeField;
 
 use super::MyFinalTableAir;
 use crate::{final_page::columns::FinalPageCols, utils::to_vcols};
 
-impl<F: PrimeField64> AirBridge<F> for MyFinalTableAir {
+impl<F: PrimeField> AirBridge<F> for MyFinalTableAir {
     /// Sends the same thing as FinalPageAir
     fn sends(&self) -> Vec<Interaction<F>> {
         AirBridge::sends(&self.final_air)

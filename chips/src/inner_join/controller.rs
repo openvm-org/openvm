@@ -1,10 +1,14 @@
 use std::{iter, sync::Arc};
 
-use afs_stark_backend::config::Com;
-use afs_stark_backend::prover::trace::{ProverTraceData, TraceCommitter};
+use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
+use afs_stark_backend::keygen::types::MultiStarkPartialProvingKey;
+use afs_stark_backend::keygen::MultiStarkKeygenBuilder;
+use afs_stark_backend::prover::trace::{ProverTraceData, TraceCommitmentBuilder, TraceCommitter};
+use afs_stark_backend::prover::types::Proof;
+use afs_test_utils::engine::StarkEngine;
 use p3_field::{AbstractField, Field, PrimeField};
 use p3_matrix::dense::DenseMatrix;
-use p3_uni_stark::{StarkGenericConfig, Val};
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 use super::{
     intersector::IntersectorAir,
@@ -179,8 +183,7 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
     /// tables (mainly used for the interactions). It also calls the trace generation
     /// for the intersector_chip.
     ///
-    /// Returns the traces T1, T2, output_table, and the intersector_chip, along with
-    /// the ProverTraceData for the actual tables (T1, T2, output_tables). Moreover,
+    /// Returns ProverTraceData for the actual tables (T1, T2, output_tables). Moreover,
     /// a copy of the traces and the commitments for the tables is stored in the struct.
     pub fn load_tables(
         &mut self,
@@ -188,7 +191,7 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
         t2: &Page,
         intersector_trace_degree: usize,
         trace_committer: &mut TraceCommitter<SC>,
-    ) -> (IJTraces<Val<SC>>, Vec<ProverTraceData<SC>>)
+    ) -> Vec<ProverTraceData<SC>>
     where
         Val<SC>: PrimeField,
     {
@@ -276,7 +279,121 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
             intersector_trace,
         });
 
-        (self.traces.clone().unwrap(), prover_data)
+        prover_data
+    }
+
+    /// Sets up keygen with the different trace partitions for all the
+    /// chips the struct owns (t1_chip, t2_chip, output_chip, intersector_chip)
+    pub fn set_up_keygen_builder(
+        &self,
+        keygen_builder: &mut MultiStarkKeygenBuilder<SC>,
+        t1_height: usize,
+        t2_height: usize,
+        intersector_trace_degree: usize,
+    ) where
+        Val<SC>: PrimeField,
+    {
+        let t1_main_ptr = keygen_builder.add_cached_main_matrix(self.t1_chip.table_width());
+        let t2_main_ptr = keygen_builder.add_cached_main_matrix(self.t2_chip.table_width());
+        let output_main_ptr = keygen_builder.add_cached_main_matrix(self.output_chip.table_width());
+        let t1_aux_ptr = keygen_builder.add_main_matrix(self.t1_chip.aux_width());
+        let t2_aux_ptr = keygen_builder.add_main_matrix(self.t2_chip.aux_width());
+        let output_aux_ptr = keygen_builder.add_main_matrix(self.output_chip.aux_width());
+
+        keygen_builder.add_partitioned_air(
+            &self.t1_chip,
+            t1_height,
+            0,
+            vec![t1_main_ptr, t1_aux_ptr],
+        );
+
+        keygen_builder.add_partitioned_air(
+            &self.t2_chip,
+            t2_height,
+            0,
+            vec![t2_main_ptr, t2_aux_ptr],
+        );
+
+        keygen_builder.add_partitioned_air(
+            &self.output_chip,
+            t2_height,
+            0,
+            vec![output_main_ptr, output_aux_ptr],
+        );
+
+        keygen_builder.add_air(&self.intersector_chip, intersector_trace_degree, 0);
+        keygen_builder.add_air(
+            &self.range_checker.air,
+            self.range_checker.range_max() as usize,
+            0,
+        );
+    }
+
+    /// This function clears the trace_builder, loads in the traces for all involved chips
+    /// (including the range_checker), commits them, and then generates the proof.
+    /// cached_traces_prover_data is a vector of ProverTraceData object for the cached tables
+    /// (T1, T2, output_table in that order)
+    pub fn prove(
+        &self,
+        engine: &dyn StarkEngine<SC>,
+        partial_pk: &MultiStarkPartialProvingKey<SC>,
+        trace_builder: &mut TraceCommitmentBuilder<SC>,
+        mut cached_traces_prover_data: Vec<ProverTraceData<SC>>,
+    ) -> Proof<SC>
+    where
+        Val<SC>: PrimeField,
+        Domain<SC>: Send + Sync,
+        SC::Pcs: Sync,
+        Domain<SC>: Send + Sync,
+        PcsProverData<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Challenge: Send + Sync,
+        PcsProof<SC>: Send + Sync,
+    {
+        assert!(cached_traces_prover_data.len() == 3);
+        let traces = self.traces.as_ref().unwrap();
+
+        trace_builder.clear();
+
+        trace_builder.load_cached_trace(
+            traces.t1_main_trace.clone(),
+            cached_traces_prover_data.remove(0),
+        );
+        trace_builder.load_cached_trace(
+            traces.t2_main_trace.clone(),
+            cached_traces_prover_data.remove(0),
+        );
+        trace_builder.load_cached_trace(
+            traces.output_main_trace.clone(),
+            cached_traces_prover_data.remove(0),
+        );
+        trace_builder.load_trace(traces.t1_aux_trace.clone());
+        trace_builder.load_trace(traces.t2_aux_trace.clone());
+        trace_builder.load_trace(traces.output_aux_trace.clone());
+        trace_builder.load_trace(traces.intersector_trace.clone());
+        trace_builder.load_trace(self.range_checker.generate_trace());
+
+        trace_builder.commit_current();
+
+        let partial_vk = partial_pk.partial_vk();
+
+        let main_trace_data = trace_builder.view(
+            &partial_vk,
+            vec![
+                &self.t1_chip,
+                &self.t2_chip,
+                &self.output_chip,
+                &self.intersector_chip,
+                &self.range_checker.air,
+            ],
+        );
+
+        let pis = vec![vec![]; partial_vk.per_air.len()];
+
+        let prover = engine.prover();
+
+        let mut challenger = engine.new_challenger();
+        prover.prove(&mut challenger, partial_pk, main_trace_data, &pis)
     }
 
     /// This function takes two tables T1 and T2 and the range of the foreign key in T2
