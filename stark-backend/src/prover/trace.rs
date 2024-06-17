@@ -3,6 +3,7 @@ use itertools::Itertools;
 use p3_commit::Pcs;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use serde::{Deserialize, Serialize};
 use tracing::info_span;
 
 use crate::{
@@ -125,8 +126,12 @@ impl<'pcs, SC: StarkGenericConfig> TraceCommitter<'pcs, SC> {
 
 /// Prover data for multi-matrix trace commitments.
 /// The data is for the traces committed into a single commitment.
-#[derive(Derivative)]
+#[derive(Derivative, Serialize, Deserialize)]
 #[derivative(Clone(bound = "PcsProverData<SC>: Clone"))]
+#[serde(bound(
+    serialize = "Com<SC>: Serialize, PcsProverData<SC>: Serialize",
+    deserialize = "Com<SC>: Deserialize<'de>, PcsProverData<SC>: Deserialize<'de>"
+))]
 pub struct ProverTraceData<SC: StarkGenericConfig> {
     /// Commitment to the trace matrices.
     pub commit: Com<SC>,
