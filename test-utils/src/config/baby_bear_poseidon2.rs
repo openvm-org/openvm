@@ -118,11 +118,8 @@ pub fn default_engine(pcs_log_degree: usize) -> BabyBearPoseidon2Engine {
 }
 
 fn default_fri_params() -> FriParameters {
-    FriParameters {
-        log_blowup: 4,
-        num_queries: 55,
-        proof_of_work_bits: 0,
-    }
+    // blowup factor = 4
+    super::fri_params::fri_params_with_80_bits_of_security()[2]
 }
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
