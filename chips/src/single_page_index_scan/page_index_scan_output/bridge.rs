@@ -10,11 +10,11 @@ use super::PageIndexScanOutputAir;
 impl<F: PrimeField64> AirBridge<F> for PageIndexScanOutputAir {
     // we receive the rows that satisfy the predicate
     fn receives(&self) -> Vec<Interaction<F>> {
-        let num_cols = PageIndexScanOutputCols::<F>::get_width(self.final_page_air.clone());
+        let num_cols = PageIndexScanOutputCols::<F>::get_width(&self.final_page_air);
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
         let cols_numbered =
-            PageIndexScanOutputCols::<usize>::from_slice(&all_cols, self.final_page_air.clone());
+            PageIndexScanOutputCols::<usize>::from_slice(&all_cols, &self.final_page_air);
 
         let mut cols = vec![];
         cols.push(cols_numbered.final_page_cols.page_cols.is_alloc);
@@ -35,11 +35,11 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanOutputAir {
 
     // we send range checks that are from the IsLessThanTuple subchip
     fn sends(&self) -> Vec<Interaction<F>> {
-        let num_cols = PageIndexScanOutputCols::<F>::get_width(self.final_page_air.clone());
+        let num_cols = PageIndexScanOutputCols::<F>::get_width(&self.final_page_air);
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
         let my_final_page_cols =
-            PageIndexScanOutputCols::<usize>::from_slice(&all_cols, self.final_page_air.clone());
+            PageIndexScanOutputCols::<usize>::from_slice(&all_cols, &self.final_page_air);
 
         SubAirBridge::sends(&self.final_page_air, my_final_page_cols.final_page_cols)
     }

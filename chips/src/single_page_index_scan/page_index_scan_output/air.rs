@@ -12,7 +12,7 @@ impl AirConfig for PageIndexScanOutputAir {
 
 impl<F: Field> BaseAir<F> for PageIndexScanOutputAir {
     fn width(&self) -> usize {
-        PageIndexScanOutputCols::<F>::get_width(self.final_page_air.clone())
+        PageIndexScanOutputCols::<F>::get_width(&self.final_page_air)
     }
 }
 

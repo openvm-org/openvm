@@ -242,7 +242,7 @@ where
                 // constrain the indicator that we used to check the strict comp is correct
                 SubAir::eval(
                     is_less_than_tuple_air,
-                    &mut builder.when_transition(),
+                    builder,
                     is_less_than_tuple_cols.io,
                     is_less_than_tuple_cols.aux,
                 );
@@ -261,7 +261,7 @@ where
                 // constrain the indicator that we used to check the strict comp is correct
                 SubAir::eval(
                     is_less_than_tuple_air,
-                    &mut builder.when_transition(),
+                    builder,
                     is_less_than_tuple_cols.io,
                     is_less_than_tuple_cols.aux,
                 );

@@ -12,6 +12,17 @@ use crate::common::page::Page;
 
 use super::{page_controller::PageController, page_index_scan_input::Comp};
 
+const PAGE_BUS_INDEX: usize = 0;
+const RANGE_BUS_INDEX: usize = 1;
+const IDX_LEN: usize = 2;
+const DATA_LEN: usize = 3;
+const DECOMP: usize = 8;
+const LIMB_BITS: usize = 16;
+const RANGE_MAX: u32 = 1 << DECOMP;
+
+const LOG_PAGE_HEIGHT: usize = 1;
+const PAGE_WIDTH: usize = 1 + IDX_LEN + DATA_LEN;
+
 #[allow(clippy::too_many_arguments)]
 fn index_scan_test(
     engine: &BabyBearPoseidon2Engine,
@@ -61,39 +72,30 @@ fn index_scan_test(
 
 #[test]
 fn test_single_page_index_scan_lt() {
-    let page_bus_index: usize = 0;
-    let range_bus_index: usize = 1;
-    let idx_len: usize = 2;
-    let data_len: usize = 3;
-    let decomp: usize = 8;
-    let limb_bits: usize = 16;
-    let range_max: u32 = 1 << decomp;
-
-    let log_page_height = 1;
-    let page_width = 1 + idx_len + data_len;
+    let cmp = Comp::Lt;
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
-        page_bus_index,
-        range_bus_index,
-        idx_len,
-        data_len,
-        range_max,
-        limb_bits,
-        decomp,
-        Comp::Lt,
+        PAGE_BUS_INDEX,
+        RANGE_BUS_INDEX,
+        IDX_LEN,
+        DATA_LEN,
+        RANGE_MAX,
+        LIMB_BITS,
+        DECOMP,
+        cmp.clone(),
     );
 
     let page: Vec<Vec<u32>> = vec![
         vec![1, 443, 376, 22278, 13998, 58327],
         vec![1, 2883, 7769, 51171, 3989, 12770],
     ];
-    let page = Page::from_2d_vec(&page, idx_len, data_len);
+    let page = Page::from_2d_vec(&page, IDX_LEN, DATA_LEN);
 
     let x: Vec<u32> = vec![2177, 5880];
 
-    let page_output = page_controller.gen_output(page.clone(), x.clone(), page_width, Comp::Lt);
+    let page_output = page_controller.gen_output(page.clone(), x.clone(), PAGE_WIDTH, cmp);
 
-    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(decomp));
+    let engine = config::baby_bear_poseidon2::default_engine(LOG_PAGE_HEIGHT.max(DECOMP));
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -103,10 +105,10 @@ fn test_single_page_index_scan_lt() {
         page,
         page_output,
         x,
-        idx_len,
-        data_len,
-        limb_bits,
-        decomp,
+        IDX_LEN,
+        DATA_LEN,
+        LIMB_BITS,
+        DECOMP,
         &mut page_controller,
         &mut trace_builder,
     )
@@ -115,39 +117,30 @@ fn test_single_page_index_scan_lt() {
 
 #[test]
 fn test_single_page_index_scan_lte() {
-    let page_bus_index: usize = 0;
-    let range_bus_index: usize = 1;
-    let idx_len: usize = 2;
-    let data_len: usize = 3;
-    let decomp: usize = 8;
-    let limb_bits: usize = 16;
-    let range_max: u32 = 1 << decomp;
-
-    let log_page_height = 1;
-    let page_width = 1 + idx_len + data_len;
+    let cmp = Comp::Lte;
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
-        page_bus_index,
-        range_bus_index,
-        idx_len,
-        data_len,
-        range_max,
-        limb_bits,
-        decomp,
-        Comp::Lte,
+        PAGE_BUS_INDEX,
+        RANGE_BUS_INDEX,
+        IDX_LEN,
+        DATA_LEN,
+        RANGE_MAX,
+        LIMB_BITS,
+        DECOMP,
+        cmp.clone(),
     );
 
     let page: Vec<Vec<u32>> = vec![
         vec![1, 443, 376, 22278, 13998, 58327],
         vec![1, 2177, 5880, 51171, 3989, 12770],
     ];
-    let page = Page::from_2d_vec(&page, idx_len, data_len);
+    let page = Page::from_2d_vec(&page, IDX_LEN, DATA_LEN);
 
     let x: Vec<u32> = vec![2177, 5880];
 
-    let page_output = page_controller.gen_output(page.clone(), x.clone(), page_width, Comp::Lte);
+    let page_output = page_controller.gen_output(page.clone(), x.clone(), PAGE_WIDTH, cmp);
 
-    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(decomp));
+    let engine = config::baby_bear_poseidon2::default_engine(LOG_PAGE_HEIGHT.max(DECOMP));
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -157,10 +150,10 @@ fn test_single_page_index_scan_lte() {
         page,
         page_output,
         x,
-        idx_len,
-        data_len,
-        limb_bits,
-        decomp,
+        IDX_LEN,
+        DATA_LEN,
+        LIMB_BITS,
+        DECOMP,
         &mut page_controller,
         &mut trace_builder,
     )
@@ -169,39 +162,30 @@ fn test_single_page_index_scan_lte() {
 
 #[test]
 fn test_single_page_index_scan_eq() {
-    let page_bus_index: usize = 0;
-    let range_bus_index: usize = 1;
-    let idx_len: usize = 2;
-    let data_len: usize = 3;
-    let decomp: usize = 8;
-    let limb_bits: usize = 16;
-    let range_max: u32 = 1 << decomp;
-
-    let log_page_height = 1;
-    let page_width = 1 + idx_len + data_len;
+    let cmp = Comp::Eq;
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
-        page_bus_index,
-        range_bus_index,
-        idx_len,
-        data_len,
-        range_max,
-        limb_bits,
-        decomp,
-        Comp::Eq,
+        PAGE_BUS_INDEX,
+        RANGE_BUS_INDEX,
+        IDX_LEN,
+        DATA_LEN,
+        RANGE_MAX,
+        LIMB_BITS,
+        DECOMP,
+        cmp.clone(),
     );
 
     let page: Vec<Vec<u32>> = vec![
         vec![1, 443, 376, 22278, 13998, 58327],
         vec![1, 2883, 7769, 51171, 3989, 12770],
     ];
-    let page = Page::from_2d_vec(&page, idx_len, data_len);
+    let page = Page::from_2d_vec(&page, IDX_LEN, DATA_LEN);
 
     let x: Vec<u32> = vec![443, 376];
 
-    let page_output = page_controller.gen_output(page.clone(), x.clone(), page_width, Comp::Eq);
+    let page_output = page_controller.gen_output(page.clone(), x.clone(), PAGE_WIDTH, cmp);
 
-    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(decomp));
+    let engine = config::baby_bear_poseidon2::default_engine(LOG_PAGE_HEIGHT.max(DECOMP));
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -211,10 +195,10 @@ fn test_single_page_index_scan_eq() {
         page,
         page_output,
         x,
-        idx_len,
-        data_len,
-        limb_bits,
-        decomp,
+        IDX_LEN,
+        DATA_LEN,
+        LIMB_BITS,
+        DECOMP,
         &mut page_controller,
         &mut trace_builder,
     )
@@ -223,39 +207,30 @@ fn test_single_page_index_scan_eq() {
 
 #[test]
 fn test_single_page_index_scan_gte() {
-    let page_bus_index: usize = 0;
-    let range_bus_index: usize = 1;
-    let idx_len: usize = 2;
-    let data_len: usize = 3;
-    let decomp: usize = 8;
-    let limb_bits: usize = 16;
-    let range_max: u32 = 1 << decomp;
-
-    let log_page_height = 1;
-    let page_width = 1 + idx_len + data_len;
+    let cmp = Comp::Gte;
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
-        page_bus_index,
-        range_bus_index,
-        idx_len,
-        data_len,
-        range_max,
-        limb_bits,
-        decomp,
-        Comp::Gte,
+        PAGE_BUS_INDEX,
+        RANGE_BUS_INDEX,
+        IDX_LEN,
+        DATA_LEN,
+        RANGE_MAX,
+        LIMB_BITS,
+        DECOMP,
+        cmp.clone(),
     );
 
     let page: Vec<Vec<u32>> = vec![
         vec![1, 2177, 5880, 22278, 13998, 58327],
         vec![1, 2883, 7769, 51171, 3989, 12770],
     ];
-    let page = Page::from_2d_vec(&page, idx_len, data_len);
+    let page = Page::from_2d_vec(&page, IDX_LEN, DATA_LEN);
 
     let x: Vec<u32> = vec![2177, 5880];
 
-    let page_output = page_controller.gen_output(page.clone(), x.clone(), page_width, Comp::Gte);
+    let page_output = page_controller.gen_output(page.clone(), x.clone(), PAGE_WIDTH, cmp);
 
-    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(decomp));
+    let engine = config::baby_bear_poseidon2::default_engine(LOG_PAGE_HEIGHT.max(DECOMP));
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -265,10 +240,10 @@ fn test_single_page_index_scan_gte() {
         page,
         page_output,
         x,
-        idx_len,
-        data_len,
-        limb_bits,
-        decomp,
+        IDX_LEN,
+        DATA_LEN,
+        LIMB_BITS,
+        DECOMP,
         &mut page_controller,
         &mut trace_builder,
     )
@@ -277,39 +252,30 @@ fn test_single_page_index_scan_gte() {
 
 #[test]
 fn test_single_page_index_scan_gt() {
-    let page_bus_index: usize = 0;
-    let range_bus_index: usize = 1;
-    let idx_len: usize = 2;
-    let data_len: usize = 3;
-    let decomp: usize = 8;
-    let limb_bits: usize = 16;
-    let range_max: u32 = 1 << decomp;
-
-    let log_page_height = 1;
-    let page_width = 1 + idx_len + data_len;
+    let cmp = Comp::Gt;
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
-        page_bus_index,
-        range_bus_index,
-        idx_len,
-        data_len,
-        range_max,
-        limb_bits,
-        decomp,
-        Comp::Gt,
+        PAGE_BUS_INDEX,
+        RANGE_BUS_INDEX,
+        IDX_LEN,
+        DATA_LEN,
+        RANGE_MAX,
+        LIMB_BITS,
+        DECOMP,
+        cmp.clone(),
     );
 
     let page: Vec<Vec<u32>> = vec![
         vec![1, 2203, 376, 22278, 13998, 58327],
         vec![1, 2883, 7769, 51171, 3989, 12770],
     ];
-    let page = Page::from_2d_vec(&page, idx_len, data_len);
+    let page = Page::from_2d_vec(&page, IDX_LEN, DATA_LEN);
 
     let x: Vec<u32> = vec![2177, 5880];
 
-    let page_output = page_controller.gen_output(page.clone(), x.clone(), page_width, Comp::Gt);
+    let page_output = page_controller.gen_output(page.clone(), x.clone(), PAGE_WIDTH, cmp);
 
-    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(decomp));
+    let engine = config::baby_bear_poseidon2::default_engine(LOG_PAGE_HEIGHT.max(DECOMP));
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -319,10 +285,10 @@ fn test_single_page_index_scan_gt() {
         page,
         page_output,
         x,
-        idx_len,
-        data_len,
-        limb_bits,
-        decomp,
+        IDX_LEN,
+        DATA_LEN,
+        LIMB_BITS,
+        DECOMP,
         &mut page_controller,
         &mut trace_builder,
     )
@@ -331,26 +297,16 @@ fn test_single_page_index_scan_gt() {
 
 #[test]
 fn test_single_page_index_scan_wrong_order() {
-    let page_bus_index: usize = 0;
-    let range_bus_index: usize = 1;
-    let idx_len: usize = 2;
-    let data_len: usize = 3;
-    let decomp: usize = 8;
-    let limb_bits: usize = 16;
-    let range_max: u32 = 1 << decomp;
-
-    let log_page_height = 1;
-
     let cmp = Comp::Lt;
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
-        page_bus_index,
-        range_bus_index,
-        idx_len,
-        data_len,
-        range_max,
-        limb_bits,
-        decomp,
+        PAGE_BUS_INDEX,
+        RANGE_BUS_INDEX,
+        IDX_LEN,
+        DATA_LEN,
+        RANGE_MAX,
+        LIMB_BITS,
+        DECOMP,
         cmp,
     );
 
@@ -358,7 +314,7 @@ fn test_single_page_index_scan_wrong_order() {
         vec![1, 443, 376, 22278, 13998, 58327],
         vec![1, 2883, 7769, 51171, 3989, 12770],
     ];
-    let page = Page::from_2d_vec(&page, idx_len, data_len);
+    let page = Page::from_2d_vec(&page, IDX_LEN, DATA_LEN);
 
     let x: Vec<u32> = vec![2177, 5880];
 
@@ -366,9 +322,9 @@ fn test_single_page_index_scan_wrong_order() {
         vec![0, 0, 0, 0, 0, 0],
         vec![1, 443, 376, 22278, 13998, 58327],
     ];
-    let page_output = Page::from_2d_vec(&page_output, idx_len, data_len);
+    let page_output = Page::from_2d_vec(&page_output, IDX_LEN, DATA_LEN);
 
-    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(decomp));
+    let engine = config::baby_bear_poseidon2::default_engine(LOG_PAGE_HEIGHT.max(DECOMP));
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -382,10 +338,10 @@ fn test_single_page_index_scan_wrong_order() {
             page,
             page_output,
             x,
-            idx_len,
-            data_len,
-            limb_bits,
-            decomp,
+            IDX_LEN,
+            DATA_LEN,
+            LIMB_BITS,
+            DECOMP,
             &mut page_controller,
             &mut trace_builder,
         ),
@@ -396,26 +352,16 @@ fn test_single_page_index_scan_wrong_order() {
 
 #[test]
 fn test_single_page_index_scan_unsorted() {
-    let page_bus_index: usize = 0;
-    let range_bus_index: usize = 1;
-    let idx_len: usize = 2;
-    let data_len: usize = 3;
-    let decomp: usize = 8;
-    let limb_bits: usize = 16;
-    let range_max: u32 = 1 << decomp;
-
-    let log_page_height = 1;
-
     let cmp = Comp::Lt;
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
-        page_bus_index,
-        range_bus_index,
-        idx_len,
-        data_len,
-        range_max,
-        limb_bits,
-        decomp,
+        PAGE_BUS_INDEX,
+        RANGE_BUS_INDEX,
+        IDX_LEN,
+        DATA_LEN,
+        RANGE_MAX,
+        LIMB_BITS,
+        DECOMP,
         cmp,
     );
 
@@ -423,7 +369,7 @@ fn test_single_page_index_scan_unsorted() {
         vec![1, 2883, 7769, 51171, 3989, 12770],
         vec![1, 443, 376, 22278, 13998, 58327],
     ];
-    let page = Page::from_2d_vec(&page, idx_len, data_len);
+    let page = Page::from_2d_vec(&page, IDX_LEN, DATA_LEN);
 
     let x: Vec<u32> = vec![2177, 5880];
 
@@ -431,9 +377,9 @@ fn test_single_page_index_scan_unsorted() {
         vec![0, 0, 0, 0, 0, 0],
         vec![1, 443, 376, 22278, 13998, 58327],
     ];
-    let page_output = Page::from_2d_vec(&page_output, idx_len, data_len);
+    let page_output = Page::from_2d_vec(&page_output, IDX_LEN, DATA_LEN);
 
-    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(decomp));
+    let engine = config::baby_bear_poseidon2::default_engine(LOG_PAGE_HEIGHT.max(DECOMP));
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -447,10 +393,10 @@ fn test_single_page_index_scan_unsorted() {
             page,
             page_output,
             x,
-            idx_len,
-            data_len,
-            limb_bits,
-            decomp,
+            IDX_LEN,
+            DATA_LEN,
+            LIMB_BITS,
+            DECOMP,
             &mut page_controller,
             &mut trace_builder,
         ),
@@ -461,26 +407,16 @@ fn test_single_page_index_scan_unsorted() {
 
 #[test]
 fn test_single_page_index_scan_wrong_answer() {
-    let page_bus_index: usize = 0;
-    let range_bus_index: usize = 1;
-    let idx_len: usize = 2;
-    let data_len: usize = 3;
-    let decomp: usize = 8;
-    let limb_bits: usize = 16;
-    let range_max: u32 = 1 << decomp;
-
-    let log_page_height = 1;
-
     let cmp = Comp::Lt;
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
-        page_bus_index,
-        range_bus_index,
-        idx_len,
-        data_len,
-        range_max,
-        limb_bits,
-        decomp,
+        PAGE_BUS_INDEX,
+        RANGE_BUS_INDEX,
+        IDX_LEN,
+        DATA_LEN,
+        RANGE_MAX,
+        LIMB_BITS,
+        DECOMP,
         cmp,
     );
 
@@ -488,7 +424,7 @@ fn test_single_page_index_scan_wrong_answer() {
         vec![1, 2883, 7769, 51171, 3989, 12770],
         vec![1, 443, 376, 22278, 13998, 58327],
     ];
-    let page = Page::from_2d_vec(&page, idx_len, data_len);
+    let page = Page::from_2d_vec(&page, IDX_LEN, DATA_LEN);
 
     let x: Vec<u32> = vec![2177, 5880];
 
@@ -496,9 +432,9 @@ fn test_single_page_index_scan_wrong_answer() {
         vec![1, 2883, 7769, 51171, 3989, 12770],
         vec![0, 0, 0, 0, 0, 0],
     ];
-    let page_output = Page::from_2d_vec(&page_output, idx_len, data_len);
+    let page_output = Page::from_2d_vec(&page_output, IDX_LEN, DATA_LEN);
 
-    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(decomp));
+    let engine = config::baby_bear_poseidon2::default_engine(LOG_PAGE_HEIGHT.max(DECOMP));
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -512,10 +448,10 @@ fn test_single_page_index_scan_wrong_answer() {
             page,
             page_output,
             x,
-            idx_len,
-            data_len,
-            limb_bits,
-            decomp,
+            IDX_LEN,
+            DATA_LEN,
+            LIMB_BITS,
+            DECOMP,
             &mut page_controller,
             &mut trace_builder,
         ),
