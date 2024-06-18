@@ -1,13 +1,17 @@
 use std::{iter, sync::Arc};
 
-use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
-use afs_stark_backend::keygen::types::{
-    MultiStarkPartialProvingKey, MultiStarkPartialVerifyingKey,
+use afs_stark_backend::{
+    config::{Com, PcsProof, PcsProverData},
+    keygen::{
+        types::{MultiStarkPartialProvingKey, MultiStarkPartialVerifyingKey},
+        MultiStarkKeygenBuilder,
+    },
+    prover::{
+        trace::{ProverTraceData, TraceCommitmentBuilder, TraceCommitter},
+        types::Proof,
+    },
+    verifier::VerificationError,
 };
-use afs_stark_backend::keygen::MultiStarkKeygenBuilder;
-use afs_stark_backend::prover::trace::{ProverTraceData, TraceCommitmentBuilder, TraceCommitter};
-use afs_stark_backend::prover::types::Proof;
-use afs_stark_backend::verifier::VerificationError;
 use afs_test_utils::engine::StarkEngine;
 use p3_field::{AbstractField, Field, PrimeField};
 use p3_matrix::dense::DenseMatrix;
@@ -38,6 +42,24 @@ struct TableCommitments<SC: StarkGenericConfig> {
     t1_commitment: Com<SC>,
     t2_commitment: Com<SC>,
     output_commitment: Com<SC>,
+}
+
+/// A struct containing all bus indices used by the inner join controller
+pub struct IJBuses {
+    pub range_bus_index: usize,
+    pub t1_intersector_bus_index: usize,
+    pub t2_intersector_bus_index: usize,
+    pub intersector_t2_bus_index: usize,
+    pub t1_output_bus_index: usize,
+    pub t2_output_bus_index: usize,
+}
+
+/// A struct containing the basic format of the tables
+#[derive(derive_new::new)]
+pub struct TableFormat {
+    idx_len: usize,
+    data_len: usize,
+    idx_limb_bits: usize,
 }
 
 /// This is a controller the Inner Join operation on tables T1 (with primary key) and T2 (which foreign key).
@@ -84,81 +106,77 @@ struct TableCommitments<SC: StarkGenericConfig> {
 ///   shares with the previous receive the same columns that correspond to the key of T1)
 /// - We need to ensure that all the multiplicity columns (out_mult in T1, fkey_present in T2, out_mult in intersector chip)
 ///   are 0 if is_alloc or is_extra (described below) is 0.
-pub struct InnerJoinController<SC: StarkGenericConfig>
+pub struct FKInnerJoinController<SC: StarkGenericConfig>
 where
     Val<SC>: AbstractField,
 {
-    pub t1_chip: MyInitialTableAir,
-    pub t2_chip: MyInitialTableAir,
-    pub output_chip: MyFinalTableAir,
-    pub intersector_chip: IntersectorAir,
+    t1_chip: MyInitialTableAir,
+    t2_chip: MyInitialTableAir,
+    output_chip: MyFinalTableAir,
+    intersector_chip: IntersectorAir,
 
     traces: Option<IJTraces<Val<SC>>>,
     table_commitments: Option<TableCommitments<SC>>,
 
-    pub range_checker: Arc<RangeCheckerGateChip>,
+    range_checker: Arc<RangeCheckerGateChip>,
 }
 
-impl<SC: StarkGenericConfig> InnerJoinController<SC> {
+impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
+    /// Note that here we refer to the Parent Table (or the Referenced Table) as T1 and
+    /// the Child Table (or the Referencing Table) as T2
     /// [fkey_start, fkey_end) is the range of the foreign key within the data part of T2
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        range_bus_index: usize,
-        t1_intersector_bus_index: usize,
-        t2_intersector_bus_index: usize,
-        intersector_t2_bus_index: usize,
-        t1_output_bus_index: usize,
-        t2_output_bus_index: usize,
+        buses: IJBuses,
+        t1_format: TableFormat,
+        t2_format: TableFormat,
         fkey_start: usize,
         fkey_end: usize,
-        t1_idx_len: usize,
-        t1_data_len: usize,
-        t2_idx_len: usize,
-        t2_data_len: usize,
-        idx_limb_bits: usize,
         decomp: usize,
     ) -> Self
     where
         Val<SC>: Field,
     {
+        // Ensuring the foreign key range is valid
+        assert!(fkey_start < fkey_end && fkey_end <= t2_format.data_len);
+
         Self {
             t1_chip: MyInitialTableAir::new(
-                t1_idx_len,
-                t1_data_len,
+                t1_format.idx_len,
+                t1_format.data_len,
                 TableType::T1 {
-                    t1_intersector_bus_index,
-                    t1_output_bus_index,
+                    t1_intersector_bus_index: buses.t1_intersector_bus_index,
+                    t1_output_bus_index: buses.t1_output_bus_index,
                 },
             ),
             t2_chip: MyInitialTableAir::new(
-                t2_idx_len,
-                t2_data_len,
+                t2_format.idx_len,
+                t2_format.data_len,
                 TableType::T2 {
                     fkey_start,
                     fkey_end,
-                    t2_intersector_bus_index,
-                    intersector_t2_bus_index,
-                    t2_output_bus_index,
+                    t2_intersector_bus_index: buses.t2_intersector_bus_index,
+                    intersector_t2_bus_index: buses.intersector_t2_bus_index,
+                    t2_output_bus_index: buses.t2_output_bus_index,
                 },
             ),
             output_chip: MyFinalTableAir::new(
-                t1_output_bus_index,
-                t2_output_bus_index,
-                range_bus_index,
-                t2_idx_len,
-                t1_data_len,
-                t2_data_len,
+                buses.t1_output_bus_index,
+                buses.t2_output_bus_index,
+                buses.range_bus_index,
+                t2_format.idx_len,
+                t1_format.data_len,
+                t2_format.data_len,
                 fkey_start,
                 fkey_end,
-                idx_limb_bits,
+                t2_format.idx_limb_bits,
                 decomp,
             ),
             intersector_chip: IntersectorAir::new(
-                range_bus_index,
-                t1_intersector_bus_index,
-                t2_intersector_bus_index,
-                intersector_t2_bus_index,
-                t1_idx_len,
+                buses.range_bus_index,
+                buses.t1_intersector_bus_index,
+                buses.t2_intersector_bus_index,
+                buses.intersector_t2_bus_index,
+                t1_format.idx_len,
                 Val::<SC>::bits() - 1, // Here, we use the full range of the field because there's no guarantee that the foreign key is in the idx_limb_bits range
                 decomp,
             ),
@@ -166,13 +184,16 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
             traces: None,
             table_commitments: None,
 
-            range_checker: Arc::new(RangeCheckerGateChip::new(range_bus_index, 1 << decomp)),
+            range_checker: Arc::new(RangeCheckerGateChip::new(
+                buses.range_bus_index,
+                1 << decomp,
+            )),
         }
     }
 
     /// This function creates a new range checker (using decomp).
     /// Helpful for clearing range_checker counts
-    pub fn update_range_checker(&mut self, decomp: usize) {
+    pub fn reset_range_checker(&mut self, decomp: usize) {
         self.range_checker = Arc::new(RangeCheckerGateChip::new(
             self.range_checker.air.bus_index,
             1 << decomp,
@@ -338,7 +359,7 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
     /// (T1, T2, output_table in that order)
     pub fn prove(
         &self,
-        engine: &dyn StarkEngine<SC>,
+        engine: &impl StarkEngine<SC>,
         partial_pk: &MultiStarkPartialProvingKey<SC>,
         trace_builder: &mut TraceCommitmentBuilder<SC>,
         mut cached_traces_prover_data: Vec<ProverTraceData<SC>>,
@@ -403,7 +424,7 @@ impl<SC: StarkGenericConfig> InnerJoinController<SC> {
     /// This function takes a proof (returned by the prove function) and verifies it
     pub fn verify(
         &self,
-        engine: &dyn StarkEngine<SC>,
+        engine: &impl StarkEngine<SC>,
         partial_vk: MultiStarkPartialVerifyingKey<SC>,
         proof: Proof<SC>,
     ) -> Result<(), VerificationError>

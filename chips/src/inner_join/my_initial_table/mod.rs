@@ -19,6 +19,7 @@ pub enum TableType {
     },
 }
 
+#[derive(derive_new::new)]
 pub struct MyInitialTableAir {
     idx_len: usize,
     data_len: usize,
@@ -27,14 +28,6 @@ pub struct MyInitialTableAir {
 }
 
 impl MyInitialTableAir {
-    pub fn new(idx_len: usize, data_len: usize, table_type: TableType) -> Self {
-        Self {
-            idx_len,
-            data_len,
-            table_type,
-        }
-    }
-
     pub fn table_width(&self) -> usize {
         1 + self.idx_len + self.data_len
     }

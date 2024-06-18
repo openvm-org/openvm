@@ -39,6 +39,10 @@ impl<T: Clone> IntersectorIOCols<T> {
             .chain(iter::once(self.is_extra.clone()))
             .collect()
     }
+
+    pub fn width(intersector_air: &IntersectorAir) -> usize {
+        intersector_air.idx_len + 4
+    }
 }
 
 #[derive(Debug)]
@@ -69,6 +73,14 @@ impl<T: Clone> IntersectorAuxCols<T> {
             .chain(iter::once(self.lt_out.clone()))
             .collect()
     }
+
+    pub fn width(intersector_air: &IntersectorAir) -> usize {
+        IsLessThanTupleAuxCols::<usize>::get_width(
+            intersector_air.lt_chip.limb_bits(),
+            intersector_air.lt_chip.decomp(),
+            intersector_air.idx_len,
+        ) + 1
+    }
 }
 
 #[derive(Debug)]
@@ -80,11 +92,13 @@ pub struct IntersectorCols<T> {
 impl<T: Clone> IntersectorCols<T> {
     pub fn from_slice(slc: &[T], intersector_air: &IntersectorAir) -> Self {
         assert!(slc.len() == intersector_air.air_width());
-        let idx_len = intersector_air.idx_len;
 
         Self {
-            io: IntersectorIOCols::from_slice(&slc[..idx_len + 4], intersector_air),
-            aux: IntersectorAuxCols::from_slice(&slc[idx_len + 4..], intersector_air),
+            io: IntersectorIOCols::from_slice(&slc[..intersector_air.io_width()], intersector_air),
+            aux: IntersectorAuxCols::from_slice(
+                &slc[intersector_air.io_width()..],
+                intersector_air,
+            ),
         }
     }
 
@@ -94,5 +108,10 @@ impl<T: Clone> IntersectorCols<T> {
             .into_iter()
             .chain(self.aux.flatten())
             .collect()
+    }
+
+    pub fn width(intersector_air: &IntersectorAir) -> usize {
+        IntersectorIOCols::<usize>::width(intersector_air)
+            + IntersectorAuxCols::<usize>::width(intersector_air)
     }
 }

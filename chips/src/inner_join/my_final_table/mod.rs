@@ -19,7 +19,7 @@ use crate::{
 pub mod bridge;
 
 #[derive(Clone)]
-pub struct MyFinalTableAir {
+pub(super) struct MyFinalTableAir {
     t1_output_bus_index: usize,
     t2_output_bus_index: usize,
 
