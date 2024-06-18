@@ -13,7 +13,7 @@ use super::GroupByAir;
 
 impl<F: Field> BaseAir<F> for GroupByAir {
     fn width(&self) -> usize {
-        GroupByCols::<F>::get_width(self)
+        self.get_width()
     }
 }
 
@@ -63,12 +63,24 @@ impl AirConfig for GroupByAir {
 }
 
 impl<AB: PartitionedAirBuilder> SubAir<AB> for GroupByAir {
-    /// io.0 is local.io, io.1 is next.io. io consists of only the page, including is_alloc
+    /// `io.0` is `local.io`, `io.1` is `next.io`.
+    ///
+    /// `io` consists of only the page, including `is_alloc`
     type IoView = (GroupByIOCols<AB::Var>, GroupByIOCols<AB::Var>);
-    /// aux.0 is local.aux, aux.1 is next.aux. aux consists of everything that isn't io, including
-    /// sorted_group_by, sorted_group_by_alloc, aggregated, and partial_aggregated
+    /// `aux.0` is `local.aux`, `aux.1` is `next.aux`.
+    ///
+    /// `aux` consists of everything that isn't `io`, including
+    /// `sorted_group_by`, `sorted_group_by_alloc`, `aggregated`, and `partial_aggregated`
     type AuxView = (GroupByAuxCols<AB::Var>, GroupByAuxCols<AB::Var>);
 
+    /// Constrains `sorted_group_by` along with `partial_aggregated` to hold correct values
+    /// with minimal constraints.
+    ///
+    /// In fact `sorted_group_by` is not necessarily sorted. The only constraints are that
+    /// allocated rows are placed at the beginning, and like rows are placed together.
+    ///
+    /// Like rows being placed together is enforced by the constraints on `MyFinalPage`, since
+    /// all rows marked `final` are sent to MyFinalPage and hence must be pairwise distinct.
     fn eval(&self, builder: &mut AB, _io: Self::IoView, aux: Self::AuxView) {
         let is_equal_vec_cols = IsEqualVecCols {
             io: IsEqualVecIOCols {

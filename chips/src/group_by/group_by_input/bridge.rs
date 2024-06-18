@@ -21,6 +21,8 @@ impl<F: PrimeField64> AirBridge<F> for GroupByAir {
 }
 
 impl<F: PrimeField64> SubAirBridge<F> for GroupByAir {
+    /// Sends desired columns (`sorted_group_by` and `aggregated`) internally with count
+    /// `is_alloc`, and sends answer columns with count `is_final`.
     fn sends(&self, col_indices: GroupByCols<usize>) -> Vec<Interaction<F>> {
         let internal_sent_fields = self
             .group_by_cols
@@ -53,6 +55,8 @@ impl<F: PrimeField64> SubAirBridge<F> for GroupByAir {
         ]
     }
 
+    /// Receives desired columns (`sorted_group_by` and `aggregated`) internally with count
+    /// `is_alloc`.
     fn receives(&self, col_indices: GroupByCols<usize>) -> Vec<Interaction<F>> {
         let internal_received_fields: Vec<VirtualPairCol<F>> = col_indices
             .aux

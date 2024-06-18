@@ -1,5 +1,7 @@
 use super::page_controller::PageController;
 use crate::common::page::Page;
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
 use std::cmp::max;
 
 use afs_stark_backend::{
@@ -131,6 +133,21 @@ impl GroupByTest {
     }
 }
 
+fn perturb_page(
+    trace: p3_matrix::dense::DenseMatrix<p3_baby_bear::BabyBear>,
+    page_width: usize,
+    rng: &mut impl Rng,
+    max_value: usize,
+) -> p3_matrix::dense::DenseMatrix<p3_baby_bear::BabyBear> {
+    let height = trace.values.len() / trace.width;
+    let perturbed_x = rng.gen_range(0..height);
+    let perturbed_y = rng.gen_range(0..page_width);
+    let mut perturbed_trace = trace.clone();
+    perturbed_trace.values[perturbed_x * page_width + perturbed_y] =
+        BabyBear::from_canonical_u32(rng.gen_range(0..max_value) as u32);
+    perturbed_trace
+}
+
 #[allow(clippy::too_many_arguments)]
 fn load_page_test(
     engine: &BabyBearPoseidon2Engine,
@@ -138,6 +155,9 @@ fn load_page_test(
     page_controller: &mut PageController<BabyBearPoseidon2Config>,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
     partial_pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
+    perturb: bool,
+    rng: &mut impl Rng,
+    test: &GroupByTest,
 ) -> Result<(), VerificationError> {
     let (group_by_traces, _group_by_commitments, mut prover_data) =
         page_controller.load_page(page_init, &trace_builder.committer);
@@ -147,7 +167,19 @@ fn load_page_test(
     trace_builder.clear();
 
     trace_builder.load_cached_trace(group_by_traces.group_by_trace, prover_data.remove(0));
-    trace_builder.load_cached_trace(group_by_traces.final_page_trace, prover_data.remove(0));
+    if !perturb {
+        trace_builder.load_cached_trace(group_by_traces.final_page_trace, prover_data.remove(0));
+    } else {
+        trace_builder.load_cached_trace(
+            perturb_page(
+                group_by_traces.final_page_trace,
+                page_init.width(),
+                rng,
+                test.max_idx(),
+            ),
+            prover_data.remove(0),
+        );
+    }
     trace_builder.load_trace(group_by_traces.group_by_aux_trace);
     trace_builder.load_trace(group_by_traces.final_page_aux_trace);
     trace_builder.load_trace(range_checker_trace);
@@ -190,8 +222,11 @@ fn load_page_test(
 
 #[test]
 fn group_by_test() {
-    let test = GroupByTest::new(20, 3, 3, 10, 4);
     let mut rng = create_seeded_rng();
+    let page_width = rng.gen_range(2..20);
+    let random_value = rng.gen_range(1..page_width - 1);
+    let log_page_height = rng.gen_range(1..6);
+    let test = GroupByTest::new(page_width, random_value, log_page_height, 10, 4);
 
     let mut page_controller = PageController::new(
         test.page_width,
@@ -215,10 +250,10 @@ fn group_by_test() {
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-    let alloc_rows_arr = 0..test.page_height() - 1;
+    let alloc_rows_arr: Vec<usize> = (0..test.page_height() - 1).collect();
 
-    for rows_allocated in alloc_rows_arr {
-        let page = test.generate_page(&mut rng, rows_allocated);
+    for rows_allocated in alloc_rows_arr.iter() {
+        let page = test.generate_page(&mut rng, *rows_allocated);
 
         load_page_test(
             &engine,
@@ -226,9 +261,38 @@ fn group_by_test() {
             &mut page_controller,
             &mut trace_builder,
             &partial_pk,
+            false,
+            &mut rng,
+            &test,
         )
         .expect("Verification failed");
 
         page_controller.refresh_range_checker();
+    }
+
+    for rows_allocated in alloc_rows_arr.iter() {
+        let page = test.generate_page(&mut rng, *rows_allocated);
+
+        for _ in 0..test.page_height() {
+            USE_DEBUG_BUILDER.with(|debug| {
+                *debug.lock().unwrap() = false;
+            });
+
+            assert_eq!(
+                load_page_test(
+                    &engine,
+                    &page,
+                    &mut page_controller,
+                    &mut trace_builder,
+                    &partial_pk,
+                    true,
+                    &mut rng,
+                    &test,
+                ),
+                Err(VerificationError::OodEvaluationMismatch),
+                "Expected constraint to fail"
+            );
+            page_controller.refresh_range_checker();
+        }
     }
 }

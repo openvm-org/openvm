@@ -18,7 +18,7 @@ impl MyFinalPageAir {
     }
 
     /// As a minimal wrapper of [FinalPageAir], generates the auxiliary trace required to ensure proper formating
-    /// of the page using FinalPageAir.
+    /// of the page using FinalPageAir. Includes allocated rows.
     pub fn gen_aux_trace<SC: StarkGenericConfig>(
         &self,
         page: &Page,

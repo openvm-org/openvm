@@ -2,18 +2,29 @@ use super::GroupByAir;
 use crate::is_equal_vec::columns::IsEqualVecAuxCols;
 use std::ops::Range;
 
-// Since GroupByChip contains a LessThanChip subchip and an IsEqualVecChip subchip, a subset of the
-// columns are those of the LessThanChip and IsEqualVecChip
+/// Since `GroupByChip` contains a `LessThanChip` subchip and an `IsEqualVecChip` subchip, a subset of
+/// the columns are those of the `LessThanChip` and `IsEqualVecChip`.
+///
+/// The `io` columns consist only of the cached page, because output is sent to `MyFinalPage`. The
+/// `aux` columns are all other columns.
+///
+/// Implements two methods:
+///
+/// * `from_slice`: Takes a slice and returns a `GroupByCols` struct.
+/// * `index_map`: Returns a `GroupByColsIndexMap` struct, used to index all other structs and
+///   defines the order of segments in a slice.
 pub struct GroupByCols<T> {
     pub io: GroupByIOCols<T>,
     pub aux: GroupByAuxCols<T>,
 }
 
+/// The `io` columns consist only of the cached page, because output is sent to `MyFinalPage`.
 pub struct GroupByIOCols<T> {
     pub is_allocated: T,
     pub page: Vec<T>,
 }
 
+/// The `aux` columns are all non-cached columns.
 pub struct GroupByAuxCols<T> {
     pub sorted_group_by_alloc: T,
     pub sorted_group_by: Vec<T>,
@@ -25,6 +36,8 @@ pub struct GroupByAuxCols<T> {
     pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
 }
 
+/// Maps parts of the `GroupByCols` to their indices. Note that `sorted_group_by_combined_range` is
+/// a range containing `sorted_group_by_alloc` and `sorted_group_by_range`.
 pub struct GroupByColsIndexMap {
     pub allocated_idx: usize,
     pub page_range: Range<usize>,
@@ -39,6 +52,7 @@ pub struct GroupByColsIndexMap {
 }
 
 impl<T: Clone> GroupByCols<T> {
+    /// Takes a slice and returns a `GroupByCols` struct.
     pub fn from_slice(slc: &[T], group_by_air: &GroupByAir) -> Self {
         assert!(slc.len() == group_by_air.get_width());
         let index_map = GroupByCols::<T>::index_map(group_by_air);
@@ -72,6 +86,8 @@ impl<T: Clone> GroupByCols<T> {
         }
     }
 
+    /// Returns a `GroupByColsIndexMap` struct, used to index all other structs and defines the
+    /// order of segments in a slice.
     pub fn index_map(group_by_air: &GroupByAir) -> GroupByColsIndexMap {
         let num_group_by = group_by_air.group_by_cols.len();
         let eq_vec_width = IsEqualVecAuxCols::<T>::get_width(num_group_by + 1);
@@ -100,22 +116,5 @@ impl<T: Clone> GroupByCols<T> {
             eq_next: eq_next_idx,
             is_equal_vec_aux_range,
         }
-    }
-
-    pub fn get_width(group_by_air: &GroupByAir) -> usize {
-        let index_map = GroupByCols::<T>::index_map(group_by_air);
-        index_map.is_equal_vec_aux_range.end
-    }
-}
-
-impl<T> GroupByIOCols<T> {
-    pub fn get_width(&self) -> usize {
-        self.page.len() + 1
-    }
-}
-
-impl<T: Clone> GroupByAuxCols<T> {
-    pub fn get_width(&self) -> usize {
-        self.sorted_group_by.len() + 4 + self.is_equal_vec_aux.get_self_width()
     }
 }
