@@ -73,9 +73,9 @@ impl <F: PrimeField64> ProgramExecution<F> {
 struct Memory<F> {
     data: HashMap<F, HashMap<F, F>>,
     log: Vec<MemoryAccess<F>>,
-    clock: usize,
-    reads: VecDeque<MemoryAccess<F>>,
-    writes: VecDeque<MemoryAccess<F>>,
+    clock_cycle: usize,
+    reads_this_cycle: VecDeque<MemoryAccess<F>>,
+    writes_this_cycle: VecDeque<MemoryAccess<F>>,
 }
 
 impl <F: PrimeField64> Memory<F> {
@@ -87,9 +87,9 @@ impl <F: PrimeField64> Memory<F> {
         Self {
             data,
             log: vec![],
-            clock: 0,
-            reads: VecDeque::new(),
-            writes: VecDeque::new(),
+            clock_cycle: 0,
+            reads_this_cycle: VecDeque::new(),
+            writes_this_cycle: VecDeque::new(),
         }
     }
 
@@ -99,11 +99,11 @@ impl <F: PrimeField64> Memory<F> {
         } else {
             self.data[&address_space][&address]
         };
-        let read = MemoryAccess { clock: self.clock, is_write: false, address_space, address, value };
+        let read = MemoryAccess { clock: self.clock_cycle, is_write: false, address_space, address, value };
         if read.address_space != F::zero() {
             self.log.push(read);
         }
-        self.reads.push_back(read);
+        self.reads_this_cycle.push_back(read);
         value
     }
 
@@ -111,18 +111,18 @@ impl <F: PrimeField64> Memory<F> {
         if address_space == F::zero() {
             panic!("Attempted to write to address space 0");
         } else {
-            let write = MemoryAccess { clock: self.clock, is_write: true, address_space, address, value };
+            let write = MemoryAccess { clock: self.clock_cycle, is_write: true, address_space, address, value };
             self.log.push(write);
-            self.writes.push_back(write);
+            self.writes_this_cycle.push_back(write);
 
             self.data.get_mut(&address_space).unwrap().insert(address, value);
         }
     }
 
     fn complete_clock_cycle(&mut self) -> (VecDeque<MemoryAccess<F>>, VecDeque<MemoryAccess<F>>) {
-        self.clock += 1;
-        let reads = std::mem::take(&mut self.reads);
-        let writes = std::mem::take(&mut self.writes);
+        self.clock_cycle += 1;
+        let reads = std::mem::take(&mut self.reads_this_cycle);
+        let writes = std::mem::take(&mut self.writes_this_cycle);
         (reads, writes)
     }
 }

@@ -74,6 +74,7 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
         builder.assert_one(sum_flags);
         builder.assert_eq(opcode, match_opcode);
 
+        
         // LOADF: d[a] <- e[d[c] + b]
         let mut here = builder.when(operation_flags[LOADW as usize]);
 
@@ -85,9 +86,9 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
 
         here.assert_eq(write.address_space, d);
         here.assert_eq(write.address, a);
-        here.assert_eq(write.value, read1.value);
+        here.assert_eq(write.value, read2.value);
 
-        here.assert_eq(next_pc, pc + inst_width.clone());
+        here.when_transition().assert_eq(next_pc, pc + inst_width.clone());
 
         // STOREF: e[d[c] + b] <- d[a]
         let mut here = builder.when(operation_flags[STOREW as usize]);
@@ -99,9 +100,9 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
 
         here.assert_eq(write.address_space, e);
         here.assert_eq(write.address, read1.value + b);
-        here.assert_eq(write.value, read1.value);
+        here.assert_eq(write.value, read2.value);
 
-        here.assert_eq(next_pc, pc + inst_width.clone());
+        here.when_transition().assert_eq(next_pc, pc + inst_width.clone());
 
 
         // JAL: d[a] <- pc + INST_WIDTH, pc <- pc + b
@@ -111,7 +112,7 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
         here.assert_eq(write.address, a);
         here.assert_eq(write.value, pc + AB::Expr::from_canonical_u64(INST_WIDTH.try_into().unwrap()));
 
-        here.assert_eq(next_pc, pc + b);
+        here.when_transition().assert_eq(next_pc, pc + b);
 
         // BEQ: If d[a] = e[b], pc <- pc + c
         let mut here = builder.when(operation_flags[BEQ as usize]);
@@ -122,8 +123,8 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
         here.assert_eq(read2.address_space, e);
         here.assert_eq(read2.address, b);
 
-        here.when(beq_check).assert_eq(next_pc, pc + c);
-        here.when(AB::Expr::one() - beq_check).assert_eq(next_pc, pc + inst_width.clone());
+        here.when_transition().when(beq_check).assert_eq(next_pc, pc + c);
+        here.when_transition().when(AB::Expr::one() - beq_check).assert_eq(next_pc, pc + inst_width.clone());
 
         let is_equal_io_cols = IsEqualIOCols {
             x: read1.value,
@@ -144,8 +145,8 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
         here.assert_eq(read2.address_space, e);
         here.assert_eq(read2.address, b);
 
-        here.when(beq_check).assert_eq(next_pc, pc + inst_width.clone());
-        here.when(AB::Expr::one() - beq_check).assert_eq(next_pc, pc + c);
+        here.when_transition().when(beq_check).assert_eq(next_pc, pc + inst_width.clone());
+        here.when_transition().when(AB::Expr::one() - beq_check).assert_eq(next_pc, pc + c);
 
         // arithmetic operations
         if self.options.field_arithmetic_enabled {
@@ -167,7 +168,7 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
             here.assert_eq(write.address_space, d);
             here.assert_eq(write.address, a);
 
-            here.assert_eq(next_pc, pc + inst_width.clone());
+            here.when_transition().assert_eq(next_pc, pc + inst_width.clone());
         }
 
         // immediate calculation
