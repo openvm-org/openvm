@@ -152,6 +152,8 @@ impl ProveCommand {
         let init_prover_data: ProverTraceData<BabyBearPoseidon2Config> =
             bincode::deserialize(&init_prover_data_encoded).unwrap();
 
+        let span = tracing::info_span!("Trace generation");
+        let _enter = span.enter();
         let (page_traces, mut prover_data) = page_controller.load_page_and_ops(
             &page_init,
             zk_ops.clone(),
@@ -165,6 +167,7 @@ impl ProveCommand {
         // Generating trace for ops_sender and making sure it has height num_ops
         let ops_sender_trace =
             ops_sender.generate_trace_testing(&zk_ops, config.page.max_rw_ops as usize, 1);
+        drop(_enter);
 
         // Clearing the range_checker counts
         page_controller.update_range_checker(idx_decomp);
@@ -178,7 +181,7 @@ impl ProveCommand {
         trace_builder.load_trace(range_checker_trace);
         trace_builder.load_trace(ops_sender_trace);
 
-        trace_builder.commit_current();
+        tracing::info_span!("Trace commitment").in_scope(|| trace_builder.commit_current());
         let encoded_pk =
             read_from_path(self.keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
         let partial_pk: MultiStarkPartialProvingKey<BabyBearPoseidon2Config> =

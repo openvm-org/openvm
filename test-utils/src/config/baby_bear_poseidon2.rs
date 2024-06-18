@@ -119,8 +119,8 @@ pub fn default_engine(pcs_log_degree: usize) -> BabyBearPoseidon2Engine {
 
 fn default_fri_params() -> FriParameters {
     FriParameters {
-        log_blowup: 4,
-        num_queries: 55,
+        log_blowup: 3,
+        num_queries: 65,
         proof_of_work_bits: 0,
     }
 }
