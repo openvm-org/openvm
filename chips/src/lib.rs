@@ -18,6 +18,7 @@ pub mod pagebtree;
 /// Chip to range check a value has less than a fixed number of bits
 pub mod range;
 pub mod range_gate;
+pub mod single_page_index_scan;
 pub mod sub_chip;
 pub mod sum;
 mod utils;

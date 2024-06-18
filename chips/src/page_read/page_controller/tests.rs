@@ -1,6 +1,7 @@
 use std::iter;
 
 use crate::page_read::page_controller;
+use afs_stark_backend::prover::USE_DEBUG_BUILDER;
 use afs_stark_backend::verifier::VerificationError;
 use afs_stark_backend::{
     keygen::{types::MultiStarkPartialProvingKey, MultiStarkKeygenBuilder},
@@ -167,6 +168,10 @@ fn page_read_chip_test() {
     )
     .expect("Verification failed");
 
+    // We expect failure, so we turn off debug assertions
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
     let result = load_page_test(
         &engine,
         &pages[0],

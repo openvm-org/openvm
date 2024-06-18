@@ -1,4 +1,4 @@
-use afs_stark_backend::verifier::VerificationError;
+use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::interaction::{
     dummy_interaction_air::DummyInteractionAir, verify_interactions,
 };
@@ -116,6 +116,9 @@ fn test_interaction_stark_multi_rows_neg() {
         2,
     );
     let receiver_air = DummyInteractionAir::new(1, false, 0);
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
     let res = verify_interactions(
         vec![sender_trace, receiver_trace],
         vec![&sender_air, &receiver_air],
@@ -207,6 +210,9 @@ fn test_interaction_stark_multi_senders_neg() {
         2,
     );
     let receiver_air = DummyInteractionAir::new(1, false, 0);
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
     let res = verify_interactions(
         vec![sender_trace1, sender_trace2, receiver_trace],
         vec![&sender_air, &sender_air, &receiver_air],

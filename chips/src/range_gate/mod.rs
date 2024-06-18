@@ -36,6 +36,10 @@ impl RangeCheckerGateChip {
         }
     }
 
+    pub fn bus_index(&self) -> usize {
+        self.air.bus_index
+    }
+
     pub fn range_max(&self) -> u32 {
         self.air.range_max
     }
