@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::{iter, panic};
 
 use afs_stark_backend::{
@@ -20,8 +20,7 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 
-use crate::common::page::Page;
-use crate::common::page_cols::PageCols;
+use crate::common::{page::Page, page_cols::PageCols};
 use crate::page_rw_checker::{
     self,
     page_controller::{self, OpType, Operation},
@@ -154,25 +153,15 @@ fn page_read_write_test() {
     let max_idx = 1 << idx_limb_bits;
 
     // Generating a random page with distinct indices
-    let mut page: Vec<Vec<u32>> = vec![];
-    let mut idx_data_map = HashMap::new();
-    for _ in 0..page_height {
-        let mut idx;
-        loop {
-            idx = (0..idx_len)
-                .map(|_| rng.gen::<u32>() % max_idx)
-                .collect::<Vec<u32>>();
-            if !idx_data_map.contains_key(&idx) {
-                break;
-            }
-        }
-
-        let data: Vec<u32> = (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect();
-        idx_data_map.insert(idx.clone(), data.clone());
-        page.push(iter::once(1).chain(idx).chain(data).collect());
-    }
-
-    let mut page = Page::from_2d_vec(&page, idx_len, data_len);
+    let mut page = Page::random(
+        &mut rng,
+        idx_len,
+        data_len,
+        max_idx,
+        MAX_VAL,
+        page_height,
+        page_height,
+    );
 
     // Generating random sorted distinct timestamps for operations
     let mut clks = HashSet::new();
@@ -184,12 +173,7 @@ fn page_read_write_test() {
 
     let mut ops: Vec<Operation> = vec![];
     for &clk in clks.iter() {
-        let idx = idx_data_map
-            .iter()
-            .nth(rng.gen::<usize>() % idx_data_map.len())
-            .unwrap()
-            .0
-            .to_vec();
+        let idx = page.get_random_idx(&mut rng);
 
         let op_type = {
             if rng.gen::<bool>() {
@@ -201,14 +185,14 @@ fn page_read_write_test() {
 
         let data = {
             if op_type == OpType::Read {
-                idx_data_map[&idx].to_vec()
+                page[&idx].clone()
             } else {
                 (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect()
             }
         };
 
         if op_type == OpType::Write {
-            idx_data_map.insert(idx.clone(), data.clone());
+            page[&idx].clone_from(&data);
         }
 
         ops.push(Operation::new(clk, idx, data, op_type));
@@ -225,7 +209,9 @@ fn page_read_write_test() {
     );
     let ops_sender = DummyInteractionAir::new(idx_len + data_len + 2, true, ops_bus_index);
 
-    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(3 + log_num_ops));
+    let engine = config::baby_bear_poseidon2::default_engine(
+        idx_decomp.max(log_page_height.max(3 + log_num_ops)),
+    );
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
     let init_page_ptr = keygen_builder.add_cached_main_matrix(page_width);

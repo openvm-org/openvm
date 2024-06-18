@@ -3,8 +3,8 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::MyFinalPageAir;
-use crate::{final_page::columns::FinalPageCols, sub_chip::AirConfig};
+use super::{columns::MyFinalPageCols, MyFinalPageAir};
+use crate::sub_chip::AirConfig;
 
 impl<F: Field> BaseAir<F> for MyFinalPageAir {
     fn width(&self) -> usize {
@@ -13,7 +13,7 @@ impl<F: Field> BaseAir<F> for MyFinalPageAir {
 }
 
 impl AirConfig for MyFinalPageAir {
-    type Cols<T> = FinalPageCols<T>;
+    type Cols<T> = MyFinalPageCols<T>;
 }
 
 impl<AB: PartitionedAirBuilder> Air<AB> for MyFinalPageAir
