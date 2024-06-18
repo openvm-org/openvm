@@ -5,6 +5,7 @@ members = [
     "test-utils",
     "derive",
     "logical-interface",
+    "vm",
 ]
 resolver = "2"
 
