@@ -61,7 +61,7 @@ impl<F: PrimeField64> SubAirBridge<F> for GroupByAir {
             .chain(std::iter::once(&col_indices.aux.aggregated))
             .map(|&i| VirtualPairCol::single_main(i))
             .collect();
-        let internal_count = VirtualPairCol::single_main(col_indices.io.is_allocated);
+        let internal_count = VirtualPairCol::single_main(col_indices.aux.sorted_group_by_alloc);
 
         vec![Interaction {
             fields: internal_received_fields,

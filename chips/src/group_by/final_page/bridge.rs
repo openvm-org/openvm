@@ -34,11 +34,6 @@ impl<F: PrimeField64> AirBridge<F> for MyFinalPageAir {
             .map(VirtualPairCol::single_main)
             .collect::<Vec<_>>();
 
-        // let page_cols = [1, 2]
-        //     .iter()
-        //     .map(|&x| VirtualPairCol::single_main(x))
-        //     .collect::<Vec<_>>();
-
         let input_count = VirtualPairCol::single_main(alloc_idx);
 
         vec![Interaction {

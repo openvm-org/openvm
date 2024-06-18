@@ -15,6 +15,7 @@ pub struct GroupByIOCols<T> {
 }
 
 pub struct GroupByAuxCols<T> {
+    pub sorted_group_by_alloc: T,
     pub sorted_group_by: Vec<T>,
     pub aggregated: T,
     pub partial_aggregated: T,
@@ -42,6 +43,7 @@ impl<T: Clone> GroupByCols<T> {
 
         let is_allocated = slc[index_map.allocated_idx].clone();
         let page = slc[index_map.page_range].to_vec();
+        let sorted_group_by_alloc = slc[index_map.sorted_group_by_alloc].clone();
         let sorted_group_by = slc[index_map.sorted_group_by_range].to_vec();
         let aggregated = slc[index_map.aggregated].clone();
         let partial_aggregated = slc[index_map.partial_aggregated].clone();
@@ -55,6 +57,7 @@ impl<T: Clone> GroupByCols<T> {
         Self {
             io: GroupByIOCols { is_allocated, page },
             aux: GroupByAuxCols {
+                sorted_group_by_alloc,
                 sorted_group_by,
                 aggregated,
                 partial_aggregated,

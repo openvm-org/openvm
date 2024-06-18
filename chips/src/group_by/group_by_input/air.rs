@@ -83,9 +83,16 @@ impl<AB: PartitionedAirBuilder> SubAir<AB> for GroupByAir {
             is_equal_vec_cols.io,
             is_equal_vec_cols.aux,
         );
-        builder.when_last_row().assert_zero(aux.0.eq_next);
+
+        // if sorted_group_by_alloc changes, then is_final must be 1
+        builder.when_transition().assert_eq(
+            aux.0.sorted_group_by_alloc - aux.1.sorted_group_by_alloc,
+            (aux.0.sorted_group_by_alloc - aux.1.sorted_group_by_alloc) * aux.0.is_final,
+        );
 
         builder.assert_one(aux.0.eq_next + aux.0.is_final);
+
+        builder.assert_eq(aux.0.is_final, aux.0.is_final * aux.0.sorted_group_by_alloc);
 
         builder
             .when_first_row()
@@ -94,6 +101,11 @@ impl<AB: PartitionedAirBuilder> SubAir<AB> for GroupByAir {
         builder.when_transition().assert_eq(
             aux.1.partial_aggregated,
             aux.0.eq_next * aux.0.partial_aggregated + aux.1.aggregated,
+        );
+
+        builder.when_transition().assert_eq(
+            aux.1.sorted_group_by_alloc * aux.0.sorted_group_by_alloc,
+            aux.1.sorted_group_by_alloc,
         );
     }
 }

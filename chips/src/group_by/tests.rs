@@ -216,7 +216,7 @@ fn group_by_test() {
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-    let alloc_rows_arr = vec![test.page_height() - 1];
+    let alloc_rows_arr = vec![test.page_height()];
 
     for rows_allocated in alloc_rows_arr {
         let page = test.generate_page(&mut rng, rows_allocated);
