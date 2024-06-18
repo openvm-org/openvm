@@ -190,8 +190,7 @@ fn load_page_test(
 
 #[test]
 fn group_by_test() {
-    let test = GroupByTest::new(4, 1, 0, 10, 4);
-    // let test = GroupByTest::new(20, 3, 3, 10, 4);
+    let test = GroupByTest::new(20, 3, 3, 10, 4);
     let mut rng = create_seeded_rng();
 
     let mut page_controller = PageController::new(
@@ -216,9 +215,7 @@ fn group_by_test() {
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-    // let alloc_rows_arr = (0..test.page_height()-1).collect::<Vec<_>>();
-    // let alloc_rows_arr = vec![test.page_height()];
-    let alloc_rows_arr = vec![0, 1];
+    let alloc_rows_arr = 0..test.page_height() - 1;
 
     for rows_allocated in alloc_rows_arr {
         let page = test.generate_page(&mut rng, rows_allocated);
@@ -231,5 +228,7 @@ fn group_by_test() {
             &partial_pk,
         )
         .expect("Verification failed");
+
+        page_controller.refresh_range_checker();
     }
 }

@@ -119,4 +119,11 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             prover_data,
         )
     }
+
+    pub fn refresh_range_checker(&mut self) {
+        self.range_checker = Arc::new(RangeCheckerGateChip::new(
+            self.range_checker.air.bus_index,
+            self.range_checker.air.range_max,
+        ));
+    }
 }
