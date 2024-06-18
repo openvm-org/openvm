@@ -49,7 +49,7 @@ impl<F: PrimeField64> SubAirBridge<F> for OfflineChecker {
 
         let mut interactions = vec![Interaction {
             fields: page_cols,
-            count: VirtualPairCol::single_main(col_indices.is_final_x3),
+            count: VirtualPairCol::single_main(col_indices.is_final_write_x3),
             argument_index: self.page_bus_index,
         }];
 

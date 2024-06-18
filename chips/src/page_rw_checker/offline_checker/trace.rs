@@ -62,15 +62,15 @@ impl OfflineChecker {
         let gen_row = |is_first_row: &mut bool,
                        page: &mut Page,
                        idx: usize,
-                       is_initial: u8,
-                       is_final: u8,
-                       is_internal: u8,
+                       is_initial: bool,
+                       is_final: bool,
+                       is_internal: bool,
                        clk: usize,
                        op_type: u8,
                        last_idx: &mut Vec<u32>,
                        last_data: &mut Vec<u32>,
                        last_clk: &mut usize,
-                       is_extra: u8| {
+                       is_extra: bool| {
             // Make sure the row in the page is allocated
             assert!(page[idx].is_alloc == 1);
 
@@ -129,11 +129,18 @@ impl OfflineChecker {
             let data_equal_cols =
                 LocalTraceInstructions::generate_trace_row(&is_equal_data, (last_data, cur_data));
 
+            let is_final_write = is_final && op_type == 0;
+            let is_final_delete = is_final && op_type == 2;
+            let is_read = op_type == 0;
+            let is_write = op_type == 1;
+            let is_delete = op_type == 2;
+
             let cols = OfflineCheckerCols::new(
-                Val::<SC>::from_canonical_u8(is_initial),
-                Val::<SC>::from_canonical_u8(is_final),
-                Val::<SC>::from_canonical_u8(is_internal),
-                Val::<SC>::from_canonical_u8(is_final * 3),
+                Val::<SC>::from_bool(is_initial),
+                Val::<SC>::from_bool(is_final_write),
+                Val::<SC>::from_bool(is_final_delete),
+                Val::<SC>::from_bool(is_internal),
+                Val::<SC>::from_canonical_u8(is_final_write as u8 * 3),
                 Val::<SC>::from_canonical_usize(clk),
                 page[idx]
                     .to_vec()
@@ -142,10 +149,13 @@ impl OfflineChecker {
                     .map(Val::<SC>::from_canonical_u32)
                     .collect(),
                 Val::<SC>::from_canonical_u8(op_type),
+                Val::<SC>::from_bool(is_read),
+                Val::<SC>::from_bool(is_write),
+                Val::<SC>::from_bool(is_delete),
                 idx_equal_cols.io.prod,
                 data_equal_cols.io.prod,
                 lt_cols.io.tuple_less_than,
-                Val::<SC>::from_canonical_u8(is_extra),
+                Val::<SC>::from_bool(is_extra),
                 idx_equal_cols.aux,
                 data_equal_cols.aux,
                 lt_cols.aux,
@@ -184,15 +194,15 @@ impl OfflineChecker {
                     &mut is_first_row,
                     page,
                     idx,
-                    1,
-                    0,
-                    0,
+                    true,
+                    false,
+                    false,
                     0,
                     1,
                     &mut last_idx,
                     &mut last_data,
                     &mut last_clk,
-                    0,
+                    false,
                 ));
             }
 
@@ -205,15 +215,15 @@ impl OfflineChecker {
                     &mut is_first_row,
                     page,
                     idx,
-                    0,
-                    0,
-                    1,
+                    false,
+                    false,
+                    true,
                     op.clk,
                     op.op_type.clone() as u8,
                     &mut last_idx,
                     &mut last_data,
                     &mut last_clk,
-                    0,
+                    false,
                 ));
             }
 
@@ -222,15 +232,15 @@ impl OfflineChecker {
                 &mut is_first_row,
                 page,
                 idx,
-                0,
-                1,
-                0,
+                false,
+                true,
+                false,
                 max_clk,
                 0,
                 &mut last_idx,
                 &mut last_data,
                 &mut last_clk,
-                0,
+                false,
             ));
 
             i = j;
@@ -245,15 +255,15 @@ impl OfflineChecker {
                 &mut is_first_row,
                 page,
                 0,
-                0,
-                0,
-                0,
+                false,
+                false,
+                false,
                 0,
                 0,
                 &mut last_idx,
                 &mut last_data,
                 &mut last_clk,
-                1,
+                true,
             )
         });
 

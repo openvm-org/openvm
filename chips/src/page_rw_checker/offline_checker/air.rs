@@ -50,17 +50,37 @@ where
 
         // Making sure bits are bools
         builder.assert_bool(local_cols.is_initial);
-        builder.assert_bool(local_cols.is_final);
+        builder.assert_bool(local_cols.is_final_write);
+        builder.assert_bool(local_cols.is_final_delete);
         builder.assert_bool(local_cols.is_internal);
-        builder.assert_bool(local_cols.op_type);
+        builder.assert_bool(local_cols.is_read);
+        builder.assert_bool(local_cols.is_write);
+        builder.assert_bool(local_cols.is_delete);
         builder.assert_bool(local_cols.same_idx);
         builder.assert_bool(local_cols.same_data);
         builder.assert_bool(local_cols.is_extra);
 
+        // Ensuring that op_type is decomposed into is_read, is_write, is_delete correctly
+        builder.assert_eq(
+            local_cols.op_type,
+            local_cols.is_write + local_cols.is_delete * AB::Expr::from_canonical_u8(2),
+        );
+
+        // Ensuring the sum of is_initial, is_internal, is_final_write, is_final_delete is 1
+        // This ensures exactly one of them is on because they're all bool
+        builder.assert_zero(
+            (AB::Expr::one() - local_cols.is_extra)
+                * (local_cols.is_initial
+                    + local_cols.is_internal
+                    + local_cols.is_final_write
+                    + local_cols.is_final_delete
+                    - AB::Expr::one()),
+        );
+
         // Ensuring is_final_x3 is correct
         builder.assert_eq(
-            local_cols.is_final_x3,
-            local_cols.is_final * AB::Expr::from_canonical_u8(3),
+            local_cols.is_final_write_x3,
+            local_cols.is_final_write * AB::Expr::from_canonical_u8(3),
         );
 
         // Making sure first row starts with same_idx, same_data being false
@@ -138,14 +158,17 @@ where
         // NOTE: constraint degree is 3
         builder.assert_one(or(
             local_cols.is_extra.into(),
-            or(local_cols.same_idx.into(), local_cols.op_type.into()),
+            or(local_cols.same_idx.into(), local_cols.is_write.into()),
         ));
 
-        // Making sure every idx block ends with a is_final
+        // Making sure every idx block ends with a is_final_write or is_final_delete
         // NOTE: constraint degree is 3
         builder.when_transition().assert_one(or(
             local_cols.is_extra.into(),
-            or(next_cols.same_idx.into(), local_cols.is_final.into()),
+            or(
+                next_cols.same_idx.into(),
+                local_cols.is_final_write.into() + local_cols.is_final_delete.into(),
+            ),
         ));
         // NOTE: constraint degree is 3
         builder.when_transition().assert_one(implies(
@@ -153,11 +176,11 @@ where
                 AB::Expr::one() - local_cols.is_extra.into(),
                 next_cols.is_extra.into(),
             ),
-            local_cols.is_final.into(),
+            local_cols.is_final_write.into() + local_cols.is_final_delete.into(),
         ));
         builder.when_last_row().assert_one(implies(
             AB::Expr::one() - local_cols.is_extra,
-            local_cols.is_final.into(),
+            local_cols.is_final_write.into() + local_cols.is_final_delete.into(),
         ));
 
         // Making sure that is_initial rows only appear at the start of blocks
@@ -172,17 +195,14 @@ where
         // NOTE: constraint degree is 3
         builder.assert_one(or(
             local_cols.is_extra.into(),
-            or(local_cols.op_type.into(), local_cols.same_data.into()),
+            implies(local_cols.is_read.into(), local_cols.same_data.into()),
         ));
 
         // is_final => read
         // NOTE: constraint degree is 3
         builder.assert_one(or(
             local_cols.is_extra.into(),
-            implies(
-                local_cols.is_final.into(),
-                AB::Expr::one() - local_cols.op_type.into(),
-            ),
+            implies(local_cols.is_final_write.into(), local_cols.is_read.into()),
         ));
 
         // is_internal => not is_initial
@@ -194,21 +214,15 @@ where
         // is_internal => not is_final
         builder.assert_one(implies(
             local_cols.is_internal.into(),
-            AB::Expr::one() - local_cols.is_final,
+            AB::Expr::one()
+                - (local_cols.is_final_write.into() + local_cols.is_final_delete.into()),
         ));
 
-        // next.is_final => local.is_internal
+        // next.is_final_write or next.is_final_delete => local.is_internal
         builder.when_transition().assert_one(implies(
-            next_cols.is_final.into(),
+            next_cols.is_final_write.into() + next_cols.is_final_delete.into(),
             local_cols.is_internal.into(),
         ));
-
-        // Ensuring at least one of is_initial, is_internal, is_final is on
-        builder.assert_zero(
-            (AB::Expr::one() - local_cols.is_extra)
-                * (local_cols.is_initial + local_cols.is_internal + local_cols.is_final
-                    - AB::Expr::one()),
-        );
 
         // Making sure is_extra rows are at the bottom
         builder.when_transition().assert_one(implies(
