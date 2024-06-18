@@ -5,22 +5,11 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use afs_chips::{is_equal::IsEqualAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions};
 
-use super::{columns::{CPUAuxCols, CPUCols, CPUIOCols, MemoryAccessCols}, CPUChip, INST_WIDTH};
-
-const LOADF: usize = 0;
-const STOREF: usize = 1;
-const JAL: usize = 2;
-const BEQ: usize = 3;
-const BNE: usize = 4;
-
-const FADD: usize = 5;
-const FSUB: usize = 6;
-const FMUL: usize = 7;
-const FDIV: usize = 8;
+use super::{columns::{CPUAuxCols, CPUCols, CPUIOCols, MemoryAccessCols}, CPUChip, OpCode, OpCode::*, INST_WIDTH};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Instruction<F> {
-    pub opcode: usize,
+    pub opcode: OpCode,
     pub op_a: F,
     pub op_b: F,
     pub op_c: F,
@@ -60,7 +49,7 @@ fn memory_access_to_cols<F: PrimeField64>(access: Option<MemoryAccess<F>>) -> Me
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ArithmeticOperation<F> {
-    pub opcode: usize,
+    pub opcode: OpCode,
     pub operand1: F,
     pub operand2: F,
     pub result: F,
@@ -165,7 +154,7 @@ impl CPUChip {
             let io = CPUIOCols {
                 clock_cycle: F::from_canonical_usize(clock_cycle),
                 pc,
-                opcode: F::from_canonical_usize(opcode),
+                opcode: F::from_canonical_usize(opcode as usize),
                 op_a: a,
                 op_b: b,
                 op_c: c,
@@ -174,19 +163,19 @@ impl CPUChip {
             };
 
             let mut operation_flags = vec![F::zero(); self.air.options.num_operations()];
-            operation_flags[opcode] = F::one();
+            operation_flags[opcode as usize] = F::one();
 
             let mut next_pc = pc + F::one();
 
             match opcode {
                 // d[a] <- e[d[c] + b]
-                LOADF => {
+                LOADW => {
                     let base_pointer = memory.read(d, c);
                     let value = memory.read(e, base_pointer + b);
                     memory.write(d, a, value);
                 }
                 // e[d[c] + b] <- d[a]
-                STOREF => {
+                STOREW => {
                     let base_pointer = memory.read(d, c);
                     let value = memory.read(d, a);
                     memory.write(e, base_pointer + b, value);
@@ -212,29 +201,31 @@ impl CPUChip {
                         next_pc = pc + c;
                     }
                 }
-                _ => {}
-            };
-            if self.air.options.field_arithmetic_enabled && (FADD..=FDIV).contains(&opcode) {
-                // read from e[b] and e[c]
-                let operand1 = memory.read(e, b);
-                let operand2 = memory.read(e, c);
-                let result = match opcode {
-                    FADD => operand1 + operand2,
-                    FSUB => operand1 - operand2,
-                    FMUL => operand1 * operand2,
-                    FDIV => operand1 / operand2,
-                    _ => unreachable!(),
-                };
-                // write to d[a]
-                memory.write(d, a, result);
+                opcode @ (FADD | FSUB | FMUL | FDIV) => if self.air.options.field_arithmetic_enabled {
+
+                    // read from e[b] and e[c]
+                    let operand1 = memory.read(e, b);
+                    let operand2 = memory.read(e, c);
+                    let result = match opcode {
+                        FADD => operand1 + operand2,
+                        FSUB => operand1 - operand2,
+                        FMUL => operand1 * operand2,
+                        FDIV => operand1 / operand2,
+                        _ => unreachable!(),
+                    };
+                    // write to d[a]
+                    memory.write(d, a, result);
                 
-                arithmetic_operations.push(ArithmeticOperation {
-                    opcode,
-                    operand1,
-                    operand2,
-                    result,
-                });
-            }
+                    arithmetic_operations.push(ArithmeticOperation {
+                        opcode,
+                        operand1,
+                        operand2,
+                        result,
+                    });
+                } else {
+                    panic!("Field arithmetic is not enabled");
+                }
+            };
 
             // complete the clock cycle and get the read and write cols
             let (mut read_cols, mut write_cols) = memory.complete_clock_cycle();

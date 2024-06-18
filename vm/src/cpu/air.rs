@@ -7,20 +7,10 @@ use p3_matrix::Matrix;
 use afs_chips::{is_equal::{columns::{IsEqualAuxCols, IsEqualIOCols}, IsEqualAir}, is_zero::{columns::IsZeroIOCols, IsZeroAir}, sub_chip::{AirConfig, SubAir}};
 
 use super::{
+    OpCode::*,
     columns::CPUCols,
     CPUAir, INST_WIDTH,
 };
-
-const LOADF: usize = 0;
-const STOREF: usize = 1;
-const JAL: usize = 2;
-const BEQ: usize = 3;
-const BNE: usize = 4;
-
-const FADD: usize = 5;
-const FSUB: usize = 6;
-const FMUL: usize = 7;
-const FDIV: usize = 8;
 
 impl AirConfig for CPUAir {
     type Cols<T> = CPUCols<T>;
@@ -85,7 +75,7 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
         builder.assert_eq(opcode, match_opcode);
 
         // LOADF: d[a] <- e[d[c] + b]
-        let mut here = builder.when(operation_flags[LOADF]);
+        let mut here = builder.when(operation_flags[LOADW as usize]);
 
         here.assert_eq(read1.address_space, d);
         here.assert_eq(read1.address, c);
@@ -100,7 +90,7 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
         here.assert_eq(next_pc, pc + inst_width.clone());
 
         // STOREF: e[d[c] + b] <- d[a]
-        let mut here = builder.when(operation_flags[STOREF]);
+        let mut here = builder.when(operation_flags[STOREW as usize]);
         here.assert_eq(read1.address_space, d);
         here.assert_eq(read1.address, c);
 
@@ -115,7 +105,7 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
 
 
         // JAL: d[a] <- pc + INST_WIDTH, pc <- pc + b
-        let mut here = builder.when(operation_flags[JAL]);
+        let mut here = builder.when(operation_flags[JAL as usize]);
         
         here.assert_eq(write.address_space, d);
         here.assert_eq(write.address, a);
@@ -124,7 +114,7 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
         here.assert_eq(next_pc, pc + b);
 
         // BEQ: If d[a] = e[b], pc <- pc + c
-        let mut here = builder.when(operation_flags[BEQ]);
+        let mut here = builder.when(operation_flags[BEQ as usize]);
 
         here.assert_eq(read1.address_space, d);
         here.assert_eq(read1.address, a);
@@ -146,7 +136,7 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
         SubAir::eval(&IsEqualAir, builder, is_equal_io_cols, is_equal_aux_cols);
 
         // BNE: If d[a] != e[b], pc <- pc + c
-        let mut here = builder.when(operation_flags[BNE]);
+        let mut here = builder.when(operation_flags[BNE as usize]);
 
         here.assert_eq(read1.address_space, d);
         here.assert_eq(read1.address, a);
@@ -159,7 +149,12 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
 
         // arithmetic operations
         if self.options.field_arithmetic_enabled {
-            let mut here = builder.when(operation_flags[FADD] + operation_flags[FSUB] + operation_flags[FMUL] + operation_flags[FDIV]);
+            let mut here = builder.when(
+                operation_flags[FADD as usize]
+                + operation_flags[FSUB as usize]
+                + operation_flags[FMUL as usize]
+                + operation_flags[FDIV as usize]
+            );
 
             // read from e[b] and e[c]
             here.assert_eq(read1.address_space, e);

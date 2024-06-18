@@ -11,18 +11,7 @@ use p3_matrix::dense::DenseMatrix;
 use crate::cpu::columns::{CPUCols, CPUIOCols};
 use crate::cpu::{CPUChip, CPUOptions};
 
-use super::trace::{ArithmeticOperation, Instruction, MemoryAccess};
-
-const LOADW: usize = 0;
-const STOREW: usize = 1;
-const JAL: usize = 2;
-const BEQ: usize = 3;
-const BNE: usize = 4;
-
-const FADD: usize = 5;
-const FSUB: usize = 6;
-const FMUL: usize = 7;
-const FDIV: usize = 8;
+use super::{OpCode::*, trace::{ArithmeticOperation, Instruction, MemoryAccess}};
 
 #[test]
 fn test_flatten_fromslice_roundtrip() {

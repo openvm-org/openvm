@@ -19,20 +19,6 @@ pub const ARITHMETIC_BUS: usize = 2;
 pub const NUM_CORE_OPERATIONS: usize = 5;
 pub const NUM_ARITHMETIC_OPERATIONS: usize = 4;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum OpCode {
-    LOADW = 0,
-    STOREW = 1,
-    JAL = 2,
-    BEQ = 3,
-    BNE = 4,
-
-    FADD = 5,
-    FSUB = 6,
-    FMUL = 7,
-    FDIV = 8,
-}
-
 #[derive(Default, Clone, Copy, CopyGetters)]
 #[getset(get_copy = "pub")]
 pub struct CPUOptions {
@@ -47,8 +33,8 @@ impl CPUOptions {
 
 #[derive(Default, Clone, CopyGetters)]
 #[getset(get_copy = "pub")]
-pub struct CPUAir {
-    options: CPUOptions,
+pub struct ProgramAir {
+    
 }
 
 #[derive(Default, Getters)]
