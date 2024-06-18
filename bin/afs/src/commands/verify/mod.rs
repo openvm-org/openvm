@@ -76,9 +76,9 @@ impl VerifyCommand {
         let range_bus_index = 2;
         let ops_bus_index = 3;
 
-        let checker_trace_degree = config.page.max_rw_ops as usize * 4;
+        let checker_trace_degree = config.page.max_rw_ops * 4;
 
-        let idx_limb_bits = config.page.bits_per_fe as usize;
+        let idx_limb_bits = config.page.bits_per_fe;
 
         let max_log_degree = log2_strict_usize(checker_trace_degree)
             .max(log2_strict_usize(height))

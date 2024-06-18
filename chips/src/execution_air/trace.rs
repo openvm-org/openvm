@@ -9,7 +9,7 @@ impl ExecutionAir {
     /// trace_degree is MAX_OPS
     pub fn generate_trace<F: PrimeField64>(
         &self,
-        ops: &Vec<Operation>,
+        ops: &[Operation],
         trace_degree: usize,
     ) -> RowMajorMatrix<F> {
         self.generate_trace_testing(ops, trace_degree, 1)
@@ -18,7 +18,7 @@ impl ExecutionAir {
     /// For testing purposes, we want to see that this is still performant when we add spaces everywhere. Spacing = 1 is normal
     pub fn generate_trace_testing<F: PrimeField64>(
         &self,
-        ops: &Vec<Operation>,
+        ops: &[Operation],
         trace_degree: usize,
         spacing: usize,
     ) -> RowMajorMatrix<F> {

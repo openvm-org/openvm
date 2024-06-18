@@ -19,7 +19,7 @@ fn read_from_path(path: String) -> Option<Vec<u8>> {
     Some(buf)
 }
 
-fn write_bytes(bytes: &Vec<u8>, path: String) -> Result<()> {
+fn write_bytes(bytes: &[u8], path: String) -> Result<()> {
     let file = File::create(path)?;
     let mut writer = BufWriter::new(file);
     writer.write_all(bytes)?;

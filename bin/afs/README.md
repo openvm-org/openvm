@@ -10,7 +10,7 @@ cargo run --release --bin afs -- --help
 
 ## Configuration
 
-All configuration is handled via the `cargo.toml` file at the root of the repository.
+All configuration is handled via the `config.toml` file at the root of the repository.
 
 ## Commands
 

@@ -257,11 +257,12 @@ impl OfflineChecker {
             )
         });
 
-        tracing::debug!("Offline Checker trace by row: ");
-        for row in &rows {
-            let cols = OfflineCheckerCols::from_slice(row, self);
-            tracing::debug!("{:?}", cols);
-        }
+        tracing::debug_span!("Offline Checker trace by row: ").in_scope(|| {
+            for row in &rows {
+                let cols = OfflineCheckerCols::from_slice(row, self);
+                tracing::debug!("{:?}", cols);
+            }
+        });
 
         RowMajorMatrix::new(rows.concat(), self.air_width())
     }

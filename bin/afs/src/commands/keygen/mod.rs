@@ -36,13 +36,13 @@ impl KeygenCommand {
     /// Execute the `keygen` command
     pub fn execute(self, config: &PageConfig) -> Result<()> {
         let start = Instant::now();
-        let prefix = create_prefix(&config);
+        let prefix = create_prefix(config);
         match config.page.mode {
             PageMode::ReadWrite => self.execute_rw(
-                (config.page.index_bytes + 1) / 2 as usize,
-                (config.page.data_bytes + 1) / 2 as usize,
-                config.page.max_rw_ops as usize,
-                config.page.height as usize,
+                (config.page.index_bytes + 1) / 2,
+                (config.page.data_bytes + 1) / 2,
+                config.page.max_rw_ops,
+                config.page.height,
                 config.page.bits_per_fe,
                 prefix,
             )?,
@@ -148,9 +148,9 @@ impl KeygenCommand {
     }
 }
 
-fn write_bytes(bytes: &Vec<u8>, path: String) -> Result<()> {
+fn write_bytes(bytes: &[u8], path: String) -> Result<()> {
     let file = File::create(path).unwrap();
     let mut writer = BufWriter::new(file);
-    writer.write(bytes).unwrap();
+    writer.write_all(bytes)?;
     Ok(())
 }
