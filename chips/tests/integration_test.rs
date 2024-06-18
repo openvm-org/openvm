@@ -164,6 +164,9 @@ fn negative_test_xor_bits_chip() {
         4,
     );
 
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
     let result = run_simple_test_no_pis(
         vec![&dummy_requester, &xor_chip.air],
         vec![dummy_trace, xor_chip_trace],
@@ -303,6 +306,9 @@ fn negative_test_xor_limbs_chip() {
     let xor_limbs_chip_trace = xor_chip.generate_trace();
     let xor_lookup_chip_trace = xor_chip.xor_lookup_chip.generate_trace();
 
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
     let result = run_simple_test_no_pis(
         vec![&requester, &xor_chip.air, &xor_chip.xor_lookup_chip.air],
         vec![requester_trace, xor_limbs_chip_trace, xor_lookup_chip_trace],

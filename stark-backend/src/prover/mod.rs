@@ -10,7 +10,7 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::instrument;
 
 use crate::{
-    air_builders::debug::check_constraints::check_constraints,
+    air_builders::debug::check_constraints::{check_constraints, check_cumulative_sums},
     commit::CommittedSingleMatrixView,
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkPartialProvingKey,
@@ -149,6 +149,10 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         #[cfg(debug_assertions)]
         USE_DEBUG_BUILDER.with(|debug| {
             if *debug.lock().unwrap() {
+                let mut raps = vec![];
+                let mut preprocessed = vec![];
+                let mut partitioned_main = vec![];
+                let mut permutation = vec![];
                 for (
                     (((preprocessed_trace, main_data), perm_trace), cumulative_sum_and_index),
                     pis,
@@ -173,7 +177,13 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
                         pis,
                         cumulative_sum.map(|c| vec![c]).as_slice(),
                     );
+
+                    raps.push(rap);
+                    preprocessed.push(preprocessed_trace);
+                    partitioned_main.push(partitioned_main_trace.as_slice());
+                    permutation.push(perm_trace);
                 }
+                check_cumulative_sums(&raps, &preprocessed, &partitioned_main, &permutation);
             }
         });
 
