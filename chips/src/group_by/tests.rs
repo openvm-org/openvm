@@ -90,7 +90,7 @@ impl GroupByTest {
             0,
             self.max_idx() as u32,
             0,
-            rows_allocated,
+            self.page_height(),
             rows_allocated,
         )
     }
@@ -175,10 +175,6 @@ fn load_page_test(
 
     let mut challenger = engine.new_challenger();
 
-    // // We expect failure, so we turn off debug assertions
-    // USE_DEBUG_BUILDER.with(|debug| {
-    //     *debug.lock().unwrap() = false;
-    // });
     verifier.verify(
         &mut challenger,
         partial_vk,
@@ -220,220 +216,18 @@ fn group_by_test() {
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-    let page = test.generate_page(&mut rng, test.page_height());
+    let alloc_rows_arr = vec![test.page_height() - 1];
 
-    // Testing a fully allocated page
-    load_page_test(
-        &engine,
-        &page,
-        &mut page_controller,
-        &mut trace_builder,
-        &partial_pk,
-    )
-    .expect("Verification failed");
+    for rows_allocated in alloc_rows_arr {
+        let page = test.generate_page(&mut rng, rows_allocated);
 
-    let page = test.generate_page(&mut rng, test.page_height() - 1);
-
-    // Testing a half allocated page
-    load_page_test(
-        &engine,
-        &page,
-        &mut page_controller,
-        &mut trace_builder,
-        &partial_pk,
-    )
-    .expect("Verification failed");
-
-    // let rows_allocated = rng.gen::<usize>() % (test.page_height() + 1);
-    // for i in rows_allocated..test.page_height() {
-    //     page[i][0] = 0;
-
-    //     // Making sure the first operation using this index is a write
-    //     let idx = page[i][1..test.idx_len() + 1].to_vec();
-    //     for op in ops.iter_mut() {
-    //         if op.idx == idx {
-    //             op.op_type = OpType::Write;
-    //             break;
-    //         }
-    //     }
-    // }
-
-    // load_page_test(
-    //     &engine,
-    //     &page,
-    //     &mut page_controller,
-    //     &mut trace_builder,
-    //     &partial_pk,
-    // )
-    // .expect("Verification failed");
-
-    // // Testing a fully unallocated page
-    // for i in 0..page_height {
-    //     // Making sure the first operation that uses every index is a write
-    //     let idx = page[i][1..idx_len + 1].to_vec();
-    //     for op in ops.iter_mut() {
-    //         if op.idx == idx {
-    //             op.op_type = OpType::Write;
-    //             break;
-    //         }
-    //     }
-
-    //     let idx: Vec<u32> = (0..idx_len).map(|_| rng.gen::<u32>() % max_idx).collect();
-    //     let data: Vec<u32> = (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect();
-    //     page[i] = iter::once(0).chain(idx).chain(data).collect();
-    // }
-
-    // load_page_test(
-    //     &engine,
-    //     page.clone(),
-    //     idx_len,
-    //     data_len,
-    //     idx_limb_bits,
-    //     idx_decomp,
-    //     &ops,
-    //     &mut page_controller,
-    //     &ops_sender,
-    //     &mut trace_builder,
-    //     &partial_pk,
-    //     trace_degree,
-    //     num_ops,
-    // )
-    // .expect("Verification failed");
-
-    // // Testing writing only 1 index into an unallocated page
-    // ops = vec![Operation::new(
-    //     10,
-    //     (0..idx_len).map(|_| rng.gen::<u32>() % max_idx).collect(),
-    //     (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect(),
-    //     OpType::Write,
-    // )];
-
-    // load_page_test(
-    //     &engine,
-    //     page.clone(),
-    //     idx_len,
-    //     data_len,
-    //     idx_limb_bits,
-    //     idx_decomp,
-    //     &ops,
-    //     &mut page_controller,
-    //     &ops_sender,
-    //     &mut trace_builder,
-    //     &partial_pk,
-    //     trace_degree,
-    //     num_ops,
-    // )
-    // .expect("Verification failed");
-
-    // // Negative tests
-
-    // // Testing reading from a non-existing index (in a fully-unallocated page)
-    // ops = vec![Operation::new(
-    //     1,
-    //     (0..idx_len).map(|_| rng.gen::<u32>() % max_idx).collect(),
-    //     (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect(),
-    //     OpType::Read,
-    // )];
-
-    // USE_DEBUG_BUILDER.with(|debug| {
-    //     *debug.lock().unwrap() = false;
-    // });
-    // assert_eq!(
-    //     load_page_test(
-    //         &engine,
-    //         page.clone(),
-    //         idx_len,
-    //         data_len,
-    //         idx_limb_bits,
-    //         idx_decomp,
-    //         &ops,
-    //         &mut page_controller,
-    //         &ops_sender,
-    //         &mut trace_builder,
-    //         &partial_pk,
-    //         trace_degree,
-    //         num_ops,
-    //     ),
-    //     Err(VerificationError::OodEvaluationMismatch),
-    //     "Expected constraints to fail"
-    // );
-
-    // // Testing reading wrong data from an existing index
-    // let idx: Vec<u32> = (0..idx_len).map(|_| rng.gen::<u32>() % max_idx).collect();
-    // let data_1: Vec<u32> = (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect();
-    // let mut data_2 = data_1.clone();
-    // data_2[0] += 1; // making sure data_2 is different
-
-    // ops = vec![
-    //     Operation::new(1, idx.clone(), data_1, OpType::Write),
-    //     Operation::new(2, idx, data_2, OpType::Read),
-    // ];
-
-    // assert_eq!(
-    //     load_page_test(
-    //         &engine,
-    //         page.clone(),
-    //         idx_len,
-    //         data_len,
-    //         idx_limb_bits,
-    //         idx_decomp,
-    //         &ops,
-    //         &mut page_controller,
-    //         &ops_sender,
-    //         &mut trace_builder,
-    //         &partial_pk,
-    //         trace_degree,
-    //         num_ops,
-    //     ),
-    //     Err(VerificationError::OodEvaluationMismatch),
-    //     "Expected constraints to fail"
-    // );
-
-    // // Testing writing too many indices to a fully unallocated page
-    // let mut idx_map = HashSet::new();
-    // for _ in 0..page_height + 1 {
-    //     let mut idx: Vec<u32>;
-    //     loop {
-    //         idx = (0..idx_len).map(|_| rng.gen::<u32>() % max_idx).collect();
-    //         if !idx_map.contains(&idx) {
-    //             break;
-    //         }
-    //     }
-
-    //     idx_map.insert(idx);
-    // }
-
-    // ops.clear();
-    // for (i, idx) in idx_map.iter().enumerate() {
-    //     ops.push(Operation::new(
-    //         i + 1,
-    //         idx.clone(),
-    //         (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect(),
-    //         OpType::Write,
-    //     ));
-    // }
-
-    // let engine_ref = &engine;
-    // let result = panic::catch_unwind(move || {
-    //     let _ = load_page_test(
-    //         engine_ref,
-    //         page.clone(),
-    //         idx_len,
-    //         data_len,
-    //         idx_limb_bits,
-    //         idx_decomp,
-    //         &ops,
-    //         &mut page_controller,
-    //         &ops_sender,
-    //         &mut trace_builder,
-    //         &partial_pk,
-    //         trace_degree,
-    //         num_ops,
-    //     );
-    // });
-
-    // assert!(
-    //     result.is_err(),
-    //     "Expected to fail when allocating too many indices"
-    // );
+        load_page_test(
+            &engine,
+            &page,
+            &mut page_controller,
+            &mut trace_builder,
+            &partial_pk,
+        )
+        .expect("Verification failed");
+    }
 }

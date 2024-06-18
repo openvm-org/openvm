@@ -49,6 +49,7 @@ impl GroupByAir {
         let mut grouped_page: Vec<Vec<u32>> = page
             .rows
             .iter()
+            .filter(|row| row.is_alloc == 1)
             .map(|row| {
                 let mut selected_row: Vec<u32> = self
                     .group_by_cols
