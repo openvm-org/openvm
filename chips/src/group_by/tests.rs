@@ -1,7 +1,6 @@
 use super::page_controller::PageController;
 use crate::common::page::Page;
 use std::cmp::max;
-use std::iter;
 
 use afs_stark_backend::{
     keygen::{types::MultiStarkPartialProvingKey, MultiStarkKeygenBuilder},
@@ -83,6 +82,53 @@ impl GroupByTest {
     pub fn range_height(&self) -> usize {
         1 << self.idx_decomp
     }
+
+    pub fn generate_page(&self, rng: &mut impl Rng, rows_allocated: usize) -> Page {
+        Page::random(
+            rng,
+            self.idx_len(),
+            0,
+            self.max_idx() as u32,
+            0,
+            rows_allocated,
+            rows_allocated,
+        )
+    }
+    fn set_up_keygen_builder(
+        &self,
+        keygen_builder: &mut MultiStarkKeygenBuilder<BabyBearPoseidon2Config>,
+        page_controller: &PageController<BabyBearPoseidon2Config>,
+    ) {
+        let group_by_ptr = keygen_builder.add_cached_main_matrix(self.page_width);
+        let final_page_ptr =
+            keygen_builder.add_cached_main_matrix(page_controller.final_chip.page_width());
+        let group_by_aux_ptr = keygen_builder.add_main_matrix(page_controller.group_by.aux_width());
+        let final_page_aux_ptr =
+            keygen_builder.add_main_matrix(page_controller.final_chip.aux_width());
+        let range_checker_ptr =
+            keygen_builder.add_main_matrix(page_controller.range_checker.air_width());
+
+        keygen_builder.add_partitioned_air(
+            &page_controller.group_by,
+            self.page_height(),
+            0,
+            vec![group_by_ptr, group_by_aux_ptr],
+        );
+
+        keygen_builder.add_partitioned_air(
+            &page_controller.final_chip,
+            self.page_height(),
+            0,
+            vec![final_page_ptr, final_page_aux_ptr],
+        );
+
+        keygen_builder.add_partitioned_air(
+            &page_controller.range_checker.air,
+            self.range_height(),
+            0,
+            vec![range_checker_ptr],
+        );
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -146,87 +192,11 @@ fn load_page_test(
     )
 }
 
-// fn pk_setup_test(
-//     test: GroupByTest,
-// ) -> (
-//     &BabyBearPoseidon2Engine,
-//     &mut PageController<BabyBearPoseidon2Config>,
-//     &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
-//     &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
-// ) {
-//     let engine =
-//         config::baby_bear_poseidon2::default_engine(max(test.log_page_height, test.idx_decomp));
-
-//     let mut page_controller = PageController::new(
-//         test.page_width,
-//         test.group_by_cols.clone(),
-//         test.aggregated_col,
-//         test.internal_bus_index,
-//         test.output_bus_index,
-//         test.range_bus_index,
-//         test.idx_limb_bits,
-//         test.idx_decomp,
-//     );
-
-//     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
-
-//     let group_by_ptr = keygen_builder.add_cached_main_matrix(test.page_width);
-//     let final_page_ptr =
-//         keygen_builder.add_cached_main_matrix(page_controller.final_chip.page_width());
-//     let group_by_aux_ptr = keygen_builder.add_main_matrix(page_controller.group_by.aux_width());
-//     let final_page_aux_ptr = keygen_builder.add_main_matrix(page_controller.final_chip.aux_width());
-//     let range_checker_ptr =
-//         keygen_builder.add_main_matrix(page_controller.range_checker.air_width());
-
-//     keygen_builder.add_partitioned_air(
-//         &page_controller.group_by,
-//         test.page_height(),
-//         0,
-//         vec![group_by_ptr, group_by_aux_ptr],
-//     );
-
-//     keygen_builder.add_partitioned_air(
-//         &page_controller.final_chip,
-//         test.page_height(),
-//         0,
-//         vec![final_page_ptr, final_page_aux_ptr],
-//     );
-
-//     keygen_builder.add_partitioned_air(
-//         &page_controller.range_checker.air,
-//         test.range_height(),
-//         0,
-//         vec![range_checker_ptr],
-//     );
-
-//     let partial_pk = keygen_builder.generate_partial_pk();
-
-//     let prover = MultiTraceStarkProver::new(&engine.config);
-//     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
-
-//     (
-//         &engine,
-//         &mut page_controller,
-//         &mut trace_builder,
-//         &partial_pk,
-//     )
-// }
-
 #[test]
 fn group_by_test() {
     // let test = GroupByTest::new(4, 1, 0, 10, 4);
     let test = GroupByTest::new(20, 3, 5, 10, 4);
     let mut rng = create_seeded_rng();
-
-    let page = Page::random(
-        &mut rng,
-        test.idx_len(),
-        0,
-        test.max_idx() as u32,
-        0,
-        test.page_height(),
-        test.page_height(),
-    );
 
     let mut page_controller = PageController::new(
         test.page_width,
@@ -243,39 +213,14 @@ fn group_by_test() {
         config::baby_bear_poseidon2::default_engine(max(test.log_page_height, test.idx_decomp));
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-    let group_by_ptr = keygen_builder.add_cached_main_matrix(test.page_width);
-    let final_page_ptr =
-        keygen_builder.add_cached_main_matrix(page_controller.final_chip.page_width());
-    let group_by_aux_ptr = keygen_builder.add_main_matrix(page_controller.group_by.aux_width());
-    let final_page_aux_ptr = keygen_builder.add_main_matrix(page_controller.final_chip.aux_width());
-    let range_checker_ptr =
-        keygen_builder.add_main_matrix(page_controller.range_checker.air_width());
-
-    keygen_builder.add_partitioned_air(
-        &page_controller.group_by,
-        test.page_height(),
-        0,
-        vec![group_by_ptr, group_by_aux_ptr],
-    );
-
-    keygen_builder.add_partitioned_air(
-        &page_controller.final_chip,
-        test.page_height(),
-        0,
-        vec![final_page_ptr, final_page_aux_ptr],
-    );
-
-    keygen_builder.add_partitioned_air(
-        &page_controller.range_checker.air,
-        test.range_height(),
-        0,
-        vec![range_checker_ptr],
-    );
+    test.set_up_keygen_builder(&mut keygen_builder, &page_controller);
 
     let partial_pk = keygen_builder.generate_partial_pk();
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
+
+    let page = test.generate_page(&mut rng, test.page_height());
 
     // Testing a fully allocated page
     load_page_test(
@@ -286,6 +231,18 @@ fn group_by_test() {
         &partial_pk,
     )
     .expect("Verification failed");
+
+    // let page = test.generate_page(&mut rng, test.page_height() - 1);
+
+    // // Testing a half allocated page
+    // load_page_test(
+    //     &engine,
+    //     &page,
+    //     &mut page_controller,
+    //     &mut trace_builder,
+    //     &partial_pk,
+    // )
+    // .expect("Verification failed");
 
     // let rows_allocated = rng.gen::<usize>() % (test.page_height() + 1);
     // for i in rows_allocated..test.page_height() {
