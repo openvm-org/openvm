@@ -5,6 +5,7 @@ members = [
     "test-utils",
     "derive",
     "bin/afs",
+    "bin/afs-1b",
     "logical-interface",
 ]
 resolver = "2"
