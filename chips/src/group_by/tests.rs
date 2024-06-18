@@ -146,27 +146,87 @@ fn load_page_test(
     )
 }
 
-// fn pk_setup_test(current_test: GroupByTest) -> Result<(), VerificationError> {
-//     let mut rng = create_seeded_rng();
+// fn pk_setup_test(
+//     test: GroupByTest,
+// ) -> (
+//     &BabyBearPoseidon2Engine,
+//     &mut PageController<BabyBearPoseidon2Config>,
+//     &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
+//     &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
+// ) {
+//     let engine =
+//         config::baby_bear_poseidon2::default_engine(max(test.log_page_height, test.idx_decomp));
+
+//     let mut page_controller = PageController::new(
+//         test.page_width,
+//         test.group_by_cols.clone(),
+//         test.aggregated_col,
+//         test.internal_bus_index,
+//         test.output_bus_index,
+//         test.range_bus_index,
+//         test.idx_limb_bits,
+//         test.idx_decomp,
+//     );
+
+//     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
+
+//     let group_by_ptr = keygen_builder.add_cached_main_matrix(test.page_width);
+//     let final_page_ptr =
+//         keygen_builder.add_cached_main_matrix(page_controller.final_chip.page_width());
+//     let group_by_aux_ptr = keygen_builder.add_main_matrix(page_controller.group_by.aux_width());
+//     let final_page_aux_ptr = keygen_builder.add_main_matrix(page_controller.final_chip.aux_width());
+//     let range_checker_ptr =
+//         keygen_builder.add_main_matrix(page_controller.range_checker.air_width());
+
+//     keygen_builder.add_partitioned_air(
+//         &page_controller.group_by,
+//         test.page_height(),
+//         0,
+//         vec![group_by_ptr, group_by_aux_ptr],
+//     );
+
+//     keygen_builder.add_partitioned_air(
+//         &page_controller.final_chip,
+//         test.page_height(),
+//         0,
+//         vec![final_page_ptr, final_page_aux_ptr],
+//     );
+
+//     keygen_builder.add_partitioned_air(
+//         &page_controller.range_checker.air,
+//         test.range_height(),
+//         0,
+//         vec![range_checker_ptr],
+//     );
+
+//     let partial_pk = keygen_builder.generate_partial_pk();
+
+//     let prover = MultiTraceStarkProver::new(&engine.config);
+//     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
+
+//     (
+//         &engine,
+//         &mut page_controller,
+//         &mut trace_builder,
+//         &partial_pk,
+//     )
 // }
 
 #[test]
 fn group_by_test() {
-    let test = GroupByTest::new(4, 1, 0, 10, 4);
-    // let test = GroupByTest::new(20, 3, 5, 10, 4);
+    // let test = GroupByTest::new(4, 1, 0, 10, 4);
+    let test = GroupByTest::new(20, 3, 5, 10, 4);
     let mut rng = create_seeded_rng();
 
-    // Generating a random page
-    let mut page: Vec<Vec<u32>> = vec![];
-    for _ in 0..test.page_height() {
-        let idx: Vec<u32> = (0..test.idx_len())
-            .map(|_| rng.gen::<u32>() % test.max_idx() as u32)
-            .collect::<Vec<u32>>();
-
-        page.push(iter::once(1).chain(idx).collect());
-    }
-
-    let page = Page::from_2d_vec(&page, test.idx_len(), 0);
+    let page = Page::random(
+        &mut rng,
+        test.idx_len(),
+        0,
+        test.max_idx() as u32,
+        0,
+        test.page_height(),
+        test.page_height(),
+    );
 
     let mut page_controller = PageController::new(
         test.page_width,
