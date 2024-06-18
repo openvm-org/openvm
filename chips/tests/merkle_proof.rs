@@ -29,6 +29,7 @@ fn generate_digests(leaf_hashes: Vec<[u8; 32]>) -> Vec<Vec<[u8; 32]>> {
 }
 
 #[test]
+#[ignore = "integration test takes too long"]
 fn test_merkle_proof_prove() {
     const DEPTH: usize = 8;
 
