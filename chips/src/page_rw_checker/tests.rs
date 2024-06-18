@@ -351,7 +351,6 @@ fn page_offline_checker_test() {
         Operation::new(2, idx, data_2, OpType::Read),
     ];
 
-    // TODO: look at this more closely
     assert_eq!(
         load_page_test(
             &engine,

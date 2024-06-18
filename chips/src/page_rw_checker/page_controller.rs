@@ -1,15 +1,19 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
-use afs_stark_backend::keygen::types::{
-    MultiStarkPartialProvingKey, MultiStarkPartialVerifyingKey,
+use afs_stark_backend::{
+    config::{Com, PcsProof, PcsProverData},
+    keygen::{
+        types::{MultiStarkPartialProvingKey, MultiStarkPartialVerifyingKey},
+        MultiStarkKeygenBuilder,
+    },
+    prover::{
+        trace::{ProverTraceData, TraceCommitmentBuilder, TraceCommitter},
+        types::Proof,
+    },
+    rap::AnyRap,
+    verifier::VerificationError,
 };
-use afs_stark_backend::keygen::MultiStarkKeygenBuilder;
-use afs_stark_backend::prover::trace::{ProverTraceData, TraceCommitmentBuilder, TraceCommitter};
-use afs_stark_backend::prover::types::Proof;
-use afs_stark_backend::rap::AnyRap;
-use afs_stark_backend::verifier::VerificationError;
 use afs_test_utils::engine::StarkEngine;
 use p3_field::{AbstractField, Field, PrimeField};
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
@@ -29,7 +33,7 @@ pub enum OpType {
     Delete = 2,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, derive_new::new)]
 pub struct Operation {
     pub clk: usize,
     pub idx: Vec<u32>,
@@ -37,23 +41,11 @@ pub struct Operation {
     pub op_type: OpType,
 }
 
-impl Operation {
-    pub fn new(clk: usize, idx: Vec<u32>, data: Vec<u32>, op_type: OpType) -> Self {
-        Self {
-            clk,
-            idx,
-            data,
-            op_type,
-        }
-    }
-}
-
-// TODO: remove pub
-pub struct PageRWTraces<F> {
-    pub init_page_trace: DenseMatrix<F>,
-    pub final_page_trace: DenseMatrix<F>,
-    pub final_page_aux_trace: DenseMatrix<F>,
-    pub offline_checker_trace: DenseMatrix<F>,
+struct PageRWTraces<F> {
+    init_page_trace: DenseMatrix<F>,
+    final_page_trace: DenseMatrix<F>,
+    final_page_aux_trace: DenseMatrix<F>,
+    offline_checker_trace: DenseMatrix<F>,
 }
 
 #[allow(dead_code)]
@@ -139,19 +131,17 @@ pub struct PageController<SC: StarkGenericConfig>
 where
     Val<SC>: AbstractField,
 {
-    pub init_chip: MyInitialPageAir,
-    pub offline_checker: OfflineChecker,
-    pub final_chip: MyFinalPageAir,
+    init_chip: MyInitialPageAir,
+    offline_checker: OfflineChecker,
+    final_chip: MyFinalPageAir,
 
-    // TODO: remove pub
-    pub traces: Option<PageRWTraces<Val<SC>>>,
+    traces: Option<PageRWTraces<Val<SC>>>,
     page_commitments: Option<PageCommitments<SC>>,
 
     pub range_checker: Arc<RangeCheckerGateChip>,
 }
 
 impl<SC: StarkGenericConfig> PageController<SC> {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         page_bus_index: usize,
         range_bus_index: usize,
