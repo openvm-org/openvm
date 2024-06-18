@@ -72,8 +72,8 @@ impl<AB: PartitionedAirBuilder> SubAir<AB> for GroupByAir {
     fn eval(&self, builder: &mut AB, _io: Self::IoView, aux: Self::AuxView) {
         let is_equal_vec_cols = IsEqualVecCols {
             io: IsEqualVecIOCols {
-                x: aux.0.sorted_group_by,
-                y: aux.1.sorted_group_by,
+                x: aux.0.sorted_group_by_combined,
+                y: aux.1.sorted_group_by_combined,
                 prod: aux.0.eq_next,
             },
             aux: aux.0.is_equal_vec_aux,
@@ -94,10 +94,10 @@ impl<AB: PartitionedAirBuilder> SubAir<AB> for GroupByAir {
         );
 
         // constrain is_final to be 1 if differ from next row
-        builder.assert_one(aux.0.eq_next + aux.0.is_final);
-
-        // constrain is_final to be 0 if unallocated
-        builder.assert_eq(aux.0.is_final, aux.0.is_final * aux.0.sorted_group_by_alloc);
+        builder.assert_eq(
+            aux.0.is_final,
+            aux.0.sorted_group_by_alloc - aux.0.sorted_group_by_alloc * aux.0.eq_next,
+        );
 
         // initialize partial sum at first row
         builder

@@ -32,17 +32,18 @@ impl GroupByAir {
             page_width,
             group_by_cols: group_by_cols.clone(),
             aggregated_col,
-            is_equal_vec_air: IsEqualVecAir::new(group_by_cols.len()),
+            // +1 for is_allocated column
+            is_equal_vec_air: IsEqualVecAir::new(group_by_cols.len() + 1),
             internal_bus,
             output_bus,
         }
     }
     pub fn get_width(&self) -> usize {
-        self.page_width + 3 * self.group_by_cols.len() + 5
+        self.page_width + 3 * self.group_by_cols.len() + 7
     }
 
     pub fn aux_width(&self) -> usize {
-        3 * self.group_by_cols.len() + 5
+        3 * self.group_by_cols.len() + 7
     }
 
     pub fn request(&self, page: &Page) -> Page {
