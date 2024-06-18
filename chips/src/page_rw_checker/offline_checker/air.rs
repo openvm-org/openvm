@@ -61,6 +61,13 @@ where
         builder.assert_bool(local_cols.same_data);
         builder.assert_bool(local_cols.is_extra);
 
+        // Making sure op_type is one of 0, 1, 2 (R, W, D)
+        builder.assert_zero(
+            local_cols.op_type
+                * (local_cols.op_type - AB::Expr::one())
+                * (local_cols.op_type - AB::Expr::two()),
+        );
+
         // Ensuring that op_type is decomposed into is_read, is_write, is_delete correctly
         builder.assert_eq(
             local_cols.op_type,
@@ -78,7 +85,7 @@ where
                     - AB::Expr::one()),
         );
 
-        // Ensuring is_final_x3 is correct
+        // Ensuring is_final_write_x3 is correct
         builder.assert_eq(
             local_cols.is_final_write_x3,
             local_cols.is_final_write * AB::Expr::from_canonical_u8(3),
@@ -90,8 +97,8 @@ where
 
         // Making sure same_idx is correct across rows
         let is_equal_idx = IsEqualVecCols::new(
-            local_cols.page_row[1..self.idx_len + 1].to_vec(),
-            next_cols.page_row[1..self.idx_len + 1].to_vec(),
+            local_cols.page_row[..self.idx_len].to_vec(),
+            next_cols.page_row[..self.idx_len].to_vec(),
             next_cols.is_equal_idx_aux.prods,
             next_cols.is_equal_idx_aux.invs,
         );
@@ -107,8 +114,8 @@ where
 
         // Making sure same_data is correct across rows
         let is_equal_data = IsEqualVecCols::new(
-            local_cols.page_row[self.idx_len + 1..].to_vec(),
-            next_cols.page_row[self.idx_len + 1..].to_vec(),
+            local_cols.page_row[self.idx_len..].to_vec(),
+            next_cols.page_row[self.idx_len..].to_vec(),
             next_cols.is_equal_data_aux.prods,
             next_cols.is_equal_data_aux.invs,
         );
@@ -123,12 +130,12 @@ where
 
         // Ensuring all rows are sorted by (key, clk)
         let lt_io_cols = IsLessThanTupleIOCols::<AB::Var> {
-            x: local_cols.page_row[1..self.idx_len + 1]
+            x: local_cols.page_row[..self.idx_len]
                 .iter()
                 .copied()
                 .chain(iter::once(local_cols.clk))
                 .collect(),
-            y: next_cols.page_row[1..self.idx_len + 1]
+            y: next_cols.page_row[..self.idx_len]
                 .iter()
                 .copied()
                 .chain(iter::once(next_cols.clk))
@@ -219,10 +226,40 @@ where
                 - (local_cols.is_final_write.into() + local_cols.is_final_delete.into()),
         ));
 
-        // next.is_final_write or next.is_final_delete => local.is_internal
+        // next is_final_write or next is_final_delete => local is_internal
         builder.when_transition().assert_one(implies(
             next_cols.is_final_write.into() + next_cols.is_final_delete.into(),
             local_cols.is_internal.into(),
+        ));
+
+        // Ensuring that next read => not local delete
+        // NOTE: constraint degree is 3
+        builder.when_transition().assert_one(or(
+            next_cols.is_extra.into(),
+            implies(
+                next_cols.is_read.into(),
+                AB::Expr::one() - local_cols.is_delete,
+            ),
+        ));
+
+        // Ensuring local is_final_delete => next not same_idx
+        // NOTE: constraint degree is 3
+        builder.when_transition().assert_one(or(
+            next_cols.is_extra.into(),
+            implies(
+                local_cols.is_final_delete.into(),
+                AB::Expr::one() - next_cols.same_idx,
+            ),
+        ));
+
+        // Ensuring that next is_final_delete => local is_delete
+        // NOTE: constraint degree is 3
+        builder.when_transition().assert_one(or(
+            next_cols.is_extra.into(),
+            implies(
+                next_cols.is_final_delete.into(),
+                local_cols.is_delete.into(),
+            ),
         ));
 
         // Making sure is_extra rows are at the bottom

@@ -42,10 +42,6 @@ impl OfflineChecker {
         }
     }
 
-    fn page_width(&self) -> usize {
-        1 + self.idx_len + self.data_len
-    }
-
     pub fn air_width(&self) -> usize {
         OfflineCheckerCols::<usize>::width(self)
     }

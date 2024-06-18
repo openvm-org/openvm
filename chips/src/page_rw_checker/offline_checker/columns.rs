@@ -21,7 +21,7 @@ pub struct OfflineCheckerCols<T> {
 
     /// timestamp for the operation
     pub clk: T,
-    /// the row of the page: starts with is_alloc bit, then index, then data
+    /// the row of the page without the is_alloc bit: idx and data only
     pub page_row: Vec<T>,
     /// 0 for read, 1 for write, 2 for delete
     pub op_type: T,
@@ -83,7 +83,7 @@ where
 
     pub fn from_slice(slc: &[T], oc: &OfflineChecker) -> Self {
         assert!(slc.len() == oc.air_width());
-        let page_width = oc.page_width();
+        let page_row_width = oc.idx_len + oc.data_len;
 
         Self {
             is_initial: slc[0].clone(),
@@ -92,26 +92,26 @@ where
             is_internal: slc[3].clone(),
             is_final_write_x3: slc[4].clone(),
             clk: slc[5].clone(),
-            page_row: slc[6..6 + page_width].to_vec(),
-            op_type: slc[6 + page_width].clone(),
-            is_read: slc[7 + page_width].clone(),
-            is_write: slc[8 + page_width].clone(),
-            is_delete: slc[9 + page_width].clone(),
-            same_idx: slc[10 + page_width].clone(),
-            same_data: slc[11 + page_width].clone(),
-            lt_bit: slc[12 + page_width].clone(),
-            is_extra: slc[13 + page_width].clone(),
+            page_row: slc[6..6 + page_row_width].to_vec(),
+            op_type: slc[6 + page_row_width].clone(),
+            is_read: slc[7 + page_row_width].clone(),
+            is_write: slc[8 + page_row_width].clone(),
+            is_delete: slc[9 + page_row_width].clone(),
+            same_idx: slc[10 + page_row_width].clone(),
+            same_data: slc[11 + page_row_width].clone(),
+            lt_bit: slc[12 + page_row_width].clone(),
+            is_extra: slc[13 + page_row_width].clone(),
             is_equal_idx_aux: IsEqualVecAuxCols::from_slice(
-                &slc[14 + page_width..14 + page_width + 2 * oc.idx_len],
+                &slc[14 + page_row_width..14 + page_row_width + 2 * oc.idx_len],
                 oc.idx_len,
             ),
             is_equal_data_aux: IsEqualVecAuxCols::from_slice(
-                &slc[14 + page_width + 2 * oc.idx_len
-                    ..14 + page_width + 2 * oc.idx_len + 2 * oc.data_len],
+                &slc[14 + page_row_width + 2 * oc.idx_len
+                    ..14 + page_row_width + 2 * oc.idx_len + 2 * oc.data_len],
                 oc.data_len,
             ),
             lt_aux: IsLessThanTupleAuxCols::from_slice(
-                &slc[14 + page_width + 2 * oc.idx_len + 2 * oc.data_len..],
+                &slc[14 + page_row_width + 2 * oc.idx_len + 2 * oc.data_len..],
                 oc.idx_clk_limb_bits.clone(),
                 oc.idx_decomp,
                 oc.idx_len + 1,
@@ -120,7 +120,8 @@ where
     }
 
     pub fn width(oc: &OfflineChecker) -> usize {
-        14 + oc.page_width()
+        14 + oc.idx_len
+            + oc.data_len
             + 2 * (oc.idx_len + oc.data_len)
             + IsLessThanTupleAuxCols::<usize>::get_width(
                 oc.idx_clk_limb_bits.clone(),

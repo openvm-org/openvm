@@ -18,7 +18,7 @@ use super::page_cols::PageCols;
 /// - Allocated rows come first
 /// - Allocated rows are sorted by idx and indices are distinct
 /// - Unallocated rows are all zeros
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Page {
     pub rows: Vec<PageCols<u32>>,
 }
@@ -76,7 +76,7 @@ impl Page {
             PageCols::new(0, vec![0; idx_len], vec![0; data_len]),
         );
 
-        Self { rows }
+        Page { rows }
     }
 
     pub fn idx_len(&self) -> usize {
@@ -100,6 +100,50 @@ impl Page {
         self.rows
             .iter()
             .any(|row| row.is_alloc == 1 && row.idx == idx)
+    }
+
+    /// This function inserts (idx, data) into the page
+    /// It assumes that the page is not full and that the idx is not already in the page
+    /// Does a linear scan
+    pub fn insert(&mut self, idx: &[u32], data: &[u32]) {
+        assert!(!self.contains(idx));
+        assert!(
+            self.rows.last().unwrap().is_alloc == 0,
+            "Can't insert into a full Page"
+        );
+        assert!(idx.len() == self.idx_len());
+        assert!(data.len() == self.data_len());
+
+        let mut pos = 0;
+        while self[pos].is_alloc == 1 && self[pos].idx < idx.to_vec() {
+            pos += 1;
+        }
+        self.rows
+            .insert(pos, PageCols::new(1, idx.to_vec(), data.to_vec()));
+        self.rows.pop();
+    }
+
+    /// This function deletes the row with index idx
+    /// It assumes that the page contains an allocated row with index idx
+    /// Does a linear scan
+    pub fn delete(&mut self, idx: &[u32]) {
+        assert!(self.contains(idx));
+
+        let mut pos = 0;
+        while self[pos].idx != idx {
+            pos += 1;
+        }
+        self.rows.remove(pos);
+        self.rows.push(PageCols::new(
+            0,
+            vec![0; self.idx_len()],
+            vec![0; self.data_len()],
+        ));
+    }
+
+    pub fn get_rows_index(&self, idx: &[u32]) -> usize {
+        assert!(self.contains(idx));
+        self.rows.iter().position(|row| row.idx == idx).unwrap()
     }
 
     /// Returns a random index from an allocated row in the page
