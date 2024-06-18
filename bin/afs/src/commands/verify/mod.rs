@@ -85,8 +85,8 @@ impl VerifyCommand {
             .max(8);
 
         let idx_decomp = 8;
+
         println!("Verifying proof file: {}", self.proof_file);
-        // verify::verify_ops(&self.proof_file).await?;
         let encoded_vk =
             read_from_path(self.keys_folder.clone() + "/" + &prefix + ".partial.vk").unwrap();
         let partial_vk: MultiStarkPartialVerifyingKey<BabyBearPoseidon2Config> =
