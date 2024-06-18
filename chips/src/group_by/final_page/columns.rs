@@ -1,5 +1,6 @@
 use crate::final_page::{columns::FinalPageCols, FinalPageAir};
 
+// Minimal wrapper around FinalPageCols
 pub struct MyFinalPageCols<T> {
     pub final_page_cols: FinalPageCols<T>,
 }

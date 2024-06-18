@@ -6,13 +6,20 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
+/// Main struct defining constraints and dimensions for group-by operation
+///
+/// Operation:
+/// 1. sends columns of interest to itself, constraining equal rows to be adjacent
+/// 2. completes partial operations on aggregated column
+/// 3. sends the aggregated columns to MyFinalPage
 pub struct GroupByAir {
     pub internal_bus: usize,
     pub output_bus: usize,
 
+    /// Has +1 to check equality on `is_alloc` column
     pub is_equal_vec_air: IsEqualVecAir,
 
-    // does not include is_allocated column
+    /// Does not include is_allocated column, so `idx_len + 1 == page_width`
     pub page_width: usize,
     pub group_by_cols: Vec<usize>,
     pub aggregated_col: usize,
@@ -32,20 +39,24 @@ impl GroupByAir {
             page_width,
             group_by_cols: group_by_cols.clone(),
             aggregated_col,
-            // +1 for is_allocated column
+            // has +1 to check equality on is_alloc column
             is_equal_vec_air: IsEqualVecAir::new(group_by_cols.len() + 1),
             internal_bus,
             output_bus,
         }
     }
+
+    /// Width of entire trace
     pub fn get_width(&self) -> usize {
         self.page_width + 3 * self.group_by_cols.len() + 7
     }
 
+    /// Width of auxilliary trace, i.e. all non-input-page columns
     pub fn aux_width(&self) -> usize {
         3 * self.group_by_cols.len() + 7
     }
 
+    /// This pure function computes the answer to the group-by operation
     pub fn request(&self, page: &Page) -> Page {
         let mut grouped_page: Vec<Vec<u32>> = page
             .rows

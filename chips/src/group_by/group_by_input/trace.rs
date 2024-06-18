@@ -7,6 +7,10 @@ use crate::sub_chip::LocalTraceInstructions;
 use super::{columns::GroupByCols, GroupByAir};
 
 impl GroupByAir {
+    /// Generate the auxilliary trace for the group-by operation
+    /// To generate page trace, use `Page::gen_trace`
+    ///
+    /// Solves for each segment of the trace independently, then zips them all together
     pub fn gen_aux_trace<F: Field>(&self, grouped_page: &Page) -> RowMajorMatrix<F> {
         let page_f: Vec<Vec<F>> = grouped_page
             .rows
@@ -36,9 +40,12 @@ impl GroupByAir {
             eq_vec_aux_trace.push(local_is_eq_vec_cols.aux.flatten());
             is_equal.push(vec![F::from_bool(vecs[0] == vecs[1])]);
         }
+        // fill in the last row with zeros
         eq_vec_aux_trace.push(vec![F::zero(); self.is_equal_vec_air.aux_width()]);
         is_equal.push(vec![F::zero()]);
 
+        // this mirrors the constraint on is_final, i.e.
+        // is_final = is_alloc AND !eq_next
         let is_final = is_equal
             .iter()
             .zip(grouped_page.rows.iter())

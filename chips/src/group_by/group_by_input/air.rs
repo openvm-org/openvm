@@ -105,11 +105,15 @@ impl<AB: PartitionedAirBuilder> SubAir<AB> for GroupByAir {
             (aux.0.sorted_group_by_alloc - aux.1.sorted_group_by_alloc) * aux.0.is_final,
         );
 
-        // constrain is_final to be 1 if differ from next row
+        // constrain is_final to be 1 iff differ from next row and sorted_group_by_alloc is 1
         builder.assert_eq(
             aux.0.is_final,
             aux.0.sorted_group_by_alloc - aux.0.sorted_group_by_alloc * aux.0.eq_next,
         );
+
+        // constrain last vector equality to 0
+        // because previously only constrained on transition
+        builder.when_last_row().assert_zero(aux.0.eq_next);
 
         // initialize partial sum at first row
         builder
