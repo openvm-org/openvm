@@ -16,6 +16,7 @@ impl<F: PrimeField64> AirBridge<F> for MyFinalPageAir {
         SubAirBridge::sends(&self.final_air, my_final_page_cols.final_page_cols)
     }
 
+    /// Receives GroupBy result (count via is_final, group_by cols (idx) and aggregated cols(data)) from GroupByInput
     fn receives(&self) -> Vec<Interaction<F>> {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();

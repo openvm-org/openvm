@@ -30,7 +30,7 @@ impl GroupByAir {
                 }]
             })
             .collect();
-        is_equal.push(vec![F::zero()]);
+        is_equal.push(vec![F::one()]);
 
         let is_final = is_equal
             .iter()

@@ -21,6 +21,8 @@ impl<AB: PartitionedAirBuilder> Air<AB> for GroupByAir
 where
     AB::M: Clone,
 {
+    /// Re-references builder into page_trace and aux_trace, then slices into local and next rows
+    /// to evaluate using SubAir::eval(GroupByAir)
     fn eval(&self, builder: &mut AB) {
         let page_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[0].clone();
         let aux_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[1].clone();
@@ -61,9 +63,10 @@ impl AirConfig for GroupByAir {
 }
 
 impl<AB: PartitionedAirBuilder> SubAir<AB> for GroupByAir {
-    // io.0 is local.io, io.1 is next.io
+    /// io.0 is local.io, io.1 is next.io. io consists of only the page, including is_alloc
     type IoView = (GroupByIOCols<AB::Var>, GroupByIOCols<AB::Var>);
-    // aux.0 is local.aux, aux.1 is next.aux
+    /// aux.0 is local.aux, aux.1 is next.aux. aux consists of everything that isn't io, including
+    /// sorted_group_by, sorted_group_by_alloc, aggregated, and partial_aggregated
     type AuxView = (GroupByAuxCols<AB::Var>, GroupByAuxCols<AB::Var>);
 
     fn eval(&self, builder: &mut AB, _io: Self::IoView, aux: Self::AuxView) {
@@ -84,25 +87,30 @@ impl<AB: PartitionedAirBuilder> SubAir<AB> for GroupByAir {
             is_equal_vec_cols.aux,
         );
 
-        // if sorted_group_by_alloc changes, then is_final must be 1
+        // if sorted_group_by_alloc changes, then is_final must be 1, even if eq_next is 1
         builder.when_transition().assert_eq(
             aux.0.sorted_group_by_alloc - aux.1.sorted_group_by_alloc,
             (aux.0.sorted_group_by_alloc - aux.1.sorted_group_by_alloc) * aux.0.is_final,
         );
 
+        // constrain is_final to be 1 if differ from next row
         builder.assert_one(aux.0.eq_next + aux.0.is_final);
 
+        // constrain is_final to be 0 if unallocated
         builder.assert_eq(aux.0.is_final, aux.0.is_final * aux.0.sorted_group_by_alloc);
 
+        // initialize partial sum at first row
         builder
             .when_first_row()
             .assert_eq(aux.0.partial_aggregated, aux.0.aggregated);
 
+        // constrain partials to sum correctly
         builder.when_transition().assert_eq(
             aux.1.partial_aggregated,
             aux.0.eq_next * aux.0.partial_aggregated + aux.1.aggregated,
         );
 
+        // constrain allocated rows come first
         builder.when_transition().assert_eq(
             aux.1.sorted_group_by_alloc * aux.0.sorted_group_by_alloc,
             aux.1.sorted_group_by_alloc,

@@ -5,6 +5,7 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
+/// Minimal wrapper of [FinalPageAir] that receives data (from GroupByInput)
 #[derive(Clone)]
 pub struct MyFinalPageAir {
     page_bus_index: usize,
