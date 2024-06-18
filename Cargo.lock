@@ -1521,6 +1521,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
 
 [[package]]
+name = "predicate"
+version = "0.1.0"
+dependencies = [
+ "afs-chips",
+ "afs-stark-backend",
+ "afs-test-utils",
+ "alloy-primitives",
+ "bincode",
+ "clap",
+ "color-eyre",
+ "logical-interface",
+ "p3-util",
+ "serde",
+ "serde_derive",
+]
+
+[[package]]
 name = "primitive-types"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
