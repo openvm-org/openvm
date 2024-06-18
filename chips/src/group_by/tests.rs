@@ -175,10 +175,10 @@ fn load_page_test(
 
     let mut challenger = engine.new_challenger();
 
-    // We expect failure, so we turn off debug assertions
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
+    // // We expect failure, so we turn off debug assertions
+    // USE_DEBUG_BUILDER.with(|debug| {
+    //     *debug.lock().unwrap() = false;
+    // });
     verifier.verify(
         &mut challenger,
         partial_vk,
@@ -194,8 +194,8 @@ fn load_page_test(
 
 #[test]
 fn group_by_test() {
-    // let test = GroupByTest::new(4, 1, 0, 10, 4);
-    let test = GroupByTest::new(20, 3, 5, 10, 4);
+    let test = GroupByTest::new(4, 1, 2, 10, 4);
+    // let test = GroupByTest::new(20, 3, 3, 10, 4);
     let mut rng = create_seeded_rng();
 
     let mut page_controller = PageController::new(
@@ -232,17 +232,17 @@ fn group_by_test() {
     )
     .expect("Verification failed");
 
-    // let page = test.generate_page(&mut rng, test.page_height() - 1);
+    let page = test.generate_page(&mut rng, test.page_height() - 1);
 
-    // // Testing a half allocated page
-    // load_page_test(
-    //     &engine,
-    //     &page,
-    //     &mut page_controller,
-    //     &mut trace_builder,
-    //     &partial_pk,
-    // )
-    // .expect("Verification failed");
+    // Testing a half allocated page
+    load_page_test(
+        &engine,
+        &page,
+        &mut page_controller,
+        &mut trace_builder,
+        &partial_pk,
+    )
+    .expect("Verification failed");
 
     // let rows_allocated = rng.gen::<usize>() % (test.page_height() + 1);
     // for i in rows_allocated..test.page_height() {
