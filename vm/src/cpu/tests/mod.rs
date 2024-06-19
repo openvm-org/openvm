@@ -66,14 +66,8 @@ fn air_test(
     let program_air = DummyInteractionAir::new(7, false, READ_INSTRUCTION_BUS);
     let mut program_rows = vec![];
     for (pc, instruction) in execution.program.iter().enumerate() {
-        let mut multiplicity = 0;
-        for trace_row in execution.trace_rows.iter() {
-            if trace_row.io.pc == BabyBear::from_canonical_u64(pc as u64) {
-                multiplicity += 1;
-            }
-        }
         program_rows.extend(vec![
-            BabyBear::from_canonical_usize(multiplicity),
+            execution.execution_frequencies[pc],
             BabyBear::from_canonical_usize(pc),
             BabyBear::from_canonical_usize(instruction.opcode as usize),
             instruction.op_a,

@@ -58,6 +58,7 @@ pub struct ArithmeticOperation<F> {
 pub struct ProgramExecution<F> {
     pub program: Vec<Instruction<F>>,
     pub trace_rows: Vec<CPUCols<F>>,
+    pub execution_frequencies: Vec<F>,
     pub memory_accesses: Vec<MemoryAccess<F>>,
     pub arithmetic_ops: Vec<ArithmeticOperation<F>>,
 }
@@ -129,12 +130,8 @@ impl <F: PrimeField64> Memory<F> {
 
 impl CPUChip {
     pub fn generate_trace<F: PrimeField64>(&self, program: Vec<Instruction<F>>) -> ProgramExecution<F> {
-        let mut instruction_map = HashMap::new();
-        for (i, instruction) in program.iter().enumerate() {
-            instruction_map.insert(F::from_canonical_usize(i), instruction);
-        }
-
         let mut rows = vec![];
+        let mut execution_frequencies = vec![F::zero(); program.len()];
         let mut arithmetic_operations = vec![];
 
         let mut clock_cycle: usize = 0;
@@ -143,7 +140,9 @@ impl CPUChip {
         let mut memory = Memory::new();
 
         loop {
-            let instruction = instruction_map[&pc];
+            execution_frequencies[pc.as_canonical_u64() as usize] += F::one();
+
+            let instruction = program[pc.as_canonical_u64() as usize];
             let opcode = instruction.opcode;
             let a = instruction.op_a;
             let b = instruction.op_b;
@@ -269,6 +268,7 @@ impl CPUChip {
 
         ProgramExecution {
             program,
+            execution_frequencies,
             trace_rows: rows,
             memory_accesses: memory.log,
             arithmetic_ops: arithmetic_operations,
