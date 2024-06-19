@@ -4,9 +4,7 @@ pub mod tests;
 pub mod types;
 
 use crate::{
-    mock_db::MockDbTable,
-    table::codec::fixed_bytes::FixedBytesCodec,
-    types::{Data, Index},
+    mock_db::MockDbTable, table::codec::fixed_bytes::FixedBytesCodec,
     utils::fixed_bytes_to_field_vec,
 };
 use afs_chips::common::{page::Page, page_cols::PageCols};
@@ -16,16 +14,16 @@ use types::{TableId, TableMetadata};
 
 /// Read-only Table object that returns an underlying database table as simple types
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Table<I: Index, D: Data> {
+pub struct Table {
     /// Unique identifier for the table
     pub id: TableId,
     /// Metadata for the table
     pub metadata: TableMetadata,
     /// Body of the table, mapping index to data
-    pub body: BTreeMap<I, D>,
+    pub body: BTreeMap<Vec<u8>, Vec<u8>>,
 }
 
-impl<I: Index, D: Data> Table<I, D> {
+impl Table {
     pub fn new(id: TableId, metadata: TableMetadata) -> Self {
         Self {
             id,
@@ -39,17 +37,17 @@ impl<I: Index, D: Data> Table<I, D> {
             .items
             .iter()
             .map(|(k, v)| {
-                let codec = FixedBytesCodec::<I, D>::new(
+                let codec = FixedBytesCodec::new(
                     index_bytes,
                     data_bytes,
                     db_table.db_table_metadata.index_bytes,
                     db_table.db_table_metadata.data_bytes,
                 );
-                let index = codec.fixed_bytes_to_index(k.to_vec());
-                let data = codec.fixed_bytes_to_data(v.to_vec());
+                let index = codec.db_to_table_index_bytes(k.to_vec());
+                let data = codec.db_to_table_data_bytes(v.to_vec());
                 (index, data)
             })
-            .collect::<BTreeMap<I, D>>();
+            .collect::<BTreeMap<Vec<u8>, Vec<u8>>>();
 
         Self {
             id: db_table.id,
@@ -62,7 +60,7 @@ impl<I: Index, D: Data> Table<I, D> {
     }
 
     pub fn from_page(id: TableId, page: Page, index_bytes: usize, data_bytes: usize) -> Self {
-        let codec = FixedBytesCodec::<I, D>::new(
+        let codec = FixedBytesCodec::new(
             index_bytes,
             data_bytes,
             page.rows[0].idx.len() * 2,
@@ -93,15 +91,15 @@ impl<I: Index, D: Data> Table<I, D> {
                         bytes[2..4].to_vec()
                     })
                     .collect::<Vec<u8>>();
-                let index = codec.fixed_bytes_to_index(index_bytes);
-                let data = codec.fixed_bytes_to_data(data_bytes);
+                let index = codec.db_to_table_index_bytes(index_bytes);
+                let data = codec.db_to_table_data_bytes(data_bytes);
                 Some((index, data))
             })
-            .collect::<BTreeMap<I, D>>();
+            .collect::<BTreeMap<Vec<u8>, Vec<u8>>>();
 
         // Remove the 0 index which is from the padding
         let index_zero: Vec<u8> = vec![0; index_bytes];
-        body.remove(&codec.fixed_bytes_to_index(index_zero));
+        body.remove(&codec.db_to_table_index_bytes(index_zero));
 
         Self {
             id,
@@ -110,7 +108,7 @@ impl<I: Index, D: Data> Table<I, D> {
         }
     }
 
-    pub fn to_page(&self, height: usize) -> Page {
+    pub fn to_page(&self, page_index_bytes: usize, page_data_bytes: usize, height: usize) -> Page {
         if self.body.len() > height {
             panic!(
                 "Table height {} cannot be bigger than `height` {}",
@@ -118,20 +116,20 @@ impl<I: Index, D: Data> Table<I, D> {
                 height
             );
         }
-        let codec = FixedBytesCodec::<I, D>::new(
+        let codec = FixedBytesCodec::new(
             self.metadata.index_bytes,
             self.metadata.data_bytes,
-            self.metadata.index_bytes,
-            self.metadata.data_bytes,
+            page_index_bytes,
+            page_data_bytes,
         );
         let mut rows: Vec<PageCols<u32>> = self
             .body
             .iter()
             .map(|(index, data)| {
                 let is_alloc: u32 = 1;
-                let index_bytes = codec.index_to_fixed_bytes(index.clone());
+                let index_bytes = codec.table_to_db_index_bytes(index.clone());
                 let index_fields = fixed_bytes_to_field_vec(index_bytes);
-                let data_bytes = codec.data_to_fixed_bytes(data.clone());
+                let data_bytes = codec.table_to_db_data_bytes(data.clone());
                 let data_fields = fixed_bytes_to_field_vec(data_bytes);
                 PageCols {
                     is_alloc,
@@ -142,8 +140,8 @@ impl<I: Index, D: Data> Table<I, D> {
             .collect::<Vec<PageCols<u32>>>();
         let zeros: PageCols<u32> = PageCols {
             is_alloc: 0,
-            idx: vec![0; self.metadata.index_bytes / 2],
-            data: vec![0; self.metadata.data_bytes / 2],
+            idx: vec![0; page_index_bytes / 2],
+            data: vec![0; page_data_bytes / 2],
         };
         let remaining_rows = height - self.body.len();
         for _ in 0..remaining_rows {
@@ -160,7 +158,7 @@ impl<I: Index, D: Data> Table<I, D> {
         "0x".to_string() + &self.id.to_string()
     }
 
-    pub fn read(&self, index: I) -> Option<D> {
+    pub fn read(&self, index: Vec<u8>) -> Option<Vec<u8>> {
         self.body.get(&index).cloned()
     }
 
@@ -173,10 +171,10 @@ impl<I: Index, D: Data> Table<I, D> {
     }
 
     pub fn size_of_index(&self) -> usize {
-        std::mem::size_of::<I>()
+        self.metadata.index_bytes
     }
 
     pub fn size_of_data(&self) -> usize {
-        std::mem::size_of::<D>()
+        self.metadata.data_bytes
     }
 }

@@ -3,23 +3,56 @@ use afs_chips::common::{page::Page, page_cols::PageCols};
 use crate::{
     afs_interface::utils::string_to_table_id,
     table::types::{TableId, TableMetadata},
+    utils::uint_to_be_vec,
 };
 
 use super::Table;
 
-fn create_table() -> Table<u32, u64> {
+fn create_table() -> Table {
     let table_id = TableId::new([0; 32]);
-    let mut table = Table::<u32, u64>::new(table_id, TableMetadata::new(4, 8));
-    table.body.insert(1, 2);
-    table.body.insert(2, 4);
-    table.body.insert(4, 8);
-    table.body.insert(8, 16);
-    table.body.insert(16, 32);
-    table.body.insert(32, 64);
-    table.body.insert(64, 128);
-    table.body.insert(128, 256);
-    table.body.insert(1000, 65536);
-    table.body.insert(65791, 65792);
+    let index_bytes = 4;
+    let data_bytes = 8;
+    let mut table = Table::new(table_id, TableMetadata::new(index_bytes, data_bytes));
+    table.body.insert(
+        uint_to_be_vec(1, index_bytes),
+        uint_to_be_vec(2, data_bytes),
+    );
+    table.body.insert(
+        uint_to_be_vec(2, index_bytes),
+        uint_to_be_vec(4, data_bytes),
+    );
+    table.body.insert(
+        uint_to_be_vec(4, index_bytes),
+        uint_to_be_vec(8, data_bytes),
+    );
+    table.body.insert(
+        uint_to_be_vec(8, index_bytes),
+        uint_to_be_vec(16, data_bytes),
+    );
+    table.body.insert(
+        uint_to_be_vec(16, index_bytes),
+        uint_to_be_vec(32, data_bytes),
+    );
+    table.body.insert(
+        uint_to_be_vec(32, index_bytes),
+        uint_to_be_vec(64, data_bytes),
+    );
+    table.body.insert(
+        uint_to_be_vec(64, index_bytes),
+        uint_to_be_vec(128, data_bytes),
+    );
+    table.body.insert(
+        uint_to_be_vec(128, index_bytes),
+        uint_to_be_vec(256, data_bytes),
+    );
+    table.body.insert(
+        uint_to_be_vec(1000, index_bytes),
+        uint_to_be_vec(65536, data_bytes),
+    );
+    table.body.insert(
+        uint_to_be_vec(65791, index_bytes),
+        uint_to_be_vec(65792, data_bytes),
+    );
     table
 }
 
@@ -116,7 +149,7 @@ pub fn test_create_new_table() {
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 1,
     ]);
-    let table = Table::<u32, u64>::new(table_id, TableMetadata::new(4, 8));
+    let table = Table::new(table_id, TableMetadata::new(4, 8));
     assert_eq!(table.id, string_to_table_id("1".to_string()));
 }
 
@@ -124,7 +157,7 @@ pub fn test_create_new_table() {
 pub fn test_convert_to_page() {
     let page_size = 16;
     let table = create_table();
-    let page = table.to_page(page_size);
+    let page = table.to_page(4, 8, page_size);
     assert_eq!(page.rows.len(), page_size);
     for row in page.clone().rows {
         println!("{:?}", row);
@@ -149,13 +182,13 @@ pub fn test_convert_to_page() {
 #[should_panic]
 pub fn test_convert_to_page_too_small() {
     let table = create_table();
-    table.to_page(4);
+    table.to_page(4, 8, 4);
 }
 
 #[test]
 pub fn test_convert_from_page() {
     let page = create_page();
-    let table = Table::<u32, u64>::from_page(
+    let table = Table::from_page(
         TableId::new([1; 32]),
         page,
         std::mem::size_of::<u32>(),
@@ -169,20 +202,52 @@ pub fn test_convert_from_page() {
 #[test]
 pub fn test_unordered_table() {
     let table_id = TableId::new([0; 32]);
-    let mut table = Table::<u32, u64>::new(table_id, TableMetadata::new(4, 8));
-    table.body.insert(16, 32);
-    table.body.insert(2, 4);
-    table.body.insert(128, 256);
-    table.body.insert(1000, 65536);
-    table.body.insert(65791, 65792);
-    table.body.insert(4, 8);
-    table.body.insert(64, 128);
-    table.body.insert(8, 16);
-    table.body.insert(1, 2);
-    table.body.insert(32, 64);
+    let index_bytes = 4;
+    let data_bytes = 8;
+    let mut table = Table::new(table_id, TableMetadata::new(index_bytes, data_bytes));
+    table.body.insert(
+        uint_to_be_vec(16, index_bytes),
+        uint_to_be_vec(32, data_bytes),
+    );
+    table.body.insert(
+        uint_to_be_vec(2, index_bytes),
+        uint_to_be_vec(4, data_bytes),
+    );
+    table.body.insert(
+        uint_to_be_vec(128, index_bytes),
+        uint_to_be_vec(256, data_bytes),
+    );
+    table.body.insert(
+        uint_to_be_vec(1000, index_bytes),
+        uint_to_be_vec(65536, data_bytes),
+    );
+    table.body.insert(
+        uint_to_be_vec(65791, index_bytes),
+        uint_to_be_vec(65792, data_bytes),
+    );
+    table.body.insert(
+        uint_to_be_vec(4, index_bytes),
+        uint_to_be_vec(8, data_bytes),
+    );
+    table.body.insert(
+        uint_to_be_vec(64, index_bytes),
+        uint_to_be_vec(128, data_bytes),
+    );
+    table.body.insert(
+        uint_to_be_vec(8, index_bytes),
+        uint_to_be_vec(16, data_bytes),
+    );
+    table.body.insert(
+        uint_to_be_vec(1, index_bytes),
+        uint_to_be_vec(2, data_bytes),
+    );
+    table.body.insert(
+        uint_to_be_vec(32, index_bytes),
+        uint_to_be_vec(64, data_bytes),
+    );
     let comparison_table = create_table();
     assert_eq!(table.body, comparison_table.body);
-    let page = table.to_page(16);
+    let page = table.to_page(index_bytes, data_bytes, 16);
     let comparison_page = create_page();
     for (i, row) in page.rows.iter().enumerate() {
         assert_eq!(row.is_alloc, comparison_page.rows[i].is_alloc);

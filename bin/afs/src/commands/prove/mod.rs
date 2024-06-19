@@ -23,8 +23,7 @@ use logical_interface::{
     afs_interface::AfsInterface,
     mock_db::MockDb,
     table::codec::fixed_bytes::FixedBytesCodec,
-    types::{Data, Index},
-    utils::{fixed_bytes_to_field_vec, string_to_fixed_bytes_be_vec},
+    utils::{fixed_bytes_to_field_vec, string_to_be_vec},
 };
 use p3_util::log2_strict_usize;
 
@@ -109,16 +108,14 @@ impl ProveCommand {
             config.page.index_bytes,
             config.page.data_bytes,
         );
-        let mut interface = AfsInterface::<Vec<u8>, Vec<u8>>::new(
-            &mut db,
+        let mut interface =
+            AfsInterface::new(config.page.index_bytes, config.page.data_bytes, &mut db);
+        let table_id = instructions.header.table_id;
+        let page_init = interface.get_table(table_id.clone()).unwrap().to_page(
             config.page.index_bytes,
             config.page.data_bytes,
+            height,
         );
-        let table_id = instructions.header.table_id;
-        let page_init = interface
-            .get_table(table_id.clone())
-            .unwrap()
-            .to_page(height);
         let zk_ops = instructions
             .operations
             .iter()
@@ -228,27 +225,23 @@ impl ProveCommand {
     }
 }
 
-fn afi_op_conv<I, D>(
+fn afi_op_conv(
     afi_op: &AfsOperation,
     table_id: String,
-    interface: &mut AfsInterface<I, D>,
+    interface: &mut AfsInterface,
     clk: usize,
-    codec: &FixedBytesCodec<I, D>,
-) -> Operation
-where
-    I: Index,
-    D: Data,
-{
-    let idx_u8 = string_to_fixed_bytes_be_vec(afi_op.args[0].clone(), codec.fixed_index_bytes);
+    codec: &FixedBytesCodec,
+) -> Operation {
+    let idx_u8 = string_to_be_vec(afi_op.args[0].clone(), codec.db.index_bytes);
     let idx_u16 = fixed_bytes_to_field_vec(idx_u8.clone());
-    let idx = codec.fixed_bytes_to_index(idx_u8.clone());
+    let idx = codec.db_to_table_index_bytes(idx_u8.clone());
     match afi_op.operation {
         InputFileBodyOperation::Read => {
             assert!(afi_op.args.len() == 1);
             let data = interface
-                .read(table_id, codec.fixed_bytes_to_index(idx_u8))
+                .read(table_id, codec.db_to_table_index_bytes(idx_u8))
                 .unwrap();
-            let data_bytes = codec.data_to_fixed_bytes(data.clone());
+            let data_bytes = codec.table_to_db_data_bytes(data.clone());
             let data_u16 = fixed_bytes_to_field_vec(data_bytes);
             Operation {
                 clk,
@@ -259,10 +252,9 @@ where
         }
         InputFileBodyOperation::Insert => {
             assert!(afi_op.args.len() == 2);
-            let data_u8 =
-                string_to_fixed_bytes_be_vec(afi_op.args[1].clone(), codec.fixed_data_bytes);
+            let data_u8 = string_to_be_vec(afi_op.args[1].clone(), codec.db.data_bytes);
             let data_u16 = fixed_bytes_to_field_vec(data_u8.clone());
-            let data = codec.fixed_bytes_to_data(data_u8);
+            let data = codec.db_to_table_data_bytes(data_u8);
             interface.insert(table_id, idx, data);
             Operation {
                 clk,
@@ -273,10 +265,9 @@ where
         }
         InputFileBodyOperation::Write => {
             assert!(afi_op.args.len() == 2);
-            let data_u8 =
-                string_to_fixed_bytes_be_vec(afi_op.args[1].clone(), codec.fixed_data_bytes);
+            let data_u8 = string_to_be_vec(afi_op.args[1].clone(), codec.db.data_bytes);
             let data_u16 = fixed_bytes_to_field_vec(data_u8.clone());
-            let data = codec.fixed_bytes_to_data(data_u8);
+            let data = codec.db_to_table_data_bytes(data_u8);
             interface.write(table_id, idx, data);
             Operation {
                 clk,
