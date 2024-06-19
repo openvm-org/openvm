@@ -9,5 +9,5 @@ pub mod columns;
 pub mod trace;
 
 pub struct ProgramAir<T> {
-    program: Vec<Instruction<T>>
+    program: Vec<Instruction<T>>,
 }

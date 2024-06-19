@@ -3,7 +3,8 @@ use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
 use super::{
-    columns::CPUCols, CPUAir, ARITHMETIC_BUS, NUM_ARITHMETIC_OPERATIONS, NUM_CORE_OPERATIONS, READ_INSTRUCTION_BUS, MEMORY_BUS
+    columns::CPUCols, CPUAir, ARITHMETIC_BUS, MEMORY_BUS, NUM_ARITHMETIC_OPERATIONS,
+    NUM_CORE_OPERATIONS, READ_INSTRUCTION_BUS,
 };
 
 impl<F: PrimeField64> AirBridge<F> for CPUAir {
@@ -35,7 +36,10 @@ impl<F: PrimeField64> AirBridge<F> for CPUAir {
                     VirtualPairCol::single_main(cols_numbered.aux.read1.address),
                     VirtualPairCol::single_main(cols_numbered.aux.read1.value),
                 ],
-                count: VirtualPairCol::diff_main(cols_numbered.aux.read1.enabled, cols_numbered.aux.read1.is_immediate),
+                count: VirtualPairCol::diff_main(
+                    cols_numbered.aux.read1.enabled,
+                    cols_numbered.aux.read1.is_immediate,
+                ),
                 argument_index: MEMORY_BUS,
             },
             Interaction {
@@ -46,7 +50,10 @@ impl<F: PrimeField64> AirBridge<F> for CPUAir {
                     VirtualPairCol::single_main(cols_numbered.aux.read2.address),
                     VirtualPairCol::single_main(cols_numbered.aux.read2.value),
                 ],
-                count: VirtualPairCol::diff_main(cols_numbered.aux.read2.enabled, cols_numbered.aux.read2.is_immediate),
+                count: VirtualPairCol::diff_main(
+                    cols_numbered.aux.read2.enabled,
+                    cols_numbered.aux.read2.is_immediate,
+                ),
                 argument_index: MEMORY_BUS,
             },
             Interaction {
@@ -57,7 +64,10 @@ impl<F: PrimeField64> AirBridge<F> for CPUAir {
                     VirtualPairCol::single_main(cols_numbered.aux.write.address),
                     VirtualPairCol::single_main(cols_numbered.aux.write.value),
                 ],
-                count: VirtualPairCol::diff_main(cols_numbered.aux.write.enabled, cols_numbered.aux.write.is_immediate),
+                count: VirtualPairCol::diff_main(
+                    cols_numbered.aux.write.enabled,
+                    cols_numbered.aux.write.is_immediate,
+                ),
                 argument_index: MEMORY_BUS,
             },
             // Interaction with arithmetic (bus 2)
@@ -65,9 +75,12 @@ impl<F: PrimeField64> AirBridge<F> for CPUAir {
                 Interaction {
                     fields: vec![
                         /* opcode    */ VirtualPairCol::single_main(cols_numbered.io.opcode),
-                        /* operand 1 */ VirtualPairCol::single_main(cols_numbered.aux.read1.value),
-                        /* operand 2 */ VirtualPairCol::single_main(cols_numbered.aux.read2.value),
-                        /* result    */ VirtualPairCol::single_main(cols_numbered.aux.write.value),
+                        /* operand 1 */
+                        VirtualPairCol::single_main(cols_numbered.aux.read1.value),
+                        /* operand 2 */
+                        VirtualPairCol::single_main(cols_numbered.aux.read2.value),
+                        /* result    */
+                        VirtualPairCol::single_main(cols_numbered.aux.write.value),
                     ],
                     count: VirtualPairCol::sum_main(
                         cols_numbered.aux.operation_flags
@@ -82,7 +95,7 @@ impl<F: PrimeField64> AirBridge<F> for CPUAir {
                     count: VirtualPairCol::constant(F::zero()),
                     argument_index: ARITHMETIC_BUS,
                 }
-            }
+            },
         ];
 
         interactions

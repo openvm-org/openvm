@@ -93,7 +93,7 @@ pub struct CPUAuxCols<T> {
     pub read2: MemoryAccessCols<T>,
     pub write: MemoryAccessCols<T>,
     pub beq_check: T,
-    pub is_equal_aux: T
+    pub is_equal_aux: T,
 }
 
 impl<T: Clone> CPUAuxCols<T> {

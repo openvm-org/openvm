@@ -5,7 +5,12 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use afs_chips::{is_equal::IsEqualAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions};
 
-use super::{columns::{CPUAuxCols, CPUCols, CPUIOCols, MemoryAccessCols}, CPUChip, OpCode, OpCode::*, INST_WIDTH};
+use super::{
+    columns::{CPUAuxCols, CPUCols, CPUIOCols, MemoryAccessCols},
+    CPUChip, OpCode,
+    OpCode::*,
+    INST_WIDTH,
+};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Instruction<F> {
@@ -28,13 +33,16 @@ pub struct MemoryAccess<F> {
 
 fn memory_access_to_cols<F: PrimeField64>(access: Option<MemoryAccess<F>>) -> MemoryAccessCols<F> {
     let (enabled, address_space, address, value) = match access {
-        Some(MemoryAccess { clock: _, is_write: _, address_space, address, value }) => (F::one(), address_space, address, value),
+        Some(MemoryAccess {
+            clock: _,
+            is_write: _,
+            address_space,
+            address,
+            value,
+        }) => (F::one(), address_space, address, value),
         None => (F::zero(), F::one(), F::zero(), F::zero()),
     };
-    let is_zero_cols = LocalTraceInstructions::generate_trace_row(
-        &IsZeroAir {},
-        address_space,
-    );
+    let is_zero_cols = LocalTraceInstructions::generate_trace_row(&IsZeroAir {}, address_space);
     let is_immediate = is_zero_cols.io.is_zero;
     let is_zero_aux = is_zero_cols.inv;
     MemoryAccessCols {
@@ -63,9 +71,13 @@ pub struct ProgramExecution<F> {
     pub arithmetic_ops: Vec<ArithmeticOperation<F>>,
 }
 
-impl <F: PrimeField64> ProgramExecution<F> {
+impl<F: PrimeField64> ProgramExecution<F> {
     pub fn trace(&self) -> RowMajorMatrix<F> {
-        let rows: Vec<F> = self.trace_rows.iter().flat_map(|row| row.flatten()).collect();
+        let rows: Vec<F> = self
+            .trace_rows
+            .iter()
+            .flat_map(|row| row.flatten())
+            .collect();
         let num_cols = rows.len() / self.trace_rows.len();
         RowMajorMatrix::new(rows, num_cols)
     }
@@ -79,7 +91,7 @@ struct Memory<F> {
     writes_this_cycle: VecDeque<MemoryAccess<F>>,
 }
 
-impl <F: PrimeField64> Memory<F> {
+impl<F: PrimeField64> Memory<F> {
     fn new() -> Self {
         let mut data = HashMap::new();
         data.insert(F::one(), HashMap::new());
@@ -98,9 +110,17 @@ impl <F: PrimeField64> Memory<F> {
         let value = if address_space == F::zero() {
             address
         } else {
-            *self.data[&address_space].get(&address).unwrap_or(&F::zero())
+            *self.data[&address_space]
+                .get(&address)
+                .unwrap_or(&F::zero())
         };
-        let read = MemoryAccess { clock: self.clock_cycle, is_write: false, address_space, address, value };
+        let read = MemoryAccess {
+            clock: self.clock_cycle,
+            is_write: false,
+            address_space,
+            address,
+            value,
+        };
         if read.address_space != F::zero() {
             self.log.push(read);
         }
@@ -112,11 +132,20 @@ impl <F: PrimeField64> Memory<F> {
         if address_space == F::zero() {
             panic!("Attempted to write to address space 0");
         } else {
-            let write = MemoryAccess { clock: self.clock_cycle, is_write: true, address_space, address, value };
+            let write = MemoryAccess {
+                clock: self.clock_cycle,
+                is_write: true,
+                address_space,
+                address,
+                value,
+            };
             self.log.push(write);
             self.writes_this_cycle.push_back(write);
 
-            self.data.get_mut(&address_space).unwrap().insert(address, value);
+            self.data
+                .get_mut(&address_space)
+                .unwrap()
+                .insert(address, value);
         }
     }
 
@@ -129,7 +158,10 @@ impl <F: PrimeField64> Memory<F> {
 }
 
 impl CPUChip {
-    pub fn generate_trace<F: PrimeField64>(&self, program: Vec<Instruction<F>>) -> ProgramExecution<F> {
+    pub fn generate_trace<F: PrimeField64>(
+        &self,
+        program: Vec<Instruction<F>>,
+    ) -> ProgramExecution<F> {
         let mut rows = vec![];
         let mut execution_frequencies = vec![F::zero(); program.len()];
         let mut arithmetic_operations = vec![];
@@ -204,29 +236,30 @@ impl CPUChip {
                         next_pc = pc + c;
                     }
                 }
-                opcode @ (FADD | FSUB | FMUL | FDIV) => if self.air.options.field_arithmetic_enabled {
+                opcode @ (FADD | FSUB | FMUL | FDIV) => {
+                    if self.air.options.field_arithmetic_enabled {
+                        // read from e[b] and e[c]
+                        let operand1 = memory.read(e, b);
+                        let operand2 = memory.read(e, c);
+                        let result = match opcode {
+                            FADD => operand1 + operand2,
+                            FSUB => operand1 - operand2,
+                            FMUL => operand1 * operand2,
+                            FDIV => operand1 / operand2,
+                            _ => unreachable!(),
+                        };
+                        // write to d[a]
+                        memory.write(d, a, result);
 
-                    // read from e[b] and e[c]
-                    let operand1 = memory.read(e, b);
-                    let operand2 = memory.read(e, c);
-                    let result = match opcode {
-                        FADD => operand1 + operand2,
-                        FSUB => operand1 - operand2,
-                        FMUL => operand1 * operand2,
-                        FDIV => operand1 / operand2,
-                        _ => unreachable!(),
-                    };
-                    // write to d[a]
-                    memory.write(d, a, result);
-                
-                    arithmetic_operations.push(ArithmeticOperation {
-                        opcode,
-                        operand1,
-                        operand2,
-                        result,
-                    });
-                } else {
-                    panic!("Field arithmetic is not enabled");
+                        arithmetic_operations.push(ArithmeticOperation {
+                            opcode,
+                            operand1,
+                            operand2,
+                            result,
+                        });
+                    } else {
+                        panic!("Field arithmetic is not enabled");
+                    }
                 }
             };
 
