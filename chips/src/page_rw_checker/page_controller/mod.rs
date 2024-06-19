@@ -42,10 +42,10 @@ pub struct Operation {
 }
 
 struct PageRWTraces<F> {
-    init_page_trace: DenseMatrix<F>,
-    final_page_trace: DenseMatrix<F>,
-    final_page_aux_trace: DenseMatrix<F>,
-    offline_checker_trace: DenseMatrix<F>,
+    init_page_trace: RowMajorMatrix<F>,
+    final_page_trace: RowMajorMatrix<F>,
+    final_page_aux_trace: RowMajorMatrix<F>,
+    offline_checker_trace: RowMajorMatrix<F>,
 }
 
 #[allow(dead_code)]
@@ -199,11 +199,12 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     pub fn load_page_and_ops(
         &mut self,
         page: &Page,
-        mut pages_prover_data: Vec<Option<Arc<ProverTraceData<SC>>>>,
+        init_page_pdata: Option<Arc<ProverTraceData<SC>>>,
+        final_page_pdata: Option<Arc<ProverTraceData<SC>>>,
         ops: Vec<Operation>,
         trace_degree: usize,
         trace_committer: &mut TraceCommitter<SC>,
-    ) -> Vec<Arc<ProverTraceData<SC>>>
+    ) -> (Arc<ProverTraceData<SC>>, Arc<ProverTraceData<SC>>)
     where
         Val<SC>: PrimeField,
     {
@@ -239,16 +240,15 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             final_write_indices,
         );
 
-        let prover_data = vec![
-            match pages_prover_data.remove(0) {
-                Some(prover_data) => prover_data,
-                None => Arc::new(trace_committer.commit(vec![init_page_trace.clone()])),
-            },
-            match pages_prover_data.remove(0) {
-                Some(prover_data) => prover_data,
-                None => Arc::new(trace_committer.commit(vec![final_page_trace.clone()])),
-            },
-        ];
+        let init_page_pdata = match init_page_pdata {
+            Some(prover_data) => prover_data,
+            None => Arc::new(trace_committer.commit(vec![init_page_trace.clone()])),
+        };
+
+        let final_page_pdata = match final_page_pdata {
+            Some(prover_data) => prover_data,
+            None => Arc::new(trace_committer.commit(vec![final_page_trace.clone()])),
+        };
 
         self.traces = Some(PageRWTraces {
             init_page_trace,
@@ -258,11 +258,11 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         });
 
         self.page_commitments = Some(PageCommitments {
-            init_page_commitment: prover_data[0].commit.clone(),
-            final_page_commitment: prover_data[1].commit.clone(),
+            init_page_commitment: init_page_pdata.commit.clone(),
+            final_page_commitment: final_page_pdata.commit.clone(),
         });
 
-        prover_data
+        (init_page_pdata, final_page_pdata)
     }
 
     /// Sets up keygen with the different trace partitions for the chips
@@ -307,12 +307,14 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     /// commits them, and then generates the proof.
     /// cached_traces_prover_data is a vector of ProverTraceData object for the cached pages
     /// (init_page, final_page), which is returned by load_page_and_ops
+    #[allow(clippy::too_many_arguments)]
     pub fn prove(
         &self,
         engine: &impl StarkEngine<SC>,
         partial_pk: &MultiStarkPartialProvingKey<SC>,
         trace_builder: &mut TraceCommitmentBuilder<SC>,
-        mut cached_traces_prover_data: Vec<Arc<ProverTraceData<SC>>>,
+        init_page_pdata: Arc<ProverTraceData<SC>>,
+        final_page_pdata: Arc<ProverTraceData<SC>>,
         ops_sender: &dyn AnyRap<SC>,
         ops_sender_trace: DenseMatrix<Val<SC>>,
     ) -> Proof<SC>
@@ -326,22 +328,20 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
     {
-        assert!(cached_traces_prover_data.len() == 2);
-
         let traces = self.traces.as_ref().unwrap();
 
         trace_builder.clear();
 
         trace_builder.load_cached_trace(
             traces.init_page_trace.clone(),
-            match Arc::try_unwrap(cached_traces_prover_data.remove(0)) {
+            match Arc::try_unwrap(init_page_pdata) {
                 Ok(data) => data,
                 Err(_) => panic!("Prover data should have only one owner"),
             },
         );
         trace_builder.load_cached_trace(
             traces.final_page_trace.clone(),
-            match Arc::try_unwrap(cached_traces_prover_data.remove(0)) {
+            match Arc::try_unwrap(final_page_pdata) {
                 Ok(data) => data,
                 Err(_) => panic!("Prover data should have only one owner"),
             },

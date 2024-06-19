@@ -169,16 +169,18 @@ where
             or(local_cols.same_idx.into(), local_cols.is_write.into()),
         ));
 
-        // Making sure every idx block ends with a is_final_write or is_final_delete
+        // Making sure every idx block ends with a is_final_write or is_final_delete (in the three constraints below)
+        // First, when local and next are not extra
         // NOTE: constraint degree is 3
         builder.when_transition().assert_one(or(
-            local_cols.is_extra.into(),
+            next_cols.is_extra.into(),
             or(
                 next_cols.same_idx.into(),
                 local_cols.is_final_write.into() + local_cols.is_final_delete.into(),
             ),
         ));
         // NOTE: constraint degree is 3
+        // Second, when local is not extra but next is extra
         builder.when_transition().assert_one(implies(
             and(
                 AB::Expr::one() - local_cols.is_extra.into(),
@@ -186,6 +188,7 @@ where
             ),
             local_cols.is_final_write.into() + local_cols.is_final_delete.into(),
         ));
+        // Third, when it's the last row
         builder.when_last_row().assert_one(implies(
             AB::Expr::one() - local_cols.is_extra,
             local_cols.is_final_write.into() + local_cols.is_final_delete.into(),
@@ -270,12 +273,12 @@ where
 
         // Note that the following is implied:
         // - for every row: (is_initial => write) because is_initial => not same_idx => write
-        // - for every row: (is_initial => not is_final) because is_final => read and is_initial => not same_idx => write
-        // - for every row: exactly one of is_initial, is_internal, is_final is on because we know at least one of them
-        //   is on, and we know each of them implies the other two are off
+        // - for every row: (is_initial => not is_final_write) because is_final_write => read and is_initial => not same_idx => write
+        // - for every row: exactly one of is_initial, is_internal, is_final_write, is_final_delete is on because we know their sum if 1
+        //   and that they're bool
         // - for every row: read => same_idx because not same_idx => write
         // - there is at most 1 is_initial per index block because every row is sent at most once from the inital page chip
-        // - there is exactly 1 is_final per index block because every row is received at most once from the final page chip
-        //   and we make sure that is_final is the last row in the block
+        // - there is exactly 1 is_final_write or is_final_delete per index block because we enforce the row below is_final_write
+        //   or is_final_delete to have a different idx
     }
 }

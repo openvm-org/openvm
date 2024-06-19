@@ -46,9 +46,10 @@ fn load_page_test(
     // Clearing the range_checker counts
     page_controller.reset_range_checker(idx_decomp);
 
-    let prover_data = page_controller.load_page_and_ops(
+    let (init_page_pdata, final_page_pdata) = page_controller.load_page_and_ops(
         page_init,
-        vec![None, None],
+        None,
+        None,
         ops.to_vec(),
         trace_degree,
         &mut trace_builder.committer,
@@ -77,7 +78,8 @@ fn load_page_test(
         engine,
         partial_pk,
         trace_builder,
-        prover_data,
+        init_page_pdata,
+        final_page_pdata,
         ops_sender,
         ops_sender_trace,
     );

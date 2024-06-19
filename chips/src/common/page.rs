@@ -98,8 +98,18 @@ impl Page {
     /// Returns true only if the page contains an allocated row with index idx
     pub fn contains(&self, idx: &[u32]) -> bool {
         self.rows
-            .iter()
-            .any(|row| row.is_alloc == 1 && row.idx == idx)
+            .binary_search_by(|row| {
+                if row.is_alloc == 0 {
+                    std::cmp::Ordering::Greater
+                } else if row.idx == idx {
+                    std::cmp::Ordering::Equal
+                } else if row.idx < idx.to_vec() {
+                    std::cmp::Ordering::Less
+                } else {
+                    std::cmp::Ordering::Greater
+                }
+            })
+            .is_ok()
     }
 
     /// This function inserts (idx, data) into the page
@@ -141,7 +151,7 @@ impl Page {
         ));
     }
 
-    pub fn get_rows_index(&self, idx: &[u32]) -> usize {
+    pub fn get_row_index(&self, idx: &[u32]) -> usize {
         assert!(self.contains(idx));
         self.rows.iter().position(|row| row.idx == idx).unwrap()
     }
