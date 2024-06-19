@@ -98,7 +98,7 @@ impl <F: PrimeField64> Memory<F> {
         let value = if address_space == F::zero() {
             address
         } else {
-            self.data[&address_space][&address]
+            *self.data[&address_space].get(&address).unwrap_or(&F::zero())
         };
         let read = MemoryAccess { clock: self.clock_cycle, is_write: false, address_space, address, value };
         if read.address_space != F::zero() {
@@ -140,7 +140,11 @@ impl CPUChip {
         let mut memory = Memory::new();
 
         loop {
-            execution_frequencies[pc.as_canonical_u64() as usize] += F::one();
+            let pc_usize = pc.as_canonical_u64() as usize;
+            if pc_usize >= program.len() {
+                break;
+            }
+            execution_frequencies[pc_usize] += F::one();
 
             let instruction = program[pc.as_canonical_u64() as usize];
             let opcode = instruction.opcode;
@@ -260,10 +264,6 @@ impl CPUChip {
 
             pc = next_pc;
             clock_cycle += 1;
-
-            if pc == F::neg_one() {
-                break;
-            }
         }
 
         ProgramExecution {
