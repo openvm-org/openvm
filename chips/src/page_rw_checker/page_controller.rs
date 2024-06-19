@@ -199,10 +199,11 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     pub fn load_page_and_ops(
         &mut self,
         page: &Page,
+        init_page_prover_data: Option<Arc<ProverTraceData<SC>>>,
         ops: Vec<Operation>,
         trace_degree: usize,
         trace_committer: &mut TraceCommitter<SC>,
-    ) -> Vec<ProverTraceData<SC>>
+    ) -> Vec<Arc<ProverTraceData<SC>>>
     where
         Val<SC>: PrimeField,
     {
@@ -239,8 +240,11 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         );
 
         let prover_data = vec![
-            trace_committer.commit(vec![init_page_trace.clone()]),
-            trace_committer.commit(vec![final_page_trace.clone()]),
+            match init_page_prover_data {
+                Some(prover_data) => prover_data,
+                None => Arc::new(trace_committer.commit(vec![init_page_trace.clone()])),
+            },
+            Arc::new(trace_committer.commit(vec![final_page_trace.clone()])),
         ];
 
         self.traces = Some(PageRWTraces {
@@ -305,7 +309,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         engine: &impl StarkEngine<SC>,
         partial_pk: &MultiStarkPartialProvingKey<SC>,
         trace_builder: &mut TraceCommitmentBuilder<SC>,
-        mut cached_traces_prover_data: Vec<ProverTraceData<SC>>,
+        mut cached_traces_prover_data: Vec<Arc<ProverTraceData<SC>>>,
         ops_sender: &dyn AnyRap<SC>,
         ops_sender_trace: DenseMatrix<Val<SC>>,
     ) -> Proof<SC>
@@ -327,11 +331,17 @@ impl<SC: StarkGenericConfig> PageController<SC> {
 
         trace_builder.load_cached_trace(
             traces.init_page_trace.clone(),
-            cached_traces_prover_data.remove(0),
+            match Arc::try_unwrap(cached_traces_prover_data.remove(0)) {
+                Ok(data) => data,
+                Err(_) => panic!("Prover data should have only one owner"),
+            },
         );
         trace_builder.load_cached_trace(
             traces.final_page_trace.clone(),
-            cached_traces_prover_data.remove(0),
+            match Arc::try_unwrap(cached_traces_prover_data.remove(0)) {
+                Ok(data) => data,
+                Err(_) => panic!("Prover data should have only one owner"),
+            },
         );
         trace_builder.load_trace(traces.final_page_aux_trace.clone());
         trace_builder.load_trace(traces.offline_checker_trace.clone());

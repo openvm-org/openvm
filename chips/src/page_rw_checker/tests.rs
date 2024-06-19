@@ -48,6 +48,7 @@ fn load_page_test(
 
     let prover_data = page_controller.load_page_and_ops(
         page_init,
+        None,
         ops.to_vec(),
         trace_degree,
         &mut trace_builder.committer,
