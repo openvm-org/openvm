@@ -7,9 +7,7 @@ use p3_matrix::Matrix;
 use afs_chips::{is_equal::{columns::{IsEqualAuxCols, IsEqualIOCols}, IsEqualAir}, is_zero::{columns::IsZeroIOCols, IsZeroAir}, sub_chip::SubAir};
 
 use super::{
-    OpCode::*,
-    columns::CPUCols,
-    CPUAir, INST_WIDTH,
+    columns::{CPUAuxCols, CPUCols, CPUIOCols}, CPUAir, OpCode::*, INST_WIDTH
 };
 
 impl<F: Field> BaseAir<F> for CPUAir {
@@ -31,30 +29,13 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
         let next = main.row_slice(1);
         let next: &[AB::Var] = (*next).borrow();
         let next_cols = CPUCols::<AB::Var>::from_slice(next, self.options);
+        let CPUCols { io, aux } = local_cols;
+        let CPUCols { io: next_io, .. } = next_cols;
 
-        let io = local_cols.io;
-        let aux = local_cols.aux;
+        let CPUIOCols { clock_cycle: clock, pc, opcode, op_a: a, op_b: b, op_c: c, as_b: d, as_c: e } = io;
+        let CPUIOCols { clock_cycle: next_clock, pc: next_pc, .. } = next_io;
 
-        let clock = io.clock_cycle;
-        let next_clock = next_cols.io.clock_cycle;
-
-        let pc = io.pc;
-        let next_pc = next_cols.io.pc;
-
-        let opcode = io.opcode;
-        let a = io.op_a;
-        let b = io.op_b;
-        let c = io.op_c;
-        let d = io.as_b;
-        let e = io.as_c;
-
-        let operation_flags = aux.operation_flags;
-        let read1 = aux.read1;
-        let read2 = aux.read2;
-        let write = aux.write;
-        let beq_check = aux.beq_check;
-        let is_equal_aux = aux.is_equal_aux;
-
+        let CPUAuxCols { operation_flags, read1, read2, write, beq_check, is_equal_aux } = aux;
         // set correct operation flag
 
         for operation_flag in operation_flags.iter() {
