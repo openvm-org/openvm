@@ -199,7 +199,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     pub fn load_page_and_ops(
         &mut self,
         page: &Page,
-        init_page_prover_data: Option<Arc<ProverTraceData<SC>>>,
+        mut pages_prover_data: Vec<Option<Arc<ProverTraceData<SC>>>>,
         ops: Vec<Operation>,
         trace_degree: usize,
         trace_committer: &mut TraceCommitter<SC>,
@@ -240,11 +240,14 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         );
 
         let prover_data = vec![
-            match init_page_prover_data {
+            match pages_prover_data.remove(0) {
                 Some(prover_data) => prover_data,
                 None => Arc::new(trace_committer.commit(vec![init_page_trace.clone()])),
             },
-            Arc::new(trace_committer.commit(vec![final_page_trace.clone()])),
+            match pages_prover_data.remove(0) {
+                Some(prover_data) => prover_data,
+                None => Arc::new(trace_committer.commit(vec![final_page_trace.clone()])),
+            },
         ];
 
         self.traces = Some(PageRWTraces {
