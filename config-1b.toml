@@ -1,0 +1,17 @@
+[page]
+index_bytes = 32
+data_bytes = 1024
+bits_per_fe = 16
+height = 32
+mode = "ReadWrite" # options: "ReadOnly", "ReadWrite"
+max_rw_ops = 65536
+
+[tree]
+init_leaf_cap = 10000
+init_internal_cap = 2000
+final_leaf_cap = 10000
+final_internal_cap = 2000
+
+[schema]
+key_length = 2
+limb_size = 4
