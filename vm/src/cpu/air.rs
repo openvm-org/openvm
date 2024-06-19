@@ -4,17 +4,13 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use afs_chips::{is_equal::{columns::{IsEqualAuxCols, IsEqualIOCols}, IsEqualAir}, is_zero::{columns::IsZeroIOCols, IsZeroAir}, sub_chip::{AirConfig, SubAir}};
+use afs_chips::{is_equal::{columns::{IsEqualAuxCols, IsEqualIOCols}, IsEqualAir}, is_zero::{columns::IsZeroIOCols, IsZeroAir}, sub_chip::SubAir};
 
 use super::{
     OpCode::*,
     columns::CPUCols,
     CPUAir, INST_WIDTH,
 };
-
-impl AirConfig for CPUAir {
-    type Cols<T> = CPUCols<T>;
-}
 
 impl<F: Field> BaseAir<F> for CPUAir {
     fn width(&self) -> usize {
