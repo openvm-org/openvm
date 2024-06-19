@@ -1,14 +1,22 @@
 use std::{
     fs::{self, File},
     io::{BufWriter, Write},
+    sync::Arc,
     time::Instant,
 };
 
 use afs_chips::{
-    execution_air::ExecutionAir, multitier_page_rw_checker::page_controller::PageController,
+    execution_air::ExecutionAir,
+    multitier_page_rw_checker::page_controller::{
+        MyLessThanTupleParams, PageController, PageTreeParams,
+    },
+    range_gate::RangeCheckerGateChip,
 };
-use afs_stark_backend::{keygen::MultiStarkKeygenBuilder, prover::MultiTraceStarkProver};
-use afs_test_utils::page_config::{MultitierPageConfig, PageConfig, TreeParamsConfig};
+use afs_stark_backend::{
+    keygen::MultiStarkKeygenBuilder,
+    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+};
+use afs_test_utils::page_config::{MultitierPageConfig, TreeParamsConfig};
 use afs_test_utils::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
     page_config::PageMode,
@@ -66,7 +74,7 @@ impl KeygenCommand {
         data_len: usize,
         max_ops: usize,
         height: usize,
-        limb_bits: usize,
+        _limb_bits: usize,
         tree_params: &TreeParamsConfig,
         prefix: String,
     ) -> Result<()> {
@@ -78,10 +86,12 @@ impl KeygenCommand {
 
         let trace_degree = max_ops * 4;
 
-        let engine =
-            config::baby_bear_poseidon2::default_engine(log_page_height.max(3 + log_num_ops));
-        let prover = MultiTraceStarkProver::new(&engine.config);
-        let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
+        let log_page_height = log2_strict_usize(height);
+        let log_trace_degree = 2 + log2_strict_usize(max_ops);
+
+        let engine = config::baby_bear_poseidon2::default_engine(
+            log_page_height.max(DECOMP_BITS).max(log_trace_degree),
+        );
 
         let init_path_bus = 3;
         let final_path_bus = 4;
@@ -94,7 +104,7 @@ impl KeygenCommand {
 
         let range_checker = Arc::new(RangeCheckerGateChip::new(lt_bus_index, 1 << DECOMP_BITS));
 
-        let mut page_controller: PageController<BABYBEAR_COMMITMENT_LEN> =
+        let page_controller: PageController<BABYBEAR_COMMITMENT_LEN> =
             PageController::new::<BabyBearPoseidon2Config>(
                 data_bus_index,
                 internal_data_bus_index,
@@ -102,13 +112,59 @@ impl KeygenCommand {
                 lt_bus_index,
                 idx_len,
                 data_len,
-                init_param.clone(),
-                final_param.clone(),
+                PageTreeParams {
+                    path_bus_index: init_path_bus,
+                    leaf_cap: tree_params.init_leaf_cap,
+                    internal_cap: tree_params.init_internal_cap,
+                    leaf_page_height: height,
+                    internal_page_height: height,
+                },
+                PageTreeParams {
+                    path_bus_index: final_path_bus,
+                    leaf_cap: tree_params.final_leaf_cap,
+                    internal_cap: tree_params.final_internal_cap,
+                    leaf_page_height: height,
+                    internal_page_height: height,
+                },
                 less_than_tuple_param,
                 range_checker,
             );
         let ops_sender = ExecutionAir::new(ops_bus_index, idx_len, data_len);
         let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
+
+        let engine = config::baby_bear_poseidon2::default_engine(
+            log_page_height.max(DECOMP_BITS).max(log_trace_degree),
+        );
+        let prover = MultiTraceStarkProver::new(&engine.config);
+        let trace_builder = TraceCommitmentBuilder::<BabyBearPoseidon2Config>::new(prover.pcs());
+        let mut blank_leaf_row = vec![1];
+        blank_leaf_row.resize(2 + idx_len + data_len, 0);
+        let blank_leaf = vec![blank_leaf_row.clone(); height];
+
+        let blank_internal = vec![vec![0; 2 + 2 * idx_len + BABYBEAR_COMMITMENT_LEN]; height];
+
+        // literally use any leaf chip
+        let blank_leaf_trace = page_controller.init_leaf_chips[0].generate_cached_trace(blank_leaf);
+        let blank_internal_trace =
+            page_controller.init_internal_chips[0].generate_cached_trace(blank_internal);
+        let blank_leaf_prover_data = trace_builder.committer.commit(vec![blank_leaf_trace]);
+        let blank_internal_prover_data = trace_builder.committer.commit(vec![blank_internal_trace]);
+
+        fs::create_dir_all(self.output_folder.clone()).unwrap();
+
+        let encoded_data = bincode::serialize(&blank_leaf_prover_data).unwrap();
+        write_bytes(
+            &encoded_data,
+            self.output_folder.clone() + "/" + &prefix.clone() + ".blank_leaf.cache.bin",
+        )
+        .unwrap();
+
+        let encoded_data = bincode::serialize(&blank_internal_prover_data).unwrap();
+        write_bytes(
+            &encoded_data,
+            self.output_folder.clone() + "/" + &prefix.clone() + ".blank_internal.cache.bin",
+        )
+        .unwrap();
 
         let mut init_leaf_data_ptrs = vec![];
         let mut init_leaf_main_ptrs = vec![];
@@ -180,7 +236,7 @@ impl KeygenCommand {
         let final_root_ptr =
             keygen_builder.add_main_matrix(page_controller.final_root_signal.air_width());
 
-        for i in 0..init_param.leaf_cap {
+        for i in 0..tree_params.init_leaf_cap {
             keygen_builder.add_partitioned_air(
                 &page_controller.init_leaf_chips[i],
                 page_height,
@@ -189,7 +245,7 @@ impl KeygenCommand {
             );
         }
 
-        for i in 0..init_param.internal_cap {
+        for i in 0..tree_params.init_internal_cap {
             keygen_builder.add_partitioned_air(
                 &page_controller.init_internal_chips[i],
                 page_height,
@@ -198,7 +254,7 @@ impl KeygenCommand {
             );
         }
 
-        for i in 0..final_param.leaf_cap {
+        for i in 0..tree_params.final_leaf_cap {
             keygen_builder.add_partitioned_air(
                 &page_controller.final_leaf_chips[i],
                 page_height,
@@ -207,7 +263,7 @@ impl KeygenCommand {
             );
         }
 
-        for i in 0..final_param.internal_cap {
+        for i in 0..tree_params.final_internal_cap {
             keygen_builder.add_partitioned_air(
                 &page_controller.final_internal_chips[i],
                 page_height,
@@ -239,7 +295,7 @@ impl KeygenCommand {
 
         keygen_builder.add_air(&page_controller.range_checker.air, 1 << DECOMP_BITS, 0);
 
-        keygen_builder.add_air(&ops_sender, num_ops, 0);
+        keygen_builder.add_air(&ops_sender, max_ops, 0);
 
         let partial_pk = keygen_builder.generate_partial_pk();
         let partial_vk = partial_pk.partial_vk();
@@ -247,7 +303,6 @@ impl KeygenCommand {
         let encoded_vk: Vec<u8> = bincode::serialize(&partial_vk)?;
         let pk_path = self.output_folder.clone() + "/" + &prefix.clone() + ".partial.pk";
         let vk_path = self.output_folder.clone() + "/" + &prefix.clone() + ".partial.vk";
-        fs::create_dir_all(self.output_folder).unwrap();
         write_bytes(&encoded_pk, pk_path).unwrap();
         write_bytes(&encoded_vk, vk_path).unwrap();
         Ok(())

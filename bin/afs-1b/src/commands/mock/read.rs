@@ -1,62 +1,72 @@
-use alloy_primitives::U256;
+use afs_chips::pagebtree::PageBTree;
+use afs_test_utils::page_config::MultitierPageConfig;
 use clap::Parser;
 use color_eyre::eyre::Result;
-use logical_interface::{
-    afs_interface::AfsInterface, mock_db::MockDb, table::types::TableMetadata,
-};
+use logical_interface::utils::{fixed_bytes_to_field_vec, string_to_fixed_bytes_be_vec};
+
+use crate::commands::{BABYBEAR_COMMITMENT_LEN, INTERNAL_HEIGHT, LEAF_HEIGHT, LIMB_BITS};
 
 #[derive(Debug, Parser)]
 pub struct ReadCommand {
-    #[arg(long = "table-id", short = 't', help = "The table ID", required = true)]
-    pub table_id: String,
+    #[arg(
+        long = "table-id",
+        short = 't',
+        help = "The table ID",
+        required = false
+    )]
+    pub table_id: Option<String>,
 
     #[arg(
-        long = "db-file",
+        long = "db-folder",
         short = 'd',
-        help = "Mock DB file input (default: new empty DB)",
-        required = false
+        help = "Mock DB folder (default: new empty DB)",
+        required = false,
+        default_value = "multitier_mockdb"
     )]
-    pub db_file_path: Option<String>,
+    pub db_folder: String,
 
     #[arg(
-        long = "silent",
-        short = 's',
-        help = "Don't print the output to stdout",
-        required = false
+        long = "index",
+        short = 'i',
+        help = "The index you want to query",
+        required = true
     )]
-    pub silent: bool,
+    pub idx: String,
 }
 
 /// `mock read` subcommand
 impl ReadCommand {
     /// Execute the `mock read` command
-    pub fn execute(self) -> Result<()> {
-        let mut db = if let Some(db_file_path) = self.db_file_path {
-            println!("db_file_path: {}", db_file_path);
-            MockDb::from_file(&db_file_path)
+    pub fn execute(&self, config: &MultitierPageConfig) -> Result<()> {
+        let idx_len = (config.page.index_bytes + 1) / 2 as usize;
+        let data_len = (config.page.data_bytes + 1) / 2 as usize;
+        let mut db = if let Some(table_id) = &self.table_id {
+            println!("db_file_path: {}/root/{}", self.db_folder, table_id);
+
+            PageBTree::<INTERNAL_HEIGHT, LEAF_HEIGHT, BABYBEAR_COMMITMENT_LEN>::load(
+                self.db_folder.clone(),
+                table_id.to_owned(),
+                "".to_owned(),
+            )
+            .unwrap()
         } else {
-            let default_table_metadata = TableMetadata::new(32, 1024);
-            MockDb::new(default_table_metadata)
+            PageBTree::new(
+                LIMB_BITS,
+                idx_len,
+                data_len,
+                config.page.height,
+                config.page.height,
+                "".to_owned(),
+            )
         };
-
-        let mut interface = AfsInterface::<U256, U256>::new(&mut db);
-
-        let table_id = self.table_id;
-        let table = interface.get_table(table_id.clone());
-        match table {
-            Some(table) => {
-                if !self.silent {
-                    println!("Table ID: {}", table.id);
-                    println!("{:?}", table.metadata);
-                    for (index, data) in table.body.iter() {
-                        println!("{:?}: {:?}", index, data);
-                    }
-                }
-            }
-            None => {
-                panic!("No table at table_id: {}", table_id);
-            }
-        }
+        let idx_bytes = string_to_fixed_bytes_be_vec(self.idx.clone(), config.page.index_bytes);
+        let idx_u16 = fixed_bytes_to_field_vec(idx_bytes);
+        let data = db.search(&idx_u16).unwrap();
+        println!(
+            "Table ID: {}",
+            self.table_id.clone().unwrap_or("".to_owned())
+        );
+        println!("{:?}: {:?}", self.idx, data);
 
         Ok(())
     }

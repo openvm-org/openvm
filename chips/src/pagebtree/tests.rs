@@ -14,7 +14,7 @@ pub fn make_new_tree() {
     let key_len = 1;
     let val_len = 1;
     let limb_bits = 20;
-    PageBTree::<7, 7, 8>::new(limb_bits, key_len, val_len, 16, 16);
+    PageBTree::<7, 7, 8>::new(limb_bits, key_len, val_len, 16, 16, "".to_owned());
 }
 
 #[test]
@@ -22,7 +22,7 @@ pub fn update_tree() {
     let key_len = 1;
     let val_len = 1;
     let limb_bits = 20;
-    let mut tree = PageBTree::<4, 4, 8>::new(limb_bits, key_len, val_len, 8, 8);
+    let mut tree = PageBTree::<4, 4, 8>::new(limb_bits, key_len, val_len, 8, 8, "".to_owned());
     let mut rng = create_seeded_rng();
     let mut truth = BTreeMap::<u32, u32>::new();
     for _ in 0..10 {
@@ -49,7 +49,7 @@ pub fn consistency_check() {
     let key_len = 1;
     let val_len = 1;
     let limb_bits = 20;
-    let mut tree = PageBTree::<4, 4, 8>::new(limb_bits, key_len, val_len, 8, 8);
+    let mut tree = PageBTree::<4, 4, 8>::new(limb_bits, key_len, val_len, 8, 8, "".to_owned());
     let mut rng = create_seeded_rng();
     let mut truth = BTreeMap::<u32, u32>::new();
     for _ in 0..400 {
@@ -66,7 +66,7 @@ pub fn update_tree_key_len() {
     let key_len = 2;
     let val_len = 2;
     let limb_bits = 20;
-    let mut tree = PageBTree::<20, 20, 8>::new(limb_bits, key_len, val_len, 20, 20);
+    let mut tree = PageBTree::<20, 20, 8>::new(limb_bits, key_len, val_len, 20, 20, "".to_owned());
     let mut rng = create_seeded_rng();
     let mut truth = BTreeMap::<Vec<u32>, Vec<u32>>::new();
     for _ in 0..1000000 {
@@ -99,7 +99,7 @@ pub fn benchmark_pagebtree() {
     let key_len = 2;
     let val_len = 2;
     let limb_bits = 20;
-    let mut tree = PageBTree::<20, 20, 8>::new(limb_bits, key_len, val_len, 20, 20);
+    let mut tree = PageBTree::<20, 20, 8>::new(limb_bits, key_len, val_len, 20, 20, "".to_owned());
     let mut rng = create_seeded_rng();
     for _ in 0..1000000 {
         let i = rng.gen::<u32>() % 100;
@@ -128,7 +128,7 @@ pub fn wide_tree() {
     let key_len = 2;
     let val_len = 2;
     let limb_bits = 20;
-    let mut tree = PageBTree::<25, 25, 8>::new(limb_bits, key_len, val_len, 32, 32);
+    let mut tree = PageBTree::<25, 25, 8>::new(limb_bits, key_len, val_len, 32, 32, "".to_owned());
     let mut rng = create_seeded_rng();
     let mut truth = BTreeMap::<Vec<u32>, Vec<u32>>::new();
     for _ in 0..1000000 {
@@ -162,7 +162,7 @@ pub fn gen_trace_test() {
     let key_len = 2;
     let val_len = 2;
     let limb_bits = 20;
-    let mut tree = PageBTree::<4, 4, 8>::new(limb_bits, key_len, val_len, 8, 8);
+    let mut tree = PageBTree::<4, 4, 8>::new(limb_bits, key_len, val_len, 8, 8, "".to_owned());
     let mut rng = create_seeded_rng();
     for _ in 0..100 {
         let i = rng.gen::<u32>() % 10;
@@ -178,7 +178,7 @@ pub fn gen_trace_test() {
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder: TraceCommitmentBuilder<BabyBearPoseidon2Config> =
         TraceCommitmentBuilder::new(prover.pcs());
-    tree.gen_trace(&mut trace_builder.committer);
+    tree.gen_trace(&mut trace_builder.committer, None);
     tree.consistency_check();
 }
 
@@ -187,7 +187,8 @@ pub fn commit_test() {
     let key_len = 2;
     let val_len = 2;
     let limb_bits = 20;
-    let mut tree = PageBTree::<4, 4, 8>::new(limb_bits, key_len, val_len, 8, 8);
+    let mut tree =
+        PageBTree::<4, 4, 8>::new(limb_bits, key_len, val_len, 8, 8, "commit".to_owned());
     let mut rng = create_seeded_rng();
     for _ in 0..100 {
         let i = rng.gen::<u32>() % 10;
@@ -203,15 +204,17 @@ pub fn commit_test() {
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder: TraceCommitmentBuilder<BabyBearPoseidon2Config> =
         TraceCommitmentBuilder::new(prover.pcs());
-    tree.commit(&mut trace_builder.committer);
+    tree.commit(&mut trace_builder.committer, "src/pagebtree".to_owned());
     tree.consistency_check();
 }
 
 #[test]
 pub fn load_test() {
-    let mut tree = PageBTree::<4, 4, 8>::load(vec![
-        1277945474, 675901888, 1328126946, 1303028605, 1192361605, 463245759, 762893355, 1086762636,
-    ])
+    let mut tree = PageBTree::<4, 4, 8>::load(
+        "src/pagebtree".to_owned(),
+        "commit".to_owned(),
+        "".to_owned(),
+    )
     .unwrap();
     let mut rng = create_seeded_rng();
     for _ in 0..100 {
@@ -228,7 +231,8 @@ pub fn make_a_large_tree() {
     let key_len = 2;
     let val_len = 3;
     let limb_bits = 20;
-    let mut tree = PageBTree::<32, 32, 8>::new(limb_bits, key_len, val_len, 32, 32);
+    let mut tree =
+        PageBTree::<32, 32, 8>::new(limb_bits, key_len, val_len, 32, 32, "large".to_owned());
     let mut rng = create_seeded_rng();
     const BIG_TREE_SIZE: usize = 1000_000;
     const BIG_TREE_MAX_KEY: u32 = 1000_000;
@@ -249,15 +253,17 @@ pub fn make_a_large_tree() {
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder: TraceCommitmentBuilder<BabyBearPoseidon2Config> =
         TraceCommitmentBuilder::new(prover.pcs());
-    tree.commit(&mut trace_builder.committer);
+    tree.commit(&mut trace_builder.committer, "src/pagebtree".to_owned());
     // tree.consistency_check();
 }
 
 #[test]
 pub fn load_and_read_a_large_tree() {
-    let mut tree = PageBTree::<32, 32, 8>::load(vec![
-        639955356, 1577306122, 107201956, 1528176068, 704402408, 1775238984, 169542638, 1916258191,
-    ])
+    let mut tree = PageBTree::<32, 32, 8>::load(
+        "src/pagebtree".to_owned(),
+        "large".to_owned(),
+        "".to_owned(),
+    )
     .unwrap();
     let mut rng = create_seeded_rng();
     for _ in 0..100 {

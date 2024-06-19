@@ -1,6 +1,6 @@
 use crate::commands::keygen::KeygenCommand;
-use crate::commands::{cache, keygen, mock, prove, verify};
-use afs_test_utils::page_config::PageConfig;
+use crate::commands::{keygen, mock, prove, verify};
+use afs_test_utils::page_config::MultitierPageConfig;
 use clap::Parser;
 use clap::Subcommand;
 
@@ -22,13 +22,6 @@ pub enum CliCommand {
     /// Generate partial proving and verifying keys
     Keygen(keygen::KeygenCommand),
 
-    #[command(
-        name = "cache",
-        about = "Create the cached trace of a page from a page file"
-    )]
-    /// Create cached trace of a page from a page file
-    Cache(cache::CacheCommand),
-
     #[command(name = "prove", about = "Generates a multi-STARK proof")]
     /// Generates a multi-STARK proof
     Prove(prove::ProveCommand),
@@ -39,20 +32,17 @@ pub enum CliCommand {
 }
 
 impl Cli {
-    pub fn run(config: &PageConfig) -> Self {
+    pub fn run(config: &MultitierPageConfig) -> Self {
         let cli = Self::parse();
         match &cli.command {
             CliCommand::Mock(mock) => {
-                mock.execute().unwrap();
+                mock.execute(config).unwrap();
             }
             CliCommand::Keygen(keygen) => {
                 let cmd = KeygenCommand {
                     output_folder: keygen.output_folder.clone(),
                 };
                 cmd.execute(config).unwrap();
-            }
-            CliCommand::Cache(cache) => {
-                cache.execute(config).unwrap();
             }
             CliCommand::Prove(prove) => {
                 prove.execute(config).unwrap();

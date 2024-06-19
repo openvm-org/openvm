@@ -2,6 +2,7 @@ mod afi;
 mod read;
 mod write;
 
+use afs_test_utils::page_config::MultitierPageConfig;
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::Result;
 
@@ -24,7 +25,7 @@ pub enum MockSubcommands {
 }
 
 impl MockCommand {
-    pub fn execute(&self) -> Result<()> {
+    pub fn execute(&self, config: &MultitierPageConfig) -> Result<()> {
         match &self.command {
             MockSubcommands::Afi(afi) => {
                 let cmd = afi::AfiCommand {
@@ -33,23 +34,8 @@ impl MockCommand {
                 };
                 cmd.execute()
             }
-            MockSubcommands::Read(read) => {
-                let cmd = read::ReadCommand {
-                    db_file_path: read.db_file_path.clone(),
-                    table_id: read.table_id.clone(),
-                    silent: read.silent,
-                };
-                cmd.execute()
-            }
-            MockSubcommands::Write(write) => {
-                let cmd = write::WriteCommand {
-                    afi_file_path: write.afi_file_path.clone(),
-                    db_file_path: write.db_file_path.clone(),
-                    output_db_file_path: write.output_db_file_path.clone(),
-                    silent: write.silent,
-                };
-                cmd.execute()
-            }
+            MockSubcommands::Read(read) => read.execute(config),
+            MockSubcommands::Write(write) => write.execute(config),
         }
     }
 }

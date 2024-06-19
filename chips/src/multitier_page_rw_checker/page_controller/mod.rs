@@ -278,7 +278,7 @@ where
     pub commitments: Com<SC>,
 }
 
-struct NodeProducts<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>
+pub struct NodeProducts<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>
 where
     Val<SC>: AbstractField + PrimeField64,
 {
@@ -485,6 +485,14 @@ impl<const COMMITMENT_LEN: usize> PageController<COMMITMENT_LEN> {
         ops: Vec<Operation>,
         trace_degree: usize,
         trace_committer: &mut TraceCommitter<SC>,
+        init_cached_data: Option<(
+            NodeProducts<SC, COMMITMENT_LEN>,
+            NodeProducts<SC, COMMITMENT_LEN>,
+        )>,
+        final_cached_data: Option<(
+            NodeProducts<SC, COMMITMENT_LEN>,
+            NodeProducts<SC, COMMITMENT_LEN>,
+        )>,
     ) -> (
         PageControllerDataTrace<SC, COMMITMENT_LEN>,
         PageControllerMainTrace<SC, COMMITMENT_LEN>,
@@ -535,6 +543,7 @@ impl<const COMMITMENT_LEN: usize> PageController<COMMITMENT_LEN> {
             self.range_checker.clone(),
             &internal_indices,
             true,
+            init_cached_data,
         );
         let mut mega_page = mega_page.unwrap();
         mega_page.resize(
@@ -558,6 +567,7 @@ impl<const COMMITMENT_LEN: usize> PageController<COMMITMENT_LEN> {
             self.range_checker.clone(),
             &internal_indices,
             false,
+            final_cached_data,
         );
         let mut mega_page =
             Page::from_2d_vec(&mega_page, self.params.idx_len, self.params.data_len);
@@ -619,6 +629,10 @@ fn make_tree_products<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>(
     range_checker: Arc<RangeCheckerGateChip>,
     internal_indices: &HashSet<Vec<u32>>,
     make_mega_page: bool,
+    cached_data: Option<(
+        NodeProducts<SC, COMMITMENT_LEN>,
+        NodeProducts<SC, COMMITMENT_LEN>,
+    )>,
 ) -> (TreeProducts<SC, COMMITMENT_LEN>, Option<Vec<Vec<u32>>>)
 where
     Val<SC>: AbstractField + PrimeField64,
@@ -639,10 +653,17 @@ where
         .zip(internal_chips.iter())
         .map(|(page, chip)| chip.generate_cached_trace::<Val<SC>>(page.clone()))
         .collect::<Vec<_>>();
-
-    let mut leaf_prods = gen_products(committer, leaf_trace);
-    let mut internal_prods = gen_products(committer, internal_trace);
-
+    let (mut leaf_prods, mut internal_prods) = if cached_data.is_some() {
+        let mut data = cached_data.unwrap();
+        data.0.data_traces = leaf_trace;
+        data.1.data_traces = internal_trace;
+        (data.0, data.1)
+    } else {
+        (
+            gen_products(committer, leaf_trace),
+            gen_products(committer, internal_trace),
+        )
+    };
     let tree = PageTreeGraph::<SC, COMMITMENT_LEN>::new(
         &leaf_pages,
         &internal_pages,
@@ -747,6 +768,26 @@ where
     }
 }
 
+pub fn gen_some_products_from_prover_data<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>(
+    data: Vec<ProverTraceData<SC>>,
+) -> NodeProducts<SC, COMMITMENT_LEN>
+where
+    Val<SC>: AbstractField + PrimeField64,
+    Com<SC>: Into<[Val<SC>; COMMITMENT_LEN]>,
+{
+    let commitments = commitment_from_data(&data);
+
+    let commitment_arr = arr_from_commitment::<SC, COMMITMENT_LEN>(&commitments);
+
+    NodeProducts {
+        data_traces: vec![],
+        main_traces: vec![],
+        prover_data: data,
+        commitments,
+        commitments_as_arr: commitment_arr,
+    }
+}
+
 fn data_from_trace<SC: StarkGenericConfig>(
     committer: &mut TraceCommitter<SC>,
     traces: &[RowMajorMatrix<Val<SC>>],
@@ -757,13 +798,13 @@ fn data_from_trace<SC: StarkGenericConfig>(
         .collect::<Vec<_>>()
 }
 
-fn commitment_from_data<SC: StarkGenericConfig>(data: &[ProverTraceData<SC>]) -> Vec<Com<SC>> {
+pub fn commitment_from_data<SC: StarkGenericConfig>(data: &[ProverTraceData<SC>]) -> Vec<Com<SC>> {
     data.iter()
         .map(|data| data.commit.clone())
         .collect::<Vec<_>>()
 }
 
-fn arr_from_commitment<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>(
+pub fn arr_from_commitment<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>(
     commitment: &[Com<SC>],
 ) -> Vec<[Val<SC>; COMMITMENT_LEN]>
 where

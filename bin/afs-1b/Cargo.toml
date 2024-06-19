@@ -23,3 +23,5 @@ afs-derive = { path = "../../derive" }
 afs-test-utils = { path = "../../test-utils" }
 afs-chips = { path = "../../chips" }
 p3-uni-stark = { workspace = true }
+p3-field = { workspace = true }
+itertools = "0.13.0"

@@ -339,6 +339,8 @@ fn load_page_test(
         ops.clone(),
         trace_degree,
         &mut trace_builder.committer,
+        None,
+        None,
     );
     let offline_checker_trace = main_trace.offline_checker_trace.clone();
     let init_root = main_trace.init_root_signal_trace.clone();
@@ -479,6 +481,7 @@ fn generate_no_new_keys(
         data_len,
         page_height,
         page_height,
+        "".to_owned(),
     );
     // Generating a random page with distinct indices
     let mut idx_data_map = HashMap::new();
@@ -497,7 +500,7 @@ fn generate_no_new_keys(
         idx_data_map.insert(idx.clone(), data.clone());
         btree.update(&idx, &data);
     }
-    let init_pages = btree.gen_all_trace(committer);
+    let init_pages = btree.gen_all_trace(committer, None);
     // check for correctness
     for (idx, _) in idx_data_map.iter() {
         btree.search(idx).unwrap();
@@ -540,7 +543,7 @@ fn generate_no_new_keys(
 
         ops.push(Operation::new(clk, idx, data, op_type));
     }
-    let final_pages = btree.gen_all_trace(committer);
+    let final_pages = btree.gen_all_trace(committer, None);
     (init_pages, false, final_pages, false, ops)
 }
 
@@ -560,6 +563,7 @@ fn generate_new_keys(
         data_len,
         page_height,
         page_height,
+        "".to_owned(),
     );
     // Generating a random page with distinct indices
     let mut idx_data_map = HashMap::new();
@@ -578,7 +582,7 @@ fn generate_new_keys(
         idx_data_map.insert(idx.clone(), data.clone());
         btree.update(&idx, &data);
     }
-    let init_pages = btree.gen_all_trace(committer);
+    let init_pages = btree.gen_all_trace(committer, None);
     // check for correctness
     for (idx, _) in idx_data_map.iter() {
         btree.search(idx).unwrap();
@@ -605,7 +609,7 @@ fn generate_new_keys(
         btree.update(&idx, &data);
         ops.push(Operation::new(clk, idx, data, OpType::Write));
     }
-    let final_pages = btree.gen_all_trace(committer);
+    let final_pages = btree.gen_all_trace(committer, None);
     (init_pages, false, final_pages, false, ops)
 }
 
@@ -625,6 +629,7 @@ fn generate_mixed_ops(
         data_len,
         page_height,
         page_height,
+        "".to_owned(),
     );
     // Generating a random page with distinct indices
     let mut idx_data_map = HashMap::new();
@@ -643,7 +648,7 @@ fn generate_mixed_ops(
         idx_data_map.insert(idx.clone(), data.clone());
         btree.update(&idx, &data);
     }
-    let init_pages = btree.gen_all_trace(committer);
+    let init_pages = btree.gen_all_trace(committer, None);
     // check for correctness
     for (idx, _) in idx_data_map.iter() {
         btree.search(idx).unwrap();
@@ -702,7 +707,7 @@ fn generate_mixed_ops(
             ops.push(Operation::new(clk, idx, data, op_type));
         }
     }
-    let final_pages = btree.gen_all_trace(committer);
+    let final_pages = btree.gen_all_trace(committer, None);
     (init_pages, false, final_pages, false, ops)
 }
 
@@ -722,6 +727,7 @@ fn generate_mixed_ops_remove_first_leaf(
         data_len,
         page_height,
         page_height,
+        "".to_owned(),
     );
     let mut idx_data_map = HashMap::new();
     for _ in 0..4 * page_height {
@@ -739,7 +745,7 @@ fn generate_mixed_ops_remove_first_leaf(
         idx_data_map.insert(idx.clone(), data.clone());
         btree.update(&idx, &data);
     }
-    let mut init_pages = btree.gen_all_trace(committer);
+    let mut init_pages = btree.gen_all_trace(committer, None);
     // check for correctness
     for (idx, _) in idx_data_map.iter() {
         btree.search(idx).unwrap();
@@ -804,7 +810,7 @@ fn generate_mixed_ops_remove_first_leaf(
             ops.push(Operation::new(clk, idx, data, op_type));
         }
     }
-    let mut final_pages = btree.gen_all_trace(committer);
+    let mut final_pages = btree.gen_all_trace(committer, None);
     final_pages.leaf_pages.pop();
     init_pages.leaf_pages.pop();
     (init_pages.clone(), false, final_pages.clone(), false, ops)
@@ -826,9 +832,10 @@ fn generate_mixed_ops_empty_start(
         data_len,
         page_height,
         page_height,
+        "".to_owned(),
     );
     let mut idx_data_map = HashMap::new();
-    let init_pages = btree.gen_all_trace(committer);
+    let init_pages = btree.gen_all_trace(committer, None);
 
     let mut clks: Vec<usize> = (0..num_ops)
         .map(|_| rng.gen::<usize>() % (MAX_VAL as usize))
@@ -884,7 +891,7 @@ fn generate_mixed_ops_empty_start(
             ops.push(Operation::new(clk, idx, data, op_type));
         }
     }
-    let final_pages = btree.gen_all_trace(committer);
+    let final_pages = btree.gen_all_trace(committer, None);
     (init_pages, true, final_pages, true, ops)
 }
 
@@ -897,15 +904,17 @@ fn generate_large_tree_no_new_keys(
     committer: &mut TraceCommitter<BabyBearPoseidon2Config>,
 ) -> (PageBTreePages, bool, PageBTreePages, bool, Vec<Operation>) {
     let mut rng = create_seeded_rng();
-    let mut btree = PageBTree::<32, 32, BABYBEAR_COMMITMENT_LEN>::load(vec![
-        639955356, 1577306122, 107201956, 1528176068, 704402408, 1775238984, 169542638, 1916258191,
-    ])
+    let mut btree = PageBTree::<32, 32, BABYBEAR_COMMITMENT_LEN>::load(
+        "src/pagebtree".to_owned(),
+        "large".to_owned(),
+        "".to_owned(),
+    )
     .unwrap();
     let existing_keys = vec![vec![534524, 887809], vec![380587, 701877]];
     for k in &existing_keys {
         btree.search(k).unwrap();
     }
-    let init_pages = btree.gen_all_trace(committer);
+    let init_pages = btree.gen_all_trace(committer, None);
     btree.consistency_check();
     let mut clks: Vec<usize> = (0..num_ops)
         .map(|_| rng.gen::<usize>() % (MAX_VAL as usize))
@@ -939,7 +948,7 @@ fn generate_large_tree_no_new_keys(
 
         ops.push(Operation::new(clk, idx, data, op_type));
     }
-    let final_pages = btree.gen_all_trace(committer);
+    let final_pages = btree.gen_all_trace(committer, None);
     (init_pages.clone(), false, final_pages.clone(), false, ops)
 }
 
@@ -952,9 +961,11 @@ fn generate_large_tree_new_keys(
     committer: &mut TraceCommitter<BabyBearPoseidon2Config>,
 ) -> (PageBTreePages, bool, PageBTreePages, bool, Vec<Operation>) {
     let mut rng = create_seeded_rng();
-    let mut btree = PageBTree::<32, 32, BABYBEAR_COMMITMENT_LEN>::load(vec![
-        639955356, 1577306122, 107201956, 1528176068, 704402408, 1775238984, 169542638, 1916258191,
-    ])
+    let mut btree = PageBTree::<32, 32, BABYBEAR_COMMITMENT_LEN>::load(
+        "src/pagebtree".to_owned(),
+        "large".to_owned(),
+        "".to_owned(),
+    )
     .unwrap();
     let existing_keys = vec![vec![534524, 887809], vec![380587, 701877]];
     let mut clks: Vec<usize> = (0..num_ops)
@@ -998,7 +1009,7 @@ fn generate_large_tree_new_keys(
             ops.push(Operation::new(clk, idx, data, op_type));
         }
     }
-    let final_pages = btree.gen_all_trace(committer);
+    let final_pages = btree.gen_all_trace(committer, None);
     let init_pages = btree.gen_loaded_trace();
     (init_pages.clone(), false, final_pages.clone(), false, ops)
 }
