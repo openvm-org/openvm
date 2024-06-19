@@ -50,7 +50,11 @@ impl CacheCommand {
         let start = Instant::now();
         let mut db = MockDb::from_file(&self.db_file_path);
         let height = config.page.height;
-        let mut interface = AfsInterface::<U256, U256>::new(&mut db);
+        let mut interface = AfsInterface::<U256, U256>::new(
+            &mut db,
+            config.page.index_bytes,
+            config.page.data_bytes,
+        );
         let page = interface
             .get_table(self.table_id.clone())
             .unwrap()

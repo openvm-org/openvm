@@ -43,7 +43,7 @@ impl Cli {
         let cli = Self::parse();
         match &cli.command {
             CliCommand::Mock(mock) => {
-                mock.execute().unwrap();
+                mock.execute(config).unwrap();
             }
             CliCommand::Keygen(keygen) => {
                 let cmd = KeygenCommand {

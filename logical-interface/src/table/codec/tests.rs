@@ -2,7 +2,12 @@ use super::fixed_bytes::FixedBytesCodec;
 
 #[test]
 pub fn test_convert_to_db() {
-    let fbc = FixedBytesCodec::<u32, u128>::new(64, 256);
+    let fbc = FixedBytesCodec::<u32, u128>::new(
+        std::mem::size_of::<u32>(),
+        std::mem::size_of::<u128>(),
+        64,
+        256,
+    );
 
     let index_fb = fbc.index_to_fixed_bytes(2);
     let index_slice: [u8; 64] = index_fb.try_into().unwrap();

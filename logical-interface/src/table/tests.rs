@@ -137,8 +137,8 @@ pub fn test_convert_to_page() {
     }
 
     // Save page as Json
-    let serialized = serde_json::to_string(&page).unwrap();
-    std::fs::write("tests/data/page.json", serialized).unwrap();
+    // let serialized = serde_json::to_string(&page).unwrap();
+    // std::fs::write("tests/data/page.json", serialized).unwrap();
 
     // Save page as binary
     // let serialized = bincode::serialize(&page).unwrap();
@@ -155,7 +155,12 @@ pub fn test_convert_to_page_too_small() {
 #[test]
 pub fn test_convert_from_page() {
     let page = create_page();
-    let table = Table::<u32, u64>::from_page(TableId::new([1; 32]), page);
+    let table = Table::<u32, u64>::from_page(
+        TableId::new([1; 32]),
+        page,
+        std::mem::size_of::<u32>(),
+        std::mem::size_of::<u64>(),
+    );
     println!("{:?}", table.body);
     let comparison_table = create_table();
     assert_eq!(table.body, comparison_table.body);

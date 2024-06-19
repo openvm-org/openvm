@@ -15,14 +15,20 @@ use utils::string_to_table_id;
 pub struct AfsInterface<'a, I: Index, D: Data> {
     /// Reference to the mock database
     db_ref: &'a mut MockDb,
+    /// Number of bytes for the index
+    index_bytes: usize,
+    /// Number of bytes for the data
+    data_bytes: usize,
     /// Stores current table in memory for faster reads
     current_table: Option<Table<I, D>>,
 }
 
 impl<'a, I: Index, D: Data> AfsInterface<'a, I, D> {
-    pub fn new(db_ref: &'a mut MockDb) -> Self {
+    pub fn new(db_ref: &'a mut MockDb, index_bytes: usize, data_bytes: usize) -> Self {
         Self {
             db_ref,
+            index_bytes,
+            data_bytes,
             current_table: None,
         }
     }
@@ -106,7 +112,11 @@ impl<'a, I: Index, D: Data> AfsInterface<'a, I, D> {
     pub fn get_table(&mut self, table_id: String) -> Option<&Table<I, D>> {
         let table_id_bytes = string_to_table_id(table_id);
         let db_table = self.db_ref.get_table(table_id_bytes)?;
-        self.current_table = Some(Table::from_db_table(db_table));
+        self.current_table = Some(Table::<I, D>::from_db_table(
+            db_table,
+            self.index_bytes,
+            self.data_bytes,
+        ));
         self.current_table.as_ref()
     }
 
@@ -125,8 +135,13 @@ impl<'a, I: Index, D: Data> AfsInterface<'a, I, D> {
 
     pub fn insert(&mut self, table_id: String, index: I, data: D) -> Option<()> {
         let table_id_bytes = string_to_table_id(table_id);
-        let metadata = self.db_ref.get_table_metadata(table_id_bytes)?;
-        let codec = FixedBytesCodec::<I, D>::new(metadata.index_bytes, metadata.data_bytes);
+        let db_table_metadata = self.db_ref.get_table_metadata(table_id_bytes)?;
+        let codec = FixedBytesCodec::<I, D>::new(
+            index.num_bytes(),
+            data.num_bytes(),
+            db_table_metadata.index_bytes,
+            db_table_metadata.data_bytes,
+        );
         let index_bytes = codec.index_to_fixed_bytes(index);
         let data_bytes = codec.data_to_fixed_bytes(data);
         self.db_ref
@@ -136,8 +151,13 @@ impl<'a, I: Index, D: Data> AfsInterface<'a, I, D> {
 
     pub fn write(&mut self, table_id: String, index: I, data: D) -> Option<()> {
         let table_id_bytes = string_to_table_id(table_id);
-        let metadata = self.db_ref.get_table_metadata(table_id_bytes)?;
-        let codec = FixedBytesCodec::<I, D>::new(metadata.index_bytes, metadata.data_bytes);
+        let db_table_metadata = self.db_ref.get_table_metadata(table_id_bytes)?;
+        let codec = FixedBytesCodec::<I, D>::new(
+            index.num_bytes(),
+            data.num_bytes(),
+            db_table_metadata.index_bytes,
+            db_table_metadata.data_bytes,
+        );
         let index_bytes = codec.index_to_fixed_bytes(index);
         let data_bytes = codec.data_to_fixed_bytes(data);
         self.db_ref

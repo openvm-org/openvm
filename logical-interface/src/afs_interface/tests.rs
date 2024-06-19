@@ -8,7 +8,7 @@ use super::AfsInterface;
 pub fn test_initialize_interface() {
     let default_table_metadata = TableMetadata::new(32, 1024);
     let mut db = MockDb::new(default_table_metadata);
-    let mut _interface = AfsInterface::<u64, u64>::new(&mut db);
+    let mut _interface = AfsInterface::<u64, u64>::new(&mut db, 32, 1024);
 }
 
 #[test]
@@ -16,8 +16,11 @@ pub fn test_initialize_interface_from_file() {
     let file_path = "tests/data/test_input_file_8_8.afi";
     let default_table_metadata = TableMetadata::new(8, 8);
     let mut db = MockDb::new(default_table_metadata);
-    let mut interface = AfsInterface::<u32, u64>::new(&mut db);
-    interface.load_input_file(file_path).unwrap();
+    let mut interface = AfsInterface::<u32, u64>::new(&mut db, 4, 8);
+    match interface.load_input_file(file_path) {
+        Ok(_) => {}
+        Err(e) => panic!("Error loading input file: {}", e),
+    }
     let table = interface.current_table.unwrap();
     assert_eq!(
         table.id,

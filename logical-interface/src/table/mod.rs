@@ -26,9 +26,6 @@ pub struct Table<I: Index, D: Data> {
 }
 
 impl<I: Index, D: Data> Table<I, D> {
-    const SIZE_I: usize = I::MEMORY_SIZE;
-    const SIZE_D: usize = D::MEMORY_SIZE;
-
     pub fn new(id: TableId, metadata: TableMetadata) -> Self {
         Self {
             id,
@@ -37,12 +34,14 @@ impl<I: Index, D: Data> Table<I, D> {
         }
     }
 
-    pub fn from_db_table(db_table: &MockDbTable) -> Self {
+    pub fn from_db_table(db_table: &MockDbTable, index_bytes: usize, data_bytes: usize) -> Self {
         let body = db_table
             .items
             .iter()
             .map(|(k, v)| {
                 let codec = FixedBytesCodec::<I, D>::new(
+                    index_bytes,
+                    data_bytes,
                     db_table.db_table_metadata.index_bytes,
                     db_table.db_table_metadata.data_bytes,
                 );
@@ -54,13 +53,21 @@ impl<I: Index, D: Data> Table<I, D> {
 
         Self {
             id: db_table.id,
-            metadata: TableMetadata::new(Self::SIZE_I, Self::SIZE_D),
+            metadata: TableMetadata::new(
+                db_table.db_table_metadata.index_bytes,
+                db_table.db_table_metadata.data_bytes,
+            ),
             body,
         }
     }
 
-    pub fn from_page(id: TableId, page: Page) -> Self {
-        let codec = FixedBytesCodec::<I, D>::new(Self::SIZE_I, Self::SIZE_D);
+    pub fn from_page(id: TableId, page: Page, index_bytes: usize, data_bytes: usize) -> Self {
+        let codec = FixedBytesCodec::<I, D>::new(
+            index_bytes,
+            data_bytes,
+            page.rows[0].idx.len() * 2,
+            page.rows[0].data.len() * 2,
+        );
         let mut body = page
             .rows
             .iter()
@@ -93,12 +100,12 @@ impl<I: Index, D: Data> Table<I, D> {
             .collect::<BTreeMap<I, D>>();
 
         // Remove the 0 index which is from the padding
-        let index_zero: Vec<u8> = vec![0; Self::SIZE_I];
-        body.remove(&I::from_be_bytes(&index_zero).unwrap());
+        let index_zero: Vec<u8> = vec![0; index_bytes];
+        body.remove(&codec.fixed_bytes_to_index(index_zero));
 
         Self {
             id,
-            metadata: TableMetadata::new(Self::SIZE_I, Self::SIZE_D),
+            metadata: TableMetadata::new(index_bytes, data_bytes),
             body,
         }
     }
@@ -111,8 +118,12 @@ impl<I: Index, D: Data> Table<I, D> {
                 height
             );
         }
-        let codec =
-            FixedBytesCodec::<I, D>::new(self.metadata.index_bytes, self.metadata.data_bytes);
+        let codec = FixedBytesCodec::<I, D>::new(
+            self.metadata.index_bytes,
+            self.metadata.data_bytes,
+            self.metadata.index_bytes,
+            self.metadata.data_bytes,
+        );
         let mut rows: Vec<PageCols<u32>> = self
             .body
             .iter()
@@ -131,8 +142,8 @@ impl<I: Index, D: Data> Table<I, D> {
             .collect::<Vec<PageCols<u32>>>();
         let zeros: PageCols<u32> = PageCols {
             is_alloc: 0,
-            idx: vec![0; Self::SIZE_I / 2],
-            data: vec![0; Self::SIZE_D / 2],
+            idx: vec![0; self.metadata.index_bytes / 2],
+            data: vec![0; self.metadata.data_bytes / 2],
         };
         let remaining_rows = height - self.body.len();
         for _ in 0..remaining_rows {

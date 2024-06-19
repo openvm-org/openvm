@@ -16,7 +16,6 @@ use afs_test_utils::{
     engine::StarkEngine,
     page_config::{PageConfig, PageMode},
 };
-use alloy_primitives::U256;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{
@@ -104,8 +103,17 @@ impl ProveCommand {
         let idx_len = (config.page.index_bytes + 1) / 2;
         let data_len = (config.page.data_bytes + 1) / 2;
         let height = config.page.height;
-        let codec = FixedBytesCodec::new(config.page.index_bytes, config.page.data_bytes);
-        let mut interface = AfsInterface::<U256, U256>::new(&mut db);
+        let codec = FixedBytesCodec::new(
+            config.page.index_bytes,
+            config.page.data_bytes,
+            config.page.index_bytes,
+            config.page.data_bytes,
+        );
+        let mut interface = AfsInterface::<Vec<u8>, Vec<u8>>::new(
+            &mut db,
+            config.page.index_bytes,
+            config.page.data_bytes,
+        );
         let table_id = instructions.header.table_id;
         let page_init = interface
             .get_table(table_id.clone())
@@ -231,7 +239,7 @@ where
     I: Index,
     D: Data,
 {
-    let idx_u8 = string_to_fixed_bytes_be_vec(afi_op.args[0].clone(), codec.db_size_index);
+    let idx_u8 = string_to_fixed_bytes_be_vec(afi_op.args[0].clone(), codec.fixed_index_bytes);
     let idx_u16 = fixed_bytes_to_field_vec(idx_u8.clone());
     let idx = codec.fixed_bytes_to_index(idx_u8.clone());
     match afi_op.operation {
@@ -251,7 +259,8 @@ where
         }
         InputFileBodyOperation::Insert => {
             assert!(afi_op.args.len() == 2);
-            let data_u8 = string_to_fixed_bytes_be_vec(afi_op.args[1].clone(), codec.db_size_data);
+            let data_u8 =
+                string_to_fixed_bytes_be_vec(afi_op.args[1].clone(), codec.fixed_data_bytes);
             let data_u16 = fixed_bytes_to_field_vec(data_u8.clone());
             let data = codec.fixed_bytes_to_data(data_u8);
             interface.insert(table_id, idx, data);
@@ -264,7 +273,8 @@ where
         }
         InputFileBodyOperation::Write => {
             assert!(afi_op.args.len() == 2);
-            let data_u8 = string_to_fixed_bytes_be_vec(afi_op.args[1].clone(), codec.db_size_data);
+            let data_u8 =
+                string_to_fixed_bytes_be_vec(afi_op.args[1].clone(), codec.fixed_data_bytes);
             let data_u16 = fixed_bytes_to_field_vec(data_u8.clone());
             let data = codec.fixed_bytes_to_data(data_u8);
             interface.write(table_id, idx, data);
