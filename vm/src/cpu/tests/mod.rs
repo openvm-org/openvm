@@ -1,3 +1,4 @@
+use afs_stark_backend::verifier::VerificationError;
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_baby_bear::BabyBear;
@@ -122,6 +123,99 @@ fn air_test(
     .expect("Verification failed");
 }
 
+fn air_test_change_pc(
+    is_field_arithmetic_enabled: bool,
+    program: Vec<Instruction<BabyBear>>,
+    change_row: usize,
+    change_value: usize,
+    should_fail: bool,
+) {
+    let chip = CPUChip::new(is_field_arithmetic_enabled);
+    let mut execution = chip.generate_trace(program);
+
+    let mut trace = execution.trace();
+    let options = CPUOptions { field_arithmetic_enabled: is_field_arithmetic_enabled };
+    let all_cols = (0..CPUCols::<BabyBear>::get_width(options)).collect::<Vec<usize>>();
+    let cols_numbered = CPUCols::<usize>::from_slice(&all_cols, options);
+    let pc_col = cols_numbered.io.pc;
+    let old_value = trace.row_mut(change_row)[pc_col].as_canonical_u64() as usize;
+    trace.row_mut(change_row)[pc_col] = BabyBear::from_canonical_usize(change_value);
+
+    execution.execution_frequencies[old_value] -= BabyBear::one();
+    execution.execution_frequencies[change_value] += BabyBear::one();
+
+    let program_air = DummyInteractionAir::new(7, false, READ_INSTRUCTION_BUS);
+    let mut program_rows = vec![];
+    for (pc, instruction) in execution.program.iter().enumerate() {
+        program_rows.extend(vec![
+            execution.execution_frequencies[pc],
+            BabyBear::from_canonical_usize(pc),
+            BabyBear::from_canonical_usize(instruction.opcode as usize),
+            instruction.op_a,
+            instruction.op_b,
+            instruction.op_c,
+            instruction.as_b,
+            instruction.as_c,
+        ]);
+    }
+    while !(program_rows.len() / 8).is_power_of_two() {
+        program_rows.push(BabyBear::zero());
+    }
+    let program_trace = RowMajorMatrix::new(program_rows, 8);
+
+    let memory_air = DummyInteractionAir::new(5, false, MEMORY_BUS);
+    let mut memory_rows = vec![];
+    for memory_access in execution.memory_accesses.iter() {
+        memory_rows.extend(vec![
+            BabyBear::one(),
+            BabyBear::from_canonical_usize(memory_access.clock),
+            BabyBear::from_bool(memory_access.is_write),
+            memory_access.address_space,
+            memory_access.address,
+            memory_access.value,
+        ]);
+    }
+    while !(memory_rows.len() / 6).is_power_of_two() {
+        memory_rows.push(BabyBear::zero());
+    }
+    let memory_trace = RowMajorMatrix::new(memory_rows, 6);
+
+    let arithmetic_air = DummyInteractionAir::new(4, false, ARITHMETIC_BUS);
+    let mut arithmetic_rows = vec![];
+    for arithmetic_op in execution.arithmetic_ops.iter() {
+        arithmetic_rows.extend(vec![
+            BabyBear::one(),
+            BabyBear::from_canonical_usize(arithmetic_op.opcode as usize),
+            arithmetic_op.operand1,
+            arithmetic_op.operand2,
+            arithmetic_op.result,
+        ]);
+    }
+    while !(arithmetic_rows.len() / 5).is_power_of_two() {
+        arithmetic_rows.push(BabyBear::zero());
+    }
+    let arithmetic_trace = RowMajorMatrix::new(arithmetic_rows, 5);
+
+    println!("here");
+
+    let test_result = run_simple_test_no_pis(
+        vec![&chip.air, &program_air, &memory_air, &arithmetic_air],
+        vec![trace, program_trace, memory_trace, arithmetic_trace],
+    );
+
+    println!("bing: {:?}", test_result);
+
+    if should_fail {
+        assert_eq!(
+            test_result,
+            Err(VerificationError::OodEvaluationMismatch),
+            "Expected verification to fail, but it passed"
+        );
+    } else {
+        test_result.expect("Verification failed");
+    }
+}
+
 #[test]
 fn test_cpu() {
     let zero = BabyBear::zero();
@@ -226,4 +320,61 @@ fn test_cpu_without_field_arithmetic() {
 
     program_execution_test::<BabyBear>(field_arithmetic_enabled, program.clone(), expected_execution, expected_memory_log, vec![]);
     air_test(field_arithmetic_enabled, program);
+}
+
+#[test]
+#[should_panic]
+fn test_cpu_negative() {
+    let zero = BabyBear::zero();
+    let one = BabyBear::one();
+    let two = BabyBear::two();
+    let four = BabyBear::from_canonical_u32(4);
+    let six = BabyBear::from_canonical_u32(6);
+
+    let neg = BabyBear::neg_one();
+    let neg_four = neg * four;
+    let neg_five = neg * BabyBear::from_canonical_u32(5);
+
+    let program = vec![
+        // word[0]_1 <- word[6]_0
+        Instruction { opcode: STOREW, op_a: six, op_b: zero, op_c: zero, as_b: zero, as_c: one },
+        // word[0]_1 <- word[6]_0
+        Instruction { opcode: STOREW, op_a: six, op_b: zero, op_c: zero, as_b: zero, as_c: one },
+        // if word[0]_1 == 4 then pc += 2
+        Instruction { opcode: BEQ, op_a: zero, op_b: four, op_c: two, as_b: one, as_c: zero },
+        // if word[0]_1 != 0 then pc -= 4
+        Instruction { opcode: BNE, op_a: zero, op_b: zero, op_c: neg_four, as_b: one, as_c: zero },
+        // if word[0]_1 != 0 then pc -= 5
+        Instruction { opcode: BNE, op_a: zero, op_b: zero, op_c: neg_five, as_b: one, as_c: zero },
+    ];
+
+    air_test_change_pc(true, program, 3, 4, true);
+}
+
+#[test]
+fn test_cpu_negative_assure() {
+    let zero = BabyBear::zero();
+    let one = BabyBear::one();
+    let two = BabyBear::two();
+    let four = BabyBear::from_canonical_u32(4);
+    let six = BabyBear::from_canonical_u32(6);
+
+    let neg = BabyBear::neg_one();
+    let neg_four = neg * four;
+    let neg_five = neg * BabyBear::from_canonical_u32(5);
+
+    let program = vec![
+        // word[0]_1 <- word[6]_0
+        Instruction { opcode: STOREW, op_a: six, op_b: zero, op_c: zero, as_b: zero, as_c: one },
+        // word[0]_1 <- word[6]_0
+        Instruction { opcode: STOREW, op_a: six, op_b: zero, op_c: zero, as_b: zero, as_c: one },
+        // if word[0]_1 == 4 then pc += 2
+        Instruction { opcode: BEQ, op_a: zero, op_b: four, op_c: two, as_b: one, as_c: zero },
+        // if word[0]_1 != 0 then pc -= 4
+        Instruction { opcode: BNE, op_a: zero, op_b: zero, op_c: neg_four, as_b: one, as_c: zero },
+        // if word[0]_1 != 0 then pc -= 5
+        Instruction { opcode: BNE, op_a: zero, op_b: zero, op_c: neg_five, as_b: one, as_c: zero },
+    ];
+
+    air_test_change_pc(true, program, 3, 3, false);
 }
