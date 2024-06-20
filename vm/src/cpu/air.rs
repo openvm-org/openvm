@@ -74,9 +74,9 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
 
         let mut sum_flags = AB::Expr::zero();
         let mut match_opcode = AB::Expr::zero();
-        for (i, flag) in operation_flags.iter().enumerate() {
-            sum_flags = sum_flags + *flag;
-            match_opcode += *flag * AB::Expr::from_canonical_u64(i.try_into().unwrap());
+        for (i, &flag) in operation_flags.iter().enumerate() {
+            sum_flags = sum_flags + flag;
+            match_opcode += flag * AB::F::from_canonical_usize(i);
         }
         builder.assert_one(sum_flags);
         builder.assert_eq(opcode, match_opcode);
