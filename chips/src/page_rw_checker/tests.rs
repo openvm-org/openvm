@@ -115,11 +115,7 @@ fn page_offline_checker_test() {
     let max_idx = 1 << idx_limb_bits;
 
     // Generating a random page with distinct indices
-<<<<<<< HEAD
-    let mut page = Page::random(
-=======
     let mut initial_page = Page::random(
->>>>>>> main
         &mut rng,
         idx_len,
         data_len,
@@ -128,13 +124,10 @@ fn page_offline_checker_test() {
         page_height,
         page_height,
     );
-<<<<<<< HEAD
-=======
 
     // We will generate the final page from the initial page below
     // while generating the operations
     let mut final_page = initial_page.clone();
->>>>>>> main
 
     // Generating random sorted distinct timestamps for operations
     let mut clks = HashSet::new();
@@ -146,11 +139,6 @@ fn page_offline_checker_test() {
 
     let mut ops: Vec<Operation> = vec![];
     for &clk in clks.iter() {
-<<<<<<< HEAD
-        let idx = page.get_random_idx(&mut rng);
-
-=======
->>>>>>> main
         let op_type = {
             if rng.gen::<u32>() % 3 == 0 {
                 OpType::Read
@@ -170,13 +158,8 @@ fn page_offline_checker_test() {
 
         let data = {
             if op_type == OpType::Read {
-<<<<<<< HEAD
-                page[&idx].clone()
-            } else {
-=======
                 final_page[&idx].clone()
             } else if op_type == OpType::Write {
->>>>>>> main
                 (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect()
             } else {
                 vec![0; data_len]
@@ -184,9 +167,6 @@ fn page_offline_checker_test() {
         };
 
         if op_type == OpType::Write {
-<<<<<<< HEAD
-            page[&idx].clone_from(&data);
-=======
             if final_page.contains(&idx) {
                 final_page[&idx].clone_from(&data);
             } else {
@@ -194,7 +174,6 @@ fn page_offline_checker_test() {
             }
         } else if op_type == OpType::Delete {
             final_page.delete(&idx);
->>>>>>> main
         }
 
         ops.push(Operation::new(clk, idx, data, op_type));
