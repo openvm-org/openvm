@@ -1,6 +1,6 @@
 use std::iter;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, derive_new::new)]
 pub struct PageCols<T> {
     pub is_alloc: T, // indicates if row is allocated
     pub idx: Vec<T>,
@@ -8,14 +8,6 @@ pub struct PageCols<T> {
 }
 
 impl<T: Clone> PageCols<T> {
-    pub fn new(is_alloc: T, idx: Vec<T>, data: Vec<T>) -> PageCols<T> {
-        PageCols {
-            is_alloc,
-            idx,
-            data,
-        }
-    }
-
     pub fn from_slice(cols: &[T], idx_len: usize, data_len: usize) -> PageCols<T> {
         PageCols {
             is_alloc: cols[0].clone(),

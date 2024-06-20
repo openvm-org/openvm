@@ -35,3 +35,5 @@ p3-baby-bear = { workspace = true }
 p3-poseidon2 = { workspace = true }
 p3-symmetric = { workspace = true }
 p3-mds = { workspace = true }
+p3-blake3 = { workspace = true }
+p3-keccak = { workspace = true }

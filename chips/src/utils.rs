@@ -33,7 +33,7 @@ pub fn to_vcols<F: Field>(cols: &[usize]) -> Vec<VirtualPairCol<F>> {
 }
 
 pub fn and<AB: AirBuilder>(a: AB::Expr, b: AB::Expr) -> AB::Expr {
-    a.clone() * b.clone()
+    a * b
 }
 
 /// Assumes that a and b are boolean
