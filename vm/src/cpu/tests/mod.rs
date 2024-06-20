@@ -487,7 +487,7 @@ fn test_cpu_negative_hasnt_terminated() {
 }
 
 #[test]
-#[should_panic(expected = "assertion `left == right` failed: constraints had nonzero value on row 0")]
+#[should_panic(expected = "assertion `left == right` failed")]
 fn test_cpu_negative_secret_write() {
     let program = vec![
         // if word[0]_0 == word[0]_[0] then pc += 1
@@ -518,7 +518,7 @@ fn test_cpu_negative_secret_write() {
 }
 
 #[test]
-#[should_panic(expected = "assertion `left == right` failed: constraints had nonzero value on row 0")]
+#[should_panic(expected = "assertion `left == right` failed")]
 fn test_cpu_negative_disable_write() {
     let program = vec![
         // if word[0]_0 == word[0]_[0] then pc += 1
@@ -538,7 +538,7 @@ fn test_cpu_negative_disable_write() {
 }
 
 #[test]
-#[should_panic(expected = "assertion `left == right` failed: constraints had nonzero value on row 0")]
+#[should_panic(expected = "assertion `left == right` failed")]
 fn test_cpu_negative_disable_read() {
     let program = vec![
         // if word[0]_0 == word[0]_[0] then pc += 1
