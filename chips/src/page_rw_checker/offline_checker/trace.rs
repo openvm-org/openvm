@@ -202,7 +202,7 @@ impl OfflineChecker {
                     false,
                     true,
                     op.clk,
-                    op.op_type.clone() as u8,
+                    op.op_type as u8,
                     &mut last_idx,
                     &mut last_data,
                     &mut last_clk,

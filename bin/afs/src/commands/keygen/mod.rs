@@ -64,14 +64,11 @@ impl KeygenCommand {
         prefix: String,
     ) -> Result<()> {
         let page_bus_index = 0;
-        let range_bus_index = 2;
-        let ops_bus_index = 3;
+        let range_bus_index = 1;
+        let ops_bus_index = 2;
 
         let page_height = height;
-        let page_width = 1 + idx_len + data_len;
-
         let checker_trace_degree = max_ops * 4;
-
         let idx_limb_bits = limb_bits;
 
         let max_log_degree = log2_strict_usize(checker_trace_degree)
@@ -95,45 +92,13 @@ impl KeygenCommand {
         let engine = config::baby_bear_poseidon2::default_engine(max_log_degree);
         let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-        let init_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
-        let final_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
-        let final_page_aux_ptr =
-            keygen_builder.add_main_matrix(page_controller.final_chip.aux_width());
-        let offline_checker_ptr =
-            keygen_builder.add_main_matrix(page_controller.offline_checker.air_width());
-        let range_checker_ptr =
-            keygen_builder.add_main_matrix(page_controller.range_checker.air_width());
-        let ops_sender_ptr = keygen_builder.add_main_matrix(ops_sender.air_width());
-
-        keygen_builder.add_partitioned_air(
-            &page_controller.init_chip,
+        page_controller.set_up_keygen_builder(
+            &mut keygen_builder,
             page_height,
-            0,
-            vec![init_page_ptr],
-        );
-
-        keygen_builder.add_partitioned_air(
-            &page_controller.final_chip,
-            page_height,
-            0,
-            vec![final_page_ptr, final_page_aux_ptr],
-        );
-
-        keygen_builder.add_partitioned_air(
-            &page_controller.offline_checker,
             checker_trace_degree,
-            0,
-            vec![offline_checker_ptr],
+            &ops_sender,
+            max_ops,
         );
-
-        keygen_builder.add_partitioned_air(
-            &page_controller.range_checker.air,
-            1 << idx_decomp,
-            0,
-            vec![range_checker_ptr],
-        );
-
-        keygen_builder.add_partitioned_air(&ops_sender, max_ops, 0, vec![ops_sender_ptr]);
 
         let partial_pk = keygen_builder.generate_partial_pk();
         let partial_vk = partial_pk.partial_vk();

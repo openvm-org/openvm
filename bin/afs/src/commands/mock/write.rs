@@ -1,4 +1,4 @@
-use alloy_primitives::U256;
+use afs_test_utils::page_config::PageConfig;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{
@@ -44,7 +44,7 @@ pub struct WriteCommand {
 /// `mock read` subcommand
 impl WriteCommand {
     /// Execute the `mock read` command
-    pub fn execute(self) -> Result<()> {
+    pub fn execute(self, config: &PageConfig) -> Result<()> {
         let mut db = if let Some(db_file_path) = self.db_file_path {
             println!("db_file_path: {}", db_file_path);
             MockDb::from_file(&db_file_path)
@@ -57,7 +57,8 @@ impl WriteCommand {
         let instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
         let table_id = instructions.header.table_id.clone();
 
-        let mut interface = AfsInterface::<U256, U256>::new(&mut db);
+        let mut interface =
+            AfsInterface::new(config.page.index_bytes, config.page.data_bytes, &mut db);
         interface.load_input_file(&self.afi_file_path)?;
         let table = interface.get_table(table_id).unwrap();
         if !self.silent {

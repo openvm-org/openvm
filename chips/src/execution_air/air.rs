@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::Field;
+use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use crate::sub_chip::AirConfig;
@@ -36,7 +36,11 @@ where
             .when_first_row()
             .assert_eq(local_cols.mult, local_cols.clk);
         builder.assert_bool(local_cols.mult);
-        builder.assert_bool(local_cols.op_type);
+        builder.assert_zero(
+            local_cols.op_type
+                * (local_cols.op_type - AB::Expr::one())
+                * (local_cols.op_type - AB::Expr::two()),
+        );
         // clk goes up by 1 when mult is 1
         builder
             .when_transition()

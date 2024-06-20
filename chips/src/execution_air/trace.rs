@@ -1,7 +1,7 @@
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::page_rw_checker::page_controller::{OpType, Operation};
+use crate::page_rw_checker::page_controller::Operation;
 
 use super::ExecutionAir;
 
@@ -32,10 +32,7 @@ impl ExecutionAir {
             row.push(i as u32 + 1);
             row.extend(op.idx.clone());
             row.extend(op.data.clone());
-            match op.op_type {
-                OpType::Read => row.push(0),
-                OpType::Write => row.push(1),
-            }
+            row.push(op.op_type as u32);
             rows.push(row);
             blank_row[1] += 1;
         }

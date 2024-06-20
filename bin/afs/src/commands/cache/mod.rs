@@ -6,7 +6,6 @@ use afs_test_utils::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
     page_config::PageConfig,
 };
-use alloy_primitives::U256;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{afs_interface::AfsInterface, mock_db::MockDb};
@@ -50,11 +49,13 @@ impl CacheCommand {
         let start = Instant::now();
         let mut db = MockDb::from_file(&self.db_file_path);
         let height = config.page.height;
-        let mut interface = AfsInterface::<U256, U256>::new(&mut db);
-        let page = interface
-            .get_table(self.table_id.clone())
-            .unwrap()
-            .to_page(height);
+        let mut interface =
+            AfsInterface::new(config.page.index_bytes, config.page.data_bytes, &mut db);
+        let page = interface.get_table(self.table_id.clone()).unwrap().to_page(
+            config.page.index_bytes,
+            config.page.data_bytes,
+            height,
+        );
 
         assert!(height > 0);
 

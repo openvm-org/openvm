@@ -26,7 +26,7 @@ use super::{
 use crate::common::page::Page;
 use crate::range_gate::RangeCheckerGateChip;
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug, Copy)]
 pub enum OpType {
     Read = 0,
     Write = 1,
@@ -351,7 +351,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         trace_builder.load_trace(self.range_checker.generate_trace());
         trace_builder.load_trace(ops_sender_trace);
 
-        trace_builder.commit_current();
+        tracing::info_span!("Trace commitment").in_scope(|| trace_builder.commit_current());
 
         let partial_vk = partial_pk.partial_vk();
 
