@@ -52,6 +52,9 @@ fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear
     let offline_checker_trace =
         offline_checker.generate_trace(ops, range_checker.clone(), MEMORY_TRACE_DEGREE);
 
+    let range_trace = range_checker.generate_trace();
+    println!("range_trace: {:?}", range_trace);
+
     let field_arithmetic_air = FieldArithmeticAir::new();
     let field_arithmetic_trace = field_arithmetic_air.generate_trace(&execution);
 
@@ -62,12 +65,14 @@ fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear
                 &program_air,
                 &offline_checker,
                 &field_arithmetic_air,
+                &range_checker.air,
             ],
             vec![
                 execution.trace(),
                 program_trace,
                 offline_checker_trace,
                 field_arithmetic_trace,
+                range_trace,
             ],
         )
     } else {
@@ -76,11 +81,13 @@ fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear
                 &cpu_chip.air,
                 &program_air,
                 &offline_checker,
+                &range_checker.air,
             ],
             vec![
                 execution.trace(),
                 program_trace,
                 offline_checker_trace,
+                range_trace,
             ],
         )
     };
