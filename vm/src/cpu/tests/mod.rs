@@ -87,69 +87,7 @@ fn program_execution_test<F: PrimeField64>(
 fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>) {
     let chip = CPUChip::new(is_field_arithmetic_enabled);
     let execution = chip.generate_trace(program);
-
-    let program_air = DummyInteractionAir::new(7, false, READ_INSTRUCTION_BUS);
-    let mut program_rows = vec![];
-    for (pc, instruction) in execution.program.iter().enumerate() {
-        program_rows.extend(vec![
-            execution.execution_frequencies[pc],
-            BabyBear::from_canonical_usize(pc),
-            BabyBear::from_canonical_usize(instruction.opcode as usize),
-            instruction.op_a,
-            instruction.op_b,
-            instruction.op_c,
-            instruction.d,
-            instruction.e,
-        ]);
-    }
-    while !(program_rows.len() / 8).is_power_of_two() {
-        program_rows.push(BabyBear::zero());
-    }
-    let program_trace = RowMajorMatrix::new(program_rows, 8);
-
-    let memory_air = DummyInteractionAir::new(5, false, MEMORY_BUS);
-    let mut memory_rows = vec![];
-    for memory_access in execution.memory_accesses.iter() {
-        memory_rows.extend(vec![
-            BabyBear::one(),
-            BabyBear::from_canonical_usize(memory_access.clock),
-            BabyBear::from_bool(memory_access.op_type == OpType::Write),
-            memory_access.address_space,
-            memory_access.address,
-            memory_access.data,
-        ]);
-    }
-    while !(memory_rows.len() / 6).is_power_of_two() {
-        memory_rows.push(BabyBear::zero());
-    }
-    let memory_trace = RowMajorMatrix::new(memory_rows, 6);
-
-    let arithmetic_air = DummyInteractionAir::new(4, false, ARITHMETIC_BUS);
-    let mut arithmetic_rows = vec![];
-    for arithmetic_op in execution.arithmetic_ops.iter() {
-        arithmetic_rows.extend(vec![
-            BabyBear::one(),
-            BabyBear::from_canonical_usize(arithmetic_op.opcode as usize),
-            arithmetic_op.operand1,
-            arithmetic_op.operand2,
-            arithmetic_op.result,
-        ]);
-    }
-    while !(arithmetic_rows.len() / 5).is_power_of_two() {
-        arithmetic_rows.push(BabyBear::zero());
-    }
-    let arithmetic_trace = RowMajorMatrix::new(arithmetic_rows, 5);
-
-    run_simple_test_no_pis(
-        vec![&chip.air, &program_air, &memory_air, &arithmetic_air],
-        vec![
-            execution.trace(),
-            program_trace,
-            memory_trace,
-            arithmetic_trace,
-        ],
-    )
-    .expect("Verification failed");
+    air_test_custom_execution(is_field_arithmetic_enabled, execution);
 }
 
 fn air_test_change_pc(
@@ -162,18 +100,29 @@ fn air_test_change_pc(
     let chip = CPUChip::new(is_field_arithmetic_enabled);
     let mut execution = chip.generate_trace(program);
 
-    let mut trace = execution.trace();
-    let options = CPUOptions {
-        field_arithmetic_enabled: is_field_arithmetic_enabled,
-    };
-    let all_cols = (0..CPUCols::<BabyBear>::get_width(options)).collect::<Vec<usize>>();
-    let cols_numbered = CPUCols::<usize>::from_slice(&all_cols, options);
-    let pc_col = cols_numbered.io.pc;
-    let old_value = trace.row_mut(change_row)[pc_col].as_canonical_u64() as usize;
-    trace.row_mut(change_row)[pc_col] = BabyBear::from_canonical_usize(change_value);
+    let old_value = execution.trace_rows[change_row].io.pc.as_canonical_u64() as usize;
+    execution.trace_rows[change_row].io.pc = BabyBear::from_canonical_usize(change_value);
 
     execution.execution_frequencies[old_value] -= BabyBear::one();
     execution.execution_frequencies[change_value] += BabyBear::one();
+
+    air_test_custom_execution_with_failure(is_field_arithmetic_enabled, execution, should_fail);
+}
+
+fn air_test_custom_execution(
+    is_field_arithmetic_enabled: bool,
+    execution: ProgramExecution<BabyBear>,
+) {
+    air_test_custom_execution_with_failure(is_field_arithmetic_enabled, execution, false);
+}
+
+fn air_test_custom_execution_with_failure(
+    is_field_arithmetic_enabled: bool,
+    execution: ProgramExecution<BabyBear>,
+    should_fail: bool
+) {
+    let chip = CPUChip::new(is_field_arithmetic_enabled);
+    let trace = execution.trace();
 
     let program_air = DummyInteractionAir::new(7, false, READ_INSTRUCTION_BUS);
     let mut program_rows = vec![];
@@ -241,73 +190,6 @@ fn air_test_change_pc(
     } else {
         test_result.expect("Verification failed");
     }
-}
-
-fn air_test_custom_execution(
-    is_field_arithmetic_enabled: bool,
-    execution: ProgramExecution<BabyBear>,
-) {
-    let chip = CPUChip::new(is_field_arithmetic_enabled);
-    let trace = execution.trace();
-
-    let program_air = DummyInteractionAir::new(7, false, READ_INSTRUCTION_BUS);
-    let mut program_rows = vec![];
-    for (pc, instruction) in execution.program.iter().enumerate() {
-        program_rows.extend(vec![
-            execution.execution_frequencies[pc],
-            BabyBear::from_canonical_usize(pc),
-            BabyBear::from_canonical_usize(instruction.opcode as usize),
-            instruction.op_a,
-            instruction.op_b,
-            instruction.op_c,
-            instruction.d,
-            instruction.e,
-        ]);
-    }
-    while !(program_rows.len() / 8).is_power_of_two() {
-        program_rows.push(BabyBear::zero());
-    }
-    let program_trace = RowMajorMatrix::new(program_rows, 8);
-
-    let memory_air = DummyInteractionAir::new(5, false, MEMORY_BUS);
-    let mut memory_rows = vec![];
-    for memory_access in execution.memory_accesses.iter() {
-        memory_rows.extend(vec![
-            BabyBear::one(),
-            BabyBear::from_canonical_usize(memory_access.clock),
-            BabyBear::from_bool(memory_access.op_type == OpType::Write),
-            memory_access.address_space,
-            memory_access.address,
-            memory_access.data,
-        ]);
-    }
-    while !(memory_rows.len() / 6).is_power_of_two() {
-        memory_rows.push(BabyBear::zero());
-    }
-    let memory_trace = RowMajorMatrix::new(memory_rows, 6);
-
-    let arithmetic_air = DummyInteractionAir::new(4, false, ARITHMETIC_BUS);
-    let mut arithmetic_rows = vec![];
-    for arithmetic_op in execution.arithmetic_ops.iter() {
-        arithmetic_rows.extend(vec![
-            BabyBear::one(),
-            BabyBear::from_canonical_usize(arithmetic_op.opcode as usize),
-            arithmetic_op.operand1,
-            arithmetic_op.operand2,
-            arithmetic_op.result,
-        ]);
-    }
-    while !(arithmetic_rows.len() / 5).is_power_of_two() {
-        arithmetic_rows.push(BabyBear::zero());
-    }
-    let arithmetic_trace = RowMajorMatrix::new(arithmetic_rows, 5);
-
-    let test_result = run_simple_test_no_pis(
-        vec![&chip.air, &program_air, &memory_air, &arithmetic_air],
-        vec![trace, program_trace, memory_trace, arithmetic_trace],
-    );
-
-    test_result.expect("Verification failed");
 }
 
 #[test]
