@@ -1,3 +1,4 @@
+use afs_chips::is_zero::IsZeroAir;
 use afs_stark_backend::verifier::VerificationError;
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
@@ -9,6 +10,7 @@ use crate::cpu::columns::{CPUCols, CPUIOCols};
 use crate::cpu::{CPUChip, CPUOptions};
 use crate::memory::OpType;
 
+use super::columns::MemoryAccessCols;
 use super::trace::ProgramExecution;
 use super::{
     trace::{ArithmeticOperation, Instruction, MemoryAccess},
@@ -480,6 +482,37 @@ fn test_cpu_negative_hasnt_terminated() {
     let mut execution = chip.generate_trace(program);
     execution.trace_rows.remove(execution.trace_rows.len() - 1);
     execution.execution_frequencies[1] = AbstractField::zero();
+
+    air_test_custom_execution(true, execution);
+}
+
+#[test]
+#[should_panic(expected = "assertion `left == right` failed: constraints had nonzero value on row 0")]
+fn test_cpu_negative_secret_write() {
+    let program = vec![
+        // if word[0]_0 == word[0]_[0] then pc += 1
+        Instruction::from_isize(BEQ, 0, 0, 1, 0, 0),
+        // terminate
+        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
+    ];
+
+    let chip = CPUChip::new(true);
+    let mut execution = chip.generate_trace(program);
+
+    let is_zero_air = IsZeroAir;
+    let mut is_zero_trace = is_zero_air.generate_trace(vec![AbstractField::one()]).clone();
+    let is_zero_aux = is_zero_trace.row_mut(0)[2];
+
+    execution.trace_rows[0].aux.write = MemoryAccessCols {
+        enabled: AbstractField::one(),
+        address_space: AbstractField::one(),
+        is_immediate: AbstractField::zero(),
+        is_zero_aux,
+        address: AbstractField::zero(),
+        data: AbstractField::from_canonical_usize(115)
+    };
+
+    execution.memory_accesses.push(MemoryAccess::from_isize(0, OpType::Write, 1, 0, 115));
 
     air_test_custom_execution(true, execution);
 }
