@@ -119,7 +119,7 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
         when_jal.assert_eq(write.address, a);
         when_jal.assert_eq(
             write.data,
-            pc + AB::Expr::from_canonical_u64(INST_WIDTH.try_into().unwrap()),
+            pc + inst_width,
         );
 
         when_jal.when_transition().assert_eq(next_pc, pc + b);
