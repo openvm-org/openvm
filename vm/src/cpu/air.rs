@@ -30,7 +30,7 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let inst_width = AB::Expr::from_canonical_u64(INST_WIDTH.try_into().unwrap());
+        let inst_width = AB::Var::from_canonical_usize(INST_WIDTH);
 
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
