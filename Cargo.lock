@@ -78,6 +78,7 @@ dependencies = [
  "afs-stark-backend",
  "afs-test-utils",
  "bincode",
+ "derive-new",
  "getset",
  "itertools 0.13.0",
  "p3-air",
@@ -160,11 +161,13 @@ dependencies = [
  "itertools 0.12.1",
  "p3-air",
  "p3-baby-bear",
+ "p3-blake3",
  "p3-challenger",
  "p3-commit",
  "p3-dft",
  "p3-field",
  "p3-fri",
+ "p3-keccak",
  "p3-matrix",
  "p3-maybe-rayon",
  "p3-mds",
@@ -406,6 +409,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arrayref"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b4930d2cb77ce62f89ee5d5289b4ac049559b1c45539271f5ed4fdc7db34545"
+
+[[package]]
 name = "arrayvec"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -495,6 +504,19 @@ dependencies = [
  "radium",
  "tap",
  "wyz",
+]
+
+[[package]]
+name = "blake3"
+version = "1.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30cca6d3674597c30ddf2c587bf8d9d65c9a84d2326d941cc79c9842dfe0ef52"
+dependencies = [
+ "arrayref",
+ "arrayvec",
+ "cc",
+ "cfg-if",
+ "constant_time_eq",
 ]
 
 [[package]]
@@ -629,6 +651,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 
 [[package]]
+name = "constant_time_eq"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7144d30dcf0fafbce74250a3963025d8d52177934239851c917d29f1df280c2"
+
+[[package]]
 name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -732,6 +760,17 @@ name = "derivative"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "derive-new"
+version = "0.5.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3418329ca0ad70234b9735dc4ceed10af4df60eff9c8e7b06cb5e520d92c3535"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1242,6 +1281,15 @@ dependencies = [
  "p3-symmetric",
  "rand",
  "serde",
+]
+
+[[package]]
+name = "p3-blake3"
+version = "0.1.0"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=sp1#f535642f5bea6a2bfded8c4e51b1f2960b1f6da7"
+dependencies = [
+ "blake3",
+ "p3-symmetric",
 ]
 
 [[package]]

@@ -1,4 +1,4 @@
-use crate::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
+use columns::OfflineCheckerCols;
 
 mod air;
 mod bridge;
@@ -42,17 +42,7 @@ impl OfflineChecker {
         }
     }
 
-    fn page_width(&self) -> usize {
-        1 + self.idx_len + self.data_len
-    }
-
     pub fn air_width(&self) -> usize {
-        10 + self.page_width()
-            + 2 * (self.idx_len + self.data_len)
-            + IsLessThanTupleAuxCols::<usize>::get_width(
-                self.idx_clk_limb_bits.clone(),
-                self.idx_decomp,
-                self.idx_len + 1,
-            )
+        OfflineCheckerCols::<usize>::width(self)
     }
 }
