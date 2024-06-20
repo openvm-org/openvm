@@ -18,8 +18,8 @@ impl<F: Field> BaseAir<F> for ProgramAir<F> {
                 op_a: instruction.op_a,
                 op_b: instruction.op_b,
                 op_c: instruction.op_c,
-                as_b: instruction.as_b,
-                as_c: instruction.as_c,
+                as_b: instruction.d,
+                as_c: instruction.e,
             };
             rows.extend(preprocessed_cols.flatten());
         }

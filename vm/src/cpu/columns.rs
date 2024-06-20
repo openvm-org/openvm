@@ -9,8 +9,8 @@ pub struct CPUIOCols<T> {
     pub op_a: T,
     pub op_b: T,
     pub op_c: T,
-    pub as_b: T,
-    pub as_c: T,
+    pub d: T,
+    pub e: T,
 }
 
 impl<T: Clone> CPUIOCols<T> {
@@ -22,8 +22,8 @@ impl<T: Clone> CPUIOCols<T> {
             op_a: slc[3].clone(),
             op_b: slc[4].clone(),
             op_c: slc[5].clone(),
-            as_b: slc[6].clone(),
-            as_c: slc[7].clone(),
+            d: slc[6].clone(),
+            e: slc[7].clone(),
         }
     }
 
@@ -35,8 +35,8 @@ impl<T: Clone> CPUIOCols<T> {
             self.op_a.clone(),
             self.op_b.clone(),
             self.op_c.clone(),
-            self.as_b.clone(),
-            self.as_c.clone(),
+            self.d.clone(),
+            self.e.clone(),
         ]
     }
 

@@ -65,8 +65,8 @@ fn program_execution_test<F: PrimeField64>(
             op_a: program[pc].op_a,
             op_b: program[pc].op_b,
             op_c: program[pc].op_c,
-            as_b: program[pc].as_b,
-            as_c: program[pc].as_c,
+            d: program[pc].d,
+            e: program[pc].e,
         };
         assert_eq!(row.io, expected_io);
     }
@@ -95,8 +95,8 @@ fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear
             instruction.op_a,
             instruction.op_b,
             instruction.op_c,
-            instruction.as_b,
-            instruction.as_c,
+            instruction.d,
+            instruction.e,
         ]);
     }
     while !(program_rows.len() / 8).is_power_of_two() {
@@ -182,8 +182,8 @@ fn air_test_change_pc(
             instruction.op_a,
             instruction.op_b,
             instruction.op_c,
-            instruction.as_b,
-            instruction.as_c,
+            instruction.d,
+            instruction.e,
         ]);
     }
     while !(program_rows.len() / 8).is_power_of_two() {

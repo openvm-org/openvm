@@ -49,8 +49,8 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
             op_a: a,
             op_b: b,
             op_c: c,
-            as_b: d,
-            as_c: e,
+            d,
+            e,
         } = io;
         let CPUIOCols {
             clock_cycle: next_clock,

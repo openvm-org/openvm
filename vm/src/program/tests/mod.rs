@@ -44,8 +44,8 @@ fn interaction_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<
             instruction.op_a,
             instruction.op_b,
             instruction.op_c,
-            instruction.as_b,
-            instruction.as_c,
+            instruction.d,
+            instruction.e,
         ]);
     }
     while !program_rows.len().is_power_of_two() {
@@ -128,8 +128,8 @@ fn test_program_negative() {
             instruction.op_a,
             instruction.op_b,
             instruction.op_c,
-            instruction.as_b,
-            instruction.as_c,
+            instruction.d,
+            instruction.e,
         ]);
     }
     let mut counter_trace = RowMajorMatrix::new(program_rows, 8);

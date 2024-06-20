@@ -20,8 +20,8 @@ pub struct Instruction<F> {
     pub op_a: F,
     pub op_b: F,
     pub op_c: F,
-    pub as_b: F,
-    pub as_c: F,
+    pub d: F,
+    pub e: F,
 }
 
 fn isize_to_field<F: PrimeField64>(value: isize) -> F {
@@ -32,14 +32,21 @@ fn isize_to_field<F: PrimeField64>(value: isize) -> F {
 }
 
 impl<F: PrimeField64> Instruction<F> {
-    pub fn from_isize(opcode: OpCode, op_a: isize, op_b: isize, op_c: isize, as_b: isize, as_c: isize) -> Self {
+    pub fn from_isize(
+        opcode: OpCode,
+        op_a: isize,
+        op_b: isize,
+        op_c: isize,
+        d: isize,
+        e: isize,
+    ) -> Self {
         Self {
             opcode,
             op_a: isize_to_field::<F>(op_a),
             op_b: isize_to_field::<F>(op_b),
             op_c: isize_to_field::<F>(op_c),
-            as_b: isize_to_field::<F>(as_b),
-            as_c: isize_to_field::<F>(as_c),
+            d: isize_to_field::<F>(d),
+            e: isize_to_field::<F>(e),
         }
     }
 }
@@ -54,7 +61,13 @@ pub struct MemoryAccess<F> {
 }
 
 impl<F: PrimeField64> MemoryAccess<F> {
-    pub fn from_isize(clock: isize, op_type: OpType, address_space: isize, address: isize, data: isize) -> Self {
+    pub fn from_isize(
+        clock: isize,
+        op_type: OpType,
+        address_space: isize,
+        address: isize,
+        data: isize,
+    ) -> Self {
         Self {
             clock: clock as usize,
             op_type,
@@ -236,8 +249,8 @@ impl CPUChip {
             let a = instruction.op_a;
             let b = instruction.op_b;
             let c = instruction.op_c;
-            let d = instruction.as_b;
-            let e = instruction.as_c;
+            let d = instruction.d;
+            let e = instruction.e;
 
             let io = CPUIOCols {
                 clock_cycle: F::from_canonical_usize(clock_cycle),
@@ -246,8 +259,8 @@ impl CPUChip {
                 op_a: a,
                 op_b: b,
                 op_c: c,
-                as_b: d,
-                as_c: e,
+                d,
+                e,
             };
 
             let mut operation_flags = vec![F::zero(); self.air.options.num_operations()];
@@ -355,7 +368,7 @@ impl CPUChip {
             clock_cycle += 1;
 
             if opcode == TERMINATE && rows.len().is_power_of_two() {
-                break
+                break;
             }
         }
 
