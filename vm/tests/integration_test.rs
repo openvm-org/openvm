@@ -55,21 +55,37 @@ fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear
     let field_arithmetic_air = FieldArithmeticAir::new();
     let field_arithmetic_trace = field_arithmetic_air.generate_trace(&execution);
 
-    run_simple_test_no_pis(
-        vec![
-            &cpu_chip.air,
-            &program_air,
-            &offline_checker,
-            &field_arithmetic_air,
-        ],
-        vec![
-            execution.trace(),
-            program_trace,
-            offline_checker_trace,
-            field_arithmetic_trace,
-        ],
-    )
-    .expect("Verification failed");
+    let test_result = if is_field_arithmetic_enabled {
+        run_simple_test_no_pis(
+            vec![
+                &cpu_chip.air,
+                &program_air,
+                &offline_checker,
+                &field_arithmetic_air,
+            ],
+            vec![
+                execution.trace(),
+                program_trace,
+                offline_checker_trace,
+                field_arithmetic_trace,
+            ],
+        )
+    } else {
+        run_simple_test_no_pis(
+            vec![
+                &cpu_chip.air,
+                &program_air,
+                &offline_checker,
+            ],
+            vec![
+                execution.trace(),
+                program_trace,
+                offline_checker_trace,
+            ],
+        )
+    };
+
+    test_result.expect("Verification failed");
 }
 
 #[test]
