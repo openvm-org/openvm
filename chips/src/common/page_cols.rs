@@ -1,6 +1,6 @@
 use std::iter;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, derive_new::new)]
 pub struct PageCols<T> {
     pub is_alloc: T, // indicates if row is allocated
     pub idx: Vec<T>,

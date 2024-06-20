@@ -1,11 +1,11 @@
 use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
-use p3_field::PrimeField64;
+use p3_field::PrimeField;
 
 use super::{columns::MyFinalPageCols, MyFinalPageAir};
-use crate::sub_chip::SubAirBridge;
+use crate::{sub_chip::SubAirBridge, utils::to_vcols};
 
-impl<F: PrimeField64> AirBridge<F> for MyFinalPageAir {
+impl<F: PrimeField> AirBridge<F> for MyFinalPageAir {
     /// Sends interactions required by IsLessThanTuple SubAir
     fn sends(&self) -> Vec<Interaction<F>> {
         let num_cols = self.air_width();
@@ -27,13 +27,7 @@ impl<F: PrimeField64> AirBridge<F> for MyFinalPageAir {
         let page_cols = my_final_page_cols.final_page_cols.page_cols;
         let rcv_mult = my_final_page_cols.rcv_mult;
 
-        let page_cols = page_cols
-            .idx
-            .iter()
-            .copied()
-            .chain(page_cols.data)
-            .map(VirtualPairCol::single_main)
-            .collect::<Vec<_>>();
+        let page_cols = to_vcols(&[page_cols.idx, page_cols.data].concat());
 
         vec![Interaction {
             fields: page_cols,
