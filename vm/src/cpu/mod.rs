@@ -14,6 +14,7 @@ pub const INST_WIDTH: usize = 1;
 pub const READ_INSTRUCTION_BUS: usize = 0;
 pub const MEMORY_BUS: usize = 1;
 pub const ARITHMETIC_BUS: usize = 2;
+pub const RANGE_CHECKER_BUS: usize = 3;
 
 pub const NUM_CORE_OPERATIONS: usize = 6;
 pub const NUM_ARITHMETIC_OPERATIONS: usize = 4;

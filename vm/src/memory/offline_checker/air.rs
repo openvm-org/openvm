@@ -6,6 +6,8 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
+use crate::cpu::RANGE_CHECKER_BUS;
+
 use super::{columns::OfflineCheckerCols, OfflineChecker};
 use afs_chips::{
     is_equal::{columns::IsEqualCols, IsEqualAir},
@@ -52,7 +54,7 @@ where
         builder.assert_bool(local_cols.same_pointer);
         builder.assert_bool(local_cols.same_addr);
         builder.assert_bool(local_cols.same_data);
-        builder.assert_bool(local_cols.is_extra);
+        builder.assert_bool(local_cols.is_valid);
 
         // Making sure first row starts with same_addr_space, same_pointer, same_data being false
         builder
@@ -127,7 +129,7 @@ where
         };
 
         let lt_chip = IsLessThanTupleAir::new(
-            self.range_bus_index,
+            RANGE_CHECKER_BUS,
             self.addr_clk_limb_bits.clone(),
             self.decomp,
         );
@@ -140,9 +142,10 @@ where
         );
 
         // Ensuring lt_bit is on
-        builder
-            .when_transition()
-            .assert_one(or(next_cols.is_extra.into(), next_cols.lt_bit.into()));
+        builder.when_transition().assert_one(or(
+            AB::Expr::one() - next_cols.is_valid.into(),
+            next_cols.lt_bit.into(),
+        ));
 
         // Constraining that same_addr is correct
         builder.when_transition().assert_eq(
@@ -157,7 +160,7 @@ where
         // not same_idx => write
         // NOTE: constraint degree is 3
         builder.assert_one(or(
-            local_cols.is_extra.into(),
+            AB::Expr::one() - local_cols.is_valid.into(),
             or(local_cols.same_addr.into(), local_cols.op_type.into()),
         ));
 
@@ -165,14 +168,14 @@ where
         // read => same_data
         // NOTE: constraint degree is 3
         builder.assert_one(or(
-            local_cols.is_extra.into(),
+            AB::Expr::one() - local_cols.is_valid.into(),
             or(local_cols.op_type.into(), local_cols.same_data.into()),
         ));
 
         // Making sure is_extra rows are at the bottom
         builder.when_transition().assert_one(implies(
-            AB::Expr::one() - next_cols.is_extra,
-            AB::Expr::one() - local_cols.is_extra,
+            next_cols.is_valid.into(),
+            local_cols.is_valid.into(),
         ));
 
         // Note that the following is implied:

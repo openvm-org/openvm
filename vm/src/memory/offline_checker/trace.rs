@@ -15,7 +15,7 @@ use afs_chips::sub_chip::LocalTraceInstructions;
 
 impl OfflineChecker {
     /// Each row in the trace follow the same order as the Cols struct:
-    /// [clk, mem_row, op_type, same_addr_space, same_pointer, same_addr, same_data, lt_bit, is_extra, is_equal_addr_space_aux, is_equal_pointer_aux, is_equal_data_aux, lt_aux]
+    /// [clk, mem_row, op_type, same_addr_space, same_pointer, same_addr, same_data, lt_bit, is_valid, is_equal_addr_space_aux, is_equal_pointer_aux, is_equal_data_aux, lt_aux]
     ///
     /// The trace consists of a row for every read/write operation plus some extra rows
     /// The trace is sorted by addr (addr_space and pointer) and then by clk, so every addr has a block of consective rows in the trace with the following structure
@@ -42,7 +42,7 @@ impl OfflineChecker {
         if !ops.is_empty() {
             rows.extend(self.generate_trace_row::<F>(
                 true,
-                0,
+                1,
                 &ops[0],
                 &dummy_op,
                 range_checker.clone(),
@@ -52,7 +52,7 @@ impl OfflineChecker {
         for i in 1..ops.len() {
             rows.extend(self.generate_trace_row::<F>(
                 false,
-                0,
+                1,
                 &ops[i],
                 &ops[i - 1],
                 range_checker.clone(),
@@ -65,7 +65,7 @@ impl OfflineChecker {
         if ops.len() < trace_degree {
             rows.extend(self.generate_trace_row::<F>(
                 false,
-                1,
+                0,
                 &dummy_op,
                 &ops[ops.len() - 1],
                 range_checker.clone(),
@@ -75,7 +75,7 @@ impl OfflineChecker {
         for _i in 1..(trace_degree - ops.len()) {
             rows.extend(self.generate_trace_row::<F>(
                 false,
-                1,
+                0,
                 &dummy_op,
                 &dummy_op,
                 range_checker.clone(),
@@ -88,7 +88,7 @@ impl OfflineChecker {
     pub fn generate_trace_row<F: PrimeField32>(
         &self,
         is_first_row: bool,
-        is_extra: u8,
+        is_valid: u8,
         curr_op: &MemoryAccess<F>,
         prev_op: &MemoryAccess<F>,
         range_checker: Arc<RangeCheckerGateChip>,
@@ -136,7 +136,7 @@ impl OfflineChecker {
         };
 
         row.push(F::from_canonical_u8(lt_bit));
-        row.push(F::from_canonical_u8(is_extra));
+        row.push(F::from_canonical_u8(is_valid));
 
         let is_equal_addr_space_air = IsEqualAir {};
         let is_equal_pointer_air = IsEqualAir {};

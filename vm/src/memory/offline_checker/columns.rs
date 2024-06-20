@@ -26,8 +26,8 @@ pub struct OfflineCheckerCols<T> {
 
     /// this bit indicates if (addr_space, pointer, clk) is strictly more than the one in the previous row
     pub lt_bit: T,
-    /// a bit to indicate if this is an extra row that should be ignored
-    pub is_extra: T,
+    /// a bit to indicate if this is a valid operation row
+    pub is_valid: T,
 
     /// auxiliary columns used for same_addr_space
     pub is_equal_addr_space_aux: IsEqualAuxCols<T>,
@@ -53,7 +53,7 @@ where
         same_addr: T,
         same_data: T,
         lt_bit: T,
-        is_extra: T,
+        is_valid: T,
         is_equal_addr_space_aux: IsEqualAuxCols<T>,
         is_equal_pointer_aux: IsEqualAuxCols<T>,
         is_equal_data_aux: IsEqualVecAuxCols<T>,
@@ -68,7 +68,7 @@ where
             same_addr,
             same_data,
             lt_bit,
-            is_extra,
+            is_valid,
             is_equal_addr_space_aux,
             is_equal_pointer_aux,
             is_equal_data_aux,
@@ -86,7 +86,7 @@ where
             self.same_addr.clone(),
             self.same_data.clone(),
             self.lt_bit.clone(),
-            self.is_extra.clone(),
+            self.is_valid.clone(),
         ]);
 
         flattened.extend(self.is_equal_addr_space_aux.flatten());
@@ -110,7 +110,7 @@ where
             same_addr: slc[4 + mem_width].clone(),
             same_data: slc[5 + mem_width].clone(),
             lt_bit: slc[6 + mem_width].clone(),
-            is_extra: slc[7 + mem_width].clone(),
+            is_valid: slc[7 + mem_width].clone(),
             is_equal_addr_space_aux: IsEqualAuxCols::from_slice(&slc[8 + mem_width..9 + mem_width]),
             is_equal_pointer_aux: IsEqualAuxCols::from_slice(&slc[9 + mem_width..10 + mem_width]),
             is_equal_data_aux: IsEqualVecAuxCols::from_slice(
