@@ -18,7 +18,7 @@ use super::{utils::generate_rlc_elements, AirBridge, InteractiveAir};
 impl<AB, A> Rap<AB> for A
 where
     A: InteractiveAir<AB>,
-    AB: PairBuilder + PermutationAirBuilderWithExposedValues + PartitionedAirBuilder + Sync,
+    AB: PairBuilder + PermutationAirBuilderWithExposedValues + PartitionedAirBuilder,
 {
     fn eval(&self, builder: &mut AB) {
         // Constraits for the main trace:
