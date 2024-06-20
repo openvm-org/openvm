@@ -2,11 +2,10 @@ use std::sync::Arc;
 
 use afs_chips::is_equal::IsEqualAir;
 use afs_chips::is_less_than_tuple::columns::IsLessThanTupleIOCols;
-use afs_test_utils::utils::to_field_vec;
-use p3_field::{AbstractField, PrimeField};
+use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::memory::{OpType, Operation};
+use crate::memory::{MemoryAccess, OpType};
 
 use super::OfflineChecker;
 use afs_chips::is_equal_vec::IsEqualVecAir;
@@ -22,22 +21,22 @@ impl OfflineChecker {
     /// The trace is sorted by addr (addr_space and pointer) and then by clk, so every addr has a block of consective rows in the trace with the following structure
     /// A row is added to the trace for every read/write operation with the corresponding data
     /// The trace is padded at the end to be of height trace_degree
-    pub fn generate_trace<F: PrimeField>(
+    pub fn generate_trace<F: PrimeField32>(
         &self,
-        mut ops: Vec<Operation>,
+        mut ops: Vec<MemoryAccess<F>>,
         range_checker: Arc<RangeCheckerGateChip>,
         trace_degree: usize,
     ) -> RowMajorMatrix<F> {
-        ops.sort_by_key(|op| (op.addr_space, op.pointer, op.clk));
+        ops.sort_by_key(|op| (op.address_space, op.address, op.clock));
 
         let mut rows: Vec<F> = vec![];
 
-        let dummy_op = Operation {
-            clk: 0,
-            addr_space: 0,
-            pointer: 0,
-            data: vec![0; self.data_len],
+        let dummy_op = MemoryAccess {
+            clock: 0,
             op_type: OpType::Read,
+            address_space: F::zero(),
+            address: F::zero(),
+            data: vec![F::zero(); self.data_len],
         };
 
         if !ops.is_empty() {
@@ -86,12 +85,12 @@ impl OfflineChecker {
         RowMajorMatrix::new(rows, self.air_width())
     }
 
-    pub fn generate_trace_row<F: PrimeField + AbstractField>(
+    pub fn generate_trace_row<F: PrimeField32>(
         &self,
         is_first_row: bool,
         is_extra: u8,
-        curr_op: &Operation,
-        prev_op: &Operation,
+        curr_op: &MemoryAccess<F>,
+        prev_op: &MemoryAccess<F>,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Vec<F> {
         let mut row: Vec<F> = vec![];
@@ -101,18 +100,18 @@ impl OfflineChecker {
             1
         };
 
-        row.push(F::from_canonical_usize(curr_op.clk));
-        row.push(F::from_canonical_u32(curr_op.addr_space));
-        row.push(F::from_canonical_u32(curr_op.pointer));
-        row.extend(curr_op.data.iter().map(|x| F::from_canonical_u32(*x)));
+        row.push(F::from_canonical_usize(curr_op.clock));
+        row.push(curr_op.address_space);
+        row.push(curr_op.address);
+        row.extend(curr_op.data.clone());
         row.push(F::from_canonical_u8(op_type));
 
-        let same_addr_space = if curr_op.addr_space == prev_op.addr_space {
+        let same_addr_space = if curr_op.address_space == prev_op.address_space {
             1
         } else {
             0
         };
-        let same_pointer = if curr_op.pointer == prev_op.pointer {
+        let same_pointer = if curr_op.address == prev_op.address {
             1
         } else {
             0
@@ -125,11 +124,11 @@ impl OfflineChecker {
         row.push(F::from_canonical_u8(same_addr));
         row.push(F::from_canonical_u8(same_data));
 
-        let lt_bit = if curr_op.addr_space > prev_op.addr_space
-            || (curr_op.addr_space == prev_op.addr_space && curr_op.pointer > prev_op.pointer)
-            || (curr_op.addr_space == prev_op.addr_space
-                && curr_op.pointer == prev_op.pointer
-                && curr_op.clk > prev_op.clk)
+        let lt_bit = if curr_op.address_space > prev_op.address_space
+            || (curr_op.address_space == prev_op.address_space && curr_op.address > prev_op.address)
+            || (curr_op.address_space == prev_op.address_space
+                && curr_op.address == prev_op.address
+                && curr_op.clock > prev_op.clock)
         {
             1
         } else {
@@ -149,28 +148,27 @@ impl OfflineChecker {
         );
 
         let is_equal_addr_space_aux = is_equal_addr_space_air
-            .generate_trace_row((
-                F::from_canonical_u32(prev_op.addr_space),
-                F::from_canonical_u32(curr_op.addr_space),
-            ))
+            .generate_trace_row((prev_op.address_space, curr_op.address_space))
             .flatten()[3];
         let is_equal_pointer_aux = is_equal_pointer_air
-            .generate_trace_row((
-                F::from_canonical_u32(prev_op.pointer),
-                F::from_canonical_u32(curr_op.pointer),
-            ))
+            .generate_trace_row((prev_op.address, curr_op.address))
             .flatten()[3];
         let is_equal_data_aux = is_equal_data_air
-            .generate_trace_row((
-                to_field_vec::<F>(prev_op.data.clone()),
-                to_field_vec::<F>(curr_op.data.clone()),
-            ))
+            .generate_trace_row((prev_op.data.clone(), curr_op.data.clone()))
             .flatten()[2 * self.data_len..]
             .to_vec();
         let lt_aux: Vec<F> = lt_air
             .generate_trace_row((
-                vec![prev_op.addr_space, prev_op.pointer, prev_op.clk as u32],
-                vec![curr_op.addr_space, curr_op.pointer, curr_op.clk as u32],
+                vec![
+                    prev_op.address_space.as_canonical_u32(),
+                    prev_op.address.as_canonical_u32(),
+                    prev_op.clock as u32,
+                ],
+                vec![
+                    curr_op.address_space.as_canonical_u32(),
+                    curr_op.address.as_canonical_u32(),
+                    curr_op.clock as u32,
+                ],
                 range_checker,
             ))
             .flatten()[IsLessThanTupleIOCols::<F>::get_width(3)..]
@@ -193,8 +191,6 @@ impl OfflineChecker {
             // lt_bit should be 1
             row[6 + self.mem_width()] = F::one();
         }
-
-        println!("{:?}", row);
 
         row
     }

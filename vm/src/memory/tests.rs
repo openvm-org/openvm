@@ -2,8 +2,10 @@ use std::sync::Arc;
 
 use afs_chips::range_gate::RangeCheckerGateChip;
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
 
-use super::{offline_checker::OfflineChecker, OpType, Operation};
+use super::{offline_checker::OfflineChecker, MemoryAccess, OpType};
 
 #[test]
 fn test_offline_checker() {
@@ -29,55 +31,83 @@ fn test_offline_checker() {
         decomp,
     );
 
-    let ops: Vec<Operation> = vec![
-        Operation {
-            clk: 0,
-            addr_space: 0,
-            pointer: 0,
-            data: vec![22783, 433, 1778],
+    let ops: Vec<MemoryAccess<BabyBear>> = vec![
+        MemoryAccess {
+            clock: 0,
             op_type: OpType::Write,
+            address_space: BabyBear::zero(),
+            address: BabyBear::zero(),
+            data: vec![
+                BabyBear::from_canonical_usize(2324),
+                BabyBear::from_canonical_usize(433),
+                BabyBear::from_canonical_usize(1778),
+            ],
         },
-        Operation {
-            clk: 1,
-            addr_space: 0,
-            pointer: 1,
-            data: vec![232, 888, 5954],
+        MemoryAccess {
+            clock: 1,
             op_type: OpType::Write,
+            address_space: BabyBear::zero(),
+            address: BabyBear::one(),
+            data: vec![
+                BabyBear::from_canonical_usize(232),
+                BabyBear::from_canonical_usize(888),
+                BabyBear::from_canonical_usize(5954),
+            ],
         },
-        Operation {
-            clk: 2,
-            addr_space: 0,
-            pointer: 1,
-            data: vec![232, 888, 5954],
+        MemoryAccess {
+            clock: 2,
             op_type: OpType::Read,
+            address_space: BabyBear::zero(),
+            address: BabyBear::one(),
+            data: vec![
+                BabyBear::from_canonical_usize(232),
+                BabyBear::from_canonical_usize(888),
+                BabyBear::from_canonical_usize(5954),
+            ],
         },
-        Operation {
-            clk: 3,
-            addr_space: 0,
-            pointer: 1,
-            data: vec![3243, 3214, 6639],
+        MemoryAccess {
+            clock: 3,
             op_type: OpType::Write,
+            address_space: BabyBear::zero(),
+            address: BabyBear::one(),
+            data: vec![
+                BabyBear::from_canonical_usize(3243),
+                BabyBear::from_canonical_usize(3214),
+                BabyBear::from_canonical_usize(6639),
+            ],
         },
-        Operation {
-            clk: 4,
-            addr_space: 1,
-            pointer: 0,
-            data: vec![231, 3883, 17],
+        MemoryAccess {
+            clock: 4,
             op_type: OpType::Write,
+            address_space: BabyBear::one(),
+            address: BabyBear::zero(),
+            data: vec![
+                BabyBear::from_canonical_usize(231),
+                BabyBear::from_canonical_usize(3883),
+                BabyBear::from_canonical_usize(17),
+            ],
         },
-        Operation {
-            clk: 5,
-            addr_space: 2,
-            pointer: 0,
-            data: vec![4382, 8837, 192],
+        MemoryAccess {
+            clock: 5,
             op_type: OpType::Write,
+            address_space: BabyBear::two(),
+            address: BabyBear::zero(),
+            data: vec![
+                BabyBear::from_canonical_usize(4382),
+                BabyBear::from_canonical_usize(8837),
+                BabyBear::from_canonical_usize(192),
+            ],
         },
-        Operation {
-            clk: 6,
-            addr_space: 2,
-            pointer: 0,
-            data: vec![4382, 8837, 192],
+        MemoryAccess {
+            clock: 6,
             op_type: OpType::Read,
+            address_space: BabyBear::two(),
+            address: BabyBear::zero(),
+            data: vec![
+                BabyBear::from_canonical_usize(4382),
+                BabyBear::from_canonical_usize(8837),
+                BabyBear::from_canonical_usize(192),
+            ],
         },
     ];
 
