@@ -176,10 +176,17 @@ fn air_test_custom_execution_with_failure(
     }
     let arithmetic_trace = RowMajorMatrix::new(arithmetic_rows, 5);
 
-    let test_result = run_simple_test_no_pis(
-        vec![&chip.air, &program_air, &memory_air, &arithmetic_air],
-        vec![trace, program_trace, memory_trace, arithmetic_trace],
-    );
+    let test_result = if is_field_arithmetic_enabled {
+        run_simple_test_no_pis(
+            vec![&chip.air, &program_air, &memory_air, &arithmetic_air],
+            vec![trace, program_trace, memory_trace, arithmetic_trace],
+        )
+    } else {
+        run_simple_test_no_pis(
+            vec![&chip.air, &program_air, &memory_air],
+            vec![trace, program_trace, memory_trace],
+        )
+    };
 
     if should_fail {
         assert_eq!(
