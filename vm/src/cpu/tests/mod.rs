@@ -244,6 +244,15 @@ fn test_cpu() {
     let n = 20;
     let nf = AbstractField::from_canonical_u64(n);
 
+    /*
+    Instruction 0 assigns word[0]_1 to n.
+    Instruction 1 repeats this to make the trace height a power of 2.
+    Instruction 2 assigns word[1]_1 to 1 for use in later arithmetic operations.
+    The remainder is a loop that decrements word[0]_1 until it reaches 0, then terminates.
+    Instruction 3 checks if word[0]_1 is 0 yet, and if so terminates (by setting pc to -1)
+    Instruction 4 decrements word[0]_1 (using word[1]_1)
+    Instruction 5 uses JAL as a simple jump to go back to instruction 3 (repeating the loop).
+     */
     let program = vec![
         // word[0]_1 <- word[n]_0
         Instruction {
@@ -415,6 +424,13 @@ fn test_cpu_without_field_arithmetic() {
     let neg_two = neg * two;
     let neg_five = neg * BabyBear::from_canonical_u32(5);
 
+    /*
+    Instruction 0 assigns word[0]_1 to 5.
+    Instruction 1 assigns word[0]_1 to 5 (repeat to make the trace height a power of 2)
+    Instruction 2 checks if word[0]_1 is *not* 4, and if so jumps to instruction 4.
+    Instruction 3 is never run.
+    Instruction 4 checks if word[0]_1 is 5, and if so terminates (by setting pc to -1)
+     */
     let program = vec![
         // word[0]_1 <- word[5]_0
         Instruction {
