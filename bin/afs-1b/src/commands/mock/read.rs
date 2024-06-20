@@ -4,7 +4,7 @@ use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::utils::{fixed_bytes_to_field_vec, string_to_be_vec};
 
-use crate::commands::{BABYBEAR_COMMITMENT_LEN, INTERNAL_HEIGHT, LEAF_HEIGHT, LIMB_BITS};
+use crate::commands::{BABYBEAR_COMMITMENT_LEN, LIMB_BITS};
 
 #[derive(Debug, Parser)]
 pub struct ReadCommand {
@@ -43,7 +43,7 @@ impl ReadCommand {
         let mut db = if let Some(table_id) = &self.table_id {
             println!("db_file_path: {}/root/{}", self.db_folder, table_id);
 
-            PageBTree::<INTERNAL_HEIGHT, LEAF_HEIGHT, BABYBEAR_COMMITMENT_LEN>::load(
+            PageBTree::<BABYBEAR_COMMITMENT_LEN>::load(
                 self.db_folder.clone(),
                 table_id.to_owned(),
                 "".to_owned(),

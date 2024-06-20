@@ -480,7 +480,7 @@ fn generate_no_new_keys(
 ) -> (PageBTreePages, bool, PageBTreePages, bool, Vec<Operation>) {
     const MAX_LIMB_VAL: u32 = 1 << 20;
     let mut rng = create_seeded_rng();
-    let mut btree = PageBTree::<16, 16, BABYBEAR_COMMITMENT_LEN>::new(
+    let mut btree = PageBTree::<BABYBEAR_COMMITMENT_LEN>::new(
         limb_bits,
         idx_len,
         data_len,
@@ -562,7 +562,7 @@ fn generate_new_keys(
 ) -> (PageBTreePages, bool, PageBTreePages, bool, Vec<Operation>) {
     const MAX_LIMB_VAL: u32 = 1 << 20;
     let mut rng = create_seeded_rng();
-    let mut btree = PageBTree::<16, 16, BABYBEAR_COMMITMENT_LEN>::new(
+    let mut btree = PageBTree::<BABYBEAR_COMMITMENT_LEN>::new(
         limb_bits,
         idx_len,
         data_len,
@@ -628,7 +628,7 @@ fn generate_mixed_ops(
 ) -> (PageBTreePages, bool, PageBTreePages, bool, Vec<Operation>) {
     const MAX_LIMB_VAL: u32 = 1 << 20;
     let mut rng = create_seeded_rng();
-    let mut btree = PageBTree::<16, 16, BABYBEAR_COMMITMENT_LEN>::new(
+    let mut btree = PageBTree::<BABYBEAR_COMMITMENT_LEN>::new(
         limb_bits,
         idx_len,
         data_len,
@@ -726,7 +726,7 @@ fn generate_mixed_ops_remove_first_leaf(
 ) -> (PageBTreePages, bool, PageBTreePages, bool, Vec<Operation>) {
     const MAX_LIMB_VAL: u32 = 1 << 20;
     let mut rng = create_seeded_rng();
-    let mut btree = PageBTree::<16, 16, BABYBEAR_COMMITMENT_LEN>::new(
+    let mut btree = PageBTree::<BABYBEAR_COMMITMENT_LEN>::new(
         limb_bits,
         idx_len,
         data_len,
@@ -831,7 +831,7 @@ fn generate_mixed_ops_empty_start(
 ) -> (PageBTreePages, bool, PageBTreePages, bool, Vec<Operation>) {
     const MAX_LIMB_VAL: u32 = 1 << 20;
     let mut rng = create_seeded_rng();
-    let mut btree = PageBTree::<16, 16, BABYBEAR_COMMITMENT_LEN>::new(
+    let mut btree = PageBTree::<BABYBEAR_COMMITMENT_LEN>::new(
         limb_bits,
         idx_len,
         data_len,
@@ -909,7 +909,7 @@ fn generate_large_tree_no_new_keys(
     committer: &mut TraceCommitter<BabyBearPoseidon2Config>,
 ) -> (PageBTreePages, bool, PageBTreePages, bool, Vec<Operation>) {
     let mut rng = create_seeded_rng();
-    let mut btree = PageBTree::<32, 32, BABYBEAR_COMMITMENT_LEN>::load(
+    let mut btree = PageBTree::<BABYBEAR_COMMITMENT_LEN>::load(
         "src/pagebtree".to_owned(),
         "large".to_owned(),
         "".to_owned(),
@@ -966,7 +966,7 @@ fn generate_large_tree_new_keys(
     committer: &mut TraceCommitter<BabyBearPoseidon2Config>,
 ) -> (PageBTreePages, bool, PageBTreePages, bool, Vec<Operation>) {
     let mut rng = create_seeded_rng();
-    let mut btree = PageBTree::<32, 32, BABYBEAR_COMMITMENT_LEN>::load(
+    let mut btree = PageBTree::<BABYBEAR_COMMITMENT_LEN>::load(
         "src/pagebtree".to_owned(),
         "large".to_owned(),
         "".to_owned(),

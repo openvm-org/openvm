@@ -38,7 +38,7 @@ use crate::commands::{
     BABYBEAR_COMMITMENT_LEN, DECOMP_BITS, LIMB_BITS,
 };
 
-use super::{create_prefix, INTERNAL_HEIGHT, LEAF_HEIGHT};
+use super::create_prefix;
 
 /// `afs prove` command
 /// Uses information from config.toml to generate a proof of the changes made by a .afi file to a table
@@ -112,7 +112,7 @@ impl ProveCommand {
         let instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
         let table_id = instructions.header.table_id.clone();
         let dst_id = table_id.clone() + ".0";
-        let mut db = PageBTree::<INTERNAL_HEIGHT, LEAF_HEIGHT, BABYBEAR_COMMITMENT_LEN>::load(
+        let mut db = PageBTree::<BABYBEAR_COMMITMENT_LEN>::load(
             self.db_folder.clone(),
             table_id.to_owned(),
             dst_id,
@@ -388,7 +388,7 @@ impl ProveCommand {
 }
 
 fn afi_op_conv(
-    db: &mut PageBTree<INTERNAL_HEIGHT, LEAF_HEIGHT, BABYBEAR_COMMITMENT_LEN>,
+    db: &mut PageBTree<BABYBEAR_COMMITMENT_LEN>,
     afi_op: &AfsOperation,
     idx_bytes: usize,
     data_bytes: usize,

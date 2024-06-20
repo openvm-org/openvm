@@ -69,12 +69,8 @@ where
     bincode::deserialize::<ProverTraceData<SC>>(&data).unwrap()
 }
 
-pub fn load_input_file<
-    const MAX_INTERNAL: usize,
-    const MAX_LEAF: usize,
-    const COMMITMENT_LEN: usize,
->(
-    db: &mut PageBTree<MAX_INTERNAL, MAX_LEAF, COMMITMENT_LEN>,
+pub fn load_input_file<const COMMITMENT_LEN: usize>(
+    db: &mut PageBTree<COMMITMENT_LEN>,
     instructions: &AfsInputInstructions,
 ) {
     for op in &instructions.operations {

@@ -9,9 +9,7 @@ use color_eyre::eyre::Result;
 use logical_interface::afs_input_instructions::AfsInputInstructions;
 use p3_util::log2_strict_usize;
 
-use crate::commands::{
-    load_input_file, BABYBEAR_COMMITMENT_LEN, DECOMP_BITS, INTERNAL_HEIGHT, LEAF_HEIGHT, LIMB_BITS,
-};
+use crate::commands::{load_input_file, BABYBEAR_COMMITMENT_LEN, DECOMP_BITS, LIMB_BITS};
 
 #[derive(Debug, Parser)]
 pub struct WriteCommand {
@@ -64,7 +62,7 @@ impl WriteCommand {
         println!("afi_file_path: {}", self.afi_file_path);
         let instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
         let table_id = instructions.header.table_id.clone();
-        let mut db = match PageBTree::<INTERNAL_HEIGHT, LEAF_HEIGHT, BABYBEAR_COMMITMENT_LEN>::load(
+        let mut db = match PageBTree::<BABYBEAR_COMMITMENT_LEN>::load(
             self.db_folder.clone(),
             table_id.to_owned(),
             dst_id.clone(),
