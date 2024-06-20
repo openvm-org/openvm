@@ -8,7 +8,6 @@ use afs_chips::{execution_air::ExecutionAir, page_rw_checker::page_controller::P
 use afs_stark_backend::{keygen::types::MultiStarkPartialVerifyingKey, prover::types::Proof};
 use afs_test_utils::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
-    engine::StarkEngine,
     page_config::{PageConfig, PageMode},
 };
 use clap::Parser;
@@ -73,8 +72,8 @@ impl VerifyCommand {
 
         assert!(height > 0);
         let page_bus_index = 0;
-        let range_bus_index = 2;
-        let ops_bus_index = 3;
+        let range_bus_index = 1;
+        let ops_bus_index = 2;
 
         let checker_trace_degree = config.page.max_rw_ops * 4;
 
@@ -105,22 +104,7 @@ impl VerifyCommand {
         );
         let ops_sender = ExecutionAir::new(ops_bus_index, idx_len, data_len);
         let engine = config::baby_bear_poseidon2::default_engine(max_log_degree);
-        let verifier = engine.verifier();
-        let pis = vec![vec![]; partial_vk.per_air.len()];
-        let mut challenger = engine.new_challenger();
-        let result = verifier.verify(
-            &mut challenger,
-            partial_vk,
-            vec![
-                &page_controller.init_chip,
-                &page_controller.final_chip,
-                &page_controller.offline_checker,
-                &page_controller.range_checker.air,
-                &ops_sender,
-            ],
-            proof,
-            &pis,
-        );
+        let result = page_controller.verify(&engine, partial_vk, proof, &ops_sender);
         if result.is_err() {
             println!("Verification Unsuccessful");
         } else {

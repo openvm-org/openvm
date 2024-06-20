@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub struct ExecutionCols<T> {
     pub mult: T,
     pub clk: T,
