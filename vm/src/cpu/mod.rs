@@ -1,5 +1,4 @@
 //use crate::range_gate::RangeCheckerGateChip;
-use getset::{CopyGetters, Getters};
 
 #[cfg(test)]
 pub mod tests;
@@ -9,7 +8,7 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-//pub const WORD_SIZE: usize = 1;
+pub const WORD_SIZE: usize = 1;
 pub const INST_WIDTH: usize = 1;
 
 pub const READ_INSTRUCTION_BUS: usize = 0;
@@ -20,6 +19,7 @@ pub const NUM_CORE_OPERATIONS: usize = 6;
 pub const NUM_ARITHMETIC_OPERATIONS: usize = 4;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(usize)]
 pub enum OpCode {
     LOADW = 0,
     STOREW = 1,
@@ -51,10 +51,9 @@ impl OpCode {
     }
 }
 
-#[derive(Default, Clone, Copy, CopyGetters)]
-#[getset(get_copy = "pub")]
+#[derive(Default, Clone, Copy)]
 pub struct CPUOptions {
-    field_arithmetic_enabled: bool,
+    pub field_arithmetic_enabled: bool,
 }
 
 impl CPUOptions {
@@ -68,13 +67,12 @@ impl CPUOptions {
     }
 }
 
-#[derive(Default, Clone, CopyGetters)]
-#[getset(get_copy = "pub")]
+#[derive(Default, Clone)]
 pub struct CPUAir {
-    options: CPUOptions,
+    pub options: CPUOptions,
 }
 
-#[derive(Default, Getters)]
+#[derive(Default)]
 pub struct CPUChip {
     pub air: CPUAir,
     //pub range_checker: Arc<RangeCheckerGateChip>,
