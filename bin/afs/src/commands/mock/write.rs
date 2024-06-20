@@ -49,7 +49,8 @@ impl WriteCommand {
             println!("db_file_path: {}", db_file_path);
             MockDb::from_file(&db_file_path)
         } else {
-            let default_table_metadata = TableMetadata::new(32, 1024);
+            let default_table_metadata =
+                TableMetadata::new(config.page.index_bytes, config.page.data_bytes);
             MockDb::new(default_table_metadata)
         };
 

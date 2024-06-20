@@ -30,16 +30,18 @@ pub struct ReadCommand {
 /// `mock read` subcommand
 impl ReadCommand {
     /// Execute the `mock read` command
-    pub fn execute(self, _config: &PageConfig) -> Result<()> {
+    pub fn execute(self, config: &PageConfig) -> Result<()> {
         let mut db = if let Some(db_file_path) = self.db_file_path {
             println!("db_file_path: {}", db_file_path);
             MockDb::from_file(&db_file_path)
         } else {
-            let default_table_metadata = TableMetadata::new(32, 1024);
+            let default_table_metadata =
+                TableMetadata::new(config.page.index_bytes, config.page.data_bytes);
             MockDb::new(default_table_metadata)
         };
 
-        let mut interface = AfsInterface::new(32, 32, &mut db);
+        let mut interface =
+            AfsInterface::new(config.page.index_bytes, config.page.data_bytes, &mut db);
 
         let table_id = self.table_id;
         let table = interface.get_table(table_id.clone());
