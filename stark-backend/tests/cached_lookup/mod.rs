@@ -2,7 +2,7 @@ use std::iter;
 
 use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver, USE_DEBUG_BUILDER},
     verifier::{MultiTraceStarkVerifier, VerificationError},
 };
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
@@ -187,6 +187,9 @@ fn test_interaction_cached_trace_neg() {
         (0, vec![456, 5]),
     ];
 
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
     assert_eq!(
         prove_and_verify_indexless_lookups(sender, receiver),
         Err(VerificationError::NonZeroCumulativeSum)

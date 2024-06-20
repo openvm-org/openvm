@@ -1,5 +1,10 @@
 use super::FriParameters;
 
+pub fn default_fri_params() -> FriParameters {
+    // blowup factor = 4
+    fri_params_with_80_bits_of_security()[2]
+}
+
 /// Query phase security, ignores commit phase security which depends on field size
 pub fn fri_params_with_80_bits_of_security() -> Vec<FriParameters> {
     vec![
@@ -11,6 +16,11 @@ pub fn fri_params_with_80_bits_of_security() -> Vec<FriParameters> {
         FriParameters {
             log_blowup: 3,
             num_queries: 65,
+            proof_of_work_bits: 0,
+        },
+        FriParameters {
+            log_blowup: 2,
+            num_queries: 103,
             proof_of_work_bits: 0,
         },
     ]

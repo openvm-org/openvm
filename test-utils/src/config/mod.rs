@@ -5,6 +5,9 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry};
 
+pub mod baby_bear_blake3;
+pub mod baby_bear_bytehash;
+pub mod baby_bear_keccak;
 pub mod baby_bear_poseidon2;
 pub mod fri_params;
 pub mod instrument;
