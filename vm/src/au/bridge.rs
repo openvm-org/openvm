@@ -6,12 +6,18 @@ use crate::au::{columns::AUCols, AUAir};
 
 impl<T: Field> AirBridge<T> for AUAir {
     fn receives(&self) -> Vec<Interaction<T>> {
-        (0..AUCols::<T>::NUM_IO_COLS)
-            .map(|i| Interaction {
-                fields: vec![VirtualPairCol::single_main(i)],
-                count: VirtualPairCol::one(),
-                argument_index: Self::BUS_INDEX,
-            })
-            .collect()
+        // (0..AUCols::<T>::NUM_IO_COLS)
+        //     .map(|i| Interaction {
+        //         fields: vec![VirtualPairCol::single_main(i)],
+        //         count: VirtualPairCol::one(),
+        //         argument_index: Self::BUS_INDEX,
+        //     })
+        vec![Interaction {
+            fields: (0..AUCols::<T>::NUM_IO_COLS)
+                .map(VirtualPairCol::single_main)
+                .collect(),
+            count: VirtualPairCol::one(),
+            argument_index: Self::BUS_INDEX,
+        }]
     }
 }
