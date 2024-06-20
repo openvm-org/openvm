@@ -23,18 +23,3 @@ impl AUAir {
         Self {}
     }
 }
-
-impl<T> AUChip<T> {
-    pub fn new() -> Self {
-        Self {
-            air: AUAir::new(),
-            arithmetic_operations: vec![],
-        }
-    }
-}
-
-impl<T> Default for AUChip<T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
