@@ -2,6 +2,8 @@ use crate::au::columns::AUIOCols;
 use crate::au::AUAir;
 use crate::cpu::trace::ProgramExecution;
 use crate::cpu::OpCode;
+use afs_stark_backend::prover::USE_DEBUG_BUILDER;
+use afs_stark_backend::verifier::VerificationError;
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::create_seeded_rng;
@@ -10,17 +12,16 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 
-fn generate_arith_program() -> ProgramExecution<BabyBear> {
+fn generate_arith_program(len_ops: usize) -> ProgramExecution<BabyBear> {
     let mut rng = create_seeded_rng();
-    let len_ops = 1;
     let ops = (0..len_ops)
         .map(|_| OpCode::from_u8(rng.gen_range(5..=8)).unwrap())
         .collect();
     let operands = (0..len_ops)
         .map(|_| {
             (
-                BabyBear::from_canonical_u32(rng.gen_range(0..=100)),
-                BabyBear::from_canonical_u32(rng.gen_range(0..=100)),
+                BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
+                BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
             )
         })
         .collect();
@@ -37,7 +38,9 @@ fn generate_arith_program() -> ProgramExecution<BabyBear> {
 
 #[test]
 fn au_air_test() {
-    let prog = generate_arith_program();
+    let mut rng = create_seeded_rng();
+    let len_ops = 1 << 5;
+    let prog = generate_arith_program(len_ops);
     let au_air = AUAir::new();
 
     let dummy_trace = RowMajorMatrix::new(
@@ -54,11 +57,35 @@ fn au_air_test() {
         AUIOCols::<BabyBear>::get_width() + 1,
     );
 
-    let au_trace = au_air.generate_trace(&prog);
+    let mut au_trace = au_air.generate_trace(&prog);
 
     let page_requester =
         DummyInteractionAir::new(AUIOCols::<BabyBear>::get_width(), true, AUAir::BUS_INDEX);
 
-    run_simple_test_no_pis(vec![&au_air, &page_requester], vec![au_trace, dummy_trace])
-        .expect("Verification failed");
+    // positive test
+    run_simple_test_no_pis(
+        vec![&au_air, &page_requester],
+        vec![au_trace.clone(), dummy_trace.clone()],
+    )
+    .expect("Verification failed");
+
+    for height in 0..(prog.arithmetic_ops.len()) {
+        for width in 0..AUIOCols::<BabyBear>::get_width() {
+            let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
+            au_trace.row_mut(height)[width] = prank_value;
+        }
+
+        // Run a test after pranking each row
+        USE_DEBUG_BUILDER.with(|debug| {
+            *debug.lock().unwrap() = false;
+        });
+        assert_eq!(
+            run_simple_test_no_pis(
+                vec![&au_air, &page_requester],
+                vec![au_trace.clone(), dummy_trace.clone()],
+            ),
+            Err(VerificationError::OodEvaluationMismatch),
+            "Expected constraint to fail"
+        )
+    }
 }

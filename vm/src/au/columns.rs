@@ -47,7 +47,7 @@ where
         let is_mul = T::from_bool(op == OpCode::FMUL);
         let mul_result = x * y;
         let div_result = x * y.inverse();
-        let z = is_mul * mul_result + is_div * div_result + (T::one() - opcode_0bit) * lin_term;
+        let z = is_mul * mul_result + is_div * div_result + (T::one() - opcode_1bit) * lin_term;
 
         Self {
             io: AUIOCols {
