@@ -536,3 +536,23 @@ fn test_cpu_negative_disable_write() {
 
     air_test_custom_execution(true, execution);
 }
+
+#[test]
+#[should_panic(expected = "assertion `left == right` failed: constraints had nonzero value on row 0")]
+fn test_cpu_negative_disable_read() {
+    let program = vec![
+        // if word[0]_0 == word[0]_[0] then pc += 1
+        Instruction::from_isize(LOADW, 0, 0, 0, 1, 1),
+        // terminate
+        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
+    ];
+
+    let chip = CPUChip::new(true);
+    let mut execution = chip.generate_trace(program);
+
+    execution.trace_rows[0].aux.read1.enabled = AbstractField::zero();
+
+    execution.memory_accesses.remove(0);
+
+    air_test_custom_execution(true, execution);
+}
