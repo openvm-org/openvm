@@ -13,7 +13,7 @@ pub mod columns;
 pub mod trace;
 
 #[derive(Clone, Debug)]
-pub enum MyPageAir {
+pub(crate) enum MyPageAir {
     Initial(MyInitialPageAir),
     Final(MyFinalPageAir),
 }

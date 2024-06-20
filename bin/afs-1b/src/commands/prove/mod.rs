@@ -28,7 +28,7 @@ use color_eyre::eyre::Result;
 use itertools::Itertools;
 use logical_interface::{
     afs_input_instructions::{types::InputFileBodyOperation, AfsInputInstructions, AfsOperation},
-    utils::{fixed_bytes_to_field_vec, string_to_fixed_bytes_be_vec},
+    utils::{fixed_bytes_to_field_vec, string_to_be_vec},
 };
 use p3_baby_bear::BabyBear;
 use p3_util::log2_strict_usize;
@@ -394,7 +394,7 @@ fn afi_op_conv(
     data_bytes: usize,
     clk: usize,
 ) -> Operation {
-    let idx_u8 = string_to_fixed_bytes_be_vec(afi_op.args[0].clone(), idx_bytes);
+    let idx_u8 = string_to_be_vec(afi_op.args[0].clone(), idx_bytes);
     let idx_u16 = fixed_bytes_to_field_vec(idx_u8.clone());
     match afi_op.operation {
         InputFileBodyOperation::Read => {
@@ -409,7 +409,7 @@ fn afi_op_conv(
         }
         InputFileBodyOperation::Insert => {
             assert!(afi_op.args.len() == 2);
-            let data_u8 = string_to_fixed_bytes_be_vec(afi_op.args[1].clone(), data_bytes);
+            let data_u8 = string_to_be_vec(afi_op.args[1].clone(), data_bytes);
             let data_u16 = fixed_bytes_to_field_vec(data_u8.clone());
             db.update(&idx_u16, &data_u16);
             Operation {
@@ -421,7 +421,7 @@ fn afi_op_conv(
         }
         InputFileBodyOperation::Write => {
             assert!(afi_op.args.len() == 2);
-            let data_u8 = string_to_fixed_bytes_be_vec(afi_op.args[1].clone(), data_bytes);
+            let data_u8 = string_to_be_vec(afi_op.args[1].clone(), data_bytes);
             let data_u16 = fixed_bytes_to_field_vec(data_u8.clone());
             db.update(&idx_u16, &data_u16);
             Operation {

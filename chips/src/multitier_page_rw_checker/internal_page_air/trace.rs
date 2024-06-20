@@ -46,6 +46,8 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
                     trace_row.push((mult * row[1] == 1) as u32);
                     // dummy value
                     trace_row.push(0);
+                    println!("row[1]: {:?}", row[1]);
+                    println!("mult: {:?}", mult);
                     trace_row.push(row[1] * mult - row[1]);
                     let next = if i < page.len() - 1 {
                         page[i + 1][2..2 + self.idx_len].to_vec()

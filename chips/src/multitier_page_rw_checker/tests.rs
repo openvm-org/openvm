@@ -284,6 +284,11 @@ where
         num_ops,
         &mut trace_builder.committer,
     );
+    println!(
+        "init_pages: {:?}, {:?}",
+        final_pages.leaf_pages.len(),
+        final_pages.internal_pages.len()
+    );
     let res = load_page_test(
         &engine,
         init_pages.leaf_pages.clone(),

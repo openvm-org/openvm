@@ -4,7 +4,7 @@ use afs_test_utils::page_config::MultitierPageConfig;
 use color_eyre::eyre::Result;
 use logical_interface::{
     afs_input_instructions::{types::InputFileBodyOperation, AfsInputInstructions},
-    utils::{fixed_bytes_to_field_vec, string_to_fixed_bytes_be_vec},
+    utils::{fixed_bytes_to_field_vec, string_to_be_vec},
 };
 use p3_uni_stark::StarkGenericConfig;
 use serde::{de::DeserializeOwned, Serialize};
@@ -86,11 +86,10 @@ pub fn load_input_file<
                 // }
                 assert!(op.args.len() == 2);
                 let index_input = op.args[0].clone();
-                let index =
-                    string_to_fixed_bytes_be_vec(index_input, instructions.header.index_bytes);
+                let index = string_to_be_vec(index_input, instructions.header.index_bytes);
                 let index = fixed_bytes_to_field_vec(index);
                 let data_input = op.args[1].clone();
-                let data = string_to_fixed_bytes_be_vec(data_input, instructions.header.data_bytes);
+                let data = string_to_be_vec(data_input, instructions.header.data_bytes);
                 let data = fixed_bytes_to_field_vec(data);
                 db.update(&index, &data)
             }
@@ -100,11 +99,10 @@ pub fn load_input_file<
                 // }
                 assert!(op.args.len() == 2);
                 let index_input = op.args[0].clone();
-                let index =
-                    string_to_fixed_bytes_be_vec(index_input, instructions.header.index_bytes);
+                let index = string_to_be_vec(index_input, instructions.header.index_bytes);
                 let index = fixed_bytes_to_field_vec(index);
                 let data_input = op.args[1].clone();
-                let data = string_to_fixed_bytes_be_vec(data_input, instructions.header.data_bytes);
+                let data = string_to_be_vec(data_input, instructions.header.data_bytes);
                 let data = fixed_bytes_to_field_vec(data);
                 db.update(&index, &data)
             }

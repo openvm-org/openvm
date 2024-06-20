@@ -129,6 +129,7 @@ where
                     }
                 }
             }
+            println!("mult: {:?}", mult);
             mults[cur_node.1] = mult;
             child_ids[cur_node.1] = child_id;
             ans + 1
