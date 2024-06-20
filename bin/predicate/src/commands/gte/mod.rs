@@ -6,19 +6,19 @@ use color_eyre::eyre::Result;
 use super::common::{execute_predicate_common, CommonCommands};
 
 #[derive(Debug, Parser)]
-pub struct LteCommand {
+pub struct GteCommand {
     #[command(flatten)]
     pub args: CommonCommands,
 }
 
-/// `lte` command
-impl LteCommand {
-    /// Execute the `lte` command
+/// `gte` command
+impl GteCommand {
+    /// Execute the `gte` command
     pub fn execute(self, config: &PageConfig) -> Result<()> {
         println!(
-            "Running `index <= {}` command on table: {}",
+            "Running `index >= {}` command on table: {}",
             self.args.value, self.args.table_id
         );
-        execute_predicate_common(self.args, config, Comp::Lte)
+        execute_predicate_common(self.args, config, Comp::Gte)
     }
 }

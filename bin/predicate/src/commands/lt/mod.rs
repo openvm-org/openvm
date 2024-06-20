@@ -1,11 +1,9 @@
+use afs_chips::single_page_index_scan::page_index_scan_input::Comp;
 use afs_test_utils::page_config::PageConfig;
-use alloy_primitives::U256;
 use clap::Parser;
 use color_eyre::eyre::Result;
 
-use crate::utils::get_table_from_db;
-
-use super::common::CommonCommands;
+use super::common::{execute_predicate_common, CommonCommands};
 
 #[derive(Debug, Parser)]
 pub struct LtCommand {
@@ -21,16 +19,6 @@ impl LtCommand {
             "Running `index < {}` command on table: {}",
             self.args.value, self.args.table_id
         );
-        let table = get_table_from_db::<U256, U256>(self.args.table_id, self.args.db_file_path);
-        let _page = table.to_page(config.page.height);
-        let _predicate = "<";
-
-        // Handle the page and predicate in ZK and get the resulting page back
-
-        // Convert back to a Table
-
-        // Save the output to a file or print it
-
-        Ok(())
+        execute_predicate_common(self.args, config, Comp::Lt)
     }
 }
