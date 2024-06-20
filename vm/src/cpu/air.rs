@@ -30,7 +30,7 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let inst_width = AB::Var::from_canonical_usize(INST_WIDTH);
+        let inst_width = AB::F::from_canonical_usize(INST_WIDTH);
 
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
@@ -94,8 +94,9 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
         when_loadw.assert_eq(write.address, a);
         when_loadw.assert_eq(write.data, read2.data);
 
-        when_loadw.when_transition()
-            .assert_eq(next_pc, pc + inst_width.clone());
+        when_loadw
+            .when_transition()
+            .assert_eq(next_pc, pc + inst_width);
 
         // STOREW: e[d[c] + b] <- d[a]
         let mut when_storew = builder.when(operation_flags[STOREW as usize]);
@@ -109,18 +110,16 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
         when_storew.assert_eq(write.address, read1.data + b);
         when_storew.assert_eq(write.data, read2.data);
 
-        when_storew.when_transition()
-            .assert_eq(next_pc, pc + inst_width.clone());
+        when_storew
+            .when_transition()
+            .assert_eq(next_pc, pc + inst_width);
 
         // JAL: d[a] <- pc + INST_WIDTH, pc <- pc + b
         let mut when_jal = builder.when(operation_flags[JAL as usize]);
 
         when_jal.assert_eq(write.address_space, d);
         when_jal.assert_eq(write.address, a);
-        when_jal.assert_eq(
-            write.data,
-            pc + inst_width,
-        );
+        when_jal.assert_eq(write.data, pc + inst_width);
 
         when_jal.when_transition().assert_eq(next_pc, pc + b);
 
@@ -133,12 +132,14 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
         when_beq.assert_eq(read2.address_space, e);
         when_beq.assert_eq(read2.address, b);
 
-        when_beq.when_transition()
+        when_beq
+            .when_transition()
             .when(beq_check)
             .assert_eq(next_pc, pc + c);
-        when_beq.when_transition()
+        when_beq
+            .when_transition()
             .when(AB::Expr::one() - beq_check)
-            .assert_eq(next_pc, pc + inst_width.clone());
+            .assert_eq(next_pc, pc + inst_width);
 
         let is_equal_io_cols = IsEqualIOCols {
             x: read1.data,
@@ -157,10 +158,12 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
         when_bne.assert_eq(read2.address_space, e);
         when_bne.assert_eq(read2.address, b);
 
-        when_bne.when_transition()
+        when_bne
+            .when_transition()
             .when(beq_check)
-            .assert_eq(next_pc, pc + inst_width.clone());
-        when_bne.when_transition()
+            .assert_eq(next_pc, pc + inst_width);
+        when_bne
+            .when_transition()
             .when(AB::Expr::one() - beq_check)
             .assert_eq(next_pc, pc + c);
 
@@ -188,8 +191,9 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
             when_arithmetic.assert_eq(write.address_space, d);
             when_arithmetic.assert_eq(write.address, a);
 
-            when_arithmetic.when_transition()
-                .assert_eq(next_pc, pc + inst_width.clone());
+            when_arithmetic
+                .when_transition()
+                .assert_eq(next_pc, pc + inst_width);
         }
 
         // immediate calculation
@@ -220,6 +224,8 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
             .assert_eq(next_clock, clock + AB::Expr::one());
 
         // make sure program terminates
-        builder.when_last_row().assert_eq(opcode, AB::Expr::from_canonical_usize(TERMINATE as usize));
+        builder
+            .when_last_row()
+            .assert_eq(opcode, AB::Expr::from_canonical_usize(TERMINATE as usize));
     }
 }
