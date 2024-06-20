@@ -6,7 +6,7 @@ pub mod columns;
 pub mod trace;
 
 #[derive(Clone)]
-pub struct MyFinalPageAir {
+pub(super) struct MyFinalPageAir {
     page_bus_index: usize,
 
     final_air: FinalPageAir,

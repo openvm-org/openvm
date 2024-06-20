@@ -14,6 +14,7 @@ use crate::{
         IsLessThanTupleAir,
     },
     sub_chip::{AirConfig, SubAir},
+    utils::{implies, or},
 };
 
 impl<F: Field> BaseAir<F> for FinalPageAir {
@@ -78,8 +79,8 @@ impl<AB: AirBuilder> SubAir<AB> for FinalPageAir {
         let (page_local, page_next) = (&io[0], &io[1]);
 
         // Helpers
-        let or = |a: AB::Expr, b: AB::Expr| a.clone() + b.clone() - a * b;
-        let implies = |a: AB::Expr, b: AB::Expr| or(AB::Expr::one() - a, b);
+        let or = or::<AB>;
+        let implies = implies::<AB>;
 
         // Ensuring that is_alloc is always bool
         builder.assert_bool(page_local.is_alloc);

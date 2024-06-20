@@ -1,6 +1,6 @@
 use crate::final_page::{columns::FinalPageCols, FinalPageAir};
 
-pub(crate) struct MyFinalPageCols<T> {
+pub struct MyFinalPageCols<T> {
     /// The columns for FinalPageAir, which include the page itself
     /// and the extra columns for ensuting sorting
     pub final_page_cols: FinalPageCols<T>,
