@@ -19,7 +19,7 @@ pub struct AUChip<T> {
 }
 
 impl AUAir {
-    pub const BASE_OP: u8 = 5;
+    pub const BASE_OP: u8 = 6;
     pub const BUS_INDEX: usize = 2;
 
     pub fn new() -> Self {
@@ -33,6 +33,7 @@ impl AUAir {
             OpCode::JAL => None,
             OpCode::BEQ => None,
             OpCode::BNE => None,
+            OpCode::TERMINATE => None,
 
             OpCode::FADD => Some(operands.0 + operands.1),
             OpCode::FSUB => Some(operands.0 - operands.1),

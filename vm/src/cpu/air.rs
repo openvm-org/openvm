@@ -164,6 +164,10 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
             .when(AB::Expr::one() - beq_check)
             .assert_eq(next_pc, pc + c);
 
+        // TERMINATE
+        let mut here = builder.when(operation_flags[TERMINATE as usize]);
+        here.when_transition().assert_eq(next_pc, pc);
+
         // arithmetic operations
         if self.options.field_arithmetic_enabled {
             let mut here = builder.when(
@@ -215,7 +219,7 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
             .when_transition()
             .assert_eq(next_clock, clock + AB::Expr::one());
 
-        // termination?
-        // ???
+        // make sure program terminates
+        builder.when_last_row().assert_eq(opcode, AB::Expr::from_canonical_usize(TERMINATE as usize));
     }
 }

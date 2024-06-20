@@ -40,7 +40,7 @@ fn test_flatten_fromslice_roundtrip() {
 fn program_execution_test<F: PrimeField64>(
     is_field_arithmetic_enabled: bool,
     program: Vec<Instruction<F>>,
-    expected_execution: Vec<usize>,
+    mut expected_execution: Vec<usize>,
     expected_memory_log: Vec<MemoryAccess<F>>,
     expected_arithmetic_operations: Vec<ArithmeticOperation<F>>,
 ) {
@@ -50,6 +50,10 @@ fn program_execution_test<F: PrimeField64>(
     assert_eq!(execution.program, program);
     assert_eq!(execution.memory_accesses, expected_memory_log);
     assert_eq!(execution.arithmetic_ops, expected_arithmetic_operations);
+
+    while !expected_execution.len().is_power_of_two() {
+        expected_execution.push(*expected_execution.last().unwrap());
+    }
 
     assert_eq!(execution.trace_rows.len(), expected_execution.len());
     for (i, row) in execution.trace_rows.iter().enumerate() {
@@ -65,6 +69,15 @@ fn program_execution_test<F: PrimeField64>(
             as_c: program[pc].as_c,
         };
         assert_eq!(row.io, expected_io);
+    }
+
+    let mut execution_frequency_check = execution.execution_frequencies.clone();
+    for row in execution.trace_rows {
+        let pc = row.io.pc.as_canonical_u64() as usize;
+        execution_frequency_check[pc] += F::neg_one();
+    }
+    for frequency in execution_frequency_check.iter() {
+        assert_eq!(*frequency, F::zero());
     }
 }
 
@@ -232,131 +245,65 @@ fn air_test_change_pc(
 }
 
 #[test]
-fn test_cpu() {
-    let zero = BabyBear::zero();
-    let one = BabyBear::one();
-    let two = BabyBear::two();
-    let six = BabyBear::from_canonical_u32(6);
-
-    let neg = BabyBear::neg_one();
-    let neg_two = neg * two;
-    let neg_four = neg * BabyBear::from_canonical_u32(4);
-
-    let n = 20;
-    let nf = AbstractField::from_canonical_u64(n);
+fn test_cpu_1() {
+    let n = 2;
 
     /*
     Instruction 0 assigns word[0]_1 to n.
-    Instruction 1 repeats this to make the trace height a power of 2.
-    Instruction 2 assigns word[1]_1 to 1 for use in later arithmetic operations.
+    Instruction 1 assigns word[1]_1 to 1 for use in later arithmetic operations.
+    Instruction 5 terminates
     The remainder is a loop that decrements word[0]_1 until it reaches 0, then terminates.
-    Instruction 3 checks if word[0]_1 is 0 yet, and if so terminates (by setting pc to -1)
-    Instruction 4 decrements word[0]_1 (using word[1]_1)
-    Instruction 5 uses JAL as a simple jump to go back to instruction 3 (repeating the loop).
+    Instruction 2 checks if word[0]_1 is 0 yet, and if so sets pc to 5 in order to terminate
+    Instruction 3 decrements word[0]_1 (using word[1]_1)
+    Instruction 4 uses JAL as a simple jump to go back to instruction 3 (repeating the loop).
      */
     let program = vec![
         // word[0]_1 <- word[n]_0
-        Instruction::new(STOREW, nf, zero, zero, zero, one),
-        // word[0]_1 <- word[n]_0
-        Instruction::new(STOREW, nf, zero, zero, zero, one),
+        Instruction::from_isize(STOREW, n, 0, 0, 0, 1),
         // word[1]_1 <- word[1]_1
-        Instruction::new(STOREW, one, one, zero, zero, one),
-        // if word[0]_1 == 0 then pc -= 4
-        Instruction::new(BEQ, zero, zero, neg_four, one, zero),
+        Instruction::from_isize(STOREW, 1, 1, 0, 0, 1),
+        // if word[0]_1 == 0 then pc += 3
+        Instruction::from_isize(BEQ, 0, 0, 3, 1, 0),
         // word[0]_1 <- word[0]_1 - word[1]_1
-        Instruction::new(FSUB, zero, zero, one, one, one),
+        Instruction::from_isize(FSUB, 0, 0, 1, 1, 1),
         // word[2]_1 <- pc + 1, pc -= 2
-        Instruction::new(JAL, two, neg_two, zero, one, zero),
+        Instruction::from_isize(JAL, 2, -2, 0, 1, 0),
+        // terminate
+        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    let mut expected_execution: Vec<usize> = vec![0, 1, 2, 3];
+    let mut expected_execution: Vec<usize> = vec![0, 1, 2];
     for _ in 0..n {
-        expected_execution.push(4);
-        expected_execution.push(5);
         expected_execution.push(3);
+        expected_execution.push(4);
+        expected_execution.push(2);
     }
+    expected_execution.push(5);
 
     let mut expected_memory_log = vec![
-        MemoryAccess {
-            clock: 0,
-            op_type: OpType::Write,
-            address_space: one,
-            address: zero,
-            data: nf,
-        },
-        MemoryAccess {
-            clock: 1,
-            op_type: OpType::Write,
-            address_space: one,
-            address: zero,
-            data: nf,
-        },
-        MemoryAccess {
-            clock: 2,
-            op_type: OpType::Write,
-            address_space: one,
-            address: one,
-            data: one,
-        },
-        MemoryAccess {
-            clock: 3,
-            op_type: OpType::Read,
-            address_space: one,
-            address: zero,
-            data: nf,
-        },
+        MemoryAccess::from_isize(0, OpType::Write, 1, 0, n),
+        MemoryAccess::from_isize(1, OpType::Write, 1, 1, 1),
+        MemoryAccess::from_isize(2, OpType::Read, 1, 0, n),
     ];
     for t in 0..n {
-        let tf = BabyBear::from_canonical_u64(t);
-        let clock = (4 + (3 * t)) as usize;
+        let clock = 3 + (3 * t);
         expected_memory_log.extend(vec![
-            MemoryAccess {
-                clock,
-                op_type: OpType::Read,
-                address_space: one,
-                address: zero,
-                data: nf - tf,
-            },
-            MemoryAccess {
-                clock,
-                op_type: OpType::Read,
-                address_space: one,
-                address: one,
-                data: one,
-            },
-            MemoryAccess {
-                clock,
-                op_type: OpType::Write,
-                address_space: one,
-                address: zero,
-                data: nf - tf - one,
-            },
-            MemoryAccess {
-                clock: clock + 1,
-                op_type: OpType::Write,
-                address_space: one,
-                address: two,
-                data: six,
-            },
-            MemoryAccess {
-                clock: clock + 2,
-                op_type: OpType::Read,
-                address_space: one,
-                address: zero,
-                data: nf - tf - one,
-            },
+            MemoryAccess::from_isize(clock, OpType::Read, 1, 0, n - t),
+            MemoryAccess::from_isize(clock, OpType::Read, 1, 1, 1),
+            MemoryAccess::from_isize(clock, OpType::Write, 1, 0, n - t - 1),
+            MemoryAccess::from_isize(clock + 1, OpType::Write, 1, 2, 5),
+            MemoryAccess::from_isize(clock + 2, OpType::Read, 1, 0, n - t - 1),
         ]);
     }
 
     let mut expected_arithmetic_operations = vec![];
     for t in 0..n {
-        let tf = BabyBear::from_canonical_u64(t);
-        expected_arithmetic_operations.push(ArithmeticOperation {
-            opcode: FSUB,
-            operand1: nf - tf,
-            operand2: one,
-            result: nf - tf - one,
-        });
+        expected_arithmetic_operations.push(ArithmeticOperation::from_isize(
+            FSUB,
+            n - t,
+            1,
+            n - t - 1,
+        ));
     }
 
     program_execution_test::<BabyBear>(
@@ -373,67 +320,32 @@ fn test_cpu() {
 fn test_cpu_without_field_arithmetic() {
     let field_arithmetic_enabled = false;
 
-    let zero = BabyBear::zero();
-    let one = BabyBear::one();
-    let two = BabyBear::two();
-    let four = BabyBear::from_canonical_u32(4);
-    let five = BabyBear::from_canonical_u32(5);
-
-    let neg = BabyBear::neg_one();
-    let neg_two = neg * two;
-    let neg_five = neg * BabyBear::from_canonical_u32(5);
-
     /*
     Instruction 0 assigns word[0]_1 to 5.
-    Instruction 1 assigns word[0]_1 to 5 (repeat to make the trace height a power of 2)
-    Instruction 2 checks if word[0]_1 is *not* 4, and if so jumps to instruction 4.
-    Instruction 3 is never run.
-    Instruction 4 checks if word[0]_1 is 5, and if so terminates (by setting pc to -1)
+    Instruction 1 checks if word[0]_1 is *not* 4, and if so jumps to instruction 4.
+    Instruction 2 is never run.
+    Instruction 3 terminates.
+    Instruction 4 checks if word[0]_1 is 5, and if so jumps to instruction 3 to terminate.
      */
     let program = vec![
         // word[0]_1 <- word[5]_0
-        Instruction::new(STOREW, five, zero, zero, zero, one),
-        // word[0]_1 <- word[5]_0
-        Instruction::new(STOREW, five, zero, zero, zero, one),
+        Instruction::from_isize(STOREW, 5, 0, 0, 0, 1),
         // if word[0]_1 != 4 then pc += 2
-        Instruction::new(BNE, zero, four, two, one, zero),
+        Instruction::from_isize(BNE, 0, 4, 3, 1, 0),
         // word[2]_1 <- pc + 1, pc -= 2
-        Instruction::new(JAL, two, neg_two, zero, one, zero),
-        // if word[0]_1 == 5 then pc -= 5
-        Instruction::new(BEQ, zero, five, neg_five, one, zero),
+        Instruction::from_isize(JAL, 2, -2, 0, 1, 0),
+        // terminate
+        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
+        // if word[0]_1 == 5 then pc -= 1
+        Instruction::from_isize(BEQ, 0, 5, -1, 1, 0),
     ];
 
-    let expected_execution: Vec<usize> = vec![0, 1, 2, 4];
+    let expected_execution: Vec<usize> = vec![0, 1, 4, 3];
 
     let expected_memory_log = vec![
-        MemoryAccess {
-            clock: 0,
-            op_type: OpType::Write,
-            address_space: one,
-            address: zero,
-            data: five,
-        },
-        MemoryAccess {
-            clock: 1,
-            op_type: OpType::Write,
-            address_space: one,
-            address: zero,
-            data: five,
-        },
-        MemoryAccess {
-            clock: 2,
-            op_type: OpType::Read,
-            address_space: one,
-            address: zero,
-            data: five,
-        },
-        MemoryAccess {
-            clock: 3,
-            op_type: OpType::Read,
-            address_space: one,
-            address: zero,
-            data: five,
-        },
+        MemoryAccess::from_isize(0, OpType::Write, 1, 0, 5),
+        MemoryAccess::from_isize(1, OpType::Read, 1, 0, 5),
+        MemoryAccess::from_isize(2, OpType::Read, 1, 0, 5),
     ];
 
     program_execution_test::<BabyBear>(
@@ -449,64 +361,44 @@ fn test_cpu_without_field_arithmetic() {
 #[test]
 #[should_panic]
 fn test_cpu_negative() {
-    let zero = BabyBear::zero();
-    let one = BabyBear::one();
-    let two = BabyBear::two();
-    let four = BabyBear::from_canonical_u32(4);
-    let six = BabyBear::from_canonical_u32(6);
-
-    let neg = BabyBear::neg_one();
-    let neg_four = neg * four;
-    let neg_five = neg * BabyBear::from_canonical_u32(5);
-
     /*
     Instruction 0 assigns word[0]_1 to 6.
-    Instruction 1 assigns word[0]_1 to 6 (repeat to make trace height a power of 2)
-    Instruction 2 checks if word[0]_1 is 4, and if so jumps to instruction 4 (but this doesn't happen)
-    Instruction 3 checks if word[0]_1 is 0, and if not terminates by setting pc to -1
-    Instruction 4 checks if word[0]_1 is 0, and if not terminates by setting pc to -1 (identical to instruction 3)
+    Instruction 1 checks if word[0]_1 is 4, and if so jumps to instruction 3 (but this doesn't happen)
+    Instruction 2 checks if word[0]_1 is 0, and if not jumps to instruction 4 to terminate
+    Instruction 3 checks if word[0]_1 is 0, and if not jumps to instruction 4 to terminate (identical to instruction 2) (note: would go to instruction 4 either way)
+    Instruction 4 terminates
      */
     let program = vec![
         // word[0]_1 <- word[6]_0
-        Instruction::new(STOREW, six, zero, zero, zero, one),
-        // word[0]_1 <- word[6]_0
-        Instruction::new(STOREW, six, zero, zero, zero, one),
+        Instruction::from_isize(STOREW, 6, 0, 0, 0, 1),
         // if word[0]_1 != 4 then pc += 2
-        Instruction::new(BEQ, zero, four, two, one, zero),
-        // if word[0]_1 != 0 then pc -= 4
-        Instruction::new(BNE, zero, zero, neg_four, one, zero),
-        // if word[0]_1 != 0 then pc -= 5
-        Instruction::new(BNE, zero, zero, neg_five, one, zero),
+        Instruction::from_isize(BEQ, 0, 4, 2, 1, 0),
+        // if word[0]_1 != 0 then pc += 2
+        Instruction::from_isize(BNE, 0, 0, 2, 1, 0),
+        // if word[0]_1 != 0 then pc += 1
+        Instruction::from_isize(BNE, 0, 0, 1, 1, 0),
+        // terminate
+        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test_change_pc(true, program, 3, 4, true);
+    air_test_change_pc(true, program, 2, 3, true);
 }
 
 #[test]
 fn test_cpu_negative_assure() {
-    let zero = BabyBear::zero();
-    let one = BabyBear::one();
-    let two = BabyBear::two();
-    let four = BabyBear::from_canonical_u32(4);
-    let six = BabyBear::from_canonical_u32(6);
-
-    let neg = BabyBear::neg_one();
-    let neg_four = neg * four;
-    let neg_five = neg * BabyBear::from_canonical_u32(5);
-
     //Same program as test_cpu_negative.
     let program = vec![
         // word[0]_1 <- word[6]_0
-        Instruction::new(STOREW, six, zero, zero, zero, one),
-        // word[0]_1 <- word[6]_0
-        Instruction::new(STOREW, six, zero, zero, zero, one),
+        Instruction::from_isize(STOREW, 6, 0, 0, 0, 1),
         // if word[0]_1 != 4 then pc += 2
-        Instruction::new(BEQ, zero, four, two, one, zero),
-        // if word[0]_1 != 0 then pc -= 4
-        Instruction::new(BNE, zero, zero, neg_four, one, zero),
-        // if word[0]_1 != 0 then pc -= 5
-        Instruction::new(BNE, zero, zero, neg_five, one, zero),
+        Instruction::from_isize(BEQ, 0, 4, 2, 1, 0),
+        // if word[0]_1 != 0 then pc += 2
+        Instruction::from_isize(BNE, 0, 0, 2, 1, 0),
+        // if word[0]_1 != 0 then pc += 1
+        Instruction::from_isize(BNE, 0, 0, 1, 1, 0),
+        // terminate
+        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test_change_pc(true, program, 3, 3, false);
+    air_test_change_pc(true, program, 2, 2, false);
 }

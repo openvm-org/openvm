@@ -24,6 +24,26 @@ pub struct Instruction<F> {
     pub as_c: F,
 }
 
+fn isize_to_field<F: PrimeField64>(value: isize) -> F {
+    if value < 0 {
+        return F::neg_one() * F::from_canonical_usize(value.unsigned_abs());
+    }
+    F::from_canonical_usize(value as usize)
+}
+
+impl<F: PrimeField64> Instruction<F> {
+    pub fn from_isize(opcode: OpCode, op_a: isize, op_b: isize, op_c: isize, as_b: isize, as_c: isize) -> Self {
+        Self {
+            opcode,
+            op_a: isize_to_field::<F>(op_a),
+            op_b: isize_to_field::<F>(op_b),
+            op_c: isize_to_field::<F>(op_c),
+            as_b: isize_to_field::<F>(as_b),
+            as_c: isize_to_field::<F>(as_c),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct MemoryAccess<F> {
     pub clock: usize,
@@ -31,6 +51,18 @@ pub struct MemoryAccess<F> {
     pub address_space: F,
     pub address: F,
     pub data: F,
+}
+
+impl<F: PrimeField64> MemoryAccess<F> {
+    pub fn from_isize(clock: isize, op_type: OpType, address_space: isize, address: isize, data: isize) -> Self {
+        Self {
+            clock: clock as usize,
+            op_type,
+            address_space: isize_to_field::<F>(address_space),
+            address: isize_to_field::<F>(address),
+            data: isize_to_field::<F>(data),
+        }
+    }
 }
 
 fn memory_access_to_cols<F: PrimeField64>(access: Option<MemoryAccess<F>>) -> MemoryAccessCols<F> {
@@ -63,6 +95,17 @@ pub struct ArithmeticOperation<F> {
     pub operand1: F,
     pub operand2: F,
     pub result: F,
+}
+
+impl<F: PrimeField64> ArithmeticOperation<F> {
+    pub fn from_isize(opcode: OpCode, operand1: isize, operand2: isize, result: isize) -> Self {
+        Self {
+            opcode,
+            operand1: isize_to_field::<F>(operand1),
+            operand2: isize_to_field::<F>(operand2),
+            result: isize_to_field::<F>(result),
+        }
+    }
 }
 
 pub struct ProgramExecution<F> {
@@ -186,12 +229,9 @@ impl CPUChip {
 
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
-            if pc_usize >= program.len() {
-                break;
-            }
             execution_frequencies[pc_usize] += F::one();
 
-            let instruction = program[pc.as_canonical_u64() as usize];
+            let instruction = program[pc_usize];
             let opcode = instruction.opcode;
             let a = instruction.op_a;
             let b = instruction.op_b;
@@ -248,6 +288,9 @@ impl CPUChip {
                     if left != right {
                         next_pc = pc + c;
                     }
+                }
+                TERMINATE => {
+                    next_pc = pc;
                 }
                 opcode @ (FADD | FSUB | FMUL | FDIV) => {
                     if self.air.options.field_arithmetic_enabled {
@@ -310,6 +353,10 @@ impl CPUChip {
 
             pc = next_pc;
             clock_cycle += 1;
+
+            if opcode == TERMINATE && rows.len().is_power_of_two() {
+                break
+            }
         }
 
         ProgramExecution {

@@ -16,7 +16,7 @@ pub const READ_INSTRUCTION_BUS: usize = 0;
 pub const MEMORY_BUS: usize = 1;
 pub const ARITHMETIC_BUS: usize = 2;
 
-pub const NUM_CORE_OPERATIONS: usize = 5;
+pub const NUM_CORE_OPERATIONS: usize = 6;
 pub const NUM_ARITHMETIC_OPERATIONS: usize = 4;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -26,11 +26,12 @@ pub enum OpCode {
     JAL = 2,
     BEQ = 3,
     BNE = 4,
+    TERMINATE = 5,
 
-    FADD = 5,
-    FSUB = 6,
-    FMUL = 7,
-    FDIV = 8,
+    FADD = 6,
+    FSUB = 7,
+    FMUL = 8,
+    FDIV = 9,
 }
 
 impl OpCode {
