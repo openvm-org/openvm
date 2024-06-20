@@ -9,6 +9,7 @@ use crate::cpu::columns::{CPUCols, CPUIOCols};
 use crate::cpu::{CPUChip, CPUOptions};
 use crate::memory::OpType;
 
+use super::trace::ProgramExecution;
 use super::{
     trace::{ArithmeticOperation, Instruction, MemoryAccess},
     OpCode::*,
@@ -224,14 +225,10 @@ fn air_test_change_pc(
     }
     let arithmetic_trace = RowMajorMatrix::new(arithmetic_rows, 5);
 
-    println!("here");
-
     let test_result = run_simple_test_no_pis(
         vec![&chip.air, &program_air, &memory_air, &arithmetic_air],
         vec![trace, program_trace, memory_trace, arithmetic_trace],
     );
-
-    println!("bing: {:?}", test_result);
 
     if should_fail {
         assert_eq!(
@@ -242,6 +239,73 @@ fn air_test_change_pc(
     } else {
         test_result.expect("Verification failed");
     }
+}
+
+fn air_test_custom_execution(
+    is_field_arithmetic_enabled: bool,
+    execution: ProgramExecution<BabyBear>,
+) {
+    let chip = CPUChip::new(is_field_arithmetic_enabled);
+    let trace = execution.trace();
+
+    let program_air = DummyInteractionAir::new(7, false, READ_INSTRUCTION_BUS);
+    let mut program_rows = vec![];
+    for (pc, instruction) in execution.program.iter().enumerate() {
+        program_rows.extend(vec![
+            execution.execution_frequencies[pc],
+            BabyBear::from_canonical_usize(pc),
+            BabyBear::from_canonical_usize(instruction.opcode as usize),
+            instruction.op_a,
+            instruction.op_b,
+            instruction.op_c,
+            instruction.d,
+            instruction.e,
+        ]);
+    }
+    while !(program_rows.len() / 8).is_power_of_two() {
+        program_rows.push(BabyBear::zero());
+    }
+    let program_trace = RowMajorMatrix::new(program_rows, 8);
+
+    let memory_air = DummyInteractionAir::new(5, false, MEMORY_BUS);
+    let mut memory_rows = vec![];
+    for memory_access in execution.memory_accesses.iter() {
+        memory_rows.extend(vec![
+            BabyBear::one(),
+            BabyBear::from_canonical_usize(memory_access.clock),
+            BabyBear::from_bool(memory_access.op_type == OpType::Write),
+            memory_access.address_space,
+            memory_access.address,
+            memory_access.data,
+        ]);
+    }
+    while !(memory_rows.len() / 6).is_power_of_two() {
+        memory_rows.push(BabyBear::zero());
+    }
+    let memory_trace = RowMajorMatrix::new(memory_rows, 6);
+
+    let arithmetic_air = DummyInteractionAir::new(4, false, ARITHMETIC_BUS);
+    let mut arithmetic_rows = vec![];
+    for arithmetic_op in execution.arithmetic_ops.iter() {
+        arithmetic_rows.extend(vec![
+            BabyBear::one(),
+            BabyBear::from_canonical_usize(arithmetic_op.opcode as usize),
+            arithmetic_op.operand1,
+            arithmetic_op.operand2,
+            arithmetic_op.result,
+        ]);
+    }
+    while !(arithmetic_rows.len() / 5).is_power_of_two() {
+        arithmetic_rows.push(BabyBear::zero());
+    }
+    let arithmetic_trace = RowMajorMatrix::new(arithmetic_rows, 5);
+
+    let test_result = run_simple_test_no_pis(
+        vec![&chip.air, &program_air, &memory_air, &arithmetic_air],
+        vec![trace, program_trace, memory_trace, arithmetic_trace],
+    );
+
+    test_result.expect("Verification failed");
 }
 
 #[test]
@@ -360,7 +424,7 @@ fn test_cpu_without_field_arithmetic() {
 
 #[test]
 #[should_panic]
-fn test_cpu_negative() {
+fn test_cpu_negative_wrong_pc() {
     /*
     Instruction 0 assigns word[0]_1 to 6.
     Instruction 1 checks if word[0]_1 is 4, and if so jumps to instruction 3 (but this doesn't happen)
@@ -385,7 +449,7 @@ fn test_cpu_negative() {
 }
 
 #[test]
-fn test_cpu_negative_assure() {
+fn test_cpu_negative_wrong_pc_check() {
     //Same program as test_cpu_negative.
     let program = vec![
         // word[0]_1 <- word[6]_0
@@ -401,4 +465,21 @@ fn test_cpu_negative_assure() {
     ];
 
     air_test_change_pc(true, program, 2, 2, false);
+}
+
+#[test]
+#[should_panic(expected = "assertion `left == right` failed: constraints had nonzero value on row 0")]
+fn test_cpu_negative_hasnt_terminated() {
+    let program = vec![
+        // word[0]_1 <- word[6]_0
+        Instruction::from_isize(STOREW, 6, 0, 0, 0, 1),
+        // terminate
+        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
+    ];
+    let chip = CPUChip::new(true);
+    let mut execution = chip.generate_trace(program);
+    execution.trace_rows.remove(execution.trace_rows.len() - 1);
+    execution.execution_frequencies[1] = AbstractField::zero();
+
+    air_test_custom_execution(true, execution);
 }
