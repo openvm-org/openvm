@@ -7,6 +7,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::cpu::columns::{CPUCols, CPUIOCols};
 use crate::cpu::{CPUChip, CPUOptions};
+use crate::memory::OpType;
 
 use super::{
     trace::{ArithmeticOperation, Instruction, MemoryAccess},
@@ -96,10 +97,10 @@ fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear
         memory_rows.extend(vec![
             BabyBear::one(),
             BabyBear::from_canonical_usize(memory_access.clock),
-            BabyBear::from_bool(memory_access.is_write),
+            BabyBear::from_bool(memory_access.op_type == OpType::Write),
             memory_access.address_space,
             memory_access.address,
-            memory_access.value,
+            memory_access.data,
         ]);
     }
     while !(memory_rows.len() / 6).is_power_of_two() {
@@ -183,10 +184,10 @@ fn air_test_change_pc(
         memory_rows.extend(vec![
             BabyBear::one(),
             BabyBear::from_canonical_usize(memory_access.clock),
-            BabyBear::from_bool(memory_access.is_write),
+            BabyBear::from_bool(memory_access.op_type == OpType::Write),
             memory_access.address_space,
             memory_access.address,
-            memory_access.value,
+            memory_access.data,
         ]);
     }
     while !(memory_rows.len() / 6).is_power_of_two() {
@@ -278,31 +279,31 @@ fn test_cpu() {
     let mut expected_memory_log = vec![
         MemoryAccess {
             clock: 0,
-            is_write: true,
+            op_type: OpType::Write,
             address_space: one,
             address: zero,
-            value: nf,
+            data: nf,
         },
         MemoryAccess {
             clock: 1,
-            is_write: true,
+            op_type: OpType::Write,
             address_space: one,
             address: zero,
-            value: nf,
+            data: nf,
         },
         MemoryAccess {
             clock: 2,
-            is_write: true,
+            op_type: OpType::Write,
             address_space: one,
             address: one,
-            value: one,
+            data: one,
         },
         MemoryAccess {
             clock: 3,
-            is_write: false,
+            op_type: OpType::Read,
             address_space: one,
             address: zero,
-            value: nf,
+            data: nf,
         },
     ];
     for t in 0..n {
@@ -311,38 +312,38 @@ fn test_cpu() {
         expected_memory_log.extend(vec![
             MemoryAccess {
                 clock,
-                is_write: false,
+                op_type: OpType::Read,
                 address_space: one,
                 address: zero,
-                value: nf - tf,
+                data: nf - tf,
             },
             MemoryAccess {
                 clock,
-                is_write: false,
+                op_type: OpType::Read,
                 address_space: one,
                 address: one,
-                value: one,
+                data: one,
             },
             MemoryAccess {
                 clock,
-                is_write: true,
+                op_type: OpType::Write,
                 address_space: one,
                 address: zero,
-                value: nf - tf - one,
+                data: nf - tf - one,
             },
             MemoryAccess {
                 clock: clock + 1,
-                is_write: true,
+                op_type: OpType::Write,
                 address_space: one,
                 address: two,
-                value: six,
+                data: six,
             },
             MemoryAccess {
                 clock: clock + 2,
-                is_write: false,
+                op_type: OpType::Read,
                 address_space: one,
                 address: zero,
-                value: nf - tf - one,
+                data: nf - tf - one,
             },
         ]);
     }
@@ -407,31 +408,31 @@ fn test_cpu_without_field_arithmetic() {
     let expected_memory_log = vec![
         MemoryAccess {
             clock: 0,
-            is_write: true,
+            op_type: OpType::Write,
             address_space: one,
             address: zero,
-            value: five,
+            data: five,
         },
         MemoryAccess {
             clock: 1,
-            is_write: true,
+            op_type: OpType::Write,
             address_space: one,
             address: zero,
-            value: five,
+            data: five,
         },
         MemoryAccess {
             clock: 2,
-            is_write: false,
+            op_type: OpType::Read,
             address_space: one,
             address: zero,
-            value: five,
+            data: five,
         },
         MemoryAccess {
             clock: 3,
-            is_write: false,
+            op_type: OpType::Read,
             address_space: one,
             address: zero,
-            value: five,
+            data: five,
         },
     ];
 

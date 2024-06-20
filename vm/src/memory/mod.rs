@@ -2,7 +2,7 @@ pub mod offline_checker;
 #[cfg(test)]
 pub mod tests;
 
-#[derive(PartialEq, Copy, Clone, Debug)]
+#[derive(PartialEq, Copy, Clone, Debug, Eq)]
 pub enum OpType {
     Read = 0,
     Write = 1,

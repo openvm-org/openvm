@@ -55,7 +55,7 @@ pub struct MemoryAccessCols<T> {
 
     pub address: T,
 
-    pub value: T,
+    pub data: T,
 }
 
 impl<T: Clone> MemoryAccessCols<T> {
@@ -66,7 +66,7 @@ impl<T: Clone> MemoryAccessCols<T> {
             is_immediate: slc[2].clone(),
             is_zero_aux: slc[3].clone(),
             address: slc[4].clone(),
-            value: slc[5].clone(),
+            data: slc[5].clone(),
         }
     }
 
@@ -77,7 +77,7 @@ impl<T: Clone> MemoryAccessCols<T> {
             self.is_immediate.clone(),
             self.is_zero_aux.clone(),
             self.address.clone(),
-            self.value.clone(),
+            self.data.clone(),
         ]
     }
 
