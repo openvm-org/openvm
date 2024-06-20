@@ -74,12 +74,9 @@ impl<F: PrimeField64> AirBridge<F> for CPUAir {
             if self.options.field_arithmetic_enabled {
                 Interaction {
                     fields: vec![
-                        /* opcode    */ VirtualPairCol::single_main(cols_numbered.io.opcode),
-                        /* operand 1 */
+                        VirtualPairCol::single_main(cols_numbered.io.opcode),
                         VirtualPairCol::single_main(cols_numbered.aux.read1.data),
-                        /* operand 2 */
                         VirtualPairCol::single_main(cols_numbered.aux.read2.data),
-                        /* result    */
                         VirtualPairCol::single_main(cols_numbered.aux.write.data),
                     ],
                     count: VirtualPairCol::sum_main(

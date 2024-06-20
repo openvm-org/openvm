@@ -7,6 +7,10 @@ use super::ProgramAir;
 
 impl<F: PrimeField64> ProgramAir<F> {
     pub fn generate_trace(&self, execution: &ProgramExecution<F>) -> RowMajorMatrix<F> {
-        RowMajorMatrix::new_col(execution.execution_frequencies.clone())
+        let mut frequencies = execution.execution_frequencies.clone();
+        while frequencies.len() != self.program.len() {
+            frequencies.push(F::zero());
+        }
+        RowMajorMatrix::new_col(frequencies)
     }
 }
