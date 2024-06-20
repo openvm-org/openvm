@@ -19,7 +19,7 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
             page.into_iter()
                 .flat_map(|row| row.into_iter().map(F::from_wrapped_u32).collect::<Vec<F>>())
                 .collect(),
-            2 + self.idx_len + self.data_len,
+            1 + self.idx_len + self.data_len,
         )
     }
 
@@ -101,7 +101,7 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                     }
                 })
                 .collect(),
-            self.air_width() - (2 + self.idx_len + self.data_len),
+            self.air_width() - (1 + self.idx_len + self.data_len),
         )
     }
 }

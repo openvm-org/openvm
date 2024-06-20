@@ -160,7 +160,7 @@ where
     let mut final_internal_main_ptrs = vec![];
 
     for _ in 0..init_param.leaf_cap {
-        init_leaf_data_ptrs.push(keygen_builder.add_cached_main_matrix(2 + idx_len + data_len));
+        init_leaf_data_ptrs.push(keygen_builder.add_cached_main_matrix(1 + idx_len + data_len));
     }
 
     for _ in 0..init_param.internal_cap {
@@ -169,7 +169,7 @@ where
     }
 
     for _ in 0..final_param.leaf_cap {
-        final_leaf_data_ptrs.push(keygen_builder.add_cached_main_matrix(2 + idx_len + data_len));
+        final_leaf_data_ptrs.push(keygen_builder.add_cached_main_matrix(1 + idx_len + data_len));
     }
 
     for _ in 0..final_param.internal_cap {
@@ -179,7 +179,7 @@ where
 
     for _ in 0..init_param.leaf_cap {
         init_leaf_main_ptrs.push(keygen_builder.add_main_matrix(
-            page_controller.init_leaf_chips[0].air_width() - 2 - idx_len - data_len,
+            page_controller.init_leaf_chips[0].air_width() - 1 - idx_len - data_len,
         ));
     }
 
@@ -194,7 +194,7 @@ where
 
     for _ in 0..final_param.leaf_cap {
         final_leaf_main_ptrs.push(keygen_builder.add_main_matrix(
-            page_controller.final_leaf_chips[0].air_width() - 2 - idx_len - data_len,
+            page_controller.final_leaf_chips[0].air_width() - 1 - idx_len - data_len,
         ));
     }
 

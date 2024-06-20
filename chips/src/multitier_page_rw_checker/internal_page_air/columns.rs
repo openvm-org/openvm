@@ -11,7 +11,7 @@ pub struct InternalPageCols<T> {
 
 #[derive(Clone)]
 pub struct PtrPageCols<T> {
-    pub is_leaf: T,
+    pub internal_marker: T,
     pub is_alloc: T,
     pub start: Vec<T>,
     pub end: Vec<T>,
@@ -20,15 +20,23 @@ pub struct PtrPageCols<T> {
 
 #[derive(Clone)]
 pub struct InternalPageSubAirCols<T> {
+    // check if the 1st idx of this row is less than the lower bound assigned to this page -> want this to be false
     pub idx1_start: IsLessThanTupleAuxCols<T>,
+    // check if the upper bound assigned to this page is less than the 1st idx of this row -> want this to be false
     pub end_idx1: IsLessThanTupleAuxCols<T>,
+    // check if the 2nd idx of this row is less than the lower bound assigned to this page -> want this to be false
     pub idx2_start: IsLessThanTupleAuxCols<T>,
+    // check if the upper bound assigned to this page is less than the 2nd idx of this row -> want this to be false
     pub end_idx2: IsLessThanTupleAuxCols<T>,
+    // check if the 2nd idx of this row is less than the 1st idx of this row -> want this to be false
     pub end_start: IsLessThanTupleAuxCols<T>,
+    // check if the 2nd idx of this row is less than the 1st idx of the next -> want this to be true
     pub end_next: IsLessThanTupleAuxCols<T>,
+    // aux for is_zero of mult_minus_one_alloc
     pub mult_inv: T,
 }
 
+/// A parent of this page will assign some range of keys - we must prove that range is accurate
 #[derive(Clone)]
 pub struct TwoRangeInclusionCols<T> {
     pub start: Vec<T>,
@@ -46,7 +54,6 @@ pub struct ProveSortCols<T> {
     pub end_less_than_start: T,
 }
 
-// Probably can be made more efficient but whatever
 #[derive(Clone)]
 pub struct InternalPageMetadataCols<T> {
     pub own_commitment: Vec<T>,
@@ -96,7 +103,7 @@ impl<T> PtrPageCols<T> {
         T: Clone,
     {
         PtrPageCols {
-            is_leaf: cols[0].clone(),
+            internal_marker: cols[0].clone(),
             is_alloc: cols[1].clone(),
             start: cols[2..2 + idx_len].to_vec(),
             end: cols[2 + idx_len..2 + 2 * idx_len].to_vec(),

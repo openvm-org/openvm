@@ -6,23 +6,21 @@ use crate::{
 
 #[derive(Clone)]
 pub struct LeafPageCols<T> {
-    pub cache_cols: LeafDataCols<T>,
+    pub cache_cols: PageCols<T>,
     pub metadata: LeafPageMetadataCols<T>,
 }
 
 #[derive(Clone)]
-pub struct LeafDataCols<T> {
-    pub is_leaf: T,
-    pub page_cols: PageCols<T>,
-}
-
-#[derive(Clone)]
 pub struct LeafPageSubAirCols<T> {
+    // check if the idx of this row is less than the lower bound assigned to this page -> want this to be false
     pub idx_start: IsLessThanTupleAuxCols<T>,
+    // check if the upper bound assigned to this page is less than the idx of this row -> want this to be false
     pub end_idx: IsLessThanTupleAuxCols<T>,
+    // constrain sortedness (which is done with MyFinalPageAir)
     pub final_page_aux: MyFinalPageAuxCols<T>,
 }
 
+/// A parent of this page will assign some range of keys - we must prove that range is accurate
 #[derive(Clone)]
 pub struct RangeInclusionCols<T> {
     pub start: Vec<T>,
@@ -52,13 +50,9 @@ impl<T> LeafPageCols<T> {
         T: Clone,
     {
         LeafPageCols {
-            cache_cols: LeafDataCols::from_slice(
-                &cols[0..2 + idx_len + data_len],
-                idx_len,
-                data_len,
-            ),
+            cache_cols: PageCols::from_slice(&cols[0..1 + idx_len + data_len], idx_len, data_len),
             metadata: LeafPageMetadataCols::from_slice(
-                &cols[2 + idx_len + data_len..],
+                &cols[1 + idx_len + data_len..],
                 idx_len,
                 commitment_len,
                 is_init,
@@ -125,18 +119,6 @@ impl<T> LeafPageMetadataCols<T> {
                 range_inclusion_cols: Some(range_inclusion_cols),
                 subchip_aux_cols: Some(subair_cols),
             }
-        }
-    }
-}
-
-impl<T> LeafDataCols<T> {
-    pub fn from_slice(cols: &[T], idx_len: usize, data_len: usize) -> Self
-    where
-        T: Clone,
-    {
-        LeafDataCols {
-            is_leaf: cols[0].clone(),
-            page_cols: PageCols::from_slice(&cols[1..2 + idx_len + data_len], idx_len, data_len),
         }
     }
 }

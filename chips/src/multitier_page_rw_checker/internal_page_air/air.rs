@@ -51,7 +51,7 @@ where
         }
         // assert that own id is correct
         builder.assert_eq(metadata.id, AB::Expr::from_canonical_u64(self.id as u64));
-        builder.assert_zero(cached_data.is_leaf);
+        builder.assert_eq(cached_data.internal_marker, AB::Expr::from_canonical_u64(2));
         builder.assert_eq(metadata.mult_alloc, cached_data.is_alloc * metadata.mult);
         builder.assert_eq(
             metadata.mult_alloc_minus_one,

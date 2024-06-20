@@ -37,7 +37,6 @@ impl<F: PrimeField> SubAirBridge<F> for MyFinalPageAir {
     fn receives(&self, col_indices: MyFinalPageCols<usize>) -> Vec<Interaction<F>> {
         let page_cols = col_indices.final_page_cols.page_cols;
         let rcv_mult = col_indices.rcv_mult;
-
         let page_cols = to_vcols(&[page_cols.idx, page_cols.data].concat());
 
         vec![Interaction {

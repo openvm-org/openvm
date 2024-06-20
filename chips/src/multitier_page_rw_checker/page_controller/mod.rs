@@ -136,8 +136,8 @@ where
         } else {
             let mut ans = 0;
             for row in &leaf_pages[cur_node.1] {
-                if row[1] == 1 {
-                    mega_page.push(row[1..].to_vec());
+                if row[0] == 1 {
+                    mega_page.push(row.clone());
                     ans += 1;
                 }
             }
@@ -178,12 +178,12 @@ where
         let mut internal_ranges = vec![(vec![], vec![]); internal_pages.len()];
         if root.0 {
             for row in &leaf_pages[root.1] {
-                if row[1] == 1 {
+                if row[0] == 1 {
                     if leaf_ranges[root.1].0.is_empty() {
                         leaf_ranges[root.1] =
-                            (row[2..2 + idx_len].to_vec(), row[2..2 + idx_len].to_vec());
+                            (row[1..1 + idx_len].to_vec(), row[1..1 + idx_len].to_vec());
                     } else {
-                        let idx = row[2..2 + idx_len].to_vec();
+                        let idx = row[1..1 + idx_len].to_vec();
                         if cmp(&leaf_ranges[root.1].0, &idx) > 0 {
                             leaf_ranges[root.1].0.clone_from(&idx);
                         }
@@ -509,23 +509,20 @@ impl<const COMMITMENT_LEN: usize> PageController<COMMITMENT_LEN> {
         let final_leaf_height = self.params.final_tree_params.leaf_page_height;
         let final_internal_height = self.params.final_tree_params.internal_page_height;
 
-        let mut blank_init_leaf_row = vec![1];
-        blank_init_leaf_row.resize(2 + self.params.idx_len + self.params.data_len, 0);
+        let blank_init_leaf_row = vec![0; 1 + self.params.idx_len + self.params.data_len];
         let blank_init_leaf = vec![blank_init_leaf_row.clone(); init_leaf_height];
 
-        let blank_init_internal =
-            vec![
-                vec![0; 2 + 2 * self.params.idx_len + self.params.commitment_len];
-                init_internal_height
-            ];
-        let mut blank_final_leaf_row = vec![1];
-        blank_final_leaf_row.resize(2 + self.params.idx_len + self.params.data_len, 0);
+        let mut blank_init_internal_row = vec![2];
+        blank_init_internal_row.resize(2 + 2 * self.params.idx_len + self.params.commitment_len, 0);
+        let blank_init_internal = vec![blank_init_internal_row; init_internal_height];
+
+        let blank_final_leaf_row = vec![0; 1 + self.params.idx_len + self.params.data_len];
         let blank_final_leaf = vec![blank_final_leaf_row.clone(); final_leaf_height];
-        let blank_final_internal =
-            vec![
-                vec![0; 2 + 2 * self.params.idx_len + self.params.commitment_len];
-                final_internal_height
-            ];
+
+        let mut blank_final_internal_row = vec![2];
+        blank_final_internal_row
+            .resize(2 + 2 * self.params.idx_len + self.params.commitment_len, 0);
+        let blank_final_internal = vec![blank_final_internal_row; final_internal_height];
         let internal_indices = ops.iter().map(|op| op.idx.clone()).collect();
         let (init_tree_products, mega_page) = make_tree_products(
             trace_committer,
@@ -680,7 +677,7 @@ where
             .collect();
         let page = leaf_pages[i].clone();
         let range = tree.leaf_ranges[i].clone();
-        let page = Page::from_2d_vec_multitier(&page, idx_len, data_len);
+        let page = Page::from_2d_vec(&page, idx_len, data_len);
         let tmp = leaf_chips[i].generate_main_trace::<SC>(
             &page,
             commit,
