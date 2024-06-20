@@ -2,22 +2,22 @@ use crate::cpu::OpCode;
 use afs_derive::AlignedBorrow;
 use p3_field::Field;
 
-use crate::au::AUAir;
+use crate::au::FieldArithmeticAir;
 
 #[derive(AlignedBorrow)]
-pub struct AUCols<T> {
-    pub io: AUIOCols<T>,
-    pub aux: AUAuxCols<T>,
+pub struct FieldArithmeticCols<T> {
+    pub io: FieldArithmeticIOCols<T>,
+    pub aux: FieldArithmeticAuxCols<T>,
 }
 
-pub struct AUIOCols<T> {
+pub struct FieldArithmeticIOCols<T> {
     pub opcode: T,
     pub x: T,
     pub y: T,
     pub z: T,
 }
 
-pub struct AUAuxCols<T> {
+pub struct FieldArithmeticAuxCols<T> {
     pub opcode_0bit: T,
     pub opcode_1bit: T,
     pub is_mul: T,
@@ -27,7 +27,7 @@ pub struct AUAuxCols<T> {
     pub div_result: T,
 }
 
-impl<T> AUCols<T>
+impl<T> FieldArithmeticCols<T>
 where
     T: Field,
 {
@@ -37,7 +37,7 @@ where
 
     pub fn new(op: OpCode, x: T, y: T) -> Self {
         let opcode = op as u32;
-        let opcode_value = opcode - AUAir::BASE_OP as u32;
+        let opcode_value = opcode - FieldArithmeticAir::BASE_OP as u32;
         let opcode_0bit_u32 = opcode_value % 2;
         let opcode_1bit_u32 = opcode_value / 2;
         let opcode_0bit = T::from_canonical_u32(opcode_0bit_u32);
@@ -50,13 +50,13 @@ where
         let z = is_mul * mul_result + is_div * div_result + (T::one() - opcode_1bit) * lin_term;
 
         Self {
-            io: AUIOCols {
+            io: FieldArithmeticIOCols {
                 opcode: T::from_canonical_u32(opcode),
                 x,
                 y,
                 z,
             },
-            aux: AUAuxCols {
+            aux: FieldArithmeticAuxCols {
                 opcode_0bit,
                 opcode_1bit,
                 is_mul,
@@ -79,7 +79,7 @@ where
     }
 }
 
-impl<T: Field> AUIOCols<T> {
+impl<T: Field> FieldArithmeticIOCols<T> {
     pub fn get_width() -> usize {
         4
     }
@@ -89,7 +89,7 @@ impl<T: Field> AUIOCols<T> {
     }
 }
 
-impl<T: Field> AUAuxCols<T> {
+impl<T: Field> FieldArithmeticAuxCols<T> {
     pub fn get_width() -> usize {
         7
     }

@@ -2,9 +2,9 @@ use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::Field;
 
-use crate::au::{columns::AUCols, AUAir};
+use crate::au::{columns::FieldArithmeticCols, FieldArithmeticAir};
 
-impl<T: Field> AirBridge<T> for AUAir {
+impl<T: Field> AirBridge<T> for FieldArithmeticAir {
     fn receives(&self) -> Vec<Interaction<T>> {
         // (0..AUCols::<T>::NUM_IO_COLS)
         //     .map(|i| Interaction {
@@ -13,7 +13,7 @@ impl<T: Field> AirBridge<T> for AUAir {
         //         argument_index: Self::BUS_INDEX,
         //     })
         vec![Interaction {
-            fields: (0..AUCols::<T>::NUM_IO_COLS)
+            fields: (0..FieldArithmeticCols::<T>::NUM_IO_COLS)
                 .map(VirtualPairCol::single_main)
                 .collect(),
             count: VirtualPairCol::one(),

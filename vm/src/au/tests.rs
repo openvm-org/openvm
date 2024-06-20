@@ -1,5 +1,5 @@
-use crate::au::columns::AUIOCols;
-use crate::au::AUAir;
+use crate::au::columns::FieldArithmeticIOCols;
+use crate::au::FieldArithmeticAir;
 use crate::cpu::trace::ProgramExecution;
 use crate::cpu::OpCode;
 use afs_stark_backend::prover::USE_DEBUG_BUILDER;
@@ -25,7 +25,7 @@ fn generate_arith_program(len_ops: usize) -> ProgramExecution<BabyBear> {
             )
         })
         .collect();
-    let arith_ops = AUAir::request(ops, operands);
+    let arith_ops = FieldArithmeticAir::request(ops, operands);
 
     ProgramExecution {
         program: vec![],
@@ -41,7 +41,7 @@ fn au_air_test() {
     let mut rng = create_seeded_rng();
     let len_ops = 1 << 5;
     let prog = generate_arith_program(len_ops);
-    let au_air = AUAir::new();
+    let au_air = FieldArithmeticAir::new();
 
     let dummy_trace = RowMajorMatrix::new(
         prog.arithmetic_ops
@@ -54,13 +54,16 @@ fn au_air_test() {
                     .collect::<Vec<_>>()
             })
             .collect(),
-        AUIOCols::<BabyBear>::get_width() + 1,
+        FieldArithmeticIOCols::<BabyBear>::get_width() + 1,
     );
 
     let mut au_trace = au_air.generate_trace(&prog);
 
-    let page_requester =
-        DummyInteractionAir::new(AUIOCols::<BabyBear>::get_width(), true, AUAir::BUS_INDEX);
+    let page_requester = DummyInteractionAir::new(
+        FieldArithmeticIOCols::<BabyBear>::get_width(),
+        true,
+        FieldArithmeticAir::BUS_INDEX,
+    );
 
     // positive test
     run_simple_test_no_pis(
@@ -70,7 +73,7 @@ fn au_air_test() {
     .expect("Verification failed");
 
     for height in 0..(prog.arithmetic_ops.len()) {
-        for width in 0..AUIOCols::<BabyBear>::get_width() {
+        for width in 0..FieldArithmeticIOCols::<BabyBear>::get_width() {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
             au_trace.row_mut(height)[width] = prank_value;
         }

@@ -11,14 +11,9 @@ pub mod columns;
 pub mod trace;
 
 #[derive(Default, Clone, Copy)]
-pub struct AUAir {}
+pub struct FieldArithmeticAir {}
 
-pub struct AUChip<T> {
-    pub air: AUAir,
-    pub arithmetic_operations: Vec<ArithmeticOperation<T>>,
-}
-
-impl AUAir {
+impl FieldArithmeticAir {
     pub const BASE_OP: u8 = 5;
     pub const BUS_INDEX: usize = 2;
 

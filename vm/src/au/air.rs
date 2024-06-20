@@ -4,27 +4,27 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::{columns::AUCols, AUAir};
+use super::{columns::FieldArithmeticCols, FieldArithmeticAir};
 use afs_chips::sub_chip::AirConfig;
 
-impl AirConfig for AUAir {
-    type Cols<T> = AUCols<T>;
+impl AirConfig for FieldArithmeticAir {
+    type Cols<T> = FieldArithmeticCols<T>;
 }
 
-impl<F: Field> BaseAir<F> for AUAir {
+impl<F: Field> BaseAir<F> for FieldArithmeticAir {
     fn width(&self) -> usize {
-        AUCols::<F>::NUM_COLS
+        FieldArithmeticCols::<F>::NUM_COLS
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for AUAir {
+impl<AB: AirBuilder> Air<AB> for FieldArithmeticAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
         let local = main.row_slice(0);
-        let au_cols: &AUCols<_> = (*local).borrow();
+        let au_cols: &FieldArithmeticCols<_> = (*local).borrow();
 
-        let AUCols { io, aux } = au_cols;
+        let FieldArithmeticCols { io, aux } = au_cols;
 
         builder.assert_bool(aux.opcode_0bit);
         builder.assert_bool(aux.opcode_1bit);
@@ -32,7 +32,7 @@ impl<AB: AirBuilder> Air<AB> for AUAir {
             io.opcode,
             aux.opcode_0bit
                 + aux.opcode_1bit * AB::F::two()
-                + AB::F::from_canonical_u8(AUAir::BASE_OP),
+                + AB::F::from_canonical_u8(FieldArithmeticAir::BASE_OP),
         );
 
         builder.assert_eq(
