@@ -7,7 +7,7 @@ use crate::cpu::trace::ProgramExecution;
 use super::AUAir;
 
 impl AUAir {
-    pub fn generate_trace<T: Field>(&self, prog_exec: ProgramExecution<T>) -> RowMajorMatrix<T> {
+    pub fn generate_trace<T: Field>(&self, prog_exec: &ProgramExecution<T>) -> RowMajorMatrix<T> {
         let trace = prog_exec
             .arithmetic_ops
             .iter()

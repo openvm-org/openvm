@@ -33,6 +33,23 @@ pub enum OpCode {
     FDIV = 8,
 }
 
+impl OpCode {
+    pub fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(OpCode::LOADW),
+            1 => Some(OpCode::STOREW),
+            2 => Some(OpCode::JAL),
+            3 => Some(OpCode::BEQ),
+            4 => Some(OpCode::BNE),
+            5 => Some(OpCode::FADD),
+            6 => Some(OpCode::FSUB),
+            7 => Some(OpCode::FMUL),
+            8 => Some(OpCode::FDIV),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Default, Clone, Copy, CopyGetters)]
 #[getset(get_copy = "pub")]
 pub struct CPUOptions {

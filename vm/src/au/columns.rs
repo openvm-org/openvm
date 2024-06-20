@@ -31,7 +31,7 @@ impl<T> AUCols<T>
 where
     T: Field,
 {
-    pub const NUM_COLS: usize = 10;
+    pub const NUM_COLS: usize = 11;
     pub const NUM_IO_COLS: usize = 4;
     pub const NUM_AUX_COLS: usize = 6;
 
@@ -42,7 +42,7 @@ where
         let opcode_1bit_u32 = opcode_value / 2;
         let opcode_0bit = T::from_canonical_u32(opcode_0bit_u32);
         let opcode_1bit = T::from_canonical_u32(opcode_1bit_u32);
-        let lin_term = x + T::from_canonical_u32(1 - 2 * opcode_0bit_u32) * y;
+        let lin_term = x + y - T::two() * opcode_0bit * y;
         let is_div = T::from_bool(op == OpCode::FDIV);
         let is_mul = T::from_bool(op == OpCode::FMUL);
         let mul_result = x * y;
@@ -69,7 +69,7 @@ where
     }
 
     pub fn get_width() -> usize {
-        10
+        11
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -91,7 +91,7 @@ impl<T: Field> AUIOCols<T> {
 
 impl<T: Field> AUAuxCols<T> {
     pub fn get_width() -> usize {
-        6
+        7
     }
 
     pub fn flatten(&self) -> Vec<T> {

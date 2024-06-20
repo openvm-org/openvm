@@ -9,8 +9,8 @@ impl<T: Field> AirBridge<T> for AUAir {
         (0..AUCols::<T>::NUM_IO_COLS)
             .map(|i| Interaction {
                 fields: vec![VirtualPairCol::single_main(i)],
-                count: VirtualPairCol::constant(T::one()),
-                argument_index: i,
+                count: VirtualPairCol::one(),
+                argument_index: Self::BUS_INDEX,
             })
             .collect()
     }

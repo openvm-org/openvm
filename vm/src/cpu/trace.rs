@@ -83,6 +83,17 @@ impl<F: PrimeField64> ProgramExecution<F> {
     }
 }
 
+impl<F: PrimeField64> ArithmeticOperation<F> {
+    pub fn to_vec(&self) -> Vec<F> {
+        vec![
+            F::from_canonical_usize(self.opcode as usize),
+            self.operand1,
+            self.operand2,
+            self.result,
+        ]
+    }
+}
+
 struct Memory<F> {
     data: HashMap<F, HashMap<F, F>>,
     log: Vec<MemoryAccess<F>>,
