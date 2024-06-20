@@ -88,11 +88,11 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
         here.assert_eq(read1.address, c);
 
         here.assert_eq(read2.address_space, e);
-        here.assert_eq(read2.address, read1.value + b);
+        here.assert_eq(read2.address, read1.data + b);
 
         here.assert_eq(write.address_space, d);
         here.assert_eq(write.address, a);
-        here.assert_eq(write.value, read2.value);
+        here.assert_eq(write.data, read2.data);
 
         here.when_transition()
             .assert_eq(next_pc, pc + inst_width.clone());
@@ -106,8 +106,8 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
         here.assert_eq(read2.address, a);
 
         here.assert_eq(write.address_space, e);
-        here.assert_eq(write.address, read1.value + b);
-        here.assert_eq(write.value, read2.value);
+        here.assert_eq(write.address, read1.data + b);
+        here.assert_eq(write.data, read2.data);
 
         here.when_transition()
             .assert_eq(next_pc, pc + inst_width.clone());
@@ -118,7 +118,7 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
         here.assert_eq(write.address_space, d);
         here.assert_eq(write.address, a);
         here.assert_eq(
-            write.value,
+            write.data,
             pc + AB::Expr::from_canonical_u64(INST_WIDTH.try_into().unwrap()),
         );
 
@@ -141,8 +141,8 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
             .assert_eq(next_pc, pc + inst_width.clone());
 
         let is_equal_io_cols = IsEqualIOCols {
-            x: read1.value,
-            y: read2.value,
+            x: read1.data,
+            y: read2.data,
             is_equal: beq_check,
         };
         let is_equal_aux_cols = IsEqualAuxCols { inv: is_equal_aux };
@@ -201,7 +201,7 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
         for read in [&read1, &read2] {
             builder
                 .when(read.is_immediate)
-                .assert_eq(read.value, read.address);
+                .assert_eq(read.data, read.address);
         }
         // maybe writes to immediate address space are ignored instead of disallowed?
         //builder.assert_zero(write.is_immediate);

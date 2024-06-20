@@ -7,6 +7,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::cpu::columns::{CPUCols, CPUIOCols};
 use crate::cpu::{CPUChip, CPUOptions};
+use crate::memory::OpType;
 
 use super::{
     trace::{ArithmeticOperation, Instruction, MemoryAccess},
@@ -96,10 +97,10 @@ fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear
         memory_rows.extend(vec![
             BabyBear::one(),
             BabyBear::from_canonical_usize(memory_access.clock),
-            BabyBear::from_bool(memory_access.is_write),
+            BabyBear::from_bool(memory_access.op_type == OpType::Write),
             memory_access.address_space,
             memory_access.address,
-            memory_access.value,
+            memory_access.data,
         ]);
     }
     while !(memory_rows.len() / 6).is_power_of_two() {
@@ -183,10 +184,10 @@ fn air_test_change_pc(
         memory_rows.extend(vec![
             BabyBear::one(),
             BabyBear::from_canonical_usize(memory_access.clock),
-            BabyBear::from_bool(memory_access.is_write),
+            BabyBear::from_bool(memory_access.op_type == OpType::Write),
             memory_access.address_space,
             memory_access.address,
-            memory_access.value,
+            memory_access.data,
         ]);
     }
     while !(memory_rows.len() / 6).is_power_of_two() {
@@ -244,61 +245,28 @@ fn test_cpu() {
     let n = 20;
     let nf = AbstractField::from_canonical_u64(n);
 
+    /*
+    Instruction 0 assigns word[0]_1 to n.
+    Instruction 1 repeats this to make the trace height a power of 2.
+    Instruction 2 assigns word[1]_1 to 1 for use in later arithmetic operations.
+    The remainder is a loop that decrements word[0]_1 until it reaches 0, then terminates.
+    Instruction 3 checks if word[0]_1 is 0 yet, and if so terminates (by setting pc to -1)
+    Instruction 4 decrements word[0]_1 (using word[1]_1)
+    Instruction 5 uses JAL as a simple jump to go back to instruction 3 (repeating the loop).
+     */
     let program = vec![
         // word[0]_1 <- word[n]_0
-        Instruction {
-            opcode: STOREW,
-            op_a: nf,
-            op_b: zero,
-            op_c: zero,
-            as_b: zero,
-            as_c: one,
-        },
+        Instruction::new(STOREW, nf, zero, zero, zero, one),
         // word[0]_1 <- word[n]_0
-        Instruction {
-            opcode: STOREW,
-            op_a: nf,
-            op_b: zero,
-            op_c: zero,
-            as_b: zero,
-            as_c: one,
-        },
+        Instruction::new(STOREW, nf, zero, zero, zero, one),
         // word[1]_1 <- word[1]_1
-        Instruction {
-            opcode: STOREW,
-            op_a: one,
-            op_b: one,
-            op_c: zero,
-            as_b: zero,
-            as_c: one,
-        },
+        Instruction::new(STOREW, one, one, zero, zero, one),
         // if word[0]_1 == 0 then pc -= 4
-        Instruction {
-            opcode: BEQ,
-            op_a: zero,
-            op_b: zero,
-            op_c: neg_four,
-            as_b: one,
-            as_c: zero,
-        },
+        Instruction::new(BEQ, zero, zero, neg_four, one, zero),
         // word[0]_1 <- word[0]_1 - word[1]_1
-        Instruction {
-            opcode: FSUB,
-            op_a: zero,
-            op_b: zero,
-            op_c: one,
-            as_b: one,
-            as_c: one,
-        },
+        Instruction::new(FSUB, zero, zero, one, one, one),
         // word[2]_1 <- pc + 1, pc -= 2
-        Instruction {
-            opcode: JAL,
-            op_a: two,
-            op_b: neg_two,
-            op_c: zero,
-            as_b: one,
-            as_c: zero,
-        },
+        Instruction::new(JAL, two, neg_two, zero, one, zero),
     ];
 
     let mut expected_execution: Vec<usize> = vec![0, 1, 2, 3];
@@ -311,31 +279,31 @@ fn test_cpu() {
     let mut expected_memory_log = vec![
         MemoryAccess {
             clock: 0,
-            is_write: true,
+            op_type: OpType::Write,
             address_space: one,
             address: zero,
-            value: nf,
+            data: nf,
         },
         MemoryAccess {
             clock: 1,
-            is_write: true,
+            op_type: OpType::Write,
             address_space: one,
             address: zero,
-            value: nf,
+            data: nf,
         },
         MemoryAccess {
             clock: 2,
-            is_write: true,
+            op_type: OpType::Write,
             address_space: one,
             address: one,
-            value: one,
+            data: one,
         },
         MemoryAccess {
             clock: 3,
-            is_write: false,
+            op_type: OpType::Read,
             address_space: one,
             address: zero,
-            value: nf,
+            data: nf,
         },
     ];
     for t in 0..n {
@@ -344,38 +312,38 @@ fn test_cpu() {
         expected_memory_log.extend(vec![
             MemoryAccess {
                 clock,
-                is_write: false,
+                op_type: OpType::Read,
                 address_space: one,
                 address: zero,
-                value: nf - tf,
+                data: nf - tf,
             },
             MemoryAccess {
                 clock,
-                is_write: false,
+                op_type: OpType::Read,
                 address_space: one,
                 address: one,
-                value: one,
+                data: one,
             },
             MemoryAccess {
                 clock,
-                is_write: true,
+                op_type: OpType::Write,
                 address_space: one,
                 address: zero,
-                value: nf - tf - one,
+                data: nf - tf - one,
             },
             MemoryAccess {
                 clock: clock + 1,
-                is_write: true,
+                op_type: OpType::Write,
                 address_space: one,
                 address: two,
-                value: six,
+                data: six,
             },
             MemoryAccess {
                 clock: clock + 2,
-                is_write: false,
+                op_type: OpType::Read,
                 address_space: one,
                 address: zero,
-                value: nf - tf - one,
+                data: nf - tf - one,
             },
         ]);
     }
@@ -415,52 +383,24 @@ fn test_cpu_without_field_arithmetic() {
     let neg_two = neg * two;
     let neg_five = neg * BabyBear::from_canonical_u32(5);
 
+    /*
+    Instruction 0 assigns word[0]_1 to 5.
+    Instruction 1 assigns word[0]_1 to 5 (repeat to make the trace height a power of 2)
+    Instruction 2 checks if word[0]_1 is *not* 4, and if so jumps to instruction 4.
+    Instruction 3 is never run.
+    Instruction 4 checks if word[0]_1 is 5, and if so terminates (by setting pc to -1)
+     */
     let program = vec![
         // word[0]_1 <- word[5]_0
-        Instruction {
-            opcode: STOREW,
-            op_a: five,
-            op_b: zero,
-            op_c: zero,
-            as_b: zero,
-            as_c: one,
-        },
+        Instruction::new(STOREW, five, zero, zero, zero, one),
         // word[0]_1 <- word[5]_0
-        Instruction {
-            opcode: STOREW,
-            op_a: five,
-            op_b: zero,
-            op_c: zero,
-            as_b: zero,
-            as_c: one,
-        },
+        Instruction::new(STOREW, five, zero, zero, zero, one),
         // if word[0]_1 != 4 then pc += 2
-        Instruction {
-            opcode: BNE,
-            op_a: zero,
-            op_b: four,
-            op_c: two,
-            as_b: one,
-            as_c: zero,
-        },
+        Instruction::new(BNE, zero, four, two, one, zero),
         // word[2]_1 <- pc + 1, pc -= 2
-        Instruction {
-            opcode: JAL,
-            op_a: two,
-            op_b: neg_two,
-            op_c: zero,
-            as_b: one,
-            as_c: zero,
-        },
+        Instruction::new(JAL, two, neg_two, zero, one, zero),
         // if word[0]_1 == 5 then pc -= 5
-        Instruction {
-            opcode: BEQ,
-            op_a: zero,
-            op_b: five,
-            op_c: neg_five,
-            as_b: one,
-            as_c: zero,
-        },
+        Instruction::new(BEQ, zero, five, neg_five, one, zero),
     ];
 
     let expected_execution: Vec<usize> = vec![0, 1, 2, 4];
@@ -468,31 +408,31 @@ fn test_cpu_without_field_arithmetic() {
     let expected_memory_log = vec![
         MemoryAccess {
             clock: 0,
-            is_write: true,
+            op_type: OpType::Write,
             address_space: one,
             address: zero,
-            value: five,
+            data: five,
         },
         MemoryAccess {
             clock: 1,
-            is_write: true,
+            op_type: OpType::Write,
             address_space: one,
             address: zero,
-            value: five,
+            data: five,
         },
         MemoryAccess {
             clock: 2,
-            is_write: false,
+            op_type: OpType::Read,
             address_space: one,
             address: zero,
-            value: five,
+            data: five,
         },
         MemoryAccess {
             clock: 3,
-            is_write: false,
+            op_type: OpType::Read,
             address_space: one,
             address: zero,
-            value: five,
+            data: five,
         },
     ];
 
@@ -519,52 +459,24 @@ fn test_cpu_negative() {
     let neg_four = neg * four;
     let neg_five = neg * BabyBear::from_canonical_u32(5);
 
+    /*
+    Instruction 0 assigns word[0]_1 to 6.
+    Instruction 1 assigns word[0]_1 to 6 (repeat to make trace height a power of 2)
+    Instruction 2 checks if word[0]_1 is 4, and if so jumps to instruction 4 (but this doesn't happen)
+    Instruction 3 checks if word[0]_1 is 0, and if not terminates by setting pc to -1
+    Instruction 4 checks if word[0]_1 is 0, and if not terminates by setting pc to -1 (identical to instruction 3)
+     */
     let program = vec![
         // word[0]_1 <- word[6]_0
-        Instruction {
-            opcode: STOREW,
-            op_a: six,
-            op_b: zero,
-            op_c: zero,
-            as_b: zero,
-            as_c: one,
-        },
+        Instruction::new(STOREW, six, zero, zero, zero, one),
         // word[0]_1 <- word[6]_0
-        Instruction {
-            opcode: STOREW,
-            op_a: six,
-            op_b: zero,
-            op_c: zero,
-            as_b: zero,
-            as_c: one,
-        },
-        // if word[0]_1 == 4 then pc += 2
-        Instruction {
-            opcode: BEQ,
-            op_a: zero,
-            op_b: four,
-            op_c: two,
-            as_b: one,
-            as_c: zero,
-        },
+        Instruction::new(STOREW, six, zero, zero, zero, one),
+        // if word[0]_1 != 4 then pc += 2
+        Instruction::new(BEQ, zero, four, two, one, zero),
         // if word[0]_1 != 0 then pc -= 4
-        Instruction {
-            opcode: BNE,
-            op_a: zero,
-            op_b: zero,
-            op_c: neg_four,
-            as_b: one,
-            as_c: zero,
-        },
+        Instruction::new(BNE, zero, zero, neg_four, one, zero),
         // if word[0]_1 != 0 then pc -= 5
-        Instruction {
-            opcode: BNE,
-            op_a: zero,
-            op_b: zero,
-            op_c: neg_five,
-            as_b: one,
-            as_c: zero,
-        },
+        Instruction::new(BNE, zero, zero, neg_five, one, zero),
     ];
 
     air_test_change_pc(true, program, 3, 4, true);
@@ -582,52 +494,18 @@ fn test_cpu_negative_assure() {
     let neg_four = neg * four;
     let neg_five = neg * BabyBear::from_canonical_u32(5);
 
+    //Same program as test_cpu_negative.
     let program = vec![
         // word[0]_1 <- word[6]_0
-        Instruction {
-            opcode: STOREW,
-            op_a: six,
-            op_b: zero,
-            op_c: zero,
-            as_b: zero,
-            as_c: one,
-        },
+        Instruction::new(STOREW, six, zero, zero, zero, one),
         // word[0]_1 <- word[6]_0
-        Instruction {
-            opcode: STOREW,
-            op_a: six,
-            op_b: zero,
-            op_c: zero,
-            as_b: zero,
-            as_c: one,
-        },
-        // if word[0]_1 == 4 then pc += 2
-        Instruction {
-            opcode: BEQ,
-            op_a: zero,
-            op_b: four,
-            op_c: two,
-            as_b: one,
-            as_c: zero,
-        },
+        Instruction::new(STOREW, six, zero, zero, zero, one),
+        // if word[0]_1 != 4 then pc += 2
+        Instruction::new(BEQ, zero, four, two, one, zero),
         // if word[0]_1 != 0 then pc -= 4
-        Instruction {
-            opcode: BNE,
-            op_a: zero,
-            op_b: zero,
-            op_c: neg_four,
-            as_b: one,
-            as_c: zero,
-        },
+        Instruction::new(BNE, zero, zero, neg_four, one, zero),
         // if word[0]_1 != 0 then pc -= 5
-        Instruction {
-            opcode: BNE,
-            op_a: zero,
-            op_b: zero,
-            op_c: neg_five,
-            as_b: one,
-            as_c: zero,
-        },
+        Instruction::new(BNE, zero, zero, neg_five, one, zero),
     ];
 
     air_test_change_pc(true, program, 3, 3, false);

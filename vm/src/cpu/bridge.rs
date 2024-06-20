@@ -34,7 +34,7 @@ impl<F: PrimeField64> AirBridge<F> for CPUAir {
                     VirtualPairCol::constant(F::zero()),
                     VirtualPairCol::single_main(cols_numbered.aux.read1.address_space),
                     VirtualPairCol::single_main(cols_numbered.aux.read1.address),
-                    VirtualPairCol::single_main(cols_numbered.aux.read1.value),
+                    VirtualPairCol::single_main(cols_numbered.aux.read1.data),
                 ],
                 count: VirtualPairCol::diff_main(
                     cols_numbered.aux.read1.enabled,
@@ -48,7 +48,7 @@ impl<F: PrimeField64> AirBridge<F> for CPUAir {
                     VirtualPairCol::constant(F::zero()),
                     VirtualPairCol::single_main(cols_numbered.aux.read2.address_space),
                     VirtualPairCol::single_main(cols_numbered.aux.read2.address),
-                    VirtualPairCol::single_main(cols_numbered.aux.read2.value),
+                    VirtualPairCol::single_main(cols_numbered.aux.read2.data),
                 ],
                 count: VirtualPairCol::diff_main(
                     cols_numbered.aux.read2.enabled,
@@ -62,7 +62,7 @@ impl<F: PrimeField64> AirBridge<F> for CPUAir {
                     VirtualPairCol::constant(F::one()),
                     VirtualPairCol::single_main(cols_numbered.aux.write.address_space),
                     VirtualPairCol::single_main(cols_numbered.aux.write.address),
-                    VirtualPairCol::single_main(cols_numbered.aux.write.value),
+                    VirtualPairCol::single_main(cols_numbered.aux.write.data),
                 ],
                 count: VirtualPairCol::diff_main(
                     cols_numbered.aux.write.enabled,
@@ -76,11 +76,11 @@ impl<F: PrimeField64> AirBridge<F> for CPUAir {
                     fields: vec![
                         /* opcode    */ VirtualPairCol::single_main(cols_numbered.io.opcode),
                         /* operand 1 */
-                        VirtualPairCol::single_main(cols_numbered.aux.read1.value),
+                        VirtualPairCol::single_main(cols_numbered.aux.read1.data),
                         /* operand 2 */
-                        VirtualPairCol::single_main(cols_numbered.aux.read2.value),
+                        VirtualPairCol::single_main(cols_numbered.aux.read2.data),
                         /* result    */
-                        VirtualPairCol::single_main(cols_numbered.aux.write.value),
+                        VirtualPairCol::single_main(cols_numbered.aux.write.data),
                     ],
                     count: VirtualPairCol::sum_main(
                         cols_numbered.aux.operation_flags

@@ -5,6 +5,8 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use afs_chips::{is_equal::IsEqualAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions};
 
+use crate::memory::OpType;
+
 use super::{
     columns::{CPUAuxCols, CPUCols, CPUIOCols, MemoryAccessCols},
     CPUChip, OpCode,
@@ -12,7 +14,7 @@ use super::{
     INST_WIDTH,
 };
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, derive_new::new)]
 pub struct Instruction<F> {
     pub opcode: OpCode,
     pub op_a: F,
@@ -25,21 +27,21 @@ pub struct Instruction<F> {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct MemoryAccess<F> {
     pub clock: usize,
-    pub is_write: bool,
+    pub op_type: OpType,
     pub address_space: F,
     pub address: F,
-    pub value: F,
+    pub data: F,
 }
 
 fn memory_access_to_cols<F: PrimeField64>(access: Option<MemoryAccess<F>>) -> MemoryAccessCols<F> {
     let (enabled, address_space, address, value) = match access {
         Some(MemoryAccess {
             clock: _,
-            is_write: _,
+            op_type: _,
             address_space,
             address,
-            value,
-        }) => (F::one(), address_space, address, value),
+            data,
+        }) => (F::one(), address_space, address, data),
         None => (F::zero(), F::one(), F::zero(), F::zero()),
     };
     let is_zero_cols = LocalTraceInstructions::generate_trace_row(&IsZeroAir {}, address_space);
@@ -51,7 +53,7 @@ fn memory_access_to_cols<F: PrimeField64>(access: Option<MemoryAccess<F>>) -> Me
         is_immediate,
         is_zero_aux,
         address,
-        value,
+        data: value,
     }
 }
 
@@ -118,7 +120,7 @@ impl<F: PrimeField64> Memory<F> {
     }
 
     fn read(&mut self, address_space: F, address: F) -> F {
-        let value = if address_space == F::zero() {
+        let data = if address_space == F::zero() {
             address
         } else {
             *self.data[&address_space]
@@ -127,28 +129,28 @@ impl<F: PrimeField64> Memory<F> {
         };
         let read = MemoryAccess {
             clock: self.clock_cycle,
-            is_write: false,
+            op_type: OpType::Read,
             address_space,
             address,
-            value,
+            data,
         };
         if read.address_space != F::zero() {
             self.log.push(read);
         }
         self.reads_this_cycle.push_back(read);
-        value
+        data
     }
 
-    fn write(&mut self, address_space: F, address: F, value: F) {
+    fn write(&mut self, address_space: F, address: F, data: F) {
         if address_space == F::zero() {
             panic!("Attempted to write to address space 0");
         } else {
             let write = MemoryAccess {
                 clock: self.clock_cycle,
-                is_write: true,
+                op_type: OpType::Write,
                 address_space,
                 address,
-                value,
+                data,
             };
             self.log.push(write);
             self.writes_this_cycle.push_back(write);
@@ -156,7 +158,7 @@ impl<F: PrimeField64> Memory<F> {
             self.data
                 .get_mut(&address_space)
                 .unwrap()
-                .insert(address, value);
+                .insert(address, data);
         }
     }
 
@@ -289,7 +291,7 @@ impl CPUChip {
 
             let is_equal_cols = LocalTraceInstructions::generate_trace_row(
                 &IsEqualAir {},
-                (read1.value, read2.value),
+                (read1.data, read2.data),
             );
             let beq_check = is_equal_cols.io.is_equal;
             let is_equal_aux = is_equal_cols.aux.inv;
