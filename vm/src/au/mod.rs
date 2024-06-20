@@ -10,6 +10,9 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
+/// Field arithmetic chip.
+///
+/// Carries information about opcodes (currently 5..=8) and bus index (currently 2).
 #[derive(Default, Clone, Copy)]
 pub struct FieldArithmeticAir {}
 
@@ -21,6 +24,9 @@ impl FieldArithmeticAir {
         Self {}
     }
 
+    /// Evaluates given opcode using given operands.
+    ///
+    /// Returns None for non-arithmetic operations.
     pub fn solve<T: Field>(op: OpCode, operands: (T, T)) -> Option<T> {
         match op {
             OpCode::LOADW => None,
@@ -36,6 +42,7 @@ impl FieldArithmeticAir {
         }
     }
 
+    /// Vectorized solve<>
     pub fn solve_all<T: Field>(ops: Vec<OpCode>, operands: Vec<(T, T)>) -> Vec<T> {
         ops.iter()
             .zip(operands.iter())
@@ -43,6 +50,7 @@ impl FieldArithmeticAir {
             .collect()
     }
 
+    /// Converts vectorized opcodes and operands into vectorized ArithmeticOperations.
     pub fn request<T: Field>(
         ops: Vec<OpCode>,
         operands: Vec<(T, T)>,

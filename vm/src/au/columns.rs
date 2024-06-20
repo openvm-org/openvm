@@ -4,6 +4,10 @@ use p3_field::Field;
 
 use crate::au::FieldArithmeticAir;
 
+/// Columns for field arithmetic chip.
+///
+/// Four IO columns for opcode, x, y, result.
+/// Seven aux columns for interpreting opcode, evaluating indicators, and explicit computations.
 #[derive(AlignedBorrow)]
 pub struct FieldArithmeticCols<T> {
     pub io: FieldArithmeticIOCols<T>,
@@ -18,13 +22,13 @@ pub struct FieldArithmeticIOCols<T> {
 }
 
 pub struct FieldArithmeticAuxCols<T> {
-    pub opcode_0bit: T,
-    pub opcode_1bit: T,
+    pub opcode_lo: T,
+    pub opcode_hi: T,
     pub is_mul: T,
     pub is_div: T,
-    pub lin_term: T,
-    pub mul_result: T,
-    pub div_result: T,
+    pub sum_or_diff: T,
+    pub product: T,
+    pub quotient: T,
 }
 
 impl<T> FieldArithmeticCols<T>
@@ -35,19 +39,24 @@ where
     pub const NUM_IO_COLS: usize = 4;
     pub const NUM_AUX_COLS: usize = 6;
 
+    /// Constructs a new set of columns (including auxiliary columns) given inputs.
     pub fn new(op: OpCode, x: T, y: T) -> Self {
         let opcode = op as u32;
         let opcode_value = opcode - FieldArithmeticAir::BASE_OP as u32;
-        let opcode_0bit_u32 = opcode_value % 2;
-        let opcode_1bit_u32 = opcode_value / 2;
-        let opcode_0bit = T::from_canonical_u32(opcode_0bit_u32);
-        let opcode_1bit = T::from_canonical_u32(opcode_1bit_u32);
-        let lin_term = x + y - T::two() * opcode_0bit * y;
+        let opcode_lo_u32 = opcode_value % 2;
+        let opcode_hi_u32 = opcode_value / 2;
+        let opcode_lo = T::from_canonical_u32(opcode_lo_u32);
+        let opcode_hi = T::from_canonical_u32(opcode_hi_u32);
         let is_div = T::from_bool(op == OpCode::FDIV);
         let is_mul = T::from_bool(op == OpCode::FMUL);
-        let mul_result = x * y;
-        let div_result = x * y.inverse();
-        let z = is_mul * mul_result + is_div * div_result + (T::one() - opcode_1bit) * lin_term;
+        let sum_or_diff = x + y - T::two() * opcode_lo * y;
+        let product = x * y;
+        let quotient = if y == T::zero() {
+            T::zero()
+        } else {
+            x * y.inverse()
+        };
+        let z = is_mul * product + is_div * quotient + (T::one() - opcode_hi) * sum_or_diff;
 
         Self {
             io: FieldArithmeticIOCols {
@@ -57,19 +66,19 @@ where
                 z,
             },
             aux: FieldArithmeticAuxCols {
-                opcode_0bit,
-                opcode_1bit,
+                opcode_lo,
+                opcode_hi,
                 is_mul,
                 is_div,
-                lin_term,
-                mul_result,
-                div_result,
+                sum_or_diff,
+                product,
+                quotient,
             },
         }
     }
 
     pub fn get_width() -> usize {
-        11
+        FieldArithmeticIOCols::<T>::get_width() + FieldArithmeticAuxCols::<T>::get_width()
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -96,13 +105,13 @@ impl<T: Field> FieldArithmeticAuxCols<T> {
 
     pub fn flatten(&self) -> Vec<T> {
         vec![
-            self.opcode_0bit,
-            self.opcode_1bit,
+            self.opcode_lo,
+            self.opcode_hi,
             self.is_mul,
             self.is_div,
-            self.lin_term,
-            self.mul_result,
-            self.div_result,
+            self.sum_or_diff,
+            self.product,
+            self.quotient,
         ]
     }
 }

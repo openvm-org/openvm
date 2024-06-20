@@ -12,6 +12,7 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 
+/// Function for testing that generates a random program consisting only of field arithmetic operations.
 fn generate_arith_program(len_ops: usize) -> ProgramExecution<BabyBear> {
     let mut rng = create_seeded_rng();
     let ops = (0..len_ops)
@@ -72,6 +73,7 @@ fn au_air_test() {
     )
     .expect("Verification failed");
 
+    // negative test pranking each IO value
     for height in 0..(prog.arithmetic_ops.len()) {
         for width in 0..FieldArithmeticIOCols::<BabyBear>::get_width() {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
