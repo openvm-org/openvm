@@ -41,7 +41,12 @@ pub struct CPUOptions {
 
 impl CPUOptions {
     pub fn num_operations(&self) -> usize {
-        NUM_CORE_OPERATIONS + if self.field_arithmetic_enabled { NUM_ARITHMETIC_OPERATIONS } else { 0 }
+        NUM_CORE_OPERATIONS
+            + if self.field_arithmetic_enabled {
+                NUM_ARITHMETIC_OPERATIONS
+            } else {
+                0
+            }
     }
 }
 

@@ -10,13 +10,13 @@ impl<F: PrimeField64> AirBridge<F> for ProgramAir<F> {
     fn receives(&self) -> Vec<Interaction<F>> {
         let width = ProgramPreprocessedCols::<F>::get_width();
 
-        let interactions = vec![
-            Interaction {
-                fields: (0..width).map(|col| VirtualPairCol::single_preprocessed(col)).collect(),
-                count: VirtualPairCol::single_main(0),
-                argument_index: READ_INSTRUCTION_BUS,
-            },
-        ];
+        let interactions = vec![Interaction {
+            fields: (0..width)
+                .map(|col| VirtualPairCol::single_preprocessed(col))
+                .collect(),
+            count: VirtualPairCol::single_main(0),
+            argument_index: READ_INSTRUCTION_BUS,
+        }];
 
         interactions
     }

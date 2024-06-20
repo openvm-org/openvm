@@ -23,7 +23,10 @@ impl<F: Field> BaseAir<F> for ProgramAir<F> {
             };
             rows.extend(preprocessed_cols.flatten());
         }
-        Some(RowMajorMatrix::new(rows, ProgramPreprocessedCols::<F>::get_width()))
+        Some(RowMajorMatrix::new(
+            rows,
+            ProgramPreprocessedCols::<F>::get_width(),
+        ))
     }
 }
 

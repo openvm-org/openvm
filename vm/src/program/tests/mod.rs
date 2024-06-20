@@ -6,7 +6,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::cpu::{CPUChip, /*ARITHMETIC_BUS, MEMORY_BUS,*/ READ_INSTRUCTION_BUS};
 
-use crate::cpu::{OpCode::*, trace::Instruction};
+use crate::cpu::{trace::Instruction, OpCode::*};
 use crate::program::columns::ProgramPreprocessedCols;
 
 use super::ProgramAir;
@@ -26,10 +26,7 @@ fn test_flatten_fromslice_roundtrip() {
     assert_eq!(num_cols, flattened.len());
 }
 
-fn interaction_test(
-    is_field_arithmetic_enabled: bool,
-    program: Vec<Instruction<BabyBear>>,
-) {
+fn interaction_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>) {
     let cpu_chip = CPUChip::new(is_field_arithmetic_enabled);
     let execution = cpu_chip.generate_trace(program.clone());
 
@@ -52,11 +49,8 @@ fn interaction_test(
     }
     let counter_trace = RowMajorMatrix::new(program_rows, 8);
 
-    run_simple_test_no_pis(
-        vec![&air, &counter_air],
-        vec![trace, counter_trace],
-    )
-    .expect("Verification failed");
+    run_simple_test_no_pis(vec![&air, &counter_air], vec![trace, counter_trace])
+        .expect("Verification failed");
 }
 
 // integration test
@@ -125,21 +119,77 @@ fn test_cpu() {
 
     let program = vec![
         // word[0]_1 <- word[n]_0
-        Instruction { opcode: STOREW, op_a: nf, op_b: zero, op_c: zero, as_b: zero, as_c: one },
+        Instruction {
+            opcode: STOREW,
+            op_a: nf,
+            op_b: zero,
+            op_c: zero,
+            as_b: zero,
+            as_c: one,
+        },
         // word[0]_1 <- word[n]_0
-        Instruction { opcode: STOREW, op_a: nf, op_b: zero, op_c: zero, as_b: zero, as_c: one },
+        Instruction {
+            opcode: STOREW,
+            op_a: nf,
+            op_b: zero,
+            op_c: zero,
+            as_b: zero,
+            as_c: one,
+        },
         // word[1]_1 <- word[1]_1
-        Instruction { opcode: STOREW, op_a: one, op_b: one, op_c: zero, as_b: zero, as_c: one },
+        Instruction {
+            opcode: STOREW,
+            op_a: one,
+            op_b: one,
+            op_c: zero,
+            as_b: zero,
+            as_c: one,
+        },
         // if word[0]_1 == 0 then pc -= 4
-        Instruction { opcode: BEQ, op_a: zero, op_b: zero, op_c: neg_four, as_b: one, as_c: zero },
+        Instruction {
+            opcode: BEQ,
+            op_a: zero,
+            op_b: zero,
+            op_c: neg_four,
+            as_b: one,
+            as_c: zero,
+        },
         // word[0]_1 <- word[0]_1 - word[1]_1
-        Instruction { opcode: FSUB, op_a: zero, op_b: zero, op_c: one, as_b: one, as_c: one },
+        Instruction {
+            opcode: FSUB,
+            op_a: zero,
+            op_b: zero,
+            op_c: one,
+            as_b: one,
+            as_c: one,
+        },
         // word[2]_1 <- pc + 1, pc -= 2
-        Instruction { opcode: JAL, op_a: two, op_b: neg_two, op_c: zero, as_b: one, as_c: zero },
+        Instruction {
+            opcode: JAL,
+            op_a: two,
+            op_b: neg_two,
+            op_c: zero,
+            as_b: one,
+            as_c: zero,
+        },
         // word[2]_1 <- pc + 1, pc -= 2
-        Instruction { opcode: JAL, op_a: two, op_b: neg_two, op_c: zero, as_b: one, as_c: zero },
+        Instruction {
+            opcode: JAL,
+            op_a: two,
+            op_b: neg_two,
+            op_c: zero,
+            as_b: one,
+            as_c: zero,
+        },
         // word[2]_1 <- pc + 1, pc -= 2
-        Instruction { opcode: JAL, op_a: two, op_b: neg_two, op_c: zero, as_b: one, as_c: zero },
+        Instruction {
+            opcode: JAL,
+            op_a: two,
+            op_b: neg_two,
+            op_c: zero,
+            as_b: one,
+            as_c: zero,
+        },
     ];
 
     interaction_test(true, program.clone());
@@ -163,21 +213,77 @@ fn test_cpu_without_field_arithmetic() {
 
     let program = vec![
         // word[0]_1 <- word[5]_0
-        Instruction { opcode: STOREW, op_a: five, op_b: zero, op_c: zero, as_b: zero, as_c: one },
+        Instruction {
+            opcode: STOREW,
+            op_a: five,
+            op_b: zero,
+            op_c: zero,
+            as_b: zero,
+            as_c: one,
+        },
         // word[0]_1 <- word[5]_0
-        Instruction { opcode: STOREW, op_a: five, op_b: zero, op_c: zero, as_b: zero, as_c: one },
+        Instruction {
+            opcode: STOREW,
+            op_a: five,
+            op_b: zero,
+            op_c: zero,
+            as_b: zero,
+            as_c: one,
+        },
         // if word[0]_1 != 4 then pc += 2
-        Instruction { opcode: BNE, op_a: zero, op_b: four, op_c: two, as_b: one, as_c: zero },
+        Instruction {
+            opcode: BNE,
+            op_a: zero,
+            op_b: four,
+            op_c: two,
+            as_b: one,
+            as_c: zero,
+        },
         // word[2]_1 <- pc + 1, pc -= 2
-        Instruction { opcode: JAL, op_a: two, op_b: neg_two, op_c: zero, as_b: one, as_c: zero },
+        Instruction {
+            opcode: JAL,
+            op_a: two,
+            op_b: neg_two,
+            op_c: zero,
+            as_b: one,
+            as_c: zero,
+        },
         // if word[0]_1 == 5 then pc -= 5
-        Instruction { opcode: BEQ, op_a: zero, op_b: five, op_c: neg_five, as_b: one, as_c: zero },
+        Instruction {
+            opcode: BEQ,
+            op_a: zero,
+            op_b: five,
+            op_c: neg_five,
+            as_b: one,
+            as_c: zero,
+        },
         // if word[0]_1 == 5 then pc -= 5
-        Instruction { opcode: BEQ, op_a: zero, op_b: five, op_c: neg_five, as_b: one, as_c: zero },
+        Instruction {
+            opcode: BEQ,
+            op_a: zero,
+            op_b: five,
+            op_c: neg_five,
+            as_b: one,
+            as_c: zero,
+        },
         // if word[0]_1 == 5 then pc -= 5
-        Instruction { opcode: BEQ, op_a: zero, op_b: five, op_c: neg_five, as_b: one, as_c: zero },
+        Instruction {
+            opcode: BEQ,
+            op_a: zero,
+            op_b: five,
+            op_c: neg_five,
+            as_b: one,
+            as_c: zero,
+        },
         // if word[0]_1 == 5 then pc -= 5
-        Instruction { opcode: BEQ, op_a: zero, op_b: five, op_c: neg_five, as_b: one, as_c: zero },
+        Instruction {
+            opcode: BEQ,
+            op_a: zero,
+            op_b: five,
+            op_c: neg_five,
+            as_b: one,
+            as_c: zero,
+        },
     ];
 
     interaction_test(field_arithmetic_enabled, program.clone());
@@ -188,8 +294,22 @@ fn test_cpu_without_field_arithmetic() {
 #[should_panic(expected = "assertion `left == right` failed")]
 fn test_program_negative() {
     let program = vec![
-        Instruction { opcode: STOREW, op_a: BabyBear::neg_one(), op_b: BabyBear::zero(), op_c: BabyBear::zero(), as_b: BabyBear::zero(), as_c: BabyBear::one() },
-        Instruction { opcode: LOADW, op_a: BabyBear::neg_one(), op_b: BabyBear::zero(), op_c: BabyBear::zero(), as_b: BabyBear::one(), as_c: BabyBear::one() },
+        Instruction {
+            opcode: STOREW,
+            op_a: BabyBear::neg_one(),
+            op_b: BabyBear::zero(),
+            op_c: BabyBear::zero(),
+            as_b: BabyBear::zero(),
+            as_c: BabyBear::one(),
+        },
+        Instruction {
+            opcode: LOADW,
+            op_a: BabyBear::neg_one(),
+            op_b: BabyBear::zero(),
+            op_c: BabyBear::zero(),
+            as_b: BabyBear::one(),
+            as_c: BabyBear::one(),
+        },
     ];
 
     let cpu_chip = CPUChip::new(true);
@@ -215,9 +335,6 @@ fn test_program_negative() {
     let mut counter_trace = RowMajorMatrix::new(program_rows, 8);
     counter_trace.row_mut(1)[1] = BabyBear::zero();
 
-    run_simple_test_no_pis(
-        vec![&air, &counter_air],
-        vec![trace, counter_trace],
-    )
-    .expect("Incorrect failure mode");
+    run_simple_test_no_pis(vec![&air, &counter_air], vec![trace, counter_trace])
+        .expect("Incorrect failure mode");
 }
