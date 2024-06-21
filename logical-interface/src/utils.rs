@@ -219,6 +219,7 @@ pub fn test_macro_u8_vec() {
     assert_eq!(u8_vec!("0x010101", 6), vec![0, 0, 0, 1, 1, 1]);
     assert_eq!(u8_vec!("0x010101"), vec![1, 1, 1]);
     assert_eq!(u8_vec!(1), vec![1]);
+    assert_eq!(u8_vec!(257), vec![1, 1]);
     assert_eq!(u8_vec!([1, 2, 3], 5), vec![0, 0, 1, 2, 3]);
     assert_eq!(u8_vec!("010101", 6), vec![48, 49, 48, 49, 48, 49]);
     assert_eq!(u8_vec!([10, 10, 10]), vec![10, 10, 10]);
@@ -228,6 +229,8 @@ pub fn test_macro_u8_vec() {
     assert_eq!(u8_vec!("0x010101", len), vec![0, 1, 1, 1]);
     let len = 10;
     assert_eq!(u8_vec!("0x010101", len), vec![0, 0, 0, 0, 0, 0, 0, 1, 1, 1]);
+    let len = 6;
+    assert_eq!(u8_vec!(257, len), vec![0, 0, 0, 0, 1, 1]);
 }
 
 #[test]
