@@ -88,7 +88,6 @@ impl KeygenCommand {
         );
         let ops_sender = ExecutionAir::new(ops_bus_index, idx_len, data_len);
 
-        // i put a dummy max value here - to be changed
         let engine = config::baby_bear_poseidon2::default_engine(max_log_degree);
         let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 

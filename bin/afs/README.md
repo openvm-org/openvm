@@ -52,6 +52,14 @@ cargo run --release --bin afs -- verify --proof-file bin/afs/tests/data/input_fi
 
 Useful for reading/writing the .mockdb files. Run these commands from the root of the repository.
 
+### Describe
+
+List all tables and table metadata in a given mock database file. Set the --db-file (-d) flag.
+
+```bash
+cargo run --release --bin afs -- mock describe -d bin/afs/tests/data/afs_db.mockdb
+```
+
 ### Read
 
 Read from a local mock database file. Set the --db-file (-d), --table-id (-t), and print to stdout with the --print (-p) flag.
