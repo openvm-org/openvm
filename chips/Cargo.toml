@@ -27,6 +27,7 @@ parking_lot = "0.12.2"
 tracing = "0.1.40"
 itertools = "0.13.0"
 getset = "0.1.2"
+serde = { version = "1.0", default-features = false, features = ["derive"] }
 
 [dev-dependencies]
 p3-uni-stark = { workspace = true }

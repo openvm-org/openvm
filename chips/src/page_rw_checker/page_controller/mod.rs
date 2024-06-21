@@ -18,6 +18,7 @@ use afs_test_utils::engine::StarkEngine;
 use p3_field::{AbstractField, Field, PrimeField};
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use tracing::info_span;
 
 use super::{
     my_final_page::MyFinalPageAir, my_initial_page::MyInitialPageAir,
@@ -26,7 +27,7 @@ use super::{
 use crate::common::page::Page;
 use crate::range_gate::RangeCheckerGateChip;
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug, Copy)]
 pub enum OpType {
     Read = 0,
     Write = 1,
@@ -208,6 +209,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     where
         Val<SC>: PrimeField,
     {
+        let trace_span = info_span!("Trace generation").entered();
         let mut page = page.clone();
 
         assert!(!page.rows.is_empty());
@@ -239,7 +241,9 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             self.range_checker.clone(),
             final_write_indices,
         );
+        trace_span.exit();
 
+        let trace_commit_span = info_span!("Trace commitment").entered();
         let init_page_pdata = match init_page_pdata {
             Some(prover_data) => prover_data,
             None => Arc::new(trace_committer.commit(vec![init_page_trace.clone()])),
@@ -249,6 +253,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             Some(prover_data) => prover_data,
             None => Arc::new(trace_committer.commit(vec![final_page_trace.clone()])),
         };
+        trace_commit_span.exit();
 
         self.traces = Some(PageRWTraces {
             init_page_trace,
@@ -351,7 +356,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         trace_builder.load_trace(self.range_checker.generate_trace());
         trace_builder.load_trace(ops_sender_trace);
 
-        trace_builder.commit_current();
+        tracing::info_span!("Trace commitment").in_scope(|| trace_builder.commit_current());
 
         let partial_vk = partial_pk.partial_vk();
 
