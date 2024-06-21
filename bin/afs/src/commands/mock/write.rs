@@ -45,7 +45,15 @@ pub struct WriteCommand {
 impl WriteCommand {
     /// Execute the `mock read` command
     pub fn execute(&self, config: &PageConfig) -> Result<()> {
-        let mut db = if let Some(db_file_path) = &self.db_file_path {
+        let db_file_path = self
+            .db_file_path
+            .as_ref()
+            .or(self.output_db_file_path.as_ref());
+        let db_exists = db_file_path
+            .and_then(|path| std::fs::metadata(path).ok())
+            .is_some();
+        let mut db = if db_exists {
+            let db_file_path = db_file_path.unwrap();
             println!("db_file_path: {}", db_file_path);
             MockDb::from_file(db_file_path)
         } else {
@@ -53,7 +61,6 @@ impl WriteCommand {
                 TableMetadata::new(config.page.index_bytes, config.page.data_bytes);
             MockDb::new(default_table_metadata)
         };
-        dbg!(db.tables.keys());
 
         println!("afi_file_path: {}", self.afi_file_path);
         let instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
