@@ -1,4 +1,4 @@
-use crate::final_page::FinalPageAir;
+use crate::indexed_output_page_air::IndexedOutputPageAir;
 
 pub mod air;
 pub mod bridge;
@@ -9,7 +9,7 @@ pub mod trace;
 pub(super) struct IndexedPageWriteAir {
     page_bus_index: usize,
 
-    final_air: FinalPageAir,
+    final_air: IndexedOutputPageAir,
 }
 
 impl IndexedPageWriteAir {
@@ -23,7 +23,7 @@ impl IndexedPageWriteAir {
     ) -> Self {
         Self {
             page_bus_index,
-            final_air: FinalPageAir::new(
+            final_air: IndexedOutputPageAir::new(
                 range_bus_index,
                 idx_len,
                 data_len,

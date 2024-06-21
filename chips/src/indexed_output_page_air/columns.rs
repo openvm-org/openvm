@@ -2,21 +2,21 @@ use std::iter;
 
 use crate::{common::page_cols::PageCols, is_less_than_tuple::columns::IsLessThanTupleAuxCols};
 
-pub struct FinalPageCols<T> {
+pub struct IndexedOutputPageCols<T> {
     /// The columns for the page itself
     pub page_cols: PageCols<T>,
     /// The auxiliary columns used for ensuring sorting
-    pub aux_cols: FinalPageAuxCols<T>,
+    pub aux_cols: IndexedOutputPageAuxCols<T>,
 }
 
-impl<T: Clone> FinalPageCols<T> {
+impl<T: Clone> IndexedOutputPageCols<T> {
     pub fn from_slice(
         slc: &[T],
         idx_len: usize,
         data_len: usize,
         limb_bits: usize,
         decomp: usize,
-    ) -> FinalPageCols<T> {
+    ) -> IndexedOutputPageCols<T> {
         Self::from_partitioned_slice(
             &slc[..1 + idx_len + data_len],
             &slc[1 + idx_len + data_len..],
@@ -33,28 +33,28 @@ impl<T: Clone> FinalPageCols<T> {
         data_len: usize,
         limb_bits: usize,
         decomp: usize,
-    ) -> FinalPageCols<T> {
-        FinalPageCols {
+    ) -> IndexedOutputPageCols<T> {
+        IndexedOutputPageCols {
             page_cols: PageCols::from_slice(&page, idx_len, data_len),
-            aux_cols: FinalPageAuxCols::from_slice(&other, limb_bits, decomp, idx_len),
+            aux_cols: IndexedOutputPageAuxCols::from_slice(&other, limb_bits, decomp, idx_len),
         }
     }
 }
 
 #[derive(Clone)]
-pub struct FinalPageAuxCols<T> {
+pub struct IndexedOutputPageAuxCols<T> {
     pub lt_cols: IsLessThanTupleAuxCols<T>, // auxiliary columns used for lt_out
     pub lt_out: T, // this bit indicates whether the idx in this row is greater than the idx in the previous row
 }
 
-impl<T: Clone> FinalPageAuxCols<T> {
+impl<T: Clone> IndexedOutputPageAuxCols<T> {
     pub fn from_slice(
         slc: &[T],
         limb_bits: usize,
         decomp: usize,
         tuple_len: usize,
-    ) -> FinalPageAuxCols<T> {
-        FinalPageAuxCols {
+    ) -> IndexedOutputPageAuxCols<T> {
+        IndexedOutputPageAuxCols {
             lt_cols: IsLessThanTupleAuxCols::from_slice(
                 &slc[..slc.len() - 1],
                 vec![limb_bits; tuple_len],

@@ -21,7 +21,7 @@ use rand::Rng;
 fn test_single_page(
     engine: &BabyBearPoseidon2Engine,
     page: &Page,
-    final_page_chip: &super::FinalPageAir,
+    final_page_chip: &super::IndexedOutputPageAir,
     range_checker: Arc<RangeCheckerGateChip>,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
     partial_pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
@@ -69,7 +69,7 @@ fn final_page_chip_test() {
     let mut rng = create_seeded_rng();
     let range_bus_index = 0;
 
-    use super::FinalPageAir;
+    use super::IndexedOutputPageAir;
 
     let log_page_height = 3;
 
@@ -113,7 +113,7 @@ fn final_page_chip_test() {
 
     let mut page = Page::from_2d_vec(&page, idx_len, data_len);
 
-    let final_page_chip = FinalPageAir::new(
+    let final_page_chip = IndexedOutputPageAir::new(
         range_bus_index,
         idx_len,
         data_len,
