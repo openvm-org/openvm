@@ -17,17 +17,9 @@ pub struct PageParamsConfig {
     pub max_rw_ops: usize,
 }
 
-/// im keeping this here in case it is relevant
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SchemaConfig {
-    pub key_length: usize,
-    pub limb_size: usize,
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PageConfig {
     pub page: PageParamsConfig,
-    pub schema: SchemaConfig,
 }
 
 impl PageConfig {
