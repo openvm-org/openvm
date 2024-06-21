@@ -17,7 +17,7 @@ Run these commands from the root of the repository.
 Find all indexes from a tableId (-t) in a mockDb (-d) that are equal to some value (-v).
 
 ```bash
-cargo run --bin predicate -- eq -d bin/afs/tests/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050 
+cargo run --bin predicate -- eq -d bin/common/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050 
 ```
 
 ### gt (<)
@@ -25,7 +25,7 @@ cargo run --bin predicate -- eq -d bin/afs/tests/data/input_file_32_32.mockdb -t
 Find all indexes from a tableId (-t) in a mockDb (-d) that are greater than some value (-v).
 
 ```bash
-cargo run --bin predicate -- gt -d bin/afs/tests/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050 
+cargo run --bin predicate -- gt -d bin/common/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050 
 ```
 
 ### gte (<=)
@@ -33,7 +33,7 @@ cargo run --bin predicate -- gt -d bin/afs/tests/data/input_file_32_32.mockdb -t
 Find all indexes from a tableId (-t) in a mockDb (-d) that are greater than or equal to some value (-v).
 
 ```bash
-cargo run --bin predicate -- gte -d bin/afs/tests/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050 
+cargo run --bin predicate -- gte -d bin/common/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050 
 ```
 
 ### lt (<)
@@ -41,7 +41,7 @@ cargo run --bin predicate -- gte -d bin/afs/tests/data/input_file_32_32.mockdb -
 Find all indexes from a tableId (-t) in a mockDb (-d) that are less than some value (-v).
 
 ```bash
-cargo run --bin predicate -- lt -d bin/afs/tests/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050 
+cargo run --bin predicate -- lt -d bin/common/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050 
 ```
 
 ### lte (<=)
@@ -49,7 +49,7 @@ cargo run --bin predicate -- lt -d bin/afs/tests/data/input_file_32_32.mockdb -t
 Find all indexes from a tableId (-t) in a mockDb (-d) that are less than or equal to some value (-v).
 
 ```bash
-cargo run --bin predicate -- lte -d bin/afs/tests/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050 
+cargo run --bin predicate -- lte -d bin/common/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050 
 ```
 
 ## Full test
@@ -68,15 +68,15 @@ max_rw_ops = 256
 ```
 
 ```bash
-cargo run --release --bin afs -- mock write -f bin/afs/tests/data/test_input_file_32_32.afi -o bin/afs/tests/data/input_file_32_32.mockdb
+cargo run --release --bin afs -- mock write -f bin/common/data/test_input_file_32_32.afi -o bin/common/data/input_file_32_32.mockdb
 
-cargo run --bin predicate -- eq -d bin/afs/tests/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050
+cargo run --bin predicate -- eq -d bin/common/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050
 
-cargo run --bin predicate -- gt -d bin/afs/tests/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050 
+cargo run --bin predicate -- gt -d bin/common/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050 
 
-cargo run --bin predicate -- gte -d bin/afs/tests/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050 
+cargo run --bin predicate -- gte -d bin/common/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050 
 
-cargo run --bin predicate -- lt -d bin/afs/tests/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050 
+cargo run --bin predicate -- lt -d bin/common/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050 
 
-cargo run --bin predicate -- lte -d bin/afs/tests/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050 
+cargo run --bin predicate -- lte -d bin/common/data/input_file_32_32.mockdb -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -v 19000050 
 ```
