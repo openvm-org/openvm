@@ -96,6 +96,13 @@ pub fn fixed_bytes_to_field_vec(value: Vec<u8>) -> Vec<u32> {
         .collect()
 }
 
+/// Converts a number, string, or array into a big endian Vec<u8> with optional target length (left-padded with zeros)
+/// number: converts number directly to big endian bytes
+/// string: converts string to big endian bytes:
+///   - if string starts with "0x", it is treated as a hex value
+///   - otherwise, it is treated as string literal and each letter is converted to its byte representation
+/// array: converts each element of the array to big endian bytes
+/// output: Vec<u8>
 #[macro_export]
 macro_rules! u8_vec {
     ( $s:literal, $len:expr ) => {
@@ -147,11 +154,19 @@ macro_rules! u8_vec {
     };
 }
 
+/// Converts a number, string, or array into its big endian u16 representation but as a Vec<u32> with each
+///   element's 2 MSBs set to 0 and 2 LSBs set to the 2 bytes of the u16.
+/// number: converts number directly to big endian
+/// string: converts string to big endian:
+///   - if string starts with "0x", it is treated as a hex value
+///   - otherwise, it is treated as string literal and each letter is converted to its byte representation
+/// array: converts each element of the array to big endian
+/// output: Vec<u32>
 #[macro_export]
-macro_rules! field_vec {
+macro_rules! u16_vec {
     ( $s:literal, $len:expr ) => {
         {
-            let v = field_vec!($s);
+            let v = u16_vec!($s);
             let zeros_len = $len - v.len();
             let mut fixed_bytes = vec![0; zeros_len];
             fixed_bytes.extend_from_slice(&v);
@@ -176,7 +191,7 @@ macro_rules! field_vec {
     };
     ( [$($x:expr),*], $len: expr ) => {
         {
-            let bytes_vec = field_vec!([$($x),*]);
+            let bytes_vec = u16_vec!([$($x),*]);
             let zeros_len = $len - bytes_vec.len();
             let mut fixed_bytes = vec![0; zeros_len];
             fixed_bytes.extend_from_slice(&bytes_vec);
@@ -208,13 +223,14 @@ pub fn test_macro_u8_vec() {
 }
 
 #[test]
-pub fn test_macro_field_vec() {
-    assert_eq!(field_vec!(5), vec![5]);
-    assert_eq!(field_vec!("0x0101"), vec![257]);
-    assert_eq!(field_vec!("0x0101", 6), vec![0, 0, 0, 0, 0, 257]);
-    assert_eq!(field_vec!([10, 10, 10]), vec![10, 10, 10]);
+pub fn test_macro_u16_vec() {
+    assert_eq!(u16_vec!(5), vec![5]);
+    assert_eq!(u16_vec!("0x0101"), vec![257]);
+    assert_eq!(u16_vec!("0x0101", 6), vec![0, 0, 0, 0, 0, 257]);
+    assert_eq!(u16_vec!([10, 10, 10]), vec![10, 10, 10]);
+    assert_eq!(u16_vec!("010101", 6), vec![0, 0, 0, 12337, 12337, 12337]);
     assert_eq!(
-        field_vec!("0x003700370037", 8),
+        u16_vec!("0x003700370037", 8),
         vec![0, 0, 0, 0, 0, 55, 55, 55]
     );
 }
