@@ -17,14 +17,26 @@ impl<T: Clone> FinalPageCols<T> {
         limb_bits: usize,
         decomp: usize,
     ) -> FinalPageCols<T> {
+        Self::from_partitioned_slice(
+            &slc[..1 + idx_len + data_len],
+            &slc[1 + idx_len + data_len..],
+            idx_len,
+            data_len,
+            limb_bits,
+            decomp,
+        )
+    }
+    pub fn from_partitioned_slice(
+        page: &[T],
+        other: &[T],
+        idx_len: usize,
+        data_len: usize,
+        limb_bits: usize,
+        decomp: usize,
+    ) -> FinalPageCols<T> {
         FinalPageCols {
-            page_cols: PageCols::from_slice(&slc[..1 + idx_len + data_len], idx_len, data_len),
-            aux_cols: FinalPageAuxCols::from_slice(
-                &slc[1 + idx_len + data_len..],
-                limb_bits,
-                decomp,
-                idx_len,
-            ),
+            page_cols: PageCols::from_slice(&page, idx_len, data_len),
+            aux_cols: FinalPageAuxCols::from_slice(&other, limb_bits, decomp, idx_len),
         }
     }
 }
