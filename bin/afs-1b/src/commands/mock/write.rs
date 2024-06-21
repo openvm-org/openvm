@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use afs_chips::pagebtree::PageBTree;
 use afs_stark_backend::prover::{trace::TraceCommitter, MultiTraceStarkProver};
 use afs_test_utils::{
@@ -51,6 +53,7 @@ pub struct WriteCommand {
 impl WriteCommand {
     /// Execute the `mock read` command
     pub fn execute(&self, config: &MultitierPageConfig) -> Result<()> {
+        let start1 = Instant::now();
         let idx_len = (config.page.index_bytes + 1) / 2 as usize;
         let data_len = (config.page.data_bytes + 1) / 2 as usize;
 
@@ -78,7 +81,9 @@ impl WriteCommand {
             ),
         };
         load_input_file(&mut db, &instructions);
-
+        let duration = start1.elapsed();
+        println!("Wrote in memory table operations {:?}", duration);
+        let start2 = Instant::now();
         if self.output_table_id.is_some() {
             let page_height = config.page.height;
 
@@ -94,6 +99,8 @@ impl WriteCommand {
             let mut trace_committer = TraceCommitter::new(prover.pcs());
             db.commit::<BabyBearPoseidon2Config>(&mut trace_committer, self.db_folder.clone());
         }
+        let duration = start2.elapsed();
+        println!("Committed table operations in {:?}", duration);
 
         Ok(())
     }
