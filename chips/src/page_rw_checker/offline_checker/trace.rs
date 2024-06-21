@@ -202,7 +202,7 @@ impl OfflineChecker {
                     false,
                     true,
                     op.clk,
-                    op.op_type.clone() as u8,
+                    op.op_type as u8,
                     &mut last_idx,
                     &mut last_data,
                     &mut last_clk,
@@ -259,11 +259,12 @@ impl OfflineChecker {
             )
         });
 
-        tracing::debug!("Offline Checker trace by row: ");
-        for row in &rows {
-            let cols = OfflineCheckerCols::from_slice(row, self);
-            tracing::debug!("{:?}", cols);
-        }
+        tracing::debug_span!("Offline Checker trace by row: ").in_scope(|| {
+            for row in &rows {
+                let cols = OfflineCheckerCols::from_slice(row, self);
+                tracing::debug!("{:?}", cols);
+            }
+        });
 
         RowMajorMatrix::new(rows.concat(), self.air_width())
     }

@@ -4,6 +4,7 @@ members = [
     "stark-backend",
     "test-utils",
     "derive",
+    "bin/afs",
     "logical-interface",
 ]
 resolver = "2"
