@@ -96,32 +96,6 @@ pub fn fixed_bytes_to_field_vec(value: Vec<u8>) -> Vec<u32> {
         .collect()
 }
 
-pub fn parse_literal_to_bytes(s: &str) -> Vec<u8> {
-    let s = stringify!(s);
-    if s.starts_with('"') {
-        // handle str
-        let s = s.strip_prefix('"').unwrap();
-        let s = s.strip_suffix('"').unwrap();
-        if s.starts_with("0x") {
-            let hex_str = s.strip_prefix("0x").unwrap();
-            hex::decode(hex_str).unwrap()
-        } else {
-            bytes_to_be_vec(s.as_bytes(), s.len())
-        }
-    } else {
-        // handle number
-        let num = s.parse::<u128>().unwrap();
-        let num = num.to_be_bytes().to_vec();
-        // remove leading zeros
-        num.iter().fold(Vec::<u8>::new(), |mut acc, &x| {
-            if x != 0 || !acc.is_empty() {
-                acc.push(x);
-            }
-            acc
-        })
-    }
-}
-
 #[macro_export]
 macro_rules! u8_vec {
     ( $s:literal, $len:expr ) => {
