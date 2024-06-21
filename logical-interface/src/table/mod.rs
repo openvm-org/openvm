@@ -109,6 +109,8 @@ impl Table {
     }
 
     pub fn to_page(&self, page_index_bytes: usize, page_data_bytes: usize, height: usize) -> Page {
+        assert_eq!(self.metadata.index_bytes, page_index_bytes);
+        assert_eq!(self.metadata.data_bytes, page_data_bytes);
         if self.body.len() > height {
             panic!(
                 "Table height {} cannot be bigger than `height` {}",

@@ -44,15 +44,16 @@ pub struct WriteCommand {
 /// `mock read` subcommand
 impl WriteCommand {
     /// Execute the `mock read` command
-    pub fn execute(self, config: &PageConfig) -> Result<()> {
-        let mut db = if let Some(db_file_path) = self.db_file_path {
+    pub fn execute(&self, config: &PageConfig) -> Result<()> {
+        let mut db = if let Some(db_file_path) = &self.db_file_path {
             println!("db_file_path: {}", db_file_path);
-            MockDb::from_file(&db_file_path)
+            MockDb::from_file(db_file_path)
         } else {
             let default_table_metadata =
                 TableMetadata::new(config.page.index_bytes, config.page.data_bytes);
             MockDb::new(default_table_metadata)
         };
+        dbg!(db.tables.keys());
 
         println!("afi_file_path: {}", self.afi_file_path);
         let instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
@@ -70,8 +71,8 @@ impl WriteCommand {
             }
         }
 
-        if let Some(output_db_file_path) = self.output_db_file_path {
-            db.save_to_file(&output_db_file_path)?;
+        if let Some(output_db_file_path) = &self.output_db_file_path {
+            db.save_to_file(output_db_file_path)?;
         }
 
         Ok(())

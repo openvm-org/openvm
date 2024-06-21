@@ -24,7 +24,7 @@ pub struct AfiCommand {
 /// `mock afi` subcommand
 impl AfiCommand {
     /// Execute the `mock afi` command
-    pub fn execute(self) -> Result<()> {
+    pub fn execute(&self) -> Result<()> {
         println!("afi_file_path: {}", self.afi_file_path);
         let instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
         if !self.silent {

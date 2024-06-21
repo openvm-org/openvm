@@ -107,6 +107,15 @@ impl<'a> AfsInterface<'a> {
     pub fn get_table(&mut self, table_id: String) -> Option<&Table> {
         let table_id_bytes = string_to_table_id(table_id);
         let db_table = self.db_ref.get_table(table_id_bytes)?;
+        if self.index_bytes != db_table.db_table_metadata.index_bytes
+            || self.data_bytes != db_table.db_table_metadata.data_bytes
+        {
+            println!(
+                "Table index bytes {}, data bytes {} does not match config",
+                db_table.db_table_metadata.index_bytes, db_table.db_table_metadata.data_bytes
+            );
+            return None;
+        }
         self.current_table = Some(Table::from_db_table(
             db_table,
             self.index_bytes,
