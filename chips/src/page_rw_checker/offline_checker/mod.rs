@@ -18,8 +18,8 @@ pub struct OfflineChecker {
     data_len: usize,
     idx_decomp: usize,
 
-    is_equal_idx_chip: IsEqualVecAir,
-    lt_idx_clk_chip: IsLessThanTupleAir,
+    is_equal_idx_air: IsEqualVecAir,
+    lt_idx_clk_air: IsLessThanTupleAir,
 }
 
 impl OfflineChecker {
@@ -40,8 +40,8 @@ impl OfflineChecker {
             idx_len,
             data_len,
             idx_decomp,
-            is_equal_idx_chip: IsEqualVecAir::new(idx_len),
-            lt_idx_clk_chip: IsLessThanTupleAir::new(
+            is_equal_idx_air: IsEqualVecAir::new(idx_len),
+            lt_idx_clk_air: IsLessThanTupleAir::new(
                 range_bus_index,
                 [vec![idx_limb_bits; idx_len], vec![clk_bits]].concat(),
                 idx_decomp,

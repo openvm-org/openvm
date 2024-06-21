@@ -104,7 +104,7 @@ where
             ),
             lt_aux: IsLessThanTupleAuxCols::from_slice(
                 &slc[13 + page_row_width + 2 * oc.idx_len..],
-                oc.lt_idx_clk_chip.limb_bits(),
+                oc.lt_idx_clk_air.limb_bits(),
                 oc.idx_decomp,
                 oc.idx_len + 1,
             ),
@@ -116,7 +116,7 @@ where
             + oc.data_len
             + IsEqualVecAuxCols::<usize>::get_width(oc.idx_len)
             + IsLessThanTupleAuxCols::<usize>::get_width(
-                oc.lt_idx_clk_chip.limb_bits(),
+                oc.lt_idx_clk_air.limb_bits(),
                 oc.idx_decomp,
                 oc.idx_len + 1,
             )

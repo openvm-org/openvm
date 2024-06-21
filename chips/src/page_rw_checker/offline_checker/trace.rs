@@ -71,7 +71,7 @@ impl OfflineChecker {
             let last_clk = my_last_clk;
 
             let lt_cols = LocalTraceInstructions::generate_trace_row(
-                &self.lt_idx_clk_chip,
+                &self.lt_idx_clk_air,
                 (
                     last_idx
                         .iter()
@@ -95,7 +95,7 @@ impl OfflineChecker {
             let cur_idx = to_field_vec(cur_idx.to_vec());
 
             let is_equal_idx_cols = LocalTraceInstructions::generate_trace_row(
-                &self.is_equal_idx_chip,
+                &self.is_equal_idx_air,
                 (last_idx, cur_idx),
             );
 

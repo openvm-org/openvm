@@ -102,7 +102,7 @@ where
         );
 
         SubAir::eval(
-            &self.is_equal_idx_chip,
+            &self.is_equal_idx_air,
             &mut builder.when_transition(),
             is_equal_idx_cols.io,
             is_equal_idx_cols.aux,
@@ -126,7 +126,7 @@ where
         };
 
         SubAir::eval(
-            &self.lt_idx_clk_chip,
+            &self.lt_idx_clk_air,
             &mut builder.when_transition(),
             lt_io_cols,
             next_cols.lt_aux,

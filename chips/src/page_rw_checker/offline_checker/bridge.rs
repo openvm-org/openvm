@@ -50,7 +50,7 @@ impl<F: PrimeField> SubAirBridge<F> for OfflineChecker {
         }];
 
         interactions.extend(SubAirBridge::sends(
-            &self.lt_idx_clk_chip,
+            &self.lt_idx_clk_air,
             IsLessThanTupleCols {
                 io: IsLessThanTupleIOCols {
                     x: vec![usize::MAX; 1 + self.idx_len],
