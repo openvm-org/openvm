@@ -11,14 +11,13 @@ use afs_test_utils::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
     page_config::PageConfig,
 };
-use alloy_primitives::U256;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{
     afs_interface::AfsInterface,
     mock_db::MockDb,
     table::{types::TableId, Table},
-    utils::{fixed_bytes_to_field_vec, string_to_fixed_bytes_be_vec},
+    utils::{fixed_bytes_to_field_vec, string_to_be_vec},
 };
 use p3_util::log2_strict_usize;
 
@@ -82,10 +81,10 @@ pub fn execute_predicate_common(
     let idx_decomp = log2_strict_usize(page_height).max(8);
 
     let mut db = MockDb::from_file(args.db_file_path.unwrap().as_str());
-    let mut interface = AfsInterface::<U256, U256>::new(&mut db);
+    let mut interface = AfsInterface::new(config.page.index_bytes, config.page.data_bytes, &mut db);
     let table_id = args.table_id;
     let table = interface.get_table(table_id.clone()).unwrap();
-    let page_input = table.to_page(page_height);
+    let page_input = table.to_page(config.page.index_bytes, config.page.data_bytes, page_height);
     let value = args.value;
 
     // Handle the page and predicate in ZK and get the resulting page back
@@ -101,7 +100,7 @@ pub fn execute_predicate_common(
     );
 
     let page_width = 1 + idx_len + data_len;
-    let value = string_to_fixed_bytes_be_vec(value, config.page.index_bytes);
+    let value = string_to_be_vec(value, config.page.index_bytes);
     let value = fixed_bytes_to_field_vec(value);
     let page_output =
         page_controller.gen_output(page_input.clone(), value.clone(), page_width, comp);
@@ -145,7 +144,12 @@ pub fn execute_predicate_common(
 
     // Convert back to a Table
     let table_id_bytes = TableId::from_str(table_id.as_str())?;
-    let table_output = Table::<U256, U256>::from_page(table_id_bytes, page_output);
+    let table_output = Table::from_page(
+        table_id_bytes,
+        page_output,
+        config.page.index_bytes,
+        config.page.data_bytes,
+    );
 
     let duration = start.elapsed();
     // Save the output to a file or print it
