@@ -119,7 +119,7 @@ fn air_test_custom_execution(
 fn air_test_custom_execution_with_failure(
     is_field_arithmetic_enabled: bool,
     execution: ProgramExecution<BabyBear>,
-    should_fail: bool
+    should_fail: bool,
 ) {
     let chip = CPUChip::new(is_field_arithmetic_enabled);
     let trace = execution.trace();
@@ -359,7 +359,9 @@ fn test_cpu_negative_wrong_pc_check() {
 }
 
 #[test]
-#[should_panic(expected = "assertion `left == right` failed: constraints had nonzero value on row 0")]
+#[should_panic(
+    expected = "assertion `left == right` failed: constraints had nonzero value on row 0"
+)]
 fn test_cpu_negative_hasnt_terminated() {
     let program = vec![
         // word[0]_1 <- word[6]_0
@@ -389,7 +391,9 @@ fn test_cpu_negative_secret_write() {
     let mut execution = chip.generate_trace(program);
 
     let is_zero_air = IsZeroAir;
-    let mut is_zero_trace = is_zero_air.generate_trace(vec![AbstractField::one()]).clone();
+    let mut is_zero_trace = is_zero_air
+        .generate_trace(vec![AbstractField::one()])
+        .clone();
     let is_zero_aux = is_zero_trace.row_mut(0)[2];
 
     execution.trace_rows[0].aux.write = MemoryAccessCols {
@@ -398,10 +402,12 @@ fn test_cpu_negative_secret_write() {
         is_immediate: AbstractField::zero(),
         is_zero_aux,
         address: AbstractField::zero(),
-        data: AbstractField::from_canonical_usize(115)
+        data: AbstractField::from_canonical_usize(115),
     };
 
-    execution.memory_accesses.push(MemoryAccess::from_isize(0, OpType::Write, 1, 0, 115));
+    execution
+        .memory_accesses
+        .push(MemoryAccess::from_isize(0, OpType::Write, 1, 0, 115));
 
     air_test_custom_execution(true, execution);
 }

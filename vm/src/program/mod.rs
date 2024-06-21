@@ -28,7 +28,7 @@ impl<F: PrimeField64> ProgramAir<F> {
             // as_b should be nonzero so we don't write to immediate (may be unsupported)
             program.push(Instruction::from_isize(JAL, 0, 0, 0, 1, 0));
         }
-        
+
         Self { program }
     }
 }
