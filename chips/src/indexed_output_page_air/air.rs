@@ -4,8 +4,8 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::{
-    columns::{FinalPageAuxCols, FinalPageCols},
-    FinalPageAir,
+    columns::{IndexedOutputPageAuxCols, IndexedOutputPageCols},
+    IndexedOutputPageAir,
 };
 use crate::{
     common::page_cols::PageCols,
@@ -17,17 +17,17 @@ use crate::{
     utils::{implies, or},
 };
 
-impl<F: Field> BaseAir<F> for FinalPageAir {
+impl<F: Field> BaseAir<F> for IndexedOutputPageAir {
     fn width(&self) -> usize {
         self.air_width()
     }
 }
 
-impl AirConfig for FinalPageAir {
-    type Cols<T> = FinalPageCols<T>;
+impl AirConfig for IndexedOutputPageAir {
+    type Cols<T> = IndexedOutputPageCols<T>;
 }
 
-impl<AB: PartitionedAirBuilder> Air<AB> for FinalPageAir
+impl<AB: PartitionedAirBuilder> Air<AB> for IndexedOutputPageAir
 where
     AB::M: Clone,
 {
@@ -52,7 +52,7 @@ where
         // The auxiliary columns to compare local index and next index are stored in the next row
         let aux_next = aux_trace.row_slice(1);
 
-        let aux_next_cols = FinalPageAuxCols::from_slice(
+        let aux_next_cols = IndexedOutputPageAuxCols::from_slice(
             &aux_next[0..self.aux_width()],
             self.idx_limb_bits,
             self.idx_decomp,
@@ -68,9 +68,9 @@ where
     }
 }
 
-impl<AB: AirBuilder> SubAir<AB> for FinalPageAir {
+impl<AB: AirBuilder> SubAir<AB> for IndexedOutputPageAir {
     type IoView = [PageCols<AB::Var>; 2];
-    type AuxView = FinalPageAuxCols<AB::Var>;
+    type AuxView = IndexedOutputPageAuxCols<AB::Var>;
 
     /// Ensuring the page is in the proper format: allocated rows come first
     /// and are sorted by idx, which are distinct. Moreover `idx` and `data`

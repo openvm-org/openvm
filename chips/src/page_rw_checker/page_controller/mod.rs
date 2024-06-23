@@ -21,8 +21,7 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::info_span;
 
 use super::{
-    my_final_page::MyFinalPageAir, my_initial_page::MyInitialPageAir,
-    offline_checker::OfflineChecker,
+    final_page::IndexedPageWriteAir, initial_page::PageReadAir, offline_checker::OfflineChecker,
 };
 use crate::common::page::Page;
 use crate::range_gate::RangeCheckerGateChip;
@@ -132,9 +131,9 @@ pub struct PageController<SC: StarkGenericConfig>
 where
     Val<SC>: AbstractField,
 {
-    init_chip: MyInitialPageAir,
+    init_chip: PageReadAir,
     offline_checker: OfflineChecker,
-    final_chip: MyFinalPageAir,
+    final_chip: IndexedPageWriteAir,
 
     traces: Option<PageRWTraces<Val<SC>>>,
     page_commitments: Option<PageCommitments<SC>>,
@@ -156,7 +155,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         Val<SC>: Field,
     {
         Self {
-            init_chip: MyInitialPageAir::new(page_bus_index, idx_len, data_len),
+            init_chip: PageReadAir::new(page_bus_index, idx_len, data_len),
             offline_checker: OfflineChecker::new(
                 page_bus_index,
                 range_bus_index,
@@ -167,7 +166,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
                 Val::<SC>::bits() - 1,
                 idx_decomp,
             ),
-            final_chip: MyFinalPageAir::new(
+            final_chip: IndexedPageWriteAir::new(
                 page_bus_index,
                 range_bus_index,
                 idx_len,

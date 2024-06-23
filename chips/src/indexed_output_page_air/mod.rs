@@ -9,7 +9,7 @@ pub mod trace;
 pub mod tests;
 
 #[derive(Clone)]
-pub struct FinalPageAir {
+pub struct IndexedOutputPageAir {
     range_bus_index: usize,
 
     pub idx_len: usize,
@@ -19,7 +19,7 @@ pub struct FinalPageAir {
     pub idx_decomp: usize,
 }
 
-impl FinalPageAir {
+impl IndexedOutputPageAir {
     pub fn new(
         range_bus_index: usize,
         idx_len: usize,
