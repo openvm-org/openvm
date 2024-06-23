@@ -34,7 +34,7 @@ jobs:
     runs-on: ${{ needs.start-runner.outputs.label }} # run the job on the newly created runner
     steps:
       - name: Hello World
-        run: echo 'Hello World!'
+        run: echo 'Hello World!!'
   stop-runner:
     name: Stop self-hosted EC2 runner
     needs:
