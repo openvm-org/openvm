@@ -14,7 +14,7 @@ impl<T: Clone> IndexedOutputPageCols<T> {
         slc: &[T],
         idx_len: usize,
         data_len: usize,
-        limb_bits: usize,
+        idx_limb_bits: usize,
         decomp: usize,
     ) -> IndexedOutputPageCols<T> {
         Self::from_partitioned_slice(
@@ -22,7 +22,7 @@ impl<T: Clone> IndexedOutputPageCols<T> {
             &slc[1 + idx_len + data_len..],
             idx_len,
             data_len,
-            limb_bits,
+            idx_limb_bits,
             decomp,
         )
     }
@@ -31,12 +31,12 @@ impl<T: Clone> IndexedOutputPageCols<T> {
         other: &[T],
         idx_len: usize,
         data_len: usize,
-        limb_bits: usize,
+        idx_limb_bits: usize,
         decomp: usize,
     ) -> IndexedOutputPageCols<T> {
         IndexedOutputPageCols {
-            page_cols: PageCols::from_slice(&page, idx_len, data_len),
-            aux_cols: IndexedOutputPageAuxCols::from_slice(&other, limb_bits, decomp, idx_len),
+            page_cols: PageCols::from_slice(page, idx_len, data_len),
+            aux_cols: IndexedOutputPageAuxCols::from_slice(other, idx_limb_bits, decomp, idx_len),
         }
     }
 }
@@ -50,16 +50,16 @@ pub struct IndexedOutputPageAuxCols<T> {
 impl<T: Clone> IndexedOutputPageAuxCols<T> {
     pub fn from_slice(
         slc: &[T],
-        limb_bits: usize,
+        idx_limb_bits: usize,
         decomp: usize,
-        tuple_len: usize,
+        idx_len: usize,
     ) -> IndexedOutputPageAuxCols<T> {
         IndexedOutputPageAuxCols {
             lt_cols: IsLessThanTupleAuxCols::from_slice(
                 &slc[..slc.len() - 1],
-                vec![limb_bits; tuple_len],
+                vec![idx_limb_bits; idx_len],
                 decomp,
-                tuple_len,
+                idx_len,
             ),
             lt_out: slc[slc.len() - 1].clone(),
         }

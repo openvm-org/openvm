@@ -1,8 +1,8 @@
 use crate::indexed_output_page_air::{columns::IndexedOutputPageCols, IndexedOutputPageAir};
 
 pub struct IndexedPageWriteCols<T> {
-    /// The columns for FinalPageAir, which include the page itself
-    /// and the extra columns for ensuting sorting
+    /// The columns for IndexedOutputPageAir, which include the page itself
+    /// and the extra columns for ensuring sorting
     pub final_page_cols: IndexedOutputPageCols<T>,
     /// The multiplicity with which a row is received on the page_bus
     pub rcv_mult: T,
@@ -23,7 +23,7 @@ impl<T: Clone> IndexedPageWriteCols<T> {
     ) -> Self {
         Self {
             final_page_cols: IndexedOutputPageCols::from_partitioned_slice(
-                &page,
+                page,
                 &other[..other.len() - 1],
                 final_air.idx_len,
                 final_air.data_len,
