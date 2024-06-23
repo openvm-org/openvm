@@ -4,7 +4,7 @@ use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use super::{columns::FinalPageAuxCols, FinalPageAir};
+use super::{columns::IndexedOutputPageAuxCols, IndexedOutputPageAir};
 use crate::{
     common::page::Page,
     is_less_than_tuple::{columns::IsLessThanTupleCols, IsLessThanTupleAir},
@@ -12,7 +12,7 @@ use crate::{
     sub_chip::LocalTraceInstructions,
 };
 
-impl FinalPageAir {
+impl IndexedOutputPageAir {
     /// The trace is the whole page (including the is_alloc column)
     pub fn gen_page_trace<SC: StarkGenericConfig>(&self, page: &Page) -> RowMajorMatrix<Val<SC>>
     where
@@ -53,7 +53,7 @@ impl FinalPageAir {
                 (prv_idx, cur_idx, range_checker.clone()),
             );
 
-            let page_aux_cols = FinalPageAuxCols {
+            let page_aux_cols = IndexedOutputPageAuxCols {
                 lt_cols: lt_cols.aux,
                 lt_out: lt_cols.io.tuple_less_than,
             };

@@ -1,13 +1,13 @@
 pub mod air;
 pub mod bridge;
 
-pub struct MyInitialPageAir {
+pub struct PageReadAir {
     page_bus: usize,
     idx_len: usize,
     data_len: usize,
 }
 
-impl MyInitialPageAir {
+impl PageReadAir {
     pub fn new(page_bus: usize, idx_len: usize, data_len: usize) -> Self {
         Self {
             page_bus,

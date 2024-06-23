@@ -1,7 +1,7 @@
 use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_field::PrimeField;
 
-use super::{columns::FinalPageCols, FinalPageAir};
+use super::{columns::IndexedOutputPageCols, IndexedOutputPageAir};
 use crate::{
     is_less_than_tuple::{
         columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
@@ -10,9 +10,9 @@ use crate::{
     sub_chip::SubAirBridge,
 };
 
-impl<F: PrimeField> SubAirBridge<F> for FinalPageAir {
+impl<F: PrimeField> SubAirBridge<F> for IndexedOutputPageAir {
     /// Sends interactions required by IsLessThanTuple SubAir
-    fn sends(&self, col_indices: FinalPageCols<usize>) -> Vec<Interaction<F>> {
+    fn sends(&self, col_indices: IndexedOutputPageCols<usize>) -> Vec<Interaction<F>> {
         let lt_air = IsLessThanTupleAir::new(
             self.range_bus_index,
             vec![self.idx_limb_bits; self.idx_len],
@@ -33,12 +33,12 @@ impl<F: PrimeField> SubAirBridge<F> for FinalPageAir {
     }
 }
 
-impl<F: PrimeField> AirBridge<F> for FinalPageAir {
+impl<F: PrimeField> AirBridge<F> for IndexedOutputPageAir {
     fn sends(&self) -> Vec<Interaction<F>> {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-        let cols_to_send = FinalPageCols::<usize>::from_slice(
+        let cols_to_send = IndexedOutputPageCols::<usize>::from_slice(
             &all_cols,
             self.idx_len,
             self.data_len,
