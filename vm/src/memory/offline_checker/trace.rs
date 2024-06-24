@@ -27,12 +27,12 @@ impl OfflineChecker {
         range_checker: Arc<RangeCheckerGateChip>,
         trace_degree: usize,
     ) -> RowMajorMatrix<F> {
-        ops.sort_by_key(|op| (op.address_space, op.address, op.clock));
+        ops.sort_by_key(|op| (op.address_space, op.address, op.timestamp));
 
         let mut rows: Vec<F> = vec![];
 
         let dummy_op = MemoryAccess {
-            clock: 0,
+            timestamp: 0,
             op_type: OpType::Read,
             address_space: F::zero(),
             address: F::zero(),
@@ -100,7 +100,7 @@ impl OfflineChecker {
             1
         };
 
-        row.push(F::from_canonical_usize(curr_op.clock));
+        row.push(F::from_canonical_usize(curr_op.timestamp));
         row.push(curr_op.address_space);
         row.push(curr_op.address);
         row.extend(curr_op.data.clone());
@@ -128,7 +128,7 @@ impl OfflineChecker {
             || (curr_op.address_space == prev_op.address_space && curr_op.address > prev_op.address)
             || (curr_op.address_space == prev_op.address_space
                 && curr_op.address == prev_op.address
-                && curr_op.clock > prev_op.clock)
+                && curr_op.timestamp > prev_op.timestamp)
         {
             1
         } else {
@@ -162,12 +162,12 @@ impl OfflineChecker {
                 vec![
                     prev_op.address_space.as_canonical_u32(),
                     prev_op.address.as_canonical_u32(),
-                    prev_op.clock as u32,
+                    prev_op.timestamp as u32,
                 ],
                 vec![
                     curr_op.address_space.as_canonical_u32(),
                     curr_op.address.as_canonical_u32(),
-                    curr_op.clock as u32,
+                    curr_op.timestamp as u32,
                 ],
                 range_checker,
             ))

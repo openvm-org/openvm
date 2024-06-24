@@ -10,7 +10,7 @@ pub enum OpType {
 
 #[derive(Clone, Debug)]
 pub struct MemoryAccess<F> {
-    pub clock: usize,
+    pub timestamp: usize,
     pub op_type: OpType,
     pub address_space: F,
     pub address: F,

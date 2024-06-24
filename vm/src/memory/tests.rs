@@ -37,7 +37,7 @@ fn test_offline_checker() {
 
     let ops: Vec<MemoryAccess<BabyBear>> = vec![
         MemoryAccess {
-            clock: 1,
+            timestamp: 1,
             op_type: OpType::Write,
             address_space: BabyBear::zero(),
             address: BabyBear::one(),
@@ -48,7 +48,7 @@ fn test_offline_checker() {
             ],
         },
         MemoryAccess {
-            clock: 0,
+            timestamp: 0,
             op_type: OpType::Write,
             address_space: BabyBear::zero(),
             address: BabyBear::zero(),
@@ -59,7 +59,7 @@ fn test_offline_checker() {
             ],
         },
         MemoryAccess {
-            clock: 4,
+            timestamp: 4,
             op_type: OpType::Write,
             address_space: BabyBear::one(),
             address: BabyBear::zero(),
@@ -70,7 +70,7 @@ fn test_offline_checker() {
             ],
         },
         MemoryAccess {
-            clock: 2,
+            timestamp: 2,
             op_type: OpType::Read,
             address_space: BabyBear::zero(),
             address: BabyBear::one(),
@@ -81,7 +81,7 @@ fn test_offline_checker() {
             ],
         },
         MemoryAccess {
-            clock: 6,
+            timestamp: 6,
             op_type: OpType::Read,
             address_space: BabyBear::two(),
             address: BabyBear::zero(),
@@ -92,7 +92,7 @@ fn test_offline_checker() {
             ],
         },
         MemoryAccess {
-            clock: 5,
+            timestamp: 5,
             op_type: OpType::Write,
             address_space: BabyBear::two(),
             address: BabyBear::zero(),
@@ -103,7 +103,7 @@ fn test_offline_checker() {
             ],
         },
         MemoryAccess {
-            clock: 3,
+            timestamp: 3,
             op_type: OpType::Write,
             address_space: BabyBear::zero(),
             address: BabyBear::one(),
@@ -122,7 +122,7 @@ fn test_offline_checker() {
         ops.iter()
             .flat_map(|op: &MemoryAccess<BabyBear>| {
                 iter::once(BabyBear::one())
-                    .chain(iter::once(BabyBear::from_canonical_usize(op.clock)))
+                    .chain(iter::once(BabyBear::from_canonical_usize(op.timestamp)))
                     .chain(iter::once(BabyBear::from_canonical_u8(op.op_type as u8)))
                     .chain(iter::once(op.address_space))
                     .chain(iter::once(op.address))
@@ -160,7 +160,7 @@ fn test_offline_checker_negative_invalid_read() {
 
     // should fail because we can't read before writing
     let ops: Vec<MemoryAccess<BabyBear>> = vec![MemoryAccess {
-        clock: 0,
+        timestamp: 0,
         op_type: OpType::Read,
         address_space: BabyBear::zero(),
         address: BabyBear::zero(),
@@ -178,7 +178,7 @@ fn test_offline_checker_negative_invalid_read() {
         ops.iter()
             .flat_map(|op: &MemoryAccess<BabyBear>| {
                 iter::once(BabyBear::one())
-                    .chain(iter::once(BabyBear::from_canonical_usize(op.clock)))
+                    .chain(iter::once(BabyBear::from_canonical_usize(op.timestamp)))
                     .chain(iter::once(BabyBear::from_canonical_u8(op.op_type as u8)))
                     .chain(iter::once(op.address_space))
                     .chain(iter::once(op.address))
@@ -222,7 +222,7 @@ fn test_offline_checker_negative_data_mismatch() {
 
     let ops: Vec<MemoryAccess<BabyBear>> = vec![
         MemoryAccess {
-            clock: 0,
+            timestamp: 0,
             op_type: OpType::Write,
             address_space: BabyBear::zero(),
             address: BabyBear::zero(),
@@ -233,7 +233,7 @@ fn test_offline_checker_negative_data_mismatch() {
             ],
         },
         MemoryAccess {
-            clock: 1,
+            timestamp: 1,
             op_type: OpType::Write,
             address_space: BabyBear::zero(),
             address: BabyBear::one(),
@@ -245,7 +245,7 @@ fn test_offline_checker_negative_data_mismatch() {
         },
         // data read does not match write from previous operation
         MemoryAccess {
-            clock: 2,
+            timestamp: 2,
             op_type: OpType::Read,
             address_space: BabyBear::zero(),
             address: BabyBear::one(),
@@ -264,7 +264,7 @@ fn test_offline_checker_negative_data_mismatch() {
         ops.iter()
             .flat_map(|op: &MemoryAccess<BabyBear>| {
                 iter::once(BabyBear::one())
-                    .chain(iter::once(BabyBear::from_canonical_usize(op.clock)))
+                    .chain(iter::once(BabyBear::from_canonical_usize(op.timestamp)))
                     .chain(iter::once(BabyBear::from_canonical_u8(op.op_type as u8)))
                     .chain(iter::once(op.address_space))
                     .chain(iter::once(op.address))

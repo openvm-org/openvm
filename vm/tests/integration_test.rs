@@ -45,7 +45,7 @@ fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear
             address: access.address,
             op_type: access.op_type,
             address_space: access.address_space,
-            clock: access.timestamp,
+            timestamp: access.timestamp,
             data: vec![access.data],
         })
         .collect::<Vec<MemoryAccess<BabyBear>>>();
