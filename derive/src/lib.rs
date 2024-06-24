@@ -3,11 +3,10 @@
 extern crate alloc;
 extern crate proc_macro;
 
-
 use proc_macro::TokenStream;
 
 use quote::quote;
-use syn::{Data, DeriveInput, Fields, GenericParam, parse_macro_input};
+use syn::{parse_macro_input, Data, DeriveInput, Fields, GenericParam};
 
 #[proc_macro_derive(AlignedBorrow)]
 pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
@@ -67,7 +66,6 @@ pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
 
     TokenStream::from(methods)
 }
-
 
 #[proc_macro_derive(DslVariable)]
 pub fn derive_variable(input: TokenStream) -> TokenStream {
