@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use afs_chips::is_equal::IsEqualAir;
 use afs_chips::is_less_than_tuple::columns::IsLessThanTupleIOCols;
-use p3_field::PrimeField32;
+use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::memory::{MemoryAccess, OpType};
@@ -21,7 +21,7 @@ impl OfflineChecker {
     /// The trace is sorted by addr (addr_space and pointer) and then by clk, so every addr has a block of consective rows in the trace with the following structure
     /// A row is added to the trace for every read/write operation with the corresponding data
     /// The trace is padded at the end to be of height trace_degree
-    pub fn generate_trace<F: PrimeField32>(
+    pub fn generate_trace<F: PrimeField64>(
         &self,
         mut ops: Vec<MemoryAccess<F>>,
         range_checker: Arc<RangeCheckerGateChip>,
@@ -85,7 +85,7 @@ impl OfflineChecker {
         RowMajorMatrix::new(rows, self.air_width())
     }
 
-    pub fn generate_trace_row<F: PrimeField32>(
+    pub fn generate_trace_row<F: PrimeField64>(
         &self,
         is_first_row: bool,
         is_valid: u8,
@@ -160,13 +160,13 @@ impl OfflineChecker {
         let lt_aux: Vec<F> = lt_air
             .generate_trace_row((
                 vec![
-                    prev_op.address_space.as_canonical_u32(),
-                    prev_op.address.as_canonical_u32(),
+                    prev_op.address_space.as_canonical_u64() as u32,
+                    prev_op.address.as_canonical_u64() as u32,
                     prev_op.timestamp as u32,
                 ],
                 vec![
-                    curr_op.address_space.as_canonical_u32(),
-                    curr_op.address.as_canonical_u32(),
+                    curr_op.address_space.as_canonical_u64() as u32,
+                    curr_op.address.as_canonical_u64() as u32,
                     curr_op.timestamp as u32,
                 ],
                 range_checker,

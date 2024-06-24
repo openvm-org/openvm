@@ -1,5 +1,7 @@
 //use crate::range_gate::RangeCheckerGateChip;
 
+use serde::{Deserialize, Serialize};
+
 #[cfg(test)]
 pub mod tests;
 
@@ -55,7 +57,7 @@ impl OpCode {
     }
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct CPUOptions {
     pub field_arithmetic_enabled: bool,
 }

@@ -179,6 +179,6 @@ where
         ));
 
         // Note that the following is implied:
-        // - for every row: read => same_addr because not same_addr => write
+        // - for every row: read => same_addr because not same_addr => write*/
     }
 }
