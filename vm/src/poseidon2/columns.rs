@@ -28,13 +28,13 @@ pub struct Poseidon2ColsIndexMap<const WIDTH: usize> {
 }
 
 impl<const WIDTH: usize> Poseidon2Cols<WIDTH> {
-    pub fn get_width(poseidon2_air: &Poseidon2Air) -> usize {
+    pub fn get_width(poseidon2_air: &Poseidon2Air<WIDTH>) -> usize {
         let io_width = Poseidon2IOCols::<WIDTH>::get_width();
         let aux_width = Poseidon2AuxCols::<WIDTH>::get_width(poseidon2_air);
         io_width + aux_width
     }
 
-    pub fn from_slice(slice: &[BabyBear], poseidon2_air: &Poseidon2Air) -> Self {
+    pub fn from_slice(slice: &[BabyBear], poseidon2_air: &Poseidon2Air<WIDTH>) -> Self {
         let index_map = Self::index_map(poseidon2_air);
 
         assert!(slice.len() == Self::get_width(poseidon2_air));
@@ -67,7 +67,7 @@ impl<const WIDTH: usize> Poseidon2Cols<WIDTH> {
         }
     }
 
-    pub fn index_map(poseidon2_air: &Poseidon2Air) -> Poseidon2ColsIndexMap<WIDTH> {
+    pub fn index_map(poseidon2_air: &Poseidon2Air<WIDTH>) -> Poseidon2ColsIndexMap<WIDTH> {
         let phase1_len = poseidon2_air.rounds_f / 2;
         let phase2_len = poseidon2_air.rounds_p;
         let phase3_len = poseidon2_air.rounds_f - phase1_len;
@@ -104,7 +104,7 @@ impl<const WIDTH: usize> Poseidon2IOCols<WIDTH> {
 }
 
 impl<const WIDTH: usize> Poseidon2AuxCols<WIDTH> {
-    pub fn get_width(poseidon2_air: &Poseidon2Air) -> usize {
+    pub fn get_width(poseidon2_air: &Poseidon2Air<WIDTH>) -> usize {
         (poseidon2_air.rounds_f + poseidon2_air.rounds_p) * WIDTH
     }
 }
