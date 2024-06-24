@@ -2,16 +2,16 @@ use super::Poseidon2Air;
 // use static_assertions::const_assert;
 
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
-use p3_field::AbstractField;
+use p3_field::{AbstractField, PrimeField};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_poseidon2::Poseidon2ExternalMatrixGeneral;
 use p3_symmetric::Permutation;
 
-impl<const WIDTH: usize> Poseidon2Air<WIDTH> {
+impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
     // const_assert!(WIDTH == 16 || WIDTH == 24, "WIDTH must be 16 or 24");
-    pub fn generate_trace(&self, input_states: Vec<[BabyBear; WIDTH]>) -> RowMajorMatrix<BabyBear>
+    pub fn generate_trace(&self, input_states: Vec<[T; WIDTH]>) -> RowMajorMatrix<T>
     where
-        DiffusionMatrixBabyBear: Permutation<[BabyBear; WIDTH]>,
+        DiffusionMatrixBabyBear: Permutation<[T; WIDTH]>,
     {
         RowMajorMatrix::new(
             input_states
@@ -23,11 +23,11 @@ impl<const WIDTH: usize> Poseidon2Air<WIDTH> {
     }
 
     pub fn ext_layer(
-        state: &mut [BabyBear; WIDTH],
-        constants: &[BabyBear; WIDTH],
+        state: &mut [T; WIDTH],
+        constants: &[T; WIDTH],
         external_layer: &Poseidon2ExternalMatrixGeneral,
     ) where
-        DiffusionMatrixBabyBear: Permutation<[BabyBear; WIDTH]>,
+        DiffusionMatrixBabyBear: Permutation<[T; WIDTH]>,
     {
         for (s, c) in state.iter_mut().zip(constants) {
             *s = Self::sbox_p(*s + *c);
@@ -35,28 +35,25 @@ impl<const WIDTH: usize> Poseidon2Air<WIDTH> {
         external_layer.permute_mut(state);
     }
 
-    pub fn int_layer(
-        state: &mut [BabyBear; WIDTH],
-        constant: BabyBear,
-        internal_layer: &DiffusionMatrixBabyBear,
-    ) where
-        DiffusionMatrixBabyBear: Permutation<[BabyBear; WIDTH]>,
+    pub fn int_layer(state: &mut [T; WIDTH], constant: T, internal_layer: &DiffusionMatrixBabyBear)
+    where
+        DiffusionMatrixBabyBear: Permutation<[T; WIDTH]>,
     {
         state[0] += constant;
         state[0] = Self::sbox_p(state[0]);
         internal_layer.permute_mut(state);
     }
 
-    pub fn sbox_p(value: BabyBear) -> BabyBear {
+    pub fn sbox_p(value: T) -> T {
         let x2 = value.square();
         let x3 = x2 * value;
         let x4 = x2.square();
         x3 * x4
     }
 
-    pub fn generate_local_trace(&self, input_state: [BabyBear; WIDTH]) -> Vec<BabyBear>
+    pub fn generate_local_trace(&self, input_state: [T; WIDTH]) -> Vec<T>
     where
-        DiffusionMatrixBabyBear: Permutation<[BabyBear; WIDTH]>,
+        DiffusionMatrixBabyBear: Permutation<[T; WIDTH]>,
     {
         let mut row = input_state.to_vec();
         let mut state = input_state;
