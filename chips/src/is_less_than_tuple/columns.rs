@@ -2,7 +2,7 @@ use afs_derive::AlignedBorrow;
 
 use crate::{is_equal_vec::columns::IsEqualVecAuxCols, is_less_than::columns::IsLessThanAuxCols};
 
-#[derive(Default, AlignedBorrow)]
+#[derive(Default, Debug, AlignedBorrow)]
 pub struct IsLessThanTupleIOCols<T> {
     pub x: Vec<T>,
     pub y: Vec<T>,
@@ -154,6 +154,7 @@ impl<T> IsLessThanTupleAuxCols<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct IsLessThanTupleCols<T> {
     pub io: IsLessThanTupleIOCols<T>,
     pub aux: IsLessThanTupleAuxCols<T>,

@@ -1,20 +1,28 @@
-use crate::table::types::{TableId, TableMetadata};
-use std::collections::{hash_map::Entry, HashMap};
+use serde_derive::{Deserialize, Serialize};
 
+use crate::table::types::{TableId, TableMetadata};
+use std::{
+    collections::{btree_map::Entry, BTreeMap},
+    fs::File,
+    io::{Read, Write},
+};
+
+#[derive(Serialize, Deserialize)]
 pub struct MockDb {
     /// Default metadata for tables created in this database
     pub default_table_metadata: TableMetadata,
     /// Map of table id to table
-    pub tables: HashMap<TableId, MockDbTable>,
+    pub tables: BTreeMap<TableId, MockDbTable>,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct MockDbTable {
     /// Table id
     pub id: TableId,
     /// Metadata containing byte sizes for the db table index and data
     pub db_table_metadata: TableMetadata,
     /// Map of index to data
-    pub items: HashMap<Vec<u8>, Vec<u8>>,
+    pub items: BTreeMap<Vec<u8>, Vec<u8>>,
 }
 
 impl MockDbTable {
@@ -22,7 +30,7 @@ impl MockDbTable {
         Self {
             id: table_id,
             db_table_metadata: metadata,
-            items: HashMap::new(),
+            items: BTreeMap::new(),
         }
     }
 }
@@ -31,8 +39,24 @@ impl MockDb {
     pub fn new(default_table_metadata: TableMetadata) -> Self {
         Self {
             default_table_metadata,
-            tables: HashMap::new(),
+            tables: BTreeMap::new(),
         }
+    }
+
+    pub fn from_file(path: &str) -> Self {
+        let file = File::open(path).unwrap();
+        let mut reader = std::io::BufReader::new(file);
+        let mut serialized = Vec::new();
+        reader.read_to_end(&mut serialized).unwrap();
+        let deserialized: MockDb = bincode::deserialize(&serialized).unwrap();
+        deserialized
+    }
+
+    pub fn save_to_file(&self, path: &str) -> std::io::Result<()> {
+        let serialized = bincode::serialize(&self).unwrap();
+        let mut file = std::fs::File::create(path).unwrap();
+        file.write_all(&serialized).unwrap();
+        Ok(())
     }
 
     pub fn get_table(&self, table_id: TableId) -> Option<&MockDbTable> {
