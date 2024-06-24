@@ -5,23 +5,35 @@ use p3_field::PrimeField64;
 use crate::memory::OpType;
 
 use super::{
-    columns::CPUCols, CPUAir, ARITHMETIC_BUS, MAX_READS_PER_CYCLE, MAX_WRITES_PER_CYCLE, MEMORY_BUS, NUM_ARITHMETIC_OPERATIONS, NUM_CORE_OPERATIONS, READ_INSTRUCTION_BUS
+    columns::CpuCols, CpuAir, ARITHMETIC_BUS, MAX_READS_PER_CYCLE, MAX_WRITES_PER_CYCLE,
+    MEMORY_BUS, NUM_ARITHMETIC_OPERATIONS, NUM_CORE_OPERATIONS, READ_INSTRUCTION_BUS,
 };
 
-fn access_cycle<F: PrimeField64>(clock_cycle: usize, op_type: OpType, index: usize) -> VirtualPairCol<F> {
+fn access_cycle<F: PrimeField64>(
+    clock_cycle: usize,
+    op_type: OpType,
+    index: usize,
+) -> VirtualPairCol<F> {
     VirtualPairCol::new(
         vec![(
             PairCol::Main(clock_cycle),
             F::from_canonical_usize(MAX_READS_PER_CYCLE + MAX_WRITES_PER_CYCLE),
         )],
-        F::from_canonical_usize(index + if op_type == OpType::Write { MAX_READS_PER_CYCLE } else { 0 }),
+        F::from_canonical_usize(
+            index
+                + if op_type == OpType::Write {
+                    MAX_READS_PER_CYCLE
+                } else {
+                    0
+                },
+        ),
     )
 }
 
-impl<F: PrimeField64> AirBridge<F> for CPUAir {
+impl<F: PrimeField64> AirBridge<F> for CpuAir {
     fn sends(&self) -> Vec<Interaction<F>> {
-        let all_cols = (0..CPUCols::<F>::get_width(self.options)).collect::<Vec<usize>>();
-        let cols_numbered = CPUCols::<usize>::from_slice(&all_cols, self.options);
+        let all_cols = (0..CpuCols::<F>::get_width(self.options)).collect::<Vec<usize>>();
+        let cols_numbered = CpuCols::<usize>::from_slice(&all_cols, self.options);
 
         let interactions = vec![
             // Interaction with program (bus 0)

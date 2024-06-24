@@ -36,6 +36,9 @@ pub enum OpCode {
     FSUB = 7,
     FMUL = 8,
     FDIV = 9,
+
+    FEADD = 10,
+    FESUB = 11,
 }
 
 impl OpCode {
@@ -46,21 +49,24 @@ impl OpCode {
             2 => Some(OpCode::JAL),
             3 => Some(OpCode::BEQ),
             4 => Some(OpCode::BNE),
-            5 => Some(OpCode::FADD),
-            6 => Some(OpCode::FSUB),
-            7 => Some(OpCode::FMUL),
-            8 => Some(OpCode::FDIV),
+            5 => Some(OpCode::TERMINATE),
+            6 => Some(OpCode::FADD),
+            7 => Some(OpCode::FSUB),
+            8 => Some(OpCode::FMUL),
+            9 => Some(OpCode::FDIV),
+            10 => Some(OpCode::FEADD),
+            11 => Some(OpCode::FESUB),
             _ => None,
         }
     }
 }
 
 #[derive(Default, Clone, Copy)]
-pub struct CPUOptions {
+pub struct CpuOptions {
     pub field_arithmetic_enabled: bool,
 }
 
-impl CPUOptions {
+impl CpuOptions {
     pub fn num_operations(&self) -> usize {
         NUM_CORE_OPERATIONS
             + if self.field_arithmetic_enabled {
@@ -72,23 +78,23 @@ impl CPUOptions {
 }
 
 #[derive(Default, Clone)]
-pub struct CPUAir {
-    pub options: CPUOptions,
+pub struct CpuAir {
+    pub options: CpuOptions,
 }
 
 #[derive(Default)]
-pub struct CPUChip {
-    pub air: CPUAir,
+pub struct CpuChip {
+    pub air: CpuAir,
     //pub range_checker: Arc<RangeCheckerGateChip>,
 }
 
-impl CPUChip {
+impl CpuChip {
     pub fn new(
         field_arithmetic_enabled: bool,
         //range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
-        let air = CPUAir {
-            options: CPUOptions {
+        let air = CpuAir {
+            options: CpuOptions {
                 field_arithmetic_enabled,
             },
         };

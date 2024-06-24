@@ -6,7 +6,7 @@ use p3_baby_bear::BabyBear;
 
 use stark_vm::au::FieldArithmeticAir;
 use stark_vm::cpu::trace::Instruction;
-use stark_vm::cpu::CPUChip;
+use stark_vm::cpu::CpuChip;
 use stark_vm::cpu::OpCode::*;
 use stark_vm::cpu::RANGE_CHECKER_BUS;
 use stark_vm::memory::offline_checker::OfflineChecker;
@@ -23,8 +23,8 @@ const RANGE_MAX: u32 = 1 << DECOMP;
 const MEMORY_TRACE_DEGREE: usize = 32;
 
 fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>) {
-    let cpu_chip = CPUChip::new(is_field_arithmetic_enabled);
-    let execution = cpu_chip.generate_trace(program);
+    let cpu_chip = CpuChip::new(is_field_arithmetic_enabled);
+    let execution = cpu_chip.generate_program_execution(program);
 
     let program_air = ProgramAir::new(execution.program.clone());
     let program_trace = program_air.generate_trace(&execution);

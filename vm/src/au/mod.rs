@@ -12,12 +12,12 @@ pub mod trace;
 
 /// Field arithmetic chip.
 ///
-/// Carries information about opcodes (currently 5..=8) and bus index (currently 2).
+/// Carries information about opcodes (currently 6..=9) and bus index (currently 2).
 #[derive(Default, Clone, Copy)]
 pub struct FieldArithmeticAir {}
 
 impl FieldArithmeticAir {
-    pub const BASE_OP: u8 = 6;
+    pub const BASE_OP: u8 = OpCode::FADD as u8;
     pub const BUS_INDEX: usize = 2;
 
     pub fn new() -> Self {
@@ -29,17 +29,11 @@ impl FieldArithmeticAir {
     /// Returns None for non-arithmetic operations.
     pub fn solve<T: Field>(op: OpCode, operands: (T, T)) -> Option<T> {
         match op {
-            OpCode::LOADW => None,
-            OpCode::STOREW => None,
-            OpCode::JAL => None,
-            OpCode::BEQ => None,
-            OpCode::BNE => None,
-            OpCode::TERMINATE => None,
-
             OpCode::FADD => Some(operands.0 + operands.1),
             OpCode::FSUB => Some(operands.0 - operands.1),
             OpCode::FMUL => Some(operands.0 * operands.1),
             OpCode::FDIV => Some(operands.0 / operands.1),
+            _ => None,
         }
     }
 
