@@ -48,7 +48,7 @@ fn program_execution_test<F: PrimeField64>(
     expected_arithmetic_operations: Vec<ArithmeticOperation<F>>,
 ) {
     let chip = CpuChip::new(is_field_arithmetic_enabled);
-    let execution = chip.generate_trace(program.clone());
+    let execution = chip.generate_program_execution(program.clone());
 
     assert_eq!(execution.program, program);
     assert_eq!(execution.memory_accesses, expected_memory_log);
@@ -86,7 +86,7 @@ fn program_execution_test<F: PrimeField64>(
 
 fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>) {
     let chip = CpuChip::new(is_field_arithmetic_enabled);
-    let execution = chip.generate_trace(program);
+    let execution = chip.generate_program_execution(program);
     air_test_custom_execution(is_field_arithmetic_enabled, execution);
 }
 
@@ -98,7 +98,7 @@ fn air_test_change_pc(
     should_fail: bool,
 ) {
     let chip = CpuChip::new(is_field_arithmetic_enabled);
-    let mut execution = chip.generate_trace(program);
+    let mut execution = chip.generate_program_execution(program);
 
     let old_value = execution.trace_rows[change_row].io.pc.as_canonical_u64() as usize;
     execution.trace_rows[change_row].io.pc = BabyBear::from_canonical_usize(change_value);
@@ -370,7 +370,7 @@ fn test_cpu_negative_hasnt_terminated() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
     let chip = CpuChip::new(true);
-    let mut execution = chip.generate_trace(program);
+    let mut execution = chip.generate_program_execution(program);
     execution.trace_rows.remove(execution.trace_rows.len() - 1);
     execution.execution_frequencies[1] = AbstractField::zero();
 
@@ -388,7 +388,7 @@ fn test_cpu_negative_secret_write() {
     ];
 
     let chip = CpuChip::new(true);
-    let mut execution = chip.generate_trace(program);
+    let mut execution = chip.generate_program_execution(program);
 
     let is_zero_air = IsZeroAir;
     let mut is_zero_trace = is_zero_air
@@ -423,7 +423,7 @@ fn test_cpu_negative_disable_write() {
     ];
 
     let chip = CpuChip::new(true);
-    let mut execution = chip.generate_trace(program);
+    let mut execution = chip.generate_program_execution(program);
 
     execution.trace_rows[0].aux.write.enabled = AbstractField::zero();
 
@@ -443,7 +443,7 @@ fn test_cpu_negative_disable_read() {
     ];
 
     let chip = CpuChip::new(true);
-    let mut execution = chip.generate_trace(program);
+    let mut execution = chip.generate_program_execution(program);
 
     execution.trace_rows[0].aux.read1.enabled = AbstractField::zero();
 

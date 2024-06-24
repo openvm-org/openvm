@@ -24,7 +24,7 @@ const MEMORY_TRACE_DEGREE: usize = 32;
 
 fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>) {
     let cpu_chip = CpuChip::new(is_field_arithmetic_enabled);
-    let execution = cpu_chip.generate_trace(program);
+    let execution = cpu_chip.generate_program_execution(program);
 
     let program_air = ProgramAir::new(execution.program.clone());
     let program_trace = program_air.generate_trace(&execution);

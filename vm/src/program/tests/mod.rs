@@ -29,7 +29,7 @@ fn test_flatten_fromslice_roundtrip() {
 
 fn interaction_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>) {
     let cpu_chip = CpuChip::new(is_field_arithmetic_enabled);
-    let execution = cpu_chip.generate_trace(program.clone());
+    let execution = cpu_chip.generate_program_execution(program.clone());
 
     let air = ProgramAir::new(program);
     let trace = air.generate_trace(&execution);
@@ -113,7 +113,7 @@ fn test_program_negative() {
     ];
 
     let cpu_chip = CpuChip::new(true);
-    let execution = cpu_chip.generate_trace(program.clone());
+    let execution = cpu_chip.generate_program_execution(program.clone());
 
     let air = ProgramAir { program };
     let trace = air.generate_trace(&execution);

@@ -246,7 +246,7 @@ impl<F: PrimeField64> Memory<F> {
 }
 
 impl CpuChip {
-    pub fn generate_trace<F: PrimeField64>(
+    pub fn generate_program_execution<F: PrimeField64>(
         &self,
         program: Vec<Instruction<F>>,
     ) -> ProgramExecution<F> {
@@ -331,7 +331,8 @@ impl CpuChip {
                         let operand1 = memory.read(e, b);
                         let operand2 = memory.read(e, c);
                         // write to d[a]
-                        let result = FieldArithmeticAir::solve(opcode, (operand1, operand2)).unwrap();
+                        let result =
+                            FieldArithmeticAir::solve(opcode, (operand1, operand2)).unwrap();
                         memory.write(d, a, result);
 
                         arithmetic_operations.push(ArithmeticOperation {
