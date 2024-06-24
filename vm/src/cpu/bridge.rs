@@ -1,11 +1,22 @@
 use afs_stark_backend::interaction::{AirBridge, Interaction};
-use p3_air::VirtualPairCol;
+use p3_air::{PairCol, VirtualPairCol};
 use p3_field::PrimeField64;
 
+use crate::memory::OpType;
+
 use super::{
-    columns::CPUCols, CPUAir, ARITHMETIC_BUS, MEMORY_BUS, NUM_ARITHMETIC_OPERATIONS,
-    NUM_CORE_OPERATIONS, READ_INSTRUCTION_BUS,
+    columns::CPUCols, CPUAir, ARITHMETIC_BUS, MAX_READS_PER_CYCLE, MAX_WRITES_PER_CYCLE, MEMORY_BUS, NUM_ARITHMETIC_OPERATIONS, NUM_CORE_OPERATIONS, READ_INSTRUCTION_BUS
 };
+
+fn access_cycle<F: PrimeField64>(clock_cycle: usize, op_type: OpType, index: usize) -> VirtualPairCol<F> {
+    VirtualPairCol::new(
+        vec![(
+            PairCol::Main(clock_cycle),
+            F::from_canonical_usize(MAX_READS_PER_CYCLE + MAX_WRITES_PER_CYCLE),
+        )],
+        F::from_canonical_usize(index + if op_type == OpType::Write { MAX_READS_PER_CYCLE } else { 0 }),
+    )
+}
 
 impl<F: PrimeField64> AirBridge<F> for CPUAir {
     fn sends(&self) -> Vec<Interaction<F>> {
@@ -30,7 +41,7 @@ impl<F: PrimeField64> AirBridge<F> for CPUAir {
             // Interactions with memory (bus 1)
             Interaction {
                 fields: vec![
-                    VirtualPairCol::single_main(cols_numbered.io.clock_cycle),
+                    access_cycle(cols_numbered.io.clock_cycle, OpType::Read, 0),
                     VirtualPairCol::constant(F::zero()),
                     VirtualPairCol::single_main(cols_numbered.aux.read1.address_space),
                     VirtualPairCol::single_main(cols_numbered.aux.read1.address),
@@ -44,7 +55,7 @@ impl<F: PrimeField64> AirBridge<F> for CPUAir {
             },
             Interaction {
                 fields: vec![
-                    VirtualPairCol::single_main(cols_numbered.io.clock_cycle),
+                    access_cycle(cols_numbered.io.clock_cycle, OpType::Read, 1),
                     VirtualPairCol::constant(F::zero()),
                     VirtualPairCol::single_main(cols_numbered.aux.read2.address_space),
                     VirtualPairCol::single_main(cols_numbered.aux.read2.address),
@@ -58,7 +69,7 @@ impl<F: PrimeField64> AirBridge<F> for CPUAir {
             },
             Interaction {
                 fields: vec![
-                    VirtualPairCol::single_main(cols_numbered.io.clock_cycle),
+                    access_cycle(cols_numbered.io.clock_cycle, OpType::Write, 0),
                     VirtualPairCol::constant(F::one()),
                     VirtualPairCol::single_main(cols_numbered.aux.write.address_space),
                     VirtualPairCol::single_main(cols_numbered.aux.write.address),

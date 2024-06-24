@@ -19,6 +19,9 @@ pub const RANGE_CHECKER_BUS: usize = 3;
 pub const NUM_CORE_OPERATIONS: usize = 6;
 pub const NUM_ARITHMETIC_OPERATIONS: usize = 4;
 
+pub const MAX_READS_PER_CYCLE: usize = 2;
+pub const MAX_WRITES_PER_CYCLE: usize = 1;
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(usize)]
 pub enum OpCode {

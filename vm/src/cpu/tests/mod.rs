@@ -148,7 +148,7 @@ fn air_test_custom_execution_with_failure(
     for memory_access in execution.memory_accesses.iter() {
         memory_rows.extend(vec![
             BabyBear::one(),
-            BabyBear::from_canonical_usize(memory_access.clock),
+            BabyBear::from_canonical_usize(memory_access.timestamp),
             BabyBear::from_bool(memory_access.op_type == OpType::Write),
             memory_access.address_space,
             memory_access.address,
@@ -236,18 +236,18 @@ fn test_cpu_1() {
     expected_execution.push(5);
 
     let mut expected_memory_log = vec![
-        MemoryAccess::from_isize(0, OpType::Write, 1, 0, n),
-        MemoryAccess::from_isize(1, OpType::Write, 1, 1, 1),
-        MemoryAccess::from_isize(2, OpType::Read, 1, 0, n),
+        MemoryAccess::from_isize(2, OpType::Write, 1, 0, n),
+        MemoryAccess::from_isize(5, OpType::Write, 1, 1, 1),
+        MemoryAccess::from_isize(6, OpType::Read, 1, 0, n),
     ];
     for t in 0..n {
         let clock = 3 + (3 * t);
         expected_memory_log.extend(vec![
-            MemoryAccess::from_isize(clock, OpType::Read, 1, 0, n - t),
-            MemoryAccess::from_isize(clock, OpType::Read, 1, 1, 1),
-            MemoryAccess::from_isize(clock, OpType::Write, 1, 0, n - t - 1),
-            MemoryAccess::from_isize(clock + 1, OpType::Write, 1, 2, 5),
-            MemoryAccess::from_isize(clock + 2, OpType::Read, 1, 0, n - t - 1),
+            MemoryAccess::from_isize(3 * clock, OpType::Read, 1, 0, n - t),
+            MemoryAccess::from_isize((3 * clock) + 1, OpType::Read, 1, 1, 1),
+            MemoryAccess::from_isize((3 * clock) + 2, OpType::Write, 1, 0, n - t - 1),
+            MemoryAccess::from_isize((3 * (clock + 1)) + 2, OpType::Write, 1, 2, 5),
+            MemoryAccess::from_isize(3 * (clock + 2), OpType::Read, 1, 0, n - t - 1),
         ]);
     }
 
@@ -298,9 +298,9 @@ fn test_cpu_without_field_arithmetic() {
     let expected_execution: Vec<usize> = vec![0, 1, 4, 3];
 
     let expected_memory_log = vec![
-        MemoryAccess::from_isize(0, OpType::Write, 1, 0, 5),
-        MemoryAccess::from_isize(1, OpType::Read, 1, 0, 5),
-        MemoryAccess::from_isize(2, OpType::Read, 1, 0, 5),
+        MemoryAccess::from_isize(2, OpType::Write, 1, 0, 5),
+        MemoryAccess::from_isize(3, OpType::Read, 1, 0, 5),
+        MemoryAccess::from_isize(6, OpType::Read, 1, 0, 5),
     ];
 
     program_execution_test::<BabyBear>(

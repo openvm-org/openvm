@@ -9,9 +9,9 @@ use crate::memory::OpType;
 
 use super::{
     columns::{CPUAuxCols, CPUCols, CPUIOCols, MemoryAccessCols},
-    CPUChip, OpCode,
-    OpCode::*,
-    INST_WIDTH,
+    CPUChip,
+    OpCode::{self, *},
+    INST_WIDTH, MAX_READS_PER_CYCLE, MAX_WRITES_PER_CYCLE,
 };
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, derive_new::new)]
@@ -53,7 +53,7 @@ impl<F: PrimeField64> Instruction<F> {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct MemoryAccess<F> {
-    pub clock: usize,
+    pub timestamp: usize,
     pub op_type: OpType,
     pub address_space: F,
     pub address: F,
@@ -62,14 +62,14 @@ pub struct MemoryAccess<F> {
 
 impl<F: PrimeField64> MemoryAccess<F> {
     pub fn from_isize(
-        clock: isize,
+        timestamp: isize,
         op_type: OpType,
         address_space: isize,
         address: isize,
         data: isize,
     ) -> Self {
         Self {
-            clock: clock as usize,
+            timestamp: timestamp as usize,
             op_type,
             address_space: isize_to_field::<F>(address_space),
             address: isize_to_field::<F>(address),
@@ -81,11 +81,10 @@ impl<F: PrimeField64> MemoryAccess<F> {
 fn memory_access_to_cols<F: PrimeField64>(access: Option<MemoryAccess<F>>) -> MemoryAccessCols<F> {
     let (enabled, address_space, address, value) = match access {
         Some(MemoryAccess {
-            clock: _,
-            op_type: _,
             address_space,
             address,
             data,
+            ..
         }) => (F::one(), address_space, address, data),
         None => (F::zero(), F::one(), F::zero(), F::zero()),
     };
@@ -184,7 +183,7 @@ impl<F: PrimeField64> Memory<F> {
                 .unwrap_or(&F::zero())
         };
         let read = MemoryAccess {
-            clock: self.clock_cycle,
+            timestamp: ((MAX_READS_PER_CYCLE + MAX_WRITES_PER_CYCLE) * self.clock_cycle) + self.reads_this_cycle.len(),
             op_type: OpType::Read,
             address_space,
             address,
@@ -202,7 +201,7 @@ impl<F: PrimeField64> Memory<F> {
             panic!("Attempted to write to address space 0");
         } else {
             let write = MemoryAccess {
-                clock: self.clock_cycle,
+                timestamp: ((MAX_READS_PER_CYCLE + MAX_WRITES_PER_CYCLE) * self.clock_cycle) + MAX_READS_PER_CYCLE + self.writes_this_cycle.len(),
                 op_type: OpType::Write,
                 address_space,
                 address,
