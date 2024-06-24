@@ -62,11 +62,11 @@ impl OpCode {
 }
 
 #[derive(Default, Clone, Copy)]
-pub struct CPUOptions {
+pub struct CpuOptions {
     pub field_arithmetic_enabled: bool,
 }
 
-impl CPUOptions {
+impl CpuOptions {
     pub fn num_operations(&self) -> usize {
         NUM_CORE_OPERATIONS
             + if self.field_arithmetic_enabled {
@@ -78,23 +78,23 @@ impl CPUOptions {
 }
 
 #[derive(Default, Clone)]
-pub struct CPUAir {
-    pub options: CPUOptions,
+pub struct CpuAir {
+    pub options: CpuOptions,
 }
 
 #[derive(Default)]
-pub struct CPUChip {
-    pub air: CPUAir,
+pub struct CpuChip {
+    pub air: CpuAir,
     //pub range_checker: Arc<RangeCheckerGateChip>,
 }
 
-impl CPUChip {
+impl CpuChip {
     pub fn new(
         field_arithmetic_enabled: bool,
         //range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
-        let air = CPUAir {
-            options: CPUOptions {
+        let air = CpuAir {
+            options: CpuOptions {
                 field_arithmetic_enabled,
             },
         };

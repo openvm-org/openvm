@@ -6,8 +6,8 @@ use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::cpu::columns::{CPUCols, CPUIOCols};
-use crate::cpu::{CPUChip, CPUOptions};
+use crate::cpu::columns::{CpuCols, CpuIoCols};
+use crate::cpu::{CpuChip, CpuOptions};
 use crate::memory::OpType;
 
 use super::columns::MemoryAccessCols;
@@ -20,14 +20,14 @@ use super::{ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS};
 
 #[test]
 fn test_flatten_fromslice_roundtrip() {
-    let num_cols = CPUCols::<usize>::get_width(CPUOptions {
+    let num_cols = CpuCols::<usize>::get_width(CpuOptions {
         field_arithmetic_enabled: true,
     });
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-    let cols_numbered = CPUCols::<usize>::from_slice(
+    let cols_numbered = CpuCols::<usize>::from_slice(
         &all_cols,
-        CPUOptions {
+        CpuOptions {
             field_arithmetic_enabled: true,
         },
     );
@@ -47,7 +47,7 @@ fn program_execution_test<F: PrimeField64>(
     expected_memory_log: Vec<MemoryAccess<F>>,
     expected_arithmetic_operations: Vec<ArithmeticOperation<F>>,
 ) {
-    let chip = CPUChip::new(is_field_arithmetic_enabled);
+    let chip = CpuChip::new(is_field_arithmetic_enabled);
     let execution = chip.generate_trace(program.clone());
 
     assert_eq!(execution.program, program);
@@ -61,7 +61,7 @@ fn program_execution_test<F: PrimeField64>(
     assert_eq!(execution.trace_rows.len(), expected_execution.len());
     for (i, row) in execution.trace_rows.iter().enumerate() {
         let pc = expected_execution[i];
-        let expected_io = CPUIOCols {
+        let expected_io = CpuIoCols {
             clock_cycle: F::from_canonical_u64(i as u64),
             pc: F::from_canonical_u64(pc as u64),
             opcode: F::from_canonical_u64(program[pc].opcode as u64),
@@ -85,7 +85,7 @@ fn program_execution_test<F: PrimeField64>(
 }
 
 fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>) {
-    let chip = CPUChip::new(is_field_arithmetic_enabled);
+    let chip = CpuChip::new(is_field_arithmetic_enabled);
     let execution = chip.generate_trace(program);
     air_test_custom_execution(is_field_arithmetic_enabled, execution);
 }
@@ -97,7 +97,7 @@ fn air_test_change_pc(
     change_value: usize,
     should_fail: bool,
 ) {
-    let chip = CPUChip::new(is_field_arithmetic_enabled);
+    let chip = CpuChip::new(is_field_arithmetic_enabled);
     let mut execution = chip.generate_trace(program);
 
     let old_value = execution.trace_rows[change_row].io.pc.as_canonical_u64() as usize;
@@ -121,7 +121,7 @@ fn air_test_custom_execution_with_failure(
     execution: ProgramExecution<BabyBear>,
     should_fail: bool,
 ) {
-    let chip = CPUChip::new(is_field_arithmetic_enabled);
+    let chip = CpuChip::new(is_field_arithmetic_enabled);
     let trace = execution.trace();
 
     let program_air = DummyInteractionAir::new(7, false, READ_INSTRUCTION_BUS);
@@ -369,7 +369,7 @@ fn test_cpu_negative_hasnt_terminated() {
         // terminate
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
-    let chip = CPUChip::new(true);
+    let chip = CpuChip::new(true);
     let mut execution = chip.generate_trace(program);
     execution.trace_rows.remove(execution.trace_rows.len() - 1);
     execution.execution_frequencies[1] = AbstractField::zero();
@@ -387,7 +387,7 @@ fn test_cpu_negative_secret_write() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    let chip = CPUChip::new(true);
+    let chip = CpuChip::new(true);
     let mut execution = chip.generate_trace(program);
 
     let is_zero_air = IsZeroAir;
@@ -422,7 +422,7 @@ fn test_cpu_negative_disable_write() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    let chip = CPUChip::new(true);
+    let chip = CpuChip::new(true);
     let mut execution = chip.generate_trace(program);
 
     execution.trace_rows[0].aux.write.enabled = AbstractField::zero();
@@ -442,7 +442,7 @@ fn test_cpu_negative_disable_read() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    let chip = CPUChip::new(true);
+    let chip = CpuChip::new(true);
     let mut execution = chip.generate_trace(program);
 
     execution.trace_rows[0].aux.read1.enabled = AbstractField::zero();

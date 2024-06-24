@@ -5,7 +5,7 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 
-use crate::cpu::{CPUChip, /*ARITHMETIC_BUS, MEMORY_BUS,*/ READ_INSTRUCTION_BUS};
+use crate::cpu::{CpuChip, /*ARITHMETIC_BUS, MEMORY_BUS,*/ READ_INSTRUCTION_BUS};
 
 use crate::cpu::{trace::Instruction, OpCode::*};
 use crate::program::columns::ProgramPreprocessedCols;
@@ -28,7 +28,7 @@ fn test_flatten_fromslice_roundtrip() {
 }
 
 fn interaction_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>) {
-    let cpu_chip = CPUChip::new(is_field_arithmetic_enabled);
+    let cpu_chip = CpuChip::new(is_field_arithmetic_enabled);
     let execution = cpu_chip.generate_trace(program.clone());
 
     let air = ProgramAir::new(program);
@@ -112,7 +112,7 @@ fn test_program_negative() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    let cpu_chip = CPUChip::new(true);
+    let cpu_chip = CpuChip::new(true);
     let execution = cpu_chip.generate_trace(program.clone());
 
     let air = ProgramAir { program };

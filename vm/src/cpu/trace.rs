@@ -8,8 +8,8 @@ use afs_chips::{is_equal::IsEqualAir, is_zero::IsZeroAir, sub_chip::LocalTraceIn
 use crate::memory::OpType;
 
 use super::{
-    columns::{CPUAuxCols, CPUCols, CPUIOCols, MemoryAccessCols},
-    CPUChip,
+    columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
+    CpuChip,
     OpCode::{self, *},
     INST_WIDTH, MAX_READS_PER_CYCLE, MAX_WRITES_PER_CYCLE,
 };
@@ -149,7 +149,7 @@ impl<F: Field> FieldExtensionOperation<F> {
 
 pub struct ProgramExecution<F> {
     pub program: Vec<Instruction<F>>,
-    pub trace_rows: Vec<CPUCols<F>>,
+    pub trace_rows: Vec<CpuCols<F>>,
     pub execution_frequencies: Vec<F>,
     pub memory_accesses: Vec<MemoryAccess<F>>,
     pub arithmetic_ops: Vec<ArithmeticOperation<F>>,
@@ -245,7 +245,7 @@ impl<F: PrimeField64> Memory<F> {
     }
 }
 
-impl CPUChip {
+impl CpuChip {
     pub fn generate_trace<F: PrimeField64>(
         &self,
         program: Vec<Instruction<F>>,
@@ -272,7 +272,7 @@ impl CPUChip {
             let d = instruction.d;
             let e = instruction.e;
 
-            let io = CPUIOCols {
+            let io = CpuIoCols {
                 clock_cycle: F::from_canonical_usize(clock_cycle),
                 pc,
                 opcode: F::from_canonical_usize(opcode as usize),
@@ -412,7 +412,7 @@ impl CPUChip {
             let beq_check = is_equal_cols.io.is_equal;
             let is_equal_aux = is_equal_cols.aux.inv;
 
-            let aux = CPUAuxCols {
+            let aux = CpuAuxCols {
                 operation_flags,
                 read1,
                 read2,
@@ -421,7 +421,7 @@ impl CPUChip {
                 is_equal_aux,
             };
 
-            let cols = CPUCols { io, aux };
+            let cols = CpuCols { io, aux };
             rows.push(cols);
 
             pc = next_pc;
