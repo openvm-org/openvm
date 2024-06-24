@@ -1,7 +1,18 @@
+use super::Poseidon2Air;
 use p3_air::Air;
+use p3_air::AirBuilder;
+use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
-use p3_poseidon2::Poseidon2Air;
+use p3_field::Field;
 
-pub struct Poseidon2Air<const WIDTH: usize> {
-    pub air: Air<BabyBear, WIDTH>,
+impl<const WIDTH: usize, F: Field> BaseAir<F> for Poseidon2Air<WIDTH> {
+    fn width(&self) -> usize {
+        self.get_width()
+    }
+}
+
+impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Air<WIDTH> {
+    fn eval(&self, builder: &mut AB) {
+        todo!()
+    }
 }

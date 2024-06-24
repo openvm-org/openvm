@@ -16,7 +16,7 @@ impl<const WIDTH: usize> Poseidon2Air<WIDTH> {
         RowMajorMatrix::new(
             input_states
                 .iter()
-                .flat_map(|input_state| self.generate_local_trace(input_state.clone()))
+                .flat_map(|input_state| self.generate_local_trace(*input_state))
                 .collect(),
             self.get_width(),
         )
@@ -49,7 +49,7 @@ impl<const WIDTH: usize> Poseidon2Air<WIDTH> {
 
     pub fn sbox_p(value: BabyBear) -> BabyBear {
         let x2 = value.square();
-        let x3 = x2.clone() * value;
+        let x3 = x2 * value;
         let x4 = x2.square();
         x3 * x4
     }
@@ -59,7 +59,7 @@ impl<const WIDTH: usize> Poseidon2Air<WIDTH> {
         DiffusionMatrixBabyBear: Permutation<[BabyBear; WIDTH]>,
     {
         let mut row = input_state.to_vec();
-        let mut state = input_state.clone();
+        let mut state = input_state;
 
         // The first half of the external rounds.
         let external_layer = Poseidon2ExternalMatrixGeneral {};
