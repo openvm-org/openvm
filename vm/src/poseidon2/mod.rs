@@ -10,13 +10,16 @@ use self::columns::Poseidon2Cols;
 
 pub struct Poseidon2Air<const WIDTH: usize> {
     pub rounds_f: usize,
-    pub external_constants: Vec<Vec<BabyBear>>,
+    pub external_constants: Vec<[BabyBear; WIDTH]>,
     pub rounds_p: usize,
     pub internal_constants: Vec<BabyBear>,
 }
 
 impl<const WIDTH: usize> Poseidon2Air<WIDTH> {
-    pub fn new(external_constants: Vec<Vec<BabyBear>>, internal_constants: Vec<BabyBear>) -> Self {
+    pub fn new(
+        external_constants: Vec<[BabyBear; WIDTH]>,
+        internal_constants: Vec<BabyBear>,
+    ) -> Self {
         Self {
             rounds_f: external_constants.len(),
             external_constants,
