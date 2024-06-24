@@ -10,14 +10,14 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 
-use super::add_sub::columns::FieldExtensionAddSubCols;
-use super::add_sub::FieldExtensionAddSubAir;
+use super::columns::FieldExtensionArithmeticIOCols;
+use super::FieldExtensionArithmeticAir;
 
 /// Function for testing that generates a random program consisting only of field arithmetic operations.
 fn generate_field_extension_program(len_ops: usize) -> ProgramExecution<BabyBear> {
     let mut rng = create_seeded_rng();
     let ops = (0..len_ops)
-        .map(|_| OpCode::from_u8(rng.gen_range(10..=11)).unwrap())
+        .map(|_| OpCode::from_u8(rng.gen_range(10..=12)).unwrap())
         .collect();
     let operands = (0..len_ops)
         .map(|_| {
@@ -37,7 +37,7 @@ fn generate_field_extension_program(len_ops: usize) -> ProgramExecution<BabyBear
             )
         })
         .collect();
-    let field_extension_ops = FieldExtensionAddSubAir::request(ops, operands);
+    let field_extension_ops = FieldExtensionArithmeticAir::request(ops, operands);
 
     ProgramExecution {
         program: vec![],
@@ -50,11 +50,11 @@ fn generate_field_extension_program(len_ops: usize) -> ProgramExecution<BabyBear
 }
 
 #[test]
-fn au_air_test() {
+fn field_extension_air_test() {
     let mut rng = create_seeded_rng();
     let len_ops = 1 << 5;
     let prog = generate_field_extension_program(len_ops);
-    let extension_air = FieldExtensionAddSubAir::new();
+    let extension_air = FieldExtensionArithmeticAir::new();
 
     let dummy_trace = RowMajorMatrix::new(
         prog.field_extension_ops
@@ -67,15 +67,15 @@ fn au_air_test() {
                     .collect::<Vec<_>>()
             })
             .collect(),
-        FieldExtensionAddSubCols::<BabyBear>::get_width() + 1,
+        FieldExtensionArithmeticIOCols::<BabyBear>::get_width() + 1,
     );
 
     let mut extension_trace = extension_air.generate_trace(&prog);
 
     let page_requester = DummyInteractionAir::new(
-        FieldExtensionAddSubCols::<BabyBear>::get_width(),
+        FieldExtensionArithmeticIOCols::<BabyBear>::get_width(),
         true,
-        FieldExtensionAddSubAir::BUS_INDEX,
+        FieldExtensionArithmeticAir::BUS_INDEX,
     );
 
     // positive test
@@ -87,7 +87,7 @@ fn au_air_test() {
 
     // negative test pranking each IO value
     for height in 0..(prog.field_extension_ops.len()) {
-        for width in 0..FieldExtensionAddSubCols::<BabyBear>::get_width() {
+        for width in 0..FieldExtensionArithmeticIOCols::<BabyBear>::get_width() {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
             extension_trace.row_mut(height)[width] = prank_value;
         }

@@ -5,7 +5,10 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use afs_chips::{is_equal::IsEqualAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions};
 
-use crate::{au::FieldArithmeticAir, memory::OpType};
+use crate::{
+    field_extension::BETA,
+    {au::FieldArithmeticAir, memory::OpType},
+};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
@@ -373,6 +376,51 @@ impl CpuChip {
                         ],
                         _ => unreachable!(),
                     };
+                    memory.write(d, a, result[0]);
+                    memory.write(d, a + F::from_canonical_usize(1), result[1]);
+                    memory.write(d, a + F::from_canonical_usize(2), result[2]);
+                    memory.write(d, a + F::from_canonical_usize(3), result[3]);
+
+                    field_extension_operations.push(FieldExtensionOperation {
+                        opcode,
+                        operand1,
+                        operand2,
+                        result,
+                    });
+                }
+                FEMUL => {
+                    let operand1 = [
+                        memory.read(e, b),
+                        memory.read(e, b + F::from_canonical_usize(1)),
+                        memory.read(e, b + F::from_canonical_usize(2)),
+                        memory.read(e, b + F::from_canonical_usize(3)),
+                    ];
+                    let operand2 = [
+                        memory.read(e, c),
+                        memory.read(e, c + F::from_canonical_usize(1)),
+                        memory.read(e, c + F::from_canonical_usize(2)),
+                        memory.read(e, c + F::from_canonical_usize(3)),
+                    ];
+                    let result = [
+                        operand1[0] * operand2[0]
+                            + F::from_canonical_usize(BETA)
+                                * (operand1[1] * operand2[3]
+                                    + operand1[2] * operand2[2]
+                                    + operand1[3] * operand2[1]),
+                        operand1[0] * operand2[1]
+                            + operand1[1] * operand2[0]
+                            + F::from_canonical_usize(BETA)
+                                * (operand1[2] * operand2[3] + operand1[3] * operand2[2]),
+                        operand1[0] * operand2[2]
+                            + operand1[1] * operand2[1]
+                            + operand1[2] * operand2[0]
+                            + F::from_canonical_usize(BETA) * operand1[3] * operand2[3],
+                        operand1[0] * operand2[3]
+                            + operand1[1] * operand2[2]
+                            + operand1[2] * operand2[1]
+                            + operand1[3] * operand2[0],
+                    ];
+
                     memory.write(d, a, result[0]);
                     memory.write(d, a + F::from_canonical_usize(1), result[1]);
                     memory.write(d, a + F::from_canonical_usize(2), result[2]);
