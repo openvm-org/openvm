@@ -1,16 +1,15 @@
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
-use sp1_core::utils::BabyBearPoseidon2;
-use sp1_recursion_compiler::asm::AsmBuilder;
-use sp1_recursion_compiler::ir::Var;
-use sp1_recursion_core::runtime::Runtime;
+use p3_field::extension::BinomialExtensionField;
+
+use afs_compiler::asm::AsmBuilder;
+use afs_compiler::ir::Var;
+
+type F = BabyBear;
+type EF = BinomialExtensionField<BabyBear, 4>;
 
 #[test]
 fn test_compiler_conditionals() {
-    type SC = BabyBearPoseidon2;
-    type F = BabyBear;
-    type EF = BinomialExtensionField<BabyBear, 4>;
     let mut builder = AsmBuilder::<F, EF>::default();
 
     let zero: Var<_> = builder.eval(F::zero());
@@ -53,18 +52,15 @@ fn test_compiler_conditionals() {
     let code = builder.compile_asm();
     println!("{}", code);
     // let program = builder.compile();
-    let program = code.machine_code();
+    // let program = code.machine_code();
 
-    let config = SC::default();
-    let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
-    runtime.run();
+    // let config = SC::default();
+    // let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
+    // runtime.run();
 }
 
 #[test]
 fn test_compiler_conditionals_v2() {
-    type SC = BabyBearPoseidon2;
-    type F = BabyBear;
-    type EF = BinomialExtensionField<BabyBear, 4>;
     let mut builder = AsmBuilder::<F, EF>::default();
 
     let zero: Var<_> = builder.eval(F::zero());
@@ -89,9 +85,9 @@ fn test_compiler_conditionals_v2() {
     let code = builder.compile_asm();
     println!("{}", code);
     // let program = builder.compile();
-    let program = code.machine_code();
+    // let program = code.machine_code();
 
-    let config = SC::default();
-    let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
-    runtime.run();
+    // let config = SC::default();
+    // let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
+    // runtime.run();
 }

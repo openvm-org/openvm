@@ -1,20 +1,18 @@
-use rand::{thread_rng, Rng};
-
+use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use sp1_core::stark::StarkGenericConfig;
-use sp1_core::utils::BabyBearPoseidon2;
-use sp1_recursion_compiler::asm::AsmBuilder;
-use sp1_recursion_compiler::ir::{Ext, Felt, SymbolicExt};
-use sp1_recursion_compiler::ir::{ExtConst, Var};
-use sp1_recursion_core::runtime::Runtime;
+use p3_field::extension::BinomialExtensionField;
+use rand::{Rng, thread_rng};
+
+use afs_compiler::asm::AsmBuilder;
+use afs_compiler::ir::{Ext, Felt, SymbolicExt};
+use afs_compiler::ir::{ExtConst, Var};
 
 #[test]
 fn test_compiler_arithmetic() {
     let num_tests = 3;
     let mut rng = thread_rng();
-    type SC = BabyBearPoseidon2;
-    type F = <SC as StarkGenericConfig>::Val;
-    type EF = <SC as StarkGenericConfig>::Challenge;
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
     let mut builder = AsmBuilder::<F, EF>::default();
 
     let zero: Felt<_> = builder.eval(F::zero());
@@ -75,10 +73,10 @@ fn test_compiler_arithmetic() {
         builder.assert_ext_eq(-a_ext, (-a_ext_val).cons());
     }
 
-    let program = builder.compile_program();
+    // let program = builder.compile_program();
 
-    let config = SC::default();
-    let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
-    runtime.run();
-    runtime.print_stats();
+    // let config = SC::default();
+    // let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
+    // runtime.run();
+    // runtime.print_stats();
 }

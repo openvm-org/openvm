@@ -7,6 +7,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+afs-derive = { path = "../derive" }
 p3-field = { workspace = true }
 itertools = "0.12.1"
 serde = { version = "1.0.201", features = ["derive"] }
@@ -17,6 +18,9 @@ serial_test = "3.1.1"
 p3-poseidon2 = { workspace = true }
 backtrace = "0.3.71"
 tracing = "0.1.40"
+quote = "1.0"
+syn = { version = "1.0", features = ["full"] }
+
 
 [dev-dependencies]
 p3-challenger = { workspace = true }

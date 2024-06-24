@@ -2,7 +2,7 @@ use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
 
 use crate::prelude::Builder;
 
-use super::{AsmCompiler, AssemblyCode, config::AsmConfig};
+use super::{config::AsmConfig, AsmCompiler, AssemblyCode};
 
 /// A builder that compiles assembly code.
 pub type AsmBuilder<F, EF> = Builder<AsmConfig<F, EF>>;

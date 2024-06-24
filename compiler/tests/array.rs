@@ -1,19 +1,18 @@
-use rand::{thread_rng, Rng};
-
+use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use sp1_core::stark::StarkGenericConfig;
-use sp1_core::utils::BabyBearPoseidon2;
-use sp1_recursion_compiler::asm::AsmBuilder;
-use sp1_recursion_compiler::ir::Array;
-use sp1_recursion_compiler::ir::Builder;
-use sp1_recursion_compiler::ir::ExtConst;
-use sp1_recursion_compiler::ir::MemIndex;
-use sp1_recursion_compiler::ir::MemVariable;
-use sp1_recursion_compiler::ir::Ptr;
-use sp1_recursion_compiler::ir::Variable;
-use sp1_recursion_compiler::ir::{Config, Ext, Felt, Var};
-use sp1_recursion_core::runtime::Runtime;
-use sp1_recursion_derive::DslVariable;
+use p3_field::extension::BinomialExtensionField;
+use rand::{Rng, thread_rng};
+
+use afs_compiler::asm::AsmBuilder;
+use afs_compiler::ir::{Config, Ext, Felt, Var};
+use afs_compiler::ir::Array;
+use afs_compiler::ir::ExtConst;
+use afs_compiler::prelude::Builder;
+use afs_compiler::prelude::MemIndex;
+use afs_compiler::prelude::MemVariable;
+use afs_compiler::prelude::Ptr;
+use afs_compiler::prelude::Variable;
+use afs_derive::DslVariable;
 
 #[derive(DslVariable, Clone, Debug)]
 pub struct Point<C: Config> {
@@ -24,9 +23,9 @@ pub struct Point<C: Config> {
 
 #[test]
 fn test_compiler_array() {
-    type SC = BabyBearPoseidon2;
-    type F = <SC as StarkGenericConfig>::Val;
-    type EF = <SC as StarkGenericConfig>::Challenge;
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+
     let mut builder = AsmBuilder::<F, EF>::default();
 
     // Sum all the values of an array.
@@ -117,9 +116,9 @@ fn test_compiler_array() {
     let code = builder.compile_asm();
     println!("{code}");
 
-    let program = code.machine_code();
+    // let program = code.machine_code();
 
-    let config = SC::default();
-    let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
-    runtime.run();
+    // let config = SC::default();
+    // let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
+    // runtime.run();
 }

@@ -6,7 +6,6 @@ pub const DIGEST_SIZE: usize = 8;
 pub const HASH_RATE: usize = 8;
 pub const PERMUTATION_WIDTH: usize = 16;
 
-
 impl<C: Config> Builder<C> {
     /// Applies the Poseidon2 permutation to the given array.
     ///

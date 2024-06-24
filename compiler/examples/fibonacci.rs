@@ -1,9 +1,9 @@
+use p3_baby_bear::BabyBear;
+use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
-use sp1_core::stark::StarkGenericConfig;
-use sp1_core::utils::BabyBearPoseidon2;
-use sp1_recursion_compiler::asm::AsmBuilder;
-use sp1_recursion_compiler::ir::{Felt, Var};
-use sp1_recursion_core::runtime::Runtime;
+
+use afs_compiler::asm::AsmBuilder;
+use afs_compiler::ir::{Felt, Var};
 
 fn fibonacci(n: u32) -> u32 {
     if n == 0 {
@@ -21,9 +21,8 @@ fn fibonacci(n: u32) -> u32 {
 }
 
 fn main() {
-    type SC = BabyBearPoseidon2;
-    type F = <SC as StarkGenericConfig>::Val;
-    type EF = <SC as StarkGenericConfig>::Challenge;
+    type F = BabyBear;
+    type EF = BinomialExtensionField<F, 4>;
 
     let n_val = 10;
     let mut builder = AsmBuilder::<F, EF>::default();
@@ -47,12 +46,12 @@ fn main() {
     let code = builder.compile_asm();
     println!("{}", code);
 
-    let program = code.machine_code();
-    println!("Program size = {}", program.instructions.len());
+    // let program = code.machine_code();
+    // println!("Program size = {}", program.instructions.len());
 
-    let config = SC::new();
-    let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
-    runtime.run();
+    // let config = SC::new();
+    // let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
+    // runtime.run();
 
     // let machine = RecursionAir::machine(config);
     // let (pk, vk) = machine.setup(&program);
