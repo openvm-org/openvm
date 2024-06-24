@@ -205,48 +205,43 @@ fn test_cpu_1() {
 
     /*
     Instruction 0 assigns word[0]_1 to n.
-    Instruction 1 assigns word[1]_1 to 1 for use in later arithmetic operations.
-    Instruction 5 terminates
+    Instruction 4 terminates
     The remainder is a loop that decrements word[0]_1 until it reaches 0, then terminates.
-    Instruction 2 checks if word[0]_1 is 0 yet, and if so sets pc to 5 in order to terminate
-    Instruction 3 decrements word[0]_1 (using word[1]_1)
-    Instruction 4 uses JAL as a simple jump to go back to instruction 3 (repeating the loop).
+    Instruction 1 checks if word[0]_1 is 0 yet, and if so sets pc to 5 in order to terminate
+    Instruction 2 decrements word[0]_1 (using word[1]_1)
+    Instruction 3 uses JAL as a simple jump to go back to instruction 1 (repeating the loop).
      */
     let program = vec![
         // word[0]_1 <- word[n]_0
         Instruction::from_isize(STOREW, n, 0, 0, 0, 1),
-        // word[1]_1 <- word[1]_1
-        Instruction::from_isize(STOREW, 1, 1, 0, 0, 1),
         // if word[0]_1 == 0 then pc += 3
         Instruction::from_isize(BEQ, 0, 0, 3, 1, 0),
-        // word[0]_1 <- word[0]_1 - word[1]_1
-        Instruction::from_isize(FSUB, 0, 0, 1, 1, 1),
+        // word[0]_1 <- word[0]_1 - word[1]_0
+        Instruction::from_isize(FSUB, 0, 0, 1, 1, 0),
         // word[2]_1 <- pc + 1, pc -= 2
         Instruction::from_isize(JAL, 2, -2, 0, 1, 0),
         // terminate
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    let mut expected_execution: Vec<usize> = vec![0, 1, 2];
+    let mut expected_execution: Vec<usize> = vec![0, 1];
     for _ in 0..n {
-        expected_execution.push(3);
-        expected_execution.push(4);
         expected_execution.push(2);
+        expected_execution.push(3);
+        expected_execution.push(1);
     }
-    expected_execution.push(5);
+    expected_execution.push(4);
 
     let mut expected_memory_log = vec![
         MemoryAccess::from_isize(2, OpType::Write, 1, 0, n),
-        MemoryAccess::from_isize(5, OpType::Write, 1, 1, 1),
-        MemoryAccess::from_isize(6, OpType::Read, 1, 0, n),
+        MemoryAccess::from_isize(3, OpType::Read, 1, 0, n),
     ];
     for t in 0..n {
-        let clock = 3 + (3 * t);
+        let clock = 2 + (3 * t);
         expected_memory_log.extend(vec![
             MemoryAccess::from_isize(3 * clock, OpType::Read, 1, 0, n - t),
-            MemoryAccess::from_isize((3 * clock) + 1, OpType::Read, 1, 1, 1),
             MemoryAccess::from_isize((3 * clock) + 2, OpType::Write, 1, 0, n - t - 1),
-            MemoryAccess::from_isize((3 * (clock + 1)) + 2, OpType::Write, 1, 2, 5),
+            MemoryAccess::from_isize((3 * (clock + 1)) + 2, OpType::Write, 1, 2, 4),
             MemoryAccess::from_isize(3 * (clock + 2), OpType::Read, 1, 0, n - t - 1),
         ]);
     }

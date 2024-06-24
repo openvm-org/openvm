@@ -100,22 +100,19 @@ fn test_vm_1() {
     let n = 2;
     /*
     Instruction 0 assigns word[0]_1 to n.
-    Instruction 1 assigns word[1]_1 to 1 for use in later arithmetic operations.
-    Instruction 5 terminates
+    Instruction 4 terminates
     The remainder is a loop that decrements word[0]_1 until it reaches 0, then terminates.
-    Instruction 2 checks if word[0]_1 is 0 yet, and if so sets pc to 5 in order to terminate
-    Instruction 3 decrements word[0]_1 (using word[1]_1)
-    Instruction 4 uses JAL as a simple jump to go back to instruction 3 (repeating the loop).
+    Instruction 1 checks if word[0]_1 is 0 yet, and if so sets pc to 5 in order to terminate
+    Instruction 2 decrements word[0]_1 (using word[1]_1)
+    Instruction 3 uses JAL as a simple jump to go back to instruction 1 (repeating the loop).
      */
     let program = vec![
         // word[0]_1 <- word[n]_0
         Instruction::from_isize(STOREW, n, 0, 0, 0, 1),
-        // word[1]_1 <- word[1]_1
-        Instruction::from_isize(STOREW, 1, 1, 0, 0, 1),
         // if word[0]_1 == 0 then pc += 3
         Instruction::from_isize(BEQ, 0, 0, 3, 1, 0),
-        // word[0]_1 <- word[0]_1 - word[1]_1
-        Instruction::from_isize(FSUB, 0, 0, 1, 1, 1),
+        // word[0]_1 <- word[0]_1 - word[1]_0
+        Instruction::from_isize(FSUB, 0, 0, 1, 1, 0),
         // word[2]_1 <- pc + 1, pc -= 2
         Instruction::from_isize(JAL, 2, -2, 0, 1, 0),
         // terminate

@@ -330,8 +330,8 @@ impl CpuChip {
                 }
                 opcode @ (FADD | FSUB | FMUL | FDIV) => {
                     if self.air.options.field_arithmetic_enabled {
-                        // read from e[b] and e[c]
-                        let operand1 = memory.read(e, b);
+                        // read from d[b] and e[c]
+                        let operand1 = memory.read(d, b);
                         let operand2 = memory.read(e, c);
                         // write to d[a]
                         let result =
