@@ -1,0 +1,14 @@
+[package]
+name = "olap"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+alloy-primitives = "0.7.6"
+bincode = "1.3.3"
+clap = { version = "4.5.4", features = ["derive"] }
+color-eyre = "0.6.3"
+serde = { version = "1.0.203", features = ["derive"] }
+afs-chips = { path = "../../chips" }
+afs-test-utils = { path = "../../test-utils" }
