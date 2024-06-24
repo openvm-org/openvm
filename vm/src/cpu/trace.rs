@@ -5,7 +5,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use afs_chips::{is_equal::IsEqualAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions};
 
-use crate::memory::OpType;
+use crate::{au::FieldArithmeticAir, memory::OpType};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
@@ -330,14 +330,8 @@ impl CpuChip {
                         // read from e[b] and e[c]
                         let operand1 = memory.read(e, b);
                         let operand2 = memory.read(e, c);
-                        let result = match opcode {
-                            FADD => operand1 + operand2,
-                            FSUB => operand1 - operand2,
-                            FMUL => operand1 * operand2,
-                            FDIV => operand1 / operand2,
-                            _ => unreachable!(),
-                        };
                         // write to d[a]
+                        let result = FieldArithmeticAir::solve(opcode, (operand1, operand2)).unwrap();
                         memory.write(d, a, result);
 
                         arithmetic_operations.push(ArithmeticOperation {
