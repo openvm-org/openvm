@@ -1,4 +1,6 @@
-use crate::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
+use columns::OfflineCheckerCols;
+
+use crate::{is_equal_vec::IsEqualVecAir, is_less_than_tuple::IsLessThanTupleAir};
 
 mod air;
 mod bridge;
@@ -10,13 +12,14 @@ mod tests;
 
 pub struct OfflineChecker {
     page_bus_index: usize,
-    range_bus_index: usize,
     ops_bus_index: usize,
 
     idx_len: usize,
     data_len: usize,
-    idx_clk_limb_bits: Vec<usize>,
     idx_decomp: usize,
+
+    is_equal_idx_air: IsEqualVecAir,
+    lt_idx_clk_air: IsLessThanTupleAir,
 }
 
 impl OfflineChecker {
@@ -33,26 +36,20 @@ impl OfflineChecker {
     ) -> Self {
         Self {
             page_bus_index,
-            range_bus_index,
             ops_bus_index,
             idx_len,
             data_len,
-            idx_clk_limb_bits: [vec![idx_limb_bits; idx_len], vec![clk_bits]].concat(),
             idx_decomp,
+            is_equal_idx_air: IsEqualVecAir::new(idx_len),
+            lt_idx_clk_air: IsLessThanTupleAir::new(
+                range_bus_index,
+                [vec![idx_limb_bits; idx_len], vec![clk_bits]].concat(),
+                idx_decomp,
+            ),
         }
     }
 
-    fn page_width(&self) -> usize {
-        1 + self.idx_len + self.data_len
-    }
-
     pub fn air_width(&self) -> usize {
-        10 + self.page_width()
-            + 2 * (self.idx_len + self.data_len)
-            + IsLessThanTupleAuxCols::<usize>::get_width(
-                self.idx_clk_limb_bits.clone(),
-                self.idx_decomp,
-                self.idx_len + 1,
-            )
+        OfflineCheckerCols::<usize>::width(self)
     }
 }

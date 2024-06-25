@@ -209,8 +209,8 @@ impl<AB: AirBuilder> Air<AB> for CpuAir {
             write_enabled_check += arithmetic_flags.clone();
             let mut when_arithmetic = builder.when(arithmetic_flags);
 
-            // read from e[b] and e[c]
-            when_arithmetic.assert_eq(read1.address_space, e);
+            // read from d[b] and e[c]
+            when_arithmetic.assert_eq(read1.address_space, d);
             when_arithmetic.assert_eq(read1.address, b);
 
             when_arithmetic.assert_eq(read2.address_space, e);

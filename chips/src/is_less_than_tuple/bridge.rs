@@ -3,11 +3,11 @@ use crate::{
     sub_chip::SubAirBridge,
 };
 use afs_stark_backend::interaction::{AirBridge, Interaction};
-use p3_field::PrimeField64;
+use p3_field::PrimeField;
 
 use super::{columns::IsLessThanTupleCols, IsLessThanTupleAir};
 
-impl<F: PrimeField64> AirBridge<F> for IsLessThanTupleAir {
+impl<F: PrimeField> AirBridge<F> for IsLessThanTupleAir {
     fn sends(&self) -> Vec<Interaction<F>> {
         let num_cols = IsLessThanTupleCols::<F>::get_width(
             self.limb_bits().clone(),
@@ -27,7 +27,7 @@ impl<F: PrimeField64> AirBridge<F> for IsLessThanTupleAir {
     }
 }
 
-impl<F: PrimeField64> SubAirBridge<F> for IsLessThanTupleAir {
+impl<F: PrimeField> SubAirBridge<F> for IsLessThanTupleAir {
     fn sends(&self, col_indices: IsLessThanTupleCols<usize>) -> Vec<Interaction<F>> {
         let mut interactions = vec![];
 

@@ -1,6 +1,7 @@
 pub mod assert_sorted;
 pub mod common;
-pub mod final_page;
+pub mod execution_air;
+pub mod indexed_output_page_air;
 pub mod is_equal;
 pub mod is_equal_vec;
 pub mod is_less_than;

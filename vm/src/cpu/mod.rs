@@ -36,9 +36,6 @@ pub enum OpCode {
     FSUB = 7,
     FMUL = 8,
     FDIV = 9,
-
-    FEADD = 10,
-    FESUB = 11,
 }
 
 impl OpCode {
@@ -54,8 +51,6 @@ impl OpCode {
             7 => Some(OpCode::FSUB),
             8 => Some(OpCode::FMUL),
             9 => Some(OpCode::FDIV),
-            10 => Some(OpCode::FEADD),
-            11 => Some(OpCode::FESUB),
             _ => None,
         }
     }

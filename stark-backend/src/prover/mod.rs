@@ -58,7 +58,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
     /// Public values: for each AIR, a separate list of public values.
     /// The prover can support global public values that are shared among all AIRs,
     /// but we currently split public values per-AIR for modularity.
-    #[instrument(name = "MultiTraceStarkProver::prove", level = "debug", skip_all)]
+    #[instrument(name = "MultiTraceStarkProver::prove", level = "info", skip_all)]
     pub fn prove<'a>(
         &self,
         challenger: &mut SC::Challenger,
