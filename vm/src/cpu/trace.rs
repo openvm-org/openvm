@@ -331,7 +331,7 @@ impl CpuChip {
                 opcode @ (FADD | FSUB | FMUL | FDIV) => {
                     if self.air.options.field_arithmetic_enabled {
                         // read from e[b] and e[c]
-                        let operand1 = memory.read(e, b);
+                        let operand1 = memory.read(d, b);
                         let operand2 = memory.read(e, c);
                         // write to d[a]
                         let result =
@@ -350,10 +350,10 @@ impl CpuChip {
                 }
                 opcode @ (FEADD | FESUB) => {
                     let operand1 = [
-                        memory.read(e, b),
-                        memory.read(e, b + F::from_canonical_usize(1)),
-                        memory.read(e, b + F::from_canonical_usize(2)),
-                        memory.read(e, b + F::from_canonical_usize(3)),
+                        memory.read(d, b),
+                        memory.read(d, b + F::from_canonical_usize(1)),
+                        memory.read(d, b + F::from_canonical_usize(2)),
+                        memory.read(d, b + F::from_canonical_usize(3)),
                     ];
                     let operand2 = [
                         memory.read(e, c),
@@ -390,10 +390,10 @@ impl CpuChip {
                 }
                 FEMUL => {
                     let operand1 = [
-                        memory.read(e, b),
-                        memory.read(e, b + F::from_canonical_usize(1)),
-                        memory.read(e, b + F::from_canonical_usize(2)),
-                        memory.read(e, b + F::from_canonical_usize(3)),
+                        memory.read(d, b),
+                        memory.read(d, b + F::from_canonical_usize(1)),
+                        memory.read(d, b + F::from_canonical_usize(2)),
+                        memory.read(d, b + F::from_canonical_usize(3)),
                     ];
                     let operand2 = [
                         memory.read(e, c),
@@ -432,6 +432,39 @@ impl CpuChip {
                         operand2,
                         result,
                     });
+                }
+                FEINV => {
+                    let operand1 = [
+                        memory.read(d, b),
+                        memory.read(d, b + F::from_canonical_usize(1)),
+                        memory.read(d, b + F::from_canonical_usize(2)),
+                        memory.read(d, b + F::from_canonical_usize(3)),
+                    ];
+
+                    let mut b0 = operand1[0] * operand1[0]
+                        - F::from_canonical_usize(BETA)
+                            * (F::two() * operand1[1] * operand1[3] - operand1[2] * operand1[2]);
+                    let mut b2 = F::two() * operand1[0] * operand1[2]
+                        - operand1[1] * operand1[1]
+                        - F::from_canonical_usize(BETA) * operand1[3] * operand1[3];
+
+                    let c = b0 * b0 - F::from_canonical_usize(BETA) * b2 * b2;
+                    let inv_c = c.inverse();
+
+                    b0 *= inv_c;
+                    b2 *= inv_c;
+
+                    let result = [
+                        operand1[0] * b0 - F::from_canonical_usize(BETA) * operand1[2] * b2,
+                        -operand1[1] * b0 + F::from_canonical_usize(BETA) * operand1[3] * b2,
+                        -operand1[0] * b2 + operand1[2] * b0,
+                        operand1[1] * b2 - operand1[3] * b0,
+                    ];
+
+                    memory.write(d, a, result[0]);
+                    memory.write(d, a + F::from_canonical_usize(1), result[1]);
+                    memory.write(d, a + F::from_canonical_usize(2), result[2]);
+                    memory.write(d, a + F::from_canonical_usize(3), result[3]);
                 }
             };
 

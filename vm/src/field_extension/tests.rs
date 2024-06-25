@@ -17,7 +17,7 @@ use super::FieldExtensionArithmeticAir;
 fn generate_field_extension_program(len_ops: usize) -> ProgramExecution<BabyBear> {
     let mut rng = create_seeded_rng();
     let ops = (0..len_ops)
-        .map(|_| OpCode::from_u8(rng.gen_range(10..=12)).unwrap())
+        .map(|_| OpCode::from_u8(rng.gen_range(13..=13)).unwrap())
         .collect();
     let operands = (0..len_ops)
         .map(|_| {

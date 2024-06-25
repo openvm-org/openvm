@@ -30,6 +30,7 @@ impl FieldExtensionArithmeticAir {
         let opcode_lo = T::from_canonical_u32(opcode_lo_u32);
         let opcode_hi = T::from_canonical_u32(opcode_hi_u32);
         let is_mul = T::from_bool(op.opcode == OpCode::FEMUL);
+        let is_inv = T::from_bool(op.opcode == OpCode::FEINV);
 
         let x = op.operand1;
         let y = op.operand2;
@@ -50,6 +51,31 @@ impl FieldExtensionArithmeticAir {
             x[0] * y[3] + x[1] * y[2] + x[2] * y[1] + x[3] * y[0],
         ];
 
+        // Let x be the vector we are taking the inverse of ([x[0], x[1], x[2], x[3]]), and define
+        // x' = [x[0], -x[1], x[2], -x[3]]. We want to compute 1 / x = x' / (x * x'). Let the
+        // denominator x * x' = y. By construction, y will have the degree 1 and degree 3 coefficients
+        // equal to 0. Let the degree 0 coefficient be b0 and the degree 2 coefficient be b2. Now,
+        // define y' as y but with the b2 negated. Note that y * y' = b0^2 - 11 * b2^2, which is an
+        // element of the original field, which we can call c. We can invert c as usual and find that
+        // 1 / x = x' / (x * x') = x' * y' / c = x' * y' * c^(-1). We multiply out as usual to obtain
+        // the answer.
+        let mut b0 =
+            x[0] * x[0] - T::from_canonical_usize(BETA) * (T::two() * x[1] * x[3] - x[2] * x[2]);
+        let mut b2 =
+            T::two() * x[0] * x[2] - x[1] * x[1] - T::from_canonical_usize(BETA) * x[3] * x[3];
+        let c = b0 * b0 - T::from_canonical_usize(BETA) * b2 * b2;
+        let inv_c = c.inverse();
+
+        b0 *= inv_c;
+        b2 *= inv_c;
+
+        let inv = [
+            x[0] * b0 - T::from_canonical_usize(BETA) * x[2] * b2,
+            -x[1] * b0 + T::from_canonical_usize(BETA) * x[3] * b2,
+            -x[0] * b2 + x[2] * b0,
+            x[1] * b2 - x[3] * b0,
+        ];
+
         let cols = FieldExtensionArithmeticCols {
             io: FieldExtensionArithmeticIOCols {
                 opcode: T::from_canonical_usize(op.opcode as usize),
@@ -61,8 +87,11 @@ impl FieldExtensionArithmeticAir {
                 opcode_lo,
                 opcode_hi,
                 is_mul,
+                is_inv,
                 sum_or_diff,
                 product,
+                inv_c,
+                inv,
             },
         };
 

@@ -40,6 +40,7 @@ pub enum OpCode {
     FEADD = 10,
     FESUB = 11,
     FEMUL = 12,
+    FEINV = 13,
 }
 
 impl OpCode {
@@ -58,6 +59,7 @@ impl OpCode {
             10 => Some(OpCode::FEADD),
             11 => Some(OpCode::FESUB),
             12 => Some(OpCode::FEMUL),
+            13 => Some(OpCode::FEINV),
             _ => None,
         }
     }

@@ -20,12 +20,15 @@ pub struct FieldExtensionArithmeticAuxCols<T> {
     pub opcode_lo: T,
     pub opcode_hi: T,
     pub is_mul: T,
+    pub is_inv: T,
     pub sum_or_diff: [T; 4],
     pub product: [T; 4],
+    pub inv_c: T,
+    pub inv: [T; 4],
 }
 
 impl<T: Clone> FieldExtensionArithmeticCols<T> {
-    pub const NUM_COLS: usize = 24;
+    pub const NUM_COLS: usize = 30;
 
     pub fn get_width() -> usize {
         FieldExtensionArithmeticIOCols::<T>::get_width()
@@ -56,17 +59,25 @@ impl<T: Clone> FieldExtensionArithmeticCols<T> {
         let opcode_lo = slice[13].clone();
         let opcode_hi = slice[14].clone();
         let is_mul = slice[15].clone();
+        let is_inv = slice[16].clone();
         let sum_or_diff: [T; 4] = [
-            slice[16].clone(),
             slice[17].clone(),
             slice[18].clone(),
             slice[19].clone(),
+            slice[20].clone(),
         ];
         let product: [T; 4] = [
-            slice[20].clone(),
             slice[21].clone(),
             slice[22].clone(),
             slice[23].clone(),
+            slice[24].clone(),
+        ];
+        let inv_c = slice[25].clone();
+        let inv: [T; 4] = [
+            slice[26].clone(),
+            slice[27].clone(),
+            slice[28].clone(),
+            slice[29].clone(),
         ];
 
         Self {
@@ -75,8 +86,11 @@ impl<T: Clone> FieldExtensionArithmeticCols<T> {
                 opcode_lo,
                 opcode_hi,
                 is_mul,
+                is_inv,
                 sum_or_diff,
                 product,
+                inv_c,
+                inv,
             },
         }
     }
@@ -106,7 +120,7 @@ impl<T: Clone> FieldExtensionArithmeticIOCols<T> {
 
 impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
     pub fn get_width() -> usize {
-        11
+        17
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -114,6 +128,7 @@ impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
             self.opcode_lo.clone(),
             self.opcode_hi.clone(),
             self.is_mul.clone(),
+            self.is_inv.clone(),
             self.sum_or_diff[0].clone(),
             self.sum_or_diff[1].clone(),
             self.sum_or_diff[2].clone(),
@@ -122,6 +137,11 @@ impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
             self.product[1].clone(),
             self.product[2].clone(),
             self.product[3].clone(),
+            self.inv_c.clone(),
+            self.inv[0].clone(),
+            self.inv[1].clone(),
+            self.inv[2].clone(),
+            self.inv[3].clone(),
         ]
     }
 }
