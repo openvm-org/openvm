@@ -4,7 +4,7 @@ use afs_chips::range_gate::RangeCheckerGateChip;
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use p3_baby_bear::BabyBear;
 
-use stark_vm::au::FieldArithmeticAir;
+use stark_vm::field_arithmetic::FieldArithmeticAir;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::CpuChip;
 use stark_vm::cpu::OpCode::*;

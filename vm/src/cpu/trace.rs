@@ -5,7 +5,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use afs_chips::{is_equal::IsEqualAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions};
 
-use crate::{au::FieldArithmeticAir, memory::OpType};
+use crate::{field_arithmetic::FieldArithmeticAir, memory::OpType};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},

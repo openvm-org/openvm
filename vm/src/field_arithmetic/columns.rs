@@ -2,7 +2,7 @@ use crate::cpu::OpCode;
 use afs_derive::AlignedBorrow;
 use p3_field::Field;
 
-use crate::au::FieldArithmeticAir;
+use super::FieldArithmeticAir;
 
 /// Columns for field arithmetic chip.
 ///

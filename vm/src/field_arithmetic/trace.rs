@@ -1,7 +1,7 @@
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::au::columns::FieldArithmeticCols;
+use super::columns::FieldArithmeticCols;
 use crate::cpu::trace::ProgramExecution;
 
 use super::FieldArithmeticAir;

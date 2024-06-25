@@ -1,5 +1,5 @@
-use crate::au::columns::FieldArithmeticIOCols;
-use crate::au::FieldArithmeticAir;
+use super::columns::FieldArithmeticIOCols;
+use super::FieldArithmeticAir;
 use crate::cpu::trace::ProgramExecution;
 use crate::cpu::OpCode;
 use afs_stark_backend::prover::USE_DEBUG_BUILDER;
