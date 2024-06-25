@@ -1,14 +1,13 @@
 use super::Poseidon2Air;
 // use static_assertions::const_assert;
 
-use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
-use p3_field::{AbstractField, PrimeField};
+use p3_baby_bear::DiffusionMatrixBabyBear;
+use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_poseidon2::Poseidon2ExternalMatrixGeneral;
 use p3_symmetric::Permutation;
 
 impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
-    // const_assert!(WIDTH == 16 || WIDTH == 24, "WIDTH must be 16 or 24");
     pub fn generate_trace(&self, input_states: Vec<[T; WIDTH]>) -> RowMajorMatrix<T>
     where
         DiffusionMatrixBabyBear: Permutation<[T; WIDTH]>,
@@ -79,6 +78,8 @@ impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
             Self::ext_layer(&mut state, &self.external_constants[r], &external_layer);
             row.extend(state.iter());
         }
+
+        assert_eq!(row.len(), self.get_width());
 
         row
     }

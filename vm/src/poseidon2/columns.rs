@@ -26,11 +26,11 @@ pub struct Poseidon2ColsIndexMap<const WIDTH: usize> {
     pub phase3: Vec<Range<usize>>,
 }
 
-impl<const WIDTH: usize, T: Clone + p3_field::PrimeField> Poseidon2Cols<WIDTH, T> {
+impl<const WIDTH: usize, T: Clone> Poseidon2Cols<WIDTH, T> {
     pub fn get_width(poseidon2_air: &Poseidon2Air<WIDTH, T>) -> usize {
         let io_width = Poseidon2IOCols::<WIDTH, T>::get_width();
         let aux_width = Poseidon2AuxCols::<WIDTH, T>::get_width(poseidon2_air);
-        io_width + aux_width
+        io_width + aux_width - WIDTH
     }
 
     pub fn from_slice(slice: &[T], poseidon2_air: &Poseidon2Air<WIDTH, T>) -> Self {
@@ -72,9 +72,8 @@ impl<const WIDTH: usize, T: Clone + p3_field::PrimeField> Poseidon2Cols<WIDTH, T
         let phase3_len = poseidon2_air.rounds_f - phase1_len;
 
         let input = 0..WIDTH;
-        let output = input.end..input.end + WIDTH;
         let phase1: Vec<_> = (0..phase1_len)
-            .map(|i| output.end + i * WIDTH..output.end + (i + 1) * WIDTH)
+            .map(|i| input.end + i * WIDTH..input.end + (i + 1) * WIDTH)
             .collect();
         let phase2: Vec<_> = (0..phase2_len)
             .map(|i| {
@@ -86,6 +85,7 @@ impl<const WIDTH: usize, T: Clone + p3_field::PrimeField> Poseidon2Cols<WIDTH, T
                 phase2.last().unwrap().end + i * WIDTH..phase2.last().unwrap().end + (i + 1) * WIDTH
             })
             .collect();
+        let output = phase3.last().unwrap().clone();
         Poseidon2ColsIndexMap {
             input,
             output,
@@ -102,7 +102,7 @@ impl<const WIDTH: usize, T> Poseidon2IOCols<WIDTH, T> {
     }
 }
 
-impl<const WIDTH: usize, T: Clone + p3_field::PrimeField> Poseidon2AuxCols<WIDTH, T> {
+impl<const WIDTH: usize, T: Clone> Poseidon2AuxCols<WIDTH, T> {
     pub fn get_width(poseidon2_air: &Poseidon2Air<WIDTH, T>) -> usize {
         (poseidon2_air.rounds_f + poseidon2_air.rounds_p) * WIDTH
     }
