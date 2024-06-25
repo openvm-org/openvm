@@ -38,9 +38,9 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanOutputAir {
         let num_cols = PageIndexScanOutputCols::<F>::get_width(&self.final_page_air);
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-        let my_final_page_cols =
+        let final_page_cols =
             PageIndexScanOutputCols::<usize>::from_slice(&all_cols, &self.final_page_air);
 
-        SubAirBridge::sends(&self.final_page_air, my_final_page_cols.final_page_cols)
+        SubAirBridge::sends(&self.final_page_air, final_page_cols.final_page_cols)
     }
 }

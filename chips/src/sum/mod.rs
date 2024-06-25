@@ -21,15 +21,15 @@ pub mod trace;
 /// The data for `key` and `value` is sourced from the input bus. For each unique key, a `(key, sum)` pair
 /// is sent to the output bus, where `sum` is the total sum of all values associated with that key.
 pub struct SumAir {
-    input_bus: usize,
-    output_bus: usize,
+    pub input_bus: usize,
+    pub output_bus: usize,
 
-    is_lt_air: IsLessThanAir,
+    pub is_lt_air: IsLessThanAir,
 }
 
 pub struct SumChip {
-    air: SumAir,
-    range_checker: Arc<RangeCheckerGateChip>,
+    pub air: SumAir,
+    pub range_checker: Arc<RangeCheckerGateChip>,
 }
 
 impl SumChip {

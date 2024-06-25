@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use getset::Getters;
 
-use crate::{final_page::FinalPageAir, range_gate::RangeCheckerGateChip};
+use crate::{indexed_output_page_air::IndexedOutputPageAir, range_gate::RangeCheckerGateChip};
 
 pub mod air;
 pub mod bridge;
@@ -14,7 +14,7 @@ pub struct PageIndexScanOutputAir {
     /// The bus index for page row receives
     pub page_bus_index: usize,
 
-    pub final_page_air: FinalPageAir,
+    pub final_page_air: IndexedOutputPageAir,
 }
 
 /// This chip receives rows from the PageIndexScanInputChip and constrains that:
@@ -39,7 +39,7 @@ impl PageIndexScanOutputChip {
         Self {
             air: PageIndexScanOutputAir {
                 page_bus_index,
-                final_page_air: FinalPageAir::new(
+                final_page_air: IndexedOutputPageAir::new(
                     range_checker.bus_index(),
                     idx_len,
                     data_len,

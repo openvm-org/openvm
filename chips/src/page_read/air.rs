@@ -9,7 +9,7 @@ use super::PageReadAir;
 
 impl<F: Field> BaseAir<F> for PageReadAir {
     fn width(&self) -> usize {
-        self.width
+        self.air_width()
     }
 }
 

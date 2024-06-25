@@ -23,7 +23,7 @@ use crate::{
 ///
 /// Does not inherit [Air](p3_air::Air) trait to allow overrides for technical reasons
 /// around dynamic dispatch.
-pub trait Rap<AB>
+pub trait Rap<AB>: Sync
 where
     AB: PairBuilder + PermutationAirBuilder,
 {
