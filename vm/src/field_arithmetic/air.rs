@@ -23,8 +23,6 @@ impl<AB: AirBuilder> Air<AB> for FieldArithmeticAir {
 
         let local = main.row_slice(0);
         let au_cols: &FieldArithmeticCols<_> = (*local).borrow();
-        // let local = (*local).borrow();
-        // let au_cols = FieldArithmeticCols::from_slice(local);
 
         let FieldArithmeticCols { io, aux } = au_cols;
 
