@@ -1,0 +1,49 @@
+[package]
+name = "stark-vm"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Aggregation VM STARK"
+
+[dependencies]
+p3-air = { workspace = true }
+p3-baby-bear = { workspace = true, optional = true }
+p3-commit = { workspace = true }
+p3-field = { workspace = true }
+p3-keccak = { workspace = true }
+p3-keccak-air = { workspace = true }
+p3-matrix = { workspace = true }
+p3-maybe-rayon = { workspace = true }
+p3-symmetric = { workspace = true }
+p3-util = { workspace = true }
+p3-uni-stark = { workspace = true }
+rand = "0.8"
+
+afs-chips = { path = "../chips" }
+afs-stark-backend = { path = "../stark-backend" }
+afs-derive = { path = "../derive" }
+afs-test-utils = { path = "../test-utils" }
+parking_lot = "0.12.2"
+tracing = "0.1.40"
+itertools = "0.13.0"
+getset = "0.1.2"
+derive-new = "0.5.1"
+
+[dev-dependencies]
+p3-uni-stark = { workspace = true }
+p3-baby-bear = { workspace = true }
+p3-challenger = { workspace = true }
+p3-dft = { workspace = true }
+p3-fri = { workspace = true }
+p3-goldilocks = { workspace = true }
+p3-keccak = { workspace = true }
+p3-merkle-tree = { workspace = true }
+p3-poseidon2 = { workspace = true }
+p3-symmetric = { workspace = true }
+tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }
+tracing-forest = { version = "0.1.6", features = ["ansi", "smallvec"] }
+test-case = "3.3.1"
+
+[features]
+default = ["test-traits"]
+test-traits = ["p3-baby-bear"]
