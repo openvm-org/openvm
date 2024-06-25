@@ -1,4 +1,4 @@
-use p3_field::PrimeField64;
+use p3_field::{ExtensionField, PrimeField64};
 
 use crate::asm::{AsmInstruction, AssemblyCode};
 
@@ -49,8 +49,8 @@ fn register<F: PrimeField64>(value: i32) -> F {
 
 const UTILITY_REGISTER: i32 = 0;
 
-fn convert_instruction<F: PrimeField64>(
-    instruction: AsmInstruction<F, F>,
+fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
+    instruction: AsmInstruction<F, EF>,
     pc: F,
     labels: impl Fn(F) -> F,
 ) -> Vec<Instruction<F>> {
@@ -384,7 +384,7 @@ fn convert_instruction<F: PrimeField64>(
     }
 }
 
-pub fn convert_program<F: PrimeField64>(program: AssemblyCode<F, F>) -> Vec<Instruction<F>> {
+pub fn convert_program<F: PrimeField64, EF: ExtensionField<F>>(program: AssemblyCode<F, EF>) -> Vec<Instruction<F>> {
     let mut block_start = vec![];
     let mut pc = 0;
     for block in program.blocks.iter() {
@@ -397,8 +397,6 @@ pub fn convert_program<F: PrimeField64>(program: AssemblyCode<F, F>) -> Vec<Inst
             pc += instructions.len();
         }
     }
-
-    println!("{:?}", block_start);
 
     let mut result = vec![];
     for block in program.blocks.iter() {

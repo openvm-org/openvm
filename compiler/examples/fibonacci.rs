@@ -1,11 +1,10 @@
-use afs_compiler::conversion::convert_program;
+use afs_compiler::util::{display_program, execute_program};
 use p3_baby_bear::BabyBear;
-//use p3_field::extension::BinomialExtensionField;
+use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
 
 use afs_compiler::asm::AsmBuilder;
 use afs_compiler::ir::{Felt, Var};
-use stark_vm::cpu::CpuChip;
 
 fn fibonacci(n: u32) -> u32 {
     if n == 0 {
@@ -24,7 +23,7 @@ fn fibonacci(n: u32) -> u32 {
 
 fn main() {
     type F = BabyBear;
-    type EF = BabyBear; //BinomialExtensionField<F, 4>;
+    type EF = BinomialExtensionField<F, 4>;
 
     let n_val = 10;
     let mut builder = AsmBuilder::<F, EF>::default();
@@ -47,20 +46,9 @@ fn main() {
 
     builder.halt();
 
-    let code = builder.compile_asm();
-    println!("{}", code);
-    println!("{:?}", code);
-
-    let isa_code = convert_program(code);
-    //println!("{:?}", isa_code);
-    for (pc, instruction) in isa_code.iter().enumerate() {
-        println!("pc: {}, instruction: {:?}", pc, instruction);
-    }
-
-    let cpu_chip = CpuChip::new(true);
-
-    let execution = cpu_chip.generate_program_execution(isa_code);
-    println!("{:?}", execution.memory_accesses);
+    let program = builder.compile_isa();
+    display_program(&program);
+    execute_program(program);
 
     // let program = code.machine_code();
     // println!("Program size = {}", program.instructions.len());
