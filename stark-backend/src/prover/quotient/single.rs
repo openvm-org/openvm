@@ -30,7 +30,7 @@ pub fn compute_single_rap_quotient_values<'a, SC, R, Mat>(
     alpha: SC::Challenge,
     public_values: &'a [Val<SC>],
     // Values exposed to verifier after challenge round i
-    exposed_values_after_challenge: &'a [&'a [SC::Challenge]],
+    exposed_values_after_challenge: &'a [&'a [PackedChallenge<SC>]],
 ) -> Vec<SC::Challenge>
 where
     // TODO: avoid ?Sized to prevent dynamic dispatching because `eval` is called many many times
