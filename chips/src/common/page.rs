@@ -37,6 +37,32 @@ impl Page {
         }
     }
 
+    pub fn from_row_major_matrix<F: PrimeField>(
+        matrix: &RowMajorMatrix<F>,
+        idx_len: usize,
+        data_len: usize,
+    ) -> Self {
+        let page_width = 1 + idx_len + data_len;
+        let rows = matrix
+            .values
+            .chunks(page_width)
+            .map(|chunk| {
+                let chunk = chunk
+                    .iter()
+                    .map(|f| {
+                        (*f).as_canonical_biguint()
+                            .to_u32_digits()
+                            .last()
+                            .unwrap()
+                            .to_owned()
+                    })
+                    .collect::<Vec<u32>>();
+                PageCols::from_slice(&chunk, idx_len, data_len)
+            })
+            .collect();
+        Self { rows }
+    }
+
     /// Returns a random page with the given parameters in the proper format
     /// Note that max_idx and max_data are not inclusive
     pub fn random(

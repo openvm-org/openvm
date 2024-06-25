@@ -1,14 +1,14 @@
 use crate::commands::run::{PageConfig, RunCommand};
-use afs_chips::group_by::page_controller::PageController;
+use afs_chips::{common::page::Page, group_by::page_controller::PageController};
 use afs_stark_backend::{
-    keygen::MultiStarkKeygenBuilder,
+    keygen::{types::MultiStarkPartialProvingKey, MultiStarkKeygenBuilder},
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
 };
 use afs_test_utils::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
     engine::StarkEngine,
 };
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{eyre, Result};
 use logical_interface::{
     afs_input::operation::GroupByOp, afs_interface::AfsInterface, mock_db::MockDb,
 };
@@ -50,8 +50,7 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
         idx_decomp,
     );
     let engine = config::baby_bear_poseidon2::default_engine(idx_decomp);
-    let mut keygen_builder =
-        MultiStarkKeygenBuilder::<BabyBearPoseidon2Config>::new(&engine.config);
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
     let group_by_ptr = keygen_builder.add_cached_main_matrix(page_width);
     let final_page_ptr =
@@ -82,12 +81,75 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
         vec![range_checker_ptr],
     );
 
-    let partial_pk = keygen_builder.generate_partial_pk();
-    let prover = MultiTraceStarkProver::new(&engine.config);
+    // let pcs_log_degree = log2_ceil_usize(height);
+    // let perm = random_perm();
+    // let engine = engine_from_perm(perm, pcs_log_degree, config.fri_params);
+    // let prover = engine.prover();
+    // let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
+
+    let prover = engine.prover();
+
+    // let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
     // Load a page into the GroupBy controller
-    page_controller.load_page(&page, &trace_builder.committer);
+    let (group_by_traces, _group_by_commitments, mut prover_data) =
+        page_controller.load_page(&page, &trace_builder.committer);
 
-    Ok(())
+    let range_checker_trace = page_controller.range_checker.generate_trace();
+
+    trace_builder.clear();
+    trace_builder.load_cached_trace(group_by_traces.group_by_trace, prover_data.remove(0));
+    trace_builder.load_cached_trace(
+        group_by_traces.final_page_trace.clone(),
+        prover_data.remove(0),
+    );
+    trace_builder.load_trace(group_by_traces.group_by_aux_trace);
+    trace_builder.load_trace(group_by_traces.final_page_aux_trace);
+    trace_builder.load_trace(range_checker_trace);
+    trace_builder.commit_current();
+
+    let partial_pk: MultiStarkPartialProvingKey<BabyBearPoseidon2Config> =
+        keygen_builder.generate_partial_pk();
+    let partial_vk = partial_pk.partial_vk();
+
+    let main_trace_data = trace_builder.view(
+        &partial_vk,
+        vec![
+            &page_controller.group_by,
+            &page_controller.final_chip,
+            &page_controller.range_checker.air,
+        ],
+    );
+
+    let pis = vec![vec![]; partial_vk.per_air.len()];
+    let verifier = engine.verifier();
+
+    let mut challenger = engine.new_challenger();
+    let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
+
+    let mut challenger = engine.new_challenger();
+    let verify = verifier.verify(
+        &mut challenger,
+        partial_vk,
+        vec![
+            &page_controller.group_by,
+            &page_controller.final_chip,
+            &page_controller.range_checker.air,
+        ],
+        proof,
+        &pis,
+    );
+
+    match verify {
+        Ok(_) => {
+            let output_page =
+                Page::from_row_major_matrix(&group_by_traces.final_page_trace, idx_len, data_len);
+            if !cli.silent {
+                println!("Output page: {:?}", output_page);
+            }
+            Ok(())
+        }
+        Err(e) => Err(eyre!(format!("Proof verification failed: {:?}", e))),
+    }
 }
