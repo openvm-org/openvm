@@ -1,4 +1,8 @@
 use crate::poseidon2::Poseidon2Air;
+use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use afs_test_utils::{
+    config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng,
+};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
@@ -18,4 +22,6 @@ fn test_poseidon2_trace() {
     let state: Vec<[BabyBear; 16]> = vec![state.try_into().unwrap()];
     let trace = poseidon2_air.generate_trace(state);
     println!("{:?}", trace);
+
+    run_simple_test_no_pis(vec![&poseidon2_air], vec![trace]).expect("Verification failed");
 }

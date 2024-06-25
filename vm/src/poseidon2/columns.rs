@@ -33,14 +33,14 @@ impl<const WIDTH: usize, T: Clone> Poseidon2Cols<WIDTH, T> {
         io_width + aux_width - WIDTH
     }
 
-    pub fn from_slice(slice: &[T], poseidon2_air: &Poseidon2Air<WIDTH, T>) -> Self {
-        let index_map = Self::index_map(poseidon2_air);
+    pub fn from_slice(slice: &[T], index_map: &Poseidon2ColsIndexMap<WIDTH>) -> Self {
+        // let index_map = Self::index_map(poseidon2_air);
 
-        assert!(slice.len() == Self::get_width(poseidon2_air));
+        // assert!(slice.len() == Self::get_width(poseidon2_air));
         assert!(slice.len() == index_map.phase3.last().unwrap().end);
 
-        let input = slice[index_map.input].to_vec();
-        let output = slice[index_map.output].to_vec();
+        let input = slice[index_map.input.clone()].to_vec();
+        let output = slice[index_map.output.clone()].to_vec();
         let phase1 = index_map
             .phase1
             .iter()
