@@ -12,4 +12,8 @@ color-eyre = "0.6.3"
 serde = { version = "1.0.203", features = ["derive"] }
 afs-chips = { path = "../../chips" }
 afs-test-utils = { path = "../../test-utils" }
+afs-stark-backend = { path = "../../stark-backend" }
+afs-derive = { path = "../../derive" }
 logical-interface = { path = "../../logical-interface" }
+p3-util = { workspace = true }
+p3-uni-stark = { workspace = true }

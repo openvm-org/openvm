@@ -1,16 +1,21 @@
+pub mod group_by;
+pub mod inner_join;
+pub mod utils;
+
 use afs_test_utils::page_config::PageConfig;
 use clap::Parser;
 use color_eyre::eyre::Result;
+use group_by::execute_group_by;
+use inner_join::execute_inner_join;
 use logical_interface::{
     afs_input::{
         operation::{GroupByOp, InnerJoinOp, WhereOp},
         operations_file::AfsOperationsFile,
         types::InputFileOp,
     },
-    afs_interface::AfsInterface,
     mock_db::MockDb,
-    table::types::TableMetadata,
 };
+use p3_uni_stark::StarkGenericConfig;
 
 #[derive(Debug, Parser)]
 pub struct RunCommand {
@@ -48,11 +53,8 @@ pub struct RunCommand {
 }
 
 impl RunCommand {
-    pub fn execute(&self, config: &PageConfig) -> Result<()> {
+    pub fn execute<SC: StarkGenericConfig>(&self, config: &PageConfig) -> Result<()> {
         let mut db = MockDb::from_file(&self.db_path);
-        let idx_len = (config.page.index_bytes + 1) / 2;
-        let data_len = (config.page.data_bytes + 1) / 2;
-        let height = config.page.height;
         let afo = AfsOperationsFile::open(self.afo_path.clone());
         afo.operations.iter().for_each(|op| match op.operation {
             InputFileOp::Insert | InputFileOp::Write | InputFileOp::Read => {
@@ -64,11 +66,11 @@ impl RunCommand {
             }
             InputFileOp::GroupBy => {
                 let group_by = GroupByOp::parse(op.args.clone()).unwrap();
-                println!("group_by: {:?}", group_by);
+                execute_group_by::<SC>(config, self, &mut db, group_by).unwrap();
             }
             InputFileOp::InnerJoin => {
                 let inner_join = InnerJoinOp::parse(op.args.clone()).unwrap();
-                println!("inner_join: {:?}", inner_join);
+                execute_inner_join::<SC>(config, self, &mut db, inner_join).unwrap();
             }
         });
 

@@ -1,6 +1,7 @@
 use afs_test_utils::page_config::PageConfig;
 use clap::Parser;
 use clap::Subcommand;
+use p3_uni_stark::StarkGenericConfig;
 
 use crate::commands::run;
 
@@ -20,11 +21,11 @@ pub enum CliCommand {
 }
 
 impl Cli {
-    pub fn run(config: &PageConfig) -> Self {
+    pub fn run<SC: StarkGenericConfig>(config: &PageConfig) -> Self {
         let cli = Self::parse();
         match &cli.command {
             CliCommand::Run(run) => {
-                run.execute(config).unwrap();
+                run.execute::<SC>(config).unwrap();
             }
         }
         cli
