@@ -5,10 +5,7 @@ use std::{
 };
 
 use afs_test_utils::{
-    config::{
-        self,
-        baby_bear_poseidon2::BabyBearPoseidon2Config,
-    },
+    config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
     engine::StarkEngine,
 };
 use clap::Parser;

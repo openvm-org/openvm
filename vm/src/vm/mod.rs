@@ -8,8 +8,8 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 
 use crate::{
-    field_arithmetic::FieldArithmeticAir,
     cpu::{trace::Instruction, CpuChip, RANGE_CHECKER_BUS, WORD_SIZE},
+    field_arithmetic::FieldArithmeticAir,
     memory::{offline_checker::OfflineChecker, MemoryAccess},
     program::ProgramAir,
 };
