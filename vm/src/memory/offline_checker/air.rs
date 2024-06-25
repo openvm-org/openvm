@@ -44,9 +44,10 @@ where
         let next_cols = OfflineCheckerCols::from_slice(next, self);
 
         // Some helpers
+        let not = |a: AB::Expr| AB::Expr::one() - a;
         let and = |a: AB::Expr, b: AB::Expr| a * b;
         let or = |a: AB::Expr, b: AB::Expr| a.clone() + b.clone() - a * b;
-        let implies = |a: AB::Expr, b: AB::Expr| or(AB::Expr::one() - a, b);
+        let implies = |a: AB::Expr, b: AB::Expr| not(and(a, not(b)));
 
         // Making sure bits are bools
         builder.assert_bool(local_cols.op_type);
