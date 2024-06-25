@@ -1,7 +1,7 @@
-use super::CPUOptions;
+use super::CpuOptions;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CPUIOCols<T> {
+pub struct CpuIoCols<T> {
     pub clock_cycle: T,
     pub pc: T,
 
@@ -13,7 +13,7 @@ pub struct CPUIOCols<T> {
     pub e: T,
 }
 
-impl<T: Clone> CPUIOCols<T> {
+impl<T: Clone> CpuIoCols<T> {
     pub fn from_slice(slc: &[T]) -> Self {
         Self {
             clock_cycle: slc[0].clone(),
@@ -87,7 +87,7 @@ impl<T: Clone> MemoryAccessCols<T> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CPUAuxCols<T> {
+pub struct CpuAuxCols<T> {
     pub operation_flags: Vec<T>,
     pub read1: MemoryAccessCols<T>,
     pub read2: MemoryAccessCols<T>,
@@ -96,8 +96,8 @@ pub struct CPUAuxCols<T> {
     pub is_equal_aux: T,
 }
 
-impl<T: Clone> CPUAuxCols<T> {
-    pub fn from_slice(slc: &[T], options: CPUOptions) -> Self {
+impl<T: Clone> CpuAuxCols<T> {
+    pub fn from_slice(slc: &[T], options: CpuOptions) -> Self {
         let mut start = 0;
         let mut end = options.num_operations();
         let operation_flags = slc[start..end].to_vec();
@@ -137,21 +137,21 @@ impl<T: Clone> CPUAuxCols<T> {
         flattened
     }
 
-    pub fn get_width(options: CPUOptions) -> usize {
+    pub fn get_width(options: CpuOptions) -> usize {
         options.num_operations() + (3 * MemoryAccessCols::<T>::get_width()) + 2
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CPUCols<T> {
-    pub io: CPUIOCols<T>,
-    pub aux: CPUAuxCols<T>,
+pub struct CpuCols<T> {
+    pub io: CpuIoCols<T>,
+    pub aux: CpuAuxCols<T>,
 }
 
-impl<T: Clone> CPUCols<T> {
-    pub fn from_slice(slc: &[T], options: CPUOptions) -> Self {
-        let io = CPUIOCols::<T>::from_slice(&slc[..CPUIOCols::<T>::get_width()]);
-        let aux = CPUAuxCols::<T>::from_slice(&slc[CPUIOCols::<T>::get_width()..], options);
+impl<T: Clone> CpuCols<T> {
+    pub fn from_slice(slc: &[T], options: CpuOptions) -> Self {
+        let io = CpuIoCols::<T>::from_slice(&slc[..CpuIoCols::<T>::get_width()]);
+        let aux = CpuAuxCols::<T>::from_slice(&slc[CpuIoCols::<T>::get_width()..], options);
 
         Self { io, aux }
     }
@@ -162,7 +162,7 @@ impl<T: Clone> CPUCols<T> {
         flattened
     }
 
-    pub fn get_width(options: CPUOptions) -> usize {
-        CPUIOCols::<T>::get_width() + CPUAuxCols::<T>::get_width(options)
+    pub fn get_width(options: CpuOptions) -> usize {
+        CpuIoCols::<T>::get_width() + CpuAuxCols::<T>::get_width(options)
     }
 }

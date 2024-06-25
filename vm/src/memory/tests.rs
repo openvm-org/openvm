@@ -121,12 +121,15 @@ fn test_offline_checker() {
     let requester_trace = RowMajorMatrix::new(
         ops.iter()
             .flat_map(|op: &MemoryAccess<BabyBear>| {
-                iter::once(BabyBear::one())
-                    .chain(iter::once(BabyBear::from_canonical_usize(op.timestamp)))
-                    .chain(iter::once(BabyBear::from_canonical_u8(op.op_type as u8)))
-                    .chain(iter::once(op.address_space))
-                    .chain(iter::once(op.address))
-                    .chain(op.data.iter().cloned())
+                [
+                    BabyBear::one(),
+                    BabyBear::from_canonical_usize(op.timestamp),
+                    BabyBear::from_canonical_u8(op.op_type as u8),
+                    op.address_space,
+                    op.address,
+                ]
+                .into_iter()
+                .chain(op.data.iter().cloned())
             })
             .chain(
                 iter::repeat_with(|| {

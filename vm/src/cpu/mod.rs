@@ -1,7 +1,5 @@
 //use crate::range_gate::RangeCheckerGateChip;
 
-use serde::{Deserialize, Serialize};
-
 #[cfg(test)]
 pub mod tests;
 
@@ -48,21 +46,22 @@ impl OpCode {
             2 => Some(OpCode::JAL),
             3 => Some(OpCode::BEQ),
             4 => Some(OpCode::BNE),
-            5 => Some(OpCode::FADD),
-            6 => Some(OpCode::FSUB),
-            7 => Some(OpCode::FMUL),
-            8 => Some(OpCode::FDIV),
+            5 => Some(OpCode::TERMINATE),
+            6 => Some(OpCode::FADD),
+            7 => Some(OpCode::FSUB),
+            8 => Some(OpCode::FMUL),
+            9 => Some(OpCode::FDIV),
             _ => None,
         }
     }
 }
 
-#[derive(Default, Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct CPUOptions {
+#[derive(Default, Clone, Copy)]
+pub struct CpuOptions {
     pub field_arithmetic_enabled: bool,
 }
 
-impl CPUOptions {
+impl CpuOptions {
     pub fn num_operations(&self) -> usize {
         NUM_CORE_OPERATIONS
             + if self.field_arithmetic_enabled {
@@ -74,23 +73,23 @@ impl CPUOptions {
 }
 
 #[derive(Default, Clone)]
-pub struct CPUAir {
-    pub options: CPUOptions,
+pub struct CpuAir {
+    pub options: CpuOptions,
 }
 
 #[derive(Default)]
-pub struct CPUChip {
-    pub air: CPUAir,
+pub struct CpuChip {
+    pub air: CpuAir,
     //pub range_checker: Arc<RangeCheckerGateChip>,
 }
 
-impl CPUChip {
+impl CpuChip {
     pub fn new(
         field_arithmetic_enabled: bool,
         //range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
-        let air = CPUAir {
-            options: CPUOptions {
+        let air = CpuAir {
+            options: CpuOptions {
                 field_arithmetic_enabled,
             },
         };

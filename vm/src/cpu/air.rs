@@ -14,19 +14,19 @@ use afs_chips::{
 };
 
 use super::{
-    columns::{CPUAuxCols, CPUCols, CPUIOCols},
-    CPUAir,
+    columns::{CpuAuxCols, CpuCols, CpuIoCols},
+    CpuAir,
     OpCode::*,
     INST_WIDTH,
 };
 
-impl<F: Field> BaseAir<F> for CPUAir {
+impl<F: Field> BaseAir<F> for CpuAir {
     fn width(&self) -> usize {
-        CPUCols::<F>::get_width(self.options)
+        CpuCols::<F>::get_width(self.options)
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for CPUAir {
+impl<AB: AirBuilder> Air<AB> for CpuAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -34,15 +34,15 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
 
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
-        let local_cols = CPUCols::<AB::Var>::from_slice(local, self.options);
+        let local_cols = CpuCols::<AB::Var>::from_slice(local, self.options);
 
         let next = main.row_slice(1);
         let next: &[AB::Var] = (*next).borrow();
-        let next_cols = CPUCols::<AB::Var>::from_slice(next, self.options);
-        let CPUCols { io, aux } = local_cols;
-        let CPUCols { io: next_io, .. } = next_cols;
+        let next_cols = CpuCols::<AB::Var>::from_slice(next, self.options);
+        let CpuCols { io, aux } = local_cols;
+        let CpuCols { io: next_io, .. } = next_cols;
 
-        let CPUIOCols {
+        let CpuIoCols {
             clock_cycle: clock,
             pc,
             opcode,
@@ -52,13 +52,13 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
             d,
             e,
         } = io;
-        let CPUIOCols {
+        let CpuIoCols {
             clock_cycle: next_clock,
             pc: next_pc,
             ..
         } = next_io;
 
-        let CPUAuxCols {
+        let CpuAuxCols {
             operation_flags,
             read1,
             read2,
@@ -209,8 +209,8 @@ impl<AB: AirBuilder> Air<AB> for CPUAir {
             write_enabled_check += arithmetic_flags.clone();
             let mut when_arithmetic = builder.when(arithmetic_flags);
 
-            // read from e[b] and e[c]
-            when_arithmetic.assert_eq(read1.address_space, e);
+            // read from d[b] and e[c]
+            when_arithmetic.assert_eq(read1.address_space, d);
             when_arithmetic.assert_eq(read1.address, b);
 
             when_arithmetic.assert_eq(read2.address_space, e);

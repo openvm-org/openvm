@@ -1,15 +1,15 @@
 use std::collections::{HashMap, VecDeque};
 
-use p3_field::PrimeField64;
+use p3_field::{Field, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
 use afs_chips::{is_equal::IsEqualAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions};
 
-use crate::memory::OpType;
+use crate::{field_arithmetic::FieldArithmeticAir, memory::OpType};
 
 use super::{
-    columns::{CPUAuxCols, CPUCols, CPUIOCols, MemoryAccessCols},
-    CPUChip,
+    columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
+    CpuChip,
     OpCode::{self, *},
     INST_WIDTH, MAX_READS_PER_CYCLE, MAX_WRITES_PER_CYCLE,
 };
@@ -118,11 +118,38 @@ impl<F: PrimeField64> ArithmeticOperation<F> {
             result: isize_to_field::<F>(result),
         }
     }
+
+    pub fn to_vec(&self) -> Vec<F> {
+        vec![
+            F::from_canonical_usize(self.opcode as usize),
+            self.operand1,
+            self.operand2,
+            self.result,
+        ]
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct FieldExtensionOperation<F> {
+    pub opcode: OpCode,
+    pub operand1: [F; 4],
+    pub operand2: [F; 4],
+    pub result: [F; 4],
+}
+
+impl<F: Field> FieldExtensionOperation<F> {
+    pub fn to_vec(&self) -> Vec<F> {
+        let mut vec = vec![F::from_canonical_usize(self.opcode as usize)];
+        vec.extend(self.operand1.iter());
+        vec.extend(self.operand2.iter());
+        vec.extend(self.result.iter());
+        vec
+    }
 }
 
 pub struct ProgramExecution<F> {
     pub program: Vec<Instruction<F>>,
-    pub trace_rows: Vec<CPUCols<F>>,
+    pub trace_rows: Vec<CpuCols<F>>,
     pub execution_frequencies: Vec<F>,
     pub memory_accesses: Vec<MemoryAccess<F>>,
     pub arithmetic_ops: Vec<ArithmeticOperation<F>>,
@@ -137,17 +164,6 @@ impl<F: PrimeField64> ProgramExecution<F> {
             .collect();
         let num_cols = rows.len() / self.trace_rows.len();
         RowMajorMatrix::new(rows, num_cols)
-    }
-}
-
-impl<F: PrimeField64> ArithmeticOperation<F> {
-    pub fn to_vec(&self) -> Vec<F> {
-        vec![
-            F::from_canonical_usize(self.opcode as usize),
-            self.operand1,
-            self.operand2,
-            self.result,
-        ]
     }
 }
 
@@ -183,7 +199,8 @@ impl<F: PrimeField64> Memory<F> {
                 .unwrap_or(&F::zero())
         };
         let read = MemoryAccess {
-            timestamp: ((MAX_READS_PER_CYCLE + MAX_WRITES_PER_CYCLE) * self.clock_cycle) + self.reads_this_cycle.len(),
+            timestamp: ((MAX_READS_PER_CYCLE + MAX_WRITES_PER_CYCLE) * self.clock_cycle)
+                + self.reads_this_cycle.len(),
             op_type: OpType::Read,
             address_space,
             address,
@@ -201,7 +218,9 @@ impl<F: PrimeField64> Memory<F> {
             panic!("Attempted to write to address space 0");
         } else {
             let write = MemoryAccess {
-                timestamp: ((MAX_READS_PER_CYCLE + MAX_WRITES_PER_CYCLE) * self.clock_cycle) + MAX_READS_PER_CYCLE + self.writes_this_cycle.len(),
+                timestamp: ((MAX_READS_PER_CYCLE + MAX_WRITES_PER_CYCLE) * self.clock_cycle)
+                    + MAX_READS_PER_CYCLE
+                    + self.writes_this_cycle.len(),
                 op_type: OpType::Write,
                 address_space,
                 address,
@@ -225,8 +244,8 @@ impl<F: PrimeField64> Memory<F> {
     }
 }
 
-impl CPUChip {
-    pub fn generate_trace<F: PrimeField64>(
+impl CpuChip {
+    pub fn generate_program_execution<F: PrimeField64>(
         &self,
         program: Vec<Instruction<F>>,
     ) -> ProgramExecution<F> {
@@ -251,7 +270,7 @@ impl CPUChip {
             let d = instruction.d;
             let e = instruction.e;
 
-            let io = CPUIOCols {
+            let io = CpuIoCols {
                 clock_cycle: F::from_canonical_usize(clock_cycle),
                 pc,
                 opcode: F::from_canonical_usize(opcode as usize),
@@ -306,17 +325,12 @@ impl CPUChip {
                 }
                 opcode @ (FADD | FSUB | FMUL | FDIV) => {
                     if self.air.options.field_arithmetic_enabled {
-                        // read from e[b] and e[c]
-                        let operand1 = memory.read(e, b);
+                        // read from d[b] and e[c]
+                        let operand1 = memory.read(d, b);
                         let operand2 = memory.read(e, c);
-                        let result = match opcode {
-                            FADD => operand1 + operand2,
-                            FSUB => operand1 - operand2,
-                            FMUL => operand1 * operand2,
-                            FDIV => operand1 / operand2,
-                            _ => unreachable!(),
-                        };
                         // write to d[a]
+                        let result =
+                            FieldArithmeticAir::solve(opcode, (operand1, operand2)).unwrap();
                         memory.write(d, a, result);
 
                         arithmetic_operations.push(ArithmeticOperation {
@@ -351,7 +365,7 @@ impl CPUChip {
             let beq_check = is_equal_cols.io.is_equal;
             let is_equal_aux = is_equal_cols.aux.inv;
 
-            let aux = CPUAuxCols {
+            let aux = CpuAuxCols {
                 operation_flags,
                 read1,
                 read2,
@@ -360,7 +374,7 @@ impl CPUChip {
                 is_equal_aux,
             };
 
-            let cols = CPUCols { io, aux };
+            let cols = CpuCols { io, aux };
             rows.push(cols);
 
             pc = next_pc;
