@@ -35,6 +35,3 @@ p3-baby-bear = { workspace = true }
 p3-poseidon2 = { workspace = true }
 p3-symmetric = { workspace = true }
 p3-mds = { workspace = true }
-toml = "0.8.14"
-p3-blake3 = { workspace = true }
-p3-keccak = { workspace = true }

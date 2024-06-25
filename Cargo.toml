@@ -1,11 +1,9 @@
 [workspace]
 members = [
     "chips",
-    "compiler",
     "stark-backend",
     "test-utils",
     "derive",
-    "bin/afs",
     "logical-interface",
     "vm",
 ]

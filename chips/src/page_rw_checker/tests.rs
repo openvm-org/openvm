@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::{iter, panic};
 
 use afs_stark_backend::{
@@ -11,6 +11,7 @@ use afs_test_utils::{
         self,
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
     },
+    engine::StarkEngine,
     interaction::dummy_interaction_air::DummyInteractionAir,
     utils::create_seeded_rng,
 };
@@ -19,7 +20,8 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 
-use crate::common::{page::Page, page_cols::PageCols};
+use crate::common::page::Page;
+use crate::common::page_cols::PageCols;
 use crate::page_rw_checker::{
     self,
     page_controller::{self, OpType, Operation},
@@ -43,17 +45,16 @@ fn load_page_test(
     let page_height = page_init.height();
     assert!(page_height > 0);
 
-    // Clearing the range_checker counts
-    page_controller.reset_range_checker(idx_decomp);
-
-    let (init_page_pdata, final_page_pdata) = page_controller.load_page_and_ops(
+    let (page_traces, mut prover_data) = page_controller.load_page_and_ops(
         page_init,
-        None,
-        None,
         ops.to_vec(),
         trace_degree,
         &mut trace_builder.committer,
     );
+
+    let offline_checker_trace = page_controller.offline_checker_trace();
+    let final_page_aux_trace = page_controller.final_page_aux_trace();
+    let range_checker_trace = page_controller.range_checker_trace();
 
     // Generating trace for ops_sender and making sure it has height num_ops
     let ops_sender_trace = RowMajorMatrix::new(
@@ -63,7 +64,7 @@ fn load_page_test(
                     .chain(iter::once(Val::from_canonical_usize(op.clk)))
                     .chain(op.idx.iter().map(|x| Val::from_canonical_u32(*x)))
                     .chain(op.data.iter().map(|x| Val::from_canonical_u32(*x)))
-                    .chain(iter::once(Val::from_canonical_u8(op.op_type as u8)))
+                    .chain(iter::once(Val::from_canonical_u8(op.op_type.clone() as u8)))
             })
             .chain(
                 iter::repeat_with(|| iter::repeat(Val::zero()).take(1 + ops_sender.field_width()))
@@ -74,21 +75,59 @@ fn load_page_test(
         1 + ops_sender.field_width(),
     );
 
-    let proof = page_controller.prove(
-        engine,
-        partial_pk,
-        trace_builder,
-        init_page_pdata,
-        final_page_pdata,
-        ops_sender,
-        ops_sender_trace,
+    // Clearing the range_checker counts
+    page_controller.update_range_checker(idx_decomp);
+
+    trace_builder.clear();
+
+    trace_builder.load_cached_trace(page_traces[0].clone(), prover_data.remove(0));
+    trace_builder.load_cached_trace(page_traces[1].clone(), prover_data.remove(0));
+    trace_builder.load_trace(final_page_aux_trace);
+    trace_builder.load_trace(offline_checker_trace.clone());
+    trace_builder.load_trace(range_checker_trace);
+    trace_builder.load_trace(ops_sender_trace);
+
+    trace_builder.commit_current();
+
+    let partial_vk = partial_pk.partial_vk();
+
+    let main_trace_data = trace_builder.view(
+        &partial_vk,
+        vec![
+            &page_controller.init_chip,
+            &page_controller.final_chip,
+            &page_controller.offline_checker,
+            &page_controller.range_checker.air,
+            ops_sender,
+        ],
     );
 
-    page_controller.verify(engine, partial_pk.partial_vk(), proof, ops_sender)
+    let pis = vec![vec![]; partial_vk.per_air.len()];
+
+    let prover = engine.prover();
+    let verifier = engine.verifier();
+
+    let mut challenger = engine.new_challenger();
+    let proof = prover.prove(&mut challenger, partial_pk, main_trace_data, &pis);
+
+    let mut challenger = engine.new_challenger();
+    verifier.verify(
+        &mut challenger,
+        partial_vk,
+        vec![
+            &page_controller.init_chip,
+            &page_controller.final_chip,
+            &page_controller.offline_checker,
+            &page_controller.range_checker.air,
+            ops_sender,
+        ],
+        proof,
+        &pis,
+    )
 }
 
 #[test]
-fn page_offline_checker_test() {
+fn page_read_write_test() {
     let mut rng = create_seeded_rng();
 
     let page_bus_index = 0;
@@ -115,19 +154,25 @@ fn page_offline_checker_test() {
     let max_idx = 1 << idx_limb_bits;
 
     // Generating a random page with distinct indices
-    let mut initial_page = Page::random(
-        &mut rng,
-        idx_len,
-        data_len,
-        max_idx,
-        MAX_VAL,
-        page_height,
-        page_height,
-    );
+    let mut page: Vec<Vec<u32>> = vec![];
+    let mut idx_data_map = HashMap::new();
+    for _ in 0..page_height {
+        let mut idx;
+        loop {
+            idx = (0..idx_len)
+                .map(|_| rng.gen::<u32>() % max_idx)
+                .collect::<Vec<u32>>();
+            if !idx_data_map.contains_key(&idx) {
+                break;
+            }
+        }
 
-    // We will generate the final page from the initial page below
-    // while generating the operations
-    let mut final_page = initial_page.clone();
+        let data: Vec<u32> = (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect();
+        idx_data_map.insert(idx.clone(), data.clone());
+        page.push(iter::once(1).chain(idx).chain(data).collect());
+    }
+
+    let mut page = Page::from_2d_vec(&page, idx_len, data_len);
 
     // Generating random sorted distinct timestamps for operations
     let mut clks = HashSet::new();
@@ -139,41 +184,31 @@ fn page_offline_checker_test() {
 
     let mut ops: Vec<Operation> = vec![];
     for &clk in clks.iter() {
+        let idx = idx_data_map
+            .iter()
+            .nth(rng.gen::<usize>() % idx_data_map.len())
+            .unwrap()
+            .0
+            .to_vec();
+
         let op_type = {
-            if rng.gen::<u32>() % 3 == 0 {
+            if rng.gen::<bool>() {
                 OpType::Read
-            } else if rng.gen::<u32>() % 3 == 1 {
-                OpType::Write
             } else {
-                OpType::Delete
+                OpType::Write
             }
         };
 
-        let mut idx = final_page.get_random_idx(&mut rng);
-
-        // if this is a write operation, make it an insert sometimes
-        if op_type == OpType::Write && rng.gen::<u32>() % 2 == 0 {
-            idx = (0..idx_len).map(|_| rng.gen::<u32>() % max_idx).collect();
-        }
-
         let data = {
             if op_type == OpType::Read {
-                final_page[&idx].clone()
-            } else if op_type == OpType::Write {
-                (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect()
+                idx_data_map[&idx].to_vec()
             } else {
-                vec![0; data_len]
+                (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect()
             }
         };
 
         if op_type == OpType::Write {
-            if final_page.contains(&idx) {
-                final_page[&idx].clone_from(&data);
-            } else {
-                final_page.insert(&idx, &data);
-            }
-        } else if op_type == OpType::Delete {
-            final_page.delete(&idx);
+            idx_data_map.insert(idx.clone(), data.clone());
         }
 
         ops.push(Operation::new(clk, idx, data, op_type));
@@ -190,18 +225,47 @@ fn page_offline_checker_test() {
     );
     let ops_sender = DummyInteractionAir::new(idx_len + data_len + 2, true, ops_bus_index);
 
-    let engine = config::baby_bear_poseidon2::default_engine(
-        idx_decomp.max(log_page_height.max(3 + log_num_ops)),
-    );
+    let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(3 + log_num_ops));
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-    page_controller.set_up_keygen_builder(
-        &mut keygen_builder,
+    let init_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
+    let final_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
+    let final_page_aux_ptr = keygen_builder.add_main_matrix(page_controller.final_chip.aux_width());
+    let offline_checker_ptr =
+        keygen_builder.add_main_matrix(page_controller.offline_checker.air_width());
+    let range_checker_ptr =
+        keygen_builder.add_main_matrix(page_controller.range_checker.air_width());
+    let ops_sender_ptr = keygen_builder.add_main_matrix(1 + ops_sender.field_width());
+
+    keygen_builder.add_partitioned_air(
+        &page_controller.init_chip,
         page_height,
-        trace_degree,
-        &ops_sender,
-        num_ops,
+        0,
+        vec![init_page_ptr],
     );
+
+    keygen_builder.add_partitioned_air(
+        &page_controller.final_chip,
+        page_height,
+        0,
+        vec![final_page_ptr, final_page_aux_ptr],
+    );
+
+    keygen_builder.add_partitioned_air(
+        &page_controller.offline_checker,
+        trace_degree,
+        0,
+        vec![offline_checker_ptr],
+    );
+
+    keygen_builder.add_partitioned_air(
+        &page_controller.range_checker.air,
+        1 << idx_decomp,
+        0,
+        vec![range_checker_ptr],
+    );
+
+    keygen_builder.add_partitioned_air(&ops_sender, num_ops, 0, vec![ops_sender_ptr]);
 
     let partial_pk = keygen_builder.generate_partial_pk();
 
@@ -211,7 +275,7 @@ fn page_offline_checker_test() {
     // Testing a fully allocated page
     load_page_test(
         &engine,
-        &initial_page,
+        &page,
         idx_decomp,
         &ops,
         &mut page_controller,
@@ -227,7 +291,7 @@ fn page_offline_checker_test() {
     let rows_allocated = rng.gen::<usize>() % (page_height + 1);
     for i in rows_allocated..page_height {
         // Making sure the first operation using this index is a write
-        let idx = initial_page.rows[i].idx.clone();
+        let idx = page.rows[i].idx.clone();
         for op in ops.iter_mut() {
             if op.idx == idx {
                 op.op_type = OpType::Write;
@@ -236,7 +300,7 @@ fn page_offline_checker_test() {
         }
 
         // Zeroing out the row
-        initial_page.rows[i] = PageCols::from_slice(
+        page.rows[i] = PageCols::from_slice(
             vec![0; idx_len + data_len + 1].as_slice(),
             idx_len,
             data_len,
@@ -245,7 +309,7 @@ fn page_offline_checker_test() {
 
     load_page_test(
         &engine,
-        &initial_page,
+        &page,
         idx_decomp,
         &ops,
         &mut page_controller,
@@ -260,7 +324,7 @@ fn page_offline_checker_test() {
     // Testing a fully unallocated page
     for i in 0..page_height {
         // Making sure the first operation that uses every index is a write
-        let idx = initial_page.rows[i].idx.clone();
+        let idx = page[i].idx.clone();
         for op in ops.iter_mut() {
             if op.idx == idx {
                 op.op_type = OpType::Write;
@@ -268,7 +332,7 @@ fn page_offline_checker_test() {
             }
         }
 
-        initial_page.rows[i] = PageCols::from_slice(
+        page.rows[i] = PageCols::from_slice(
             vec![0; 1 + idx_len + data_len].as_slice(),
             idx_len,
             data_len,
@@ -277,7 +341,7 @@ fn page_offline_checker_test() {
 
     load_page_test(
         &engine,
-        &initial_page,
+        &page,
         idx_decomp,
         &ops,
         &mut page_controller,
@@ -299,33 +363,7 @@ fn page_offline_checker_test() {
 
     load_page_test(
         &engine,
-        &initial_page,
-        idx_decomp,
-        &ops,
-        &mut page_controller,
-        &ops_sender,
-        &mut trace_builder,
-        &partial_pk,
-        trace_degree,
-        num_ops,
-    )
-    .expect("Verification failed");
-
-    // Making a test where we write, delete, write, then read an idx
-    // in a fully-unallocated page
-    let idx: Vec<u32> = (0..idx_len).map(|_| rng.gen::<u32>() % max_idx).collect();
-    let data_1: Vec<u32> = (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect();
-    let data_2: Vec<u32> = (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect();
-    ops = vec![
-        Operation::new(1, idx.clone(), data_1.clone(), OpType::Write),
-        Operation::new(2, idx.clone(), vec![0; data_len], OpType::Delete),
-        Operation::new(3, idx.clone(), data_2.clone(), OpType::Write),
-        Operation::new(4, idx, data_2, OpType::Read),
-    ];
-
-    load_page_test(
-        &engine,
-        &initial_page,
+        &page,
         idx_decomp,
         &ops,
         &mut page_controller,
@@ -339,9 +377,33 @@ fn page_offline_checker_test() {
 
     // Negative tests
 
+    // Testing reading from a non-existing index (in a fully-unallocated page)
+    ops = vec![Operation::new(
+        1,
+        (0..idx_len).map(|_| rng.gen::<u32>() % max_idx).collect(),
+        (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect(),
+        OpType::Read,
+    )];
+
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
     });
+    assert_eq!(
+        load_page_test(
+            &engine,
+            &page,
+            idx_decomp,
+            &ops,
+            &mut page_controller,
+            &ops_sender,
+            &mut trace_builder,
+            &partial_pk,
+            trace_degree,
+            num_ops,
+        ),
+        Err(VerificationError::OodEvaluationMismatch),
+        "Expected constraints to fail"
+    );
 
     // Testing reading wrong data from an existing index
     let idx: Vec<u32> = (0..idx_len).map(|_| rng.gen::<u32>() % max_idx).collect();
@@ -357,7 +419,7 @@ fn page_offline_checker_test() {
     assert_eq!(
         load_page_test(
             &engine,
-            &initial_page,
+            &page,
             idx_decomp,
             &ops,
             &mut page_controller,
@@ -399,7 +461,7 @@ fn page_offline_checker_test() {
     let result = panic::catch_unwind(move || {
         let _ = load_page_test(
             engine_ref,
-            &initial_page,
+            &page,
             idx_decomp,
             &ops,
             &mut page_controller,

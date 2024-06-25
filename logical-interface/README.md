@@ -16,7 +16,6 @@ Data is stored in tables, referenced by `TableId`, in a MockDb. The current impl
         |          ^
         v          |
     [ -FixedBytesCodec- ]
-             ^
              |
              v
     [ -----MockDb------ ]

@@ -13,16 +13,6 @@ use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{CryptographicPermutation, PaddingFreeSponge, TruncatedPermutation};
 use p3_uni_stark::StarkConfig;
-use p3_util::log2_strict_usize;
-use rand::{rngs::StdRng, SeedableRng};
-
-use crate::engine::{StarkEngine, StarkEngineWithHashInstrumentation};
-
-use super::{
-    fri_params::default_fri_params,
-    instrument::{HashStatistics, InstrumentCounter, Instrumented, StarkHashStatistics},
-    FriParameters,
-};
 
 const RATE: usize = 8;
 // permutation width
@@ -48,6 +38,16 @@ type Pcs<P> = TwoAdicFriPcs<Val, Dft, ValMmcs<P>, ChallengeMmcs<P>>;
 pub type BabyBearPermutationConfig<P> = StarkConfig<Pcs<P>, Challenge, Challenger<P>>;
 pub type BabyBearPoseidon2Config = BabyBearPermutationConfig<Perm>;
 pub type BabyBearPoseidon2Engine = BabyBearPermutationEngine<Perm>;
+
+use p3_util::log2_strict_usize;
+use rand::{rngs::StdRng, SeedableRng};
+
+use crate::engine::{StarkEngine, StarkEngineWithHashInstrumentation};
+
+use super::{
+    instrument::{HashStatistics, InstrumentCounter, Instrumented, StarkHashStatistics},
+    FriParameters,
+};
 
 pub struct BabyBearPermutationEngine<P>
 where
@@ -106,16 +106,28 @@ where
     }
 }
 
-/// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
 pub fn default_engine(pcs_log_degree: usize) -> BabyBearPoseidon2Engine {
     let perm = random_perm();
+    let config = default_config(&perm, pcs_log_degree);
     let fri_params = default_fri_params();
-    engine_from_perm(perm, pcs_log_degree, fri_params)
+    BabyBearPermutationEngine {
+        config,
+        perm,
+        fri_params,
+    }
+}
+
+fn default_fri_params() -> FriParameters {
+    FriParameters {
+        log_blowup: 4,
+        num_queries: 55,
+        proof_of_work_bits: 0,
+    }
 }
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
 pub fn default_config(perm: &Perm, pcs_log_degree: usize) -> BabyBearPoseidon2Config {
-    // target 80 bits of security, with conjectures:
+    // target 100 bits of security, with conjectures:
     let fri_params = default_fri_params();
     config_from_perm(perm, pcs_log_degree, fri_params)
 }
