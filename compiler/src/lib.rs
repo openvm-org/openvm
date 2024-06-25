@@ -7,6 +7,7 @@ pub mod asm;
 pub mod constraints;
 pub mod ir;
 pub mod util;
+pub mod conversion;
 
 pub mod prelude {
     pub use crate::asm::AsmCompiler;

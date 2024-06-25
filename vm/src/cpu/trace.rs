@@ -261,6 +261,7 @@ impl CpuAir {
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
             execution_frequencies[pc_usize] += F::one();
+            println!("pc = {}", pc);
 
             let instruction = program[pc_usize];
             let opcode = instruction.opcode;
