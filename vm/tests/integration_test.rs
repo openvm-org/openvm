@@ -79,3 +79,24 @@ fn test_vm_without_field_arithmetic() {
 
     air_test(field_arithmetic_enabled, program);
 }
+
+#[test]
+fn test_vm_fibonacci_old() {
+    let program = vec![
+        Instruction::from_isize(STOREW, 9, 0, 0, 0, 1),
+        Instruction::from_isize(STOREW, 1, 0, 2, 0, 1),
+        Instruction::from_isize(STOREW, 1, 0, 3, 0, 1),
+        Instruction::from_isize(STOREW, 0, 0, 0, 0, 2),
+        Instruction::from_isize(STOREW, 1, 0, 1, 0, 2),
+        Instruction::from_isize(BEQ, 2, 0, 7, 1, 1),
+        Instruction::from_isize(FADD, 2, 2, 3, 1, 1),
+        Instruction::from_isize(LOADW, 4, -2, 2, 1, 2),
+        Instruction::from_isize(LOADW, 5, -1, 2, 1, 2),
+        Instruction::from_isize(FADD, 6, 4, 5, 1, 1),
+        Instruction::from_isize(STOREW, 6, 0, 2, 1, 2),
+        Instruction::from_isize(JAL, 7, -6, 0, 1, 0),
+        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
+    ];
+
+    air_test(true, program.clone());
+}
