@@ -16,12 +16,7 @@ impl<const WIDTH: usize, F: PrimeField> BaseAir<F> for Poseidon2Air<WIDTH, F> {
     }
 }
 
-impl<AB, const WIDTH: usize, F: PrimeField> Air<AB> for Poseidon2Air<WIDTH, F>
-where
-    AB: AirBuilder,
-    AB::Var: AbstractField<F = F>,
-    F: PrimeField,
-{
+impl<AB: AirBuilder, const WIDTH: usize, F: PrimeField> Air<AB> for Poseidon2Air<WIDTH, F> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
@@ -34,7 +29,5 @@ where
         let internal_layer = DiffusionMatrixBabyBear {};
 
         let mut start_state: &mut [_; WIDTH] = io.input.clone().as_mut_slice().try_into().unwrap();
-        external_layer.permute_mut(start_state);
-        Self::ext_layer(start_state, &self.external_constants[0], &external_layer);
     }
 }
