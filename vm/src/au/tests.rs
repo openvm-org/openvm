@@ -34,7 +34,6 @@ fn generate_arith_program(len_ops: usize) -> ProgramExecution<BabyBear> {
         execution_frequencies: vec![],
         memory_accesses: vec![],
         arithmetic_ops: arith_ops,
-        field_extension_ops: vec![],
     }
 }
 

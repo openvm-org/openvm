@@ -5,10 +5,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use afs_chips::{is_equal::IsEqualAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions};
 
-use crate::{
-    field_extension::BETA,
-    {au::FieldArithmeticAir, memory::OpType},
-};
+use crate::{au::FieldArithmeticAir, memory::OpType};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
@@ -156,7 +153,6 @@ pub struct ProgramExecution<F> {
     pub execution_frequencies: Vec<F>,
     pub memory_accesses: Vec<MemoryAccess<F>>,
     pub arithmetic_ops: Vec<ArithmeticOperation<F>>,
-    pub field_extension_ops: Vec<FieldExtensionOperation<F>>,
 }
 
 impl<F: PrimeField64> ProgramExecution<F> {
@@ -256,7 +252,6 @@ impl CpuChip {
         let mut rows = vec![];
         let mut execution_frequencies = vec![F::zero(); program.len()];
         let mut arithmetic_operations = vec![];
-        let mut field_extension_operations = vec![];
 
         let mut clock_cycle: usize = 0;
         let mut pc = F::zero();
@@ -348,91 +343,6 @@ impl CpuChip {
                         panic!("Field arithmetic is not enabled");
                     }
                 }
-                opcode @ (FEADD | FESUB) => {
-                    let operand1 = [
-                        memory.read(e, b),
-                        memory.read(e, b + F::from_canonical_usize(1)),
-                        memory.read(e, b + F::from_canonical_usize(2)),
-                        memory.read(e, b + F::from_canonical_usize(3)),
-                    ];
-                    let operand2 = [
-                        memory.read(e, c),
-                        memory.read(e, c + F::from_canonical_usize(1)),
-                        memory.read(e, c + F::from_canonical_usize(2)),
-                        memory.read(e, c + F::from_canonical_usize(3)),
-                    ];
-                    let result = match opcode {
-                        FEADD => [
-                            operand1[0] + operand2[0],
-                            operand1[1] + operand2[1],
-                            operand1[2] + operand2[2],
-                            operand1[3] + operand2[3],
-                        ],
-                        FESUB => [
-                            operand1[0] - operand2[0],
-                            operand1[1] - operand2[1],
-                            operand1[2] - operand2[2],
-                            operand1[3] - operand2[3],
-                        ],
-                        _ => unreachable!(),
-                    };
-                    memory.write(d, a, result[0]);
-                    memory.write(d, a + F::from_canonical_usize(1), result[1]);
-                    memory.write(d, a + F::from_canonical_usize(2), result[2]);
-                    memory.write(d, a + F::from_canonical_usize(3), result[3]);
-
-                    field_extension_operations.push(FieldExtensionOperation {
-                        opcode,
-                        operand1,
-                        operand2,
-                        result,
-                    });
-                }
-                FEMUL => {
-                    let operand1 = [
-                        memory.read(e, b),
-                        memory.read(e, b + F::from_canonical_usize(1)),
-                        memory.read(e, b + F::from_canonical_usize(2)),
-                        memory.read(e, b + F::from_canonical_usize(3)),
-                    ];
-                    let operand2 = [
-                        memory.read(e, c),
-                        memory.read(e, c + F::from_canonical_usize(1)),
-                        memory.read(e, c + F::from_canonical_usize(2)),
-                        memory.read(e, c + F::from_canonical_usize(3)),
-                    ];
-                    let result = [
-                        operand1[0] * operand2[0]
-                            + F::from_canonical_usize(BETA)
-                                * (operand1[1] * operand2[3]
-                                    + operand1[2] * operand2[2]
-                                    + operand1[3] * operand2[1]),
-                        operand1[0] * operand2[1]
-                            + operand1[1] * operand2[0]
-                            + F::from_canonical_usize(BETA)
-                                * (operand1[2] * operand2[3] + operand1[3] * operand2[2]),
-                        operand1[0] * operand2[2]
-                            + operand1[1] * operand2[1]
-                            + operand1[2] * operand2[0]
-                            + F::from_canonical_usize(BETA) * operand1[3] * operand2[3],
-                        operand1[0] * operand2[3]
-                            + operand1[1] * operand2[2]
-                            + operand1[2] * operand2[1]
-                            + operand1[3] * operand2[0],
-                    ];
-
-                    memory.write(d, a, result[0]);
-                    memory.write(d, a + F::from_canonical_usize(1), result[1]);
-                    memory.write(d, a + F::from_canonical_usize(2), result[2]);
-                    memory.write(d, a + F::from_canonical_usize(3), result[3]);
-
-                    field_extension_operations.push(FieldExtensionOperation {
-                        opcode,
-                        operand1,
-                        operand2,
-                        result,
-                    });
-                }
             };
 
             // complete the clock cycle and get the read and write cols
@@ -481,7 +391,6 @@ impl CpuChip {
             trace_rows: rows,
             memory_accesses: memory.log,
             arithmetic_ops: arithmetic_operations,
-            field_extension_ops: field_extension_operations,
         }
     }
 }
