@@ -94,11 +94,7 @@ impl OfflineChecker {
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Vec<F> {
         let mut row: Vec<F> = vec![];
-        let op_type = if curr_op.op_type == OpType::Read {
-            0
-        } else {
-            1
-        };
+        let op_type = (curr_op.op_type == OpType::Write) as u8;
 
         row.push(F::from_canonical_usize(curr_op.timestamp));
         row.push(curr_op.address_space);
