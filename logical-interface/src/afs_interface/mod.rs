@@ -3,7 +3,7 @@ pub mod tests;
 pub mod utils;
 
 use crate::{
-    afs_input_instructions::{types::InputFileBodyOperation, AfsInputInstructions},
+    afs_input::{types::InputFileOp, AfsInputFile},
     mock_db::MockDb,
     table::{codec::fixed_bytes::FixedBytesCodec, types::TableMetadata, Table},
     utils::string_to_be_vec,
@@ -33,15 +33,15 @@ impl<'a> AfsInterface<'a> {
     }
 
     pub fn load_input_file(&mut self, path: &str) -> Result<&Table> {
-        let instructions = AfsInputInstructions::from_file(path)?;
+        let instructions = AfsInputFile::open(path)?;
 
         let table_id = instructions.header.table_id;
         let table_id_bytes = string_to_table_id(table_id.clone());
 
         for op in &instructions.operations {
             match op.operation {
-                InputFileBodyOperation::Read => {}
-                InputFileBodyOperation::Insert => {
+                InputFileOp::Read => {}
+                InputFileOp::Insert => {
                     if op.args.len() != 2 {
                         return Err(eyre!("Invalid number of arguments for insert operation"));
                     }
@@ -61,7 +61,7 @@ impl<'a> AfsInterface<'a> {
                     }
                     self.db_ref.insert_data(table_id_bytes, index, data);
                 }
-                InputFileBodyOperation::Write => {
+                InputFileOp::Write => {
                     if op.args.len() != 2 {
                         return Err(eyre!("Invalid number of arguments for write operation"));
                     }
@@ -81,6 +81,9 @@ impl<'a> AfsInterface<'a> {
                     }
                     self.db_ref.write_data(table_id_bytes, index, data);
                 }
+                InputFileOp::Where => {}
+                InputFileOp::InnerJoin => {}
+                InputFileOp::GroupBy => {}
             };
         }
 

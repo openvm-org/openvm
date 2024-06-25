@@ -2,7 +2,7 @@ use afs_test_utils::page_config::PageConfig;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{
-    afs_input_instructions::AfsInputInstructions, afs_interface::AfsInterface, mock_db::MockDb,
+    afs_input::AfsInputFile, afs_interface::AfsInterface, mock_db::MockDb,
     table::types::TableMetadata,
 };
 
@@ -63,7 +63,7 @@ impl WriteCommand {
         };
 
         println!("afi_file_path: {}", self.afi_file_path);
-        let instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
+        let instructions = AfsInputFile::open(&self.afi_file_path)?;
         let table_id = instructions.header.table_id.clone();
 
         let mut interface =

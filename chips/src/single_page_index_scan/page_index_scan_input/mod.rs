@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
     is_equal_vec::{columns::IsEqualVecAuxCols, IsEqualVecAir},
     is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
@@ -11,7 +13,7 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-#[derive(Default, Clone)]
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Comp {
     #[default]
     Lt,

@@ -12,3 +12,4 @@ color-eyre = "0.6.3"
 serde = { version = "1.0.203", features = ["derive"] }
 afs-chips = { path = "../../chips" }
 afs-test-utils = { path = "../../test-utils" }
+logical-interface = { path = "../../logical-interface" }

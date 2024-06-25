@@ -5,23 +5,22 @@ use std::{
     str::FromStr,
 };
 
+/// Represents a single operation in an AFS input file
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AfsOperation {
+    pub operation: InputFileOp,
+    pub args: Vec<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum InputFileHeaderOperation {
+pub enum InputFileHeader {
     TableId,
     IndexBytes,
     DataBytes,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum InputFileBodyOperation {
-    Read,
-    Insert,
-    Write,
-}
-
-impl FromStr for InputFileHeaderOperation {
+impl FromStr for InputFileHeader {
     type Err = color_eyre::eyre::Error;
 
     fn from_str(s: &str) -> Result<Self> {
@@ -34,7 +33,18 @@ impl FromStr for InputFileHeaderOperation {
     }
 }
 
-impl FromStr for InputFileBodyOperation {
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum InputFileOp {
+    Read,
+    Insert,
+    Write,
+    Where,
+    InnerJoin,
+    GroupBy,
+}
+
+impl FromStr for InputFileOp {
     type Err = color_eyre::eyre::Error;
 
     fn from_str(s: &str) -> Result<Self> {
@@ -42,17 +52,23 @@ impl FromStr for InputFileBodyOperation {
             "READ" => Ok(Self::Read),
             "INSERT" => Ok(Self::Insert),
             "WRITE" => Ok(Self::Write),
+            "WHERE" => Ok(Self::Where),
+            "INNER_JOIN" => Ok(Self::InnerJoin),
+            "GROUP_BY" => Ok(Self::GroupBy),
             _ => Err(eyre!("Invalid operation: {}", s)),
         }
     }
 }
 
-impl Display for InputFileBodyOperation {
+impl Display for InputFileOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            InputFileBodyOperation::Read => "READ",
-            InputFileBodyOperation::Insert => "INSERT",
-            InputFileBodyOperation::Write => "WRITE",
+            InputFileOp::Read => "READ",
+            InputFileOp::Insert => "INSERT",
+            InputFileOp::Write => "WRITE",
+            InputFileOp::Where => "WHERE",
+            InputFileOp::InnerJoin => "INNER_JOIN",
+            InputFileOp::GroupBy => "GROUP_BY",
         };
         write!(f, "{}", s)
     }
