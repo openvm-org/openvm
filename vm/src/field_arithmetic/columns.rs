@@ -4,13 +4,16 @@ use p3_field::Field;
 /// Columns for field arithmetic chip.
 ///
 /// Four IO columns for opcode, x, y, result.
-/// Seven aux columns for interpreting opcode, evaluating indicators, and explicit computations.
+/// Eight aux columns for interpreting opcode, evaluating indicators, inverse, and explicit computations.
 #[derive(AlignedBorrow)]
+#[repr(C)]
 pub struct FieldArithmeticCols<T> {
     pub io: FieldArithmeticIOCols<T>,
     pub aux: FieldArithmeticAuxCols<T>,
 }
 
+#[derive(AlignedBorrow)]
+#[repr(C)]
 pub struct FieldArithmeticIOCols<T> {
     pub opcode: T,
     pub x: T,
@@ -18,6 +21,8 @@ pub struct FieldArithmeticIOCols<T> {
     pub z: T,
 }
 
+#[derive(AlignedBorrow)]
+#[repr(C)]
 pub struct FieldArithmeticAuxCols<T> {
     pub opcode_lo: T,
     pub opcode_hi: T,
@@ -26,15 +31,16 @@ pub struct FieldArithmeticAuxCols<T> {
     pub sum_or_diff: T,
     pub product: T,
     pub quotient: T,
+    pub divisor_inv: T,
 }
 
 impl<T> FieldArithmeticCols<T>
 where
     T: Field,
 {
-    pub const NUM_COLS: usize = 11;
+    pub const NUM_COLS: usize = 12;
     pub const NUM_IO_COLS: usize = 4;
-    pub const NUM_AUX_COLS: usize = 6;
+    pub const NUM_AUX_COLS: usize = 8;
 
     pub fn get_width() -> usize {
         FieldArithmeticIOCols::<T>::get_width() + FieldArithmeticAuxCols::<T>::get_width()
@@ -44,6 +50,14 @@ where
         let mut result = self.io.flatten();
         result.extend(self.aux.flatten());
         result
+    }
+
+    pub fn from_slice(slice: &[T]) -> Self {
+        let (io_slice, aux_slice) = slice.split_at(FieldArithmeticIOCols::<T>::get_width());
+        Self {
+            io: FieldArithmeticIOCols::<T>::from_slice(io_slice),
+            aux: FieldArithmeticAuxCols::<T>::from_slice(aux_slice),
+        }
     }
 }
 
@@ -55,11 +69,16 @@ impl<T: Field> FieldArithmeticIOCols<T> {
     pub fn flatten(&self) -> Vec<T> {
         vec![self.opcode, self.x, self.y, self.z]
     }
+
+    pub fn from_slice(slice: &[T]) -> Self {
+        let (opcode, x, y, z) = (slice[0], slice[1], slice[2], slice[3]);
+        Self { opcode, x, y, z }
+    }
 }
 
 impl<T: Field> FieldArithmeticAuxCols<T> {
     pub fn get_width() -> usize {
-        7
+        8
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -71,6 +90,23 @@ impl<T: Field> FieldArithmeticAuxCols<T> {
             self.sum_or_diff,
             self.product,
             self.quotient,
+            self.divisor_inv,
         ]
+    }
+
+    pub fn from_slice(slice: &[T]) -> Self {
+        let (opcode_lo, opcode_hi, is_mul, is_div, sum_or_diff, product, quotient, divisor_inv) = (
+            slice[0], slice[1], slice[2], slice[3], slice[4], slice[5], slice[6], slice[7],
+        );
+        Self {
+            opcode_lo,
+            opcode_hi,
+            is_mul,
+            is_div,
+            sum_or_diff,
+            product,
+            quotient,
+            divisor_inv,
+        }
     }
 }
