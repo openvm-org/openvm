@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::cpu::CPUOptions;
+use crate::cpu::CpuOptions;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct VMParamsConfig {
@@ -28,8 +28,8 @@ impl VMConfig {
         config
     }
 
-    pub fn cpu_options(&self) -> CPUOptions {
-        CPUOptions {
+    pub fn cpu_options(&self) -> CpuOptions {
+        CpuOptions {
             field_arithmetic_enabled: self.vm.field_arithmetic_enabled,
         }
     }

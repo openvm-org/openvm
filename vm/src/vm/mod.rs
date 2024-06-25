@@ -2,14 +2,14 @@ use std::sync::Arc;
 
 use afs_chips::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::rap::AnyRap;
-use p3_field::PrimeField64;
+use p3_field::{PrimeField32, PrimeField64};
 use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 
 use crate::{
-    au::FieldArithmeticAir,
-    cpu::{trace::Instruction, CPUChip, RANGE_CHECKER_BUS, WORD_SIZE},
+    field_arithmetic::FieldArithmeticAir,
+    cpu::{trace::Instruction, CpuChip, RANGE_CHECKER_BUS, WORD_SIZE},
     memory::{offline_checker::OfflineChecker, MemoryAccess},
     program::ProgramAir,
 };
@@ -24,7 +24,7 @@ where
 {
     pub config: VMParamsConfig,
 
-    pub cpu_chip: CPUChip,
+    pub cpu_chip: CpuChip,
     pub program_air: ProgramAir<Val<SC>>,
     pub memory_air: OfflineChecker,
     pub field_arithmetic_air: FieldArithmeticAir,
@@ -40,6 +40,7 @@ where
 impl<SC: StarkGenericConfig> VM<SC>
 where
     Val<SC>: PrimeField64,
+    Val<SC>: PrimeField32,
 {
     pub fn new(config: VMConfig, program: Vec<Instruction<Val<SC>>>) -> Self {
         let config = config.vm;
@@ -48,12 +49,12 @@ where
 
         let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, 1 << decomp));
 
-        let cpu_chip = CPUChip::new(config.field_arithmetic_enabled);
+        let cpu_chip = CpuChip::new(config.field_arithmetic_enabled);
         let program_air = ProgramAir::new(program.clone());
         let memory_air = OfflineChecker::new(WORD_SIZE, limb_bits, limb_bits, limb_bits, decomp);
         let field_arithmetic_air = FieldArithmeticAir::new();
 
-        let execution = cpu_chip.generate_trace(program_air.program.clone());
+        let execution = cpu_chip.generate_program_execution(program_air.program.clone());
         let program_trace = program_air.generate_trace(&execution);
 
         let ops = execution
