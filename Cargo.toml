@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "chips",
+    "compiler",
     "stark-backend",
     "test-utils",
     "derive",
