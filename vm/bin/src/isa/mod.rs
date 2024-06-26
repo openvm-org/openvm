@@ -13,7 +13,6 @@ pub fn get_vm<AC: StarkGenericConfig>(
     file_path: &str,
 ) -> Result<VirtualMachine<AC>, std::io::Error>
 where
-    Val<AC>: PrimeField64,
     Val<AC>: PrimeField32,
 {
     let instructions = parse_isa_file::<Val<AC>>(file_path)?;
@@ -26,11 +25,10 @@ pub fn parse_isa_file<F: PrimeField64>(
 ) -> Result<Vec<Instruction<F>>, std::io::Error> {
     let file = File::open(file_path)?;
     let reader = BufReader::new(file);
-    let lines: Vec<String> = reader.lines().collect::<Result<Vec<String>, _>>()?;
 
     let mut result = vec![];
-    for line in lines {
-        if let Some(instruction) = instruction_from_line::<F>(&line)? {
+    for line in reader.lines() {
+        if let Some(instruction) = instruction_from_line::<F>(&line?)? {
             result.push(instruction);
         }
     }

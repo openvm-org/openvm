@@ -67,7 +67,7 @@ where
                 timestamp: access.timestamp,
                 data: vec![access.data],
             })
-            .collect::<Vec<MemoryAccess<Val<SC>>>>();
+            .collect::<Vec<_>>();
         let memory_trace_degree = execution.memory_accesses.len().next_power_of_two();
         let memory_trace =
             memory_air.generate_trace(ops, range_checker.clone(), memory_trace_degree);
