@@ -1,22 +1,19 @@
 use crate::{
-    afs_interface::utils::string_to_table_id, mock_db::MockDb, table::types::TableMetadata, u8_vec,
-    utils::uint_to_be_vec,
+    afs_interface::utils::string_to_table_id, mock_db::MockDb, u8_vec, utils::uint_to_be_vec,
 };
 
 use super::AfsInterface;
 
 #[test]
 pub fn test_initialize_interface() {
-    let default_table_metadata = TableMetadata::new(32, 1024);
-    let mut db = MockDb::new(default_table_metadata);
+    let mut db = MockDb::new();
     let mut _interface = AfsInterface::new(8, 8, &mut db);
 }
 
 #[test]
 pub fn test_initialize_interface_from_file() {
     let file_path = "tests/data/test_input_file_8_8.afi";
-    let default_table_metadata = TableMetadata::new(8, 8);
-    let mut db = MockDb::new(default_table_metadata);
+    let mut db = MockDb::new();
     let mut interface = AfsInterface::new(8, 8, &mut db);
     match interface.load_input_file(file_path) {
         Ok(_) => {}

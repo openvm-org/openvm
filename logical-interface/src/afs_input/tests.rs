@@ -119,17 +119,17 @@ pub fn test_parse_inner_join_op() {
     let args = vec![
         "0x11".to_string(),
         "0x12".to_string(),
-        "31".to_string(),
-        "61".to_string(),
+        "1".to_string(),
+        "32".to_string(),
     ];
     let op = InnerJoinOp::parse(args).unwrap();
     assert_eq!(
         op,
         InnerJoinOp {
-            left_table_id: string_to_table_id("0x11".to_string()),
-            right_table_id: string_to_table_id("0x12".to_string()),
-            fkey_start: 31,
-            fkey_end: 61,
+            table_id_left: string_to_table_id("0x11".to_string()),
+            table_id_right: string_to_table_id("0x12".to_string()),
+            fkey_start: 1,
+            fkey_end: 32,
         }
     );
 }

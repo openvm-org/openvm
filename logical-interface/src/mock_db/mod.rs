@@ -7,7 +7,7 @@ use std::{
     io::{Read, Write},
 };
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct MockDb {
     /// Map of table id to table
     pub tables: BTreeMap<TableId, MockDbTable>,
@@ -35,9 +35,7 @@ impl MockDbTable {
 
 impl MockDb {
     pub fn new() -> Self {
-        Self {
-            tables: BTreeMap::new(),
-        }
+        Self::default()
     }
 
     pub fn from_file(path: &str) -> Self {
