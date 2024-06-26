@@ -38,6 +38,22 @@ impl<'a> AfsInterface<'a> {
         let table_id = instructions.header.table_id;
         let table_id_bytes = string_to_table_id(table_id.clone());
 
+        let get_table = self.get_table(table_id.clone());
+        match get_table {
+            Some(_) => {}
+            None => {
+                self.create_table(
+                    table_id.clone(),
+                    TableMetadata::new(
+                        instructions.header.index_bytes,
+                        instructions.header.data_bytes,
+                    ),
+                )
+                .unwrap();
+                self.get_table(table_id.clone()).unwrap();
+            }
+        }
+
         for op in &instructions.operations {
             match op.operation {
                 InputFileOp::Read => {}
@@ -87,11 +103,7 @@ impl<'a> AfsInterface<'a> {
             };
         }
 
-        let get_table = self.get_table(table_id);
-        match get_table {
-            Some(table) => Ok(table),
-            None => Err(eyre!("Error getting table")),
-        }
+        Ok(self.get_table(table_id).unwrap())
     }
 
     pub fn get_db_ref(&mut self) -> &mut MockDb {

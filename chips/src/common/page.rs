@@ -37,7 +37,7 @@ impl Page {
         }
     }
 
-    pub fn from_row_major_matrix<F: PrimeField>(
+    pub fn from_trace<F: PrimeField>(
         matrix: &RowMajorMatrix<F>,
         idx_len: usize,
         data_len: usize,

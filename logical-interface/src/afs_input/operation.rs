@@ -131,8 +131,8 @@ impl GroupByOp {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct InnerJoinOp {
-    pub left_table_id: TableId,
-    pub right_table_id: TableId,
+    pub table_id_left: TableId,
+    pub table_id_right: TableId,
     pub fkey_start: usize,
     pub fkey_end: usize,
 }
@@ -142,13 +142,13 @@ impl InnerJoinOp {
         if args.len() != 4 {
             return Err(eyre!("Invalid number of arguments for INNER JOIN op"));
         }
-        let left_table_id = string_to_table_id(args[0].clone());
-        let right_table_id = string_to_table_id(args[1].clone());
+        let table_id_left = string_to_table_id(args[0].clone());
+        let table_id_right = string_to_table_id(args[1].clone());
         let fkey_start = args[2].parse::<usize>()?;
         let fkey_end = args[3].parse::<usize>()?;
         Ok(Self {
-            left_table_id,
-            right_table_id,
+            table_id_left,
+            table_id_right,
             fkey_start,
             fkey_end,
         })

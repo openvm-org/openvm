@@ -1,11 +1,11 @@
-use crate::commands::run::{PageConfig, RunCommand};
+use crate::commands::run::{utils::pretty_print_page, PageConfig, RunCommand};
 use afs_chips::{common::page::Page, group_by::page_controller::PageController};
 use afs_stark_backend::{
     keygen::{types::MultiStarkPartialProvingKey, MultiStarkKeygenBuilder},
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+    prover::trace::TraceCommitmentBuilder,
 };
 use afs_test_utils::{
-    config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
+    config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
     engine::StarkEngine,
 };
 use color_eyre::eyre::{eyre, Result};
@@ -13,28 +13,26 @@ use logical_interface::{
     afs_input::operation::GroupByOp, afs_interface::AfsInterface, mock_db::MockDb,
     utils::u16_vec_to_hex_string,
 };
-use p3_baby_bear::BabyBear;
-use p3_uni_stark::{StarkGenericConfig, Val};
+use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_strict_usize;
 
 const INTERNAL_BUS: usize = 0;
 const OUTPUT_BUS: usize = 1;
 const RANGE_BUS: usize = 2;
 
-// type Val = BabyBear;
-
 pub fn execute_group_by<SC: StarkGenericConfig>(
-    config: &PageConfig,
+    cfg: &PageConfig,
     cli: &RunCommand,
     db: &mut MockDb,
     op: GroupByOp,
 ) -> Result<()> {
     println!("group_by: {:?}", op);
-    let index_bytes = config.page.index_bytes;
-    let data_bytes = config.page.data_bytes;
+    let index_bytes = cfg.page.index_bytes;
+    let data_bytes = cfg.page.data_bytes;
+    let height = cfg.page.height;
+    let limb_bits = cfg.page.bits_per_fe;
     let idx_len = (index_bytes + 1) / 2;
     let data_len = (data_bytes + 1) / 2;
-    let height = config.page.height;
     let page_width = 1 + idx_len + data_len;
     let idx_decomp = log2_strict_usize(height);
 
@@ -43,14 +41,9 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
     let table = interface.get_table(op.table_id.to_string()).unwrap();
     let page = table.to_page(index_bytes, data_bytes, height);
 
-    println!("Input page");
-    for row in page.clone().rows {
-        println!(
-            "{}|{}|{}",
-            row.is_alloc,
-            u16_vec_to_hex_string(row.idx),
-            u16_vec_to_hex_string(row.data)
-        );
+    if !cli.silent {
+        println!("Input page");
+        pretty_print_page(&page);
     }
 
     let mut page_controller = PageController::<BabyBearPoseidon2Config>::new(
@@ -60,10 +53,10 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
         INTERNAL_BUS,
         OUTPUT_BUS,
         RANGE_BUS,
-        config.page.bits_per_fe,
+        limb_bits,
         idx_decomp,
     );
-    let engine = config::baby_bear_poseidon2::default_engine(idx_decomp);
+    let engine = baby_bear_poseidon2::default_engine(idx_decomp);
 
     // Keygen
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
@@ -111,15 +104,11 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
         page_controller.load_page(&page, &trace_builder.committer);
 
     let output_page =
-        Page::from_row_major_matrix(&group_by_traces.final_page_trace, op.group_by_cols.len(), 1);
-    println!("Output page");
-    for row in output_page.clone().rows {
-        println!(
-            "{}|{}|{}",
-            row.is_alloc,
-            u16_vec_to_hex_string(row.idx),
-            u16_vec_to_hex_string(row.data)
-        );
+        Page::from_trace(&group_by_traces.final_page_trace, op.group_by_cols.len(), 1);
+
+    if !cli.silent {
+        println!("Output page");
+        pretty_print_page(&output_page);
     }
 
     let range_checker_trace = page_controller.range_checker.generate_trace();

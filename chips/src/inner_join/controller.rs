@@ -137,6 +137,10 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
         Val<SC>: Field,
     {
         // Ensuring the foreign key range is valid
+        println!(
+            "fkey_start: {}, fkey_end: {}, t2_format.data_len: {}",
+            fkey_start, fkey_end, t2_format.data_len
+        );
         assert!(fkey_start < fkey_end && fkey_end <= t2_format.data_len);
 
         Self {
@@ -449,6 +453,10 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
             proof,
             &pis,
         )
+    }
+
+    pub fn traces(&self) -> &IJTraces<Val<SC>> {
+        self.traces.as_ref().unwrap()
     }
 
     /// This function takes two tables T1 and T2 and the range of the foreign key in T2

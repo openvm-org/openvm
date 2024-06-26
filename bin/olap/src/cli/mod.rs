@@ -21,11 +21,11 @@ pub enum CliCommand {
 }
 
 impl Cli {
-    pub fn run<SC: StarkGenericConfig>(config: &PageConfig) -> Self {
+    pub fn run<SC: StarkGenericConfig>(cfg: &PageConfig) -> Self {
         let cli = Self::parse();
         match &cli.command {
             CliCommand::Run(run) => {
-                run.execute::<SC>(config).unwrap();
+                run.execute::<SC>(cfg).unwrap();
             }
         }
         cli

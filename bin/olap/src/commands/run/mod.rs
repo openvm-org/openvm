@@ -53,7 +53,7 @@ pub struct RunCommand {
 }
 
 impl RunCommand {
-    pub fn execute<SC: StarkGenericConfig>(&self, config: &PageConfig) -> Result<()> {
+    pub fn execute<SC: StarkGenericConfig>(&self, cfg: &PageConfig) -> Result<()> {
         let mut db = MockDb::from_file(&self.db_path);
         let afo = AfsOperationsFile::open(self.afo_path.clone());
         afo.operations.iter().for_each(|op| match op.operation {
@@ -66,26 +66,13 @@ impl RunCommand {
             }
             InputFileOp::GroupBy => {
                 let group_by = GroupByOp::parse(op.args.clone()).unwrap();
-                execute_group_by::<SC>(config, self, &mut db, group_by).unwrap();
+                execute_group_by::<SC>(cfg, self, &mut db, group_by).unwrap();
             }
             InputFileOp::InnerJoin => {
                 let inner_join = InnerJoinOp::parse(op.args.clone()).unwrap();
-                execute_inner_join::<SC>(config, self, &mut db, inner_join).unwrap();
+                execute_inner_join::<SC>(cfg, self, &mut db, inner_join).unwrap();
             }
         });
-
-        // let mut db = if let Some(db_path) = &self.db_path {
-        //     println!("db_path: {}", db_path);
-        //     MockDb::from_file(db_path)
-        // } else {
-        //     let default_table_metadata =
-        //         TableMetadata::new(config.page.index_bytes, config.page.data_bytes);
-        //     MockDb::new(default_table_metadata)
-        // };
-
-        // let mut interface =
-        //     AfsInterface::new(config.page.index_bytes, config.page.data_bytes, &mut db);
-
         Ok(())
     }
 }
