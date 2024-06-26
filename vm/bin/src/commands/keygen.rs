@@ -55,7 +55,7 @@ impl KeygenCommand {
         let chips = vm.chips();
         let traces = vm.traces();
 
-        for (chip, trace) in chips.into_iter().zip_eq(traces) {
+        for (chip, trace) in chips.into_iter().zip(traces) {
             keygen_builder.add_air(chip, trace.height(), 0);
         }
 
