@@ -37,13 +37,6 @@ pub struct ProveCommand {
         default_value = "keys"
     )]
     pub keys_folder: String,
-    /*#[arg(
-        long = "silent",
-        short = 's',
-        help = "Don't print the output to stdout",
-        required = false
-    )]
-    pub silent: bool,*/
 }
 
 impl ProveCommand {

@@ -14,19 +14,9 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum CliCommand {
-    /*#[command(name = "mock", about = "Mock functions")]
-    /// Mock functions
-    Mock(mock::MockCommand),*/
     #[command(name = "keygen", about = "Generate partial proving and verifying keys")]
     /// Generate partial proving and verifying keys
     Keygen(keygen::KeygenCommand),
-
-    #[command(
-        name = "cache",
-        about = "Create the cached trace of a page from a page file"
-    )]
-    /// Create cached trace of a page from a page file
-    //Cache(cache::CacheCommand),
 
     #[command(name = "prove", about = "Generates a multi-STARK proof")]
     /// Generates a multi-STARK proof
@@ -41,9 +31,6 @@ impl Cli {
     pub fn run(config: VMConfig) -> Self {
         let cli = Self::parse();
         match &cli.command {
-            /*CliCommand::Mock(mock) => {
-                mock.execute(config).unwrap();
-            }*/
             CliCommand::Keygen(keygen) => {
                 let cmd = KeygenCommand {
                     output_folder: keygen.output_folder.clone(),
@@ -51,9 +38,6 @@ impl Cli {
                 };
                 cmd.execute(config).unwrap();
             }
-            /*CliCommand::Cache(cache) => {
-                cache.execute(config).unwrap();
-            }*/
             CliCommand::Prove(prove) => {
                 prove.execute(config).unwrap();
             }

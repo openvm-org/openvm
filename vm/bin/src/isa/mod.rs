@@ -71,8 +71,6 @@ fn instruction_from_line<F: PrimeField64>(
         });
     }
 
-    //println!("Instruction::from_isize({}, {}, {}, {}, {}, {}),", parts[0], ints[0], ints[1], ints[2], ints[3], ints[4]);
-
     Ok(Some(Instruction::from_isize(
         opcode, ints[0], ints[1], ints[2], ints[3], ints[4],
     )))
