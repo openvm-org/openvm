@@ -63,7 +63,7 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
                 register(index),
                 size,
                 AS::Register,
-                AS::Immediate
+                AS::Immediate,
             ),
             // register[util] <- register[src] + register[util]
             inst(
@@ -103,7 +103,7 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
                 register(index),
                 size,
                 AS::Register,
-                AS::Immediate
+                AS::Immediate,
             ),
             // register[util] <- register[src] + register[util]
             inst(
@@ -133,7 +133,7 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
                 register(addr),
                 AS::Register,
                 AS::Memory,
-            )
+            ),
         ],
         AsmInstruction::AddF(dst, lhs, rhs) => vec![
             // register[dst] <- register[lhs] + register[rhs]
@@ -180,23 +180,23 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
             ),
         ],
         AsmInstruction::SubFIN(dst, lhs, rhs) => vec![
-            // register[util] <- lhs
-            inst(
-                STOREW,
-                lhs,
-                F::zero(),
-                register(rhs),
-                AS::Immediate,
-                AS::Register,
-            ),
-            // register[dst] <- register[util] - register[rhs]
+            // register[dst] <- register[rhs] - lhs
             inst(
                 FSUB,
                 register(dst),
-                utility_register,
                 register(rhs),
+                lhs,
                 AS::Register,
+                AS::Immediate
+            ),
+            // register[dst] <- register[dst] * -1
+            inst(
+                FMUL,
+                register(dst),
+                register(dst),
+                F::neg_one(),
                 AS::Register,
+                AS::Immediate,
             ),
         ],
         AsmInstruction::MulF(dst, lhs, rhs) => vec![
@@ -249,7 +249,7 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
                 STOREW,
                 lhs,
                 F::zero(),
-                register(rhs),
+                utility_register,
                 AS::Immediate,
                 AS::Register,
             ),
@@ -263,17 +263,21 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
                 AS::Register,
             ),
         ],
-        AsmInstruction::Jal(dst, label, offset) => vec![
-            // pc <- labels[label] + offset, register[dst] <- pc
-            inst(
-                JAL,
-                register(dst),
-                labels(label) + offset - pc,
-                F::zero(),
-                AS::Register,
-                AS::Immediate,
-            ),
-        ],
+        AsmInstruction::Jal(dst, label, offset) => {
+            assert_eq!(offset, F::zero());
+            vec![
+                // pc <- labels[label] + offset, register[dst] <- pc
+                inst(
+                    JAL,
+                    register(dst),
+                    labels(label) - pc,
+                    F::zero(),
+                    AS::Register,
+                    AS::Immediate,
+                ),
+            ]
+        }
+        AsmInstruction::JalR(_dst, _label, _offset) => panic!("Jalr should never be used"),
         AsmInstruction::Bne(label, lhs, rhs) => vec![
             // if register[lhs] != register[rhs], pc <- labels[label]
             inst(
@@ -384,7 +388,9 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
     }
 }
 
-pub fn convert_program<F: PrimeField64, EF: ExtensionField<F>>(program: AssemblyCode<F, EF>) -> Vec<Instruction<F>> {
+pub fn convert_program<F: PrimeField64, EF: ExtensionField<F>>(
+    program: AssemblyCode<F, EF>,
+) -> Vec<Instruction<F>> {
     let mut block_start = vec![];
     let mut pc = 0;
     for block in program.blocks.iter() {
