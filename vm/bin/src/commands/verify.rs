@@ -9,7 +9,7 @@ use clap::Parser;
 use color_eyre::eyre::Result;
 use stark_vm::vm::{config::VmConfig, VirtualMachine};
 
-use crate::{commands::read_from_path, isa::parse_isa_file};
+use crate::{commands::read_from_path, asm::parse_asm_file};
 
 /// `afs verify` command
 /// Uses information from config.toml to verify a proof using the verifying key in `output-folder`
@@ -25,12 +25,12 @@ pub struct VerifyCommand {
     pub proof_file: String,
 
     #[arg(
-        long = "isa-file",
+        long = "asm-file",
         short = 'f',
-        help = "The .isa file input",
+        help = "The .asm file input",
         required = true
     )]
-    pub isa_file_path: String,
+    pub asm_file_path: String,
 
     #[arg(
         long = "keys-folder",
@@ -57,7 +57,7 @@ impl VerifyCommand {
 
     pub fn execute_helper(&self, config: VmConfig) -> Result<()> {
         println!("Verifying proof file: {}", self.proof_file);
-        let instructions = parse_isa_file(Path::new(&self.isa_file_path.clone()))?;
+        let instructions = parse_asm_file(Path::new(&self.asm_file_path.clone()))?;
         let vm = VirtualMachine::new(config, instructions);
         let encoded_vk = read_from_path(&Path::new(&self.keys_folder.clone()).join("partial.vk"))?;
         let partial_vk: MultiStarkPartialVerifyingKey<BabyBearPoseidon2Config> =

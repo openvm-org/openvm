@@ -6,7 +6,7 @@ use std::path::Path;
 use p3_field::PrimeField64;
 use stark_vm::cpu::trace::Instruction;
 
-pub fn parse_isa_file<F: PrimeField64>(path: &Path) -> Result<Vec<Instruction<F>>, std::io::Error> {
+pub fn parse_asm_file<F: PrimeField64>(path: &Path) -> Result<Vec<Instruction<F>>, std::io::Error> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
 

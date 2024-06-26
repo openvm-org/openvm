@@ -6,7 +6,7 @@ fn main() {
     if std::env::var_os("RUST_BACKTRACE").is_none() {
         std::env::set_var("RUST_BACKTRACE", "1");
     }
-    let config = VmConfig::read_config_file("../../../config.toml").unwrap();
+    let config = VmConfig::read_config_file("config.toml").unwrap();
     setup_tracing();
     let _cli = Cli::run(config);
 }

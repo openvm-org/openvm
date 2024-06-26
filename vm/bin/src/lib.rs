@@ -1,3 +1,3 @@
 pub mod cli;
 pub mod commands;
-pub mod isa;
+pub mod asm;

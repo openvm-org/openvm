@@ -5,8 +5,3 @@ bits_per_fe = 16
 height = 1048576
 mode = "ReadWrite" # options: "ReadOnly", "ReadWrite"
 max_rw_ops = 65536
-
-[vm]
-field_arithmetic_enabled = true
-limb_bits = 8
-decomp = 4

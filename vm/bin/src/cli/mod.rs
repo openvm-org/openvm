@@ -34,7 +34,7 @@ impl Cli {
             CliCommand::Keygen(keygen) => {
                 let cmd = KeygenCommand {
                     output_folder: keygen.output_folder.clone(),
-                    isa_file_path: keygen.isa_file_path.clone(),
+                    asm_file_path: keygen.asm_file_path.clone(),
                 };
                 cmd.execute(config).unwrap();
             }

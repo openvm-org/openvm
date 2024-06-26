@@ -1,6 +1,5 @@
 use std::{
-    fs::{self, File},
-    io::{BufWriter, Write},
+    fs::{self},
     path::Path,
     time::Instant,
 };
@@ -14,7 +13,9 @@ use color_eyre::eyre::Result;
 use p3_matrix::Matrix;
 use stark_vm::vm::{config::VmConfig, VirtualMachine};
 
-use crate::isa::parse_isa_file;
+use crate::asm::parse_asm_file;
+
+use super::write_bytes;
 
 /// `afs keygen` command
 /// Uses information from config.toml to generate partial proving and verifying keys and
@@ -22,12 +23,12 @@ use crate::isa::parse_isa_file;
 #[derive(Debug, Parser)]
 pub struct KeygenCommand {
     #[arg(
-        long = "isa-file",
+        long = "asm-file",
         short = 'f',
-        help = "The .isa file input",
+        help = "The .asm file input",
         required = true
     )]
-    pub isa_file_path: String,
+    pub asm_file_path: String,
     #[arg(
         long = "output-folder",
         short = 'o',
@@ -49,7 +50,7 @@ impl KeygenCommand {
     }
 
     fn execute_helper(self, config: VmConfig) -> Result<()> {
-        let instructions = parse_isa_file(Path::new(&self.isa_file_path.clone()))?;
+        let instructions = parse_asm_file(Path::new(&self.asm_file_path.clone()))?;
         let vm = VirtualMachine::new(config, instructions);
         let engine = config::baby_bear_poseidon2::default_engine(vm.max_log_degree());
         let mut keygen_builder = engine.keygen_builder();
@@ -73,11 +74,4 @@ impl KeygenCommand {
         write_bytes(&encoded_vk, &vk_path)?;
         Ok(())
     }
-}
-
-fn write_bytes(bytes: &[u8], path: &Path) -> Result<()> {
-    let file = File::create(path)?;
-    let mut writer = BufWriter::new(file);
-    writer.write_all(bytes)?;
-    Ok(())
 }

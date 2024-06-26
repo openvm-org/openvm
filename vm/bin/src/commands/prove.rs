@@ -12,8 +12,8 @@ use color_eyre::eyre::Result;
 use stark_vm::vm::{config::VmConfig, VirtualMachine};
 
 use crate::{
+    asm::parse_asm_file,
     commands::{read_from_path, write_bytes},
-    isa::parse_isa_file,
 };
 
 /// `afs prove` command
@@ -22,12 +22,12 @@ use crate::{
 #[derive(Debug, Parser)]
 pub struct ProveCommand {
     #[arg(
-        long = "isa-file",
+        long = "asm-file",
         short = 'f',
-        help = "The .isa file input",
+        help = "The .asm file input",
         required = true
     )]
-    pub isa_file_path: String,
+    pub asm_file_path: String,
 
     #[arg(
         long = "keys-folder",
@@ -52,8 +52,8 @@ impl ProveCommand {
     }
 
     pub fn execute_helper(&self, config: VmConfig) -> Result<()> {
-        println!("Proving program: {}", self.isa_file_path);
-        let instructions = parse_isa_file(Path::new(&self.isa_file_path.clone()))?;
+        println!("Proving program: {}", self.asm_file_path);
+        let instructions = parse_asm_file(Path::new(&self.asm_file_path.clone()))?;
         let vm = VirtualMachine::new(config, instructions);
 
         let engine = config::baby_bear_poseidon2::default_engine(vm.max_log_degree());
@@ -81,11 +81,9 @@ impl ProveCommand {
             &vec![vec![]; vm.chips().len()],
         );
 
-        let encoded_proof: Vec<u8> = bincode::serialize(&proof)?;
-        write_bytes(
-            &encoded_proof,
-            &Path::new(&self.keys_folder.clone()).join("prove.bin"),
-        )?;
+        let encoded_proof: Vec<u8> = bincode::serialize(&proof).unwrap();
+        let proof_path = Path::new(&self.asm_file_path.clone()).with_extension("prove.bin");
+        write_bytes(&encoded_proof, &proof_path)?;
         Ok(())
     }
 }
