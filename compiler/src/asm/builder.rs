@@ -15,7 +15,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmBu
         compiler.build(self.operations);
         compiler.code()
     }
-    
+
     pub fn compile_isa(self) -> Vec<Instruction<F>> {
         let mut compiler = AsmCompiler::new();
         compiler.build(self.operations);

@@ -187,7 +187,7 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
                 register(rhs),
                 lhs,
                 AS::Register,
-                AS::Immediate
+                AS::Immediate,
             ),
             // register[dst] <- register[dst] * -1
             inst(

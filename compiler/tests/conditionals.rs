@@ -98,7 +98,7 @@ fn test_compiler_conditionals_v2() {
 
     // let code = builder.compile_asm();
     // println!("{}", code);
-    
+
     // let program = builder.compile();
     // let program = code.machine_code();
 
