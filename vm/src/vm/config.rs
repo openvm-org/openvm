@@ -17,14 +17,14 @@ pub struct VmConfig {
 }
 
 impl VmConfig {
-    pub fn read_config_file(file: &str) -> VmConfig {
-        let file_str = std::fs::read_to_string(file).unwrap_or_else(|_| {
-            panic!("`config.toml` is required in the root directory of the project");
-        });
-        let config: VmConfig = toml::from_str(file_str.as_str()).unwrap_or_else(|e| {
-            panic!("Failed to parse config file {}:\n{}", file, e);
-        });
-        config
+    pub fn read_config_file(file: &str) -> Result<VmConfig, String> {
+        let file_str = std::fs::read_to_string(file).map_err(|_| {
+            String::from("`config.toml` is required in the root directory of the project")
+        })?;
+        let config: VmConfig = toml::from_str(file_str.as_str()).map_err(|e| {
+            format!("Failed to parse config file {}:\n{}", file, e)
+        })?;
+        Ok(config)
     }
 
     pub fn cpu_options(&self) -> CpuOptions {
