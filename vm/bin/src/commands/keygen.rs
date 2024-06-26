@@ -10,6 +10,7 @@ use afs_test_utils::{
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
+use itertools::Itertools;
 use p3_matrix::Matrix;
 use stark_vm::vm::{config::VmConfig, VirtualMachine};
 
@@ -58,7 +59,7 @@ impl KeygenCommand {
         let chips = vm.chips();
         let traces = vm.traces();
 
-        for (chip, trace) in chips.into_iter().zip(traces) {
+        for (chip, trace) in chips.into_iter().zip_eq(traces) {
             keygen_builder.add_air(chip, trace.height(), 0);
         }
 
@@ -66,7 +67,7 @@ impl KeygenCommand {
         let partial_vk = partial_pk.partial_vk();
         let encoded_pk: Vec<u8> = bincode::serialize(&partial_pk)?;
         let encoded_vk: Vec<u8> = bincode::serialize(&partial_vk)?;
-        fs::create_dir_all(Path::new(&self.output_folder.clone()))?;
+        fs::create_dir_all(Path::new(&self.output_folder))?;
         let pk_path = Path::new(&self.output_folder).join("partial.pk");
         let vk_path = Path::new(&self.output_folder).join("partial.vk");
         fs::create_dir_all(self.output_folder)?;
