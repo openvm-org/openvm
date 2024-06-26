@@ -94,18 +94,18 @@ where
     pub fn chips(&self) -> Vec<&dyn AnyRap<SC>> {
         if self.config.field_arithmetic_enabled {
             vec![
-                &self.cpu_chip.air as &dyn AnyRap<SC>,
-                &self.program_air as &dyn AnyRap<SC>,
-                &self.memory_air as &dyn AnyRap<SC>,
-                &self.field_arithmetic_air as &dyn AnyRap<SC>,
-                &self.range_checker.air as &dyn AnyRap<SC>,
+                &self.cpu_chip.air,
+                &self.program_air,
+                &self.memory_air,
+                &self.field_arithmetic_air,
+                &self.range_checker.air,
             ]
         } else {
             vec![
-                &self.cpu_chip.air as &dyn AnyRap<SC>,
-                &self.program_air as &dyn AnyRap<SC>,
-                &self.memory_air as &dyn AnyRap<SC>,
-                &self.range_checker.air as &dyn AnyRap<SC>,
+                &self.cpu_chip.air,
+                &self.program_air,
+                &self.memory_air,
+                &self.range_checker.air,
             ]
         }
     }
