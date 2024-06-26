@@ -21,9 +21,8 @@ impl VmConfig {
         let file_str = std::fs::read_to_string(file).map_err(|_| {
             String::from("`config.toml` is required in the root directory of the project")
         })?;
-        let config: VmConfig = toml::from_str(file_str.as_str()).map_err(|e| {
-            format!("Failed to parse config file {}:\n{}", file, e)
-        })?;
+        let config: VmConfig = toml::from_str(file_str.as_str())
+            .map_err(|e| format!("Failed to parse config file {}:\n{}", file, e))?;
         Ok(config)
     }
 

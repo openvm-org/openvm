@@ -1,5 +1,8 @@
 use std::{
-    fs::{self, File}, io::{BufWriter, Write}, path::Path, time::Instant
+    fs::{self, File},
+    io::{BufWriter, Write},
+    path::Path,
+    time::Instant,
 };
 
 use afs_test_utils::{

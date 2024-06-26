@@ -1,7 +1,8 @@
 use color_eyre::eyre::Result;
 use std::{
     fs::File,
-    io::{BufReader, BufWriter, Read, Write}, path::Path,
+    io::{BufReader, BufWriter, Read, Write},
+    path::Path,
 };
 
 pub mod keygen;

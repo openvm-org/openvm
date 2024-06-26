@@ -82,7 +82,10 @@ impl ProveCommand {
         );
 
         let encoded_proof: Vec<u8> = bincode::serialize(&proof)?;
-        write_bytes(&encoded_proof, &Path::new(&self.keys_folder.clone()).join("prove.bin"))?;
+        write_bytes(
+            &encoded_proof,
+            &Path::new(&self.keys_folder.clone()).join("prove.bin"),
+        )?;
         Ok(())
     }
 }
