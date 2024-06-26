@@ -9,7 +9,7 @@ use afs_test_utils::{
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
-use stark_vm::vm::config::VMConfig;
+use stark_vm::vm::config::VmConfig;
 
 use crate::{
     commands::{read_from_path, write_bytes},
@@ -41,7 +41,7 @@ pub struct ProveCommand {
 
 impl ProveCommand {
     /// Execute the `prove` command
-    pub fn execute(&self, config: VMConfig) -> Result<()> {
+    pub fn execute(&self, config: VmConfig) -> Result<()> {
         let start = Instant::now();
         self.execute_helper(config)?;
 
@@ -51,7 +51,7 @@ impl ProveCommand {
         Ok(())
     }
 
-    pub fn execute_helper(&self, config: VMConfig) -> Result<()> {
+    pub fn execute_helper(&self, config: VmConfig) -> Result<()> {
         println!("Proving program: {}", self.isa_file_path);
         let vm = get_vm::<BabyBearPoseidon2Config>(config, &self.isa_file_path)?;
 

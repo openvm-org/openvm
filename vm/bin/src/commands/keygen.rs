@@ -11,7 +11,7 @@ use afs_test_utils::{
 use clap::Parser;
 use color_eyre::eyre::Result;
 use p3_matrix::Matrix;
-use stark_vm::vm::config::VMConfig;
+use stark_vm::vm::config::VmConfig;
 
 use crate::isa::get_vm;
 
@@ -39,7 +39,7 @@ pub struct KeygenCommand {
 
 impl KeygenCommand {
     /// Execute the `keygen` command
-    pub fn execute(self, config: VMConfig) -> Result<()> {
+    pub fn execute(self, config: VmConfig) -> Result<()> {
         let start = Instant::now();
         self.execute_helper(config)?;
         let duration = start.elapsed();
@@ -47,7 +47,7 @@ impl KeygenCommand {
         Ok(())
     }
 
-    fn execute_helper(self, config: VMConfig) -> Result<()> {
+    fn execute_helper(self, config: VmConfig) -> Result<()> {
         let vm = get_vm::<BabyBearPoseidon2Config>(config, &self.isa_file_path)?;
         let engine = config::baby_bear_poseidon2::default_engine(vm.max_log_degree());
         let mut keygen_builder = engine.keygen_builder(); // MultiStarkKeygenBuilder::new(&engine.config);

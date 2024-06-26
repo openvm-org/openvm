@@ -7,7 +7,7 @@ use afs_test_utils::{
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
-use stark_vm::vm::config::VMConfig;
+use stark_vm::vm::config::VmConfig;
 
 use crate::{commands::read_from_path, isa::get_vm};
 
@@ -44,7 +44,7 @@ pub struct VerifyCommand {
 
 impl VerifyCommand {
     /// Execute the `verify` command
-    pub fn execute(&self, config: VMConfig) -> Result<()> {
+    pub fn execute(&self, config: VmConfig) -> Result<()> {
         let start = Instant::now();
 
         self.execute_helper(config)?;
@@ -55,7 +55,7 @@ impl VerifyCommand {
         Ok(())
     }
 
-    pub fn execute_helper(&self, config: VMConfig) -> Result<()> {
+    pub fn execute_helper(&self, config: VmConfig) -> Result<()> {
         println!("Verifying proof file: {}", self.proof_file);
         let vm = get_vm::<BabyBearPoseidon2Config>(config, &self.isa_file_path)?;
         // verify::verify_ops(&self.proof_file).await?;

@@ -14,15 +14,15 @@ use crate::{
     program::ProgramAir,
 };
 
-use self::config::{VMConfig, VMParamsConfig};
+use self::config::{VmConfig, VmParamsConfig};
 
 pub mod config;
 
-pub struct VM<SC: StarkGenericConfig>
+pub struct VirtualMachine<SC: StarkGenericConfig>
 where
     Val<SC>: PrimeField64,
 {
-    pub config: VMParamsConfig,
+    pub config: VmParamsConfig,
 
     pub cpu_chip: CpuChip,
     pub program_air: ProgramAir<Val<SC>>,
@@ -37,12 +37,12 @@ where
     pub range_trace: DenseMatrix<Val<SC>>,
 }
 
-impl<SC: StarkGenericConfig> VM<SC>
+impl<SC: StarkGenericConfig> VirtualMachine<SC>
 where
     Val<SC>: PrimeField64,
     Val<SC>: PrimeField32,
 {
-    pub fn new(config: VMConfig, program: Vec<Instruction<Val<SC>>>) -> Self {
+    pub fn new(config: VmConfig, program: Vec<Instruction<Val<SC>>>) -> Self {
         let config = config.vm;
         let decomp = config.decomp;
         let limb_bits = config.limb_bits;

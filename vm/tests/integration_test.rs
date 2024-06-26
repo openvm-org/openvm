@@ -3,17 +3,17 @@ use p3_baby_bear::BabyBear;
 
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
-use stark_vm::vm::config::VMConfig;
-use stark_vm::vm::config::VMParamsConfig;
-use stark_vm::vm::VM;
+use stark_vm::vm::config::VmConfig;
+use stark_vm::vm::config::VmParamsConfig;
+use stark_vm::vm::VirtualMachine;
 
 const LIMB_BITS: usize = 8;
 const DECOMP: usize = 4;
 
 fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>) {
-    let vm = VM::new(
-        VMConfig {
-            vm: VMParamsConfig {
+    let vm = VirtualMachine::new(
+        VmConfig {
+            vm: VmParamsConfig {
                 field_arithmetic_enabled: is_field_arithmetic_enabled,
                 limb_bits: LIMB_BITS,
                 decomp: DECOMP,
