@@ -5,7 +5,6 @@ use std::io::{BufRead, BufReader};
 use p3_field::{PrimeField32, PrimeField64};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use stark_vm::cpu::trace::Instruction;
-use stark_vm::cpu::OpCode::{self, *};
 use stark_vm::vm::config::VMConfig;
 use stark_vm::vm::VM;
 
@@ -55,7 +54,7 @@ fn instruction_from_line<F: PrimeField64>(
             "Instruction should have opcode followed by 5 arguments",
         ));
     }
-    let opcode = opcode_from_string(parts[0])
+    let opcode = parts[0].parse()
         .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid opcode"))?;
     let mut ints = vec![];
     for part in parts.iter().skip(1) {
@@ -74,20 +73,4 @@ fn instruction_from_line<F: PrimeField64>(
     Ok(Some(Instruction::from_isize(
         opcode, ints[0], ints[1], ints[2], ints[3], ints[4],
     )))
-}
-
-fn opcode_from_string(opcode: &str) -> Result<OpCode, ()> {
-    match opcode {
-        "LOADW" => Ok(LOADW),
-        "STOREW" => Ok(STOREW),
-        "JAL" => Ok(JAL),
-        "BEQ" => Ok(BEQ),
-        "BNE" => Ok(BNE),
-        "TERMINATE" => Ok(TERMINATE),
-        "FADD" => Ok(FADD),
-        "FSUB" => Ok(FSUB),
-        "FMUL" => Ok(FMUL),
-        "FDIV" => Ok(FDIV),
-        _ => Err(()),
-    }
 }

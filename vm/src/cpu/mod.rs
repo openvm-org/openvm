@@ -1,5 +1,7 @@
 //use crate::range_gate::RangeCheckerGateChip;
 
+use enum_utils::FromStr;
+
 #[cfg(test)]
 pub mod tests;
 
@@ -22,7 +24,7 @@ pub const NUM_ARITHMETIC_OPERATIONS: usize = 4;
 pub const MAX_READS_PER_CYCLE: usize = 2;
 pub const MAX_WRITES_PER_CYCLE: usize = 1;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, FromStr)]
 #[repr(usize)]
 pub enum OpCode {
     LOADW = 0,
