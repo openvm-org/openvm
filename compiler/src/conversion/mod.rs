@@ -55,84 +55,86 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
     let utility_register = F::zero();
     match instruction {
         AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
-        AsmInstruction::LoadF(dst, src, index, offset, size) => (0..1)
-            .flat_map(|i| {
-                vec![
-                    // register[util] <- register[src] + register[index]
-                    inst(
-                        FADD,
-                        utility_register,
-                        register(src),
-                        register(index),
-                        AS::Register,
-                        AS::Register,
-                    ),
-                    // register[dst] <- mem[register[util] + offset]
-                    inst(
-                        LOADW,
-                        register(dst),
-                        offset + F::from_canonical_u64(i),
-                        utility_register,
-                        AS::Register,
-                        AS::Memory,
-                    ),
-                ]
-            })
-            .collect(),
-        AsmInstruction::LoadFI(dst, src, index, offset, size) => (0..1)
-            .flat_map(|i| {
-                vec![
-                    // register[dst] <- mem[register[src] + (index + offset)]
-                    inst(
-                        LOADW,
-                        register(dst),
-                        index + offset + F::from_canonical_u64(i),
-                        register(src),
-                        AS::Register,
-                        AS::Memory,
-                    ),
-                ]
-            })
-            .collect(),
-        AsmInstruction::StoreF(val, addr, index, offset, size) => (0..1)
-            .flat_map(|i| {
-                vec![
-                    // register[util] <- register[addr] + register[index]
-                    inst(
-                        FADD,
-                        utility_register,
-                        register(addr),
-                        register(index),
-                        AS::Register,
-                        AS::Register,
-                    ),
-                    //  mem[register[util] + offset] <- register[val]
-                    inst(
-                        STOREW,
-                        register(val),
-                        offset + F::from_canonical_u64(i),
-                        utility_register,
-                        AS::Register,
-                        AS::Memory,
-                    ),
-                ]
-            })
-            .collect(),
-        AsmInstruction::StoreFI(val, addr, index, offset, size) => (0..1)
-            .flat_map(|i| {
-                vec![
-                    // mem[register[addr] + (index + offset)] <- register[val]
-                    inst(
-                        STOREW,
-                        register(val),
-                        index + offset + F::from_canonical_u64(i),
-                        register(addr),
-                        AS::Register,
-                        AS::Memory,
-                    ),
-                ]
-            })
-            .collect(),
+        AsmInstruction::LoadF(dst, src, index, offset, size) => vec![
+            // register[util] <- register[index] * size
+            inst(
+                FMUL,
+                utility_register,
+                register(index),
+                size,
+                AS::Register,
+                AS::Immediate
+            ),
+            // register[util] <- register[src] + register[util]
+            inst(
+                FADD,
+                utility_register,
+                register(src),
+                utility_register,
+                AS::Register,
+                AS::Register,
+            ),
+            // register[dst] <- mem[register[util] + offset]
+            inst(
+                LOADW,
+                register(dst),
+                offset,
+                utility_register,
+                AS::Register,
+                AS::Memory,
+            ),
+        ],
+        AsmInstruction::LoadFI(dst, src, index, offset, size) => vec![
+            // register[dst] <- mem[register[src] + ((index * size) + offset)]
+            inst(
+                LOADW,
+                register(dst),
+                (index * size) + offset,
+                register(src),
+                AS::Register,
+                AS::Memory,
+            ),
+        ],
+        AsmInstruction::StoreF(val, addr, index, offset, size) => vec![
+            // register[util] <- register[index] * size
+            inst(
+                FMUL,
+                utility_register,
+                register(index),
+                size,
+                AS::Register,
+                AS::Immediate
+            ),
+            // register[util] <- register[src] + register[util]
+            inst(
+                FADD,
+                utility_register,
+                register(addr),
+                utility_register,
+                AS::Register,
+                AS::Register,
+            ),
+            //  mem[register[util] + offset] <- register[val]
+            inst(
+                STOREW,
+                register(val),
+                offset,
+                utility_register,
+                AS::Register,
+                AS::Memory,
+            ),
+        ],
+        AsmInstruction::StoreFI(val, addr, index, offset, size) => vec![
+            // mem[register[addr] + ((index * size) + offset)] <- register[val]
+            inst(
+                STOREW,
+                register(val),
+                (index * size) + offset,
+                register(addr),
+                AS::Register,
+                AS::Memory,
+            )
+        ],
         AsmInstruction::AddF(dst, lhs, rhs) => vec![
             // register[dst] <- register[lhs] + register[rhs]
             inst(

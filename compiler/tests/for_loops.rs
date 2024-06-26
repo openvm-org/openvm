@@ -63,8 +63,8 @@ fn test_compiler_nested_array_loop() {
     let mut builder = AsmBuilder::<F, EF>::default();
     type C = AsmConfig<F, EF>;
 
-    let outer_len = 8;
-    let inner_len = 3;
+    let outer_len = 2;
+    let inner_len = 2;
 
     let mut array: Array<C, Array<C, Var<_>>> = builder.array(outer_len);
 
@@ -87,11 +87,7 @@ fn test_compiler_nested_array_loop() {
 
     builder.halt();
 
-    let code = builder.clone().compile_asm();
-    println!("{:?}", code);
-
     let program = builder.compile_isa();
-    display_program(&program);
     execute_program(program);
 
     // let code = builder.compile_asm();

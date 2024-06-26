@@ -210,14 +210,10 @@ impl<F: PrimeField64> Memory<F> {
             self.log.push(read);
         }
         self.reads_this_cycle.push_back(read);
-        println!("read(as = {}, addr = {}) -> {}", address_space, address, data);
         data
     }
 
     fn write(&mut self, address_space: F, address: F, data: F) {
-        if true {
-            println!("write(as = {}, addr = {}, data = {})", address_space, address, data);
-        }
         if address_space == F::zero() {
             panic!("Attempted to write to address space 0");
         } else {
@@ -265,11 +261,6 @@ impl CpuAir {
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
             execution_frequencies[pc_usize] += F::one();
-            println!("pc = {}", pc);
-
-            if pc_usize == 40 {
-                println!("{:?}", memory.data)
-            }
 
             let instruction = program[pc_usize];
             let opcode = instruction.opcode;
@@ -317,7 +308,6 @@ impl CpuAir {
                 BEQ => {
                     let left = memory.read(d, a);
                     let right = memory.read(e, b);
-                    println!("beq {} {} {}", left, right, pc + c);
                     if left == right {
                         next_pc = pc + c;
                     }
