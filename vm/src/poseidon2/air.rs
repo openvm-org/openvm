@@ -47,13 +47,14 @@ impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Air<WIDTH, AB::F> 
             .collect();
         for phase2_index in 0..self.rounds_p {
             state[0] += self.internal_constants[phase2_index].into();
+            state[0] = sbox_p::<AB>(state[0].clone());
             state = int_lin_layer::<AB, WIDTH>(state);
             for (state_index, state_elem) in state.iter().enumerate() {
                 builder.assert_eq(state_elem.clone(), aux.phase2[phase2_index][state_index]);
             }
         }
 
-        for phase3_index in 0..self.rounds_p - half_ext_rounds {
+        for phase3_index in 0..(self.rounds_f - half_ext_rounds) {
             state = add_ext_consts::<AB, WIDTH>(
                 state,
                 phase3_index + half_ext_rounds,
@@ -95,17 +96,18 @@ fn ext_lin_layer<AB: AirBuilder, const WIDTH: usize>(state: Vec<AB::Expr>) -> Ve
 }
 
 fn int_lin_layer<AB: AirBuilder, const WIDTH: usize>(state: Vec<AB::Expr>) -> Vec<AB::Expr> {
+    let redc_fact = AB::Expr::from_canonical_u32(943718400);
+    // let redc_fact = AB::Expr::from_canonical_u32(1887436800);
     let sum: AB::Expr = state.clone().into_iter().sum();
     let mut new_state = vec![AB::Expr::default(); WIDTH];
-    for i in 0..WIDTH {
-        let fact = if i == 0 {
-            AB::Expr::zero() - AB::Expr::two()
-        } else if WIDTH == 16 && i == 15 {
+    new_state[0] = (sum.clone() - state[0].clone() * AB::Expr::two()) * redc_fact.clone();
+    for i in 1..WIDTH {
+        let fact = if WIDTH == 16 && i == 15 {
             AB::Expr::from_canonical_u32(1 << 15)
         } else {
             AB::Expr::from_canonical_u32(1 << (i - 1))
         };
-        new_state[i] = sum.clone() + state[i].clone() * fact;
+        new_state[i] = (sum.clone() + state[i].clone() * fact) * redc_fact.clone();
     }
     new_state
 }
