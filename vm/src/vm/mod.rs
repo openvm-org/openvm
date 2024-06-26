@@ -146,10 +146,10 @@ where
     }*/
 
     pub fn max_log_degree(&self) -> usize {
-        let mut checker_trace_degree = 8;
+        let mut checker_trace_degree = 0;
         for trace in self.traces() {
             checker_trace_degree = std::cmp::max(checker_trace_degree, trace.height());
         }
-        log2_strict_usize(checker_trace_degree).max(8)
+        log2_strict_usize(checker_trace_degree)
     }
 }
