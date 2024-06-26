@@ -53,19 +53,19 @@ impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
     ) where
         DiffusionMatrixBabyBear: Permutation<[T; WIDTH]>,
     {
+        external_layer.permute_mut(state);
         for (s, c) in state.iter_mut().zip(constants) {
             *s = Self::sbox_p(*s + *c);
         }
-        external_layer.permute_mut(state);
     }
 
     pub fn int_layer(state: &mut [T; WIDTH], constant: T, internal_layer: &DiffusionMatrixBabyBear)
     where
         DiffusionMatrixBabyBear: Permutation<[T; WIDTH]>,
     {
+        internal_layer.permute_mut(state);
         state[0] += constant;
         state[0] = Self::sbox_p(state[0]);
-        internal_layer.permute_mut(state);
     }
 
     pub fn sbox_p(value: T) -> T {
@@ -85,7 +85,6 @@ impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
         // The first half of the external rounds.
         let external_layer = Poseidon2ExternalMatrixGeneral {};
         let internal_layer = DiffusionMatrixBabyBear {};
-        external_layer.permute_mut(&mut state);
         let rounds_f_half = self.rounds_f / 2;
         for r in 0..rounds_f_half {
             Self::ext_layer(&mut state, &self.external_constants[r], &external_layer);
@@ -94,15 +93,33 @@ impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
 
         // The internal rounds.
         for r in 0..self.rounds_p {
-            Self::int_layer(&mut state, self.internal_constants[r], &internal_layer);
+            if r == 0 {
+                external_layer.permute_mut(&mut state);
+                state[0] += self.internal_constants[0];
+                state[0] = Self::sbox_p(state[0]);
+            } else {
+                Self::int_layer(&mut state, self.internal_constants[r], &internal_layer);
+            }
             row.extend(state.iter());
         }
 
         // The second half of the external rounds.
         for r in rounds_f_half..self.rounds_f {
-            Self::ext_layer(&mut state, &self.external_constants[r], &external_layer);
+            if r == rounds_f_half {
+                internal_layer.permute_mut(&mut state);
+                for (s, c) in state
+                    .iter_mut()
+                    .zip(&self.external_constants[rounds_f_half])
+                {
+                    *s = Self::sbox_p(*s + *c);
+                }
+            } else {
+                Self::ext_layer(&mut state, &self.external_constants[r], &external_layer);
+            }
             row.extend(state.iter());
         }
+        external_layer.permute_mut(&mut state);
+        row.extend(state.iter());
 
         assert_eq!(row.len(), self.get_width());
 

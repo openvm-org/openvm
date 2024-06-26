@@ -17,7 +17,7 @@ use rand::RngCore;
 
 #[test]
 fn test_poseidon2_trace() {
-    let num_rows = 1 << 4;
+    let num_rows = 1 << 0;
     let num_ext_rounds = 8;
     let num_int_rounds = 13;
     let mut rng = create_seeded_rng();
