@@ -88,6 +88,7 @@ where
     let partial_pk = keygen_builder.generate_partial_pk();
     let partial_vk = partial_pk.partial_vk();
     dbg!(&partial_vk.per_air[0].quotient_degree);
+    // panic!();
 
     let prover = engine.prover();
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());

@@ -222,8 +222,8 @@ impl<F: Field> AirBuilder for SymbolicRapBuilder<F> {
 
     fn assert_zero<I: Into<Self::Expr>>(&mut self, x: I) {
         self.constraints.push(x.into());
-        dbg!(self.constraints.last().unwrap());
-        panic!()
+        // dbg!(self.constraints.last().unwrap());
+        // panic!()
     }
 }
 
