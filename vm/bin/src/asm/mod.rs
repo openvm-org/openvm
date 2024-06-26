@@ -3,10 +3,11 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
+use color_eyre::eyre::{Report, Result};
 use p3_field::PrimeField64;
 use stark_vm::cpu::trace::Instruction;
 
-pub fn parse_asm_file<F: PrimeField64>(path: &Path) -> Result<Vec<Instruction<F>>, std::io::Error> {
+pub fn parse_asm_file<F: PrimeField64>(path: &Path) -> Result<Vec<Instruction<F>>> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
 
@@ -20,9 +21,7 @@ pub fn parse_asm_file<F: PrimeField64>(path: &Path) -> Result<Vec<Instruction<F>
     Ok(result)
 }
 
-fn instruction_from_line<F: PrimeField64>(
-    line: &str,
-) -> Result<Option<Instruction<F>>, std::io::Error> {
+fn instruction_from_line<F: PrimeField64>(line: &str) -> Result<Option<Instruction<F>>> {
     let parts: Vec<&str> = line.split_whitespace().collect();
     if parts.is_empty() {
         return Ok(None);
@@ -31,26 +30,19 @@ fn instruction_from_line<F: PrimeField64>(
         return Ok(None);
     }
     if parts.len() != 6 {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
+        return Err(Report::msg(
             "Instruction should have opcode followed by 5 arguments",
         ));
     }
     let opcode = parts[0]
         .parse()
-        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid opcode"))?;
+        .map_err(|_| Report::msg("Invalid opcode"))?;
     let mut ints = vec![];
     for part in parts.iter().skip(1) {
-        let try_int = part.parse::<isize>();
-        ints.push(match try_int {
-            Ok(int) => int,
-            Err(_) => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "Opcode argument should be int",
-                ))
-            }
-        });
+        ints.push(
+            part.parse::<isize>()
+                .map_err(|_| Report::msg("Opcode argument should be int"))?,
+        );
     }
 
     Ok(Some(Instruction::from_isize(

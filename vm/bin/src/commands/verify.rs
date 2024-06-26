@@ -9,7 +9,7 @@ use clap::Parser;
 use color_eyre::eyre::Result;
 use stark_vm::vm::{config::VmConfig, VirtualMachine};
 
-use crate::{commands::read_from_path, asm::parse_asm_file};
+use crate::{asm::parse_asm_file, commands::read_from_path};
 
 /// `afs verify` command
 /// Uses information from config.toml to verify a proof using the verifying key in `output-folder`
