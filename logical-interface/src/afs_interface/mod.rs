@@ -32,6 +32,20 @@ impl<'a> AfsInterface<'a> {
         }
     }
 
+    pub fn new_with_table(table_id: String, db_ref: &'a mut MockDb) -> Self {
+        let table_id_bytes = string_to_table_id(table_id);
+        let table = db_ref.get_table(table_id_bytes).unwrap();
+        let index_bytes = table.db_table_metadata.index_bytes;
+        let data_bytes = table.db_table_metadata.data_bytes;
+        let table = Table::from_db_table(table, index_bytes, data_bytes);
+        Self {
+            index_bytes,
+            data_bytes,
+            db_ref,
+            current_table: Some(table),
+        }
+    }
+
     pub fn load_input_file(&mut self, path: &str) -> Result<&Table> {
         let instructions = AfsInputFile::open(path)?;
 
@@ -110,7 +124,7 @@ impl<'a> AfsInterface<'a> {
         self.db_ref
     }
 
-    pub fn get_current_table(&self) -> Option<&Table> {
+    pub fn current_table(&self) -> Option<&Table> {
         self.current_table.as_ref()
     }
 

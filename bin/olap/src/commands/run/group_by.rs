@@ -2,7 +2,7 @@ use crate::commands::run::{utils::pretty_print_page, PageConfig, RunCommand};
 use afs_chips::{common::page::Page, group_by::page_controller::PageController};
 use afs_stark_backend::{
     keygen::{types::MultiStarkPartialProvingKey, MultiStarkKeygenBuilder},
-    prover::trace::TraceCommitmentBuilder,
+    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
 };
 use afs_test_utils::{
     config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
@@ -11,7 +11,6 @@ use afs_test_utils::{
 use color_eyre::eyre::{eyre, Result};
 use logical_interface::{
     afs_input::operation::GroupByOp, afs_interface::AfsInterface, mock_db::MockDb,
-    utils::u16_vec_to_hex_string,
 };
 use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_strict_usize;
@@ -34,11 +33,12 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
     let idx_len = (index_bytes + 1) / 2;
     let data_len = (data_bytes + 1) / 2;
     let page_width = 1 + idx_len + data_len;
-    let idx_decomp = log2_strict_usize(height);
+    let degree = log2_strict_usize(height);
+    let range_checker_idx_decomp = 4;
 
     // Get page from DB
-    let mut interface = AfsInterface::new(index_bytes, data_bytes, db);
-    let table = interface.get_table(op.table_id.to_string()).unwrap();
+    let interface = AfsInterface::new_with_table(op.table_id.to_string(), db);
+    let table = interface.current_table().unwrap();
     let page = table.to_page(index_bytes, data_bytes, height);
 
     if !cli.silent {
@@ -54,9 +54,9 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
         OUTPUT_BUS,
         RANGE_BUS,
         limb_bits,
-        idx_decomp,
+        range_checker_idx_decomp,
     );
-    let engine = baby_bear_poseidon2::default_engine(idx_decomp);
+    let engine = baby_bear_poseidon2::default_engine(degree + 1);
 
     // Keygen
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
@@ -89,14 +89,7 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
         vec![range_checker_ptr],
     );
 
-    // let pcs_log_degree = log2_ceil_usize(height);
-    // let perm = random_perm();
-    // let engine = engine_from_perm(perm, pcs_log_degree, config.fri_params);
-    // let prover = engine.prover();
-    // let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
-
     let prover = engine.prover();
-    // let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
     // Load a page into the GroupBy controller
@@ -105,7 +98,6 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
 
     let output_page =
         Page::from_trace(&group_by_traces.final_page_trace, op.group_by_cols.len(), 1);
-
     if !cli.silent {
         println!("Output page");
         pretty_print_page(&output_page);
@@ -125,8 +117,7 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
     trace_builder.load_trace(range_checker_trace);
     trace_builder.commit_current();
 
-    let partial_pk: MultiStarkPartialProvingKey<BabyBearPoseidon2Config> =
-        keygen_builder.generate_partial_pk();
+    let partial_pk = keygen_builder.generate_partial_pk();
     let partial_vk = partial_pk.partial_vk();
 
     let main_trace_data = trace_builder.view(
@@ -138,10 +129,12 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
         ],
     );
 
+    // Prove
     let mut challenger = engine.new_challenger();
     let pis = vec![vec![]; partial_vk.per_air.len()];
     let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
 
+    // Verify
     let mut challenger = engine.new_challenger();
     let verifier = engine.verifier();
     let verify = verifier.verify(
@@ -157,12 +150,7 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
     );
 
     match verify {
-        Ok(_) => {
-            if !cli.silent {
-                println!("Output page: {:?}", output_page);
-            }
-            Ok(())
-        }
+        Ok(_) => Ok(()),
         Err(e) => Err(eyre!(format!("Proof verification failed: {:?}", e))),
     }
 }

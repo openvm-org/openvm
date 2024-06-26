@@ -4,11 +4,8 @@ use afs_chips::{
     inner_join::controller::{FKInnerJoinController, IJBuses, TableFormat},
 };
 use afs_stark_backend::{keygen::MultiStarkKeygenBuilder, prover::trace::TraceCommitmentBuilder};
-use afs_test_utils::{
-    config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
-    engine::StarkEngine,
-};
-use color_eyre::eyre::Result;
+use afs_test_utils::{config::baby_bear_poseidon2, engine::StarkEngine};
+use color_eyre::eyre::{eyre, Result};
 use logical_interface::{
     afs_input::operation::InnerJoinOp, afs_interface::AfsInterface, mock_db::MockDb,
 };
@@ -30,31 +27,31 @@ pub fn execute_inner_join<SC: StarkGenericConfig>(
 ) -> Result<()> {
     println!("inner_join: {:?}", op);
 
-    let index_bytes = cfg.page.index_bytes;
-    let data_bytes = cfg.page.data_bytes;
     let height = cfg.page.height;
     let limb_bits = cfg.page.bits_per_fe;
     let degree = log2_strict_usize(height);
+    let range_chip_idx_decomp = 4;
 
-    let mut interface = AfsInterface::new(index_bytes, data_bytes, db);
-    let table_left = interface.get_table(op.table_id_left.to_string()).unwrap();
-    let table_left_metadata = table_left.metadata.clone();
+    // Get input pages from database
+    let interface_left = AfsInterface::new_with_table(op.table_id_left.to_string(), db);
+    let table_left = interface_left.current_table().unwrap();
     let page_left = table_left.to_page(
-        table_left_metadata.index_bytes,
-        table_left_metadata.data_bytes,
+        table_left.metadata.index_bytes,
+        table_left.metadata.data_bytes,
         height,
     );
-    let index_len_left = (table_left_metadata.index_bytes + 1) / 2;
-    let data_len_left = (table_left_metadata.data_bytes + 1) / 2;
-    let table_right = interface.get_table(op.table_id_right.to_string()).unwrap();
-    let table_right_metadata = table_right.metadata.clone();
+    let index_len_left = (table_left.metadata.index_bytes + 1) / 2;
+    let data_len_left = (table_left.metadata.data_bytes + 1) / 2;
+
+    let interface_right = AfsInterface::new_with_table(op.table_id_right.to_string(), db);
+    let table_right = interface_right.current_table().unwrap();
     let page_right = table_right.to_page(
-        table_right_metadata.index_bytes,
-        table_right_metadata.data_bytes,
+        table_right.metadata.index_bytes,
+        table_right.metadata.data_bytes,
         height,
     );
-    let index_len_right = (table_right_metadata.index_bytes + 1) / 2;
-    let data_len_right = (table_right_metadata.data_bytes + 1) / 2;
+    let index_len_right = (table_right.metadata.index_bytes + 1) / 2;
+    let data_len_right = (table_right.metadata.data_bytes + 1) / 2;
 
     if !cli.silent {
         println!("Left page:");
@@ -80,15 +77,15 @@ pub fn execute_inner_join<SC: StarkGenericConfig>(
         t2_format,
         op.fkey_start,
         op.fkey_end,
-        degree,
+        range_chip_idx_decomp,
     );
-    let engine = baby_bear_poseidon2::default_engine(degree);
+    let engine = baby_bear_poseidon2::default_engine(degree + 1);
     let prover = engine.prover();
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     let prover_trace_data = inner_join_controller.load_tables(
         &page_left,
         &page_right,
-        degree,
+        2 * height,
         &mut trace_builder.committer,
     );
 
@@ -105,7 +102,7 @@ pub fn execute_inner_join<SC: StarkGenericConfig>(
     }
 
     let mut keygen_builder = MultiStarkKeygenBuilder::new(engine.config());
-    inner_join_controller.set_up_keygen_builder(&mut keygen_builder, height, height, degree);
+    inner_join_controller.set_up_keygen_builder(&mut keygen_builder, height, height, 2 * height);
     let partial_pk = keygen_builder.generate_partial_pk();
     let partial_vk = partial_pk.partial_vk();
 
@@ -115,11 +112,7 @@ pub fn execute_inner_join<SC: StarkGenericConfig>(
     let verify = inner_join_controller.verify(&engine, partial_vk, proof);
 
     match verify {
-        Ok(_) => {}
-        Err(e) => {
-            println!("Proof verification failed: {:?}", e);
-        }
+        Ok(_) => Ok(()),
+        Err(e) => Err(eyre!(format!("Proof verification failed: {:?}", e))),
     }
-
-    Ok(())
 }
