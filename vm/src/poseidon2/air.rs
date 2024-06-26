@@ -1,6 +1,5 @@
 use super::columns::Poseidon2Cols;
 use super::Poseidon2Air;
-use afs_stark_backend::interaction::AirBridge;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
 use p3_field::Field;
@@ -12,9 +11,6 @@ impl<const WIDTH: usize, F: Field> BaseAir<F> for Poseidon2Air<WIDTH, F> {
         self.get_width()
     }
 }
-
-// No interactions
-impl<const WIDTH: usize, F: Field> AirBridge<F> for Poseidon2Air<WIDTH, F> {}
 
 impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Air<WIDTH, AB::F> {
     fn eval(&self, builder: &mut AB) {
@@ -97,7 +93,6 @@ fn ext_lin_layer<AB: AirBuilder, const WIDTH: usize>(state: Vec<AB::Expr>) -> Ve
 
 fn int_lin_layer<AB: AirBuilder, const WIDTH: usize>(state: Vec<AB::Expr>) -> Vec<AB::Expr> {
     let redc_fact = AB::Expr::from_canonical_u32(943718400);
-    // let redc_fact = AB::Expr::from_canonical_u32(1887436800);
     let sum: AB::Expr = state.clone().into_iter().sum();
     let mut new_state = vec![AB::Expr::default(); WIDTH];
     new_state[0] = (sum.clone() - state[0].clone() * AB::Expr::two()) * redc_fact.clone();

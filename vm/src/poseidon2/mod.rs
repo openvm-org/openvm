@@ -1,8 +1,10 @@
 pub mod air;
+pub mod bridge;
 pub mod columns;
-pub mod tests;
-#[cfg(test)]
 pub mod trace;
+
+#[cfg(test)]
+pub mod tests;
 
 use self::columns::Poseidon2Cols;
 
@@ -13,15 +15,21 @@ pub struct Poseidon2Air<const WIDTH: usize, T: Clone> {
     pub external_constants: Vec<[T; WIDTH]>,
     pub rounds_p: usize,
     pub internal_constants: Vec<T>,
+    pub BUS_INDEX: usize,
 }
 
 impl<const WIDTH: usize, T: Clone> Poseidon2Air<WIDTH, T> {
-    pub fn new(external_constants: Vec<[T; WIDTH]>, internal_constants: Vec<T>) -> Self {
+    pub fn new(
+        external_constants: Vec<[T; WIDTH]>,
+        internal_constants: Vec<T>,
+        bus_index: usize,
+    ) -> Self {
         Self {
             rounds_f: external_constants.len(),
             external_constants,
             rounds_p: internal_constants.len(),
             internal_constants,
+            BUS_INDEX: bus_index,
         }
     }
     pub fn get_width(&self) -> usize {
