@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::{path::Path, time::Instant};
 
 use afs_stark_backend::{keygen::types::MultiStarkPartialVerifyingKey, prover::types::Proof};
 use afs_test_utils::{
@@ -7,9 +7,9 @@ use afs_test_utils::{
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
-use stark_vm::vm::config::VmConfig;
+use stark_vm::vm::{config::VmConfig, VirtualMachine};
 
-use crate::{commands::read_from_path, isa::get_vm};
+use crate::{commands::read_from_path, isa::parse_isa_file};
 
 /// `afs verify` command
 /// Uses information from config.toml to verify a proof using the verifying key in `output-folder`
@@ -57,14 +57,14 @@ impl VerifyCommand {
 
     pub fn execute_helper(&self, config: VmConfig) -> Result<()> {
         println!("Verifying proof file: {}", self.proof_file);
-        let vm = get_vm::<BabyBearPoseidon2Config>(config, &self.isa_file_path)?;
-        // verify::verify_ops(&self.proof_file).await?;
-        let encoded_vk = read_from_path(self.keys_folder.clone() + "/partial.vk").unwrap();
+        let instructions = parse_isa_file(Path::new(&self.isa_file_path.clone()))?;
+        let vm = VirtualMachine::new(config, instructions);
+        let encoded_vk = read_from_path(&Path::new(&self.keys_folder.clone()).join("partial.vk"))?;
         let partial_vk: MultiStarkPartialVerifyingKey<BabyBearPoseidon2Config> =
-            bincode::deserialize(&encoded_vk).unwrap();
+            bincode::deserialize(&encoded_vk)?;
 
-        let encoded_proof = read_from_path(self.proof_file.clone()).unwrap();
-        let proof: Proof<BabyBearPoseidon2Config> = bincode::deserialize(&encoded_proof).unwrap();
+        let encoded_proof = read_from_path(Path::new(&self.proof_file.clone()))?;
+        let proof: Proof<BabyBearPoseidon2Config> = bincode::deserialize(&encoded_proof)?;
 
         let engine = config::baby_bear_poseidon2::default_engine(vm.max_log_degree());
 

@@ -1,29 +1,15 @@
 use std::fs::File;
 
 use std::io::{BufRead, BufReader};
+use std::path::Path;
 
-use p3_field::{PrimeField32, PrimeField64};
-use p3_uni_stark::{StarkGenericConfig, Val};
+use p3_field::PrimeField64;
 use stark_vm::cpu::trace::Instruction;
-use stark_vm::vm::config::VmConfig;
-use stark_vm::vm::VirtualMachine;
-
-pub fn get_vm<AC: StarkGenericConfig>(
-    config: VmConfig,
-    file_path: &str,
-) -> Result<VirtualMachine<AC>, std::io::Error>
-where
-    Val<AC>: PrimeField32,
-{
-    let instructions = parse_isa_file::<Val<AC>>(file_path)?;
-    let vm = VirtualMachine::new(config, instructions);
-    Ok(vm)
-}
 
 pub fn parse_isa_file<F: PrimeField64>(
-    file_path: &str,
+    path: &Path,
 ) -> Result<Vec<Instruction<F>>, std::io::Error> {
-    let file = File::open(file_path)?;
+    let file = File::open(path)?;
     let reader = BufReader::new(file);
 
     let mut result = vec![];

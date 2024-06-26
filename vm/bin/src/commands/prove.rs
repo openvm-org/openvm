@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::{path::Path, time::Instant};
 
 use afs_stark_backend::{
     keygen::types::MultiStarkPartialProvingKey, prover::trace::TraceCommitmentBuilder,
@@ -9,11 +9,11 @@ use afs_test_utils::{
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
-use stark_vm::vm::config::VmConfig;
+use stark_vm::vm::{config::VmConfig, VirtualMachine};
 
 use crate::{
     commands::{read_from_path, write_bytes},
-    isa::get_vm,
+    isa::parse_isa_file,
 };
 
 /// `afs prove` command
@@ -53,12 +53,13 @@ impl ProveCommand {
 
     pub fn execute_helper(&self, config: VmConfig) -> Result<()> {
         println!("Proving program: {}", self.isa_file_path);
-        let vm = get_vm::<BabyBearPoseidon2Config>(config, &self.isa_file_path)?;
+        let instructions = parse_isa_file(Path::new(&self.isa_file_path.clone()))?;
+        let vm = VirtualMachine::new(config, instructions);
 
         let engine = config::baby_bear_poseidon2::default_engine(vm.max_log_degree());
-        let encoded_pk = read_from_path(self.keys_folder.clone() + "/partial.pk").unwrap();
+        let encoded_pk = read_from_path(&Path::new(&self.keys_folder.clone()).join("partial.pk"))?;
         let partial_pk: MultiStarkPartialProvingKey<BabyBearPoseidon2Config> =
-            bincode::deserialize(&encoded_pk).unwrap();
+            bincode::deserialize(&encoded_pk)?;
 
         let partial_vk = partial_pk.partial_vk();
 
@@ -80,9 +81,8 @@ impl ProveCommand {
             &vec![vec![]; vm.chips().len()],
         );
 
-        let encoded_proof: Vec<u8> = bincode::serialize(&proof).unwrap();
-        let proof_path = self.isa_file_path.clone() + ".prove.bin";
-        write_bytes(&encoded_proof, proof_path).unwrap();
+        let encoded_proof: Vec<u8> = bincode::serialize(&proof)?;
+        write_bytes(&encoded_proof, &Path::new(&self.keys_folder.clone()).join("prove.bin"))?;
         Ok(())
     }
 }

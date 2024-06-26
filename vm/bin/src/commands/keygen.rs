@@ -1,19 +1,17 @@
 use std::{
-    fs::{self, File},
-    io::{BufWriter, Write},
-    time::Instant,
+    fs::{self, File}, io::{BufWriter, Write}, path::Path, time::Instant
 };
 
 use afs_test_utils::{
-    config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
+    config::{self},
     engine::StarkEngine,
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
 use p3_matrix::Matrix;
-use stark_vm::vm::config::VmConfig;
+use stark_vm::vm::{config::VmConfig, VirtualMachine};
 
-use crate::isa::get_vm;
+use crate::isa::parse_isa_file;
 
 /// `afs keygen` command
 /// Uses information from config.toml to generate partial proving and verifying keys and
@@ -48,9 +46,10 @@ impl KeygenCommand {
     }
 
     fn execute_helper(self, config: VmConfig) -> Result<()> {
-        let vm = get_vm::<BabyBearPoseidon2Config>(config, &self.isa_file_path)?;
+        let instructions = parse_isa_file(Path::new(&self.isa_file_path.clone()))?;
+        let vm = VirtualMachine::new(config, instructions);
         let engine = config::baby_bear_poseidon2::default_engine(vm.max_log_degree());
-        let mut keygen_builder = engine.keygen_builder(); // MultiStarkKeygenBuilder::new(&engine.config);
+        let mut keygen_builder = engine.keygen_builder();
 
         let chips = vm.chips();
         let traces = vm.traces();
@@ -63,17 +62,18 @@ impl KeygenCommand {
         let partial_vk = partial_pk.partial_vk();
         let encoded_pk: Vec<u8> = bincode::serialize(&partial_pk)?;
         let encoded_vk: Vec<u8> = bincode::serialize(&partial_vk)?;
-        let pk_path = self.output_folder.clone() + "/partial.pk";
-        let vk_path = self.output_folder.clone() + "/partial.vk";
-        fs::create_dir_all(self.output_folder).unwrap();
-        write_bytes(&encoded_pk, pk_path).unwrap();
-        write_bytes(&encoded_vk, vk_path).unwrap();
+        fs::create_dir_all(Path::new(&self.output_folder.clone()))?;
+        let pk_path = Path::new(&self.output_folder).join("partial.pk");
+        let vk_path = Path::new(&self.output_folder).join("partial.vk");
+        fs::create_dir_all(self.output_folder)?;
+        write_bytes(&encoded_pk, &pk_path)?;
+        write_bytes(&encoded_vk, &vk_path)?;
         Ok(())
     }
 }
 
-fn write_bytes(bytes: &[u8], path: String) -> Result<()> {
-    let file = File::create(path).unwrap();
+fn write_bytes(bytes: &[u8], path: &Path) -> Result<()> {
+    let file = File::create(path)?;
     let mut writer = BufWriter::new(file);
     writer.write_all(bytes)?;
     Ok(())
