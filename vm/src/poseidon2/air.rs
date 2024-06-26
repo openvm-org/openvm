@@ -27,40 +27,42 @@ impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Air<WIDTH, AB::F> 
         let half_ext_rounds = self.rounds_f / 2;
         for phase1_index in 0..half_ext_rounds {
             state = add_ext_consts::<AB, WIDTH>(state, phase1_index, &self.external_constants);
-            state = ext_lin_layer::<AB, WIDTH>(sbox::<AB>(state));
+            let sb_state = sbox::<AB>(state);
+            builder.assert_zero(sb_state[0].clone());
+            state = ext_lin_layer::<AB, WIDTH>(sb_state);
             for (state_index, state_elem) in state.iter().enumerate() {
                 builder.assert_eq(state_elem.clone(), aux.phase1[phase1_index][state_index]);
             }
         }
 
-        state = aux
-            .phase1
-            .last()
-            .unwrap()
-            .clone()
-            .into_iter()
-            .map(|x| x.into())
-            .collect();
-        for phase2_index in 0..self.rounds_p {
-            state[0] += self.internal_constants[phase2_index].into();
-            state[0] = sbox_p::<AB>(state[0].clone());
-            state = int_lin_layer::<AB, WIDTH>(state);
-            for (state_index, state_elem) in state.iter().enumerate() {
-                builder.assert_eq(state_elem.clone(), aux.phase2[phase2_index][state_index]);
-            }
-        }
+        // state = aux
+        //     .phase1
+        //     .last()
+        //     .unwrap()
+        //     .clone()
+        //     .into_iter()
+        //     .map(|x| x.into())
+        //     .collect();
+        // for phase2_index in 0..self.rounds_p {
+        //     state[0] += self.internal_constants[phase2_index].into();
+        //     state[0] = sbox_p::<AB>(state[0].clone());
+        //     // state = int_lin_layer::<AB, WIDTH>(state);
+        //     for (state_index, state_elem) in state.iter().enumerate() {
+        //         builder.assert_eq(state_elem.clone(), aux.phase2[phase2_index][state_index]);
+        //     }
+        // }
 
-        for phase3_index in 0..(self.rounds_f - half_ext_rounds) {
-            state = add_ext_consts::<AB, WIDTH>(
-                state,
-                phase3_index + half_ext_rounds,
-                &self.external_constants,
-            );
-            state = ext_lin_layer::<AB, WIDTH>(sbox::<AB>(state));
-            for (state_index, state_elem) in state.iter().enumerate() {
-                builder.assert_eq(state_elem.clone(), aux.phase3[phase3_index][state_index]);
-            }
-        }
+        // for phase3_index in 0..(self.rounds_f - half_ext_rounds) {
+        //     state = add_ext_consts::<AB, WIDTH>(
+        //         state,
+        //         phase3_index + half_ext_rounds,
+        //         &self.external_constants,
+        //     );
+        //     state = ext_lin_layer::<AB, WIDTH>(sbox::<AB>(state));
+        //     for (state_index, state_elem) in state.iter().enumerate() {
+        //         builder.assert_eq(state_elem.clone(), aux.phase3[phase3_index][state_index]);
+        //     }
+        // }
     }
 }
 
