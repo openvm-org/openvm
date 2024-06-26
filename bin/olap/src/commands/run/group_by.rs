@@ -11,13 +11,17 @@ use afs_test_utils::{
 use color_eyre::eyre::{eyre, Result};
 use logical_interface::{
     afs_input::operation::GroupByOp, afs_interface::AfsInterface, mock_db::MockDb,
+    utils::u16_vec_to_hex_string,
 };
-use p3_uni_stark::StarkGenericConfig;
+use p3_baby_bear::BabyBear;
+use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 
 const INTERNAL_BUS: usize = 0;
 const OUTPUT_BUS: usize = 1;
 const RANGE_BUS: usize = 2;
+
+// type Val = BabyBear;
 
 pub fn execute_group_by<SC: StarkGenericConfig>(
     config: &PageConfig,
@@ -39,9 +43,19 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
     let table = interface.get_table(op.table_id.to_string()).unwrap();
     let page = table.to_page(index_bytes, data_bytes, height);
 
+    println!("Input page");
+    for row in page.clone().rows {
+        println!(
+            "{}|{}|{}",
+            row.is_alloc,
+            u16_vec_to_hex_string(row.idx),
+            u16_vec_to_hex_string(row.data)
+        );
+    }
+
     let mut page_controller = PageController::<BabyBearPoseidon2Config>::new(
         page_width,
-        op.group_by_cols,
+        op.group_by_cols.clone(),
         op.agg_col,
         INTERNAL_BUS,
         OUTPUT_BUS,
@@ -50,8 +64,9 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
         idx_decomp,
     );
     let engine = config::baby_bear_poseidon2::default_engine(idx_decomp);
-    let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
+    // Keygen
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
     let group_by_ptr = keygen_builder.add_cached_main_matrix(page_width);
     let final_page_ptr =
         keygen_builder.add_cached_main_matrix(page_controller.final_chip.page_width());
@@ -88,7 +103,6 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
     // let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
     let prover = engine.prover();
-
     // let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
@@ -96,8 +110,21 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
     let (group_by_traces, _group_by_commitments, mut prover_data) =
         page_controller.load_page(&page, &trace_builder.committer);
 
+    let output_page =
+        Page::from_row_major_matrix(&group_by_traces.final_page_trace, op.group_by_cols.len(), 1);
+    println!("Output page");
+    for row in output_page.clone().rows {
+        println!(
+            "{}|{}|{}",
+            row.is_alloc,
+            u16_vec_to_hex_string(row.idx),
+            u16_vec_to_hex_string(row.data)
+        );
+    }
+
     let range_checker_trace = page_controller.range_checker.generate_trace();
 
+    // Build trace
     trace_builder.clear();
     trace_builder.load_cached_trace(group_by_traces.group_by_trace, prover_data.remove(0));
     trace_builder.load_cached_trace(
@@ -122,13 +149,12 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
         ],
     );
 
-    let pis = vec![vec![]; partial_vk.per_air.len()];
-    let verifier = engine.verifier();
-
     let mut challenger = engine.new_challenger();
+    let pis = vec![vec![]; partial_vk.per_air.len()];
     let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
 
     let mut challenger = engine.new_challenger();
+    let verifier = engine.verifier();
     let verify = verifier.verify(
         &mut challenger,
         partial_vk,
@@ -143,8 +169,6 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
 
     match verify {
         Ok(_) => {
-            let output_page =
-                Page::from_row_major_matrix(&group_by_traces.final_page_trace, idx_len, data_len);
             if !cli.silent {
                 println!("Output page: {:?}", output_page);
             }

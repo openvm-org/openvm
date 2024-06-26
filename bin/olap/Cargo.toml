@@ -17,3 +17,5 @@ afs-derive = { path = "../../derive" }
 logical-interface = { path = "../../logical-interface" }
 p3-util = { workspace = true }
 p3-uni-stark = { workspace = true }
+p3-baby-bear = { workspace = true }
+p3-field = { workspace = true }

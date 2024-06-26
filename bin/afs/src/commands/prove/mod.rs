@@ -18,7 +18,10 @@ use afs_test_utils::{
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{
-    afs_input::{operations_file::AfsOperation, types::InputFileOp, AfsInputFile},
+    afs_input::{
+        types::{AfsOperation, InputFileOp},
+        AfsInputFile,
+    },
     afs_interface::AfsInterface,
     mock_db::MockDb,
     table::codec::fixed_bytes::FixedBytesCodec,

@@ -96,6 +96,18 @@ pub fn fixed_bytes_to_field_vec(value: Vec<u8>) -> Vec<u32> {
         .collect()
 }
 
+pub fn u8_vec_to_hex_string(vec: Vec<u8>) -> String {
+    format!("0x{}", hex::encode(vec))
+}
+
+pub fn u16_vec_to_hex_string(vec: Vec<u32>) -> String {
+    let bytes = vec
+        .iter()
+        .flat_map(|x| x.to_be_bytes().iter().skip(2).cloned().collect::<Vec<u8>>())
+        .collect::<Vec<u8>>();
+    format!("0x{}", hex::encode(bytes))
+}
+
 /// Converts a number, string, or array into a big endian Vec<u8> with optional target length (left-padded with zeros)
 /// number: converts number directly to big endian bytes
 /// string: converts string to big endian bytes:

@@ -53,7 +53,7 @@ impl Page {
                         (*f).as_canonical_biguint()
                             .to_u32_digits()
                             .last()
-                            .unwrap()
+                            .unwrap_or(&0u32)
                             .to_owned()
                     })
                     .collect::<Vec<u32>>();
