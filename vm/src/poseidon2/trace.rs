@@ -1,11 +1,7 @@
+use super::columns::Poseidon2Cols;
 use super::Poseidon2Air;
-// use static_assertions::const_assert;
-
-use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
-use p3_field::AbstractField;
-use p3_field::Field;
+use p3_baby_bear::DiffusionMatrixBabyBear;
 use p3_field::PrimeField;
-use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_poseidon2::Poseidon2ExternalMatrixGeneral;
 use p3_symmetric::Permutation;
@@ -15,6 +11,9 @@ impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
     where
         DiffusionMatrixBabyBear: Permutation<[T; WIDTH]>,
     {
+        if self.trace.is_some() {
+            return self.trace.clone().unwrap();
+        }
         RowMajorMatrix::new(
             input_states
                 .iter()
@@ -22,6 +21,29 @@ impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
                 .collect(),
             self.get_width(),
         )
+    }
+
+    pub fn request_trace(&mut self, states: &[[T; WIDTH]]) -> Vec<Vec<T>>
+    where
+        T: PrimeField,
+        DiffusionMatrixBabyBear: Permutation<[T; WIDTH]>,
+    {
+        let index_map = Poseidon2Cols::<WIDTH, T>::index_map(self);
+        let traces: Vec<_> = states
+            .iter()
+            .map(|s| self.generate_local_trace(*s))
+            .collect();
+        let outputs: Vec<Vec<T>> = traces
+            .iter()
+            .map(|t| t[index_map.output.clone()].to_vec())
+            .collect();
+
+        self.trace = Some(RowMajorMatrix::new(
+            traces.iter().flat_map(|t| t.clone()).collect(),
+            self.get_width(),
+        ));
+
+        outputs
     }
 
     pub fn ext_layer(
