@@ -1,8 +1,11 @@
 use super::Poseidon2Air;
 // use static_assertions::const_assert;
 
-use p3_baby_bear::DiffusionMatrixBabyBear;
+use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
+use p3_field::AbstractField;
+use p3_field::Field;
 use p3_field::PrimeField;
+use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_poseidon2::Poseidon2ExternalMatrixGeneral;
 use p3_symmetric::Permutation;
