@@ -55,8 +55,8 @@ impl KeygenCommand {
         let chips = vm.chips();
         let traces = vm.traces();
 
-        for i in 0..chips.len() {
-            keygen_builder.add_air(chips[i], traces[i].height(), 0);
+        for (chip, trace) in chips.into_iter().zip_eq(traces) {
+            keygen_builder.add_air(chip, trace.height(), 0);
         }
 
         let partial_pk = keygen_builder.generate_partial_pk();
