@@ -5,7 +5,8 @@ use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use p3_baby_bear::BabyBear;
 
 use stark_vm::cpu::trace::Instruction;
-use stark_vm::cpu::CpuChip;
+use stark_vm::cpu::CpuAir;
+use stark_vm::cpu::CpuOptions;
 use stark_vm::cpu::OpCode::*;
 use stark_vm::cpu::RANGE_CHECKER_BUS;
 use stark_vm::field_arithmetic::FieldArithmeticAir;
@@ -22,9 +23,11 @@ const RANGE_MAX: u32 = 1 << DECOMP;
 
 const MEMORY_TRACE_DEGREE: usize = 32;
 
-fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>) {
-    let cpu_chip = CpuChip::new(is_field_arithmetic_enabled);
-    let execution = cpu_chip.generate_program_execution(program);
+fn air_test(field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>) {
+    let cpu_air = CpuAir::new(CpuOptions {
+        field_arithmetic_enabled,
+    });
+    let execution = cpu_air.generate_program_execution(program);
 
     let program_air = ProgramAir::new(execution.program.clone());
     let program_trace = program_air.generate_trace(&execution);
@@ -58,10 +61,10 @@ fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear
     let field_arithmetic_air = FieldArithmeticAir::new();
     let field_arithmetic_trace = field_arithmetic_air.generate_trace(&execution);
 
-    let test_result = if is_field_arithmetic_enabled {
+    let test_result = if field_arithmetic_enabled {
         run_simple_test_no_pis(
             vec![
-                &cpu_chip.air,
+                &cpu_air,
                 &program_air,
                 &offline_checker,
                 &field_arithmetic_air,
@@ -78,7 +81,7 @@ fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear
     } else {
         run_simple_test_no_pis(
             vec![
-                &cpu_chip.air,
+                &cpu_air,
                 &program_air,
                 &offline_checker,
                 &range_checker.air,

@@ -9,7 +9,7 @@ use crate::{field_arithmetic::FieldArithmeticAir, memory::OpType};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
-    CpuChip,
+    CpuAir,
     OpCode::{self, *},
     INST_WIDTH, MAX_READS_PER_CYCLE, MAX_WRITES_PER_CYCLE,
 };
@@ -244,7 +244,7 @@ impl<F: PrimeField64> Memory<F> {
     }
 }
 
-impl CpuChip {
+impl CpuAir {
     pub fn generate_program_execution<F: PrimeField64>(
         &self,
         program: Vec<Instruction<F>>,
@@ -281,7 +281,7 @@ impl CpuChip {
                 e,
             };
 
-            let mut operation_flags = vec![F::zero(); self.air.options.num_operations()];
+            let mut operation_flags = vec![F::zero(); self.options.num_operations()];
             operation_flags[opcode as usize] = F::one();
 
             let mut next_pc = pc + F::one();
@@ -324,7 +324,7 @@ impl CpuChip {
                     next_pc = pc;
                 }
                 opcode @ (FADD | FSUB | FMUL | FDIV) => {
-                    if self.air.options.field_arithmetic_enabled {
+                    if self.options.field_arithmetic_enabled {
                         // read from d[b] and e[c]
                         let operand1 = memory.read(d, b);
                         let operand2 = memory.read(e, c);
