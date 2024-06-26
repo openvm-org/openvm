@@ -26,6 +26,9 @@ pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
             d,
             e,
         } = instruction;
-        println!("{} | {:?} {} {} {} {} {}", pc, opcode, op_a, op_b, op_c, d, e);
+        println!(
+            "{} | {:?} {} {} {} {} {}",
+            pc, opcode, op_a, op_b, op_c, d, e
+        );
     }
 }
