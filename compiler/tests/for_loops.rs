@@ -1,3 +1,5 @@
+use afs_compiler::util::display_program;
+use afs_compiler::util::execute_program;
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
@@ -43,6 +45,12 @@ fn test_compiler_for_loops() {
     builder.assert_var_eq(total_counter, n_val * m_val);
     builder.assert_var_eq(total_counter, n * m);
 
+    builder.halt();
+
+    let program = builder.compile_isa();
+    display_program(&program);
+    execute_program(program);
+
     // let program = builder.compile_program();
 
     // let config = SC::default();
@@ -55,12 +63,15 @@ fn test_compiler_nested_array_loop() {
     let mut builder = AsmBuilder::<F, EF>::default();
     type C = AsmConfig<F, EF>;
 
-    let mut array: Array<C, Array<C, Var<_>>> = builder.array(100);
+    let outer_len = 8;
+    let inner_len = 3;
+
+    let mut array: Array<C, Array<C, Var<_>>> = builder.array(outer_len);
 
     builder.range(0, array.len()).for_each(|i, builder| {
-        let mut inner_array = builder.array::<Var<_>>(10);
+        let mut inner_array = builder.array::<Var<_>>(inner_len);
         builder.range(0, inner_array.len()).for_each(|j, builder| {
-            builder.set(&mut inner_array, j, i + j);
+            builder.set(&mut inner_array, j, i + j);//(j * F::from_canonical_u16(300)));
         });
         builder.set(&mut array, i, inner_array);
     });
@@ -70,13 +81,22 @@ fn test_compiler_nested_array_loop() {
         let inner_array = builder.get(&array, i);
         builder.range(0, inner_array.len()).for_each(|j, builder| {
             let val = builder.get(&inner_array, j);
-            builder.assert_var_eq(val, i + j);
+            builder.assert_var_eq(val, i + j); //*(j * F::from_canonical_u16(300)));
         });
     });
 
-    let code = builder.compile_asm();
+    builder.halt();
 
-    println!("{}", code);
+    let code = builder.clone().compile_asm();
+    println!("{:?}", code);
+
+    let program = builder.compile_isa();
+    display_program(&program);
+    execute_program(program);
+
+    // let code = builder.compile_asm();
+
+    // println!("{}", code);
 
     // let program = code.machine_code();
 

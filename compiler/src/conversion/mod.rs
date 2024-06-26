@@ -41,23 +41,21 @@ impl AS {
 }
 
 fn register<F: PrimeField64>(value: i32) -> F {
-    let value = -value;
+    let value = 1 - value;
     //println!("register index: {}", value);
-    assert!(value >= 0);
+    assert!(value > 0);
     F::from_canonical_usize(value as usize)
 }
-
-const UTILITY_REGISTER: i32 = 0;
 
 fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
     pc: F,
     labels: impl Fn(F) -> F,
 ) -> Vec<Instruction<F>> {
-    let utility_register = register(UTILITY_REGISTER);
+    let utility_register = F::zero();
     match instruction {
         AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
-        AsmInstruction::LoadF(dst, src, index, offset, size) => (0..size.as_canonical_u64())
+        AsmInstruction::LoadF(dst, src, index, offset, size) => (0..1)
             .flat_map(|i| {
                 vec![
                     // register[util] <- register[src] + register[index]
@@ -81,7 +79,7 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
                 ]
             })
             .collect(),
-        AsmInstruction::LoadFI(dst, src, index, offset, size) => (0..size.as_canonical_u64())
+        AsmInstruction::LoadFI(dst, src, index, offset, size) => (0..1)
             .flat_map(|i| {
                 vec![
                     // register[dst] <- mem[register[src] + (index + offset)]
@@ -96,7 +94,7 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
                 ]
             })
             .collect(),
-        AsmInstruction::StoreF(val, addr, index, offset, size) => (0..size.as_canonical_u64())
+        AsmInstruction::StoreF(val, addr, index, offset, size) => (0..1)
             .flat_map(|i| {
                 vec![
                     // register[util] <- register[addr] + register[index]
@@ -120,7 +118,7 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
                 ]
             })
             .collect(),
-        AsmInstruction::StoreFI(val, addr, index, offset, size) => (0..size.as_canonical_u64())
+        AsmInstruction::StoreFI(val, addr, index, offset, size) => (0..1)
             .flat_map(|i| {
                 vec![
                     // mem[register[addr] + (index + offset)] <- register[val]

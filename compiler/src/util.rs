@@ -16,8 +16,8 @@ pub fn execute_program<F: PrimeField32>(program: Vec<Instruction<F>>) {
     cpu.generate_program_execution(program);
 }
 
-pub fn display_program<F: PrimeField32>(program: &Vec<Instruction<F>>) {
-    for instruction in program {
+pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
+    for (pc, instruction) in program.iter().enumerate() {
         let Instruction {
             opcode,
             op_a,
@@ -26,6 +26,6 @@ pub fn display_program<F: PrimeField32>(program: &Vec<Instruction<F>>) {
             d,
             e,
         } = instruction;
-        println!("{:?} {} {} {} {} {}", opcode, op_a, op_b, op_c, d, e);
+        println!("{} | {:?} {} {} {} {} {}", pc, opcode, op_a, op_b, op_c, d, e);
     }
 }
