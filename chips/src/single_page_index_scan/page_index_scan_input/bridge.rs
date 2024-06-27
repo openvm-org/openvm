@@ -85,7 +85,7 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
 
         interactions.push(Interaction {
             fields: virtual_cols,
-            count: VirtualPairCol::single_main(cols_numbered.send_row),
+            count: VirtualPairCol::single_main(cols_numbered.local_cols.send_row),
             argument_index: self.page_bus_index,
         });
 
@@ -94,7 +94,7 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
         let (is_less_than_tuple_aux_flattened, strict_comp_ind): (
             Option<Vec<usize>>,
             Option<usize>,
-        ) = match cols_numbered.aux_cols {
+        ) = match cols_numbered.local_cols.aux_cols {
             PageIndexScanInputAuxCols::Lt(StrictCompAuxCols {
                 is_less_than_tuple_aux,
                 ..
@@ -104,7 +104,7 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                 ..
             }) => (
                 Some(is_less_than_tuple_aux.flatten()),
-                Some(cols_numbered.satisfies_pred),
+                Some(cols_numbered.local_cols.satisfies_pred),
             ),
             PageIndexScanInputAuxCols::Lte(NonStrictCompAuxCols {
                 satisfies_strict_comp,
@@ -135,7 +135,7 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                 let is_less_than_tuple_cols = IsLessThanTupleCols {
                     io: IsLessThanTupleIOCols {
                         x: cols_numbered.page_cols.idx.clone(),
-                        y: cols_numbered.x.clone(),
+                        y: cols_numbered.local_cols.x.clone(),
                         tuple_less_than: strict_comp_ind.unwrap(),
                     },
                     aux: IsLessThanTupleAuxCols::from_slice(
@@ -158,7 +158,7 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
             }) => {
                 let is_less_than_tuple_cols = IsLessThanTupleCols {
                     io: IsLessThanTupleIOCols {
-                        x: cols_numbered.x.clone(),
+                        x: cols_numbered.local_cols.x.clone(),
                         y: cols_numbered.page_cols.idx.clone(),
                         tuple_less_than: strict_comp_ind.unwrap(),
                     },
