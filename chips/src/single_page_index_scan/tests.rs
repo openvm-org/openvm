@@ -42,6 +42,8 @@ fn index_scan_test(
     page_controller.load_page(
         page.clone(),
         page_output.clone(),
+        None,
+        None,
         x.clone(),
         idx_len,
         data_len,
