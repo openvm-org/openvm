@@ -1,5 +1,8 @@
 use p3_field::PrimeField32;
-use stark_vm::cpu::{trace::Instruction, CpuChip};
+use stark_vm::cpu::{
+    trace::{Instruction, ProgramExecution},
+    CpuAir, CpuOptions,
+};
 
 pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
     let modulus = F::ORDER_U32;
@@ -11,9 +14,11 @@ pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
     }
 }
 
-pub fn execute_program<F: PrimeField32>(program: Vec<Instruction<F>>) {
-    let cpu = CpuChip::new(true);
-    cpu.generate_program_execution(program);
+pub fn execute_program<F: PrimeField32>(program: Vec<Instruction<F>>) -> ProgramExecution<F> {
+    let cpu = CpuAir::new(CpuOptions {
+        field_arithmetic_enabled: true,
+    });
+    cpu.generate_program_execution(program)
 }
 
 pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
