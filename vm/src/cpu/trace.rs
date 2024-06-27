@@ -1,4 +1,8 @@
-use std::collections::{HashMap, VecDeque};
+use std::{
+    collections::{BTreeMap, HashMap, VecDeque},
+    error::Error,
+    fmt::Display,
+};
 
 use p3_field::{Field, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
@@ -9,7 +13,7 @@ use crate::{field_arithmetic::FieldArithmeticAir, memory::OpType};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
-    CpuAir,
+    CpuAir, CpuOptions,
     OpCode::{self, *},
     INST_WIDTH, MAX_READS_PER_CYCLE, MAX_WRITES_PER_CYCLE,
 };
@@ -156,11 +160,11 @@ pub struct ProgramExecution<F> {
 }
 
 impl<F: PrimeField64> ProgramExecution<F> {
-    pub fn trace(&self) -> RowMajorMatrix<F> {
+    pub fn trace(&self, options: CpuOptions) -> RowMajorMatrix<F> {
         let rows: Vec<F> = self
             .trace_rows
             .iter()
-            .flat_map(|row| row.flatten())
+            .flat_map(|row| row.flatten(options))
             .collect();
         let num_cols = rows.len() / self.trace_rows.len();
         RowMajorMatrix::new(rows, num_cols)
@@ -244,11 +248,34 @@ impl<F: PrimeField64> Memory<F> {
     }
 }
 
+#[derive(Debug)]
+pub enum ExecutionError {
+    Fail,
+    PcOutOfBounds(usize, usize),
+    DisabledOperation(OpCode),
+}
+
+impl Display for ExecutionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExecutionError::Fail => write!(f, "execution failed"),
+            ExecutionError::PcOutOfBounds(pc, program_len) => write!(
+                f,
+                "pc = {} out of bounds for program of length {}",
+                pc, program_len
+            ),
+            ExecutionError::DisabledOperation(op) => write!(f, "opcode {:?} was not enabled", op),
+        }
+    }
+}
+
+impl Error for ExecutionError {}
+
 impl CpuAir {
     pub fn generate_program_execution<F: PrimeField64>(
         &self,
         program: Vec<Instruction<F>>,
-    ) -> ProgramExecution<F> {
+    ) -> Result<ProgramExecution<F>, ExecutionError> {
         let mut rows = vec![];
         let mut execution_frequencies = vec![F::zero(); program.len()];
         let mut arithmetic_operations = vec![];
@@ -260,9 +287,11 @@ impl CpuAir {
 
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
+            let instruction = program
+                .get(pc_usize)
+                .ok_or(ExecutionError::PcOutOfBounds(pc_usize, program.len()))?;
             execution_frequencies[pc_usize] += F::one();
 
-            let instruction = program[pc_usize];
             let opcode = instruction.opcode;
             let a = instruction.op_a;
             let b = instruction.op_b;
@@ -280,9 +309,6 @@ impl CpuAir {
                 d,
                 e,
             };
-
-            let mut operation_flags = vec![F::zero(); self.options.num_operations()];
-            operation_flags[opcode as usize] = F::one();
 
             let mut next_pc = pc + F::one();
 
@@ -340,10 +366,21 @@ impl CpuAir {
                             result,
                         });
                     } else {
-                        panic!("Field arithmetic is not enabled");
+                        return Err(ExecutionError::DisabledOperation(opcode));
                     }
                 }
+                FAIL => return Err(ExecutionError::Fail),
+                PRINTF => {
+                    let value = memory.read(d, a);
+                    println!("{}", value);
+                }
             };
+
+            let mut operation_flags = BTreeMap::new();
+            for other_opcode in self.options.enabled_instructions() {
+                operation_flags.insert(other_opcode, F::from_bool(other_opcode == opcode));
+            }
+            println!("operation flags: {:?}", operation_flags);
 
             // complete the clock cycle and get the read and write cols
             let (mut read_cols, mut write_cols) = memory.complete_clock_cycle();
@@ -385,12 +422,12 @@ impl CpuAir {
             }
         }
 
-        ProgramExecution {
+        Ok(ProgramExecution {
             program,
             execution_frequencies,
             trace_rows: rows,
             memory_accesses: memory.log,
             arithmetic_ops: arithmetic_operations,
-        }
+        })
     }
 }

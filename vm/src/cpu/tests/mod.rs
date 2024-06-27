@@ -31,7 +31,9 @@ fn test_flatten_fromslice_roundtrip() {
             field_arithmetic_enabled: true,
         },
     );
-    let flattened = cols_numbered.flatten();
+    let flattened = cols_numbered.flatten(CpuOptions {
+        field_arithmetic_enabled: true,
+    });
 
     for (i, col) in flattened.iter().enumerate() {
         assert_eq!(*col, all_cols[i]);
@@ -50,7 +52,7 @@ fn program_execution_test<F: PrimeField64>(
     let air = CpuAir::new(CpuOptions {
         field_arithmetic_enabled,
     });
-    let execution = air.generate_program_execution(program.clone());
+    let execution = air.generate_program_execution(program.clone()).unwrap();
 
     assert_eq!(execution.program, program);
     assert_eq!(execution.memory_accesses, expected_memory_log);
@@ -90,7 +92,7 @@ fn air_test(field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>)
     let air = CpuAir::new(CpuOptions {
         field_arithmetic_enabled,
     });
-    let execution = air.generate_program_execution(program);
+    let execution = air.generate_program_execution(program).unwrap();
     air_test_custom_execution(field_arithmetic_enabled, execution);
 }
 
@@ -104,7 +106,7 @@ fn air_test_change_pc(
     let chip = CpuAir::new(CpuOptions {
         field_arithmetic_enabled: is_field_arithmetic_enabled,
     });
-    let mut execution = chip.generate_program_execution(program);
+    let mut execution = chip.generate_program_execution(program).unwrap();
 
     let old_value = execution.trace_rows[change_row].io.pc.as_canonical_u64() as usize;
     execution.trace_rows[change_row].io.pc = BabyBear::from_canonical_usize(change_value);
@@ -123,14 +125,15 @@ fn air_test_custom_execution(
 }
 
 fn air_test_custom_execution_with_failure(
-    is_field_arithmetic_enabled: bool,
+    field_arithmetic_enabled: bool,
     execution: ProgramExecution<BabyBear>,
     should_fail: bool,
 ) {
-    let air = CpuAir::new(CpuOptions {
-        field_arithmetic_enabled: is_field_arithmetic_enabled,
-    });
-    let trace = execution.trace();
+    let options = CpuOptions {
+        field_arithmetic_enabled,
+    };
+    let air = CpuAir::new(options);
+    let trace = execution.trace(options);
 
     let program_air = DummyInteractionAir::new(7, false, READ_INSTRUCTION_BUS);
     let mut program_rows = vec![];
@@ -184,7 +187,7 @@ fn air_test_custom_execution_with_failure(
     }
     let arithmetic_trace = RowMajorMatrix::new(arithmetic_rows, 5);
 
-    let test_result = if is_field_arithmetic_enabled {
+    let test_result = if field_arithmetic_enabled {
         run_simple_test_no_pis(
             vec![&air, &program_air, &memory_air, &arithmetic_air],
             vec![trace, program_trace, memory_trace, arithmetic_trace],
@@ -209,6 +212,9 @@ fn air_test_custom_execution_with_failure(
 
 #[test]
 fn test_cpu_1() {
+    if std::env::var_os("RUST_BACKTRACE").is_none() {
+        std::env::set_var("RUST_BACKTRACE", "1");
+    }
     let n = 2;
 
     /*
@@ -375,7 +381,7 @@ fn test_cpu_negative_hasnt_terminated() {
     let air = CpuAir::new(CpuOptions {
         field_arithmetic_enabled: true,
     });
-    let mut execution = air.generate_program_execution(program);
+    let mut execution = air.generate_program_execution(program).unwrap();
     execution.trace_rows.remove(execution.trace_rows.len() - 1);
     execution.execution_frequencies[1] = AbstractField::zero();
 
@@ -395,7 +401,7 @@ fn test_cpu_negative_secret_write() {
     let air = CpuAir::new(CpuOptions {
         field_arithmetic_enabled: true,
     });
-    let mut execution = air.generate_program_execution(program);
+    let mut execution = air.generate_program_execution(program).unwrap();
 
     let is_zero_air = IsZeroAir;
     let mut is_zero_trace = is_zero_air
@@ -432,7 +438,7 @@ fn test_cpu_negative_disable_write() {
     let air = CpuAir::new(CpuOptions {
         field_arithmetic_enabled: true,
     });
-    let mut execution = air.generate_program_execution(program);
+    let mut execution = air.generate_program_execution(program).unwrap();
 
     execution.trace_rows[0].aux.write.enabled = AbstractField::zero();
 
@@ -454,7 +460,7 @@ fn test_cpu_negative_disable_read() {
     let air = CpuAir::new(CpuOptions {
         field_arithmetic_enabled: true,
     });
-    let mut execution = air.generate_program_execution(program);
+    let mut execution = air.generate_program_execution(program).unwrap();
 
     execution.trace_rows[0].aux.read1.enabled = AbstractField::zero();
 

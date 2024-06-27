@@ -67,16 +67,15 @@ impl<AB: AirBuilder> Air<AB> for CpuAir {
             is_equal_aux,
         } = aux;
 
-        // set correct operation flag
-        for &operation_flag in operation_flags.iter() {
-            builder.assert_bool(operation_flag);
+        for &flag in operation_flags.values() {
+            builder.assert_bool(flag);
         }
 
         let mut sum_flags = AB::Expr::zero();
         let mut match_opcode = AB::Expr::zero();
-        for (i, &flag) in operation_flags.iter().enumerate() {
+        for (&opcode, &flag) in operation_flags.iter() {
             sum_flags = sum_flags + flag;
-            match_opcode += flag * AB::F::from_canonical_usize(i);
+            match_opcode += flag * AB::F::from_canonical_usize(opcode as usize);
         }
         builder.assert_one(sum_flags);
         builder.assert_eq(opcode, match_opcode);
@@ -87,7 +86,7 @@ impl<AB: AirBuilder> Air<AB> for CpuAir {
         let mut write_enabled_check = AB::Expr::zero();
 
         // LOADW: d[a] <- e[d[c] + b]
-        let loadw_flag = operation_flags[LOADW as usize];
+        let loadw_flag = operation_flags[&LOADW];
         read1_enabled_check = read1_enabled_check + loadw_flag;
         read2_enabled_check = read2_enabled_check + loadw_flag;
         write_enabled_check = write_enabled_check + loadw_flag;
@@ -109,7 +108,7 @@ impl<AB: AirBuilder> Air<AB> for CpuAir {
             .assert_eq(next_pc, pc + inst_width);
 
         // STOREW: e[d[c] + b] <- d[a]
-        let storew_flag = operation_flags[STOREW as usize];
+        let storew_flag = operation_flags[&STOREW];
         read1_enabled_check = read1_enabled_check + storew_flag;
         read2_enabled_check = read2_enabled_check + storew_flag;
         write_enabled_check = write_enabled_check + storew_flag;
@@ -130,7 +129,7 @@ impl<AB: AirBuilder> Air<AB> for CpuAir {
             .assert_eq(next_pc, pc + inst_width);
 
         // JAL: d[a] <- pc + INST_WIDTH, pc <- pc + b
-        let jal_flag = operation_flags[JAL as usize];
+        let jal_flag = operation_flags[&JAL];
         write_enabled_check = write_enabled_check + jal_flag;
 
         let mut when_jal = builder.when(jal_flag);
@@ -142,7 +141,7 @@ impl<AB: AirBuilder> Air<AB> for CpuAir {
         when_jal.when_transition().assert_eq(next_pc, pc + b);
 
         // BEQ: If d[a] = e[b], pc <- pc + c
-        let beq_flag = operation_flags[BEQ as usize];
+        let beq_flag = operation_flags[&BEQ];
         read1_enabled_check = read1_enabled_check + beq_flag;
         read2_enabled_check = read2_enabled_check + beq_flag;
 
@@ -172,7 +171,7 @@ impl<AB: AirBuilder> Air<AB> for CpuAir {
         SubAir::eval(&IsEqualAir, builder, is_equal_io_cols, is_equal_aux_cols);
 
         // BNE: If d[a] != e[b], pc <- pc + c
-        let bne_flag = operation_flags[BNE as usize];
+        let bne_flag = operation_flags[&BNE];
         read1_enabled_check = read1_enabled_check + bne_flag;
         read2_enabled_check = read2_enabled_check + bne_flag;
 
@@ -194,16 +193,16 @@ impl<AB: AirBuilder> Air<AB> for CpuAir {
             .assert_eq(next_pc, pc + c);
 
         // TERMINATE
-        let terminate_flag = operation_flags[TERMINATE as usize];
+        let terminate_flag = operation_flags[&TERMINATE];
         let mut when_terminate = builder.when(terminate_flag);
         when_terminate.when_transition().assert_eq(next_pc, pc);
 
         // arithmetic operations
         if self.options.field_arithmetic_enabled {
-            let arithmetic_flags = operation_flags[FADD as usize]
-                + operation_flags[FSUB as usize]
-                + operation_flags[FMUL as usize]
-                + operation_flags[FDIV as usize];
+            let arithmetic_flags = operation_flags[&FADD]
+                + operation_flags[&FSUB]
+                + operation_flags[&FMUL]
+                + operation_flags[&FDIV];
             read1_enabled_check += arithmetic_flags.clone();
             read2_enabled_check += arithmetic_flags.clone();
             write_enabled_check += arithmetic_flags.clone();

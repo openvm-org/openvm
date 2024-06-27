@@ -18,13 +18,10 @@ pub const MEMORY_BUS: usize = 1;
 pub const ARITHMETIC_BUS: usize = 2;
 pub const RANGE_CHECKER_BUS: usize = 3;
 
-pub const NUM_CORE_OPERATIONS: usize = 6;
-pub const NUM_ARITHMETIC_OPERATIONS: usize = 4;
-
 pub const MAX_READS_PER_CYCLE: usize = 2;
 pub const MAX_WRITES_PER_CYCLE: usize = 1;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, FromStr)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, FromStr, PartialOrd, Ord)]
 #[repr(usize)]
 pub enum OpCode {
     LOADW = 0,
@@ -38,6 +35,9 @@ pub enum OpCode {
     FSUB = 7,
     FMUL = 8,
     FDIV = 9,
+
+    FAIL = 10,
+    PRINTF = 11,
 }
 
 impl OpCode {
@@ -53,10 +53,17 @@ impl OpCode {
             7 => Some(OpCode::FSUB),
             8 => Some(OpCode::FMUL),
             9 => Some(OpCode::FDIV),
+            10 => Some(OpCode::FAIL),
+            11 => Some(OpCode::PRINTF),
             _ => None,
         }
     }
 }
+
+use OpCode::*;
+
+const CORE_INSTRUCTIONS: [OpCode; 6] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE];
+const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
 
 #[derive(Default, Clone, Copy)]
 pub struct CpuOptions {
@@ -64,13 +71,16 @@ pub struct CpuOptions {
 }
 
 impl CpuOptions {
-    pub fn num_operations(&self) -> usize {
-        NUM_CORE_OPERATIONS
-            + if self.field_arithmetic_enabled {
-                NUM_ARITHMETIC_OPERATIONS
-            } else {
-                0
-            }
+    pub fn enabled_instructions(&self) -> Vec<OpCode> {
+        let mut result = CORE_INSTRUCTIONS.to_vec();
+        if self.field_arithmetic_enabled {
+            result.extend(FIELD_ARITHMETIC_INSTRUCTIONS);
+        }
+        result
+    }
+
+    pub fn num_enabled_instructions(&self) -> usize {
+        self.enabled_instructions().len()
     }
 }
 
