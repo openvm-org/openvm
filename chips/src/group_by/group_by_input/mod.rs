@@ -77,9 +77,8 @@ impl GroupByAir {
         }
     }
 
-    /// This pure function computes the answer to the group-by operation
-    pub fn request(&self, page: &Page) -> Page {
-        let grouped_page: Vec<Vec<u32>> = if self.sorted {
+    pub fn select_and_sort(&self, page: &Page) -> Vec<Vec<u32>> {
+        if self.sorted {
             page.rows
                 .clone()
                 .iter()
@@ -102,7 +101,12 @@ impl GroupByAir {
                 .collect();
             grouped_page.sort();
             grouped_page
-        };
+        }
+    }
+
+    /// This pure function computes the answer to the group-by operation
+    pub fn request(&self, page: &Page) -> (Page, Page) {
+        let grouped_page: Vec<Vec<u32>> = self.select_and_sort(page);
 
         let mut sums_by_key: HashMap<Vec<u32>, u32> = HashMap::new();
         for row in grouped_page.iter() {
@@ -125,6 +129,18 @@ impl GroupByAir {
         let row_width = 1 + idx_len + 1;
         grouped_sums.resize(page.height(), vec![0; row_width]);
 
-        Page::from_2d_vec(&grouped_sums, idx_len, 1)
+        let mut new_grouped_page: Vec<Vec<u32>> = grouped_page
+            .iter()
+            .map(|row| {
+                let mut new_row = vec![1];
+                new_row.append(&mut row.clone());
+                new_row
+            })
+            .collect();
+        new_grouped_page.resize(page.height(), vec![0; row_width]);
+        (
+            Page::from_2d_vec(&grouped_sums, idx_len, 1),
+            Page::from_2d_vec(&new_grouped_page, idx_len, 1),
+        )
     }
 }

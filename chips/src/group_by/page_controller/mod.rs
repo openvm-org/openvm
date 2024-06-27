@@ -123,13 +123,13 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     {
         let group_by_trace = page.gen_trace();
 
-        let grouped_page = self.group_by.request(page);
+        let (answer, grouped_page) = self.group_by.request(page);
         let group_by_aux_trace: DenseMatrix<Val<SC>> = self.group_by.gen_aux_trace(&grouped_page);
 
         let final_page_trace = grouped_page.gen_trace();
         let final_page_aux_trace = self
             .final_chip
-            .gen_aux_trace::<SC>(&grouped_page, self.range_checker.clone());
+            .gen_aux_trace::<SC>(&answer, self.range_checker.clone());
 
         let prover_data = vec![
             trace_committer.commit(vec![group_by_trace.clone()]),
