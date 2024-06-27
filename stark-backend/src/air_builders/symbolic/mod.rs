@@ -68,14 +68,7 @@ where
             num_exposed_values_after_challenge,
         )
         .iter()
-        .map(|c| {
-            let d = c.degree_multiple();
-            if d > 7 {
-                dbg!(c);
-                panic!();
-            };
-            d
-        }),
+        .map(|c| c.degree_multiple()),
     )
     .unwrap_or(0)
 }
