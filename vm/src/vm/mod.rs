@@ -8,7 +8,7 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 
 use crate::{
-    cpu::{trace::Instruction, CpuChip, RANGE_CHECKER_BUS, WORD_SIZE},
+    cpu::{trace::Instruction, CpuAir, RANGE_CHECKER_BUS, WORD_SIZE},
     field_arithmetic::FieldArithmeticAir,
     memory::{offline_checker::OfflineChecker, MemoryAccess},
     program::ProgramAir,
@@ -24,7 +24,7 @@ where
 {
     pub config: VmParamsConfig,
 
-    pub cpu_chip: CpuChip,
+    pub cpu_air: CpuAir,
     pub program_air: ProgramAir<Val<SC>>,
     pub memory_air: OfflineChecker,
     pub field_arithmetic_air: FieldArithmeticAir,
@@ -49,12 +49,12 @@ where
 
         let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, 1 << decomp));
 
-        let cpu_chip = CpuChip::new(config.field_arithmetic_enabled);
+        let cpu_air = CpuAir::new(config.cpu_options());
         let program_air = ProgramAir::new(program.clone());
         let memory_air = OfflineChecker::new(WORD_SIZE, limb_bits, limb_bits, limb_bits, decomp);
         let field_arithmetic_air = FieldArithmeticAir::new();
 
-        let execution = cpu_chip.generate_program_execution(program_air.program.clone());
+        let execution = cpu_air.generate_program_execution(program_air.program.clone());
         let program_trace = program_air.generate_trace(&execution);
 
         let ops = execution
@@ -78,7 +78,7 @@ where
 
         Self {
             config,
-            cpu_chip,
+            cpu_air,
             program_air,
             memory_air,
             field_arithmetic_air,
@@ -94,7 +94,7 @@ where
     pub fn chips(&self) -> Vec<&dyn AnyRap<SC>> {
         if self.config.field_arithmetic_enabled {
             vec![
-                &self.cpu_chip.air,
+                &self.cpu_air,
                 &self.program_air,
                 &self.memory_air,
                 &self.field_arithmetic_air,
@@ -102,7 +102,7 @@ where
             ]
         } else {
             vec![
-                &self.cpu_chip.air,
+                &self.cpu_air,
                 &self.program_air,
                 &self.memory_air,
                 &self.range_checker.air,

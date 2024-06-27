@@ -11,6 +11,14 @@ pub struct VmParamsConfig {
     pub max_operations: usize,*/
 }
 
+impl VmParamsConfig {
+    pub fn cpu_options(&self) -> CpuOptions {
+        CpuOptions {
+            field_arithmetic_enabled: self.field_arithmetic_enabled,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct VmConfig {
     pub vm: VmParamsConfig,
@@ -24,11 +32,5 @@ impl VmConfig {
         let config: VmConfig = toml::from_str(file_str.as_str())
             .map_err(|e| format!("Failed to parse config file {}:\n{}", file, e))?;
         Ok(config)
-    }
-
-    pub fn cpu_options(&self) -> CpuOptions {
-        CpuOptions {
-            field_arithmetic_enabled: self.vm.field_arithmetic_enabled,
-        }
     }
 }

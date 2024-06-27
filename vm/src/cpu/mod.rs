@@ -79,25 +79,8 @@ pub struct CpuAir {
     pub options: CpuOptions,
 }
 
-#[derive(Default)]
-pub struct CpuChip {
-    pub air: CpuAir,
-    //pub range_checker: Arc<RangeCheckerGateChip>,
-}
-
-impl CpuChip {
-    pub fn new(
-        field_arithmetic_enabled: bool,
-        //range_checker: Arc<RangeCheckerGateChip>,
-    ) -> Self {
-        let air = CpuAir {
-            options: CpuOptions {
-                field_arithmetic_enabled,
-            },
-        };
-
-        Self {
-            air, /*range_checker*/
-        }
+impl CpuAir {
+    pub fn new(options: CpuOptions) -> Self {
+        Self { options }
     }
 }
