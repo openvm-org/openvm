@@ -5,13 +5,17 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use afs_chips::{is_equal::IsEqualAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions};
 
-use crate::{field_arithmetic::FieldArithmeticAir, field_extension::BETA, memory::OpType};
+use crate::{
+    field_arithmetic::FieldArithmeticAir,
+    field_extension::{FieldExtensionArithmeticAir, BETA},
+    memory::OpType,
+};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
-    CpuChip,
+    CpuAir,
     OpCode::{self, *},
-    INST_WIDTH, MAX_READS_PER_CYCLE, MAX_WRITES_PER_CYCLE,
+    INST_WIDTH, MAX_READS_PER_CYCLE, MAX_WRITES_PER_CYCLE, WORD_SIZE,
 };
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, derive_new::new)]
@@ -214,6 +218,17 @@ impl<F: PrimeField64> Memory<F> {
         data
     }
 
+    fn read_consecutive(&mut self, address_space: F, address: F, length: usize) -> Vec<F> {
+        let mut ans = vec![];
+        for i in 0..length {
+            ans.push(self.read(
+                address_space,
+                address + F::from_canonical_usize(i * WORD_SIZE),
+            ));
+        }
+        ans
+    }
+
     fn write(&mut self, address_space: F, address: F, data: F) {
         if address_space == F::zero() {
             panic!("Attempted to write to address space 0");
@@ -237,6 +252,16 @@ impl<F: PrimeField64> Memory<F> {
         }
     }
 
+    fn write_consecutive(&mut self, address_space: F, address: F, data: Vec<F>) {
+        for (i, value) in data.iter().enumerate() {
+            self.write(
+                address_space,
+                address + F::from_canonical_usize(i * WORD_SIZE),
+                *value,
+            );
+        }
+    }
+
     fn complete_clock_cycle(&mut self) -> (VecDeque<MemoryAccess<F>>, VecDeque<MemoryAccess<F>>) {
         self.clock_cycle += 1;
         let reads = std::mem::take(&mut self.reads_this_cycle);
@@ -245,7 +270,7 @@ impl<F: PrimeField64> Memory<F> {
     }
 }
 
-impl CpuChip {
+impl CpuAir {
     pub fn generate_program_execution<F: PrimeField64>(
         &self,
         program: Vec<Instruction<F>>,
@@ -283,7 +308,7 @@ impl CpuChip {
                 e,
             };
 
-            let mut operation_flags = vec![F::zero(); self.air.options.num_operations()];
+            let mut operation_flags = vec![F::zero(); self.options.num_operations()];
             operation_flags[opcode as usize] = F::one();
 
             let mut next_pc = pc + F::one();
@@ -326,7 +351,7 @@ impl CpuChip {
                     next_pc = pc;
                 }
                 opcode @ (FADD | FSUB | FMUL | FDIV) => {
-                    if self.air.options.field_arithmetic_enabled {
+                    if self.options.field_arithmetic_enabled {
                         // read from d[b] and e[c]
                         let operand1 = memory.read(d, b);
                         let operand2 = memory.read(e, c);
@@ -345,38 +370,19 @@ impl CpuChip {
                         panic!("Field arithmetic is not enabled");
                     }
                 }
-                opcode @ (FEADD | FESUB) => {
-                    let operand1 = [
-                        memory.read(d, b),
-                        memory.read(d, b + F::from_canonical_usize(1)),
-                        memory.read(d, b + F::from_canonical_usize(2)),
-                        memory.read(d, b + F::from_canonical_usize(3)),
-                    ];
-                    let operand2 = [
-                        memory.read(e, c),
-                        memory.read(e, c + F::from_canonical_usize(1)),
-                        memory.read(e, c + F::from_canonical_usize(2)),
-                        memory.read(e, c + F::from_canonical_usize(3)),
-                    ];
-                    let result = match opcode {
-                        FEADD => [
-                            operand1[0] + operand2[0],
-                            operand1[1] + operand2[1],
-                            operand1[2] + operand2[2],
-                            operand1[3] + operand2[3],
-                        ],
-                        FESUB => [
-                            operand1[0] - operand2[0],
-                            operand1[1] - operand2[1],
-                            operand1[2] - operand2[2],
-                            operand1[3] - operand2[3],
-                        ],
-                        _ => unreachable!(),
-                    };
-                    memory.write(d, a, result[0]);
-                    memory.write(d, a + F::from_canonical_usize(1), result[1]);
-                    memory.write(d, a + F::from_canonical_usize(2), result[2]);
-                    memory.write(d, a + F::from_canonical_usize(3), result[3]);
+                opcode @ (FE4ADD | FE4SUB | BBE4MUL) => {
+                    let operand1_vec = memory.read_consecutive(d, b, 4);
+                    let operand1: [F; 4] = operand1_vec
+                        .try_into()
+                        .expect("Expected a vector of length 4");
+                    let operand2_vec = memory.read_consecutive(e, c, 4);
+                    let operand2: [F; 4] = operand2_vec
+                        .try_into()
+                        .expect("Expected a vector of length 4");
+
+                    let result =
+                        FieldExtensionArithmeticAir::solve(opcode, (operand1, operand2)).unwrap();
+                    memory.write_consecutive(d, a, result.to_vec());
 
                     field_extension_operations.push(FieldExtensionOperation {
                         opcode,
@@ -385,58 +391,11 @@ impl CpuChip {
                         result,
                     });
                 }
-                FEMUL => {
-                    let operand1 = [
-                        memory.read(d, b),
-                        memory.read(d, b + F::from_canonical_usize(1)),
-                        memory.read(d, b + F::from_canonical_usize(2)),
-                        memory.read(d, b + F::from_canonical_usize(3)),
-                    ];
-                    let operand2 = [
-                        memory.read(e, c),
-                        memory.read(e, c + F::from_canonical_usize(1)),
-                        memory.read(e, c + F::from_canonical_usize(2)),
-                        memory.read(e, c + F::from_canonical_usize(3)),
-                    ];
-                    let result = [
-                        operand1[0] * operand2[0]
-                            + F::from_canonical_usize(BETA)
-                                * (operand1[1] * operand2[3]
-                                    + operand1[2] * operand2[2]
-                                    + operand1[3] * operand2[1]),
-                        operand1[0] * operand2[1]
-                            + operand1[1] * operand2[0]
-                            + F::from_canonical_usize(BETA)
-                                * (operand1[2] * operand2[3] + operand1[3] * operand2[2]),
-                        operand1[0] * operand2[2]
-                            + operand1[1] * operand2[1]
-                            + operand1[2] * operand2[0]
-                            + F::from_canonical_usize(BETA) * operand1[3] * operand2[3],
-                        operand1[0] * operand2[3]
-                            + operand1[1] * operand2[2]
-                            + operand1[2] * operand2[1]
-                            + operand1[3] * operand2[0],
-                    ];
-
-                    memory.write(d, a, result[0]);
-                    memory.write(d, a + F::from_canonical_usize(1), result[1]);
-                    memory.write(d, a + F::from_canonical_usize(2), result[2]);
-                    memory.write(d, a + F::from_canonical_usize(3), result[3]);
-
-                    field_extension_operations.push(FieldExtensionOperation {
-                        opcode,
-                        operand1,
-                        operand2,
-                        result,
-                    });
-                }
-                FEINV => {
-                    let operand1 = [
-                        memory.read(d, b),
-                        memory.read(d, b + F::from_canonical_usize(1)),
-                        memory.read(d, b + F::from_canonical_usize(2)),
-                        memory.read(d, b + F::from_canonical_usize(3)),
-                    ];
+                BBE4INV => {
+                    let operand1_vec = memory.read_consecutive(d, b, 4);
+                    let operand1: [F; 4] = operand1_vec
+                        .try_into()
+                        .expect("Expected a vector of length 4");
 
                     let mut b0 = operand1[0] * operand1[0]
                         - F::from_canonical_usize(BETA)
@@ -457,11 +416,14 @@ impl CpuChip {
                         -operand1[0] * b2 + operand1[2] * b0,
                         operand1[1] * b2 - operand1[3] * b0,
                     ];
+                    memory.write_consecutive(d, a, result.to_vec());
 
-                    memory.write(d, a, result[0]);
-                    memory.write(d, a + F::from_canonical_usize(1), result[1]);
-                    memory.write(d, a + F::from_canonical_usize(2), result[2]);
-                    memory.write(d, a + F::from_canonical_usize(3), result[3]);
+                    field_extension_operations.push(FieldExtensionOperation {
+                        opcode,
+                        operand1,
+                        operand2: [F::zero(); 4],
+                        result,
+                    });
                 }
             };
 

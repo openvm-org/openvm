@@ -1,5 +1,7 @@
 use afs_derive::AlignedBorrow;
 
+use super::EXTENSION_DEGREE;
+
 /// Columns for field extension add/sub chip.
 ///
 /// IO columns for opcode, x, y, result.
@@ -11,9 +13,9 @@ pub struct FieldExtensionArithmeticCols<T> {
 
 pub struct FieldExtensionArithmeticIOCols<T> {
     pub opcode: T,
-    pub x: [T; 4],
-    pub y: [T; 4],
-    pub z: [T; 4],
+    pub x: [T; EXTENSION_DEGREE],
+    pub y: [T; EXTENSION_DEGREE],
+    pub z: [T; EXTENSION_DEGREE],
 }
 
 pub struct FieldExtensionArithmeticAuxCols<T> {
@@ -21,14 +23,14 @@ pub struct FieldExtensionArithmeticAuxCols<T> {
     pub opcode_hi: T,
     pub is_mul: T,
     pub is_inv: T,
-    pub sum_or_diff: [T; 4],
-    pub product: [T; 4],
+    pub sum_or_diff: [T; EXTENSION_DEGREE],
+    pub product: [T; EXTENSION_DEGREE],
     pub inv_c: T,
-    pub inv: [T; 4],
+    pub inv: [T; EXTENSION_DEGREE],
 }
 
-impl<T: Clone> FieldExtensionArithmeticCols<T> {
-    pub const NUM_COLS: usize = 30;
+impl<T: Clone + std::fmt::Debug> FieldExtensionArithmeticCols<T> {
+    pub const NUM_COLS: usize = 6 * EXTENSION_DEGREE + 6;
 
     pub fn get_width() -> usize {
         FieldExtensionArithmeticIOCols::<T>::get_width()
@@ -36,49 +38,60 @@ impl<T: Clone> FieldExtensionArithmeticCols<T> {
     }
 
     pub fn from_slice(slice: &[T]) -> Self {
-        let opcode = slice[0].clone();
-        let x: [T; 4] = [
-            slice[1].clone(),
-            slice[2].clone(),
-            slice[3].clone(),
-            slice[4].clone(),
-        ];
-        let y: [T; 4] = [
-            slice[5].clone(),
-            slice[6].clone(),
-            slice[7].clone(),
-            slice[8].clone(),
-        ];
-        let z: [T; 4] = [
-            slice[9].clone(),
-            slice[10].clone(),
-            slice[11].clone(),
-            slice[12].clone(),
-        ];
+        let mut idx = 0;
 
-        let opcode_lo = slice[13].clone();
-        let opcode_hi = slice[14].clone();
-        let is_mul = slice[15].clone();
-        let is_inv = slice[16].clone();
-        let sum_or_diff: [T; 4] = [
-            slice[17].clone(),
-            slice[18].clone(),
-            slice[19].clone(),
-            slice[20].clone(),
-        ];
-        let product: [T; 4] = [
-            slice[21].clone(),
-            slice[22].clone(),
-            slice[23].clone(),
-            slice[24].clone(),
-        ];
-        let inv_c = slice[25].clone();
-        let inv: [T; 4] = [
-            slice[26].clone(),
-            slice[27].clone(),
-            slice[28].clone(),
-            slice[29].clone(),
-        ];
+        let opcode = slice[idx].clone();
+        idx += 1;
+
+        let x: [T; EXTENSION_DEGREE] = slice[idx..idx + EXTENSION_DEGREE]
+            .to_vec()
+            .try_into()
+            .expect("Expected a vector of length 4");
+        idx += EXTENSION_DEGREE;
+
+        let y: [T; EXTENSION_DEGREE] = slice[idx..idx + EXTENSION_DEGREE]
+            .to_vec()
+            .try_into()
+            .expect("Expected a vector of length 4");
+        idx += EXTENSION_DEGREE;
+
+        let z: [T; EXTENSION_DEGREE] = slice[idx..idx + EXTENSION_DEGREE]
+            .to_vec()
+            .try_into()
+            .expect("Expected a vector of length 4");
+        idx += EXTENSION_DEGREE;
+
+        let opcode_lo = slice[idx].clone();
+        idx += 1;
+
+        let opcode_hi = slice[idx].clone();
+        idx += 1;
+
+        let is_mul = slice[idx].clone();
+        idx += 1;
+
+        let is_inv = slice[idx].clone();
+        idx += 1;
+
+        let sum_or_diff: [T; EXTENSION_DEGREE] = slice[idx..idx + EXTENSION_DEGREE]
+            .to_vec()
+            .try_into()
+            .expect("Expected a vector of length 4");
+        idx += EXTENSION_DEGREE;
+
+        let product: [T; EXTENSION_DEGREE] = slice[idx..idx + EXTENSION_DEGREE]
+            .to_vec()
+            .try_into()
+            .expect("Expected a vector of length 4");
+        idx += EXTENSION_DEGREE;
+
+        let inv_c = slice[idx].clone();
+        idx += 1;
+
+        let inv: [T; EXTENSION_DEGREE] = slice[idx..idx + EXTENSION_DEGREE]
+            .to_vec()
+            .try_into()
+            .expect("Expected a vector of length 4");
 
         Self {
             io: FieldExtensionArithmeticIOCols { opcode, x, y, z },
@@ -106,7 +119,7 @@ impl<T: Clone> FieldExtensionArithmeticCols<T> {
 
 impl<T: Clone> FieldExtensionArithmeticIOCols<T> {
     pub fn get_width() -> usize {
-        13
+        3 * EXTENSION_DEGREE + 1
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -120,28 +133,20 @@ impl<T: Clone> FieldExtensionArithmeticIOCols<T> {
 
 impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
     pub fn get_width() -> usize {
-        17
+        3 * EXTENSION_DEGREE + 5
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        vec![
+        let mut result = vec![
             self.opcode_lo.clone(),
             self.opcode_hi.clone(),
             self.is_mul.clone(),
             self.is_inv.clone(),
-            self.sum_or_diff[0].clone(),
-            self.sum_or_diff[1].clone(),
-            self.sum_or_diff[2].clone(),
-            self.sum_or_diff[3].clone(),
-            self.product[0].clone(),
-            self.product[1].clone(),
-            self.product[2].clone(),
-            self.product[3].clone(),
-            self.inv_c.clone(),
-            self.inv[0].clone(),
-            self.inv[1].clone(),
-            self.inv[2].clone(),
-            self.inv[3].clone(),
-        ]
+        ];
+        result.extend_from_slice(&self.sum_or_diff);
+        result.extend_from_slice(&self.product);
+        result.push(self.inv_c.clone());
+        result.extend_from_slice(&self.inv);
+        result
     }
 }

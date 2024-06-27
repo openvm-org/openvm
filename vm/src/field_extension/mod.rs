@@ -11,13 +11,14 @@ pub mod trace;
 pub mod tests;
 
 pub const BETA: usize = 11;
+pub const EXTENSION_DEGREE: usize = 4;
 
-/// Field extension add/sub chip.
+/// Field extension arithmetic chip. The irreducible polynomial is x^4 - 11.
 #[derive(Default, Clone, Copy)]
 pub struct FieldExtensionArithmeticAir {}
 
 impl FieldExtensionArithmeticAir {
-    pub const BASE_OP: u8 = OpCode::FEADD as u8;
+    pub const BASE_OP: u8 = OpCode::FE4ADD as u8;
     pub const BUS_INDEX: usize = 2;
 
     pub fn new() -> Self {
@@ -27,7 +28,7 @@ impl FieldExtensionArithmeticAir {
     /// Converts vectorized opcodes and operands into vectorized FieldExtensionOperations.
     pub fn request<T: Field>(
         ops: Vec<OpCode>,
-        operands: Vec<([T; 4], [T; 4])>,
+        operands: Vec<([T; EXTENSION_DEGREE], [T; EXTENSION_DEGREE])>,
     ) -> Vec<FieldExtensionOperation<T>> {
         ops.iter()
             .zip(operands.iter())
@@ -43,21 +44,24 @@ impl FieldExtensionArithmeticAir {
     /// Evaluates given opcode using given operands.
     ///
     /// Returns None for non field extension add/sub operations.
-    pub fn solve<T: Field>(op: OpCode, operands: ([T; 4], [T; 4])) -> Option<[T; 4]> {
+    pub fn solve<T: Field>(
+        op: OpCode,
+        operands: ([T; EXTENSION_DEGREE], [T; EXTENSION_DEGREE]),
+    ) -> Option<[T; EXTENSION_DEGREE]> {
         match op {
-            OpCode::FEADD => Some([
+            OpCode::FE4ADD => Some([
                 operands.0[0] + operands.1[0],
                 operands.0[1] + operands.1[1],
                 operands.0[2] + operands.1[2],
                 operands.0[3] + operands.1[3],
             ]),
-            OpCode::FESUB => Some([
+            OpCode::FE4SUB => Some([
                 operands.0[0] - operands.1[0],
                 operands.0[1] - operands.1[1],
                 operands.0[2] - operands.1[2],
                 operands.0[3] - operands.1[3],
             ]),
-            OpCode::FEMUL => Some([
+            OpCode::BBE4MUL => Some([
                 operands.0[0] * operands.1[0]
                     + T::from_canonical_usize(BETA)
                         * (operands.0[1] * operands.1[3]
@@ -84,7 +88,7 @@ impl FieldExtensionArithmeticAir {
             // element of the original field, which we can call c. We can invert c as usual and find that
             // 1 / x = x' / (x * x') = x' * y' / c = x' * y' * c^(-1). We multiply out as usual to obtain
             // the answer.
-            OpCode::FEINV => {
+            OpCode::BBE4INV => {
                 let mut b0 = operands.0[0] * operands.0[0]
                     - T::from_canonical_usize(BETA)
                         * (T::two() * operands.0[1] * operands.0[3]
@@ -112,7 +116,10 @@ impl FieldExtensionArithmeticAir {
     }
 
     /// Vectorized solve<>
-    pub fn solve_all<T: Field>(ops: Vec<OpCode>, operands: Vec<([T; 4], [T; 4])>) -> Vec<[T; 4]> {
+    pub fn solve_all<T: Field>(
+        ops: Vec<OpCode>,
+        operands: Vec<([T; EXTENSION_DEGREE], [T; EXTENSION_DEGREE])>,
+    ) -> Vec<[T; EXTENSION_DEGREE]> {
         ops.iter()
             .zip(operands.iter())
             .filter_map(|(op, operand)| Self::solve::<T>(*op, *operand))

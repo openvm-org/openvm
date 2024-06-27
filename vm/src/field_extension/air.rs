@@ -4,7 +4,7 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use crate::field_extension::BETA;
+use crate::field_extension::{BETA, EXTENSION_DEGREE};
 
 use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
 use afs_chips::sub_chip::AirConfig;
@@ -19,7 +19,10 @@ impl<F: Field> BaseAir<F> for FieldExtensionArithmeticAir {
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for FieldExtensionArithmeticAir {
+impl<AB: AirBuilder> Air<AB> for FieldExtensionArithmeticAir
+where
+    AB::Var: std::fmt::Debug,
+{
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -48,7 +51,7 @@ impl<AB: AirBuilder> Air<AB> for FieldExtensionArithmeticAir {
 
         let add_sub_coeff = AB::Expr::one() - AB::Expr::two() * aux.opcode_lo;
 
-        for i in 0..4 {
+        for i in 0..EXTENSION_DEGREE {
             builder.assert_eq(
                 io.x[i] + add_sub_coeff.clone() * io.y[i],
                 aux.sum_or_diff[i],
@@ -114,7 +117,7 @@ impl<AB: AirBuilder> Air<AB> for FieldExtensionArithmeticAir {
         builder.assert_eq(io.x[1] * b2.clone() - io.x[3] * b0.clone(), aux.inv[3]);
 
         // constrain that the overall output is correct
-        for i in 0..4 {
+        for i in 0..EXTENSION_DEGREE {
             builder.assert_eq(
                 io.z[i],
                 aux.product[i] * aux.is_mul

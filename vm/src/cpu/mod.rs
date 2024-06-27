@@ -1,5 +1,7 @@
 //use crate::range_gate::RangeCheckerGateChip;
 
+use enum_utils::FromStr;
+
 #[cfg(test)]
 pub mod tests;
 
@@ -22,7 +24,7 @@ pub const NUM_ARITHMETIC_OPERATIONS: usize = 4;
 pub const MAX_READS_PER_CYCLE: usize = 2;
 pub const MAX_WRITES_PER_CYCLE: usize = 1;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, FromStr)]
 #[repr(usize)]
 pub enum OpCode {
     LOADW = 0,
@@ -37,10 +39,10 @@ pub enum OpCode {
     FMUL = 8,
     FDIV = 9,
 
-    FEADD = 10,
-    FESUB = 11,
-    FEMUL = 12,
-    FEINV = 13,
+    FE4ADD = 10,
+    FE4SUB = 11,
+    BBE4MUL = 12,
+    BBE4INV = 13,
 }
 
 impl OpCode {
@@ -56,10 +58,10 @@ impl OpCode {
             7 => Some(OpCode::FSUB),
             8 => Some(OpCode::FMUL),
             9 => Some(OpCode::FDIV),
-            10 => Some(OpCode::FEADD),
-            11 => Some(OpCode::FESUB),
-            12 => Some(OpCode::FEMUL),
-            13 => Some(OpCode::FEINV),
+            10 => Some(OpCode::FE4ADD),
+            11 => Some(OpCode::FE4SUB),
+            12 => Some(OpCode::BBE4MUL),
+            13 => Some(OpCode::BBE4INV),
             _ => None,
         }
     }
@@ -86,25 +88,8 @@ pub struct CpuAir {
     pub options: CpuOptions,
 }
 
-#[derive(Default)]
-pub struct CpuChip {
-    pub air: CpuAir,
-    //pub range_checker: Arc<RangeCheckerGateChip>,
-}
-
-impl CpuChip {
-    pub fn new(
-        field_arithmetic_enabled: bool,
-        //range_checker: Arc<RangeCheckerGateChip>,
-    ) -> Self {
-        let air = CpuAir {
-            options: CpuOptions {
-                field_arithmetic_enabled,
-            },
-        };
-
-        Self {
-            air, /*range_checker*/
-        }
+impl CpuAir {
+    pub fn new(options: CpuOptions) -> Self {
+        Self { options }
     }
 }
