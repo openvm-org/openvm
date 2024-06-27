@@ -23,8 +23,17 @@ pub struct GroupByAir {
     pub page_width: usize,
     pub group_by_cols: Vec<usize>,
     pub aggregated_col: usize,
-    // for now, will default to addition
-    // operation: SubAir::eval,
+
+    /// Whether the input page is already sorted by the group-by columns
+    pub sorted: bool,
+
+    /// The operation to perform on the aggregated column
+    pub op: GroupByOperation,
+}
+
+enum GroupByOperation {
+    Sum,
+    Product,
 }
 
 impl GroupByAir {
@@ -34,11 +43,15 @@ impl GroupByAir {
         aggregated_col: usize,
         internal_bus: usize,
         output_bus: usize,
+        sorted: bool,
+        op: GroupByOperation,
     ) -> Self {
         Self {
             page_width,
             group_by_cols: group_by_cols.clone(),
             aggregated_col,
+            sorted,
+            op,
             // has +1 to check equality on is_alloc column
             is_equal_vec_air: IsEqualVecAir::new(group_by_cols.len() + 1),
             internal_bus,
@@ -48,32 +61,44 @@ impl GroupByAir {
 
     /// Width of entire trace
     pub fn get_width(&self) -> usize {
-        self.page_width + 3 * self.group_by_cols.len() + 7
+        if !self.sorted {
+            self.page_width + 3 * self.group_by_cols.len() + 7
+        } else {
+            3 * self.group_by_cols.len() + 7
+        }
     }
 
     /// Width of auxilliary trace, i.e. all non-input-page columns
     pub fn aux_width(&self) -> usize {
-        3 * self.group_by_cols.len() + 7
+        if !self.sorted {
+            3 * self.group_by_cols.len() + 7
+        } else {
+            2 * self.group_by_cols.len() + 7
+        }
     }
 
     /// This pure function computes the answer to the group-by operation
     pub fn request(&self, page: &Page) -> Page {
-        let mut grouped_page: Vec<Vec<u32>> = page
-            .rows
-            .iter()
-            .filter(|row| row.is_alloc == 1)
-            .map(|row| {
-                let mut selected_row: Vec<u32> = self
-                    .group_by_cols
-                    .iter()
-                    .map(|&col_index| row.idx[col_index])
-                    .collect();
-                selected_row.push(row.idx[self.aggregated_col]);
-                selected_row
-            })
-            .collect();
-
-        grouped_page.sort();
+        let mut grouped_page: Vec<Vec<u32>> = if self.sorted {
+            page.rows.clone()
+        } else {
+            let mut grouped_page: Vec<Vec<u32>> = page
+                .rows
+                .iter()
+                .filter(|row| row.is_alloc == 1)
+                .map(|row| {
+                    let mut selected_row: Vec<u32> = self
+                        .group_by_cols
+                        .iter()
+                        .map(|&col_index| row.idx[col_index])
+                        .collect();
+                    selected_row.push(row.idx[self.aggregated_col]);
+                    selected_row
+                })
+                .collect();
+            grouped_page.sort();
+            grouped_page
+        };
 
         let mut sums_by_key: HashMap<Vec<u32>, u32> = HashMap::new();
         for row in grouped_page.iter() {
