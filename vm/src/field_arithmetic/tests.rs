@@ -13,7 +13,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 
 /// Function for testing that generates a random program consisting only of field arithmetic operations.
-fn generate_arith_program(len_ops: usize) -> ProgramExecution<BabyBear> {
+fn generate_arith_program(len_ops: usize) -> ProgramExecution<1, BabyBear> {
     let mut rng = create_seeded_rng();
     let ops = (0..len_ops)
         .map(|_| OpCode::from_u8(rng.gen_range(6..=9)).unwrap())

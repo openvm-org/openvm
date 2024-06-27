@@ -1,8 +1,8 @@
-use std::collections::BTreeMap;
+use std::{array::from_fn, collections::BTreeMap};
 
 use itertools::Itertools;
 
-use super::{CpuOptions, OpCode};
+use super::{CpuOptions, OpCode, MAX_ACCESSES_PER_CYCLE};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuIoCols<T> {
@@ -49,8 +49,9 @@ impl<T: Clone> CpuIoCols<T> {
     }
 }
 
+
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MemoryAccessCols<T> {
+pub struct MemoryAccessCols<const WORD_SIZE: usize, T> {
     pub enabled: T,
 
     pub address_space: T,
@@ -59,10 +60,9 @@ pub struct MemoryAccessCols<T> {
 
     pub address: T,
 
-    pub data: T,
+    pub data: [T; WORD_SIZE],
 }
-
-impl<T: Clone> MemoryAccessCols<T> {
+impl<const WORD_SIZE: usize, T: Clone> MemoryAccessCols<WORD_SIZE, T> {
     pub fn from_slice(slc: &[T]) -> Self {
         Self {
             enabled: slc[0].clone(),
@@ -70,37 +70,36 @@ impl<T: Clone> MemoryAccessCols<T> {
             is_immediate: slc[2].clone(),
             is_zero_aux: slc[3].clone(),
             address: slc[4].clone(),
-            data: slc[5].clone(),
+            data: from_fn(|i| slc[5 + i].clone()),
         }
     }
-
     pub fn flatten(&self) -> Vec<T> {
-        vec![
+        let mut flattened = vec![
             self.enabled.clone(),
             self.address_space.clone(),
             self.is_immediate.clone(),
             self.is_zero_aux.clone(),
             self.address.clone(),
-            self.data.clone(),
-        ]
+        ];
+        flattened.extend(self.data.to_vec());
+        flattened
     }
 
     pub fn get_width() -> usize {
-        6
+        5 + WORD_SIZE
     }
 }
 
+
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CpuAuxCols<T> {
+pub struct CpuAuxCols<const WORD_SIZE: usize, T> {
     pub operation_flags: BTreeMap<OpCode, T>,
-    pub read1: MemoryAccessCols<T>,
-    pub read2: MemoryAccessCols<T>,
-    pub write: MemoryAccessCols<T>,
+    pub accesses: [MemoryAccessCols<WORD_SIZE, T>; MAX_ACCESSES_PER_CYCLE],
     pub beq_check: T,
     pub is_equal_aux: T,
 }
 
-impl<T: Clone> CpuAuxCols<T> {
+impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
     pub fn from_slice(slc: &[T], options: CpuOptions) -> Self {
         let mut start = 0;
         let mut end = options.num_enabled_instructions();
@@ -114,26 +113,18 @@ impl<T: Clone> CpuAuxCols<T> {
             operation_flags.insert(*opcode, operation_flag);
         }
 
-        start = end;
-        end += MemoryAccessCols::<T>::get_width();
-        let read1 = MemoryAccessCols::<T>::from_slice(&slc[start..end]);
-
-        start = end;
-        end += MemoryAccessCols::<T>::get_width();
-        let read2 = MemoryAccessCols::<T>::from_slice(&slc[start..end]);
-
-        start = end;
-        end += MemoryAccessCols::<T>::get_width();
-        let write = MemoryAccessCols::<T>::from_slice(&slc[start..end]);
+        let accesses = from_fn(|_| {
+            start = end;
+            end += MemoryAccessCols::<WORD_SIZE, T>::get_width();
+            MemoryAccessCols::from_slice(&slc[start..end])
+        });
 
         let beq_check = slc[end].clone();
         let is_equal_aux = slc[end + 1].clone();
 
         Self {
             operation_flags,
-            read1,
-            read2,
-            write,
+            accesses,
             beq_check,
             is_equal_aux,
         }
@@ -144,29 +135,27 @@ impl<T: Clone> CpuAuxCols<T> {
         for opcode in options.enabled_instructions() {
             flattened.push(self.operation_flags.get(&opcode).unwrap().clone());
         }
-        flattened.extend(self.read1.flatten());
-        flattened.extend(self.read2.flatten());
-        flattened.extend(self.write.flatten());
+        flattened.extend(self.accesses.iter().flat_map(MemoryAccessCols::flatten));
         flattened.push(self.beq_check.clone());
         flattened.push(self.is_equal_aux.clone());
         flattened
     }
 
     pub fn get_width(options: CpuOptions) -> usize {
-        options.num_enabled_instructions() + (3 * MemoryAccessCols::<T>::get_width()) + 2
+        options.num_enabled_instructions() + (MAX_ACCESSES_PER_CYCLE * MemoryAccessCols::<WORD_SIZE, T>::get_width()) + 2
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CpuCols<T> {
+pub struct CpuCols<const WORD_SIZE: usize, T> {
     pub io: CpuIoCols<T>,
-    pub aux: CpuAuxCols<T>,
+    pub aux: CpuAuxCols<WORD_SIZE, T>,
 }
 
-impl<T: Clone> CpuCols<T> {
+impl<const WORD_SIZE: usize, T: Clone> CpuCols<WORD_SIZE, T> {
     pub fn from_slice(slc: &[T], options: CpuOptions) -> Self {
         let io = CpuIoCols::<T>::from_slice(&slc[..CpuIoCols::<T>::get_width()]);
-        let aux = CpuAuxCols::<T>::from_slice(&slc[CpuIoCols::<T>::get_width()..], options);
+        let aux = CpuAuxCols::<WORD_SIZE, T>::from_slice(&slc[CpuIoCols::<T>::get_width()..], options);
 
         Self { io, aux }
     }
@@ -178,6 +167,6 @@ impl<T: Clone> CpuCols<T> {
     }
 
     pub fn get_width(options: CpuOptions) -> usize {
-        CpuIoCols::<T>::get_width() + CpuAuxCols::<T>::get_width(options)
+        CpuIoCols::<T>::get_width() + CpuAuxCols::<WORD_SIZE, T>::get_width(options)
     }
 }

@@ -7,14 +7,15 @@ use stark_vm::vm::config::VmConfig;
 use stark_vm::vm::config::VmParamsConfig;
 use stark_vm::vm::VirtualMachine;
 
+const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 8;
 const DECOMP: usize = 4;
 
-fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>) {
-    let vm = VirtualMachine::new(
+fn air_test(field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>) {
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
             vm: VmParamsConfig {
-                field_arithmetic_enabled: is_field_arithmetic_enabled,
+                field_arithmetic_enabled,
                 limb_bits: LIMB_BITS,
                 decomp: DECOMP,
             },

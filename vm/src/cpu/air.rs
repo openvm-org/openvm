@@ -14,19 +14,25 @@ use afs_chips::{
 };
 
 use super::{
-    columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    CpuAir,
-    OpCode::*,
-    INST_WIDTH,
+    columns::{CpuAuxCols, CpuCols, CpuIoCols}, CpuAir, OpCode::*, FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH
 };
 
-impl<F: Field> BaseAir<F> for CpuAir {
+impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for CpuAir<WORD_SIZE> {
     fn width(&self) -> usize {
-        CpuCols::<F>::get_width(self.options)
+        CpuCols::<WORD_SIZE, F>::get_width(self.options)
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for CpuAir {
+impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
+    fn eval_compose<AB: AirBuilder>(&self, builder: &mut AB, word: [AB::Var; WORD_SIZE], field_elem: AB::Expr) {
+        builder.assert_eq(word[0], field_elem);
+        for &cell in word.iter().take(WORD_SIZE).skip(1) {
+            builder.assert_zero(cell);
+        }
+    }
+}
+
+impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -34,11 +40,11 @@ impl<AB: AirBuilder> Air<AB> for CpuAir {
 
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
-        let local_cols = CpuCols::<AB::Var>::from_slice(local, self.options);
+        let local_cols = CpuCols::<WORD_SIZE, AB::Var>::from_slice(local, self.options);
 
         let next = main.row_slice(1);
         let next: &[AB::Var] = (*next).borrow();
-        let next_cols = CpuCols::<AB::Var>::from_slice(next, self.options);
+        let next_cols = CpuCols::<WORD_SIZE, AB::Var>::from_slice(next, self.options);
         let CpuCols { io, aux } = local_cols;
         let CpuCols { io: next_io, .. } = next_cols;
 
@@ -60,13 +66,16 @@ impl<AB: AirBuilder> Air<AB> for CpuAir {
 
         let CpuAuxCols {
             operation_flags,
-            read1,
-            read2,
-            write,
+            accesses,
             beq_check,
             is_equal_aux,
         } = aux;
 
+        let read1 = &accesses[0];
+        let read2 = &accesses[1];
+        let write = &accesses[2];
+
+        // set correct operation flag
         for &flag in operation_flags.values() {
             builder.assert_bool(flag);
         }
@@ -97,11 +106,14 @@ impl<AB: AirBuilder> Air<AB> for CpuAir {
         when_loadw.assert_eq(read1.address, c);
 
         when_loadw.assert_eq(read2.address_space, e);
-        when_loadw.assert_eq(read2.address, read1.data + b);
+        self.eval_compose(&mut when_loadw, read1.data, read2.address - b);
+        when_loadw.assert_eq(read2.address, read1.data[0] + b);
 
         when_loadw.assert_eq(write.address_space, d);
         when_loadw.assert_eq(write.address, a);
-        when_loadw.assert_eq(write.data, read2.data);
+        for i in 0..WORD_SIZE {
+            when_loadw.assert_eq(write.data[i], read2.data[i]);
+        }
 
         when_loadw
             .when_transition()
@@ -121,8 +133,10 @@ impl<AB: AirBuilder> Air<AB> for CpuAir {
         when_storew.assert_eq(read2.address, a);
 
         when_storew.assert_eq(write.address_space, e);
-        when_storew.assert_eq(write.address, read1.data + b);
-        when_storew.assert_eq(write.data, read2.data);
+        self.eval_compose(&mut when_storew, read1.data, write.address - b);
+        for i in 0..WORD_SIZE {
+            when_storew.assert_eq(write.data[i], read2.data[i]);
+        }
 
         when_storew
             .when_transition()
@@ -136,7 +150,7 @@ impl<AB: AirBuilder> Air<AB> for CpuAir {
 
         when_jal.assert_eq(write.address_space, d);
         when_jal.assert_eq(write.address, a);
-        when_jal.assert_eq(write.data, pc + inst_width);
+        self.eval_compose(&mut when_jal, write.data, pc + inst_width);
 
         when_jal.when_transition().assert_eq(next_pc, pc + b);
 
@@ -163,8 +177,8 @@ impl<AB: AirBuilder> Air<AB> for CpuAir {
             .assert_eq(next_pc, pc + inst_width);
 
         let is_equal_io_cols = IsEqualIOCols {
-            x: read1.data,
-            y: read2.data,
+            x: read1.data[0],
+            y: read2.data[0],
             is_equal: beq_check,
         };
         let is_equal_aux_cols = IsEqualAuxCols { inv: is_equal_aux };
@@ -199,10 +213,10 @@ impl<AB: AirBuilder> Air<AB> for CpuAir {
 
         // arithmetic operations
         if self.options.field_arithmetic_enabled {
-            let arithmetic_flags = operation_flags[&FADD]
-                + operation_flags[&FSUB]
-                + operation_flags[&FMUL]
-                + operation_flags[&FDIV];
+            let mut arithmetic_flags = AB::Expr::zero();
+            for opcode in FIELD_ARITHMETIC_INSTRUCTIONS {
+                arithmetic_flags = arithmetic_flags + operation_flags[&opcode];
+            }
             read1_enabled_check += arithmetic_flags.clone();
             read2_enabled_check += arithmetic_flags.clone();
             write_enabled_check += arithmetic_flags.clone();
@@ -237,7 +251,7 @@ impl<AB: AirBuilder> Air<AB> for CpuAir {
         for read in [&read1, &read2] {
             builder
                 .when(read.is_immediate)
-                .assert_eq(read.data, read.address);
+                .assert_eq(read.data[0], read.address);
         }
         // maybe writes to immediate address space are ignored instead of disallowed?
         //builder.assert_zero(write.is_immediate);
