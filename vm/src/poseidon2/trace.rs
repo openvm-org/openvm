@@ -7,6 +7,7 @@ use p3_poseidon2::Poseidon2ExternalMatrixGeneral;
 use p3_symmetric::Permutation;
 
 impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
+    /// Return cached state trace if it exists (input is ignored), otherwise generate trace and return
     pub fn generate_trace(&self, input_states: Vec<[T; WIDTH]>) -> RowMajorMatrix<T>
     where
         DiffusionMatrixBabyBear: Permutation<[T; WIDTH]>,
@@ -23,6 +24,7 @@ impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
         )
     }
 
+    /// Cache the trace as a state variable, return the outputs
     pub fn request_trace(&mut self, states: &[[T; WIDTH]]) -> Vec<Vec<T>>
     where
         T: PrimeField,
@@ -46,6 +48,7 @@ impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
         outputs
     }
 
+    /// Perform entire nonlinear external layer operation on state
     pub fn ext_layer(
         state: &mut [T; WIDTH],
         constants: &[T; WIDTH],
@@ -59,6 +62,7 @@ impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
         }
     }
 
+    /// Perform entire nonlinear internal layer operation on state
     pub fn int_layer(state: &mut [T; WIDTH], constant: T, internal_layer: &DiffusionMatrixBabyBear)
     where
         DiffusionMatrixBabyBear: Permutation<[T; WIDTH]>,
@@ -75,6 +79,7 @@ impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
         x3 * x4
     }
 
+    /// Generate one row of trace from the input state
     pub fn generate_local_trace(&self, input_state: [T; WIDTH]) -> Vec<T>
     where
         DiffusionMatrixBabyBear: Permutation<[T; WIDTH]>,

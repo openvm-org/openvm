@@ -2,6 +2,8 @@ use std::ops::Range;
 
 use crate::poseidon2::Poseidon2Air;
 
+/// Composed of IO and Aux columns, which are disjoint
+/// Aux columns composed of Vec<Vec<T>>, one for each phase
 pub struct Poseidon2Cols<const WIDTH: usize, T> {
     pub io: Poseidon2IOCols<WIDTH, T>,
     pub aux: Poseidon2AuxCols<WIDTH, T>,
@@ -18,6 +20,7 @@ pub struct Poseidon2AuxCols<const WIDTH: usize, T> {
     pub phase3: Vec<Vec<T>>,
 }
 
+/// Index map for columns
 pub struct Poseidon2ColsIndexMap<const WIDTH: usize> {
     pub input: Range<usize>,
     pub output: Range<usize>,
@@ -34,8 +37,6 @@ impl<const WIDTH: usize, T: Clone> Poseidon2Cols<WIDTH, T> {
     }
 
     pub fn from_slice(slice: &[T], index_map: &Poseidon2ColsIndexMap<WIDTH>) -> Self {
-        // let index_map = Self::index_map(poseidon2_air);
-
         assert!(slice.len() == index_map.output.end);
 
         let input = slice[index_map.input.clone()].to_vec();

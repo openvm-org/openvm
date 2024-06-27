@@ -9,6 +9,11 @@ pub mod tests;
 use self::columns::Poseidon2Cols;
 use p3_matrix::dense::RowMajorMatrix;
 
+/// Air for Poseidon2. Performs a single permutation of the state.
+/// Permutation consists of external rounds (linear map combined with nonlinearity),
+/// internal rounds, and then the remainder of external rounds.
+///
+/// Spec is at https://hackmd.io/_I1lx-6GROWbKbDi_Vz-pw?view .
 pub struct Poseidon2Air<const WIDTH: usize, T: Clone> {
     pub rounds_f: usize,
     pub external_constants: Vec<[T; WIDTH]>,

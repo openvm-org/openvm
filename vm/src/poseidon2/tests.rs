@@ -17,9 +17,12 @@ use rand::RngCore;
 
 #[test]
 fn test_poseidon2_trace() {
-    let num_rows = 1 << 0;
+    // config
+    let num_rows = 1 << 4;
     let num_ext_rounds = 8;
     let num_int_rounds = 13;
+
+    // random constants, state generation
     let mut rng = create_seeded_rng();
     let external_constants: Vec<[BabyBear; 16]> = (0..num_ext_rounds)
         .map(|_| {
@@ -32,8 +35,6 @@ fn test_poseidon2_trace() {
     let internal_constants: Vec<BabyBear> = (0..num_int_rounds)
         .map(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30)))
         .collect();
-    let mut poseidon2_air =
-        Poseidon2Air::<16, BabyBear>::new(external_constants, internal_constants, 0);
     let states: Vec<[BabyBear; 16]> = (0..num_rows)
         .map(|_| {
             let vec: Vec<BabyBear> = (0..16)
@@ -43,9 +44,13 @@ fn test_poseidon2_trace() {
         })
         .collect();
 
+    // air and trace generation
+    let mut poseidon2_air =
+        Poseidon2Air::<16, BabyBear>::new(external_constants, internal_constants, 0);
     let outputs = poseidon2_air.request_trace(&states);
     let mut poseidon2_trace = poseidon2_air.generate_trace(vec![]);
 
+    // dummy interaction air and trace generation
     let page_requester = DummyInteractionAir::new(2 * 16, true, poseidon2_air.bus_index);
     let dummy_trace = RowMajorMatrix::new(
         states
@@ -64,11 +69,14 @@ fn test_poseidon2_trace() {
 
     let traces = vec![poseidon2_trace.clone(), dummy_trace.clone()];
 
+    // engine generation
     let max_trace_height = traces.iter().map(|trace| trace.height()).max().unwrap();
     let max_log_degree = log2_strict_usize(max_trace_height);
     let perm = random_perm();
     let fri_params = fri_params_with_80_bits_of_security()[1];
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
+
+    // positive test
     engine
         .run_simple_test(
             vec![&poseidon2_air, &page_requester],
@@ -77,6 +85,7 @@ fn test_poseidon2_trace() {
         )
         .expect("Verification failed");
 
+    // negative test
     for _ in 0..10 {
         let width = rng.gen_range(0..poseidon2_air.get_width());
         let height = rng.gen_range(0..num_rows);
