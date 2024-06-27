@@ -37,7 +37,8 @@ pub struct GroupByAuxCols<T> {
 }
 
 /// Maps parts of the `GroupByCols` to their indices. Note that `sorted_group_by_combined_range` is
-/// a range containing `sorted_group_by_alloc` and `sorted_group_by_range`.
+/// a range containing `sorted_group_by_alloc` and `sorted_group_by_range`. Indexes by the
+/// respective partition, not by the complete row.
 pub struct GroupByColsIndexMap {
     pub allocated_idx: usize,
     pub page_range: Range<usize>,
@@ -54,25 +55,46 @@ pub struct GroupByColsIndexMap {
 impl<T: Clone> GroupByCols<T> {
     /// Takes a slice and returns a `GroupByCols` struct.
     pub fn from_slice(slc: &[T], group_by_air: &GroupByAir) -> Self {
-        assert!(slc.len() == group_by_air.get_width());
+        assert_eq!(slc.len(), group_by_air.get_width());
+        Self::from_partitioned_slice(
+            &slc[..group_by_air.page_width],
+            &slc[group_by_air.page_width..],
+            group_by_air,
+        )
+    }
+
+    pub fn from_partitioned_slice(page: &[T], aux: &[T], group_by_air: &GroupByAir) -> Self {
+        assert_eq!(page.len(), group_by_air.page_width);
+        assert_eq!(
+            aux.len(),
+            group_by_air.get_width() - group_by_air.page_width
+        );
+
         let index_map = GroupByCols::<T>::index_map(group_by_air);
 
-        let is_allocated = slc[index_map.allocated_idx].clone();
-        let page = slc[index_map.page_range].to_vec();
-        let sorted_group_by_alloc = slc[index_map.sorted_group_by_alloc].clone();
-        let sorted_group_by = slc[index_map.sorted_group_by_range].to_vec();
-        let sorted_group_by_combined = slc[index_map.sorted_group_by_combined_range].to_vec();
-        let aggregated = slc[index_map.aggregated].clone();
-        let partial_aggregated = slc[index_map.partial_aggregated].clone();
-        let is_final = slc[index_map.is_final].clone();
-        let eq_next = slc[index_map.eq_next].clone();
+        let is_allocated = page[index_map.allocated_idx].clone();
+        let unsorted_page = page[index_map.page_range].to_vec();
+
+        let sorted_source = if !group_by_air.sorted { aux } else { page };
+        let sorted_group_by_alloc = sorted_source[index_map.sorted_group_by_alloc].clone();
+        let sorted_group_by = sorted_source[index_map.sorted_group_by_range].to_vec();
+        let sorted_group_by_combined =
+            sorted_source[index_map.sorted_group_by_combined_range].to_vec();
+
+        let aggregated = aux[index_map.aggregated].clone();
+        let partial_aggregated = aux[index_map.partial_aggregated].clone();
+        let is_final = aux[index_map.is_final].clone();
+        let eq_next = aux[index_map.eq_next].clone();
         let is_equal_vec_aux = IsEqualVecAuxCols::from_slice(
-            &slc[index_map.is_equal_vec_aux_range],
+            &aux[index_map.is_equal_vec_aux_range],
             group_by_air.group_by_cols.len() + 1,
         );
 
         Self {
-            io: GroupByIOCols { is_allocated, page },
+            io: GroupByIOCols {
+                is_allocated,
+                page: unsorted_page,
+            },
             aux: GroupByAuxCols {
                 sorted_group_by_alloc,
                 sorted_group_by,
@@ -87,27 +109,27 @@ impl<T: Clone> GroupByCols<T> {
     }
 
     /// Returns a `GroupByColsIndexMap` struct, used to index all other structs and defines the
-    /// order of segments in a slice.
+    /// order of segments in a slice. Indexes by the respective partition, not by the complete row.
     pub fn index_map(group_by_air: &GroupByAir) -> GroupByColsIndexMap {
         let num_group_by = group_by_air.group_by_cols.len();
         let eq_vec_width = IsEqualVecAuxCols::<T>::get_width(num_group_by + 1);
 
-        let (allocated_idx, page_range, sorted_group_by_alloc) = if !group_by_air.sorted {
-            let allocated_idx = 0;
-            let page_range = allocated_idx + 1..group_by_air.page_width;
-            let sorted_group_by_alloc = page_range.end;
-            (allocated_idx, page_range, sorted_group_by_alloc)
+        let allocated_idx = 0;
+        let page_range = if !group_by_air.sorted {
+            allocated_idx + 1..group_by_air.page_width
         } else {
-            let allocated_idx = 0;
-            let page_range = 0..0;
-            let sorted_group_by_alloc = 0;
-            (allocated_idx, page_range, sorted_group_by_alloc)
+            0..0
         };
+        let sorted_group_by_alloc = 0;
         let sorted_group_by_range =
             sorted_group_by_alloc + 1..sorted_group_by_alloc + 1 + num_group_by;
         let sorted_group_by_combined_range = sorted_group_by_alloc..sorted_group_by_range.end;
         let aggregated_idx = sorted_group_by_range.end;
-        let partial_aggregated_idx = aggregated_idx + 1;
+        let partial_aggregated_idx = if !group_by_air.sorted {
+            aggregated_idx + 1
+        } else {
+            0
+        };
         let is_final_idx = partial_aggregated_idx + 1;
         let eq_next_idx = is_final_idx + 1;
         let is_equal_vec_aux_range = eq_next_idx + 1..eq_next_idx + 1 + eq_vec_width;
