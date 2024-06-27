@@ -82,7 +82,7 @@ impl<T: Clone> GroupByCols<T> {
             sorted_source[index_map.sorted_group_by_combined_range].to_vec();
         let aggregated = sorted_source[index_map.aggregated].clone();
 
-        let partial_aggregated = sorted_source[index_map.partial_aggregated].clone();
+        let partial_aggregated = aux[index_map.partial_aggregated].clone();
         let is_final = aux[index_map.is_final].clone();
         let eq_next = aux[index_map.eq_next].clone();
         let is_equal_vec_aux = IsEqualVecAuxCols::from_slice(

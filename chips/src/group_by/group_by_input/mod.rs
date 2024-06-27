@@ -82,6 +82,7 @@ impl GroupByAir {
             page.rows
                 .clone()
                 .iter()
+                .filter(|row| row.is_alloc == 1)
                 .map(|row| row.idx.clone())
                 .collect()
         } else {

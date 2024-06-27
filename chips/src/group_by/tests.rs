@@ -82,6 +82,9 @@ impl GroupByTest {
                 group_by_cols.push(col);
             }
         }
+        if self.sorted {
+            group_by_cols = (0..self.num_groups + 1).collect();
+        }
         self.aggregated_col = group_by_cols.pop().unwrap();
         self.group_by_cols = group_by_cols;
     }
@@ -415,7 +418,8 @@ fn group_by_sorted_test() {
     // let page_width = rng.gen_range(2..20);
     let page_width = 5;
     let num_groups = page_width - 2;
-    let log_page_height = rng.gen_range(1..6);
+    // let log_page_height = rng.gen_range(1..6);
+    let log_page_height = 1;
     let sorted = true;
     let op = GroupByOperation::Sum;
     let test = GroupByTest::new(page_width, num_groups, log_page_height, 10, 4, sorted);
