@@ -365,11 +365,11 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
         AsmInstruction::Trap => vec![
             // pc <- -1 (causes trace generation to fail)
             inst(
-                JAL,
-                utility_register,
-                -pc - F::one(),
+                FAIL,
                 F::zero(),
-                AS::Register,
+                F::zero(),
+                F::zero(),
+                AS::Immediate,
                 AS::Immediate,
             ),
         ],
