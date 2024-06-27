@@ -380,7 +380,6 @@ impl CpuAir {
             for other_opcode in self.options.enabled_instructions() {
                 operation_flags.insert(other_opcode, F::from_bool(other_opcode == opcode));
             }
-            println!("operation flags: {:?}", operation_flags);
 
             // complete the clock cycle and get the read and write cols
             let (mut read_cols, mut write_cols) = memory.complete_clock_cycle();
@@ -388,12 +387,8 @@ impl CpuAir {
             let read2 = memory_access_to_cols(read_cols.pop_front());
             let write = memory_access_to_cols(write_cols.pop_front());
 
-            if !read_cols.is_empty() {
-                panic!("Too many reads");
-            }
-            if !write_cols.is_empty() {
-                panic!("Too many writes");
-            }
+            assert!(read_cols.is_empty());
+            assert!(write_cols.is_empty());
 
             let is_equal_cols = LocalTraceInstructions::generate_trace_row(
                 &IsEqualAir {},
