@@ -229,7 +229,6 @@ impl<F: Field> Mul for SymbolicExpression<F> {
     fn mul(self, rhs: Self) -> Self {
         #[allow(clippy::suspicious_arithmetic_impl)]
         let degree_multiple = self.degree_multiple() + rhs.degree_multiple();
-        assert!(degree_multiple <= 7);
         Self::Mul {
             x: Arc::new(self),
             y: Arc::new(rhs),
