@@ -115,7 +115,10 @@ where
             PageIndexScanInputAirVariants::Eq(..) => Comp::Eq,
         };
 
-        let local_cols = PageIndexScanInputCols::<AB::Var>::from_partitioned_slice(
+        let PageIndexScanInputCols {
+            page_cols,
+            local_cols,
+        } = PageIndexScanInputCols::<AB::Var>::from_partitioned_slice(
             &local_page,
             &local_aux,
             self.idx_len,
@@ -126,23 +129,23 @@ where
         );
 
         // constrain that the public value x is the same as the column x
-        for (&local_x, &pub_x) in local_cols.local_cols.x.iter().zip(public_x.iter()) {
+        for (&local_x, &pub_x) in local_cols.x.iter().zip(public_x.iter()) {
             builder.assert_eq(local_x, pub_x);
         }
         // constrain that we send the row iff the row is allocated and satisfies the predicate
         builder.assert_eq(
-            local_cols.page_cols.is_alloc * local_cols.local_cols.satisfies_pred,
-            local_cols.local_cols.send_row,
+            page_cols.is_alloc * local_cols.satisfies_pred,
+            local_cols.send_row,
         );
         // constrain that satisfies_pred and send_row are boolean indicators
-        builder.assert_bool(local_cols.local_cols.satisfies_pred);
-        builder.assert_bool(local_cols.local_cols.send_row);
+        builder.assert_bool(local_cols.satisfies_pred);
+        builder.assert_bool(local_cols.send_row);
 
         // get the indicators for strict and equal comparisons
         let (strict_comp_ind, equal_comp_ind): (Option<AB::Var>, Option<AB::Var>) =
-            match &local_cols.local_cols.aux_cols {
+            match &local_cols.aux_cols {
                 PageIndexScanInputAuxCols::Lt(..) | PageIndexScanInputAuxCols::Gt(..) => {
-                    (Some(local_cols.local_cols.satisfies_pred), None)
+                    (Some(local_cols.satisfies_pred), None)
                 }
                 PageIndexScanInputAuxCols::Lte(NonStrictCompAuxCols {
                     satisfies_strict_comp,
@@ -154,14 +157,12 @@ where
                     satisfies_eq_comp,
                     ..
                 }) => (Some(*satisfies_strict_comp), Some(*satisfies_eq_comp)),
-                PageIndexScanInputAuxCols::Eq(..) => {
-                    (None, Some(local_cols.local_cols.satisfies_pred))
-                }
+                PageIndexScanInputAuxCols::Eq(..) => (None, Some(local_cols.satisfies_pred)),
             };
 
         // generate aux columns for IsLessThanTuple
         let is_less_than_tuple_cols: Option<IsLessThanTupleCols<AB::Var>> =
-            match &local_cols.local_cols.aux_cols {
+            match &local_cols.aux_cols {
                 PageIndexScanInputAuxCols::Lt(StrictCompAuxCols {
                     is_less_than_tuple_aux,
                     ..
@@ -172,8 +173,8 @@ where
                 }) => Some(IsLessThanTupleCols {
                     io: IsLessThanTupleIOCols {
                         // idx < x
-                        x: local_cols.page_cols.idx.clone(),
-                        y: local_cols.local_cols.x.clone(),
+                        x: page_cols.idx.clone(),
+                        y: local_cols.x.clone(),
                         // use the strict_comp_ind
                         tuple_less_than: strict_comp_ind.unwrap(),
                     },
@@ -189,8 +190,8 @@ where
                 }) => Some(IsLessThanTupleCols {
                     io: IsLessThanTupleIOCols {
                         // idx > x
-                        x: local_cols.local_cols.x.clone(),
-                        y: local_cols.page_cols.idx.clone(),
+                        x: local_cols.x.clone(),
+                        y: page_cols.idx.clone(),
                         // use the strict_comp_ind
                         tuple_less_than: strict_comp_ind.unwrap(),
                     },
@@ -200,30 +201,29 @@ where
             };
 
         // generate aux columns for IsEqualVec
-        let is_equal_vec_cols: Option<IsEqualVecCols<AB::Var>> =
-            match &local_cols.local_cols.aux_cols {
-                PageIndexScanInputAuxCols::Eq(EqCompAuxCols {
-                    is_equal_vec_aux, ..
-                })
-                | PageIndexScanInputAuxCols::Lte(NonStrictCompAuxCols {
-                    is_equal_vec_aux, ..
-                })
-                | PageIndexScanInputAuxCols::Gte(NonStrictCompAuxCols {
-                    is_equal_vec_aux, ..
-                }) => {
-                    let is_equal_vec_cols = IsEqualVecCols {
-                        io: IsEqualVecIOCols {
-                            x: local_cols.page_cols.idx.clone(),
-                            y: local_cols.local_cols.x.clone(),
-                            // use the equal_comp_ind
-                            prod: equal_comp_ind.unwrap(),
-                        },
-                        aux: is_equal_vec_aux.clone(),
-                    };
-                    Some(is_equal_vec_cols)
-                }
-                _ => None,
-            };
+        let is_equal_vec_cols: Option<IsEqualVecCols<AB::Var>> = match &local_cols.aux_cols {
+            PageIndexScanInputAuxCols::Eq(EqCompAuxCols {
+                is_equal_vec_aux, ..
+            })
+            | PageIndexScanInputAuxCols::Lte(NonStrictCompAuxCols {
+                is_equal_vec_aux, ..
+            })
+            | PageIndexScanInputAuxCols::Gte(NonStrictCompAuxCols {
+                is_equal_vec_aux, ..
+            }) => {
+                let is_equal_vec_cols = IsEqualVecCols {
+                    io: IsEqualVecIOCols {
+                        x: page_cols.idx.clone(),
+                        y: local_cols.x.clone(),
+                        // use the equal_comp_ind
+                        prod: equal_comp_ind.unwrap(),
+                    },
+                    aux: is_equal_vec_aux.clone(),
+                };
+                Some(is_equal_vec_cols)
+            }
+            _ => None,
+        };
 
         // constrain that satisfies pred is correct
         match &self.variant_air {
@@ -275,7 +275,7 @@ where
                 // constrain that satisfies_pred indicates the nonstrict comparison
                 builder.assert_eq(
                     strict_comp_ind.unwrap() + equal_comp_ind.unwrap(),
-                    local_cols.local_cols.satisfies_pred,
+                    local_cols.satisfies_pred,
                 );
             }
             PageIndexScanInputAirVariants::Eq(EqCompAir { is_equal_vec_air }) => {
