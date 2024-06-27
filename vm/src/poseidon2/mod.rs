@@ -14,7 +14,7 @@ pub struct Poseidon2Air<const WIDTH: usize, T: Clone> {
     pub external_constants: Vec<[T; WIDTH]>,
     pub rounds_p: usize,
     pub internal_constants: Vec<T>,
-    pub BUS_INDEX: usize,
+    pub bus_index: usize,
     pub trace: Option<RowMajorMatrix<T>>,
 }
 
@@ -29,7 +29,7 @@ impl<const WIDTH: usize, T: Clone> Poseidon2Air<WIDTH, T> {
             external_constants,
             rounds_p: internal_constants.len(),
             internal_constants,
-            BUS_INDEX: bus_index,
+            bus_index,
             trace: None,
         }
     }

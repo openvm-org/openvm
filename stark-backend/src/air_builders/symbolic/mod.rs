@@ -40,7 +40,6 @@ where
         num_exposed_values_after_challenge,
     )
     .max(2);
-    dbg!(constraint_degree);
 
     // The quotient's actual degree is approximately (max_constraint_degree - 1) n,
     // where subtracting 1 comes from division by the zerofier.
