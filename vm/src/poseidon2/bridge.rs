@@ -4,7 +4,7 @@ use p3_field::Field;
 
 use crate::poseidon2::{columns::Poseidon2Cols, Poseidon2Air};
 
-// No interactions
+// Receives input and output columns in one interaction
 impl<const WIDTH: usize, F: Field> AirBridge<F> for Poseidon2Air<WIDTH, F> {
     fn receives(&self) -> Vec<Interaction<F>> {
         let index_map = Poseidon2Cols::<WIDTH, F>::index_map(self);

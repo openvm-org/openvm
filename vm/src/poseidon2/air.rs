@@ -24,6 +24,7 @@ impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Air<WIDTH, AB::F> 
 
         let half_ext_rounds = self.rounds_f / 2;
         for phase1_index in 0..half_ext_rounds {
+            // regenerate state as Expr from trace variables on each round
             let mut state = if phase1_index == 0 {
                 io.input.clone().into_iter().map(|x| x.into()).collect()
             } else {
@@ -42,6 +43,7 @@ impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Air<WIDTH, AB::F> 
         }
 
         for phase2_index in 0..self.rounds_p {
+            // regenerate state as Expr from trace variables on each round
             let mut state = if phase2_index == 0 {
                 ext_lin_layer::<AB, WIDTH>(
                     aux.phase1
@@ -69,6 +71,7 @@ impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Air<WIDTH, AB::F> 
         }
 
         for phase3_index in 0..(self.rounds_f - half_ext_rounds) {
+            // regenerate state as Expr from trace variables on each round
             let mut state = if phase3_index == 0 {
                 int_lin_layer::<AB, WIDTH>(
                     aux.phase2
@@ -115,6 +118,8 @@ impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Air<WIDTH, AB::F> 
     }
 }
 
+/// External linear layer. Applies a diffused linear matrix operation, sending every element to every other element
+/// Satisfies MDS, also called `Poseidon2ExternalMatrixGeneral`
 fn ext_lin_layer<AB: AirBuilder, const WIDTH: usize>(state: Vec<AB::Expr>) -> Vec<AB::Expr> {
     let mut new_state = vec![AB::Expr::default(); WIDTH];
     for i in (0..WIDTH).step_by(4) {
@@ -142,6 +147,8 @@ fn ext_lin_layer<AB: AirBuilder, const WIDTH: usize>(state: Vec<AB::Expr>) -> Ve
     new_state
 }
 
+/// Internal linear layer. Applies a diffused linear matrix operation, sending every element to every other element
+/// Also called `DiffusionMatrixBabyBear`
 fn int_lin_layer<AB: AirBuilder, const WIDTH: usize>(state: Vec<AB::Expr>) -> Vec<AB::Expr> {
     let redc_fact = AB::Expr::from_canonical_u32(943718400);
     let sum: AB::Expr = state.clone().into_iter().sum();
@@ -158,6 +165,7 @@ fn int_lin_layer<AB: AirBuilder, const WIDTH: usize>(state: Vec<AB::Expr>) -> Ve
     new_state
 }
 
+/// Returns 7th power of field element input
 fn sbox_p<AB: AirBuilder>(state_elem: AB::Expr) -> AB::Expr {
     state_elem.clone()
         * state_elem.clone()
@@ -168,10 +176,12 @@ fn sbox_p<AB: AirBuilder>(state_elem: AB::Expr) -> AB::Expr {
         * state_elem.clone()
 }
 
+/// Returns elementwise 7th power of vector field element input
 fn sbox<AB: AirBuilder>(state: Vec<AB::Expr>) -> Vec<AB::Expr> {
     state.iter().map(|x| sbox_p::<AB>(x.clone())).collect()
 }
 
+/// Adds external constants elementwise to state, indexed from [[F]]
 fn add_ext_consts<AB: AirBuilder, const WIDTH: usize>(
     state: Vec<AB::Expr>,
     index: usize,
