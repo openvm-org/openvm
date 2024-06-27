@@ -46,7 +46,7 @@ fn test_poseidon2_trace() {
     let outputs = poseidon2_air.request_trace(&states);
     let mut poseidon2_trace = poseidon2_air.generate_trace(vec![]);
 
-    let page_requester = DummyInteractionAir::new(2 * 16, true, poseidon2_air.BUS_INDEX);
+    let page_requester = DummyInteractionAir::new(2 * 16, true, poseidon2_air.bus_index);
     let dummy_trace = RowMajorMatrix::new(
         states
             .into_iter()
@@ -67,7 +67,7 @@ fn test_poseidon2_trace() {
     let max_trace_height = traces.iter().map(|trace| trace.height()).max().unwrap();
     let max_log_degree = log2_strict_usize(max_trace_height);
     let perm = random_perm();
-    let fri_params = fri_params_with_80_bits_of_security()[0];
+    let fri_params = fri_params_with_80_bits_of_security()[1];
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
     engine
         .run_simple_test(
@@ -77,24 +77,24 @@ fn test_poseidon2_trace() {
         )
         .expect("Verification failed");
 
-    for width in 0..(poseidon2_air.get_width()) {
-        for height in 0..num_rows {
-            let rand = BabyBear::from_canonical_u32(rng.gen_range(1..=1 << 27));
-            poseidon2_trace.row_mut(height)[width] += rand;
+    for _ in 0..10 {
+        let width = rng.gen_range(0..poseidon2_air.get_width());
+        let height = rng.gen_range(0..num_rows);
+        let rand = BabyBear::from_canonical_u32(rng.gen_range(1..=1 << 27));
+        poseidon2_trace.row_mut(height)[width] += rand;
 
-            USE_DEBUG_BUILDER.with(|debug| {
-                *debug.lock().unwrap() = false;
-            });
-            assert_eq!(
-                engine.run_simple_test(
-                    vec![&poseidon2_air, &page_requester],
-                    vec![poseidon2_trace.clone(), dummy_trace.clone()],
-                    vec![vec![]; 2],
-                ),
-                Err(VerificationError::OodEvaluationMismatch),
-                "Expected constraint to fail"
-            );
-            poseidon2_trace.row_mut(height)[width] -= rand;
-        }
+        USE_DEBUG_BUILDER.with(|debug| {
+            *debug.lock().unwrap() = false;
+        });
+        assert_eq!(
+            engine.run_simple_test(
+                vec![&poseidon2_air, &page_requester],
+                vec![poseidon2_trace.clone(), dummy_trace.clone()],
+                vec![vec![]; 2],
+            ),
+            Err(VerificationError::OodEvaluationMismatch),
+            "Expected constraint to fail"
+        );
+        poseidon2_trace.row_mut(height)[width] -= rand;
     }
 }

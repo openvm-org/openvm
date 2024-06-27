@@ -17,7 +17,7 @@ impl<const WIDTH: usize, F: Field> AirBridge<F> for Poseidon2Air<WIDTH, F> {
             .map(VirtualPairCol::single_main)
             .collect(),
             count: VirtualPairCol::one(),
-            argument_index: self.BUS_INDEX,
+            argument_index: self.bus_index,
         }]
     }
 }
