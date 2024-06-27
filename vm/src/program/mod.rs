@@ -12,7 +12,7 @@ pub mod columns;
 pub mod trace;
 
 pub struct ProgramAir<T> {
-    program: Vec<Instruction<T>>,
+    pub program: Vec<Instruction<T>>,
 }
 
 impl<F: PrimeField64> ProgramAir<F> {
