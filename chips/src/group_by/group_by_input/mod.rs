@@ -73,7 +73,7 @@ impl GroupByAir {
         if !self.sorted {
             3 * self.group_by_cols.len() + 7
         } else {
-            2 * self.group_by_cols.len() + 7
+            2 * self.group_by_cols.len() + 5
         }
     }
 

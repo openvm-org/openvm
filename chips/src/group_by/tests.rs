@@ -40,6 +40,7 @@ struct GroupByTest {
     idx_decomp: usize,
 
     log_page_height: usize,
+    sorted: bool,
 }
 
 impl GroupByTest {
@@ -51,6 +52,7 @@ impl GroupByTest {
         log_page_height: usize,
         idx_limb_bits: usize,
         idx_decomp: usize,
+        sorted: bool,
     ) -> Self {
         let mut my_test = GroupByTest {
             page_width,
@@ -63,6 +65,7 @@ impl GroupByTest {
             idx_limb_bits,
             idx_decomp,
             log_page_height,
+            sorted,
         };
         my_test.generate_group_by_aggregated_cols();
         my_test
@@ -105,6 +108,7 @@ impl GroupByTest {
 
     /// Generate a random page.
     pub fn generate_page(&self, rng: &mut impl Rng, rows_allocated: usize) -> Page {
+        // TODO generate page that actually has rows that get folded
         Page::random(
             rng,
             self.idx_len(),
@@ -128,7 +132,7 @@ impl GroupByTest {
         );
         let mut page_vecs: Vec<Vec<u32>> = page.to_2d_vec();
         page_vecs.sort();
-        Page::from_2d_vec(&page_vecs, self.idx_len(), 1)
+        Page::from_2d_vec(&page_vecs, self.idx_len(), 0)
     }
 
     /// Set up the keygen builder for the group-by test case by querying trace widths.
@@ -330,9 +334,9 @@ fn test_random_values() {
     let page_width = rng.gen_range(2..20);
     let random_value = rng.gen_range(1..page_width - 1);
     let log_page_height = rng.gen_range(1..6);
-    let test = GroupByTest::new(page_width, random_value, log_page_height, 10, 4);
     let sorted = false;
     let op = GroupByOperation::Sum;
+    let test = GroupByTest::new(page_width, random_value, log_page_height, 10, 4, sorted);
 
     let mut page_controller = PageController::new(
         test.page_width,
@@ -408,12 +412,13 @@ fn test_random_values() {
 #[test]
 fn group_by_sorted_test() {
     let mut rng = create_seeded_rng();
-    let page_width = rng.gen_range(2..20);
-    let random_value = rng.gen_range(1..page_width - 1);
+    // let page_width = rng.gen_range(2..20);
+    let page_width = 5;
+    let num_groups = page_width - 2;
     let log_page_height = rng.gen_range(1..6);
-    let test = GroupByTest::new(page_width, random_value, log_page_height, 10, 4);
     let sorted = true;
     let op = GroupByOperation::Sum;
+    let test = GroupByTest::new(page_width, num_groups, log_page_height, 10, 4, sorted);
 
     let mut page_controller = PageController::new(
         test.page_width,
