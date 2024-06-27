@@ -16,7 +16,7 @@ use rand::Rng;
 use rand::RngCore;
 
 #[test]
-fn test_poseidon2_trace() {
+fn test_poseidon2() {
     // config
     let num_rows = 1 << 4;
     let num_ext_rounds = 8;
