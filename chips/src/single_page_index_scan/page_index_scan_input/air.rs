@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-
 use afs_stark_backend::air_builders::PartitionedAirBuilder;
 use p3_air::{Air, AirBuilderWithPublicValues, BaseAir};
 use p3_field::Field;
@@ -84,9 +82,6 @@ where
         let local_page = page_main.row_slice(0);
         let local_aux = aux_main.row_slice(0);
 
-        let page_slice: &[AB::Var] = (*local_page).borrow();
-        let aux_slice: &[AB::Var] = (*local_aux).borrow();
-
         // get the idx_limb_bits and decomp, which will be used to generate local_cols
         let (idx_limb_bits, decomp) = match &self.variant_air {
             PageIndexScanInputAirVariants::Lt(StrictCompAir {
@@ -121,8 +116,8 @@ where
         };
 
         let local_cols = PageIndexScanInputCols::<AB::Var>::from_partitioned_slice(
-            page_slice,
-            aux_slice,
+            &local_page,
+            &local_aux,
             self.idx_len,
             self.data_len,
             idx_limb_bits.clone(),
