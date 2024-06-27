@@ -1,98 +1,29 @@
-use std::sync::Arc;
-
-use afs_chips::range_gate::RangeCheckerGateChip;
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use p3_baby_bear::BabyBear;
 
 use stark_vm::cpu::trace::Instruction;
-use stark_vm::cpu::CpuChip;
 use stark_vm::cpu::OpCode::*;
-use stark_vm::cpu::RANGE_CHECKER_BUS;
-use stark_vm::field_arithmetic::FieldArithmeticAir;
-use stark_vm::memory::offline_checker::OfflineChecker;
-use stark_vm::memory::MemoryAccess;
-use stark_vm::program::ProgramAir;
+use stark_vm::vm::config::VmConfig;
+use stark_vm::vm::config::VmParamsConfig;
+use stark_vm::vm::VirtualMachine;
 
-const DATA_LEN: usize = 1;
-const ADDR_SPACE_LIMB_BITS: usize = 8;
-const POINTER_LIMB_BITS: usize = 8;
-const CLK_LIMB_BITS: usize = 8;
+const LIMB_BITS: usize = 8;
 const DECOMP: usize = 4;
-const RANGE_MAX: u32 = 1 << DECOMP;
-
-const MEMORY_TRACE_DEGREE: usize = 32;
 
 fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>) {
-    let cpu_chip = CpuChip::new(is_field_arithmetic_enabled);
-    let execution = cpu_chip.generate_program_execution(program);
-
-    let program_air = ProgramAir::new(execution.program.clone());
-    let program_trace = program_air.generate_trace(&execution);
-
-    let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
-    let offline_checker = OfflineChecker::new(
-        DATA_LEN,
-        ADDR_SPACE_LIMB_BITS,
-        POINTER_LIMB_BITS,
-        CLK_LIMB_BITS,
-        DECOMP,
+    let vm = VirtualMachine::new(
+        VmConfig {
+            vm: VmParamsConfig {
+                field_arithmetic_enabled: is_field_arithmetic_enabled,
+                limb_bits: LIMB_BITS,
+                decomp: DECOMP,
+            },
+        },
+        program,
     );
-
-    let ops = execution
-        .memory_accesses
-        .iter()
-        .map(|access| MemoryAccess {
-            address: access.address,
-            op_type: access.op_type,
-            address_space: access.address_space,
-            timestamp: access.timestamp,
-            data: vec![access.data],
-        })
-        .collect::<Vec<MemoryAccess<BabyBear>>>();
-    let offline_checker_trace =
-        offline_checker.generate_trace(ops, range_checker.clone(), MEMORY_TRACE_DEGREE);
-
-    let range_trace = range_checker.generate_trace();
-    println!("range_trace: {:?}", range_trace);
-
-    let field_arithmetic_air = FieldArithmeticAir::new();
-    let field_arithmetic_trace = field_arithmetic_air.generate_trace(&execution);
-
-    let test_result = if is_field_arithmetic_enabled {
-        run_simple_test_no_pis(
-            vec![
-                &cpu_chip.air,
-                &program_air,
-                &offline_checker,
-                &field_arithmetic_air,
-                &range_checker.air,
-            ],
-            vec![
-                execution.trace(),
-                program_trace,
-                offline_checker_trace,
-                field_arithmetic_trace,
-                range_trace,
-            ],
-        )
-    } else {
-        run_simple_test_no_pis(
-            vec![
-                &cpu_chip.air,
-                &program_air,
-                &offline_checker,
-                &range_checker.air,
-            ],
-            vec![
-                execution.trace(),
-                program_trace,
-                offline_checker_trace,
-                range_trace,
-            ],
-        )
-    };
-
-    test_result.expect("Verification failed");
+    let chips = vm.chips();
+    let traces = vm.traces();
+    run_simple_test_no_pis(chips, traces).expect("Verification failed");
 }
 
 #[test]
@@ -147,4 +78,25 @@ fn test_vm_without_field_arithmetic() {
     ];
 
     air_test(field_arithmetic_enabled, program);
+}
+
+#[test]
+fn test_vm_fibonacci_old() {
+    let program = vec![
+        Instruction::from_isize(STOREW, 9, 0, 0, 0, 1),
+        Instruction::from_isize(STOREW, 1, 0, 2, 0, 1),
+        Instruction::from_isize(STOREW, 1, 0, 3, 0, 1),
+        Instruction::from_isize(STOREW, 0, 0, 0, 0, 2),
+        Instruction::from_isize(STOREW, 1, 0, 1, 0, 2),
+        Instruction::from_isize(BEQ, 2, 0, 7, 1, 1),
+        Instruction::from_isize(FADD, 2, 2, 3, 1, 1),
+        Instruction::from_isize(LOADW, 4, -2, 2, 1, 2),
+        Instruction::from_isize(LOADW, 5, -1, 2, 1, 2),
+        Instruction::from_isize(FADD, 6, 4, 5, 1, 1),
+        Instruction::from_isize(STOREW, 6, 0, 2, 1, 2),
+        Instruction::from_isize(JAL, 7, -6, 0, 1, 0),
+        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
+    ];
+
+    air_test(true, program.clone());
 }
