@@ -24,14 +24,6 @@ impl<F: PrimeField64> SubAirBridge<F> for GroupByAir {
     /// Sends desired columns (`sorted_group_by` and `aggregated`) internally with count
     /// `is_alloc`, and sends answer columns with count `is_final`.
     fn sends(&self, col_indices: GroupByCols<usize>) -> Vec<Interaction<F>> {
-        let internal_sent_fields = self
-            .group_by_cols
-            .iter()
-            .chain(std::iter::once(&self.aggregated_col))
-            .map(|i| VirtualPairCol::single_main(col_indices.io.page[*i]))
-            .collect();
-        let internal_count = VirtualPairCol::single_main(col_indices.io.is_allocated);
-
         let output_sent_fields: Vec<VirtualPairCol<F>> = col_indices
             .aux
             .sorted_group_by
@@ -47,6 +39,13 @@ impl<F: PrimeField64> SubAirBridge<F> for GroupByAir {
             argument_index: self.output_bus,
         }];
         if !self.sorted {
+            let internal_sent_fields = self
+                .group_by_cols
+                .iter()
+                .chain(std::iter::once(&self.aggregated_col))
+                .map(|i| VirtualPairCol::single_main(col_indices.io.page[*i]))
+                .collect();
+            let internal_count = VirtualPairCol::single_main(col_indices.io.is_allocated);
             interactions.insert(
                 0,
                 Interaction {

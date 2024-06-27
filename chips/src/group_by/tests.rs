@@ -116,6 +116,21 @@ impl GroupByTest {
         )
     }
 
+    pub fn generate_sorted_page(&self, rng: &mut impl Rng, rows_allocated: usize) -> Page {
+        let page = Page::random(
+            rng,
+            self.idx_len(),
+            0,
+            self.max_idx() as u32,
+            0,
+            self.page_height(),
+            rows_allocated,
+        );
+        let mut page_vecs: Vec<Vec<u32>> = page.to_2d_vec();
+        page_vecs.sort();
+        Page::from_2d_vec(&page_vecs, self.idx_len(), 1)
+    }
+
     /// Set up the keygen builder for the group-by test case by querying trace widths.
     fn set_up_keygen_builder(
         &self,
@@ -366,6 +381,87 @@ fn test_random_values() {
     // Negative test
     for rows_allocated in alloc_rows_arr.iter() {
         let page = test.generate_page(&mut rng, *rows_allocated);
+
+        for _ in 0..test.page_height() {
+            USE_DEBUG_BUILDER.with(|debug| {
+                *debug.lock().unwrap() = false;
+            });
+
+            assert_eq!(
+                test.load_page_test(
+                    &engine,
+                    &page,
+                    &mut page_controller,
+                    &mut trace_builder,
+                    &partial_pk,
+                    true,
+                    &mut rng,
+                ),
+                Err(VerificationError::OodEvaluationMismatch),
+                "Expected constraint to fail"
+            );
+            page_controller.refresh_range_checker();
+        }
+    }
+}
+
+#[test]
+fn group_by_sorted_test() {
+    let mut rng = create_seeded_rng();
+    let page_width = rng.gen_range(2..20);
+    let random_value = rng.gen_range(1..page_width - 1);
+    let log_page_height = rng.gen_range(1..6);
+    let test = GroupByTest::new(page_width, random_value, log_page_height, 10, 4);
+    let sorted = true;
+    let op = GroupByOperation::Sum;
+
+    let mut page_controller = PageController::new(
+        test.page_width,
+        test.group_by_cols.clone(),
+        test.aggregated_col,
+        test.internal_bus_index,
+        test.output_bus_index,
+        test.range_bus_index,
+        test.idx_limb_bits,
+        test.idx_decomp,
+        sorted,
+        op,
+    );
+
+    let engine =
+        config::baby_bear_poseidon2::default_engine(max(test.log_page_height, test.idx_decomp));
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
+
+    test.set_up_keygen_builder(&mut keygen_builder, &page_controller);
+
+    let partial_pk = keygen_builder.generate_partial_pk();
+
+    let prover = MultiTraceStarkProver::new(&engine.config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
+
+    let alloc_rows_arr: Vec<usize> = (0..test.page_height() - 1).collect();
+
+    // Positive test
+    for rows_allocated in alloc_rows_arr.iter() {
+        let page = test.generate_sorted_page(&mut rng, *rows_allocated);
+
+        test.load_page_test(
+            &engine,
+            &page,
+            &mut page_controller,
+            &mut trace_builder,
+            &partial_pk,
+            false,
+            &mut rng,
+        )
+        .expect("Verification failed");
+
+        page_controller.refresh_range_checker();
+    }
+
+    // Negative test
+    for rows_allocated in alloc_rows_arr.iter() {
+        let page = test.generate_sorted_page(&mut rng, *rows_allocated);
 
         for _ in 0..test.page_height() {
             USE_DEBUG_BUILDER.with(|debug| {
