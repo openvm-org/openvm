@@ -92,15 +92,17 @@ impl<T: Clone> GroupByCols<T> {
         let num_group_by = group_by_air.group_by_cols.len();
         let eq_vec_width = IsEqualVecAuxCols::<T>::get_width(num_group_by + 1);
 
-        if !group_by_air.sorted {
+        let (allocated_idx, page_range, sorted_group_by_alloc) = if !group_by_air.sorted {
             let allocated_idx = 0;
             let page_range = allocated_idx + 1..group_by_air.page_width;
             let sorted_group_by_alloc = page_range.end;
+            (allocated_idx, page_range, sorted_group_by_alloc)
         } else {
             let allocated_idx = 0;
             let page_range = 0..0;
             let sorted_group_by_alloc = 0;
-        }
+            (allocated_idx, page_range, sorted_group_by_alloc)
+        };
         let sorted_group_by_range =
             sorted_group_by_alloc + 1..sorted_group_by_alloc + 1 + num_group_by;
         let sorted_group_by_combined_range = sorted_group_by_alloc..sorted_group_by_range.end;

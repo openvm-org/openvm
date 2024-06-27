@@ -31,7 +31,7 @@ pub struct GroupByAir {
     pub op: GroupByOperation,
 }
 
-enum GroupByOperation {
+pub enum GroupByOperation {
     Sum,
     Product,
 }
@@ -79,8 +79,12 @@ impl GroupByAir {
 
     /// This pure function computes the answer to the group-by operation
     pub fn request(&self, page: &Page) -> Page {
-        let mut grouped_page: Vec<Vec<u32>> = if self.sorted {
-            page.rows.clone()
+        let grouped_page: Vec<Vec<u32>> = if self.sorted {
+            page.rows
+                .clone()
+                .iter()
+                .map(|row| row.idx.clone())
+                .collect()
         } else {
             let mut grouped_page: Vec<Vec<u32>> = page
                 .rows

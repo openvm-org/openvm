@@ -62,9 +62,6 @@ impl GroupByAir {
             }
         }
 
-        if !self.sorted {
-            partial_sums.sort();
-        }
         let trace: Vec<F> = page_f
             .iter()
             .zip(partial_sums.iter())

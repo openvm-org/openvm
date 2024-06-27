@@ -1,5 +1,6 @@
 use super::page_controller::PageController;
 use crate::common::page::Page;
+use crate::group_by::group_by_input::GroupByOperation;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_util::log2_strict_usize;
@@ -315,6 +316,8 @@ fn test_random_values() {
     let random_value = rng.gen_range(1..page_width - 1);
     let log_page_height = rng.gen_range(1..6);
     let test = GroupByTest::new(page_width, random_value, log_page_height, 10, 4);
+    let sorted = false;
+    let op = GroupByOperation::Sum;
 
     let mut page_controller = PageController::new(
         test.page_width,
@@ -325,6 +328,8 @@ fn test_random_values() {
         test.range_bus_index,
         test.idx_limb_bits,
         test.idx_decomp,
+        sorted,
+        op,
     );
 
     let engine =

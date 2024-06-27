@@ -1,6 +1,6 @@
 use crate::common::page::Page;
-use crate::group_by::final_page::MyFinalPageAir;
-use crate::group_by::group_by_input::GroupByAir;
+use crate::group_by::group_by_input::{GroupByAir, GroupByOperation};
+use crate::group_by::receiving_indexed_output_page_air::ReceivingIndexedOutputPageAir;
 use crate::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
@@ -39,7 +39,7 @@ where
 {
     pub group_by: GroupByAir,
     pub range_checker: Arc<RangeCheckerGateChip>,
-    pub final_chip: MyFinalPageAir,
+    pub final_chip: ReceivingIndexedOutputPageAir,
     _marker: PhantomData<SC>,
 }
 
@@ -75,6 +75,8 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         range_bus: usize,
         limb_bits: usize,
         decomp: usize,
+        sorted: bool,
+        op: GroupByOperation,
     ) -> Self {
         let group_by = GroupByAir::new(
             page_width,
@@ -82,9 +84,11 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             aggregated_col,
             internal_bus,
             output_bus,
+            sorted,
+            op,
         );
         let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus, 1 << decomp));
-        let final_chip = MyFinalPageAir::new(
+        let final_chip = ReceivingIndexedOutputPageAir::new(
             output_bus,
             range_bus,
             group_by_cols.len(),
