@@ -384,26 +384,22 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
                 AS::Immediate,
             ),
         ],
-        AsmInstruction::PrintV(src) => vec![
-            inst(
-                PRINTF,
-                register(src),
-                F::zero(),
-                F::zero(),
-                AS::Register,
-                AS::Immediate,
-            )
-        ],
-        AsmInstruction::PrintF(src) => vec![
-            inst(
-                PRINTF,
-                register(src),
-                F::zero(),
-                F::zero(),
-                AS::Register,
-                AS::Immediate,
-            )
-        ],
+        AsmInstruction::PrintV(src) => vec![inst(
+            PRINTF,
+            register(src),
+            F::zero(),
+            F::zero(),
+            AS::Register,
+            AS::Immediate,
+        )],
+        AsmInstruction::PrintF(src) => vec![inst(
+            PRINTF,
+            register(src),
+            F::zero(),
+            F::zero(),
+            AS::Register,
+            AS::Immediate,
+        )],
         _ => panic!("Unsupported instruction {:?}", instruction),
     }
 }
