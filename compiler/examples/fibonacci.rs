@@ -21,6 +21,8 @@ fn fibonacci(n: u32) -> u32 {
     }
 }
 
+const WORD_SIZE: usize = 1;
+
 fn main() {
     type F = BabyBear;
     type EF = BinomialExtensionField<F, 4>;
@@ -49,7 +51,7 @@ fn main() {
 
     let program = builder.compile_isa();
     display_program(&program);
-    execute_program(program);
+    execute_program::<WORD_SIZE, _>(program);
 
     // let program = code.machine_code();
     // println!("Program size = {}", program.instructions.len());

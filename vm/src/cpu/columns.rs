@@ -1,5 +1,6 @@
 use std::{array::from_fn, collections::BTreeMap};
 
+use afs_chips::is_equal_vec::columns::IsEqualVecAuxCols;
 use itertools::Itertools;
 
 use super::{CpuOptions, OpCode, MAX_ACCESSES_PER_CYCLE};
@@ -49,7 +50,6 @@ impl<T: Clone> CpuIoCols<T> {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryAccessCols<const WORD_SIZE: usize, T> {
     pub enabled: T,
@@ -90,13 +90,12 @@ impl<const WORD_SIZE: usize, T: Clone> MemoryAccessCols<WORD_SIZE, T> {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuAuxCols<const WORD_SIZE: usize, T> {
     pub operation_flags: BTreeMap<OpCode, T>,
     pub accesses: [MemoryAccessCols<WORD_SIZE, T>; MAX_ACCESSES_PER_CYCLE],
-    pub beq_check: T,
-    pub is_equal_aux: T,
+    pub read1_equals_read2: T,
+    pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
 }
 
 impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
@@ -120,13 +119,13 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
         });
 
         let beq_check = slc[end].clone();
-        let is_equal_aux = slc[end + 1].clone();
+        let is_equal_vec_aux = IsEqualVecAuxCols::from_slice(&slc[end + 1..], WORD_SIZE);
 
         Self {
             operation_flags,
             accesses,
-            beq_check,
-            is_equal_aux,
+            read1_equals_read2: beq_check,
+            is_equal_vec_aux,
         }
     }
 
@@ -136,13 +135,16 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
             flattened.push(self.operation_flags.get(&opcode).unwrap().clone());
         }
         flattened.extend(self.accesses.iter().flat_map(MemoryAccessCols::flatten));
-        flattened.push(self.beq_check.clone());
-        flattened.push(self.is_equal_aux.clone());
+        flattened.push(self.read1_equals_read2.clone());
+        flattened.extend(self.is_equal_vec_aux.flatten());
         flattened
     }
 
     pub fn get_width(options: CpuOptions) -> usize {
-        options.num_enabled_instructions() + (MAX_ACCESSES_PER_CYCLE * MemoryAccessCols::<WORD_SIZE, T>::get_width()) + 2
+        options.num_enabled_instructions()
+            + (MAX_ACCESSES_PER_CYCLE * MemoryAccessCols::<WORD_SIZE, T>::get_width())
+            + 1
+            + IsEqualVecAuxCols::<T>::get_width(WORD_SIZE)
     }
 }
 
@@ -155,7 +157,8 @@ pub struct CpuCols<const WORD_SIZE: usize, T> {
 impl<const WORD_SIZE: usize, T: Clone> CpuCols<WORD_SIZE, T> {
     pub fn from_slice(slc: &[T], options: CpuOptions) -> Self {
         let io = CpuIoCols::<T>::from_slice(&slc[..CpuIoCols::<T>::get_width()]);
-        let aux = CpuAuxCols::<WORD_SIZE, T>::from_slice(&slc[CpuIoCols::<T>::get_width()..], options);
+        let aux =
+            CpuAuxCols::<WORD_SIZE, T>::from_slice(&slc[CpuIoCols::<T>::get_width()..], options);
 
         Self { io, aux }
     }

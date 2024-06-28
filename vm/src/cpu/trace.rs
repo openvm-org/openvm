@@ -1,16 +1,24 @@
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque}, error::Error, fmt::Display
+    collections::{BTreeMap, HashMap, VecDeque},
+    error::Error,
+    fmt::Display,
 };
 
 use p3_field::{Field, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
-use afs_chips::{is_equal::IsEqualAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions};
+use afs_chips::{
+    is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir,
+    sub_chip::LocalTraceInstructions,
+};
 
 use crate::{field_arithmetic::FieldArithmeticAir, memory::OpType};
 
 use super::{
-    columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols}, compose, decompose, CpuAir, CpuOptions, OpCode::{self, *}, INST_WIDTH, MAX_READS_PER_CYCLE, MAX_WRITES_PER_CYCLE
+    columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
+    compose, decompose, CpuAir, CpuOptions,
+    OpCode::{self, *},
+    INST_WIDTH, MAX_READS_PER_CYCLE, MAX_WRITES_PER_CYCLE,
 };
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, derive_new::new)]
@@ -231,8 +239,6 @@ impl<const WORD_SIZE: usize, F: PrimeField64> Memory<WORD_SIZE, F> {
     }
 }
 
-
-
 #[derive(Debug)]
 pub enum ExecutionError {
     Fail(usize),
@@ -310,11 +316,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 }
                 // d[a] <- pc + INST_WIDTH, pc <- pc + b
                 JAL => {
-                    memory.write(
-                        d,
-                        a,
-                        decompose(pc + F::from_canonical_usize(INST_WIDTH)),
-                    );
+                    memory.write(d, a, decompose(pc + F::from_canonical_usize(INST_WIDTH)));
                     next_pc = pc + b;
                 }
                 // If d[a] = e[b], pc <- pc + c
@@ -377,18 +379,19 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             assert!(read_cols.is_empty());
             assert!(write_cols.is_empty());
 
-            let is_equal_cols = LocalTraceInstructions::generate_trace_row(
-                &IsEqualAir {},
-                (read1.data[0], read2.data[0]),
+            let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
+                &IsEqualVecAir::new(WORD_SIZE),
+                (read1.data.to_vec(), read2.data.to_vec()),
             );
-            let beq_check = is_equal_cols.io.is_equal;
-            let is_equal_aux = is_equal_cols.aux.inv;
+
+            let read1_equals_read2 = is_equal_vec_cols.io.prod;
+            let is_equal_vec_aux = is_equal_vec_cols.aux;
 
             let aux = CpuAuxCols {
                 operation_flags,
                 accesses: [read1, read2, write],
-                beq_check,
-                is_equal_aux,
+                read1_equals_read2,
+                is_equal_vec_aux,
             };
 
             let cols = CpuCols { io, aux };

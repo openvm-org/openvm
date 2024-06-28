@@ -5,16 +5,16 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use afs_chips::{
-    is_equal::{
-        columns::{IsEqualAuxCols, IsEqualIOCols},
-        IsEqualAir,
-    },
+    is_equal_vec::{columns::IsEqualVecIOCols, IsEqualVecAir},
     is_zero::{columns::IsZeroIOCols, IsZeroAir},
     sub_chip::SubAir,
 };
 
 use super::{
-    columns::{CpuAuxCols, CpuCols, CpuIoCols}, CpuAir, OpCode::*, FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH
+    columns::{CpuAuxCols, CpuCols, CpuIoCols},
+    CpuAir,
+    OpCode::*,
+    FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH,
 };
 
 impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for CpuAir<WORD_SIZE> {
@@ -24,7 +24,12 @@ impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for CpuAir<WORD_SIZE> {
 }
 
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
-    fn eval_compose<AB: AirBuilder>(&self, builder: &mut AB, word: [AB::Var; WORD_SIZE], field_elem: AB::Expr) {
+    fn eval_compose<AB: AirBuilder>(
+        &self,
+        builder: &mut AB,
+        word: [AB::Var; WORD_SIZE],
+        field_elem: AB::Expr,
+    ) {
         builder.assert_eq(word[0], field_elem);
         for &cell in word.iter().take(WORD_SIZE).skip(1) {
             builder.assert_zero(cell);
@@ -67,8 +72,8 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
         let CpuAuxCols {
             operation_flags,
             accesses,
-            beq_check,
-            is_equal_aux,
+            read1_equals_read2,
+            is_equal_vec_aux,
         } = aux;
 
         let read1 = &accesses[0];
@@ -169,20 +174,12 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
 
         when_beq
             .when_transition()
-            .when(beq_check)
+            .when(read1_equals_read2)
             .assert_eq(next_pc, pc + c);
         when_beq
             .when_transition()
-            .when(AB::Expr::one() - beq_check)
+            .when(AB::Expr::one() - read1_equals_read2)
             .assert_eq(next_pc, pc + inst_width);
-
-        let is_equal_io_cols = IsEqualIOCols {
-            x: read1.data[0],
-            y: read2.data[0],
-            is_equal: beq_check,
-        };
-        let is_equal_aux_cols = IsEqualAuxCols { inv: is_equal_aux };
-        SubAir::eval(&IsEqualAir, builder, is_equal_io_cols, is_equal_aux_cols);
 
         // BNE: If d[a] != e[b], pc <- pc + c
         let bne_flag = operation_flags[&BNE];
@@ -199,11 +196,11 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
 
         when_bne
             .when_transition()
-            .when(beq_check)
+            .when(read1_equals_read2)
             .assert_eq(next_pc, pc + inst_width);
         when_bne
             .when_transition()
-            .when(AB::Expr::one() - beq_check)
+            .when(AB::Expr::one() - read1_equals_read2)
             .assert_eq(next_pc, pc + c);
 
         // TERMINATE
@@ -255,6 +252,20 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
         }
         // maybe writes to immediate address space are ignored instead of disallowed?
         //builder.assert_zero(write.is_immediate);
+
+        // evaluate equality between read1 and read2
+
+        let is_equal_vec_io_cols = IsEqualVecIOCols {
+            x: read1.data.to_vec(),
+            y: read2.data.to_vec(),
+            prod: read1_equals_read2,
+        };
+        SubAir::eval(
+            &IsEqualVecAir::new(WORD_SIZE),
+            builder,
+            is_equal_vec_io_cols,
+            is_equal_vec_aux,
+        );
 
         // make sure program starts at beginning
         builder.when_first_row().assert_zero(pc);

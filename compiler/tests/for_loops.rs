@@ -13,6 +13,8 @@ use afs_compiler::ir::Var;
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
 
+const WORD_SIZE: usize = 1;
+
 #[test]
 fn test_compiler_for_loops() {
     let mut builder = AsmBuilder::<F, EF>::default();
@@ -49,7 +51,7 @@ fn test_compiler_for_loops() {
 
     let program = builder.compile_isa();
     display_program(&program);
-    execute_program(program);
+    execute_program::<WORD_SIZE, _>(program);
 
     // let program = builder.compile_program();
 
@@ -88,7 +90,7 @@ fn test_compiler_nested_array_loop() {
     builder.halt();
 
     let program = builder.compile_isa();
-    execute_program(program);
+    execute_program::<WORD_SIZE, _>(program);
 
     // let code = builder.compile_asm();
 
@@ -174,7 +176,7 @@ fn test_compiler_break() {
     builder.halt();
 
     let program = builder.compile_isa();
-    execute_program(program);
+    execute_program::<WORD_SIZE, _>(program);
 
     // println!("{}", code);
 
@@ -205,7 +207,7 @@ fn test_compiler_step_by() {
     builder.halt();
 
     let program = builder.compile_isa();
-    execute_program(program);
+    execute_program::<WORD_SIZE, _>(program);
 
     // let program = builder.compile_program();
 
@@ -231,7 +233,7 @@ fn test_compiler_bneinc() {
     builder.halt();
 
     let program = builder.compile_isa();
-    execute_program(program);
+    execute_program::<WORD_SIZE, _>(program);
 
     // let code = builder.clone().compile_asm();
 
