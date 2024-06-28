@@ -111,16 +111,32 @@ impl GroupByTest {
 
     /// Generate a random page.
     pub fn generate_page(&self, rng: &mut impl Rng, rows_allocated: usize) -> Page {
-        // TODO generate page that actually has rows that get folded
-        Page::random(
-            rng,
-            self.idx_len(),
-            0,
-            self.max_idx() as u32,
-            0,
-            self.page_height(),
-            rows_allocated,
-        )
+        let mut matrix = vec![];
+        let mut rng = rand::thread_rng();
+
+        // Generate half the height of unique rows
+        for _ in 0..(self.page_height() / 2) {
+            let mut row = vec![1];
+            row.extend((0..self.idx_len()).map(|_| rng.gen::<u32>()));
+            matrix.push(row);
+        }
+
+        // Add random identical copies of rows
+        for _ in 0..(self.page_height() / 2) {
+            let row = matrix[rng.gen_range(0..matrix.len())].clone();
+            matrix.push(row);
+        }
+
+        // Adjust the 0s and 1s to match rows_allocated
+        for i in 0..self.page_height() {
+            if i >= rows_allocated {
+                matrix[i][0] = 0;
+            }
+        }
+
+        // Sort the matrix
+        matrix.sort();
+        Page::from_2d_vec(&matrix, self.idx_len(), 0)
     }
 
     pub fn generate_sorted_page(&self, rng: &mut impl Rng, rows_allocated: usize) -> Page {
@@ -419,7 +435,7 @@ fn group_by_sorted_test() {
     let page_width = 5;
     let num_groups = page_width - 2;
     // let log_page_height = rng.gen_range(1..6);
-    let log_page_height = 1;
+    let log_page_height = 3;
     let sorted = true;
     let op = GroupByOperation::Sum;
     let test = GroupByTest::new(page_width, num_groups, log_page_height, 10, 4, sorted);
