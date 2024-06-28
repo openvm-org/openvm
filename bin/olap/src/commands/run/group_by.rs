@@ -103,5 +103,6 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
     let file = File::create(output_path).unwrap();
     let mut writer = BufWriter::new(file);
     writer.write_all(&encoded_proof).unwrap();
+
     Ok(())
 }

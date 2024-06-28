@@ -1,3 +1,8 @@
+use std::{
+    fs::File,
+    io::{BufWriter, Write},
+};
+
 use crate::commands::run::{utils::pretty_print_page, PageConfig, RunCommand};
 use afs_chips::{
     common::page::Page,
@@ -5,7 +10,7 @@ use afs_chips::{
 };
 use afs_stark_backend::{keygen::MultiStarkKeygenBuilder, prover::trace::TraceCommitmentBuilder};
 use afs_test_utils::{config::baby_bear_poseidon2, engine::StarkEngine};
-use color_eyre::eyre::{eyre, Result};
+use color_eyre::eyre::Result;
 use logical_interface::{
     afs_input::operation::InnerJoinOp, afs_interface::AfsInterface, mock_db::MockDb,
 };
@@ -95,11 +100,6 @@ pub fn execute_inner_join<SC: StarkGenericConfig>(
         index_len_right,
         data_len_right + data_len_left,
     );
-    if !cli.silent {
-        println!("Proof verified");
-        println!("Output page:");
-        pretty_print_page(&output_page);
-    }
 
     let mut keygen_builder = MultiStarkKeygenBuilder::new(engine.config());
     inner_join_controller.set_up_keygen_builder(&mut keygen_builder, height, height, 2 * height);
@@ -109,10 +109,23 @@ pub fn execute_inner_join<SC: StarkGenericConfig>(
     let proof =
         inner_join_controller.prove(&engine, &partial_pk, &mut trace_builder, prover_trace_data);
 
-    let verify = inner_join_controller.verify(&engine, partial_vk, proof);
-
-    match verify {
-        Ok(_) => Ok(()),
-        Err(e) => Err(eyre!(format!("Proof verification failed: {:?}", e))),
+    if !cli.silent {
+        println!("Output page:");
+        pretty_print_page(&output_page);
     }
+
+    let output_path = if let Some(output_path) = &cli.output_path {
+        output_path.to_owned()
+    } else {
+        "bin/olap/tests/data/innerjoin.proof.bin".to_string()
+    };
+    let encoded_proof = bincode::serialize(&proof).unwrap();
+    inner_join_controller
+        .verify(&engine, partial_vk, proof)
+        .unwrap();
+    let file = File::create(output_path).unwrap();
+    let mut writer = BufWriter::new(file);
+    writer.write_all(&encoded_proof).unwrap();
+
+    Ok(())
 }
