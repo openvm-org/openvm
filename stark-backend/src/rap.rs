@@ -23,7 +23,7 @@ use crate::{
 ///
 /// Does not inherit [Air](p3_air::Air) trait to allow overrides for technical reasons
 /// around dynamic dispatch.
-pub trait Rap<AB>
+pub trait Rap<AB>: Sync
 where
     AB: PairBuilder + PermutationAirBuilder,
 {
@@ -37,7 +37,7 @@ where
 /// Exposed values are used internally by the prover and verifier
 /// in cross-table permutation arguments.
 pub trait PermutationAirBuilderWithExposedValues: PermutationAirBuilder {
-    fn permutation_exposed_values(&self) -> &[Self::EF];
+    fn permutation_exposed_values(&self) -> &[Self::VarEF];
 }
 
 /// RAP trait for all-purpose dynamic dispatch use.

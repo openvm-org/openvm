@@ -7,6 +7,7 @@ use std::{
 use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
+use serde::{Deserialize, Serialize};
 
 use super::page_cols::PageCols;
 
@@ -18,7 +19,7 @@ use super::page_cols::PageCols;
 /// - Allocated rows come first
 /// - Allocated rows are sorted by idx and indices are distinct
 /// - Unallocated rows are all zeros
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Page {
     pub rows: Vec<PageCols<u32>>,
 }

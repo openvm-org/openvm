@@ -21,7 +21,7 @@ pub struct ProverConstraintFolder<'a, SC: StarkGenericConfig> {
     pub alpha: SC::Challenge,
     pub accumulator: PackedChallenge<SC>,
     pub public_values: &'a [Val<SC>],
-    pub exposed_values_after_challenge: &'a [&'a [SC::Challenge]],
+    pub exposed_values_after_challenge: &'a [&'a [PackedChallenge<SC>]],
 }
 
 impl<'a, SC> AirBuilder for ProverConstraintFolder<'a, SC>
@@ -128,7 +128,7 @@ impl<'a, SC> PermutationAirBuilderWithExposedValues for ProverConstraintFolder<'
 where
     SC: StarkGenericConfig,
 {
-    fn permutation_exposed_values(&self) -> &[Self::EF] {
+    fn permutation_exposed_values(&self) -> &[Self::VarEF] {
         self.exposed_values_after_challenge
             .first()
             .expect("Challenge phase not supported")

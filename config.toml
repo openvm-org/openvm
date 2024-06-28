@@ -1,0 +1,7 @@
+[page]
+index_bytes = 32
+data_bytes = 1024
+bits_per_fe = 16
+height = 1048576
+mode = "ReadWrite" # options: "ReadOnly", "ReadWrite"
+max_rw_ops = 65536

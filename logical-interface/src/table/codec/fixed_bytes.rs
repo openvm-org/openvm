@@ -1,107 +1,108 @@
 use serde_derive::{Deserialize, Serialize};
 use std::fmt::Debug;
 
-use crate::types::{Data, Index};
-
 #[derive(Debug, Deserialize, Serialize)]
-pub struct FixedBytesCodec<I, D>
-where
-    I: Index,
-    D: Data,
-{
-    pub db_size_index: usize,
-    pub db_size_data: usize,
-    _phantom: std::marker::PhantomData<(I, D)>,
+pub struct FixedBytesConfig {
+    pub index_bytes: usize,
+    pub data_bytes: usize,
 }
 
-impl<I, D> FixedBytesCodec<I, D>
-where
-    I: Index,
-    D: Data,
-{
-    const SIZE_I: usize = I::MEMORY_SIZE;
-    const SIZE_D: usize = D::MEMORY_SIZE;
+#[derive(Debug, Deserialize, Serialize)]
+pub struct FixedBytesCodec {
+    pub table: FixedBytesConfig,
+    pub db: FixedBytesConfig,
+}
 
-    pub fn new(db_size_index: usize, db_size_data: usize) -> Self {
+impl FixedBytesCodec {
+    pub fn new(
+        table_index_bytes: usize,
+        table_data_bytes: usize,
+        db_index_bytes: usize,
+        db_data_bytes: usize,
+    ) -> Self {
         Self {
-            db_size_index,
-            db_size_data,
-            _phantom: std::marker::PhantomData,
+            table: FixedBytesConfig {
+                index_bytes: table_index_bytes,
+                data_bytes: table_data_bytes,
+            },
+            db: FixedBytesConfig {
+                index_bytes: db_index_bytes,
+                data_bytes: db_data_bytes,
+            },
         }
     }
 
-    pub fn index_to_fixed_bytes(&self, index: I) -> Vec<u8> {
-        let index_bytes = index.to_be_bytes();
-        let mut index_bytes = index_bytes.to_vec();
-        if index_bytes.len() > self.db_size_index {
+    pub fn table_to_db_index_bytes(&self, table_index: Vec<u8>) -> Vec<u8> {
+        if table_index.len() > self.db.index_bytes {
             panic!("Index size exceeds the maximum size");
         }
-        let zeros_len = self.db_size_index - index_bytes.len();
-        let mut db_index = vec![0; zeros_len];
-        db_index.append(&mut index_bytes);
-        if db_index.len() != self.db_size_index {
+        let zeros_len = self.db.index_bytes - table_index.len();
+        let mut fixed_index = vec![0; zeros_len];
+        fixed_index.extend_from_slice(&table_index);
+        if fixed_index.len() != self.db.index_bytes {
             panic!(
                 "Invalid index size: {} for this codec, expected: {}",
-                db_index.len(),
-                self.db_size_index
+                fixed_index.len(),
+                self.db.index_bytes
             );
         }
-        db_index
+        fixed_index
     }
 
-    pub fn data_to_fixed_bytes(&self, data: D) -> Vec<u8> {
-        let data_bytes = data.to_be_bytes();
-        let mut data_bytes = data_bytes.to_vec();
-        if data_bytes.len() > self.db_size_data {
+    pub fn table_to_db_data_bytes(&self, table_data: Vec<u8>) -> Vec<u8> {
+        if table_data.len() > self.db.data_bytes {
             panic!("Data size exceeds the maximum size");
         }
-        let zeros_len = self.db_size_data - data_bytes.len();
-        let mut db_data = vec![0; zeros_len];
-        db_data.append(&mut data_bytes);
-        if db_data.len() != self.db_size_data {
+        let zeros_len = self.db.data_bytes - table_data.len();
+        let mut fixed_data = vec![0; zeros_len];
+        fixed_data.extend_from_slice(&table_data);
+        if fixed_data.len() != self.db.data_bytes {
             panic!(
                 "Invalid data size: {} for this codec, expected: {}",
-                db_data.len(),
-                self.db_size_data
+                fixed_data.len(),
+                self.db.data_bytes
             );
         }
-        db_data
+        fixed_data
     }
 
-    pub fn fixed_bytes_to_index(&self, fixed_bytes: Vec<u8>) -> I {
-        let bytes_len = fixed_bytes.len();
-        if bytes_len != self.db_size_index {
+    pub fn db_to_table_index_bytes(&self, db_index: Vec<u8>) -> Vec<u8> {
+        let bytes_len = db_index.len();
+        if bytes_len != self.db.index_bytes {
             panic!(
                 "Index size ({}) is invalid for this codec (requires {})",
-                bytes_len, self.db_size_index
+                bytes_len, self.db.index_bytes
             );
         }
-        if Self::SIZE_I > bytes_len {
+        if self.table.index_bytes > bytes_len {
             panic!(
                 "Index size ({}) is less than the expected size ({})",
-                bytes_len,
-                Self::SIZE_I
+                bytes_len, self.table.index_bytes
             );
         }
 
         // Get least significant size(I) bytes (big endian)
-        let bytes_slice = &fixed_bytes[bytes_len - Self::SIZE_I..];
-        let bytes_vec = bytes_slice.to_vec();
-        I::from_be_bytes(&bytes_vec).unwrap()
+        let bytes_slice = &db_index[bytes_len - self.table.index_bytes..];
+        bytes_slice.to_vec()
     }
 
-    pub fn fixed_bytes_to_data(&self, fixed_bytes: Vec<u8>) -> D {
-        let bytes_len = fixed_bytes.len();
-        if bytes_len != self.db_size_data {
-            panic!("Data size is invalid for this codec");
+    pub fn db_to_table_data_bytes(&self, db_data: Vec<u8>) -> Vec<u8> {
+        let bytes_len = db_data.len();
+        if bytes_len != self.db.data_bytes {
+            panic!(
+                "Data size ({}) is invalid for this codec (requires {})",
+                bytes_len, self.db.data_bytes
+            );
         }
-        if Self::SIZE_D > bytes_len {
-            panic!("Data size is less than the expected size");
+        if self.table.data_bytes > bytes_len {
+            panic!(
+                "Data size ({}) is less than the expected size ({})",
+                bytes_len, self.table.data_bytes
+            );
         }
 
         // Get least significant size(D) bytes (big endian)
-        let bytes_slice = &fixed_bytes[bytes_len - Self::SIZE_D..];
-        let bytes_vec = bytes_slice.to_vec();
-        D::from_be_bytes(&bytes_vec).unwrap()
+        let bytes_slice = &db_data[bytes_len - self.table.data_bytes..];
+        bytes_slice.to_vec()
     }
 }
