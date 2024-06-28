@@ -18,9 +18,9 @@ use p3_matrix::dense::DenseMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 use super::{
+    final_table::FinalTableAir,
+    initial_table::{InitialTableAir, TableType},
     intersector::IntersectorAir,
-    my_final_table::MyFinalTableAir,
-    my_initial_table::{MyInitialTableAir, TableType},
 };
 use crate::{common::page::Page, range_gate::RangeCheckerGateChip};
 
@@ -110,9 +110,9 @@ pub struct FKInnerJoinController<SC: StarkGenericConfig>
 where
     Val<SC>: AbstractField,
 {
-    t1_chip: MyInitialTableAir,
-    t2_chip: MyInitialTableAir,
-    output_chip: MyFinalTableAir,
+    t1_chip: InitialTableAir,
+    t2_chip: InitialTableAir,
+    output_chip: FinalTableAir,
     intersector_chip: IntersectorAir,
 
     traces: Option<IJTraces<Val<SC>>>,
@@ -140,7 +140,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
         assert!(fkey_start < fkey_end && fkey_end <= t2_format.data_len);
 
         Self {
-            t1_chip: MyInitialTableAir::new(
+            t1_chip: InitialTableAir::new(
                 t1_format.idx_len,
                 t1_format.data_len,
                 TableType::T1 {
@@ -148,7 +148,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
                     t1_output_bus_index: buses.t1_output_bus_index,
                 },
             ),
-            t2_chip: MyInitialTableAir::new(
+            t2_chip: InitialTableAir::new(
                 t2_format.idx_len,
                 t2_format.data_len,
                 TableType::T2 {
@@ -159,7 +159,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
                     t2_output_bus_index: buses.t2_output_bus_index,
                 },
             ),
-            output_chip: MyFinalTableAir::new(
+            output_chip: FinalTableAir::new(
                 buses.t1_output_bus_index,
                 buses.t2_output_bus_index,
                 buses.range_bus_index,

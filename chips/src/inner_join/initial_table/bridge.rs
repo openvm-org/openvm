@@ -4,9 +4,9 @@ use p3_field::PrimeField;
 
 use crate::utils::to_vcols;
 
-use super::{columns::TableCols, MyInitialTableAir, TableType};
+use super::{columns::TableCols, InitialTableAir, TableType};
 
-impl<F: PrimeField> AirBridge<F> for MyInitialTableAir {
+impl<F: PrimeField> AirBridge<F> for InitialTableAir {
     /// For T1:
     /// - Sends idx (primary key) with multiplicity is_alloc on t1_intersector_bus (received by intersector_chip)
     /// - Sends (idx, data) with multiplicity out_mult on t1_output_bus (received by output_chip)

@@ -10,16 +10,14 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::{
-    common::page::Page,
-    final_page::{columns::FinalPageCols, FinalPageAir},
+    common::page::Page, indexed_output_page_air::IndexedOutputPageAir,
     range_gate::RangeCheckerGateChip,
-    sub_chip::AirConfig,
 };
 
 pub mod bridge;
 
 #[derive(Clone)]
-pub(super) struct MyFinalTableAir {
+pub(super) struct FinalTableAir {
     t1_output_bus_index: usize,
     t2_output_bus_index: usize,
 
@@ -29,10 +27,10 @@ pub(super) struct MyFinalTableAir {
 
     t2_data_len: usize,
 
-    final_air: FinalPageAir,
+    final_air: IndexedOutputPageAir,
 }
 
-impl MyFinalTableAir {
+impl FinalTableAir {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         t1_output_bus_index: usize,
@@ -52,7 +50,7 @@ impl MyFinalTableAir {
             fkey_start,
             fkey_end,
             t2_data_len,
-            final_air: FinalPageAir::new(
+            final_air: IndexedOutputPageAir::new(
                 range_bus_index,
                 idx_len,
                 t1_data_len + t2_data_len,
@@ -86,17 +84,13 @@ impl MyFinalTableAir {
     }
 }
 
-impl<F: Field> BaseAir<F> for MyFinalTableAir {
+impl<F: Field> BaseAir<F> for FinalTableAir {
     fn width(&self) -> usize {
         self.air_width()
     }
 }
 
-impl AirConfig for MyFinalTableAir {
-    type Cols<T> = FinalPageCols<T>;
-}
-
-impl<AB: PartitionedAirBuilder> Air<AB> for MyFinalTableAir
+impl<AB: PartitionedAirBuilder> Air<AB> for FinalTableAir
 where
     AB::M: Clone,
 {
