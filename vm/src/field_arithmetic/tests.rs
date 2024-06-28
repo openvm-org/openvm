@@ -1,6 +1,6 @@
 use super::columns::FieldArithmeticIOCols;
 use super::FieldArithmeticAir;
-use crate::cpu::trace::ProgramExecution;
+use crate::cpu::trace::{ArithmeticOperation, ProgramExecution};
 use crate::cpu::OpCode;
 use afs_stark_backend::prover::USE_DEBUG_BUILDER;
 use afs_stark_backend::verifier::VerificationError;
@@ -93,4 +93,68 @@ fn au_air_test() {
             "Expected constraint to fail"
         )
     }
+
+    let zero_div_zero_prog = ProgramExecution {
+        program: vec![],
+        trace_rows: vec![],
+        execution_frequencies: vec![],
+        memory_accesses: vec![],
+        arithmetic_ops: vec![ArithmeticOperation {
+            opcode: OpCode::FDIV,
+            operand1: BabyBear::zero(),
+            operand2: BabyBear::one(),
+            result: BabyBear::zero(),
+        }],
+    };
+
+    let mut au_trace = au_air.generate_trace(&zero_div_zero_prog);
+    au_trace.row_mut(0)[2] = BabyBear::zero();
+    let page_requester = DummyInteractionAir::new(
+        FieldArithmeticIOCols::<BabyBear>::get_width(),
+        true,
+        FieldArithmeticAir::BUS_INDEX,
+    );
+    let dummy_trace = RowMajorMatrix::new(
+        vec![
+            BabyBear::one(),
+            BabyBear::from_canonical_u32(OpCode::FDIV as u32),
+            BabyBear::zero(),
+            BabyBear::zero(),
+            BabyBear::zero(),
+        ],
+        FieldArithmeticIOCols::<BabyBear>::get_width() + 1,
+    );
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
+    assert_eq!(
+        run_simple_test_no_pis(
+            vec![&au_air, &page_requester],
+            vec![au_trace.clone(), dummy_trace.clone()],
+        ),
+        Err(VerificationError::OodEvaluationMismatch),
+        "Expected constraint to fail"
+    );
+}
+
+#[should_panic]
+#[test]
+fn au_air_test_panic() {
+    let au_air = FieldArithmeticAir::new();
+
+    let zero_div_zero_prog = ProgramExecution {
+        program: vec![],
+        trace_rows: vec![],
+        execution_frequencies: vec![],
+        memory_accesses: vec![],
+        arithmetic_ops: vec![ArithmeticOperation {
+            opcode: OpCode::FDIV,
+            operand1: BabyBear::zero(),
+            operand2: BabyBear::zero(),
+            result: BabyBear::zero(),
+        }],
+    };
+
+    // Should panic
+    au_air.generate_trace(&zero_div_zero_prog);
 }
