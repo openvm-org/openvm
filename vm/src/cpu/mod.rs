@@ -98,6 +98,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
     }
 }
 
+// panics if the word is not equal to decompose(elem) for some elem: F
 pub fn compose<const WORD_SIZE: usize, F: PrimeField64>(word: [F; WORD_SIZE]) -> F {
     for &cell in word.iter().skip(1) {
         assert_eq!(cell, F::zero());
