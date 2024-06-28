@@ -1,14 +1,16 @@
+use std::{
+    fs::File,
+    io::{BufWriter, Write},
+};
+
 use crate::commands::run::{utils::pretty_print_page, PageConfig, RunCommand};
 use afs_chips::{common::page::Page, group_by::page_controller::PageController};
-use afs_stark_backend::{
-    keygen::{types::MultiStarkPartialProvingKey, MultiStarkKeygenBuilder},
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
-};
+use afs_stark_backend::{keygen::MultiStarkKeygenBuilder, prover::trace::TraceCommitmentBuilder};
 use afs_test_utils::{
     config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
     engine::StarkEngine,
 };
-use color_eyre::eyre::{eyre, Result};
+use color_eyre::eyre::Result;
 use logical_interface::{
     afs_input::operation::GroupByOp, afs_interface::AfsInterface, mock_db::MockDb,
 };
@@ -73,6 +75,7 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     let (group_by_traces, _group_by_commitments, prover_data) =
         page_controller.load_page(&page, &trace_builder.committer);
+    let final_page_trace = group_by_traces.final_page_trace.clone();
 
     let partial_pk = keygen_builder.generate_partial_pk();
     let partial_vk = partial_pk.partial_vk();
@@ -84,101 +87,21 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
         prover_data,
     );
 
-    let verify = page_controller.verify(&engine, partial_vk, proof);
-
-    // Keygen
-    // let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
-    // let group_by_ptr = keygen_builder.add_cached_main_matrix(page_width);
-    // let final_page_ptr =
-    //     keygen_builder.add_cached_main_matrix(page_controller.final_chip.page_width());
-    // let group_by_aux_ptr = keygen_builder.add_main_matrix(page_controller.group_by.aux_width());
-    // let final_page_aux_ptr = keygen_builder.add_main_matrix(page_controller.final_chip.aux_width());
-    // let range_checker_ptr =
-    //     keygen_builder.add_main_matrix(page_controller.range_checker.air_width());
-
-    // keygen_builder.add_partitioned_air(
-    //     &page_controller.group_by,
-    //     height,
-    //     0,
-    //     vec![group_by_ptr, group_by_aux_ptr],
-    // );
-
-    // keygen_builder.add_partitioned_air(
-    //     &page_controller.final_chip,
-    //     height,
-    //     0,
-    //     vec![final_page_ptr, final_page_aux_ptr],
-    // );
-
-    // keygen_builder.add_partitioned_air(
-    //     &page_controller.range_checker.air,
-    //     decomp,
-    //     0,
-    //     vec![range_checker_ptr],
-    // );
-
-    // let prover = engine.prover();
-    // let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
-
-    // // Load a page into the GroupBy controller
-    // let (group_by_traces, _group_by_commitments, mut prover_data) =
-    //     page_controller.load_page(&page, &trace_builder.committer);
-
-    // let output_page =
-    //     Page::from_trace(&group_by_traces.final_page_trace, op.group_by_cols.len(), 1);
-    // if !cli.silent {
-    //     println!("Output page");
-    //     pretty_print_page(&output_page);
-    // }
-
-    // let range_checker_trace = page_controller.range_checker.generate_trace();
-
-    // // Build trace
-    // trace_builder.clear();
-    // trace_builder.load_cached_trace(group_by_traces.group_by_trace, prover_data.remove(0));
-    // trace_builder.load_cached_trace(
-    //     group_by_traces.final_page_trace.clone(),
-    //     prover_data.remove(0),
-    // );
-    // trace_builder.load_trace(group_by_traces.group_by_aux_trace);
-    // trace_builder.load_trace(group_by_traces.final_page_aux_trace);
-    // trace_builder.load_trace(range_checker_trace);
-    // trace_builder.commit_current();
-
-    // let partial_pk = keygen_builder.generate_partial_pk();
-    // let partial_vk = partial_pk.partial_vk();
-
-    // let main_trace_data = trace_builder.view(
-    //     &partial_vk,
-    //     vec![
-    //         &page_controller.group_by,
-    //         &page_controller.final_chip,
-    //         &page_controller.range_checker.air,
-    //     ],
-    // );
-
-    // // Prove
-    // let mut challenger = engine.new_challenger();
-    // let pis = vec![vec![]; partial_vk.per_air.len()];
-    // let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
-
-    // // Verify
-    // let mut challenger = engine.new_challenger();
-    // let verifier = engine.verifier();
-    // let verify = verifier.verify(
-    //     &mut challenger,
-    //     partial_vk,
-    //     vec![
-    //         &page_controller.group_by,
-    //         &page_controller.final_chip,
-    //         &page_controller.range_checker.air,
-    //     ],
-    //     proof,
-    //     &pis,
-    // );
-
-    match verify {
-        Ok(_) => Ok(()),
-        Err(e) => Err(eyre!(format!("Proof verification failed: {:?}", e))),
+    let output_page = Page::from_trace(&final_page_trace, op.group_by_cols.len(), 1);
+    if !cli.silent {
+        println!("Output page");
+        pretty_print_page(&output_page);
     }
+
+    let output_path = if let Some(output_path) = &cli.output_path {
+        output_path.to_owned()
+    } else {
+        "bin/olap/tests/data/groupby.proof.bin".to_string()
+    };
+    let encoded_proof = bincode::serialize(&proof).unwrap();
+    page_controller.verify(&engine, partial_vk, proof).unwrap();
+    let file = File::create(output_path).unwrap();
+    let mut writer = BufWriter::new(file);
+    writer.write_all(&encoded_proof).unwrap();
+    Ok(())
 }
