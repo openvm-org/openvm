@@ -250,7 +250,7 @@ impl<F: PrimeField64> Memory<F> {
 
 #[derive(Debug)]
 pub enum ExecutionError {
-    Fail,
+    Fail(usize),
     PcOutOfBounds(usize, usize),
     DisabledOperation(OpCode),
 }
@@ -258,7 +258,7 @@ pub enum ExecutionError {
 impl Display for ExecutionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExecutionError::Fail => write!(f, "execution failed"),
+            ExecutionError::Fail(pc) => write!(f, "execution failed at pc = {}", pc),
             ExecutionError::PcOutOfBounds(pc, program_len) => write!(
                 f,
                 "pc = {} out of bounds for program of length {}",
@@ -369,7 +369,7 @@ impl CpuAir {
                         return Err(ExecutionError::DisabledOperation(opcode));
                     }
                 }
-                FAIL => return Err(ExecutionError::Fail),
+                FAIL => return Err(ExecutionError::Fail(pc_usize)),
                 PRINTF => {
                     let value = memory.read(d, a);
                     println!("{}", value);
