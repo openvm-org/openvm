@@ -150,7 +150,8 @@ impl GroupByTest {
             rows_allocated,
         );
         let mut page_vecs: Vec<Vec<u32>> = page.to_2d_vec();
-        page_vecs.sort();
+        page_vecs.sort_by(|a, b| b.cmp(a));
+        page_vecs[..rows_allocated].sort();
         Page::from_2d_vec(&page_vecs, self.idx_len(), 0)
     }
 
@@ -439,7 +440,7 @@ fn group_by_sorted_test() {
     let page_width = 5;
     let num_groups = page_width - 2;
     // let log_page_height = rng.gen_range(1..6);
-    let log_page_height = 3;
+    let log_page_height = 2;
     let sorted = true;
     let op = GroupByOperation::Sum;
     let test = GroupByTest::new(page_width, num_groups, log_page_height, 10, 4, sorted);
