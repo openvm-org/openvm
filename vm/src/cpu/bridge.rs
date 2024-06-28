@@ -63,9 +63,6 @@ impl<const WORD_SIZE: usize, F: PrimeField64> AirBridge<F> for CpuAir<WORD_SIZE>
             fields.push(VirtualPairCol::single_main(cols_numbered.io.opcode));
 
             let accesses = cols_numbered.aux.accesses;
-            /*fields.extend(accesses[0].data.iter().map(|x| VirtualPairCol::single_main(*x)));
-            fields.extend(accesses[1].data.iter().map(|x| VirtualPairCol::single_main(*x)));
-            fields.extend(accesses[2].data.iter().map(|x| VirtualPairCol::single_main(*x)));*/
             fields.push(VirtualPairCol::single_main(accesses[0].data[0]));
             fields.push(VirtualPairCol::single_main(accesses[1].data[0]));
             fields.push(VirtualPairCol::single_main(

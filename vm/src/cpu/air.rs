@@ -24,7 +24,7 @@ impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for CpuAir<WORD_SIZE> {
 }
 
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
-    fn eval_compose<AB: AirBuilder>(
+    fn assert_compose<AB: AirBuilder>(
         &self,
         builder: &mut AB,
         word: [AB::Var; WORD_SIZE],
@@ -111,7 +111,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
         when_loadw.assert_eq(read1.address, c);
 
         when_loadw.assert_eq(read2.address_space, e);
-        self.eval_compose(&mut when_loadw, read1.data, read2.address - b);
+        self.assert_compose(&mut when_loadw, read1.data, read2.address - b);
 
         when_loadw.assert_eq(write.address_space, d);
         when_loadw.assert_eq(write.address, a);
@@ -137,7 +137,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
         when_storew.assert_eq(read2.address, a);
 
         when_storew.assert_eq(write.address_space, e);
-        self.eval_compose(&mut when_storew, read1.data, write.address - b);
+        self.assert_compose(&mut when_storew, read1.data, write.address - b);
         for i in 0..WORD_SIZE {
             when_storew.assert_eq(write.data[i], read2.data[i]);
         }
@@ -154,7 +154,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
 
         when_jal.assert_eq(write.address_space, d);
         when_jal.assert_eq(write.address, a);
-        self.eval_compose(&mut when_jal, write.data, pc + inst_width);
+        self.assert_compose(&mut when_jal, write.data, pc + inst_width);
 
         when_jal.when_transition().assert_eq(next_pc, pc + b);
 
@@ -245,7 +245,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
             SubAir::eval(&IsZeroAir, builder, is_zero_io, is_zero_aux);
         }
         for read in [&read1, &read2] {
-            self.eval_compose(
+            self.assert_compose(
                 &mut builder.when(read.is_immediate),
                 read.data,
                 read.address.into(),
