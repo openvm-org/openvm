@@ -1,12 +1,10 @@
-name: chips Tests
+name: Unit Tests
 
 on:
   push:
     branches: ["main", "develop"]
   pull_request:
     branches: ["main", "develop"]
-    paths:
-      - "chips/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -20,9 +18,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
-      - name: Run chips tests
-        working-directory: "chips"
+      - name: Run unit tests
         run: |
-          cargo test
+          cargo test --workspace --exclude logical-interface

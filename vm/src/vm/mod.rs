@@ -8,7 +8,10 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 
 use crate::{
-    cpu::{trace::Instruction, CpuAir, RANGE_CHECKER_BUS, WORD_SIZE},
+    cpu::{
+        trace::{ExecutionError, Instruction},
+        CpuAir, RANGE_CHECKER_BUS, WORD_SIZE,
+    },
     field_arithmetic::FieldArithmeticAir,
     memory::{offline_checker::OfflineChecker, MemoryAccess},
     program::ProgramAir,
@@ -42,7 +45,10 @@ where
     Val<SC>: PrimeField64,
     Val<SC>: PrimeField32,
 {
-    pub fn new(config: VmConfig, program: Vec<Instruction<Val<SC>>>) -> Self {
+    pub fn new(
+        config: VmConfig,
+        program: Vec<Instruction<Val<SC>>>,
+    ) -> Result<Self, ExecutionError> {
         let config = config.vm;
         let decomp = config.decomp;
         let limb_bits = config.limb_bits;
@@ -54,7 +60,7 @@ where
         let memory_air = OfflineChecker::new(WORD_SIZE, limb_bits, limb_bits, limb_bits, decomp);
         let field_arithmetic_air = FieldArithmeticAir::new();
 
-        let execution = cpu_air.generate_program_execution(program_air.program.clone());
+        let execution = cpu_air.generate_program_execution(program_air.program.clone())?;
         let program_trace = program_air.generate_trace(&execution);
 
         let ops = execution
@@ -76,19 +82,19 @@ where
 
         let field_arithmetic_trace = field_arithmetic_air.generate_trace(&execution);
 
-        Self {
+        Ok(Self {
             config,
             cpu_air,
             program_air,
             memory_air,
             field_arithmetic_air,
             range_checker,
-            cpu_trace: execution.trace(),
+            cpu_trace: execution.trace(config.cpu_options()),
             program_trace,
             memory_trace,
             field_arithmetic_trace,
             range_trace,
-        }
+        })
     }
 
     pub fn chips(&self) -> Vec<&dyn AnyRap<SC>> {

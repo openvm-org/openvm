@@ -365,11 +365,11 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
         AsmInstruction::Trap => vec![
             // pc <- -1 (causes trace generation to fail)
             inst(
-                JAL,
-                utility_register,
-                -pc - F::one(),
+                FAIL,
                 F::zero(),
-                AS::Register,
+                F::zero(),
+                F::zero(),
+                AS::Immediate,
                 AS::Immediate,
             ),
         ],
@@ -384,6 +384,22 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
                 AS::Immediate,
             ),
         ],
+        AsmInstruction::PrintV(src) => vec![inst(
+            PRINTF,
+            register(src),
+            F::zero(),
+            F::zero(),
+            AS::Register,
+            AS::Immediate,
+        )],
+        AsmInstruction::PrintF(src) => vec![inst(
+            PRINTF,
+            register(src),
+            F::zero(),
+            F::zero(),
+            AS::Register,
+            AS::Immediate,
+        )],
         _ => panic!("Unsupported instruction {:?}", instruction),
     }
 }

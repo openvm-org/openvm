@@ -31,7 +31,7 @@ fn interaction_test(field_arithmetic_enabled: bool, program: Vec<Instruction<Bab
     let air = CpuAir::new(CpuOptions {
         field_arithmetic_enabled,
     });
-    let execution = air.generate_program_execution(program.clone());
+    let execution = air.generate_program_execution(program.clone()).unwrap();
 
     let air = ProgramAir::new(program);
     let trace = air.generate_trace(&execution);
@@ -117,7 +117,7 @@ fn test_program_negative() {
     let air = CpuAir::new(CpuOptions {
         field_arithmetic_enabled: true,
     });
-    let execution = air.generate_program_execution(program.clone());
+    let execution = air.generate_program_execution(program.clone()).unwrap();
 
     let air = ProgramAir { program };
     let trace = air.generate_trace(&execution);

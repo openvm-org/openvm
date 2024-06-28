@@ -5,8 +5,8 @@ use p3_field::PrimeField64;
 use crate::memory::OpType;
 
 use super::{
-    columns::CpuCols, CpuAir, ARITHMETIC_BUS, MAX_READS_PER_CYCLE, MAX_WRITES_PER_CYCLE,
-    MEMORY_BUS, NUM_ARITHMETIC_OPERATIONS, NUM_CORE_OPERATIONS, READ_INSTRUCTION_BUS,
+    columns::CpuCols, CpuAir, ARITHMETIC_BUS, FIELD_ARITHMETIC_INSTRUCTIONS, MAX_READS_PER_CYCLE,
+    MAX_WRITES_PER_CYCLE, MEMORY_BUS, READ_INSTRUCTION_BUS,
 };
 
 fn access_cycle<F: PrimeField64>(
@@ -103,9 +103,10 @@ impl<F: PrimeField64> AirBridge<F> for CpuAir {
                         VirtualPairCol::single_main(cols_numbered.aux.write.data),
                     ],
                     count: VirtualPairCol::sum_main(
-                        cols_numbered.aux.operation_flags
-                            [NUM_CORE_OPERATIONS..NUM_CORE_OPERATIONS + NUM_ARITHMETIC_OPERATIONS]
-                            .to_vec(),
+                        FIELD_ARITHMETIC_INSTRUCTIONS
+                            .iter()
+                            .map(|opcode| cols_numbered.aux.operation_flags[opcode])
+                            .collect(),
                     ),
                     argument_index: ARITHMETIC_BUS,
                 }

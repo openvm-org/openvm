@@ -1,4 +1,8 @@
-use super::CpuOptions;
+use std::collections::BTreeMap;
+
+use itertools::Itertools;
+
+use super::{CpuOptions, OpCode};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuIoCols<T> {
@@ -88,7 +92,7 @@ impl<T: Clone> MemoryAccessCols<T> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuAuxCols<T> {
-    pub operation_flags: Vec<T>,
+    pub operation_flags: BTreeMap<OpCode, T>,
     pub read1: MemoryAccessCols<T>,
     pub read2: MemoryAccessCols<T>,
     pub write: MemoryAccessCols<T>,
@@ -99,8 +103,16 @@ pub struct CpuAuxCols<T> {
 impl<T: Clone> CpuAuxCols<T> {
     pub fn from_slice(slc: &[T], options: CpuOptions) -> Self {
         let mut start = 0;
-        let mut end = options.num_operations();
-        let operation_flags = slc[start..end].to_vec();
+        let mut end = options.num_enabled_instructions();
+        let operation_flags_vec = slc[start..end].to_vec();
+        let mut operation_flags = BTreeMap::new();
+        for (opcode, operation_flag) in options
+            .enabled_instructions()
+            .iter()
+            .zip_eq(operation_flags_vec)
+        {
+            operation_flags.insert(*opcode, operation_flag);
+        }
 
         start = end;
         end += MemoryAccessCols::<T>::get_width();
@@ -127,8 +139,11 @@ impl<T: Clone> CpuAuxCols<T> {
         }
     }
 
-    pub fn flatten(&self) -> Vec<T> {
-        let mut flattened = self.operation_flags.clone();
+    pub fn flatten(&self, options: CpuOptions) -> Vec<T> {
+        let mut flattened = vec![];
+        for opcode in options.enabled_instructions() {
+            flattened.push(self.operation_flags.get(&opcode).unwrap().clone());
+        }
         flattened.extend(self.read1.flatten());
         flattened.extend(self.read2.flatten());
         flattened.extend(self.write.flatten());
@@ -138,7 +153,7 @@ impl<T: Clone> CpuAuxCols<T> {
     }
 
     pub fn get_width(options: CpuOptions) -> usize {
-        options.num_operations() + (3 * MemoryAccessCols::<T>::get_width()) + 2
+        options.num_enabled_instructions() + (3 * MemoryAccessCols::<T>::get_width()) + 2
     }
 }
 
@@ -156,9 +171,9 @@ impl<T: Clone> CpuCols<T> {
         Self { io, aux }
     }
 
-    pub fn flatten(&self) -> Vec<T> {
+    pub fn flatten(&self, options: CpuOptions) -> Vec<T> {
         let mut flattened = self.io.flatten();
-        flattened.extend(self.aux.flatten());
+        flattened.extend(self.aux.flatten(options));
         flattened
     }
 

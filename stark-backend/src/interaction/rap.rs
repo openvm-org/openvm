@@ -43,7 +43,7 @@ where
 // Copied from valida/machine/src/chip.rs
 /// The permutation row consists of 1 virtual column for each interaction (send or receive)
 /// and one virtual column for the partial sum of log derivative.
-pub fn eval_permutation_constraints<C, AB>(chip: &C, builder: &mut AB, cumulative_sum: AB::EF)
+pub fn eval_permutation_constraints<C, AB>(chip: &C, builder: &mut AB, cumulative_sum: AB::VarEF)
 where
     C: AirBridge<AB::F>,
     AB: PairBuilder + PermutationAirBuilder + PartitionedAirBuilder,
@@ -124,8 +124,7 @@ where
     builder
         .when_first_row()
         .assert_eq_ext(*perm_local.last().unwrap(), phi_0);
-    builder.when_last_row().assert_eq_ext(
-        *perm_local.last().unwrap(),
-        AB::ExprEF::from_f(cumulative_sum),
-    );
+    builder
+        .when_last_row()
+        .assert_eq_ext(*perm_local.last().unwrap(), cumulative_sum);
 }

@@ -20,7 +20,8 @@ fn air_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear
             },
         },
         program,
-    );
+    )
+    .unwrap();
     let chips = vm.chips();
     let traces = vm.traces();
     run_simple_test_no_pis(chips, traces).expect("Verification failed");

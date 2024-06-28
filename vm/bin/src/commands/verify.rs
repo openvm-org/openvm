@@ -58,7 +58,7 @@ impl VerifyCommand {
     pub fn execute_helper(&self, config: VmConfig) -> Result<()> {
         println!("Verifying proof file: {}", self.proof_file);
         let instructions = parse_asm_file(Path::new(&self.asm_file_path))?;
-        let vm = VirtualMachine::new(config, instructions);
+        let vm = VirtualMachine::new(config, instructions)?;
         let encoded_vk = read_from_path(&Path::new(&self.keys_folder).join("partial.vk"))?;
         let partial_vk: MultiStarkPartialVerifyingKey<BabyBearPoseidon2Config> =
             bincode::deserialize(&encoded_vk)?;

@@ -18,7 +18,7 @@ pub fn execute_program<F: PrimeField32>(program: Vec<Instruction<F>>) -> Program
     let cpu = CpuAir::new(CpuOptions {
         field_arithmetic_enabled: true,
     });
-    cpu.generate_program_execution(program)
+    cpu.generate_program_execution(program).unwrap()
 }
 
 pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
