@@ -14,7 +14,9 @@ pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
     }
 }
 
-pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(program: Vec<Instruction<F>>) -> ProgramExecution<WORD_SIZE, F> {
+pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(
+    program: Vec<Instruction<F>>,
+) -> ProgramExecution<WORD_SIZE, F> {
     let cpu = CpuAir::new(CpuOptions {
         field_arithmetic_enabled: true,
     });

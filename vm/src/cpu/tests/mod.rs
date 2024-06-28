@@ -12,11 +12,11 @@ use crate::memory::OpType;
 
 use super::columns::MemoryAccessCols;
 use super::trace::{isize_to_field, ProgramExecution};
+use super::{decompose, ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS};
 use super::{
     trace::{ArithmeticOperation, Instruction, MemoryAccess},
     OpCode::*,
 };
-use super::{decompose, ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS};
 
 const TEST_WORD_SIZE: usize = 4;
 

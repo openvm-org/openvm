@@ -3,7 +3,8 @@ use p3_air::{PairCol, VirtualPairCol};
 use p3_field::PrimeField64;
 
 use super::{
-    columns::CpuCols, CpuAir, ARITHMETIC_BUS, FIELD_ARITHMETIC_INSTRUCTIONS, MAX_ACCESSES_PER_CYCLE, MAX_READS_PER_CYCLE, MEMORY_BUS, READ_INSTRUCTION_BUS
+    columns::CpuCols, CpuAir, ARITHMETIC_BUS, FIELD_ARITHMETIC_INSTRUCTIONS,
+    MAX_ACCESSES_PER_CYCLE, MAX_READS_PER_CYCLE, MEMORY_BUS, READ_INSTRUCTION_BUS,
 };
 
 impl<const WORD_SIZE: usize, F: PrimeField64> AirBridge<F> for CpuAir<WORD_SIZE> {
@@ -50,10 +51,7 @@ impl<const WORD_SIZE: usize, F: PrimeField64> AirBridge<F> for CpuAir<WORD_SIZE>
             }
             interactions.push(Interaction {
                 fields,
-                count: VirtualPairCol::diff_main(
-                    access_cols.enabled,
-                    access_cols.is_immediate,
-                ),
+                count: VirtualPairCol::diff_main(access_cols.enabled, access_cols.is_immediate),
                 argument_index: MEMORY_BUS,
             });
         }
@@ -70,7 +68,9 @@ impl<const WORD_SIZE: usize, F: PrimeField64> AirBridge<F> for CpuAir<WORD_SIZE>
             fields.extend(accesses[2].data.iter().map(|x| VirtualPairCol::single_main(*x)));*/
             fields.push(VirtualPairCol::single_main(accesses[0].data[0]));
             fields.push(VirtualPairCol::single_main(accesses[1].data[0]));
-            fields.push(VirtualPairCol::single_main(accesses[MAX_READS_PER_CYCLE].data[0]));
+            fields.push(VirtualPairCol::single_main(
+                accesses[MAX_READS_PER_CYCLE].data[0],
+            ));
 
             interactions.push(Interaction {
                 fields,

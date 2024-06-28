@@ -112,7 +112,6 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
 
         when_loadw.assert_eq(read2.address_space, e);
         self.eval_compose(&mut when_loadw, read1.data, read2.address - b);
-        when_loadw.assert_eq(read2.address, read1.data[0] + b);
 
         when_loadw.assert_eq(write.address_space, d);
         when_loadw.assert_eq(write.address, a);
@@ -212,7 +211,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
         if self.options.field_arithmetic_enabled {
             let mut arithmetic_flags = AB::Expr::zero();
             for opcode in FIELD_ARITHMETIC_INSTRUCTIONS {
-                arithmetic_flags = arithmetic_flags + operation_flags[&opcode];
+                arithmetic_flags += operation_flags[&opcode].into();
             }
             read1_enabled_check += arithmetic_flags.clone();
             read2_enabled_check += arithmetic_flags.clone();
@@ -246,9 +245,11 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
             SubAir::eval(&IsZeroAir, builder, is_zero_io, is_zero_aux);
         }
         for read in [&read1, &read2] {
-            builder
-                .when(read.is_immediate)
-                .assert_eq(read.data[0], read.address);
+            self.eval_compose(
+                &mut builder.when(read.is_immediate),
+                read.data,
+                read.address.into(),
+            );
         }
         // maybe writes to immediate address space are ignored instead of disallowed?
         //builder.assert_zero(write.is_immediate);
