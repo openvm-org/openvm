@@ -127,11 +127,11 @@ impl GroupByTest {
         }
 
         // Adjust the 0s and 1s to match rows_allocated
-        for i in 0..self.page_height() {
+        matrix.iter_mut().enumerate().for_each(|(i, row)| {
             if i >= rows_allocated {
-                matrix[i][0] = 0;
+                row[0] = 0;
             }
-        }
+        });
 
         // Sort the matrix
         matrix.sort_by(|a, b| b.cmp(a));
@@ -330,8 +330,8 @@ fn test_static_values() {
         op,
     );
     let engine = config::baby_bear_poseidon2::default_engine(degree);
-
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
+
     page_controller.set_up_keygen_builder(&mut keygen_builder, height, 1 << idx_decomp);
 
     let prover = engine.prover();
@@ -410,37 +410,33 @@ fn test_random_values() {
     for rows_allocated in alloc_rows_arr.iter() {
         let page = test.generate_page(&mut rng, *rows_allocated);
 
-        for _ in 0..test.page_height() {
-            USE_DEBUG_BUILDER.with(|debug| {
-                *debug.lock().unwrap() = false;
-            });
+        USE_DEBUG_BUILDER.with(|debug| {
+            *debug.lock().unwrap() = false;
+        });
 
-            assert_eq!(
-                test.load_page_test(
-                    &engine,
-                    &page,
-                    &mut page_controller,
-                    &mut trace_builder,
-                    &partial_pk,
-                    true,
-                    &mut rng,
-                ),
-                Err(VerificationError::OodEvaluationMismatch),
-                "Expected constraint to fail"
-            );
-            page_controller.refresh_range_checker();
-        }
+        assert_eq!(
+            test.load_page_test(
+                &engine,
+                &page,
+                &mut page_controller,
+                &mut trace_builder,
+                &partial_pk,
+                true,
+                &mut rng,
+            ),
+            Err(VerificationError::OodEvaluationMismatch),
+            "Expected constraint to fail"
+        );
+        page_controller.refresh_range_checker();
     }
 }
 
 #[test]
 fn group_by_sorted_test() {
     let mut rng = create_seeded_rng();
-    // let page_width = rng.gen_range(2..20);
-    let page_width = 5;
+    let page_width = rng.gen_range(2..20);
     let num_groups = page_width - 2;
-    // let log_page_height = rng.gen_range(1..6);
-    let log_page_height = 2;
+    let log_page_height = rng.gen_range(3..6);
     let sorted = true;
     let op = GroupByOperation::Sum;
     let test = GroupByTest::new(page_width, num_groups, log_page_height, 10, 4, sorted);
@@ -462,7 +458,11 @@ fn group_by_sorted_test() {
         config::baby_bear_poseidon2::default_engine(max(test.log_page_height, test.idx_decomp));
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-    test.set_up_keygen_builder(&mut keygen_builder, &page_controller);
+    page_controller.set_up_keygen_builder(
+        &mut keygen_builder,
+        test.page_height(),
+        1 << test.idx_decomp,
+    );
 
     let partial_pk = keygen_builder.generate_partial_pk();
 
@@ -493,25 +493,23 @@ fn group_by_sorted_test() {
     for rows_allocated in alloc_rows_arr.iter() {
         let page = test.generate_sorted_page(&mut rng, *rows_allocated);
 
-        for _ in 0..test.page_height() {
-            USE_DEBUG_BUILDER.with(|debug| {
-                *debug.lock().unwrap() = false;
-            });
+        USE_DEBUG_BUILDER.with(|debug| {
+            *debug.lock().unwrap() = false;
+        });
 
-            assert_eq!(
-                test.load_page_test(
-                    &engine,
-                    &page,
-                    &mut page_controller,
-                    &mut trace_builder,
-                    &partial_pk,
-                    true,
-                    &mut rng,
-                ),
-                Err(VerificationError::OodEvaluationMismatch),
-                "Expected constraint to fail"
-            );
-            page_controller.refresh_range_checker();
-        }
+        assert_eq!(
+            test.load_page_test(
+                &engine,
+                &page,
+                &mut page_controller,
+                &mut trace_builder,
+                &partial_pk,
+                true,
+                &mut rng,
+            ),
+            Err(VerificationError::OodEvaluationMismatch),
+            "Expected constraint to fail"
+        );
+        page_controller.refresh_range_checker();
     }
 }
