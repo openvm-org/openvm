@@ -70,7 +70,7 @@ impl<const WORD_SIZE: usize, F: PrimeField64> AirBridge<F> for CpuAir<WORD_SIZE>
             fields.extend(accesses[2].data.iter().map(|x| VirtualPairCol::single_main(*x)));*/
             fields.push(VirtualPairCol::single_main(accesses[0].data[0]));
             fields.push(VirtualPairCol::single_main(accesses[1].data[0]));
-            fields.push(VirtualPairCol::single_main(accesses[2].data[0]));
+            fields.push(VirtualPairCol::single_main(accesses[MAX_READS_PER_CYCLE].data[0]));
 
             interactions.push(Interaction {
                 fields,

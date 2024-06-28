@@ -62,6 +62,7 @@ pub struct MemoryAccessCols<const WORD_SIZE: usize, T> {
 
     pub data: [T; WORD_SIZE],
 }
+
 impl<const WORD_SIZE: usize, T: Clone> MemoryAccessCols<WORD_SIZE, T> {
     pub fn from_slice(slc: &[T]) -> Self {
         Self {
@@ -94,7 +95,7 @@ impl<const WORD_SIZE: usize, T: Clone> MemoryAccessCols<WORD_SIZE, T> {
 pub struct CpuAuxCols<const WORD_SIZE: usize, T> {
     pub operation_flags: BTreeMap<OpCode, T>,
     pub accesses: [MemoryAccessCols<WORD_SIZE, T>; MAX_ACCESSES_PER_CYCLE],
-    pub read1_equals_read2: T,
+    pub read0_equals_read1: T,
     pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
 }
 
@@ -124,7 +125,7 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
         Self {
             operation_flags,
             accesses,
-            read1_equals_read2: beq_check,
+            read0_equals_read1: beq_check,
             is_equal_vec_aux,
         }
     }
@@ -135,7 +136,7 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
             flattened.push(self.operation_flags.get(&opcode).unwrap().clone());
         }
         flattened.extend(self.accesses.iter().flat_map(MemoryAccessCols::flatten));
-        flattened.push(self.read1_equals_read2.clone());
+        flattened.push(self.read0_equals_read1.clone());
         flattened.extend(self.is_equal_vec_aux.flatten());
         flattened
     }

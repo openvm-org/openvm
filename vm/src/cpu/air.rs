@@ -14,7 +14,7 @@ use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
     CpuAir,
     OpCode::*,
-    FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH,
+    FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH, MAX_READS_PER_CYCLE,
 };
 
 impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for CpuAir<WORD_SIZE> {
@@ -72,13 +72,13 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
         let CpuAuxCols {
             operation_flags,
             accesses,
-            read1_equals_read2,
+            read0_equals_read1,
             is_equal_vec_aux,
         } = aux;
 
         let read1 = &accesses[0];
         let read2 = &accesses[1];
-        let write = &accesses[2];
+        let write = &accesses[MAX_READS_PER_CYCLE];
 
         // set correct operation flag
         for &flag in operation_flags.values() {
@@ -174,11 +174,11 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
 
         when_beq
             .when_transition()
-            .when(read1_equals_read2)
+            .when(read0_equals_read1)
             .assert_eq(next_pc, pc + c);
         when_beq
             .when_transition()
-            .when(AB::Expr::one() - read1_equals_read2)
+            .when(AB::Expr::one() - read0_equals_read1)
             .assert_eq(next_pc, pc + inst_width);
 
         // BNE: If d[a] != e[b], pc <- pc + c
@@ -196,11 +196,11 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
 
         when_bne
             .when_transition()
-            .when(read1_equals_read2)
+            .when(read0_equals_read1)
             .assert_eq(next_pc, pc + inst_width);
         when_bne
             .when_transition()
-            .when(AB::Expr::one() - read1_equals_read2)
+            .when(AB::Expr::one() - read0_equals_read1)
             .assert_eq(next_pc, pc + c);
 
         // TERMINATE
@@ -258,7 +258,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
         let is_equal_vec_io_cols = IsEqualVecIOCols {
             x: read1.data.to_vec(),
             y: read2.data.to_vec(),
-            prod: read1_equals_read2,
+            prod: read0_equals_read1,
         };
         SubAir::eval(
             &IsEqualVecAir::new(WORD_SIZE),

@@ -1,5 +1,6 @@
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
+    array::from_fn,
+    collections::{BTreeMap, HashMap},
     error::Error,
     fmt::Display,
 };
@@ -8,8 +9,7 @@ use p3_field::{Field, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
 use afs_chips::{
-    is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir,
-    sub_chip::LocalTraceInstructions,
+    is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
 
 use crate::{field_arithmetic::FieldArithmeticAir, memory::OpType};
@@ -88,10 +88,10 @@ pub struct MemoryAccess<const WORD_SIZE: usize, F> {
 }
 
 fn memory_access_to_cols<const WORD_SIZE: usize, F: PrimeField64>(
-    access: Option<MemoryAccess<WORD_SIZE, F>>,
+    access: Option<&MemoryAccess<WORD_SIZE, F>>,
 ) -> MemoryAccessCols<WORD_SIZE, F> {
     let (enabled, address_space, address, value) = match access {
-        Some(MemoryAccess {
+        Some(&MemoryAccess {
             address_space,
             address,
             data,
@@ -161,8 +161,8 @@ struct Memory<const WORD_SIZE: usize, F> {
     data: HashMap<F, HashMap<F, [F; WORD_SIZE]>>,
     log: Vec<MemoryAccess<WORD_SIZE, F>>,
     clock_cycle: usize,
-    reads_this_cycle: VecDeque<MemoryAccess<WORD_SIZE, F>>,
-    writes_this_cycle: VecDeque<MemoryAccess<WORD_SIZE, F>>,
+    reads_this_cycle: Vec<MemoryAccess<WORD_SIZE, F>>,
+    writes_this_cycle: Vec<MemoryAccess<WORD_SIZE, F>>,
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField64> Memory<WORD_SIZE, F> {
@@ -175,8 +175,8 @@ impl<const WORD_SIZE: usize, F: PrimeField64> Memory<WORD_SIZE, F> {
             data,
             log: vec![],
             clock_cycle: 0,
-            reads_this_cycle: VecDeque::new(),
-            writes_this_cycle: VecDeque::new(),
+            reads_this_cycle: vec![],
+            writes_this_cycle: vec![],
         }
     }
 
@@ -199,7 +199,7 @@ impl<const WORD_SIZE: usize, F: PrimeField64> Memory<WORD_SIZE, F> {
         if read.address_space != F::zero() {
             self.log.push(read);
         }
-        self.reads_this_cycle.push_back(read);
+        self.reads_this_cycle.push(read);
         data
     }
 
@@ -217,7 +217,7 @@ impl<const WORD_SIZE: usize, F: PrimeField64> Memory<WORD_SIZE, F> {
                 data,
             };
             self.log.push(write);
-            self.writes_this_cycle.push_back(write);
+            self.writes_this_cycle.push(write);
 
             self.data
                 .get_mut(&address_space)
@@ -229,8 +229,8 @@ impl<const WORD_SIZE: usize, F: PrimeField64> Memory<WORD_SIZE, F> {
     fn complete_clock_cycle(
         &mut self,
     ) -> (
-        VecDeque<MemoryAccess<WORD_SIZE, F>>,
-        VecDeque<MemoryAccess<WORD_SIZE, F>>,
+        Vec<MemoryAccess<WORD_SIZE, F>>,
+        Vec<MemoryAccess<WORD_SIZE, F>>,
     ) {
         self.clock_cycle += 1;
         let reads = std::mem::take(&mut self.reads_this_cycle);
@@ -371,26 +371,30 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             }
 
             // complete the clock cycle and get the read and write cols
-            let (mut read_cols, mut write_cols) = memory.complete_clock_cycle();
-            let read1 = memory_access_to_cols(read_cols.pop_front());
-            let read2 = memory_access_to_cols(read_cols.pop_front());
-            let write = memory_access_to_cols(write_cols.pop_front());
+            let (reads, writes) = memory.complete_clock_cycle();
+            assert!(reads.len() <= MAX_READS_PER_CYCLE);
+            assert!(writes.len() <= MAX_WRITES_PER_CYCLE);
 
-            assert!(read_cols.is_empty());
-            assert!(write_cols.is_empty());
+            let accesses = from_fn(|i| {
+                memory_access_to_cols(if i < MAX_READS_PER_CYCLE {
+                    reads.get(i)
+                } else {
+                    writes.get(i - MAX_READS_PER_CYCLE)
+                })
+            });
 
             let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
                 &IsEqualVecAir::new(WORD_SIZE),
-                (read1.data.to_vec(), read2.data.to_vec()),
+                (accesses[0].data.to_vec(), accesses[1].data.to_vec()),
             );
 
-            let read1_equals_read2 = is_equal_vec_cols.io.prod;
+            let read0_equals_read1 = is_equal_vec_cols.io.prod;
             let is_equal_vec_aux = is_equal_vec_cols.aux;
 
             let aux = CpuAuxCols {
                 operation_flags,
-                accesses: [read1, read2, write],
-                read1_equals_read2,
+                accesses,
+                read0_equals_read1,
                 is_equal_vec_aux,
             };
 
