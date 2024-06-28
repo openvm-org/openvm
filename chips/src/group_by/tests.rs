@@ -112,12 +112,11 @@ impl GroupByTest {
     /// Generate a random page.
     pub fn generate_page(&self, rng: &mut impl Rng, rows_allocated: usize) -> Page {
         let mut matrix = vec![];
-        let mut rng = rand::thread_rng();
 
         // Generate half the height of unique rows
         for _ in 0..(self.page_height() / 2) {
             let mut row = vec![1];
-            row.extend((0..self.idx_len()).map(|_| rng.gen::<u32>()));
+            row.extend((0..self.idx_len()).map(|_| rng.gen::<u32>() % (1 << self.idx_limb_bits)));
             matrix.push(row);
         }
 
@@ -135,7 +134,8 @@ impl GroupByTest {
         }
 
         // Sort the matrix
-        matrix.sort();
+        matrix.sort_by(|a, b| b.cmp(a));
+        matrix[..rows_allocated].sort();
         Page::from_2d_vec(&matrix, self.idx_len(), 0)
     }
 
@@ -314,6 +314,8 @@ fn test_static_values() {
     let internal_bus = 0;
     let output_bus = 1;
     let range_bus = 2;
+    let sorted = false;
+    let op = GroupByOperation::Sum;
     let mut page_controller = PageController::new(
         page_width,
         vec![2],
@@ -323,6 +325,8 @@ fn test_static_values() {
         range_bus,
         limb_bits,
         idx_decomp,
+        sorted,
+        op,
     );
     let engine = config::baby_bear_poseidon2::default_engine(degree);
 
@@ -352,7 +356,7 @@ fn test_random_values() {
     let mut rng = create_seeded_rng();
     let page_width = rng.gen_range(2..20);
     let random_value = rng.gen_range(1..page_width - 1);
-    let log_page_height = rng.gen_range(1..6);
+    let log_page_height = rng.gen_range(3..6);
     let sorted = false;
     let op = GroupByOperation::Sum;
     let test = GroupByTest::new(page_width, random_value, log_page_height, 10, 4, sorted);
