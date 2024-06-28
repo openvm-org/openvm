@@ -2,6 +2,7 @@ use super::page_controller::PageController;
 use crate::common::page::Page;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
+use p3_util::log2_strict_usize;
 use std::cmp::max;
 
 use afs_stark_backend::{
@@ -246,7 +247,69 @@ fn perturb_page(
 }
 
 #[test]
-fn group_by_test() {
+fn test_static_values() {
+    let page_vec = vec![
+        vec![1, 0, 0, 1, 1, 0, 0, 0, 1],
+        vec![1, 0, 0, 1, 5, 0, 0, 0, 9],
+        vec![1, 0, 0, 3, 9, 0, 0, 1, 5],
+        vec![1, 0, 0, 3, 1, 0, 0, 9, 1],
+        vec![1, 0, 1, 5, 6, 0, 0, 0, 2],
+        vec![1, 1, 1, 5, 8, 0, 1, 0, 1],
+        vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
+        vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
+        vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
+        vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
+        vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
+        vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
+        vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
+        vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
+        vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
+        vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
+    ];
+    let page = Page::from_2d_vec(&page_vec, 4, 4);
+    let page_width = page_vec[0].len();
+    let height = page_vec.len();
+    let limb_bits = 10;
+    let degree = log2_strict_usize(height);
+    let idx_decomp = 4;
+    let internal_bus = 0;
+    let output_bus = 1;
+    let range_bus = 2;
+    let mut page_controller = PageController::new(
+        page_width,
+        vec![2],
+        3,
+        internal_bus,
+        output_bus,
+        range_bus,
+        limb_bits,
+        idx_decomp,
+    );
+    let engine = config::baby_bear_poseidon2::default_engine(degree);
+
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
+    page_controller.set_up_keygen_builder(&mut keygen_builder, height, 1 << idx_decomp);
+
+    let prover = engine.prover();
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
+    let (group_by_traces, _group_by_commitments, prover_data) =
+        page_controller.load_page(&page, &trace_builder.committer);
+
+    let partial_pk = keygen_builder.generate_partial_pk();
+    let partial_vk = partial_pk.partial_vk();
+    let proof = page_controller.prove(
+        &engine,
+        &partial_pk,
+        &mut trace_builder,
+        group_by_traces,
+        prover_data,
+    );
+    let verify = page_controller.verify(&engine, partial_vk, proof);
+    assert!(verify.is_ok());
+}
+
+#[test]
+fn test_random_values() {
     let mut rng = create_seeded_rng();
     let page_width = rng.gen_range(2..20);
     let random_value = rng.gen_range(1..page_width - 1);
