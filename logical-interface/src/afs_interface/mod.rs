@@ -32,6 +32,8 @@ impl<'a> AfsInterface<'a> {
         }
     }
 
+    /// Gets a table from the DB and creates a new AfsInterface with its index and data byte lengths.
+    /// The table is then stored in current_table for easy access.
     pub fn new_with_table(table_id: String, db_ref: &'a mut MockDb) -> Self {
         let table_id_bytes = string_to_table_id(table_id);
         let table = db_ref.get_table(table_id_bytes).unwrap();
@@ -46,6 +48,7 @@ impl<'a> AfsInterface<'a> {
         }
     }
 
+    /// Loads an .afi input file and executes the instructions in the file, outputting the resulting Table.
     pub fn load_input_file(&mut self, path: &str) -> Result<&Table> {
         let instructions = AfsInputFile::open(path)?;
 

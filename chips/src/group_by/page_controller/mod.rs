@@ -2,12 +2,23 @@ use crate::common::page::Page;
 use crate::group_by::final_page::MyFinalPageAir;
 use crate::group_by::group_by_input::GroupByAir;
 use crate::range_gate::RangeCheckerGateChip;
-use afs_stark_backend::config::Com;
-use afs_stark_backend::prover::trace::ProverTraceData;
-use afs_stark_backend::prover::trace::TraceCommitter;
+use afs_stark_backend::{
+    config::{Com, PcsProof, PcsProverData},
+    keygen::{
+        types::{MultiStarkPartialProvingKey, MultiStarkPartialVerifyingKey},
+        MultiStarkKeygenBuilder,
+    },
+    prover::{
+        trace::{ProverTraceData, TraceCommitmentBuilder, TraceCommitter},
+        types::Proof,
+    },
+    verifier::VerificationError,
+};
+use afs_test_utils::engine::StarkEngine;
+use p3_field::PrimeField64;
 use p3_field::{AbstractField, PrimeField};
 use p3_matrix::dense::DenseMatrix;
-use p3_uni_stark::{StarkGenericConfig, Val};
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -145,5 +156,118 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             self.range_checker.air.bus_index,
             self.range_checker.air.range_max,
         ));
+    }
+
+    /// Set up the keygen builder for the group-by test case by querying trace widths.
+    pub fn set_up_keygen_builder(
+        &self,
+        keygen_builder: &mut MultiStarkKeygenBuilder<SC>,
+        height: usize,
+        range_checker_height: usize,
+    ) where
+        Val<SC>: PrimeField64,
+    {
+        let group_by_ptr = keygen_builder.add_cached_main_matrix(self.group_by.page_width);
+        let final_page_ptr = keygen_builder.add_cached_main_matrix(self.final_chip.page_width());
+        let group_by_aux_ptr = keygen_builder.add_main_matrix(self.group_by.aux_width());
+        let final_page_aux_ptr = keygen_builder.add_main_matrix(self.final_chip.aux_width());
+        let range_checker_ptr = keygen_builder.add_main_matrix(self.range_checker.air_width());
+
+        keygen_builder.add_partitioned_air(
+            &self.group_by,
+            height,
+            0,
+            vec![group_by_ptr, group_by_aux_ptr],
+        );
+
+        keygen_builder.add_partitioned_air(
+            &self.final_chip,
+            height,
+            0,
+            vec![final_page_ptr, final_page_aux_ptr],
+        );
+
+        keygen_builder.add_partitioned_air(
+            &self.range_checker.air,
+            range_checker_height,
+            0,
+            vec![range_checker_ptr],
+        );
+    }
+
+    pub fn prove(
+        &self,
+        engine: &impl StarkEngine<SC>,
+        partial_pk: &MultiStarkPartialProvingKey<SC>,
+        trace_builder: &mut TraceCommitmentBuilder<SC>,
+        group_by_traces: GroupByTraces<SC>,
+        mut cached_traces_prover_data: Vec<ProverTraceData<SC>>,
+    ) -> Proof<SC>
+    where
+        Val<SC>: PrimeField64,
+        Domain<SC>: Send + Sync,
+        SC::Pcs: Sync,
+        PcsProverData<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Challenge: Send + Sync,
+        PcsProof<SC>: Send + Sync,
+    {
+        assert!(cached_traces_prover_data.len() == 2);
+
+        let range_checker_trace = self.range_checker.generate_trace();
+
+        trace_builder.clear();
+
+        trace_builder.load_cached_trace(
+            group_by_traces.group_by_trace,
+            cached_traces_prover_data.remove(0),
+        );
+        trace_builder.load_cached_trace(
+            group_by_traces.final_page_trace,
+            cached_traces_prover_data.remove(0),
+        );
+
+        trace_builder.load_trace(group_by_traces.group_by_aux_trace);
+        trace_builder.load_trace(group_by_traces.final_page_aux_trace);
+        trace_builder.load_trace(range_checker_trace);
+
+        trace_builder.commit_current();
+
+        let partial_vk = partial_pk.partial_vk();
+
+        let main_trace_data = trace_builder.view(
+            &partial_vk,
+            vec![&self.group_by, &self.final_chip, &self.range_checker.air],
+        );
+
+        let pis = vec![vec![]; partial_vk.per_air.len()];
+
+        let prover = engine.prover();
+        let mut challenger = engine.new_challenger();
+        prover.prove(&mut challenger, partial_pk, main_trace_data, &pis)
+    }
+
+    /// This function takes a proof (returned by the prove function) and verifies it
+    pub fn verify(
+        &self,
+        engine: &impl StarkEngine<SC>,
+        partial_vk: MultiStarkPartialVerifyingKey<SC>,
+        proof: Proof<SC>,
+    ) -> Result<(), VerificationError>
+    where
+        Val<SC>: PrimeField64,
+    {
+        let verifier = engine.verifier();
+
+        let pis = vec![vec![]; partial_vk.per_air.len()];
+
+        let mut challenger = engine.new_challenger();
+        verifier.verify(
+            &mut challenger,
+            partial_vk,
+            vec![&self.group_by, &self.final_chip, &self.range_checker.air],
+            proof,
+            &pis,
+        )
     }
 }
