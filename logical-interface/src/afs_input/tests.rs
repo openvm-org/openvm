@@ -82,11 +82,17 @@ pub fn test_parse_insert_op() {
 
 #[test]
 pub fn test_parse_where_op() {
-    let args = vec!["INDEX".to_string(), "<".to_string(), "0x55".to_string()];
+    let args = vec![
+        "0x15".to_string(),
+        "INDEX".to_string(),
+        "<".to_string(),
+        "0x55".to_string(),
+    ];
     let op = WhereOp::parse(args).unwrap();
     assert_eq!(
         op,
         WhereOp {
+            table_id: string_to_table_id("0x15".to_string()),
             operand: Operand::Index,
             predicate: Comp::Lt,
             value: "0x55".to_string()

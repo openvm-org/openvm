@@ -74,6 +74,7 @@ impl InsertOp {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct WhereOp {
+    pub table_id: TableId,
     pub operand: Operand,
     pub predicate: Comp,
     pub value: String,
@@ -81,20 +82,22 @@ pub struct WhereOp {
 
 impl WhereOp {
     pub fn parse(args: Vec<String>) -> Result<Self> {
-        if args.len() != 3 {
+        if args.len() != 4 {
             return Err(eyre!("Invalid number of arguments for WHERE op"));
         }
-        let operand = Operand::from_str(&args[0])?;
-        let predicate = match args[1].as_str() {
+        let table_id = string_to_table_id(args[0].clone());
+        let operand = Operand::from_str(&args[1])?;
+        let predicate = match args[2].as_str() {
             "=" => Comp::Eq,
             "<" => Comp::Lt,
             "<=" => Comp::Lte,
             ">" => Comp::Gt,
             ">=" => Comp::Gte,
-            _ => return Err(eyre!("Invalid predicate: {}", args[0])),
+            _ => return Err(eyre!("Invalid predicate: {}", args[1])),
         };
-        let value = args[2].clone();
+        let value = args[3].clone();
         Ok(Self {
+            table_id,
             operand,
             predicate,
             value,

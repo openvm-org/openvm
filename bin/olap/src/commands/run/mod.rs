@@ -1,6 +1,7 @@
 pub mod group_by;
 pub mod inner_join;
 pub mod utils;
+pub mod where_op;
 
 use afs_test_utils::page_config::PageConfig;
 use clap::Parser;
@@ -16,6 +17,8 @@ use logical_interface::{
     mock_db::MockDb,
 };
 use p3_uni_stark::StarkGenericConfig;
+
+use self::where_op::execute_where_op;
 
 #[derive(Debug, Parser)]
 pub struct RunCommand {
@@ -62,7 +65,7 @@ impl RunCommand {
             }
             InputFileOp::Where => {
                 let where_op = WhereOp::parse(op.args.clone()).unwrap();
-                println!("where_op: {:?}", where_op);
+                execute_where_op::<SC>(cfg, self, &mut db, where_op).unwrap();
             }
             InputFileOp::GroupBy => {
                 let group_by = GroupByOp::parse(op.args.clone()).unwrap();
