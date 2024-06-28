@@ -39,7 +39,7 @@ fn index_scan_test(
     let page_height = page.rows.len();
     assert!(page_height > 0);
 
-    page_controller.load_page(
+    let (input_prover_data, output_prover_data) = page_controller.load_page(
         page.clone(),
         page_output.clone(),
         None,
@@ -66,7 +66,15 @@ fn index_scan_test(
 
     let partial_pk = keygen_builder.generate_partial_pk();
 
-    let proof = page_controller.prove(engine, &partial_pk, trace_builder, x.clone(), idx_decomp);
+    let proof = page_controller.prove(
+        engine,
+        &partial_pk,
+        trace_builder,
+        input_prover_data,
+        output_prover_data,
+        x.clone(),
+        idx_decomp,
+    );
     let partial_vk = partial_pk.partial_vk();
 
     page_controller.verify(engine, partial_vk, proof, x.clone())

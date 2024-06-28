@@ -40,7 +40,6 @@ where
     output_commitment: Option<Com<SC>>,
 
     page_traces: Vec<DenseMatrix<Val<SC>>>,
-    prover_data: Vec<Arc<ProverTraceData<SC>>>,
 
     pub range_checker: Arc<RangeCheckerGateChip>,
 }
@@ -86,7 +85,6 @@ where
             input_commitment: None,
             output_commitment: None,
             page_traces: vec![],
-            prover_data: vec![],
             range_checker,
         }
     }
@@ -312,11 +310,14 @@ where
         );
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn prove(
         &mut self,
         engine: &dyn StarkEngine<SC>,
         partial_pk: &MultiStarkPartialProvingKey<SC>,
         trace_builder: &mut TraceCommitmentBuilder<SC>,
+        input_prover_data: Arc<ProverTraceData<SC>>,
+        output_prover_data: Arc<ProverTraceData<SC>>,
         x: Vec<u32>,
         idx_decomp: usize,
     ) -> Proof<SC>
@@ -343,14 +344,14 @@ where
 
         trace_builder.load_cached_trace(
             page_traces[0].clone(),
-            match Arc::try_unwrap(self.prover_data.remove(0)) {
+            match Arc::try_unwrap(input_prover_data) {
                 Ok(data) => data,
                 Err(_) => panic!("Prover data should have only one owner"),
             },
         );
         trace_builder.load_cached_trace(
             page_traces[1].clone(),
-            match Arc::try_unwrap(self.prover_data.remove(0)) {
+            match Arc::try_unwrap(output_prover_data) {
                 Ok(data) => data,
                 Err(_) => panic!("Prover data should have only one owner"),
             },
@@ -434,7 +435,8 @@ where
         idx_limb_bits: usize,
         idx_decomp: usize,
         trace_committer: &mut TraceCommitter<SC>,
-    ) where
+    ) -> (Arc<ProverTraceData<SC>>, Arc<ProverTraceData<SC>>)
+    where
         Val<SC>: PrimeField,
     {
         // idx_decomp can't change between different pages since range_checker depends on it
@@ -478,15 +480,14 @@ where
             None => Arc::new(trace_committer.commit(vec![self.output_chip_trace.clone().unwrap()])),
         };
 
-        let prover_data = vec![page_input_prover_data, page_output_prover_data];
-
-        self.input_commitment = Some(prover_data[0].commit.clone());
-        self.output_commitment = Some(prover_data[1].commit.clone());
+        self.input_commitment = Some(page_input_prover_data.commit.clone());
+        self.output_commitment = Some(page_output_prover_data.commit.clone());
 
         self.page_traces = vec![
             self.input_chip_trace.clone().unwrap(),
             self.output_chip_trace.clone().unwrap(),
         ];
-        self.prover_data = prover_data;
+
+        (page_input_prover_data, page_output_prover_data)
     }
 }
