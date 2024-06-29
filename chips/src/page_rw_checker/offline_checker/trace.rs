@@ -9,21 +9,19 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use super::columns::OfflineCheckerCols;
 use super::OfflineChecker;
 use crate::common::page::Page;
-use crate::is_equal_vec::IsEqualVecAir;
-use crate::is_less_than_tuple::IsLessThanTupleAir;
 use crate::page_rw_checker::page_controller::{OpType, Operation};
 use crate::range_gate::RangeCheckerGateChip;
 use crate::sub_chip::LocalTraceInstructions;
 
 impl OfflineChecker {
     /// Each row in the trace follow the same order as the Cols struct:
-    /// [is_initial, is_final, is_internal, is_final_x3, clk, page_row, op_type, same_idx, same_data, lt_bit, is_extra, is_equal_idx_aux, is_equal_data_aux, lt_aux]
+    /// [is_initial, is_final_write, is_final_delete, is_internal, is_final_write_x3, clk, idx, data, op_type, same_idx, lt_bit, is_extra, is_equal_idx_aux, lt_aux]
     ///
-    /// The trace consists of a row for every read/write operation plus some extra rows
-    /// The trace is sorted by index (in page_row) and then by clk, so every index has a block of consective rows in the trace with the following structure
+    /// The trace consists of a row for every read/write/delete operation plus some extra rows
+    /// The trace is sorted by idx and then by clk, so every idx has a block of consective rows in the trace with the following structure
     /// If the index exists in the initial page, the block starts with a row of the initial data with is_initial=1
-    /// Then, a row is added to the trace for every read/write operation with the corresponding data with is_internal=1
-    /// Then, a row is added with the final data for that index with is_final=1
+    /// Then, a row is added to the trace for every read/write/delete operation with the corresponding data with is_internal=1
+    /// Then, a row is added with the final data (or vector of zeros if deleted) for that index with is_final_write=1 or is_final_delete=1
     /// The trace is padded at the end to be of height trace_degree
     pub fn generate_trace<SC: StarkGenericConfig>(
         &self,
@@ -35,12 +33,6 @@ impl OfflineChecker {
     where
         Val<SC>: PrimeField,
     {
-        let is_equal_idx = IsEqualVecAir::new(self.idx_len);
-        let is_equal_data = IsEqualVecAir::new(self.data_len);
-
-        let lt_chip =
-            IsLessThanTupleAir::new(usize::MAX, self.idx_clk_limb_bits.clone(), self.idx_decomp);
-
         // Creating a timestamp bigger than all others
         let max_clk = ops.iter().map(|op| op.clk).max().unwrap_or(0) + 1;
 
@@ -58,34 +50,28 @@ impl OfflineChecker {
                        clk: usize,
                        op_type: u8,
                        last_idx: &mut Vec<u32>,
-                       last_data: &mut Vec<u32>,
                        last_clk: &mut usize,
                        is_extra: bool| {
             if *is_first_row {
                 // Making sure the last_idx and last_data are different from current when its the first row
                 last_idx.clone_from(cur_idx);
-                last_data.clone_from(cur_data);
 
                 last_idx[0] += 1;
-                last_data[0] += 1;
 
                 *is_first_row = false;
             }
 
             let my_last_idx = last_idx.clone();
-            let my_last_data = last_data.clone();
             let my_last_clk = *last_clk;
 
             last_idx.clone_from(cur_idx);
-            last_data.clone_from(cur_data);
             *last_clk = clk;
 
             let last_idx = my_last_idx;
-            let last_data = my_last_data;
             let last_clk = my_last_clk;
 
             let lt_cols = LocalTraceInstructions::generate_trace_row(
-                &lt_chip,
+                &self.lt_idx_clk_air,
                 (
                     last_idx
                         .iter()
@@ -101,19 +87,17 @@ impl OfflineChecker {
                 ),
             );
 
-            let page_row: Vec<u32> = cur_idx.iter().chain(cur_data.iter()).copied().collect();
+            // those are used later to initialize the Cols struct
+            let my_cur_idx = cur_idx.clone();
+            let my_cur_data = cur_data.clone();
 
             let last_idx = to_field_vec(last_idx);
             let cur_idx = to_field_vec(cur_idx.to_vec());
 
-            let last_data = to_field_vec(last_data);
-            let cur_data = to_field_vec(cur_data.to_vec());
-
-            let idx_equal_cols =
-                LocalTraceInstructions::generate_trace_row(&is_equal_idx, (last_idx, cur_idx));
-
-            let data_equal_cols =
-                LocalTraceInstructions::generate_trace_row(&is_equal_data, (last_data, cur_data));
+            let is_equal_idx_cols = LocalTraceInstructions::generate_trace_row(
+                &self.is_equal_idx_air,
+                (last_idx, cur_idx),
+            );
 
             let is_final_write = is_final && op_type == 0;
             let is_final_delete = is_final && op_type == 2;
@@ -128,20 +112,16 @@ impl OfflineChecker {
                 Val::<SC>::from_bool(is_internal),
                 Val::<SC>::from_canonical_u8(is_final_write as u8 * 3),
                 Val::<SC>::from_canonical_usize(clk),
-                page_row
-                    .into_iter()
-                    .map(Val::<SC>::from_canonical_u32)
-                    .collect(),
+                to_field_vec(my_cur_idx),
+                to_field_vec(my_cur_data),
                 Val::<SC>::from_canonical_u8(op_type),
                 Val::<SC>::from_bool(is_read),
                 Val::<SC>::from_bool(is_write),
                 Val::<SC>::from_bool(is_delete),
-                idx_equal_cols.io.prod,
-                data_equal_cols.io.prod,
+                is_equal_idx_cols.io.prod,
                 lt_cols.io.tuple_less_than,
                 Val::<SC>::from_bool(is_extra),
-                idx_equal_cols.aux,
-                data_equal_cols.aux,
+                is_equal_idx_cols.aux,
                 lt_cols.aux,
             );
 
@@ -152,7 +132,6 @@ impl OfflineChecker {
         let mut rows = vec![];
 
         let mut last_idx = vec![0; self.idx_len];
-        let mut last_data = vec![0; self.data_len];
         let mut last_clk = 0;
         let mut is_first_row = true;
 
@@ -177,7 +156,6 @@ impl OfflineChecker {
                     0,
                     1,
                     &mut last_idx,
-                    &mut last_data,
                     &mut last_clk,
                     false,
                 ));
@@ -204,7 +182,6 @@ impl OfflineChecker {
                     op.clk,
                     op.op_type as u8,
                     &mut last_idx,
-                    &mut last_data,
                     &mut last_clk,
                     false,
                 ));
@@ -227,7 +204,6 @@ impl OfflineChecker {
                 max_clk,
                 if page.contains(&cur_idx) { 0 } else { 2 }, // 0 (read) for is_final_write, 2 (delete) for is_final_delete
                 &mut last_idx,
-                &mut last_data,
                 &mut last_clk,
                 false,
             ));
@@ -253,7 +229,6 @@ impl OfflineChecker {
                 0,
                 0,
                 &mut last_idx,
-                &mut last_data,
                 &mut last_clk,
                 true,
             )

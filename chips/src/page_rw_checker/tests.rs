@@ -368,7 +368,7 @@ fn page_offline_checker_test() {
             num_ops,
         ),
         Err(VerificationError::OodEvaluationMismatch),
-        "Expected interactions to fail"
+        "Expected constraints to fail"
     );
 
     // Testing writing too many indices to a fully unallocated page

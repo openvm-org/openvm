@@ -21,8 +21,10 @@ pub struct OfflineCheckerCols<T> {
 
     /// timestamp for the operation
     pub clk: T,
-    /// the row of the page without the is_alloc bit: idx and data only
-    pub page_row: Vec<T>,
+    /// idx for the row
+    pub idx: Vec<T>,
+    /// data for the row
+    pub data: Vec<T>,
     /// 0 for read, 1 for write, 2 for delete
     pub op_type: T,
     /// 1 if the operation is a read, 0 otherwise
@@ -34,8 +36,6 @@ pub struct OfflineCheckerCols<T> {
 
     /// this bit indicates if the index matches the one in the previous row (should be 0 in first row)
     pub same_idx: T,
-    /// this bit indicates if the data matches the one in the previous row (should be 0 in first row)
-    pub same_data: T,
     /// this bit indicates if (idx, clk) is strictly more than the one in the previous row
     pub lt_bit: T,
     /// a bit to indicate if this is an extra row that should be ignored
@@ -43,8 +43,6 @@ pub struct OfflineCheckerCols<T> {
 
     /// auxiliary columns used for same_idx
     pub is_equal_idx_aux: IsEqualVecAuxCols<T>,
-    /// auxiliary columns used for same_data
-    pub is_equal_data_aux: IsEqualVecAuxCols<T>,
     /// auxiliary columns to check proper sorting
     pub lt_aux: IsLessThanTupleAuxCols<T>,
 }
@@ -62,20 +60,19 @@ where
             self.is_final_write_x3.clone(),
             self.clk.clone(),
         ];
-        flattened.extend(self.page_row.clone());
+        flattened.extend(self.idx.clone());
+        flattened.extend(self.data.clone());
         flattened.extend(vec![
             self.op_type.clone(),
             self.is_read.clone(),
             self.is_write.clone(),
             self.is_delete.clone(),
             self.same_idx.clone(),
-            self.same_data.clone(),
             self.lt_bit.clone(),
             self.is_extra.clone(),
         ]);
 
         flattened.extend(self.is_equal_idx_aux.flatten());
-        flattened.extend(self.is_equal_data_aux.flatten());
         flattened.extend(self.lt_aux.flatten());
 
         flattened
@@ -92,27 +89,22 @@ where
             is_internal: slc[3].clone(),
             is_final_write_x3: slc[4].clone(),
             clk: slc[5].clone(),
-            page_row: slc[6..6 + page_row_width].to_vec(),
+            idx: slc[6..6 + oc.idx_len].to_vec(),
+            data: slc[6 + oc.idx_len..6 + page_row_width].to_vec(),
             op_type: slc[6 + page_row_width].clone(),
             is_read: slc[7 + page_row_width].clone(),
             is_write: slc[8 + page_row_width].clone(),
             is_delete: slc[9 + page_row_width].clone(),
             same_idx: slc[10 + page_row_width].clone(),
-            same_data: slc[11 + page_row_width].clone(),
-            lt_bit: slc[12 + page_row_width].clone(),
-            is_extra: slc[13 + page_row_width].clone(),
+            lt_bit: slc[11 + page_row_width].clone(),
+            is_extra: slc[12 + page_row_width].clone(),
             is_equal_idx_aux: IsEqualVecAuxCols::from_slice(
-                &slc[14 + page_row_width..14 + page_row_width + 2 * oc.idx_len],
+                &slc[13 + page_row_width..13 + page_row_width + 2 * oc.idx_len],
                 oc.idx_len,
             ),
-            is_equal_data_aux: IsEqualVecAuxCols::from_slice(
-                &slc[14 + page_row_width + 2 * oc.idx_len
-                    ..14 + page_row_width + 2 * oc.idx_len + 2 * oc.data_len],
-                oc.data_len,
-            ),
             lt_aux: IsLessThanTupleAuxCols::from_slice(
-                &slc[14 + page_row_width + 2 * oc.idx_len + 2 * oc.data_len..],
-                oc.idx_clk_limb_bits.clone(),
+                &slc[13 + page_row_width + 2 * oc.idx_len..],
+                oc.lt_idx_clk_air.limb_bits(),
                 oc.idx_decomp,
                 oc.idx_len + 1,
             ),
@@ -120,11 +112,11 @@ where
     }
 
     pub fn width(oc: &OfflineChecker) -> usize {
-        14 + oc.idx_len
+        13 + oc.idx_len
             + oc.data_len
-            + 2 * (oc.idx_len + oc.data_len)
+            + IsEqualVecAuxCols::<usize>::get_width(oc.idx_len)
             + IsLessThanTupleAuxCols::<usize>::get_width(
-                oc.idx_clk_limb_bits.clone(),
+                oc.lt_idx_clk_air.limb_bits(),
                 oc.idx_decomp,
                 oc.idx_len + 1,
             )
