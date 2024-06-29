@@ -17,47 +17,64 @@ use logical_interface::{
     afs_interface::AfsInterface,
     mock_db::MockDb,
     table::{types::TableId, Table},
-    utils::{fixed_bytes_to_field_vec, string_to_be_vec},
+    utils::{fixed_bytes_to_u16_vec, string_to_u8_vec},
 };
 use p3_util::log2_strict_usize;
 
-const PAGE_BUS_INDEX: usize = 0;
-const RANGE_BUS_INDEX: usize = 1;
+pub const PAGE_BUS_INDEX: usize = 0;
+pub const RANGE_BUS_INDEX: usize = 1;
 
 #[derive(Debug, Parser)]
 pub struct CommonCommands {
     #[arg(
-        long = "db-file",
-        short = 'd',
-        help = "Mock DB file input (default: new empty DB)",
-        required = false
-    )]
-    pub db_file_path: Option<String>,
-
-    #[arg(
-        long = "table-id",
-        short = 't',
-        help = "The table id to run the predicate on",
+        long = "predicate",
+        short = 'p',
+        help = "The comparison predicate to prove",
         required = true
     )]
-    pub table_id: String,
+    pub predicate: String,
 
     #[arg(
         long = "value",
         short = 'v',
-        help = "The value to compare against",
+        help = "Value to prove the predicate against",
         required = true
     )]
     pub value: String,
 
     #[arg(
-        long = "output-file",
-        short = 'o',
-        help = "Save the output to file",
-        required = false,
-        default_value = "output/eq.csv"
+        long = "table-id",
+        short = 't',
+        help = "Table id to run the predicate on",
+        required = true
     )]
-    pub output_file: Option<String>,
+    pub table_id: String,
+
+    #[arg(
+        long = "db-file",
+        short = 'd',
+        help = "Path to the database file",
+        required = true
+    )]
+    pub db_file_path: String,
+
+    #[arg(
+        long = "cache-folder",
+        short = 'c',
+        help = "Folder that contains cached traces",
+        required = false,
+        default_value = "cache"
+    )]
+    pub cache_folder: String,
+
+    #[arg(
+        long = "output-folder",
+        short = 'o',
+        help = "Folder to save output files to",
+        required = false,
+        default_value = "bin/common/data/predicate"
+    )]
+    pub output_folder: String,
 
     #[arg(
         long = "silent",
@@ -66,6 +83,17 @@ pub struct CommonCommands {
         required = false
     )]
     pub silent: bool,
+}
+
+pub fn string_to_comp(p: String) -> Comp {
+    match p.to_lowercase().as_str() {
+        "eq" | "=" => Comp::Eq,
+        "lt" | "<" => Comp::Lt,
+        "lte" | "<=" => Comp::Lte,
+        "gt" | ">" => Comp::Gt,
+        "gte" | ">=" => Comp::Gte,
+        _ => panic!("Invalid comparison predicate: {}", p),
+    }
 }
 
 pub fn execute_predicate_common(
@@ -80,7 +108,7 @@ pub fn execute_predicate_common(
     let idx_limb_bits = config.page.bits_per_fe;
     let idx_decomp = log2_strict_usize(page_height).max(8);
 
-    let mut db = MockDb::from_file(args.db_file_path.unwrap().as_str());
+    let mut db = MockDb::from_file(args.db_file_path.as_str());
     let mut interface = AfsInterface::new(config.page.index_bytes, config.page.data_bytes, &mut db);
     let table_id = args.table_id;
     let table = interface.get_table(table_id.clone()).unwrap();
@@ -100,8 +128,8 @@ pub fn execute_predicate_common(
     );
 
     let page_width = 1 + idx_len + data_len;
-    let value = string_to_be_vec(value, config.page.index_bytes);
-    let value = fixed_bytes_to_field_vec(value);
+    let value = string_to_u8_vec(value, config.page.index_bytes);
+    let value = fixed_bytes_to_u16_vec(value);
     let page_output =
         page_controller.gen_output(page_input.clone(), value.clone(), page_width, comp);
 

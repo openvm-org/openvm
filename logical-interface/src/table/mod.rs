@@ -4,8 +4,7 @@ pub mod tests;
 pub mod types;
 
 use crate::{
-    mock_db::MockDbTable, table::codec::fixed_bytes::FixedBytesCodec,
-    utils::fixed_bytes_to_field_vec,
+    mock_db::MockDbTable, table::codec::fixed_bytes::FixedBytesCodec, utils::fixed_bytes_to_u16_vec,
 };
 use afs_chips::common::{page::Page, page_cols::PageCols};
 use serde_derive::{Deserialize, Serialize};
@@ -130,9 +129,9 @@ impl Table {
             .map(|(index, data)| {
                 let is_alloc: u32 = 1;
                 let index_bytes = codec.table_to_db_index_bytes(index.clone());
-                let index_fields = fixed_bytes_to_field_vec(index_bytes);
+                let index_fields = fixed_bytes_to_u16_vec(index_bytes);
                 let data_bytes = codec.table_to_db_data_bytes(data.clone());
-                let data_fields = fixed_bytes_to_field_vec(data_bytes);
+                let data_fields = fixed_bytes_to_u16_vec(data_bytes);
                 PageCols {
                     is_alloc,
                     idx: index_fields,

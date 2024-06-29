@@ -2,8 +2,9 @@ use afs_test_utils::page_config::PageConfig;
 use clap::Parser;
 use clap::Subcommand;
 
-use crate::commands::common::CommonCommands;
-use crate::commands::{eq, gt, gte, lt, lte};
+use crate::commands::{
+    common::CommonCommands, keygen::KeygenCommand, prove::ProveCommand, verify::VerifyCommand,
+};
 
 #[derive(Debug, Parser)]
 #[command(author, version, about = "AFS Predicate CLI")]
@@ -15,96 +16,60 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum CliCommand {
-    #[command(name = "eq", about = "Get data in a Table that is equal to the input")]
-    /// Get data in a Table that is equal to the input
-    Eq(eq::EqCommand),
+    #[command(name = "keygen", about = "Generate keys")]
+    Keygen(KeygenCommand),
 
-    #[command(
-        name = "gt",
-        about = "Get data in a Table that is greater than the input"
-    )]
-    /// Get data in a Table that is greater than the input
-    Gt(gt::GtCommand),
+    #[command(name = "prove", about = "Prove the predicate operation")]
+    Prove(ProveCommand),
 
-    #[command(
-        name = "gte",
-        about = "Get data in a Table that is greater than or equal to the input"
-    )]
-    /// Get data in a Table that is greater than or equal to the input
-    Gte(gte::GteCommand),
-
-    #[command(name = "lt", about = "Get data in a Table that is less than the input")]
-    /// Get data in a Table that is less than the input
-    Lt(lt::LtCommand),
-
-    #[command(
-        name = "lte",
-        about = "Get data in a Table that is less than or equal to the input"
-    )]
-    /// Get data in a Table that is less than or equal to the input
-    Lte(lte::LteCommand),
+    #[command(name = "verify", about = "Verify the predicate operation")]
+    Verify(VerifyCommand),
 }
 
 impl Cli {
     pub fn run(config: &PageConfig) -> Self {
         let cli = Self::parse();
         match &cli.command {
-            CliCommand::Eq(eq) => {
-                let cmd = eq::EqCommand {
-                    args: CommonCommands {
-                        db_file_path: eq.args.db_file_path.clone(),
-                        table_id: eq.args.table_id.clone(),
-                        value: eq.args.value.clone(),
-                        output_file: eq.args.output_file.clone(),
-                        silent: eq.args.silent,
+            CliCommand::Keygen(keygen) => {
+                let cmd = KeygenCommand {
+                    common: CommonCommands {
+                        predicate: keygen.common.predicate.clone(),
+                        value: keygen.common.value.clone(),
+                        table_id: keygen.common.table_id.clone(),
+                        db_file_path: keygen.common.db_file_path.clone(),
+                        cache_folder: keygen.common.cache_folder.clone(),
+                        output_folder: keygen.common.output_folder.clone(),
+                        silent: keygen.common.silent,
                     },
                 };
                 cmd.execute(config).unwrap();
             }
-            CliCommand::Gt(gt) => {
-                let cmd = gt::GtCommand {
-                    args: CommonCommands {
-                        db_file_path: gt.args.db_file_path.clone(),
-                        table_id: gt.args.table_id.clone(),
-                        value: gt.args.value.clone(),
-                        output_file: gt.args.output_file.clone(),
-                        silent: gt.args.silent,
+            CliCommand::Prove(prove) => {
+                let cmd = ProveCommand {
+                    keys_folder: prove.keys_folder.clone(),
+                    common: CommonCommands {
+                        predicate: prove.common.predicate.clone(),
+                        value: prove.common.value.clone(),
+                        table_id: prove.common.table_id.clone(),
+                        db_file_path: prove.common.db_file_path.clone(),
+                        cache_folder: prove.common.cache_folder.clone(),
+                        output_folder: prove.common.output_folder.clone(),
+                        silent: prove.common.silent,
                     },
                 };
                 cmd.execute(config).unwrap();
             }
-            CliCommand::Gte(gte) => {
-                let cmd = gte::GteCommand {
-                    args: CommonCommands {
-                        db_file_path: gte.args.db_file_path.clone(),
-                        table_id: gte.args.table_id.clone(),
-                        value: gte.args.value.clone(),
-                        output_file: gte.args.output_file.clone(),
-                        silent: gte.args.silent,
-                    },
-                };
-                cmd.execute(config).unwrap();
-            }
-            CliCommand::Lt(lt) => {
-                let cmd = lt::LtCommand {
-                    args: CommonCommands {
-                        db_file_path: lt.args.db_file_path.clone(),
-                        table_id: lt.args.table_id.clone(),
-                        value: lt.args.value.clone(),
-                        output_file: lt.args.output_file.clone(),
-                        silent: lt.args.silent,
-                    },
-                };
-                cmd.execute(config).unwrap();
-            }
-            CliCommand::Lte(lte) => {
-                let cmd = lte::LteCommand {
-                    args: CommonCommands {
-                        db_file_path: lte.args.db_file_path.clone(),
-                        table_id: lte.args.table_id.clone(),
-                        value: lte.args.value.clone(),
-                        output_file: lte.args.output_file.clone(),
-                        silent: lte.args.silent,
+            CliCommand::Verify(verify) => {
+                let cmd = VerifyCommand {
+                    keys_folder: verify.keys_folder.clone(),
+                    common: CommonCommands {
+                        predicate: verify.common.predicate.clone(),
+                        value: verify.common.value.clone(),
+                        table_id: verify.common.table_id.clone(),
+                        db_file_path: verify.common.db_file_path.clone(),
+                        cache_folder: verify.common.cache_folder.clone(),
+                        output_folder: verify.common.output_folder.clone(),
+                        silent: verify.common.silent,
                     },
                 };
                 cmd.execute(config).unwrap();
