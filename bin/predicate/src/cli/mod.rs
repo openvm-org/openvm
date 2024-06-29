@@ -47,6 +47,8 @@ impl Cli {
             CliCommand::Prove(prove) => {
                 let cmd = ProveCommand {
                     keys_folder: prove.keys_folder.clone(),
+                    input_trace_data: prove.input_trace_data.clone(),
+                    output_trace_data: prove.output_trace_data.clone(),
                     common: CommonCommands {
                         predicate: prove.common.predicate.clone(),
                         value: prove.common.value.clone(),

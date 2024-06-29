@@ -1,9 +1,12 @@
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 
 use afs_chips::single_page_index_scan::page_controller::PageController;
 use afs_stark_backend::{
     keygen::types::MultiStarkPartialProvingKey,
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+    prover::{
+        trace::{ProverTraceData, TraceCommitmentBuilder},
+        MultiTraceStarkProver,
+    },
 };
 use afs_test_utils::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
@@ -30,6 +33,22 @@ pub struct ProveCommand {
         default_value = "bin/common/data/predicate"
     )]
     pub keys_folder: String,
+
+    #[arg(
+        long = "input-trace-data",
+        short = 'i',
+        help = "The input prover trace data",
+        required = false
+    )]
+    pub input_trace_data: Option<String>,
+
+    #[arg(
+        long = "output-trace-data",
+        short = 'u',
+        help = "The output prover trace data",
+        required = false
+    )]
+    pub output_trace_data: Option<String>,
 
     #[command(flatten)]
     pub common: CommonCommands,
@@ -84,9 +103,31 @@ impl ProveCommand {
         let prover = MultiTraceStarkProver::new(&engine.config);
         let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-        page_controller.load_page(
+        // Handle optional prover data
+        let input_trace_data = if self.input_trace_data.is_some() {
+            let trace_data_path = self.input_trace_data.unwrap();
+            let trace_data = read_from_path(trace_data_path).unwrap();
+            let trace_data: ProverTraceData<BabyBearPoseidon2Config> =
+                bincode::deserialize(&trace_data).unwrap();
+            Some(Arc::new(trace_data))
+        } else {
+            None
+        };
+        let output_trace_data = if self.output_trace_data.is_some() {
+            let trace_data_path = self.output_trace_data.unwrap();
+            let trace_data = read_from_path(trace_data_path).unwrap();
+            let trace_data: ProverTraceData<BabyBearPoseidon2Config> =
+                bincode::deserialize(&trace_data).unwrap();
+            Some(Arc::new(trace_data))
+        } else {
+            None
+        };
+
+        let (input_prover_data, output_prover_data) = page_controller.load_page(
             page_input.clone(),
             page_output.clone(),
+            input_trace_data,
+            output_trace_data,
             value.clone(),
             idx_len,
             data_len,
@@ -107,6 +148,8 @@ impl ProveCommand {
             &engine,
             &partial_pk,
             &mut trace_builder,
+            input_prover_data,
+            output_prover_data,
             value.clone(),
             idx_decomp,
         );

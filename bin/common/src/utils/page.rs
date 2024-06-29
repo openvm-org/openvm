@@ -10,7 +10,7 @@ fn wrap_string(s: String, width: usize) -> Vec<String> {
         .collect::<Vec<String>>()
 }
 
-pub fn print_page(p: &Page, idx_wrap_bytes: usize, data_wrap_bytes: usize) {
+pub fn print_page(p: &Page, idx_wrap_bytes: usize, data_wrap_bytes: usize, max_rows: usize) {
     let idx_wrap_chars = if idx_wrap_bytes == 0 {
         &p.rows[0].idx.len() * 4
     } else {
@@ -47,7 +47,9 @@ pub fn print_page(p: &Page, idx_wrap_bytes: usize, data_wrap_bytes: usize) {
         data_rows.resize(num_rows, " ".repeat(data_wrap_chars));
 
         for (i, (is_alloc, idx, data)) in izip!(is_alloc_rows, idx_rows, data_rows).enumerate() {
-            if i == 0 {
+            if i != 0 && i >= max_rows {
+                break;
+            } else if i == 0 {
                 println!("{}|0x{}|0x{}", is_alloc, idx, data);
             } else {
                 println!("{}|  {}|  {}", is_alloc, idx, data);
@@ -57,6 +59,10 @@ pub fn print_page(p: &Page, idx_wrap_bytes: usize, data_wrap_bytes: usize) {
     println!("Height: {}", p.rows.len());
 }
 
+pub fn print_page_nowrap_upto(p: &Page, max_rows: usize) {
+    print_page(p, 0, 0, max_rows);
+}
+
 pub fn print_page_nowrap(p: &Page) {
-    print_page(p, 0, 0);
+    print_page(p, 0, 0, 0);
 }
