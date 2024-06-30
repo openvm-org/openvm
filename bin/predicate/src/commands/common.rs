@@ -15,30 +15,6 @@ pub struct CommonCommands {
     pub predicate: String,
 
     #[arg(
-        long = "value",
-        short = 'v',
-        help = "Value to prove the predicate against",
-        required = true
-    )]
-    pub value: String,
-
-    #[arg(
-        long = "table-id",
-        short = 't',
-        help = "Table id to run the predicate on",
-        required = true
-    )]
-    pub table_id: String,
-
-    #[arg(
-        long = "db-file",
-        short = 'd',
-        help = "Path to the database file",
-        required = true
-    )]
-    pub db_file_path: String,
-
-    #[arg(
         long = "cache-folder",
         short = 'c',
         help = "Folder that contains cached traces",

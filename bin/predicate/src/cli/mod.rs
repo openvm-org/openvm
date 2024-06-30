@@ -34,9 +34,6 @@ impl Cli {
                 let cmd = KeygenCommand {
                     common: CommonCommands {
                         predicate: keygen.common.predicate.clone(),
-                        value: keygen.common.value.clone(),
-                        table_id: keygen.common.table_id.clone(),
-                        db_file_path: keygen.common.db_file_path.clone(),
                         cache_folder: keygen.common.cache_folder.clone(),
                         output_folder: keygen.common.output_folder.clone(),
                         silent: keygen.common.silent,
@@ -46,14 +43,14 @@ impl Cli {
             }
             CliCommand::Prove(prove) => {
                 let cmd = ProveCommand {
+                    value: prove.value.clone(),
+                    table_id: prove.table_id.clone(),
+                    db_file_path: prove.db_file_path.clone(),
                     keys_folder: prove.keys_folder.clone(),
                     input_trace_data: prove.input_trace_data.clone(),
                     output_trace_data: prove.output_trace_data.clone(),
                     common: CommonCommands {
                         predicate: prove.common.predicate.clone(),
-                        value: prove.common.value.clone(),
-                        table_id: prove.common.table_id.clone(),
-                        db_file_path: prove.common.db_file_path.clone(),
                         cache_folder: prove.common.cache_folder.clone(),
                         output_folder: prove.common.output_folder.clone(),
                         silent: prove.common.silent,
@@ -63,12 +60,12 @@ impl Cli {
             }
             CliCommand::Verify(verify) => {
                 let cmd = VerifyCommand {
+                    value: verify.value.clone(),
+                    table_id: verify.table_id.clone(),
+                    db_file_path: verify.db_file_path.clone(),
                     keys_folder: verify.keys_folder.clone(),
                     common: CommonCommands {
                         predicate: verify.common.predicate.clone(),
-                        value: verify.common.value.clone(),
-                        table_id: verify.common.table_id.clone(),
-                        db_file_path: verify.common.db_file_path.clone(),
                         cache_folder: verify.common.cache_folder.clone(),
                         output_folder: verify.common.output_folder.clone(),
                         silent: verify.common.silent,

@@ -17,6 +17,30 @@ use super::common::{string_to_comp, CommonCommands, PAGE_BUS_INDEX, RANGE_BUS_IN
 #[derive(Debug, Parser)]
 pub struct VerifyCommand {
     #[arg(
+        long = "value",
+        short = 'v',
+        help = "Value to prove the predicate against",
+        required = true
+    )]
+    pub value: String,
+
+    #[arg(
+        long = "table-id",
+        short = 't',
+        help = "Table id to run the predicate on",
+        required = true
+    )]
+    pub table_id: String,
+
+    #[arg(
+        long = "db-file",
+        short = 'd',
+        help = "Path to the database file",
+        required = true
+    )]
+    pub db_file_path: String,
+
+    #[arg(
         long = "keys-folder",
         short = 'k',
         help = "The folder that contains the proving and verifying keys",
@@ -32,10 +56,10 @@ pub struct VerifyCommand {
 impl VerifyCommand {
     pub fn execute(self, config: &PageConfig) -> Result<()> {
         // Get full-length table_id
-        let table_id_full = string_to_table_id(self.common.table_id).to_string();
+        let table_id_full = string_to_table_id(self.table_id).to_string();
         let cmp = string_to_comp(self.common.predicate);
         let output_folder = self.common.output_folder;
-        let value = self.common.value;
+        let value = self.value;
 
         let start = Instant::now();
         let idx_len = config.page.index_bytes / 2;
