@@ -94,7 +94,7 @@ fn au_air_test() {
         )
     }
 
-    let zero_div_zero_prog = ProgramExecution {
+    let zero_div_zero_prog = ProgramExecution::<1, BabyBear> {
         program: vec![],
         trace_rows: vec![],
         execution_frequencies: vec![],
@@ -142,7 +142,7 @@ fn au_air_test() {
 fn au_air_test_panic() {
     let au_air = FieldArithmeticAir::new();
 
-    let zero_div_zero_prog = ProgramExecution {
+    let zero_div_zero_prog = ProgramExecution::<1, BabyBear> {
         program: vec![],
         trace_rows: vec![],
         execution_frequencies: vec![],
