@@ -4,6 +4,7 @@ pub mod columns;
 pub mod trace;
 
 // An enum for the different table types and their bus indices
+#[derive(derive_new::new)]
 pub enum TableType {
     T1 {
         t1_intersector_bus_index: usize,

@@ -14,7 +14,7 @@ use rand::Rng;
 
 use crate::inner_join::{
     self,
-    controller::{self, TableFormat},
+    controller::{self, T2Format, TableFormat},
 };
 use crate::{common::page::Page, inner_join::controller::IJBuses};
 
@@ -112,9 +112,11 @@ fn inner_join_test() {
         FKInnerJoinController::new(
             ij_buses,
             TableFormat::new(t1_idx_len, t1_data_len, idx_limb_bits),
-            TableFormat::new(t2_idx_len, t2_data_len, idx_limb_bits),
-            fkey_start,
-            fkey_end,
+            T2Format::new(
+                TableFormat::new(t2_idx_len, t2_data_len, idx_limb_bits),
+                fkey_start,
+                fkey_end,
+            ),
             decomp,
         );
 

@@ -28,7 +28,7 @@ impl<F: PrimeField> SubAirBridge<F> for IntersectorAir {
         interactions.push(Interaction {
             fields: to_vcols(&col_indices.io.idx),
             count: VirtualPairCol::single_main(col_indices.io.out_mult),
-            argument_index: self.intersector_t2_bus_index,
+            argument_index: self.buses.intersector_t2_bus_index,
         });
 
         interactions
@@ -41,12 +41,12 @@ impl<F: PrimeField> SubAirBridge<F> for IntersectorAir {
             Interaction {
                 fields: to_vcols(&col_indices.io.idx),
                 count: VirtualPairCol::single_main(col_indices.io.t1_mult),
-                argument_index: self.t1_intersector_bus_index,
+                argument_index: self.buses.t1_intersector_bus_index,
             },
             Interaction {
                 fields: to_vcols(&col_indices.io.idx),
                 count: VirtualPairCol::single_main(col_indices.io.t2_mult),
-                argument_index: self.t2_intersector_bus_index,
+                argument_index: self.buses.t2_intersector_bus_index,
             },
         ]
     }

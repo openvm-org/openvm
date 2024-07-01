@@ -43,12 +43,12 @@ impl<F: PrimeField> AirBridge<F> for FinalTableAir {
             Interaction {
                 fields: to_vcols(&t1_cols),
                 count: VirtualPairCol::single_main(table_cols.page_cols.is_alloc),
-                argument_index: self.t1_output_bus_index,
+                argument_index: self.buses.t1_output_bus_index,
             },
             Interaction {
                 fields: to_vcols(&t2_cols),
                 count: VirtualPairCol::single_main(table_cols.page_cols.is_alloc),
-                argument_index: self.t2_output_bus_index,
+                argument_index: self.buses.t2_output_bus_index,
             },
         ]
     }

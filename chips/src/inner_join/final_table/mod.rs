@@ -14,17 +14,23 @@ use crate::{
     range_gate::RangeCheckerGateChip,
 };
 
+use super::controller::{T2Format, TableFormat};
+
 pub mod bridge;
+
+#[derive(Clone, derive_new::new)]
+pub(super) struct FinalTableBuses {
+    t1_output_bus_index: usize,
+    t2_output_bus_index: usize,
+}
 
 #[derive(Clone)]
 pub(super) struct FinalTableAir {
-    t1_output_bus_index: usize,
-    t2_output_bus_index: usize,
-
-    /// Foreign key indices within the data
+    buses: FinalTableBuses,
+    /// Foreign key start index within the data
     fkey_start: usize,
+    /// Foreign key end index within the data
     fkey_end: usize,
-
     t2_data_len: usize,
 
     final_air: IndexedOutputPageAir,
@@ -33,28 +39,22 @@ pub(super) struct FinalTableAir {
 impl FinalTableAir {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        t1_output_bus_index: usize,
-        t2_output_bus_index: usize,
+        buses: FinalTableBuses,
         range_bus_index: usize,
-        idx_len: usize,
-        t1_data_len: usize,
-        t2_data_len: usize,
-        fkey_start: usize,
-        fkey_end: usize,
-        idx_limb_bits: usize,
+        t1_format: TableFormat,
+        t2_format: T2Format,
         decomp: usize,
     ) -> Self {
         Self {
-            t1_output_bus_index,
-            t2_output_bus_index,
-            fkey_start,
-            fkey_end,
-            t2_data_len,
+            buses,
+            fkey_start: t2_format.fkey_start,
+            fkey_end: t2_format.fkey_end,
+            t2_data_len: t2_format.table_format.data_len,
             final_air: IndexedOutputPageAir::new(
                 range_bus_index,
-                idx_len,
-                t1_data_len + t2_data_len,
-                idx_limb_bits,
+                t2_format.table_format.idx_len,
+                t1_format.data_len + t2_format.table_format.data_len,
+                t2_format.table_format.idx_limb_bits,
                 decomp,
             ),
         }
