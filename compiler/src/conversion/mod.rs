@@ -408,7 +408,14 @@ pub fn convert_program<F: PrimeField64, EF: ExtensionField<F>>(
     program: AssemblyCode<F, EF>,
 ) -> Vec<Instruction<F>> {
     // register[0] <- 0
-    let init_register_0 = inst(STOREW, F::zero(), F::zero(), register(0), AS::Immediate, AS::Register);
+    let init_register_0 = inst(
+        STOREW,
+        F::zero(),
+        F::zero(),
+        register(0),
+        AS::Immediate,
+        AS::Register,
+    );
 
     let mut block_start = vec![];
     let mut pc = 1;
