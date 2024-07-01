@@ -7,11 +7,11 @@ use super::EXTENSION_DEGREE;
 /// IO columns for opcode, x, y, result.
 #[derive(AlignedBorrow)]
 pub struct FieldExtensionArithmeticCols<T> {
-    pub io: FieldExtensionArithmeticIOCols<T>,
+    pub io: FieldExtensionArithmeticIoCols<T>,
     pub aux: FieldExtensionArithmeticAuxCols<T>,
 }
 
-pub struct FieldExtensionArithmeticIOCols<T> {
+pub struct FieldExtensionArithmeticIoCols<T> {
     pub opcode: T,
     pub x: [T; EXTENSION_DEGREE],
     pub y: [T; EXTENSION_DEGREE],
@@ -33,7 +33,7 @@ impl<T: Clone + std::fmt::Debug> FieldExtensionArithmeticCols<T> {
     pub const NUM_COLS: usize = 6 * EXTENSION_DEGREE + 6;
 
     pub fn get_width() -> usize {
-        FieldExtensionArithmeticIOCols::<T>::get_width()
+        FieldExtensionArithmeticIoCols::<T>::get_width()
             + FieldExtensionArithmeticAuxCols::<T>::get_width()
     }
 
@@ -94,7 +94,7 @@ impl<T: Clone + std::fmt::Debug> FieldExtensionArithmeticCols<T> {
             .expect("Expected a vector of length 4");
 
         Self {
-            io: FieldExtensionArithmeticIOCols { opcode, x, y, z },
+            io: FieldExtensionArithmeticIoCols { opcode, x, y, z },
             aux: FieldExtensionArithmeticAuxCols {
                 opcode_lo,
                 opcode_hi,
@@ -117,7 +117,7 @@ impl<T: Clone + std::fmt::Debug> FieldExtensionArithmeticCols<T> {
     }
 }
 
-impl<T: Clone> FieldExtensionArithmeticIOCols<T> {
+impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
     pub fn get_width() -> usize {
         3 * EXTENSION_DEGREE + 1
     }

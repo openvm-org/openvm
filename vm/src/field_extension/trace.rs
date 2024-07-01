@@ -7,7 +7,7 @@ use crate::cpu::OpCode;
 use crate::field_extension::BETA;
 
 use super::columns::{
-    FieldExtensionArithmeticAuxCols, FieldExtensionArithmeticCols, FieldExtensionArithmeticIOCols,
+    FieldExtensionArithmeticAuxCols, FieldExtensionArithmeticCols, FieldExtensionArithmeticIoCols,
 };
 use super::FieldExtensionArithmeticAir;
 
@@ -58,7 +58,7 @@ impl FieldExtensionArithmeticAir {
         let inv = Self::solve(OpCode::BBE4INV, x, y).unwrap();
 
         let cols = FieldExtensionArithmeticCols {
-            io: FieldExtensionArithmeticIOCols {
+            io: FieldExtensionArithmeticIoCols {
                 opcode: T::from_canonical_usize(op.opcode as usize),
                 x,
                 y,
