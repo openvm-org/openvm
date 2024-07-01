@@ -41,7 +41,7 @@ cargo run --bin predicate -- verify -p lt -v 0x20 -t 0x155687649d5789a399211641b
 Run from the root of the repository.
 
 ```bash
-# config.toml
+# Relevant lines from `config.toml`
 [page]
 index_bytes = 32
 data_bytes = 32
@@ -50,11 +50,18 @@ height = 256
 ```
 
 ```bash
+# Write test input file to mockdb
 cargo run --release --bin afs -- mock write -f bin/common/data/test_input_file_32_32.afi -o bin/common/data/input_file_32_32.mockdb
 
-cargo run --bin predicate -- keygen -p lt
+# Cache table input trace
+cargo run --release --bin afs -- cache -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 --db-file bin/common/data/input_file_32_32.mockdb --output-folder bin/common/data/predicate
 
-cargo run --bin predicate -- prove -p lt -v 0x20 -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -d bin/common/data/input_file_32_32.mockdb
+# Generate proving and verifying keys
+cargo run --release --bin predicate -- keygen -p lt
 
-cargo run --bin predicate -- verify -p lt -v 0x20 -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -d bin/common/data/input_file_32_32.mockdb
+# Prove the inputs and save the proof to file
+cargo run --release --bin predicate -- prove -p lt -v 0x20 -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -d bin/common/data/input_file_32_32.mockdb -i bin/common/data/predicate/0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711.cache.bin
+
+# Verify the proof
+cargo run --release --bin predicate -- verify -p lt -v 0x20 -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -d bin/common/data/input_file_32_32.mockdb
 ```

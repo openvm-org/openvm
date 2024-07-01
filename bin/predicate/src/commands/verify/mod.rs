@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use afs_chips::single_page_index_scan::page_controller::PageController;
 use afs_stark_backend::{keygen::types::MultiStarkPartialVerifyingKey, prover::types::Proof};
 use afs_test_utils::{
@@ -10,9 +8,8 @@ use bin_common::utils::io::{create_prefix, read_from_path};
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{afs_interface::utils::string_to_table_id, utils::string_to_u16_vec};
-use p3_util::log2_strict_usize;
 
-use super::common::{string_to_comp, CommonCommands, PAGE_BUS_INDEX, RANGE_BUS_INDEX};
+use super::{common_setup, CommonCommands, PAGE_BUS_INDEX, RANGE_BUS_INDEX};
 
 #[derive(Debug, Parser)]
 pub struct VerifyCommand {
@@ -57,28 +54,30 @@ impl VerifyCommand {
     pub fn execute(self, config: &PageConfig) -> Result<()> {
         // Get full-length table_id
         let table_id_full = string_to_table_id(self.table_id).to_string();
-        let cmp = string_to_comp(self.common.predicate);
         let output_folder = self.common.output_folder;
-        let value = self.value;
 
-        let start = Instant::now();
-        let idx_len = config.page.index_bytes / 2;
-        let data_len = config.page.data_bytes / 2;
-        let page_height = config.page.height;
-        let idx_limb_bits = config.page.bits_per_fe;
-        let idx_decomp = log2_strict_usize(page_height);
-        let range_max = 1 << idx_decomp;
-        let value = string_to_u16_vec(value, idx_len);
+        let (
+            start,
+            comp,
+            idx_len,
+            data_len,
+            _page_width,
+            _page_height,
+            idx_limb_bits,
+            idx_decomp,
+            range_max,
+        ) = common_setup(config, self.common.predicate);
+        let value = string_to_u16_vec(self.value, idx_len);
 
         let page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
             PAGE_BUS_INDEX,
             RANGE_BUS_INDEX,
             idx_len,
             data_len,
-            range_max,
+            range_max as u32,
             idx_limb_bits,
             idx_decomp,
-            cmp.clone(),
+            comp.clone(),
         );
 
         let engine = config::baby_bear_poseidon2::default_engine(idx_decomp);

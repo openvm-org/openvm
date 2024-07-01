@@ -32,7 +32,7 @@ pub struct CacheCommand {
     pub db_file_path: String,
 
     #[arg(
-        long = "output-file",
+        long = "output-folder",
         short = 'o',
         help = "The folder to output the cached traces to",
         required = false,

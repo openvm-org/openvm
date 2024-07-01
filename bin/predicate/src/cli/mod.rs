@@ -3,7 +3,7 @@ use clap::Parser;
 use clap::Subcommand;
 
 use crate::commands::{
-    common::CommonCommands, keygen::KeygenCommand, prove::ProveCommand, verify::VerifyCommand,
+    keygen::KeygenCommand, prove::ProveCommand, verify::VerifyCommand, CommonCommands,
 };
 
 #[derive(Debug, Parser)]
@@ -47,8 +47,8 @@ impl Cli {
                     table_id: prove.table_id.clone(),
                     db_file_path: prove.db_file_path.clone(),
                     keys_folder: prove.keys_folder.clone(),
-                    input_trace_data: prove.input_trace_data.clone(),
-                    output_trace_data: prove.output_trace_data.clone(),
+                    input_trace_file: prove.input_trace_file.clone(),
+                    output_trace_folder: prove.output_trace_folder.clone(),
                     common: CommonCommands {
                         predicate: prove.common.predicate.clone(),
                         cache_folder: prove.common.cache_folder.clone(),

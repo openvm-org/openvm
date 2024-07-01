@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
 
 use afs_chips::single_page_index_scan::page_controller::PageController;
 use afs_stark_backend::{
@@ -19,9 +19,8 @@ use bin_common::utils::{
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{afs_interface::AfsInterface, mock_db::MockDb, utils::string_to_u16_vec};
-use p3_util::log2_strict_usize;
 
-use super::common::{string_to_comp, CommonCommands, PAGE_BUS_INDEX, RANGE_BUS_INDEX};
+use super::{common_setup, comp_value_to_string, CommonCommands, PAGE_BUS_INDEX, RANGE_BUS_INDEX};
 
 #[derive(Debug, Parser)]
 pub struct ProveCommand {
@@ -59,20 +58,21 @@ pub struct ProveCommand {
     pub keys_folder: String,
 
     #[arg(
-        long = "input-trace-data",
+        long = "input-trace-file",
         short = 'i',
-        help = "The input prover trace data",
-        required = false
+        help = "Input prover trace data file",
+        required = true
     )]
-    pub input_trace_data: Option<String>,
+    pub input_trace_file: String,
 
     #[arg(
-        long = "output-trace-data",
+        long = "output-trace-folder",
         short = 'u',
-        help = "The output prover trace data",
-        required = false
+        help = "Folder to save output prover trace data file",
+        required = false,
+        default_value = "bin/common/data/predicate"
     )]
-    pub output_trace_data: Option<String>,
+    pub output_trace_folder: String,
 
     #[command(flatten)]
     pub common: CommonCommands,
@@ -80,26 +80,34 @@ pub struct ProveCommand {
 
 impl ProveCommand {
     pub fn execute(self, config: &PageConfig) -> Result<()> {
-        let cmp = string_to_comp(self.common.predicate);
-        let value = self.value;
         let table_id = self.table_id;
         let db_file_path = self.db_file_path;
         let output_folder = self.common.output_folder;
 
-        let start = Instant::now();
-        let idx_len = config.page.index_bytes / 2;
-        let data_len = config.page.data_bytes / 2;
-        let page_width = 1 + idx_len + data_len;
-        let page_height = config.page.height;
-        let idx_limb_bits = config.page.bits_per_fe;
-        let idx_decomp = log2_strict_usize(page_height);
-        let range_max = 1 << idx_decomp;
-        let value = string_to_u16_vec(value, idx_len);
+        let (
+            start,
+            comp,
+            idx_len,
+            data_len,
+            page_width,
+            page_height,
+            idx_limb_bits,
+            idx_decomp,
+            range_max,
+        ) = common_setup(config, self.common.predicate);
+        let value = string_to_u16_vec(self.value, idx_len);
 
         // Get Page from db
         let mut db = MockDb::from_file(db_file_path.as_str());
         let interface = AfsInterface::new_with_table(table_id.clone(), &mut db);
         let table = interface.current_table().unwrap();
+
+        // Handle prover trace data
+        let input_trace_file = read_from_path(self.input_trace_file).unwrap();
+        let input_trace_file: ProverTraceData<BabyBearPoseidon2Config> =
+            bincode::deserialize(&input_trace_file).unwrap();
+
+        // Get input page from trace data
         let page_input =
             table.to_page(config.page.index_bytes, config.page.data_bytes, page_height);
 
@@ -113,45 +121,25 @@ impl ProveCommand {
             RANGE_BUS_INDEX,
             idx_len,
             data_len,
-            range_max,
+            range_max as u32,
             idx_limb_bits,
             idx_decomp,
-            cmp.clone(),
+            comp.clone(),
         );
 
         // Generate the output page
         let page_output =
-            page_controller.gen_output(page_input.clone(), value.clone(), page_width, cmp);
+            page_controller.gen_output(page_input.clone(), value.clone(), page_width, comp.clone());
 
         let engine = config::baby_bear_poseidon2::default_engine(idx_decomp);
         let prover = MultiTraceStarkProver::new(&engine.config);
         let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-        // Handle optional prover data
-        let input_trace_data = if self.input_trace_data.is_some() {
-            let trace_data_path = self.input_trace_data.unwrap();
-            let trace_data = read_from_path(trace_data_path).unwrap();
-            let trace_data: ProverTraceData<BabyBearPoseidon2Config> =
-                bincode::deserialize(&trace_data).unwrap();
-            Some(Arc::new(trace_data))
-        } else {
-            None
-        };
-        let output_trace_data = if self.output_trace_data.is_some() {
-            let trace_data_path = self.output_trace_data.unwrap();
-            let trace_data = read_from_path(trace_data_path).unwrap();
-            let trace_data: ProverTraceData<BabyBearPoseidon2Config> =
-                bincode::deserialize(&trace_data).unwrap();
-            Some(Arc::new(trace_data))
-        } else {
-            None
-        };
-
         let (input_prover_data, output_prover_data) = page_controller.load_page(
             page_input.clone(),
             page_output.clone(),
-            input_trace_data,
-            output_trace_data,
+            Some(Arc::new(input_trace_file)),
+            None,
             value.clone(),
             idx_len,
             data_len,
@@ -159,6 +147,17 @@ impl ProveCommand {
             idx_decomp,
             &mut trace_builder.committer,
         );
+
+        // let output_trace = page_output.gen_trace::<BabyBear>();
+        let output_trace_path = self.output_trace_folder.clone()
+            + "/"
+            + &table_id.clone()
+            + comp_value_to_string(comp.clone(), value.clone()).as_str()
+            + ".prover.cache.bin";
+        let output_prover_data_ref = output_prover_data.as_ref();
+        let encoded_output_trace_data: Vec<u8> =
+            bincode::serialize(output_prover_data_ref).unwrap();
+        write_bytes(&encoded_output_trace_data, output_trace_path).unwrap();
 
         // Load from disk and deserialize partial proving key
         let prefix = create_prefix(config);

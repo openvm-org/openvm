@@ -1,4 +1,4 @@
-use std::{fs, time::Instant};
+use std::fs;
 
 use afs_chips::single_page_index_scan::page_controller::PageController;
 use afs_stark_backend::keygen::MultiStarkKeygenBuilder;
@@ -9,9 +9,8 @@ use afs_test_utils::{
 use bin_common::utils::io::{create_prefix, write_bytes};
 use clap::Parser;
 use color_eyre::eyre::Result;
-use p3_util::log2_strict_usize;
 
-use super::common::{string_to_comp, CommonCommands, PAGE_BUS_INDEX, RANGE_BUS_INDEX};
+use super::{common_setup, CommonCommands, PAGE_BUS_INDEX, RANGE_BUS_INDEX};
 
 #[derive(Debug, Parser)]
 pub struct KeygenCommand {
@@ -21,27 +20,29 @@ pub struct KeygenCommand {
 
 impl KeygenCommand {
     pub fn execute(self, config: &PageConfig) -> Result<()> {
-        let cmp = string_to_comp(self.common.predicate);
         let output_folder = self.common.output_folder;
 
-        let start = Instant::now();
-        let idx_len = config.page.index_bytes / 2;
-        let data_len = config.page.data_bytes / 2;
-        let page_width = 1 + idx_len + data_len;
-        let page_height = config.page.height;
-        let idx_limb_bits = config.page.bits_per_fe;
-        let idx_decomp = log2_strict_usize(page_height);
-        let range_max = 1 << idx_decomp;
+        let (
+            start,
+            comp,
+            idx_len,
+            data_len,
+            page_width,
+            page_height,
+            idx_limb_bits,
+            idx_decomp,
+            range_max,
+        ) = common_setup(config, self.common.predicate);
 
         let page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
             PAGE_BUS_INDEX,
             RANGE_BUS_INDEX,
             idx_len,
             data_len,
-            range_max,
+            range_max as u32,
             idx_limb_bits,
             idx_decomp,
-            cmp.clone(),
+            comp,
         );
 
         let engine = config::baby_bear_poseidon2::default_engine(idx_decomp);
