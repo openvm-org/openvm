@@ -10,14 +10,14 @@ pub struct Poseidon2Cols<const WIDTH: usize, T> {
 }
 
 pub struct Poseidon2IOCols<const WIDTH: usize, T> {
-    pub input: Vec<T>,
-    pub output: Vec<T>,
+    pub input: [T; WIDTH],
+    pub output: [T; WIDTH],
 }
 
 pub struct Poseidon2AuxCols<const WIDTH: usize, T> {
-    pub phase1: Vec<Vec<T>>,
-    pub phase2: Vec<Vec<T>>,
-    pub phase3: Vec<Vec<T>>,
+    pub phase1: Vec<[T; WIDTH]>,
+    pub phase2: Vec<[T; WIDTH]>,
+    pub phase3: Vec<[T; WIDTH]>,
 }
 
 /// Index map for columns
@@ -37,24 +37,25 @@ impl<const WIDTH: usize, T: Clone> Poseidon2Cols<WIDTH, T> {
     }
 
     pub fn from_slice(slice: &[T], index_map: &Poseidon2ColsIndexMap<WIDTH>) -> Self {
-        assert!(slice.len() == index_map.output.end);
+        assert_eq!(slice.len(), index_map.output.end);
 
-        let input = slice[index_map.input.clone()].to_vec();
-        let output = slice[index_map.output.clone()].to_vec();
-        let phase1 = index_map
+        let input = core::array::from_fn(|i| slice[index_map.input.start + i].clone());
+        let output = core::array::from_fn(|i| slice[index_map.output.start + i].clone());
+        // SAFETY: each element of phase1, phase2, phase3 is a range of length WIDTH
+        let phase1: Vec<[T; WIDTH]> = index_map
             .phase1
             .iter()
-            .map(|r| slice[r.clone()].to_vec())
+            .map(|r| core::array::from_fn(|i| slice[r.start + i].clone()))
             .collect();
-        let phase2 = index_map
+        let phase2: Vec<[T; WIDTH]> = index_map
             .phase2
             .iter()
-            .map(|r| slice[r.clone()].to_vec())
+            .map(|r| core::array::from_fn(|i| slice[r.start + i].clone()))
             .collect();
         let phase3 = index_map
             .phase3
             .iter()
-            .map(|r| slice[r.clone()].to_vec())
+            .map(|r| core::array::from_fn(|i| slice[r.start + i].clone()))
             .collect();
         Self {
             io: Poseidon2IOCols { input, output },
