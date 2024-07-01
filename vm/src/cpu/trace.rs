@@ -212,13 +212,17 @@ impl<const WORD_SIZE: usize, F: PrimeField64> Memory<WORD_SIZE, F> {
         address_space: F,
         address: F,
     ) -> [[F; WORD_SIZE]; N] {
-        let mut ans = [[F::zero(); WORD_SIZE]; N];
-        for i in 0..N {
-            ans[i] = self.read(
-                address_space,
-                address + F::from_canonical_usize(i * WORD_SIZE),
-            );
-        }
+        let ans: [[F; WORD_SIZE]; N] = (0..N)
+            .map(|i| {
+                self.read(
+                    address_space,
+                    address + F::from_canonical_usize(i * WORD_SIZE),
+                )
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+
         ans
     }
 
