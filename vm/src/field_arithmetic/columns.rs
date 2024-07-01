@@ -1,6 +1,6 @@
+use super::FieldArithmeticAir;
 use afs_derive::AlignedBorrow;
 use p3_field::Field;
-
 /// Columns for field arithmetic chip.
 ///
 /// Four IO columns for opcode, x, y, result.
@@ -15,6 +15,7 @@ pub struct FieldArithmeticCols<T> {
 #[derive(AlignedBorrow)]
 #[repr(C)]
 pub struct FieldArithmeticIOCols<T> {
+    pub is_alloc: T,
     pub opcode: T,
     pub x: T,
     pub y: T,
@@ -38,8 +39,8 @@ impl<T> FieldArithmeticCols<T>
 where
     T: Field,
 {
-    pub const NUM_COLS: usize = 12;
-    pub const NUM_IO_COLS: usize = 4;
+    pub const NUM_COLS: usize = 13;
+    pub const NUM_IO_COLS: usize = 5;
     pub const NUM_AUX_COLS: usize = 8;
 
     pub fn get_width() -> usize {
@@ -51,15 +52,37 @@ where
         result.extend(self.aux.flatten());
         result
     }
+
+    pub fn blank_row() -> Self {
+        Self {
+            io: FieldArithmeticIOCols::<T> {
+                is_alloc: T::zero(),
+                opcode: T::from_canonical_u8(FieldArithmeticAir::BASE_OP),
+                x: T::zero(),
+                y: T::zero(),
+                z: T::zero(),
+            },
+            aux: FieldArithmeticAuxCols::<T> {
+                opcode_lo: T::zero(),
+                opcode_hi: T::zero(),
+                is_mul: T::zero(),
+                is_div: T::zero(),
+                sum_or_diff: T::zero(),
+                product: T::zero(),
+                quotient: T::zero(),
+                divisor_inv: T::zero(),
+            },
+        }
+    }
 }
 
 impl<T: Field> FieldArithmeticIOCols<T> {
     pub fn get_width() -> usize {
-        4
+        5
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        vec![self.opcode, self.x, self.y, self.z]
+        vec![self.is_alloc, self.opcode, self.x, self.y, self.z]
     }
 }
 

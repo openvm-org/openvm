@@ -1,3 +1,4 @@
+use super::columns::FieldArithmeticCols;
 use super::columns::FieldArithmeticIOCols;
 use super::FieldArithmeticAir;
 use crate::cpu::trace::{ArithmeticOperation, ProgramExecution};
@@ -40,10 +41,12 @@ fn generate_arith_program(len_ops: usize) -> ProgramExecution<1, BabyBear> {
 #[test]
 fn au_air_test() {
     let mut rng = create_seeded_rng();
-    let len_ops = 1 << 5;
+    let len_ops: usize = 3;
+    let correct_height = len_ops.next_power_of_two();
     let prog = generate_arith_program(len_ops);
     let au_air = FieldArithmeticAir::new();
 
+    let empty_dummy_row = FieldArithmeticCols::<BabyBear>::blank_row().io.flatten();
     let dummy_trace = RowMajorMatrix::new(
         prog.arithmetic_ops
             .clone()
@@ -54,14 +57,15 @@ fn au_air_test() {
                     .chain(op.to_vec())
                     .collect::<Vec<_>>()
             })
+            .chain((0..(correct_height - len_ops)).flat_map(|_| empty_dummy_row.clone()))
             .collect(),
-        FieldArithmeticIOCols::<BabyBear>::get_width() + 1,
+        FieldArithmeticIOCols::<BabyBear>::get_width(),
     );
 
     let mut au_trace = au_air.generate_trace(&prog);
 
     let page_requester = DummyInteractionAir::new(
-        FieldArithmeticIOCols::<BabyBear>::get_width(),
+        FieldArithmeticIOCols::<BabyBear>::get_width() - 1,
         true,
         FieldArithmeticAir::BUS_INDEX,
     );
@@ -108,9 +112,9 @@ fn au_air_test() {
     };
 
     let mut au_trace = au_air.generate_trace(&zero_div_zero_prog);
-    au_trace.row_mut(0)[2] = BabyBear::zero();
+    au_trace.row_mut(0)[3] = BabyBear::zero();
     let page_requester = DummyInteractionAir::new(
-        FieldArithmeticIOCols::<BabyBear>::get_width(),
+        FieldArithmeticIOCols::<BabyBear>::get_width() - 1,
         true,
         FieldArithmeticAir::BUS_INDEX,
     );
@@ -122,7 +126,7 @@ fn au_air_test() {
             BabyBear::zero(),
             BabyBear::zero(),
         ],
-        FieldArithmeticIOCols::<BabyBear>::get_width() + 1,
+        FieldArithmeticIOCols::<BabyBear>::get_width(),
     );
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
