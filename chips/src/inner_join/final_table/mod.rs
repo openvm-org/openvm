@@ -37,7 +37,6 @@ pub(super) struct FinalTableAir {
 }
 
 impl FinalTableAir {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         buses: FinalTableBuses,
         range_bus_index: usize,
