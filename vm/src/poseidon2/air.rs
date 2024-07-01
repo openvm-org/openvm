@@ -167,13 +167,10 @@ fn int_lin_layer<AB: AirBuilder, const WIDTH: usize>(state: Vec<AB::Expr>) -> Ve
 
 /// Returns 7th power of field element input
 fn sbox_p<AB: AirBuilder>(state_elem: AB::Expr) -> AB::Expr {
-    state_elem.clone()
-        * state_elem.clone()
-        * state_elem.clone()
-        * state_elem.clone()
-        * state_elem.clone()
-        * state_elem.clone()
-        * state_elem.clone()
+    let x2 = state_elem.clone() * state_elem.clone();
+    let x4 = x2.clone() * x2.clone();
+    let x3 = x2.clone() * state_elem.clone();
+    x3 * x4
 }
 
 /// Returns elementwise 7th power of vector field element input
