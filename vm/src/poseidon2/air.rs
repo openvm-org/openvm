@@ -26,17 +26,13 @@ impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Air<WIDTH, AB::F> 
         for phase1_index in 0..half_ext_rounds {
             // regenerate state as Expr from trace variables on each round
             let mut state = if phase1_index == 0 {
-                io.input.clone().into_iter().map(|x| x.into()).collect()
+                core::array::from_fn(|i| io.input[i].into())
             } else {
-                aux.phase1[phase1_index - 1]
-                    .clone()
-                    .into_iter()
-                    .map(|x| x.into())
-                    .collect()
+                core::array::from_fn(|i| aux.phase1[phase1_index - 1][i].into())
             };
             state = ext_lin_layer::<AB, WIDTH>(state);
             state = add_ext_consts::<AB, WIDTH>(state, phase1_index, &self.external_constants);
-            state = sbox::<AB>(state);
+            state = sbox::<AB, WIDTH>(state);
             for (state_index, state_elem) in state.iter().enumerate() {
                 builder.assert_eq(state_elem.clone(), aux.phase1[phase1_index][state_index]);
             }
@@ -45,23 +41,13 @@ impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Air<WIDTH, AB::F> 
         for phase2_index in 0..self.rounds_p {
             // regenerate state as Expr from trace variables on each round
             let mut state = if phase2_index == 0 {
-                ext_lin_layer::<AB, WIDTH>(
-                    aux.phase1
-                        .last()
-                        .unwrap()
-                        .clone()
-                        .into_iter()
-                        .map(|x| x.into())
-                        .collect(),
-                )
+                ext_lin_layer::<AB, WIDTH>(core::array::from_fn(|i| {
+                    aux.phase1[half_ext_rounds - 1][i].into()
+                }))
             } else {
-                int_lin_layer::<AB, WIDTH>(
-                    aux.phase2[phase2_index - 1]
-                        .clone()
-                        .into_iter()
-                        .map(|x| x.into())
-                        .collect(),
-                )
+                int_lin_layer::<AB, WIDTH>(core::array::from_fn(|i| {
+                    aux.phase2[phase2_index - 1][i].into()
+                }))
             };
             state[0] += self.internal_constants[phase2_index].into();
             state[0] = sbox_p::<AB>(state[0].clone());
@@ -73,44 +59,28 @@ impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Air<WIDTH, AB::F> 
         for phase3_index in 0..(self.rounds_f - half_ext_rounds) {
             // regenerate state as Expr from trace variables on each round
             let mut state = if phase3_index == 0 {
-                int_lin_layer::<AB, WIDTH>(
-                    aux.phase2
-                        .last()
-                        .unwrap()
-                        .clone()
-                        .into_iter()
-                        .map(|x| x.into())
-                        .collect(),
-                )
+                int_lin_layer::<AB, WIDTH>(core::array::from_fn(|i| {
+                    aux.phase2[self.rounds_p - 1][i].into()
+                }))
             } else {
-                ext_lin_layer::<AB, WIDTH>(
-                    aux.phase3[phase3_index - 1]
-                        .clone()
-                        .into_iter()
-                        .map(|x| x.into())
-                        .collect(),
-                )
+                ext_lin_layer::<AB, WIDTH>(core::array::from_fn(|i| {
+                    aux.phase3[phase3_index - 1][i].into()
+                }))
             };
             state = add_ext_consts::<AB, WIDTH>(
                 state,
                 phase3_index + half_ext_rounds,
                 &self.external_constants,
             );
-            state = sbox::<AB>(state);
+            state = sbox::<AB, WIDTH>(state);
 
             for (state_index, state_elem) in state.iter().enumerate() {
                 builder.assert_eq(state_elem.clone(), aux.phase3[phase3_index][state_index]);
             }
         }
 
-        let mut state = aux
-            .phase3
-            .last()
-            .unwrap()
-            .clone()
-            .into_iter()
-            .map(|x| x.into())
-            .collect();
+        let mut state =
+            core::array::from_fn(|i| aux.phase3[self.rounds_f - half_ext_rounds - 1][i].into());
         state = ext_lin_layer::<AB, WIDTH>(state);
         for (state_index, state_elem) in state.iter().enumerate() {
             builder.assert_eq(state_elem.clone(), io.output[state_index]);
@@ -120,8 +90,11 @@ impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Air<WIDTH, AB::F> 
 
 /// External linear layer. Applies a diffused linear matrix operation, sending every element to every other element
 /// Satisfies MDS, also called `Poseidon2ExternalMatrixGeneral`
-fn ext_lin_layer<AB: AirBuilder, const WIDTH: usize>(state: Vec<AB::Expr>) -> Vec<AB::Expr> {
-    let mut new_state = vec![AB::Expr::default(); WIDTH];
+fn ext_lin_layer<AB: AirBuilder, const WIDTH: usize>(
+    state: [AB::Expr; WIDTH],
+) -> [AB::Expr; WIDTH] {
+    let mut new_state: [<AB as AirBuilder>::Expr; WIDTH] =
+        core::array::from_fn(|_| AB::Expr::default());
     for i in (0..WIDTH).step_by(4) {
         let mut sum = AB::Expr::default();
         for j in 0..4 {
@@ -149,10 +122,14 @@ fn ext_lin_layer<AB: AirBuilder, const WIDTH: usize>(state: Vec<AB::Expr>) -> Ve
 
 /// Internal linear layer. Applies a diffused linear matrix operation, sending every element to every other element
 /// Also called `DiffusionMatrixBabyBear`
-fn int_lin_layer<AB: AirBuilder, const WIDTH: usize>(state: Vec<AB::Expr>) -> Vec<AB::Expr> {
+fn int_lin_layer<AB: AirBuilder, const WIDTH: usize>(
+    state: [AB::Expr; WIDTH],
+) -> [AB::Expr; WIDTH] {
     let redc_fact = AB::Expr::from_canonical_u32(943718400);
     let sum: AB::Expr = state.clone().into_iter().sum();
-    let mut new_state = vec![AB::Expr::default(); WIDTH];
+    let mut new_state: [<AB as AirBuilder>::Expr; WIDTH] =
+        core::array::from_fn(|_| AB::Expr::default());
+
     new_state[0] = (sum.clone() - state[0].clone() * AB::Expr::two()) * redc_fact.clone();
     for i in 1..WIDTH {
         let fact = if WIDTH == 16 && i == 15 {
@@ -174,19 +151,15 @@ fn sbox_p<AB: AirBuilder>(state_elem: AB::Expr) -> AB::Expr {
 }
 
 /// Returns elementwise 7th power of vector field element input
-fn sbox<AB: AirBuilder>(state: Vec<AB::Expr>) -> Vec<AB::Expr> {
-    state.iter().map(|x| sbox_p::<AB>(x.clone())).collect()
+fn sbox<AB: AirBuilder, const WIDTH: usize>(state: [AB::Expr; WIDTH]) -> [AB::Expr; WIDTH] {
+    core::array::from_fn(|i| sbox_p::<AB>(state[i].clone()))
 }
 
 /// Adds external constants elementwise to state, indexed from [[F]]
 fn add_ext_consts<AB: AirBuilder, const WIDTH: usize>(
-    state: Vec<AB::Expr>,
+    state: [AB::Expr; WIDTH],
     index: usize,
     external_constants: &[[AB::F; WIDTH]],
-) -> Vec<AB::Expr> {
-    state
-        .iter()
-        .zip(external_constants[index].iter())
-        .map(|(x, c)| x.clone() + *c)
-        .collect()
+) -> [AB::Expr; WIDTH] {
+    core::array::from_fn(|i| state[i].clone() + external_constants[index][i])
 }
