@@ -24,7 +24,7 @@ pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(
 }
 
 pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
-    for (pc, instruction) in program.iter().enumerate() {
+    for instruction in program.iter() {
         let Instruction {
             opcode,
             op_a,
@@ -34,8 +34,8 @@ pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
             e,
         } = instruction;
         println!(
-            "{} | {:?} {} {} {} {} {}",
-            pc, opcode, op_a, op_b, op_c, d, e
+            "{:?} {} {} {} {} {}",
+            opcode, op_a, op_b, op_c, d, e
         );
     }
 }
