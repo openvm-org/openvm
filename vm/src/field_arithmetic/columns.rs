@@ -57,11 +57,7 @@ where
     pub fn blank_row() -> Self {
         Self {
             io: FieldArithmeticIOCols::<T> {
-<<<<<<< HEAD
                 rcv_count: T::zero(),
-=======
-                is_alloc: T::zero(),
->>>>>>> 1be7271 (feat: 0-indexed is_allocated column for padding trace to power of 2, also pad dummy traces in testing)
                 opcode: T::from_canonical_u8(FieldArithmeticAir::BASE_OP),
                 x: T::zero(),
                 y: T::zero(),
@@ -87,11 +83,7 @@ impl<T: Field> FieldArithmeticIOCols<T> {
     }
 
     pub fn flatten(&self) -> Vec<T> {
-<<<<<<< HEAD
         vec![self.rcv_count, self.opcode, self.x, self.y, self.z]
-=======
-        vec![self.is_alloc, self.opcode, self.x, self.y, self.z]
->>>>>>> 1be7271 (feat: 0-indexed is_allocated column for padding trace to power of 2, also pad dummy traces in testing)
     }
 }
 
