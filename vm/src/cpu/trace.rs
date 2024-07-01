@@ -13,8 +13,7 @@ use afs_chips::{
 };
 
 use crate::{
-    field_arithmetic::FieldArithmeticAir,
-    field_extension::{FieldExtensionArithmeticAir, BETA},
+    field_arithmetic::FieldArithmeticAir, field_extension::FieldExtensionArithmeticAir,
     memory::OpType,
 };
 
@@ -208,18 +207,17 @@ impl<const WORD_SIZE: usize, F: PrimeField64> Memory<WORD_SIZE, F> {
         data
     }
 
-    fn read_consecutive(
+    fn read_consecutive<const N: usize>(
         &mut self,
         address_space: F,
         address: F,
-        length: usize,
-    ) -> Vec<[F; WORD_SIZE]> {
-        let mut ans = vec![];
-        for i in 0..length {
-            ans.push(self.read(
+    ) -> [[F; WORD_SIZE]; N] {
+        let mut ans = [[F::zero(); WORD_SIZE]; N];
+        for i in 0..N {
+            ans[i] = self.read(
                 address_space,
                 address + F::from_canonical_usize(i * WORD_SIZE),
-            ));
+            );
         }
         ans
     }
@@ -391,23 +389,23 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     }
                 }
                 opcode @ (FE4ADD | FE4SUB | BBE4MUL) => {
-                    let operand1_vec = memory.read_consecutive(d, b, 4);
+                    let operand1_vec = memory.read_consecutive::<4>(d, b);
                     let operand1: [F; 4] = operand1_vec
                         .iter()
                         .map(|x| compose(*x))
                         .collect::<Vec<F>>()
                         .try_into()
-                        .expect("Expected a vector of length 4");
-                    let operand2_vec = memory.read_consecutive(e, c, 4);
+                        .unwrap();
+                    let operand2_vec = memory.read_consecutive::<4>(e, c);
                     let operand2: [F; 4] = operand2_vec
                         .iter()
                         .map(|x| compose(*x))
                         .collect::<Vec<F>>()
                         .try_into()
-                        .expect("Expected a vector of length 4");
+                        .unwrap();
 
                     let result =
-                        FieldExtensionArithmeticAir::solve(opcode, (operand1, operand2)).unwrap();
+                        FieldExtensionArithmeticAir::solve(opcode, operand1, operand2).unwrap();
                     let result_vec: Vec<[F; WORD_SIZE]> =
                         result.iter().map(|x| decompose(*x)).collect();
 
@@ -421,33 +419,18 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     });
                 }
                 BBE4INV => {
-                    let operand1_vec = memory.read_consecutive(d, b, 4);
+                    let operand1_vec = memory.read_consecutive::<4>(d, b);
                     let operand1: [F; 4] = operand1_vec
                         .iter()
                         .map(|x| compose(*x))
                         .collect::<Vec<F>>()
                         .try_into()
-                        .expect("Expected a vector of length 4");
+                        .unwrap();
 
-                    let mut b0 = operand1[0] * operand1[0]
-                        - F::from_canonical_usize(BETA)
-                            * (F::two() * operand1[1] * operand1[3] - operand1[2] * operand1[2]);
-                    let mut b2 = F::two() * operand1[0] * operand1[2]
-                        - operand1[1] * operand1[1]
-                        - F::from_canonical_usize(BETA) * operand1[3] * operand1[3];
+                    let result =
+                        FieldExtensionArithmeticAir::solve(opcode, operand1, [F::zero(); 4])
+                            .unwrap();
 
-                    let c = b0 * b0 - F::from_canonical_usize(BETA) * b2 * b2;
-                    let inv_c = c.inverse();
-
-                    b0 *= inv_c;
-                    b2 *= inv_c;
-
-                    let result = [
-                        operand1[0] * b0 - F::from_canonical_usize(BETA) * operand1[2] * b2,
-                        -operand1[1] * b0 + F::from_canonical_usize(BETA) * operand1[3] * b2,
-                        -operand1[0] * b2 + operand1[2] * b0,
-                        operand1[1] * b2 - operand1[3] * b0,
-                    ];
                     let result_vec: Vec<[F; WORD_SIZE]> =
                         result.iter().map(|x| decompose(*x)).collect();
                     memory.write_consecutive(d, a, result_vec);

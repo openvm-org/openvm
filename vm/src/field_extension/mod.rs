@@ -36,7 +36,7 @@ impl FieldExtensionArithmeticAir {
                 opcode: *op,
                 operand1: operand.0,
                 operand2: operand.1,
-                result: Self::solve::<T>(*op, *operand).unwrap(),
+                result: Self::solve::<T>(*op, operand.0, operand.1).unwrap(),
             })
             .collect()
     }
@@ -46,68 +46,53 @@ impl FieldExtensionArithmeticAir {
     /// Returns None for non field extension add/sub operations.
     pub fn solve<T: Field>(
         op: OpCode,
-        operands: ([T; EXTENSION_DEGREE], [T; EXTENSION_DEGREE]),
+        operand1: [T; EXTENSION_DEGREE],
+        operand2: [T; EXTENSION_DEGREE],
     ) -> Option<[T; EXTENSION_DEGREE]> {
+        let a0 = operand1[0];
+        let a1 = operand1[1];
+        let a2 = operand1[2];
+        let a3 = operand1[3];
+
+        let b0 = operand2[0];
+        let b1 = operand2[1];
+        let b2 = operand2[2];
+        let b3 = operand2[3];
+
+        let beta_f = T::from_canonical_usize(BETA);
+
         match op {
-            OpCode::FE4ADD => Some([
-                operands.0[0] + operands.1[0],
-                operands.0[1] + operands.1[1],
-                operands.0[2] + operands.1[2],
-                operands.0[3] + operands.1[3],
-            ]),
-            OpCode::FE4SUB => Some([
-                operands.0[0] - operands.1[0],
-                operands.0[1] - operands.1[1],
-                operands.0[2] - operands.1[2],
-                operands.0[3] - operands.1[3],
-            ]),
+            OpCode::FE4ADD => Some([a0 + b0, a1 + b1, a2 + b2, a3 + b3]),
+            OpCode::FE4SUB => Some([a0 - b0, a1 - b1, a2 - b2, a3 - b3]),
             OpCode::BBE4MUL => Some([
-                operands.0[0] * operands.1[0]
-                    + T::from_canonical_usize(BETA)
-                        * (operands.0[1] * operands.1[3]
-                            + operands.0[2] * operands.1[2]
-                            + operands.0[3] * operands.1[1]),
-                operands.0[0] * operands.1[1]
-                    + operands.0[1] * operands.1[0]
-                    + T::from_canonical_usize(BETA)
-                        * (operands.0[2] * operands.1[3] + operands.0[3] * operands.1[2]),
-                operands.0[0] * operands.1[2]
-                    + operands.0[1] * operands.1[1]
-                    + operands.0[2] * operands.1[0]
-                    + T::from_canonical_usize(BETA) * operands.0[3] * operands.1[3],
-                operands.0[0] * operands.1[3]
-                    + operands.0[1] * operands.1[2]
-                    + operands.0[2] * operands.1[1]
-                    + operands.0[3] * operands.1[0],
+                a0 * b0 + beta_f * (a1 * b3 + a2 * b2 + a3 * b1),
+                a0 * b1 + a1 * b0 + beta_f * (a2 * b3 + a3 * b2),
+                a0 * b2 + a1 * b1 + a2 * b0 + beta_f * a3 * b3,
+                a0 * b3 + a1 * b2 + a2 * b1 + a3 * b0,
             ]),
             // Let x be the vector we are taking the inverse of ([x[0], x[1], x[2], x[3]]), and define
             // x' = [x[0], -x[1], x[2], -x[3]]. We want to compute 1 / x = x' / (x * x'). Let the
             // denominator x * x' = y. By construction, y will have the degree 1 and degree 3 coefficients
-            // equal to 0. Let the degree 0 coefficient be b0 and the degree 2 coefficient be b2. Now,
-            // define y' as y but with the b2 negated. Note that y * y' = b0^2 - 11 * b2^2, which is an
+            // equal to 0. Let the degree 0 coefficient be n and the degree 2 coefficient be m. Now,
+            // define y' as y but with the m negated. Note that y * y' = n^2 - 11 * m^2, which is an
             // element of the original field, which we can call c. We can invert c as usual and find that
             // 1 / x = x' / (x * x') = x' * y' / c = x' * y' * c^(-1). We multiply out as usual to obtain
             // the answer.
             OpCode::BBE4INV => {
-                let mut b0 = operands.0[0] * operands.0[0]
-                    - T::from_canonical_usize(BETA)
-                        * (T::two() * operands.0[1] * operands.0[3]
-                            - operands.0[2] * operands.0[2]);
-                let mut b2 = T::two() * operands.0[0] * operands.0[2]
-                    - operands.0[1] * operands.0[1]
-                    - T::from_canonical_usize(BETA) * operands.0[3] * operands.0[3];
+                let mut n = a0 * a0 - beta_f * (T::two() * a1 * a3 - a2 * a2);
+                let mut m = T::two() * a0 * a2 - a1 * a1 - beta_f * a3 * a3;
 
-                let c = b0 * b0 - T::from_canonical_usize(BETA) * b2 * b2;
+                let c = n * n - beta_f * m * m;
                 let inv_c = c.inverse();
 
-                b0 *= inv_c;
-                b2 *= inv_c;
+                n *= inv_c;
+                m *= inv_c;
 
                 let result = [
-                    operands.0[0] * b0 - T::from_canonical_usize(BETA) * operands.0[2] * b2,
-                    -operands.0[1] * b0 + T::from_canonical_usize(BETA) * operands.0[3] * b2,
-                    -operands.0[0] * b2 + operands.0[2] * b0,
-                    operands.0[1] * b2 - operands.0[3] * b0,
+                    a0 * n - beta_f * a2 * m,
+                    -a1 * n + beta_f * a3 * m,
+                    -a0 * m + a2 * n,
+                    a1 * m - a3 * n,
                 ];
                 Some(result)
             }
@@ -120,9 +105,17 @@ impl FieldExtensionArithmeticAir {
         ops: Vec<OpCode>,
         operands: Vec<([T; EXTENSION_DEGREE], [T; EXTENSION_DEGREE])>,
     ) -> Vec<[T; EXTENSION_DEGREE]> {
-        ops.iter()
-            .zip(operands.iter())
-            .filter_map(|(op, operand)| Self::solve::<T>(*op, *operand))
-            .collect()
+        let mut result = Vec::<[T; EXTENSION_DEGREE]>::new();
+
+        for i in 0..ops.len() {
+            match Self::solve::<T>(ops[i], operands[i].0, operands[i].1) {
+                Some(res) => result.push(res),
+                None => {
+                    panic!("FieldExtensionArithmeticAir::solve_all: non-field extension opcode")
+                }
+            }
+        }
+
+        result
     }
 }

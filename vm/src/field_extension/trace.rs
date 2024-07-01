@@ -47,7 +47,7 @@ impl FieldExtensionArithmeticAir {
             x[3] + add_sub_coeff * y[3],
         ];
 
-        let product = Self::solve(OpCode::BBE4MUL, (x, y)).unwrap();
+        let product = Self::solve(OpCode::BBE4MUL, x, y).unwrap();
 
         let b0 =
             x[0] * x[0] - T::from_canonical_usize(BETA) * (T::two() * x[1] * x[3] - x[2] * x[2]);
@@ -55,7 +55,7 @@ impl FieldExtensionArithmeticAir {
         let c = b0 * b0 - T::from_canonical_usize(BETA) * b2 * b2;
         let inv_c = c.inverse();
 
-        let inv = Self::solve(OpCode::BBE4INV, (x, y)).unwrap();
+        let inv = Self::solve(OpCode::BBE4INV, x, y).unwrap();
 
         let cols = FieldExtensionArithmeticCols {
             io: FieldExtensionArithmeticIOCols {
