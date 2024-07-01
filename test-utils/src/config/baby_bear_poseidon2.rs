@@ -1,6 +1,5 @@
 use std::any::type_name;
 
-use afs_stark_backend::{rap::AnyRap, verifier::VerificationError};
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_challenger::DuplexChallenger;
 use p3_commit::ExtensionMmcs;
@@ -16,12 +15,14 @@ use p3_uni_stark::StarkConfig;
 use p3_util::log2_strict_usize;
 use rand::{rngs::StdRng, SeedableRng};
 
+use afs_stark_backend::{rap::AnyRap, verifier::VerificationError};
+
 use crate::engine::{StarkEngine, StarkEngineWithHashInstrumentation};
 
 use super::{
     fri_params::default_fri_params,
-    instrument::{HashStatistics, InstrumentCounter, Instrumented, StarkHashStatistics},
     FriParameters,
+    instrument::{HashStatistics, InstrumentCounter, Instrumented, StarkHashStatistics},
 };
 
 const RATE: usize = 8;
@@ -40,7 +41,7 @@ type Hash<P> = PaddingFreeSponge<P, WIDTH, RATE, DIGEST_WIDTH>;
 type Compress<P> = TruncatedPermutation<P, 2, DIGEST_WIDTH, WIDTH>;
 type ValMmcs<P> =
     FieldMerkleTreeMmcs<PackedVal, <Val as Field>::Packing, Hash<P>, Compress<P>, DIGEST_WIDTH>;
-type ChallengeMmcs<P> = ExtensionMmcs<Val, Challenge, ValMmcs<P>>;
+pub type ChallengeMmcs<P> = ExtensionMmcs<Val, Challenge, ValMmcs<P>>;
 pub type Challenger<P> = DuplexChallenger<Val, P, WIDTH>;
 type Dft = Radix2DitParallel;
 type Pcs<P> = TwoAdicFriPcs<Val, Dft, ValMmcs<P>, ChallengeMmcs<P>>;

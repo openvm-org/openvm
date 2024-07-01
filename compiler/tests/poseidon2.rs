@@ -1,12 +1,12 @@
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
-use rand::thread_rng;
+use p3_field::extension::BinomialExtensionField;
 use rand::Rng;
+use rand::thread_rng;
 
 use afs_compiler::asm::AsmBuilder;
-use afs_compiler::ir::Var;
 use afs_compiler::ir::PERMUTATION_WIDTH;
+use afs_compiler::ir::Var;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
