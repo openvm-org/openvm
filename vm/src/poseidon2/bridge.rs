@@ -8,14 +8,14 @@ use crate::poseidon2::{columns::Poseidon2Cols, Poseidon2Air};
 impl<const WIDTH: usize, F: Field> AirBridge<F> for Poseidon2Air<WIDTH, F> {
     fn receives(&self) -> Vec<Interaction<F>> {
         let index_map = Poseidon2Cols::<WIDTH, F>::index_map(self);
+        let field_cols = index_map
+            .input
+            .collect::<Vec<_>>()
+            .into_iter()
+            .chain(index_map.output.collect::<Vec<_>>());
+
         vec![Interaction {
-            fields: (index_map
-                .input
-                .collect::<Vec<_>>()
-                .into_iter()
-                .chain(index_map.output.collect::<Vec<_>>()))
-            .map(VirtualPairCol::single_main)
-            .collect(),
+            fields: field_cols.map(VirtualPairCol::single_main).collect(),
             count: VirtualPairCol::one(),
             argument_index: self.bus_index,
         }]
