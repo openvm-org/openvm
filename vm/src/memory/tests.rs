@@ -12,9 +12,9 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::cpu::{MEMORY_BUS, RANGE_CHECKER_BUS};
 
-use super::{offline_checker::OfflineChecker, MemoryAccess, OpType};
+use super::{offline_checker::MemoryChip, MemoryAccess, OpType};
 
-const DATA_LEN: usize = 3;
+const WORD_SIZE: usize = 3;
 const ADDR_SPACE_LIMB_BITS: usize = 8;
 const POINTER_LIMB_BITS: usize = 8;
 const CLK_LIMB_BITS: usize = 8;
@@ -26,14 +26,14 @@ const TRACE_DEGREE: usize = 16;
 #[test]
 fn test_offline_checker() {
     let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
-    let offline_checker = OfflineChecker::new(
-        DATA_LEN,
+    let memory_chip = MemoryChip::new(
         ADDR_SPACE_LIMB_BITS,
         POINTER_LIMB_BITS,
         CLK_LIMB_BITS,
         DECOMP,
     );
-    let requester = DummyInteractionAir::new(2 + offline_checker.mem_width(), true, MEMORY_BUS);
+    let requester = DummyInteractionAir::new(2 + memory_chip.air.mem_width(), true, MEMORY_BUS);
+
 
     let ops: Vec<MemoryAccess<BabyBear>> = vec![
         MemoryAccess {
@@ -152,34 +152,22 @@ fn test_offline_checker() {
 #[test]
 fn test_offline_checker_negative_invalid_read() {
     let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
-    let offline_checker = OfflineChecker::new(
-        DATA_LEN,
+    let mut memory_chip = MemoryChip::new(
         ADDR_SPACE_LIMB_BITS,
         POINTER_LIMB_BITS,
         CLK_LIMB_BITS,
         DECOMP,
     );
-    let requester = DummyInteractionAir::new(2 + offline_checker.mem_width(), true, MEMORY_BUS);
+    let requester = DummyInteractionAir::new(2 + memory_chip.air.mem_width(), true, MEMORY_BUS);
 
     // should fail because we can't read before writing
-    let ops: Vec<MemoryAccess<BabyBear>> = vec![MemoryAccess {
-        timestamp: 0,
-        op_type: OpType::Read,
-        address_space: BabyBear::zero(),
-        address: BabyBear::zero(),
-        data: vec![
-            BabyBear::from_canonical_usize(0),
-            BabyBear::from_canonical_usize(0),
-            BabyBear::from_canonical_usize(0),
-        ],
-    }];
+    memory_chip.write_word(0, BabyBear::one(), BabyBear::zero(), [BabyBear::zero(), BabyBear::zero(), BabyBear::zero()]);
 
-    let offline_checker_trace =
-        offline_checker.generate_trace(ops.clone(), range_checker.clone(), TRACE_DEGREE);
+    let memory_trace = memory_chip.generate_trace(range_checker.clone(), TRACE_DEGREE);
     let range_checker_trace = range_checker.generate_trace();
     let requester_trace = RowMajorMatrix::new(
-        ops.iter()
-            .flat_map(|op: &MemoryAccess<BabyBear>| {
+        memory_chip.accesses.iter()
+            .flat_map(|op: &MemoryAccess<WORD_SIZE, BabyBear>| {
                 iter::once(BabyBear::one())
                     .chain(iter::once(BabyBear::from_canonical_usize(op.timestamp)))
                     .chain(iter::once(BabyBear::from_canonical_u8(op.op_type as u8)))
@@ -191,7 +179,7 @@ fn test_offline_checker_negative_invalid_read() {
                 iter::repeat_with(|| {
                     iter::repeat(BabyBear::zero()).take(1 + requester.field_width())
                 })
-                .take(TRACE_DEGREE - ops.len())
+                .take(TRACE_DEGREE - memory_chip.accesses.len())
                 .flatten(),
             )
             .collect(),
@@ -203,8 +191,8 @@ fn test_offline_checker_negative_invalid_read() {
     });
     assert_eq!(
         run_simple_test_no_pis(
-            vec![&offline_checker, &range_checker.air, &requester],
-            vec![offline_checker_trace, range_checker_trace, requester_trace],
+            vec![&memory_chip.air, &range_checker.air, &requester],
+            vec![memory_trace, range_checker_trace, requester_trace],
         ),
         Err(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
@@ -215,7 +203,7 @@ fn test_offline_checker_negative_invalid_read() {
 fn test_offline_checker_negative_data_mismatch() {
     let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
     let offline_checker = OfflineChecker::new(
-        DATA_LEN,
+        WORD_SIZE,
         ADDR_SPACE_LIMB_BITS,
         POINTER_LIMB_BITS,
         CLK_LIMB_BITS,

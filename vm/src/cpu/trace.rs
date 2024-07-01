@@ -12,7 +12,7 @@ use afs_chips::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
 
-use crate::{field_arithmetic::FieldArithmeticAir, memory::OpType};
+use crate::{field_arithmetic::FieldArithmeticAir, memory::OpType, vm::VirtualMachine};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
@@ -138,25 +138,6 @@ impl<F: Field> FieldExtensionOperation<F> {
     }
 }
 
-pub struct ProgramExecution<const WORD_SIZE: usize, F> {
-    pub program: Vec<Instruction<F>>,
-    pub trace_rows: Vec<CpuCols<WORD_SIZE, F>>,
-    pub execution_frequencies: Vec<F>,
-    pub memory_accesses: Vec<MemoryAccess<WORD_SIZE, F>>,
-    pub arithmetic_ops: Vec<ArithmeticOperation<F>>,
-}
-
-impl<const WORD_SIZE: usize, F: PrimeField64> ProgramExecution<WORD_SIZE, F> {
-    pub fn trace(&self, options: CpuOptions) -> RowMajorMatrix<F> {
-        let rows: Vec<F> = self
-            .trace_rows
-            .iter()
-            .flat_map(|row| row.flatten(options))
-            .collect();
-        RowMajorMatrix::new(rows, CpuCols::<WORD_SIZE, F>::get_width(options))
-    }
-}
-
 struct Memory<const WORD_SIZE: usize, F> {
     data: HashMap<F, HashMap<F, [F; WORD_SIZE]>>,
     log: Vec<MemoryAccess<WORD_SIZE, F>>,
@@ -265,8 +246,8 @@ impl Error for ExecutionError {}
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
     pub fn generate_program_execution<F: PrimeField64>(
         &self,
-        program: Vec<Instruction<F>>,
-    ) -> Result<ProgramExecution<WORD_SIZE, F>, ExecutionError> {
+        vm: VirtualMachine<WORD_SIZE, F>,
+    ) -> RowMajorMatrix<F> {
         let mut rows = vec![];
         let mut execution_frequencies = vec![F::zero(); program.len()];
         let mut arithmetic_operations = vec![];

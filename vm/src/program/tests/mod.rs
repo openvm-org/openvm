@@ -9,8 +9,7 @@ use crate::cpu::{CpuAir, CpuOptions, READ_INSTRUCTION_BUS};
 
 use crate::cpu::{trace::Instruction, OpCode::*};
 use crate::program::columns::ProgramPreprocessedCols;
-
-use super::ProgramAir;
+use crate::program::ProgramChip;
 
 #[test]
 fn test_flatten_fromslice_roundtrip() {
@@ -33,8 +32,8 @@ fn interaction_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<
     });
     let execution = cpu_air.generate_program_execution(program.clone()).unwrap();
 
-    let air = ProgramAir::new(program);
-    let trace = air.generate_trace(&execution);
+    let chip = ProgramChip::new(program);
+    let trace = chip.generate_trace();
 
     let counter_air = DummyInteractionAir::new(7, true, READ_INSTRUCTION_BUS);
     let mut program_rows = vec![];
@@ -57,7 +56,7 @@ fn interaction_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<
     println!("trace height = {}", trace.height());
     println!("counter trace height = {}", counter_trace.height());
 
-    run_simple_test_no_pis(vec![&air, &counter_air], vec![trace, counter_trace])
+    run_simple_test_no_pis(vec![&chip.air, &counter_air], vec![trace, counter_trace])
         .expect("Verification failed");
 }
 
@@ -119,8 +118,8 @@ fn test_program_negative() {
     });
     let execution = cpu_air.generate_program_execution(program.clone()).unwrap();
 
-    let air = ProgramAir { program };
-    let trace = air.generate_trace(&execution);
+    let chip = ProgramChip::new(program);
+    let trace = chip.generate_trace();
 
     let counter_air = DummyInteractionAir::new(7, true, READ_INSTRUCTION_BUS);
     let mut program_rows = vec![];
@@ -139,6 +138,6 @@ fn test_program_negative() {
     let mut counter_trace = RowMajorMatrix::new(program_rows, 8);
     counter_trace.row_mut(1)[1] = BabyBear::zero();
 
-    run_simple_test_no_pis(vec![&air, &counter_air], vec![trace, counter_trace])
+    run_simple_test_no_pis(vec![&chip.air, &counter_air], vec![trace, counter_trace])
         .expect("Incorrect failure mode");
 }
