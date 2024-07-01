@@ -3,7 +3,7 @@ use afs_derive::AlignedBorrow;
 use p3_field::Field;
 /// Columns for field arithmetic chip.
 ///
-/// Four IO columns for opcode, x, y, result.
+/// Five IO columns for rcv_count, opcode, x, y, result.
 /// Eight aux columns for interpreting opcode, evaluating indicators, inverse, and explicit computations.
 #[derive(AlignedBorrow)]
 #[repr(C)]
@@ -15,7 +15,8 @@ pub struct FieldArithmeticCols<T> {
 #[derive(AlignedBorrow)]
 #[repr(C)]
 pub struct FieldArithmeticIOCols<T> {
-    pub is_alloc: T,
+    /// Number of times to receive
+    pub rcv_count: T,
     pub opcode: T,
     pub x: T,
     pub y: T,
@@ -56,7 +57,7 @@ where
     pub fn blank_row() -> Self {
         Self {
             io: FieldArithmeticIOCols::<T> {
-                is_alloc: T::zero(),
+                rcv_count: T::zero(),
                 opcode: T::from_canonical_u8(FieldArithmeticAir::BASE_OP),
                 x: T::zero(),
                 y: T::zero(),
@@ -82,7 +83,7 @@ impl<T: Field> FieldArithmeticIOCols<T> {
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        vec![self.is_alloc, self.opcode, self.x, self.y, self.z]
+        vec![self.rcv_count, self.opcode, self.x, self.y, self.z]
     }
 }
 

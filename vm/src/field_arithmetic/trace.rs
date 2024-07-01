@@ -32,7 +32,7 @@ fn generate_cols<T: Field>(op: OpCode, x: T, y: T) -> FieldArithmeticCols<T> {
 
     FieldArithmeticCols {
         io: FieldArithmeticIOCols {
-            is_alloc: T::one(),
+            rcv_count: T::one(),
             opcode: T::from_canonical_u32(opcode),
             x,
             y,
