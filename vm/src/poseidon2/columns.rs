@@ -5,11 +5,11 @@ use crate::poseidon2::Poseidon2Air;
 /// Composed of IO and Aux columns, which are disjoint
 /// Aux columns composed of Vec<Vec<T>>, one for each phase
 pub struct Poseidon2Cols<const WIDTH: usize, T> {
-    pub io: Poseidon2IOCols<WIDTH, T>,
+    pub io: Poseidon2IoCols<WIDTH, T>,
     pub aux: Poseidon2AuxCols<WIDTH, T>,
 }
 
-pub struct Poseidon2IOCols<const WIDTH: usize, T> {
+pub struct Poseidon2IoCols<const WIDTH: usize, T> {
     pub input: [T; WIDTH],
     pub output: [T; WIDTH],
 }
@@ -34,7 +34,7 @@ pub struct Poseidon2ColsIndexMap<const WIDTH: usize> {
 
 impl<const WIDTH: usize, T: Clone> Poseidon2Cols<WIDTH, T> {
     pub fn get_width(poseidon2_air: &Poseidon2Air<WIDTH, T>) -> usize {
-        let io_width = Poseidon2IOCols::<WIDTH, T>::get_width();
+        let io_width = Poseidon2IoCols::<WIDTH, T>::get_width();
         let aux_width = Poseidon2AuxCols::<WIDTH, T>::get_width(poseidon2_air);
         io_width + aux_width
     }
@@ -61,7 +61,7 @@ impl<const WIDTH: usize, T: Clone> Poseidon2Cols<WIDTH, T> {
             .map(|r| core::array::from_fn(|i| slice[r.start + i].clone()))
             .collect();
         Self {
-            io: Poseidon2IOCols { input, output },
+            io: Poseidon2IoCols { input, output },
             aux: Poseidon2AuxCols {
                 phase1,
                 phase2,
@@ -100,7 +100,7 @@ impl<const WIDTH: usize, T: Clone> Poseidon2Cols<WIDTH, T> {
     }
 }
 
-impl<const WIDTH: usize, T> Poseidon2IOCols<WIDTH, T> {
+impl<const WIDTH: usize, T> Poseidon2IoCols<WIDTH, T> {
     pub fn get_width() -> usize {
         2 * WIDTH
     }
