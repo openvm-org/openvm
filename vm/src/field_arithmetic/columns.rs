@@ -4,13 +4,16 @@ use p3_field::Field;
 /// Columns for field arithmetic chip.
 ///
 /// Four IO columns for opcode, x, y, result.
-/// Seven aux columns for interpreting opcode, evaluating indicators, and explicit computations.
+/// Eight aux columns for interpreting opcode, evaluating indicators, inverse, and explicit computations.
 #[derive(AlignedBorrow)]
+#[repr(C)]
 pub struct FieldArithmeticCols<T> {
     pub io: FieldArithmeticIOCols<T>,
     pub aux: FieldArithmeticAuxCols<T>,
 }
 
+#[derive(AlignedBorrow)]
+#[repr(C)]
 pub struct FieldArithmeticIOCols<T> {
     pub opcode: T,
     pub x: T,
@@ -18,6 +21,8 @@ pub struct FieldArithmeticIOCols<T> {
     pub z: T,
 }
 
+#[derive(AlignedBorrow)]
+#[repr(C)]
 pub struct FieldArithmeticAuxCols<T> {
     pub opcode_lo: T,
     pub opcode_hi: T,
@@ -26,15 +31,16 @@ pub struct FieldArithmeticAuxCols<T> {
     pub sum_or_diff: T,
     pub product: T,
     pub quotient: T,
+    pub divisor_inv: T,
 }
 
 impl<T> FieldArithmeticCols<T>
 where
     T: Field,
 {
-    pub const NUM_COLS: usize = 11;
+    pub const NUM_COLS: usize = 12;
     pub const NUM_IO_COLS: usize = 4;
-    pub const NUM_AUX_COLS: usize = 6;
+    pub const NUM_AUX_COLS: usize = 8;
 
     pub fn get_width() -> usize {
         FieldArithmeticIOCols::<T>::get_width() + FieldArithmeticAuxCols::<T>::get_width()
@@ -59,7 +65,7 @@ impl<T: Field> FieldArithmeticIOCols<T> {
 
 impl<T: Field> FieldArithmeticAuxCols<T> {
     pub fn get_width() -> usize {
-        7
+        8
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -71,6 +77,7 @@ impl<T: Field> FieldArithmeticAuxCols<T> {
             self.sum_or_diff,
             self.product,
             self.quotient,
+            self.divisor_inv,
         ]
     }
 }

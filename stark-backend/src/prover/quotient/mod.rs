@@ -122,7 +122,10 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
                     self.pcs
                         .get_evaluations_on_domain(view.data, view.matrix_index, quotient_domain)
                         .to_row_major_matrix(),
-                    exposed_values.as_slice(),
+                    exposed_values
+                        .iter()
+                        .map(|x| PackedChallenge::<SC>::from_f(*x))
+                        .collect_vec(),
                 )
             })
             .unzip();
@@ -137,7 +140,10 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
             &self.challenges,
             self.alpha,
             public_values,
-            &exposed_values_after_challenge,
+            &exposed_values_after_challenge
+                .iter()
+                .map(|v| v.as_slice())
+                .collect_vec(),
         );
         SingleQuotientData {
             quotient_degree,

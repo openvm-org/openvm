@@ -1,4 +1,9 @@
-use super::CpuOptions;
+use std::{array::from_fn, collections::BTreeMap};
+
+use afs_chips::is_equal_vec::columns::IsEqualVecAuxCols;
+use itertools::Itertools;
+
+use super::{CpuOptions, OpCode, MAX_ACCESSES_PER_CYCLE};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuIoCols<T> {
@@ -46,7 +51,7 @@ impl<T: Clone> CpuIoCols<T> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MemoryAccessCols<T> {
+pub struct MemoryAccessCols<const WORD_SIZE: usize, T> {
     pub enabled: T,
 
     pub address_space: T,
@@ -55,10 +60,10 @@ pub struct MemoryAccessCols<T> {
 
     pub address: T,
 
-    pub data: T,
+    pub data: [T; WORD_SIZE],
 }
 
-impl<T: Clone> MemoryAccessCols<T> {
+impl<const WORD_SIZE: usize, T: Clone> MemoryAccessCols<WORD_SIZE, T> {
     pub fn from_slice(slc: &[T]) -> Self {
         Self {
             enabled: slc[0].clone(),
@@ -66,103 +71,106 @@ impl<T: Clone> MemoryAccessCols<T> {
             is_immediate: slc[2].clone(),
             is_zero_aux: slc[3].clone(),
             address: slc[4].clone(),
-            data: slc[5].clone(),
+            data: from_fn(|i| slc[5 + i].clone()),
         }
     }
-
     pub fn flatten(&self) -> Vec<T> {
-        vec![
+        let mut flattened = vec![
             self.enabled.clone(),
             self.address_space.clone(),
             self.is_immediate.clone(),
             self.is_zero_aux.clone(),
             self.address.clone(),
-            self.data.clone(),
-        ]
+        ];
+        flattened.extend(self.data.to_vec());
+        flattened
     }
 
     pub fn get_width() -> usize {
-        6
+        5 + WORD_SIZE
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CpuAuxCols<T> {
-    pub operation_flags: Vec<T>,
-    pub read1: MemoryAccessCols<T>,
-    pub read2: MemoryAccessCols<T>,
-    pub write: MemoryAccessCols<T>,
-    pub beq_check: T,
-    pub is_equal_aux: T,
+pub struct CpuAuxCols<const WORD_SIZE: usize, T> {
+    pub operation_flags: BTreeMap<OpCode, T>,
+    pub accesses: [MemoryAccessCols<WORD_SIZE, T>; MAX_ACCESSES_PER_CYCLE],
+    pub read0_equals_read1: T,
+    pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
 }
 
-impl<T: Clone> CpuAuxCols<T> {
+impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
     pub fn from_slice(slc: &[T], options: CpuOptions) -> Self {
         let mut start = 0;
-        let mut end = options.num_operations();
-        let operation_flags = slc[start..end].to_vec();
+        let mut end = options.num_enabled_instructions();
+        let operation_flags_vec = slc[start..end].to_vec();
+        let mut operation_flags = BTreeMap::new();
+        for (opcode, operation_flag) in options
+            .enabled_instructions()
+            .iter()
+            .zip_eq(operation_flags_vec)
+        {
+            operation_flags.insert(*opcode, operation_flag);
+        }
 
-        start = end;
-        end += MemoryAccessCols::<T>::get_width();
-        let read1 = MemoryAccessCols::<T>::from_slice(&slc[start..end]);
-
-        start = end;
-        end += MemoryAccessCols::<T>::get_width();
-        let read2 = MemoryAccessCols::<T>::from_slice(&slc[start..end]);
-
-        start = end;
-        end += MemoryAccessCols::<T>::get_width();
-        let write = MemoryAccessCols::<T>::from_slice(&slc[start..end]);
+        let accesses = from_fn(|_| {
+            start = end;
+            end += MemoryAccessCols::<WORD_SIZE, T>::get_width();
+            MemoryAccessCols::from_slice(&slc[start..end])
+        });
 
         let beq_check = slc[end].clone();
-        let is_equal_aux = slc[end + 1].clone();
+        let is_equal_vec_aux = IsEqualVecAuxCols::from_slice(&slc[end + 1..], WORD_SIZE);
 
         Self {
             operation_flags,
-            read1,
-            read2,
-            write,
-            beq_check,
-            is_equal_aux,
+            accesses,
+            read0_equals_read1: beq_check,
+            is_equal_vec_aux,
         }
     }
 
-    pub fn flatten(&self) -> Vec<T> {
-        let mut flattened = self.operation_flags.clone();
-        flattened.extend(self.read1.flatten());
-        flattened.extend(self.read2.flatten());
-        flattened.extend(self.write.flatten());
-        flattened.push(self.beq_check.clone());
-        flattened.push(self.is_equal_aux.clone());
+    pub fn flatten(&self, options: CpuOptions) -> Vec<T> {
+        let mut flattened = vec![];
+        for opcode in options.enabled_instructions() {
+            flattened.push(self.operation_flags.get(&opcode).unwrap().clone());
+        }
+        flattened.extend(self.accesses.iter().flat_map(MemoryAccessCols::flatten));
+        flattened.push(self.read0_equals_read1.clone());
+        flattened.extend(self.is_equal_vec_aux.flatten());
         flattened
     }
 
     pub fn get_width(options: CpuOptions) -> usize {
-        options.num_operations() + (3 * MemoryAccessCols::<T>::get_width()) + 2
+        options.num_enabled_instructions()
+            + (MAX_ACCESSES_PER_CYCLE * MemoryAccessCols::<WORD_SIZE, T>::get_width())
+            + 1
+            + IsEqualVecAuxCols::<T>::get_width(WORD_SIZE)
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CpuCols<T> {
+pub struct CpuCols<const WORD_SIZE: usize, T> {
     pub io: CpuIoCols<T>,
-    pub aux: CpuAuxCols<T>,
+    pub aux: CpuAuxCols<WORD_SIZE, T>,
 }
 
-impl<T: Clone> CpuCols<T> {
+impl<const WORD_SIZE: usize, T: Clone> CpuCols<WORD_SIZE, T> {
     pub fn from_slice(slc: &[T], options: CpuOptions) -> Self {
         let io = CpuIoCols::<T>::from_slice(&slc[..CpuIoCols::<T>::get_width()]);
-        let aux = CpuAuxCols::<T>::from_slice(&slc[CpuIoCols::<T>::get_width()..], options);
+        let aux =
+            CpuAuxCols::<WORD_SIZE, T>::from_slice(&slc[CpuIoCols::<T>::get_width()..], options);
 
         Self { io, aux }
     }
 
-    pub fn flatten(&self) -> Vec<T> {
+    pub fn flatten(&self, options: CpuOptions) -> Vec<T> {
         let mut flattened = self.io.flatten();
-        flattened.extend(self.aux.flatten());
+        flattened.extend(self.aux.flatten(options));
         flattened
     }
 
     pub fn get_width(options: CpuOptions) -> usize {
-        CpuIoCols::<T>::get_width() + CpuAuxCols::<T>::get_width(options)
+        CpuIoCols::<T>::get_width() + CpuAuxCols::<WORD_SIZE, T>::get_width(options)
     }
 }

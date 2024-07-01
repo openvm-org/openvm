@@ -1,6 +1,7 @@
 use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
+use stark_vm::cpu::trace::Instruction;
 
-use crate::prelude::Builder;
+use crate::{conversion::convert_program, prelude::Builder};
 
 use super::{config::AsmConfig, AsmCompiler, AssemblyCode};
 
@@ -13,5 +14,12 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmBu
         let mut compiler = AsmCompiler::new();
         compiler.build(self.operations);
         compiler.code()
+    }
+
+    pub fn compile_isa(self) -> Vec<Instruction<F>> {
+        let mut compiler = AsmCompiler::new();
+        compiler.build(self.operations);
+        let asm_code = compiler.code();
+        convert_program(asm_code)
     }
 }

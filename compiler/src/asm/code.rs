@@ -35,8 +35,8 @@ impl<F: PrimeField32, EF: ExtensionField<F>> BasicBlock<F, EF> {
 /// Assembly code for a program.
 #[derive(Debug, Clone)]
 pub struct AssemblyCode<F, EF> {
-    blocks: Vec<BasicBlock<F, EF>>,
-    labels: BTreeMap<F, String>,
+    pub blocks: Vec<BasicBlock<F, EF>>,
+    pub labels: BTreeMap<F, String>,
 }
 
 impl<F: PrimeField32, EF: ExtensionField<F>> AssemblyCode<F, EF> {

@@ -1,7 +1,7 @@
 use p3_field::PrimeField64;
 
 use crate::cpu::trace::Instruction;
-use crate::cpu::OpCode::JAL;
+use crate::cpu::OpCode::FAIL;
 
 #[cfg(test)]
 pub mod tests;
@@ -26,7 +26,7 @@ impl<F: PrimeField64> ProgramAir<F> {
             // op_a doesn't matter here (random address to write garbage to)
             // op_b is the offset, needs to be 0 so we jump to self
             // as_b should be nonzero so we don't write to immediate (may be unsupported)
-            program.push(Instruction::from_isize(JAL, 0, 0, 0, 1, 0));
+            program.push(Instruction::from_isize(FAIL, 0, 0, 0, 0, 0));
         }
 
         Self { program }

@@ -8,7 +8,10 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 
 use crate::{
-    cpu::{trace::Instruction, CpuAir, RANGE_CHECKER_BUS, WORD_SIZE},
+    cpu::{
+        trace::{ExecutionError, Instruction},
+        CpuAir, RANGE_CHECKER_BUS,
+    },
     field_arithmetic::FieldArithmeticAir,
     memory::{offline_checker::OfflineChecker, MemoryAccess},
     program::ProgramAir,
@@ -18,13 +21,13 @@ use self::config::{VmConfig, VmParamsConfig};
 
 pub mod config;
 
-pub struct VirtualMachine<SC: StarkGenericConfig>
+pub struct VirtualMachine<const WORD_SIZE: usize, SC: StarkGenericConfig>
 where
     Val<SC>: PrimeField64,
 {
     pub config: VmParamsConfig,
 
-    pub cpu_air: CpuAir,
+    pub cpu_air: CpuAir<WORD_SIZE>,
     pub program_air: ProgramAir<Val<SC>>,
     pub memory_air: OfflineChecker,
     pub field_arithmetic_air: FieldArithmeticAir,
@@ -37,12 +40,14 @@ where
     pub range_trace: DenseMatrix<Val<SC>>,
 }
 
-impl<SC: StarkGenericConfig> VirtualMachine<SC>
+impl<const WORD_SIZE: usize, SC: StarkGenericConfig> VirtualMachine<WORD_SIZE, SC>
 where
-    Val<SC>: PrimeField64,
     Val<SC>: PrimeField32,
 {
-    pub fn new(config: VmConfig, program: Vec<Instruction<Val<SC>>>) -> Self {
+    pub fn new(
+        config: VmConfig,
+        program: Vec<Instruction<Val<SC>>>,
+    ) -> Result<Self, ExecutionError> {
         let config = config.vm;
         let decomp = config.decomp;
         let limb_bits = config.limb_bits;
@@ -54,7 +59,7 @@ where
         let memory_air = OfflineChecker::new(WORD_SIZE, limb_bits, limb_bits, limb_bits, decomp);
         let field_arithmetic_air = FieldArithmeticAir::new();
 
-        let execution = cpu_air.generate_program_execution(program_air.program.clone());
+        let execution = cpu_air.generate_program_execution(program_air.program.clone())?;
         let program_trace = program_air.generate_trace(&execution);
 
         let ops = execution
@@ -65,7 +70,7 @@ where
                 op_type: access.op_type,
                 address_space: access.address_space,
                 timestamp: access.timestamp,
-                data: vec![access.data],
+                data: access.data.to_vec(),
             })
             .collect::<Vec<_>>();
         let memory_trace_degree = execution.memory_accesses.len().next_power_of_two();
@@ -76,19 +81,19 @@ where
 
         let field_arithmetic_trace = field_arithmetic_air.generate_trace(&execution);
 
-        Self {
+        Ok(Self {
             config,
             cpu_air,
             program_air,
             memory_air,
             field_arithmetic_air,
             range_checker,
-            cpu_trace: execution.trace(),
+            cpu_trace: execution.trace(config.cpu_options()),
             program_trace,
             memory_trace,
             field_arithmetic_trace,
             range_trace,
-        }
+        })
     }
 
     pub fn chips(&self) -> Vec<&dyn AnyRap<SC>> {

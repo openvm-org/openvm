@@ -1,3 +1,4 @@
+use afs_compiler::util::{display_program, execute_program};
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
@@ -7,6 +8,8 @@ use afs_compiler::ir::Var;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
+
+const WORD_SIZE: usize = 1;
 
 #[test]
 fn test_compiler_conditionals() {
@@ -49,8 +52,15 @@ fn test_compiler_conditionals() {
     );
     builder.assert_var_eq(c, F::zero());
 
-    let code = builder.compile_asm();
-    println!("{}", code);
+    builder.halt();
+
+    let program = builder.compile_isa();
+    display_program(&program);
+    execute_program::<WORD_SIZE, _>(program);
+
+    // let code = builder.compile_asm();
+    // println!("{}", code);
+
     // let program = builder.compile();
     // let program = code.machine_code();
 
@@ -82,8 +92,15 @@ fn test_compiler_conditionals_v2() {
         })
     });
 
-    let code = builder.compile_asm();
-    println!("{}", code);
+    builder.halt();
+
+    let program = builder.compile_isa();
+    display_program(&program);
+    execute_program::<WORD_SIZE, _>(program);
+
+    // let code = builder.compile_asm();
+    // println!("{}", code);
+
     // let program = builder.compile();
     // let program = code.machine_code();
 

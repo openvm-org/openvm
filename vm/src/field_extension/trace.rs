@@ -13,7 +13,10 @@ use super::FieldExtensionArithmeticAir;
 
 impl FieldExtensionArithmeticAir {
     /// Generates trace for field extension add/sub chip.
-    pub fn generate_trace<T: Field>(&self, prog_exec: &ProgramExecution<T>) -> RowMajorMatrix<T> {
+    pub fn generate_trace<T: Field>(
+        &self,
+        prog_exec: &ProgramExecution<1, T>,
+    ) -> RowMajorMatrix<T> {
         let trace: Vec<T> = prog_exec
             .field_extension_ops
             .iter()

@@ -14,7 +14,7 @@ use super::columns::FieldExtensionArithmeticIOCols;
 use super::FieldExtensionArithmeticAir;
 
 /// Function for testing that generates a random program consisting only of field arithmetic operations.
-fn generate_field_extension_program(len_ops: usize) -> ProgramExecution<BabyBear> {
+fn generate_field_extension_program(len_ops: usize) -> ProgramExecution<1, BabyBear> {
     let mut rng = create_seeded_rng();
     let ops = (0..len_ops)
         .map(|_| OpCode::from_u8(rng.gen_range(13..=13)).unwrap())
