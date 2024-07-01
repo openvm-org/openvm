@@ -86,15 +86,14 @@ fn test_poseidon2() {
         .expect("Verification failed");
 
     // negative test
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
     for _ in 0..10 {
         let width = rng.gen_range(0..poseidon2_air.get_width());
         let height = rng.gen_range(0..num_rows);
         let rand = BabyBear::from_canonical_u32(rng.gen_range(1..=1 << 27));
         poseidon2_trace.row_mut(height)[width] += rand;
-
-        USE_DEBUG_BUILDER.with(|debug| {
-            *debug.lock().unwrap() = false;
-        });
         assert_eq!(
             engine.run_simple_test(
                 vec![&poseidon2_air, &page_requester],
