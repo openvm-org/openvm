@@ -15,8 +15,11 @@ pub struct Poseidon2IOCols<const WIDTH: usize, T> {
 }
 
 pub struct Poseidon2AuxCols<const WIDTH: usize, T> {
+    // contains one state (array of length WIDTH) for each round of phase1, of which there are `rounds_f/2`
     pub phase1: Vec<[T; WIDTH]>,
+    // contains one state (array of length WIDTH) for each round of phase2, of which there are `rounds_p`
     pub phase2: Vec<[T; WIDTH]>,
+    // contains one state (array of length WIDTH) for each round of phase3, of which there are `rounds_f - rounds_f/2`
     pub phase3: Vec<[T; WIDTH]>,
 }
 
