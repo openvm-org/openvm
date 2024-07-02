@@ -1,5 +1,5 @@
-pub mod my_final_page;
-pub mod my_initial_page;
+pub mod final_page;
+pub mod initial_page;
 pub mod offline_checker;
 pub mod page_controller;
 

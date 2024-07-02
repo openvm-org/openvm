@@ -7,10 +7,15 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-pub struct IntersectorAir {
+#[derive(derive_new::new)]
+pub struct IntersectorBuses {
     pub t1_intersector_bus_index: usize,
     pub t2_intersector_bus_index: usize,
     pub intersector_t2_bus_index: usize,
+}
+
+pub struct IntersectorAir {
+    pub buses: IntersectorBuses,
 
     pub idx_len: usize,
 
@@ -20,17 +25,13 @@ pub struct IntersectorAir {
 impl IntersectorAir {
     pub fn new(
         range_bus_index: usize,
-        t1_intersector_bus_index: usize,
-        t2_intersector_bus_index: usize,
-        intersector_t2_bus_index: usize,
+        buses: IntersectorBuses,
         idx_len: usize,
         idx_limb_bits: usize,
         decomp: usize,
     ) -> Self {
         Self {
-            t1_intersector_bus_index,
-            t2_intersector_bus_index,
-            intersector_t2_bus_index,
+            buses,
             idx_len,
             lt_chip: IsLessThanTupleAir::new(range_bus_index, vec![idx_limb_bits; idx_len], decomp),
         }

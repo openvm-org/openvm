@@ -81,12 +81,6 @@ where
 
         let local_page = page_main.row_slice(0);
         let local_aux = aux_main.row_slice(0);
-        let local_vec = local_page
-            .iter()
-            .chain(local_aux.iter())
-            .cloned()
-            .collect::<Vec<AB::Var>>();
-        let local = local_vec.as_slice();
 
         // get the idx_limb_bits and decomp, which will be used to generate local_cols
         let (idx_limb_bits, decomp) = match &self.variant_air {
@@ -121,8 +115,12 @@ where
             PageIndexScanInputAirVariants::Eq(..) => Comp::Eq,
         };
 
-        let local_cols = PageIndexScanInputCols::<AB::Var>::from_slice(
-            local,
+        let PageIndexScanInputCols {
+            page_cols,
+            local_cols,
+        } = PageIndexScanInputCols::<AB::Var>::from_partitioned_slice(
+            &local_page,
+            &local_aux,
             self.idx_len,
             self.data_len,
             idx_limb_bits.clone(),
@@ -136,7 +134,7 @@ where
         }
         // constrain that we send the row iff the row is allocated and satisfies the predicate
         builder.assert_eq(
-            local_cols.page_cols.is_alloc * local_cols.satisfies_pred,
+            page_cols.is_alloc * local_cols.satisfies_pred,
             local_cols.send_row,
         );
         // constrain that satisfies_pred and send_row are boolean indicators
@@ -175,7 +173,7 @@ where
                 }) => Some(IsLessThanTupleCols {
                     io: IsLessThanTupleIOCols {
                         // idx < x
-                        x: local_cols.page_cols.idx.clone(),
+                        x: page_cols.idx.clone(),
                         y: local_cols.x.clone(),
                         // use the strict_comp_ind
                         tuple_less_than: strict_comp_ind.unwrap(),
@@ -193,7 +191,7 @@ where
                     io: IsLessThanTupleIOCols {
                         // idx > x
                         x: local_cols.x.clone(),
-                        y: local_cols.page_cols.idx.clone(),
+                        y: page_cols.idx.clone(),
                         // use the strict_comp_ind
                         tuple_less_than: strict_comp_ind.unwrap(),
                     },
@@ -215,7 +213,7 @@ where
             }) => {
                 let is_equal_vec_cols = IsEqualVecCols {
                     io: IsEqualVecIOCols {
-                        x: local_cols.page_cols.idx.clone(),
+                        x: page_cols.idx.clone(),
                         y: local_cols.x.clone(),
                         // use the equal_comp_ind
                         prod: equal_comp_ind.unwrap(),

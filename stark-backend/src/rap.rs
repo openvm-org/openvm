@@ -37,7 +37,7 @@ where
 /// Exposed values are used internally by the prover and verifier
 /// in cross-table permutation arguments.
 pub trait PermutationAirBuilderWithExposedValues: PermutationAirBuilder {
-    fn permutation_exposed_values(&self) -> &[Self::EF];
+    fn permutation_exposed_values(&self) -> &[Self::VarEF];
 }
 
 /// RAP trait for all-purpose dynamic dispatch use.

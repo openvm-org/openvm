@@ -6,7 +6,7 @@ use crate::{
     afs_input::{types::InputFileOp, AfsInputFile},
     mock_db::MockDb,
     table::{codec::fixed_bytes::FixedBytesCodec, types::TableMetadata, Table},
-    utils::string_to_be_vec,
+    utils::string_to_u8_vec,
 };
 use color_eyre::eyre::{eyre, Result};
 use utils::string_to_table_id;
@@ -48,7 +48,6 @@ impl<'a> AfsInterface<'a> {
         }
     }
 
-    /// Loads an .afi input file and executes the instructions in the file, outputting the resulting Table.
     pub fn load_input_file(&mut self, path: &str) -> Result<&Table> {
         let instructions = AfsInputFile::open(path)?;
 
@@ -79,9 +78,9 @@ impl<'a> AfsInterface<'a> {
                         return Err(eyre!("Invalid number of arguments for insert operation"));
                     }
                     let index_input = op.args[0].clone();
-                    let index = string_to_be_vec(index_input, instructions.header.index_bytes);
+                    let index = string_to_u8_vec(index_input, instructions.header.index_bytes);
                     let data_input = op.args[1].clone();
-                    let data = string_to_be_vec(data_input, instructions.header.data_bytes);
+                    let data = string_to_u8_vec(data_input, instructions.header.data_bytes);
                     let table = self.db_ref.get_table(table_id_bytes);
                     if table.is_none() {
                         self.db_ref.create_table(
@@ -99,9 +98,9 @@ impl<'a> AfsInterface<'a> {
                         return Err(eyre!("Invalid number of arguments for write operation"));
                     }
                     let index_input = op.args[0].clone();
-                    let index = string_to_be_vec(index_input, instructions.header.index_bytes);
+                    let index = string_to_u8_vec(index_input, instructions.header.index_bytes);
                     let data_input = op.args[1].clone();
-                    let data = string_to_be_vec(data_input, instructions.header.data_bytes);
+                    let data = string_to_u8_vec(data_input, instructions.header.data_bytes);
                     let table = self.db_ref.get_table(table_id_bytes);
                     if table.is_none() {
                         self.db_ref.create_table(

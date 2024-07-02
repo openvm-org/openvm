@@ -18,11 +18,15 @@ use p3_matrix::dense::DenseMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 use super::{
+    final_table::FinalTableAir,
+    initial_table::{InitialTableAir, TableType},
     intersector::IntersectorAir,
-    my_final_table::MyFinalTableAir,
-    my_initial_table::{MyInitialTableAir, TableType},
 };
-use crate::{common::page::Page, range_gate::RangeCheckerGateChip};
+use crate::{
+    common::page::Page,
+    inner_join::{final_table::FinalTableBuses, intersector::IntersectorBuses},
+    range_gate::RangeCheckerGateChip,
+};
 
 /// A struct to keep track of the traces of the chips
 /// owned by the inner join controller
@@ -55,11 +59,19 @@ pub struct IJBuses {
 }
 
 /// A struct containing the basic format of the tables
-#[derive(derive_new::new)]
+#[derive(Clone, derive_new::new)]
 pub struct TableFormat {
-    idx_len: usize,
-    data_len: usize,
-    idx_limb_bits: usize,
+    pub idx_len: usize,
+    pub data_len: usize,
+    pub idx_limb_bits: usize,
+}
+
+/// A struct containing the format of the T2 table (Child Table)
+#[derive(Clone, derive_new::new)]
+pub struct T2Format {
+    pub table_format: TableFormat,
+    pub fkey_start: usize,
+    pub fkey_end: usize,
 }
 
 /// This is a controller the Inner Join operation on tables T1 (with primary key) and T2 (which foreign key).
@@ -110,9 +122,9 @@ pub struct FKInnerJoinController<SC: StarkGenericConfig>
 where
     Val<SC>: AbstractField,
 {
-    t1_chip: MyInitialTableAir,
-    t2_chip: MyInitialTableAir,
-    output_chip: MyFinalTableAir,
+    t1_chip: InitialTableAir,
+    t2_chip: InitialTableAir,
+    output_chip: FinalTableAir,
     intersector_chip: IntersectorAir,
 
     traces: Option<IJTraces<Val<SC>>>,
@@ -125,26 +137,18 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
     /// Note that here we refer to the Parent Table (or the Referenced Table) as T1 and
     /// the Child Table (or the Referencing Table) as T2
     /// [fkey_start, fkey_end) is the range of the foreign key within the data part of T2
-    pub fn new(
-        buses: IJBuses,
-        t1_format: TableFormat,
-        t2_format: TableFormat,
-        fkey_start: usize,
-        fkey_end: usize,
-        decomp: usize,
-    ) -> Self
+    pub fn new(buses: IJBuses, t1_format: TableFormat, t2_format: T2Format, decomp: usize) -> Self
     where
         Val<SC>: Field,
     {
         // Ensuring the foreign key range is valid
-        println!(
-            "fkey_start: {}, fkey_end: {}, t2_format.data_len: {}",
-            fkey_start, fkey_end, t2_format.data_len
+        assert!(
+            t2_format.fkey_start < t2_format.fkey_end
+                && t2_format.fkey_end <= t2_format.table_format.data_len
         );
-        assert!(fkey_start < fkey_end && fkey_end <= t2_format.data_len);
 
         Self {
-            t1_chip: MyInitialTableAir::new(
+            t1_chip: InitialTableAir::new(
                 t1_format.idx_len,
                 t1_format.data_len,
                 TableType::T1 {
@@ -152,34 +156,31 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
                     t1_output_bus_index: buses.t1_output_bus_index,
                 },
             ),
-            t2_chip: MyInitialTableAir::new(
-                t2_format.idx_len,
-                t2_format.data_len,
-                TableType::T2 {
-                    fkey_start,
-                    fkey_end,
-                    t2_intersector_bus_index: buses.t2_intersector_bus_index,
-                    intersector_t2_bus_index: buses.intersector_t2_bus_index,
-                    t2_output_bus_index: buses.t2_output_bus_index,
-                },
+            t2_chip: InitialTableAir::new(
+                t2_format.table_format.idx_len,
+                t2_format.table_format.data_len,
+                TableType::new_t2(
+                    t2_format.fkey_start,
+                    t2_format.fkey_end,
+                    buses.t2_intersector_bus_index,
+                    buses.intersector_t2_bus_index,
+                    buses.t2_output_bus_index,
+                ),
             ),
-            output_chip: MyFinalTableAir::new(
-                buses.t1_output_bus_index,
-                buses.t2_output_bus_index,
+            output_chip: FinalTableAir::new(
+                FinalTableBuses::new(buses.t1_output_bus_index, buses.t2_output_bus_index),
                 buses.range_bus_index,
-                t2_format.idx_len,
-                t1_format.data_len,
-                t2_format.data_len,
-                fkey_start,
-                fkey_end,
-                t2_format.idx_limb_bits,
+                t1_format.clone(),
+                t2_format,
                 decomp,
             ),
             intersector_chip: IntersectorAir::new(
                 buses.range_bus_index,
-                buses.t1_intersector_bus_index,
-                buses.t2_intersector_bus_index,
-                buses.intersector_t2_bus_index,
+                IntersectorBuses::new(
+                    buses.t1_intersector_bus_index,
+                    buses.t2_intersector_bus_index,
+                    buses.intersector_t2_bus_index,
+                ),
                 t1_format.idx_len,
                 Val::<SC>::bits() - 1, // Here, we use the full range of the field because there's no guarantee that the foreign key is in the idx_limb_bits range
                 decomp,
@@ -453,10 +454,6 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
             proof,
             &pis,
         )
-    }
-
-    pub fn traces(&self) -> &IJTraces<Val<SC>> {
-        self.traces.as_ref().unwrap()
     }
 
     /// This function takes two tables T1 and T2 and the range of the foreign key in T2

@@ -9,15 +9,16 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_util::log2_ceil_usize;
 use tracing::instrument;
 
-pub mod symbolic_expression;
-pub mod symbolic_variable;
-
-use self::symbolic_expression::SymbolicExpression;
-use self::symbolic_variable::{Entry, SymbolicVariable};
 use crate::keygen::types::TraceWidth;
 use crate::rap::{PermutationAirBuilderWithExposedValues, Rap};
 
 use super::PartitionedAirBuilder;
+
+use self::symbolic_expression::SymbolicExpression;
+use self::symbolic_variable::{Entry, SymbolicVariable};
+
+pub mod symbolic_expression;
+pub mod symbolic_variable;
 
 #[instrument(name = "infer log of constraint degree", skip_all)]
 pub fn get_log_quotient_degree<F, R>(
@@ -103,7 +104,7 @@ pub struct SymbolicRapBuilder<F: Field> {
     after_challenge: Vec<RowMajorMatrix<SymbolicVariable<F>>>,
     public_values: Vec<SymbolicVariable<F>>,
     challenges: Vec<Vec<SymbolicVariable<F>>>,
-    exposed_values_after_challenge: Vec<Vec<F>>,
+    exposed_values_after_challenge: Vec<Vec<SymbolicVariable<F>>>,
     constraints: Vec<SymbolicExpression<F>>,
 }
 
@@ -167,10 +168,14 @@ impl<F: Field> SymbolicRapBuilder<F> {
                     .collect_vec()
             })
             .collect_vec();
-        // TODO: This should be a symbolic variable
+
         let exposed_values_after_challenge = num_exposed_values_after_challenge
             .iter()
-            .map(|&num| (0..num).map(|_index| F::one()).collect_vec())
+            .map(|&num| {
+                (0..num)
+                    .map(|index| SymbolicVariable::new(Entry::Exposed, index))
+                    .collect_vec()
+            })
             .collect_vec();
 
         Self {
@@ -272,7 +277,7 @@ impl<F: Field> PermutationAirBuilder for SymbolicRapBuilder<F> {
 }
 
 impl<F: Field> PermutationAirBuilderWithExposedValues for SymbolicRapBuilder<F> {
-    fn permutation_exposed_values(&self) -> &[Self::EF] {
+    fn permutation_exposed_values(&self) -> &[Self::VarEF] {
         self.exposed_values_after_challenge
             .first()
             .map(|c| c.as_slice())

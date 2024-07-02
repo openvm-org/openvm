@@ -1,11 +1,15 @@
 [workspace]
 members = [
     "chips",
+    "compiler",
     "stark-backend",
     "test-utils",
     "derive",
     "bin/afs",
-    "logical-interface", "bin/olap",
+    "bin/predicate",
+    "logical-interface",
+    "vm",
+    "vm/bin",
 ]
 resolver = "2"
 

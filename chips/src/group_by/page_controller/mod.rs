@@ -1,6 +1,6 @@
 use crate::common::page::Page;
-use crate::group_by::final_page::MyFinalPageAir;
-use crate::group_by::group_by_input::GroupByAir;
+use crate::group_by::group_by_input::{GroupByAir, GroupByOperation};
+use crate::group_by::receiving_indexed_output_page_air::ReceivingIndexedOutputPageAir;
 use crate::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
@@ -15,8 +15,7 @@ use afs_stark_backend::{
     verifier::VerificationError,
 };
 use afs_test_utils::engine::StarkEngine;
-use p3_field::PrimeField64;
-use p3_field::{AbstractField, PrimeField};
+use p3_field::{AbstractField, PrimeField, PrimeField64};
 use p3_matrix::dense::DenseMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use std::marker::PhantomData;
@@ -40,7 +39,7 @@ where
 {
     pub group_by: GroupByAir,
     pub range_checker: Arc<RangeCheckerGateChip>,
-    pub final_chip: MyFinalPageAir,
+    pub final_chip: ReceivingIndexedOutputPageAir,
     _marker: PhantomData<SC>,
 }
 
@@ -76,6 +75,8 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         range_bus: usize,
         limb_bits: usize,
         decomp: usize,
+        sorted: bool,
+        op: GroupByOperation,
     ) -> Self {
         let group_by = GroupByAir::new(
             page_width,
@@ -83,9 +84,11 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             aggregated_col,
             internal_bus,
             output_bus,
+            sorted,
+            op,
         );
         let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus, 1 << decomp));
-        let final_chip = MyFinalPageAir::new(
+        let final_chip = ReceivingIndexedOutputPageAir::new(
             output_bus,
             range_bus,
             group_by_cols.len(),
@@ -106,35 +109,39 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     ///
     /// Returns a tuple of `GroupByTraces`, `GroupByCommitments`, and a vector of
     /// `ProverTraceData`.
+    #[allow(clippy::type_complexity)]
     pub fn load_page(
         &mut self,
         page: &Page,
+        page_input_pdata: Option<Arc<ProverTraceData<SC>>>,
+        page_output_pdata: Option<Arc<ProverTraceData<SC>>>,
         trace_committer: &TraceCommitter<SC>,
     ) -> (
         GroupByTraces<SC>,
         GroupByCommitments<SC>,
-        Vec<ProverTraceData<SC>>,
+        Arc<ProverTraceData<SC>>,
+        Arc<ProverTraceData<SC>>,
     )
     where
         Val<SC>: PrimeField,
     {
         let group_by_trace = page.gen_trace();
 
-        let grouped_page = self.group_by.request(page);
+        let (answer, grouped_page) = self.group_by.request(page);
         let group_by_aux_trace: DenseMatrix<Val<SC>> = self.group_by.gen_aux_trace(&grouped_page);
 
-        let final_page_trace = grouped_page.gen_trace();
+        let final_page_trace = answer.gen_trace();
         let final_page_aux_trace = self
             .final_chip
-            .gen_aux_trace::<SC>(&grouped_page, self.range_checker.clone());
+            .gen_aux_trace::<SC>(&answer, self.range_checker.clone());
 
-        let prover_data = vec![
-            trace_committer.commit(vec![group_by_trace.clone()]),
-            trace_committer.commit(vec![final_page_trace.clone()]),
-        ];
+        let page_input_pdata = page_input_pdata
+            .unwrap_or_else(|| Arc::new(trace_committer.commit(vec![group_by_trace.clone()])));
+        let page_output_pdata = page_output_pdata
+            .unwrap_or_else(|| Arc::new(trace_committer.commit(vec![final_page_trace.clone()])));
 
-        let group_by_commitment = prover_data[0].commit.clone();
-        let final_page_commitment = prover_data[1].commit.clone();
+        let group_by_commitment = page_input_pdata.commit.clone();
+        let final_page_commitment = page_output_pdata.commit.clone();
 
         (
             GroupByTraces {
@@ -147,7 +154,8 @@ impl<SC: StarkGenericConfig> PageController<SC> {
                 group_by_commitment,
                 final_page_commitment,
             },
-            prover_data,
+            page_input_pdata,
+            page_output_pdata,
         )
     }
 
@@ -201,7 +209,8 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         partial_pk: &MultiStarkPartialProvingKey<SC>,
         trace_builder: &mut TraceCommitmentBuilder<SC>,
         group_by_traces: GroupByTraces<SC>,
-        mut cached_traces_prover_data: Vec<ProverTraceData<SC>>,
+        input_prover_data: Arc<ProverTraceData<SC>>,
+        output_prover_data: Arc<ProverTraceData<SC>>,
     ) -> Proof<SC>
     where
         Val<SC>: PrimeField64,
@@ -212,19 +221,23 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
     {
-        assert!(cached_traces_prover_data.len() == 2);
-
         let range_checker_trace = self.range_checker.generate_trace();
 
         trace_builder.clear();
 
         trace_builder.load_cached_trace(
             group_by_traces.group_by_trace,
-            cached_traces_prover_data.remove(0),
+            match Arc::try_unwrap(input_prover_data) {
+                Ok(data) => data,
+                Err(_) => panic!("Prover data should have only one owner"),
+            },
         );
         trace_builder.load_cached_trace(
             group_by_traces.final_page_trace,
-            cached_traces_prover_data.remove(0),
+            match Arc::try_unwrap(output_prover_data) {
+                Ok(data) => data,
+                Err(_) => panic!("Prover data should have only one owner"),
+            },
         );
 
         trace_builder.load_trace(group_by_traces.group_by_aux_trace);

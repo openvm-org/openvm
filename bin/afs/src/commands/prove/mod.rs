@@ -25,7 +25,7 @@ use logical_interface::{
     afs_interface::AfsInterface,
     mock_db::MockDb,
     table::codec::fixed_bytes::FixedBytesCodec,
-    utils::{fixed_bytes_to_field_vec, string_to_be_vec},
+    utils::{fixed_bytes_to_u16_vec, string_to_u8_vec},
 };
 use p3_util::log2_strict_usize;
 
@@ -208,8 +208,8 @@ fn afi_op_conv(
     clk: usize,
     codec: &FixedBytesCodec,
 ) -> Operation {
-    let idx_u8 = string_to_be_vec(afi_op.args[0].clone(), codec.db.index_bytes);
-    let idx_u16 = fixed_bytes_to_field_vec(idx_u8.clone());
+    let idx_u8 = string_to_u8_vec(afi_op.args[0].clone(), codec.db.index_bytes);
+    let idx_u16 = fixed_bytes_to_u16_vec(idx_u8.clone());
     let idx = codec.db_to_table_index_bytes(idx_u8.clone());
     match afi_op.operation {
         InputFileOp::Read => {
@@ -218,7 +218,7 @@ fn afi_op_conv(
                 .read(table_id, codec.db_to_table_index_bytes(idx_u8))
                 .unwrap();
             let data_bytes = codec.table_to_db_data_bytes(data.clone());
-            let data_u16 = fixed_bytes_to_field_vec(data_bytes);
+            let data_u16 = fixed_bytes_to_u16_vec(data_bytes);
             Operation {
                 clk,
                 idx: idx_u16,
@@ -228,8 +228,8 @@ fn afi_op_conv(
         }
         InputFileOp::Insert => {
             assert!(afi_op.args.len() == 2);
-            let data_u8 = string_to_be_vec(afi_op.args[1].clone(), codec.db.data_bytes);
-            let data_u16 = fixed_bytes_to_field_vec(data_u8.clone());
+            let data_u8 = string_to_u8_vec(afi_op.args[1].clone(), codec.db.data_bytes);
+            let data_u16 = fixed_bytes_to_u16_vec(data_u8.clone());
             let data = codec.db_to_table_data_bytes(data_u8);
             interface.insert(table_id, idx, data);
             Operation {
@@ -241,8 +241,8 @@ fn afi_op_conv(
         }
         InputFileOp::Write => {
             assert!(afi_op.args.len() == 2);
-            let data_u8 = string_to_be_vec(afi_op.args[1].clone(), codec.db.data_bytes);
-            let data_u16 = fixed_bytes_to_field_vec(data_u8.clone());
+            let data_u8 = string_to_u8_vec(afi_op.args[1].clone(), codec.db.data_bytes);
+            let data_u16 = fixed_bytes_to_u16_vec(data_u8.clone());
             let data = codec.db_to_table_data_bytes(data_u8);
             interface.write(table_id, idx, data);
             Operation {

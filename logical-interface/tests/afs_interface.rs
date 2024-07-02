@@ -3,7 +3,7 @@ use logical_interface::{
     afs_interface::AfsInterface,
     mock_db::MockDb,
     table::types::TableMetadata,
-    utils::{string_to_be_vec, uint_to_be_vec},
+    utils::{string_to_u8_vec, uint_to_be_vec},
 };
 
 fn insert_data(interface: &mut AfsInterface, table_id: String, key: Vec<u8>, value: Vec<u8>) {
@@ -80,7 +80,7 @@ pub fn test_interface_large_values() {
     insert_data(
         &mut interface,
         table_id.clone(),
-        string_to_be_vec(
+        string_to_u8_vec(
             "0xf221eb52f500a1db8bf0de52d2f2da5d208498b03cef6597be489c2207e1c576".to_string(),
             index_bytes,
         ),
@@ -90,7 +90,7 @@ pub fn test_interface_large_values() {
         &mut interface,
         table_id.clone(),
         uint_to_be_vec(1000, index_bytes),
-        string_to_be_vec(
+        string_to_u8_vec(
             "0x1f221eb52f500a1db8bf0de52d2f2da5d208498b03cef6597be489c2207e1c5".to_string(),
             data_bytes,
         ),
@@ -98,7 +98,7 @@ pub fn test_interface_large_values() {
     let table = interface
         .get_table(table_id.clone())
         .expect("Error getting table");
-    let read0 = table.read(string_to_be_vec(
+    let read0 = table.read(string_to_u8_vec(
         "0xf221eb52f500a1db8bf0de52d2f2da5d208498b03cef6597be489c2207e1c576".to_string(),
         index_bytes,
     ));
@@ -106,7 +106,7 @@ pub fn test_interface_large_values() {
     let read1 = table.read(uint_to_be_vec(1000, index_bytes));
     assert_eq!(
         read1,
-        Some(string_to_be_vec(
+        Some(string_to_u8_vec(
             "0x1f221eb52f500a1db8bf0de52d2f2da5d208498b03cef6597be489c2207e1c5".to_string(),
             data_bytes,
         ))

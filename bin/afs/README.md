@@ -29,7 +29,7 @@ cargo run --release --bin afs -- keygen --output-folder bin/common/data
 Cache a trace of a table.
 
 ```bash
-cargo run --release --bin afs -- cache -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 --db-file bin/common/data/input_file_32_1024.mockdb --output-file bin/common/data
+cargo run --release --bin afs -- cache -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 --db-file bin/common/data/input_file_32_1024.mockdb --output-folder bin/common/data
 ```
 
 ### prove
@@ -91,7 +91,7 @@ cargo run --release --bin afs -- mock write -f bin/common/data/test_input_file_3
 
 cargo run --release --bin afs -- keygen --output-folder bin/common/data
 
-cargo run --release --bin afs -- cache -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 --db-file bin/common/data/input_file_32_1024.mockdb --output-file bin/common/data
+cargo run --release --bin afs -- cache -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 --db-file bin/common/data/input_file_32_1024.mockdb --output-folder bin/common/data
 
 cargo run --release --bin afs -- prove --afi-file bin/common/data/test_input_file_32_1024.afi --db-file bin/common/data/input_file_32_1024.mockdb --cache-folder bin/common/data --keys-folder bin/common/data
 

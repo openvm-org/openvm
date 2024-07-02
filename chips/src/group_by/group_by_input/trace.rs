@@ -52,7 +52,7 @@ impl GroupByAir {
             .map(|(is_eq, row)| vec![F::from_canonical_u32(row.is_alloc) * (F::one() - is_eq[0])])
             .collect::<Vec<Vec<F>>>();
 
-        let agg_idx = index_cols_map.aggregated - index_cols_map.page_range.end;
+        let agg_idx = index_cols_map.to_aggregate;
         let mut partial_sums: Vec<Vec<F>> = vec![vec![F::zero()]; page_f.len()];
         if !page_f.is_empty() {
             partial_sums[0][0] = page_f[0][agg_idx]; // Initialize with the first aggregated value
@@ -70,7 +70,11 @@ impl GroupByAir {
             .zip(eq_vec_aux_trace.iter())
             .flat_map(
                 |((((grouped_row, partial_sum_row), is_final_row), is_eq_row), eq_vec_aux_row)| {
-                    let mut trace_row = grouped_row.clone();
+                    let mut trace_row = if !self.sorted {
+                        grouped_row.clone()
+                    } else {
+                        vec![]
+                    };
                     trace_row.extend(partial_sum_row.clone()); // Singleton from partial
                     trace_row.extend(is_final_row.clone());
                     trace_row.extend(is_eq_row.clone());

@@ -1,3 +1,4 @@
+use derive_more::Display;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -13,7 +14,7 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Display, Clone)]
 pub enum Comp {
     #[default]
     Lt,
