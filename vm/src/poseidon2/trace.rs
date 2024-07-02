@@ -49,25 +49,16 @@ impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
     }
 
     /// Perform entire nonlinear external layer operation on state
-    pub fn ext_layer(
-        state: &mut [T; WIDTH],
-        constants: &[T; WIDTH],
-        external_layer: &Poseidon2ExternalMatrixGeneral,
-    ) where
-        DiffusionMatrixBabyBear: Permutation<[T; WIDTH]>,
-    {
-        external_layer.permute_mut(state);
+    pub fn ext_layer(&self, state: &mut [T; WIDTH], constants: &[T; WIDTH]) {
+        self.ext_lin_layer(state);
         for (s, c) in state.iter_mut().zip(constants) {
             *s = Self::sbox_p(*s + *c);
         }
     }
 
     /// Perform entire nonlinear internal layer operation on state
-    pub fn int_layer(state: &mut [T; WIDTH], constant: T, internal_layer: &DiffusionMatrixBabyBear)
-    where
-        DiffusionMatrixBabyBear: Permutation<[T; WIDTH]>,
-    {
-        internal_layer.permute_mut(state);
+    pub fn int_layer(&self, state: &mut [T; WIDTH], constant: T) {
+        self.int_lin_layer(state);
         state[0] += constant;
         state[0] = Self::sbox_p(state[0]);
     }
@@ -92,7 +83,7 @@ impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
         let internal_layer = DiffusionMatrixBabyBear {};
         let rounds_f_half = self.rounds_f / 2;
         for r in 0..rounds_f_half {
-            Self::ext_layer(&mut state, &self.external_constants[r], &external_layer);
+            Self::ext_layer(self, &mut state, &self.external_constants[r]);
             row.extend(state.iter());
         }
 
@@ -103,7 +94,7 @@ impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
                 state[0] += self.internal_constants[0];
                 state[0] = Self::sbox_p(state[0]);
             } else {
-                Self::int_layer(&mut state, self.internal_constants[r], &internal_layer);
+                Self::int_layer(self, &mut state, self.internal_constants[r]);
             }
             row.extend(state.iter());
         }
@@ -119,7 +110,7 @@ impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
                     *s = Self::sbox_p(*s + *c);
                 }
             } else {
-                Self::ext_layer(&mut state, &self.external_constants[r], &external_layer);
+                Self::ext_layer(self, &mut state, &self.external_constants[r]);
             }
             row.extend(state.iter());
         }

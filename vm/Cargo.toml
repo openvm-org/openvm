@@ -50,6 +50,7 @@ tracing-forest = { version = "0.1.6", features = ["ansi", "smallvec"] }
 test-case = "3.3.1"
 zkhash = { workspace = true }
 criterion = "0.4"
+rand_xoshiro = "0.6.0"
 
 [features]
 default = ["test-traits"]
