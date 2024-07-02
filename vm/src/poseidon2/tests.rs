@@ -7,6 +7,7 @@ use afs_test_utils::config::{
 use afs_test_utils::engine::StarkEngine;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::create_seeded_rng;
+use ark_ff::PrimeField as _;
 use criterion::black_box;
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_field::{AbstractField, PrimeField32};
@@ -147,7 +148,7 @@ fn test_poseidon2() {
 #[test]
 fn test_horizen_poseidon2() {
     fn horizen_to_p3(horizen_babybear: HorizenBabyBear) -> BabyBear {
-        BabyBear::from_canonical_u32(HorizenBabyBear::from(horizen_babybear).0.as_ref()[0] as u32)
+        BabyBear::from_canonical_u64(horizen_babybear.into_bigint().0[0])
     }
 
     let p3_rc16: Vec<Vec<BabyBear>> = RC16
@@ -175,7 +176,7 @@ fn test_horizen_poseidon2() {
     let horizen_int_diag: [u32; 16] = {
         let mut array = [0u32; 16];
         for (i, elem) in MAT_DIAG16_M_1.iter().enumerate() {
-            array[i] = HorizenBabyBear::from(*elem).0.as_ref()[0] as u32;
+            array[i] = elem.into_bigint().0[0] as u32;
         }
         array
     };
@@ -190,26 +191,24 @@ fn test_horizen_poseidon2() {
     let u32state = (0..16)
         .map(|_| rng.gen_range(1..=1 << 27))
         .collect::<Vec<_>>();
-    let horizen_state: Vec<HorizenBabyBear> = u32state
-        .clone()
-        .into_iter()
-        .map(HorizenBabyBear::from)
-        .collect();
-    let p3_state: Vec<[BabyBear; 16]> = vec![u32state
-        .into_iter()
-        .map(BabyBear::from_canonical_u32)
+    let horizen_state: Vec<HorizenBabyBear> =
+        u32state.into_iter().map(HorizenBabyBear::from).collect();
+    let p3_state: [BabyBear; 16] = horizen_state
+        .iter()
+        .copied()
+        .map(horizen_to_p3)
         .collect::<Vec<_>>()
         .try_into()
-        .unwrap()];
-    let air_result: Vec<BabyBear> = air_permut.request_trace(&p3_state)[0].to_vec();
-    let horizen_result = horizen_permut.permutation(black_box(&horizen_state));
+        .unwrap();
+    let air_result: Vec<BabyBear> = air_permut.request_trace(&[p3_state])[0].to_vec();
+    let horizen_result = horizen_permut.permutation(&horizen_state);
     let air_u32_result = air_result
         .iter()
         .map(BabyBear::as_canonical_u32)
         .collect::<Vec<_>>();
     let horizen_u32_result = horizen_result
         .into_iter()
-        .map(|elem| HorizenBabyBear::from(elem).0.as_ref()[0] as u32)
+        .map(|elem| elem.into_bigint().0[0] as u32)
         .collect::<Vec<_>>();
     println!("{:?}", air_u32_result);
     println!("{:?}", horizen_u32_result);
