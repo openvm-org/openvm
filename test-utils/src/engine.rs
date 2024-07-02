@@ -5,10 +5,19 @@ use afs_stark_backend::{
     rap::AnyRap,
     verifier::{MultiTraceStarkVerifier, VerificationError},
 };
+use p3_blake3::Blake3;
+use p3_keccak::Keccak256Hash;
 use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
-use crate::config::instrument::StarkHashStatistics;
+use crate::config::{
+    baby_bear_blake3::BabyBearBlake3Engine,
+    baby_bear_bytehash::engine_from_byte_hash,
+    baby_bear_keccak::BabyBearKeccakEngine,
+    baby_bear_poseidon2::{engine_from_perm, random_perm, BabyBearPoseidon2Engine},
+    instrument::StarkHashStatistics,
+    EngineType, FriParameters,
+};
 
 /// Testing engine
 pub trait StarkEngine<SC: StarkGenericConfig> {
@@ -57,6 +66,34 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
 pub trait StarkEngineWithHashInstrumentation<SC: StarkGenericConfig>: StarkEngine<SC> {
     fn clear_instruments(&mut self);
     fn stark_hash_statistics<T>(&self, custom: T) -> StarkHashStatistics<T>;
+}
+
+pub fn engine_from_params<SC: StarkGenericConfig>(
+    engine_type: EngineType,
+    fri_params: FriParameters,
+    pcs_log_degree: usize,
+) -> Box<dyn StarkEngine<SC>>
+where
+    BabyBearBlake3Engine: StarkEngine<SC>,
+    BabyBearKeccakEngine: StarkEngine<SC>,
+    BabyBearPoseidon2Engine: StarkEngine<SC>,
+{
+    match engine_type {
+        EngineType::BabyBearBlake3 => {
+            Box::new(
+                engine_from_byte_hash(Blake3, pcs_log_degree, fri_params) as BabyBearBlake3Engine
+            )
+        }
+        EngineType::BabyBearKeccak => Box::new(engine_from_byte_hash(
+            Keccak256Hash,
+            pcs_log_degree,
+            fri_params,
+        ) as BabyBearKeccakEngine),
+        EngineType::BabyBearPoseidon2 => {
+            let perm = random_perm();
+            Box::new(engine_from_perm(perm, pcs_log_degree, fri_params))
+        }
+    }
 }
 
 fn run_simple_test_impl<SC: StarkGenericConfig, E: StarkEngine<SC> + ?Sized>(
