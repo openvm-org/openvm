@@ -7,13 +7,13 @@ use afs_chips::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
 
-use crate::{cpu::MAX_ACCESSES_PER_CYCLE, vm::VirtualMachine};
+use crate::vm::VirtualMachine;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
     compose, decompose, CpuAir,
     OpCode::{self, *},
-    INST_WIDTH, MAX_READS_PER_CYCLE,
+    INST_WIDTH, MAX_ACCESSES_PER_CYCLE, MAX_READS_PER_CYCLE, MAX_WRITES_PER_CYCLE,
 };
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, derive_new::new)]
@@ -152,22 +152,22 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             let mut next_pc = pc + F::one();
 
             let mut accesses = [disabled_memory_cols(); MAX_ACCESSES_PER_CYCLE];
-            let mut read_index = 0;
-            let mut write_index = MAX_READS_PER_CYCLE;
+            let mut num_reads = 0;
+            let mut num_writes = 0;
 
             macro_rules! read {
                 ($address_space: expr, $address: expr) => {{
-                    assert!(read_index < MAX_READS_PER_CYCLE);
-                    let timestamp = (MAX_ACCESSES_PER_CYCLE * clock_cycle) + read_index;
+                    num_reads += 1;
+                    assert!(num_reads <= MAX_READS_PER_CYCLE);
+                    let timestamp = (MAX_ACCESSES_PER_CYCLE * clock_cycle) + (num_reads - 1);
                     let data = if $address_space == F::zero() {
                         decompose::<WORD_SIZE, F>($address)
                     } else {
                         vm.memory_chip
                             .read_word(timestamp, $address_space, $address)
                     };
-                    accesses[read_index] =
+                    accesses[num_reads - 1] =
                         memory_access_to_cols(true, $address_space, $address, data);
-                    read_index += 1;
                     compose(data)
                 }};
             }
@@ -179,9 +179,8 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     let word = decompose($data);
                     vm.memory_chip
                         .write_word(timestamp, $address_space, $address, word);
-                    accesses[write_index] =
+                    accesses[MAX_READS_PER_CYCLE + num_writes - 1] =
                         memory_access_to_cols(true, $address_space, $address, word);
-                    write_index += 1;
                 }};
             }
 
