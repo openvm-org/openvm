@@ -57,32 +57,12 @@ fn test_poseidon2() {
         })
         .collect();
 
-    let ext_mds_mat = [[2, 3, 1, 1], [1, 2, 3, 1], [1, 1, 2, 3], [3, 1, 1, 2]];
-    let int_diag_mat = [
-        2013265921 - 2,
-        1,
-        2,
-        4,
-        8,
-        16,
-        32,
-        64,
-        128,
-        256,
-        512,
-        1024,
-        2048,
-        4096,
-        8192,
-        32768,
-    ];
-
     // air and trace generation
     let poseidon2_air = Poseidon2Air::<16, BabyBear>::new(
         external_constants.clone(),
         internal_constants.clone(),
-        ext_mds_mat,
-        int_diag_mat,
+        Poseidon2Air::<16, BabyBear>::MDS_MAT_4,
+        Poseidon2Air::<16, BabyBear>::DIAG_MAT_16,
         943718400,
         0,
     );

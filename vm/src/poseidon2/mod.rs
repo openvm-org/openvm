@@ -28,6 +28,26 @@ pub struct Poseidon2Air<const WIDTH: usize, T: Clone> {
 }
 
 impl<const WIDTH: usize, T: Clone> Poseidon2Air<WIDTH, T> {
+    pub const MDS_MAT_4: [[u32; 4]; 4] = [[2, 3, 1, 1], [1, 2, 3, 1], [1, 1, 2, 3], [3, 1, 1, 2]];
+    pub const DIAG_MAT_16: [u32; 16] = [
+        2013265921 - 2,
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256,
+        512,
+        1024,
+        2048,
+        4096,
+        8192,
+        32768,
+    ];
+
     pub fn new(
         external_constants: Vec<[T; WIDTH]>,
         internal_constants: Vec<T>,
