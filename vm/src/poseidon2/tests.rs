@@ -25,6 +25,7 @@ use rand_xoshiro::Xoroshiro128Plus;
 use zkhash::fields::babybear::FpBabyBear as HorizenBabyBear;
 use zkhash::fields::utils::from_hex;
 use zkhash::poseidon2::poseidon2::Poseidon2 as HorizenPoseidon2;
+use zkhash::poseidon2::poseidon2_instance_babybear::MAT_DIAG16_M_1;
 use zkhash::poseidon2::poseidon2_instance_babybear::POSEIDON2_BABYBEAR_16_PARAMS;
 use zkhash::poseidon2::poseidon2_instance_babybear::RC16;
 
@@ -143,67 +144,77 @@ fn test_poseidon2() {
     }
 }
 
-// #[test]
-// fn test_horizen_poseidon2() {
-//     fn horizen_to_p3(horizen_babybear: HorizenBabyBear) -> BabyBear {
-//         BabyBear::from_canonical_u32(HorizenBabyBear::from(horizen_babybear).0.as_ref()[0] as u32)
-//     }
+#[test]
+fn test_horizen_poseidon2() {
+    fn horizen_to_p3(horizen_babybear: HorizenBabyBear) -> BabyBear {
+        BabyBear::from_canonical_u32(HorizenBabyBear::from(horizen_babybear).0.as_ref()[0] as u32)
+    }
 
-//     let p3_rc16: Vec<Vec<BabyBear>> = RC16
-//         .iter()
-//         .map(|round| {
-//             round
-//                 .iter()
-//                 .map(|babybear| horizen_to_p3(*babybear))
-//                 .collect()
-//         })
-//         .collect();
+    let p3_rc16: Vec<Vec<BabyBear>> = RC16
+        .iter()
+        .map(|round| {
+            round
+                .iter()
+                .map(|babybear| horizen_to_p3(*babybear))
+                .collect()
+        })
+        .collect();
 
-//     let external_round_constants: Vec<[BabyBear; 16]> = p3_rc16
-//         .iter()
-//         .take(6)
-//         .chain(p3_rc16.iter().rev().take(7))
-//         .cloned()
-//         .map(|round| round.try_into().unwrap())
-//         .collect();
-//     let internal_round_constants: Vec<BabyBear> =
-//         p3_rc16[6..14].iter().map(|round| round[0]).collect();
+    let external_round_constants: Vec<[BabyBear; 16]> = p3_rc16
+        .iter()
+        .take(4)
+        .chain(p3_rc16.iter().skip(17).take(4))
+        .cloned()
+        .map(|round| round.try_into().unwrap())
+        .collect();
+    let internal_round_constants: Vec<BabyBear> =
+        p3_rc16[4..17].iter().map(|round| round[0]).collect();
 
-//     let mut rng = create_seeded_rng();
-//     let horizen_permut = HorizenPoseidon2::new(&POSEIDON2_BABYBEAR_16_PARAMS);
-//     let mut air_permut = Poseidon2Air::<16, BabyBear>::new(
-//         external_round_constants.clone(),
-//         internal_round_constants.clone(),
-//         0,
-//     );
-//     let u32state = (0..16)
-//         .map(|_| rng.gen_range(1..=1 << 27))
-//         .collect::<Vec<_>>();
-//     let horizen_state: Vec<HorizenBabyBear> = u32state
-//         .clone()
-//         .into_iter()
-//         .map(HorizenBabyBear::from)
-//         .collect();
-//     let p3_state: Vec<[BabyBear; 16]> = vec![u32state
-//         .into_iter()
-//         .map(BabyBear::from_canonical_u32)
-//         .collect::<Vec<_>>()
-//         .try_into()
-//         .unwrap()];
-//     let air_result: Vec<BabyBear> = air_permut.request_trace(&p3_state)[0].to_vec();
-//     let horizen_result = horizen_permut.permutation(black_box(&horizen_state));
-//     let air_u32_result = air_result
-//         .iter()
-//         .map(BabyBear::as_canonical_u32)
-//         .collect::<Vec<_>>();
-//     let horizen_u32_result = horizen_result
-//         .into_iter()
-//         .map(|elem| HorizenBabyBear::from(elem).0.as_ref()[0] as u32)
-//         .collect::<Vec<_>>();
-//     println!("{:?}", air_u32_result);
-//     println!("{:?}", horizen_u32_result);
-//     assert_eq!(air_u32_result, horizen_u32_result);
-// }
+    let mut rng = create_seeded_rng();
+    let horizen_permut = HorizenPoseidon2::new(&POSEIDON2_BABYBEAR_16_PARAMS);
+    let horizen_int_diag: [u32; 16] = {
+        let mut array = [0u32; 16];
+        for (i, elem) in MAT_DIAG16_M_1.iter().enumerate() {
+            array[i] = HorizenBabyBear::from(*elem).0.as_ref()[0] as u32;
+        }
+        array
+    };
+    let mut air_permut = Poseidon2Air::<16, BabyBear>::new(
+        external_round_constants.clone(),
+        internal_round_constants.clone(),
+        Poseidon2Air::<16, BabyBear>::MDS_MAT_4,
+        horizen_int_diag,
+        1,
+        0,
+    );
+    let u32state = (0..16)
+        .map(|_| rng.gen_range(1..=1 << 27))
+        .collect::<Vec<_>>();
+    let horizen_state: Vec<HorizenBabyBear> = u32state
+        .clone()
+        .into_iter()
+        .map(HorizenBabyBear::from)
+        .collect();
+    let p3_state: Vec<[BabyBear; 16]> = vec![u32state
+        .into_iter()
+        .map(BabyBear::from_canonical_u32)
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap()];
+    let air_result: Vec<BabyBear> = air_permut.request_trace(&p3_state)[0].to_vec();
+    let horizen_result = horizen_permut.permutation(black_box(&horizen_state));
+    let air_u32_result = air_result
+        .iter()
+        .map(BabyBear::as_canonical_u32)
+        .collect::<Vec<_>>();
+    let horizen_u32_result = horizen_result
+        .into_iter()
+        .map(|elem| HorizenBabyBear::from(elem).0.as_ref()[0] as u32)
+        .collect::<Vec<_>>();
+    println!("{:?}", air_u32_result);
+    println!("{:?}", horizen_u32_result);
+    assert_eq!(air_u32_result, horizen_u32_result);
+}
 
 // #[test]
 // fn test_poseidon2_air_xoshiro()
@@ -218,8 +229,14 @@ fn test_poseidon2() {
 //         .collect::<Vec<[BabyBear; 16]>>();
 //     let internal_constants = rng.sample_iter(Standard).take(8).collect::<Vec<BabyBear>>();
 
-//     let mut poseidon2air =
-//         Poseidon2Air::<16, BabyBear>::new(external_constants, internal_constants, 0);
+//     let mut poseidon2air = Poseidon2Air::<16, BabyBear>::new(
+//         external_constants.clone(),
+//         internal_constants.clone(),
+//         Poseidon2Air::<16, BabyBear>::MDS_MAT_4,
+//         Poseidon2Air::<16, BabyBear>::DIAG_MAT_16,
+//         943718400,
+//         0,
+//     );
 //     let input: [BabyBear; 16] = [
 //         894848333, 1437655012, 1200606629, 1690012884, 71131202, 1749206695, 1717947831, 120589055,
 //         19776022, 42382981, 1831865506, 724844064, 171220207, 1299207443, 227047920, 1783754913,
