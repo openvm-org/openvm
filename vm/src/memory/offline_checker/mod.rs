@@ -60,9 +60,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
     }
 
     pub fn read_word(&mut self, timestamp: usize, address_space: F, address: F) -> [F; WORD_SIZE] {
-        // temporary, as cpu trace generation currently works using word-addressing
-        let address = F::from_canonical_usize(WORD_SIZE) * address;
-        
         assert!(address_space != F::zero());
         if let Some(last_timestamp) = self.last_timestamp {
             assert!(timestamp > last_timestamp);
@@ -76,6 +73,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             address,
             data,
         });
+        println!("access: {:?}", self.accesses.last().unwrap());
         data
     }
 
@@ -86,9 +84,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         address: F,
         data: [F; WORD_SIZE],
     ) {
-        // temporary, as cpu trace generation currently works using word-addressing
-        let address = F::from_canonical_usize(WORD_SIZE) * address;
-
         assert!(address_space != F::zero());
         if let Some(last_timestamp) = self.last_timestamp {
             assert!(timestamp > last_timestamp);
@@ -104,5 +99,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             address,
             data,
         });
+        println!("access: {:?}", self.accesses.last().unwrap());
     }
 }

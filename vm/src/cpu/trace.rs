@@ -223,7 +223,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     next_pc = pc;
                 }
                 opcode @ (FADD | FSUB | FMUL | FDIV) => {
-                    if vm.config.cpu_options().field_arithmetic_enabled {
+                    if vm.options().field_arithmetic_enabled {
                         // read from d[b] and e[c]
                         let operand1 = read!(d, b);
                         let operand2 = read!(e, c);
@@ -244,7 +244,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             };
 
             let mut operation_flags = BTreeMap::new();
-            for other_opcode in vm.config.cpu_options().enabled_instructions() {
+            for other_opcode in vm.options().enabled_instructions() {
                 operation_flags.insert(other_opcode, F::from_bool(other_opcode == opcode));
             }
 
@@ -264,19 +264,19 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             };
 
             let cols = CpuCols { io, aux };
-            rows.extend(cols.flatten(vm.config.cpu_options()));
+            rows.extend(cols.flatten(vm.options()));
 
             pc = next_pc;
             clock_cycle += 1;
 
-            if opcode == TERMINATE && rows.len().is_power_of_two() {
+            if opcode == TERMINATE && clock_cycle.is_power_of_two() {
                 break;
             }
         }
 
         Ok(RowMajorMatrix::new(
             rows,
-            CpuCols::<WORD_SIZE, F>::get_width(vm.config.cpu_options()),
+            CpuCols::<WORD_SIZE, F>::get_width(vm.options()),
         ))
     }
 }

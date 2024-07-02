@@ -11,8 +11,7 @@ pub enum Void {}
 
 use crate::{
     cpu::{
-        trace::{ExecutionError, Instruction},
-        CpuAir, RANGE_CHECKER_BUS,
+        trace::{ExecutionError, Instruction}, CpuAir, CpuOptions, RANGE_CHECKER_BUS
     },
     field_arithmetic::FieldArithmeticChip,
     memory::offline_checker::MemoryChip,
@@ -59,15 +58,22 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
         }
     }
 
+    pub fn options(&self) -> CpuOptions {
+        self.config.cpu_options()
+    }
+
     fn generate_traces(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
         let cpu_trace = CpuAir::generate_trace(self)?;
-        Ok(vec![
+        let mut result = vec![
             cpu_trace,
             self.program_chip.generate_trace(),
             self.memory_chip.generate_trace(self.range_checker.clone()),
-            self.field_arithmetic_chip.generate_trace(),
             self.range_checker.generate_trace(),
-        ])
+        ];
+        if self.options().field_arithmetic_enabled {
+            result.push(self.field_arithmetic_chip.generate_trace());
+        }
+        Ok(result)
     }
 
     pub fn traces(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
@@ -108,13 +114,13 @@ pub fn get_chips<const WORD_SIZE: usize, SC: StarkGenericConfig>(
 where
     Val<SC>: PrimeField32,
 {
-    if vm.config.field_arithmetic_enabled {
+    if vm.options().field_arithmetic_enabled {
         vec![
             &vm.cpu_air,
             &vm.program_chip.air,
             &vm.memory_chip.air,
-            &vm.field_arithmetic_chip.air,
             &vm.range_checker.air,
+            &vm.field_arithmetic_chip.air,
         ]
     } else {
         vec![
