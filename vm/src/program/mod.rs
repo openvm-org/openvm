@@ -17,7 +17,7 @@ pub struct ProgramAir<F> {
 
 pub struct ProgramChip<F> {
     pub air: ProgramAir<F>,
-    execution_frequencies: Vec<usize>,
+    pub execution_frequencies: Vec<usize>,
 }
 
 impl<F: PrimeField64> ProgramChip<F> {

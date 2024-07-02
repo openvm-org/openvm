@@ -3,15 +3,18 @@ use std::sync::Arc;
 use afs_chips::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::rap::AnyRap;
 use p3_field::PrimeField32;
-use p3_matrix::dense::DenseMatrix;
+use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
+
+pub enum Void {}
 
 use crate::{
     cpu::{
         trace::{ExecutionError, Instruction},
         CpuAir, RANGE_CHECKER_BUS,
     },
+    field_arithmetic::FieldArithmeticChip,
     memory::offline_checker::MemoryChip,
     program::ProgramChip,
 };
@@ -28,10 +31,12 @@ pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub memory_chip: MemoryChip<WORD_SIZE, F>,
     pub field_arithmetic_chip: FieldArithmeticChip<F>,
     pub range_checker: Arc<RangeCheckerGateChip>,
+
+    traces: Vec<DenseMatrix<F>>,
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
-    pub fn new(config: VmConfig, program: Vec<Instruction<F>>) -> Result<Self, ExecutionError> {
+    pub fn new(config: VmConfig, program: Vec<Instruction<F>>) -> Self {
         let config = config.vm;
         let decomp = config.decomp;
         let limb_bits = config.limb_bits;
@@ -43,17 +48,34 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
         let memory_chip = MemoryChip::new(limb_bits, limb_bits, limb_bits, decomp);
         let field_arithmetic_chip = FieldArithmeticChip::new();
 
-        Ok(Self {
+        Self {
             config,
             cpu_air,
             program_chip,
             memory_chip,
             field_arithmetic_chip,
             range_checker,
-        })
+            traces: vec![],
+        }
     }
 
-    pub fn generate_traces(&self) -> Vec<DenseMatrix<Val<SC>>> {}
+    fn generate_traces(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
+        let cpu_trace = CpuAir::generate_trace(self)?;
+        Ok(vec![
+            cpu_trace,
+            self.program_chip.generate_trace(),
+            self.memory_chip.generate_trace(self.range_checker.clone()),
+            self.field_arithmetic_chip.generate_trace(),
+            self.range_checker.generate_trace(),
+        ])
+    }
+
+    pub fn traces(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
+        if self.traces.is_empty() {
+            self.traces = self.generate_traces()?;
+        }
+        Ok(self.traces.clone())
+    }
 
     /*fn max_trace_heights(&self) -> Vec<usize> {
         let max_operations = self.config.max_operations;
@@ -71,35 +93,35 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             .collect()
     }*/
 
-    pub fn max_log_degree(&self) -> usize {
+    pub fn max_log_degree(&mut self) -> Result<usize, ExecutionError> {
         let mut checker_trace_degree = 0;
-        for trace in self.traces() {
+        for trace in self.traces()? {
             checker_trace_degree = std::cmp::max(checker_trace_degree, trace.height());
         }
-        log2_strict_usize(checker_trace_degree)
+        Ok(log2_strict_usize(checker_trace_degree))
     }
 }
 
-impl<const WORD_SIZE: usize, SC: StarkGenericConfig> VirtualMachine<WORD_SIZE, Val<SC>>
+pub fn get_chips<const WORD_SIZE: usize, SC: StarkGenericConfig>(
+    vm: &VirtualMachine<WORD_SIZE, Val<SC>>,
+) -> Vec<&dyn AnyRap<SC>>
 where
     Val<SC>: PrimeField32,
 {
-    pub fn chips(&self) -> Vec<&dyn AnyRap<SC>> {
-        if self.config.field_arithmetic_enabled {
-            vec![
-                &self.cpu_air,
-                &self.program_chip.air,
-                &self.memory_chip.air,
-                &self.field_arithmetic_chip.air,
-                &self.range_checker.air,
-            ]
-        } else {
-            vec![
-                &self.cpu_air,
-                &self.program_chip.air,
-                &self.memory_chip.air,
-                &self.range_checker.air,
-            ]
-        }
+    if vm.config.field_arithmetic_enabled {
+        vec![
+            &vm.cpu_air,
+            &vm.program_chip.air,
+            &vm.memory_chip.air,
+            &vm.field_arithmetic_chip.air,
+            &vm.range_checker.air,
+        ]
+    } else {
+        vec![
+            &vm.cpu_air,
+            &vm.program_chip.air,
+            &vm.memory_chip.air,
+            &vm.range_checker.air,
+        ]
     }
 }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{array::from_fn, collections::HashMap};
 
 use afs_chips::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 use p3_field::PrimeField32;
@@ -37,7 +37,7 @@ impl<const WORD_SIZE: usize> OfflineChecker<WORD_SIZE> {
 pub struct MemoryChip<const WORD_SIZE: usize, F: PrimeField32> {
     pub air: OfflineChecker<WORD_SIZE>,
     pub accesses: Vec<MemoryAccess<WORD_SIZE, F>>,
-    memory: HashMap<(F, F), [F; WORD_SIZE]>,
+    memory: HashMap<(F, F), F>,
     last_timestamp: Option<usize>,
 }
 
@@ -60,19 +60,21 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
     }
 
     pub fn read_word(&mut self, timestamp: usize, address_space: F, address: F) -> [F; WORD_SIZE] {
+        // temporary, as cpu trace generation currently works using word-addressing
+        let address = F::from_canonical_usize(WORD_SIZE) * address;
+        
         assert!(address_space != F::zero());
-        assert!(timestamp % WORD_SIZE == 0);
         if let Some(last_timestamp) = self.last_timestamp {
             assert!(timestamp > last_timestamp);
         }
         self.last_timestamp = Some(timestamp);
-        let data = self.memory[&(address_space, address)];
+        let data = from_fn(|i| self.memory[&(address_space, address + F::from_canonical_usize(i))]);
         self.accesses.push(MemoryAccess {
             timestamp,
             op_type: OpType::Read,
             address_space,
             address,
-            data: data.clone(),
+            data,
         });
         data
     }
@@ -84,19 +86,23 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         address: F,
         data: [F; WORD_SIZE],
     ) {
+        // temporary, as cpu trace generation currently works using word-addressing
+        let address = F::from_canonical_usize(WORD_SIZE) * address;
+
         assert!(address_space != F::zero());
-        assert!(timestamp % WORD_SIZE == 0);
         if let Some(last_timestamp) = self.last_timestamp {
             assert!(timestamp > last_timestamp);
         }
         self.last_timestamp = Some(timestamp);
-        self.memory.insert((address_space, address), data);
+        for (i, &datum) in data.iter().enumerate() {
+            self.memory.insert((address_space, address + F::from_canonical_usize(i)), datum);
+        }
         self.accesses.push(MemoryAccess {
             timestamp,
             op_type: OpType::Write,
             address_space,
             address,
-            data: data.clone(),
+            data,
         });
     }
 }

@@ -24,7 +24,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
     pub fn generate_trace(
         &mut self,
         range_checker: Arc<RangeCheckerGateChip>,
-        trace_degree: usize,
     ) -> RowMajorMatrix<F> {
         self.accesses
             .sort_by_key(|op| (op.address_space, op.address, op.timestamp));
@@ -60,7 +59,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         }
 
         // Ensure that trace degree is a power of two
-        assert!(trace_degree > 0 && trace_degree & (trace_degree - 1) == 0);
+        let trace_degree = self.accesses.len().next_power_of_two();
+
 
         if self.accesses.len() < trace_degree {
             rows.extend(self.generate_trace_row(
@@ -99,7 +99,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         row.push(F::from_canonical_usize(curr_op.timestamp));
         row.push(curr_op.address_space);
         row.push(curr_op.address);
-        row.extend(curr_op.data.clone());
+        row.extend(curr_op.data);
         row.push(F::from_canonical_u8(op_type));
 
         let same_addr_space = if curr_op.address_space == prev_op.address_space {

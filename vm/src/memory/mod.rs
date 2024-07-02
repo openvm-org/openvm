@@ -8,7 +8,7 @@ pub enum OpType {
     Write = 1,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryAccess<const WORD_SIZE: usize, F> {
     pub timestamp: usize,
     pub op_type: OpType,

@@ -12,7 +12,7 @@ use clap::Parser;
 use color_eyre::eyre::Result;
 use itertools::Itertools;
 use p3_matrix::Matrix;
-use stark_vm::vm::{config::VmConfig, VirtualMachine};
+use stark_vm::vm::{config::VmConfig, get_chips, VirtualMachine};
 
 use crate::asm::parse_asm_file;
 
@@ -52,12 +52,12 @@ impl KeygenCommand {
 
     fn execute_helper(self, config: VmConfig) -> Result<()> {
         let instructions = parse_asm_file(Path::new(&self.asm_file_path.clone()))?;
-        let vm = VirtualMachine::<WORD_SIZE, _>::new(config, instructions)?;
-        let engine = config::baby_bear_poseidon2::default_engine(vm.max_log_degree());
+        let mut vm = VirtualMachine::<WORD_SIZE, _>::new(config, instructions);
+        let engine = config::baby_bear_poseidon2::default_engine(vm.max_log_degree()?);
         let mut keygen_builder = engine.keygen_builder();
 
-        let chips = vm.chips();
-        let traces = vm.traces();
+        let traces = vm.traces()?;
+        let chips = get_chips(&vm);
 
         for (chip, trace) in chips.into_iter().zip_eq(traces) {
             keygen_builder.add_air(chip, trace.height(), 0);
