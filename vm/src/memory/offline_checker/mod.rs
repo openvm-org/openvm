@@ -73,7 +73,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             address,
             data,
         });
-        println!("access: {:?}", self.accesses.last().unwrap());
         data
     }
 
@@ -100,6 +99,5 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             address,
             data,
         });
-        println!("access: {:?}", self.accesses.last().unwrap());
     }
 }
