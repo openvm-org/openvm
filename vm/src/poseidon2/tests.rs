@@ -9,7 +9,7 @@ use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::create_seeded_rng;
 use criterion::black_box;
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
-use p3_field::AbstractField;
+use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
@@ -18,8 +18,10 @@ use p3_util::log2_strict_usize;
 use rand::Rng;
 use rand::RngCore;
 use zkhash::fields::babybear::FpBabyBear as HorizenBabyBear;
+use zkhash::fields::utils::from_hex;
 use zkhash::poseidon2::poseidon2::Poseidon2 as HorizenPoseidon2;
 use zkhash::poseidon2::poseidon2_instance_babybear::POSEIDON2_BABYBEAR_16_PARAMS;
+use zkhash::poseidon2::poseidon2_instance_babybear::RC16;
 
 #[test]
 fn test_poseidon2() {
@@ -133,15 +135,67 @@ fn test_poseidon2() {
     }
 }
 
-// #[test]
-// fn test_horizen_poseidon2() {
-//     let mut rng = create_seeded_rng();
-//     let instance = HorizenPoseidon2::new(&POSEIDON2_BABYBEAR_16_PARAMS);
-//     let u32state = (0..16)
-//         .map(|_| rng.gen_range(1..=1 << 27))
-//         .collect::<Vec<_>>();
-//     let horizen_state: Vec<HorizenBabyBear> =
-//         u32state.into_iter().map(HorizenBabyBear::from).collect();
-//     let result = instance.permutation(black_box(&horizen_state));
-//     println!("{:?}", result);
-// }
+#[test]
+fn test_horizen_poseidon2() {
+    fn horizen_to_p3(horizen_babybear: HorizenBabyBear) -> BabyBear {
+        BabyBear::from_canonical_u32(HorizenBabyBear::from(horizen_babybear).0.as_ref()[0] as u32)
+    }
+
+    let p3_rc16: Vec<Vec<BabyBear>> = RC16
+        .iter()
+        .map(|round| {
+            round
+                .iter()
+                .map(|babybear| horizen_to_p3(*babybear))
+                .collect()
+        })
+        .collect();
+
+    let external_round_constants: Vec<[BabyBear; 16]> = p3_rc16
+        .iter()
+        .take(6)
+        .chain(p3_rc16.iter().rev().take(7))
+        .cloned()
+        .map(|round| round.try_into().unwrap())
+        .collect();
+    let internal_round_constants: Vec<BabyBear> =
+        p3_rc16[6..14].iter().map(|round| round[0]).collect();
+
+    let mut rng = create_seeded_rng();
+    let instance = HorizenPoseidon2::new(&POSEIDON2_BABYBEAR_16_PARAMS);
+    let mut my_instance = Poseidon2Air::<16, BabyBear>::new(
+        external_round_constants.clone(),
+        internal_round_constants.clone(),
+        0,
+    );
+    let u32state = (0..16)
+        .map(|_| rng.gen_range(1..=1 << 27))
+        .collect::<Vec<_>>();
+    let horizen_state: Vec<HorizenBabyBear> = u32state
+        .clone()
+        .into_iter()
+        .map(HorizenBabyBear::from)
+        .collect();
+    let p3_state: Vec<[BabyBear; 16]> = vec![u32state
+        .into_iter()
+        .map(BabyBear::from_canonical_u32)
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap()];
+    let my_state: Vec<BabyBear> = my_instance.request_trace(&p3_state)[0].to_vec();
+    let result = instance.permutation(black_box(&horizen_state));
+    println!(
+        "{:?}",
+        result
+            .into_iter()
+            .map(|elem| HorizenBabyBear::from(elem).0.as_ref()[0])
+            .collect::<Vec<_>>()
+    );
+    println!(
+        "{:?}",
+        my_state
+            .iter()
+            .map(BabyBear::as_canonical_u32)
+            .collect::<Vec<_>>()
+    );
+}
