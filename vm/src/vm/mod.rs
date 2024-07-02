@@ -47,6 +47,7 @@ where
     pub fn new(
         config: VmConfig,
         program: Vec<Instruction<Val<SC>>>,
+        witness_stream: Vec<Vec<[Val<SC>; WORD_SIZE]>>,
     ) -> Result<Self, ExecutionError> {
         let config = config.vm;
         let decomp = config.decomp;
@@ -59,7 +60,8 @@ where
         let memory_air = OfflineChecker::new(WORD_SIZE, limb_bits, limb_bits, limb_bits, decomp);
         let field_arithmetic_air = FieldArithmeticAir::new();
 
-        let execution = cpu_air.generate_program_execution(program_air.program.clone())?;
+        let execution =
+            cpu_air.generate_program_execution(program_air.program.clone(), witness_stream)?;
         let program_trace = program_air.generate_trace(&execution);
 
         let ops = execution

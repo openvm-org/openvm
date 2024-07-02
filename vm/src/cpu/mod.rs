@@ -40,6 +40,9 @@ pub enum OpCode {
 
     FAIL = 10,
     PRINTF = 11,
+
+    HINT = 12,
+    HINTLEN = 13,
 }
 
 impl OpCode {
@@ -57,6 +60,8 @@ impl OpCode {
             9 => Some(OpCode::FDIV),
             10 => Some(OpCode::FAIL),
             11 => Some(OpCode::PRINTF),
+            12 => Some(OpCode::HINT),
+            13 => Some(OpCode::HINTLEN),
             _ => None,
         }
     }

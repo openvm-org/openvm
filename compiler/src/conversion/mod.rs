@@ -400,6 +400,22 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
             AS::Register,
             AS::Immediate,
         )],
+        AsmInstruction::HintLen(src) => vec![inst(
+            HINTLEN,
+            register(src),
+            F::zero(),
+            F::zero(),
+            AS::Register,
+            AS::Immediate,
+        )],
+        AsmInstruction::Hint(src) => vec![inst(
+            HINT,
+            register(src),
+            F::zero(),
+            F::zero(),
+            AS::Register,
+            AS::Immediate,
+        )],
         _ => panic!("Unsupported instruction {:?}", instruction),
     }
 }

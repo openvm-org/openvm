@@ -266,6 +266,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
     pub fn generate_program_execution<F: PrimeField64>(
         &self,
         program: Vec<Instruction<F>>,
+        witness_stream: Vec<Vec<[F; WORD_SIZE]>>,
     ) -> Result<ProgramExecution<WORD_SIZE, F>, ExecutionError> {
         let mut rows = vec![];
         let mut execution_frequencies = vec![F::zero(); program.len()];
@@ -275,6 +276,8 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
         let mut pc = F::zero();
 
         let mut memory = Memory::new();
+
+        let mut witness_idx = 0;
 
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
@@ -362,6 +365,18 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 PRINTF => {
                     let value = memory.read(d, a);
                     println!("{}", compose(value));
+                }
+                HINT => {
+                    let next_input = &witness_stream[witness_idx];
+                    witness_idx += 1;
+                    for (i, value) in next_input.iter().enumerate() {
+                        memory.write(d, a + F::from_canonical_usize(i * WORD_SIZE), *value);
+                    }
+                }
+                HINTLEN => {
+                    let len = witness_stream[witness_idx].len();
+                    witness_idx += 1;
+                    memory.write(d, a, decompose(F::from_canonical_usize(len)));
                 }
             };
 

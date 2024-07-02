@@ -20,7 +20,7 @@ pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(
     let cpu = CpuAir::new(CpuOptions {
         field_arithmetic_enabled: true,
     });
-    cpu.generate_program_execution(program).unwrap()
+    cpu.generate_program_execution(program, vec![]).unwrap()
 }
 
 pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {

@@ -21,6 +21,7 @@ fn air_test(field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>)
             },
         },
         program,
+        vec![],
     )
     .unwrap();
     let chips = vm.chips();
