@@ -174,8 +174,10 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
 
             macro_rules! write {
                 ($address_space: expr, $address: expr, $data: expr) => {{
-                    assert!(write_index < MAX_ACCESSES_PER_CYCLE);
-                    let timestamp = (MAX_ACCESSES_PER_CYCLE * clock_cycle) + write_index;
+                    num_writes += 1;
+                    assert!(num_writes <= MAX_WRITES_PER_CYCLE);
+                    let timestamp = (MAX_ACCESSES_PER_CYCLE * clock_cycle)
+                        + (MAX_READS_PER_CYCLE + num_writes - 1);
                     let word = decompose($data);
                     vm.memory_chip
                         .write_word(timestamp, $address_space, $address, word);
