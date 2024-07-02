@@ -63,12 +63,12 @@ impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
         state[0] = Self::sbox_p(state[0]);
     }
 
-    pub fn sbox_p(value: T) -> T {
-        let x2 = value.square();
-        let x3 = x2 * value;
-        let x4 = x2.square();
-        x3 * x4
-    }
+    // pub fn sbox_p(value: T) -> T {
+    //     let x2 = value.square();
+    //     let x3 = x2 * value;
+    //     let x4 = x2.square();
+    //     x3 * x4
+    // }
 
     /// Generate one row of trace from the input state
     pub fn generate_local_trace(&self, input_state: [T; WIDTH]) -> Vec<T>

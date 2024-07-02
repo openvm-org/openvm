@@ -88,4 +88,16 @@ impl<const WIDTH: usize, T: Clone> Poseidon2Air<WIDTH, T> {
 
         input.clone_from_slice(&new_state);
     }
+
+    pub fn sbox_p<F: AbstractField>(value: F) -> F {
+        let x2 = value.square();
+        let x3 = x2.clone() * value;
+        let x4 = x2.clone().square();
+        x3 * x4
+    }
+
+    /// Returns elementwise 7th power of vector field element input
+    fn sbox<F: AbstractField>(state: [F; WIDTH]) -> [F; WIDTH] {
+        core::array::from_fn(|i| Self::sbox_p::<F>(state[i].clone()))
+    }
 }
