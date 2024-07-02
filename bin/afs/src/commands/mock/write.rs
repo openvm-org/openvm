@@ -41,7 +41,7 @@ pub struct WriteCommand {
 /// `mock read` subcommand
 impl WriteCommand {
     /// Execute the `mock read` command
-    pub fn execute(&self, config: &PageConfig) -> Result<()> {
+    pub fn execute(&self, _config: &PageConfig) -> Result<()> {
         let db_file_path = self
             .db_file_path
             .as_ref()

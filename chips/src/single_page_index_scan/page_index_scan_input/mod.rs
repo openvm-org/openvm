@@ -14,7 +14,7 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-#[derive(Default, Display, Clone)]
+#[derive(Default, Debug, Display, Clone, Deserialize, Serialize, PartialEq)]
 pub enum Comp {
     #[default]
     Lt,

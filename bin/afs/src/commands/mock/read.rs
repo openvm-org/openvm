@@ -2,7 +2,7 @@ use afs_test_utils::page_config::PageConfig;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{
-    afs_interface::AfsInterface, mock_db::MockDb, table::types::TableId, utils::string_to_be_vec,
+    afs_interface::AfsInterface, mock_db::MockDb, table::types::TableId, utils::string_to_u8_vec,
 };
 
 #[derive(Debug, Parser)]
@@ -30,7 +30,7 @@ pub struct ReadCommand {
 /// `mock read` subcommand
 impl ReadCommand {
     /// Execute the `mock read` command
-    pub fn execute(&self, config: &PageConfig) -> Result<()> {
+    pub fn execute(&self, _config: &PageConfig) -> Result<()> {
         let mut db = if let Some(db_file_path) = &self.db_file_path {
             println!("db_file_path: {}", db_file_path);
             MockDb::from_file(db_file_path)
@@ -40,7 +40,7 @@ impl ReadCommand {
 
         let table_metadata = db
             .get_table_metadata(TableId::from_slice(
-                string_to_be_vec(self.table_id.clone(), 32).as_slice(),
+                string_to_u8_vec(self.table_id.clone(), 32).as_slice(),
             ))
             .unwrap();
 

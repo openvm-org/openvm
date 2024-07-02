@@ -14,7 +14,7 @@ use logical_interface::{
     afs_input::operation::WhereOp,
     afs_interface::AfsInterface,
     mock_db::MockDb,
-    utils::{fixed_bytes_to_field_vec, string_to_be_vec},
+    utils::{fixed_bytes_to_field_vec, string_to_u8_vec},
 };
 use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_strict_usize;
@@ -64,7 +64,7 @@ pub fn execute_where_op<SC: StarkGenericConfig>(
         op.predicate.clone(),
     );
 
-    let value = string_to_be_vec(op.value, index_bytes);
+    let value = string_to_u8_vec(op.value, index_bytes);
     let value = fixed_bytes_to_field_vec(value);
     let output_page =
         page_controller.gen_output(input_page.clone(), value.clone(), page_width, op.predicate);
