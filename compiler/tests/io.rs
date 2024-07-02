@@ -1,7 +1,10 @@
+use afs_compiler::util::{display_program, execute_program};
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
+use p3_field::AbstractField;
 
 use afs_compiler::asm::AsmBuilder;
+use stark_vm::cpu::decompose;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
@@ -22,13 +25,34 @@ fn test_io() {
         builder.print_f(el);
     });
 
-    let arr = builder.hint_exts();
-    builder.range(0, arr.len()).for_each(|i, builder| {
-        let el = builder.get(&arr, i);
-        builder.print_e(el);
-    });
+    // let arr = builder.hint_exts();
+    // builder.range(0, arr.len()).for_each(|i, builder| {
+    //     let el = builder.get(&arr, i);
+    //     builder.print_e(el);
+    // });
 
-    // let program = builder.compile_program();
+    let program = builder.compile_isa();
+
+    let witness_stream: Vec<Vec<[F; 4]>> = vec![
+        vec![
+            decompose(F::zero()),
+            decompose(F::zero()),
+            decompose(F::one()),
+        ],
+        vec![
+            decompose(F::zero()),
+            decompose(F::zero()),
+            decompose(F::two()),
+        ],
+        vec![
+            decompose(F::one()),
+            decompose(F::one()),
+            decompose(F::two()),
+        ],
+    ];
+
+    display_program(&program);
+    execute_program::<4, _>(program, witness_stream);
 
     // let config = SC::default();
     // let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());

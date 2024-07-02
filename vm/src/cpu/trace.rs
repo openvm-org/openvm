@@ -375,7 +375,6 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 }
                 HINTLEN => {
                     let len = witness_stream[witness_idx].len();
-                    witness_idx += 1;
                     memory.write(d, a, decompose(F::from_canonical_usize(len)));
                 }
             };
