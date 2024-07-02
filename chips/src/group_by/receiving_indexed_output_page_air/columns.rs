@@ -1,12 +1,12 @@
 use crate::indexed_output_page_air::{columns::IndexedOutputPageCols, IndexedOutputPageAir};
 
-// Minimal wrapper around FinalPageCols
-pub struct MyFinalPageCols<T> {
+// Minimal wrapper around IndexedOutputPageCols
+pub struct ReceivingIndexedOutputPageCols<T> {
     pub final_page_cols: IndexedOutputPageCols<T>,
 }
 
-impl<T: Clone> MyFinalPageCols<T> {
-    pub fn from_slice(slc: &[T], final_air: IndexedOutputPageAir) -> Self {
+impl<T: Clone> ReceivingIndexedOutputPageCols<T> {
+    pub fn from_slice(slc: &[T], final_air: &IndexedOutputPageAir) -> Self {
         Self {
             final_page_cols: IndexedOutputPageCols::from_slice(
                 &slc[..slc.len()],

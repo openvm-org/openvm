@@ -1,5 +1,5 @@
 use super::GroupByAir;
-use crate::is_equal_vec::columns::IsEqualVecAuxCols;
+use crate::{common::page_cols::PageCols, is_equal_vec::columns::IsEqualVecAuxCols};
 use std::ops::Range;
 
 /// Since `GroupByChip` contains a `LessThanChip` subchip and an `IsEqualVecChip` subchip, a subset of
@@ -14,26 +14,26 @@ use std::ops::Range;
 /// * `index_map`: Returns a `GroupByColsIndexMap` struct, used to index all other structs and
 ///   defines the order of segments in a slice.
 pub struct GroupByCols<T> {
-    pub io: GroupByIOCols<T>,
+    /// Page with `idx_len = 0` because the page does not need an index.
+    pub page: PageCols<T>,
     pub aux: GroupByAuxCols<T>,
-}
-
-/// The `io` columns consist only of the cached page, because output is sent to `MyFinalPage`.
-pub struct GroupByIOCols<T> {
-    pub is_allocated: T,
-    pub page: Vec<T>,
 }
 
 /// The `aux` columns are all non-cached columns.
 pub struct GroupByAuxCols<T> {
-    pub sorted_group_by_alloc: T,
-    pub sorted_group_by: Vec<T>,
-    pub sorted_group_by_combined: Vec<T>,
-    pub aggregated: T,
+    /// If page is not already grouped, extra columns are needed to do the grouping.
+    pub grouped: Option<GroupedPageCols<T>>,
     pub partial_aggregated: T,
     pub is_final: T,
     pub eq_next: T,
     pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
+}
+
+/// The columns that are relevant to the GroupBy operation.
+pub struct GroupedPageCols<T> {
+    pub is_alloc: T,
+    pub group_by: Vec<T>,
+    pub to_aggregate: T,
 }
 
 /// Maps parts of the `GroupByCols` to their indices. Note that `sorted_group_by_combined_range` is
@@ -45,7 +45,7 @@ pub struct GroupByColsIndexMap {
     pub sorted_group_by_alloc: usize,
     pub sorted_group_by_range: Range<usize>,
     pub sorted_group_by_combined_range: Range<usize>,
-    pub aggregated: usize,
+    pub to_aggregate: usize,
     pub partial_aggregated: usize,
     pub is_final: usize,
     pub eq_next: usize,
@@ -72,15 +72,15 @@ impl<T: Clone> GroupByCols<T> {
 
         let index_map = GroupByCols::<T>::index_map(group_by_air);
 
-        let is_allocated = page[index_map.allocated_idx].clone();
-        let unsorted_page = page[index_map.page_range].to_vec();
-
-        let sorted_source = if !group_by_air.sorted { aux } else { page };
-        let sorted_group_by_alloc = sorted_source[index_map.sorted_group_by_alloc].clone();
-        let sorted_group_by = sorted_source[index_map.sorted_group_by_range].to_vec();
-        let sorted_group_by_combined =
-            sorted_source[index_map.sorted_group_by_combined_range].to_vec();
-        let aggregated = sorted_source[index_map.aggregated].clone();
+        let grouped = if !group_by_air.sorted {
+            Some(GroupedPageCols {
+                is_alloc: aux[index_map.sorted_group_by_alloc].clone(),
+                group_by: aux[index_map.sorted_group_by_range].to_vec(),
+                to_aggregate: aux[index_map.to_aggregate].clone(),
+            })
+        } else {
+            None
+        };
 
         let partial_aggregated = aux[index_map.partial_aggregated].clone();
         let is_final = aux[index_map.is_final].clone();
@@ -90,16 +90,11 @@ impl<T: Clone> GroupByCols<T> {
             group_by_air.group_by_cols.len() + 1,
         );
 
+        let data_len = group_by_air.page_width - 1;
         Self {
-            io: GroupByIOCols {
-                is_allocated,
-                page: unsorted_page,
-            },
+            page: PageCols::from_slice(page, 0, data_len),
             aux: GroupByAuxCols {
-                sorted_group_by_alloc,
-                sorted_group_by,
-                sorted_group_by_combined,
-                aggregated,
+                grouped,
                 partial_aggregated,
                 is_final,
                 eq_next,
@@ -140,7 +135,7 @@ impl<T: Clone> GroupByCols<T> {
             sorted_group_by_alloc,
             sorted_group_by_range,
             sorted_group_by_combined_range,
-            aggregated: aggregated_idx,
+            to_aggregate: aggregated_idx,
             partial_aggregated: partial_aggregated_idx,
             is_final: is_final_idx,
             eq_next: eq_next_idx,

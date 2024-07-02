@@ -1,6 +1,7 @@
 use super::page_controller::PageController;
 use crate::common::page::Page;
 use crate::group_by::group_by_input::GroupByOperation;
+use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_util::log2_strict_usize;
@@ -306,7 +307,25 @@ fn test_static_values() {
         vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
         vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
     ];
-    let page = Page::from_2d_vec(&page_vec, 4, 4);
+    let answer_vec = vec![
+        vec![1, 1, 6],
+        vec![1, 3, 10],
+        vec![1, 5, 14],
+        vec![0, 0, 0],
+        vec![0, 0, 0],
+        vec![0, 0, 0],
+        vec![0, 0, 0],
+        vec![0, 0, 0],
+        vec![0, 0, 0],
+        vec![0, 0, 0],
+        vec![0, 0, 0],
+        vec![0, 0, 0],
+        vec![0, 0, 0],
+        vec![0, 0, 0],
+        vec![0, 0, 0],
+        vec![0, 0, 0],
+    ];
+    let page = Page::from_2d_vec(&page_vec, 0, 8);
     let page_width = page_vec[0].len();
     let height = page_vec.len();
     let limb_bits = 10;
@@ -338,6 +357,13 @@ fn test_static_values() {
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     let (group_by_traces, _group_by_commitments, prover_data) =
         page_controller.load_page(&page, &trace_builder.committer);
+    assert_eq!(
+        &group_by_traces.final_page_trace.values,
+        &answer_vec
+            .iter()
+            .flat_map(|row| row.iter().map(|&x| AbstractField::from_canonical_u32(x)))
+            .collect_vec()
+    );
 
     let partial_pk = keygen_builder.generate_partial_pk();
     let partial_vk = partial_pk.partial_vk();
@@ -406,13 +432,12 @@ fn test_random_values() {
         page_controller.refresh_range_checker();
     }
 
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
     // Negative test
     for rows_allocated in alloc_rows_arr.iter() {
         let page = test.generate_page(&mut rng, *rows_allocated);
-
-        USE_DEBUG_BUILDER.with(|debug| {
-            *debug.lock().unwrap() = false;
-        });
 
         assert_eq!(
             test.load_page_test(
@@ -489,13 +514,12 @@ fn group_by_sorted_test() {
         page_controller.refresh_range_checker();
     }
 
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
     // Negative test
     for rows_allocated in alloc_rows_arr.iter() {
         let page = test.generate_sorted_page(&mut rng, *rows_allocated);
-
-        USE_DEBUG_BUILDER.with(|debug| {
-            *debug.lock().unwrap() = false;
-        });
 
         assert_eq!(
             test.load_page_test(

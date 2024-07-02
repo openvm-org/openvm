@@ -2,7 +2,7 @@ use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
-use super::{columns::MyFinalPageCols, ReceivingIndexedOutputPageAir};
+use super::{columns::ReceivingIndexedOutputPageCols, ReceivingIndexedOutputPageAir};
 use crate::sub_chip::SubAirBridge;
 
 impl<F: PrimeField64> AirBridge<F> for ReceivingIndexedOutputPageAir {
@@ -11,7 +11,7 @@ impl<F: PrimeField64> AirBridge<F> for ReceivingIndexedOutputPageAir {
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
         let my_final_page_cols =
-            MyFinalPageCols::<usize>::from_slice(&all_cols, self.final_air.clone());
+            ReceivingIndexedOutputPageCols::<usize>::from_slice(&all_cols, &self.final_air);
 
         SubAirBridge::sends(&self.final_air, my_final_page_cols.final_page_cols)
     }
@@ -22,7 +22,7 @@ impl<F: PrimeField64> AirBridge<F> for ReceivingIndexedOutputPageAir {
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
         let my_final_page_cols =
-            MyFinalPageCols::<usize>::from_slice(&all_cols, self.final_air.clone());
+            ReceivingIndexedOutputPageCols::<usize>::from_slice(&all_cols, &self.final_air);
 
         let page_cols = my_final_page_cols.final_page_cols.page_cols;
         let alloc_idx = page_cols.is_alloc;

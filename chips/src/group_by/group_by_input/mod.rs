@@ -19,7 +19,7 @@ pub struct GroupByAir {
     /// Has +1 to check equality on `is_alloc` column
     pub is_equal_vec_air: IsEqualVecAir,
 
-    /// Does not include is_allocated column, so `idx_len + 1 == page_width`
+    /// Includes is_allocated column, so `data_len + 1 == page_width`
     pub page_width: usize,
     pub group_by_cols: Vec<usize>,
     pub aggregated_col: usize,
@@ -48,12 +48,12 @@ impl GroupByAir {
     ) -> Self {
         Self {
             page_width,
-            group_by_cols: group_by_cols.clone(),
+            // has +1 to check equality on is_alloc column
+            is_equal_vec_air: IsEqualVecAir::new(group_by_cols.len() + 1),
+            group_by_cols,
             aggregated_col,
             sorted,
             op,
-            // has +1 to check equality on is_alloc column
-            is_equal_vec_air: IsEqualVecAir::new(group_by_cols.len() + 1),
             internal_bus,
             output_bus,
         }
@@ -83,7 +83,7 @@ impl GroupByAir {
                 .clone()
                 .iter()
                 .filter(|row| row.is_alloc == 1)
-                .map(|row| row.idx.clone())
+                .map(|row| row.data.clone())
                 .collect()
         } else {
             let mut grouped_page: Vec<Vec<u32>> = page
@@ -94,9 +94,9 @@ impl GroupByAir {
                     let mut selected_row: Vec<u32> = self
                         .group_by_cols
                         .iter()
-                        .map(|&col_index| row.idx[col_index])
+                        .map(|&col_index| row.data[col_index])
                         .collect();
-                    selected_row.push(row.idx[self.aggregated_col]);
+                    selected_row.push(row.data[self.aggregated_col]);
                     selected_row
                 })
                 .collect();
