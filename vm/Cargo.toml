@@ -48,6 +48,8 @@ p3-symmetric = { workspace = true }
 tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }
 tracing-forest = { version = "0.1.6", features = ["ansi", "smallvec"] }
 test-case = "3.3.1"
+zkhash = { workspace = true }
+criterion = "0.4"
 
 [features]
 default = ["test-traits"]

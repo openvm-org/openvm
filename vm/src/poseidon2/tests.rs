@@ -7,13 +7,19 @@ use afs_test_utils::config::{
 use afs_test_utils::engine::StarkEngine;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::create_seeded_rng;
-use p3_baby_bear::BabyBear;
+use criterion::black_box;
+use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
+use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
+use p3_symmetric::Permutation;
 use p3_util::log2_strict_usize;
 use rand::Rng;
 use rand::RngCore;
+use zkhash::fields::babybear::FpBabyBear as HorizenBabyBear;
+use zkhash::poseidon2::poseidon2::Poseidon2 as HorizenPoseidon2;
+use zkhash::poseidon2::poseidon2_instance_babybear::POSEIDON2_BABYBEAR_16_PARAMS;
 
 #[test]
 fn test_poseidon2() {
@@ -45,10 +51,30 @@ fn test_poseidon2() {
         .collect();
 
     // air and trace generation
-    let mut poseidon2_air =
-        Poseidon2Air::<16, BabyBear>::new(external_constants, internal_constants, 0);
-    let outputs = poseidon2_air.request_trace(&states);
-    let mut poseidon2_trace = poseidon2_air.generate_trace(vec![]);
+    let poseidon2_air = Poseidon2Air::<16, BabyBear>::new(
+        external_constants.clone(),
+        internal_constants.clone(),
+        0,
+    );
+    let mut poseidon2_trace = poseidon2_air.generate_trace(states.clone());
+    let mut outputs = states.clone();
+    let poseidon2: Poseidon2<
+        BabyBear,
+        Poseidon2ExternalMatrixGeneral,
+        DiffusionMatrixBabyBear,
+        16,
+        7,
+    > = Poseidon2::new(
+        num_ext_rounds,
+        external_constants.clone(),
+        Poseidon2ExternalMatrixGeneral,
+        num_int_rounds,
+        internal_constants.clone(),
+        DiffusionMatrixBabyBear,
+    );
+    for output in outputs.iter_mut() {
+        poseidon2.permute_mut(output);
+    }
 
     // dummy interaction air and trace generation
     let page_requester = DummyInteractionAir::new(2 * 16, true, poseidon2_air.bus_index);
@@ -106,3 +132,16 @@ fn test_poseidon2() {
         poseidon2_trace.row_mut(height)[width] -= rand;
     }
 }
+
+// #[test]
+// fn test_horizen_poseidon2() {
+//     let mut rng = create_seeded_rng();
+//     let instance = HorizenPoseidon2::new(&POSEIDON2_BABYBEAR_16_PARAMS);
+//     let u32state = (0..16)
+//         .map(|_| rng.gen_range(1..=1 << 27))
+//         .collect::<Vec<_>>();
+//     let horizen_state: Vec<HorizenBabyBear> =
+//         u32state.into_iter().map(HorizenBabyBear::from).collect();
+//     let result = instance.permutation(black_box(&horizen_state));
+//     println!("{:?}", result);
+// }
