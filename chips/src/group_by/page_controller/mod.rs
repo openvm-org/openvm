@@ -109,14 +109,18 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     ///
     /// Returns a tuple of `GroupByTraces`, `GroupByCommitments`, and a vector of
     /// `ProverTraceData`.
+    #[allow(clippy::type_complexity)]
     pub fn load_page(
         &mut self,
         page: &Page,
+        page_input_pdata: Option<Arc<ProverTraceData<SC>>>,
+        page_output_pdata: Option<Arc<ProverTraceData<SC>>>,
         trace_committer: &TraceCommitter<SC>,
     ) -> (
         GroupByTraces<SC>,
         GroupByCommitments<SC>,
-        Vec<ProverTraceData<SC>>,
+        Arc<ProverTraceData<SC>>,
+        Arc<ProverTraceData<SC>>,
     )
     where
         Val<SC>: PrimeField,
@@ -131,13 +135,13 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             .final_chip
             .gen_aux_trace::<SC>(&answer, self.range_checker.clone());
 
-        let prover_data = vec![
-            trace_committer.commit(vec![group_by_trace.clone()]),
-            trace_committer.commit(vec![final_page_trace.clone()]),
-        ];
+        let page_input_pdata = page_input_pdata
+            .unwrap_or_else(|| Arc::new(trace_committer.commit(vec![group_by_trace.clone()])));
+        let page_output_pdata = page_output_pdata
+            .unwrap_or_else(|| Arc::new(trace_committer.commit(vec![final_page_trace.clone()])));
 
-        let group_by_commitment = prover_data[0].commit.clone();
-        let final_page_commitment = prover_data[1].commit.clone();
+        let group_by_commitment = page_input_pdata.commit.clone();
+        let final_page_commitment = page_output_pdata.commit.clone();
 
         (
             GroupByTraces {
@@ -150,7 +154,8 @@ impl<SC: StarkGenericConfig> PageController<SC> {
                 group_by_commitment,
                 final_page_commitment,
             },
-            prover_data,
+            page_input_pdata,
+            page_output_pdata,
         )
     }
 
@@ -204,7 +209,8 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         partial_pk: &MultiStarkPartialProvingKey<SC>,
         trace_builder: &mut TraceCommitmentBuilder<SC>,
         group_by_traces: GroupByTraces<SC>,
-        mut cached_traces_prover_data: Vec<ProverTraceData<SC>>,
+        input_prover_data: Arc<ProverTraceData<SC>>,
+        output_prover_data: Arc<ProverTraceData<SC>>,
     ) -> Proof<SC>
     where
         Val<SC>: PrimeField64,
@@ -215,19 +221,23 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
     {
-        assert!(cached_traces_prover_data.len() == 2);
-
         let range_checker_trace = self.range_checker.generate_trace();
 
         trace_builder.clear();
 
         trace_builder.load_cached_trace(
             group_by_traces.group_by_trace,
-            cached_traces_prover_data.remove(0),
+            match Arc::try_unwrap(input_prover_data) {
+                Ok(data) => data,
+                Err(_) => panic!("Prover data should have only one owner"),
+            },
         );
         trace_builder.load_cached_trace(
             group_by_traces.final_page_trace,
-            cached_traces_prover_data.remove(0),
+            match Arc::try_unwrap(output_prover_data) {
+                Ok(data) => data,
+                Err(_) => panic!("Prover data should have only one owner"),
+            },
         );
 
         trace_builder.load_trace(group_by_traces.group_by_aux_trace);

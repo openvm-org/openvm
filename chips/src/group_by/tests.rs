@@ -5,7 +5,7 @@ use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_util::log2_strict_usize;
-use std::cmp::max;
+use std::{cmp::max, sync::Arc};
 
 use afs_stark_backend::{
     keygen::{types::MultiStarkPartialProvingKey, MultiStarkKeygenBuilder},
@@ -90,8 +90,8 @@ impl GroupByTest {
         self.group_by_cols = group_by_cols;
     }
 
-    /// The length of indices, i.e. `page_width - 1`.
-    pub fn idx_len(&self) -> usize {
+    /// The length of data, i.e. `page_width - 1`.
+    pub fn data_len(&self) -> usize {
         self.page_width - 1
     }
 
@@ -117,7 +117,7 @@ impl GroupByTest {
         // Generate half the height of unique rows
         for _ in 0..(self.page_height() / 2) {
             let mut row = vec![1];
-            row.extend((0..self.idx_len()).map(|_| rng.gen::<u32>() % (1 << self.idx_limb_bits)));
+            row.extend((0..self.data_len()).map(|_| rng.gen::<u32>() % (1 << self.idx_limb_bits)));
             matrix.push(row);
         }
 
@@ -134,26 +134,21 @@ impl GroupByTest {
             }
         });
 
-        // Sort the matrix
-        matrix.sort_by(|a, b| b.cmp(a));
-        matrix[..rows_allocated].sort();
-        Page::from_2d_vec(&matrix, self.idx_len(), 0)
+        Page::from_2d_vec(&matrix, 0, self.data_len())
     }
 
     pub fn generate_sorted_page(&self, rng: &mut impl Rng, rows_allocated: usize) -> Page {
-        let page = Page::random(
-            rng,
-            self.idx_len(),
-            0,
-            self.max_idx() as u32,
-            0,
-            self.page_height(),
-            rows_allocated,
-        );
+        let page = self.generate_page(rng, rows_allocated);
         let mut page_vecs: Vec<Vec<u32>> = page.to_2d_vec();
+        // Sort the matrix
         page_vecs.sort_by(|a, b| b.cmp(a));
         page_vecs[..rows_allocated].sort();
-        Page::from_2d_vec(&page_vecs, self.idx_len(), 0)
+        for row in page_vecs[rows_allocated..].iter_mut() {
+            for x in row.iter_mut() {
+                *x = 0;
+            }
+        }
+        Page::from_2d_vec(&page_vecs, 0, self.data_len())
     }
 
     /// Set up the keygen builder for the group-by test case by querying trace widths.
@@ -208,17 +203,22 @@ impl GroupByTest {
         perturb: bool,
         rng: &mut impl Rng,
     ) -> Result<(), VerificationError> {
-        let (group_by_traces, _group_by_commitments, mut prover_data) =
-            page_controller.load_page(page_init, &trace_builder.committer);
+        let (group_by_traces, _group_by_commitments, input_prover_data, output_prover_data) =
+            page_controller.load_page(page_init, None, None, &trace_builder.committer);
 
         let range_checker_trace = page_controller.range_checker.generate_trace();
 
         trace_builder.clear();
 
-        trace_builder.load_cached_trace(group_by_traces.group_by_trace, prover_data.remove(0));
+        trace_builder.load_cached_trace(
+            group_by_traces.group_by_trace,
+            Arc::try_unwrap(input_prover_data).unwrap_or_else(|_| panic!()),
+        );
         if !perturb {
-            trace_builder
-                .load_cached_trace(group_by_traces.final_page_trace, prover_data.remove(0));
+            trace_builder.load_cached_trace(
+                group_by_traces.final_page_trace,
+                Arc::try_unwrap(output_prover_data).unwrap_or_else(|_| panic!()),
+            );
         } else {
             trace_builder.load_cached_trace(
                 perturb_page(
@@ -227,7 +227,7 @@ impl GroupByTest {
                     rng,
                     self.max_idx(),
                 ),
-                prover_data.remove(0),
+                Arc::try_unwrap(output_prover_data).unwrap_or_else(|_| panic!()),
             );
         }
         trace_builder.load_trace(group_by_traces.group_by_aux_trace);
@@ -355,8 +355,8 @@ fn test_static_values() {
 
     let prover = engine.prover();
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
-    let (group_by_traces, _group_by_commitments, prover_data) =
-        page_controller.load_page(&page, &trace_builder.committer);
+    let (group_by_traces, _group_by_commitments, input_pdata, output_pdata) =
+        page_controller.load_page(&page, None, None, &trace_builder.committer);
     assert_eq!(
         &group_by_traces.final_page_trace.values,
         &answer_vec
@@ -372,7 +372,8 @@ fn test_static_values() {
         &partial_pk,
         &mut trace_builder,
         group_by_traces,
-        prover_data,
+        input_pdata,
+        output_pdata,
     );
     let verify = page_controller.verify(&engine, partial_vk, proof);
     assert!(verify.is_ok());
