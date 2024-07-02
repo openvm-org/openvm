@@ -413,7 +413,12 @@ fn test_random_values() {
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-    let alloc_rows_arr: Vec<usize> = (0..test.page_height() - 1).collect();
+    const NUM_TESTS: usize = 3;
+    let mut alloc_rows_arr: Vec<usize> = (0..NUM_TESTS)
+        .map(|_| rng.gen_range(0..test.page_height() - 1))
+        .collect();
+    alloc_rows_arr.push(0);
+    alloc_rows_arr.push(test.page_height() - 1);
 
     // Positive test
     for rows_allocated in alloc_rows_arr.iter() {
@@ -495,7 +500,13 @@ fn group_by_sorted_test() {
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-    let alloc_rows_arr: Vec<usize> = (0..test.page_height() - 1).collect();
+    // let alloc_rows_arr: Vec<usize> = (0..test.page_height() - 1).collect();
+    const NUM_TESTS: usize = 3;
+    let mut alloc_rows_arr: Vec<usize> = (0..NUM_TESTS)
+        .map(|_| rng.gen_range(0..test.page_height() - 1))
+        .collect();
+    alloc_rows_arr.push(0);
+    alloc_rows_arr.push(test.page_height() - 1);
 
     // Positive test
     for rows_allocated in alloc_rows_arr.iter() {
