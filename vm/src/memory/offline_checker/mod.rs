@@ -90,7 +90,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         }
         self.last_timestamp = Some(timestamp);
         for (i, &datum) in data.iter().enumerate() {
-            self.memory.insert((address_space, address + F::from_canonical_usize(i)), datum);
+            self.memory
+                .insert((address_space, address + F::from_canonical_usize(i)), datum);
         }
         self.accesses.push(MemoryAccess {
             timestamp,

@@ -446,10 +446,15 @@ fn test_cpu_negative_hasnt_terminated() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test_change(true, program, true, |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
-        rows.remove(rows.len() - 1);
-        vm.program_chip.execution_frequencies[1] = 0;
-    });
+    air_test_change(
+        true,
+        program,
+        true,
+        |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
+            rows.remove(rows.len() - 1);
+            vm.program_chip.execution_frequencies[1] = 0;
+        },
+    );
 }
 
 #[test]
@@ -462,26 +467,31 @@ fn test_cpu_negative_secret_write() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test_change(true, program, true, |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
-        let is_zero_air = IsZeroAir;
-        let mut is_zero_trace = is_zero_air
-            .generate_trace(vec![AbstractField::one()])
-            .clone();
-        let is_zero_aux = is_zero_trace.row_mut(0)[2];
+    air_test_change(
+        true,
+        program,
+        true,
+        |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
+            let is_zero_air = IsZeroAir;
+            let mut is_zero_trace = is_zero_air
+                .generate_trace(vec![AbstractField::one()])
+                .clone();
+            let is_zero_aux = is_zero_trace.row_mut(0)[2];
 
-        rows[0].aux.accesses[2] = MemoryAccessCols {
-            enabled: AbstractField::one(),
-            address_space: AbstractField::one(),
-            is_immediate: AbstractField::zero(),
-            is_zero_aux,
-            address: AbstractField::zero(),
-            data: decompose(AbstractField::from_canonical_usize(115)),
-        };
+            rows[0].aux.accesses[2] = MemoryAccessCols {
+                enabled: AbstractField::one(),
+                address_space: AbstractField::one(),
+                is_immediate: AbstractField::zero(),
+                is_zero_aux,
+                address: AbstractField::zero(),
+                data: decompose(AbstractField::from_canonical_usize(115)),
+            };
 
-        vm.memory_chip
-            .accesses
-            .push(MemoryAccess::from_isize(0, OpType::Write, 1, 0, 115));
-    });
+            vm.memory_chip
+                .accesses
+                .push(MemoryAccess::from_isize(0, OpType::Write, 1, 0, 115));
+        },
+    );
 }
 
 #[test]
@@ -494,10 +504,15 @@ fn test_cpu_negative_disable_write() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test_change(true, program, true, |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
-        rows[0].aux.accesses[2].enabled = AbstractField::zero();
-        vm.memory_chip.accesses.remove(0);
-    });
+    air_test_change(
+        true,
+        program,
+        true,
+        |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
+            rows[0].aux.accesses[2].enabled = AbstractField::zero();
+            vm.memory_chip.accesses.remove(0);
+        },
+    );
 }
 
 #[test]
@@ -512,10 +527,15 @@ fn test_cpu_negative_disable_read0() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test_change(true, program, true, |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
-        rows[1].aux.accesses[0].enabled = AbstractField::zero();
-        vm.memory_chip.accesses.remove(1);
-    });
+    air_test_change(
+        true,
+        program,
+        true,
+        |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
+            rows[1].aux.accesses[0].enabled = AbstractField::zero();
+            vm.memory_chip.accesses.remove(1);
+        },
+    );
 }
 
 #[test]
@@ -530,8 +550,13 @@ fn test_cpu_negative_disable_read1() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test_change(true, program, true, |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
-        rows[1].aux.accesses[1].enabled = AbstractField::zero();
-        vm.memory_chip.accesses.remove(2);
-    });
+    air_test_change(
+        true,
+        program,
+        true,
+        |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
+            rows[1].aux.accesses[1].enabled = AbstractField::zero();
+            vm.memory_chip.accesses.remove(2);
+        },
+    );
 }

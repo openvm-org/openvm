@@ -119,7 +119,10 @@ fn test_offline_checker() {
     for op in ops_sorted.iter() {
         match op.op_type {
             OpType::Read => {
-                assert_eq!(chip.read_word(op.timestamp, op.address_space, op.address), op.data);
+                assert_eq!(
+                    chip.read_word(op.timestamp, op.address_space, op.address),
+                    op.data
+                );
             }
             OpType::Write => {
                 chip.write_word(op.timestamp, op.address_space, op.address, op.data);
@@ -172,13 +175,20 @@ fn test_offline_checker_negative_invalid_read() {
     let requester = DummyInteractionAir::new(2 + memory_chip.air.mem_width(), true, MEMORY_BUS);
 
     // should fail because we can't read before writing
-    memory_chip.write_word(0, BabyBear::one(), BabyBear::zero(), [BabyBear::zero(), BabyBear::zero(), BabyBear::zero()]);
+    memory_chip.write_word(
+        0,
+        BabyBear::one(),
+        BabyBear::zero(),
+        [BabyBear::zero(), BabyBear::zero(), BabyBear::zero()],
+    );
     memory_chip.accesses[0].op_type = OpType::Read;
 
     let memory_trace = memory_chip.generate_trace(range_checker.clone());
     let range_checker_trace = range_checker.generate_trace();
     let requester_trace = RowMajorMatrix::new(
-        memory_chip.accesses.iter()
+        memory_chip
+            .accesses
+            .iter()
             .flat_map(|op: &MemoryAccess<WORD_SIZE, BabyBear>| {
                 iter::once(BabyBear::one())
                     .chain(iter::once(BabyBear::from_canonical_usize(op.timestamp)))

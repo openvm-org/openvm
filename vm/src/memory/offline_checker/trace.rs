@@ -61,7 +61,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         // Ensure that trace degree is a power of two
         let trace_degree = self.accesses.len().next_power_of_two();
 
-
         if self.accesses.len() < trace_degree {
             rows.extend(self.generate_trace_row(
                 false,

@@ -11,7 +11,8 @@ pub enum Void {}
 
 use crate::{
     cpu::{
-        trace::{ExecutionError, Instruction}, CpuAir, CpuOptions, RANGE_CHECKER_BUS
+        trace::{ExecutionError, Instruction},
+        CpuAir, CpuOptions, RANGE_CHECKER_BUS,
     },
     field_arithmetic::FieldArithmeticChip,
     memory::offline_checker::MemoryChip,

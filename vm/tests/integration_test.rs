@@ -57,8 +57,6 @@ fn test_vm_1() {
 
 #[test]
 fn test_vm_without_field_arithmetic() {
-    std::env::set_var("RUST_BACKTRACE", "1");
-    
     let field_arithmetic_enabled = false;
 
     /*
