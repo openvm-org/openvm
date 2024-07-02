@@ -407,8 +407,18 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
 pub fn convert_program<F: PrimeField64, EF: ExtensionField<F>>(
     program: AssemblyCode<F, EF>,
 ) -> Vec<Instruction<F>> {
+    // register[0] <- 0
+    let init_register_0 = inst(
+        STOREW,
+        F::zero(),
+        F::zero(),
+        register(0),
+        AS::Immediate,
+        AS::Register,
+    );
+
     let mut block_start = vec![];
-    let mut pc = 0;
+    let mut pc = 1;
     for block in program.blocks.iter() {
         block_start.push(pc);
         for instruction in block.0.iter() {
@@ -420,7 +430,7 @@ pub fn convert_program<F: PrimeField64, EF: ExtensionField<F>>(
         }
     }
 
-    let mut result = vec![];
+    let mut result = vec![init_register_0];
     for block in program.blocks.iter() {
         for instruction in block.0.iter() {
             let labels =

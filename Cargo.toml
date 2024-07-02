@@ -6,6 +6,7 @@ members = [
     "test-utils",
     "derive",
     "bin/afs",
+    "bin/predicate",
     "logical-interface",
     "vm",
     "vm/bin",

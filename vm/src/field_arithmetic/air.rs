@@ -43,7 +43,7 @@ impl<AB: AirBuilder> Air<AB> for FieldArithmeticAir {
         builder.assert_eq(aux.is_div, aux.opcode_hi * aux.opcode_lo);
 
         builder.assert_eq(aux.product, io.x * io.y);
-        builder.assert_eq(aux.quotient * io.y, io.x);
+        builder.assert_eq(aux.quotient * io.y, io.x * aux.is_div);
         builder.assert_eq(
             au_cols.aux.sum_or_diff,
             io.x + io.y - AB::Expr::two() * aux.opcode_lo * io.y,
@@ -55,5 +55,7 @@ impl<AB: AirBuilder> Air<AB> for FieldArithmeticAir {
                 + aux.is_div * aux.quotient
                 + aux.sum_or_diff * (AB::Expr::one() - aux.opcode_hi),
         );
+
+        builder.assert_eq(aux.divisor_inv * io.y, aux.is_div);
     }
 }

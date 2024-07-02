@@ -1,7 +1,7 @@
 pub mod controller;
+pub mod final_table;
+pub mod initial_table;
 pub mod intersector;
-pub mod my_final_table;
-pub mod my_initial_table;
 
 #[cfg(test)]
 pub mod tests;

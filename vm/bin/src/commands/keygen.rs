@@ -16,7 +16,7 @@ use stark_vm::vm::{config::VmConfig, VirtualMachine};
 
 use crate::asm::parse_asm_file;
 
-use super::write_bytes;
+use super::{write_bytes, WORD_SIZE};
 
 /// `afs keygen` command
 /// Uses information from config.toml to generate partial proving and verifying keys and
@@ -52,7 +52,7 @@ impl KeygenCommand {
 
     fn execute_helper(self, config: VmConfig) -> Result<()> {
         let instructions = parse_asm_file(Path::new(&self.asm_file_path.clone()))?;
-        let vm = VirtualMachine::new(config, instructions)?;
+        let vm = VirtualMachine::<WORD_SIZE, _>::new(config, instructions)?;
         let engine = config::baby_bear_poseidon2::default_engine(vm.max_log_degree());
         let mut keygen_builder = engine.keygen_builder();
 

@@ -14,7 +14,9 @@ pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
     }
 }
 
-pub fn execute_program<F: PrimeField32>(program: Vec<Instruction<F>>) -> ProgramExecution<F> {
+pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(
+    program: Vec<Instruction<F>>,
+) -> ProgramExecution<WORD_SIZE, F> {
     let cpu = CpuAir::new(CpuOptions {
         field_arithmetic_enabled: true,
     });
@@ -22,7 +24,7 @@ pub fn execute_program<F: PrimeField32>(program: Vec<Instruction<F>>) -> Program
 }
 
 pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
-    for (pc, instruction) in program.iter().enumerate() {
+    for instruction in program.iter() {
         let Instruction {
             opcode,
             op_a,
@@ -31,9 +33,6 @@ pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
             d,
             e,
         } = instruction;
-        println!(
-            "{} | {:?} {} {} {} {} {}",
-            pc, opcode, op_a, op_b, op_c, d, e
-        );
+        println!("{:?} {} {} {} {} {}", opcode, op_a, op_b, op_c, d, e);
     }
 }

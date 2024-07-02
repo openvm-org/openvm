@@ -18,15 +18,21 @@ fn generate_cols<T: Field>(op: OpCode, x: T, y: T) -> FieldArithmeticCols<T> {
     let is_mul = T::from_bool(op == OpCode::FMUL);
     let sum_or_diff = x + y - T::two() * opcode_lo * y;
     let product = x * y;
-    let quotient = if y == T::zero() {
+    let quotient = if y == T::zero() || op != OpCode::FDIV {
         T::zero()
     } else {
         x * y.inverse()
+    };
+    let divisor_inv = if op != OpCode::FDIV {
+        T::zero()
+    } else {
+        y.inverse()
     };
     let z = is_mul * product + is_div * quotient + (T::one() - opcode_hi) * sum_or_diff;
 
     FieldArithmeticCols {
         io: FieldArithmeticIOCols {
+            rcv_count: T::one(),
             opcode: T::from_canonical_u32(opcode),
             x,
             y,
@@ -40,14 +46,18 @@ fn generate_cols<T: Field>(op: OpCode, x: T, y: T) -> FieldArithmeticCols<T> {
             sum_or_diff,
             product,
             quotient,
+            divisor_inv,
         },
     }
 }
 
 impl FieldArithmeticAir {
     /// Generates trace for field arithmetic chip.
-    pub fn generate_trace<T: Field>(&self, prog_exec: &ProgramExecution<T>) -> RowMajorMatrix<T> {
-        let trace = prog_exec
+    pub fn generate_trace<const WORD_SIZE: usize, T: Field>(
+        &self,
+        prog_exec: &ProgramExecution<WORD_SIZE, T>,
+    ) -> RowMajorMatrix<T> {
+        let mut trace: Vec<T> = prog_exec
             .arithmetic_ops
             .iter()
             .flat_map(|op| {
@@ -55,6 +65,17 @@ impl FieldArithmeticAir {
                 cols.flatten()
             })
             .collect();
+
+        let empty_row = FieldArithmeticCols::<T>::blank_row().flatten();
+        let curr_height = prog_exec.arithmetic_ops.len();
+        let correct_height = curr_height.next_power_of_two();
+        trace.extend(
+            empty_row
+                .iter()
+                .cloned()
+                .cycle()
+                .take((correct_height - curr_height) * FieldArithmeticCols::<T>::NUM_COLS),
+        );
 
         RowMajorMatrix::new(trace, FieldArithmeticCols::<T>::NUM_COLS)
     }

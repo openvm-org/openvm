@@ -12,8 +12,11 @@ use afs_test_utils::{
 };
 use rand::Rng;
 
-use crate::common::page::Page;
-use crate::inner_join::{self, controller};
+use crate::inner_join::{
+    self,
+    controller::{self, T2Format, TableFormat},
+};
+use crate::{common::page::Page, inner_join::controller::IJBuses};
 
 #[allow(clippy::too_many_arguments)]
 fn load_tables_test(
@@ -21,13 +24,13 @@ fn load_tables_test(
     t1: &Page,
     t2: &Page,
     decomp: usize,
-    ij_controller: &mut controller::InnerJoinController<BabyBearPoseidon2Config>,
+    ij_controller: &mut controller::FKInnerJoinController<BabyBearPoseidon2Config>,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
     partial_pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
     intersector_trace_degree: usize,
 ) -> Result<(), VerificationError> {
     // Clearing the range_checker counts
-    ij_controller.update_range_checker(decomp);
+    ij_controller.reset_range_checker(decomp);
 
     let prover_data = ij_controller.load_tables(
         t1,
@@ -44,14 +47,16 @@ fn load_tables_test(
 fn inner_join_test() {
     let mut rng = create_seeded_rng();
 
-    let range_bus_index = 0;
-    let t1_intersector_bus_index = 1;
-    let t2_intersector_bus_index = 2;
-    let intersector_t2_bus_index = 3;
-    let t1_output_bus_index = 4;
-    let t2_output_bus_index = 5;
+    let ij_buses = IJBuses {
+        range_bus_index: 0,
+        t1_intersector_bus_index: 1,
+        t2_intersector_bus_index: 2,
+        intersector_t2_bus_index: 3,
+        t1_output_bus_index: 4,
+        t2_output_bus_index: 5,
+    };
 
-    use inner_join::controller::InnerJoinController;
+    use inner_join::controller::FKInnerJoinController;
 
     const MAX_VAL: u32 = 0x78000001 / 2; // The prime used by BabyBear / 2
 
@@ -103,22 +108,17 @@ fn inner_join_test() {
         row.data[fkey_start..fkey_end].clone_from_slice(&t1.get_random_idx(&mut rng));
     }
 
-    let mut ij_controller: InnerJoinController<BabyBearPoseidon2Config> = InnerJoinController::new(
-        range_bus_index,
-        t1_intersector_bus_index,
-        t2_intersector_bus_index,
-        intersector_t2_bus_index,
-        t1_output_bus_index,
-        t2_output_bus_index,
-        fkey_start,
-        fkey_end,
-        t1_idx_len,
-        t1_data_len,
-        t2_idx_len,
-        t2_data_len,
-        idx_limb_bits,
-        decomp,
-    );
+    let mut ij_controller: FKInnerJoinController<BabyBearPoseidon2Config> =
+        FKInnerJoinController::new(
+            ij_buses,
+            TableFormat::new(t1_idx_len, t1_data_len, idx_limb_bits),
+            T2Format::new(
+                TableFormat::new(t2_idx_len, t2_data_len, idx_limb_bits),
+                fkey_start,
+                fkey_end,
+            ),
+            decomp,
+        );
 
     let engine = config::baby_bear_poseidon2::default_engine(
         decomp.max(log_t1_height.max(log_t2_height) + 1),

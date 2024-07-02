@@ -10,7 +10,7 @@ use p3_util::log2_strict_usize;
 use crate::{
     cpu::{
         trace::{ExecutionError, Instruction},
-        CpuAir, RANGE_CHECKER_BUS, WORD_SIZE,
+        CpuAir, RANGE_CHECKER_BUS,
     },
     field_arithmetic::FieldArithmeticAir,
     memory::{offline_checker::OfflineChecker, MemoryAccess},
@@ -21,13 +21,13 @@ use self::config::{VmConfig, VmParamsConfig};
 
 pub mod config;
 
-pub struct VirtualMachine<SC: StarkGenericConfig>
+pub struct VirtualMachine<const WORD_SIZE: usize, SC: StarkGenericConfig>
 where
     Val<SC>: PrimeField64,
 {
     pub config: VmParamsConfig,
 
-    pub cpu_air: CpuAir,
+    pub cpu_air: CpuAir<WORD_SIZE>,
     pub program_air: ProgramAir<Val<SC>>,
     pub memory_air: OfflineChecker,
     pub field_arithmetic_air: FieldArithmeticAir,
@@ -40,9 +40,8 @@ where
     pub range_trace: DenseMatrix<Val<SC>>,
 }
 
-impl<SC: StarkGenericConfig> VirtualMachine<SC>
+impl<const WORD_SIZE: usize, SC: StarkGenericConfig> VirtualMachine<WORD_SIZE, SC>
 where
-    Val<SC>: PrimeField64,
     Val<SC>: PrimeField32,
 {
     pub fn new(
@@ -71,7 +70,7 @@ where
                 op_type: access.op_type,
                 address_space: access.address_space,
                 timestamp: access.timestamp,
-                data: vec![access.data],
+                data: access.data.to_vec(),
             })
             .collect::<Vec<_>>();
         let memory_trace_degree = execution.memory_accesses.len().next_power_of_two();

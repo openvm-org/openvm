@@ -9,6 +9,8 @@ use afs_compiler::ir::Var;
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
 
+const WORD_SIZE: usize = 1;
+
 #[test]
 fn test_compiler_conditionals() {
     let mut builder = AsmBuilder::<F, EF>::default();
@@ -54,7 +56,7 @@ fn test_compiler_conditionals() {
 
     let program = builder.compile_isa();
     display_program(&program);
-    execute_program(program);
+    execute_program::<WORD_SIZE, _>(program);
 
     // let code = builder.compile_asm();
     // println!("{}", code);
@@ -94,7 +96,7 @@ fn test_compiler_conditionals_v2() {
 
     let program = builder.compile_isa();
     display_program(&program);
-    execute_program(program);
+    execute_program::<WORD_SIZE, _>(program);
 
     // let code = builder.compile_asm();
     // println!("{}", code);

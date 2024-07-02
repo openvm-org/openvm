@@ -24,7 +24,7 @@ impl<T: Clone> IsEqualVecIOCols<T> {
     }
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct IsEqualVecAuxCols<T> {
     pub prods: Vec<T>,
     pub invs: Vec<T>,

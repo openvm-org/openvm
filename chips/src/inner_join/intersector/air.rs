@@ -44,7 +44,7 @@ impl<AB: AirBuilder> SubAir<AB> for IntersectorAir {
     type IoView = [IntersectorIOCols<AB::Var>; 2];
     type AuxView = [IntersectorAuxCols<AB::Var>; 2];
 
-    /// Ensured indices in non-extra rows are sorted and distinct,
+    /// Ensures indices in non-extra rows are sorted and distinct,
     /// that out_mult is correct, and that multiplicity are zero for
     /// non-extra rows
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
@@ -70,7 +70,7 @@ impl<AB: AirBuilder> SubAir<AB> for IntersectorAir {
             next_aux_cols.lt_out.into(),
         ));
 
-        // Ensuting out_mult is correct
+        // Ensuring out_mult is correct
         builder.assert_eq(
             local_io_cols.t1_mult * local_io_cols.t2_mult,
             local_io_cols.out_mult,
@@ -80,11 +80,5 @@ impl<AB: AirBuilder> SubAir<AB> for IntersectorAir {
         builder.assert_zero(local_io_cols.is_extra * local_io_cols.t1_mult);
         builder.assert_zero(local_io_cols.is_extra * local_io_cols.t2_mult);
         builder.assert_zero(local_io_cols.is_extra * local_io_cols.out_mult);
-
-        // Ensuting out_mult is correct
-        builder.assert_eq(
-            local_io_cols.t1_mult * local_io_cols.t2_mult,
-            local_io_cols.out_mult,
-        );
     }
 }
