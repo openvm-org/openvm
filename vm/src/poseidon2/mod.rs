@@ -49,24 +49,6 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
     // It is also the matrix used by the Horizon Labs implementation.
     pub const HL_MDS_MAT_4: [[u32; 4]; 4] =
         [[5, 7, 1, 3], [4, 6, 1, 1], [1, 3, 5, 7], [1, 1, 4, 6]];
-    pub const DIAG_MAT_16: [u32; 16] = [
-        2013265921 - 2,
-        1,
-        2,
-        4,
-        8,
-        16,
-        32,
-        64,
-        128,
-        256,
-        512,
-        1024,
-        2048,
-        4096,
-        8192,
-        32768,
-    ];
 
     pub fn new(
         external_constants: Vec<[F; WIDTH]>,
