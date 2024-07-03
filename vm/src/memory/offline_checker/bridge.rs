@@ -12,7 +12,7 @@ use afs_chips::is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupl
 use afs_chips::is_less_than_tuple::IsLessThanTupleAir;
 use afs_chips::sub_chip::SubAirBridge;
 
-impl<F: PrimeField64> SubAirBridge<F> for OfflineChecker {
+impl<const WORD_SIZE: usize, F: PrimeField64> SubAirBridge<F> for OfflineChecker<WORD_SIZE> {
     /// Receives operations (clk, op_type, addr_space, pointer, data)
     fn receives(&self, col_indices: OfflineCheckerCols<usize>) -> Vec<Interaction<F>> {
         let op_cols: Vec<VirtualPairCol<F>> = iter::once(col_indices.clk)
@@ -50,7 +50,7 @@ impl<F: PrimeField64> SubAirBridge<F> for OfflineChecker {
     }
 }
 
-impl<F: PrimeField64> AirBridge<F> for OfflineChecker {
+impl<const WORD_SIZE: usize, F: PrimeField64> AirBridge<F> for OfflineChecker<WORD_SIZE> {
     fn receives(&self) -> Vec<Interaction<F>> {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();

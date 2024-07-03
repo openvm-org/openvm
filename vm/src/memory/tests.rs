@@ -12,9 +12,9 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::cpu::{MEMORY_BUS, RANGE_CHECKER_BUS};
 
-use super::{offline_checker::OfflineChecker, MemoryAccess, OpType};
+use super::{offline_checker::MemoryChip, MemoryAccess, OpType};
 
-const DATA_LEN: usize = 3;
+const WORD_SIZE: usize = 3;
 const ADDR_SPACE_LIMB_BITS: usize = 8;
 const POINTER_LIMB_BITS: usize = 8;
 const CLK_LIMB_BITS: usize = 8;
@@ -26,22 +26,21 @@ const TRACE_DEGREE: usize = 16;
 #[test]
 fn test_offline_checker() {
     let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
-    let offline_checker = OfflineChecker::new(
-        DATA_LEN,
+    let mut chip = MemoryChip::new(
         ADDR_SPACE_LIMB_BITS,
         POINTER_LIMB_BITS,
         CLK_LIMB_BITS,
         DECOMP,
     );
-    let requester = DummyInteractionAir::new(2 + offline_checker.mem_width(), true, MEMORY_BUS);
+    let requester = DummyInteractionAir::new(2 + chip.air.mem_width(), true, MEMORY_BUS);
 
-    let ops: Vec<MemoryAccess<BabyBear>> = vec![
+    let ops: Vec<MemoryAccess<WORD_SIZE, BabyBear>> = vec![
         MemoryAccess {
             timestamp: 1,
             op_type: OpType::Write,
-            address_space: BabyBear::zero(),
+            address_space: BabyBear::one(),
             address: BabyBear::one(),
-            data: vec![
+            data: [
                 BabyBear::from_canonical_usize(232),
                 BabyBear::from_canonical_usize(888),
                 BabyBear::from_canonical_usize(5954),
@@ -50,9 +49,9 @@ fn test_offline_checker() {
         MemoryAccess {
             timestamp: 0,
             op_type: OpType::Write,
-            address_space: BabyBear::zero(),
+            address_space: BabyBear::one(),
             address: BabyBear::zero(),
-            data: vec![
+            data: [
                 BabyBear::from_canonical_usize(2324),
                 BabyBear::from_canonical_usize(433),
                 BabyBear::from_canonical_usize(1778),
@@ -63,7 +62,7 @@ fn test_offline_checker() {
             op_type: OpType::Write,
             address_space: BabyBear::one(),
             address: BabyBear::zero(),
-            data: vec![
+            data: [
                 BabyBear::from_canonical_usize(231),
                 BabyBear::from_canonical_usize(3883),
                 BabyBear::from_canonical_usize(17),
@@ -72,9 +71,9 @@ fn test_offline_checker() {
         MemoryAccess {
             timestamp: 2,
             op_type: OpType::Read,
-            address_space: BabyBear::zero(),
+            address_space: BabyBear::one(),
             address: BabyBear::one(),
-            data: vec![
+            data: [
                 BabyBear::from_canonical_usize(232),
                 BabyBear::from_canonical_usize(888),
                 BabyBear::from_canonical_usize(5954),
@@ -85,7 +84,7 @@ fn test_offline_checker() {
             op_type: OpType::Read,
             address_space: BabyBear::two(),
             address: BabyBear::zero(),
-            data: vec![
+            data: [
                 BabyBear::from_canonical_usize(4382),
                 BabyBear::from_canonical_usize(8837),
                 BabyBear::from_canonical_usize(192),
@@ -96,7 +95,7 @@ fn test_offline_checker() {
             op_type: OpType::Write,
             address_space: BabyBear::two(),
             address: BabyBear::zero(),
-            data: vec![
+            data: [
                 BabyBear::from_canonical_usize(4382),
                 BabyBear::from_canonical_usize(8837),
                 BabyBear::from_canonical_usize(192),
@@ -105,22 +104,37 @@ fn test_offline_checker() {
         MemoryAccess {
             timestamp: 3,
             op_type: OpType::Write,
-            address_space: BabyBear::zero(),
+            address_space: BabyBear::one(),
             address: BabyBear::one(),
-            data: vec![
+            data: [
                 BabyBear::from_canonical_usize(3243),
                 BabyBear::from_canonical_usize(3214),
                 BabyBear::from_canonical_usize(6639),
             ],
         },
     ];
+    let mut ops_sorted = ops.clone();
+    ops_sorted.sort_by_key(|op| op.timestamp);
 
-    let offline_checker_trace =
-        offline_checker.generate_trace(ops.clone(), range_checker.clone(), TRACE_DEGREE);
+    for op in ops_sorted.iter() {
+        match op.op_type {
+            OpType::Read => {
+                assert_eq!(
+                    chip.read_word(op.timestamp, op.address_space, op.address),
+                    op.data
+                );
+            }
+            OpType::Write => {
+                chip.write_word(op.timestamp, op.address_space, op.address, op.data);
+            }
+        }
+    }
+
+    let trace = chip.generate_trace(range_checker.clone());
     let range_checker_trace = range_checker.generate_trace();
     let requester_trace = RowMajorMatrix::new(
         ops.iter()
-            .flat_map(|op: &MemoryAccess<BabyBear>| {
+            .flat_map(|op: &MemoryAccess<WORD_SIZE, BabyBear>| {
                 [
                     BabyBear::one(),
                     BabyBear::from_canonical_usize(op.timestamp),
@@ -143,8 +157,8 @@ fn test_offline_checker() {
     );
 
     run_simple_test_no_pis(
-        vec![&offline_checker, &range_checker.air, &requester],
-        vec![offline_checker_trace, range_checker_trace, requester_trace],
+        vec![&chip.air, &range_checker.air, &requester],
+        vec![trace, range_checker_trace, requester_trace],
     )
     .expect("Verification failed");
 }
@@ -152,34 +166,30 @@ fn test_offline_checker() {
 #[test]
 fn test_offline_checker_negative_invalid_read() {
     let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
-    let offline_checker = OfflineChecker::new(
-        DATA_LEN,
+    let mut memory_chip = MemoryChip::new(
         ADDR_SPACE_LIMB_BITS,
         POINTER_LIMB_BITS,
         CLK_LIMB_BITS,
         DECOMP,
     );
-    let requester = DummyInteractionAir::new(2 + offline_checker.mem_width(), true, MEMORY_BUS);
+    let requester = DummyInteractionAir::new(2 + memory_chip.air.mem_width(), true, MEMORY_BUS);
 
     // should fail because we can't read before writing
-    let ops: Vec<MemoryAccess<BabyBear>> = vec![MemoryAccess {
-        timestamp: 0,
-        op_type: OpType::Read,
-        address_space: BabyBear::zero(),
-        address: BabyBear::zero(),
-        data: vec![
-            BabyBear::from_canonical_usize(0),
-            BabyBear::from_canonical_usize(0),
-            BabyBear::from_canonical_usize(0),
-        ],
-    }];
+    memory_chip.write_word(
+        0,
+        BabyBear::one(),
+        BabyBear::zero(),
+        [BabyBear::zero(), BabyBear::zero(), BabyBear::zero()],
+    );
+    memory_chip.accesses[0].op_type = OpType::Read;
 
-    let offline_checker_trace =
-        offline_checker.generate_trace(ops.clone(), range_checker.clone(), TRACE_DEGREE);
+    let memory_trace = memory_chip.generate_trace(range_checker.clone());
     let range_checker_trace = range_checker.generate_trace();
     let requester_trace = RowMajorMatrix::new(
-        ops.iter()
-            .flat_map(|op: &MemoryAccess<BabyBear>| {
+        memory_chip
+            .accesses
+            .iter()
+            .flat_map(|op: &MemoryAccess<WORD_SIZE, BabyBear>| {
                 iter::once(BabyBear::one())
                     .chain(iter::once(BabyBear::from_canonical_usize(op.timestamp)))
                     .chain(iter::once(BabyBear::from_canonical_u8(op.op_type as u8)))
@@ -191,7 +201,7 @@ fn test_offline_checker_negative_invalid_read() {
                 iter::repeat_with(|| {
                     iter::repeat(BabyBear::zero()).take(1 + requester.field_width())
                 })
-                .take(TRACE_DEGREE - ops.len())
+                .take(TRACE_DEGREE - memory_chip.accesses.len())
                 .flatten(),
             )
             .collect(),
@@ -203,8 +213,8 @@ fn test_offline_checker_negative_invalid_read() {
     });
     assert_eq!(
         run_simple_test_no_pis(
-            vec![&offline_checker, &range_checker.air, &requester],
-            vec![offline_checker_trace, range_checker_trace, requester_trace],
+            vec![&memory_chip.air, &range_checker.air, &requester],
+            vec![memory_trace, range_checker_trace, requester_trace],
         ),
         Err(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
@@ -214,22 +224,21 @@ fn test_offline_checker_negative_invalid_read() {
 #[test]
 fn test_offline_checker_negative_data_mismatch() {
     let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
-    let offline_checker = OfflineChecker::new(
-        DATA_LEN,
+    let mut chip = MemoryChip::new(
         ADDR_SPACE_LIMB_BITS,
         POINTER_LIMB_BITS,
         CLK_LIMB_BITS,
         DECOMP,
     );
-    let requester = DummyInteractionAir::new(2 + offline_checker.mem_width(), true, MEMORY_BUS);
+    let requester = DummyInteractionAir::new(2 + chip.air.mem_width(), true, MEMORY_BUS);
 
-    let ops: Vec<MemoryAccess<BabyBear>> = vec![
+    let ops: Vec<MemoryAccess<WORD_SIZE, BabyBear>> = vec![
         MemoryAccess {
             timestamp: 0,
             op_type: OpType::Write,
-            address_space: BabyBear::zero(),
+            address_space: BabyBear::one(),
             address: BabyBear::zero(),
-            data: vec![
+            data: [
                 BabyBear::from_canonical_usize(2324),
                 BabyBear::from_canonical_usize(433),
                 BabyBear::from_canonical_usize(1778),
@@ -238,9 +247,9 @@ fn test_offline_checker_negative_data_mismatch() {
         MemoryAccess {
             timestamp: 1,
             op_type: OpType::Write,
-            address_space: BabyBear::zero(),
+            address_space: BabyBear::one(),
             address: BabyBear::one(),
-            data: vec![
+            data: [
                 BabyBear::from_canonical_usize(232),
                 BabyBear::from_canonical_usize(888),
                 BabyBear::from_canonical_usize(5954),
@@ -250,9 +259,9 @@ fn test_offline_checker_negative_data_mismatch() {
         MemoryAccess {
             timestamp: 2,
             op_type: OpType::Read,
-            address_space: BabyBear::zero(),
+            address_space: BabyBear::one(),
             address: BabyBear::one(),
-            data: vec![
+            data: [
                 BabyBear::from_canonical_usize(233),
                 BabyBear::from_canonical_usize(888),
                 BabyBear::from_canonical_usize(5954),
@@ -260,12 +269,14 @@ fn test_offline_checker_negative_data_mismatch() {
         },
     ];
 
-    let offline_checker_trace =
-        offline_checker.generate_trace(ops.clone(), range_checker.clone(), TRACE_DEGREE);
+    chip.accesses.clone_from(&ops);
+
+    let trace = chip.generate_trace(range_checker.clone());
+
     let range_checker_trace = range_checker.generate_trace();
     let requester_trace = RowMajorMatrix::new(
         ops.iter()
-            .flat_map(|op: &MemoryAccess<BabyBear>| {
+            .flat_map(|op: &MemoryAccess<WORD_SIZE, BabyBear>| {
                 iter::once(BabyBear::one())
                     .chain(iter::once(BabyBear::from_canonical_usize(op.timestamp)))
                     .chain(iter::once(BabyBear::from_canonical_u8(op.op_type as u8)))
@@ -289,8 +300,8 @@ fn test_offline_checker_negative_data_mismatch() {
     });
     assert_eq!(
         run_simple_test_no_pis(
-            vec![&offline_checker, &range_checker.air, &requester],
-            vec![offline_checker_trace, range_checker_trace, requester_trace],
+            vec![&chip.air, &range_checker.air, &requester],
+            vec![trace, range_checker_trace, requester_trace],
         ),
         Err(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"

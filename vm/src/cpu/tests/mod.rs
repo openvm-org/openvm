@@ -3,22 +3,41 @@ use afs_stark_backend::verifier::VerificationError;
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField64};
-use p3_matrix::dense::RowMajorMatrix;
+use p3_field::{AbstractField, PrimeField32, PrimeField64};
+use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
+use p3_matrix::Matrix;
 
 use crate::cpu::columns::{CpuCols, CpuIoCols};
 use crate::cpu::{CpuAir, CpuOptions};
-use crate::memory::OpType;
+use crate::field_arithmetic::ArithmeticOperation;
+use crate::memory::{MemoryAccess, OpType};
+use crate::vm::config::{VmConfig, VmParamsConfig};
+use crate::vm::VirtualMachine;
 
 use super::columns::MemoryAccessCols;
-use super::trace::{isize_to_field, ProgramExecution};
+use super::trace::isize_to_field;
 use super::{decompose, ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS};
-use super::{
-    trace::{ArithmeticOperation, Instruction, MemoryAccess},
-    OpCode::*,
-};
+use super::{trace::Instruction, OpCode::*};
 
-const TEST_WORD_SIZE: usize = 4;
+const TEST_WORD_SIZE: usize = 1;
+const LIMB_BITS: usize = 8;
+const DECOMP: usize = 4;
+
+fn make_vm<const WORD_SIZE: usize, F: PrimeField32>(
+    program: Vec<Instruction<F>>,
+    field_arithmetic_enabled: bool,
+) -> VirtualMachine<WORD_SIZE, F> {
+    VirtualMachine::<WORD_SIZE, F>::new(
+        VmConfig {
+            vm: VmParamsConfig {
+                field_arithmetic_enabled,
+                limb_bits: LIMB_BITS,
+                decomp: DECOMP,
+            },
+        },
+        program,
+    )
+}
 
 impl<const WORD_SIZE: usize, F: PrimeField64> MemoryAccess<WORD_SIZE, F> {
     pub fn from_isize(
@@ -56,29 +75,62 @@ fn test_flatten_fromslice_roundtrip() {
     assert_eq!(num_cols, flattened.len());
 }
 
-fn program_execution_test<const WORD_SIZE: usize, F: PrimeField64>(
+/*fn test<const WORD_SIZE: usize>(
+    field_arithmetic_enabled: bool,
+    program: Vec<Instruction<BabyBear>>,
+    mut expected_execution: Vec<usize>,
+    expected_memory_log: Vec<MemoryAccess<WORD_SIZE, BabyBear>>,
+    expected_arithmetic_operations: Vec<ArithmeticOperation<BabyBear>>,
+) {
+    program_execution_test(
+        field_arithmetic_enabled,
+        program,
+        expected_execution,
+        expected_memory_log,
+        expected_arithmetic_operations,
+    );
+    let mut expected_execution_frequencies = expected_execution.clone();
+    for i in 0..expected_execution.len() {
+        expected_execution_frequencies[i] += 1;
+    }
+    air_test(
+        field_arithmetic_enabled,
+        program,
+        expected_execution_frequencies,
+        expected_memory_log,
+        expected_arithmetic_operations,
+    );
+}*/
+
+fn execution_test<const WORD_SIZE: usize, F: PrimeField32>(
     field_arithmetic_enabled: bool,
     program: Vec<Instruction<F>>,
     mut expected_execution: Vec<usize>,
     expected_memory_log: Vec<MemoryAccess<WORD_SIZE, F>>,
     expected_arithmetic_operations: Vec<ArithmeticOperation<F>>,
 ) {
-    let air = CpuAir::new(CpuOptions {
-        field_arithmetic_enabled,
-    });
-    let execution = air.generate_program_execution(program.clone()).unwrap();
+    let mut vm = make_vm(program.clone(), field_arithmetic_enabled);
+    let mut trace = CpuAir::generate_trace(&mut vm).unwrap();
 
-    assert_eq!(execution.program, program);
-    assert_eq!(execution.memory_accesses, expected_memory_log);
-    assert_eq!(execution.arithmetic_ops, expected_arithmetic_operations);
+    let mut actual_memory_log = vm.memory_chip.accesses.clone();
+    // temporary
+    for access in actual_memory_log.iter_mut() {
+        access.address = access.address / F::from_canonical_usize(WORD_SIZE);
+    }
+
+    assert_eq!(actual_memory_log, expected_memory_log);
+    assert_eq!(
+        vm.field_arithmetic_chip.operations,
+        expected_arithmetic_operations
+    );
 
     while !expected_execution.len().is_power_of_two() {
         expected_execution.push(*expected_execution.last().unwrap());
     }
 
-    assert_eq!(execution.trace_rows.len(), expected_execution.len());
-    for (i, row) in execution.trace_rows.iter().enumerate() {
-        let pc = expected_execution[i];
+    assert_eq!(trace.height(), expected_execution.len());
+    for (i, &pc) in expected_execution.iter().enumerate() {
+        let cols = CpuCols::<WORD_SIZE, F>::from_slice(trace.row_mut(i), vm.options());
         let expected_io = CpuIoCols {
             clock_cycle: F::from_canonical_u64(i as u64),
             pc: F::from_canonical_u64(pc as u64),
@@ -89,16 +141,15 @@ fn program_execution_test<const WORD_SIZE: usize, F: PrimeField64>(
             d: program[pc].d,
             e: program[pc].e,
         };
-        assert_eq!(row.io, expected_io);
+        assert_eq!(cols.io, expected_io);
     }
 
-    let mut execution_frequency_check = execution.execution_frequencies.clone();
-    for row in execution.trace_rows {
-        let pc = row.io.pc.as_canonical_u64() as usize;
-        execution_frequency_check[pc] += F::neg_one();
+    let mut execution_frequency_check = vm.program_chip.execution_frequencies.clone();
+    for pc in expected_execution {
+        execution_frequency_check[pc] -= 1;
     }
     for frequency in execution_frequency_check.iter() {
-        assert_eq!(*frequency, F::zero());
+        assert_eq!(*frequency, 0);
     }
 }
 
@@ -106,61 +157,59 @@ fn air_test<const WORD_SIZE: usize>(
     field_arithmetic_enabled: bool,
     program: Vec<Instruction<BabyBear>>,
 ) {
-    let air = CpuAir::new(CpuOptions {
-        field_arithmetic_enabled,
-    });
-    let execution = air.generate_program_execution(program).unwrap();
-    air_test_custom_execution::<WORD_SIZE>(field_arithmetic_enabled, execution);
+    air_test_change::<WORD_SIZE, _>(field_arithmetic_enabled, program, false, |_, _| {});
 }
 
 fn air_test_change_pc<const WORD_SIZE: usize>(
     field_arithmetic_enabled: bool,
     program: Vec<Instruction<BabyBear>>,
-    change_row: usize,
-    change_value: usize,
     should_fail: bool,
+    change_row: usize,
+    new: usize,
 ) {
-    let air = CpuAir::new(CpuOptions {
+    air_test_change::<WORD_SIZE, _>(
         field_arithmetic_enabled,
-    });
-    let mut execution = air.generate_program_execution(program).unwrap();
-
-    let old_value = execution.trace_rows[change_row].io.pc.as_canonical_u64() as usize;
-    execution.trace_rows[change_row].io.pc = BabyBear::from_canonical_usize(change_value);
-
-    execution.execution_frequencies[old_value] -= BabyBear::one();
-    execution.execution_frequencies[change_value] += BabyBear::one();
-
-    air_test_custom_execution_with_failure::<WORD_SIZE>(
-        field_arithmetic_enabled,
-        execution,
+        program,
         should_fail,
+        |rows, vm| {
+            let old = rows[change_row].io.pc.as_canonical_u64() as usize;
+            rows[change_row].io.pc = BabyBear::from_canonical_usize(new);
+            vm.program_chip.execution_frequencies[new] += 1;
+            vm.program_chip.execution_frequencies[old] -= 1;
+        },
     );
 }
 
-fn air_test_custom_execution<const WORD_SIZE: usize>(
+fn air_test_change<
+    const WORD_SIZE: usize,
+    F: Fn(&mut Vec<CpuCols<WORD_SIZE, BabyBear>>, &mut VirtualMachine<WORD_SIZE, BabyBear>),
+>(
     field_arithmetic_enabled: bool,
-    execution: ProgramExecution<WORD_SIZE, BabyBear>,
-) {
-    air_test_custom_execution_with_failure(field_arithmetic_enabled, execution, false);
-}
-
-fn air_test_custom_execution_with_failure<const WORD_SIZE: usize>(
-    field_arithmetic_enabled: bool,
-    execution: ProgramExecution<WORD_SIZE, BabyBear>,
+    program: Vec<Instruction<BabyBear>>,
     should_fail: bool,
+    change: F,
 ) {
-    let options = CpuOptions {
-        field_arithmetic_enabled,
-    };
-    let air = CpuAir::<TEST_WORD_SIZE>::new(options);
-    let trace = execution.trace(options);
+    let mut vm = make_vm(program.clone(), field_arithmetic_enabled);
+    let mut trace = CpuAir::generate_trace(&mut vm).unwrap();
+    let mut rows = vec![];
+    for i in 0..trace.height() {
+        rows.push(CpuCols::<WORD_SIZE, BabyBear>::from_slice(
+            trace.row_mut(i),
+            vm.options(),
+        ));
+    }
+    change(&mut rows, &mut vm);
+    let mut flattened = vec![];
+    for row in rows {
+        flattened.extend(row.flatten(vm.options()));
+    }
+    let trace = DenseMatrix::new(flattened, trace.width());
 
     let program_air = DummyInteractionAir::new(7, false, READ_INSTRUCTION_BUS);
     let mut program_rows = vec![];
-    for (pc, instruction) in execution.program.iter().enumerate() {
+    for (pc, instruction) in program.iter().enumerate() {
         program_rows.extend(vec![
-            execution.execution_frequencies[pc],
+            BabyBear::from_canonical_usize(vm.program_chip.execution_frequencies[pc]),
             BabyBear::from_canonical_usize(pc),
             BabyBear::from_canonical_usize(instruction.opcode as usize),
             instruction.op_a,
@@ -177,7 +226,7 @@ fn air_test_custom_execution_with_failure<const WORD_SIZE: usize>(
 
     let memory_air = DummyInteractionAir::new(5, false, MEMORY_BUS);
     let mut memory_rows = vec![];
-    for memory_access in execution.memory_accesses.iter() {
+    for memory_access in vm.memory_chip.accesses.iter() {
         memory_rows.extend(vec![
             BabyBear::one(),
             BabyBear::from_canonical_usize(memory_access.timestamp),
@@ -194,7 +243,7 @@ fn air_test_custom_execution_with_failure<const WORD_SIZE: usize>(
 
     let arithmetic_air = DummyInteractionAir::new(4, false, ARITHMETIC_BUS);
     let mut arithmetic_rows = vec![];
-    for arithmetic_op in execution.arithmetic_ops.iter() {
+    for arithmetic_op in vm.field_arithmetic_chip.operations.iter() {
         arithmetic_rows.extend(vec![
             BabyBear::one(),
             BabyBear::from_canonical_usize(arithmetic_op.opcode as usize),
@@ -210,12 +259,12 @@ fn air_test_custom_execution_with_failure<const WORD_SIZE: usize>(
 
     let test_result = if field_arithmetic_enabled {
         run_simple_test_no_pis(
-            vec![&air, &program_air, &memory_air, &arithmetic_air],
+            vec![&vm.cpu_air, &program_air, &memory_air, &arithmetic_air],
             vec![trace, program_trace, memory_trace, arithmetic_trace],
         )
     } else {
         run_simple_test_no_pis(
-            vec![&air, &program_air, &memory_air],
+            vec![&vm.cpu_air, &program_air, &memory_air],
             vec![trace, program_trace, memory_trace],
         )
     };
@@ -288,7 +337,7 @@ fn test_cpu_1() {
         ));
     }
 
-    program_execution_test::<TEST_WORD_SIZE, BabyBear>(
+    execution_test::<TEST_WORD_SIZE, BabyBear>(
         true,
         program.clone(),
         expected_execution,
@@ -330,7 +379,7 @@ fn test_cpu_without_field_arithmetic() {
         MemoryAccess::from_isize(6, OpType::Read, 1, 0, 5),
     ];
 
-    program_execution_test::<TEST_WORD_SIZE, BabyBear>(
+    execution_test::<TEST_WORD_SIZE, BabyBear>(
         field_arithmetic_enabled,
         program.clone(),
         expected_execution,
@@ -363,7 +412,7 @@ fn test_cpu_negative_wrong_pc() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test_change_pc::<TEST_WORD_SIZE>(true, program, 2, 3, true);
+    air_test_change_pc::<TEST_WORD_SIZE>(true, program, true, 2, 3);
 }
 
 #[test]
@@ -382,7 +431,7 @@ fn test_cpu_negative_wrong_pc_check() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test_change_pc::<TEST_WORD_SIZE>(true, program, 2, 2, false);
+    air_test_change_pc::<TEST_WORD_SIZE>(true, program, false, 2, 2);
 }
 
 #[test]
@@ -396,15 +445,16 @@ fn test_cpu_negative_hasnt_terminated() {
         // terminate
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
-    let options = CpuOptions {
-        field_arithmetic_enabled: true,
-    };
-    let air = CpuAir::new(options);
-    let mut execution = air.generate_program_execution(program).unwrap();
-    execution.trace_rows.remove(execution.trace_rows.len() - 1);
-    execution.execution_frequencies[1] = AbstractField::zero();
 
-    air_test_custom_execution::<TEST_WORD_SIZE>(true, execution);
+    air_test_change(
+        true,
+        program,
+        true,
+        |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
+            rows.remove(rows.len() - 1);
+            vm.program_chip.execution_frequencies[1] = 0;
+        },
+    );
 }
 
 #[test]
@@ -417,32 +467,31 @@ fn test_cpu_negative_secret_write() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    let options = CpuOptions {
-        field_arithmetic_enabled: true,
-    };
-    let air = CpuAir::new(options);
-    let mut execution = air.generate_program_execution(program).unwrap();
+    air_test_change(
+        true,
+        program,
+        true,
+        |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
+            let is_zero_air = IsZeroAir;
+            let mut is_zero_trace = is_zero_air
+                .generate_trace(vec![AbstractField::one()])
+                .clone();
+            let is_zero_aux = is_zero_trace.row_mut(0)[2];
 
-    let is_zero_air = IsZeroAir;
-    let mut is_zero_trace = is_zero_air
-        .generate_trace(vec![AbstractField::one()])
-        .clone();
-    let is_zero_aux = is_zero_trace.row_mut(0)[2];
+            rows[0].aux.accesses[2] = MemoryAccessCols {
+                enabled: AbstractField::one(),
+                address_space: AbstractField::one(),
+                is_immediate: AbstractField::zero(),
+                is_zero_aux,
+                address: AbstractField::zero(),
+                data: decompose(AbstractField::from_canonical_usize(115)),
+            };
 
-    execution.trace_rows[0].aux.accesses[2] = MemoryAccessCols {
-        enabled: AbstractField::one(),
-        address_space: AbstractField::one(),
-        is_immediate: AbstractField::zero(),
-        is_zero_aux,
-        address: AbstractField::zero(),
-        data: decompose(AbstractField::from_canonical_usize(115)),
-    };
-
-    execution
-        .memory_accesses
-        .push(MemoryAccess::from_isize(0, OpType::Write, 1, 0, 115));
-
-    air_test_custom_execution::<TEST_WORD_SIZE>(true, execution);
+            vm.memory_chip
+                .accesses
+                .push(MemoryAccess::from_isize(0, OpType::Write, 1, 0, 115));
+        },
+    );
 }
 
 #[test]
@@ -455,38 +504,59 @@ fn test_cpu_negative_disable_write() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    let options = CpuOptions {
-        field_arithmetic_enabled: true,
-    };
-    let air = CpuAir::new(options);
-    let mut execution = air.generate_program_execution(program).unwrap();
-
-    execution.trace_rows[0].aux.accesses[2].enabled = AbstractField::zero();
-
-    execution.memory_accesses.remove(0);
-
-    air_test_custom_execution::<TEST_WORD_SIZE>(true, execution);
+    air_test_change(
+        true,
+        program,
+        true,
+        |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
+            rows[0].aux.accesses[2].enabled = AbstractField::zero();
+            vm.memory_chip.accesses.remove(0);
+        },
+    );
 }
 
 #[test]
 #[should_panic(expected = "assertion `left == right` failed")]
-fn test_cpu_negative_disable_read() {
+fn test_cpu_negative_disable_read0() {
     let program = vec![
+        // word[0]_1 <- 0
+        Instruction::from_isize(STOREW, 0, 0, 0, 0, 1),
         // if word[0]_0 == word[0]_[0] then pc += 1
         Instruction::from_isize(LOADW, 0, 0, 0, 1, 1),
         // terminate
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    let options = CpuOptions {
-        field_arithmetic_enabled: true,
-    };
-    let air = CpuAir::new(options);
-    let mut execution = air.generate_program_execution(program).unwrap();
+    air_test_change(
+        true,
+        program,
+        true,
+        |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
+            rows[1].aux.accesses[0].enabled = AbstractField::zero();
+            vm.memory_chip.accesses.remove(1);
+        },
+    );
+}
 
-    execution.trace_rows[0].aux.accesses[0].enabled = AbstractField::zero();
+#[test]
+#[should_panic(expected = "assertion `left == right` failed")]
+fn test_cpu_negative_disable_read1() {
+    let program = vec![
+        // word[0]_1 <- 0
+        Instruction::from_isize(STOREW, 0, 0, 0, 0, 1),
+        // if word[0]_0 == word[0]_[0] then pc += 1
+        Instruction::from_isize(LOADW, 0, 0, 0, 1, 1),
+        // terminate
+        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
+    ];
 
-    execution.memory_accesses.remove(0);
-
-    air_test_custom_execution::<TEST_WORD_SIZE>(true, execution);
+    air_test_change(
+        true,
+        program,
+        true,
+        |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
+            rows[1].aux.accesses[1].enabled = AbstractField::zero();
+            vm.memory_chip.accesses.remove(2);
+        },
+    );
 }

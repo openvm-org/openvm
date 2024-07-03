@@ -2,52 +2,41 @@ use std::sync::Arc;
 
 use afs_chips::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::rap::AnyRap;
-use p3_field::{PrimeField32, PrimeField64};
+use p3_field::PrimeField32;
 use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 
+pub enum Void {}
+
 use crate::{
     cpu::{
         trace::{ExecutionError, Instruction},
-        CpuAir, RANGE_CHECKER_BUS,
+        CpuAir, CpuOptions, RANGE_CHECKER_BUS,
     },
-    field_arithmetic::FieldArithmeticAir,
-    memory::{offline_checker::OfflineChecker, MemoryAccess},
-    program::ProgramAir,
+    field_arithmetic::FieldArithmeticChip,
+    memory::offline_checker::MemoryChip,
+    program::ProgramChip,
 };
 
 use self::config::{VmConfig, VmParamsConfig};
 
 pub mod config;
 
-pub struct VirtualMachine<const WORD_SIZE: usize, SC: StarkGenericConfig>
-where
-    Val<SC>: PrimeField64,
-{
+pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub config: VmParamsConfig,
 
     pub cpu_air: CpuAir<WORD_SIZE>,
-    pub program_air: ProgramAir<Val<SC>>,
-    pub memory_air: OfflineChecker,
-    pub field_arithmetic_air: FieldArithmeticAir,
+    pub program_chip: ProgramChip<F>,
+    pub memory_chip: MemoryChip<WORD_SIZE, F>,
+    pub field_arithmetic_chip: FieldArithmeticChip<F>,
     pub range_checker: Arc<RangeCheckerGateChip>,
 
-    pub cpu_trace: DenseMatrix<Val<SC>>,
-    pub program_trace: DenseMatrix<Val<SC>>,
-    pub memory_trace: DenseMatrix<Val<SC>>,
-    pub field_arithmetic_trace: DenseMatrix<Val<SC>>,
-    pub range_trace: DenseMatrix<Val<SC>>,
+    traces: Vec<DenseMatrix<F>>,
 }
 
-impl<const WORD_SIZE: usize, SC: StarkGenericConfig> VirtualMachine<WORD_SIZE, SC>
-where
-    Val<SC>: PrimeField32,
-{
-    pub fn new(
-        config: VmConfig,
-        program: Vec<Instruction<Val<SC>>>,
-    ) -> Result<Self, ExecutionError> {
+impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
+    pub fn new(config: VmConfig, program: Vec<Instruction<F>>) -> Self {
         let config = config.vm;
         let decomp = config.decomp;
         let limb_bits = config.limb_bits;
@@ -55,83 +44,44 @@ where
         let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, 1 << decomp));
 
         let cpu_air = CpuAir::new(config.cpu_options());
-        let program_air = ProgramAir::new(program.clone());
-        let memory_air = OfflineChecker::new(WORD_SIZE, limb_bits, limb_bits, limb_bits, decomp);
-        let field_arithmetic_air = FieldArithmeticAir::new();
+        let program_chip = ProgramChip::new(program.clone());
+        let memory_chip = MemoryChip::new(limb_bits, limb_bits, limb_bits, decomp);
+        let field_arithmetic_chip = FieldArithmeticChip::new();
 
-        let execution = cpu_air.generate_program_execution(program_air.program.clone())?;
-        let program_trace = program_air.generate_trace(&execution);
-
-        let ops = execution
-            .memory_accesses
-            .iter()
-            .map(|access| MemoryAccess {
-                address: access.address,
-                op_type: access.op_type,
-                address_space: access.address_space,
-                timestamp: access.timestamp,
-                data: access.data.to_vec(),
-            })
-            .collect::<Vec<_>>();
-        let memory_trace_degree = execution.memory_accesses.len().next_power_of_two();
-        let memory_trace =
-            memory_air.generate_trace(ops, range_checker.clone(), memory_trace_degree);
-
-        let range_trace: DenseMatrix<Val<SC>> = range_checker.generate_trace();
-
-        let field_arithmetic_trace = field_arithmetic_air.generate_trace(&execution);
-
-        Ok(Self {
+        Self {
             config,
             cpu_air,
-            program_air,
-            memory_air,
-            field_arithmetic_air,
+            program_chip,
+            memory_chip,
+            field_arithmetic_chip,
             range_checker,
-            cpu_trace: execution.trace(config.cpu_options()),
-            program_trace,
-            memory_trace,
-            field_arithmetic_trace,
-            range_trace,
-        })
-    }
-
-    pub fn chips(&self) -> Vec<&dyn AnyRap<SC>> {
-        if self.config.field_arithmetic_enabled {
-            vec![
-                &self.cpu_air,
-                &self.program_air,
-                &self.memory_air,
-                &self.field_arithmetic_air,
-                &self.range_checker.air,
-            ]
-        } else {
-            vec![
-                &self.cpu_air,
-                &self.program_air,
-                &self.memory_air,
-                &self.range_checker.air,
-            ]
+            traces: vec![],
         }
     }
 
-    pub fn traces(&self) -> Vec<DenseMatrix<Val<SC>>> {
-        if self.config.field_arithmetic_enabled {
-            vec![
-                self.cpu_trace.clone(),
-                self.program_trace.clone(),
-                self.memory_trace.clone(),
-                self.field_arithmetic_trace.clone(),
-                self.range_trace.clone(),
-            ]
-        } else {
-            vec![
-                self.cpu_trace.clone(),
-                self.program_trace.clone(),
-                self.memory_trace.clone(),
-                self.range_trace.clone(),
-            ]
+    pub fn options(&self) -> CpuOptions {
+        self.config.cpu_options()
+    }
+
+    fn generate_traces(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
+        let cpu_trace = CpuAir::generate_trace(self)?;
+        let mut result = vec![
+            cpu_trace,
+            self.program_chip.generate_trace(),
+            self.memory_chip.generate_trace(self.range_checker.clone()),
+            self.range_checker.generate_trace(),
+        ];
+        if self.options().field_arithmetic_enabled {
+            result.push(self.field_arithmetic_chip.generate_trace());
         }
+        Ok(result)
+    }
+
+    pub fn traces(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
+        if self.traces.is_empty() {
+            self.traces = self.generate_traces()?;
+        }
+        Ok(self.traces.clone())
     }
 
     /*fn max_trace_heights(&self) -> Vec<usize> {
@@ -150,11 +100,35 @@ where
             .collect()
     }*/
 
-    pub fn max_log_degree(&self) -> usize {
+    pub fn max_log_degree(&mut self) -> Result<usize, ExecutionError> {
         let mut checker_trace_degree = 0;
-        for trace in self.traces() {
+        for trace in self.traces()? {
             checker_trace_degree = std::cmp::max(checker_trace_degree, trace.height());
         }
-        log2_strict_usize(checker_trace_degree)
+        Ok(log2_strict_usize(checker_trace_degree))
+    }
+}
+
+pub fn get_chips<const WORD_SIZE: usize, SC: StarkGenericConfig>(
+    vm: &VirtualMachine<WORD_SIZE, Val<SC>>,
+) -> Vec<&dyn AnyRap<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    if vm.options().field_arithmetic_enabled {
+        vec![
+            &vm.cpu_air,
+            &vm.program_chip.air,
+            &vm.memory_chip.air,
+            &vm.range_checker.air,
+            &vm.field_arithmetic_chip.air,
+        ]
+    } else {
+        vec![
+            &vm.cpu_air,
+            &vm.program_chip.air,
+            &vm.memory_chip.air,
+            &vm.range_checker.air,
+        ]
     }
 }

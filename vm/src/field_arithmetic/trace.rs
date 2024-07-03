@@ -1,8 +1,11 @@
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::columns::{FieldArithmeticAuxCols, FieldArithmeticCols, FieldArithmeticIOCols};
-use crate::cpu::{trace::ProgramExecution, OpCode};
+use super::{
+    columns::{FieldArithmeticAuxCols, FieldArithmeticCols, FieldArithmeticIOCols},
+    FieldArithmeticChip,
+};
+use crate::cpu::OpCode;
 
 use super::FieldArithmeticAir;
 
@@ -32,6 +35,7 @@ fn generate_cols<T: Field>(op: OpCode, x: T, y: T) -> FieldArithmeticCols<T> {
 
     FieldArithmeticCols {
         io: FieldArithmeticIOCols {
+            rcv_count: T::one(),
             opcode: T::from_canonical_u32(opcode),
             x,
             y,
@@ -50,14 +54,11 @@ fn generate_cols<T: Field>(op: OpCode, x: T, y: T) -> FieldArithmeticCols<T> {
     }
 }
 
-impl FieldArithmeticAir {
+impl<F: Field> FieldArithmeticChip<F> {
     /// Generates trace for field arithmetic chip.
-    pub fn generate_trace<const WORD_SIZE: usize, T: Field>(
-        &self,
-        prog_exec: &ProgramExecution<WORD_SIZE, T>,
-    ) -> RowMajorMatrix<T> {
-        let trace = prog_exec
-            .arithmetic_ops
+    pub fn generate_trace(&self) -> RowMajorMatrix<F> {
+        let mut trace: Vec<F> = self
+            .operations
             .iter()
             .flat_map(|op| {
                 let cols = generate_cols(op.opcode, op.operand1, op.operand2);
@@ -65,6 +66,17 @@ impl FieldArithmeticAir {
             })
             .collect();
 
-        RowMajorMatrix::new(trace, FieldArithmeticCols::<T>::NUM_COLS)
+        let empty_row: Vec<F> = FieldArithmeticCols::blank_row().flatten();
+        let curr_height = self.operations.len();
+        let correct_height = curr_height.next_power_of_two();
+        trace.extend(
+            empty_row
+                .iter()
+                .cloned()
+                .cycle()
+                .take((correct_height - curr_height) * FieldArithmeticCols::<F>::NUM_COLS),
+        );
+
+        RowMajorMatrix::new(trace, FieldArithmeticCols::<F>::NUM_COLS)
     }
 }

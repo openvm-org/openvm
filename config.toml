@@ -1,6 +1,6 @@
 [page]
 index_bytes = 32
-data_bytes = 1024
+data_bytes = 32
 bits_per_fe = 16
 height = 65536
 mode = "ReadWrite" # options: "ReadOnly", "ReadWrite"

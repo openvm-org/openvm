@@ -9,10 +9,10 @@ use super::FieldArithmeticAir;
 impl<T: Field> AirBridge<T> for FieldArithmeticAir {
     fn receives(&self) -> Vec<Interaction<T>> {
         vec![Interaction {
-            fields: (0..FieldArithmeticCols::<T>::NUM_IO_COLS)
+            fields: (1..FieldArithmeticCols::<T>::NUM_IO_COLS)
                 .map(VirtualPairCol::single_main)
                 .collect(),
-            count: VirtualPairCol::one(),
+            count: VirtualPairCol::single_main(0),
             argument_index: Self::BUS_INDEX,
         }]
     }

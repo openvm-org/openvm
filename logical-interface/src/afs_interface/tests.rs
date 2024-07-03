@@ -2,7 +2,7 @@ use crate::{
     afs_interface::utils::string_to_table_id,
     mock_db::MockDb,
     table::types::TableMetadata,
-    utils::{string_to_be_vec, uint_to_be_vec},
+    utils::{string_to_u8_vec, uint_to_be_vec},
 };
 
 use super::AfsInterface;
@@ -33,19 +33,19 @@ pub fn test_initialize_interface_from_file() {
     );
     assert_eq!(
         table
-            .read(string_to_be_vec(String::from("555"), 4))
+            .read(string_to_u8_vec(String::from("555"), 4))
             .unwrap(),
         uint_to_be_vec(1, 8)
     );
     assert_eq!(
         table
-            .read(string_to_be_vec(String::from("5006"), 4))
+            .read(string_to_u8_vec(String::from("5006"), 4))
             .unwrap(),
         uint_to_be_vec(9, 8)
     );
     assert_eq!(
         table
-            .read(string_to_be_vec(String::from("26892"), 4))
+            .read(string_to_u8_vec(String::from("26892"), 4))
             .unwrap(),
         uint_to_be_vec(5, 8)
     );

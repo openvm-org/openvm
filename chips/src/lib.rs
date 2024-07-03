@@ -1,6 +1,7 @@
 pub mod assert_sorted;
 pub mod common;
 pub mod execution_air;
+pub mod group_by;
 pub mod indexed_output_page_air;
 pub mod inner_join;
 pub mod is_equal;
@@ -14,7 +15,6 @@ pub mod keccak_permute;
 pub mod merkle_proof;
 pub mod page_read;
 pub mod page_rw_checker;
-/// Chip to range check a value has less than a fixed number of bits
 pub mod range;
 pub mod range_gate;
 pub mod single_page_index_scan;

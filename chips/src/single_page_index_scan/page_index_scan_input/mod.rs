@@ -1,3 +1,4 @@
+use derive_more::Display;
 use std::sync::Arc;
 
 use crate::{
@@ -11,7 +12,7 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-#[derive(Default, Clone)]
+#[derive(Default, Display, Clone)]
 pub enum Comp {
     #[default]
     Lt,

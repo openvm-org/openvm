@@ -56,7 +56,7 @@ struct PageCommitments<SC: StarkGenericConfig> {
 
 /// This is a controller for read/write/delete for one page. Here's an outline of how it works
 /// It owns three chips: a init_chip (MyInitialPageAir), offline_checker (OfflineChecker), and final_chip (MyFinalPageAir)
-/// The only trace partition of init_chip is the initial page, and a trace partition of final_chip is the final page. The goal of
+/// The only trace partition of init_chip is the initial page and a trace partition of final_chip is the final page. The goal of
 /// those chips and the offline_checker is to prove that the difference between the initial and final pages is exactly
 /// the list of operations sent on the ops_bus to the offline_checker.
 ///
