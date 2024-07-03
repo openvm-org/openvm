@@ -219,22 +219,6 @@ fn test_horizen_poseidon2() {
     assert_eq!(air_u32_result, horizen_u32_result);
 }
 
-pub fn new_from_rng_128<R: Rng>(rng: &mut R) -> (Vec<[BabyBear; 16]>, Vec<BabyBear>)
-where
-    Standard: Distribution<BabyBear> + Distribution<[BabyBear; 16]>,
-{
-    let external_constants = rng
-        .sample_iter(Standard)
-        .take(8)
-        .collect::<Vec<[BabyBear; 16]>>();
-    let internal_constants = rng
-        .sample_iter(Standard)
-        .take(13)
-        .collect::<Vec<BabyBear>>();
-
-    (external_constants, internal_constants)
-}
-
 #[test]
 fn test_poseidon2_air_xoshiro()
 where
@@ -242,7 +226,8 @@ where
 {
     let mut rng = Xoroshiro128Plus::seed_from_u64(1);
 
-    let (external_constants, internal_constants) = new_from_rng_128(&mut rng);
+    let external_constants: Vec<[BabyBear; 16]> = (0..8).map(|_| rng.gen()).collect();
+    let internal_constants: Vec<BabyBear> = (0..13).map(|_| rng.gen()).collect();
 
     let mut poseidon2air = Poseidon2Air::<16, BabyBear>::new(
         external_constants.clone(),
