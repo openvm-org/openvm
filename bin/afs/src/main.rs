@@ -1,6 +1,5 @@
-use afs::cli::Cli;
+use afs::cli::run;
 use afs_test_utils::{config::setup_tracing, page_config::PageConfig};
-use p3_util::log2_strict_usize;
 
 fn main() {
     if std::env::var_os("RUST_BACKTRACE").is_none() {
@@ -8,5 +7,5 @@ fn main() {
     }
     let config = PageConfig::read_config_file("config.toml");
     setup_tracing();
-    let _cli = Cli::run(&config);
+    run(&config);
 }

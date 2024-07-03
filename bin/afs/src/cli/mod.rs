@@ -2,16 +2,11 @@ use crate::commands::{cache, keygen, mock, prove, verify};
 use afs_stark_backend::config::Com;
 use afs_stark_backend::config::PcsProof;
 use afs_stark_backend::config::PcsProverData;
-use afs_test_utils::config::baby_bear_blake3::BabyBearBlake3Config;
 use afs_test_utils::config::baby_bear_blake3::BabyBearBlake3Engine;
 use afs_test_utils::config::baby_bear_bytehash::engine_from_byte_hash;
-use afs_test_utils::config::baby_bear_keccak::BabyBearKeccakConfig;
 use afs_test_utils::config::baby_bear_keccak::BabyBearKeccakEngine;
-use afs_test_utils::config::baby_bear_poseidon2::config_from_perm;
-use afs_test_utils::config::baby_bear_poseidon2::default_engine;
 use afs_test_utils::config::baby_bear_poseidon2::engine_from_perm;
 use afs_test_utils::config::baby_bear_poseidon2::random_perm;
-use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
 use afs_test_utils::config::EngineType;
 use afs_test_utils::engine::StarkEngine;
@@ -70,37 +65,8 @@ where
     Com<SC>: Send + Sync,
     SC::Pcs: Sync,
     SC::Challenge: Send + Sync,
-    BabyBearBlake3Engine: StarkEngine<BabyBearBlake3Config>,
-    BabyBearKeccakEngine: StarkEngine<BabyBearKeccakConfig>,
-    BabyBearPoseidon2Engine: StarkEngine<BabyBearPoseidon2Config>,
 {
-    pub fn run(config: &PageConfig) -> Self {
-        let pcs_log_degree = log2_strict_usize(config.page.height);
-        let fri_params = config.fri_params;
-        let engine_type = config.stark_engine.engine;
-        match engine_type {
-            EngineType::BabyBearBlake3 => {
-                let engine: BabyBearBlake3Engine =
-                    engine_from_byte_hash(Blake3, pcs_log_degree, fri_params);
-                Self::run_with_engine(config, &engine)
-            }
-
-            EngineType::BabyBearKeccak => {
-                let engine: BabyBearKeccakEngine =
-                    engine_from_byte_hash(Keccak256Hash, pcs_log_degree, fri_params);
-                Self::run_with_engine(config, &engine)
-            }
-            EngineType::BabyBearPoseidon2 => {
-                let perm = random_perm();
-                // let config = config_from_perm(&perm, pcs_log_degree, fri_params);
-                let engine: BabyBearPoseidon2Engine =
-                    engine_from_perm(perm, pcs_log_degree, fri_params);
-                Self::run_with_engine(config, &engine)
-            }
-        }
-    }
-
-    pub fn run_with_engine(config: &PageConfig, engine: &E) -> Self
+    pub fn run_with_engine(config: &PageConfig, engine: &E)
     where
         E: StarkEngine<SC>,
     {
@@ -122,6 +88,30 @@ where
                 verify.execute(config, engine).unwrap();
             }
         }
-        cli
+        // cli
+    }
+}
+
+pub fn run(config: &PageConfig) {
+    let pcs_log_degree = log2_strict_usize(config.page.height);
+    let fri_params = config.fri_params;
+    let engine_type = config.stark_engine.engine;
+    match engine_type {
+        EngineType::BabyBearBlake3 => {
+            let engine: BabyBearBlake3Engine =
+                engine_from_byte_hash(Blake3, pcs_log_degree, fri_params);
+            Cli::run_with_engine(config, &engine)
+        }
+        EngineType::BabyBearKeccak => {
+            let engine: BabyBearKeccakEngine =
+                engine_from_byte_hash(Keccak256Hash, pcs_log_degree, fri_params);
+            Cli::run_with_engine(config, &engine)
+        }
+        EngineType::BabyBearPoseidon2 => {
+            let perm = random_perm();
+            let engine: BabyBearPoseidon2Engine =
+                engine_from_perm(perm, pcs_log_degree, fri_params);
+            Cli::run_with_engine(config, &engine)
+        }
     }
 }
