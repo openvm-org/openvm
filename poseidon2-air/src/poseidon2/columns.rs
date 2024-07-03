@@ -97,16 +97,35 @@ impl<const WIDTH: usize, T: Clone> Poseidon2Cols<WIDTH, T> {
             phase3,
         }
     }
+
+    pub fn flatten(&self) -> Vec<T> {
+        let mut flattened = self.io.flatten();
+        flattened.extend(self.aux.flatten());
+        flattened
+    }
 }
 
-impl<const WIDTH: usize, T> Poseidon2IoCols<WIDTH, T> {
+impl<const WIDTH: usize, T: Clone> Poseidon2IoCols<WIDTH, T> {
     pub fn get_width() -> usize {
         2 * WIDTH
+    }
+
+    pub fn flatten(&self) -> Vec<T> {
+        let mut flattened = self.input.to_vec();
+        flattened.extend(self.output.to_vec());
+        flattened
     }
 }
 
 impl<const WIDTH: usize, T: Clone> Poseidon2AuxCols<WIDTH, T> {
     pub fn get_width(poseidon2_air: &Poseidon2Air<WIDTH, T>) -> usize {
         (poseidon2_air.rounds_f + poseidon2_air.rounds_p) * WIDTH
+    }
+
+    pub fn flatten(&self) -> Vec<T> {
+        let mut flattened: Vec<T> = self.phase1.iter().flat_map(|s| s.to_vec()).collect();
+        flattened.extend(self.phase2.iter().flat_map(|s| s.to_vec()));
+        flattened.extend(self.phase3.iter().flat_map(|s| s.to_vec()));
+        flattened
     }
 }

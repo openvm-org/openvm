@@ -17,6 +17,7 @@ use crate::{
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
     memory::offline_checker::MemoryChip,
+    poseidon2::Poseidon2Chip,
     program::ProgramChip,
 };
 
@@ -33,6 +34,7 @@ pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub field_arithmetic_chip: FieldArithmeticChip<F>,
     pub field_extension_chip: FieldExtensionArithmeticChip<WORD_SIZE, F>,
     pub range_checker: Arc<RangeCheckerGateChip>,
+    pub poseidon2_chip: Poseidon2Chip<16, F>,
 
     traces: Vec<DenseMatrix<F>>,
 }
