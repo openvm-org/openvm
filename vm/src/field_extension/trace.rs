@@ -20,7 +20,7 @@ fn generate_cols<T: Field>(
     d: T,
     e: T,
 ) -> FieldExtensionArithmeticCols<T> {
-    let opcode_value = op.opcode as u32 - FieldExtensionArithmeticAir::<T>::BASE_OP as u32;
+    let opcode_value = op.opcode as u32 - FieldExtensionArithmeticAir::BASE_OP as u32;
     let opcode_lo_u32 = opcode_value % 2;
     let opcode_hi_u32 = opcode_value / 2;
     let opcode_lo = T::from_canonical_u32(opcode_lo_u32);
@@ -39,8 +39,8 @@ fn generate_cols<T: Field>(
         x[2] + add_sub_coeff * y[2],
         x[3] + add_sub_coeff * y[3],
     ];
-    let product = FieldExtensionArithmeticAir::<T>::solve(OpCode::BBE4MUL, x, y).unwrap();
-    let inv = FieldExtensionArithmeticAir::<T>::solve(OpCode::BBE4INV, x, y).unwrap();
+    let product = FieldExtensionArithmeticAir::solve(OpCode::BBE4MUL, x, y).unwrap();
+    let inv = FieldExtensionArithmeticAir::solve(OpCode::BBE4INV, x, y).unwrap();
 
     FieldExtensionArithmeticCols {
         io: FieldExtensionArithmeticIoCols {
@@ -76,12 +76,12 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
             .flat_map(|op| {
                 generate_cols(
                     *op,
-                    self.air.clock_cycle,
-                    self.air.op_a,
-                    self.air.op_b,
-                    self.air.op_c,
-                    self.air.d,
-                    self.air.e,
+                    self.clock_cycle,
+                    self.op_a,
+                    self.op_b,
+                    self.op_c,
+                    self.d,
+                    self.e,
                 )
                 .flatten()
             })

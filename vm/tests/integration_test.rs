@@ -110,23 +110,23 @@ fn test_vm_fibonacci_old() {
     air_test(true, false, program.clone());
 }
 
-// #[test]
-// fn test_vm_field_extension_arithmetic() {
-//     let field_arithmetic_enabled = true;
-//     let field_extension_enabled = true;
+#[test]
+fn test_vm_field_extension_arithmetic() {
+    let field_arithmetic_enabled = true;
+    let field_extension_enabled = true;
 
-//     let program = vec![
-//         Instruction::from_isize(STOREW, 1, 0, 0, 0, 1),
-//         Instruction::from_isize(STOREW, 2, 0, 1, 0, 1),
-//         Instruction::from_isize(STOREW, 1, 0, 2, 0, 1),
-//         Instruction::from_isize(STOREW, 2, 0, 3, 0, 1),
-//         Instruction::from_isize(STOREW, 2, 0, 4, 0, 1),
-//         Instruction::from_isize(STOREW, 1, 0, 5, 0, 1),
-//         Instruction::from_isize(STOREW, 1, 0, 6, 0, 1),
-//         Instruction::from_isize(STOREW, 2, 0, 7, 0, 1),
-//         // Instruction::from_isize(FE4ADD, 8, 0, 4, 1, 1),
-//         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
-//     ];
+    let program = vec![
+        Instruction::from_isize(STOREW, 1, 0, 0, 0, 1),
+        Instruction::from_isize(STOREW, 2, 0, 1, 0, 1),
+        Instruction::from_isize(STOREW, 1, 0, 2, 0, 1),
+        Instruction::from_isize(STOREW, 2, 0, 3, 0, 1),
+        Instruction::from_isize(STOREW, 2, 0, 4, 0, 1),
+        Instruction::from_isize(STOREW, 1, 0, 5, 0, 1),
+        Instruction::from_isize(STOREW, 1, 0, 6, 0, 1),
+        Instruction::from_isize(STOREW, 2, 0, 7, 0, 1),
+        // Instruction::from_isize(FE4ADD, 8, 0, 4, 1, 1),
+        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
+    ];
 
-//     air_test(field_arithmetic_enabled, field_extension_enabled, program);
-// }
+    air_test(field_arithmetic_enabled, field_extension_enabled, program);
+}

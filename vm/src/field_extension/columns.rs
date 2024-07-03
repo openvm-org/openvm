@@ -81,7 +81,7 @@ where
     pub fn blank_row() -> Self {
         Self {
             io: FieldExtensionArithmeticIoCols {
-                opcode: T::from_canonical_u8(FieldExtensionArithmeticAir::<T>::BASE_OP),
+                opcode: T::from_canonical_u8(FieldExtensionArithmeticAir::BASE_OP),
                 x: [T::zero(); EXTENSION_DEGREE],
                 y: [T::zero(); EXTENSION_DEGREE],
                 z: [T::zero(); EXTENSION_DEGREE],

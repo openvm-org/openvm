@@ -9,17 +9,17 @@ use crate::field_extension::{BETA, EXTENSION_DEGREE};
 use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
 use afs_chips::sub_chip::AirConfig;
 
-impl<F: Field> AirConfig for FieldExtensionArithmeticAir<F> {
+impl AirConfig for FieldExtensionArithmeticAir {
     type Cols<T> = FieldExtensionArithmeticCols<T>;
 }
 
-impl<F: Field> BaseAir<F> for FieldExtensionArithmeticAir<F> {
+impl<F: Field> BaseAir<F> for FieldExtensionArithmeticAir {
     fn width(&self) -> usize {
         FieldExtensionArithmeticCols::<F>::NUM_COLS
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for FieldExtensionArithmeticAir<AB::F> {
+impl<AB: AirBuilder> Air<AB> for FieldExtensionArithmeticAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -37,7 +37,7 @@ impl<AB: AirBuilder> Air<AB> for FieldExtensionArithmeticAir<AB::F> {
             io.opcode,
             aux.opcode_lo
                 + aux.opcode_hi * AB::Expr::two()
-                + AB::F::from_canonical_u8(FieldExtensionArithmeticAir::<AB::F>::BASE_OP),
+                + AB::F::from_canonical_u8(FieldExtensionArithmeticAir::BASE_OP),
         );
 
         builder.assert_eq(

@@ -4,16 +4,24 @@ use p3_field::Field;
 
 use crate::cpu::{MEMORY_BUS, WORD_SIZE};
 
-use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir, EXTENSION_DEGREE};
+use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
 
 fn get_rw_interactions<T: Field>(
     is_write: bool,
     cols_numbered: &FieldExtensionArithmeticCols<usize>,
     addr_space: usize,
     address: usize,
-    ext_element: [usize; EXTENSION_DEGREE],
+    ext_element_ind: usize,
 ) -> Vec<Interaction<T>> {
     let mut interactions = vec![];
+
+    let ext_element = if ext_element_ind == 0 {
+        cols_numbered.io.x
+    } else if ext_element_ind == 1 {
+        cols_numbered.io.y
+    } else {
+        cols_numbered.io.z
+    };
 
     for (i, &element) in ext_element.iter().enumerate() {
         let memory_cycle = VirtualPairCol::new(
@@ -21,7 +29,7 @@ fn get_rw_interactions<T: Field>(
                 PairCol::Main(cols_numbered.aux.clock_cycle),
                 T::from_canonical_usize(1),
             )],
-            T::from_canonical_usize(i),
+            T::from_canonical_usize(ext_element_ind * 4 + i),
         );
 
         let pointer = VirtualPairCol::new(
@@ -49,8 +57,8 @@ fn get_rw_interactions<T: Field>(
     interactions
 }
 
-/// Receives all IO columns from another chip on bus 3 (FieldExtensionArithmeticAir::BUS_INDEX).
-impl<T: Field> AirBridge<T> for FieldExtensionArithmeticAir<T> {
+/// Receives all IO columns from another chip on bus 4 (FieldExtensionArithmeticAir::BUS_INDEX).
+impl<T: Field> AirBridge<T> for FieldExtensionArithmeticAir {
     fn sends(&self) -> Vec<Interaction<T>> {
         let all_cols = (0..FieldExtensionArithmeticCols::<T>::get_width()).collect::<Vec<usize>>();
         let cols_numbered = FieldExtensionArithmeticCols::<usize>::from_slice(&all_cols);
@@ -63,7 +71,7 @@ impl<T: Field> AirBridge<T> for FieldExtensionArithmeticAir<T> {
             &cols_numbered,
             cols_numbered.aux.d,
             cols_numbered.aux.op_b,
-            cols_numbered.io.x,
+            0,
         ));
         // reads for y
         interactions.extend(get_rw_interactions(
@@ -71,7 +79,7 @@ impl<T: Field> AirBridge<T> for FieldExtensionArithmeticAir<T> {
             &cols_numbered,
             cols_numbered.aux.e,
             cols_numbered.aux.op_c,
-            cols_numbered.io.y,
+            1,
         ));
         // writes for z
         interactions.extend(get_rw_interactions(
@@ -79,7 +87,7 @@ impl<T: Field> AirBridge<T> for FieldExtensionArithmeticAir<T> {
             &cols_numbered,
             cols_numbered.aux.d,
             cols_numbered.aux.op_a,
-            cols_numbered.io.z,
+            2,
         ));
 
         interactions

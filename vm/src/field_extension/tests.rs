@@ -140,13 +140,12 @@ fn field_extension_consistency_test() {
         let plonky_mul = a_ext.mul(b_ext);
         let plonky_div = a_ext.div(b_ext);
 
-        let my_add = FieldExtensionArithmeticAir::<F>::solve(OpCode::FE4ADD, a, b);
-        let my_sub = FieldExtensionArithmeticAir::<F>::solve(OpCode::FE4SUB, a, b);
-        let my_mul = FieldExtensionArithmeticAir::<F>::solve(OpCode::BBE4MUL, a, b);
+        let my_add = FieldExtensionArithmeticAir::solve(OpCode::FE4ADD, a, b);
+        let my_sub = FieldExtensionArithmeticAir::solve(OpCode::FE4SUB, a, b);
+        let my_mul = FieldExtensionArithmeticAir::solve(OpCode::BBE4MUL, a, b);
 
-        let b_inv =
-            FieldExtensionArithmeticAir::<F>::solve(OpCode::BBE4INV, b, [F::zero(); 4]).unwrap();
-        let my_div = FieldExtensionArithmeticAir::<F>::solve(OpCode::BBE4MUL, a, b_inv);
+        let b_inv = FieldExtensionArithmeticAir::solve(OpCode::BBE4INV, b, [F::zero(); 4]).unwrap();
+        let my_div = FieldExtensionArithmeticAir::solve(OpCode::BBE4MUL, a, b_inv);
 
         assert_eq!(my_add.unwrap(), plonky_add.as_base_slice());
         assert_eq!(my_sub.unwrap(), plonky_sub.as_base_slice());
