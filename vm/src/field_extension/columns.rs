@@ -1,6 +1,7 @@
 use afs_derive::AlignedBorrow;
+use p3_field::Field;
 
-use super::EXTENSION_DEGREE;
+use super::{FieldExtensionArithmeticAir, EXTENSION_DEGREE};
 
 /// Columns for field extension chip.
 ///
@@ -36,14 +37,15 @@ pub struct FieldExtensionArithmeticAuxCols<T> {
     pub sum_or_diff: [T; EXTENSION_DEGREE],
     // the product of x and y
     pub product: [T; EXTENSION_DEGREE],
-    // the base field inverse needed in the inverse calculation
-    pub inv_c: T,
     // the field extension inverse of x
     pub inv: [T; EXTENSION_DEGREE],
 }
 
-impl<T: Clone> FieldExtensionArithmeticCols<T> {
-    pub const NUM_COLS: usize = 6 * EXTENSION_DEGREE + 6;
+impl<T: Clone> FieldExtensionArithmeticCols<T>
+where
+    T: Field,
+{
+    pub const NUM_COLS: usize = 6 * EXTENSION_DEGREE + 5;
 
     pub fn get_width() -> usize {
         FieldExtensionArithmeticIoCols::<T>::get_width()
@@ -56,6 +58,26 @@ impl<T: Clone> FieldExtensionArithmeticCols<T> {
             .into_iter()
             .chain(self.aux.flatten())
             .collect()
+    }
+
+    pub fn blank_row() -> Self {
+        Self {
+            io: FieldExtensionArithmeticIoCols {
+                opcode: T::from_canonical_u8(FieldExtensionArithmeticAir::BASE_OP),
+                x: [T::zero(); EXTENSION_DEGREE],
+                y: [T::zero(); EXTENSION_DEGREE],
+                z: [T::zero(); EXTENSION_DEGREE],
+            },
+            aux: FieldExtensionArithmeticAuxCols {
+                opcode_lo: T::zero(),
+                opcode_hi: T::zero(),
+                is_mul: T::zero(),
+                is_inv: T::zero(),
+                sum_or_diff: [T::zero(); EXTENSION_DEGREE],
+                product: [T::zero(); EXTENSION_DEGREE],
+                inv: [T::zero(); EXTENSION_DEGREE],
+            },
+        }
     }
 }
 
@@ -75,7 +97,7 @@ impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
 
 impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
     pub fn get_width() -> usize {
-        3 * EXTENSION_DEGREE + 5
+        3 * EXTENSION_DEGREE + 4
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -87,7 +109,6 @@ impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
         ];
         result.extend_from_slice(&self.sum_or_diff);
         result.extend_from_slice(&self.product);
-        result.push(self.inv_c.clone());
         result.extend_from_slice(&self.inv);
         result
     }

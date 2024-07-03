@@ -22,4 +22,8 @@ impl IsEqualVecAir {
     pub fn get_width(&self) -> usize {
         4 * self.vec_len
     }
+
+    pub fn aux_width(&self) -> usize {
+        2 * self.vec_len
+    }
 }

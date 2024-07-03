@@ -5,6 +5,7 @@ use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
 use stark_vm::vm::config::VmConfig;
 use stark_vm::vm::config::VmParamsConfig;
+use stark_vm::vm::get_chips;
 use stark_vm::vm::VirtualMachine;
 
 const WORD_SIZE: usize = 1;
@@ -12,7 +13,7 @@ const LIMB_BITS: usize = 8;
 const DECOMP: usize = 4;
 
 fn air_test(field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>) {
-    let vm = VirtualMachine::<WORD_SIZE, _>::new(
+    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
             vm: VmParamsConfig {
                 field_arithmetic_enabled,
@@ -21,10 +22,9 @@ fn air_test(field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>)
             },
         },
         program,
-    )
-    .unwrap();
-    let chips = vm.chips();
-    let traces = vm.traces();
+    );
+    let traces = vm.traces().unwrap();
+    let chips = get_chips(&vm);
     run_simple_test_no_pis(chips, traces).expect("Verification failed");
 }
 

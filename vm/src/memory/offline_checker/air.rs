@@ -16,17 +16,17 @@ use afs_chips::{
     sub_chip::{AirConfig, SubAir},
 };
 
-impl AirConfig for OfflineChecker {
+impl<const WORD_SIZE: usize> AirConfig for OfflineChecker<WORD_SIZE> {
     type Cols<T> = OfflineCheckerCols<T>;
 }
 
-impl<F: Field> BaseAir<F> for OfflineChecker {
+impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for OfflineChecker<WORD_SIZE> {
     fn width(&self) -> usize {
         self.air_width()
     }
 }
 
-impl<AB: PartitionedAirBuilder> Air<AB> for OfflineChecker
+impl<const WORD_SIZE: usize, AB: PartitionedAirBuilder> Air<AB> for OfflineChecker<WORD_SIZE>
 where
     AB::M: Clone,
 {
@@ -105,7 +105,7 @@ where
             next_cols.is_equal_data_aux.prods,
             next_cols.is_equal_data_aux.invs,
         );
-        let is_equal_data_air = IsEqualVecAir::new(self.data_len);
+        let is_equal_data_air = IsEqualVecAir::new(WORD_SIZE);
 
         SubAir::eval(
             &is_equal_data_air,

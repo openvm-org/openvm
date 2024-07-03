@@ -1,6 +1,6 @@
 use p3_field::Field;
 
-use crate::cpu::{trace::FieldExtensionOperation, OpCode};
+use crate::cpu::{trace::isize_to_field, OpCode};
 
 pub mod air;
 pub mod bridge;
@@ -12,6 +12,53 @@ pub mod tests;
 
 pub const BETA: usize = 11;
 pub const EXTENSION_DEGREE: usize = 4;
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct FieldExtensionArithmeticOperation<F> {
+    pub opcode: OpCode,
+    pub operand1: [F; EXTENSION_DEGREE],
+    pub operand2: [F; EXTENSION_DEGREE],
+    pub result: [F; EXTENSION_DEGREE],
+}
+
+impl<F: Field> FieldExtensionArithmeticOperation<F> {
+    pub fn from_isize(
+        opcode: OpCode,
+        operand1: [isize; EXTENSION_DEGREE],
+        operand2: [isize; EXTENSION_DEGREE],
+        result: [isize; EXTENSION_DEGREE],
+    ) -> Self {
+        Self {
+            opcode,
+            operand1: [
+                isize_to_field(operand1[0]),
+                isize_to_field(operand1[1]),
+                isize_to_field(operand1[2]),
+                isize_to_field(operand1[3]),
+            ],
+            operand2: [
+                isize_to_field(operand2[0]),
+                isize_to_field(operand2[1]),
+                isize_to_field(operand2[2]),
+                isize_to_field(operand2[3]),
+            ],
+            result: [
+                isize_to_field(result[0]),
+                isize_to_field(result[1]),
+                isize_to_field(result[2]),
+                isize_to_field(result[3]),
+            ],
+        }
+    }
+
+    pub fn to_vec(&self) -> Vec<F> {
+        let mut result = vec![F::from_canonical_usize(self.opcode as usize)];
+        result.extend(self.operand1.iter());
+        result.extend(self.operand2.iter());
+        result.extend(self.result.iter());
+        result
+    }
+}
 
 /// Field extension arithmetic chip. The irreducible polynomial is x^4 - 11.
 #[derive(Default, Clone, Copy)]
@@ -29,10 +76,10 @@ impl FieldExtensionArithmeticAir {
     pub fn request<T: Field>(
         ops: Vec<OpCode>,
         operands: Vec<([T; EXTENSION_DEGREE], [T; EXTENSION_DEGREE])>,
-    ) -> Vec<FieldExtensionOperation<T>> {
+    ) -> Vec<FieldExtensionArithmeticOperation<T>> {
         ops.iter()
             .zip(operands.iter())
-            .map(|(op, operand)| FieldExtensionOperation {
+            .map(|(op, operand)| FieldExtensionArithmeticOperation {
                 opcode: *op,
                 operand1: operand.0,
                 operand2: operand.1,
@@ -117,5 +164,50 @@ impl FieldExtensionArithmeticAir {
         }
 
         result
+    }
+}
+
+pub struct FieldExtensionArithmeticChip<F: Field> {
+    pub air: FieldExtensionArithmeticAir,
+    pub operations: Vec<FieldExtensionArithmeticOperation<F>>,
+}
+
+impl<F: Field> FieldExtensionArithmeticChip<F> {
+    pub fn new() -> Self {
+        Self {
+            air: FieldExtensionArithmeticAir {},
+            operations: vec![],
+        }
+    }
+
+    pub fn calculate(
+        &mut self,
+        op: OpCode,
+        operands: ([F; EXTENSION_DEGREE], [F; EXTENSION_DEGREE]),
+    ) -> [F; EXTENSION_DEGREE] {
+        let result = FieldExtensionArithmeticAir::solve::<F>(op, operands.0, operands.1).unwrap();
+        self.operations.push(FieldExtensionArithmeticOperation {
+            opcode: op,
+            operand1: operands.0,
+            operand2: operands.1,
+            result,
+        });
+        result
+    }
+
+    pub fn request(
+        &mut self,
+        ops: Vec<OpCode>,
+        operands_vec: Vec<([F; EXTENSION_DEGREE], [F; EXTENSION_DEGREE])>,
+    ) {
+        for (op, operands) in ops.iter().zip(operands_vec.iter()) {
+            self.calculate(*op, *operands);
+        }
+    }
+}
+
+impl<F: Field> Default for FieldExtensionArithmeticChip<F> {
+    fn default() -> Self {
+        Self::new()
     }
 }
