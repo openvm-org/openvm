@@ -217,8 +217,6 @@ fn test_horizen_poseidon2() {
         .into_iter()
         .map(|elem| elem.into_bigint().0[0] as u32)
         .collect::<Vec<_>>();
-    println!("{:?}", air_u32_result);
-    println!("{:?}", horizen_u32_result);
     assert_eq!(air_u32_result, horizen_u32_result);
 }
 

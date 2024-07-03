@@ -1,9 +1,7 @@
 use super::columns::Poseidon2Cols;
 use super::Poseidon2Air;
-use p3_baby_bear::DiffusionMatrixBabyBear;
 use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_symmetric::Permutation;
 
 impl<const WIDTH: usize, F: PrimeField> Poseidon2Air<WIDTH, F> {
     /// Return cached state trace if it exists (input is ignored), otherwise generate trace and return
