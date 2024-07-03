@@ -28,7 +28,21 @@ pub struct Poseidon2Air<const WIDTH: usize, T: Clone> {
 }
 
 impl<const WIDTH: usize, T: Clone> Poseidon2Air<WIDTH, T> {
+    /// MDSMat4 from Plonky3
+    /// [ 2 3 1 1 ]
+    /// [ 1 2 3 1 ]
+    /// [ 1 1 2 3 ]
+    /// [ 3 1 1 2 ].
     pub const MDS_MAT_4: [[u32; 4]; 4] = [[2, 3, 1, 1], [1, 2, 3, 1], [1, 1, 2, 3], [3, 1, 1, 2]];
+    // Multiply a 4-element vector x by
+    // [ 5 7 1 3 ]
+    // [ 4 6 1 1 ]
+    // [ 1 3 5 7 ]
+    // [ 1 1 4 6 ].
+    // This uses the formula from the start of Appendix B in the Poseidon2 paper, with multiplications unrolled into additions.
+    // It is also the matrix used by the Horizon Labs implementation.
+    pub const HL_MDS_MAT_4: [[u32; 4]; 4] =
+        [[5, 7, 1, 3], [4, 6, 1, 1], [1, 3, 5, 7], [1, 1, 4, 6]];
     pub const DIAG_MAT_16: [u32; 16] = [
         2013265921 - 2,
         1,
@@ -73,8 +87,9 @@ impl<const WIDTH: usize, T: Clone> Poseidon2Air<WIDTH, T> {
         Poseidon2Cols::<WIDTH, T>::get_width(self)
     }
 
+    // TODO: allow custom implementations of this via generic DiffusionMatrix: DiffusionPermutation<F, WIDTH>
     pub fn int_lin_layer<F: AbstractField>(&self, input: &mut [F; WIDTH]) {
-        let sum = input.clone().into_iter().sum::<F>();
+        let sum = input.iter().cloned().sum::<F>();
         let answer: [F; WIDTH] = core::array::from_fn(|i| {
             (sum.clone() + F::from_canonical_u32(self.int_diag_matrix[i]) * input[i].clone())
                 * F::from_canonical_u32(self.reduction_factor)

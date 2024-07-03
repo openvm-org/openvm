@@ -150,6 +150,7 @@ fn test_horizen_poseidon2() {
     fn horizen_to_p3(horizen_babybear: HorizenBabyBear) -> BabyBear {
         BabyBear::from_canonical_u64(horizen_babybear.into_bigint().0[0])
     }
+    let horizen_permut = HorizenPoseidon2::new(&POSEIDON2_BABYBEAR_16_PARAMS);
 
     let p3_rc16: Vec<Vec<BabyBear>> = RC16
         .iter()
@@ -161,18 +162,22 @@ fn test_horizen_poseidon2() {
         })
         .collect();
 
-    let external_round_constants: Vec<[BabyBear; 16]> = p3_rc16
+    let rounds_f = 8;
+    let rounds_p = 13;
+    let rounds_f_beginning = rounds_f / 2;
+    let p_end = rounds_f_beginning + rounds_p;
+    let external_round_constants: Vec<[BabyBear; 16]> = p3_rc16[..rounds_f_beginning]
         .iter()
-        .take(4)
-        .chain(p3_rc16.iter().skip(17).take(4))
+        .chain(p3_rc16[p_end..].iter())
         .cloned()
         .map(|round| round.try_into().unwrap())
         .collect();
-    let internal_round_constants: Vec<BabyBear> =
-        p3_rc16[4..17].iter().map(|round| round[0]).collect();
+    let internal_round_constants: Vec<BabyBear> = p3_rc16[rounds_f_beginning..p_end]
+        .iter()
+        .map(|round| round[0])
+        .collect();
 
     let mut rng = create_seeded_rng();
-    let horizen_permut = HorizenPoseidon2::new(&POSEIDON2_BABYBEAR_16_PARAMS);
     let horizen_int_diag: [u32; 16] = {
         let mut array = [0u32; 16];
         for (i, elem) in MAT_DIAG16_M_1.iter().enumerate() {
@@ -183,7 +188,7 @@ fn test_horizen_poseidon2() {
     let mut air_permut = Poseidon2Air::<16, BabyBear>::new(
         external_round_constants.clone(),
         internal_round_constants.clone(),
-        Poseidon2Air::<16, BabyBear>::MDS_MAT_4,
+        Poseidon2Air::<16, BabyBear>::HL_MDS_MAT_4,
         horizen_int_diag,
         1,
         0,
@@ -200,7 +205,7 @@ fn test_horizen_poseidon2() {
         .collect::<Vec<_>>()
         .try_into()
         .unwrap();
-    let air_result: Vec<BabyBear> = air_permut.request_trace(&[p3_state])[0].to_vec();
+    let air_result: Vec<BabyBear> = air_permut.request_trace(&[p3_state])[0].clone();
     let horizen_result = horizen_permut.permutation(&horizen_state);
     let air_u32_result = air_result
         .iter()
