@@ -31,7 +31,7 @@ pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub program_chip: ProgramChip<F>,
     pub memory_chip: MemoryChip<WORD_SIZE, F>,
     pub field_arithmetic_chip: FieldArithmeticChip<F>,
-    pub field_extension_chip: FieldExtensionArithmeticChip<F>,
+    pub field_extension_chip: FieldExtensionArithmeticChip<WORD_SIZE, F>,
     pub range_checker: Arc<RangeCheckerGateChip>,
 
     traces: Vec<DenseMatrix<F>>,
@@ -76,7 +76,18 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             self.range_checker.generate_trace(),
         ];
         if self.options().field_arithmetic_enabled {
+            println!(
+                "field arithmetic trace: {:?}",
+                self.field_arithmetic_chip.generate_trace()
+            );
             result.push(self.field_arithmetic_chip.generate_trace());
+        }
+        if self.options().field_extension_enabled {
+            println!(
+                "field extension trace: {:?}",
+                self.field_extension_chip.generate_trace()
+            );
+            result.push(self.field_extension_chip.generate_trace());
         }
         Ok(result)
     }

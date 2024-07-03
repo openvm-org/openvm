@@ -1,18 +1,103 @@
 use afs_stark_backend::interaction::{AirBridge, Interaction};
-use p3_air::VirtualPairCol;
+use p3_air::{PairCol, VirtualPairCol};
 use p3_field::Field;
 
-use crate::field_extension::columns::FieldExtensionArithmeticIoCols;
+use crate::cpu::{MEMORY_BUS, WORD_SIZE};
 
-use super::FieldExtensionArithmeticAir;
+use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir, EXTENSION_DEGREE};
 
-/// Receives all IO columns from another chip on bus 2 (FieldExtensionArithmeticAir::BUS_INDEX).
-impl<T: Field> AirBridge<T> for FieldExtensionArithmeticAir {
+fn get_rw_interactions<T: Field>(
+    is_write: bool,
+    cols_numbered: &FieldExtensionArithmeticCols<usize>,
+    addr_space: usize,
+    address: usize,
+    ext_element: [usize; EXTENSION_DEGREE],
+) -> Vec<Interaction<T>> {
+    let mut interactions = vec![];
+
+    for (i, &element) in ext_element.iter().enumerate() {
+        let memory_cycle = VirtualPairCol::new(
+            vec![(
+                PairCol::Main(cols_numbered.aux.clock_cycle),
+                T::from_canonical_usize(1),
+            )],
+            T::from_canonical_usize(i),
+        );
+
+        let pointer = VirtualPairCol::new(
+            vec![(PairCol::Main(address), T::from_canonical_usize(1))],
+            T::from_canonical_usize(i * WORD_SIZE),
+        );
+
+        let mut fields = vec![
+            memory_cycle,
+            VirtualPairCol::constant(T::from_bool(is_write)),
+            VirtualPairCol::single_main(addr_space),
+            pointer,
+        ];
+
+        // handle WORD_SIZE > 1 later
+        fields.push(VirtualPairCol::single_main(element));
+
+        interactions.push(Interaction {
+            fields,
+            count: VirtualPairCol::constant(T::one()),
+            argument_index: MEMORY_BUS,
+        });
+    }
+
+    interactions
+}
+
+/// Receives all IO columns from another chip on bus 3 (FieldExtensionArithmeticAir::BUS_INDEX).
+impl<T: Field> AirBridge<T> for FieldExtensionArithmeticAir<T> {
+    fn sends(&self) -> Vec<Interaction<T>> {
+        let all_cols = (0..FieldExtensionArithmeticCols::<T>::get_width()).collect::<Vec<usize>>();
+        let cols_numbered = FieldExtensionArithmeticCols::<usize>::from_slice(&all_cols);
+
+        let mut interactions = vec![];
+
+        // reads for x
+        interactions.extend(get_rw_interactions(
+            false,
+            &cols_numbered,
+            cols_numbered.aux.d,
+            cols_numbered.aux.op_b,
+            cols_numbered.io.x,
+        ));
+        // reads for y
+        interactions.extend(get_rw_interactions(
+            false,
+            &cols_numbered,
+            cols_numbered.aux.e,
+            cols_numbered.aux.op_c,
+            cols_numbered.io.y,
+        ));
+        // writes for z
+        interactions.extend(get_rw_interactions(
+            true,
+            &cols_numbered,
+            cols_numbered.aux.d,
+            cols_numbered.aux.op_a,
+            cols_numbered.io.z,
+        ));
+
+        interactions
+    }
+
     fn receives(&self) -> Vec<Interaction<T>> {
+        let all_cols = (0..FieldExtensionArithmeticCols::<T>::get_width()).collect::<Vec<usize>>();
+        let cols_numbered = FieldExtensionArithmeticCols::<usize>::from_slice(&all_cols);
+
         vec![Interaction {
-            fields: (0..FieldExtensionArithmeticIoCols::<T>::get_width())
-                .map(VirtualPairCol::single_main)
-                .collect(),
+            fields: vec![
+                VirtualPairCol::single_main(cols_numbered.io.opcode),
+                VirtualPairCol::single_main(cols_numbered.aux.op_a),
+                VirtualPairCol::single_main(cols_numbered.aux.op_b),
+                VirtualPairCol::single_main(cols_numbered.aux.op_c),
+                VirtualPairCol::single_main(cols_numbered.aux.d),
+                VirtualPairCol::single_main(cols_numbered.aux.e),
+            ],
             count: VirtualPairCol::one(),
             argument_index: Self::BUS_INDEX,
         }]

@@ -17,7 +17,8 @@ pub const INST_WIDTH: usize = 1;
 pub const READ_INSTRUCTION_BUS: usize = 0;
 pub const MEMORY_BUS: usize = 1;
 pub const ARITHMETIC_BUS: usize = 2;
-pub const RANGE_CHECKER_BUS: usize = 3;
+pub const FIELD_EXTENSION_BUS: usize = 3;
+pub const RANGE_CHECKER_BUS: usize = 4;
 
 pub const MAX_READS_PER_CYCLE: usize = 2;
 pub const MAX_WRITES_PER_CYCLE: usize = 1;
@@ -78,10 +79,12 @@ use OpCode::*;
 
 const CORE_INSTRUCTIONS: [OpCode; 6] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE];
 const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
+const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
 
 #[derive(Default, Clone, Copy)]
 pub struct CpuOptions {
     pub field_arithmetic_enabled: bool,
+    pub field_extension_enabled: bool,
 }
 
 impl CpuOptions {

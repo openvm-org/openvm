@@ -26,11 +26,13 @@ const DECOMP: usize = 4;
 fn make_vm<const WORD_SIZE: usize, F: PrimeField32>(
     program: Vec<Instruction<F>>,
     field_arithmetic_enabled: bool,
+    field_extension_enabled: bool,
 ) -> VirtualMachine<WORD_SIZE, F> {
     VirtualMachine::<WORD_SIZE, F>::new(
         VmConfig {
             vm: VmParamsConfig {
                 field_arithmetic_enabled,
+                field_extension_enabled,
                 limb_bits: LIMB_BITS,
                 decomp: DECOMP,
             },
@@ -61,6 +63,7 @@ impl<const WORD_SIZE: usize, F: PrimeField64> MemoryAccess<WORD_SIZE, F> {
 fn test_flatten_fromslice_roundtrip() {
     let options = CpuOptions {
         field_arithmetic_enabled: true,
+        field_extension_enabled: false,
     };
     let num_cols = CpuCols::<TEST_WORD_SIZE, usize>::get_width(options);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
@@ -104,12 +107,17 @@ fn test_flatten_fromslice_roundtrip() {
 
 fn execution_test<const WORD_SIZE: usize, F: PrimeField32>(
     field_arithmetic_enabled: bool,
+    field_extension_enabled: bool,
     program: Vec<Instruction<F>>,
     mut expected_execution: Vec<usize>,
     expected_memory_log: Vec<MemoryAccess<WORD_SIZE, F>>,
     expected_arithmetic_operations: Vec<ArithmeticOperation<F>>,
 ) {
-    let mut vm = make_vm(program.clone(), field_arithmetic_enabled);
+    let mut vm = make_vm(
+        program.clone(),
+        field_arithmetic_enabled,
+        field_extension_enabled,
+    );
     let mut trace = CpuAir::generate_trace(&mut vm).unwrap();
 
     let mut actual_memory_log = vm.memory_chip.accesses.clone();
@@ -155,13 +163,21 @@ fn execution_test<const WORD_SIZE: usize, F: PrimeField32>(
 
 fn air_test<const WORD_SIZE: usize>(
     field_arithmetic_enabled: bool,
+    field_extension_enabled: bool,
     program: Vec<Instruction<BabyBear>>,
 ) {
-    air_test_change::<WORD_SIZE, _>(field_arithmetic_enabled, program, false, |_, _| {});
+    air_test_change::<WORD_SIZE, _>(
+        field_arithmetic_enabled,
+        field_extension_enabled,
+        program,
+        false,
+        |_, _| {},
+    );
 }
 
 fn air_test_change_pc<const WORD_SIZE: usize>(
     field_arithmetic_enabled: bool,
+    field_extension_enabled: bool,
     program: Vec<Instruction<BabyBear>>,
     should_fail: bool,
     change_row: usize,
@@ -169,6 +185,7 @@ fn air_test_change_pc<const WORD_SIZE: usize>(
 ) {
     air_test_change::<WORD_SIZE, _>(
         field_arithmetic_enabled,
+        field_extension_enabled,
         program,
         should_fail,
         |rows, vm| {
@@ -185,11 +202,16 @@ fn air_test_change<
     F: Fn(&mut Vec<CpuCols<WORD_SIZE, BabyBear>>, &mut VirtualMachine<WORD_SIZE, BabyBear>),
 >(
     field_arithmetic_enabled: bool,
+    field_extension_enabled: bool,
     program: Vec<Instruction<BabyBear>>,
     should_fail: bool,
     change: F,
 ) {
-    let mut vm = make_vm(program.clone(), field_arithmetic_enabled);
+    let mut vm = make_vm(
+        program.clone(),
+        field_arithmetic_enabled,
+        field_extension_enabled,
+    );
     let mut trace = CpuAir::generate_trace(&mut vm).unwrap();
     let mut rows = vec![];
     for i in 0..trace.height() {
@@ -339,17 +361,19 @@ fn test_cpu_1() {
 
     execution_test::<TEST_WORD_SIZE, BabyBear>(
         true,
+        false,
         program.clone(),
         expected_execution,
         expected_memory_log,
         expected_arithmetic_operations,
     );
-    air_test::<TEST_WORD_SIZE>(true, program);
+    air_test::<TEST_WORD_SIZE>(true, false, program);
 }
 
 #[test]
 fn test_cpu_without_field_arithmetic() {
     let field_arithmetic_enabled = false;
+    let field_extension_enabled = false;
 
     /*
     Instruction 0 assigns word[0]_1 to 5.
@@ -381,12 +405,13 @@ fn test_cpu_without_field_arithmetic() {
 
     execution_test::<TEST_WORD_SIZE, BabyBear>(
         field_arithmetic_enabled,
+        field_extension_enabled,
         program.clone(),
         expected_execution,
         expected_memory_log,
         vec![],
     );
-    air_test::<TEST_WORD_SIZE>(field_arithmetic_enabled, program);
+    air_test::<TEST_WORD_SIZE>(field_arithmetic_enabled, field_extension_enabled, program);
 }
 
 #[test]
@@ -412,7 +437,7 @@ fn test_cpu_negative_wrong_pc() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test_change_pc::<TEST_WORD_SIZE>(true, program, true, 2, 3);
+    air_test_change_pc::<TEST_WORD_SIZE>(true, false, program, true, 2, 3);
 }
 
 #[test]
@@ -431,7 +456,7 @@ fn test_cpu_negative_wrong_pc_check() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test_change_pc::<TEST_WORD_SIZE>(true, program, false, 2, 2);
+    air_test_change_pc::<TEST_WORD_SIZE>(true, false, program, false, 2, 2);
 }
 
 #[test]
@@ -448,6 +473,7 @@ fn test_cpu_negative_hasnt_terminated() {
 
     air_test_change(
         true,
+        false,
         program,
         true,
         |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
@@ -469,6 +495,7 @@ fn test_cpu_negative_secret_write() {
 
     air_test_change(
         true,
+        false,
         program,
         true,
         |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
@@ -506,6 +533,7 @@ fn test_cpu_negative_disable_write() {
 
     air_test_change(
         true,
+        false,
         program,
         true,
         |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
@@ -529,6 +557,7 @@ fn test_cpu_negative_disable_read0() {
 
     air_test_change(
         true,
+        false,
         program,
         true,
         |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
@@ -552,6 +581,7 @@ fn test_cpu_negative_disable_read1() {
 
     air_test_change(
         true,
+        false,
         program,
         true,
         |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {

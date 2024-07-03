@@ -7,7 +7,7 @@ use afs_chips::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
 
-use crate::vm::VirtualMachine;
+use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
@@ -224,61 +224,21 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     let value = read!(d, a);
                     println!("{}", value);
                 }
-                opcode @ (FE4ADD | FE4SUB | BBE4MUL) => {
-
-                    // let operand1_vec = memory.read_consecutive::<4>(d, b);
-                    // let operand1: [F; 4] = operand1_vec
-                    //     .iter()
-                    //     .map(|x| compose(*x))
-                    //     .collect::<Vec<F>>()
-                    //     .try_into()
-                    //     .unwrap();
-                    // let operand2_vec = memory.read_consecutive::<4>(e, c);
-                    // let operand2: [F; 4] = operand2_vec
-                    //     .iter()
-                    //     .map(|x| compose(*x))
-                    //     .collect::<Vec<F>>()
-                    //     .try_into()
-                    //     .unwrap();
-
-                    // let result =
-                    //     FieldExtensionArithmeticAir::solve(opcode, operand1, operand2).unwrap();
-                    // let result_vec: Vec<[F; WORD_SIZE]> =
-                    //     result.iter().map(|x| decompose(*x)).collect();
-
-                    // memory.write_consecutive(d, a, result_vec);
-
-                    // field_extension_operations.push(FieldExtensionOperation {
-                    //     opcode,
-                    //     operand1,
-                    //     operand2,
-                    //     result,
-                    // });
-                } // BBE4INV => {
-                //     let operand1_vec = memory.read_consecutive::<4>(d, b);
-                //     let operand1: [F; 4] = operand1_vec
-                //         .iter()
-                //         .map(|x| compose(*x))
-                //         .collect::<Vec<F>>()
-                //         .try_into()
-                //         .unwrap();
-
-                //     let result =
-                //         FieldExtensionArithmeticAir::solve(opcode, operand1, [F::zero(); 4])
-                //             .unwrap();
-
-                //     let result_vec: Vec<[F; WORD_SIZE]> =
-                //         result.iter().map(|x| decompose(*x)).collect();
-                //     memory.write_consecutive(d, a, result_vec);
-
-                //     field_extension_operations.push(FieldExtensionOperation {
-                //         opcode,
-                //         operand1,
-                //         operand2: [F::zero(); 4],
-                //         result,
-                //     });
-                // }
-                _ => todo!(),
+                opcode @ (FE4ADD | FE4SUB | BBE4MUL | BBE4INV) => {
+                    println!("here");
+                    if vm.options().field_extension_enabled {
+                        FieldExtensionArithmeticChip::calculate(
+                            vm,
+                            clock_cycle,
+                            opcode,
+                            a,
+                            b,
+                            c,
+                            d,
+                            e,
+                        );
+                    }
+                }
             };
 
             let mut operation_flags = BTreeMap::new();

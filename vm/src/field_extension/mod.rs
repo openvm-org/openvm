@@ -1,6 +1,9 @@
-use p3_field::Field;
+use p3_field::{Field, PrimeField32};
 
-use crate::cpu::{trace::isize_to_field, OpCode};
+use crate::{
+    cpu::{compose, decompose, trace::isize_to_field, OpCode},
+    vm::VirtualMachine,
+};
 
 pub mod air;
 pub mod bridge;
@@ -12,6 +15,7 @@ pub mod tests;
 
 pub const BETA: usize = 11;
 pub const EXTENSION_DEGREE: usize = 4;
+pub const TIMESTAMP_FACTOR: usize = 20;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct FieldExtensionArithmeticOperation<F> {
@@ -62,14 +66,28 @@ impl<F: Field> FieldExtensionArithmeticOperation<F> {
 
 /// Field extension arithmetic chip. The irreducible polynomial is x^4 - 11.
 #[derive(Default, Clone, Copy)]
-pub struct FieldExtensionArithmeticAir {}
+pub struct FieldExtensionArithmeticAir<F: Field> {
+    pub clock_cycle: usize,
+    pub op_a: F,
+    pub op_b: F,
+    pub op_c: F,
+    pub d: F,
+    pub e: F,
+}
 
-impl FieldExtensionArithmeticAir {
+impl<F: Field> FieldExtensionArithmeticAir<F> {
     pub const BASE_OP: u8 = OpCode::FE4ADD as u8;
-    pub const BUS_INDEX: usize = 2;
+    pub const BUS_INDEX: usize = 3;
 
     pub fn new() -> Self {
-        Self {}
+        Self {
+            clock_cycle: 0,
+            op_a: F::zero(),
+            op_b: F::zero(),
+            op_c: F::zero(),
+            d: F::zero(),
+            e: F::zero(),
+        }
     }
 
     /// Converts vectorized opcodes and operands into vectorized FieldExtensionOperations.
@@ -167,46 +185,120 @@ impl FieldExtensionArithmeticAir {
     }
 }
 
-pub struct FieldExtensionArithmeticChip<F: Field> {
-    pub air: FieldExtensionArithmeticAir,
+pub struct FieldExtensionArithmeticChip<const WORD_SIZE: usize, F: PrimeField32> {
+    pub air: FieldExtensionArithmeticAir<F>,
     pub operations: Vec<FieldExtensionArithmeticOperation<F>>,
 }
 
-impl<F: Field> FieldExtensionArithmeticChip<F> {
+impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_SIZE, F> {
     pub fn new() -> Self {
         Self {
-            air: FieldExtensionArithmeticAir {},
+            air: FieldExtensionArithmeticAir::new(),
             operations: vec![],
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn calculate(
-        &mut self,
+        vm: &mut VirtualMachine<WORD_SIZE, F>,
+        clk: usize,
         op: OpCode,
-        operands: ([F; EXTENSION_DEGREE], [F; EXTENSION_DEGREE]),
+        op_a: F,
+        op_b: F,
+        op_c: F,
+        d: F,
+        e: F,
     ) -> [F; EXTENSION_DEGREE] {
-        let result = FieldExtensionArithmeticAir::solve::<F>(op, operands.0, operands.1).unwrap();
-        self.operations.push(FieldExtensionArithmeticOperation {
-            opcode: op,
-            operand1: operands.0,
-            operand2: operands.1,
-            result,
-        });
+        let timestamp = clk * TIMESTAMP_FACTOR;
+        let operand1 = FieldExtensionArithmeticChip::read_extension_element(vm, timestamp, d, op_b);
+        let operand2 = if op == OpCode::BBE4INV {
+            [[F::zero(); WORD_SIZE]; EXTENSION_DEGREE]
+        } else {
+            FieldExtensionArithmeticChip::read_extension_element(vm, timestamp + 5, e, op_c)
+        };
+
+        let operand1_comp = [
+            compose(operand1[0]),
+            compose(operand1[1]),
+            compose(operand1[2]),
+            compose(operand1[3]),
+        ];
+        let operand2_comp = [
+            compose(operand2[0]),
+            compose(operand2[1]),
+            compose(operand2[2]),
+            compose(operand2[3]),
+        ];
+
+        let result =
+            FieldExtensionArithmeticAir::<F>::solve::<F>(op, operand1_comp, operand2_comp).unwrap();
+        let result_decomp = [
+            decompose(result[0]),
+            decompose(result[1]),
+            decompose(result[2]),
+            decompose(result[3]),
+        ];
+
+        FieldExtensionArithmeticChip::write_extension_element(
+            vm,
+            timestamp + 9,
+            d,
+            op_a,
+            result_decomp,
+        );
+
+        vm.field_extension_chip
+            .operations
+            .push(FieldExtensionArithmeticOperation {
+                opcode: op,
+                operand1: operand1_comp,
+                operand2: operand2_comp,
+                result,
+            });
+
         result
     }
 
-    pub fn request(
-        &mut self,
-        ops: Vec<OpCode>,
-        operands_vec: Vec<([F; EXTENSION_DEGREE], [F; EXTENSION_DEGREE])>,
+    fn read_extension_element(
+        vm: &mut VirtualMachine<WORD_SIZE, F>,
+        timestamp: usize,
+        address_space: F,
+        address: F,
+    ) -> [[F; WORD_SIZE]; EXTENSION_DEGREE] {
+        assert!(address_space != F::zero());
+
+        let mut result = [[F::zero(); WORD_SIZE]; EXTENSION_DEGREE];
+
+        for (i, result_row) in result.iter_mut().enumerate() {
+            let data = vm
+                .memory_chip
+                .read_word(timestamp + i, address_space, address);
+
+            *result_row = data;
+        }
+
+        result
+    }
+
+    fn write_extension_element(
+        vm: &mut VirtualMachine<WORD_SIZE, F>,
+        timestamp: usize,
+        address_space: F,
+        address: F,
+        result: [[F; WORD_SIZE]; EXTENSION_DEGREE],
     ) {
-        for (op, operands) in ops.iter().zip(operands_vec.iter()) {
-            self.calculate(*op, *operands);
+        assert!(address_space != F::zero());
+
+        for (i, row) in result.iter().enumerate() {
+            vm.memory_chip
+                .write_word(timestamp + i, address_space, address, *row);
         }
     }
 }
 
-impl<F: Field> Default for FieldExtensionArithmeticChip<F> {
+impl<const WORD_SIZE: usize, F: PrimeField32> Default
+    for FieldExtensionArithmeticChip<WORD_SIZE, F>
+{
     fn default() -> Self {
         Self::new()
     }

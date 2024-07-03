@@ -1,4 +1,4 @@
-use p3_field::Field;
+use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::cpu::OpCode;
@@ -13,8 +13,14 @@ use super::{
 /// Constructs a new set of columns (including auxiliary columns) given inputs.
 fn generate_cols<T: Field>(
     op: FieldExtensionArithmeticOperation<T>,
+    clock_cycle: usize,
+    op_a: T,
+    op_b: T,
+    op_c: T,
+    d: T,
+    e: T,
 ) -> FieldExtensionArithmeticCols<T> {
-    let opcode_value = op.opcode as u32 - FieldExtensionArithmeticAir::BASE_OP as u32;
+    let opcode_value = op.opcode as u32 - FieldExtensionArithmeticAir::<T>::BASE_OP as u32;
     let opcode_lo_u32 = opcode_value % 2;
     let opcode_hi_u32 = opcode_value / 2;
     let opcode_lo = T::from_canonical_u32(opcode_lo_u32);
@@ -33,8 +39,8 @@ fn generate_cols<T: Field>(
         x[2] + add_sub_coeff * y[2],
         x[3] + add_sub_coeff * y[3],
     ];
-    let product = FieldExtensionArithmeticAir::solve(OpCode::BBE4MUL, x, y).unwrap();
-    let inv = FieldExtensionArithmeticAir::solve(OpCode::BBE4INV, x, y).unwrap();
+    let product = FieldExtensionArithmeticAir::<T>::solve(OpCode::BBE4MUL, x, y).unwrap();
+    let inv = FieldExtensionArithmeticAir::<T>::solve(OpCode::BBE4INV, x, y).unwrap();
 
     FieldExtensionArithmeticCols {
         io: FieldExtensionArithmeticIoCols {
@@ -44,6 +50,12 @@ fn generate_cols<T: Field>(
             z: op.result,
         },
         aux: FieldExtensionArithmeticAuxCols {
+            clock_cycle: T::from_canonical_usize(clock_cycle),
+            op_a,
+            op_b,
+            op_c,
+            d,
+            e,
             opcode_lo,
             opcode_hi,
             is_mul,
@@ -55,13 +67,24 @@ fn generate_cols<T: Field>(
     }
 }
 
-impl<F: Field> FieldExtensionArithmeticChip<F> {
+impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_SIZE, F> {
     /// Generates trace for field arithmetic chip.
     pub fn generate_trace(&self) -> RowMajorMatrix<F> {
         let mut trace: Vec<F> = self
             .operations
             .iter()
-            .flat_map(|op| generate_cols(*op).flatten())
+            .flat_map(|op| {
+                generate_cols(
+                    *op,
+                    self.air.clock_cycle,
+                    self.air.op_a,
+                    self.air.op_b,
+                    self.air.op_c,
+                    self.air.d,
+                    self.air.e,
+                )
+                .flatten()
+            })
             .collect();
 
         let empty_row: Vec<F> = FieldExtensionArithmeticCols::blank_row().flatten();
