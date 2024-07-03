@@ -8,7 +8,6 @@ pub mod tests;
 
 use self::columns::Poseidon2Cols;
 use p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrix;
 
 /// Air for Poseidon2. Performs a single permutation of the state.
 /// Permutation consists of external rounds (linear map combined with nonlinearity),
@@ -30,7 +29,6 @@ pub struct Poseidon2Air<const WIDTH: usize, F: Clone> {
     pub int_diag_m1_matrix: [F; WIDTH],
     pub reduction_factor: F,
     pub bus_index: usize,
-    pub trace: Option<RowMajorMatrix<F>>,
 }
 
 impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
@@ -67,7 +65,6 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
             int_diag_m1_matrix,
             reduction_factor,
             bus_index,
-            trace: None,
         }
     }
 

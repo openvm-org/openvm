@@ -30,11 +30,6 @@ impl<const WIDTH: usize, F: PrimeField> Poseidon2Air<WIDTH, F> {
             .map(|t| t[index_map.output.clone()].to_vec())
             .collect();
 
-        self.trace = Some(RowMajorMatrix::new(
-            traces.iter().flat_map(|t| t.clone()).collect(),
-            self.get_width(),
-        ));
-
         outputs
     }
 
