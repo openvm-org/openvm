@@ -58,7 +58,6 @@ impl OpCode {
     }
 }
 
-use p3_field::PrimeField64;
 use OpCode::*;
 
 const CORE_INSTRUCTIONS: [OpCode; 6] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE];
