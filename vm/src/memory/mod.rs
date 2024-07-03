@@ -1,5 +1,5 @@
-use std::array::from_fn;
 use p3_field::PrimeField64;
+use std::array::from_fn;
 
 pub mod offline_checker;
 #[cfg(test)]

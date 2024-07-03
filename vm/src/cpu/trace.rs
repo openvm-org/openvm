@@ -7,8 +7,8 @@ use afs_chips::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
 
-use crate::vm::VirtualMachine;
 use crate::memory::{compose, decompose};
+use crate::vm::VirtualMachine;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},

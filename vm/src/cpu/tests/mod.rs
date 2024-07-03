@@ -16,8 +16,8 @@ use crate::vm::VirtualMachine;
 
 use super::columns::MemoryAccessCols;
 use super::trace::isize_to_field;
-use super::{ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS};
 use super::{trace::Instruction, OpCode::*};
+use super::{ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS};
 
 const TEST_WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 8;

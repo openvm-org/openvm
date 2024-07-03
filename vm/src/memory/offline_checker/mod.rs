@@ -61,7 +61,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
 
     pub fn read_word(&mut self, timestamp: usize, address_space: F, address: F) -> [F; WORD_SIZE] {
         if address_space == F::zero() {
-            return decompose(address)
+            return decompose(address);
         }
         if let Some(last_timestamp) = self.last_timestamp {
             assert!(timestamp > last_timestamp);
@@ -107,13 +107,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         compose(self.read_word(timestamp, address_space, address))
     }
 
-    pub fn write_elem(
-        &mut self,
-        timestamp: usize,
-        address_space: F,
-        address: F,
-        data: F,
-    ) {
+    pub fn write_elem(&mut self, timestamp: usize, address_space: F, address: F, data: F) {
         self.write_word(timestamp, address_space, address, decompose(data));
     }
 }
