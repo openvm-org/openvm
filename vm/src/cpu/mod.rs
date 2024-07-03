@@ -40,13 +40,13 @@ pub enum OpCode {
     FMUL = 8,
     FDIV = 9,
 
-    FE4ADD = 10,
-    FE4SUB = 11,
-    BBE4MUL = 12,
-    BBE4INV = 13,
+    FAIL = 10,
+    PRINTF = 11,
 
-    FAIL = 14,
-    PRINTF = 15,
+    FE4ADD = 12,
+    FE4SUB = 13,
+    BBE4MUL = 14,
+    BBE4INV = 15,
 }
 
 impl OpCode {
@@ -62,12 +62,12 @@ impl OpCode {
             7 => Some(OpCode::FSUB),
             8 => Some(OpCode::FMUL),
             9 => Some(OpCode::FDIV),
-            10 => Some(OpCode::FE4ADD),
-            11 => Some(OpCode::FE4SUB),
-            12 => Some(OpCode::BBE4MUL),
-            13 => Some(OpCode::BBE4INV),
-            14 => Some(OpCode::FAIL),
-            15 => Some(OpCode::PRINTF),
+            10 => Some(OpCode::FAIL),
+            11 => Some(OpCode::PRINTF),
+            12 => Some(OpCode::FE4ADD),
+            13 => Some(OpCode::FE4SUB),
+            14 => Some(OpCode::BBE4MUL),
+            15 => Some(OpCode::BBE4INV),
             _ => None,
         }
     }

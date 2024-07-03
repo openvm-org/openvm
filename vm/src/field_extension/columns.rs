@@ -2,15 +2,18 @@ use afs_derive::AlignedBorrow;
 
 use super::EXTENSION_DEGREE;
 
-/// Columns for field extension add/sub chip.
+/// Columns for field extension chip.
 ///
 /// IO columns for opcode, x, y, result.
 #[derive(AlignedBorrow)]
+#[repr(C)]
 pub struct FieldExtensionArithmeticCols<T> {
     pub io: FieldExtensionArithmeticIoCols<T>,
     pub aux: FieldExtensionArithmeticAuxCols<T>,
 }
 
+#[derive(AlignedBorrow)]
+#[repr(C)]
 pub struct FieldExtensionArithmeticIoCols<T> {
     pub opcode: T,
     pub x: [T; EXTENSION_DEGREE],
@@ -18,94 +21,33 @@ pub struct FieldExtensionArithmeticIoCols<T> {
     pub z: [T; EXTENSION_DEGREE],
 }
 
+#[derive(AlignedBorrow)]
+#[repr(C)]
 pub struct FieldExtensionArithmeticAuxCols<T> {
+    // the lower bit of the opcode - BASE_OP
     pub opcode_lo: T,
+    // the upper bit of the opcode - BASE_OP
     pub opcode_hi: T,
+    // whether the opcode is BBE4MUL
     pub is_mul: T,
+    // whether the opcode is BBE4INV
     pub is_inv: T,
+    // the sum x + y if opcode_lo is 0, or the difference x - y if opcode_lo is 1
     pub sum_or_diff: [T; EXTENSION_DEGREE],
+    // the product of x and y
     pub product: [T; EXTENSION_DEGREE],
+    // the base field inverse needed in the inverse calculation
     pub inv_c: T,
+    // the field extension inverse of x
     pub inv: [T; EXTENSION_DEGREE],
 }
 
-impl<T: Clone + std::fmt::Debug> FieldExtensionArithmeticCols<T> {
+impl<T: Clone> FieldExtensionArithmeticCols<T> {
     pub const NUM_COLS: usize = 6 * EXTENSION_DEGREE + 6;
 
     pub fn get_width() -> usize {
         FieldExtensionArithmeticIoCols::<T>::get_width()
             + FieldExtensionArithmeticAuxCols::<T>::get_width()
-    }
-
-    pub fn from_slice(slice: &[T]) -> Self {
-        let mut idx = 0;
-
-        let opcode = slice[idx].clone();
-        idx += 1;
-
-        let x: [T; EXTENSION_DEGREE] = slice[idx..idx + EXTENSION_DEGREE]
-            .to_vec()
-            .try_into()
-            .expect("Expected a vector of length 4");
-        idx += EXTENSION_DEGREE;
-
-        let y: [T; EXTENSION_DEGREE] = slice[idx..idx + EXTENSION_DEGREE]
-            .to_vec()
-            .try_into()
-            .expect("Expected a vector of length 4");
-        idx += EXTENSION_DEGREE;
-
-        let z: [T; EXTENSION_DEGREE] = slice[idx..idx + EXTENSION_DEGREE]
-            .to_vec()
-            .try_into()
-            .expect("Expected a vector of length 4");
-        idx += EXTENSION_DEGREE;
-
-        let opcode_lo = slice[idx].clone();
-        idx += 1;
-
-        let opcode_hi = slice[idx].clone();
-        idx += 1;
-
-        let is_mul = slice[idx].clone();
-        idx += 1;
-
-        let is_inv = slice[idx].clone();
-        idx += 1;
-
-        let sum_or_diff: [T; EXTENSION_DEGREE] = slice[idx..idx + EXTENSION_DEGREE]
-            .to_vec()
-            .try_into()
-            .expect("Expected a vector of length 4");
-        idx += EXTENSION_DEGREE;
-
-        let product: [T; EXTENSION_DEGREE] = slice[idx..idx + EXTENSION_DEGREE]
-            .to_vec()
-            .try_into()
-            .expect("Expected a vector of length 4");
-        idx += EXTENSION_DEGREE;
-
-        let inv_c = slice[idx].clone();
-        idx += 1;
-
-        let inv: [T; EXTENSION_DEGREE] = slice[idx..idx + EXTENSION_DEGREE]
-            .to_vec()
-            .try_into()
-            .expect("Expected a vector of length 4");
-
-        Self {
-            io: FieldExtensionArithmeticIoCols { opcode, x, y, z },
-            aux: FieldExtensionArithmeticAuxCols {
-                opcode_lo,
-                opcode_hi,
-                is_mul,
-                is_inv,
-                sum_or_diff,
-                product,
-                inv_c,
-                inv,
-            },
-        }
     }
 
     pub fn flatten(&self) -> Vec<T> {

@@ -392,6 +392,11 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                         return Err(ExecutionError::DisabledOperation(opcode));
                     }
                 }
+                FAIL => return Err(ExecutionError::Fail(pc_usize)),
+                PRINTF => {
+                    let value = memory.read(d, a);
+                    println!("{}", compose(value));
+                }
                 opcode @ (FE4ADD | FE4SUB | BBE4MUL) => {
                     let operand1_vec = memory.read_consecutive::<4>(d, b);
                     let operand1: [F; 4] = operand1_vec
@@ -445,11 +450,6 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                         operand2: [F::zero(); 4],
                         result,
                     });
-                }
-                FAIL => return Err(ExecutionError::Fail(pc_usize)),
-                PRINTF => {
-                    let value = memory.read(d, a);
-                    println!("{}", compose(value));
                 }
             };
 
