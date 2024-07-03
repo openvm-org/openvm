@@ -3,12 +3,14 @@ use super::Poseidon2Air;
 use p3_baby_bear::DiffusionMatrixBabyBear;
 use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_poseidon2::{DiffusionPermutation, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::Permutation;
 
-impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
+impl<const WIDTH: usize, F: PrimeField> Poseidon2Air<WIDTH, F> {
     /// Return cached state trace if it exists (input is ignored), otherwise generate trace and return
-    pub fn generate_trace(&self, input_states: Vec<[T; WIDTH]>) -> RowMajorMatrix<T> {
+    ///
+    /// TODO: For more efficient trace generation, a custom `DiffusionMatrix` and `ExternalMatrix` should
+    /// be provided.
+    pub fn generate_trace(&self, input_states: Vec<[F; WIDTH]>) -> RowMajorMatrix<F> {
         RowMajorMatrix::new(
             input_states
                 .into_iter()
@@ -19,17 +21,13 @@ impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
     }
 
     /// Cache the trace as a state variable, return the outputs
-    pub fn request_trace(&mut self, states: &[[T; WIDTH]]) -> Vec<Vec<T>>
-    where
-        T: PrimeField,
-        DiffusionMatrixBabyBear: Permutation<[T; WIDTH]>,
-    {
-        let index_map = Poseidon2Cols::<WIDTH, T>::index_map(self);
+    pub fn request_trace(&mut self, states: &[[F; WIDTH]]) -> Vec<Vec<F>> {
+        let index_map = Poseidon2Cols::<WIDTH, F>::index_map(self);
         let traces: Vec<_> = states
             .iter()
             .map(|s| self.generate_local_trace(*s))
             .collect();
-        let outputs: Vec<Vec<T>> = traces
+        let outputs: Vec<Vec<F>> = traces
             .iter()
             .map(|t| t[index_map.output.clone()].to_vec())
             .collect();
@@ -43,36 +41,22 @@ impl<const WIDTH: usize, T: PrimeField> Poseidon2Air<WIDTH, T> {
     }
 
     /// Perform entire nonlinear external layer operation on state
-    pub fn ext_layer(&self, state: &mut [T; WIDTH], constants: &[T; WIDTH]) {
+    pub fn ext_layer(&self, state: &mut [F; WIDTH], constants: &[F; WIDTH]) {
         self.ext_lin_layer(state);
-        println!("ext_lin_layer:");
-        for s in state.iter() {
-            println!("{}", s.as_canonical_biguint());
-        }
         for (s, c) in state.iter_mut().zip(constants) {
             *s = Self::sbox_p(*s + *c);
         }
     }
 
     /// Perform entire nonlinear internal layer operation on state
-    pub fn int_layer(&self, state: &mut [T; WIDTH], constant: T) {
+    pub fn int_layer(&self, state: &mut [F; WIDTH], constant: F) {
         self.int_lin_layer(state);
         state[0] += constant;
         state[0] = Self::sbox_p(state[0]);
     }
 
-    // pub fn sbox_p(value: T) -> T {
-    //     let x2 = value.square();
-    //     let x3 = x2 * value;
-    //     let x4 = x2.square();
-    //     x3 * x4
-    // }
-
     /// Generate one row of trace from the input state.
-    ///
-    /// For more efficient trace generation, a custom `DiffusionMatrix` can be provided
-    /// for the internal layers.
-    pub fn generate_local_trace(&self, input_state: [T; WIDTH]) -> Vec<T> {
+    pub fn generate_local_trace(&self, input_state: [F; WIDTH]) -> Vec<F> {
         let mut row = input_state.to_vec();
         let mut state = input_state;
 
