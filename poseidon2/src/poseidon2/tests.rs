@@ -24,7 +24,6 @@ use rand::{
 };
 use rand_xoshiro::Xoroshiro128Plus;
 use zkhash::fields::babybear::FpBabyBear as HorizenBabyBear;
-use zkhash::fields::utils::from_hex;
 use zkhash::poseidon2::poseidon2::Poseidon2 as HorizenPoseidon2;
 use zkhash::poseidon2::poseidon2_instance_babybear::MAT_DIAG16_M_1;
 use zkhash::poseidon2::poseidon2_instance_babybear::POSEIDON2_BABYBEAR_16_PARAMS;
@@ -220,40 +219,52 @@ fn test_horizen_poseidon2() {
     assert_eq!(air_u32_result, horizen_u32_result);
 }
 
-// #[test]
-// fn test_poseidon2_air_xoshiro()
-// where
-//     Standard: Distribution<BabyBear>,
-// {
-//     let mut rng = Xoroshiro128Plus::seed_from_u64(1);
+pub fn new_from_rng_128<R: Rng>(rng: &mut R) -> (Vec<[BabyBear; 16]>, Vec<BabyBear>)
+where
+    Standard: Distribution<BabyBear> + Distribution<[BabyBear; 16]>,
+{
+    let external_constants = rng
+        .sample_iter(Standard)
+        .take(8)
+        .collect::<Vec<[BabyBear; 16]>>();
+    let internal_constants = rng
+        .sample_iter(Standard)
+        .take(13)
+        .collect::<Vec<BabyBear>>();
 
-//     let external_constants = &rng
-//         .sample_iter(Standard)
-//         .take(13)
-//         .collect::<Vec<[BabyBear; 16]>>();
-//     let internal_constants = &rng.sample_iter(Standard).take(8).collect::<Vec<BabyBear>>();
+    (external_constants, internal_constants)
+}
 
-//     let mut poseidon2air = Poseidon2Air::<16, BabyBear>::new(
-//         external_constants.clone(),
-//         internal_constants.clone(),
-//         Poseidon2Air::<16, BabyBear>::MDS_MAT_4,
-//         Poseidon2Air::<16, BabyBear>::DIAG_MAT_16,
-//         943718400,
-//         0,
-//     );
-//     let input: [BabyBear; 16] = [
-//         894848333, 1437655012, 1200606629, 1690012884, 71131202, 1749206695, 1717947831, 120589055,
-//         19776022, 42382981, 1831865506, 724844064, 171220207, 1299207443, 227047920, 1783754913,
-//     ]
-//     .map(BabyBear::from_canonical_u32);
+#[test]
+fn test_poseidon2_air_xoshiro()
+where
+    Standard: Distribution<BabyBear>,
+{
+    let mut rng = Xoroshiro128Plus::seed_from_u64(1);
 
-//     let result = poseidon2air.request_trace(&[input]);
+    let (external_constants, internal_constants) = new_from_rng_128(&mut rng);
 
-//     let expected: [BabyBear; 16] = [
-//         512585766, 975869435, 1921378527, 1238606951, 899635794, 132650430, 1426417547, 1734425242,
-//         57415409, 67173027, 1535042492, 1318033394, 1070659233, 17258943, 856719028, 1500534995,
-//     ]
-//     .map(BabyBear::from_canonical_u32);
+    let mut poseidon2air = Poseidon2Air::<16, BabyBear>::new(
+        external_constants.clone(),
+        internal_constants.clone(),
+        Poseidon2Air::<16, BabyBear>::MDS_MAT_4,
+        POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY,
+        BabyBear::from_wrapped_u64(1u64 << 32).inverse(), // 943718400
+        0,
+    );
+    let input: [BabyBear; 16] = [
+        894848333, 1437655012, 1200606629, 1690012884, 71131202, 1749206695, 1717947831, 120589055,
+        19776022, 42382981, 1831865506, 724844064, 171220207, 1299207443, 227047920, 1783754913,
+    ]
+    .map(BabyBear::from_canonical_u32);
 
-//     assert_eq!(result[0], expected);
-// }
+    let result = poseidon2air.request_trace(&[input]);
+
+    let expected: [BabyBear; 16] = [
+        512585766, 975869435, 1921378527, 1238606951, 899635794, 132650430, 1426417547, 1734425242,
+        57415409, 67173027, 1535042492, 1318033394, 1070659233, 17258943, 856719028, 1500534995,
+    ]
+    .map(BabyBear::from_canonical_u32);
+
+    assert_eq!(result[0], expected)
+}
