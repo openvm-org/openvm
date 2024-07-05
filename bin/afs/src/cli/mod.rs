@@ -1,3 +1,4 @@
+use crate::commands::keygen::KeygenCommand;
 use crate::commands::{cache, keygen, mock, prove, verify};
 use afs_stark_backend::config::Com;
 use afs_stark_backend::config::PcsProof;
@@ -76,7 +77,8 @@ where
                 mock.execute(config).unwrap();
             }
             CliCommand::Keygen(keygen) => {
-                keygen.execute(config, engine).unwrap();
+                let output_folder = keygen.output_folder.clone();
+                KeygenCommand::execute(config, engine, output_folder).unwrap();
             }
             CliCommand::Cache(cache) => {
                 cache.execute(config, engine).unwrap();
@@ -88,7 +90,6 @@ where
                 verify.execute(config, engine).unwrap();
             }
         }
-        // cli
     }
 }
 

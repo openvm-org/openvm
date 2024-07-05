@@ -85,12 +85,11 @@ impl<SC: StarkGenericConfig, E: StarkEngine<SC>> ProveCommand<SC, E>
 where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: DeserializeOwned + Send + Sync,
-    Domain<SC>: Send + Sync,
-    SC::Pcs: Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
     PcsProof<SC>: Send + Sync,
+    Domain<SC>: Send + Sync,
+    Com<SC>: Send + Sync,
+    SC::Pcs: Sync,
+    SC::Challenge: Send + Sync,
 {
     /// Execute the `prove` command
     pub fn execute(&self, config: &PageConfig, engine: &E) -> Result<()> {

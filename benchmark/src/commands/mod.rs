@@ -1,3 +1,4 @@
+use afs_test_utils::page_config::PageConfig;
 use clap::Parser;
 
 pub mod olap;
@@ -6,13 +7,13 @@ pub mod rw;
 #[derive(Debug, Parser)]
 pub struct CommonCommands {
     #[arg(
-        long = "config",
+        long = "config-files",
         short = 'c',
-        help = "Path to a config file",
+        help = "Comma-separated paths to config files",
         required = false,
         default_value = "config.toml"
     )]
-    pub config: String,
+    pub config_files: String,
 
     #[arg(
         long = "output-file",
@@ -30,4 +31,11 @@ pub struct CommonCommands {
         required = false
     )]
     pub silent: bool,
+}
+
+pub fn parse_configs(config_files: &String) -> Vec<PageConfig> {
+    config_files
+        .split(',')
+        .map(PageConfig::read_config_file)
+        .collect()
 }
