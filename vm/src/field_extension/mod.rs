@@ -1,7 +1,7 @@
 use p3_field::{Field, PrimeField32};
 
 use crate::{
-    cpu::{trace::isize_to_field, OpCode},
+    cpu::{OpCode, MAX_ACCESSES_PER_CYCLE},
     vm::VirtualMachine,
 };
 
@@ -15,46 +15,22 @@ pub mod tests;
 
 pub const BETA: usize = 11;
 pub const EXTENSION_DEGREE: usize = 4;
-pub const TIMESTAMP_FACTOR: usize = 100;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct FieldExtensionArithmeticOperation<F> {
+    pub clock_cycle: usize,
     pub opcode: OpCode,
+    pub op_a: F,
+    pub op_b: F,
+    pub op_c: F,
+    pub d: F,
+    pub e: F,
     pub operand1: [F; EXTENSION_DEGREE],
     pub operand2: [F; EXTENSION_DEGREE],
     pub result: [F; EXTENSION_DEGREE],
 }
 
 impl<F: Field> FieldExtensionArithmeticOperation<F> {
-    pub fn from_isize(
-        opcode: OpCode,
-        operand1: [isize; EXTENSION_DEGREE],
-        operand2: [isize; EXTENSION_DEGREE],
-        result: [isize; EXTENSION_DEGREE],
-    ) -> Self {
-        Self {
-            opcode,
-            operand1: [
-                isize_to_field(operand1[0]),
-                isize_to_field(operand1[1]),
-                isize_to_field(operand1[2]),
-                isize_to_field(operand1[3]),
-            ],
-            operand2: [
-                isize_to_field(operand2[0]),
-                isize_to_field(operand2[1]),
-                isize_to_field(operand2[2]),
-                isize_to_field(operand2[3]),
-            ],
-            result: [
-                isize_to_field(result[0]),
-                isize_to_field(result[1]),
-                isize_to_field(result[2]),
-                isize_to_field(result[3]),
-            ],
-        }
-    }
-
     pub fn to_vec(&self) -> Vec<F> {
         let mut result = vec![F::from_canonical_usize(self.opcode as usize)];
         result.extend(self.operand1.iter());
@@ -70,26 +46,9 @@ pub struct FieldExtensionArithmeticAir {}
 
 impl FieldExtensionArithmeticAir {
     pub const BASE_OP: u8 = OpCode::FE4ADD as u8;
-    pub const BUS_INDEX: usize = 3;
 
     pub fn new() -> Self {
         Self {}
-    }
-
-    /// Converts vectorized opcodes and operands into vectorized FieldExtensionOperations.
-    pub fn request<T: Field>(
-        ops: Vec<OpCode>,
-        operands: Vec<([T; EXTENSION_DEGREE], [T; EXTENSION_DEGREE])>,
-    ) -> Vec<FieldExtensionArithmeticOperation<T>> {
-        ops.iter()
-            .zip(operands.iter())
-            .map(|(op, operand)| FieldExtensionArithmeticOperation {
-                opcode: *op,
-                operand1: operand.0,
-                operand2: operand.1,
-                result: Self::solve::<T>(*op, operand.0, operand.1).unwrap(),
-            })
-            .collect()
     }
 
     /// Evaluates given opcode using given operands.
@@ -174,13 +133,6 @@ impl FieldExtensionArithmeticAir {
 pub struct FieldExtensionArithmeticChip<const WORD_SIZE: usize, F: PrimeField32> {
     pub air: FieldExtensionArithmeticAir,
     pub operations: Vec<FieldExtensionArithmeticOperation<F>>,
-    clock_cycle: usize,
-    op: OpCode,
-    op_a: F,
-    op_b: F,
-    op_c: F,
-    d: F,
-    e: F,
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_SIZE, F> {
@@ -188,13 +140,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         Self {
             air: FieldExtensionArithmeticAir::new(),
             operations: vec![],
-            clock_cycle: 0,
-            op: OpCode::FE4ADD,
-            op_a: F::zero(),
-            op_b: F::zero(),
-            op_c: F::zero(),
-            d: F::zero(),
-            e: F::zero(),
         }
     }
 
@@ -209,15 +154,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         d: F,
         e: F,
     ) -> [F; EXTENSION_DEGREE] {
-        vm.field_extension_chip.clock_cycle = clk;
-        vm.field_extension_chip.op = op;
-        vm.field_extension_chip.op_a = op_a;
-        vm.field_extension_chip.op_b = op_b;
-        vm.field_extension_chip.op_c = op_c;
-        vm.field_extension_chip.d = d;
-        vm.field_extension_chip.e = e;
-
-        let timestamp = clk * TIMESTAMP_FACTOR;
+        let timestamp = clk * MAX_ACCESSES_PER_CYCLE;
         let operand1 = FieldExtensionArithmeticChip::read_extension_element(vm, timestamp, d, op_b);
         let operand2 = if op == OpCode::BBE4INV {
             [F::zero(); EXTENSION_DEGREE]
@@ -232,7 +169,13 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         vm.field_extension_chip
             .operations
             .push(FieldExtensionArithmeticOperation {
+                clock_cycle: clk,
                 opcode: op,
+                op_a,
+                op_b,
+                op_c,
+                d,
+                e,
                 operand1,
                 operand2,
                 result,

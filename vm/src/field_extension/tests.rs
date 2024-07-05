@@ -4,105 +4,104 @@ use crate::cpu::{OpCode, WORD_SIZE};
 use afs_stark_backend::prover::USE_DEBUG_BUILDER;
 use afs_stark_backend::verifier::VerificationError;
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
-use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
 use p3_field::{AbstractExtensionField, AbstractField};
-use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 
 use super::columns::FieldExtensionArithmeticIoCols;
-use super::{FieldExtensionArithmeticAir, FieldExtensionArithmeticChip};
+use super::{
+    FieldExtensionArithmeticAir, FieldExtensionArithmeticChip, FieldExtensionArithmeticOperation,
+};
 
 /// Function for testing that generates a random program consisting only of field arithmetic operations.
-// fn generate_field_extension_program(
-//     chip: &mut FieldExtensionArithmeticChip<WORD_SIZE, BabyBear>,
-//     len_ops: usize,
-// ) {
-//     let mut rng = create_seeded_rng();
-//     let ops = (0..len_ops)
-//         .map(|_| OpCode::from_u8(rng.gen_range(13..=13)).unwrap())
-//         .collect();
-//     let operands = (0..len_ops)
-//         .map(|_| {
-//             (
-//                 [
-//                     BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
-//                     BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
-//                     BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
-//                     BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
-//                 ],
-//                 [
-//                     BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
-//                     BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
-//                     BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
-//                     BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
-//                 ],
-//             )
-//         })
-//         .collect();
-//     chip.request(ops, operands);
-// }
+fn generate_field_extension_operations(
+    len_ops: usize,
+) -> Vec<FieldExtensionArithmeticOperation<BabyBear>> {
+    let mut rng = create_seeded_rng();
 
-// #[test]
-// fn field_extension_air_test() {
-//     let mut rng = create_seeded_rng();
-//     let len_ops: usize = 1 << 5;
-//     let mut chip = FieldExtensionArithmeticChip::<WORD_SIZE, BabyBear>::new();
-//     generate_field_extension_program(&mut chip, len_ops);
+    let mut requests = vec![];
 
-//     let dummy_trace = RowMajorMatrix::new(
-//         chip.operations
-//             .clone()
-//             .iter()
-//             .flat_map(|op| {
-//                 [BabyBear::one()]
-//                     .into_iter()
-//                     .chain(op.to_vec())
-//                     .collect::<Vec<_>>()
-//             })
-//             .collect(),
-//         FieldExtensionArithmeticIoCols::<BabyBear>::get_width() + 1,
-//     );
+    for _ in 0..len_ops {
+        let op = OpCode::from_u8(rng.gen_range(12..=15)).unwrap();
 
-//     let mut extension_trace = chip.generate_trace();
+        // dummy values for clock cycle and addr_space and pointers
+        let clock_cycle: usize = 0;
+        let op_a = BabyBear::zero();
+        let op_b = BabyBear::zero();
+        let op_c = BabyBear::zero();
+        let d = BabyBear::zero();
+        let e = BabyBear::zero();
 
-//     let page_requester = DummyInteractionAir::new(
-//         FieldExtensionArithmeticIoCols::<BabyBear>::get_width(),
-//         true,
-//         FieldExtensionArithmeticAir::BUS_INDEX,
-//     );
+        let operand1 = [
+            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
+            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
+            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
+            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
+        ];
+        let operand2 = [
+            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
+            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
+            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
+            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
+        ];
 
-//     // positive test
-//     run_simple_test_no_pis(
-//         vec![&chip.air, &page_requester],
-//         vec![extension_trace.clone(), dummy_trace.clone()],
-//     )
-//     .expect("Verification failed");
+        let result = FieldExtensionArithmeticAir::solve(op, operand1, operand2).unwrap();
 
-//     // Run a test after pranking each row
-//     USE_DEBUG_BUILDER.with(|debug| {
-//         *debug.lock().unwrap() = false;
-//     });
+        requests.push(FieldExtensionArithmeticOperation {
+            clock_cycle,
+            opcode: op,
+            op_a,
+            op_b,
+            op_c,
+            d,
+            e,
+            operand1,
+            operand2,
+            result,
+        });
+    }
+    requests
+}
 
-//     // negative test pranking each IO value
-//     for height in 0..(chip.operations.len()) {
-//         for width in 0..FieldExtensionArithmeticIoCols::<BabyBear>::get_width() {
-//             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
-//             extension_trace.row_mut(height)[width] = prank_value;
-//         }
+// isolated air test
+#[test]
+fn field_extension_air_test() {
+    let mut rng = create_seeded_rng();
+    let len_ops: usize = 1 << 5;
+    let mut chip = FieldExtensionArithmeticChip::<WORD_SIZE, BabyBear>::new();
+    let operations = generate_field_extension_operations(len_ops);
+    chip.operations = operations;
 
-//         assert_eq!(
-//             run_simple_test_no_pis(
-//                 vec![&chip.air, &page_requester],
-//                 vec![extension_trace.clone(), dummy_trace.clone()],
-//             ),
-//             Err(VerificationError::OodEvaluationMismatch),
-//             "Expected constraint to fail"
-//         )
-//     }
-// }
+    let mut extension_trace = chip.generate_trace();
+
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
+
+    // positive test - should only error when interactions have nonzero cumulative sum
+    assert_eq!(
+        run_simple_test_no_pis(vec![&chip.air], vec![extension_trace.clone()]),
+        Err(VerificationError::NonZeroCumulativeSum),
+        "Expected constraint to pass"
+    );
+
+    // negative test pranking each IO value
+    for height in 0..(chip.operations.len()) {
+        for width in 0..FieldExtensionArithmeticIoCols::<BabyBear>::get_width() {
+            let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
+            extension_trace.row_mut(height)[width] = prank_value;
+        }
+
+        // Run a test after pranking each row
+        assert_eq!(
+            run_simple_test_no_pis(vec![&chip.air], vec![extension_trace.clone()]),
+            Err(VerificationError::OodEvaluationMismatch),
+            "Expected constraint to fail"
+        )
+    }
+}
 
 #[test]
 fn field_extension_consistency_test() {

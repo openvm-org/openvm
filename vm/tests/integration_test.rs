@@ -125,6 +125,7 @@ fn test_vm_field_extension_arithmetic() {
         Instruction::from_isize(STOREW, 1, 6, 0, 0, 1),
         Instruction::from_isize(STOREW, 2, 7, 0, 0, 1),
         Instruction::from_isize(FE4ADD, 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4SUB, 12, 0, 4, 1, 1),
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 

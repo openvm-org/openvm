@@ -2,9 +2,9 @@ use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::{PairCol, VirtualPairCol};
 use p3_field::Field;
 
-use crate::cpu::{MEMORY_BUS, WORD_SIZE};
+use crate::cpu::{FIELD_EXTENSION_BUS, MAX_ACCESSES_PER_CYCLE, MEMORY_BUS, WORD_SIZE};
 
-use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir, TIMESTAMP_FACTOR};
+use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
 
 fn get_rw_interactions<T: Field>(
     is_write: bool,
@@ -27,7 +27,7 @@ fn get_rw_interactions<T: Field>(
         let memory_cycle = VirtualPairCol::new(
             vec![(
                 PairCol::Main(cols_numbered.aux.clock_cycle),
-                T::from_canonical_usize(TIMESTAMP_FACTOR),
+                T::from_canonical_usize(MAX_ACCESSES_PER_CYCLE),
             )],
             T::from_canonical_usize(ext_element_ind * 4 + i),
         );
@@ -107,7 +107,7 @@ impl<T: Field> AirBridge<T> for FieldExtensionArithmeticAir {
                 VirtualPairCol::single_main(cols_numbered.aux.e),
             ],
             count: VirtualPairCol::one(),
-            argument_index: Self::BUS_INDEX,
+            argument_index: FIELD_EXTENSION_BUS,
         }]
     }
 }

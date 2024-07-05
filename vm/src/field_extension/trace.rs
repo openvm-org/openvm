@@ -13,12 +13,6 @@ use super::{
 /// Constructs a new set of columns (including auxiliary columns) given inputs.
 fn generate_cols<T: Field>(
     op: FieldExtensionArithmeticOperation<T>,
-    clock_cycle: usize,
-    op_a: T,
-    op_b: T,
-    op_c: T,
-    d: T,
-    e: T,
 ) -> FieldExtensionArithmeticCols<T> {
     let opcode_value = op.opcode as u32 - FieldExtensionArithmeticAir::BASE_OP as u32;
     let opcode_lo_u32 = opcode_value % 2;
@@ -50,12 +44,12 @@ fn generate_cols<T: Field>(
             z: op.result,
         },
         aux: FieldExtensionArithmeticAuxCols {
-            clock_cycle: T::from_canonical_usize(clock_cycle),
-            op_a,
-            op_b,
-            op_c,
-            d,
-            e,
+            clock_cycle: T::from_canonical_usize(op.clock_cycle),
+            op_a: op.op_a,
+            op_b: op.op_b,
+            op_c: op.op_c,
+            d: op.d,
+            e: op.e,
             opcode_lo,
             opcode_hi,
             is_mul,
@@ -73,18 +67,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         let mut trace: Vec<F> = self
             .operations
             .iter()
-            .flat_map(|op| {
-                generate_cols(
-                    *op,
-                    self.clock_cycle,
-                    self.op_a,
-                    self.op_b,
-                    self.op_c,
-                    self.d,
-                    self.e,
-                )
-                .flatten()
-            })
+            .flat_map(|op| generate_cols(*op).flatten())
             .collect();
 
         let empty_row: Vec<F> = FieldExtensionArithmeticCols::blank_row().flatten();
