@@ -4,7 +4,7 @@ use p3_field::Field;
 
 use crate::cpu::{MEMORY_BUS, WORD_SIZE};
 
-use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
+use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir, TIMESTAMP_FACTOR};
 
 fn get_rw_interactions<T: Field>(
     is_write: bool,
@@ -27,7 +27,7 @@ fn get_rw_interactions<T: Field>(
         let memory_cycle = VirtualPairCol::new(
             vec![(
                 PairCol::Main(cols_numbered.aux.clock_cycle),
-                T::from_canonical_usize(1),
+                T::from_canonical_usize(TIMESTAMP_FACTOR),
             )],
             T::from_canonical_usize(ext_element_ind * 4 + i),
         );

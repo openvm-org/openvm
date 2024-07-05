@@ -222,7 +222,6 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     println!("{}", value);
                 }
                 opcode @ (FE4ADD | FE4SUB | BBE4MUL | BBE4INV) => {
-                    println!("here");
                     if vm.options().field_extension_enabled {
                         FieldExtensionArithmeticChip::calculate(
                             vm,

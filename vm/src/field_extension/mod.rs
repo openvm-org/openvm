@@ -70,7 +70,7 @@ pub struct FieldExtensionArithmeticAir {}
 
 impl FieldExtensionArithmeticAir {
     pub const BASE_OP: u8 = OpCode::FE4ADD as u8;
-    pub const BUS_INDEX: usize = 4;
+    pub const BUS_INDEX: usize = 3;
 
     pub fn new() -> Self {
         Self {}
@@ -224,9 +224,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         } else {
             FieldExtensionArithmeticChip::read_extension_element(vm, timestamp + 4, e, op_c)
         };
-
-        println!("{:?}", operand1);
-        println!("{:?}", operand2);
 
         let result = FieldExtensionArithmeticAir::solve::<F>(op, operand1, operand2).unwrap();
 
