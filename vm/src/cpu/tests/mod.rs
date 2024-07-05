@@ -17,11 +17,13 @@ use crate::vm::VirtualMachine;
 use super::columns::MemoryAccessCols;
 use super::trace::isize_to_field;
 use super::{trace::Instruction, OpCode::*};
-use super::{ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS};
+use super::{ARITHMETIC_BUS, MAX_ACCESSES_PER_CYCLE, MEMORY_BUS, READ_INSTRUCTION_BUS};
 
 const TEST_WORD_SIZE: usize = 1;
-const LIMB_BITS: usize = 8;
-const DECOMP: usize = 4;
+const LIMB_BITS: usize = 16;
+const DECOMP: usize = 8;
+
+const MAX_ACCESSES_PER_CYCLE_ISIZE: isize = MAX_ACCESSES_PER_CYCLE as isize;
 
 fn make_vm<const WORD_SIZE: usize, F: PrimeField32>(
     program: Vec<Instruction<F>>,
@@ -337,15 +339,39 @@ fn test_cpu_1() {
 
     let mut expected_memory_log = vec![
         MemoryAccess::from_isize(2, OpType::Write, 1, 0, n),
-        MemoryAccess::from_isize(3, OpType::Read, 1, 0, n),
+        MemoryAccess::from_isize(MAX_ACCESSES_PER_CYCLE_ISIZE, OpType::Read, 1, 0, n),
     ];
     for t in 0..n {
         let clock = 2 + (3 * t);
         expected_memory_log.extend(vec![
-            MemoryAccess::from_isize(3 * clock, OpType::Read, 1, 0, n - t),
-            MemoryAccess::from_isize((3 * clock) + 2, OpType::Write, 1, 0, n - t - 1),
-            MemoryAccess::from_isize((3 * (clock + 1)) + 2, OpType::Write, 1, 2, 4),
-            MemoryAccess::from_isize(3 * (clock + 2), OpType::Read, 1, 0, n - t - 1),
+            MemoryAccess::from_isize(
+                MAX_ACCESSES_PER_CYCLE_ISIZE * clock,
+                OpType::Read,
+                1,
+                0,
+                n - t,
+            ),
+            MemoryAccess::from_isize(
+                (MAX_ACCESSES_PER_CYCLE_ISIZE * clock) + 2,
+                OpType::Write,
+                1,
+                0,
+                n - t - 1,
+            ),
+            MemoryAccess::from_isize(
+                (MAX_ACCESSES_PER_CYCLE_ISIZE * (clock + 1)) + 2,
+                OpType::Write,
+                1,
+                2,
+                4,
+            ),
+            MemoryAccess::from_isize(
+                MAX_ACCESSES_PER_CYCLE_ISIZE * (clock + 2),
+                OpType::Read,
+                1,
+                0,
+                n - t - 1,
+            ),
         ]);
     }
 
@@ -399,8 +425,8 @@ fn test_cpu_without_field_arithmetic() {
 
     let expected_memory_log = vec![
         MemoryAccess::from_isize(2, OpType::Write, 1, 0, 5),
-        MemoryAccess::from_isize(3, OpType::Read, 1, 0, 5),
-        MemoryAccess::from_isize(6, OpType::Read, 1, 0, 5),
+        MemoryAccess::from_isize(MAX_ACCESSES_PER_CYCLE_ISIZE, OpType::Read, 1, 0, 5),
+        MemoryAccess::from_isize(2 * MAX_ACCESSES_PER_CYCLE_ISIZE, OpType::Read, 1, 0, 5),
     ];
 
     execution_test::<TEST_WORD_SIZE, BabyBear>(
