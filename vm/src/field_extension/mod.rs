@@ -225,6 +225,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
             FieldExtensionArithmeticChip::read_extension_element(vm, timestamp + 4, e, op_c)
         };
 
+        println!("{:?}", operand1);
+        println!("{:?}", operand2);
+
         let operand1_comp = [
             compose(operand1[0]),
             compose(operand1[1]),
@@ -278,9 +281,11 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         let mut result = [[F::zero(); WORD_SIZE]; EXTENSION_DEGREE];
 
         for (i, result_row) in result.iter_mut().enumerate() {
-            let data = vm
-                .memory_chip
-                .read_word(timestamp + i, address_space, address);
+            let data = vm.memory_chip.read_word(
+                timestamp + i,
+                address_space,
+                address + F::from_canonical_usize(i * WORD_SIZE),
+            );
 
             *result_row = data;
         }
@@ -298,8 +303,12 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         assert!(address_space != F::zero());
 
         for (i, row) in result.iter().enumerate() {
-            vm.memory_chip
-                .write_word(timestamp + i, address_space, address, *row);
+            vm.memory_chip.write_word(
+                timestamp + i,
+                address_space,
+                address + F::from_canonical_usize(i * WORD_SIZE),
+                *row,
+            );
         }
     }
 }
