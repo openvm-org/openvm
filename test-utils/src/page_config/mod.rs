@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::config::{EngineType, FriParameters};
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub enum PageMode {
@@ -18,8 +20,15 @@ pub struct PageParamsConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct StarkEngineConfig {
+    pub engine: EngineType,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PageConfig {
     pub page: PageParamsConfig,
+    pub fri_params: FriParameters,
+    pub stark_engine: StarkEngineConfig,
 }
 
 impl PageConfig {
