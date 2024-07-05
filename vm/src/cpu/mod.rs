@@ -90,6 +90,9 @@ pub struct CpuOptions {
 impl CpuOptions {
     pub fn enabled_instructions(&self) -> Vec<OpCode> {
         let mut result = CORE_INSTRUCTIONS.to_vec();
+        if self.field_extension_enabled {
+            result.extend(FIELD_EXTENSION_INSTRUCTIONS);
+        }
         if self.field_arithmetic_enabled {
             result.extend(FIELD_ARITHMETIC_INSTRUCTIONS);
         }

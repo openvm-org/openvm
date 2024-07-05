@@ -49,7 +49,7 @@ fn get_rw_interactions<T: Field>(
 
         interactions.push(Interaction {
             fields,
-            count: VirtualPairCol::constant(T::one()),
+            count: VirtualPairCol::one(),
             argument_index: MEMORY_BUS,
         });
     }

@@ -130,7 +130,16 @@ pub fn get_chips<const WORD_SIZE: usize, SC: StarkGenericConfig>(
 where
     Val<SC>: PrimeField32,
 {
-    if vm.options().field_arithmetic_enabled {
+    if vm.options().field_extension_enabled {
+        vec![
+            &vm.cpu_air,
+            &vm.program_chip.air,
+            &vm.memory_chip.air,
+            &vm.range_checker.air,
+            &vm.field_arithmetic_chip.air,
+            &vm.field_extension_chip.air,
+        ]
+    } else if vm.options().field_arithmetic_enabled {
         vec![
             &vm.cpu_air,
             &vm.program_chip.air,
