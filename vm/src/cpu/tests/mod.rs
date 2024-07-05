@@ -10,14 +10,14 @@ use p3_matrix::Matrix;
 use crate::cpu::columns::{CpuCols, CpuIoCols};
 use crate::cpu::{CpuAir, CpuOptions};
 use crate::field_arithmetic::ArithmeticOperation;
-use crate::memory::{MemoryAccess, OpType};
+use crate::memory::{decompose, MemoryAccess, OpType};
 use crate::vm::config::{VmConfig, VmParamsConfig};
 use crate::vm::VirtualMachine;
 
 use super::columns::MemoryAccessCols;
 use super::trace::isize_to_field;
-use super::{decompose, ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS};
 use super::{trace::Instruction, OpCode::*};
+use super::{ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS};
 
 const TEST_WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 8;

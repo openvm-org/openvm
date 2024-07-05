@@ -7,11 +7,12 @@ use afs_chips::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
 
+use crate::memory::{compose, decompose};
 use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
-    compose, decompose, CpuAir,
+    CpuAir,
     OpCode::{self, *},
     INST_WIDTH, MAX_ACCESSES_PER_CYCLE, MAX_READS_PER_CYCLE, MAX_WRITES_PER_CYCLE,
 };
@@ -25,7 +26,6 @@ pub struct Instruction<F> {
     pub d: F,
     pub e: F,
 }
-
 pub fn isize_to_field<F: Field>(value: isize) -> F {
     if value < 0 {
         return F::neg_one() * F::from_canonical_usize(value.unsigned_abs());
@@ -142,12 +142,9 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     num_reads += 1;
                     assert!(num_reads <= MAX_READS_PER_CYCLE);
                     let timestamp = (MAX_ACCESSES_PER_CYCLE * clock_cycle) + (num_reads - 1);
-                    let data = if $address_space == F::zero() {
-                        decompose::<WORD_SIZE, F>($address)
-                    } else {
-                        vm.memory_chip
-                            .read_word(timestamp, $address_space, $address)
-                    };
+                    let data = vm
+                        .memory_chip
+                        .read_word(timestamp, $address_space, $address);
                     accesses[num_reads - 1] =
                         memory_access_to_cols(true, $address_space, $address, data);
                     compose(data)

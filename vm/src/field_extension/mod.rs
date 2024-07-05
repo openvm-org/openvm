@@ -1,7 +1,7 @@
 use p3_field::{Field, PrimeField32};
 
 use crate::{
-    cpu::{compose, decompose, trace::isize_to_field, OpCode},
+    cpu::{trace::isize_to_field, OpCode},
     vm::VirtualMachine,
 };
 
@@ -220,7 +220,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         let timestamp = clk * TIMESTAMP_FACTOR;
         let operand1 = FieldExtensionArithmeticChip::read_extension_element(vm, timestamp, d, op_b);
         let operand2 = if op == OpCode::BBE4INV {
-            [[F::zero(); WORD_SIZE]; EXTENSION_DEGREE]
+            [F::zero(); EXTENSION_DEGREE]
         } else {
             FieldExtensionArithmeticChip::read_extension_element(vm, timestamp + 4, e, op_c)
         };
@@ -228,42 +228,16 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         println!("{:?}", operand1);
         println!("{:?}", operand2);
 
-        let operand1_comp = [
-            compose(operand1[0]),
-            compose(operand1[1]),
-            compose(operand1[2]),
-            compose(operand1[3]),
-        ];
-        let operand2_comp = [
-            compose(operand2[0]),
-            compose(operand2[1]),
-            compose(operand2[2]),
-            compose(operand2[3]),
-        ];
+        let result = FieldExtensionArithmeticAir::solve::<F>(op, operand1, operand2).unwrap();
 
-        let result =
-            FieldExtensionArithmeticAir::solve::<F>(op, operand1_comp, operand2_comp).unwrap();
-        let result_decomp = [
-            decompose(result[0]),
-            decompose(result[1]),
-            decompose(result[2]),
-            decompose(result[3]),
-        ];
-
-        FieldExtensionArithmeticChip::write_extension_element(
-            vm,
-            timestamp + 8,
-            d,
-            op_a,
-            result_decomp,
-        );
+        FieldExtensionArithmeticChip::write_extension_element(vm, timestamp + 8, d, op_a, result);
 
         vm.field_extension_chip
             .operations
             .push(FieldExtensionArithmeticOperation {
                 opcode: op,
-                operand1: operand1_comp,
-                operand2: operand2_comp,
+                operand1,
+                operand2,
                 result,
             });
 
@@ -275,13 +249,13 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         timestamp: usize,
         address_space: F,
         address: F,
-    ) -> [[F; WORD_SIZE]; EXTENSION_DEGREE] {
+    ) -> [F; EXTENSION_DEGREE] {
         assert!(address_space != F::zero());
 
-        let mut result = [[F::zero(); WORD_SIZE]; EXTENSION_DEGREE];
+        let mut result = [F::zero(); EXTENSION_DEGREE];
 
         for (i, result_row) in result.iter_mut().enumerate() {
-            let data = vm.memory_chip.read_word(
+            let data = vm.memory_chip.read_elem(
                 timestamp + i,
                 address_space,
                 address + F::from_canonical_usize(i * WORD_SIZE),
@@ -298,12 +272,12 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         timestamp: usize,
         address_space: F,
         address: F,
-        result: [[F; WORD_SIZE]; EXTENSION_DEGREE],
+        result: [F; EXTENSION_DEGREE],
     ) {
         assert!(address_space != F::zero());
 
         for (i, row) in result.iter().enumerate() {
-            vm.memory_chip.write_word(
+            vm.memory_chip.write_elem(
                 timestamp + i,
                 address_space,
                 address + F::from_canonical_usize(i * WORD_SIZE),

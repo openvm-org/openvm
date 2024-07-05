@@ -3,7 +3,7 @@ use std::{array::from_fn, collections::HashMap};
 use afs_chips::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 use p3_field::PrimeField32;
 
-use crate::memory::OpType;
+use crate::memory::{compose, decompose, OpType};
 
 use super::MemoryAccess;
 
@@ -60,7 +60,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
     }
 
     pub fn read_word(&mut self, timestamp: usize, address_space: F, address: F) -> [F; WORD_SIZE] {
-        assert!(address_space != F::zero());
+        if address_space == F::zero() {
+            return decompose(address);
+        }
         if let Some(last_timestamp) = self.last_timestamp {
             assert!(timestamp > last_timestamp);
         }
@@ -99,5 +101,13 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             address,
             data,
         });
+    }
+
+    pub fn read_elem(&mut self, timestamp: usize, address_space: F, address: F) -> F {
+        compose(self.read_word(timestamp, address_space, address))
+    }
+
+    pub fn write_elem(&mut self, timestamp: usize, address_space: F, address: F, data: F) {
+        self.write_word(timestamp, address_space, address, decompose(data));
     }
 }
