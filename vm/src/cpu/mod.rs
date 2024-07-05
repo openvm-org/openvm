@@ -18,7 +18,8 @@ pub const RANGE_CHECKER_BUS: usize = 4;
 
 pub const MAX_READS_PER_CYCLE: usize = 2;
 pub const MAX_WRITES_PER_CYCLE: usize = 1;
-pub const MAX_ACCESSES_PER_CYCLE: usize = MAX_READS_PER_CYCLE + MAX_WRITES_PER_CYCLE;
+// pub const MAX_ACCESSES_PER_CYCLE: usize = MAX_READS_PER_CYCLE + MAX_WRITES_PER_CYCLE;
+pub const MAX_ACCESSES_PER_CYCLE: usize = 100;
 
 pub const WORD_SIZE: usize = 1;
 

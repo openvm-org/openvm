@@ -9,8 +9,8 @@ use stark_vm::vm::get_chips;
 use stark_vm::vm::VirtualMachine;
 
 const WORD_SIZE: usize = 1;
-const LIMB_BITS: usize = 8;
-const DECOMP: usize = 4;
+const LIMB_BITS: usize = 16;
+const DECOMP: usize = 8;
 
 fn air_test(
     field_arithmetic_enabled: bool,

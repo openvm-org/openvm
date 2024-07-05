@@ -15,7 +15,7 @@ pub mod tests;
 
 pub const BETA: usize = 11;
 pub const EXTENSION_DEGREE: usize = 4;
-pub const TIMESTAMP_FACTOR: usize = 20;
+pub const TIMESTAMP_FACTOR: usize = 100;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct FieldExtensionArithmeticOperation<F> {
