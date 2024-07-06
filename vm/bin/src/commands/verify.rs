@@ -7,7 +7,7 @@ use afs_test_utils::{
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
-use stark_vm::vm::{config::VmConfig, VirtualMachine};
+use stark_vm::vm::{config::VmConfig, get_chips, VirtualMachine};
 
 use crate::{
     asm::parse_asm_file,
@@ -61,7 +61,7 @@ impl VerifyCommand {
     pub fn execute_helper(&self, config: VmConfig) -> Result<()> {
         println!("Verifying proof file: {}", self.proof_file);
         let instructions = parse_asm_file(Path::new(&self.asm_file_path))?;
-        let vm = VirtualMachine::<WORD_SIZE, _>::new(config, instructions)?;
+        let mut vm = VirtualMachine::<WORD_SIZE, _>::new(config, instructions);
         let encoded_vk = read_from_path(&Path::new(&self.keys_folder).join("partial.vk"))?;
         let partial_vk: MultiStarkPartialVerifyingKey<BabyBearPoseidon2Config> =
             bincode::deserialize(&encoded_vk)?;
@@ -69,16 +69,19 @@ impl VerifyCommand {
         let encoded_proof = read_from_path(Path::new(&self.proof_file))?;
         let proof: Proof<BabyBearPoseidon2Config> = bincode::deserialize(&encoded_proof)?;
 
-        let engine = config::baby_bear_poseidon2::default_engine(vm.max_log_degree());
+        let engine = config::baby_bear_poseidon2::default_engine(vm.max_log_degree()?);
+
+        let chips = get_chips(&vm);
+        let num_chips = chips.len();
 
         let mut challenger = engine.new_challenger();
         let verifier = engine.verifier();
         let result = verifier.verify(
             &mut challenger,
             partial_vk,
-            vm.chips(),
+            chips,
             proof,
-            &vec![vec![]; vm.chips().len()],
+            &vec![vec![]; num_chips],
         );
 
         if result.is_err() {

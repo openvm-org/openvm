@@ -5,12 +5,11 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 
-use crate::cpu::{CpuAir, CpuOptions, READ_INSTRUCTION_BUS};
+use crate::cpu::READ_INSTRUCTION_BUS;
 
 use crate::cpu::{trace::Instruction, OpCode::*};
 use crate::program::columns::ProgramPreprocessedCols;
-
-use super::ProgramAir;
+use crate::program::ProgramChip;
 
 #[test]
 fn test_flatten_fromslice_roundtrip() {
@@ -27,20 +26,20 @@ fn test_flatten_fromslice_roundtrip() {
     assert_eq!(num_cols, flattened.len());
 }
 
-fn interaction_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>) {
-    let cpu_air = CpuAir::<1>::new(CpuOptions {
-        field_arithmetic_enabled: is_field_arithmetic_enabled,
-    });
-    let execution = cpu_air.generate_program_execution(program.clone()).unwrap();
-
-    let air = ProgramAir::new(program);
-    let trace = air.generate_trace(&execution);
+fn interaction_test(program: Vec<Instruction<BabyBear>>, execution: Vec<usize>) {
+    let mut chip = ProgramChip::new(program.clone());
+    let mut execution_frequencies = vec![0; program.len()];
+    for pc in execution {
+        execution_frequencies[pc] += 1;
+        chip.get_instruction(pc);
+    }
+    let trace = chip.generate_trace();
 
     let counter_air = DummyInteractionAir::new(7, true, READ_INSTRUCTION_BUS);
     let mut program_rows = vec![];
-    for (pc, instruction) in execution.program.iter().enumerate() {
+    for (pc, instruction) in program.iter().enumerate() {
         program_rows.extend(vec![
-            execution.execution_frequencies[pc],
+            BabyBear::from_canonical_usize(execution_frequencies[pc]),
             BabyBear::from_canonical_usize(pc),
             BabyBear::from_canonical_usize(instruction.opcode as usize),
             instruction.op_a,
@@ -57,7 +56,7 @@ fn interaction_test(is_field_arithmetic_enabled: bool, program: Vec<Instruction<
     println!("trace height = {}", trace.height());
     println!("counter trace height = {}", counter_trace.height());
 
-    run_simple_test_no_pis(vec![&air, &counter_air], vec![trace, counter_trace])
+    run_simple_test_no_pis(vec![&chip.air, &counter_air], vec![trace, counter_trace])
         .expect("Verification failed");
 }
 
@@ -81,13 +80,11 @@ fn test_program_1() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    interaction_test(true, program.clone());
+    interaction_test(program.clone(), vec![0, 3, 2, 5]);
 }
 
 #[test]
 fn test_program_without_field_arithmetic() {
-    let field_arithmetic_enabled = false;
-
     // see cpu/tests/mod.rs
     let program = vec![
         // word[0]_1 <- word[5]_0
@@ -102,7 +99,7 @@ fn test_program_without_field_arithmetic() {
         Instruction::from_isize(BEQ, 0, 5, -1, 1, 0),
     ];
 
-    interaction_test(field_arithmetic_enabled, program.clone());
+    interaction_test(program.clone(), vec![0, 2, 4, 1]);
 }
 
 #[test]
@@ -114,19 +111,18 @@ fn test_program_negative() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    let cpu_air = CpuAir::<1>::new(CpuOptions {
-        field_arithmetic_enabled: true,
-    });
-    let execution = cpu_air.generate_program_execution(program.clone()).unwrap();
-
-    let air = ProgramAir { program };
-    let trace = air.generate_trace(&execution);
+    let mut chip = ProgramChip::new(program.clone());
+    let execution_frequencies = vec![1; program.len()];
+    for pc in 0..program.len() {
+        chip.get_instruction(pc);
+    }
+    let trace = chip.generate_trace();
 
     let counter_air = DummyInteractionAir::new(7, true, READ_INSTRUCTION_BUS);
     let mut program_rows = vec![];
-    for (pc, instruction) in execution.program.iter().enumerate() {
+    for (pc, instruction) in program.iter().enumerate() {
         program_rows.extend(vec![
-            execution.execution_frequencies[pc],
+            BabyBear::from_canonical_usize(execution_frequencies[pc]),
             BabyBear::from_canonical_usize(pc),
             BabyBear::from_canonical_usize(instruction.opcode as usize),
             instruction.op_a,
@@ -139,6 +135,6 @@ fn test_program_negative() {
     let mut counter_trace = RowMajorMatrix::new(program_rows, 8);
     counter_trace.row_mut(1)[1] = BabyBear::zero();
 
-    run_simple_test_no_pis(vec![&air, &counter_air], vec![trace, counter_trace])
+    run_simple_test_no_pis(vec![&chip.air, &counter_air], vec![trace, counter_trace])
         .expect("Incorrect failure mode");
 }

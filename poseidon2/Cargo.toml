@@ -1,9 +1,8 @@
 [package]
-name = "stark-vm"
+name = "poseidon2"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Aggregation VM STARK"
 
 [dependencies]
 p3-air = { workspace = true }

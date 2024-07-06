@@ -1,7 +1,3 @@
-//use crate::range_gate::RangeCheckerGateChip;
-
-use std::array::from_fn;
-
 use enum_utils::FromStr;
 
 #[cfg(test)]
@@ -62,7 +58,6 @@ impl OpCode {
     }
 }
 
-use p3_field::PrimeField64;
 use OpCode::*;
 
 const CORE_INSTRUCTIONS: [OpCode; 6] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE];
@@ -96,16 +91,4 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
     pub fn new(options: CpuOptions) -> Self {
         Self { options }
     }
-}
-
-// panics if the word is not equal to decompose(elem) for some elem: F
-pub fn compose<const WORD_SIZE: usize, F: PrimeField64>(word: [F; WORD_SIZE]) -> F {
-    for &cell in word.iter().skip(1) {
-        assert_eq!(cell, F::zero());
-    }
-    word[0]
-}
-
-pub fn decompose<const WORD_SIZE: usize, F: PrimeField64>(field_elem: F) -> [F; WORD_SIZE] {
-    from_fn(|i| if i == 0 { field_elem } else { F::zero() })
 }
