@@ -2,9 +2,9 @@
 index_bytes = 32
 data_bytes = 32
 bits_per_fe = 16
-height = 65536
+height = 256
 mode = "ReadWrite" # options: "ReadOnly", "ReadWrite"
-max_rw_ops = 65536
+max_rw_ops = 256
 
 [fri_params]
 log_blowup = 2

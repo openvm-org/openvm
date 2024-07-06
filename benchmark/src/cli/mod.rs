@@ -25,8 +25,8 @@ impl Cli {
     pub fn run() {
         let cli = Self::parse();
         match cli.command {
-            Commands::Rw(rw) => rw.execute(),
-            Commands::Olap(olap) => olap.execute(),
+            Commands::Rw(rw) => rw.execute().unwrap(),
+            Commands::Olap(olap) => olap.execute().unwrap(),
         }
     }
 }

@@ -33,7 +33,7 @@ pub struct CommonCommands {
     pub silent: bool,
 }
 
-pub fn parse_configs(config_files: &String) -> Vec<PageConfig> {
+pub fn parse_configs(config_files: String) -> Vec<PageConfig> {
     config_files
         .split(',')
         .map(PageConfig::read_config_file)

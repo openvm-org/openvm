@@ -111,7 +111,7 @@ where
         let encoded_vk: Vec<u8> = bincode::serialize(&partial_vk)?;
         let pk_path = output_folder.clone() + "/" + &prefix.clone() + ".partial.pk";
         let vk_path = output_folder.clone() + "/" + &prefix.clone() + ".partial.vk";
-        fs::create_dir_all(&output_folder).unwrap();
+        let _ = fs::create_dir_all(&output_folder);
         write_bytes(&encoded_pk, pk_path).unwrap();
         write_bytes(&encoded_vk, vk_path).unwrap();
         Ok(())

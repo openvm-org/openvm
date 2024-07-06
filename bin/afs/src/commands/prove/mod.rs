@@ -92,11 +92,28 @@ where
     SC::Challenge: Send + Sync,
 {
     /// Execute the `prove` command
-    pub fn execute(&self, config: &PageConfig, engine: &E) -> Result<()> {
+    pub fn execute(
+        config: &PageConfig,
+        engine: &E,
+        afi_file_path: String,
+        db_file_path: String,
+        keys_folder: String,
+        cache_folder: String,
+        silent: bool,
+    ) -> Result<()> {
         let start = Instant::now();
         let prefix = create_prefix(config);
         match config.page.mode {
-            PageMode::ReadWrite => self.execute_rw(config, engine, prefix)?,
+            PageMode::ReadWrite => Self::execute_rw(
+                config,
+                engine,
+                prefix,
+                afi_file_path,
+                db_file_path,
+                keys_folder,
+                cache_folder,
+                silent,
+            )?,
             PageMode::ReadOnly => panic!(),
         }
 
@@ -106,10 +123,19 @@ where
         Ok(())
     }
 
-    pub fn execute_rw(&self, config: &PageConfig, engine: &E, prefix: String) -> Result<()> {
-        println!("Proving ops file: {}", self.afi_file_path);
-        let instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
-        let mut db = MockDb::from_file(&self.db_file_path);
+    pub fn execute_rw(
+        config: &PageConfig,
+        engine: &E,
+        prefix: String,
+        afi_file_path: String,
+        db_file_path: String,
+        keys_folder: String,
+        cache_folder: String,
+        silent: bool,
+    ) -> Result<()> {
+        println!("Proving ops file: {}", afi_file_path);
+        let instructions = AfsInputInstructions::from_file(&afi_file_path)?;
+        let mut db = MockDb::from_file(&db_file_path);
         let idx_len = (config.page.index_bytes + 1) / 2;
         let data_len = (config.page.data_bytes + 1) / 2;
         let height = config.page.height;
@@ -157,7 +183,7 @@ where
         let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
         let init_prover_data_encoded =
-            read_from_path(self.cache_folder.clone() + "/" + &table_id + ".cache.bin").unwrap();
+            read_from_path(cache_folder.clone() + "/" + &table_id + ".cache.bin").unwrap();
         let init_prover_data: ProverTraceData<SC> =
             bincode::deserialize(&init_prover_data_encoded).unwrap();
 
@@ -175,7 +201,7 @@ where
             ops_sender.generate_trace_testing(&zk_ops, config.page.max_rw_ops, 1);
 
         let encoded_pk =
-            read_from_path(self.keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
+            read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
         let partial_pk: MultiStarkPartialProvingKey<SC> =
             bincode::deserialize(&encoded_pk).unwrap();
         let proof = page_controller.prove(
@@ -189,16 +215,16 @@ where
         );
         let encoded_proof: Vec<u8> = bincode::serialize(&proof).unwrap();
         let table = interface.get_table(table_id.clone()).unwrap();
-        if !self.silent {
+        if !silent {
             println!("Table ID: {}", table_id);
             println!("{:?}", table.metadata);
             for (index, data) in table.body.iter() {
                 println!("{:?}: {:?}", index, data);
             }
         }
-        let proof_path = self.db_file_path.clone() + ".prove.bin";
+        let proof_path = db_file_path.clone() + ".prove.bin";
         write_bytes(&encoded_proof, proof_path).unwrap();
-        db.save_to_file(&(self.db_file_path.clone() + ".0"))?;
+        db.save_to_file(&(db_file_path.clone() + ".0"))?;
         Ok(())
     }
 }

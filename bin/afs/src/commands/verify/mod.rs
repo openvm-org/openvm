@@ -59,11 +59,24 @@ where
     Val<SC>: PrimeField64,
 {
     /// Execute the `verify` command
-    pub fn execute(&self, config: &PageConfig, engine: &E) -> Result<()> {
+    pub fn execute(
+        config: &PageConfig,
+        engine: &E,
+        proof_file: String,
+        init_db_file_path: String,
+        keys_folder: String,
+    ) -> Result<()> {
         let start = Instant::now();
         let prefix = create_prefix(config);
         match config.page.mode {
-            PageMode::ReadWrite => self.execute_rw(config, engine, prefix)?,
+            PageMode::ReadWrite => Self::execute_rw(
+                config,
+                engine,
+                prefix,
+                proof_file,
+                init_db_file_path,
+                keys_folder,
+            )?,
             PageMode::ReadOnly => panic!(),
         }
 
@@ -73,7 +86,14 @@ where
         Ok(())
     }
 
-    pub fn execute_rw(&self, config: &PageConfig, engine: &E, prefix: String) -> Result<()> {
+    pub fn execute_rw(
+        config: &PageConfig,
+        engine: &E,
+        prefix: String,
+        proof_file: String,
+        init_db_file_path: String,
+        keys_folder: String,
+    ) -> Result<()> {
         let idx_len = (config.page.index_bytes + 1) / 2;
         let data_len = (config.page.data_bytes + 1) / 2;
         let height = config.page.height;
@@ -85,14 +105,14 @@ where
 
         let idx_limb_bits = config.page.bits_per_fe;
         let idx_decomp = 8;
-        println!("Verifying proof file: {}", self.proof_file);
+        println!("Verifying proof file: {}", proof_file);
 
         let encoded_vk =
-            read_from_path(self.keys_folder.clone() + "/" + &prefix + ".partial.vk").unwrap();
+            read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.vk").unwrap();
         let partial_vk: MultiStarkPartialVerifyingKey<SC> =
             bincode::deserialize(&encoded_vk).unwrap();
 
-        let encoded_proof = read_from_path(self.proof_file.clone()).unwrap();
+        let encoded_proof = read_from_path(proof_file.clone()).unwrap();
         let proof: Proof<SC> = bincode::deserialize(&encoded_proof).unwrap();
         let page_controller: PageController<SC> = PageController::new(
             page_bus_index,
@@ -111,13 +131,13 @@ where
             println!("Verification Succeeded!");
             println!("Updates Committed");
             {
-                let init_file = File::create(self.init_db_file_path.clone()).unwrap();
-                let new_file = File::open(self.init_db_file_path.clone() + ".0").unwrap();
+                let init_file = File::create(init_db_file_path.clone()).unwrap();
+                let new_file = File::open(init_db_file_path.clone() + ".0").unwrap();
                 let mut reader = BufReader::new(new_file);
                 let mut writer = BufWriter::new(init_file);
                 copy(&mut reader, &mut writer).unwrap();
             }
-            remove_file(self.init_db_file_path.clone() + ".0").unwrap();
+            remove_file(init_db_file_path.clone() + ".0").unwrap();
         }
         Ok(())
     }

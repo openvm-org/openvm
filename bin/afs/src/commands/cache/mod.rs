@@ -48,17 +48,23 @@ where
     PcsProverData<SC>: Serialize,
 {
     /// Execute the `cache` command
-    pub fn execute(&self, config: &PageConfig, engine: &E) -> Result<()> {
-        println!("Caching table {} from {}", self.table_id, self.db_file_path);
+    pub fn execute(
+        config: &PageConfig,
+        engine: &E,
+        table_id: String,
+        db_file_path: String,
+        output_folder: String,
+    ) -> Result<()> {
+        println!("Caching table {} from {}", table_id, db_file_path);
 
         let start = Instant::now();
-        let mut db = MockDb::from_file(&self.db_file_path);
+        let mut db = MockDb::from_file(&db_file_path);
         let height = config.page.height;
         assert!(height > 0);
 
         let mut interface =
             AfsInterface::new(config.page.index_bytes, config.page.data_bytes, &mut db);
-        let page = interface.get_table(self.table_id.clone()).unwrap().to_page(
+        let page = interface.get_table(table_id.clone()).unwrap().to_page(
             config.page.index_bytes,
             config.page.data_bytes,
             height,
@@ -69,11 +75,11 @@ where
         let trace_builder = TraceCommitmentBuilder::<SC>::new(prover.pcs());
         let prover_trace_data = trace_builder.committer.commit(vec![trace]);
         let encoded_data = bincode::serialize(&prover_trace_data).unwrap();
-        let path = self.output_folder.clone() + "/" + &self.table_id + ".cache.bin";
+        let path = output_folder.clone() + "/" + &table_id + ".cache.bin";
         write_bytes(&encoded_data, path).unwrap();
 
         let duration = start.elapsed();
-        println!("Cached table {} in {:?}", self.table_id, duration);
+        println!("Cached table {} in {:?}", table_id, duration);
 
         Ok(())
     }
