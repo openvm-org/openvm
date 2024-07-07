@@ -1,4 +1,6 @@
-use afs_chips::single_page_index_scan::page_index_scan_input::Comp;
+use afs_chips::{
+    group_by::group_by_input::GroupByOperation, single_page_index_scan::page_index_scan_input::Comp,
+};
 use color_eyre::eyre::{eyre, Result};
 use serde_derive::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -110,24 +112,27 @@ pub struct GroupByOp {
     pub table_id: TableId,
     pub group_by_cols: Vec<usize>,
     pub agg_col: usize,
+    pub op: GroupByOperation,
 }
 
 impl GroupByOp {
     pub fn parse(args: Vec<String>) -> Result<Self> {
-        if args.len() < 3 {
-            return Err(eyre!("Invalid number of arguments for GROUP BY op"));
+        if args.len() < 4 {
+            return Err(eyre!("GROUP BY op requires at least 4 arguments"));
         }
         let table_id = string_to_table_id(args[0].clone());
         let num_args = args.len();
-        let group_by_cols = args[1..num_args - 1]
+        let group_by_cols = args[1..num_args - 2]
             .iter()
             .map(|s| s.parse::<usize>().unwrap())
             .collect();
-        let agg_col = args[num_args - 1].parse::<usize>()?;
+        let agg_col = args[num_args - 2].parse::<usize>()?;
+        let op = GroupByOperation::from_str(&args[num_args - 1])?;
         Ok(Self {
             table_id,
             group_by_cols,
             agg_col,
+            op,
         })
     }
 }

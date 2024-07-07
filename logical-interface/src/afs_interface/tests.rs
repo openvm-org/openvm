@@ -1,7 +1,6 @@
 use crate::{
     afs_interface::utils::string_to_table_id,
     mock_db::MockDb,
-    table::types::TableMetadata,
     utils::{string_to_u8_vec, uint_to_be_vec},
 };
 

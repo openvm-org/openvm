@@ -456,6 +456,10 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
         )
     }
 
+    pub fn traces(&self) -> Option<&IJTraces<Val<SC>>> {
+        self.traces.as_ref()
+    }
+
     /// This function takes two tables T1 and T2 and the range of the foreign key in T2
     /// It returns the Page resulting from the inner join operations on those parameters
     fn inner_join(&self, t1: &Page, t2: &Page, fkey_start: usize, fkey_end: usize) -> Page {

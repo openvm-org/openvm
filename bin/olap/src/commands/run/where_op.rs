@@ -14,7 +14,7 @@ use logical_interface::{
     afs_input::operation::WhereOp,
     afs_interface::AfsInterface,
     mock_db::MockDb,
-    utils::{fixed_bytes_to_field_vec, string_to_u8_vec},
+    utils::{fixed_bytes_to_u16_vec, string_to_u8_vec},
 };
 use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_strict_usize;
@@ -65,7 +65,7 @@ pub fn execute_where_op<SC: StarkGenericConfig>(
     );
 
     let value = string_to_u8_vec(op.value, index_bytes);
-    let value = fixed_bytes_to_field_vec(value);
+    let value = fixed_bytes_to_u16_vec(value);
     let output_page =
         page_controller.gen_output(input_page.clone(), value.clone(), page_width, op.predicate);
 
@@ -78,9 +78,11 @@ pub fn execute_where_op<SC: StarkGenericConfig>(
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-    page_controller.load_page(
+    let (input_prover_data, output_prover_data) = page_controller.load_page(
         input_page.clone(),
         output_page.clone(),
+        None,
+        None,
         value.clone(),
         index_len,
         data_len,
@@ -104,6 +106,8 @@ pub fn execute_where_op<SC: StarkGenericConfig>(
         &engine,
         &partial_pk,
         &mut trace_builder,
+        input_prover_data,
+        output_prover_data,
         value.clone(),
         degree,
     );

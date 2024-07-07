@@ -6,7 +6,7 @@ use std::{
 use crate::commands::run::{utils::pretty_print_page, PageConfig, RunCommand};
 use afs_chips::{
     common::page::Page,
-    inner_join::controller::{FKInnerJoinController, IJBuses, TableFormat},
+    inner_join::controller::{FKInnerJoinController, IJBuses, T2Format, TableFormat},
 };
 use afs_stark_backend::{keygen::MultiStarkKeygenBuilder, prover::trace::TraceCommitmentBuilder};
 use afs_test_utils::{config::baby_bear_poseidon2, engine::StarkEngine};
@@ -74,14 +74,13 @@ pub fn execute_inner_join<SC: StarkGenericConfig>(
         t2_output_bus_index: T2_OUTPUT_BUS,
     };
     let t1_format = TableFormat::new(index_len_left, data_len_left, limb_bits);
-    let t2_format = TableFormat::new(index_len_right, data_len_right, limb_bits);
+    let t2_table_format = TableFormat::new(index_len_right, data_len_right, limb_bits);
+    let t2_format = T2Format::new(t2_table_format, op.fkey_start, op.fkey_end);
 
     let mut inner_join_controller = FKInnerJoinController::new(
         inner_join_buses,
         t1_format,
         t2_format,
-        op.fkey_start,
-        op.fkey_end,
         range_chip_idx_decomp,
     );
     let engine = baby_bear_poseidon2::default_engine(degree + 1);
@@ -94,7 +93,7 @@ pub fn execute_inner_join<SC: StarkGenericConfig>(
         &mut trace_builder.committer,
     );
 
-    let output_trace = &inner_join_controller.traces().output_main_trace;
+    let output_trace = &inner_join_controller.traces().unwrap().output_main_trace;
     let output_page = Page::from_trace(
         output_trace,
         index_len_right,

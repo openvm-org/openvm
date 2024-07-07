@@ -1,4 +1,6 @@
-use afs_chips::single_page_index_scan::page_index_scan_input::Comp;
+use afs_chips::{
+    group_by::group_by_input::GroupByOperation, single_page_index_scan::page_index_scan_input::Comp,
+};
 
 use crate::{
     afs_input::{
@@ -108,6 +110,7 @@ pub fn test_parse_group_by_op() {
         "10".to_string(),
         "20".to_string(),
         "61".to_string(),
+        "SUM".to_string(),
     ];
     let op = GroupByOp::parse(args).unwrap();
     assert_eq!(
@@ -116,6 +119,7 @@ pub fn test_parse_group_by_op() {
             table_id: string_to_table_id("0x11".to_string()),
             group_by_cols: vec![5, 10, 20],
             agg_col: 61,
+            op: GroupByOperation::Sum,
         }
     );
 }

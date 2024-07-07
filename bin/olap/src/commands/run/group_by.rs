@@ -4,7 +4,10 @@ use std::{
 };
 
 use crate::commands::run::{utils::pretty_print_page, PageConfig, RunCommand};
-use afs_chips::{common::page::Page, group_by::page_controller::PageController};
+use afs_chips::{
+    common::page::Page,
+    group_by::{group_by_input::GroupByOperation, page_controller::PageController},
+};
 use afs_stark_backend::{keygen::MultiStarkKeygenBuilder, prover::trace::TraceCommitmentBuilder};
 use afs_test_utils::{
     config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
@@ -64,6 +67,8 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
         RANGE_BUS,
         limb_bits,
         decomp,
+        false,
+        op.op,
     );
     page_controller.refresh_range_checker();
     let engine = baby_bear_poseidon2::default_engine(degree + 1);
@@ -73,8 +78,8 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
 
     let prover = engine.prover();
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
-    let (group_by_traces, _group_by_commitments, prover_data) =
-        page_controller.load_page(&page, &trace_builder.committer);
+    let (group_by_traces, _group_by_commitments, input_prover_data, output_prover_data) =
+        page_controller.load_page(&page, None, None, &trace_builder.committer);
     let final_page_trace = group_by_traces.final_page_trace.clone();
 
     let partial_pk = keygen_builder.generate_partial_pk();
@@ -84,7 +89,8 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
         &partial_pk,
         &mut trace_builder,
         group_by_traces,
-        prover_data,
+        input_prover_data,
+        output_prover_data,
     );
 
     let output_page = Page::from_trace(&final_page_trace, op.group_by_cols.len(), 1);
