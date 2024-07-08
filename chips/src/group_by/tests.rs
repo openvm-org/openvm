@@ -291,10 +291,10 @@ fn perturb_page(
 fn test_static_values() {
     let page_vec = vec![
         vec![1, 0, 0, 1, 1, 0, 0, 0, 1],
-        vec![1, 0, 0, 1, 5, 0, 0, 0, 9],
-        vec![1, 0, 0, 3, 9, 0, 0, 1, 5],
-        vec![1, 0, 0, 3, 1, 0, 0, 9, 1],
-        vec![1, 0, 1, 5, 6, 0, 0, 0, 2],
+        vec![1, 0, 1, 1, 5, 0, 0, 0, 9],
+        vec![1, 0, 2, 3, 9, 0, 0, 1, 5],
+        vec![1, 0, 3, 3, 1, 0, 0, 9, 1],
+        vec![1, 0, 4, 5, 6, 0, 0, 0, 2],
         vec![1, 1, 1, 5, 8, 0, 1, 0, 1],
         vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
         vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -325,7 +325,7 @@ fn test_static_values() {
         vec![0, 0, 0],
         vec![0, 0, 0],
     ];
-    let page = Page::from_2d_vec(&page_vec, 0, 8);
+    let page = Page::from_2d_vec(&page_vec, 2, 6);
     let page_width = page_vec[0].len();
     let height = page_vec.len();
     let limb_bits = 10;
@@ -338,8 +338,8 @@ fn test_static_values() {
     let op = GroupByOperation::Sum;
     let mut page_controller = PageController::new(
         page_width,
-        vec![2],
-        3,
+        vec![0],
+        1,
         internal_bus,
         output_bus,
         range_bus,
