@@ -187,18 +187,6 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
         )
     }
 
-    pub fn horizen_config() -> Poseidon2Config<16, BabyBear> {
-        let (external_round_constants, internal_round_constants, horizen_int_diag) =
-            Self::horizen_round_consts();
-        Poseidon2Config::<16, BabyBear> {
-            external_constants: external_round_constants,
-            internal_constants: internal_round_constants,
-            ext_mds_matrix: Poseidon2Air::<16, BabyBear>::HL_MDS_MAT_4,
-            int_diag_m1_matrix: horizen_int_diag,
-            reduction_factor: BabyBear::one(),
-        }
-    }
-
     pub fn new_p3_baby_bear_16() -> Poseidon2Air<16, BabyBear> {
         let (external_round_constants, internal_round_constants, horizen_int_diag) =
             Self::horizen_round_consts();
@@ -211,5 +199,19 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
             BabyBear::one(),
             0,
         )
+    }
+}
+
+impl Poseidon2Config<16, BabyBear> {
+    pub fn horizen_config() -> Self {
+        let (external_round_constants, internal_round_constants, horizen_int_diag) =
+            Poseidon2Air::<16, BabyBear>::horizen_round_consts();
+        Self {
+            external_constants: external_round_constants,
+            internal_constants: internal_round_constants,
+            ext_mds_matrix: Poseidon2Air::<16, BabyBear>::HL_MDS_MAT_4,
+            int_diag_m1_matrix: horizen_int_diag,
+            reduction_factor: BabyBear::one(),
+        }
     }
 }

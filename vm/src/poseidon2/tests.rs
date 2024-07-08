@@ -14,6 +14,7 @@ use afs_test_utils::{
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
+use poseidon2::poseidon2::Poseidon2Config;
 use rand::Rng;
 
 const WORD_SIZE: usize = 1;
@@ -55,6 +56,7 @@ fn poseidon2_chip_test() {
             },
         },
         vec![],
+        Poseidon2Config::<16, BabyBear>::horizen_config(),
     );
 
     for op in ops {
