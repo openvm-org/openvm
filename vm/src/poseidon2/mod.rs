@@ -13,15 +13,13 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-/// Field arithmetic chip.
+/// Poseidon2 chip.
 ///
-/// Carries information about opcodes (currently 6..=9) and bus index (currently 2).
+/// Carries the requested rows and the underlying air.
 
-// #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct Poseidon2Chip<const WIDTH: usize, F: Field> {
+pub struct Poseidon2Chip<const WIDTH: usize, F: Clone> {
     pub air: Poseidon2Air<WIDTH, F>,
     pub rows: Vec<Poseidon2ChipCols<WIDTH, F>>,
-    pub input: Option<Poseidon2Query<F>>,
 }
 
 pub struct Poseidon2Query<F> {
@@ -37,6 +35,7 @@ pub struct Poseidon2Query<F> {
 impl<F: Field> Poseidon2Query<F> {
     pub fn to_io_cols(&self) -> Poseidon2ChipIoCols<F> {
         Poseidon2ChipIoCols::<F> {
+            is_alloc: F::from_canonical_u32(1),
             clk: F::from_canonical_usize(self.clk),
             a: self.a,
             b: self.b,

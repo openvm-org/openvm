@@ -1,10 +1,10 @@
 use super::columns::Poseidon2Cols;
 use super::Poseidon2Air;
 use afs_chips::sub_chip::LocalTraceInstructions;
-use p3_field::PrimeField;
+use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
-impl<const WIDTH: usize, F: PrimeField> Poseidon2Air<WIDTH, F> {
+impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
     /// Return cached state trace if it exists (input is ignored), otherwise generate trace and return
     ///
     /// TODO: For more efficient trace generation, a custom `DiffusionMatrix` and `ExternalMatrix` should
@@ -97,7 +97,7 @@ impl<const WIDTH: usize, F: PrimeField> Poseidon2Air<WIDTH, F> {
     }
 }
 
-impl<const WIDTH: usize, F: PrimeField> LocalTraceInstructions<F> for Poseidon2Air<WIDTH, F> {
+impl<const WIDTH: usize, F: Field> LocalTraceInstructions<F> for Poseidon2Air<WIDTH, F> {
     type LocalInput = [F; WIDTH];
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
         Poseidon2Cols::from_slice(
