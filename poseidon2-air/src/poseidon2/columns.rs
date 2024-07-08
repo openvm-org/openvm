@@ -1,4 +1,6 @@
 use crate::poseidon2::Poseidon2Air;
+use afs_chips::sub_chip::LocalTraceInstructions;
+use p3_field::Field;
 use std::ops::Range;
 
 /// Composed of IO and Aux columns, which are disjoint
@@ -102,6 +104,16 @@ impl<const WIDTH: usize, T: Clone> Poseidon2Cols<WIDTH, T> {
         let mut flattened = self.io.flatten();
         flattened.extend(self.aux.flatten());
         flattened
+    }
+}
+
+impl<const WIDTH: usize, T: Field> Poseidon2Cols<WIDTH, T> {
+    pub fn blank_row(poseidon2_air: &Poseidon2Air<WIDTH, T>) -> Self {
+        let zero_row = [T::zero(); WIDTH];
+        Poseidon2Cols::from_slice(
+            poseidon2_air.generate_local_trace(zero_row).as_slice(),
+            &Poseidon2Cols::<WIDTH, T>::index_map(poseidon2_air),
+        )
     }
 }
 
