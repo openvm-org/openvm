@@ -15,6 +15,7 @@ pub const MEMORY_BUS: usize = 1;
 pub const ARITHMETIC_BUS: usize = 2;
 pub const FIELD_EXTENSION_BUS: usize = 3;
 pub const RANGE_CHECKER_BUS: usize = 4;
+pub const POSEIDON2_BUS: usize = 5;
 
 pub const CPU_MAX_READS_PER_CYCLE: usize = 2;
 pub const CPU_MAX_WRITES_PER_CYCLE: usize = 1;

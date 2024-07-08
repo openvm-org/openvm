@@ -6,13 +6,14 @@ use p3_field::PrimeField32;
 use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
+use poseidon2::poseidon2::Poseidon2Config;
 
 pub enum Void {}
 
 use crate::{
     cpu::{
         trace::{ExecutionError, Instruction},
-        CpuAir, CpuOptions, RANGE_CHECKER_BUS,
+        CpuAir, CpuOptions, POSEIDON2_BUS, RANGE_CHECKER_BUS,
     },
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
@@ -40,7 +41,11 @@ pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
-    pub fn new(config: VmConfig, program: Vec<Instruction<F>>) -> Self {
+    pub fn new(
+        config: VmConfig,
+        program: Vec<Instruction<F>>,
+        poseidon2_config: Poseidon2Config<16, F>,
+    ) -> Self {
         let config = config.vm;
         let decomp = config.decomp;
         let limb_bits = config.limb_bits;
@@ -52,7 +57,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
         let memory_chip = MemoryChip::new(limb_bits, limb_bits, limb_bits, decomp);
         let field_arithmetic_chip = FieldArithmeticChip::new();
         let field_extension_chip = FieldExtensionArithmeticChip::new();
-        let poseidon2_chip = Poseidon2Chip::new(16, F::one());
+        let poseidon2_chip = Poseidon2Chip::from_poseidon2_config(poseidon2_config, POSEIDON2_BUS);
 
         Self {
             config,
