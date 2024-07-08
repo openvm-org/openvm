@@ -54,11 +54,7 @@ impl ProveCommand {
     pub fn execute_helper(&self, config: VmConfig) -> Result<()> {
         println!("Proving program: {}", self.asm_file_path);
         let instructions = parse_asm_file(Path::new(&self.asm_file_path.clone()))?;
-<<<<<<< HEAD
-        let vm = VirtualMachine::<WORD_SIZE, _>::new(config, instructions, vec![])?;
-=======
         let mut vm = VirtualMachine::<WORD_SIZE, _>::new(config, instructions);
->>>>>>> main
 
         let engine = config::baby_bear_poseidon2::default_engine(vm.max_log_degree()?);
         let encoded_pk = read_from_path(&Path::new(&self.keys_folder.clone()).join("partial.pk"))?;
