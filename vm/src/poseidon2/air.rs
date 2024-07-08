@@ -27,5 +27,6 @@ where
         let local = main.row_slice(0);
         let cols: &[<AB>::Var] = (*local).borrow();
         let cols = Poseidon2ChipCols::<WIDTH, AB::Var>::from_slice(cols, self);
+        SubAir::<AB>::eval(self.air, builder, cols.aux.io, cols.aux.aux);
     }
 }

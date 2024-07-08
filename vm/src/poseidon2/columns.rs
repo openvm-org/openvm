@@ -39,17 +39,10 @@ where
         result
     }
 
-    // pub fn blank_row() -> Self {
-    //     Self {
-    //         io: Poseidon2ChipIoCols::<T>::blank_row(),
-    //         aux: Poseidon2Cols::<WIDTH, T>::blank_row(),
-    //     }
-    // }
-
     pub fn from_slice(
         slice: &[T],
         poseidon2_chip: &Poseidon2Chip<WIDTH, T>,
-    ) -> Poseidon2ChipCols<WIDTH, _> {
+    ) -> Poseidon2ChipCols<WIDTH, T> {
         let io_width = Poseidon2ChipIoCols::<T>::get_width();
         Self {
             io: Poseidon2ChipIoCols::<T>::from_slice(&slice[..io_width]),

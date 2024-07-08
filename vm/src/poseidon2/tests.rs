@@ -1,7 +1,3 @@
-use super::columns::FieldArithmeticCols;
-use super::columns::FieldArithmeticIOCols;
-use super::FieldArithmeticAir;
-use super::FieldArithmeticChip;
 use crate::cpu::OpCode;
 use afs_stark_backend::prover::USE_DEBUG_BUILDER;
 use afs_stark_backend::verifier::VerificationError;
