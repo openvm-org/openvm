@@ -74,14 +74,14 @@ fn poseidon2_chip_test() {
     let write_ops: [WriteOps; 16] = core::array::from_fn(|i| {
         if i < 8 {
             WriteOps {
-                clk: 40 + i,
+                clk: i,
                 ad_s: d,
                 address: a + BabyBear::from_canonical_usize(i),
                 data: [chunk1[i]],
             }
         } else {
             WriteOps {
-                clk: 40 + i,
+                clk: i,
                 ad_s: d,
                 address: b + BabyBear::from_canonical_usize(i - 8),
                 data: [chunk2[i - 8]],
