@@ -131,7 +131,7 @@ fn poseidon2_chip_test() {
     // engine generation
     // let max_trace_height = traces.iter().map(|trace| trace.height()).max().unwrap();
     // let max_log_degree = log2_strict_usize(max_trace_height);
-    let max_log_degree = 0;
+    let max_log_degree = 6;
     let perm = random_perm();
     let fri_params = fri_params_with_80_bits_of_security()[1];
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
