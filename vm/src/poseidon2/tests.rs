@@ -1,5 +1,5 @@
 use super::{Poseidon2Chip, Poseidon2Query};
-use crate::cpu::MEMORY_BUS;
+use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
 use crate::vm::config::{VmConfig, VmParamsConfig};
 use crate::vm::VirtualMachine;
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
@@ -15,6 +15,25 @@ use poseidon2::poseidon2::Poseidon2Config;
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 8;
 const DECOMP: usize = 4;
+
+struct WriteOps {
+    clk: usize,
+    ad_s: BabyBear,
+    address: BabyBear,
+    data: [BabyBear; WORD_SIZE],
+}
+
+impl WriteOps {
+    fn flatten(&self) -> Vec<BabyBear> {
+        vec![
+            BabyBear::from_canonical_usize(self.clk),
+            BabyBear::from_bool(true),
+            self.ad_s,
+            self.address,
+            self.data[0],
+        ]
+    }
+}
 
 #[test]
 fn poseidon2_chip_test() {
@@ -45,24 +64,59 @@ fn poseidon2_chip_test() {
         Poseidon2Config::<16, BabyBear>::horizen_config(),
     );
 
-    for i in 0..10 {
-        vm.memory_chip.write_word(
-            i,
-            d,
-            a + BabyBear::from_canonical_usize(i),
-            [BabyBear::from_canonical_usize(i); WORD_SIZE],
-        );
+    let chunk1 = (0..8)
+        .map(BabyBear::from_canonical_usize)
+        .collect::<Vec<_>>();
+    let chunk2 = (8..16)
+        .map(BabyBear::from_canonical_usize)
+        .collect::<Vec<_>>();
+
+    let write_ops: [WriteOps; 16] = core::array::from_fn(|i| {
+        if i < 8 {
+            WriteOps {
+                clk: i,
+                ad_s: d,
+                address: a + BabyBear::from_canonical_usize(i),
+                data: [chunk1[i]],
+            }
+        } else {
+            WriteOps {
+                clk: i,
+                ad_s: d,
+                address: b + BabyBear::from_canonical_usize(i - 8),
+                data: [chunk2[i - 8]],
+            }
+        }
+    });
+
+    for op in &write_ops {
+        vm.memory_chip
+            .write_word(op.clk, op.ad_s, op.address, op.data);
     }
 
     for op in &ops {
         Poseidon2Chip::<16, BabyBear>::poseidon2_perm(&mut vm, op.clone());
     }
-    let dummy_cpu = DummyInteractionAir::new(Poseidon2Query::<BabyBear>::width(), true, MEMORY_BUS);
-    let dummy_cpu_trace = RowMajorMatrix::new(
+    let dummy_cpu_poseidon2 =
+        DummyInteractionAir::new(Poseidon2Query::<BabyBear>::width(), true, POSEIDON2_BUS);
+    let dummy_cpu_poseidon2_trace = RowMajorMatrix::new(
         ops.into_iter()
             .flat_map(|op| op.to_io_cols().flatten())
             .collect(),
         Poseidon2Query::<BabyBear>::width() + 1,
+    );
+
+    let dummy_cpu_memory = DummyInteractionAir::new(5, true, MEMORY_BUS);
+    let dummy_cpu_memory_trace = RowMajorMatrix::new(
+        write_ops
+            .into_iter()
+            .flat_map(|op| {
+                let mut vec = op.flatten();
+                vec.insert(0, BabyBear::one());
+                vec
+            })
+            .collect(),
+        5 + 1,
     );
 
     let memory_chip_trace = vm.memory_chip.generate_trace(vm.range_checker.clone());
@@ -74,13 +128,15 @@ fn poseidon2_chip_test() {
             &vm.range_checker.air,
             &vm.memory_chip.air,
             &vm.poseidon2_chip,
-            &dummy_cpu,
+            &dummy_cpu_memory,
+            &dummy_cpu_poseidon2,
         ],
         vec![
             range_checker_trace,
             memory_chip_trace,
             poseidon2_trace,
-            dummy_cpu_trace,
+            dummy_cpu_memory_trace,
+            dummy_cpu_poseidon2_trace,
         ],
     )
     .expect("Verification failed");
