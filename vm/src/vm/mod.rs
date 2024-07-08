@@ -49,6 +49,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
         let program_chip = ProgramChip::new(program.clone());
         let memory_chip = MemoryChip::new(limb_bits, limb_bits, limb_bits, decomp);
         let field_arithmetic_chip = FieldArithmeticChip::new();
+        let poseidon2_chip = Poseidon2Chip::new(16, F::one());
 
         Self {
             config,
@@ -57,6 +58,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             memory_chip,
             field_arithmetic_chip,
             range_checker,
+            poseidon2_chip,
             traces: vec![],
         }
     }
@@ -72,6 +74,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             self.program_chip.generate_trace(),
             self.memory_chip.generate_trace(self.range_checker.clone()),
             self.range_checker.generate_trace(),
+            self.poseidon2_chip.generate_trace(),
         ];
         if self.options().field_arithmetic_enabled {
             result.push(self.field_arithmetic_chip.generate_trace());

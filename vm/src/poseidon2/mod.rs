@@ -21,6 +21,7 @@ pub mod trace;
 pub struct Poseidon2Chip<const WIDTH: usize, F: Field> {
     pub air: Poseidon2Air<WIDTH, F>,
     pub rows: Vec<Poseidon2ChipCols<WIDTH, F>>,
+    pub input: Option<Poseidon2Query<F>>,
 }
 
 pub struct Poseidon2Query<F> {
