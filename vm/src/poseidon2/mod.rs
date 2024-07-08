@@ -1,9 +1,8 @@
 use crate::vm::VirtualMachine;
 use afs_chips::sub_chip::LocalTraceInstructions;
 use columns::{Poseidon2ChipCols, Poseidon2ChipIoCols};
-use p3_baby_bear::BabyBear;
+use p3_field::Field;
 use p3_field::PrimeField32;
-use p3_field::{AbstractField, Field};
 use poseidon2::poseidon2::Poseidon2Air;
 use poseidon2::poseidon2::Poseidon2Config;
 

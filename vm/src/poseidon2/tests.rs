@@ -13,6 +13,8 @@ use afs_test_utils::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
+use p3_matrix::Matrix;
+use p3_util::log2_strict_usize;
 use poseidon2::poseidon2::Poseidon2Config;
 use rand::RngCore;
 
@@ -47,15 +49,44 @@ fn poseidon2_chip_test() {
     let c = BabyBear::from_canonical_u32(20);
     let d = BabyBear::from_canonical_u32(10);
     let e = BabyBear::from_canonical_u32(12);
-    let ops = vec![Poseidon2Query {
-        clk: 1,
-        a,
-        b,
-        c,
-        d,
-        e,
-        cmp: BabyBear::from_canonical_u32(1),
-    }];
+    let ops = vec![
+        Poseidon2Query {
+            clk: 1,
+            a,
+            b,
+            c,
+            d,
+            e,
+            cmp: BabyBear::from_canonical_u32(1),
+        },
+        Poseidon2Query {
+            clk: 2,
+            a,
+            b,
+            c,
+            d,
+            e,
+            cmp: BabyBear::from_canonical_u32(1),
+        },
+        Poseidon2Query {
+            clk: 3,
+            a,
+            b,
+            c,
+            d,
+            e,
+            cmp: BabyBear::from_canonical_u32(1),
+        },
+        Poseidon2Query {
+            clk: 4,
+            a,
+            b,
+            c,
+            d,
+            e,
+            cmp: BabyBear::from_canonical_u32(1),
+        },
+    ];
 
     let mut vm = VirtualMachine::<1, BabyBear>::new(
         VmConfig {
@@ -128,10 +159,18 @@ fn poseidon2_chip_test() {
     let range_checker_trace = vm.range_checker.generate_trace();
     let poseidon2_trace = vm.poseidon2_chip.generate_trace();
 
+    let traces = vec![
+        range_checker_trace,
+        memory_chip_trace,
+        poseidon2_trace,
+        dummy_cpu_memory_trace,
+        dummy_cpu_poseidon2_trace,
+    ];
+
     // engine generation
-    // let max_trace_height = traces.iter().map(|trace| trace.height()).max().unwrap();
-    // let max_log_degree = log2_strict_usize(max_trace_height);
-    let max_log_degree = 6;
+    let max_trace_height = traces.iter().map(|trace| trace.height()).max().unwrap();
+    let max_log_degree = log2_strict_usize(max_trace_height);
+    // let max_log_degree = 6;
     let perm = random_perm();
     let fri_params = fri_params_with_80_bits_of_security()[1];
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
@@ -146,13 +185,7 @@ fn poseidon2_chip_test() {
                 &dummy_cpu_memory,
                 &dummy_cpu_poseidon2,
             ],
-            vec![
-                range_checker_trace,
-                memory_chip_trace,
-                poseidon2_trace,
-                dummy_cpu_memory_trace,
-                dummy_cpu_poseidon2_trace,
-            ],
+            traces,
             vec![vec![]; 5],
         )
         .expect("Verification failed");
