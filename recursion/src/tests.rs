@@ -207,6 +207,7 @@ fn test_interactions() {
         ],
         chip_dimensions,
         config,
+        &engine.fri_params,
     );
     display_program(&program);
     execute_program::<4, _>(program);

@@ -5,7 +5,6 @@ use p3_commit::LagrangeSelectors;
 use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrixView;
 use p3_matrix::stack::VerticalPair;
-use p3_uni_stark::StarkGenericConfig;
 
 use afs_compiler::ir::{
     Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize, Var,
@@ -14,6 +13,7 @@ use afs_stark_backend::interaction::{AirBridge, InteractiveAir};
 use afs_stark_backend::prover::opener::AdjacentOpenedValues;
 use afs_stark_backend::rap::Rap;
 use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use afs_test_utils::config::FriParameters;
 use stark_vm::cpu::trace::Instruction;
 
 use crate::challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger};
@@ -52,6 +52,7 @@ impl AxiomVerifier<InnerConfig> {
         raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
         chip_dims: Vec<ChipDimensions>,
         config: &BabyBearPoseidon2Config,
+        fri_params: &FriParameters,
     ) -> Vec<Instruction<BabyBear>> {
         let mut builder = Builder::<InnerConfig>::default();
 
@@ -59,7 +60,7 @@ impl AxiomVerifier<InnerConfig> {
         AxiomMemoryLayout::<BabyBearPoseidon2Config>::witness(&input, &mut builder);
 
         let pcs = TwoAdicFriPcsVariable {
-            config: const_fri_config(&mut builder, config.pcs().fri_config()),
+            config: const_fri_config(&mut builder, fri_params),
         };
         Self::verify(&mut builder, &pcs, raps, chip_dims, &input);
 

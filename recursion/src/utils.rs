@@ -2,13 +2,13 @@ use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_commit::{ExtensionMmcs, TwoAdicMultiplicativeCoset};
 use p3_field::{AbstractField, Field, TwoAdicField};
 use p3_field::extension::BinomialExtensionField;
-use p3_fri::FriConfig;
 use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 
 use afs_compiler::asm::AsmConfig;
 use afs_compiler::ir::Builder;
+use afs_test_utils::config::FriParameters;
 
 use crate::fri::TwoAdicMultiplicativeCosetVariable;
 use crate::fri::types::FriConfigVariable;
@@ -26,7 +26,7 @@ type ChallengeMmcs = ExtensionMmcs<Val, Challenge, ValMmcs>;
 
 pub fn const_fri_config(
     builder: &mut RecursionBuilder,
-    config: &FriConfig<ChallengeMmcs>,
+    params: &FriParameters,
 ) -> FriConfigVariable<RecursionConfig> {
     let two_addicity = Val::TWO_ADICITY;
     let mut generators = builder.dyn_array(two_addicity);
@@ -43,10 +43,10 @@ pub fn const_fri_config(
         builder.set(&mut subgroups, i, domain_value);
     }
     FriConfigVariable {
-        log_blowup: builder.eval(BabyBear::from_canonical_usize(config.log_blowup)),
-        blowup: builder.eval(BabyBear::from_canonical_usize(1 << config.log_blowup)),
-        num_queries: builder.eval(BabyBear::from_canonical_usize(config.num_queries)),
-        proof_of_work_bits: builder.eval(BabyBear::from_canonical_usize(config.proof_of_work_bits)),
+        log_blowup: builder.eval(BabyBear::from_canonical_usize(params.log_blowup)),
+        blowup: builder.eval(BabyBear::from_canonical_usize(1 << params.log_blowup)),
+        num_queries: builder.eval(BabyBear::from_canonical_usize(params.num_queries)),
+        proof_of_work_bits: builder.eval(BabyBear::from_canonical_usize(params.proof_of_work_bits)),
         subgroups,
         generators,
     }
