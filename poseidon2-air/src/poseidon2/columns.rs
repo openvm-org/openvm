@@ -1,5 +1,4 @@
 use crate::poseidon2::Poseidon2Air;
-use afs_chips::sub_chip::LocalTraceInstructions;
 use p3_field::Field;
 use std::ops::Range;
 
