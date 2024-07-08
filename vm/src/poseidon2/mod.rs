@@ -1,6 +1,7 @@
 use crate::vm::VirtualMachine;
 use afs_chips::sub_chip::LocalTraceInstructions;
 use columns::{Poseidon2ChipCols, Poseidon2ChipIoCols};
+use p3_baby_bear::BabyBear;
 use p3_field::{Field, PrimeField32};
 use poseidon2::poseidon2::Poseidon2Air;
 use std::usize;
@@ -44,6 +45,13 @@ impl<F: Field> Poseidon2Query<F> {
             e: self.e,
             cmp: self.cmp,
         }
+    }
+}
+
+impl Poseidon2Chip<16, BabyBear> {
+    pub fn new() -> Self {
+        let air = Poseidon2Air::<16, BabyBear>::new_p3_baby_bear_16();
+        Self { air, rows: vec![] }
     }
 }
 
