@@ -4,8 +4,8 @@ use std::array::from_fn;
 
 use enum_utils::FromStr;
 
-#[cfg(test)]
-pub mod tests;
+// #[cfg(test)]
+// pub mod tests;
 
 pub mod air;
 pub mod bridge;

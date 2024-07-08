@@ -22,6 +22,7 @@ pub struct Poseidon2Chip<const WIDTH: usize, F: Clone> {
     pub rows: Vec<Poseidon2ChipCols<WIDTH, F>>,
 }
 
+#[derive(Clone)]
 pub struct Poseidon2Query<F> {
     pub clk: usize,
     pub a: F,
@@ -44,6 +45,9 @@ impl<F: Field> Poseidon2Query<F> {
             e: self.e,
             cmp: self.cmp,
         }
+    }
+    pub fn width() -> usize {
+        7
     }
 }
 

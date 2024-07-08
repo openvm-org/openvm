@@ -28,15 +28,6 @@ const TRACE_DEGREE: usize = 16;
 
 #[test]
 fn poseidon2_chip_test() {
-    let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
-    let mut chip: MemoryChip<WORD_SIZE, BabyBear> = MemoryChip::new(
-        ADDR_SPACE_LIMB_BITS,
-        POINTER_LIMB_BITS,
-        CLK_LIMB_BITS,
-        DECOMP,
-    );
-    let requester = DummyInteractionAir::new(2 + chip.air.mem_width(), true, MEMORY_BUS);
-
     let ops = vec![Poseidon2Query {
         clk: 1,
         a: BabyBear::from_canonical_u32(10),
@@ -59,7 +50,36 @@ fn poseidon2_chip_test() {
         Poseidon2Config::<16, BabyBear>::horizen_config(),
     );
 
-    for op in ops {
-        Poseidon2Chip::<16, BabyBear>::poseidon2_perm(&mut vm, op);
+    for op in &ops {
+        Poseidon2Chip::<16, BabyBear>::poseidon2_perm(&mut vm, op.clone());
     }
+    let dummy_cpu = DummyInteractionAir::new(Poseidon2Query::<BabyBear>::width(), true, MEMORY_BUS);
+    let dummy_cpu_trace = RowMajorMatrix::new(
+        ops.into_iter()
+            .flat_map(|op| {
+                let mut vec = vec![BabyBear::one()];
+                vec.extend(op.to_io_cols().flatten());
+                vec
+            })
+            .collect(),
+        Poseidon2Query::<BabyBear>::width() + 1,
+    );
+
+    let memory_chip_trace = vm.memory_chip.generate_trace(vm.range_checker.clone());
+
+    run_simple_test_no_pis(
+        vec![
+            &vm.range_checker.air,
+            &vm.memory_chip.air,
+            &vm.poseidon2_chip.air,
+            &dummy_cpu,
+        ],
+        vec![
+            vm.range_checker.generate_trace(),
+            memory_chip_trace,
+            vm.poseidon2_chip.generate_trace(),
+            dummy_cpu_trace,
+        ],
+    )
+    .expect("Verification failed");
 }
