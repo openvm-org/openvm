@@ -45,8 +45,8 @@ pub enum OpCode {
     FE4SUB = 13,
     BBE4MUL = 14,
     BBE4INV = 15,
+
     HINT = 16,
-    HINTLEN = 17,
 }
 
 impl OpCode {
@@ -69,7 +69,6 @@ impl OpCode {
             14 => Some(OpCode::BBE4MUL),
             15 => Some(OpCode::BBE4INV),
             16 => Some(OpCode::HINT),
-            17 => Some(OpCode::HINTLEN),
             _ => None,
         }
     }

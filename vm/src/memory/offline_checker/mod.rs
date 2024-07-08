@@ -1,4 +1,7 @@
-use std::{array::from_fn, collections::HashMap};
+use std::{
+    array::from_fn,
+    collections::{HashMap, HashSet},
+};
 
 use afs_chips::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 use p3_field::PrimeField32;
@@ -37,6 +40,7 @@ impl<const WORD_SIZE: usize> OfflineChecker<WORD_SIZE> {
 pub struct MemoryChip<const WORD_SIZE: usize, F: PrimeField32> {
     pub air: OfflineChecker<WORD_SIZE>,
     pub accesses: Vec<MemoryAccess<WORD_SIZE, F>>,
+    access_indices: HashSet<(F, F)>,
     memory: HashMap<(F, F), F>,
     last_timestamp: Option<usize>,
 }
@@ -54,6 +58,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
                 decomp,
             },
             accesses: vec![],
+            access_indices: HashSet::new(),
             memory: HashMap::new(),
             last_timestamp: None,
         }
@@ -75,6 +80,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             address,
             data,
         });
+        self.access_indices.insert((address_space, address));
         data
     }
 
@@ -101,6 +107,32 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             address,
             data,
         });
+        self.access_indices.insert((address_space, address));
+    }
+
+    pub fn write_hint(&mut self, timestamp: usize, address_space: F, address: F, hint: Vec<F>) {
+        assert!(address_space != F::zero());
+        if let Some(last_timestamp) = self.last_timestamp {
+            assert!(timestamp > last_timestamp);
+        }
+        self.last_timestamp = Some(timestamp);
+
+        for (i, &datum) in hint.iter().enumerate() {
+            assert!(!self.access_indices.contains(&(
+                address_space,
+                address + F::from_canonical_usize(i * WORD_SIZE)
+            )));
+            let decomp: [F; WORD_SIZE] = decompose(datum);
+            for (j, &decomp_elem) in decomp.iter().enumerate() {
+                self.memory.insert(
+                    (
+                        address_space,
+                        address + F::from_canonical_usize(i * WORD_SIZE + j),
+                    ),
+                    decomp_elem,
+                );
+            }
+        }
     }
 
     pub fn read_elem(&mut self, timestamp: usize, address_space: F, address: F) -> F {

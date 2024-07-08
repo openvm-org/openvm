@@ -27,6 +27,7 @@ fn air_test(
             },
         },
         program,
+        vec![],
     );
 
     let traces = vm.traces().unwrap();

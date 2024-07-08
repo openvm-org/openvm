@@ -40,6 +40,7 @@ fn make_vm<const WORD_SIZE: usize, F: PrimeField32>(
             },
         },
         program,
+        vec![],
     )
 }
 

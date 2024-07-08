@@ -115,6 +115,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             let pc_usize = pc.as_canonical_u64() as usize;
 
             let instruction = vm.program_chip.get_instruction(pc_usize);
+            println!("instruction: {:?}", instruction);
             let opcode = instruction.opcode;
             let a = instruction.op_a;
             let b = instruction.op_b;
@@ -238,15 +239,14 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     }
                 }
                 HINT => {
-                    // let next_input = &witness_stream[witness_idx];
-                    // witness_idx += 1;
-                    // for (i, value) in next_input.iter().enumerate() {
-                    //     memory.write(d, a + F::from_canonical_usize(i * WORD_SIZE), *value);
-                    // }
-                }
-                HINTLEN => {
-                    // let len = witness_stream[witness_idx].len();
-                    // memory.write(d, a, decompose(F::from_canonical_usize(len)));
+                    let next_input = &vm.witness_stream[witness_idx];
+                    witness_idx += 1;
+                    vm.memory_chip.write_hint(
+                        MAX_ACCESSES_PER_CYCLE * clock_cycle,
+                        d,
+                        a,
+                        next_input.clone(),
+                    );
                 }
             };
 

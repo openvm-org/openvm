@@ -17,7 +17,10 @@ pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
     }
 }
 
-pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(program: Vec<Instruction<F>>) {
+pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(
+    program: Vec<Instruction<F>>,
+    witness_stream: Vec<Vec<F>>,
+) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
             vm: VmParamsConfig {
@@ -28,6 +31,7 @@ pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(program: Vec<Ins
             },
         },
         program,
+        witness_stream,
     );
     vm.traces().unwrap();
 }

@@ -39,7 +39,11 @@ pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
-    pub fn new(config: VmConfig, program: Vec<Instruction<F>>) -> Self {
+    pub fn new(
+        config: VmConfig,
+        program: Vec<Instruction<F>>,
+        witness_stream: Vec<Vec<F>>,
+    ) -> Self {
         let config = config.vm;
         let decomp = config.decomp;
         let limb_bits = config.limb_bits;
@@ -61,7 +65,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             field_extension_chip,
             range_checker,
             traces: vec![],
-            witness_stream: vec![],
+            witness_stream,
         }
     }
 
