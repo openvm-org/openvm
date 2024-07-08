@@ -1,26 +1,28 @@
+use std::fs;
+
 use afs_test_utils::page_config::PageConfig;
 use clap::Parser;
 
-pub mod olap;
+pub mod predicate;
 pub mod rw;
 
 #[derive(Debug, Parser)]
 pub struct CommonCommands {
     #[arg(
-        long = "config-files",
+        long = "config-folder",
         short = 'c',
-        help = "Comma-separated paths to config files",
+        help = "Runs the benchmark for all .toml files in the folder",
         required = false,
-        default_value = "config.toml"
+        default_value = "benchmark/configs/rw"
     )]
-    pub config_files: String,
+    pub config_folder: String,
 
     #[arg(
         long = "output-file",
         short = 'o',
         help = "Path to an output file",
         required = false,
-        default_value = "output.csv"
+        default_value = "benchmark/output/output.csv"
     )]
     pub output_file: String,
 
@@ -33,9 +35,16 @@ pub struct CommonCommands {
     pub silent: bool,
 }
 
-pub fn parse_configs(config_files: String) -> Vec<PageConfig> {
-    config_files
-        .split(',')
-        .map(PageConfig::read_config_file)
-        .collect()
+pub fn parse_config_folder(config_folder: String) -> Vec<PageConfig> {
+    let mut configs = Vec::new();
+    if let Ok(entries) = fs::read_dir(config_folder) {
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("toml") {
+                let config = PageConfig::read_config_file(path.to_str().unwrap());
+                configs.push(config);
+            }
+        }
+    }
+    configs
 }

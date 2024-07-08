@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::commands::{olap::OlapCommand, rw::RwCommand};
+use crate::commands::{predicate::PredicateCommand, rw::RwCommand};
 
 #[derive(Debug, Parser)]
 #[command(author, version, about = "AFS Benchmark")]
@@ -16,9 +16,9 @@ pub enum Commands {
     /// Read/Write functions
     Rw(RwCommand),
 
-    #[command(name = "olap", about = "Benchmark OLAP")]
-    /// OLAP functions
-    Olap(OlapCommand),
+    #[command(name = "predicate", about = "Benchmark Predicate")]
+    /// Predicate functions
+    Predicate(PredicateCommand),
 }
 
 impl Cli {
@@ -26,7 +26,7 @@ impl Cli {
         let cli = Self::parse();
         match cli.command {
             Commands::Rw(rw) => rw.execute().unwrap(),
-            Commands::Olap(olap) => olap.execute().unwrap(),
+            Commands::Predicate(predicate) => predicate.execute().unwrap(),
         }
     }
 }

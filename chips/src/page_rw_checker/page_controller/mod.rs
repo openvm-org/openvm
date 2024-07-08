@@ -242,7 +242,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         );
         trace_span.exit();
 
-        let trace_commit_span = info_span!("Trace commitment").entered();
+        let trace_commit_span = info_span!("Load page trace commitment").entered();
         let init_page_pdata = match init_page_pdata {
             Some(prover_data) => prover_data,
             None => Arc::new(trace_committer.commit(vec![init_page_trace.clone()])),
@@ -355,7 +355,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         trace_builder.load_trace(self.range_checker.generate_trace());
         trace_builder.load_trace(ops_sender_trace);
 
-        tracing::info_span!("Trace commitment").in_scope(|| trace_builder.commit_current());
+        tracing::info_span!("Prove trace commitment").in_scope(|| trace_builder.commit_current());
 
         let partial_vk = partial_pk.partial_vk();
 

@@ -4,14 +4,14 @@ use color_eyre::eyre::Result;
 use super::CommonCommands;
 
 #[derive(Debug, Parser)]
-pub struct OlapCommand {
+pub struct PredicateCommand {
     #[command(flatten)]
     pub common: CommonCommands,
 }
 
-impl OlapCommand {
+impl PredicateCommand {
     pub fn execute(&self) -> Result<()> {
-        println!("Executing OLAP benchmark...");
-        Ok(())
+        println!("Executing Predicate benchmark...");
+        unimplemented!("WIP")
     }
 }

@@ -23,16 +23,42 @@ use p3_keccak::Keccak256Hash;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 use serde::{de::DeserializeOwned, Serialize};
+use tracing::info_span;
 
 use crate::{
-    commands::parse_configs, random_table::generate_random_table, DB_FILE_PATH, TABLE_ID,
-    TMP_FOLDER,
+    commands::parse_config_folder,
+    utils::{
+        output_writer::{save_afi_to_new_db, write_csv_header, write_csv_line},
+        random_table::generate_random_afi_rw,
+        tracing_log_parser::{clear_tracing_log, filter_and_extract_time_busy},
+    },
+    AFI_FILE_PATH, DB_FILE_PATH, TABLE_ID, TMP_FOLDER, TMP_TRACING_LOG,
 };
 
 use super::CommonCommands;
 
 #[derive(Debug, Parser)]
 pub struct RwCommand {
+    #[arg(
+        long = "percent-reads",
+        short = 'r',
+        help = "Percentage of max_rw_ops that are reads (100 = 100%)",
+        default_value = "50",
+        required = true
+    )]
+    /// Percentage of max_rw_ops that are reads (100 = 100%)
+    pub percent_reads: usize,
+
+    #[arg(
+        long = "percent-writes",
+        short = 'w',
+        help = "Percentage of max_rw_ops that are writes (100 = 100%)",
+        default_value = "50",
+        required = true
+    )]
+    /// Percentage of max_rw_ops that are writes (100 = 100%)
+    pub percent_writes: usize,
+
     #[command(flatten)]
     pub common: CommonCommands,
 }
@@ -42,20 +68,56 @@ impl RwCommand {
         println!("Executing Read/Write benchmark");
 
         // Parse config(s)
-        let configs = parse_configs(self.common.config_files.clone());
+        let configs = parse_config_folder(self.common.config_folder.clone());
 
         // Create tmp folder
         let _ = fs::create_dir_all(TMP_FOLDER);
 
+        // Write .csv file
+        let output_file = self.common.output_file.clone();
+        write_csv_header(output_file.clone())?;
+
         // Parse engine
         for config in configs {
-            // Generate and save random table to db
-            generate_random_table(&config, TABLE_ID.to_string(), DB_FILE_PATH.to_string());
-            run_rw_bench(&config).unwrap();
-        }
+            println!("Running benchmark for config: {:?}", config);
+            clear_tracing_log(TMP_TRACING_LOG.as_str())?;
 
-        // Write .csv file
-        let _output_file = self.common.output_file.clone();
+            // Generate AFI file
+            generate_random_afi_rw(
+                &config,
+                TABLE_ID.to_string(),
+                AFI_FILE_PATH.to_string(),
+                self.percent_reads,
+                self.percent_writes,
+            )?;
+
+            // Save AFI file data to database
+            save_afi_to_new_db(&config, AFI_FILE_PATH.to_string(), DB_FILE_PATH.to_string())?;
+
+            run_rw_bench(&config).unwrap();
+
+            let timings = filter_and_extract_time_busy(
+                TMP_TRACING_LOG.as_str(),
+                &[
+                    "ReadWrite keygen",
+                    "ReadWrite cache",
+                    "ReadWrite prove",
+                    "Prove.generate_trace",
+                    "prove:Prove trace commitment",
+                    "ReadWrite verify",
+                ],
+            )?;
+            println!("timing: {:?}", timings);
+
+            write_csv_line(
+                output_file.clone(),
+                "ReadWrite".to_string(),
+                &config,
+                &timings,
+                self.percent_reads,
+                self.percent_writes,
+            )?;
+        }
 
         Ok(())
     }
@@ -73,13 +135,15 @@ impl RwCommand {
         SC::Pcs: Sync,
         SC::Challenge: Send + Sync,
     {
-        let afi_file_path = TMP_FOLDER.to_string() + "/instructions.afi";
         let proof_file = DB_FILE_PATH.to_string() + ".prove.bin";
 
         // Run keygen
+        let keygen_span = info_span!("ReadWrite keygen").entered();
         KeygenCommand::execute(config, engine, TMP_FOLDER.to_string())?;
+        keygen_span.exit();
 
         // Run cache
+        let cache_span = info_span!("ReadWrite cache").entered();
         CacheCommand::execute(
             config,
             engine,
@@ -87,19 +151,23 @@ impl RwCommand {
             DB_FILE_PATH.to_string(),
             TMP_FOLDER.to_string(),
         )?;
+        cache_span.exit();
 
         // Run prove
+        let prove_span = info_span!("ReadWrite prove").entered();
         ProveCommand::execute(
             config,
             engine,
-            afi_file_path,
+            AFI_FILE_PATH.to_string(),
             DB_FILE_PATH.to_string(),
             TMP_FOLDER.to_string(),
             TMP_FOLDER.to_string(),
-            false,
+            true,
         )?;
+        prove_span.exit();
 
         // Run verify
+        let verify_span = info_span!("ReadWrite verify").entered();
         VerifyCommand::execute(
             config,
             engine,
@@ -107,6 +175,7 @@ impl RwCommand {
             DB_FILE_PATH.to_string(),
             TMP_FOLDER.to_string(),
         )?;
+        verify_span.exit();
 
         Ok(())
     }

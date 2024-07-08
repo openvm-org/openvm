@@ -25,6 +25,7 @@ use logical_interface::{
 use p3_field::PrimeField64;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::de::DeserializeOwned;
+use tracing::info_span;
 
 use crate::commands::{read_from_path, write_bytes};
 
@@ -100,6 +101,7 @@ where
         keys_folder: String,
         cache_folder: String,
         silent: bool,
+        // durations: Option<&mut (Duration, Duration)>,
     ) -> Result<()> {
         let start = Instant::now();
         let prefix = create_prefix(config);
@@ -113,6 +115,7 @@ where
                 keys_folder,
                 cache_folder,
                 silent,
+                // durations,
             )?,
             PageMode::ReadOnly => panic!(),
         }
@@ -123,6 +126,7 @@ where
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn execute_rw(
         config: &PageConfig,
         engine: &E,
@@ -132,6 +136,7 @@ where
         keys_folder: String,
         cache_folder: String,
         silent: bool,
+        // durations: Option<&mut (Duration, Duration)>,
     ) -> Result<()> {
         println!("Proving ops file: {}", afi_file_path);
         let instructions = AfsInputInstructions::from_file(&afi_file_path)?;
@@ -197,8 +202,9 @@ where
         );
 
         // Generating trace for ops_sender and making sure it has height num_ops
-        let ops_sender_trace =
-            ops_sender.generate_trace_testing(&zk_ops, config.page.max_rw_ops, 1);
+        let trace_span = info_span!("Prove.generate_trace").entered();
+        let ops_sender_trace = ops_sender.generate_trace(&zk_ops, config.page.max_rw_ops);
+        trace_span.exit();
 
         let encoded_pk =
             read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();

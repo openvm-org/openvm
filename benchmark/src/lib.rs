@@ -2,11 +2,12 @@ use lazy_static::lazy_static;
 
 pub mod cli;
 pub mod commands;
-pub mod output_writer;
-pub mod random_table;
+pub mod utils;
 
 pub const TABLE_ID: &str = "0xfade";
-pub const TMP_FOLDER: &str = "bin/common/data/tmp";
+pub const TMP_FOLDER: &str = "benchmark/tmp";
 lazy_static! {
+    pub static ref TMP_TRACING_LOG: String = TMP_FOLDER.to_string() + "/tracing.log";
     pub static ref DB_FILE_PATH: String = TMP_FOLDER.to_string() + "/db.mockdb";
+    pub static ref AFI_FILE_PATH: String = TMP_FOLDER.to_string() + "/instructions.afi";
 }

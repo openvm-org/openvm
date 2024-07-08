@@ -2,14 +2,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::{EngineType, FriParameters};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub enum PageMode {
-    ReadOnly,
+    #[default]
     ReadWrite,
+    ReadOnly,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PageParamsConfig {
     pub index_bytes: usize,
     pub data_bytes: usize,
@@ -19,7 +20,7 @@ pub struct PageParamsConfig {
     pub max_rw_ops: usize,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StarkEngineConfig {
     pub engine: EngineType,
 }
