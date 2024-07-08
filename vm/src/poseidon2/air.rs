@@ -30,7 +30,6 @@ impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Chip<WIDTH, AB::F>
         SubAir::<AB>::eval(&self.air, builder, cols.aux.io, cols.aux.aux);
         builder.assert_bool(cols.io.is_alloc);
         builder.assert_bool(cols.io.cmp);
-        // TODO
-        // builder.assert_one(implies(cols.io.cmp, cols.io.is_alloc));
+        builder.assert_eq(cols.io.is_alloc * cols.io.cmp, cols.io.cmp);
     }
 }

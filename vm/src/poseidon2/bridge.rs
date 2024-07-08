@@ -93,7 +93,7 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
             let count = if i < 8 {
                 VirtualPairCol::single_main(col_indices.io.is_alloc)
             } else {
-                VirtualPairCol::single_main(col_indices.io.cmp)
+                VirtualPairCol::diff_main(col_indices.io.is_alloc, col_indices.io.cmp)
             };
 
             interactions.push(Interaction {
