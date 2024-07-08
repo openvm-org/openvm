@@ -17,7 +17,7 @@ use crate::vm::VirtualMachine;
 use super::columns::MemoryAccessCols;
 use super::trace::isize_to_field;
 use super::{trace::Instruction, OpCode::*};
-use super::{ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS};
+use super::{ARITHMETIC_BUS, MAX_ACCESSES_PER_CYCLE, MEMORY_BUS, READ_INSTRUCTION_BUS};
 
 const TEST_WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 16;
@@ -340,7 +340,7 @@ fn test_cpu_1() {
 
     let mut expected_memory_log = vec![
         MemoryAccess::from_isize(2, OpType::Write, 1, 0, n),
-        MemoryAccess::from_isize(3, OpType::Read, 1, 0, n),
+        MemoryAccess::from_isize(MAX_ACCESSES_PER_CYCLE_ISIZE, OpType::Read, 1, 0, n),
     ];
     for t in 0..n {
         let base = 5 + (8 * t);
