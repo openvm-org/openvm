@@ -5,7 +5,7 @@ use crate::vm::VirtualMachine;
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test_no_pis,
-    interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
+    interaction::dummy_interaction_air::DummyInteractionAir,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -49,7 +49,7 @@ fn poseidon2_chip_test() {
         c,
         d,
         e,
-        cmp: BabyBear::from_canonical_u32(1),
+        cmp: BabyBear::from_canonical_u32(0),
     }];
 
     let mut vm = VirtualMachine::<1, BabyBear>::new(
@@ -74,14 +74,14 @@ fn poseidon2_chip_test() {
     let write_ops: [WriteOps; 16] = core::array::from_fn(|i| {
         if i < 8 {
             WriteOps {
-                clk: i,
+                clk: 40 + i,
                 ad_s: d,
                 address: a + BabyBear::from_canonical_usize(i),
                 data: [chunk1[i]],
             }
         } else {
             WriteOps {
-                clk: i,
+                clk: 40 + i,
                 ad_s: d,
                 address: b + BabyBear::from_canonical_usize(i - 8),
                 data: [chunk2[i - 8]],

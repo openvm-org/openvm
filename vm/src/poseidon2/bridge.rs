@@ -37,7 +37,7 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
             let memory_cycle = VirtualPairCol::new(
                 vec![(
                     PairCol::Main(col_indices.io.clk),
-                    T::from_canonical_usize(20),
+                    T::from_canonical_usize(40),
                 )],
                 T::from_canonical_usize(i),
             );
@@ -73,7 +73,7 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
             let memory_cycle = VirtualPairCol::new(
                 vec![(
                     PairCol::Main(col_indices.io.clk),
-                    T::from_canonical_usize(20),
+                    T::from_canonical_usize(40),
                 )],
                 T::from_canonical_usize(i + 16),
             );

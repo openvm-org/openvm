@@ -65,17 +65,27 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     ) {
         let data_1: [F; 8] = core::array::from_fn(|i| {
             vm.memory_chip
-                .read_elem(20 * op.clk + i, op.d, op.a + F::from_canonical_usize(i))
+                .read_elem(40 * op.clk + i, op.d, op.a + F::from_canonical_usize(i))
         });
         let data_2: [F; 8] = core::array::from_fn(|i| {
             vm.memory_chip
-                .read_elem(20 * op.clk + 8 + i, op.d, op.b + F::from_canonical_usize(i))
+                .read_elem(40 * op.clk + 8 + i, op.d, op.b + F::from_canonical_usize(i))
         });
         let input_state: [F; 16] = [data_1, data_2].concat().try_into().unwrap();
         let aux = vm.poseidon2_chip.air.generate_trace_row(input_state);
+        let output = aux.io.output;
         vm.poseidon2_chip.rows.push(Poseidon2ChipCols {
             io: op.to_io_cols(),
             aux,
         });
+        // TODO adjust for compression
+        for (i, &output_elem) in output.iter().enumerate() {
+            vm.memory_chip.write_word(
+                40 * op.clk + 16 + i,
+                op.e,
+                op.c + F::from_canonical_usize(i),
+                [output_elem; WORD_SIZE],
+            );
+        }
     }
 }
