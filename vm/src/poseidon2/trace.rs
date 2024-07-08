@@ -16,11 +16,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
             self.rows
                 .iter()
                 .flat_map(|row| row.flatten())
-                .chain(
-                    std::iter::repeat(blank_row.clone())
-                        .take(diff)
-                        .flat_map(|row| row),
-                )
+                .chain(std::iter::repeat(blank_row.clone()).take(diff).flatten())
                 .collect(),
             self.width(),
         )
