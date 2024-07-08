@@ -17,6 +17,7 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
             .io
             .flatten()
             .into_iter()
+            .skip(1)
             .map(VirtualPairCol::single_main)
             .collect();
 
@@ -50,7 +51,7 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
                     }),
                     T::from_canonical_usize(1),
                 )],
-                T::from_canonical_usize(i),
+                T::from_canonical_usize(if i < 8 { i } else { i - 8 }),
             );
 
             let fields = vec![

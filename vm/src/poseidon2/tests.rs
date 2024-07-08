@@ -3,6 +3,11 @@ use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
 use crate::vm::config::{VmConfig, VmParamsConfig};
 use crate::vm::VirtualMachine;
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use afs_test_utils::config::{
+    baby_bear_poseidon2::{engine_from_perm, random_perm},
+    fri_params::fri_params_with_80_bits_of_security,
+};
+use afs_test_utils::engine::StarkEngine;
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test_no_pis,
     interaction::dummy_interaction_air::DummyInteractionAir,
@@ -123,21 +128,32 @@ fn poseidon2_chip_test() {
     let range_checker_trace = vm.range_checker.generate_trace();
     let poseidon2_trace = vm.poseidon2_chip.generate_trace();
 
-    run_simple_test_no_pis(
-        vec![
-            &vm.range_checker.air,
-            &vm.memory_chip.air,
-            &vm.poseidon2_chip,
-            &dummy_cpu_memory,
-            &dummy_cpu_poseidon2,
-        ],
-        vec![
-            range_checker_trace,
-            memory_chip_trace,
-            poseidon2_trace,
-            dummy_cpu_memory_trace,
-            dummy_cpu_poseidon2_trace,
-        ],
-    )
-    .expect("Verification failed");
+    // engine generation
+    // let max_trace_height = traces.iter().map(|trace| trace.height()).max().unwrap();
+    // let max_log_degree = log2_strict_usize(max_trace_height);
+    let max_log_degree = 0;
+    let perm = random_perm();
+    let fri_params = fri_params_with_80_bits_of_security()[1];
+    let engine = engine_from_perm(perm, max_log_degree, fri_params);
+
+    // positive test
+    engine
+        .run_simple_test(
+            vec![
+                &vm.range_checker.air,
+                &vm.memory_chip.air,
+                &vm.poseidon2_chip,
+                &dummy_cpu_memory,
+                &dummy_cpu_poseidon2,
+            ],
+            vec![
+                range_checker_trace,
+                memory_chip_trace,
+                poseidon2_trace,
+                dummy_cpu_memory_trace,
+                dummy_cpu_poseidon2_trace,
+            ],
+            vec![vec![]; 5],
+        )
+        .expect("Verification failed");
 }
