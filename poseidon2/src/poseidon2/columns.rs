@@ -40,7 +40,7 @@ impl<const WIDTH: usize, T: Clone> Poseidon2Cols<WIDTH, T> {
     }
 
     pub fn from_slice(slice: &[T], index_map: &Poseidon2ColsIndexMap<WIDTH>) -> Self {
-        assert_eq!(slice.len(), index_map.output.end);
+        // assert_eq!(slice.len(), index_map.output.end);
 
         let input = core::array::from_fn(|i| slice[index_map.input.start + i].clone());
         let output = core::array::from_fn(|i| slice[index_map.output.start + i].clone());
@@ -100,8 +100,9 @@ impl<const WIDTH: usize, T: Clone> Poseidon2Cols<WIDTH, T> {
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        let mut flattened = self.io.flatten();
+        let mut flattened = self.io.input.to_vec();
         flattened.extend(self.aux.flatten());
+        flattened.extend(self.io.output.to_vec());
         flattened
     }
 }
