@@ -15,6 +15,7 @@ use crate::{
         CpuAir, CpuOptions, RANGE_CHECKER_BUS,
     },
     field_arithmetic::FieldArithmeticChip,
+    field_extension::FieldExtensionArithmeticChip,
     memory::offline_checker::MemoryChip,
     program::ProgramChip,
 };
@@ -30,6 +31,7 @@ pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub program_chip: ProgramChip<F>,
     pub memory_chip: MemoryChip<WORD_SIZE, F>,
     pub field_arithmetic_chip: FieldArithmeticChip<F>,
+    pub field_extension_chip: FieldExtensionArithmeticChip<WORD_SIZE, F>,
     pub range_checker: Arc<RangeCheckerGateChip>,
 
     traces: Vec<DenseMatrix<F>>,
@@ -47,6 +49,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
         let program_chip = ProgramChip::new(program.clone());
         let memory_chip = MemoryChip::new(limb_bits, limb_bits, limb_bits, decomp);
         let field_arithmetic_chip = FieldArithmeticChip::new();
+        let field_extension_chip = FieldExtensionArithmeticChip::new();
 
         Self {
             config,
@@ -54,6 +57,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             program_chip,
             memory_chip,
             field_arithmetic_chip,
+            field_extension_chip,
             range_checker,
             traces: vec![],
         }
@@ -73,6 +77,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
         ];
         if self.options().field_arithmetic_enabled {
             result.push(self.field_arithmetic_chip.generate_trace());
+        }
+        if self.options().field_extension_enabled {
+            result.push(self.field_extension_chip.generate_trace());
         }
         Ok(result)
     }
@@ -115,7 +122,16 @@ pub fn get_chips<const WORD_SIZE: usize, SC: StarkGenericConfig>(
 where
     Val<SC>: PrimeField32,
 {
-    if vm.options().field_arithmetic_enabled {
+    if vm.options().field_extension_enabled {
+        vec![
+            &vm.cpu_air,
+            &vm.program_chip.air,
+            &vm.memory_chip.air,
+            &vm.range_checker.air,
+            &vm.field_arithmetic_chip.air,
+            &vm.field_extension_chip.air,
+        ]
+    } else if vm.options().field_arithmetic_enabled {
         vec![
             &vm.cpu_air,
             &vm.program_chip.air,

@@ -9,20 +9,26 @@ use stark_vm::vm::get_chips;
 use stark_vm::vm::VirtualMachine;
 
 const WORD_SIZE: usize = 1;
-const LIMB_BITS: usize = 8;
-const DECOMP: usize = 4;
+const LIMB_BITS: usize = 16;
+const DECOMP: usize = 8;
 
-fn air_test(field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>) {
+fn air_test(
+    field_arithmetic_enabled: bool,
+    field_extension_enabled: bool,
+    program: Vec<Instruction<BabyBear>>,
+) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
             vm: VmParamsConfig {
                 field_arithmetic_enabled,
+                field_extension_enabled,
                 limb_bits: LIMB_BITS,
                 decomp: DECOMP,
             },
         },
         program,
     );
+
     let traces = vm.traces().unwrap();
     let chips = get_chips(&vm);
     run_simple_test_no_pis(chips, traces).expect("Verification failed");
@@ -52,12 +58,13 @@ fn test_vm_1() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(true, program);
+    air_test(true, false, program);
 }
 
 #[test]
 fn test_vm_without_field_arithmetic() {
     let field_arithmetic_enabled = false;
+    let field_extension_enabled = false;
 
     /*
     Instruction 0 assigns word[0]_1 to 5.
@@ -79,7 +86,7 @@ fn test_vm_without_field_arithmetic() {
         Instruction::from_isize(BEQ, 0, 5, -1, 1, 0),
     ];
 
-    air_test(field_arithmetic_enabled, program);
+    air_test(field_arithmetic_enabled, field_extension_enabled, program);
 }
 
 #[test]
@@ -100,5 +107,27 @@ fn test_vm_fibonacci_old() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(true, program.clone());
+    air_test(true, false, program.clone());
+}
+
+#[test]
+fn test_vm_field_extension_arithmetic() {
+    let field_arithmetic_enabled = true;
+    let field_extension_enabled = true;
+
+    let program = vec![
+        Instruction::from_isize(STOREW, 1, 0, 0, 0, 1),
+        Instruction::from_isize(STOREW, 2, 1, 0, 0, 1),
+        Instruction::from_isize(STOREW, 1, 2, 0, 0, 1),
+        Instruction::from_isize(STOREW, 2, 3, 0, 0, 1),
+        Instruction::from_isize(STOREW, 2, 4, 0, 0, 1),
+        Instruction::from_isize(STOREW, 1, 5, 0, 0, 1),
+        Instruction::from_isize(STOREW, 1, 6, 0, 0, 1),
+        Instruction::from_isize(STOREW, 2, 7, 0, 0, 1),
+        Instruction::from_isize(FE4ADD, 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4SUB, 12, 0, 4, 1, 1),
+        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
+    ];
+
+    air_test(field_arithmetic_enabled, field_extension_enabled, program);
 }

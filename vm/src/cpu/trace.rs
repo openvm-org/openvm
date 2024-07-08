@@ -8,7 +8,7 @@ use afs_chips::{
 };
 
 use crate::memory::{compose, decompose};
-use crate::vm::VirtualMachine;
+use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
@@ -74,24 +74,6 @@ fn memory_access_to_cols<const WORD_SIZE: usize, F: PrimeField64>(
         is_zero_aux,
         address,
         data,
-    }
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct FieldExtensionOperation<F> {
-    pub opcode: OpCode,
-    pub operand1: [F; 4],
-    pub operand2: [F; 4],
-    pub result: [F; 4],
-}
-
-impl<F: Field> FieldExtensionOperation<F> {
-    pub fn to_vec(&self) -> Vec<F> {
-        let mut vec = vec![F::from_canonical_usize(self.opcode as usize)];
-        vec.extend(self.operand1.iter());
-        vec.extend(self.operand2.iter());
-        vec.extend(self.result.iter());
-        vec
     }
 }
 
@@ -238,6 +220,20 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 PRINTF => {
                     let value = read!(d, a);
                     println!("{}", value);
+                }
+                opcode @ (FE4ADD | FE4SUB | BBE4MUL | BBE4INV) => {
+                    if vm.options().field_extension_enabled {
+                        FieldExtensionArithmeticChip::calculate(
+                            vm,
+                            clock_cycle,
+                            opcode,
+                            a,
+                            b,
+                            c,
+                            d,
+                            e,
+                        );
+                    }
                 }
             };
 

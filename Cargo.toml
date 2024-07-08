@@ -7,11 +7,11 @@ members = [
     "derive",
     "bin/afs",
     "bin/predicate",
+    "benchmark",
     "logical-interface",
     "vm",
     "vm/bin",
-    "poseidon2",
-    "benchmark",
+    "poseidon2-air",
 ]
 resolver = "2"
 
