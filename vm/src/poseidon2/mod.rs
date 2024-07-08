@@ -4,6 +4,7 @@ use columns::{Poseidon2ChipCols, Poseidon2ChipIoCols};
 use p3_baby_bear::BabyBear;
 use p3_field::{Field, PrimeField32};
 use poseidon2::poseidon2::Poseidon2Air;
+use poseidon2::poseidon2::Poseidon2Config;
 use std::usize;
 
 #[cfg(test)]
@@ -48,15 +49,18 @@ impl<F: Field> Poseidon2Query<F> {
     }
 }
 
-impl Poseidon2Chip<16, BabyBear> {
-    pub fn new() -> Self {
-        let air = Poseidon2Air::<16, BabyBear>::new_p3_baby_bear_16();
+impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
+    pub fn from_poseidon2_config(config: Poseidon2Config<WIDTH, F>, bus_index: usize) -> Self {
+        let air = Poseidon2Air::<WIDTH, F>::from_config(config, bus_index);
         Self { air, rows: vec![] }
     }
 }
 
 impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
-    pub fn poseidon2_perm(vm: &mut VirtualMachine<WIDTH, F>, op: Poseidon2Query<F>) {
+    pub fn poseidon2_perm<const WORD_SIZE: usize>(
+        vm: &mut VirtualMachine<WORD_SIZE, F>,
+        op: Poseidon2Query<F>,
+    ) {
         let data_1: [F; 8] = core::array::from_fn(|i| {
             vm.memory_chip
                 .read_elem(20 * op.clk + i, op.d, op.a + F::from_canonical_usize(i))

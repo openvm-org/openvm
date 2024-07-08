@@ -18,6 +18,7 @@ pub const READ_INSTRUCTION_BUS: usize = 0;
 pub const MEMORY_BUS: usize = 1;
 pub const ARITHMETIC_BUS: usize = 2;
 pub const RANGE_CHECKER_BUS: usize = 3;
+pub const POSEIDON2_BUS: usize = 5;
 
 pub const MAX_READS_PER_CYCLE: usize = 2;
 pub const MAX_WRITES_PER_CYCLE: usize = 1;

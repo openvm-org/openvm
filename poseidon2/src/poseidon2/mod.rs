@@ -35,6 +35,14 @@ pub struct Poseidon2Air<const WIDTH: usize, F: Clone> {
     pub bus_index: usize,
 }
 
+pub struct Poseidon2Config<const WIDTH: usize, F: Clone> {
+    pub external_constants: Vec<[F; WIDTH]>,
+    pub internal_constants: Vec<F>,
+    pub ext_mds_matrix: [[u32; 4]; 4],
+    pub int_diag_m1_matrix: [F; WIDTH],
+    pub reduction_factor: F,
+}
+
 impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
     /// MDSMat4 from Plonky3
     /// [ 2 3 1 1 ]
@@ -70,6 +78,17 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
             reduction_factor,
             bus_index,
         }
+    }
+
+    pub fn from_config(config: Poseidon2Config<WIDTH, F>, bus_index: usize) -> Self {
+        Self::new(
+            config.external_constants,
+            config.internal_constants,
+            config.ext_mds_matrix,
+            config.int_diag_m1_matrix,
+            config.reduction_factor,
+            bus_index,
+        )
     }
 
     pub fn get_width(&self) -> usize {
@@ -166,6 +185,18 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
             internal_round_constants,
             horizen_int_diag,
         )
+    }
+
+    pub fn horizen_config() -> Poseidon2Config<16, BabyBear> {
+        let (external_round_constants, internal_round_constants, horizen_int_diag) =
+            Self::horizen_round_consts();
+        Poseidon2Config::<16, BabyBear> {
+            external_constants: external_round_constants,
+            internal_constants: internal_round_constants,
+            ext_mds_matrix: Poseidon2Air::<16, BabyBear>::HL_MDS_MAT_4,
+            int_diag_m1_matrix: horizen_int_diag,
+            reduction_factor: BabyBear::one(),
+        }
     }
 
     pub fn new_p3_baby_bear_16() -> Poseidon2Air<16, BabyBear> {
