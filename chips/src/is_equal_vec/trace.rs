@@ -29,6 +29,8 @@ impl<F: Field> LocalTraceInstructions<F> for IsEqualVecAir {
     type LocalInput = (Vec<F>, Vec<F>);
 
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
+        assert_eq!(self.vec_len, local_input.0.len());
+        assert_eq!(self.vec_len, local_input.1.len());
         let (x_row, y_row) = local_input;
         let vec_len = self.vec_len;
         let mut transition_index = 0;

@@ -6,7 +6,7 @@ use crate::{
     afs_input_instructions::{types::InputFileBodyOperation, AfsInputInstructions},
     mock_db::MockDb,
     table::{codec::fixed_bytes::FixedBytesCodec, types::TableMetadata, Table},
-    utils::string_to_be_vec,
+    utils::string_to_u8_vec,
 };
 use color_eyre::eyre::{eyre, Result};
 use utils::string_to_table_id;
@@ -32,6 +32,22 @@ impl<'a> AfsInterface<'a> {
         }
     }
 
+    /// Gets a table from the DB and creates a new AfsInterface with its index and data byte lengths.
+    /// The table is then stored in current_table for easy access.
+    pub fn new_with_table(table_id: String, db_ref: &'a mut MockDb) -> Self {
+        let table_id_bytes = string_to_table_id(table_id);
+        let table = db_ref.get_table(table_id_bytes).unwrap();
+        let index_bytes = table.db_table_metadata.index_bytes;
+        let data_bytes = table.db_table_metadata.data_bytes;
+        let table = Table::from_db_table(table, index_bytes, data_bytes);
+        Self {
+            index_bytes,
+            data_bytes,
+            db_ref,
+            current_table: Some(table),
+        }
+    }
+
     pub fn load_input_file(&mut self, path: &str) -> Result<&Table> {
         let instructions = AfsInputInstructions::from_file(path)?;
 
@@ -46,9 +62,9 @@ impl<'a> AfsInterface<'a> {
                         return Err(eyre!("Invalid number of arguments for insert operation"));
                     }
                     let index_input = op.args[0].clone();
-                    let index = string_to_be_vec(index_input, instructions.header.index_bytes);
+                    let index = string_to_u8_vec(index_input, instructions.header.index_bytes);
                     let data_input = op.args[1].clone();
-                    let data = string_to_be_vec(data_input, instructions.header.data_bytes);
+                    let data = string_to_u8_vec(data_input, instructions.header.data_bytes);
                     let table = self.db_ref.get_table(table_id_bytes);
                     if table.is_none() {
                         self.db_ref.create_table(
@@ -66,9 +82,9 @@ impl<'a> AfsInterface<'a> {
                         return Err(eyre!("Invalid number of arguments for write operation"));
                     }
                     let index_input = op.args[0].clone();
-                    let index = string_to_be_vec(index_input, instructions.header.index_bytes);
+                    let index = string_to_u8_vec(index_input, instructions.header.index_bytes);
                     let data_input = op.args[1].clone();
-                    let data = string_to_be_vec(data_input, instructions.header.data_bytes);
+                    let data = string_to_u8_vec(data_input, instructions.header.data_bytes);
                     let table = self.db_ref.get_table(table_id_bytes);
                     if table.is_none() {
                         self.db_ref.create_table(
@@ -95,7 +111,7 @@ impl<'a> AfsInterface<'a> {
         self.db_ref
     }
 
-    pub fn get_current_table(&self) -> Option<&Table> {
+    pub fn current_table(&self) -> Option<&Table> {
         self.current_table.as_ref()
     }
 

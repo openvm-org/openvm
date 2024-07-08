@@ -8,3 +8,8 @@ Cargo.lock
 **/*.rs.bk
 **/.env
 .DS_Store
+
+.cache/
+
+# This directory is used by RustRover (and any other JetBrains IDE)
+.idea/

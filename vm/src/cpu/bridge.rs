@@ -3,8 +3,9 @@ use p3_air::{PairCol, VirtualPairCol};
 use p3_field::PrimeField64;
 
 use super::{
-    columns::CpuCols, CpuAir, ARITHMETIC_BUS, FIELD_ARITHMETIC_INSTRUCTIONS,
-    MAX_ACCESSES_PER_CYCLE, MAX_READS_PER_CYCLE, MEMORY_BUS, READ_INSTRUCTION_BUS,
+    columns::CpuCols, CpuAir, ARITHMETIC_BUS, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_BUS,
+    FIELD_EXTENSION_INSTRUCTIONS, MAX_ACCESSES_PER_CYCLE, MAX_READS_PER_CYCLE, MEMORY_BUS,
+    READ_INSTRUCTION_BUS,
 };
 
 impl<const WORD_SIZE: usize, F: PrimeField64> AirBridge<F> for CpuAir<WORD_SIZE> {
@@ -78,6 +79,29 @@ impl<const WORD_SIZE: usize, F: PrimeField64> AirBridge<F> for CpuAir<WORD_SIZE>
                         .collect(),
                 ),
                 argument_index: ARITHMETIC_BUS,
+            });
+        }
+
+        // Interaction with field extension arithmetic (bus 3)
+        if self.options.field_extension_enabled {
+            let fields = vec![
+                VirtualPairCol::single_main(cols_numbered.io.opcode),
+                VirtualPairCol::single_main(cols_numbered.io.op_a),
+                VirtualPairCol::single_main(cols_numbered.io.op_b),
+                VirtualPairCol::single_main(cols_numbered.io.op_c),
+                VirtualPairCol::single_main(cols_numbered.io.d),
+                VirtualPairCol::single_main(cols_numbered.io.e),
+            ];
+
+            interactions.push(Interaction {
+                fields,
+                count: VirtualPairCol::sum_main(
+                    FIELD_EXTENSION_INSTRUCTIONS
+                        .iter()
+                        .map(|opcode| cols_numbered.aux.operation_flags[opcode])
+                        .collect(),
+                ),
+                argument_index: FIELD_EXTENSION_BUS,
             });
         }
 

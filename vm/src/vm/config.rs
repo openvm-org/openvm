@@ -5,6 +5,7 @@ use crate::cpu::CpuOptions;
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct VmParamsConfig {
     pub field_arithmetic_enabled: bool,
+    pub field_extension_enabled: bool,
     pub limb_bits: usize,
     pub decomp: usize,
     /*pub max_program_length: usize,
@@ -15,6 +16,7 @@ impl VmParamsConfig {
     pub fn cpu_options(&self) -> CpuOptions {
         CpuOptions {
             field_arithmetic_enabled: self.field_arithmetic_enabled,
+            field_extension_enabled: self.field_extension_enabled,
         }
     }
 }

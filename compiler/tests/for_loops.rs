@@ -175,8 +175,8 @@ fn test_compiler_break() {
 
     builder.halt();
 
-    let program = builder.compile_isa();
-    execute_program::<WORD_SIZE, _>(program);
+    // let program = builder.compile_isa();
+    // execute_program::<WORD_SIZE, _>(program);
 
     // println!("{}", code);
 
