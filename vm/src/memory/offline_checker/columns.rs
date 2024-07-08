@@ -97,7 +97,7 @@ where
         flattened
     }
 
-    pub fn from_slice(slc: &[T], oc: &OfflineChecker) -> Self {
+    pub fn from_slice<const WORD_SIZE: usize>(slc: &[T], oc: &OfflineChecker<WORD_SIZE>) -> Self {
         assert!(slc.len() == oc.air_width());
         let mem_width = oc.mem_width();
 
@@ -114,11 +114,11 @@ where
             is_equal_addr_space_aux: IsEqualAuxCols::from_slice(&slc[8 + mem_width..9 + mem_width]),
             is_equal_pointer_aux: IsEqualAuxCols::from_slice(&slc[9 + mem_width..10 + mem_width]),
             is_equal_data_aux: IsEqualVecAuxCols::from_slice(
-                &slc[10 + mem_width..10 + mem_width + 2 * oc.data_len],
-                oc.data_len,
+                &slc[10 + mem_width..10 + mem_width + 2 * WORD_SIZE],
+                WORD_SIZE,
             ),
             lt_aux: IsLessThanTupleAuxCols::from_slice(
-                &slc[10 + mem_width + 2 * oc.data_len..],
+                &slc[10 + mem_width + 2 * WORD_SIZE..],
                 oc.addr_clk_limb_bits.clone(),
                 oc.decomp,
                 3,

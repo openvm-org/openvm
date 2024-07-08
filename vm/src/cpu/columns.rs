@@ -50,7 +50,7 @@ impl<T: Clone> CpuIoCols<T> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MemoryAccessCols<const WORD_SIZE: usize, T> {
     pub enabled: T,
 
