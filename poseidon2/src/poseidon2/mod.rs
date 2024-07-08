@@ -7,7 +7,11 @@ pub mod trace;
 pub mod tests;
 
 use self::columns::Poseidon2Cols;
+use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
+use zkhash::ark_ff::PrimeField as _;
+use zkhash::fields::babybear::FpBabyBear as HorizenBabyBear;
+use zkhash::poseidon2::poseidon2_instance_babybear::{MAT_DIAG16_M_1, RC16};
 
 /// Air for Poseidon2. Performs a single permutation of the state.
 /// Permutation consists of external rounds (linear map combined with nonlinearity),
@@ -119,5 +123,62 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
     /// Returns elementwise 7th power of vector field element input
     fn sbox<T: AbstractField>(state: [T; WIDTH]) -> [T; WIDTH] {
         core::array::from_fn(|i| Self::sbox_p::<T>(state[i].clone()))
+    }
+
+    pub fn horizen_to_p3(horizen_babybear: HorizenBabyBear) -> BabyBear {
+        BabyBear::from_canonical_u64(horizen_babybear.into_bigint().0[0])
+    }
+
+    pub fn horizen_round_consts() -> (Vec<[BabyBear; 16]>, Vec<BabyBear>, [BabyBear; 16]) {
+        let p3_rc16: Vec<Vec<BabyBear>> = RC16
+            .iter()
+            .map(|round| {
+                round
+                    .iter()
+                    .map(|babybear| Self::horizen_to_p3(*babybear))
+                    .collect()
+            })
+            .collect();
+
+        let rounds_f = 8;
+        let rounds_p = 13;
+        let rounds_f_beginning = rounds_f / 2;
+        let p_end = rounds_f_beginning + rounds_p;
+        let external_round_constants: Vec<[BabyBear; 16]> = p3_rc16[..rounds_f_beginning]
+            .iter()
+            .chain(p3_rc16[p_end..].iter())
+            .cloned()
+            .map(|round| round.try_into().unwrap())
+            .collect();
+        let internal_round_constants: Vec<BabyBear> = p3_rc16[rounds_f_beginning..p_end]
+            .iter()
+            .map(|round| round[0])
+            .collect();
+        let horizen_int_diag: [BabyBear; 16] = {
+            let mut array = [BabyBear::zero(); 16];
+            for (i, elem) in MAT_DIAG16_M_1.iter().enumerate() {
+                array[i] = BabyBear::from_canonical_u32(elem.into_bigint().0[0] as u32);
+            }
+            array
+        };
+        (
+            external_round_constants,
+            internal_round_constants,
+            horizen_int_diag,
+        )
+    }
+
+    pub fn new_p3_baby_bear_16() -> Poseidon2Air<16, BabyBear> {
+        let (external_round_constants, internal_round_constants, horizen_int_diag) =
+            Self::horizen_round_consts();
+
+        Poseidon2Air::<16, BabyBear>::new(
+            external_round_constants,
+            internal_round_constants,
+            Poseidon2Air::<16, BabyBear>::HL_MDS_MAT_4,
+            horizen_int_diag,
+            BabyBear::one(),
+            0,
+        )
     }
 }

@@ -25,9 +25,7 @@ use rand::{
 use rand_xoshiro::Xoroshiro128Plus;
 use zkhash::fields::babybear::FpBabyBear as HorizenBabyBear;
 use zkhash::poseidon2::poseidon2::Poseidon2 as HorizenPoseidon2;
-use zkhash::poseidon2::poseidon2_instance_babybear::MAT_DIAG16_M_1;
 use zkhash::poseidon2::poseidon2_instance_babybear::POSEIDON2_BABYBEAR_16_PARAMS;
-use zkhash::poseidon2::poseidon2_instance_babybear::RC16;
 
 use crate::poseidon2::Poseidon2Air;
 
@@ -148,44 +146,10 @@ fn test_poseidon2() {
 
 #[test]
 fn test_horizen_poseidon2() {
-    fn horizen_to_p3(horizen_babybear: HorizenBabyBear) -> BabyBear {
-        BabyBear::from_canonical_u64(horizen_babybear.into_bigint().0[0])
-    }
     let horizen_permut = HorizenPoseidon2::new(&POSEIDON2_BABYBEAR_16_PARAMS);
-
-    let p3_rc16: Vec<Vec<BabyBear>> = RC16
-        .iter()
-        .map(|round| {
-            round
-                .iter()
-                .map(|babybear| horizen_to_p3(*babybear))
-                .collect()
-        })
-        .collect();
-
-    let rounds_f = 8;
-    let rounds_p = 13;
-    let rounds_f_beginning = rounds_f / 2;
-    let p_end = rounds_f_beginning + rounds_p;
-    let external_round_constants: Vec<[BabyBear; 16]> = p3_rc16[..rounds_f_beginning]
-        .iter()
-        .chain(p3_rc16[p_end..].iter())
-        .cloned()
-        .map(|round| round.try_into().unwrap())
-        .collect();
-    let internal_round_constants: Vec<BabyBear> = p3_rc16[rounds_f_beginning..p_end]
-        .iter()
-        .map(|round| round[0])
-        .collect();
-
     let mut rng = create_seeded_rng();
-    let horizen_int_diag: [BabyBear; 16] = {
-        let mut array = [BabyBear::zero(); 16];
-        for (i, elem) in MAT_DIAG16_M_1.iter().enumerate() {
-            array[i] = BabyBear::from_canonical_u32(elem.into_bigint().0[0] as u32);
-        }
-        array
-    };
+    let (external_round_constants, internal_round_constants, horizen_int_diag) =
+        Poseidon2Air::<16, BabyBear>::horizen_round_consts();
     let mut air_permut = Poseidon2Air::<16, BabyBear>::new(
         external_round_constants,
         internal_round_constants,
@@ -202,7 +166,7 @@ fn test_horizen_poseidon2() {
     let p3_state: [BabyBear; 16] = horizen_state
         .iter()
         .copied()
-        .map(horizen_to_p3)
+        .map(Poseidon2Air::<16, BabyBear>::horizen_to_p3)
         .collect::<Vec<_>>()
         .try_into()
         .unwrap();
