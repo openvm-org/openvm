@@ -12,9 +12,9 @@ use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
-    CpuAir,
+    max_accesses_per_instruction, CpuAir,
     OpCode::{self, *},
-    INST_WIDTH, MAX_ACCESSES_PER_CYCLE, MAX_READS_PER_CYCLE, MAX_WRITES_PER_CYCLE,
+    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
 };
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, derive_new::new)]
@@ -107,6 +107,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
         let mut rows = vec![];
 
         let mut clock_cycle: usize = 0;
+        let mut timestamp: usize = 0;
         let mut pc = F::zero();
 
         loop {
@@ -121,7 +122,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             let e = instruction.e;
 
             let io = CpuIoCols {
-                clock_cycle: F::from_canonical_usize(clock_cycle),
+                timestamp: F::from_canonical_usize(timestamp),
                 pc,
                 opcode: F::from_canonical_usize(opcode as usize),
                 op_a: a,
@@ -133,18 +134,19 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
 
             let mut next_pc = pc + F::one();
 
-            let mut accesses = [disabled_memory_cols(); MAX_ACCESSES_PER_CYCLE];
+            let mut accesses = [disabled_memory_cols(); CPU_MAX_ACCESSES_PER_CYCLE];
             let mut num_reads = 0;
             let mut num_writes = 0;
 
             macro_rules! read {
                 ($address_space: expr, $address: expr) => {{
                     num_reads += 1;
-                    assert!(num_reads <= MAX_READS_PER_CYCLE);
-                    let timestamp = (MAX_ACCESSES_PER_CYCLE * clock_cycle) + (num_reads - 1);
-                    let data = vm
-                        .memory_chip
-                        .read_word(timestamp, $address_space, $address);
+                    assert!(num_reads <= CPU_MAX_READS_PER_CYCLE);
+                    let data = vm.memory_chip.read_word(
+                        timestamp + (num_reads - 1),
+                        $address_space,
+                        $address,
+                    );
                     accesses[num_reads - 1] =
                         memory_access_to_cols(true, $address_space, $address, data);
                     compose(data)
@@ -154,13 +156,15 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             macro_rules! write {
                 ($address_space: expr, $address: expr, $data: expr) => {{
                     num_writes += 1;
-                    assert!(num_writes <= MAX_WRITES_PER_CYCLE);
-                    let timestamp = (MAX_ACCESSES_PER_CYCLE * clock_cycle)
-                        + (MAX_READS_PER_CYCLE + num_writes - 1);
+                    assert!(num_writes <= CPU_MAX_WRITES_PER_CYCLE);
                     let word = decompose($data);
-                    vm.memory_chip
-                        .write_word(timestamp, $address_space, $address, word);
-                    accesses[MAX_READS_PER_CYCLE + num_writes - 1] =
+                    vm.memory_chip.write_word(
+                        timestamp + CPU_MAX_READS_PER_CYCLE + (num_writes - 1),
+                        $address_space,
+                        $address,
+                        word,
+                    );
+                    accesses[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
                         memory_access_to_cols(true, $address_space, $address, word);
                 }};
             }
@@ -224,14 +228,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 opcode @ (FE4ADD | FE4SUB | BBE4MUL | BBE4INV) => {
                     if vm.options().field_extension_enabled {
                         FieldExtensionArithmeticChip::calculate(
-                            vm,
-                            clock_cycle,
-                            opcode,
-                            a,
-                            b,
-                            c,
-                            d,
-                            e,
+                            vm, timestamp, opcode, a, b, c, d, e,
                         );
                     }
                 }
@@ -261,8 +258,9 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             rows.extend(cols.flatten(vm.options()));
 
             pc = next_pc;
-            clock_cycle += 1;
+            timestamp += max_accesses_per_instruction(opcode);
 
+            clock_cycle += 1;
             if opcode == TERMINATE && clock_cycle.is_power_of_two() {
                 break;
             }
