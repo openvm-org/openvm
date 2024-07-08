@@ -32,6 +32,7 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
         println!("agg col: {:?}", op.agg_col);
         println!("group operation: {:?}", op.op);
     }
+    unimplemented!("group_by cli is unimplemented until group_by chip is fixed");
 
     let index_bytes = cfg.page.index_bytes;
     let data_bytes = cfg.page.data_bytes;
