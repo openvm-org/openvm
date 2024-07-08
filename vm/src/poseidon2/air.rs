@@ -1,10 +1,9 @@
 use afs_chips::sub_chip::SubAir;
-use afs_chips::utils::implies;
 use poseidon2::poseidon2::columns::Poseidon2Cols;
 use std::borrow::Borrow;
 
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, PrimeField32};
+use p3_field::Field;
 use p3_matrix::Matrix;
 
 use super::{columns::Poseidon2ChipCols, Poseidon2Chip};
@@ -31,6 +30,7 @@ impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Chip<WIDTH, AB::F>
         SubAir::<AB>::eval(&self.air, builder, cols.aux.io, cols.aux.aux);
         builder.assert_bool(cols.io.is_alloc);
         builder.assert_bool(cols.io.cmp);
+        // todo
         // builder.assert_one(implies(cols.io.cmp, cols.io.is_alloc));
     }
 }

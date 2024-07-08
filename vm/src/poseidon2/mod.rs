@@ -1,11 +1,9 @@
 use crate::vm::VirtualMachine;
 use afs_chips::sub_chip::LocalTraceInstructions;
 use columns::{Poseidon2ChipCols, Poseidon2ChipIoCols};
-use p3_baby_bear::BabyBear;
 use p3_field::{Field, PrimeField32};
 use poseidon2::poseidon2::Poseidon2Air;
 use poseidon2::poseidon2::Poseidon2Config;
-use std::usize;
 
 #[cfg(test)]
 pub mod tests;
