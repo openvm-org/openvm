@@ -5,12 +5,26 @@ use poseidon2::poseidon2::columns::Poseidon2Cols;
 
 use super::columns::Poseidon2ChipCols;
 use super::Poseidon2Chip;
-use crate::cpu::MEMORY_BUS;
+use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
 
 /// Receives all IO columns from another chip on bus 2 (FieldArithmeticAir::BUS_INDEX).
 impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
     fn receives(&self) -> Vec<Interaction<T>> {
-        vec![]
+        let indices: Vec<usize> = (0..self.width()).collect();
+        let index_map = Poseidon2Cols::index_map(&self.air);
+        let col_indices = Poseidon2ChipCols::from_slice(&indices, &index_map);
+        let fields = col_indices
+            .io
+            .flatten()
+            .into_iter()
+            .map(VirtualPairCol::single_main)
+            .collect();
+
+        vec![Interaction {
+            fields,
+            count: VirtualPairCol::single_main(col_indices.io.is_alloc),
+            argument_index: POSEIDON2_BUS,
+        }]
     }
 
     fn sends(&self) -> Vec<Interaction<T>> {
