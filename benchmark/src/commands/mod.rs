@@ -21,10 +21,9 @@ pub struct CommonCommands {
         long = "output-file",
         short = 'o',
         help = "Path to an output file",
-        required = false,
-        default_value = "benchmark/output/output.csv"
+        required = false
     )]
-    pub output_file: String,
+    pub output_file: Option<String>,
 
     #[arg(
         long = "silent",

@@ -18,11 +18,3 @@ fn main() {
         .init();
     Cli::run();
 }
-
-/*
-TTD:
-x Use config folder
-- Get benchmarks
-- Display table
-- Write CSV
-*/

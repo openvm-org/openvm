@@ -9,6 +9,7 @@ use csv::{Writer, WriterBuilder};
 use logical_interface::{
     afs_interface::AfsInterface, mock_db::MockDb, table::types::TableMetadata,
 };
+use p3_util::ceil_div_usize;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -17,6 +18,7 @@ pub struct BenchmarkRow {
     pub scenario: String,
     pub index_bytes: usize,
     pub data_bytes: usize,
+    pub page_width: usize,
     pub height: usize,
     pub max_rw_ops: usize,
     pub bits_per_fe: usize,
@@ -59,6 +61,7 @@ pub fn write_csv_header(path: String) -> Result<()> {
         "",
         "",
         "",
+        "",
         "fri params",
         "",
         "",
@@ -77,6 +80,7 @@ pub fn write_csv_header(path: String) -> Result<()> {
         "scenario",
         "index_bytes",
         "data_bytes",
+        "page_width",
         "height",
         "max_rw_ops",
         "bits_per_fe",
@@ -107,16 +111,20 @@ pub fn write_csv_line(
 ) -> Result<()> {
     let file = OpenOptions::new().append(true).open(path).unwrap();
     let mut writer = WriterBuilder::new().has_headers(false).from_writer(file);
-    // let mut writer = Writer::from
 
     let max_writes = config.page.max_rw_ops * percent_writes / 100;
     let max_reads = config.page.max_rw_ops * percent_reads / 100;
     let scenario = format!("{}r/{}w", max_reads, max_writes);
+    let bytes_divisor = ceil_div_usize(config.page.bits_per_fe, 8);
+    let idx_len = ceil_div_usize(config.page.index_bytes, bytes_divisor);
+    let data_len = ceil_div_usize(config.page.data_bytes, bytes_divisor);
+    let page_width = 1 + idx_len + data_len;
     let row = BenchmarkRow {
         test_type,
         scenario,
         index_bytes: config.page.index_bytes,
         data_bytes: config.page.data_bytes,
+        page_width,
         height: config.page.height,
         max_rw_ops: config.page.max_rw_ops,
         bits_per_fe: config.page.bits_per_fe,

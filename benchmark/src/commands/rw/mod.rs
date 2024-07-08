@@ -32,7 +32,7 @@ use crate::{
         random_table::generate_random_afi_rw,
         tracing_log_parser::{clear_tracing_log, filter_and_extract_time_busy},
     },
-    AFI_FILE_PATH, DB_FILE_PATH, TABLE_ID, TMP_FOLDER, TMP_TRACING_LOG,
+    AFI_FILE_PATH, DB_FILE_PATH, DEFAULT_OUTPUT_FILE, TABLE_ID, TMP_FOLDER, TMP_TRACING_LOG,
 };
 
 use super::CommonCommands;
@@ -67,6 +67,8 @@ impl RwCommand {
     pub fn execute(&self) -> Result<()> {
         println!("Executing Read/Write benchmark");
 
+        assert!(self.percent_reads + self.percent_writes <= 100);
+
         // Parse config(s)
         let configs = parse_config_folder(self.common.config_folder.clone());
 
@@ -74,12 +76,16 @@ impl RwCommand {
         let _ = fs::create_dir_all(TMP_FOLDER);
 
         // Write .csv file
-        let output_file = self.common.output_file.clone();
+        let output_file = self
+            .common
+            .output_file
+            .clone()
+            .unwrap_or(DEFAULT_OUTPUT_FILE.to_string());
         write_csv_header(output_file.clone())?;
+        println!("Output file: {}", output_file.clone());
 
         // Parse engine
         for config in configs {
-            println!("Running benchmark for config: {:?}", config);
             clear_tracing_log(TMP_TRACING_LOG.as_str())?;
 
             // Generate AFI file
@@ -107,8 +113,10 @@ impl RwCommand {
                     "ReadWrite verify",
                 ],
             )?;
-            println!("timing: {:?}", timings);
+            println!("Config: {:?}", config);
+            println!("Timing: {:?}", timings);
 
+            println!("Output file: {}", output_file.clone());
             write_csv_line(
                 output_file.clone(),
                 "ReadWrite".to_string(),
