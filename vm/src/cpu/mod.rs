@@ -70,7 +70,7 @@ impl OpCode {
     }
 }
 
-use crate::field_extension::{FieldExtensionArithmeticAir, FieldExtensionArithmeticChip};
+use crate::field_extension::FieldExtensionArithmeticAir;
 use OpCode::*;
 
 pub const CORE_INSTRUCTIONS: [OpCode; 6] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE];
