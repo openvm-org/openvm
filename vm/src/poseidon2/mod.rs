@@ -1,7 +1,9 @@
 use crate::vm::VirtualMachine;
 use afs_chips::sub_chip::LocalTraceInstructions;
 use columns::{Poseidon2ChipCols, Poseidon2ChipIoCols};
-use p3_field::{Field, PrimeField32};
+use p3_baby_bear::BabyBear;
+use p3_field::PrimeField32;
+use p3_field::{AbstractField, Field};
 use poseidon2::poseidon2::Poseidon2Air;
 use poseidon2::poseidon2::Poseidon2Config;
 
@@ -79,7 +81,13 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
             aux,
         });
         // TODO adjust for compression
-        for (i, &output_elem) in output.iter().enumerate() {
+        let iter_range = if op.cmp == F::from_canonical_u32(0) {
+            output.iter().enumerate().take(16)
+        } else {
+            output.iter().enumerate().take(8)
+        };
+
+        for (i, &output_elem) in iter_range {
             vm.memory_chip.write_word(
                 40 * op.clk + 16 + i,
                 op.e,

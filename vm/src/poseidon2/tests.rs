@@ -8,14 +8,13 @@ use afs_test_utils::config::{
     fri_params::fri_params_with_80_bits_of_security,
 };
 use afs_test_utils::engine::StarkEngine;
-use afs_test_utils::{
-    config::baby_bear_poseidon2::run_simple_test_no_pis,
-    interaction::dummy_interaction_air::DummyInteractionAir,
-};
+use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
+use afs_test_utils::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use poseidon2::poseidon2::Poseidon2Config;
+use rand::RngCore;
 
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 8;
@@ -42,11 +41,12 @@ impl WriteOps {
 
 #[test]
 fn poseidon2_chip_test() {
+    let mut rng = create_seeded_rng();
     let a = BabyBear::from_canonical_u32(10);
-    let b = BabyBear::from_canonical_u32(10);
-    let c = BabyBear::from_canonical_u32(10);
+    let b = BabyBear::from_canonical_u32(30);
+    let c = BabyBear::from_canonical_u32(20);
     let d = BabyBear::from_canonical_u32(10);
-    let e = BabyBear::from_canonical_u32(10);
+    let e = BabyBear::from_canonical_u32(12);
     let ops = vec![Poseidon2Query {
         clk: 1,
         a,
@@ -54,7 +54,7 @@ fn poseidon2_chip_test() {
         c,
         d,
         e,
-        cmp: BabyBear::from_canonical_u32(0),
+        cmp: BabyBear::from_canonical_u32(1),
     }];
 
     let mut vm = VirtualMachine::<1, BabyBear>::new(
@@ -70,10 +70,10 @@ fn poseidon2_chip_test() {
     );
 
     let chunk1 = (0..8)
-        .map(BabyBear::from_canonical_usize)
+        .map(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30)))
         .collect::<Vec<_>>();
     let chunk2 = (8..16)
-        .map(BabyBear::from_canonical_usize)
+        .map(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30)))
         .collect::<Vec<_>>();
 
     let write_ops: [WriteOps; 16] = core::array::from_fn(|i| {
