@@ -27,6 +27,9 @@ pub struct BenchmarkRow {
     pub num_queries: usize,
     pub pow_bits: usize,
     pub engine: EngineType,
+    pub preprocessed: usize,
+    pub main: usize,
+    pub challenge: usize,
     pub keygen_time: String,
     pub cache_time: String,
     pub prove_generate: String,
@@ -66,6 +69,9 @@ pub fn write_csv_header(path: String) -> Result<()> {
         "",
         "",
         "stark engine",
+        "air width",
+        "",
+        "",
         "timing",
         "",
         "",
@@ -89,6 +95,9 @@ pub fn write_csv_header(path: String) -> Result<()> {
         "num_queries",
         "pow_bits",
         "engine",
+        "preprocessed",
+        "main",
+        "challenge",
         "keygen_time",
         "cache_time",
         "prove_generate",
@@ -105,7 +114,7 @@ pub fn write_csv_line(
     path: String,
     test_type: String,
     config: &PageConfig,
-    timings: &HashMap<String, String>,
+    log_data: &HashMap<String, String>,
     percent_reads: usize,
     percent_writes: usize,
 ) -> Result<()> {
@@ -133,15 +142,27 @@ pub fn write_csv_line(
         num_queries: config.fri_params.num_queries,
         pow_bits: config.fri_params.proof_of_work_bits,
         engine: config.stark_engine.engine,
-        keygen_time: timings.get("ReadWrite keygen").unwrap().to_owned(),
-        cache_time: timings.get("ReadWrite cache").unwrap().to_owned(),
-        prove_generate: timings.get("Prove.generate_trace").unwrap().to_owned(),
-        prove_commit: timings
+        preprocessed: log_data
+            .get("Total air width: preprocessed=")
+            .unwrap()
+            .parse::<usize>()?,
+        main: log_data
+            .get("Total air width: partitioned_main=")
+            .unwrap()
+            .parse::<usize>()?,
+        challenge: log_data
+            .get("Total air width: after_challenge=")
+            .unwrap()
+            .parse::<usize>()?,
+        keygen_time: log_data.get("ReadWrite keygen").unwrap().to_owned(),
+        cache_time: log_data.get("ReadWrite cache").unwrap().to_owned(),
+        prove_generate: log_data.get("Prove.generate_trace").unwrap().to_owned(),
+        prove_commit: log_data
             .get("prove:Prove trace commitment")
             .unwrap()
             .to_owned(),
-        prove_time: timings.get("ReadWrite prove").unwrap().to_owned(),
-        verify_time: timings.get("ReadWrite verify").unwrap().to_owned(),
+        prove_time: log_data.get("ReadWrite prove").unwrap().to_owned(),
+        verify_time: log_data.get("ReadWrite verify").unwrap().to_owned(),
     };
 
     writer.serialize(row)?;

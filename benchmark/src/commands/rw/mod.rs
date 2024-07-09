@@ -1,4 +1,4 @@
-use std::fs;
+use std::{collections::HashMap, fs, time::Instant};
 
 use afs::commands::{
     cache::CacheCommand, keygen::KeygenCommand, prove::ProveCommand, verify::VerifyCommand,
@@ -31,7 +31,9 @@ use crate::{
     utils::{
         output_writer::{save_afi_to_new_db, write_csv_header, write_csv_line},
         random_table::generate_random_afi_rw,
-        tracing_log_parser::{clear_tracing_log, filter_and_extract_time_busy},
+        tracing_log_parser::{
+            clear_tracing_log, extract_event_data_from_log, extract_timing_data_from_log,
+        },
     },
     AFI_FILE_PATH, DB_FILE_PATH, DEFAULT_OUTPUT_FILE, TABLE_ID, TMP_FOLDER, TMP_TRACING_LOG,
 };
@@ -113,7 +115,15 @@ impl RwCommand {
 
             run_rw_bench(config).unwrap();
 
-            let timings = filter_and_extract_time_busy(
+            let event_data = extract_event_data_from_log(
+                TMP_TRACING_LOG.as_str(),
+                &[
+                    "Total air width: preprocessed=",
+                    "Total air width: partitioned_main=",
+                    "Total air width: after_challenge=",
+                ],
+            )?;
+            let timing_data = extract_timing_data_from_log(
                 TMP_TRACING_LOG.as_str(),
                 &[
                     "ReadWrite keygen",
@@ -124,15 +134,20 @@ impl RwCommand {
                     "ReadWrite verify",
                 ],
             )?;
+
             println!("Config: {:?}", config);
-            println!("Timing: {:?}", timings);
+            println!("Event data: {:?}", event_data);
+            println!("Timing data: {:?}", timing_data);
+
+            let mut log_data: HashMap<String, String> = event_data;
+            log_data.extend(timing_data);
 
             println!("Output file: {}", output_file.clone());
             write_csv_line(
                 output_file.clone(),
                 "ReadWrite".to_string(),
                 config,
-                &timings,
+                &log_data,
                 self.percent_reads,
                 self.percent_writes,
             )?;

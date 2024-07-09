@@ -14,6 +14,7 @@ use color_eyre::eyre::Result;
 use p3_field::PrimeField64;
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::Serialize;
+use tracing::info;
 
 use super::create_prefix;
 
@@ -107,6 +108,12 @@ where
 
         let partial_pk = keygen_builder.generate_partial_pk();
         let partial_vk = partial_pk.partial_vk();
+        let (total_preprocessed, total_partitioned_main, total_after_challenge) =
+            partial_vk.total_air_width();
+        let air_width = total_preprocessed + total_partitioned_main + total_after_challenge;
+        info!("Keygen: total air width: {}", air_width);
+        println!("Keygen: total air width: {}", air_width);
+
         let encoded_pk: Vec<u8> = bincode::serialize(&partial_pk)?;
         let encoded_vk: Vec<u8> = bincode::serialize(&partial_vk)?;
         let pk_path = output_folder.clone() + "/" + &prefix.clone() + ".partial.pk";
