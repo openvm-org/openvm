@@ -406,7 +406,7 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
             F::zero(),
             F::zero(),
             AS::Register,
-            AS::Immediate,
+            AS::Register,
         )],
         _ => panic!("Unsupported instruction {:?}", instruction),
     }

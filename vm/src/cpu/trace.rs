@@ -243,8 +243,9 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     witness_idx += 1;
                     vm.memory_chip.write_hint(
                         MAX_ACCESSES_PER_CYCLE * clock_cycle,
-                        d,
                         a,
+                        d,
+                        e,
                         next_input.clone(),
                     );
                 }

@@ -110,25 +110,27 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         self.access_indices.insert((address_space, address));
     }
 
-    pub fn write_hint(&mut self, timestamp: usize, address_space: F, address: F, hint: Vec<F>) {
-        assert!(address_space != F::zero());
+    pub fn write_hint(&mut self, timestamp: usize, op_a: F, d: F, e: F, hint: Vec<F>) {
+        assert!(d != F::zero());
         if let Some(last_timestamp) = self.last_timestamp {
             assert!(timestamp > last_timestamp);
         }
         self.last_timestamp = Some(timestamp);
 
+        let address = if d != F::zero() {
+            self.memory[&(op_a, d)]
+        } else {
+            op_a
+        };
+
         for (i, &datum) in hint.iter().enumerate() {
-            assert!(!self.access_indices.contains(&(
-                address_space,
-                address + F::from_canonical_usize(i * WORD_SIZE)
-            )));
+            assert!(!self
+                .access_indices
+                .contains(&(e, address + F::from_canonical_usize(i * WORD_SIZE))));
             let decomp: [F; WORD_SIZE] = decompose(datum);
             for (j, &decomp_elem) in decomp.iter().enumerate() {
                 self.memory.insert(
-                    (
-                        address_space,
-                        address + F::from_canonical_usize(i * WORD_SIZE + j),
-                    ),
+                    (e, address + F::from_canonical_usize(i * WORD_SIZE + j)),
                     decomp_elem,
                 );
             }
