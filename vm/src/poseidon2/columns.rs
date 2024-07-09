@@ -1,7 +1,7 @@
 use super::Poseidon2Chip;
 use p3_field::Field;
-use poseidon2::poseidon2::columns::{Poseidon2Cols, Poseidon2ColsIndexMap};
-use poseidon2::poseidon2::Poseidon2Air;
+use poseidon2_air::poseidon2::columns::{Poseidon2Cols, Poseidon2ColsIndexMap};
+use poseidon2_air::poseidon2::Poseidon2Air;
 /// Columns for field arithmetic chip.
 ///
 /// Five IO columns for rcv_count, opcode, x, y, result.

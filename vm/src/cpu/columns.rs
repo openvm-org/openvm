@@ -3,11 +3,11 @@ use std::{array::from_fn, collections::BTreeMap};
 use afs_chips::is_equal_vec::columns::IsEqualVecAuxCols;
 use itertools::Itertools;
 
-use super::{CpuOptions, OpCode, MAX_ACCESSES_PER_CYCLE};
+use super::{CpuOptions, OpCode, CPU_MAX_ACCESSES_PER_CYCLE};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuIoCols<T> {
-    pub clock_cycle: T,
+    pub timestamp: T,
     pub pc: T,
 
     pub opcode: T,
@@ -21,7 +21,7 @@ pub struct CpuIoCols<T> {
 impl<T: Clone> CpuIoCols<T> {
     pub fn from_slice(slc: &[T]) -> Self {
         Self {
-            clock_cycle: slc[0].clone(),
+            timestamp: slc[0].clone(),
             pc: slc[1].clone(),
             opcode: slc[2].clone(),
             op_a: slc[3].clone(),
@@ -34,7 +34,7 @@ impl<T: Clone> CpuIoCols<T> {
 
     pub fn flatten(&self) -> Vec<T> {
         vec![
-            self.clock_cycle.clone(),
+            self.timestamp.clone(),
             self.pc.clone(),
             self.opcode.clone(),
             self.op_a.clone(),
@@ -94,7 +94,7 @@ impl<const WORD_SIZE: usize, T: Clone> MemoryAccessCols<WORD_SIZE, T> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuAuxCols<const WORD_SIZE: usize, T> {
     pub operation_flags: BTreeMap<OpCode, T>,
-    pub accesses: [MemoryAccessCols<WORD_SIZE, T>; MAX_ACCESSES_PER_CYCLE],
+    pub accesses: [MemoryAccessCols<WORD_SIZE, T>; CPU_MAX_ACCESSES_PER_CYCLE],
     pub read0_equals_read1: T,
     pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
 }
@@ -143,7 +143,7 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
 
     pub fn get_width(options: CpuOptions) -> usize {
         options.num_enabled_instructions()
-            + (MAX_ACCESSES_PER_CYCLE * MemoryAccessCols::<WORD_SIZE, T>::get_width())
+            + (CPU_MAX_ACCESSES_PER_CYCLE * MemoryAccessCols::<WORD_SIZE, T>::get_width())
             + 1
             + IsEqualVecAuxCols::<T>::get_width(WORD_SIZE)
     }

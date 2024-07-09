@@ -6,7 +6,7 @@ use p3_field::PrimeField32;
 use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
-use poseidon2::poseidon2::Poseidon2Config;
+use poseidon2_air::poseidon2::Poseidon2Config;
 
 pub enum Void {}
 
@@ -16,6 +16,7 @@ use crate::{
         CpuAir, CpuOptions, POSEIDON2_BUS, RANGE_CHECKER_BUS,
     },
     field_arithmetic::FieldArithmeticChip,
+    field_extension::FieldExtensionArithmeticChip,
     memory::offline_checker::MemoryChip,
     poseidon2::Poseidon2Chip,
     program::ProgramChip,
@@ -32,6 +33,7 @@ pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub program_chip: ProgramChip<F>,
     pub memory_chip: MemoryChip<WORD_SIZE, F>,
     pub field_arithmetic_chip: FieldArithmeticChip<F>,
+    pub field_extension_chip: FieldExtensionArithmeticChip<WORD_SIZE, F>,
     pub range_checker: Arc<RangeCheckerGateChip>,
     pub poseidon2_chip: Poseidon2Chip<16, F>,
 
@@ -54,6 +56,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
         let program_chip = ProgramChip::new(program.clone());
         let memory_chip = MemoryChip::new(limb_bits, limb_bits, limb_bits, decomp);
         let field_arithmetic_chip = FieldArithmeticChip::new();
+        let field_extension_chip = FieldExtensionArithmeticChip::new();
         let poseidon2_chip = Poseidon2Chip::from_poseidon2_config(poseidon2_config, POSEIDON2_BUS);
 
         Self {
@@ -62,6 +65,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             program_chip,
             memory_chip,
             field_arithmetic_chip,
+            field_extension_chip,
             range_checker,
             poseidon2_chip,
             traces: vec![],
@@ -83,6 +87,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
         ];
         if self.options().field_arithmetic_enabled {
             result.push(self.field_arithmetic_chip.generate_trace());
+        }
+        if self.options().field_extension_enabled {
+            result.push(self.field_extension_chip.generate_trace());
         }
         Ok(result)
     }
@@ -125,20 +132,18 @@ pub fn get_chips<const WORD_SIZE: usize, SC: StarkGenericConfig>(
 where
     Val<SC>: PrimeField32,
 {
+    let mut result: Vec<&dyn AnyRap<SC>> = vec![
+        &vm.cpu_air,
+        &vm.program_chip.air,
+        &vm.memory_chip.air,
+        &vm.range_checker.air,
+        &vm.poseidon2_chip.air,
+    ];
     if vm.options().field_arithmetic_enabled {
-        vec![
-            &vm.cpu_air,
-            &vm.program_chip.air,
-            &vm.memory_chip.air,
-            &vm.range_checker.air,
-            &vm.field_arithmetic_chip.air,
-        ]
-    } else {
-        vec![
-            &vm.cpu_air,
-            &vm.program_chip.air,
-            &vm.memory_chip.air,
-            &vm.range_checker.air,
-        ]
+        result.push(&vm.field_arithmetic_chip.air as &dyn AnyRap<SC>);
     }
+    if vm.options().field_extension_enabled {
+        result.push(&vm.field_extension_chip.air as &dyn AnyRap<SC>);
+    }
+    result
 }

@@ -22,6 +22,7 @@ pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(program: Vec<Ins
         VmConfig {
             vm: VmParamsConfig {
                 field_arithmetic_enabled: true,
+                field_extension_enabled: false,
                 limb_bits: 28,
                 decomp: 4,
             },

@@ -7,13 +7,14 @@ use afs_chips::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
 
-use crate::vm::VirtualMachine;
+use crate::memory::{compose, decompose};
+use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
-    compose, decompose, CpuAir,
+    max_accesses_per_instruction, CpuAir,
     OpCode::{self, *},
-    INST_WIDTH, MAX_ACCESSES_PER_CYCLE, MAX_READS_PER_CYCLE, MAX_WRITES_PER_CYCLE,
+    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
 };
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, derive_new::new)]
@@ -25,7 +26,6 @@ pub struct Instruction<F> {
     pub d: F,
     pub e: F,
 }
-
 pub fn isize_to_field<F: Field>(value: isize) -> F {
     if value < 0 {
         return F::neg_one() * F::from_canonical_usize(value.unsigned_abs());
@@ -77,24 +77,6 @@ fn memory_access_to_cols<const WORD_SIZE: usize, F: PrimeField64>(
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct FieldExtensionOperation<F> {
-    pub opcode: OpCode,
-    pub operand1: [F; 4],
-    pub operand2: [F; 4],
-    pub result: [F; 4],
-}
-
-impl<F: Field> FieldExtensionOperation<F> {
-    pub fn to_vec(&self) -> Vec<F> {
-        let mut vec = vec![F::from_canonical_usize(self.opcode as usize)];
-        vec.extend(self.operand1.iter());
-        vec.extend(self.operand2.iter());
-        vec.extend(self.result.iter());
-        vec
-    }
-}
-
 #[derive(Debug)]
 pub enum ExecutionError {
     Fail(usize),
@@ -125,6 +107,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
         let mut rows = vec![];
 
         let mut clock_cycle: usize = 0;
+        let mut timestamp: usize = 0;
         let mut pc = F::zero();
 
         loop {
@@ -139,7 +122,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             let e = instruction.e;
 
             let io = CpuIoCols {
-                clock_cycle: F::from_canonical_usize(clock_cycle),
+                timestamp: F::from_canonical_usize(timestamp),
                 pc,
                 opcode: F::from_canonical_usize(opcode as usize),
                 op_a: a,
@@ -151,21 +134,19 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
 
             let mut next_pc = pc + F::one();
 
-            let mut accesses = [disabled_memory_cols(); MAX_ACCESSES_PER_CYCLE];
+            let mut accesses = [disabled_memory_cols(); CPU_MAX_ACCESSES_PER_CYCLE];
             let mut num_reads = 0;
             let mut num_writes = 0;
 
             macro_rules! read {
                 ($address_space: expr, $address: expr) => {{
                     num_reads += 1;
-                    assert!(num_reads <= MAX_READS_PER_CYCLE);
-                    let timestamp = (MAX_ACCESSES_PER_CYCLE * clock_cycle) + (num_reads - 1);
-                    let data = if $address_space == F::zero() {
-                        decompose::<WORD_SIZE, F>($address)
-                    } else {
-                        vm.memory_chip
-                            .read_word(timestamp, $address_space, $address)
-                    };
+                    assert!(num_reads <= CPU_MAX_READS_PER_CYCLE);
+                    let data = vm.memory_chip.read_word(
+                        timestamp + (num_reads - 1),
+                        $address_space,
+                        $address,
+                    );
                     accesses[num_reads - 1] =
                         memory_access_to_cols(true, $address_space, $address, data);
                     compose(data)
@@ -175,13 +156,15 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             macro_rules! write {
                 ($address_space: expr, $address: expr, $data: expr) => {{
                     num_writes += 1;
-                    assert!(num_writes <= MAX_WRITES_PER_CYCLE);
-                    let timestamp = (MAX_ACCESSES_PER_CYCLE * clock_cycle)
-                        + (MAX_READS_PER_CYCLE + num_writes - 1);
+                    assert!(num_writes <= CPU_MAX_WRITES_PER_CYCLE);
                     let word = decompose($data);
-                    vm.memory_chip
-                        .write_word(timestamp, $address_space, $address, word);
-                    accesses[MAX_READS_PER_CYCLE + num_writes - 1] =
+                    vm.memory_chip.write_word(
+                        timestamp + CPU_MAX_READS_PER_CYCLE + (num_writes - 1),
+                        $address_space,
+                        $address,
+                        word,
+                    );
+                    accesses[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
                         memory_access_to_cols(true, $address_space, $address, word);
                 }};
             }
@@ -242,6 +225,16 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     let value = read!(d, a);
                     println!("{}", value);
                 }
+                opcode @ (FE4ADD | FE4SUB | BBE4MUL | BBE4INV) => {
+                    if vm.options().field_extension_enabled {
+                        FieldExtensionArithmeticChip::calculate(
+                            vm, timestamp, instruction,
+                        );
+                    } else {
+                        return Err(ExecutionError::DisabledOperation(opcode));
+                    }
+                }
+                _ => panic!()
             };
 
             let mut operation_flags = BTreeMap::new();
@@ -268,8 +261,9 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             rows.extend(cols.flatten(vm.options()));
 
             pc = next_pc;
-            clock_cycle += 1;
+            timestamp += max_accesses_per_instruction(opcode);
 
+            clock_cycle += 1;
             if opcode == TERMINATE && clock_cycle.is_power_of_two() {
                 break;
             }

@@ -1,7 +1,7 @@
 use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::{BaseAir, PairCol, VirtualPairCol};
 use p3_field::Field;
-use poseidon2::poseidon2::columns::Poseidon2Cols;
+use poseidon2_air::poseidon2::columns::Poseidon2Cols;
 
 use super::columns::Poseidon2ChipCols;
 use super::Poseidon2Chip;
@@ -38,7 +38,7 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
             let memory_cycle = VirtualPairCol::new(
                 vec![(
                     PairCol::Main(col_indices.io.clk),
-                    T::from_canonical_usize(40),
+                    T::one(),
                 )],
                 T::from_canonical_usize(i),
             );
@@ -74,7 +74,7 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
             let memory_cycle = VirtualPairCol::new(
                 vec![(
                     PairCol::Main(col_indices.io.clk),
-                    T::from_canonical_usize(40),
+                    T::one(),
                 )],
                 T::from_canonical_usize(i + 16),
             );
@@ -107,3 +107,4 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
         interactions
     }
 }
+

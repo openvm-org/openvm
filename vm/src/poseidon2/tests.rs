@@ -1,4 +1,6 @@
-use super::{Poseidon2Chip, Poseidon2Query};
+use super::{make_io_cols, Poseidon2Chip};
+use crate::cpu::trace::Instruction;
+use crate::cpu::OpCode::COMPRESS_POSEIDON2;
 use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
 use crate::vm::config::{VmConfig, VmParamsConfig};
 use crate::vm::VirtualMachine;
@@ -15,7 +17,7 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 use p3_util::log2_strict_usize;
-use poseidon2::poseidon2::Poseidon2Config;
+use poseidon2_air::poseidon2::Poseidon2Config;
 use rand::RngCore;
 
 const WORD_SIZE: usize = 1;
@@ -49,49 +51,22 @@ fn poseidon2_chip_test() {
     let c = BabyBear::from_canonical_u32(20);
     let d = BabyBear::from_canonical_u32(10);
     let e = BabyBear::from_canonical_u32(12);
-    let ops = vec![
-        Poseidon2Query {
-            clk: 1,
-            a,
-            b,
-            c,
-            d,
-            e,
-            cmp: BabyBear::from_canonical_u32(1),
-        },
-        Poseidon2Query {
-            clk: 2,
-            a,
-            b,
-            c,
-            d,
-            e,
-            cmp: BabyBear::from_canonical_u32(1),
-        },
-        Poseidon2Query {
-            clk: 3,
-            a,
-            b,
-            c,
-            d,
-            e,
-            cmp: BabyBear::from_canonical_u32(1),
-        },
-        Poseidon2Query {
-            clk: 4,
-            a,
-            b,
-            c,
-            d,
-            e,
-            cmp: BabyBear::from_canonical_u32(1),
-        },
-    ];
+
+    let same_instruction = Instruction {
+        opcode: COMPRESS_POSEIDON2,
+        op_a: a,
+        op_b: b,
+        op_c: c,
+        d,
+        e,
+    };
+    let num_instructions = 4;
 
     let mut vm = VirtualMachine::<1, BabyBear>::new(
         VmConfig {
             vm: VmParamsConfig {
                 field_arithmetic_enabled: true,
+                field_extension_enabled: false,
                 limb_bits: LIMB_BITS,
                 decomp: DECOMP,
             },
@@ -130,16 +105,24 @@ fn poseidon2_chip_test() {
             .write_word(op.clk, op.ad_s, op.address, op.data);
     }
 
-    for op in &ops {
-        Poseidon2Chip::<16, BabyBear>::poseidon2_perm(&mut vm, op.clone());
+    let time_per = Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(COMPRESS_POSEIDON2);
+
+    for i in 0..num_instructions {
+        let start_timestamp = write_ops.len() + (time_per * i);
+        Poseidon2Chip::<16, BabyBear>::poseidon2_perm(&mut vm, start_timestamp, same_instruction);
     }
-    let dummy_cpu_poseidon2 =
-        DummyInteractionAir::new(Poseidon2Query::<BabyBear>::width(), true, POSEIDON2_BUS);
+    let dummy_cpu_poseidon2 = DummyInteractionAir::new(
+        Poseidon2Chip::<16, BabyBear>::interaction_width(),
+        true,
+        POSEIDON2_BUS,
+    );
     let dummy_cpu_poseidon2_trace = RowMajorMatrix::new(
-        ops.into_iter()
-            .flat_map(|op| op.to_io_cols().flatten())
+        (0..num_instructions)
+            .flat_map(|i| {
+                make_io_cols(write_ops.len() + (time_per * i), same_instruction).flatten()
+            })
             .collect(),
-        Poseidon2Query::<BabyBear>::width() + 1,
+        Poseidon2Chip::<16, BabyBear>::interaction_width() + 1,
     );
 
     let dummy_cpu_memory = DummyInteractionAir::new(5, true, MEMORY_BUS);

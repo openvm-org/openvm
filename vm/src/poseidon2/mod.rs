@@ -3,8 +3,11 @@ use afs_chips::sub_chip::LocalTraceInstructions;
 use columns::{Poseidon2ChipCols, Poseidon2ChipIoCols};
 use p3_field::Field;
 use p3_field::PrimeField32;
-use poseidon2::poseidon2::Poseidon2Air;
-use poseidon2::poseidon2::Poseidon2Config;
+use poseidon2_air::poseidon2::Poseidon2Air;
+use poseidon2_air::poseidon2::Poseidon2Config;
+use crate::cpu::OpCode;
+use crate::cpu::OpCode::*;
+use crate::cpu::trace::Instruction;
 
 #[cfg(test)]
 pub mod tests;
@@ -23,32 +26,24 @@ pub struct Poseidon2Chip<const WIDTH: usize, F: Clone> {
     pub rows: Vec<Poseidon2ChipCols<WIDTH, F>>,
 }
 
-#[derive(Clone)]
-pub struct Poseidon2Query<F> {
-    pub clk: usize,
-    pub a: F,
-    pub b: F,
-    pub c: F,
-    pub d: F,
-    pub e: F,
-    pub cmp: F,
-}
-
-impl<F: Field> Poseidon2Query<F> {
-    pub fn to_io_cols(&self) -> Poseidon2ChipIoCols<F> {
-        Poseidon2ChipIoCols::<F> {
-            is_alloc: F::from_canonical_u32(1),
-            clk: F::from_canonical_usize(self.clk),
-            a: self.a,
-            b: self.b,
-            c: self.c,
-            d: self.d,
-            e: self.e,
-            cmp: self.cmp,
-        }
-    }
-    pub fn width() -> usize {
-        7
+fn make_io_cols<F: Field>(start_timestamp: usize, instruction: Instruction<F>) -> Poseidon2ChipIoCols<F> {
+    let Instruction {
+        opcode,
+        op_a,
+        op_b,
+        op_c,
+        d,
+        e,
+    } = instruction;
+    Poseidon2ChipIoCols::<F> {
+        is_alloc: F::one(),
+        clk: F::from_canonical_usize(start_timestamp),
+        a: op_a,
+        b: op_b,
+        c: op_c,
+        d,
+        e,
+        cmp: F::from_bool(opcode == COMPRESS_POSEIDON2)
     }
 }
 
@@ -57,30 +52,50 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
         let air = Poseidon2Air::<WIDTH, F>::from_config(config, bus_index);
         Self { air, rows: vec![] }
     }
+
+    pub fn interaction_width() -> usize {
+        7
+    }
+
+    pub fn max_accesses_per_instruction(opcode: OpCode) -> usize {
+        assert!(opcode == COMPRESS_POSEIDON2 || opcode == PERM_POSEIDON2);
+        40
+    }
 }
 
 impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     pub fn poseidon2_perm<const WORD_SIZE: usize>(
         vm: &mut VirtualMachine<WORD_SIZE, F>,
-        op: Poseidon2Query<F>,
+        start_timestamp: usize,
+        instruction: Instruction<F>,
     ) {
+        let Instruction {
+            opcode,
+            op_a,
+            op_b,
+            op_c,
+            d,
+            e,
+        } = instruction;
+        assert!(opcode == COMPRESS_POSEIDON2 || opcode == PERM_POSEIDON2);
+
         let data_1: [F; 8] = core::array::from_fn(|i| {
             vm.memory_chip
-                .read_elem(40 * op.clk + i, op.d, op.a + F::from_canonical_usize(i))
+                .read_elem(start_timestamp + i, d, op_a + F::from_canonical_usize(i))
         });
         let data_2: [F; 8] = core::array::from_fn(|i| {
             vm.memory_chip
-                .read_elem(40 * op.clk + 8 + i, op.d, op.b + F::from_canonical_usize(i))
+                .read_elem(start_timestamp + 8 + i, d, op_b + F::from_canonical_usize(i))
         });
         let input_state: [F; 16] = [data_1, data_2].concat().try_into().unwrap();
         let aux = vm.poseidon2_chip.air.generate_trace_row(input_state);
         let output = aux.io.output;
         vm.poseidon2_chip.rows.push(Poseidon2ChipCols {
-            io: op.to_io_cols(),
+            io: make_io_cols(start_timestamp, instruction),
             aux,
         });
         // TODO adjust for compression
-        let iter_range = if op.cmp == F::from_canonical_u32(0) {
+        let iter_range = if opcode == PERM_POSEIDON2 {
             output.iter().enumerate().take(16)
         } else {
             output.iter().enumerate().take(8)
@@ -88,11 +103,12 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
 
         for (i, &output_elem) in iter_range {
             vm.memory_chip.write_word(
-                40 * op.clk + 16 + i,
-                op.e,
-                op.c + F::from_canonical_usize(i),
+                start_timestamp + 16 + i,
+                e,
+                op_c + F::from_canonical_usize(i),
                 [output_elem; WORD_SIZE],
             );
         }
     }
 }
+
