@@ -35,6 +35,11 @@ pub fn generate_configs() -> Vec<PageConfig> {
         &height_vec,
         &engine_vec
     ) {
+        if (*height > 1000000 && (fri_params.log_blowup > 2 || *data_bytes > 512))
+            || (*height > 500000 && fri_params.log_blowup >= 3)
+        {
+            continue;
+        }
         let config = PageConfig {
             page: PageParamsConfig {
                 index_bytes: *idx_bytes,
