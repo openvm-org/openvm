@@ -158,6 +158,7 @@ where
             config.page.data_bytes,
             height,
         );
+        println!("Prove: setup");
         let zk_ops = instructions
             .operations
             .iter()
@@ -192,6 +193,7 @@ where
         let init_prover_data: ProverTraceData<SC> =
             bincode::deserialize(&init_prover_data_encoded).unwrap();
 
+        println!("Prove: load page and ops");
         let (init_page_pdata, final_page_pdata) = page_controller.load_page_and_ops(
             &page_init,
             Some(Arc::new(init_prover_data)),
@@ -202,14 +204,18 @@ where
         );
 
         // Generating trace for ops_sender and making sure it has height num_ops
+        println!("Prove: generate trace");
         let trace_span = info_span!("Prove.generate_trace").entered();
         let ops_sender_trace = ops_sender.generate_trace(&zk_ops, config.page.max_rw_ops);
         trace_span.exit();
 
+        println!("Prove: load keys");
         let encoded_pk =
             read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
         let partial_pk: MultiStarkPartialProvingKey<SC> =
             bincode::deserialize(&encoded_pk).unwrap();
+
+        println!("Prove: prove");
         let proof = page_controller.prove(
             engine,
             &partial_pk,

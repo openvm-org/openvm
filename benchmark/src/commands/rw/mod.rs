@@ -102,6 +102,7 @@ impl RwCommand {
             clear_tracing_log(TMP_TRACING_LOG.as_str())?;
 
             // Generate AFI file
+            let generate_afi_instant = Instant::now();
             generate_random_afi_rw(
                 config,
                 TABLE_ID.to_string(),
@@ -109,9 +110,14 @@ impl RwCommand {
                 self.percent_reads,
                 self.percent_writes,
             )?;
+            let generate_afi_duration = generate_afi_instant.elapsed();
+            println!("Setup: generate AFI duration: {:?}", generate_afi_duration);
 
             // Save AFI file data to database
+            let save_afi_instant = Instant::now();
             save_afi_to_new_db(config, AFI_FILE_PATH.to_string(), DB_FILE_PATH.to_string())?;
+            let save_afi_duration = save_afi_instant.elapsed();
+            println!("Setup: save AFI to DB duration: {:?}", save_afi_duration);
 
             run_rw_bench(config).unwrap();
 
