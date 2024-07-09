@@ -6,7 +6,7 @@ use p3_field::PrimeField32;
 use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
-use poseidon2::poseidon2::Poseidon2Config;
+use poseidon2_air::poseidon2::Poseidon2Config;
 
 pub enum Void {}
 

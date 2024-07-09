@@ -19,7 +19,7 @@ p3-poseidon2 = { workspace = true }
 p3-util = { workspace = true }
 p3-uni-stark = { workspace = true }
 rand = "0.8"
-poseidon2 = { path = "../poseidon2" }
+poseidon2-air = { path = "../poseidon2-air" }
 
 afs-chips = { path = "../chips" }
 afs-stark-backend = { path = "../stark-backend" }

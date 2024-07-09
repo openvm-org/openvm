@@ -15,7 +15,7 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 use p3_util::log2_strict_usize;
-use poseidon2::poseidon2::Poseidon2Config;
+use poseidon2_air::poseidon2::Poseidon2Config;
 use rand::RngCore;
 
 const WORD_SIZE: usize = 1;
@@ -92,6 +92,7 @@ fn poseidon2_chip_test() {
         VmConfig {
             vm: VmParamsConfig {
                 field_arithmetic_enabled: true,
+                field_extension_enabled: false,
                 limb_bits: LIMB_BITS,
                 decomp: DECOMP,
             },

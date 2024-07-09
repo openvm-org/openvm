@@ -3,8 +3,8 @@ use afs_chips::sub_chip::LocalTraceInstructions;
 use columns::{Poseidon2ChipCols, Poseidon2ChipIoCols};
 use p3_field::Field;
 use p3_field::PrimeField32;
-use poseidon2::poseidon2::Poseidon2Air;
-use poseidon2::poseidon2::Poseidon2Config;
+use poseidon2_air::poseidon2::Poseidon2Air;
+use poseidon2_air::poseidon2::Poseidon2Config;
 
 #[cfg(test)]
 pub mod tests;

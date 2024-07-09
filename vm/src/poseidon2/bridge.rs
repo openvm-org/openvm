@@ -1,7 +1,7 @@
 use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::{BaseAir, PairCol, VirtualPairCol};
 use p3_field::Field;
-use poseidon2::poseidon2::columns::Poseidon2Cols;
+use poseidon2_air::poseidon2::columns::Poseidon2Cols;
 
 use super::columns::Poseidon2ChipCols;
 use super::Poseidon2Chip;

@@ -1,5 +1,5 @@
 use afs_chips::sub_chip::SubAir;
-use poseidon2::poseidon2::columns::Poseidon2Cols;
+use poseidon2_air::poseidon2::columns::Poseidon2Cols;
 use std::borrow::Borrow;
 
 use p3_air::{Air, AirBuilder, BaseAir};
