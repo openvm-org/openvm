@@ -93,6 +93,7 @@ fn max_accesses_per_instruction(op_code: OpCode) -> usize {
         }
         FAIL => 0,
         PRINTF => 1,
+        HINT => 1,
         _ => panic!(),
     }
 }
