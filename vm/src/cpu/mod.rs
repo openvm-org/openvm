@@ -54,22 +54,29 @@ pub enum OpCode {
 impl OpCode {
     pub fn from_u8(value: u8) -> Option<Self> {
         match value {
-            0 => Some(OpCode::LOADW),
-            1 => Some(OpCode::STOREW),
-            2 => Some(OpCode::JAL),
-            3 => Some(OpCode::BEQ),
-            4 => Some(OpCode::BNE),
-            5 => Some(OpCode::TERMINATE),
-            6 => Some(OpCode::FADD),
-            7 => Some(OpCode::FSUB),
-            8 => Some(OpCode::FMUL),
-            9 => Some(OpCode::FDIV),
-            10 => Some(OpCode::FAIL),
-            11 => Some(OpCode::PRINTF),
-            12 => Some(OpCode::FE4ADD),
-            13 => Some(OpCode::FE4SUB),
-            14 => Some(OpCode::BBE4MUL),
-            15 => Some(OpCode::BBE4INV),
+            0 => Some(LOADW),
+            1 => Some(STOREW),
+            2 => Some(JAL),
+            3 => Some(BEQ),
+            4 => Some(BNE),
+            5 => Some(TERMINATE),
+            
+            6 => Some(FADD),
+            7 => Some(FSUB),
+            8 => Some(FMUL),
+            9 => Some(FDIV),
+            
+            10 => Some(FAIL),
+            11 => Some(PRINTF),
+            
+            12 => Some(FE4ADD),
+            13 => Some(FE4SUB),
+            14 => Some(BBE4MUL),
+            15 => Some(BBE4INV),
+            
+            16 => Some(PERM_POSEIDON2),
+            17 => Some(COMPRESS_POSEIDON2),
+            
             _ => None,
         }
     }
