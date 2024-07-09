@@ -103,7 +103,7 @@ impl<const WORD_SIZE: usize, F: PrimeField64> AirBridge<F> for CpuAir<WORD_SIZE>
         }
 
         // Interaction with poseidon2 (bus 5)
-        if self.options.field_extension_enabled {
+        if self.options.poseidon2_enabled() {
             let compression = VirtualPairCol::new(
                 vec![(PairCol::Main(cols_numbered.io.opcode), F::one())],
                 -F::from_canonical_usize(PERM_POSEIDON2 as usize),
