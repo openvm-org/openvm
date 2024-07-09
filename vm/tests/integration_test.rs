@@ -1,5 +1,6 @@
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
 
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
@@ -16,6 +17,7 @@ fn air_test(
     field_arithmetic_enabled: bool,
     field_extension_enabled: bool,
     program: Vec<Instruction<BabyBear>>,
+    witness_stream: Vec<Vec<BabyBear>>,
 ) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
@@ -27,7 +29,7 @@ fn air_test(
             },
         },
         program,
-        vec![],
+        witness_stream,
     );
 
     let traces = vm.traces().unwrap();
@@ -59,7 +61,7 @@ fn test_vm_1() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(true, false, program);
+    air_test(true, false, program, vec![]);
 }
 
 #[test]
@@ -87,7 +89,12 @@ fn test_vm_without_field_arithmetic() {
         Instruction::from_isize(BEQ, 0, 5, -1, 1, 0),
     ];
 
-    air_test(field_arithmetic_enabled, field_extension_enabled, program);
+    air_test(
+        field_arithmetic_enabled,
+        field_extension_enabled,
+        program,
+        vec![],
+    );
 }
 
 #[test]
@@ -108,7 +115,7 @@ fn test_vm_fibonacci_old() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(true, false, program.clone());
+    air_test(true, false, program.clone(), vec![]);
 }
 
 #[test]
@@ -130,5 +137,54 @@ fn test_vm_field_extension_arithmetic() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(field_arithmetic_enabled, field_extension_enabled, program);
+    air_test(
+        field_arithmetic_enabled,
+        field_extension_enabled,
+        program,
+        vec![],
+    );
+}
+
+#[test]
+fn test_vm_hint() {
+    let field_arithmetic_enabled = true;
+    let field_extension_enabled = false;
+
+    let program = vec![
+        Instruction::from_isize(STOREW, 0, 0, 1, 0, 1),
+        Instruction::from_isize(FADD, 5, 1, 100, 1, 0),
+        Instruction::from_isize(HINT, 18, 0, 0, 0, 1),
+        Instruction::from_isize(FADD, 21, 5, 0, 1, 0),
+        Instruction::from_isize(FMUL, 9, 18, 1, 1, 0),
+        Instruction::from_isize(FADD, 5, 5, 9, 1, 1),
+        Instruction::from_isize(HINT, 21, 0, 0, 1, 2),
+        Instruction::from_isize(FADD, 24, 1, 0, 1, 0),
+        Instruction::from_isize(JAL, 9, 7, 0, 1, 0),
+        Instruction::from_isize(FMUL, 0, 24, 1, 1, 0),
+        Instruction::from_isize(FADD, 0, 21, 0, 1, 1),
+        Instruction::from_isize(LOADW, 27, 0, 0, 1, 2),
+        Instruction::from_isize(PRINTF, 27, 0, 0, 1, 0),
+        Instruction::from_isize(FADD, 24, 24, 1, 1, 0),
+        Instruction::from_isize(BNE, 24, 18, 2013265916, 1, 1),
+        Instruction::from_isize(BNE, 24, 18, 2013265915, 1, 1),
+        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
+    ];
+
+    type F = BabyBear;
+
+    let witness_stream: Vec<Vec<F>> = vec![
+        vec![BabyBear::from_canonical_usize(3)],
+        vec![F::zero(), F::zero(), F::one()],
+        vec![F::from_canonical_usize(3)],
+        vec![F::zero(), F::zero(), F::two()],
+        vec![F::from_canonical_usize(3)],
+        vec![F::one(), F::one(), F::two()],
+    ];
+
+    air_test(
+        field_arithmetic_enabled,
+        field_extension_enabled,
+        program,
+        witness_stream,
+    );
 }

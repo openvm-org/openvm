@@ -113,6 +113,7 @@ impl CpuOptions {
         if self.field_arithmetic_enabled {
             result.extend(FIELD_ARITHMETIC_INSTRUCTIONS);
         }
+        result.push(HINT);
         result
     }
 

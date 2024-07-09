@@ -157,20 +157,16 @@ where
             ),
         );
 
-        // Making sure every idx block starts with a write
-        // not same_idx => write
-        // NOTE: constraint degree is 3
-        builder.assert_one(or(
-            AB::Expr::one() - local_cols.is_valid.into(),
-            or(local_cols.same_addr.into(), local_cols.op_type.into()),
-        ));
-
-        // Making sure that every read uses the same data as the last operation
+        // Making sure that every read uses the same data as the last operation if it is not the first
+        // operation in the block
         // read => same_data
         // NOTE: constraint degree is 3
         builder.assert_one(or(
             AB::Expr::one() - local_cols.is_valid.into(),
-            or(local_cols.op_type.into(), local_cols.same_data.into()),
+            or(
+                local_cols.op_type.into(),
+                AB::Expr::one() - local_cols.same_addr.into() + local_cols.same_data.into(),
+            ),
         ));
 
         // Making sure is_extra rows are at the bottom

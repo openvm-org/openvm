@@ -112,7 +112,11 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             0
         };
         let same_addr = same_addr_space * same_pointer;
-        let same_data = if curr_op.data == prev_op.data { 1 } else { 0 };
+        let same_data = if curr_op.data == prev_op.data && same_addr == 1 {
+            1
+        } else {
+            0
+        };
 
         row.push(F::from_canonical_u8(same_addr_space));
         row.push(F::from_canonical_u8(same_pointer));
