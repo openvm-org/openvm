@@ -117,13 +117,18 @@ impl<const WORD_SIZE: usize, F: PrimeField64> AirBridge<F> for CpuAir<WORD_SIZE>
                 VirtualPairCol::single_main(cols_numbered.io.e),
                 compression,
             ];
+            
+            let mut enabled_flags = vec![];
+            if self.options.compress_poseidon2_enabled {
+                enabled_flags.push(cols_numbered.aux.operation_flags[&COMPRESS_POSEIDON2]);
+            }
+            if self.options.perm_poseidon2_enabled {
+                enabled_flags.push(cols_numbered.aux.operation_flags[&PERM_POSEIDON2]);
+            }
 
             interactions.push(Interaction {
                 fields,
-                count: VirtualPairCol::single_main(
-                    cols_numbered.aux.operation_flags[&COMPRESS_POSEIDON2]
-                        + cols_numbered.aux.operation_flags[&PERM_POSEIDON2],
-                ),
+                count: VirtualPairCol::sum_main(enabled_flags),
                 argument_index: POSEIDON2_BUS,
             });
         }

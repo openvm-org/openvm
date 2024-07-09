@@ -1,4 +1,5 @@
 use enum_utils::FromStr;
+use p3_baby_bear::BabyBear;
 
 #[cfg(test)]
 pub mod tests;
@@ -76,24 +77,26 @@ impl OpCode {
 
 use crate::field_extension::FieldExtensionArithmeticAir;
 use OpCode::*;
+use crate::poseidon2::Poseidon2Chip;
 
 pub const CORE_INSTRUCTIONS: [OpCode; 6] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
 
-fn max_accesses_per_instruction(op_code: OpCode) -> usize {
-    match op_code {
+fn max_accesses_per_instruction(opcode: OpCode) -> usize {
+    match opcode {
         LOADW | STOREW => 3,
         // JAL only does WRITE, but it is done as timestamp + 2
         JAL => 3,
         BEQ | BNE => 2,
         TERMINATE => 0,
-        op_code if FIELD_ARITHMETIC_INSTRUCTIONS.contains(&op_code) => 3,
-        op_code if FIELD_EXTENSION_INSTRUCTIONS.contains(&op_code) => {
-            FieldExtensionArithmeticAir::max_accesses_per_instruction(op_code)
+        opcode if FIELD_ARITHMETIC_INSTRUCTIONS.contains(&opcode) => 3,
+        opcode if FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode) => {
+            FieldExtensionArithmeticAir::max_accesses_per_instruction(opcode)
         }
         FAIL => 0,
         PRINTF => 1,
+        COMPRESS_POSEIDON2 | PERM_POSEIDON2 => Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(opcode),
         _ => panic!(),
     }
 }
