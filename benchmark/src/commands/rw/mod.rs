@@ -71,6 +71,7 @@ impl RwCommand {
 
         // Parse config(s)
         let configs = parse_config_folder(self.common.config_folder.clone());
+        let configs_len = configs.len();
 
         // Create tmp folder
         let _ = fs::create_dir_all(TMP_FOLDER);
@@ -85,12 +86,19 @@ impl RwCommand {
         println!("Output file: {}", output_file.clone());
 
         // Parse engine
-        for config in configs {
+        for (idx, config) in configs.iter().rev().enumerate() {
+            println!(
+                "Running config {:?}: {} of {}",
+                config.generate_filename(),
+                idx + 1,
+                configs_len
+            );
+
             clear_tracing_log(TMP_TRACING_LOG.as_str())?;
 
             // Generate AFI file
             generate_random_afi_rw(
-                &config,
+                config,
                 TABLE_ID.to_string(),
                 AFI_FILE_PATH.to_string(),
                 self.percent_reads,
@@ -98,9 +106,9 @@ impl RwCommand {
             )?;
 
             // Save AFI file data to database
-            save_afi_to_new_db(&config, AFI_FILE_PATH.to_string(), DB_FILE_PATH.to_string())?;
+            save_afi_to_new_db(config, AFI_FILE_PATH.to_string(), DB_FILE_PATH.to_string())?;
 
-            run_rw_bench(&config).unwrap();
+            run_rw_bench(config).unwrap();
 
             let timings = filter_and_extract_time_busy(
                 TMP_TRACING_LOG.as_str(),
@@ -120,7 +128,7 @@ impl RwCommand {
             write_csv_line(
                 output_file.clone(),
                 "ReadWrite".to_string(),
-                &config,
+                config,
                 &timings,
                 self.percent_reads,
                 self.percent_writes,

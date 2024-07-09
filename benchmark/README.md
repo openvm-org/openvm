@@ -16,10 +16,14 @@ Note that `--percent-reads` and `--percent-writes` must be less than or equal to
 
 Percentage (where 100 = 100%) of config file's `max_rw_ops` that are `READ`s. Note that there must be at least one value already inserted.
 
+## `PageConfig` generation
+
+Run the test `run_generate_configs()` located in `benchmark/src/utils/config_gen.rs`, which will generate configs in `benchmark/config/rw`
+
 ## Commands
 
 Run these commands from the root of the repository
 
 ```bash
-cargo run --bin benchmark -- rw --config-folder benchmark/configs/rw -r 50 -w 50
+cargo run --release --bin benchmark -- rw --config-folder benchmark/config/rw -r 90 -w 10
 ```

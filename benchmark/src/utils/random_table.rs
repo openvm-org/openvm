@@ -77,8 +77,9 @@ pub fn generate_random_afi_rw(
     // Keep track of inserted indexes
     let mut inserted_indexes: HashSet<String> = HashSet::new();
 
-    let max_inserts = min(height, max_rw_ops);
+    let max_inserts = min(height, max_writes);
 
+    // Generate `INSERT` instructions
     for _ in 0..max_inserts {
         let mut idx = generate_random_hex_string(index_bytes);
         while inserted_indexes.contains(&idx) {
@@ -90,7 +91,8 @@ pub fn generate_random_afi_rw(
         writeln!(file, "INSERT {} {}", idx, data)?;
     }
 
-    if max_writes > max_inserts {
+    // Generate `WRITE` instructions
+    if max_rw_ops > max_writes {
         for _ in max_inserts..max_writes {
             if let Some(random_index) = inserted_indexes.iter().choose(&mut thread_rng()) {
                 let data = generate_random_hex_string(data_bytes);
@@ -99,6 +101,7 @@ pub fn generate_random_afi_rw(
         }
     }
 
+    // Generate `READ` instructions
     for _ in 0..max_reads {
         if let Some(random_index) = inserted_indexes.iter().choose(&mut thread_rng()) {
             writeln!(file, "READ {}", random_index)?;
