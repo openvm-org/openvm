@@ -12,14 +12,21 @@ use afs_test_utils::config::{
 use afs_test_utils::engine::StarkEngine;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::create_seeded_rng;
+use ark_ff::PrimeField as _;
 use core::array::from_fn;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
+use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 use p3_util::log2_strict_usize;
+use poseidon2_air::poseidon2::Poseidon2Air;
 use poseidon2_air::poseidon2::Poseidon2Config;
+use rand::Rng;
 use rand::RngCore;
+use zkhash::fields::babybear::FpBabyBear as HorizenBabyBear;
+use zkhash::poseidon2::poseidon2::Poseidon2 as HorizenPoseidon2;
+use zkhash::poseidon2::poseidon2_instance_babybear::POSEIDON2_BABYBEAR_16_PARAMS;
 
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 16;
@@ -45,9 +52,8 @@ impl WriteOps {
 }
 
 macro_rules! run_perm_ops {
-    ($instructions:expr, $num_ops:expr) => {{
-        let mut rng = create_seeded_rng();
-        let tot_ops: usize = $num_ops.next_power_of_two();
+    ($instructions:expr, $num_ops:expr, $data:expr) => {{
+        let tot_ops: usize = ($num_ops as usize).next_power_of_two();
 
         let mut vm = VirtualMachine::<1, BabyBear>::new(
             VmConfig {
@@ -55,7 +61,7 @@ macro_rules! run_perm_ops {
                     field_arithmetic_enabled: true,
                     field_extension_enabled: false,
                     compress_poseidon2_enabled: true,
-                    perm_poseidon2_enabled: false,
+                    perm_poseidon2_enabled: true,
                     limb_bits: LIMB_BITS,
                     decomp: DECOMP,
                 },
@@ -64,9 +70,6 @@ macro_rules! run_perm_ops {
             Poseidon2Config::<16, BabyBear>::horizen_config(),
         );
 
-        let data: [[BabyBear; 16]; $num_ops] =
-            from_fn(|_| from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))));
-
         let write_ops: [[WriteOps; 16]; $num_ops] = core::array::from_fn(|i| {
             core::array::from_fn(|j| {
                 if j < 8 {
@@ -74,14 +77,14 @@ macro_rules! run_perm_ops {
                         clk: 16 * i + j,
                         ad_s: $instructions[i].d,
                         address: $instructions[i].op_a + BabyBear::from_canonical_usize(j),
-                        data: [data[i][j]],
+                        data: [$data[i][j]],
                     }
                 } else {
                     WriteOps {
                         clk: 16 * i + j,
                         ad_s: $instructions[i].d,
                         address: $instructions[i].op_b + BabyBear::from_canonical_usize(j - 8),
-                        data: [data[i][j]],
+                        data: [$data[i][j]],
                     }
                 }
             })
@@ -170,18 +173,16 @@ macro_rules! run_perm_ops {
     }};
 }
 
-#[test]
-fn poseidon2_chip_test() {
+fn random_instructions<const NUM_OPS: usize>() -> [Instruction<BabyBear>; NUM_OPS] {
     let mut rng = create_seeded_rng();
-    const NUM_OPS: usize = 50;
-    let instructions: [Instruction<BabyBear>; NUM_OPS] = core::array::from_fn(|_| {
+    core::array::from_fn(|_| {
         let [a, b, c, d, e] =
             core::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6) + 1));
         Instruction {
             opcode: if rng.next_u32() % 2 == 0 {
-                COMPRESS_POSEIDON2
-            } else {
                 PERM_POSEIDON2
+            } else {
+                COMPRESS_POSEIDON2
             },
             op_a: a,
             op_b: b,
@@ -189,10 +190,19 @@ fn poseidon2_chip_test() {
             d,
             e,
         }
-    });
+    })
+}
+
+#[test]
+fn poseidon2_chip_random_50_test() {
+    let mut rng = create_seeded_rng();
+    const NUM_OPS: usize = 50;
+    let instructions: [Instruction<BabyBear>; NUM_OPS] = random_instructions::<NUM_OPS>();
+    let data: [[BabyBear; 16]; NUM_OPS] =
+        from_fn(|_| from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))));
 
     let (vm, engine, dummy_cpu_memory, dummy_cpu_poseidon2, traces) =
-        run_perm_ops!(instructions, NUM_OPS);
+        run_perm_ops!(instructions, NUM_OPS, data);
 
     // positive test
     engine
@@ -208,4 +218,60 @@ fn poseidon2_chip_test() {
             vec![vec![]; 5],
         )
         .expect("Verification failed");
+}
+
+#[test]
+fn poseidon2_horizen_test() {
+    let mut rng = create_seeded_rng();
+    const NUM_OPS: usize = 1;
+    let mut instructions: [Instruction<BabyBear>; NUM_OPS] = random_instructions::<NUM_OPS>();
+    instructions.iter_mut().for_each(|instruction| {
+        instruction.opcode = PERM_POSEIDON2;
+    });
+    let data: [[BabyBear; 16]; NUM_OPS] =
+        from_fn(|_| from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))));
+
+    let (mut vm, engine, dummy_cpu_memory, dummy_cpu_poseidon2, traces) =
+        run_perm_ops!(instructions, NUM_OPS, data);
+
+    // positive test
+    engine
+        .run_simple_test(
+            vec![
+                &vm.range_checker.air,
+                &vm.memory_chip.air,
+                &vm.poseidon2_chip,
+                &dummy_cpu_memory,
+                &dummy_cpu_poseidon2,
+            ],
+            traces,
+            vec![vec![]; 5],
+        )
+        .expect("Verification failed");
+
+    let end_timestamp = 1000;
+    let actual: [[BabyBear; 16]; NUM_OPS] = from_fn(|i| {
+        from_fn(|j| {
+            vm.memory_chip.read_elem(
+                end_timestamp + 16 * i + j,
+                instructions[i].e,
+                instructions[i].op_c + BabyBear::from_canonical_usize(j),
+            )
+        })
+    });
+
+    let horizen_permut = HorizenPoseidon2::new(&POSEIDON2_BABYBEAR_16_PARAMS);
+    let horizen_state: [Vec<HorizenBabyBear>; NUM_OPS] = from_fn(|i| {
+        data[i]
+            .into_iter()
+            .map(|elem| HorizenBabyBear::from(elem.as_canonical_u32()))
+            .collect()
+    });
+    let horizen_result: [Vec<HorizenBabyBear>; NUM_OPS] =
+        from_fn(|i| horizen_permut.permutation(&horizen_state[i]));
+    let horizen_babybear_result: [[BabyBear; 16]; NUM_OPS] = from_fn(|i| {
+        from_fn(|j| BabyBear::from_canonical_u32(horizen_result[i][j].into_bigint().0[0] as u32))
+    });
+
+    assert_eq!(actual, horizen_babybear_result);
 }
