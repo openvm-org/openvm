@@ -6,7 +6,7 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::{
     common::page::Page, is_less_than_tuple::columns::IsLessThanTupleCols,
-    multitier_page_rw_checker::leaf_page_air::PageRWAir, range_gate::RangeCheckerGateChip,
+    multitier_page_rw_checker::leaf_page_air::PageRwAir, range_gate::RangeCheckerGateChip,
     sub_chip::LocalTraceInstructions,
 };
 
@@ -14,13 +14,8 @@ use super::LeafPageAir;
 
 impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
     // The trace is the whole page (including the is_alloc column)
-    pub fn generate_cached_trace<F: PrimeField64>(&self, page: Vec<Vec<u32>>) -> RowMajorMatrix<F> {
-        RowMajorMatrix::new(
-            page.into_iter()
-                .flat_map(|row| row.into_iter().map(F::from_wrapped_u32).collect::<Vec<F>>())
-                .collect(),
-            1 + self.idx_len + self.data_len,
-        )
+    pub fn generate_cached_trace<F: PrimeField64>(&self, page: Page) -> RowMajorMatrix<F> {
+        page.gen_trace()
     }
 
     pub fn generate_main_trace<SC: StarkGenericConfig>(
@@ -36,8 +31,8 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
     {
         assert!(commit.len() == COMMITMENT_LEN);
         let mut final_page_aux_rows = match &self.page_chip {
-            PageRWAir::Final(f) => {
-                f.gen_aux_trace::<SC>(page, range_checker.clone(), internal_indices)
+            PageRwAir::Final(fin) => {
+                fin.gen_aux_trace::<SC>(page, range_checker.clone(), internal_indices)
             }
             _ => RowMajorMatrix::new(vec![], 1),
         };

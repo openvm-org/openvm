@@ -10,16 +10,16 @@ pub mod columns;
 pub mod trace;
 
 #[derive(Clone, Debug)]
-pub(crate) enum PageRWAir {
+pub(crate) enum PageRwAir {
     Initial(PageReadAir),
     Final(IndexedPageWriteAir),
 }
 
-impl PageRWAir {
+impl PageRwAir {
     pub fn air_width(&self) -> usize {
         match self {
-            PageRWAir::Initial(i) => i.air_width(),
-            PageRWAir::Final(f) => f.air_width(),
+            PageRwAir::Initial(i) => i.air_width(),
+            PageRwAir::Final(fin) => fin.air_width(),
         }
     }
 }
@@ -34,7 +34,7 @@ pub struct LeafPageAir<const COMMITMENT_LEN: usize> {
     data_bus_index: usize,
 
     #[getset(get = "pub")]
-    page_chip: PageRWAir,
+    page_chip: PageRwAir,
     // parameter telling if this is a leaf chip on the init side or the final side.
     is_less_than_tuple_air: Option<LeafPageSubAirs>,
     is_less_than_tuple_param: MyLessThanTupleParams,
@@ -66,7 +66,7 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
             Self {
                 path_bus_index,
                 data_bus_index,
-                page_chip: PageRWAir::Initial(PageReadAir::new(data_bus_index, idx_len, data_len)),
+                page_chip: PageRwAir::Initial(PageReadAir::new(data_bus_index, idx_len, data_len)),
                 idx_len,
                 data_len,
                 is_init,
@@ -78,7 +78,7 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
             Self {
                 path_bus_index,
                 data_bus_index,
-                page_chip: PageRWAir::Final(IndexedPageWriteAir::new(data_bus_index, lt_bus_index, idx_len, data_len, is_less_than_tuple_param.limb_bits, is_less_than_tuple_param.decomp)),
+                page_chip: PageRwAir::Final(IndexedPageWriteAir::new(data_bus_index, lt_bus_index, idx_len, data_len, is_less_than_tuple_param.limb_bits, is_less_than_tuple_param.decomp)),
                 idx_len,
                 data_len,
                 is_init,

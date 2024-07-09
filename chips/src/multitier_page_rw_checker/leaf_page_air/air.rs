@@ -5,7 +5,7 @@ use p3_matrix::Matrix;
 
 use super::{
     columns::{LeafPageCols, LeafPageMetadataCols},
-    LeafPageAir, PageRWAir,
+    LeafPageAir, PageRwAir,
 };
 use crate::{
     common::page_cols::PageCols,
@@ -34,7 +34,7 @@ where
         // only constrain that own_commitment is accurate
         // partition is physical page data vs metadata
         let main: &<AB as AirBuilder>::M = &builder.partitioned_main()[1].clone();
-        let local = main.row_slice(0);
+        let [local, next] = [0, 1].map(|i| main.row_slice(i));
         let pi = builder.public_values().to_vec();
         let data: &<AB as AirBuilder>::M = &builder.partitioned_main()[0].clone();
         let cached_data = PageCols::from_slice(&data.row_slice(0), self.idx_len, self.data_len);
@@ -48,10 +48,10 @@ where
             AB::Expr::from_canonical_u64(self.air_id as u64),
         );
         match &self.page_chip {
-            PageRWAir::Initial(i) => {
+            PageRwAir::Initial(i) => {
                 SubAir::eval(i, builder, cached_data, ());
             }
-            PageRWAir::Final(f) => {
+            PageRwAir::Final(fin) => {
                 let metadata = LeafPageMetadataCols::from_slice(
                     &local,
                     self.idx_len,
@@ -60,20 +60,20 @@ where
                     self.is_less_than_tuple_param.clone(),
                 );
                 let next_aux = LeafPageMetadataCols::from_slice(
-                    &main.row_slice(1),
+                    &next,
                     self.idx_len,
                     COMMITMENT_LEN,
                     false,
                     self.is_less_than_tuple_param.clone(),
                 )
-                .subchip_aux_cols
+                .subair_aux_cols
                 .unwrap()
                 .final_page_aux;
                 let range_inclusion_cols = metadata.range_inclusion_cols.unwrap();
                 let less_than_start = range_inclusion_cols.less_than_start;
                 let greater_than_end = range_inclusion_cols.greater_than_end;
                 builder.assert_zero(cached_data.is_alloc * (less_than_start + greater_than_end));
-                let subair_aux_cols = metadata.subchip_aux_cols.unwrap();
+                let subair_aux_cols = metadata.subair_aux_cols.unwrap();
                 let subairs = self.is_less_than_tuple_air.clone().unwrap();
                 {
                     let io = IsLessThanTupleIOCols {
@@ -93,7 +93,7 @@ where
                     let aux = subair_aux_cols.end_idx.clone();
                     SubAir::eval(&subairs.end_idx, builder, io, aux);
                 }
-                SubAir::eval(f, builder, [cached_data, next_data], next_aux);
+                SubAir::eval(fin, builder, [cached_data, next_data], next_aux);
             }
         };
     }

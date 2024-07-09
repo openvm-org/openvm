@@ -11,6 +11,7 @@ use crate::{
     is_less_than_tuple::columns::IsLessThanTupleIOCols,
     is_zero::columns::IsZeroIOCols,
     sub_chip::{AirConfig, SubAir},
+    utils::implies,
 };
 
 impl<F: Field, const COMMITMENT_LEN: usize> BaseAir<F> for InternalPageAir<COMMITMENT_LEN> {
@@ -44,8 +45,8 @@ where
             self.is_init,
             self.is_less_than_tuple_param.clone(),
         );
-        let next_data = PtrPageCols::from_slice(&data.row_slice(1), self.idx_len, COMMITMENT_LEN);
-        let cached_data = PtrPageCols::from_slice(&data.row_slice(0), self.idx_len, COMMITMENT_LEN);
+        let [cached_data, next_data] = [0, 1]
+            .map(|i| PtrPageCols::from_slice(&data.row_slice(i), self.idx_len, COMMITMENT_LEN));
         for (i, p) in pi.iter().enumerate().take(COMMITMENT_LEN) {
             builder.assert_eq(*p, metadata.own_commitment[i]);
         }
@@ -68,13 +69,13 @@ where
         if !self.is_init {
             // assert that next_idx is the same as the thing in the next row
             // will do the allocated rows are at the top check later probably
-
+            // Ensuring that all unallocated rows are at the bottom
+            builder.when_transition().assert_one({
+                let x: AB::Expr =
+                    implies::<AB>(next_data.is_alloc.into(), cached_data.is_alloc.into());
+                x
+            });
             let prove_sort_cols = metadata.prove_sort_cols.unwrap();
-            // for i in 0..self.idx_len {
-            //     builder.when_transition().assert_zero(
-            //         next_data.is_alloc * (next_data.start[i] - prove_sort_cols.next_idx[i]),
-            //     );
-            // }
             builder.when_transition().assert_zero(
                 next_data.is_alloc
                     * (prove_sort_cols.end_less_than_next
@@ -86,11 +87,11 @@ where
             let greater_than_end = range_inclusion_cols.greater_than_end;
             builder.assert_zero(cached_data.is_alloc * (less_than_start + greater_than_end));
             builder.assert_bool(cached_data.is_alloc);
-            let subair_aux_cols = metadata.subchip_aux_cols.unwrap();
+            let subair_aux_cols = metadata.subair_aux_cols.unwrap();
             let subairs = self.is_less_than_tuple_air.clone().unwrap();
             {
                 let io = IsLessThanTupleIOCols {
-                    x: cached_data.start.clone(),
+                    x: cached_data.child_start.clone(),
                     y: range_inclusion_cols.start.clone(),
                     tuple_less_than: range_inclusion_cols.less_than_start,
                 };
@@ -100,7 +101,7 @@ where
             {
                 let io = IsLessThanTupleIOCols {
                     x: range_inclusion_cols.end.clone(),
-                    y: cached_data.end.clone(),
+                    y: cached_data.child_end.clone(),
                     tuple_less_than: range_inclusion_cols.greater_than_end,
                 };
                 let aux = subair_aux_cols.end_idx2.clone();
@@ -108,8 +109,8 @@ where
             }
             {
                 let io = IsLessThanTupleIOCols {
-                    x: cached_data.end.clone(),
-                    y: next_data.start.clone(),
+                    x: cached_data.child_end.clone(),
+                    y: next_data.child_start.clone(),
                     tuple_less_than: prove_sort_cols.end_less_than_next,
                 };
                 let aux = subair_aux_cols.idx2_next.clone();
@@ -117,8 +118,8 @@ where
             }
             {
                 let io = IsLessThanTupleIOCols {
-                    x: cached_data.end.clone(),
-                    y: cached_data.start.clone(),
+                    x: cached_data.child_end.clone(),
+                    y: cached_data.child_start.clone(),
                     tuple_less_than: prove_sort_cols.end_less_than_start,
                 };
                 let aux = subair_aux_cols.idx2_idx1.clone();

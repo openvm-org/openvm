@@ -25,14 +25,15 @@ use rand::Rng;
 use crate::multitier_page_rw_checker::page_controller::{
     MyLessThanTupleParams, PageController, PageTreeParams,
 };
+use crate::page_btree::{PageBTree, PageBTreePages};
 use crate::page_rw_checker::page_controller::{OpType, Operation};
-use crate::pagebtree::{PageBTree, PageBTreePages};
 use crate::range_gate::RangeCheckerGateChip;
 
 use super::page_controller;
 
 pub const BABYBEAR_COMMITMENT_LEN: usize = 8;
 pub const DECOMP_BITS: usize = 6;
+const MAX_LIMB_VAL: u32 = 1 << 20;
 const MAX_VAL: u32 = 0x78000001 / 2;
 
 type Val = BabyBear;
@@ -87,9 +88,13 @@ where
         &mut TraceCommitter<BabyBearPoseidon2Config>,
     ) -> (PageBTreePages, bool, PageBTreePages, bool, Vec<Operation>),
 {
-    let data_bus_index = 0;
-    let internal_data_bus_index = 1;
-    let lt_bus_index = 2;
+    const DATA_BUS_INDEX: usize = 0;
+    const INTERNAL_DATA_BUS_INDEX: usize = 1;
+    const LT_BUS_INDEX: usize = 2;
+    const INIT_PATH_BUS: usize = 3;
+    const FINAL_PATH_BUS: usize = 4;
+    const OPS_BUS_INDEX: usize = 5;
+
     let limb_bits = 20;
 
     let log_num_ops = 3;
@@ -106,12 +111,8 @@ where
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-    let init_path_bus = 3;
-    let final_path_bus = 4;
-    let ops_bus_index = 5;
-
     let init_param = PageTreeParams {
-        path_bus_index: init_path_bus,
+        path_bus_index: INIT_PATH_BUS,
         leaf_cap: 8,
         internal_cap: 24,
         leaf_page_height: page_height,
@@ -119,7 +120,7 @@ where
     };
 
     let final_param = PageTreeParams {
-        path_bus_index: final_path_bus,
+        path_bus_index: FINAL_PATH_BUS,
         leaf_cap: 8,
         internal_cap: 24,
         leaf_page_height: page_height,
@@ -131,14 +132,14 @@ where
         decomp: DECOMP_BITS,
     };
 
-    let range_checker = Arc::new(RangeCheckerGateChip::new(lt_bus_index, 1 << DECOMP_BITS));
+    let range_checker = Arc::new(RangeCheckerGateChip::new(LT_BUS_INDEX, 1 << DECOMP_BITS));
 
     let mut page_controller: PageController<BABYBEAR_COMMITMENT_LEN> =
         PageController::new::<BabyBearPoseidon2Config>(
-            data_bus_index,
-            internal_data_bus_index,
-            ops_bus_index,
-            lt_bus_index,
+            DATA_BUS_INDEX,
+            INTERNAL_DATA_BUS_INDEX,
+            OPS_BUS_INDEX,
+            LT_BUS_INDEX,
             idx_len,
             data_len,
             init_param.clone(),
@@ -146,7 +147,7 @@ where
             less_than_tuple_param,
             range_checker,
         );
-    let ops_sender = DummyInteractionAir::new(idx_len + data_len + 2, true, ops_bus_index);
+    let ops_sender = DummyInteractionAir::new(idx_len + data_len + 2, true, OPS_BUS_INDEX);
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
     let mut init_leaf_data_ptrs = vec![];
@@ -464,15 +465,20 @@ fn load_page_test(
     verifier.verify(&mut challenger, partial_vk, airs, proof, &pis)
 }
 
-fn generate_no_new_keys(
+#[allow(clippy::type_complexity)]
+fn generate_init_tree_and_clks(
     idx_len: usize,
     data_len: usize,
     page_height: usize,
     limb_bits: usize,
     num_ops: usize,
     committer: &mut TraceCommitter<BabyBearPoseidon2Config>,
-) -> (PageBTreePages, bool, PageBTreePages, bool, Vec<Operation>) {
-    const MAX_LIMB_VAL: u32 = 1 << 20;
+) -> (
+    PageBTree<BABYBEAR_COMMITMENT_LEN>,
+    Vec<usize>,
+    PageBTreePages,
+    HashMap<Vec<u32>, Vec<u32>>,
+) {
     let mut rng = create_seeded_rng();
     let mut btree = PageBTree::<BABYBEAR_COMMITMENT_LEN>::new(
         limb_bits,
@@ -507,7 +513,27 @@ fn generate_no_new_keys(
         .map(|_| rng.gen::<usize>() % (MAX_VAL as usize))
         .collect();
     clks.sort();
+    (btree, clks, init_pages, idx_data_map)
+}
 
+// generates a test case where we add no new keys to the original tree
+fn generate_no_new_keys(
+    idx_len: usize,
+    data_len: usize,
+    page_height: usize,
+    limb_bits: usize,
+    num_ops: usize,
+    committer: &mut TraceCommitter<BabyBearPoseidon2Config>,
+) -> (PageBTreePages, bool, PageBTreePages, bool, Vec<Operation>) {
+    let (mut btree, clks, init_pages, mut idx_data_map) = generate_init_tree_and_clks(
+        idx_len,
+        data_len,
+        page_height,
+        limb_bits,
+        num_ops,
+        committer,
+    );
+    let mut rng = create_seeded_rng();
     let mut ops: Vec<Operation> = vec![];
     for clk in clks {
         let idx = idx_data_map
@@ -544,6 +570,7 @@ fn generate_no_new_keys(
     (init_pages, false, final_pages, false, ops)
 }
 
+// generates a test case where we add new keys to the original tree
 fn generate_new_keys(
     idx_len: usize,
     data_len: usize,
@@ -552,41 +579,15 @@ fn generate_new_keys(
     num_ops: usize,
     committer: &mut TraceCommitter<BabyBearPoseidon2Config>,
 ) -> (PageBTreePages, bool, PageBTreePages, bool, Vec<Operation>) {
-    const MAX_LIMB_VAL: u32 = 1 << 20;
-    let mut rng = create_seeded_rng();
-    let mut btree = PageBTree::<BABYBEAR_COMMITMENT_LEN>::new(
-        limb_bits,
+    let (mut btree, clks, init_pages, mut idx_data_map) = generate_init_tree_and_clks(
         idx_len,
         data_len,
         page_height,
-        page_height,
+        limb_bits,
+        num_ops,
+        committer,
     );
-    // Generating a random page with distinct indices
-    let mut idx_data_map = HashMap::new();
-    for _ in 0..4 * page_height {
-        let mut idx;
-        loop {
-            idx = (0..idx_len)
-                .map(|_| rng.gen::<u32>() % MAX_LIMB_VAL)
-                .collect::<Vec<u32>>();
-            if !idx_data_map.contains_key(&idx) {
-                break;
-            }
-        }
-
-        let data: Vec<u32> = (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect();
-        idx_data_map.insert(idx.clone(), data.clone());
-        btree.update(&idx, &data);
-    }
-    let init_pages = btree.gen_all_trace(committer);
-    // check for correctness
-    for (idx, _) in idx_data_map.iter() {
-        btree.search(idx).unwrap();
-    }
-    let mut clks: Vec<usize> = (0..num_ops)
-        .map(|_| rng.gen::<usize>() % (MAX_VAL as usize))
-        .collect();
-    clks.sort();
+    let mut rng = create_seeded_rng();
     let mut ops: Vec<Operation> = vec![];
     for clk in clks {
         let mut idx;
@@ -608,6 +609,7 @@ fn generate_new_keys(
     (init_pages, false, final_pages, false, ops)
 }
 
+// generates a test case where we do all kinds of ops to the original tree
 fn generate_mixed_ops(
     idx_len: usize,
     data_len: usize,
@@ -616,41 +618,15 @@ fn generate_mixed_ops(
     num_ops: usize,
     committer: &mut TraceCommitter<BabyBearPoseidon2Config>,
 ) -> (PageBTreePages, bool, PageBTreePages, bool, Vec<Operation>) {
-    const MAX_LIMB_VAL: u32 = 1 << 20;
-    let mut rng = create_seeded_rng();
-    let mut btree = PageBTree::<BABYBEAR_COMMITMENT_LEN>::new(
-        limb_bits,
+    let (mut btree, clks, init_pages, mut idx_data_map) = generate_init_tree_and_clks(
         idx_len,
         data_len,
         page_height,
-        page_height,
+        limb_bits,
+        num_ops,
+        committer,
     );
-    // Generating a random page with distinct indices
-    let mut idx_data_map = HashMap::new();
-    for _ in 0..4 * page_height {
-        let mut idx;
-        loop {
-            idx = (0..idx_len)
-                .map(|_| rng.gen::<u32>() % MAX_LIMB_VAL)
-                .collect::<Vec<u32>>();
-            if !idx_data_map.contains_key(&idx) {
-                break;
-            }
-        }
-
-        let data: Vec<u32> = (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect();
-        idx_data_map.insert(idx.clone(), data.clone());
-        btree.update(&idx, &data);
-    }
-    let init_pages = btree.gen_all_trace(committer);
-    // check for correctness
-    for (idx, _) in idx_data_map.iter() {
-        btree.search(idx).unwrap();
-    }
-    let mut clks: Vec<usize> = (0..num_ops)
-        .map(|_| rng.gen::<usize>() % (MAX_VAL as usize))
-        .collect();
-    clks.sort();
+    let mut rng = create_seeded_rng();
     let mut ops: Vec<Operation> = vec![];
     for clk in clks {
         if rng.gen::<bool>() {
@@ -704,6 +680,7 @@ fn generate_mixed_ops(
     (init_pages, false, final_pages, false, ops)
 }
 
+// generates a test case where one leaf is not exposed
 fn generate_mixed_ops_remove_first_leaf(
     idx_len: usize,
     data_len: usize,
@@ -712,40 +689,15 @@ fn generate_mixed_ops_remove_first_leaf(
     num_ops: usize,
     committer: &mut TraceCommitter<BabyBearPoseidon2Config>,
 ) -> (PageBTreePages, bool, PageBTreePages, bool, Vec<Operation>) {
-    const MAX_LIMB_VAL: u32 = 1 << 20;
-    let mut rng = create_seeded_rng();
-    let mut btree = PageBTree::<BABYBEAR_COMMITMENT_LEN>::new(
-        limb_bits,
+    let (mut btree, clks, mut init_pages, mut idx_data_map) = generate_init_tree_and_clks(
         idx_len,
         data_len,
         page_height,
-        page_height,
+        limb_bits,
+        num_ops,
+        committer,
     );
-    let mut idx_data_map = HashMap::new();
-    for _ in 0..4 * page_height {
-        let mut idx;
-        loop {
-            idx = (0..idx_len)
-                .map(|_| rng.gen::<u32>() % MAX_LIMB_VAL)
-                .collect::<Vec<u32>>();
-            if !idx_data_map.contains_key(&idx) {
-                break;
-            }
-        }
-
-        let data: Vec<u32> = (0..data_len).map(|_| rng.gen::<u32>() % MAX_VAL).collect();
-        idx_data_map.insert(idx.clone(), data.clone());
-        btree.update(&idx, &data);
-    }
-    let mut init_pages = btree.gen_all_trace(committer);
-    // check for correctness
-    for (idx, _) in idx_data_map.iter() {
-        btree.search(idx).unwrap();
-    }
-    let mut clks: Vec<usize> = (0..num_ops)
-        .map(|_| rng.gen::<usize>() % (MAX_VAL as usize))
-        .collect();
-    clks.sort();
+    let mut rng = create_seeded_rng();
     let mut ops: Vec<Operation> = vec![];
     for clk in clks {
         if rng.gen::<bool>() {
@@ -807,6 +759,7 @@ fn generate_mixed_ops_remove_first_leaf(
     (init_pages.clone(), false, final_pages.clone(), false, ops)
 }
 
+// generates a test case where we do all kinds of ops to an empty tree
 fn generate_mixed_ops_empty_start(
     idx_len: usize,
     data_len: usize,
@@ -815,7 +768,6 @@ fn generate_mixed_ops_empty_start(
     num_ops: usize,
     committer: &mut TraceCommitter<BabyBearPoseidon2Config>,
 ) -> (PageBTreePages, bool, PageBTreePages, bool, Vec<Operation>) {
-    const MAX_LIMB_VAL: u32 = 1 << 20;
     let mut rng = create_seeded_rng();
     let mut btree = PageBTree::<BABYBEAR_COMMITMENT_LEN>::new(
         limb_bits,
@@ -884,6 +836,7 @@ fn generate_mixed_ops_empty_start(
     (init_pages, true, final_pages, true, ops)
 }
 
+// generates a test case where we add no new keys to a large tree
 fn generate_large_tree_no_new_keys(
     _idx_len: usize,
     data_len: usize,
@@ -937,6 +890,7 @@ fn generate_large_tree_no_new_keys(
     (init_pages.clone(), false, final_pages.clone(), false, ops)
 }
 
+// generates a test case where we do all kinds of ops to a large tree
 fn generate_large_tree_new_keys(
     idx_len: usize,
     data_len: usize,

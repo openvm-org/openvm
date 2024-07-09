@@ -13,8 +13,8 @@ pub struct InternalPageCols<T> {
 pub struct PtrPageCols<T> {
     pub internal_marker: T,
     pub is_alloc: T,
-    pub start: Vec<T>,
-    pub end: Vec<T>,
+    pub child_start: Vec<T>,
+    pub child_end: Vec<T>,
     pub commitment: Vec<T>,
 }
 
@@ -61,7 +61,7 @@ pub struct InternalPageMetadataCols<T> {
     pub mult_minus_one_alloc: T,
     pub prove_sort_cols: Option<ProveSortCols<T>>,
     pub range_inclusion_cols: Option<TwoRangeInclusionCols<T>>,
-    pub subchip_aux_cols: Option<InternalPageSubAirCols<T>>,
+    pub subair_aux_cols: Option<InternalPageSubAirCols<T>>,
 }
 
 impl<T> InternalPageCols<T> {
@@ -100,8 +100,8 @@ impl<T> PtrPageCols<T> {
         PtrPageCols {
             internal_marker: cols[0].clone(),
             is_alloc: cols[1].clone(),
-            start: cols[2..2 + idx_len].to_vec(),
-            end: cols[2 + idx_len..2 + 2 * idx_len].to_vec(),
+            child_start: cols[2..2 + idx_len].to_vec(),
+            child_end: cols[2 + idx_len..2 + 2 * idx_len].to_vec(),
             commitment: cols[2 + 2 * idx_len..2 + 2 * idx_len + commitment_len].to_vec(),
         }
     }
@@ -130,7 +130,7 @@ impl<T> InternalPageMetadataCols<T> {
                 mult_minus_one_alloc: cols[commitment_len + 6].clone(),
                 prove_sort_cols: None,
                 range_inclusion_cols: None,
-                subchip_aux_cols: None,
+                subair_aux_cols: None,
             }
         } else {
             let mut new_start = commitment_len + 7;
@@ -178,7 +178,7 @@ impl<T> InternalPageMetadataCols<T> {
                 mult_minus_one_alloc: cols[commitment_len + 6].clone(),
                 prove_sort_cols: Some(prove_sort_cols),
                 range_inclusion_cols: Some(range_inclusion_cols),
-                subchip_aux_cols: Some(subair_cols),
+                subair_aux_cols: Some(subair_cols),
             }
         }
     }

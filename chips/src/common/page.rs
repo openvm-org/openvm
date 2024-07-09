@@ -37,7 +37,7 @@ impl Page {
         }
     }
 
-    pub fn from_2d_vec_multitier(page: &[Vec<u32>], idx_len: usize, data_len: usize) -> Self {
+    pub fn from_2d_vec_non_leaf(page: &[Vec<u32>], idx_len: usize, data_len: usize) -> Self {
         Self {
             rows: page
                 .iter()

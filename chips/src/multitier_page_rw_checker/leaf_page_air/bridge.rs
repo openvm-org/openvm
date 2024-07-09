@@ -5,7 +5,7 @@ use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
 use super::columns::LeafPageCols;
-use super::{LeafPageAir, PageRWAir};
+use super::{LeafPageAir, PageRwAir};
 use crate::indexed_output_page_air::columns::IndexedOutputPageCols;
 use crate::is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols};
 use crate::page_rw_checker::final_page::columns::IndexedPageWriteCols;
@@ -53,18 +53,18 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> SubAirBridge<F> for LeafPageA
     fn receives(&self, col_indices: LeafPageCols<usize>) -> Vec<Interaction<F>> {
         let mut interactions = vec![];
         match &self.page_chip {
-            PageRWAir::Initial(i) => {
+            PageRwAir::Initial(i) => {
                 interactions.extend(SubAirBridge::receives(i, col_indices.cache_cols.clone()));
             }
-            PageRWAir::Final(f) => {
+            PageRwAir::Final(fin) => {
                 interactions.extend(SubAirBridge::receives(
-                    f,
+                    fin,
                     IndexedPageWriteCols {
                         final_page_cols: IndexedOutputPageCols {
                             page_cols: col_indices.cache_cols.clone(),
                             aux_cols: col_indices
                                 .metadata
-                                .subchip_aux_cols
+                                .subair_aux_cols
                                 .clone()
                                 .unwrap()
                                 .final_page_aux
@@ -72,7 +72,7 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> SubAirBridge<F> for LeafPageA
                         },
                         rcv_mult: col_indices
                             .metadata
-                            .subchip_aux_cols
+                            .subair_aux_cols
                             .clone()
                             .unwrap()
                             .final_page_aux
@@ -89,18 +89,18 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> SubAirBridge<F> for LeafPageA
     fn sends(&self, col_indices: LeafPageCols<usize>) -> Vec<Interaction<F>> {
         let mut interactions = vec![];
         match &self.page_chip {
-            PageRWAir::Initial(i) => {
+            PageRwAir::Initial(i) => {
                 interactions.extend(SubAirBridge::sends(i, col_indices.cache_cols.clone()));
             }
-            PageRWAir::Final(f) => {
+            PageRwAir::Final(fin) => {
                 interactions.extend(SubAirBridge::sends(
-                    f,
+                    fin,
                     IndexedPageWriteCols {
                         final_page_cols: IndexedOutputPageCols {
                             page_cols: col_indices.cache_cols.clone(),
                             aux_cols: col_indices
                                 .metadata
-                                .subchip_aux_cols
+                                .subair_aux_cols
                                 .clone()
                                 .unwrap()
                                 .final_page_aux
@@ -108,7 +108,7 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> SubAirBridge<F> for LeafPageA
                         },
                         rcv_mult: col_indices
                             .metadata
-                            .subchip_aux_cols
+                            .subair_aux_cols
                             .clone()
                             .unwrap()
                             .final_page_aux
@@ -121,7 +121,7 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> SubAirBridge<F> for LeafPageA
         if !self.is_init {
             let subairs = self.is_less_than_tuple_air.clone().unwrap();
             let range_inclusion = col_indices.metadata.range_inclusion_cols.clone().unwrap();
-            let subair_aux = col_indices.metadata.subchip_aux_cols.clone().unwrap();
+            let subair_aux = col_indices.metadata.subair_aux_cols.clone().unwrap();
             interactions.extend(SubAirBridge::sends(
                 &subairs.idx_start,
                 IsLessThanTupleCols {
