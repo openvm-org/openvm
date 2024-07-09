@@ -163,7 +163,6 @@ fn test_vm_hint() {
         Instruction::from_isize(FMUL, 0, 24, 1, 1, 0),
         Instruction::from_isize(FADD, 0, 21, 0, 1, 1),
         Instruction::from_isize(LOADW, 27, 0, 0, 1, 2),
-        Instruction::from_isize(PRINTF, 27, 0, 0, 1, 0),
         Instruction::from_isize(FADD, 24, 24, 1, 1, 0),
         Instruction::from_isize(BNE, 24, 18, 2013265916, 1, 1),
         Instruction::from_isize(BNE, 24, 18, 2013265915, 1, 1),
