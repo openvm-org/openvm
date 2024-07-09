@@ -227,7 +227,15 @@ fn poseidon2_chip_random_50_test() {
 fn poseidon2_horizen_test() {
     let mut rng = create_seeded_rng();
     const NUM_OPS: usize = 1;
-    let mut instructions: [Instruction<BabyBear>; NUM_OPS] = random_instructions::<NUM_OPS>();
+    let op_a = BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6));
+    let mut instructions: [Instruction<BabyBear>; NUM_OPS] = [Instruction {
+        opcode: PERM_POSEIDON2,
+        op_a,
+        op_b: op_a + BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6) + 8),
+        op_c: BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6)),
+        d: BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6)),
+        e: BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6)),
+    }];
     instructions.iter_mut().for_each(|instruction| {
         instruction.opcode = PERM_POSEIDON2;
     });
