@@ -100,7 +100,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
             io: make_io_cols(start_timestamp, instruction),
             aux,
         });
-        // TODO adjust for compression
+
         let iter_range = if opcode == PERM_POSEIDON2 {
             output.iter().enumerate().take(16)
         } else {
@@ -108,11 +108,11 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
         };
 
         for (i, &output_elem) in iter_range {
-            vm.memory_chip.write_word(
+            vm.memory_chip.write_elem(
                 start_timestamp + 16 + i,
                 e,
                 op_c + F::from_canonical_usize(i),
-                [output_elem; WORD_SIZE],
+                output_elem,
             );
         }
     }

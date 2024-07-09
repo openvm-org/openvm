@@ -20,7 +20,6 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 use p3_util::log2_strict_usize;
-use poseidon2_air::poseidon2::Poseidon2Air;
 use poseidon2_air::poseidon2::Poseidon2Config;
 use rand::Rng;
 use rand::RngCore;
@@ -234,7 +233,6 @@ fn poseidon2_horizen_test() {
     let (mut vm, engine, dummy_cpu_memory, dummy_cpu_poseidon2, traces) =
         run_perm_ops!(instructions, NUM_OPS, data);
 
-    // positive test
     engine
         .run_simple_test(
             vec![
@@ -249,11 +247,10 @@ fn poseidon2_horizen_test() {
         )
         .expect("Verification failed");
 
-    let end_timestamp = 1000;
     let actual: [[BabyBear; 16]; NUM_OPS] = from_fn(|i| {
         from_fn(|j| {
             vm.memory_chip.read_elem(
-                end_timestamp + 16 * i + j,
+                1000 + 16 * i + j,
                 instructions[i].e,
                 instructions[i].op_c + BabyBear::from_canonical_usize(j),
             )
@@ -274,4 +271,47 @@ fn poseidon2_horizen_test() {
     });
 
     assert_eq!(actual, horizen_babybear_result);
+}
+
+#[test]
+fn poseidon2_negative_test() {
+    let mut rng = create_seeded_rng();
+    const NUM_OPS: usize = 1;
+    let mut instructions: [Instruction<BabyBear>; NUM_OPS] = random_instructions::<NUM_OPS>();
+    instructions.iter_mut().for_each(|instruction| {
+        instruction.opcode = PERM_POSEIDON2;
+    });
+    let data: [[BabyBear; 16]; NUM_OPS] =
+        from_fn(|_| from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))));
+
+    let (vm, engine, dummy_cpu_memory, dummy_cpu_poseidon2, mut traces) =
+        run_perm_ops!(instructions, NUM_OPS, data);
+    let poseidon2_trace_index = 2;
+
+    // negative test
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
+    for _ in 0..10 {
+        let width = rng.gen_range(24..traces[poseidon2_trace_index].width() - 16);
+        let height = rng.gen_range(0..traces[poseidon2_trace_index].height());
+        let rand = BabyBear::from_canonical_u32(rng.gen_range(1..=1 << 27));
+        traces[poseidon2_trace_index].row_mut(height)[width] += rand;
+        assert_eq!(
+            engine.run_simple_test(
+                vec![
+                    &vm.range_checker.air,
+                    &vm.memory_chip.air,
+                    &vm.poseidon2_chip,
+                    &dummy_cpu_memory,
+                    &dummy_cpu_poseidon2,
+                ],
+                traces.clone(),
+                vec![vec![]; 5],
+            ),
+            Err(VerificationError::OodEvaluationMismatch),
+            "Expected constraint to fail"
+        );
+        traces[poseidon2_trace_index].row_mut(height)[width] -= rand;
+    }
 }
