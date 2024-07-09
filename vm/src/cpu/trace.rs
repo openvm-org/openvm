@@ -238,7 +238,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     let next_input = &vm.witness_stream[witness_idx];
                     witness_idx += 1;
                     vm.memory_chip.write_hint(
-                        MAX_ACCESSES_PER_CYCLE * clock_cycle,
+                        CPU_MAX_ACCESSES_PER_CYCLE * clock_cycle,
                         a,
                         d,
                         e,
