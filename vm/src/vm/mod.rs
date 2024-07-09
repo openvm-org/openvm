@@ -132,29 +132,18 @@ pub fn get_chips<const WORD_SIZE: usize, SC: StarkGenericConfig>(
 where
     Val<SC>: PrimeField32,
 {
-    if vm.options().field_extension_enabled {
-        vec![
-            &vm.cpu_air,
-            &vm.program_chip.air,
-            &vm.memory_chip.air,
-            &vm.range_checker.air,
-            &vm.field_arithmetic_chip.air,
-            &vm.field_extension_chip.air,
-        ]
-    } else if vm.options().field_arithmetic_enabled {
-        vec![
-            &vm.cpu_air,
-            &vm.program_chip.air,
-            &vm.memory_chip.air,
-            &vm.range_checker.air,
-            &vm.field_arithmetic_chip.air,
-        ]
-    } else {
-        vec![
-            &vm.cpu_air,
-            &vm.program_chip.air,
-            &vm.memory_chip.air,
-            &vm.range_checker.air,
-        ]
+    let mut result: Vec<&dyn AnyRap<SC>> = vec![
+        &vm.cpu_air,
+        &vm.program_chip.air,
+        &vm.memory_chip.air,
+        &vm.range_checker.air,
+        &vm.poseidon2_chip.air,
+    ];
+    if vm.options().field_arithmetic_enabled {
+        result.push(&vm.field_arithmetic_chip.air as &dyn AnyRap<SC>);
     }
+    if vm.options().field_extension_enabled {
+        result.push(&vm.field_extension_chip.air as &dyn AnyRap<SC>);
+    }
+    result
 }
