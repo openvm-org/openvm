@@ -123,11 +123,13 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         };
 
         for (i, &datum) in hint.iter().enumerate() {
-            assert!(!self
-                .access_indices
-                .contains(&(e, address + F::from_canonical_usize(i * WORD_SIZE))));
             let decomp: [F; WORD_SIZE] = decompose(datum);
             for (j, &decomp_elem) in decomp.iter().enumerate() {
+                assert!(!self
+                    .access_indices
+                    .contains(&(e, address + F::from_canonical_usize(i * WORD_SIZE + j))));
+                self.access_indices
+                    .insert((e, address + F::from_canonical_usize(i * WORD_SIZE + j)));
                 self.memory.insert(
                     (e, address + F::from_canonical_usize(i * WORD_SIZE + j)),
                     decomp_elem,
