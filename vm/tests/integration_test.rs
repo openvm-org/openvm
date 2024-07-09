@@ -1,6 +1,6 @@
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use p3_baby_bear::BabyBear;
-
+use poseidon2_air::poseidon2::Poseidon2Config;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
 use stark_vm::vm::config::VmConfig;
@@ -27,6 +27,7 @@ fn air_test(
             },
         },
         program,
+        Poseidon2Config::<16, BabyBear>::horizen_config(),
     );
 
     let traces = vm.traces().unwrap();
