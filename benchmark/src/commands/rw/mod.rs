@@ -15,6 +15,7 @@ use afs_test_utils::{
     engine::StarkEngine,
     page_config::PageConfig,
 };
+use chrono::Local;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use p3_blake3::Blake3;
@@ -87,8 +88,10 @@ impl RwCommand {
 
         // Parse engine
         for (idx, config) in configs.iter().rev().enumerate() {
+            let timestamp = Local::now().format("%H:%M:%S");
             println!(
-                "Running config {:?}: {} of {}",
+                "[{}] Running config {:?}: {} of {}",
+                timestamp,
                 config.generate_filename(),
                 idx + 1,
                 configs_len
