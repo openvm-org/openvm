@@ -1,4 +1,3 @@
-use super::columns::Poseidon2ChipIoCols;
 use super::{make_io_cols, Poseidon2Chip};
 use crate::cpu::trace::Instruction;
 use crate::cpu::OpCode::{COMPRESS_POSEIDON2, PERM_POSEIDON2};
@@ -23,8 +22,8 @@ use poseidon2_air::poseidon2::Poseidon2Config;
 use rand::RngCore;
 
 const WORD_SIZE: usize = 1;
-const LIMB_BITS: usize = 8;
-const DECOMP: usize = 4;
+const LIMB_BITS: usize = 16;
+const DECOMP: usize = 8;
 
 struct WriteOps {
     clk: usize,
@@ -45,32 +44,15 @@ impl WriteOps {
     }
 }
 
-impl Poseidon2ChipIoCols<BabyBear> {
-    fn random() -> Self {
-        let mut rng = create_seeded_rng();
-        let [clk, a, b, c, d, e] =
-            core::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30)));
-        Poseidon2ChipIoCols {
-            clk,
-            is_alloc: BabyBear::from_bool(true),
-            a,
-            b,
-            c,
-            d,
-            e,
-            cmp: BabyBear::from_canonical_u32(rng.next_u32() % 2),
-        }
-    }
-}
-
 #[test]
 fn poseidon2_chip_test() {
     let mut rng = create_seeded_rng();
-    const NUM_OPS: usize = 4;
+    const NUM_OPS: usize = 50;
+    const TOT_OPS: usize = NUM_OPS.next_power_of_two();
 
     let instructions: [Instruction<BabyBear>; NUM_OPS] = core::array::from_fn(|_| {
         let [a, b, c, d, e] =
-            core::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 2) + 2));
+            core::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6) + 1));
         Instruction {
             opcode: if rng.next_u32() % 2 == 0 {
                 COMPRESS_POSEIDON2
@@ -98,10 +80,7 @@ fn poseidon2_chip_test() {
         Poseidon2Config::<16, BabyBear>::horizen_config(),
     );
 
-    let chunk1: [[BabyBear; 8]; NUM_OPS] =
-        from_fn(|_| from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))));
-
-    let chunk2: [[BabyBear; 8]; NUM_OPS] =
+    let data: [[BabyBear; 16]; NUM_OPS] =
         from_fn(|_| from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))));
 
     let write_ops: [[WriteOps; 16]; NUM_OPS] = core::array::from_fn(|i| {
@@ -111,36 +90,30 @@ fn poseidon2_chip_test() {
                     clk: 16 * i + j,
                     ad_s: instructions[i].d,
                     address: instructions[i].op_a + BabyBear::from_canonical_usize(j),
-                    data: [chunk1[i][j]],
+                    data: [data[i][j]],
                 }
             } else {
                 WriteOps {
                     clk: 16 * i + j,
                     ad_s: instructions[i].d,
                     address: instructions[i].op_b + BabyBear::from_canonical_usize(j - 8),
-                    data: [chunk2[i][j - 8]],
+                    data: [data[i][j]],
                 }
             }
         })
     });
 
-    for i in 0..NUM_OPS {
-        for j in 0..16 {
-            vm.memory_chip.write_word(
-                write_ops[i][j].clk,
-                write_ops[i][j].ad_s,
-                write_ops[i][j].address,
-                write_ops[i][j].data,
-            );
-        }
-    }
+    write_ops.iter().flatten().for_each(|op| {
+        vm.memory_chip
+            .write_word(op.clk, op.ad_s, op.address, op.data);
+    });
 
     let time_per = Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(COMPRESS_POSEIDON2);
 
-    for i in 0..NUM_OPS {
+    (0..NUM_OPS).for_each(|i| {
         let start_timestamp = 16 * NUM_OPS + (time_per * i);
         Poseidon2Chip::<16, BabyBear>::poseidon2_perm(&mut vm, start_timestamp, instructions[i]);
-    }
+    });
 
     let dummy_cpu_poseidon2 = DummyInteractionAir::new(
         Poseidon2Chip::<16, BabyBear>::interaction_width(),
@@ -148,24 +121,40 @@ fn poseidon2_chip_test() {
         POSEIDON2_BUS,
     );
     let dummy_cpu_poseidon2_trace = RowMajorMatrix::new(
-        (0..NUM_OPS)
-            .flat_map(|i| make_io_cols(16 * NUM_OPS + (time_per * i), instructions[i]).flatten())
-            .collect(),
+        {
+            let mut vec: Vec<_> = (0..NUM_OPS)
+                .flat_map(|i| {
+                    make_io_cols(16 * NUM_OPS + (time_per * i), instructions[i]).flatten()
+                })
+                .collect();
+            for _ in
+                0..(TOT_OPS - NUM_OPS) * (Poseidon2Chip::<16, BabyBear>::interaction_width() + 1)
+            {
+                vec.push(BabyBear::zero());
+            }
+            vec
+        },
         Poseidon2Chip::<16, BabyBear>::interaction_width() + 1,
     );
 
     let dummy_cpu_memory = DummyInteractionAir::new(5, true, MEMORY_BUS);
     let dummy_cpu_memory_trace = RowMajorMatrix::new(
-        write_ops
-            .iter()
-            .flat_map(|ops| {
-                ops.iter().flat_map(|op| {
-                    let mut vec = op.flatten();
-                    vec.insert(0, BabyBear::one());
-                    vec
+        {
+            let mut vec: Vec<_> = write_ops
+                .iter()
+                .flat_map(|ops| {
+                    ops.iter().flat_map(|op| {
+                        let mut vec = op.flatten();
+                        vec.insert(0, BabyBear::one());
+                        vec
+                    })
                 })
-            })
-            .collect(),
+                .collect();
+            for _ in 0..(16 * (TOT_OPS - NUM_OPS)) * (5 + 1) {
+                vec.push(BabyBear::zero());
+            }
+            vec
+        },
         5 + 1,
     );
 
