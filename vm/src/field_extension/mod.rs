@@ -153,7 +153,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         d: F,
         e: F,
     ) -> [F; EXTENSION_DEGREE] {
-        let operand1 = FieldExtensionArithmeticChip::read_extension_element(vm, start_timestamp, d, op_b);
+        let operand1 =
+            FieldExtensionArithmeticChip::read_extension_element(vm, start_timestamp, d, op_b);
         let operand2 = if opcode == OpCode::BBE4INV {
             [F::zero(); EXTENSION_DEGREE]
         } else {
@@ -162,7 +163,13 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
 
         let result = FieldExtensionArithmeticAir::solve::<F>(opcode, operand1, operand2).unwrap();
 
-        FieldExtensionArithmeticChip::write_extension_element(vm, start_timestamp + 8, d, op_a, result);
+        FieldExtensionArithmeticChip::write_extension_element(
+            vm,
+            start_timestamp + 8,
+            d,
+            op_a,
+            result,
+        );
 
         vm.field_extension_chip
             .operations
