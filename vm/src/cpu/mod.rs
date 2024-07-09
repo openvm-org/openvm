@@ -45,6 +45,9 @@ pub enum OpCode {
     FE4SUB = 13,
     BBE4MUL = 14,
     BBE4INV = 15,
+    
+    PERM_POSEIDON2 = 16,
+    COMPRESS_POSEIDON2 = 17,
 }
 
 impl OpCode {

@@ -228,10 +228,13 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 opcode @ (FE4ADD | FE4SUB | BBE4MUL | BBE4INV) => {
                     if vm.options().field_extension_enabled {
                         FieldExtensionArithmeticChip::calculate(
-                            vm, timestamp, opcode, a, b, c, d, e,
+                            vm, timestamp, instruction,
                         );
+                    } else {
+                        return Err(ExecutionError::DisabledOperation(opcode));
                     }
                 }
+                _ => panic!()
             };
 
             let mut operation_flags = BTreeMap::new();
