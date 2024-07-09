@@ -31,9 +31,7 @@ use crate::{
     utils::{
         output_writer::{save_afi_to_new_db, write_csv_header, write_csv_line},
         random_table::generate_random_afi_rw,
-        tracing_log_parser::{
-            clear_tracing_log, extract_event_data_from_log, extract_timing_data_from_log,
-        },
+        tracing::{clear_tracing_log, extract_event_data_from_log, extract_timing_data_from_log},
     },
     AFI_FILE_PATH, DB_FILE_PATH, DEFAULT_OUTPUT_FILE, TABLE_ID, TMP_FOLDER, TMP_TRACING_LOG,
 };
