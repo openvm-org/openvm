@@ -7,7 +7,7 @@ use super::columns::Poseidon2ChipCols;
 use super::Poseidon2Chip;
 use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
 
-/// Receives all IO columns from another chip on bus 2 (FieldArithmeticAir::BUS_INDEX).
+/// Receives instructions from the CPU on the designated `POSEIDON2_BUS`, and sends both read and write requests to the memory chip.
 impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
     fn receives(&self) -> Vec<Interaction<T>> {
         let indices: Vec<usize> = (0..self.width()).collect();
@@ -36,10 +36,7 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
         // READ
         for i in 0..16 {
             let memory_cycle = VirtualPairCol::new(
-                vec![(
-                    PairCol::Main(col_indices.io.clk),
-                    T::one(),
-                )],
+                vec![(PairCol::Main(col_indices.io.clk), T::one())],
                 T::from_canonical_usize(i),
             );
             let address = VirtualPairCol::new(
@@ -72,10 +69,7 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
         // WRITE
         for i in 0..16 {
             let memory_cycle = VirtualPairCol::new(
-                vec![(
-                    PairCol::Main(col_indices.io.clk),
-                    T::one(),
-                )],
+                vec![(PairCol::Main(col_indices.io.clk), T::one())],
                 T::from_canonical_usize(i + 16),
             );
             let address = VirtualPairCol::new(
@@ -107,4 +101,3 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
         interactions
     }
 }
-

@@ -54,6 +54,7 @@ macro_rules! run_perm_ops {
     ($instructions:expr, $num_ops:expr, $data:expr) => {{
         let tot_ops: usize = ($num_ops as usize).next_power_of_two();
 
+        // default VM with poseidon2 enabled
         let mut vm = VirtualMachine::<1, BabyBear>::new(
             VmConfig {
                 vm: VmParamsConfig {
@@ -172,6 +173,7 @@ macro_rules! run_perm_ops {
     }};
 }
 
+/// Create random instructions for the poseidon2 chip.
 fn random_instructions<const NUM_OPS: usize>() -> [Instruction<BabyBear>; NUM_OPS] {
     let mut rng = create_seeded_rng();
     core::array::from_fn(|_| {
@@ -192,6 +194,7 @@ fn random_instructions<const NUM_OPS: usize>() -> [Instruction<BabyBear>; NUM_OP
     })
 }
 
+/// Checking that 50 random instructions pass.
 #[test]
 fn poseidon2_chip_random_50_test() {
     let mut rng = create_seeded_rng();
@@ -219,6 +222,7 @@ fn poseidon2_chip_random_50_test() {
         .expect("Verification failed");
 }
 
+/// Checking that poseidon2chip is consistent with Horizen's poseidon2 implementation.
 #[test]
 fn poseidon2_horizen_test() {
     let mut rng = create_seeded_rng();
@@ -273,6 +277,7 @@ fn poseidon2_horizen_test() {
     assert_eq!(actual, horizen_babybear_result);
 }
 
+/// Negative test, pranking internal poseidon2 trace values.
 #[test]
 fn poseidon2_negative_test() {
     let mut rng = create_seeded_rng();

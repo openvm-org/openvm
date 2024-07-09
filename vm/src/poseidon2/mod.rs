@@ -19,13 +19,15 @@ pub mod trace;
 
 /// Poseidon2 chip.
 ///
-/// Carries the requested rows and the underlying air.
-
+/// Carries the requested rows and the underlying subair for subtrace generation.
+/// Poseidon2Chip implements its own constraints and interactions.
+/// Cached rows are represented as `Poseidon2ChipCols` structs, not flat vectors.
 pub struct Poseidon2Chip<const WIDTH: usize, F: Clone> {
     pub air: Poseidon2Air<WIDTH, F>,
     pub rows: Vec<Poseidon2ChipCols<WIDTH, F>>,
 }
 
+/// Map VM instructions to Poseidon2IO columns.
 fn make_io_cols<F: Field>(
     start_timestamp: usize,
     instruction: Instruction<F>,
@@ -67,6 +69,11 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
 }
 
 impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
+    /// Key method of Poseidon2Chip.
+    ///
+    /// Called using `vm` and not `&self`. Reads two chunks from memory and generates a trace row for
+    /// the given instruction using the subair, storing it in `rows`. Then, writes output to memory,
+    /// truncating if the instruction is a compression.
     pub fn poseidon2_perm<const WORD_SIZE: usize>(
         vm: &mut VirtualMachine<WORD_SIZE, F>,
         start_timestamp: usize,

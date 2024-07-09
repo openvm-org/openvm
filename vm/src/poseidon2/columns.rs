@@ -11,6 +11,12 @@ pub struct Poseidon2ChipCols<const WIDTH: usize, T> {
     pub aux: Poseidon2Cols<WIDTH, T>,
 }
 
+/// IO columns for Poseidon2Chip.
+/// * `is_alloc`: whether the row is allocated
+/// * `clk`: the clock cycle (NOT timestamp)
+/// * `a`, `b`, `c`: addresses
+/// * `d`, `e`: address spaces
+/// * `cmp`: boolean for compression vs. permutation
 pub struct Poseidon2ChipIoCols<T> {
     pub is_alloc: T,
     pub clk: T,
@@ -47,6 +53,8 @@ impl<const WIDTH: usize, T: Clone> Poseidon2ChipCols<WIDTH, T> {
 }
 
 impl<const WIDTH: usize, T: Field> Poseidon2ChipCols<WIDTH, T> {
+    /// Blank row with all zero input (poseidon2 internal hash values are nonzero)
+    /// and `is_alloc` set to 0.
     pub fn blank_row(poseidon2_air: &Poseidon2Air<WIDTH, T>) -> Self {
         Self {
             io: Poseidon2ChipIoCols::<T>::blank_row(),
