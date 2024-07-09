@@ -72,6 +72,8 @@ fn poseidon2_chip_test() {
             vm: VmParamsConfig {
                 field_arithmetic_enabled: true,
                 field_extension_enabled: false,
+                compress_poseidon2_enabled: true,
+                perm_poseidon2_enabled: false,
                 limb_bits: LIMB_BITS,
                 decomp: DECOMP,
             },
