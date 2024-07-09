@@ -15,6 +15,7 @@ const DECOMP: usize = 8;
 fn air_test(
     field_arithmetic_enabled: bool,
     field_extension_enabled: bool,
+    compress_poseidon2_enabled: bool,
     program: Vec<Instruction<BabyBear>>,
 ) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
@@ -22,6 +23,8 @@ fn air_test(
             vm: VmParamsConfig {
                 field_arithmetic_enabled,
                 field_extension_enabled,
+                compress_poseidon2_enabled,
+                perm_poseidon2_enabled: false,
                 limb_bits: LIMB_BITS,
                 decomp: DECOMP,
             },
@@ -59,7 +62,7 @@ fn test_vm_1() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(true, false, program);
+    air_test(true, false, false, program);
 }
 
 #[test]
@@ -87,7 +90,7 @@ fn test_vm_without_field_arithmetic() {
         Instruction::from_isize(BEQ, 0, 5, -1, 1, 0),
     ];
 
-    air_test(field_arithmetic_enabled, field_extension_enabled, program);
+    air_test(field_arithmetic_enabled, field_extension_enabled, false, program);
 }
 
 #[test]
@@ -108,7 +111,7 @@ fn test_vm_fibonacci_old() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(true, false, program.clone());
+    air_test(true, false, false, program.clone());
 }
 
 #[test]
@@ -130,5 +133,5 @@ fn test_vm_field_extension_arithmetic() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(field_arithmetic_enabled, field_extension_enabled, program);
+    air_test(field_arithmetic_enabled, field_extension_enabled, false, program);
 }

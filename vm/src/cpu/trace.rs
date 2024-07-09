@@ -9,7 +9,7 @@ use afs_chips::{
 
 use crate::memory::{compose, decompose};
 use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
-
+use crate::poseidon2::Poseidon2Chip;
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
     max_accesses_per_instruction, CpuAir,
@@ -234,7 +234,22 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                         return Err(ExecutionError::DisabledOperation(opcode));
                     }
                 }
-                _ => panic!()
+                PERM_POSEIDON2 => {
+                    if vm.options().perm_poseidon2_enabled {
+                        Poseidon2Chip::<16, _>::poseidon2_perm(vm, timestamp, instruction);
+                    }
+                }
+                opcode @ (PERM_POSEIDON2 | COMPRESS_POSEIDON2) => {
+                    let enabled = match opcode {
+                        COMPRESS_POSEIDON2 => vm.options().compress_poseidon2_enabled,
+                        PERM_POSEIDON2 => vm.options().perm_poseidon2_enabled,
+                        _ => panic!()
+                    };
+                    
+                    if opcode == PERM_POSEIDON2 {
+                        panic!("Support ")
+                    }
+                }
             };
 
             let mut operation_flags = BTreeMap::new();

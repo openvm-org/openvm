@@ -1,7 +1,7 @@
 use enum_utils::FromStr;
 
-// #[cfg(test)]
-// pub mod tests;
+#[cfg(test)]
+pub mod tests;
 
 pub mod air;
 pub mod bridge;
@@ -45,7 +45,7 @@ pub enum OpCode {
     FE4SUB = 13,
     BBE4MUL = 14,
     BBE4INV = 15,
-    
+
     PERM_POSEIDON2 = 16,
     COMPRESS_POSEIDON2 = 17,
 }
@@ -102,6 +102,8 @@ fn max_accesses_per_instruction(op_code: OpCode) -> usize {
 pub struct CpuOptions {
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
+    pub compress_poseidon2_enabled: bool,
+    pub perm_poseidon2_enabled: bool,
 }
 
 impl CpuOptions {
@@ -112,6 +114,12 @@ impl CpuOptions {
         }
         if self.field_arithmetic_enabled {
             result.extend(FIELD_ARITHMETIC_INSTRUCTIONS);
+        }
+        if self.compress_poseidon2_enabled {
+            result.push(COMPRESS_POSEIDON2);
+        }
+        if self.perm_poseidon2_enabled {
+            result.push(PERM_POSEIDON2);
         }
         result
     }

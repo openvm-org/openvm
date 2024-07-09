@@ -6,6 +6,8 @@ use crate::cpu::CpuOptions;
 pub struct VmParamsConfig {
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
+    pub compress_poseidon2_enabled: bool,
+    pub perm_poseidon2_enabled: bool,
     pub limb_bits: usize,
     pub decomp: usize,
     /*pub max_program_length: usize,
@@ -17,6 +19,8 @@ impl VmParamsConfig {
         CpuOptions {
             field_arithmetic_enabled: self.field_arithmetic_enabled,
             field_extension_enabled: self.field_extension_enabled,
+            compress_poseidon2_enabled: self.compress_poseidon2_enabled,
+            perm_poseidon2_enabled: self.perm_poseidon2_enabled,
         }
     }
 }
