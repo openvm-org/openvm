@@ -31,6 +31,7 @@ enum AS {
 }
 
 impl AS {
+    // TODO[INT-1698]
     fn to_field<F: PrimeField64>(&self) -> F {
         match self {
             AS::Immediate => F::zero(),
