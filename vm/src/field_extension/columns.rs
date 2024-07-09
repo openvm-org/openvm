@@ -25,7 +25,7 @@ pub struct FieldExtensionArithmeticIoCols<T> {
 #[derive(AlignedBorrow)]
 #[repr(C)]
 pub struct FieldExtensionArithmeticAuxCols<T> {
-    pub clock_cycle: T,
+    pub start_timestamp: T,
     pub op_a: T,
     pub op_b: T,
     pub op_c: T,
@@ -87,7 +87,7 @@ where
                 z: [T::zero(); EXTENSION_DEGREE],
             },
             aux: FieldExtensionArithmeticAuxCols {
-                clock_cycle: T::zero(),
+                start_timestamp: T::zero(),
                 op_a: T::zero(),
                 op_b: T::zero(),
                 op_c: T::zero(),
@@ -152,7 +152,7 @@ impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
     }
 
     pub fn from_slice(slice: &[T]) -> Self {
-        let clock_cycle = slice[0].clone();
+        let timestamp = slice[0].clone();
         let op_a = slice[1].clone();
         let op_b = slice[2].clone();
         let op_c = slice[3].clone();
@@ -183,7 +183,7 @@ impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
         ];
 
         FieldExtensionArithmeticAuxCols {
-            clock_cycle,
+            start_timestamp: timestamp,
             op_a,
             op_b,
             op_c,
@@ -201,7 +201,7 @@ impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
 
     pub fn flatten(&self) -> Vec<T> {
         let mut result = vec![
-            self.clock_cycle.clone(),
+            self.start_timestamp.clone(),
             self.op_a.clone(),
             self.op_b.clone(),
             self.op_c.clone(),

@@ -2,7 +2,7 @@ use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::{PairCol, VirtualPairCol};
 use p3_field::Field;
 
-use crate::cpu::{FIELD_EXTENSION_BUS, MAX_ACCESSES_PER_CYCLE, MEMORY_BUS, WORD_SIZE};
+use crate::cpu::{FIELD_EXTENSION_BUS, MEMORY_BUS, WORD_SIZE};
 
 use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
 
@@ -24,11 +24,8 @@ fn get_rw_interactions<T: Field>(
     };
 
     for (i, &element) in ext_element.iter().enumerate() {
-        let memory_cycle = VirtualPairCol::new(
-            vec![(
-                PairCol::Main(cols_numbered.aux.clock_cycle),
-                T::from_canonical_usize(MAX_ACCESSES_PER_CYCLE),
-            )],
+        let timestamp = VirtualPairCol::new(
+            vec![(PairCol::Main(cols_numbered.aux.start_timestamp), T::one())],
             T::from_canonical_usize(ext_element_ind * 4 + i),
         );
 
@@ -38,7 +35,7 @@ fn get_rw_interactions<T: Field>(
         );
 
         let mut fields = vec![
-            memory_cycle,
+            timestamp,
             VirtualPairCol::constant(T::from_bool(is_write)),
             VirtualPairCol::single_main(addr_space),
             pointer,
