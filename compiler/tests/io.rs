@@ -32,7 +32,7 @@ fn test_io() {
     //     builder.print_e(el);
     // });
 
-    let program = builder.compile_isa();
+    let program = builder.compile_isa::<WORD_SIZE>();
 
     let witness_stream: Vec<Vec<F>> = vec![
         vec![F::from_canonical_usize(3)],
