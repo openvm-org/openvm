@@ -1,6 +1,7 @@
+use super::columns::Poseidon2ChipIoCols;
 use super::{make_io_cols, Poseidon2Chip};
 use crate::cpu::trace::Instruction;
-use crate::cpu::OpCode::COMPRESS_POSEIDON2;
+use crate::cpu::OpCode::{COMPRESS_POSEIDON2, PERM_POSEIDON2};
 use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
 use crate::vm::config::{VmConfig, VmParamsConfig};
 use crate::vm::VirtualMachine;
@@ -12,6 +13,7 @@ use afs_test_utils::config::{
 use afs_test_utils::engine::StarkEngine;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::create_seeded_rng;
+use core::array::from_fn;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
@@ -43,24 +45,45 @@ impl WriteOps {
     }
 }
 
+impl Poseidon2ChipIoCols<BabyBear> {
+    fn random() -> Self {
+        let mut rng = create_seeded_rng();
+        let [clk, a, b, c, d, e] =
+            core::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30)));
+        Poseidon2ChipIoCols {
+            clk,
+            is_alloc: BabyBear::from_bool(true),
+            a,
+            b,
+            c,
+            d,
+            e,
+            cmp: BabyBear::from_canonical_u32(rng.next_u32() % 2),
+        }
+    }
+}
+
 #[test]
 fn poseidon2_chip_test() {
     let mut rng = create_seeded_rng();
-    let a = BabyBear::from_canonical_u32(10);
-    let b = BabyBear::from_canonical_u32(30);
-    let c = BabyBear::from_canonical_u32(20);
-    let d = BabyBear::from_canonical_u32(10);
-    let e = BabyBear::from_canonical_u32(12);
+    const NUM_OPS: usize = 4;
 
-    let same_instruction = Instruction {
-        opcode: COMPRESS_POSEIDON2,
-        op_a: a,
-        op_b: b,
-        op_c: c,
-        d,
-        e,
-    };
-    let num_instructions = 4;
+    let instructions: [Instruction<BabyBear>; NUM_OPS] = core::array::from_fn(|_| {
+        let [a, b, c, d, e] =
+            core::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 2) + 2));
+        Instruction {
+            opcode: if rng.next_u32() % 2 == 0 {
+                COMPRESS_POSEIDON2
+            } else {
+                PERM_POSEIDON2
+            },
+            op_a: a,
+            op_b: b,
+            op_c: c,
+            d,
+            e,
+        }
+    });
 
     let mut vm = VirtualMachine::<1, BabyBear>::new(
         VmConfig {
@@ -75,52 +98,58 @@ fn poseidon2_chip_test() {
         Poseidon2Config::<16, BabyBear>::horizen_config(),
     );
 
-    let chunk1 = (0..8)
-        .map(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30)))
-        .collect::<Vec<_>>();
-    let chunk2 = (8..16)
-        .map(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30)))
-        .collect::<Vec<_>>();
+    let chunk1: [[BabyBear; 8]; NUM_OPS] =
+        from_fn(|_| from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))));
 
-    let write_ops: [WriteOps; 16] = core::array::from_fn(|i| {
-        if i < 8 {
-            WriteOps {
-                clk: i,
-                ad_s: d,
-                address: a + BabyBear::from_canonical_usize(i),
-                data: [chunk1[i]],
+    let chunk2: [[BabyBear; 8]; NUM_OPS] =
+        from_fn(|_| from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))));
+
+    let write_ops: [[WriteOps; 16]; NUM_OPS] = core::array::from_fn(|i| {
+        core::array::from_fn(|j| {
+            if j < 8 {
+                WriteOps {
+                    clk: 16 * i + j,
+                    ad_s: instructions[i].d,
+                    address: instructions[i].op_a + BabyBear::from_canonical_usize(j),
+                    data: [chunk1[i][j]],
+                }
+            } else {
+                WriteOps {
+                    clk: 16 * i + j,
+                    ad_s: instructions[i].d,
+                    address: instructions[i].op_b + BabyBear::from_canonical_usize(j - 8),
+                    data: [chunk2[i][j - 8]],
+                }
             }
-        } else {
-            WriteOps {
-                clk: i,
-                ad_s: d,
-                address: b + BabyBear::from_canonical_usize(i - 8),
-                data: [chunk2[i - 8]],
-            }
-        }
+        })
     });
 
-    for op in &write_ops {
-        vm.memory_chip
-            .write_word(op.clk, op.ad_s, op.address, op.data);
+    for i in 0..NUM_OPS {
+        for j in 0..16 {
+            vm.memory_chip.write_word(
+                write_ops[i][j].clk,
+                write_ops[i][j].ad_s,
+                write_ops[i][j].address,
+                write_ops[i][j].data,
+            );
+        }
     }
 
     let time_per = Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(COMPRESS_POSEIDON2);
 
-    for i in 0..num_instructions {
-        let start_timestamp = write_ops.len() + (time_per * i);
-        Poseidon2Chip::<16, BabyBear>::poseidon2_perm(&mut vm, start_timestamp, same_instruction);
+    for i in 0..NUM_OPS {
+        let start_timestamp = 16 * NUM_OPS + (time_per * i);
+        Poseidon2Chip::<16, BabyBear>::poseidon2_perm(&mut vm, start_timestamp, instructions[i]);
     }
+
     let dummy_cpu_poseidon2 = DummyInteractionAir::new(
         Poseidon2Chip::<16, BabyBear>::interaction_width(),
         true,
         POSEIDON2_BUS,
     );
     let dummy_cpu_poseidon2_trace = RowMajorMatrix::new(
-        (0..num_instructions)
-            .flat_map(|i| {
-                make_io_cols(write_ops.len() + (time_per * i), same_instruction).flatten()
-            })
+        (0..NUM_OPS)
+            .flat_map(|i| make_io_cols(16 * NUM_OPS + (time_per * i), instructions[i]).flatten())
             .collect(),
         Poseidon2Chip::<16, BabyBear>::interaction_width() + 1,
     );
@@ -128,11 +157,13 @@ fn poseidon2_chip_test() {
     let dummy_cpu_memory = DummyInteractionAir::new(5, true, MEMORY_BUS);
     let dummy_cpu_memory_trace = RowMajorMatrix::new(
         write_ops
-            .into_iter()
-            .flat_map(|op| {
-                let mut vec = op.flatten();
-                vec.insert(0, BabyBear::one());
-                vec
+            .iter()
+            .flat_map(|ops| {
+                ops.iter().flat_map(|op| {
+                    let mut vec = op.flatten();
+                    vec.insert(0, BabyBear::one());
+                    vec
+                })
             })
             .collect(),
         5 + 1,

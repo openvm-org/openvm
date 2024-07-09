@@ -1,3 +1,6 @@
+use crate::cpu::trace::Instruction;
+use crate::cpu::OpCode;
+use crate::cpu::OpCode::*;
 use crate::vm::VirtualMachine;
 use afs_chips::sub_chip::LocalTraceInstructions;
 use columns::{Poseidon2ChipCols, Poseidon2ChipIoCols};
@@ -5,9 +8,6 @@ use p3_field::Field;
 use p3_field::PrimeField32;
 use poseidon2_air::poseidon2::Poseidon2Air;
 use poseidon2_air::poseidon2::Poseidon2Config;
-use crate::cpu::OpCode;
-use crate::cpu::OpCode::*;
-use crate::cpu::trace::Instruction;
 
 #[cfg(test)]
 pub mod tests;
@@ -26,7 +26,10 @@ pub struct Poseidon2Chip<const WIDTH: usize, F: Clone> {
     pub rows: Vec<Poseidon2ChipCols<WIDTH, F>>,
 }
 
-fn make_io_cols<F: Field>(start_timestamp: usize, instruction: Instruction<F>) -> Poseidon2ChipIoCols<F> {
+fn make_io_cols<F: Field>(
+    start_timestamp: usize,
+    instruction: Instruction<F>,
+) -> Poseidon2ChipIoCols<F> {
     let Instruction {
         opcode,
         op_a,
@@ -43,7 +46,7 @@ fn make_io_cols<F: Field>(start_timestamp: usize, instruction: Instruction<F>) -
         c: op_c,
         d,
         e,
-        cmp: F::from_bool(opcode == COMPRESS_POSEIDON2)
+        cmp: F::from_bool(opcode == COMPRESS_POSEIDON2),
     }
 }
 
@@ -59,7 +62,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
 
     pub fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         assert!(opcode == COMPRESS_POSEIDON2 || opcode == PERM_POSEIDON2);
-        40
+        32
     }
 }
 
@@ -84,8 +87,11 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
                 .read_elem(start_timestamp + i, d, op_a + F::from_canonical_usize(i))
         });
         let data_2: [F; 8] = core::array::from_fn(|i| {
-            vm.memory_chip
-                .read_elem(start_timestamp + 8 + i, d, op_b + F::from_canonical_usize(i))
+            vm.memory_chip.read_elem(
+                start_timestamp + 8 + i,
+                d,
+                op_b + F::from_canonical_usize(i),
+            )
         });
         let input_state: [F; 16] = [data_1, data_2].concat().try_into().unwrap();
         let aux = vm.poseidon2_chip.air.generate_trace_row(input_state);
@@ -111,4 +117,3 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
         }
     }
 }
-
