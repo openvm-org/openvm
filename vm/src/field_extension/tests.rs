@@ -50,7 +50,7 @@ fn generate_field_extension_operations(
         let result = FieldExtensionArithmeticAir::solve(op, operand1, operand2).unwrap();
 
         requests.push(FieldExtensionArithmeticOperation {
-            timestamp,
+            start_timestamp: timestamp,
             opcode: op,
             op_a,
             op_b,

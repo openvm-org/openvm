@@ -24,8 +24,8 @@ fn get_rw_interactions<T: Field>(
     };
 
     for (i, &element) in ext_element.iter().enumerate() {
-        let memory_cycle = VirtualPairCol::new(
-            vec![(PairCol::Main(cols_numbered.aux.timestamp), T::one())],
+        let timestamp = VirtualPairCol::new(
+            vec![(PairCol::Main(cols_numbered.aux.start_timestamp), T::one())],
             T::from_canonical_usize(ext_element_ind * 4 + i),
         );
 
@@ -35,7 +35,7 @@ fn get_rw_interactions<T: Field>(
         );
 
         let mut fields = vec![
-            memory_cycle,
+            timestamp,
             VirtualPairCol::constant(T::from_bool(is_write)),
             VirtualPairCol::single_main(addr_space),
             pointer,
