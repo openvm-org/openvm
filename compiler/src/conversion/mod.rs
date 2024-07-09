@@ -35,7 +35,7 @@ impl AS {
         match self {
             AS::Immediate => F::zero(),
             AS::Register => F::one(),
-            AS::Memory => F::two(),
+            AS::Memory => F::one(),
         }
     }
 }
@@ -406,6 +406,14 @@ fn convert_instruction<F: PrimeField64, EF: ExtensionField<F>>(
             F::zero(),
             F::zero(),
             AS::Register,
+            AS::Register,
+        )],
+        AsmInstruction::HintLen(src) => vec![inst(
+            HINT,
+            register(src),
+            F::zero(),
+            F::zero(),
+            AS::Immediate,
             AS::Register,
         )],
         _ => panic!("Unsupported instruction {:?}", instruction),

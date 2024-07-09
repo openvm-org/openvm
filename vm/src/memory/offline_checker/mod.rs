@@ -111,14 +111,13 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
     }
 
     pub fn write_hint(&mut self, timestamp: usize, op_a: F, d: F, e: F, hint: Vec<F>) {
-        assert!(d != F::zero());
         if let Some(last_timestamp) = self.last_timestamp {
             assert!(timestamp > last_timestamp);
         }
         self.last_timestamp = Some(timestamp);
 
         let address = if d != F::zero() {
-            self.memory[&(op_a, d)]
+            self.memory[&(d, op_a)]
         } else {
             op_a
         };

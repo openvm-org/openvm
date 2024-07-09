@@ -18,12 +18,13 @@ fn test_io() {
         let el = builder.get(&arr, i);
         builder.print_v(el);
     });
+    builder.halt();
 
-    let arr = builder.hint_felts();
-    builder.range(0, arr.len()).for_each(|i, builder| {
-        let el = builder.get(&arr, i);
-        builder.print_f(el);
-    });
+    // let arr = builder.hint_felts();
+    // builder.range(0, arr.len()).for_each(|i, builder| {
+    //     let el = builder.get(&arr, i);
+    //     builder.print_f(el);
+    // });
 
     // let arr = builder.hint_exts();
     // builder.range(0, arr.len()).for_each(|i, builder| {

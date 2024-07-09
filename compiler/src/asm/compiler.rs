@@ -492,7 +492,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     }
                     _ => unimplemented!(),
                 },
-                DslIr::HintLen(dst) => self.push(AsmInstruction::Hint(dst.fp()), trace),
+                DslIr::HintLen(dst) => self.push(AsmInstruction::HintLen(dst.fp()), trace),
                 DslIr::HintVars(dst) => match dst {
                     Array::Dyn(dst, _) => self.push(AsmInstruction::Hint(dst.fp()), trace),
                     _ => unimplemented!(),
