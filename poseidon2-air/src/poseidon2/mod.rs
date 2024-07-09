@@ -8,7 +8,7 @@ pub mod tests;
 
 use self::columns::Poseidon2Cols;
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use p3_field::{AbstractField, PrimeField32};
 use zkhash::ark_ff::PrimeField as _;
 use zkhash::fields::babybear::FpBabyBear as HorizenBabyBear;
 use zkhash::poseidon2::poseidon2_instance_babybear::{MAT_DIAG16_M_1, RC16};
@@ -212,6 +212,41 @@ impl Poseidon2Config<16, BabyBear> {
             ext_mds_matrix: Poseidon2Air::<16, BabyBear>::HL_MDS_MAT_4,
             int_diag_m1_matrix: horizen_int_diag,
             reduction_factor: BabyBear::one(),
+        }
+    }
+}
+
+impl<F: PrimeField32> Poseidon2Config<16, F> {
+    pub fn new_p3_baby_bear_16() -> Self {
+        let (external_round_constants, internal_round_constants, horizen_int_diag) =
+            Poseidon2Air::<16, BabyBear>::horizen_round_consts();
+
+        let external_round_constants_f: Vec<[F; 16]> = external_round_constants
+            .iter()
+            .map(|round| {
+                round
+                    .iter()
+                    .map(|babybear| F::from_canonical_u32(babybear.as_canonical_u32()))
+                    .collect::<Vec<F>>()
+                    .try_into()
+                    .unwrap()
+            })
+            .collect();
+
+        let internal_round_constants_f: Vec<F> = internal_round_constants
+            .into_iter()
+            .map(|babybear| F::from_canonical_u32(babybear.as_canonical_u32()))
+            .collect();
+
+        let horizen_int_diag_f: [F; 16] =
+            horizen_int_diag.map(|babybear| F::from_canonical_u32(babybear.as_canonical_u32()));
+
+        Self {
+            external_constants: external_round_constants_f,
+            internal_constants: internal_round_constants_f,
+            ext_mds_matrix: Poseidon2Air::<16, F>::HL_MDS_MAT_4,
+            int_diag_m1_matrix: horizen_int_diag_f,
+            reduction_factor: F::one(),
         }
     }
 }

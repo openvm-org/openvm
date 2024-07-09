@@ -1,6 +1,6 @@
 use super::{make_io_cols, Poseidon2Chip};
 use crate::cpu::trace::Instruction;
-use crate::cpu::OpCode::{COMPRESS_POSEIDON2, PERM_POSEIDON2};
+use crate::cpu::OpCode::{COMPPOS2, PERMPOS2};
 use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
 use crate::vm::config::{VmConfig, VmParamsConfig};
 use crate::vm::VirtualMachine;
@@ -20,7 +20,6 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 use p3_util::log2_strict_usize;
-use poseidon2_air::poseidon2::Poseidon2Config;
 use rand::Rng;
 use rand::RngCore;
 use zkhash::fields::babybear::FpBabyBear as HorizenBabyBear;
@@ -67,7 +66,6 @@ macro_rules! run_perm_ops {
                 },
             },
             vec![],
-            Poseidon2Config::<16, BabyBear>::horizen_config(),
         );
 
         let write_ops: [[WriteOps; 16]; $num_ops] = core::array::from_fn(|i| {
@@ -95,8 +93,7 @@ macro_rules! run_perm_ops {
                 .write_word(op.clk, op.ad_s, op.address, op.data);
         });
 
-        let time_per =
-            Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(COMPRESS_POSEIDON2);
+        let time_per = Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(COMPPOS2);
 
         (0..$num_ops).for_each(|i| {
             let start_timestamp = 16 * $num_ops + (time_per * i);
@@ -181,9 +178,9 @@ fn random_instructions<const NUM_OPS: usize>() -> [Instruction<BabyBear>; NUM_OP
             core::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6) + 1));
         Instruction {
             opcode: if rng.next_u32() % 2 == 0 {
-                PERM_POSEIDON2
+                PERMPOS2
             } else {
-                COMPRESS_POSEIDON2
+                COMPPOS2
             },
             op_a: a,
             op_b: b,
@@ -229,7 +226,7 @@ fn poseidon2_horizen_test() {
     const NUM_OPS: usize = 1;
     let op_a = BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6));
     let mut instructions: [Instruction<BabyBear>; NUM_OPS] = [Instruction {
-        opcode: PERM_POSEIDON2,
+        opcode: PERMPOS2,
         op_a,
         op_b: op_a + BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6) + 8),
         op_c: BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6)),
@@ -237,7 +234,7 @@ fn poseidon2_horizen_test() {
         e: BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6)),
     }];
     instructions.iter_mut().for_each(|instruction| {
-        instruction.opcode = PERM_POSEIDON2;
+        instruction.opcode = PERMPOS2;
     });
     let data: [[BabyBear; 16]; NUM_OPS] =
         from_fn(|_| from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))));
@@ -292,7 +289,7 @@ fn poseidon2_negative_test() {
     const NUM_OPS: usize = 1;
     let mut instructions: [Instruction<BabyBear>; NUM_OPS] = random_instructions::<NUM_OPS>();
     instructions.iter_mut().for_each(|instruction| {
-        instruction.opcode = PERM_POSEIDON2;
+        instruction.opcode = PERMPOS2;
     });
     let data: [[BabyBear; 16]; NUM_OPS] =
         from_fn(|_| from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))));

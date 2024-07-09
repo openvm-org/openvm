@@ -25,6 +25,8 @@ pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(program: Vec<Ins
                 field_extension_enabled: false,
                 limb_bits: 28,
                 decomp: 4,
+                compress_poseidon2_enabled: true,
+                perm_poseidon2_enabled: true,
             },
         },
         program,

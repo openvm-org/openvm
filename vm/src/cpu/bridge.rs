@@ -3,7 +3,7 @@ use super::{
     FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_BUS, FIELD_EXTENSION_INSTRUCTIONS, MEMORY_BUS,
     POSEIDON2_BUS, READ_INSTRUCTION_BUS,
 };
-use crate::cpu::OpCode::{COMPRESS_POSEIDON2, PERM_POSEIDON2};
+use crate::cpu::OpCode::{COMPPOS2, PERMPOS2};
 use afs_stark_backend::interaction::{AirBridge, Interaction};
 use p3_air::{PairCol, VirtualPairCol};
 use p3_field::PrimeField64;
@@ -106,7 +106,7 @@ impl<const WORD_SIZE: usize, F: PrimeField64> AirBridge<F> for CpuAir<WORD_SIZE>
         if self.options.poseidon2_enabled() {
             let compression = VirtualPairCol::new(
                 vec![(PairCol::Main(cols_numbered.io.opcode), F::one())],
-                -F::from_canonical_usize(PERM_POSEIDON2 as usize),
+                -F::from_canonical_usize(PERMPOS2 as usize),
             );
             let fields = vec![
                 VirtualPairCol::single_main(cols_numbered.io.timestamp),
@@ -117,13 +117,13 @@ impl<const WORD_SIZE: usize, F: PrimeField64> AirBridge<F> for CpuAir<WORD_SIZE>
                 VirtualPairCol::single_main(cols_numbered.io.e),
                 compression,
             ];
-            
+
             let mut enabled_flags = vec![];
             if self.options.compress_poseidon2_enabled {
-                enabled_flags.push(cols_numbered.aux.operation_flags[&COMPRESS_POSEIDON2]);
+                enabled_flags.push(cols_numbered.aux.operation_flags[&COMPPOS2]);
             }
             if self.options.perm_poseidon2_enabled {
-                enabled_flags.push(cols_numbered.aux.operation_flags[&PERM_POSEIDON2]);
+                enabled_flags.push(cols_numbered.aux.operation_flags[&PERMPOS2]);
             }
 
             interactions.push(Interaction {

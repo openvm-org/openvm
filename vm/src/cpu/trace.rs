@@ -7,15 +7,15 @@ use afs_chips::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
 
-use crate::memory::{compose, decompose};
-use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
-use crate::poseidon2::Poseidon2Chip;
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
     max_accesses_per_instruction, CpuAir,
     OpCode::{self, *},
     CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
 };
+use crate::memory::{compose, decompose};
+use crate::poseidon2::Poseidon2Chip;
+use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, derive_new::new)]
 pub struct Instruction<F> {
@@ -168,7 +168,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                         memory_access_to_cols(true, $address_space, $address, word);
                 }};
             }
-            
+
             if !vm.options().enabled_instructions().contains(&opcode) {
                 return Err(ExecutionError::DisabledOperation(opcode));
             }
@@ -226,11 +226,9 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     println!("{}", value);
                 }
                 FE4ADD | FE4SUB | BBE4MUL | BBE4INV => {
-                    FieldExtensionArithmeticChip::calculate(
-                        vm, timestamp, instruction,
-                    );
+                    FieldExtensionArithmeticChip::calculate(vm, timestamp, instruction);
                 }
-                PERM_POSEIDON2 | COMPRESS_POSEIDON2 => {
+                PERMPOS2 | COMPPOS2 => {
                     Poseidon2Chip::<16, _>::poseidon2_perm(vm, timestamp, instruction);
                 }
             };

@@ -1,18 +1,17 @@
-use afs_chips::is_zero::IsZeroAir;
-use afs_stark_backend::verifier::VerificationError;
-use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
-use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
-use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField32, PrimeField64};
-use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
-use p3_matrix::Matrix;
-use poseidon2_air::poseidon2::Poseidon2Config;
 use crate::cpu::columns::{CpuCols, CpuIoCols};
 use crate::cpu::{max_accesses_per_instruction, CpuAir, CpuOptions};
 use crate::field_arithmetic::ArithmeticOperation;
 use crate::memory::{decompose, MemoryAccess, OpType};
 use crate::vm::config::{VmConfig, VmParamsConfig};
 use crate::vm::VirtualMachine;
+use afs_chips::is_zero::IsZeroAir;
+use afs_stark_backend::verifier::VerificationError;
+use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
+use p3_baby_bear::BabyBear;
+use p3_field::{AbstractField, PrimeField64};
+use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
+use p3_matrix::Matrix;
 
 use super::columns::MemoryAccessCols;
 use super::trace::isize_to_field;
@@ -40,7 +39,6 @@ fn make_vm<const WORD_SIZE: usize>(
             },
         },
         program,
-        Poseidon2Config::<16, BabyBear>::horizen_config(),
     )
 }
 

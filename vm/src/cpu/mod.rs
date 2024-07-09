@@ -47,8 +47,8 @@ pub enum OpCode {
     BBE4MUL = 14,
     BBE4INV = 15,
 
-    PERM_POSEIDON2 = 16,
-    COMPRESS_POSEIDON2 = 17,
+    PERMPOS2 = 16,
+    COMPPOS2 = 17,
 }
 
 impl OpCode {
@@ -60,31 +60,31 @@ impl OpCode {
             3 => Some(BEQ),
             4 => Some(BNE),
             5 => Some(TERMINATE),
-            
+
             6 => Some(FADD),
             7 => Some(FSUB),
             8 => Some(FMUL),
             9 => Some(FDIV),
-            
+
             10 => Some(FAIL),
             11 => Some(PRINTF),
-            
+
             12 => Some(FE4ADD),
             13 => Some(FE4SUB),
             14 => Some(BBE4MUL),
             15 => Some(BBE4INV),
-            
-            16 => Some(PERM_POSEIDON2),
-            17 => Some(COMPRESS_POSEIDON2),
-            
+
+            16 => Some(PERMPOS2),
+            17 => Some(COMPPOS2),
+
             _ => None,
         }
     }
 }
 
 use crate::field_extension::FieldExtensionArithmeticAir;
-use OpCode::*;
 use crate::poseidon2::Poseidon2Chip;
+use OpCode::*;
 
 pub const CORE_INSTRUCTIONS: [OpCode; 6] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
@@ -103,7 +103,7 @@ fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         }
         FAIL => 0,
         PRINTF => 1,
-        COMPRESS_POSEIDON2 | PERM_POSEIDON2 => Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(opcode),
+        COMPPOS2 | PERMPOS2 => Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(opcode),
         _ => panic!(),
     }
 }
@@ -120,7 +120,7 @@ impl CpuOptions {
     pub fn poseidon2_enabled(&self) -> bool {
         self.compress_poseidon2_enabled || self.perm_poseidon2_enabled
     }
-    
+
     pub fn enabled_instructions(&self) -> Vec<OpCode> {
         let mut result = CORE_INSTRUCTIONS.to_vec();
         if self.field_extension_enabled {
@@ -130,10 +130,10 @@ impl CpuOptions {
             result.extend(FIELD_ARITHMETIC_INSTRUCTIONS);
         }
         if self.compress_poseidon2_enabled {
-            result.push(COMPRESS_POSEIDON2);
+            result.push(COMPPOS2);
         }
         if self.perm_poseidon2_enabled {
-            result.push(PERM_POSEIDON2);
+            result.push(PERMPOS2);
         }
         result
     }

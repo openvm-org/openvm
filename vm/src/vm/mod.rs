@@ -41,11 +41,7 @@ pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
-    pub fn new(
-        config: VmConfig,
-        program: Vec<Instruction<F>>,
-        poseidon2_config: Poseidon2Config<16, F>,
-    ) -> Self {
+    pub fn new(config: VmConfig, program: Vec<Instruction<F>>) -> Self {
         let config = config.vm;
         let decomp = config.decomp;
         let limb_bits = config.limb_bits;
@@ -57,7 +53,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
         let memory_chip = MemoryChip::new(limb_bits, limb_bits, limb_bits, decomp);
         let field_arithmetic_chip = FieldArithmeticChip::new();
         let field_extension_chip = FieldExtensionArithmeticChip::new();
-        let poseidon2_chip = Poseidon2Chip::from_poseidon2_config(poseidon2_config, POSEIDON2_BUS);
+        let poseidon2_chip = Poseidon2Chip::from_poseidon2_config(
+            Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
+            POSEIDON2_BUS,
+        );
 
         Self {
             config,

@@ -1,6 +1,5 @@
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use p3_baby_bear::BabyBear;
-use poseidon2_air::poseidon2::Poseidon2Config;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
 use stark_vm::vm::config::VmConfig;
@@ -30,7 +29,6 @@ fn air_test(
             },
         },
         program,
-        Poseidon2Config::<16, BabyBear>::horizen_config(),
     );
 
     let traces = vm.traces().unwrap();
@@ -90,7 +88,12 @@ fn test_vm_without_field_arithmetic() {
         Instruction::from_isize(BEQ, 0, 5, -1, 1, 0),
     ];
 
-    air_test(field_arithmetic_enabled, field_extension_enabled, false, program);
+    air_test(
+        field_arithmetic_enabled,
+        field_extension_enabled,
+        false,
+        program,
+    );
 }
 
 #[test]
@@ -133,5 +136,10 @@ fn test_vm_field_extension_arithmetic() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(field_arithmetic_enabled, field_extension_enabled, false, program);
+    air_test(
+        field_arithmetic_enabled,
+        field_extension_enabled,
+        false,
+        program,
+    );
 }
