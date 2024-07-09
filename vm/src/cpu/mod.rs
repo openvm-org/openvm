@@ -107,6 +107,10 @@ pub struct CpuOptions {
 }
 
 impl CpuOptions {
+    pub fn poseidon2_enabled(&self) -> bool {
+        self.compress_poseidon2_enabled || self.perm_poseidon2_enabled
+    }
+    
     pub fn enabled_instructions(&self) -> Vec<OpCode> {
         let mut result = CORE_INSTRUCTIONS.to_vec();
         if self.field_extension_enabled {

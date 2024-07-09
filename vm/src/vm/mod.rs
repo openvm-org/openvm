@@ -83,13 +83,15 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             self.program_chip.generate_trace(),
             self.memory_chip.generate_trace(self.range_checker.clone()),
             self.range_checker.generate_trace(),
-            self.poseidon2_chip.generate_trace(),
         ];
         if self.options().field_arithmetic_enabled {
             result.push(self.field_arithmetic_chip.generate_trace());
         }
         if self.options().field_extension_enabled {
             result.push(self.field_extension_chip.generate_trace());
+        }
+        if self.options().poseidon2_enabled() {
+            result.push(self.poseidon2_chip.generate_trace());
         }
         Ok(result)
     }
@@ -137,13 +139,15 @@ where
         &vm.program_chip.air,
         &vm.memory_chip.air,
         &vm.range_checker.air,
-        &vm.poseidon2_chip.air,
     ];
     if vm.options().field_arithmetic_enabled {
         result.push(&vm.field_arithmetic_chip.air as &dyn AnyRap<SC>);
     }
     if vm.options().field_extension_enabled {
         result.push(&vm.field_extension_chip.air as &dyn AnyRap<SC>);
+    }
+    if vm.options().poseidon2_enabled() {
+        result.push(&vm.poseidon2_chip.air as &dyn AnyRap<SC>);
     }
     result
 }
