@@ -164,6 +164,8 @@ impl RwCommand {
             )?;
         }
 
+        println!("Benchmark ReadWrite completed.");
+
         Ok(())
     }
 
