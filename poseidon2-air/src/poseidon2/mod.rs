@@ -187,18 +187,6 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
             horizen_int_diag,
         )
     }
-
-    // pub fn new_p3_baby_bear_16() -> Poseidon2Air<16, BabyBear> {
-    //     let horizen_config = Poseidon2Config::<16, BabyBear>::horizen_config();
-    //     Poseidon2Air::<16, BabyBear>::new(
-    //         horizen_config.external_constants,
-    //         horizen_config.internal_constants,
-    //         horizen_config.ext_mds_matrix,
-    //         horizen_config.int_diag_m1_matrix,
-    //         horizen_config.reduction_factor,
-    //         0,
-    //     )
-    // }
 }
 
 impl Poseidon2Config<16, BabyBear> {
@@ -214,6 +202,7 @@ impl Poseidon2Config<16, BabyBear> {
 }
 
 impl<F: PrimeField32> Poseidon2Config<16, F> {
+    /// Using HorizenLab's round constants: https://github.com/HorizenLabs/poseidon2
     pub fn new_p3_baby_bear_16() -> Self {
         let external_round_constants_f: Vec<[F; 16]> = HL_BABYBEAR_EXT_CONST_16
             .iter()

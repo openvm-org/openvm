@@ -101,11 +101,11 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
             )
         });
         let input_state: [F; 16] = [data_1, data_2].concat().try_into().unwrap();
-        let aux = vm.poseidon2_chip.air.generate_trace_row(input_state);
-        let output = aux.io.output;
+        let internal = vm.poseidon2_chip.air.generate_trace_row(input_state);
+        let output = internal.io.output;
         vm.poseidon2_chip.rows.push(Poseidon2ChipCols {
             io: make_io_cols(start_timestamp, instruction),
-            aux,
+            internal,
         });
 
         let iter_range = if opcode == PERM_POS2 {

@@ -56,7 +56,7 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
                 VirtualPairCol::constant(T::from_bool(false)),
                 VirtualPairCol::single_main(col_indices.io.d),
                 address,
-                VirtualPairCol::single_main(col_indices.aux.io.input[i]),
+                VirtualPairCol::single_main(col_indices.internal.io.input[i]),
             ];
 
             interactions.push(Interaction {
@@ -82,7 +82,7 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
                 VirtualPairCol::constant(T::from_bool(true)),
                 VirtualPairCol::single_main(col_indices.io.e),
                 address,
-                VirtualPairCol::single_main(col_indices.aux.io.output[i]),
+                VirtualPairCol::single_main(col_indices.internal.io.output[i]),
             ];
 
             let count = if i < 8 {

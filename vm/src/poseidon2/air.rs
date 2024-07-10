@@ -27,7 +27,7 @@ impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Chip<WIDTH, AB::F>
 
         let index_map = Poseidon2Cols::index_map(&self.air);
         let cols = Poseidon2ChipCols::<WIDTH, AB::Var>::from_slice(local, &index_map);
-        SubAir::<AB>::eval(&self.air, builder, cols.aux.io, cols.aux.aux);
+        SubAir::<AB>::eval(&self.air, builder, cols.internal.io, cols.internal.aux);
         // boolean constraints for alloc/cmp markers
         builder.assert_bool(cols.io.is_alloc);
         builder.assert_bool(cols.io.cmp);
