@@ -19,11 +19,11 @@ fn test_io() {
         builder.print_v(el);
     });
 
-    // let felts = builder.hint();
-    // builder.range(0, felts.len()).for_each(|i, builder| {
-    //     let el = builder.get(&felts, i);
-    //     builder.print_f(el);
-    // });
+    let felts = builder.hint();
+    builder.range(0, felts.len()).for_each(|i, builder| {
+        let el = builder.get(&felts, i);
+        builder.print_f(el);
+    });
 
     // TODO[INT-1727]: support AsmInstruction::LoadE
     // let exts = builder.hint();
