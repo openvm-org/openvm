@@ -18,12 +18,12 @@ Percentage (where 100 = 100%) of config file's `max_rw_ops` that are `READ`s. No
 
 ## `PageConfig` generation
 
-Run the test `run_generate_configs()` located in `benchmark/src/utils/config_gen.rs`, which will generate configs in `benchmark/config/rw`
+Run the test `run_generate_configs()` located in `benchmark/src/utils/config_gen.rs`, which will generate configs in `benchmark/config/rw`. You can optionally pass in these generated configs with the flag `--config-folder benchmark/config/rw`. If no folder is passed in, the config permutations will be generated on the fly in run from memory.
 
 ## Commands
 
 Run these commands from the root of the repository
 
 ```bash
-cargo run --release --bin benchmark -- rw --config-folder benchmark/config/rw -r 90 -w 10
+cargo run --release --bin benchmark -- rw -r 90 -w 10
 ```
