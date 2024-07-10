@@ -1,9 +1,11 @@
-use afs_test_utils::config::baby_bear_poseidon2::{engine_from_perm, random_perm, run_simple_test_no_pis};
+use afs_test_utils::config::baby_bear_poseidon2::{
+    engine_from_perm, random_perm, run_simple_test_no_pis,
+};
+use afs_test_utils::config::fri_params::fri_params_with_80_bits_of_security;
+use afs_test_utils::engine::StarkEngine;
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_poseidon2::Poseidon2ExternalMatrixGeneral;
 use rand::prelude::StdRng;
-use afs_test_utils::config::fri_params::fri_params_with_80_bits_of_security;
-use afs_test_utils::engine::StarkEngine;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
 use stark_vm::vm::config::VmConfig;
@@ -63,19 +65,14 @@ fn air_test_with_poseidon2(
     let traces = vm.traces().unwrap();
     let chips = get_chips(&vm);
 
-
     let perm = random_perm();
     let fri_params = fri_params_with_80_bits_of_security()[1];
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
-    
+
     let num_chips = chips.len();
 
     engine
-        .run_simple_test(
-            chips,
-            traces,
-            vec![vec![]; num_chips],
-        )
+        .run_simple_test(chips, traces, vec![vec![]; num_chips])
         .expect("Verification failed");
 }
 
@@ -131,11 +128,7 @@ fn test_vm_without_field_arithmetic() {
         Instruction::from_isize(BEQ, 0, 5, -1, 1, 0),
     ];
 
-    air_test(
-        field_arithmetic_enabled,
-        field_extension_enabled,
-        program,
-    );
+    air_test(field_arithmetic_enabled, field_extension_enabled, program);
 }
 
 #[test]
@@ -178,11 +171,7 @@ fn test_vm_field_extension_arithmetic() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(
-        field_arithmetic_enabled,
-        field_extension_enabled,
-        program,
-    );
+    air_test(field_arithmetic_enabled, field_extension_enabled, program);
 }
 
 #[test]
@@ -190,20 +179,31 @@ fn test_vm_compress_poseidon2() {
     let mut program = vec![];
     let input_a = 37;
     for i in 0..8 {
-        program.push(Instruction::from_isize(STOREW, 43 - (7 * i), input_a + i, 0, 0, 1));
+        program.push(Instruction::from_isize(
+            STOREW,
+            43 - (7 * i),
+            input_a + i,
+            0,
+            0,
+            1,
+        ));
     }
     let input_b = 108;
     for i in 0..8 {
-        program.push(Instruction::from_isize(STOREW, 2 + (18 * i), input_b + i, 0, 0, 1));
+        program.push(Instruction::from_isize(
+            STOREW,
+            2 + (18 * i),
+            input_b + i,
+            0,
+            0,
+            1,
+        ));
     }
     let output = 4;
-    program.push(Instruction::from_isize(COMP_POS2, input_a, input_b, output, 1, 1));
+    program.push(Instruction::from_isize(
+        COMP_POS2, input_a, input_b, output, 1, 1,
+    ));
     program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
 
-    air_test_with_poseidon2(
-        false,
-        false,
-        true,
-        program,
-    );
+    air_test_with_poseidon2(false, false, true, program);
 }

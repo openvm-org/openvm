@@ -93,7 +93,9 @@ impl Display for ExecutionError {
                 "pc = {} out of bounds for program of length {}",
                 pc, program_len
             ),
-            ExecutionError::DisabledOperation(pc, op) => write!(f, "at pc = {}, opcode {:?} was not enabled", pc, op),
+            ExecutionError::DisabledOperation(pc, op) => {
+                write!(f, "at pc = {}, opcode {:?} was not enabled", pc, op)
+            }
         }
     }
 }
