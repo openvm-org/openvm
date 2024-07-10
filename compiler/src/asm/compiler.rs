@@ -8,15 +8,15 @@ use p3_field::PrimeField32;
 use p3_field::TwoAdicField;
 
 use crate::asm::AsmInstruction;
+use crate::ir::{DslIr, Ext, Felt, Ptr, Var};
 use crate::ir::Array;
 use crate::ir::Usize;
-use crate::ir::{DslIr, Ext, Felt, Ptr, Var};
 use crate::prelude::TracedVec;
 
+use super::{AssemblyCode, BasicBlock};
 use super::config::AsmConfig;
 use super::IndexTriple;
 use super::ValueOrConst;
-use super::{AssemblyCode, BasicBlock};
 
 /// The zero address.
 pub(crate) const ZERO: i32 = 0;
@@ -492,19 +492,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     }
                     _ => unimplemented!(),
                 },
-                DslIr::HintLen(dst) => self.push(AsmInstruction::HintLen(dst.fp()), trace),
-                DslIr::HintVars(dst) => match dst {
-                    Array::Dyn(dst, _) => self.push(AsmInstruction::Hint(dst.fp()), trace),
-                    _ => unimplemented!(),
-                },
-                DslIr::HintFelts(dst) => match dst {
-                    Array::Dyn(dst, _) => self.push(AsmInstruction::Hint(dst.fp()), trace),
-                    _ => unimplemented!(),
-                },
-                DslIr::HintExts(dst) => match dst {
-                    Array::Dyn(dst, _) => self.push(AsmInstruction::Hint(dst.fp()), trace),
-                    _ => unimplemented!(),
-                },
+                DslIr::Hint(dst) => self.push(AsmInstruction::Hint(dst.fp()), trace),
                 DslIr::FriFold(m, input_ptr) => {
                     if let Array::Dyn(ptr, _) = input_ptr {
                         self.push(AsmInstruction::FriFold(m.fp(), ptr.fp()), trace);

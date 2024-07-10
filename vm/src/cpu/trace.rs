@@ -7,14 +7,14 @@ use afs_chips::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
 
-use crate::memory::{compose, decompose};
 use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
+use crate::memory::{compose, decompose};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
-    max_accesses_per_instruction, CpuAir,
-    OpCode::{self, *},
-    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
+    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE,
+    CPU_MAX_WRITES_PER_CYCLE,
+    CpuAir, INST_WIDTH, max_accesses_per_instruction, OpCode::{self, *},
 };
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, derive_new::new)]
@@ -250,7 +250,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     }
                     let next_input = &vm.witness_stream[witness_idx];
                     witness_idx += 1;
-                    vm.memory_chip.write_hint(a, d, e, next_input.clone());
+                    vm.memory_chip.write_hint(a, d, e, &next_input);
                 }
             };
 

@@ -1,9 +1,9 @@
-use afs_compiler::util::{display_program, execute_program};
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
+use p3_field::extension::BinomialExtensionField;
 
 use afs_compiler::asm::AsmBuilder;
+use afs_compiler::util::{display_program, execute_program};
 use stark_vm::cpu::WORD_SIZE;
 
 type F = BabyBear;
@@ -13,21 +13,22 @@ type EF = BinomialExtensionField<BabyBear, 4>;
 fn test_io() {
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let arr = builder.hint_vars();
-    builder.range(0, arr.len()).for_each(|i, builder| {
-        let el = builder.get(&arr, i);
+    let vars = builder.hint();
+    builder.range(0, vars.len()).for_each(|i, builder| {
+        let el = builder.get(&vars, i);
         builder.print_v(el);
     });
 
-    // let arr = builder.hint_felts();
-    // builder.range(0, arr.len()).for_each(|i, builder| {
-    //     let el = builder.get(&arr, i);
-    //     builder.print_f(el);
-    // });
+    let felts = builder.hint();
+    builder.range(0, felts.len()).for_each(|i, builder| {
+        let el = builder.get(&felts, i);
+        builder.print_f(el);
+    });
 
-    // let arr = builder.hint_exts();
-    // builder.range(0, arr.len()).for_each(|i, builder| {
-    //     let el = builder.get(&arr, i);
+    // TODO[INT-1727]: support AsmInstruction::LoadE
+    // let exts = builder.hint();
+    // builder.range(0, exts.len()).for_each(|i, builder| {
+    //     let el = builder.get(&exts, i);
     //     builder.print_e(el);
     // });
 
@@ -36,12 +37,9 @@ fn test_io() {
     let program = builder.compile_isa::<WORD_SIZE>();
 
     let witness_stream: Vec<Vec<F>> = vec![
-        vec![F::from_canonical_usize(3)],
         vec![F::zero(), F::zero(), F::one()],
-        vec![F::from_canonical_usize(3)],
         vec![F::zero(), F::zero(), F::two()],
-        vec![F::from_canonical_usize(3)],
-        vec![F::one(), F::one(), F::two()],
+        // vec![F::one(), F::one(), F::two()],
     ];
 
     display_program(&program);

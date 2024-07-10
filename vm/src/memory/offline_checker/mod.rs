@@ -1,7 +1,9 @@
 use std::{array::from_fn, collections::HashMap};
+use std::collections::hash_map::Entry;
+
+use p3_field::PrimeField32;
 
 use afs_chips::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
-use p3_field::PrimeField32;
 
 use crate::memory::{compose, decompose, OpType};
 
@@ -103,24 +105,32 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         });
     }
 
-    pub fn write_hint(&mut self, op_a: F, d: F, e: F, hint: Vec<F>) {
+    /// Writes the length and contents of `hint` into memory starting at `e[d[a]]`.
+    ///
+    /// First writes `hint.len()` into `e[d[a]]`. Then writes `hint` into `e[d[a] + 1, ..., d[a] + hint.len()]`.
+    /// Panics if any of these writes are not the first write to the corresponding memory locations.
+    pub fn write_hint(&mut self, op_a: F, d: F, e: F, hint: &[F]) {
         let address = if d != F::zero() {
             self.memory[&(d, op_a)]
         } else {
             op_a
         };
+        self.init_memory(e, address, F::from_canonical_usize(hint.len()));
 
         for (i, &datum) in hint.iter().enumerate() {
-            let decomp: [F; WORD_SIZE] = decompose(datum);
-            for (j, &decomp_elem) in decomp.iter().enumerate() {
-                assert!(!self
-                    .memory
-                    .contains_key(&(e, address + F::from_canonical_usize(i * WORD_SIZE + j))));
+            self.init_memory(e, address + F::from_canonical_usize((i + 1) * WORD_SIZE), datum);
+        }
+    }
 
-                self.memory.insert(
-                    (e, address + F::from_canonical_usize(i * WORD_SIZE + j)),
-                    decomp_elem,
-                );
+    fn init_memory(&mut self, addr_space: F, addr: F, value: F) {
+        let decomp = decompose::<WORD_SIZE, _>(value);
+        for j in 0..WORD_SIZE {
+            let loc = (addr_space, addr + F::from_canonical_usize(j));
+            match self.memory.entry(loc) {
+                Entry::Occupied(_) => panic!("cannot initialize previously used memory ({}, {})", addr_space, addr),
+                Entry::Vacant(v) => {
+                    v.insert(decomp[j]);
+                },
             }
         }
     }
