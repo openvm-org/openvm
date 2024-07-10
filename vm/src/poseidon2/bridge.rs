@@ -42,14 +42,14 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
             );
             let address = VirtualPairCol::new(
                 vec![(
-                    PairCol::Main(if i < 8 {
+                    PairCol::Main(if i < WIDTH / 2 {
                         col_indices.io.a
                     } else {
                         col_indices.io.b
                     }),
                     T::from_canonical_usize(1),
                 )],
-                T::from_canonical_usize(if i < 8 { i } else { i - 8 }),
+                T::from_canonical_usize(if i < WIDTH / 2 { i } else { i - WIDTH / 2 }),
             );
 
             let fields = vec![
@@ -86,7 +86,7 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
                 VirtualPairCol::single_main(col_indices.internal.io.output[i]),
             ];
 
-            let count = if i < 8 {
+            let count = if i < WIDTH / 2 {
                 VirtualPairCol::single_main(col_indices.io.is_alloc)
             } else {
                 VirtualPairCol::diff_main(col_indices.io.is_alloc, col_indices.io.cmp)

@@ -68,7 +68,8 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     }
 }
 
-impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
+const WIDTH: usize = 16;
+impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     /// Key method of Poseidon2Chip.
     ///
     /// Called using `vm` and not `&self`. Reads two chunks from memory and generates a trace row for
@@ -105,6 +106,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
             })
             .collect();
 
+        // SAFETY: only allowed because WIDTH constrained to 16 above
         let input_state: [F; 16] = [data_1, data_2].concat().try_into().unwrap();
         let internal = vm.poseidon2_chip.air.generate_trace_row(input_state);
         let output = internal.io.output;
