@@ -349,7 +349,7 @@ impl<C: Config> Builder<C> {
             size: V::size_of(),
         };
         let vlen: Var<C::N> = self.uninit();
-        self.load(vlen.clone(), ptr, index);
+        self.load(vlen, ptr, index);
 
         // Create array of length vlen starting at mem[ptr + 1].
         let arr_addr: Var<C::N> = self.eval(ptr.address + C::N::one());

@@ -250,7 +250,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     }
                     let next_input = &vm.witness_stream[witness_idx];
                     witness_idx += 1;
-                    vm.memory_chip.write_hint(a, d, e, &next_input);
+                    vm.memory_chip.write_hint(a, d, e, next_input);
                 }
             };
 

@@ -128,7 +128,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
 
     fn init_memory(&mut self, addr_space: F, addr: F, value: F) {
         let decomp = decompose::<WORD_SIZE, _>(value);
-        for j in 0..WORD_SIZE {
+        for (j, &value) in decomp.iter().enumerate() {
             let loc = (addr_space, addr + F::from_canonical_usize(j));
             match self.memory.entry(loc) {
                 Entry::Occupied(_) => panic!(
@@ -136,7 +136,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
                     addr_space, addr
                 ),
                 Entry::Vacant(v) => {
-                    v.insert(decomp[j]);
+                    v.insert(value);
                 }
             }
         }
