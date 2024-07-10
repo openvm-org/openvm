@@ -81,7 +81,7 @@ fn memory_access_to_cols<const WORD_SIZE: usize, F: PrimeField64>(
 pub enum ExecutionError {
     Fail(usize),
     PcOutOfBounds(usize, usize),
-    DisabledOperation(OpCode),
+    DisabledOperation(usize, OpCode),
 }
 
 impl Display for ExecutionError {
@@ -93,7 +93,7 @@ impl Display for ExecutionError {
                 "pc = {} out of bounds for program of length {}",
                 pc, program_len
             ),
-            ExecutionError::DisabledOperation(op) => write!(f, "opcode {:?} was not enabled", op),
+            ExecutionError::DisabledOperation(pc, op) => write!(f, "at pc = {}, opcode {:?} was not enabled", pc, op),
         }
     }
 }
@@ -170,7 +170,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             }
 
             if !vm.options().enabled_instructions().contains(&opcode) {
-                return Err(ExecutionError::DisabledOperation(opcode));
+                return Err(ExecutionError::DisabledOperation(pc_usize, opcode));
             }
 
             match opcode {

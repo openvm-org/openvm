@@ -143,3 +143,26 @@ fn test_vm_field_extension_arithmetic() {
         program,
     );
 }
+
+#[test]
+fn test_vm_compress_poseidon2() {
+    let mut program = vec![];
+    let input_a = 37;
+    for i in 0..8 {
+        program.push(Instruction::from_isize(STOREW, 43 - (7 * i), input_a + i, 0, 0, 1));
+    }
+    let input_b = 108;
+    for i in 0..8 {
+        program.push(Instruction::from_isize(STOREW, 2 + (18 * i), input_b + i, 0, 0, 1));
+    }
+    let output = 4;
+    program.push(Instruction::from_isize(COMP_POS2, input_a, input_b, output, 1, 1));
+    program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
+
+    air_test(
+        false,
+        false,
+        true,
+        program,
+    );
+}
