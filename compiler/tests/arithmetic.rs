@@ -73,6 +73,10 @@ fn test_compiler_arithmetic() {
         builder.assert_ext_eq(-a_ext, (-a_ext_val).cons());
     }
 
+    // let program = builder.compile_isa::<WORD_SIZE>();
+    // display_program(&program);
+    // execute_program::<WORD_SIZE, _>(program);
+
     // let program = builder.compile_program();
 
     // let config = SC::default();

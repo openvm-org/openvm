@@ -16,10 +16,9 @@ pub const ARITHMETIC_BUS: usize = 2;
 pub const FIELD_EXTENSION_BUS: usize = 3;
 pub const RANGE_CHECKER_BUS: usize = 4;
 
-pub const MAX_READS_PER_CYCLE: usize = 2;
-pub const MAX_WRITES_PER_CYCLE: usize = 1;
-// pub const MAX_ACCESSES_PER_CYCLE: usize = MAX_READS_PER_CYCLE + MAX_WRITES_PER_CYCLE;
-pub const MAX_ACCESSES_PER_CYCLE: usize = 100;
+pub const CPU_MAX_READS_PER_CYCLE: usize = 2;
+pub const CPU_MAX_WRITES_PER_CYCLE: usize = 1;
+pub const CPU_MAX_ACCESSES_PER_CYCLE: usize = CPU_MAX_READS_PER_CYCLE + CPU_MAX_WRITES_PER_CYCLE;
 
 pub const WORD_SIZE: usize = 1;
 
@@ -71,11 +70,29 @@ impl OpCode {
     }
 }
 
+use crate::field_extension::FieldExtensionArithmeticAir;
 use OpCode::*;
 
-const CORE_INSTRUCTIONS: [OpCode; 6] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE];
-const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
-const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
+pub const CORE_INSTRUCTIONS: [OpCode; 6] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE];
+pub const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
+pub const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
+
+fn max_accesses_per_instruction(op_code: OpCode) -> usize {
+    match op_code {
+        LOADW | STOREW => 3,
+        // JAL only does WRITE, but it is done as timestamp + 2
+        JAL => 3,
+        BEQ | BNE => 2,
+        TERMINATE => 0,
+        op_code if FIELD_ARITHMETIC_INSTRUCTIONS.contains(&op_code) => 3,
+        op_code if FIELD_EXTENSION_INSTRUCTIONS.contains(&op_code) => {
+            FieldExtensionArithmeticAir::max_accesses_per_instruction(op_code)
+        }
+        FAIL => 0,
+        PRINTF => 1,
+        _ => panic!(),
+    }
+}
 
 #[derive(Default, Clone, Copy)]
 pub struct CpuOptions {

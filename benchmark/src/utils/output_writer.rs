@@ -6,9 +6,7 @@ use afs_test_utils::{
 };
 use color_eyre::eyre::Result;
 use csv::{Writer, WriterBuilder};
-use logical_interface::{
-    afs_interface::AfsInterface, mock_db::MockDb, table::types::TableMetadata,
-};
+use logical_interface::{afs_interface::AfsInterface, mock_db::MockDb};
 use p3_util::ceil_div_usize;
 use serde::{Deserialize, Serialize};
 
@@ -45,8 +43,7 @@ pub fn save_afi_to_new_db(
     afi_path: String,
     db_file_path: String,
 ) -> Result<()> {
-    let table_metadata = TableMetadata::new(config.page.index_bytes, config.page.data_bytes);
-    let mut db = MockDb::new(table_metadata);
+    let mut db = MockDb::new();
     let mut interface = AfsInterface::new(config.page.index_bytes, config.page.data_bytes, &mut db);
     interface.load_input_file(afi_path.as_str())?;
     db.save_to_file(db_file_path.as_str())?;

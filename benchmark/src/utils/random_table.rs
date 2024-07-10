@@ -5,7 +5,7 @@ use afs_test_utils::page_config::PageConfig;
 use color_eyre::eyre::Result;
 use core::cmp::min;
 use logical_interface::{
-    afs_input_instructions::AfsHeader,
+    afs_input::header::AfsHeader,
     afs_interface::utils::string_to_table_id,
     mock_db::MockDb,
     table::{types::TableMetadata, Table},
@@ -25,7 +25,7 @@ pub fn generate_random_table(
     let data_len = (data_bytes + 1) / 2;
 
     let metadata = TableMetadata::new(index_bytes, data_bytes);
-    let mut db = MockDb::new(metadata.clone());
+    let mut db = MockDb::new();
 
     let table_id = string_to_table_id(table_id);
 

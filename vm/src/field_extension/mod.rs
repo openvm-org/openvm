@@ -1,9 +1,7 @@
 use p3_field::{Field, PrimeField32};
 
-use crate::{
-    cpu::{OpCode, MAX_ACCESSES_PER_CYCLE},
-    vm::VirtualMachine,
-};
+use crate::cpu::FIELD_EXTENSION_INSTRUCTIONS;
+use crate::{cpu::OpCode, vm::VirtualMachine};
 
 pub mod air;
 pub mod bridge;
@@ -18,7 +16,7 @@ pub const EXTENSION_DEGREE: usize = 4;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct FieldExtensionArithmeticOperation<F> {
-    pub clock_cycle: usize,
+    pub start_timestamp: usize,
     pub opcode: OpCode,
     pub op_a: F,
     pub op_b: F,
@@ -47,13 +45,14 @@ pub struct FieldExtensionArithmeticAir {}
 impl FieldExtensionArithmeticAir {
     pub const BASE_OP: u8 = OpCode::FE4ADD as u8;
 
-    pub fn new() -> Self {
-        Self {}
+    pub fn max_accesses_per_instruction(opcode: OpCode) -> usize {
+        assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
+        12
     }
 
     /// Evaluates given opcode using given operands.
     ///
-    /// Returns None for non field extension add/sub operations.
+    /// Returns None for opcodes not in cpu::FIELD_EXTENSION_INSTRUCTIONS.
     pub fn solve<T: Field>(
         op: OpCode,
         operand1: [T; EXTENSION_DEGREE],
@@ -138,7 +137,7 @@ pub struct FieldExtensionArithmeticChip<const WORD_SIZE: usize, F: PrimeField32>
 impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_SIZE, F> {
     pub fn new() -> Self {
         Self {
-            air: FieldExtensionArithmeticAir::new(),
+            air: FieldExtensionArithmeticAir {},
             operations: vec![],
         }
     }
@@ -146,31 +145,37 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
     #[allow(clippy::too_many_arguments)]
     pub fn calculate(
         vm: &mut VirtualMachine<WORD_SIZE, F>,
-        clk: usize,
-        op: OpCode,
+        start_timestamp: usize,
+        opcode: OpCode,
         op_a: F,
         op_b: F,
         op_c: F,
         d: F,
         e: F,
     ) -> [F; EXTENSION_DEGREE] {
-        let timestamp = clk * MAX_ACCESSES_PER_CYCLE;
-        let operand1 = FieldExtensionArithmeticChip::read_extension_element(vm, timestamp, d, op_b);
-        let operand2 = if op == OpCode::BBE4INV {
+        let operand1 =
+            FieldExtensionArithmeticChip::read_extension_element(vm, start_timestamp, d, op_b);
+        let operand2 = if opcode == OpCode::BBE4INV {
             [F::zero(); EXTENSION_DEGREE]
         } else {
-            FieldExtensionArithmeticChip::read_extension_element(vm, timestamp + 4, e, op_c)
+            FieldExtensionArithmeticChip::read_extension_element(vm, start_timestamp + 4, e, op_c)
         };
 
-        let result = FieldExtensionArithmeticAir::solve::<F>(op, operand1, operand2).unwrap();
+        let result = FieldExtensionArithmeticAir::solve::<F>(opcode, operand1, operand2).unwrap();
 
-        FieldExtensionArithmeticChip::write_extension_element(vm, timestamp + 8, d, op_a, result);
+        FieldExtensionArithmeticChip::write_extension_element(
+            vm,
+            start_timestamp + 8,
+            d,
+            op_a,
+            result,
+        );
 
         vm.field_extension_chip
             .operations
             .push(FieldExtensionArithmeticOperation {
-                clock_cycle: clk,
-                opcode: op,
+                start_timestamp,
+                opcode,
                 op_a,
                 op_b,
                 op_c,
