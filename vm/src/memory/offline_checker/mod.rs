@@ -1,7 +1,4 @@
-use std::{
-    array::from_fn,
-    collections::{HashMap, HashSet},
-};
+use std::{array::from_fn, collections::HashMap};
 
 use afs_chips::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 use p3_field::PrimeField32;
@@ -40,7 +37,6 @@ impl<const WORD_SIZE: usize> OfflineChecker<WORD_SIZE> {
 pub struct MemoryChip<const WORD_SIZE: usize, F: PrimeField32> {
     pub air: OfflineChecker<WORD_SIZE>,
     pub accesses: Vec<MemoryAccess<WORD_SIZE, F>>,
-    access_indices: HashSet<(F, F)>,
     memory: HashMap<(F, F), F>,
     last_timestamp: Option<usize>,
 }
@@ -58,7 +54,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
                 decomp,
             },
             accesses: vec![],
-            access_indices: HashSet::new(),
             memory: HashMap::new(),
             last_timestamp: None,
         }
@@ -80,7 +75,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             address,
             data,
         });
-        self.access_indices.insert((address_space, address));
         data
     }
 
@@ -107,15 +101,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             address,
             data,
         });
-        self.access_indices.insert((address_space, address));
     }
 
-    pub fn write_hint(&mut self, timestamp: usize, op_a: F, d: F, e: F, hint: Vec<F>) {
-        if let Some(last_timestamp) = self.last_timestamp {
-            assert!(timestamp > last_timestamp);
-        }
-        self.last_timestamp = Some(timestamp);
-
+    pub fn write_hint(&mut self, op_a: F, d: F, e: F, hint: Vec<F>) {
         let address = if d != F::zero() {
             self.memory[&(d, op_a)]
         } else {
@@ -126,11 +114,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             let decomp: [F; WORD_SIZE] = decompose(datum);
             for (j, &decomp_elem) in decomp.iter().enumerate() {
                 assert!(!self
-                    .access_indices
-                    .contains(&(e, address + F::from_canonical_usize(i * WORD_SIZE + j))));
-
-                self.access_indices
-                    .insert((e, address + F::from_canonical_usize(i * WORD_SIZE + j)));
+                    .memory
+                    .contains_key(&(e, address + F::from_canonical_usize(i * WORD_SIZE + j))));
 
                 self.memory.insert(
                     (e, address + F::from_canonical_usize(i * WORD_SIZE + j)),

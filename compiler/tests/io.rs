@@ -18,7 +18,6 @@ fn test_io() {
         let el = builder.get(&arr, i);
         builder.print_v(el);
     });
-    builder.halt();
 
     // let arr = builder.hint_felts();
     // builder.range(0, arr.len()).for_each(|i, builder| {
@@ -31,6 +30,8 @@ fn test_io() {
     //     let el = builder.get(&arr, i);
     //     builder.print_e(el);
     // });
+
+    builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
 
