@@ -3,6 +3,14 @@ use std::fs;
 use afs_test_utils::page_config::PageConfig;
 use clap::Parser;
 
+use crate::{
+    utils::{
+        config_gen::get_configs,
+        output_writer::{default_output_filename, write_csv_header},
+    },
+    TMP_FOLDER,
+};
+
 pub mod predicate;
 pub mod rw;
 
@@ -31,6 +39,27 @@ pub struct CommonCommands {
         required = false
     )]
     pub silent: bool,
+}
+
+pub fn benchmark_setup(
+    benchmark_name: String,
+    config_folder: Option<String>,
+    output_file: Option<String>,
+) -> (Vec<PageConfig>, String) {
+    // Generate/Parse config(s)
+    let configs = get_configs(config_folder);
+
+    // Create tmp folder
+    let _ = fs::create_dir_all(TMP_FOLDER);
+
+    // Write .csv file
+    let output_file = output_file
+        .clone()
+        .unwrap_or(default_output_filename(benchmark_name.clone()));
+    write_csv_header(output_file.clone()).unwrap();
+    println!("Output file: {}", output_file.clone());
+
+    (configs, output_file)
 }
 
 pub fn parse_config_folder(config_folder: String) -> Vec<PageConfig> {

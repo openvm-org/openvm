@@ -4,6 +4,7 @@ use afs_test_utils::{
     config::EngineType,
     page_config::{PageConfig, PageMode},
 };
+use chrono::Local;
 use color_eyre::eyre::Result;
 use csv::{Writer, WriterBuilder};
 use logical_interface::{afs_interface::AfsInterface, mock_db::MockDb};
@@ -48,6 +49,14 @@ pub fn save_afi_to_new_db(
     interface.load_input_file(afi_path.as_str())?;
     db.save_to_file(db_file_path.as_str())?;
     Ok(())
+}
+
+pub fn default_output_filename(benchmark_name: String) -> String {
+    format!(
+        "benchmark/output/{}-{}.csv",
+        benchmark_name,
+        Local::now().format("%Y%m%d-%H%M%S")
+    )
 }
 
 pub fn write_csv_header(path: String) -> Result<()> {
@@ -116,15 +125,13 @@ pub fn write_csv_header(path: String) -> Result<()> {
 pub fn write_csv_line(
     path: String,
     test_type: String,
+    scenario: String,
     config: &PageConfig,
     log_data: &HashMap<String, String>,
-    percent_reads: usize,
-    percent_writes: usize,
 ) -> Result<()> {
     let file = OpenOptions::new().append(true).open(path).unwrap();
     let mut writer = WriterBuilder::new().has_headers(false).from_writer(file);
 
-    let scenario = format!("{}%r/{}%w", percent_reads, percent_writes);
     let bytes_divisor = ceil_div_usize(config.page.bits_per_fe, 8);
     let idx_len = ceil_div_usize(config.page.index_bytes, bytes_divisor);
     let data_len = ceil_div_usize(config.page.data_bytes, bytes_divisor);

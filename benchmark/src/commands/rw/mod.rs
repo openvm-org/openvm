@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, time::Instant};
+use std::{collections::HashMap, time::Instant};
 
 use afs::commands::{
     cache::CacheCommand, keygen::KeygenCommand, prove::ProveCommand, verify::VerifyCommand,
@@ -27,14 +27,13 @@ use serde::{de::DeserializeOwned, Serialize};
 use tracing::info_span;
 
 use crate::{
-    commands::parse_config_folder,
+    commands::benchmark_setup,
     utils::{
-        config_gen::generate_configs,
-        output_writer::{save_afi_to_new_db, write_csv_header, write_csv_line},
+        output_writer::{save_afi_to_new_db, write_csv_line},
         random_table::generate_random_afi_rw,
         tracing::{clear_tracing_log, extract_event_data_from_log, extract_timing_data_from_log},
     },
-    AFI_FILE_PATH, DB_FILE_PATH, DEFAULT_OUTPUT_FILE, TABLE_ID, TMP_FOLDER, TMP_TRACING_LOG,
+    AFI_FILE_PATH, DB_FILE_PATH, TABLE_ID, TMP_FOLDER, TMP_TRACING_LOG,
 };
 
 use super::CommonCommands;
@@ -68,30 +67,20 @@ pub struct RwCommand {
 impl RwCommand {
     pub fn execute(&self) -> Result<()> {
         println!("Executing Read/Write benchmark");
+        let benchmark_name = "ReadWrite".to_string();
+        let scenario = format!("{}%r/{}%w", self.percent_reads, self.percent_writes);
 
         assert!(self.percent_reads + self.percent_writes <= 100);
 
-        // Generate/Parse config(s)
-        let configs = if let Some(config_folder) = self.common.config_folder.clone() {
-            parse_config_folder(config_folder)
-        } else {
-            generate_configs()
-        };
+        let (configs, output_file) = benchmark_setup(
+            benchmark_name.clone(),
+            self.common.config_folder.clone(),
+            self.common.output_file.clone(),
+        );
         let configs_len = configs.len();
-
-        // Create tmp folder
-        let _ = fs::create_dir_all(TMP_FOLDER);
-
-        // Write .csv file
-        let output_file = self
-            .common
-            .output_file
-            .clone()
-            .unwrap_or(DEFAULT_OUTPUT_FILE.to_string());
-        write_csv_header(output_file.clone())?;
         println!("Output file: {}", output_file.clone());
 
-        // Parse engine
+        // Run benchmark for each config
         for (idx, config) in configs.iter().rev().enumerate() {
             let timestamp = Local::now().format("%H:%M:%S");
             println!(
@@ -156,11 +145,10 @@ impl RwCommand {
 
             write_csv_line(
                 output_file.clone(),
-                "ReadWrite".to_string(),
+                benchmark_name.clone(),
+                scenario.clone(),
                 config,
                 &log_data,
-                self.percent_reads,
-                self.percent_writes,
             )?;
         }
 

@@ -8,6 +8,16 @@ use afs_test_utils::{
     page_config::{PageConfig, PageMode, PageParamsConfig, StarkEngineConfig},
 };
 
+use crate::commands::parse_config_folder;
+
+pub fn get_configs(config_folder: Option<String>) -> Vec<PageConfig> {
+    if let Some(config_folder) = config_folder.clone() {
+        parse_config_folder(config_folder)
+    } else {
+        generate_configs()
+    }
+}
+
 pub fn generate_configs() -> Vec<PageConfig> {
     let fri_params_vec = vec![
         fri_params_with_80_bits_of_security(),
