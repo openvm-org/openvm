@@ -149,7 +149,7 @@ fn test_horizen_poseidon2() {
     let horizen_permut = HorizenPoseidon2::new(&POSEIDON2_BABYBEAR_16_PARAMS);
     let mut rng = create_seeded_rng();
     let (external_round_constants, internal_round_constants, horizen_int_diag) =
-        Poseidon2Air::<16, BabyBear>::horizen_round_consts();
+        Poseidon2Air::<16, BabyBear>::horizen_round_consts_16();
     let mut air_permut = Poseidon2Air::<16, BabyBear>::new(
         external_round_constants,
         internal_round_constants,

@@ -40,7 +40,7 @@ impl<const WIDTH: usize, T: Clone> Poseidon2Cols<WIDTH, T> {
     }
 
     pub fn from_slice(slice: &[T], index_map: &Poseidon2ColsIndexMap<WIDTH>) -> Self {
-        // assert_eq!(slice.len(), index_map.output.end);
+        assert_eq!(slice.len(), index_map.output.end);
 
         let input = core::array::from_fn(|i| slice[index_map.input.start + i].clone());
         let output = core::array::from_fn(|i| slice[index_map.output.start + i].clone());

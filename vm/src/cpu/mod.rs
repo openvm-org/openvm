@@ -26,6 +26,7 @@ pub const WORD_SIZE: usize = 1;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, FromStr, PartialOrd, Ord)]
 #[repr(usize)]
+#[allow(non_camel_case_types)]
 pub enum OpCode {
     LOADW = 0,
     STOREW = 1,
@@ -47,8 +48,8 @@ pub enum OpCode {
     BBE4MUL = 14,
     BBE4INV = 15,
 
-    PERMPOS2 = 16,
-    COMPPOS2 = 17,
+    PERM_POS2 = 16,
+    COMP_POS2 = 17,
 }
 
 impl OpCode {
@@ -74,8 +75,8 @@ impl OpCode {
             14 => Some(BBE4MUL),
             15 => Some(BBE4INV),
 
-            16 => Some(PERMPOS2),
-            17 => Some(COMPPOS2),
+            16 => Some(PERM_POS2),
+            17 => Some(COMP_POS2),
 
             _ => None,
         }
@@ -103,7 +104,9 @@ fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         }
         FAIL => 0,
         PRINTF => 1,
-        COMPPOS2 | PERMPOS2 => Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(opcode),
+        COMP_POS2 | PERM_POS2 => {
+            Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(opcode)
+        }
         _ => panic!(),
     }
 }
@@ -130,10 +133,10 @@ impl CpuOptions {
             result.extend(FIELD_ARITHMETIC_INSTRUCTIONS);
         }
         if self.compress_poseidon2_enabled {
-            result.push(COMPPOS2);
+            result.push(COMP_POS2);
         }
         if self.perm_poseidon2_enabled {
-            result.push(PERMPOS2);
+            result.push(PERM_POS2);
         }
         result
     }

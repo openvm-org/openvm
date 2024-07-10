@@ -25,6 +25,7 @@ afs-stark-backend = { path = "../stark-backend" }
 afs-derive = { path = "../derive" }
 afs-test-utils = { path = "../test-utils" }
 parking_lot = "0.12.2"
+lazy_static = "1.5.0"
 tracing = "0.1.40"
 itertools = "0.13.0"
 getset = "0.1.2"

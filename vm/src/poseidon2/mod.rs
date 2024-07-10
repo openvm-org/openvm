@@ -48,7 +48,7 @@ fn make_io_cols<F: Field>(
         c: op_c,
         d,
         e,
-        cmp: F::from_bool(opcode == COMPPOS2),
+        cmp: F::from_bool(opcode == COMP_POS2),
     }
 }
 
@@ -63,7 +63,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     }
 
     pub fn max_accesses_per_instruction(opcode: OpCode) -> usize {
-        assert!(opcode == COMPPOS2 || opcode == PERMPOS2);
+        assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
         32
     }
 }
@@ -87,7 +87,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
             d,
             e,
         } = instruction;
-        assert!(opcode == COMPPOS2 || opcode == PERMPOS2);
+        assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
 
         let data_1: [F; 8] = core::array::from_fn(|i| {
             vm.memory_chip
@@ -108,7 +108,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
             aux,
         });
 
-        let iter_range = if opcode == PERMPOS2 {
+        let iter_range = if opcode == PERM_POS2 {
             output.iter().enumerate().take(16)
         } else {
             output.iter().enumerate().take(8)

@@ -1,6 +1,6 @@
 use super::{make_io_cols, Poseidon2Chip};
 use crate::cpu::trace::Instruction;
-use crate::cpu::OpCode::{COMPPOS2, PERMPOS2};
+use crate::cpu::OpCode::{COMP_POS2, PERM_POS2};
 use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
 use crate::vm::config::{VmConfig, VmParamsConfig};
 use crate::vm::VirtualMachine;
@@ -93,7 +93,7 @@ macro_rules! run_perm_ops {
                 .write_word(op.clk, op.ad_s, op.address, op.data);
         });
 
-        let time_per = Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(COMPPOS2);
+        let time_per = Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(COMP_POS2);
 
         (0..$num_ops).for_each(|i| {
             let start_timestamp = 16 * $num_ops + (time_per * i);
@@ -178,9 +178,9 @@ fn random_instructions<const NUM_OPS: usize>() -> [Instruction<BabyBear>; NUM_OP
             core::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6) + 1));
         Instruction {
             opcode: if rng.next_u32() % 2 == 0 {
-                PERMPOS2
+                PERM_POS2
             } else {
-                COMPPOS2
+                COMP_POS2
             },
             op_a: a,
             op_b: b,
@@ -225,17 +225,14 @@ fn poseidon2_horizen_test() {
     let mut rng = create_seeded_rng();
     const NUM_OPS: usize = 1;
     let op_a = BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6));
-    let mut instructions: [Instruction<BabyBear>; NUM_OPS] = [Instruction {
-        opcode: PERMPOS2,
+    let instructions: [Instruction<BabyBear>; NUM_OPS] = [Instruction {
+        opcode: PERM_POS2,
         op_a,
         op_b: op_a + BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6) + 8),
         op_c: BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6)),
         d: BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6)),
         e: BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6)),
     }];
-    instructions.iter_mut().for_each(|instruction| {
-        instruction.opcode = PERMPOS2;
-    });
     let data: [[BabyBear; 16]; NUM_OPS] =
         from_fn(|_| from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))));
 
@@ -287,10 +284,7 @@ fn poseidon2_horizen_test() {
 fn poseidon2_negative_test() {
     let mut rng = create_seeded_rng();
     const NUM_OPS: usize = 1;
-    let mut instructions: [Instruction<BabyBear>; NUM_OPS] = random_instructions::<NUM_OPS>();
-    instructions.iter_mut().for_each(|instruction| {
-        instruction.opcode = PERMPOS2;
-    });
+    let instructions: [Instruction<BabyBear>; NUM_OPS] = random_instructions::<NUM_OPS>();
     let data: [[BabyBear; 16]; NUM_OPS] =
         from_fn(|_| from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))));
 

@@ -228,7 +228,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 FE4ADD | FE4SUB | BBE4MUL | BBE4INV => {
                     FieldExtensionArithmeticChip::calculate(vm, timestamp, instruction);
                 }
-                PERMPOS2 | COMPPOS2 => {
+                PERM_POS2 | COMP_POS2 => {
                     Poseidon2Chip::<16, _>::poseidon2_perm(vm, timestamp, instruction);
                 }
             };

@@ -7,6 +7,7 @@ pub mod trace;
 pub mod tests;
 
 use self::columns::Poseidon2Cols;
+use lazy_static::lazy_static;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 use zkhash::ark_ff::PrimeField as _;
@@ -98,7 +99,7 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
     // The following are generic in T: AbstractField + From<F> because they are used in the AIR constraints:
 
     // TODO: allow custom implementations of this via generic DiffusionMatrix: DiffusionPermutation<F, WIDTH> for faster trace generation
-    pub fn int_lin_layer<T: AbstractField + From<F>>(&self, input: &mut [T; WIDTH]) {
+    fn int_lin_layer<T: AbstractField + From<F>>(&self, input: &mut [T; WIDTH]) {
         let sum = input.iter().cloned().sum::<T>();
         for (input, diag_m1) in input.iter_mut().zip(&self.int_diag_m1_matrix) {
             *input = (sum.clone() + T::from(diag_m1.clone()) * input.clone())
@@ -107,7 +108,7 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
     }
 
     // TODO: add back custom implementations for faster trace generation
-    pub fn ext_lin_layer<T: AbstractField + From<F>>(&self, input: &mut [T; WIDTH]) {
+    fn ext_lin_layer<T: AbstractField + From<F>>(&self, input: &mut [T; WIDTH]) {
         let mut new_state: [T; WIDTH] = core::array::from_fn(|_| T::zero());
         for i in (0..WIDTH).step_by(4) {
             for index1 in 0..4 {
@@ -132,7 +133,7 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
         input.clone_from_slice(&new_state);
     }
 
-    pub fn sbox_p<T: AbstractField>(value: T) -> T {
+    fn sbox_p<T: AbstractField>(value: T) -> T {
         let x2 = value.square();
         let x3 = x2.clone() * value;
         let x4 = x2.clone().square();
@@ -144,11 +145,11 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
         core::array::from_fn(|i| Self::sbox_p::<T>(state[i].clone()))
     }
 
-    pub fn horizen_to_p3(horizen_babybear: HorizenBabyBear) -> BabyBear {
+    fn horizen_to_p3(horizen_babybear: HorizenBabyBear) -> BabyBear {
         BabyBear::from_canonical_u64(horizen_babybear.into_bigint().0[0])
     }
 
-    pub fn horizen_round_consts() -> (Vec<[BabyBear; 16]>, Vec<BabyBear>, [BabyBear; 16]) {
+    fn horizen_round_consts_16() -> (Vec<[BabyBear; 16]>, Vec<BabyBear>, [BabyBear; 16]) {
         let p3_rc16: Vec<Vec<BabyBear>> = RC16
             .iter()
             .map(|round| {
@@ -187,30 +188,26 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
         )
     }
 
-    pub fn new_p3_baby_bear_16() -> Poseidon2Air<16, BabyBear> {
-        let (external_round_constants, internal_round_constants, horizen_int_diag) =
-            Self::horizen_round_consts();
-
-        Poseidon2Air::<16, BabyBear>::new(
-            external_round_constants,
-            internal_round_constants,
-            Poseidon2Air::<16, BabyBear>::HL_MDS_MAT_4,
-            horizen_int_diag,
-            BabyBear::one(),
-            0,
-        )
-    }
+    // pub fn new_p3_baby_bear_16() -> Poseidon2Air<16, BabyBear> {
+    //     let horizen_config = Poseidon2Config::<16, BabyBear>::horizen_config();
+    //     Poseidon2Air::<16, BabyBear>::new(
+    //         horizen_config.external_constants,
+    //         horizen_config.internal_constants,
+    //         horizen_config.ext_mds_matrix,
+    //         horizen_config.int_diag_m1_matrix,
+    //         horizen_config.reduction_factor,
+    //         0,
+    //     )
+    // }
 }
 
 impl Poseidon2Config<16, BabyBear> {
     pub fn horizen_config() -> Self {
-        let (external_round_constants, internal_round_constants, horizen_int_diag) =
-            Poseidon2Air::<16, BabyBear>::horizen_round_consts();
         Self {
-            external_constants: external_round_constants,
-            internal_constants: internal_round_constants,
+            external_constants: HL_BABYBEAR_EXT_CONST_16.to_vec(),
+            internal_constants: HL_BABYBEAR_INT_CONST_16.to_vec(),
             ext_mds_matrix: Poseidon2Air::<16, BabyBear>::HL_MDS_MAT_4,
-            int_diag_m1_matrix: horizen_int_diag,
+            int_diag_m1_matrix: *HL_BABYBEAR_INT_DIAG_16,
             reduction_factor: BabyBear::one(),
         }
     }
@@ -218,10 +215,7 @@ impl Poseidon2Config<16, BabyBear> {
 
 impl<F: PrimeField32> Poseidon2Config<16, F> {
     pub fn new_p3_baby_bear_16() -> Self {
-        let (external_round_constants, internal_round_constants, horizen_int_diag) =
-            Poseidon2Air::<16, BabyBear>::horizen_round_consts();
-
-        let external_round_constants_f: Vec<[F; 16]> = external_round_constants
+        let external_round_constants_f: Vec<[F; 16]> = HL_BABYBEAR_EXT_CONST_16
             .iter()
             .map(|round| {
                 round
@@ -233,13 +227,13 @@ impl<F: PrimeField32> Poseidon2Config<16, F> {
             })
             .collect();
 
-        let internal_round_constants_f: Vec<F> = internal_round_constants
-            .into_iter()
+        let internal_round_constants_f: Vec<F> = HL_BABYBEAR_INT_CONST_16
+            .iter()
             .map(|babybear| F::from_canonical_u32(babybear.as_canonical_u32()))
             .collect();
 
-        let horizen_int_diag_f: [F; 16] =
-            horizen_int_diag.map(|babybear| F::from_canonical_u32(babybear.as_canonical_u32()));
+        let horizen_int_diag_f: [F; 16] = HL_BABYBEAR_INT_DIAG_16
+            .map(|babybear| F::from_canonical_u32(babybear.as_canonical_u32()));
 
         Self {
             external_constants: external_round_constants_f,
@@ -249,4 +243,13 @@ impl<F: PrimeField32> Poseidon2Config<16, F> {
             reduction_factor: F::one(),
         }
     }
+}
+
+lazy_static! {
+    static ref HL_BABYBEAR_EXT_CONST_16: Vec<[BabyBear; 16]> =
+        Poseidon2Air::<16, BabyBear>::horizen_round_consts_16().0;
+    static ref HL_BABYBEAR_INT_CONST_16: Vec<BabyBear> =
+        Poseidon2Air::<16, BabyBear>::horizen_round_consts_16().1;
+    static ref HL_BABYBEAR_INT_DIAG_16: [BabyBear; 16] =
+        Poseidon2Air::<16, BabyBear>::horizen_round_consts_16().2;
 }
