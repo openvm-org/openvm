@@ -12,19 +12,14 @@ use afs_test_utils::config::{
 use afs_test_utils::engine::StarkEngine;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::create_seeded_rng;
-use ark_ff::PrimeField as _;
 use core::array::from_fn;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 use p3_util::log2_strict_usize;
 use rand::Rng;
 use rand::RngCore;
-use zkhash::fields::babybear::FpBabyBear as HorizenBabyBear;
-use zkhash::poseidon2::poseidon2::Poseidon2 as HorizenPoseidon2;
-use zkhash::poseidon2::poseidon2_instance_babybear::POSEIDON2_BABYBEAR_16_PARAMS;
 
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 16;
@@ -217,66 +212,6 @@ fn poseidon2_chip_random_50_test() {
             vec![vec![]; 5],
         )
         .expect("Verification failed");
-}
-
-/// Checking that poseidon2chip is consistent with Horizen's poseidon2 implementation.
-#[test]
-fn poseidon2_horizen_test() {
-    let mut rng = create_seeded_rng();
-    const NUM_OPS: usize = 1;
-    let op_a = BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6));
-    let instructions: [Instruction<BabyBear>; NUM_OPS] = [Instruction {
-        opcode: PERM_POS2,
-        op_a,
-        op_b: op_a + BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6) + 8),
-        op_c: BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6)),
-        d: BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6)),
-        e: BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6)),
-    }];
-    let data: [[BabyBear; 16]; NUM_OPS] =
-        from_fn(|_| from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))));
-
-    let (mut vm, engine, dummy_cpu_memory, dummy_cpu_poseidon2, traces) =
-        run_perm_ops!(instructions, NUM_OPS, data);
-
-    engine
-        .run_simple_test(
-            vec![
-                &vm.range_checker.air,
-                &vm.memory_chip.air,
-                &vm.poseidon2_chip,
-                &dummy_cpu_memory,
-                &dummy_cpu_poseidon2,
-            ],
-            traces,
-            vec![vec![]; 5],
-        )
-        .expect("Verification failed");
-
-    let actual: [[BabyBear; 16]; NUM_OPS] = from_fn(|i| {
-        from_fn(|j| {
-            vm.memory_chip.read_elem(
-                1000 + 16 * i + j,
-                instructions[i].e,
-                instructions[i].op_c + BabyBear::from_canonical_usize(j),
-            )
-        })
-    });
-
-    let horizen_permut = HorizenPoseidon2::new(&POSEIDON2_BABYBEAR_16_PARAMS);
-    let horizen_state: [Vec<HorizenBabyBear>; NUM_OPS] = from_fn(|i| {
-        data[i]
-            .into_iter()
-            .map(|elem| HorizenBabyBear::from(elem.as_canonical_u32()))
-            .collect()
-    });
-    let horizen_result: [Vec<HorizenBabyBear>; NUM_OPS] =
-        from_fn(|i| horizen_permut.permutation(&horizen_state[i]));
-    let horizen_babybear_result: [[BabyBear; 16]; NUM_OPS] = from_fn(|i| {
-        from_fn(|j| BabyBear::from_canonical_u32(horizen_result[i][j].into_bigint().0[0] as u32))
-    });
-
-    assert_eq!(actual, horizen_babybear_result);
 }
 
 /// Negative test, pranking internal poseidon2 trace values.

@@ -8,6 +8,7 @@ use super::Poseidon2Chip;
 use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
 
 /// Receives instructions from the CPU on the designated `POSEIDON2_BUS`, and sends both read and write requests to the memory chip.
+/// Receives (clk, a, b, c, d, e, cmp)
 impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
     fn receives(&self) -> Vec<Interaction<T>> {
         let indices: Vec<usize> = (0..self.width()).collect();
