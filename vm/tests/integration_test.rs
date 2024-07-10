@@ -153,32 +153,28 @@ fn test_vm_hint() {
     let program = vec![
         Instruction::from_isize(STOREW, 0, 0, 1, 0, 1),
         Instruction::from_isize(FADD, 5, 1, 100, 1, 0),
-        Instruction::from_isize(HINT, 18, 0, 0, 0, 1),
-        Instruction::from_isize(FADD, 21, 5, 0, 1, 0),
-        Instruction::from_isize(FMUL, 9, 18, 1, 1, 0),
+        Instruction::from_isize(FADD, 18, 5, 0, 1, 0),
+        Instruction::from_isize(FADD, 5, 5, 1, 1, 0),
+        Instruction::from_isize(HINT, 18, 0, 0, 1, 2),
+        Instruction::from_isize(LOADW, 21, 0, 18, 1, 2),
+        Instruction::from_isize(FADD, 24, 18, 1, 1, 0),
+        Instruction::from_isize(FADD, 18, 5, 0, 1, 0),
+        Instruction::from_isize(FMUL, 9, 21, 1, 1, 0),
         Instruction::from_isize(FADD, 5, 5, 9, 1, 1),
-        Instruction::from_isize(HINT, 21, 0, 0, 1, 2),
-        Instruction::from_isize(FADD, 24, 1, 0, 1, 0),
+        Instruction::from_isize(FADD, 27, 1, 0, 1, 0),
         Instruction::from_isize(JAL, 9, 7, 0, 1, 0),
-        Instruction::from_isize(FMUL, 0, 24, 1, 1, 0),
-        Instruction::from_isize(FADD, 0, 21, 0, 1, 1),
-        Instruction::from_isize(LOADW, 27, 0, 0, 1, 2),
-        Instruction::from_isize(FADD, 24, 24, 1, 1, 0),
-        Instruction::from_isize(BNE, 24, 18, 2013265916, 1, 1),
-        Instruction::from_isize(BNE, 24, 18, 2013265915, 1, 1),
+        Instruction::from_isize(FMUL, 0, 27, 1, 1, 0),
+        Instruction::from_isize(FADD, 0, 24, 0, 1, 1),
+        Instruction::from_isize(LOADW, 30, 0, 0, 1, 2),
+        Instruction::from_isize(FADD, 27, 27, 1, 1, 0),
+        Instruction::from_isize(BNE, 27, 21, 2013265916, 1, 1),
+        Instruction::from_isize(BNE, 27, 21, 2013265915, 1, 1),
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
     type F = BabyBear;
 
-    let witness_stream: Vec<Vec<F>> = vec![
-        vec![BabyBear::from_canonical_usize(3)],
-        vec![F::zero(), F::zero(), F::one()],
-        vec![F::from_canonical_usize(3)],
-        vec![F::zero(), F::zero(), F::two()],
-        vec![F::from_canonical_usize(3)],
-        vec![F::one(), F::one(), F::two()],
-    ];
+    let witness_stream: Vec<Vec<F>> = vec![vec![F::zero(), F::zero(), F::one()]];
 
     air_test(
         field_arithmetic_enabled,
