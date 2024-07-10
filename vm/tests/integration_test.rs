@@ -1,5 +1,9 @@
-use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
-use p3_baby_bear::BabyBear;
+use afs_test_utils::config::baby_bear_poseidon2::{engine_from_perm, random_perm, run_simple_test_no_pis};
+use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
+use p3_poseidon2::Poseidon2ExternalMatrixGeneral;
+use rand::prelude::StdRng;
+use afs_test_utils::config::fri_params::fri_params_with_80_bits_of_security;
+use afs_test_utils::engine::StarkEngine;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
 use stark_vm::vm::config::VmConfig;
@@ -12,6 +16,30 @@ const LIMB_BITS: usize = 16;
 const DECOMP: usize = 8;
 
 fn air_test(
+    field_arithmetic_enabled: bool,
+    field_extension_enabled: bool,
+    program: Vec<Instruction<BabyBear>>,
+) {
+    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
+        VmConfig {
+            vm: VmParamsConfig {
+                field_arithmetic_enabled,
+                field_extension_enabled,
+                compress_poseidon2_enabled: false,
+                perm_poseidon2_enabled: false,
+                limb_bits: LIMB_BITS,
+                decomp: DECOMP,
+            },
+        },
+        program,
+    );
+
+    let traces = vm.traces().unwrap();
+    let chips = get_chips(&vm);
+    run_simple_test_no_pis(chips, traces).expect("Verification failed");
+}
+
+fn air_test_with_poseidon2(
     field_arithmetic_enabled: bool,
     field_extension_enabled: bool,
     compress_poseidon2_enabled: bool,
@@ -31,9 +59,24 @@ fn air_test(
         program,
     );
 
+    let max_log_degree = vm.max_log_degree().unwrap();
     let traces = vm.traces().unwrap();
     let chips = get_chips(&vm);
-    run_simple_test_no_pis(chips, traces).expect("Verification failed");
+
+
+    let perm = random_perm();
+    let fri_params = fri_params_with_80_bits_of_security()[1];
+    let engine = engine_from_perm(perm, max_log_degree, fri_params);
+    
+    let num_chips = chips.len();
+
+    engine
+        .run_simple_test(
+            chips,
+            traces,
+            vec![vec![]; num_chips],
+        )
+        .expect("Verification failed");
 }
 
 #[test]
@@ -60,7 +103,7 @@ fn test_vm_1() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(true, false, false, program);
+    air_test(true, false, program);
 }
 
 #[test]
@@ -91,7 +134,6 @@ fn test_vm_without_field_arithmetic() {
     air_test(
         field_arithmetic_enabled,
         field_extension_enabled,
-        false,
         program,
     );
 }
@@ -114,7 +156,7 @@ fn test_vm_fibonacci_old() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(true, false, false, program.clone());
+    air_test(true, false, program.clone());
 }
 
 #[test]
@@ -139,7 +181,6 @@ fn test_vm_field_extension_arithmetic() {
     air_test(
         field_arithmetic_enabled,
         field_extension_enabled,
-        false,
         program,
     );
 }
@@ -159,7 +200,7 @@ fn test_vm_compress_poseidon2() {
     program.push(Instruction::from_isize(COMP_POS2, input_a, input_b, output, 1, 1));
     program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
 
-    air_test(
+    air_test_with_poseidon2(
         false,
         false,
         true,
