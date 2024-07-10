@@ -1,6 +1,6 @@
 use clap::Parser;
 use color_eyre::eyre::Result;
-use logical_interface::afs_input_instructions::AfsInputInstructions;
+use logical_interface::afs_input::AfsInputFile;
 
 #[derive(Debug, Parser)]
 pub struct AfiCommand {
@@ -26,7 +26,7 @@ impl AfiCommand {
     /// Execute the `mock afi` command
     pub fn execute(&self) -> Result<()> {
         println!("afi_file_path: {}", self.afi_file_path);
-        let instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
+        let instructions = AfsInputFile::open(&self.afi_file_path)?;
         if !self.silent {
             println!("{:?}", instructions.header);
             for op in instructions.operations {

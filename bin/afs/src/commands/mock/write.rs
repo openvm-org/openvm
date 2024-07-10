@@ -1,10 +1,7 @@
 use afs_test_utils::page_config::PageConfig;
 use clap::Parser;
 use color_eyre::eyre::Result;
-use logical_interface::{
-    afs_input_instructions::AfsInputInstructions, afs_interface::AfsInterface, mock_db::MockDb,
-    table::types::TableMetadata,
-};
+use logical_interface::{afs_input::AfsInputFile, afs_interface::AfsInterface, mock_db::MockDb};
 
 #[derive(Debug, Parser)]
 pub struct WriteCommand {
@@ -57,17 +54,18 @@ impl WriteCommand {
             println!("db_file_path: {}", db_file_path);
             MockDb::from_file(db_file_path)
         } else {
-            let default_table_metadata =
-                TableMetadata::new(config.page.index_bytes, config.page.data_bytes);
-            MockDb::new(default_table_metadata)
+            MockDb::new()
         };
 
         println!("afi_file_path: {}", self.afi_file_path);
-        let instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
+        let instructions = AfsInputFile::open(&self.afi_file_path)?;
         let table_id = instructions.header.table_id.clone();
 
-        let mut interface =
-            AfsInterface::new(config.page.index_bytes, config.page.data_bytes, &mut db);
+        let mut interface = AfsInterface::new(
+            instructions.header.index_bytes,
+            instructions.header.data_bytes,
+            &mut db,
+        );
         interface.load_input_file(&self.afi_file_path)?;
         let table = interface.get_table(table_id).unwrap();
         if !self.silent {

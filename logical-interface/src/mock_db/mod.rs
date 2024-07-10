@@ -7,10 +7,8 @@ use std::{
     io::{Read, Write},
 };
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct MockDb {
-    /// Default metadata for tables created in this database
-    pub default_table_metadata: TableMetadata,
     /// Map of table id to table
     pub tables: BTreeMap<TableId, MockDbTable>,
 }
@@ -36,11 +34,8 @@ impl MockDbTable {
 }
 
 impl MockDb {
-    pub fn new(default_table_metadata: TableMetadata) -> Self {
-        Self {
-            default_table_metadata,
-            tables: BTreeMap::new(),
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn from_file(path: &str) -> Self {
@@ -79,15 +74,12 @@ impl MockDb {
     }
 
     pub fn get_data(&self, table_id: TableId, index: Vec<u8>) -> Option<Vec<u8>> {
-        self.check_index_size(&index);
         let table = self.get_table(table_id)?;
         let data = table.items.get(&index)?;
         Some(data.to_vec())
     }
 
     pub fn insert_data(&mut self, table_id: TableId, index: Vec<u8>, data: Vec<u8>) -> Option<()> {
-        self.check_index_size(&index);
-        self.check_data_size(&data);
         let table = self.tables.get_mut(&table_id)?;
         match table.items.entry(index) {
             Entry::Occupied(_) => None,
@@ -99,8 +91,6 @@ impl MockDb {
     }
 
     pub fn write_data(&mut self, table_id: TableId, index: Vec<u8>, data: Vec<u8>) -> Option<()> {
-        self.check_index_size(&index);
-        self.check_data_size(&data);
         let table = self.tables.get_mut(&table_id)?;
         match table.items.entry(index) {
             Entry::Occupied(mut entry) => {
@@ -112,20 +102,7 @@ impl MockDb {
     }
 
     pub fn remove_data(&mut self, table_id: TableId, index: Vec<u8>) -> Option<()> {
-        self.check_index_size(&index);
         let table = self.tables.get_mut(&table_id)?;
         table.items.remove(&index).map(|_| ())
-    }
-
-    fn check_index_size(&self, index: &[u8]) {
-        if index.len() != self.default_table_metadata.index_bytes {
-            panic!("Invalid index size: {}", index.len());
-        }
-    }
-
-    fn check_data_size(&self, data: &[u8]) {
-        if data.len() != self.default_table_metadata.data_bytes {
-            panic!("Invalid data size: {}", data.len());
-        }
     }
 }

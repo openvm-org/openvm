@@ -149,7 +149,7 @@ macro_rules! u8_vec {
                     let hex_str = s.strip_prefix("0x").unwrap();
                     hex::decode(hex_str).unwrap()
                 } else {
-                    bytes_to_be_vec(s.as_bytes(), s.len())
+                    $crate::utils::bytes_to_be_vec(s.as_bytes(), s.len())
                 }
             } else {
                 // handle number

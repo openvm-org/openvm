@@ -16,7 +16,10 @@ use afs_test_utils::{
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{
-    afs_input_instructions::{types::InputFileBodyOperation, AfsInputInstructions, AfsOperation},
+    afs_input::{
+        types::{AfsOperation, InputFileOp},
+        AfsInputFile,
+    },
     afs_interface::AfsInterface,
     mock_db::MockDb,
     table::codec::fixed_bytes::FixedBytesCodec,
@@ -109,7 +112,7 @@ where
 
     pub fn execute_rw(&self, config: &PageConfig, engine: &E, prefix: String) -> Result<()> {
         println!("Proving ops file: {}", self.afi_file_path);
-        let instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
+        let instructions = AfsInputFile::open(&self.afi_file_path)?;
         let mut db = MockDb::from_file(&self.db_file_path);
         let idx_len = (config.page.index_bytes + 1) / 2;
         let data_len = (config.page.data_bytes + 1) / 2;
@@ -215,7 +218,7 @@ fn afi_op_conv(
     let idx_u16 = fixed_bytes_to_u16_vec(idx_u8.clone());
     let idx = codec.db_to_table_index_bytes(idx_u8.clone());
     match afi_op.operation {
-        InputFileBodyOperation::Read => {
+        InputFileOp::Read => {
             assert!(afi_op.args.len() == 1);
             let data = interface
                 .read(table_id, codec.db_to_table_index_bytes(idx_u8))
@@ -229,7 +232,7 @@ fn afi_op_conv(
                 op_type: OpType::Read,
             }
         }
-        InputFileBodyOperation::Insert => {
+        InputFileOp::Insert => {
             assert!(afi_op.args.len() == 2);
             let data_u8 = string_to_u8_vec(afi_op.args[1].clone(), codec.db.data_bytes);
             let data_u16 = fixed_bytes_to_u16_vec(data_u8.clone());
@@ -242,7 +245,7 @@ fn afi_op_conv(
                 op_type: OpType::Write,
             }
         }
-        InputFileBodyOperation::Write => {
+        InputFileOp::Write => {
             assert!(afi_op.args.len() == 2);
             let data_u8 = string_to_u8_vec(afi_op.args[1].clone(), codec.db.data_bytes);
             let data_u16 = fixed_bytes_to_u16_vec(data_u8.clone());
@@ -254,6 +257,15 @@ fn afi_op_conv(
                 data: data_u16,
                 op_type: OpType::Write,
             }
+        }
+        InputFileOp::GroupBy => {
+            panic!("GroupBy not supported yet")
+        }
+        InputFileOp::InnerJoin => {
+            panic!("InnerJoin not supported yet")
+        }
+        InputFileOp::Where => {
+            panic!("Where not supported yet")
         }
     }
 }
