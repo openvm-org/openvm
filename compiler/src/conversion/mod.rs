@@ -1,11 +1,11 @@
-use field_extension_conversion::{convert_field_extension, convert_field_extension_with_base};
 use p3_field::{ExtensionField, PrimeField64};
 
-use crate::asm::{AsmInstruction, AssemblyCode};
-
-use stark_vm::cpu::trace::Instruction;
+use field_extension_conversion::{convert_field_extension, convert_field_extension_with_base};
 use stark_vm::cpu::OpCode;
 use stark_vm::cpu::OpCode::*;
+use stark_vm::cpu::trace::Instruction;
+
+use crate::asm::{AsmInstruction, AssemblyCode};
 
 pub mod field_extension_conversion;
 
@@ -451,14 +451,6 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             F::zero(),
             AS::Register,
             AS::Memory,
-        )],
-        AsmInstruction::HintLen(src) => vec![inst(
-            HINT,
-            register(src),
-            F::zero(),
-            F::zero(),
-            AS::Immediate,
-            AS::Register,
         )],
         AsmInstruction::PrintV(..) | AsmInstruction::PrintF(..) | AsmInstruction::PrintE(..) => {
             if options.compile_prints {
