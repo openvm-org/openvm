@@ -1,5 +1,5 @@
-use std::{array::from_fn, collections::HashMap};
 use std::collections::hash_map::Entry;
+use std::{array::from_fn, collections::HashMap};
 
 use p3_field::PrimeField32;
 
@@ -118,7 +118,11 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         self.init_memory(e, address, F::from_canonical_usize(hint.len()));
 
         for (i, &datum) in hint.iter().enumerate() {
-            self.init_memory(e, address + F::from_canonical_usize((i + 1) * WORD_SIZE), datum);
+            self.init_memory(
+                e,
+                address + F::from_canonical_usize((i + 1) * WORD_SIZE),
+                datum,
+            );
         }
     }
 
@@ -127,10 +131,13 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         for j in 0..WORD_SIZE {
             let loc = (addr_space, addr + F::from_canonical_usize(j));
             match self.memory.entry(loc) {
-                Entry::Occupied(_) => panic!("cannot initialize previously used memory ({}, {})", addr_space, addr),
+                Entry::Occupied(_) => panic!(
+                    "cannot initialize previously used memory ({}, {})",
+                    addr_space, addr
+                ),
                 Entry::Vacant(v) => {
                     v.insert(decomp[j]);
-                },
+                }
             }
         }
     }

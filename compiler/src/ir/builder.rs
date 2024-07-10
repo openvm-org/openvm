@@ -3,7 +3,10 @@ use std::{iter::Zip, vec::IntoIter};
 use backtrace::Backtrace;
 use p3_field::AbstractField;
 
-use super::{Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, Ptr, SymbolicExt, SymbolicFelt, SymbolicUsize, SymbolicVar, Usize, Var, Variable};
+use super::{
+    Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, Ptr, SymbolicExt,
+    SymbolicFelt, SymbolicUsize, SymbolicVar, Usize, Var, Variable,
+};
 
 /// TracedVec is a Vec wrapper that records a trace whenever an element is pushed. When extending
 /// from another TracedVec, the traces are copied over.
@@ -350,9 +353,7 @@ impl<C: Config> Builder<C> {
 
         // Create array of length vlen starting at mem[ptr + 1].
         let arr_addr: Var<C::N> = self.eval(ptr.address + C::N::one());
-        let arr_ptr = Ptr::<C::N> {
-            address: arr_addr,
-        };
+        let arr_ptr = Ptr::<C::N> { address: arr_addr };
         let arr = Array::Dyn(arr_ptr, Usize::Var(vlen));
 
         // Now allocate post hoc to advance the free memory pointer.
