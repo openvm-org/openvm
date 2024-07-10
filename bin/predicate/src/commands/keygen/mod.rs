@@ -1,26 +1,33 @@
-use std::fs;
+use std::{fs, marker::PhantomData};
 
 use afs_chips::single_page_index_scan::page_controller::PageController;
-use afs_stark_backend::keygen::MultiStarkKeygenBuilder;
-use afs_test_utils::{
-    config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
-    page_config::PageConfig,
-};
+use afs_stark_backend::config::PcsProverData;
+use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
 use bin_common::utils::io::{create_prefix, write_bytes};
 use clap::Parser;
 use color_eyre::eyre::Result;
+use p3_field::PrimeField64;
+use p3_uni_stark::{StarkGenericConfig, Val};
+use serde::Serialize;
 
 use super::{common_setup, CommonCommands, PAGE_BUS_INDEX, RANGE_BUS_INDEX};
 
 #[derive(Debug, Parser)]
-pub struct KeygenCommand {
+pub struct KeygenCommand<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     #[command(flatten)]
     pub common: CommonCommands,
+
+    #[clap(skip)]
+    pub _marker: PhantomData<(SC, E)>,
 }
 
-impl KeygenCommand {
-    pub fn execute(self, config: &PageConfig) -> Result<()> {
-        let output_folder = self.common.output_folder;
+impl<SC: StarkGenericConfig, E: StarkEngine<SC>> KeygenCommand<SC, E>
+where
+    Val<SC>: PrimeField64,
+    PcsProverData<SC>: Serialize,
+{
+    pub fn execute(config: &PageConfig, engine: &E, common: &CommonCommands) -> Result<()> {
+        let output_folder = common.output_folder.clone();
 
         let (
             start,
@@ -32,9 +39,9 @@ impl KeygenCommand {
             idx_limb_bits,
             idx_decomp,
             range_max,
-        ) = common_setup(config, self.common.predicate);
+        ) = common_setup(config, common.predicate.clone());
 
-        let page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
+        let page_controller: PageController<SC> = PageController::new(
             PAGE_BUS_INDEX,
             RANGE_BUS_INDEX,
             idx_len,
@@ -45,8 +52,7 @@ impl KeygenCommand {
             comp,
         );
 
-        let engine = config::baby_bear_poseidon2::default_engine(idx_decomp);
-        let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
+        let mut keygen_builder = engine.keygen_builder();
         page_controller.set_up_keygen_builder(
             &mut keygen_builder,
             page_width,
@@ -67,7 +73,7 @@ impl KeygenCommand {
         write_bytes(&encoded_pk, pk_path.clone()).unwrap();
         write_bytes(&encoded_vk, vk_path.clone()).unwrap();
 
-        if !self.common.silent {
+        if !common.silent {
             println!("Keygen completed in {:?}", start.elapsed());
             println!("Partial proving key written to {}", pk_path);
             println!("Partial verifying key written to {}", vk_path);
