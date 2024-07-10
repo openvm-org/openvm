@@ -19,21 +19,25 @@ pub fn generate_configs() -> Vec<PageConfig> {
         .collect::<Vec<FriParameters>>();
     let idx_bytes_vec = vec![32];
     let data_bytes_vec = vec![32, 256, 1024];
+
+    // Currently we have the max_rw_ops use the height vec to reduce the number of permutations
     let height_vec = vec![65536, 262_144, 1_048_576];
+    // let height_vec = vec![16, 64]; // Run a mini-benchmark for testing
+
     let engine_vec = vec![
         EngineType::BabyBearPoseidon2,
-        // EngineType::BabyBearBlake3,
-        // EngineType::BabyBearKeccak,
+        EngineType::BabyBearBlake3,
+        EngineType::BabyBearKeccak,
     ];
 
     let mut configs = Vec::new();
 
-    for (fri_params, idx_bytes, data_bytes, height, engine) in iproduct!(
+    for (engine, fri_params, idx_bytes, data_bytes, height) in iproduct!(
+        &engine_vec,
         &fri_params_vec,
         &idx_bytes_vec,
         &data_bytes_vec,
-        &height_vec,
-        &engine_vec
+        &height_vec
     ) {
         if (*height > 1000000 && (fri_params.log_blowup > 2 || *data_bytes > 512))
             || (*height > 500000 && fri_params.log_blowup >= 3)

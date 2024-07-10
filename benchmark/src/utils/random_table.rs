@@ -92,7 +92,7 @@ pub fn generate_random_afi_rw(
     }
 
     // Generate `WRITE` instructions
-    if max_rw_ops > max_writes {
+    if max_inserts < max_writes {
         for _ in max_inserts..max_writes {
             if let Some(random_index) = inserted_indexes.iter().choose(&mut thread_rng()) {
                 let data = generate_random_hex_string(data_bytes);

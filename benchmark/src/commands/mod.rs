@@ -11,16 +11,15 @@ pub struct CommonCommands {
     #[arg(
         long = "config-folder",
         short = 'c',
-        help = "Runs the benchmark for all .toml files in the folder",
-        required = false,
-        default_value = "benchmark/configs/rw"
+        help = "Runs the benchmark for all .toml PageConfig files in the folder",
+        required = false
     )]
-    pub config_folder: String,
+    pub config_folder: Option<String>,
 
     #[arg(
         long = "output-file",
         short = 'o',
-        help = "Path to an output file",
+        help = "Save output to this path (default: benchmark/output/<date>.csv)",
         required = false
     )]
     pub output_file: Option<String>,

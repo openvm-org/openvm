@@ -29,6 +29,7 @@ use tracing::info_span;
 use crate::{
     commands::parse_config_folder,
     utils::{
+        config_gen::generate_configs,
         output_writer::{save_afi_to_new_db, write_csv_header, write_csv_line},
         random_table::generate_random_afi_rw,
         tracing::{clear_tracing_log, extract_event_data_from_log, extract_timing_data_from_log},
@@ -70,8 +71,12 @@ impl RwCommand {
 
         assert!(self.percent_reads + self.percent_writes <= 100);
 
-        // Parse config(s)
-        let configs = parse_config_folder(self.common.config_folder.clone());
+        // Generate/Parse config(s)
+        let configs = if let Some(config_folder) = self.common.config_folder.clone() {
+            parse_config_folder(config_folder)
+        } else {
+            generate_configs()
+        };
         let configs_len = configs.len();
 
         // Create tmp folder
@@ -133,6 +138,8 @@ impl RwCommand {
                     "ReadWrite keygen",
                     "ReadWrite cache",
                     "ReadWrite prove",
+                    "prove:Load page trace generation: afs_chips::page_rw_checker::page_controller",
+                    "prove:Load page trace commitment: afs_chips::page_rw_checker::page_controller",
                     "Prove.generate_trace",
                     "prove:Prove trace commitment",
                     "ReadWrite verify",
@@ -142,11 +149,11 @@ impl RwCommand {
             println!("Config: {:?}", config);
             println!("Event data: {:?}", event_data);
             println!("Timing data: {:?}", timing_data);
+            println!("Output file: {}", output_file.clone());
 
             let mut log_data: HashMap<String, String> = event_data;
             log_data.extend(timing_data);
 
-            println!("Output file: {}", output_file.clone());
             write_csv_line(
                 output_file.clone(),
                 "ReadWrite".to_string(),

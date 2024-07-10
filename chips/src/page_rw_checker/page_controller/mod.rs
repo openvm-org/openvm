@@ -208,7 +208,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     where
         Val<SC>: PrimeField,
     {
-        let trace_span = info_span!("Trace generation").entered();
+        let trace_span = info_span!("Load page trace generation").entered();
         let mut page = page.clone();
 
         assert!(!page.rows.is_empty());

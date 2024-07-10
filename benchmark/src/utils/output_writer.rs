@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 pub struct BenchmarkRow {
     pub test_type: String,
     pub scenario: String,
+    pub engine: EngineType,
     pub index_bytes: usize,
     pub data_bytes: usize,
     pub page_width: usize,
@@ -26,12 +27,13 @@ pub struct BenchmarkRow {
     pub log_blowup: usize,
     pub num_queries: usize,
     pub pow_bits: usize,
-    pub engine: EngineType,
     pub preprocessed: usize,
     pub main: usize,
     pub challenge: usize,
     pub keygen_time: String,
     pub cache_time: String,
+    pub prove_load_trace_gen: String,
+    pub prove_load_trace_commit: String,
     pub prove_generate: String,
     pub prove_commit: String,
     pub prove_time: String,
@@ -58,6 +60,7 @@ pub fn write_csv_header(path: String) -> Result<()> {
     writer.write_record(&vec![
         "benchmark",
         "",
+        "stark engine",
         "page config",
         "",
         "",
@@ -68,11 +71,12 @@ pub fn write_csv_header(path: String) -> Result<()> {
         "fri params",
         "",
         "",
-        "stark engine",
         "air width",
         "",
         "",
         "timing",
+        "",
+        "",
         "",
         "",
         "",
@@ -84,6 +88,7 @@ pub fn write_csv_header(path: String) -> Result<()> {
     writer.write_record(&vec![
         "test_type",
         "scenario",
+        "engine",
         "index_bytes",
         "data_bytes",
         "page_width",
@@ -94,12 +99,13 @@ pub fn write_csv_header(path: String) -> Result<()> {
         "log_blowup",
         "num_queries",
         "pow_bits",
-        "engine",
         "preprocessed",
         "main",
         "challenge",
         "keygen_time",
         "cache_time",
+        "prove_load_trace_gen",
+        "prove_load_trace_commit",
         "prove_generate",
         "prove_commit",
         "prove_time",
@@ -121,9 +127,7 @@ pub fn write_csv_line(
     let file = OpenOptions::new().append(true).open(path).unwrap();
     let mut writer = WriterBuilder::new().has_headers(false).from_writer(file);
 
-    let max_writes = config.page.max_rw_ops * percent_writes / 100;
-    let max_reads = config.page.max_rw_ops * percent_reads / 100;
-    let scenario = format!("{}r/{}w", max_reads, max_writes);
+    let scenario = format!("{}%r/{}%w", percent_reads, percent_writes);
     let bytes_divisor = ceil_div_usize(config.page.bits_per_fe, 8);
     let idx_len = ceil_div_usize(config.page.index_bytes, bytes_divisor);
     let data_len = ceil_div_usize(config.page.data_bytes, bytes_divisor);
@@ -131,6 +135,7 @@ pub fn write_csv_line(
     let row = BenchmarkRow {
         test_type,
         scenario,
+        engine: config.stark_engine.engine,
         index_bytes: config.page.index_bytes,
         data_bytes: config.page.data_bytes,
         page_width,
@@ -141,7 +146,6 @@ pub fn write_csv_line(
         log_blowup: config.fri_params.log_blowup,
         num_queries: config.fri_params.num_queries,
         pow_bits: config.fri_params.proof_of_work_bits,
-        engine: config.stark_engine.engine,
         preprocessed: log_data
             .get("Total air width: preprocessed=")
             .unwrap()
@@ -156,6 +160,14 @@ pub fn write_csv_line(
             .parse::<usize>()?,
         keygen_time: log_data.get("ReadWrite keygen").unwrap().to_owned(),
         cache_time: log_data.get("ReadWrite cache").unwrap().to_owned(),
+        prove_load_trace_gen: log_data
+            .get("prove:Load page trace generation: afs_chips::page_rw_checker::page_controller")
+            .unwrap()
+            .to_owned(),
+        prove_load_trace_commit: log_data
+            .get("prove:Load page trace commitment: afs_chips::page_rw_checker::page_controller")
+            .unwrap()
+            .to_owned(),
         prove_generate: log_data.get("Prove.generate_trace").unwrap().to_owned(),
         prove_commit: log_data
             .get("prove:Prove trace commitment")
