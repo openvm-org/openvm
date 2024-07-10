@@ -39,7 +39,7 @@ fn test_io() {
     let witness_stream: Vec<Vec<F>> = vec![
         vec![F::zero(), F::zero(), F::one()],
         vec![F::zero(), F::zero(), F::two()],
-        // vec![F::one(), F::one(), F::two()],
+        vec![F::one(), F::one(), F::two()],
     ];
 
     display_program(&program);
