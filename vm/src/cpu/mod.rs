@@ -76,7 +76,7 @@ impl OpCode {
 use crate::field_extension::FieldExtensionArithmeticAir;
 use OpCode::*;
 
-pub const CORE_INSTRUCTIONS: [OpCode; 6] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE];
+pub const CORE_INSTRUCTIONS: [OpCode; 7] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, HINT];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
 
@@ -113,7 +113,6 @@ impl CpuOptions {
         if self.field_arithmetic_enabled {
             result.extend(FIELD_ARITHMETIC_INSTRUCTIONS);
         }
-        result.push(HINT);
         result
     }
 
