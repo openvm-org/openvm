@@ -89,17 +89,22 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
         } = instruction;
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
 
-        let data_1: [F; 8] = core::array::from_fn(|i| {
-            vm.memory_chip
-                .read_elem(start_timestamp + i, d, op_a + F::from_canonical_usize(i))
-        });
-        let data_2: [F; 8] = core::array::from_fn(|i| {
-            vm.memory_chip.read_elem(
-                start_timestamp + 8 + i,
-                d,
-                op_b + F::from_canonical_usize(i),
-            )
-        });
+        let data_1: Vec<F> = (0..WIDTH / 2)
+            .map(|i| {
+                vm.memory_chip
+                    .read_elem(start_timestamp + i, d, op_a + F::from_canonical_usize(i))
+            })
+            .collect();
+        let data_2: Vec<F> = (0..WIDTH / 2)
+            .map(|i| {
+                vm.memory_chip.read_elem(
+                    start_timestamp + WIDTH / 2 + i,
+                    d,
+                    op_b + F::from_canonical_usize(i),
+                )
+            })
+            .collect();
+
         let input_state: [F; 16] = [data_1, data_2].concat().try_into().unwrap();
         let internal = vm.poseidon2_chip.air.generate_trace_row(input_state);
         let output = internal.io.output;
@@ -109,14 +114,14 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
         });
 
         let iter_range = if opcode == PERM_POS2 {
-            output.iter().enumerate().take(16)
+            output.iter().enumerate().take(WIDTH)
         } else {
-            output.iter().enumerate().take(8)
+            output.iter().enumerate().take(WIDTH / 2)
         };
 
         for (i, &output_elem) in iter_range {
             vm.memory_chip.write_elem(
-                start_timestamp + 16 + i,
+                start_timestamp + WIDTH + i,
                 e,
                 op_c + F::from_canonical_usize(i),
                 output_elem,

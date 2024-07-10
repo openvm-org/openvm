@@ -34,7 +34,7 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
         let col_indices = Poseidon2ChipCols::from_slice(&indices, &index_map);
         let mut interactions = vec![];
         // READ
-        for i in 0..16 {
+        for i in 0..WIDTH {
             let memory_cycle = VirtualPairCol::new(
                 vec![(PairCol::Main(col_indices.io.clk), T::one())],
                 T::from_canonical_usize(i),
@@ -67,10 +67,10 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
         }
 
         // WRITE
-        for i in 0..16 {
+        for i in 0..WIDTH {
             let memory_cycle = VirtualPairCol::new(
                 vec![(PairCol::Main(col_indices.io.clk), T::one())],
-                T::from_canonical_usize(i + 16),
+                T::from_canonical_usize(i + WIDTH),
             );
             let address = VirtualPairCol::new(
                 vec![(PairCol::Main(col_indices.io.c), T::from_canonical_usize(1))],
