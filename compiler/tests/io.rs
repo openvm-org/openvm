@@ -3,6 +3,7 @@ use p3_field::AbstractField;
 use p3_field::extension::BinomialExtensionField;
 
 use afs_compiler::asm::AsmBuilder;
+use afs_compiler::ir::Usize;
 use afs_compiler::util::{display_program, execute_program};
 use stark_vm::cpu::WORD_SIZE;
 
@@ -25,12 +26,11 @@ fn test_io() {
         builder.print_f(el);
     });
 
-    // TODO[INT-1727]: support AsmInstruction::LoadE
-    // let exts = builder.hint();
-    // builder.range(0, exts.len()).for_each(|i, builder| {
-    //     let el = builder.get(&exts, i);
-    //     builder.print_e(el);
-    // });
+    let exts = builder.hint_exts();
+    builder.range(0, exts.len()).for_each(|i, builder| {
+        let el = builder.get(&exts, i);
+        builder.print_e(el);
+    });
 
     builder.halt();
 
@@ -39,7 +39,12 @@ fn test_io() {
     let witness_stream: Vec<Vec<F>> = vec![
         vec![F::zero(), F::zero(), F::one()],
         vec![F::zero(), F::zero(), F::two()],
-        vec![F::one(), F::one(), F::two()],
+        vec![F::from_canonical_usize(3)],
+        vec![
+            F::zero(), F::zero(), F::zero(), F::one(), // 1
+            F::zero(), F::zero(), F::zero(), F::one(), // 1
+            F::zero(), F::zero(), F::zero(), F::two(), // 2
+        ],
     ];
 
     display_program(&program);

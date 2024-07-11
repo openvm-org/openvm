@@ -1,7 +1,7 @@
 use std::{iter::Zip, vec::IntoIter};
 
 use backtrace::Backtrace;
-use p3_field::AbstractField;
+use p3_field::{AbstractExtensionField, AbstractField};
 
 use super::{
     Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, Ptr, SymbolicExt,
@@ -333,12 +333,17 @@ impl<C: Config> Builder<C> {
     }
 
     pub fn hint_var(&mut self) -> Var<C::N> {
-        let arr = self.hint_array();
+        let arr = self.hint_vars();
         self.get(&arr, 0)
     }
 
     pub fn hint_felt(&mut self) -> Felt<C::F> {
-        let arr = self.hint_array();
+        let arr = self.hint_felts();
+        self.get(&arr, 0)
+    }
+
+    pub fn hint_ext(&mut self) -> Ext<C::F, C::EF> {
+        let arr = self.hint_exts();
         self.get(&arr, 0)
     }
 
@@ -346,17 +351,20 @@ impl<C: Config> Builder<C> {
     ///
     /// Writes the next element of the witness stream into memory and returns it.
     pub fn hint_vars(&mut self) -> Array<C, Var<C::N>> {
-        self.hint_array()
+        self.hint_words()
     }
 
     /// Hint a vector of felts.
     pub fn hint_felts(&mut self) -> Array<C, Felt<C::F>> {
-        self.hint_array()
+        self.hint_words()
     }
 
-    fn hint_array<V: MemVariable<C>>(&mut self) -> Array<C, V> {
-        // Allocate space for the length. We assume that mem[ptr..] is empty.
-        let ptr = self.alloc(Usize::Const(1), V::size_of());
+    /// Hints an array of V and assumes V::size_of() == 1.
+    fn hint_words<V: MemVariable<C>>(&mut self) -> Array<C, V> {
+        assert_eq!(V::size_of(), 1);
+
+        // Allocate space for the length variable. We assume that mem[ptr..] is empty.
+        let ptr = self.alloc(Usize::Const(1), 1);
 
         // Write length + data to memory starting at mem[ptr].
         self.operations.push(DslIr::Hint(ptr));
@@ -365,7 +373,7 @@ impl<C: Config> Builder<C> {
         let index = MemIndex {
             index: Usize::Const(0),
             offset: 0,
-            size: V::size_of(),
+            size: 1,
         };
         let vlen: Var<C::N> = self.uninit();
         self.load(vlen, ptr, index);
@@ -376,9 +384,27 @@ impl<C: Config> Builder<C> {
         let arr = Array::Dyn(arr_ptr, Usize::Var(vlen));
 
         // Now allocate post hoc to advance the free memory pointer.
-        self.push(DslIr::Alloc(ptr, vlen.into(), V::size_of()));
+        self.push(DslIr::Alloc(ptr, vlen.into(), 1));
 
         arr
+    }
+
+    /// Hint a vector of exts.
+    ///
+    /// Emits two hint opcodes: the first for the number of exts, the second for the list of exts
+    /// themselves.
+    pub fn hint_exts(&mut self) -> Array<C, Ext<C::F, C::EF>> {
+        let len = self.hint_var();
+        let flattened = self.hint_felts();
+
+        let size = <Ext<C::F, C::EF> as MemVariable<C>>::size_of();
+        self.assert_usize_eq(flattened.len(), len * C::N::from_canonical_usize(size));
+
+        // Simply recast memory as Array<Ext>.
+        match flattened {
+            Array::Fixed(_) => panic!("hint array is not dynamic"),
+            Array::Dyn(ptr, _) => Array::Dyn(ptr, Usize::Var(len)),
+        }
     }
 
     pub fn witness_var(&mut self) -> Var<C::N> {
