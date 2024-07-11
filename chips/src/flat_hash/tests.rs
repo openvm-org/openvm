@@ -13,7 +13,8 @@ use super::PageController;
 
 #[test]
 fn test_single_is_zero() {
-    let chip = PageController::new(10, 4, 5, 2, 3, 0, 1);
+    let chip = PageController::new(10, 9, 5, 2, 3, 0, 1);
+    let correct_height = chip.air.page_height.next_power_of_two();
 
     let mut rng = create_seeded_rng();
     let x = (0..chip.air.page_height)
@@ -25,17 +26,20 @@ fn test_single_is_zero() {
         .collect::<Vec<Vec<BabyBear>>>();
 
     let requester = DummyInteractionAir::new(chip.air.page_width, true, chip.air.bus_index);
-    let mut dummy_trace: p3_matrix::dense::DenseMatrix<BabyBear> =
-        RowMajorMatrix::default(chip.air.page_width + 1, chip.air.page_height);
 
-    for (i, row) in dummy_trace.rows_mut().enumerate() {
-        row[0] = BabyBear::from_canonical_u32(1);
-        for (j, value) in row.iter_mut().skip(1).enumerate() {
-            *value = x[i][j];
-        }
-    }
+    let dummy_trace = RowMajorMatrix::new(
+        x.iter()
+            .flat_map(|row| [BabyBear::one()].into_iter().chain(row.iter().cloned()))
+            .chain(
+                std::iter::repeat(BabyBear::zero())
+                    .take((chip.air.page_width + 1) * (correct_height - chip.air.page_height)),
+            )
+            .collect(),
+        chip.air.page_width + 1,
+    );
 
     let pageread_trace = chip.generate_trace(x.clone());
+
     let hash_chip_trace = {
         let hash_chip = chip.hash_chip.lock();
         hash_chip.generate_trace()
@@ -67,7 +71,8 @@ fn test_single_is_zero() {
 
 #[test]
 fn test_single_is_zero_fail() {
-    let chip = PageController::new(10, 4, 5, 2, 3, 0, 1);
+    let chip = PageController::new(10, 3, 5, 2, 3, 0, 1);
+    let correct_height = chip.air.page_height.next_power_of_two();
 
     let mut rng = create_seeded_rng();
     let x = (0..chip.air.page_height)
@@ -79,15 +84,16 @@ fn test_single_is_zero_fail() {
         .collect::<Vec<Vec<BabyBear>>>();
 
     let requester = DummyInteractionAir::new(chip.air.page_width, true, chip.air.bus_index);
-    let mut dummy_trace: p3_matrix::dense::DenseMatrix<BabyBear> =
-        RowMajorMatrix::default(chip.air.page_width + 1, chip.air.page_height);
-
-    for (i, row) in dummy_trace.rows_mut().enumerate() {
-        row[0] = BabyBear::from_canonical_u32(1);
-        for (j, value) in row.iter_mut().skip(1).enumerate() {
-            *value = x[i][j];
-        }
-    }
+    let dummy_trace = RowMajorMatrix::new(
+        x.iter()
+            .flat_map(|row| [BabyBear::one()].into_iter().chain(row.iter().cloned()))
+            .chain(
+                std::iter::repeat(BabyBear::zero())
+                    .take((chip.air.page_width + 1) * (correct_height - chip.air.page_height)),
+            )
+            .collect(),
+        chip.air.page_width + 1,
+    );
 
     let pageread_trace = chip.generate_trace(x.clone());
     let hash_chip = chip.hash_chip.lock();
@@ -119,7 +125,7 @@ fn test_single_is_zero_fail() {
 
     for _ in 0..20 {
         let row_index = rng.gen_range(0..chip.air.page_height);
-        let column_index = rng.gen_range(0..chip.air.page_width);
+        let column_index = rng.gen_range(1..chip.air.page_width);
         let mut all_traces_clone = all_traces.clone();
         all_traces_clone[0].row_mut(row_index)[column_index] +=
             BabyBear::from_canonical_u32(rng.gen_range(2..100));

@@ -24,8 +24,17 @@ impl FlatHashAir {
                 state = hash_chip.request(state.clone(), row_slice.to_vec());
                 new_row.extend(state.iter());
             }
-            rows.push([row.clone(), new_row].concat());
+            rows.push([vec![F::one()], row.clone(), new_row].concat());
         }
+
+        let mut blank_row = vec![F::zero(); self.get_width()];
+        let last_chunk_start = self.get_width() - self.hash_width;
+        blank_row[last_chunk_start..last_chunk_start + self.digest_width].copy_from_slice(
+            &rows[rows.len() - 1][last_chunk_start..last_chunk_start + self.digest_width],
+        );
+
+        let correct_len = x.len().next_power_of_two();
+        rows.extend(vec![blank_row.clone(); correct_len - x.len()]);
 
         RowMajorMatrix::new(rows.concat(), self.get_width())
     }

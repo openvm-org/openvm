@@ -65,7 +65,7 @@ impl FlatHashAir {
     }
 
     pub fn get_width(&self) -> usize {
-        self.page_width + (self.page_width / self.hash_rate + 1) * self.hash_width
+        self.page_width + (self.page_width / self.hash_rate + 1) * self.hash_width + 1
     }
 }
 

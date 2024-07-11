@@ -8,6 +8,7 @@ pub struct FlatHashCols<T> {
 }
 
 pub struct FlatHashIOCols<T> {
+    pub is_alloc: T,
     pub page: Vec<T>,
 }
 
@@ -16,6 +17,7 @@ pub struct FlatHashIOCols<T> {
 /// Hash output indices match to the output for the nth round (i.e. the next round's input)
 /// All done on the same row
 pub struct FlatHashColIndices {
+    pub is_alloc_index: usize,
     pub hash_state_indices: Vec<Vec<usize>>,
     pub hash_chunk_indices: Vec<Vec<usize>>,
     pub hash_output_indices: Vec<Vec<usize>>,
@@ -30,7 +32,8 @@ pub struct FlatHashInternalCols<T> {
 
 impl<T: Clone> FlatHashCols<T> {
     pub fn flatten(&self) -> Vec<T> {
-        let mut combined = self.io.page.clone();
+        let mut combined = vec![self.io.is_alloc.clone()];
+        combined.extend(self.io.page.clone());
         combined.extend(self.aux.hashes.clone());
         combined
     }
@@ -43,7 +46,7 @@ impl<T: Clone> FlatHashCols<T> {
         let num_hashes = page_width / hash_rate;
         let hash_state_indices = (0..num_hashes)
             .map(|i| {
-                let start = page_width + i * hash_width;
+                let start = page_width + i * hash_width + 1;
                 let end = start + hash_width;
                 (start..end).collect::<Vec<usize>>()
             })
@@ -51,7 +54,7 @@ impl<T: Clone> FlatHashCols<T> {
 
         let hash_chunk_indices = (0..num_hashes)
             .map(|i| {
-                let start = i * hash_rate;
+                let start = i * hash_rate + 1;
                 let end = start + hash_rate;
                 (start..end).collect::<Vec<usize>>()
             })
@@ -59,13 +62,14 @@ impl<T: Clone> FlatHashCols<T> {
 
         let hash_output_indices = (0..num_hashes)
             .map(|i| {
-                let start = page_width + (i + 1) * hash_width;
+                let start = page_width + (i + 1) * hash_width + 1;
                 let end = start + hash_width;
                 (start..end).collect::<Vec<usize>>()
             })
             .collect();
 
         FlatHashColIndices {
+            is_alloc_index: 0,
             hash_state_indices,
             hash_chunk_indices,
             hash_output_indices,
@@ -73,11 +77,12 @@ impl<T: Clone> FlatHashCols<T> {
     }
 
     pub fn from_slice(slice: &[T], chip: &FlatHashAir) -> Self {
-        let (page, hashes) = slice.split_at(chip.page_width);
+        let (page, hashes) = slice.split_at(chip.page_width + 1);
 
         Self {
             io: FlatHashIOCols {
-                page: page.to_vec(),
+                is_alloc: slice[0].clone(),
+                page: page[1..].to_vec(),
             },
             aux: FlatHashInternalCols {
                 hashes: hashes.to_vec(),

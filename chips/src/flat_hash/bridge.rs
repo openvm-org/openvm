@@ -11,18 +11,17 @@ impl<F: Field> AirBridge<F> for FlatHashAir {
         let num_hashes = self.page_width / self.hash_rate;
         let mut interactions = vec![];
         for i in 0..num_hashes {
-            let mut fields = col_indices.hash_state_indices[i].clone();
-            fields.extend(col_indices.hash_chunk_indices[i].iter());
-            fields.extend(col_indices.hash_output_indices[i].iter());
-
-            let fields = fields
+            let fields: Vec<_> = col_indices.hash_state_indices[i]
                 .iter()
-                .map(|i| VirtualPairCol::single_main(*i))
+                .chain(&col_indices.hash_chunk_indices[i])
+                .chain(&col_indices.hash_output_indices[i])
+                .cloned()
+                .map(VirtualPairCol::single_main)
                 .collect();
 
             interactions.push(Interaction {
                 fields,
-                count: VirtualPairCol::one(),
+                count: VirtualPairCol::single_main(col_indices.is_alloc_index),
                 argument_index: self.hash_chip_bus_index,
             });
         }
@@ -31,12 +30,12 @@ impl<F: Field> AirBridge<F> for FlatHashAir {
     }
 
     fn receives(&self) -> Vec<Interaction<F>> {
-        let fields = (0..self.page_width)
+        let fields = (1..self.page_width + 1)
             .map(|i| VirtualPairCol::single_main(i))
             .collect();
         vec![Interaction {
             fields,
-            count: VirtualPairCol::one(),
+            count: VirtualPairCol::single_main(self.hash_chip_bus_index),
             argument_index: self.bus_index,
         }]
     }
