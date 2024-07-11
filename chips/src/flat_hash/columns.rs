@@ -9,7 +9,6 @@ pub struct FlatHashCols<T> {
 
 pub struct FlatHashIOCols<T> {
     pub page: Vec<T>,
-    pub digest: Vec<T>,
 }
 
 /// Hash state indices match to the nth round index vector
@@ -22,6 +21,8 @@ pub struct FlatHashColIndices {
     pub hash_output_indices: Vec<Vec<usize>>,
 }
 
+/// Hashes is just a sequential list of all intermediate hash states
+/// Starting from all zeros initial state up to and including final state
 #[derive(Clone)]
 pub struct FlatHashInternalCols<T> {
     pub hashes: Vec<T>,
@@ -73,14 +74,10 @@ impl<T: Clone> FlatHashCols<T> {
 
     pub fn from_slice(slice: &[T], chip: &FlatHashAir) -> Self {
         let (page, hashes) = slice.split_at(chip.page_width);
-        let num_hashes = chip.page_width / chip.hash_rate;
-        let digest_start = (num_hashes - 1) * chip.hash_width;
-        let digest = hashes[digest_start..digest_start + chip.digest_width].to_vec();
 
         Self {
             io: FlatHashIOCols {
                 page: page.to_vec(),
-                digest,
             },
             aux: FlatHashInternalCols {
                 hashes: hashes.to_vec(),
