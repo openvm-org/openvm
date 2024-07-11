@@ -49,6 +49,7 @@ struct TableCommitments<SC: StarkGenericConfig> {
 }
 
 /// A struct containing all bus indices used by the inner join controller
+#[derive(derive_new::new)]
 pub struct IJBuses {
     pub range_bus_index: usize,
     pub t1_intersector_bus_index: usize,
@@ -56,6 +57,12 @@ pub struct IJBuses {
     pub intersector_t2_bus_index: usize,
     pub t1_output_bus_index: usize,
     pub t2_output_bus_index: usize,
+}
+
+impl IJBuses {
+    pub fn default() -> Self {
+        Self::new(0, 1, 2, 3, 4, 5)
+    }
 }
 
 /// A struct containing the basic format of the tables
@@ -233,7 +240,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
             _ => panic!("t2 must be of TableType T2"),
         };
 
-        let output_table = self.inner_join(t1, t2, fkey_start, fkey_end);
+        let output_table = self.inner_join(t1, t2);
 
         // Calculating the multiplicity with which T1 indices appear in the output_table
         let mut t1_out_mult = vec![];
@@ -458,7 +465,16 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
 
     /// This function takes two tables T1 and T2 and the range of the foreign key in T2
     /// It returns the Page resulting from the inner join operations on those parameters
-    fn inner_join(&self, t1: &Page, t2: &Page, fkey_start: usize, fkey_end: usize) -> Page {
+    pub fn inner_join(&self, t1: &Page, t2: &Page) -> Page {
+        let (fkey_start, fkey_end) = match self.t2_chip.table_type {
+            TableType::T2 {
+                fkey_start,
+                fkey_end,
+                ..
+            } => (fkey_start, fkey_end),
+            _ => panic!("t2 must be of TableType T2"),
+        };
+
         let mut output_table = vec![];
 
         for row in t2.rows.iter() {
