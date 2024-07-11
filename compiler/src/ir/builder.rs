@@ -332,10 +332,29 @@ impl<C: Config> Builder<C> {
         self.operations.push(DslIr::PrintE(dst));
     }
 
-    /// Hint an array of variables.
+    pub fn hint_var(&mut self) -> Var<C::N> {
+        let arr = self.hint_array();
+        self.get(&arr, 0)
+    }
+
+    pub fn hint_felt(&mut self) -> Felt<C::F> {
+        let arr = self.hint_array();
+        self.get(&arr, 0)
+    }
+
+    /// Hint a vector of variables.
     ///
     /// Writes the next element of the witness stream into memory and returns it.
-    pub fn hint<V: MemVariable<C>>(&mut self) -> Array<C, V> {
+    pub fn hint_vars(&mut self) -> Array<C, Var<C::N>> {
+        self.hint_array()
+    }
+
+    /// Hint a vector of felts.
+    pub fn hint_felts(&mut self) -> Array<C, Felt<C::F>> {
+        self.hint_array()
+    }
+
+    fn hint_array<V: MemVariable<C>>(&mut self) -> Array<C, V> {
         // Allocate space for the length. We assume that mem[ptr..] is empty.
         let ptr = self.alloc(Usize::Const(1), V::size_of());
 

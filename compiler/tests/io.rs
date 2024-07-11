@@ -1,6 +1,6 @@
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
+use p3_field::extension::BinomialExtensionField;
 
 use afs_compiler::asm::AsmBuilder;
 use afs_compiler::util::{display_program, execute_program};
@@ -13,13 +13,13 @@ type EF = BinomialExtensionField<BabyBear, 4>;
 fn test_io() {
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let vars = builder.hint();
+    let vars = builder.hint_vars();
     builder.range(0, vars.len()).for_each(|i, builder| {
         let el = builder.get(&vars, i);
         builder.print_v(el);
     });
 
-    let felts = builder.hint();
+    let felts = builder.hint_felts();
     builder.range(0, felts.len()).for_each(|i, builder| {
         let el = builder.get(&felts, i);
         builder.print_f(el);
