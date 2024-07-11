@@ -15,11 +15,13 @@ use parking_lot::Mutex;
 #[derive(Default)]
 /// The AIR for the flat hash chip
 ///
-/// All intermediate rounds for a single page hash are done on a single row
+/// Flat hashes an entire page at once, and outputs digest.
+/// All intermediate rounds for each row of the page is done on the same row of the trace.
 /// Column structure:
 /// * First page_width columns are input
 /// * Next hash_width * (page_width / hash_rate) columns are internal hash rounds, starting with all 0s
-/// * Last digest_width columns are the final hash output, also public values
+/// * Last digest_width columns of each row are copied to the first hash state indices of the next row
+/// * Last digest_width columns of the last row are the final hash output, the first digest_width elements are exposed as PIs
 pub struct FlatHashAir {
     pub hash_chip_bus_index: usize,
 
