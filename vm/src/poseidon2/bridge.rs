@@ -30,6 +30,7 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
     }
 
     fn sends(&self) -> Vec<Interaction<T>> {
+        let chunks: usize = WIDTH / 2;
         let indices: Vec<usize> = (0..self.width()).collect();
         let index_map = Poseidon2Cols::index_map(&self.air);
         let col_indices = Poseidon2ChipCols::from_slice(&indices, &index_map);
@@ -42,14 +43,14 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
             );
             let address = VirtualPairCol::new(
                 vec![(
-                    PairCol::Main(if i < WIDTH / 2 {
+                    PairCol::Main(if i < chunks {
                         col_indices.io.a
                     } else {
                         col_indices.io.b
                     }),
                     T::from_canonical_usize(1),
                 )],
-                T::from_canonical_usize(if i < WIDTH / 2 { i } else { i - WIDTH / 2 }),
+                T::from_canonical_usize(if i < chunks { i } else { i - chunks }),
             );
 
             let fields = vec![
@@ -86,7 +87,7 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
                 VirtualPairCol::single_main(col_indices.internal.io.output[i]),
             ];
 
-            let count = if i < WIDTH / 2 {
+            let count = if i < chunks {
                 VirtualPairCol::single_main(col_indices.io.is_alloc)
             } else {
                 VirtualPairCol::diff_main(col_indices.io.is_alloc, col_indices.io.cmp)

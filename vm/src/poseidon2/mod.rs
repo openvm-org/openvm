@@ -64,7 +64,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
 
     pub fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
-        32
+        WIDTH * 2
     }
 }
 
