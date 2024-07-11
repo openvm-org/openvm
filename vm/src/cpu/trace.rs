@@ -82,8 +82,8 @@ fn memory_access_to_cols<const WORD_SIZE: usize, F: PrimeField64>(
 pub enum ExecutionError {
     Fail(usize),
     PcOutOfBounds(usize, usize),
-    DisabledOperation(OpCode),
-    HintOutOfBounds(usize, usize),
+    DisabledOperation(usize, OpCode),
+    HintOutOfBounds(usize, usize, usize),
 }
 
 impl Display for ExecutionError {
@@ -95,11 +95,13 @@ impl Display for ExecutionError {
                 "pc = {} out of bounds for program of length {}",
                 pc, program_len
             ),
-            ExecutionError::DisabledOperation(op) => write!(f, "opcode {:?} was not enabled", op),
-            ExecutionError::HintOutOfBounds(witness_idx, witness_len) => write!(
+            ExecutionError::DisabledOperation(pc, op) => {
+                write!(f, "at pc = {}, opcode {:?} was not enabled", pc, op)
+            }
+            ExecutionError::HintOutOfBounds(pc, witness_idx, witness_len) => write!(
                 f,
-                "witness index = {} out of bounds for witness_stream of length {}",
-                witness_idx, witness_len
+                "at pc = {}, witness index = {} out of bounds for witness_stream of length {}",
+                pc, witness_idx, witness_len
             ),
         }
     }
@@ -180,7 +182,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             }
 
             if opcode != PRINTF && !vm.options().enabled_instructions().contains(&opcode) {
-                return Err(ExecutionError::DisabledOperation(opcode));
+                return Err(ExecutionError::DisabledOperation(pc_usize, opcode));
             }
 
             match opcode {
@@ -244,6 +246,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 HINT => {
                     if witness_idx >= vm.witness_stream.len() {
                         return Err(ExecutionError::HintOutOfBounds(
+                            pc_usize,
                             witness_idx,
                             vm.witness_stream.len(),
                         ));

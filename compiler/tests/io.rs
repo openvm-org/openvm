@@ -3,7 +3,7 @@ use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
 
 use afs_compiler::asm::AsmBuilder;
-use afs_compiler::util::{display_program, execute_program};
+use afs_compiler::util::end_to_end_test;
 use stark_vm::cpu::WORD_SIZE;
 
 type F = BabyBear;
@@ -33,7 +33,7 @@ fn test_io() {
 
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
+    //let program = builder.clone().compile_isa::<WORD_SIZE>();
 
     let witness_stream: Vec<Vec<F>> = vec![
         vec![F::zero(), F::zero(), F::one()],
@@ -55,8 +55,10 @@ fn test_io() {
         ],
     ];
 
-    display_program(&program);
-    execute_program::<WORD_SIZE, _>(program, witness_stream);
+    //display_program(&program);
+    //execute_program::<WORD_SIZE, _>(program, witness_stream);
+
+    end_to_end_test::<WORD_SIZE, _>(builder, witness_stream);
 
     // let config = SC::default();
     // let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
