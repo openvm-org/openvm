@@ -3,6 +3,7 @@ pub mod bridge;
 pub mod columns;
 pub mod page_controller;
 
+#[derive(Clone)]
 pub struct PageReadAir {
     bus_index: usize,
 

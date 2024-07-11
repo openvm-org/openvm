@@ -39,28 +39,25 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
                 .flat_map(|(i, (row, mult))| {
                     let mut trace_row = vec![];
                     trace_row.extend(commit.clone());
-                    trace_row.push(self.id);
+                    trace_row.push(self.air_id);
                     trace_row.push(child_ids[i]);
                     trace_row.push(mult);
                     trace_row.push(mult * row[1]);
                     trace_row.push((mult * row[1] == 1) as u32);
                     // dummy value
                     trace_row.push(0);
-                    println!("row[1]: {:?}", row[1]);
-                    println!("mult: {:?}", mult);
                     trace_row.push(row[1] * mult - row[1]);
                     let next = if i < page.len() - 1 {
                         page[i + 1][2..2 + self.idx_len].to_vec()
                     } else {
-                        vec![0; self.idx_len]
+                        page[0][2..2 + self.idx_len].to_vec()
                     };
                     if !self.is_init {
-                        trace_row.extend(next.clone());
                         trace_row.push(1);
                         trace_row.push(0);
                         trace_row.extend(range.0.clone());
                         trace_row.extend(range.1.clone());
-                        trace_row.extend(vec![0; 4]);
+                        trace_row.extend(vec![0; 2]);
                         let mut trace_row: Vec<F> = trace_row
                             .into_iter()
                             .map(|i| F::from_wrapped_u32(i))
@@ -73,7 +70,7 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
                                 let lt_cols =
                                     air.generate_trace_row((idx1, idx2, range_checker.clone()));
                                 trace_row.extend(lt_cols.aux.flatten());
-                                trace_row[COMMITMENT_LEN + 7 + self.idx_len + lt_res_idx] =
+                                trace_row[COMMITMENT_LEN + 7 + lt_res_idx] =
                                     lt_cols.io.tuple_less_than;
                             };
                         gen_aux(
@@ -84,33 +81,21 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
                         );
                         gen_aux(
                             range.1.clone(),
-                            row[2..2 + self.idx_len].to_vec(),
+                            row[2 + self.idx_len..2 + 2 * self.idx_len].to_vec(),
                             2 + 2 * self.idx_len + 1,
-                            self.is_less_than_tuple_air.clone().unwrap().end_idx1,
-                        );
-                        gen_aux(
-                            row[2 + self.idx_len..2 + 2 * self.idx_len].to_vec(),
-                            range.0.clone(),
-                            2 + 2 * self.idx_len + 2,
-                            self.is_less_than_tuple_air.clone().unwrap().idx2_start,
-                        );
-                        gen_aux(
-                            range.1.clone(),
-                            row[2 + self.idx_len..2 + 2 * self.idx_len].to_vec(),
-                            2 + 2 * self.idx_len + 3,
                             self.is_less_than_tuple_air.clone().unwrap().end_idx2,
                         );
                         gen_aux(
                             row[2 + self.idx_len..2 + 2 * self.idx_len].to_vec(),
                             next.clone(),
                             0,
-                            self.is_less_than_tuple_air.clone().unwrap().end_next,
+                            self.is_less_than_tuple_air.clone().unwrap().idx2_next,
                         );
                         gen_aux(
                             row[2 + self.idx_len..2 + 2 * self.idx_len].to_vec(),
                             row[2..2 + self.idx_len].to_vec(),
                             1,
-                            self.is_less_than_tuple_air.clone().unwrap().end_start,
+                            self.is_less_than_tuple_air.clone().unwrap().idx2_idx1,
                         );
                         trace_row.push(
                             self.is_less_than_tuple_air

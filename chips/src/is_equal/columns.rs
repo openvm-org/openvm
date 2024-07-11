@@ -21,6 +21,17 @@ pub struct IsEqualAuxCols<T> {
     pub inv: T,
 }
 
+impl<T: Clone> IsEqualAuxCols<T> {
+    pub fn from_slice(slc: &[T]) -> IsEqualAuxCols<T> {
+        IsEqualAuxCols {
+            inv: slc[0].clone(),
+        }
+    }
+
+    pub fn flatten(&self) -> Vec<T> {
+        vec![self.inv.clone()]
+    }
+}
 impl<T: Clone> IsEqualCols<T> {
     pub const fn new(x: T, y: T, is_equal: T, inv: T) -> IsEqualCols<T> {
         IsEqualCols {
@@ -36,6 +47,15 @@ impl<T: Clone> IsEqualCols<T> {
         let inv = slc[3].clone();
 
         IsEqualCols::new(x, y, is_equal, inv)
+    }
+
+    pub fn flatten(&self) -> Vec<T> {
+        vec![
+            self.io.x.clone(),
+            self.io.y.clone(),
+            self.io.is_equal.clone(),
+            self.aux.inv.clone(),
+        ]
     }
 
     pub fn get_width() -> usize {

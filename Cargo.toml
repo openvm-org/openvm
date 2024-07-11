@@ -1,12 +1,18 @@
 [workspace]
 members = [
     "chips",
+    "compiler",
     "stark-backend",
     "test-utils",
     "derive",
     "bin/afs",
     "bin/afs-1b",
+    "bin/predicate",
+    "benchmark",
     "logical-interface",
+    "vm",
+    "vm/bin",
+    "poseidon2-air",
 ]
 resolver = "2"
 
@@ -50,7 +56,8 @@ p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", branch = "sp1" 
 p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", branch = "sp1", features = [
     "parallel",
 ] }
-p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", branch = "sp1" }
+p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
+zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
 
 # For local development. Add to your `.cargo/config.toml`
 # [patch."https://github.com/Plonky3/Plonky3.git"]

@@ -1,10 +1,14 @@
 use afs_test_utils::page_config::PageConfig;
 use clap::Parser;
 use color_eyre::eyre::Result;
+<<<<<<< HEAD
 use logical_interface::{
     afs_input_instructions::AfsInputInstructions, afs_interface::AfsInterface, mock_db::MockDb,
     table::types::TableMetadata,
 };
+=======
+use logical_interface::{afs_input::AfsInputFile, afs_interface::AfsInterface, mock_db::MockDb};
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
 
 #[derive(Debug, Parser)]
 pub struct WriteCommand {
@@ -44,6 +48,7 @@ pub struct WriteCommand {
 /// `mock read` subcommand
 impl WriteCommand {
     /// Execute the `mock read` command
+<<<<<<< HEAD
     pub fn execute(self, config: &PageConfig) -> Result<()> {
         let mut db = if let Some(db_file_path) = self.db_file_path {
             println!("db_file_path: {}", db_file_path);
@@ -59,6 +64,27 @@ impl WriteCommand {
 
         let mut interface =
             AfsInterface::new(config.page.index_bytes, config.page.data_bytes, &mut db);
+=======
+    pub fn execute(&self, _config: &PageConfig) -> Result<()> {
+        let db_exists = self.db_file_path.is_some();
+        let mut db = if db_exists {
+            let db_file_path = self.db_file_path.as_ref().unwrap();
+            println!("db_file_path: {}", db_file_path);
+            MockDb::from_file(db_file_path)
+        } else {
+            MockDb::new()
+        };
+
+        println!("afi_file_path: {}", self.afi_file_path);
+        let instructions = AfsInputFile::open(&self.afi_file_path)?;
+        let table_id = instructions.header.table_id.clone();
+
+        let mut interface = AfsInterface::new(
+            instructions.header.index_bytes,
+            instructions.header.data_bytes,
+            &mut db,
+        );
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
         interface.load_input_file(&self.afi_file_path)?;
         let table = interface.get_table(table_id).unwrap();
         if !self.silent {
@@ -69,8 +95,13 @@ impl WriteCommand {
             }
         }
 
+<<<<<<< HEAD
         if let Some(output_db_file_path) = self.output_db_file_path {
             db.save_to_file(&output_db_file_path)?;
+=======
+        if let Some(output_db_file_path) = &self.output_db_file_path {
+            db.save_to_file(output_db_file_path)?;
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
         }
 
         Ok(())

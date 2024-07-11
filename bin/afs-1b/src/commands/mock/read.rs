@@ -1,4 +1,4 @@
-use afs_chips::pagebtree::PageBTree;
+use afs_chips::page_btree::PageBTree;
 use afs_test_utils::page_config::MultitierPageConfig;
 use clap::Parser;
 use color_eyre::eyre::Result;

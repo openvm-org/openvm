@@ -3,6 +3,7 @@ use itertools::Itertools;
 use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use crate::{
     commit::MatrixCommitmentPointers,
@@ -212,6 +213,54 @@ impl<SC: StarkGenericConfig> MultiStarkPartialVerifyingKey<SC> {
             main_commit_to_air_graph,
             num_challenges_to_sample,
         }
+    }
+
+    pub fn total_air_width(&self) -> (usize, usize, usize) {
+        let mut total_preprocessed = 0;
+        let mut total_partitioned_main = 0;
+        let mut total_after_challenge = 0;
+        for (air_idx, per_air) in self.per_air.iter().enumerate() {
+            let preprocessed_width = per_air.width.preprocessed.unwrap_or(0);
+            total_preprocessed += preprocessed_width;
+            let partitioned_main_width = per_air
+                .width
+                .partitioned_main
+                .iter()
+                .fold(0, |acc, x| acc + *x);
+            total_partitioned_main += partitioned_main_width;
+            let after_challenge_width = per_air
+                .width
+                .after_challenge
+                .iter()
+                .fold(0, |acc, x| acc + *x);
+            total_after_challenge += after_challenge_width;
+            info!(
+                "Air width [air_idx={}]: preprocessed={} partitioned_main={} after_challenge={}",
+                air_idx, preprocessed_width, partitioned_main_width, after_challenge_width
+            );
+            println!(
+                "Air width [air_idx={}]: preprocessed={} partitioned_main={} after_challenge={}",
+                air_idx, preprocessed_width, partitioned_main_width, after_challenge_width
+            );
+        }
+        info!("Total air width: preprocessed={} ", total_preprocessed);
+        info!(
+            "Total air width: partitioned_main={} ",
+            total_partitioned_main
+        );
+        info!(
+            "Total air width: after_challenge={} ",
+            total_after_challenge
+        );
+        println!(
+            "Total air width: preprocessed={} partitioned_main={} after_challenge={}",
+            total_preprocessed, total_partitioned_main, total_after_challenge
+        );
+        (
+            total_preprocessed,
+            total_partitioned_main,
+            total_after_challenge,
+        )
     }
 }
 

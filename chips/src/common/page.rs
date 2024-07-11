@@ -37,7 +37,7 @@ impl Page {
         }
     }
 
-    pub fn from_2d_vec_multitier(page: &[Vec<u32>], idx_len: usize, data_len: usize) -> Self {
+    pub fn from_2d_vec_non_leaf(page: &[Vec<u32>], idx_len: usize, data_len: usize) -> Self {
         Self {
             rows: page
                 .iter()
@@ -48,6 +48,11 @@ impl Page {
                 .collect(),
         }
     }
+
+    pub fn to_2d_vec(&self) -> Vec<Vec<u32>> {
+        self.rows.iter().map(|row| row.to_vec()).collect()
+    }
+
     /// Returns a random page with the given parameters in the proper format
     /// Note that max_idx and max_data are not inclusive
     pub fn random(

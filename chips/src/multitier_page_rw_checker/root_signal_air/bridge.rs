@@ -24,7 +24,7 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> AirBridge<F> for RootSignalAi
         if self.is_init {
             let virtual_cols = (cols.root_commitment)
                 .into_iter()
-                .chain(iter::once(cols.id))
+                .chain(iter::once(cols.air_id))
                 .map(VirtualPairCol::single_main)
                 .collect::<Vec<_>>();
 
@@ -38,7 +38,7 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> AirBridge<F> for RootSignalAi
                 .into_iter()
                 .chain(cols.range.clone().unwrap().1)
                 .chain(cols.root_commitment)
-                .chain(iter::once(cols.id))
+                .chain(iter::once(cols.air_id))
                 .map(VirtualPairCol::single_main)
                 .collect::<Vec<_>>();
 

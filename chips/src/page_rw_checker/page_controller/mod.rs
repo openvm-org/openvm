@@ -18,10 +18,10 @@ use afs_test_utils::engine::StarkEngine;
 use p3_field::{AbstractField, Field, PrimeField};
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use tracing::info_span;
 
 use super::{
-    my_final_page::MyFinalPageAir, my_initial_page::MyInitialPageAir,
-    offline_checker::OfflineChecker,
+    final_page::IndexedPageWriteAir, initial_page::PageReadAir, offline_checker::OfflineChecker,
 };
 use crate::common::page::Page;
 use crate::range_gate::RangeCheckerGateChip;
@@ -56,7 +56,7 @@ struct PageCommitments<SC: StarkGenericConfig> {
 
 /// This is a controller for read/write/delete for one page. Here's an outline of how it works
 /// It owns three chips: a init_chip (MyInitialPageAir), offline_checker (OfflineChecker), and final_chip (MyFinalPageAir)
-/// The only trace partition of init_chip is the initial page, and a trace partition of final_chip is the final page. The goal of
+/// The only trace partition of init_chip is the initial page and a trace partition of final_chip is the final page. The goal of
 /// those chips and the offline_checker is to prove that the difference between the initial and final pages is exactly
 /// the list of operations sent on the ops_bus to the offline_checker.
 ///
@@ -131,9 +131,9 @@ pub struct PageController<SC: StarkGenericConfig>
 where
     Val<SC>: AbstractField,
 {
-    init_chip: MyInitialPageAir,
+    init_chip: PageReadAir,
     offline_checker: OfflineChecker,
-    final_chip: MyFinalPageAir,
+    final_chip: IndexedPageWriteAir,
 
     traces: Option<PageRWTraces<Val<SC>>>,
     page_commitments: Option<PageCommitments<SC>>,
@@ -155,7 +155,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         Val<SC>: Field,
     {
         Self {
-            init_chip: MyInitialPageAir::new(page_bus_index, idx_len, data_len),
+            init_chip: PageReadAir::new(page_bus_index, idx_len, data_len),
             offline_checker: OfflineChecker::new(
                 page_bus_index,
                 range_bus_index,
@@ -166,7 +166,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
                 Val::<SC>::bits() - 1,
                 idx_decomp,
             ),
-            final_chip: MyFinalPageAir::new(
+            final_chip: IndexedPageWriteAir::new(
                 page_bus_index,
                 range_bus_index,
                 idx_len,
@@ -208,6 +208,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     where
         Val<SC>: PrimeField,
     {
+        let trace_span = info_span!("Load page trace generation").entered();
         let mut page = page.clone();
 
         assert!(!page.rows.is_empty());
@@ -239,7 +240,9 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             self.range_checker.clone(),
             &final_write_indices,
         );
+        trace_span.exit();
 
+        let trace_commit_span = info_span!("Load page trace commitment").entered();
         let init_page_pdata = match init_page_pdata {
             Some(prover_data) => prover_data,
             None => Arc::new(trace_committer.commit(vec![init_page_trace.clone()])),
@@ -249,6 +252,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             Some(prover_data) => prover_data,
             None => Arc::new(trace_committer.commit(vec![final_page_trace.clone()])),
         };
+        trace_commit_span.exit();
 
         self.traces = Some(PageRWTraces {
             init_page_trace,
@@ -351,7 +355,11 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         trace_builder.load_trace(self.range_checker.generate_trace());
         trace_builder.load_trace(ops_sender_trace);
 
+<<<<<<< HEAD
         tracing::info_span!("Trace commitment").in_scope(|| trace_builder.commit_current());
+=======
+        tracing::info_span!("Prove trace commitment").in_scope(|| trace_builder.commit_current());
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
 
         let partial_vk = partial_pk.partial_vk();
 

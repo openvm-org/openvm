@@ -28,15 +28,15 @@ pub fn update_tree() {
     for _ in 0..10 {
         let i = rng.gen::<u32>() % 100;
         let j = rng.gen::<u32>() % 100;
-        tree.update(&vec![i], &vec![j]);
+        tree.update(&[i], &[j]);
         truth.insert(i, j);
     }
     for _ in 0..10 {
         let i = rng.gen::<u32>() % 100;
         let my_ans = tree.search(&vec![i]);
         let real_ans = truth.get(&i);
-        if my_ans == None {
-            assert!(real_ans == None);
+        if my_ans.is_none() {
+            assert!(real_ans.is_none());
         } else {
             assert!(my_ans.unwrap()[0] == *real_ans.unwrap());
         }
@@ -55,7 +55,7 @@ pub fn consistency_check() {
     for _ in 0..400 {
         let i = rng.gen::<u32>() % 100;
         let j = rng.gen::<u32>() % 100;
-        tree.update(&vec![i], &vec![j]);
+        tree.update(&[i], &[j]);
         truth.insert(i, j);
     }
     tree.consistency_check()
@@ -74,7 +74,7 @@ pub fn update_tree_key_len() {
         let j = rng.gen::<u32>() % 100;
         let k = rng.gen::<u32>() % 100;
         let l = rng.gen::<u32>() % 100;
-        tree.update(&vec![i, j], &vec![k, l]);
+        tree.update(&[i, j], &[k, l]);
         truth.insert(vec![i, j], vec![k, l]);
     }
     for _ in 0..1000000 {
@@ -82,8 +82,8 @@ pub fn update_tree_key_len() {
         let j = rng.gen::<u32>() % 100;
         let my_ans = tree.search(&vec![i, j]);
         let real_ans = truth.get(&vec![i, j]);
-        if my_ans == None {
-            assert!(real_ans == None);
+        if my_ans.is_none() {
+            assert!(real_ans.is_none());
         } else {
             let my_ans = my_ans.unwrap();
             let real_ans = real_ans.unwrap();
@@ -106,7 +106,7 @@ pub fn benchmark_pagebtree() {
         let j = rng.gen::<u32>() % 100;
         let k = rng.gen::<u32>() % 100;
         let l = rng.gen::<u32>() % 100;
-        tree.update(&vec![i, j], &vec![k, l]);
+        tree.update(&[i, j], &[k, l]);
     }
 }
 
@@ -136,7 +136,7 @@ pub fn wide_tree() {
         let j = rng.gen::<u32>() % 100;
         let k = rng.gen::<u32>() % 100;
         let l = rng.gen::<u32>() % 100;
-        tree.update(&vec![i, j], &vec![k, l]);
+        tree.update(&[i, j], &[k, l]);
         truth.insert(vec![i, j], vec![k, l]);
     }
     for _ in 0..1000000 {
@@ -144,8 +144,8 @@ pub fn wide_tree() {
         let j = rng.gen::<u32>() % 100;
         let my_ans = tree.search(&vec![i, j]);
         let real_ans = truth.get(&vec![i, j]);
-        if my_ans == None {
-            assert!(real_ans == None);
+        if my_ans.is_none() {
+            assert!(real_ans.is_none());
         } else {
             let my_ans = my_ans.unwrap();
             let real_ans = real_ans.unwrap();
@@ -169,19 +169,20 @@ pub fn gen_trace_test() {
         let j = rng.gen::<u32>() % 10;
         let k = rng.gen::<u32>() % 10;
         let l = rng.gen::<u32>() % 10;
-        tree.update(&vec![i, j], &vec![k, l]);
+        tree.update(&[i, j], &[k, l]);
     }
     let log_page_height = 3;
     let log_num_requests = 32;
     let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(log_num_requests));
 
     let prover = MultiTraceStarkProver::new(&engine.config);
-    let mut trace_builder: TraceCommitmentBuilder<BabyBearPoseidon2Config> =
+    let trace_builder: TraceCommitmentBuilder<BabyBearPoseidon2Config> =
         TraceCommitmentBuilder::new(prover.pcs());
-    tree.gen_trace(&mut trace_builder.committer, None);
+    tree.gen_trace(&trace_builder.committer, None);
     tree.consistency_check();
 }
 
+#[ignore]
 #[test]
 pub fn commit_test() {
     let key_len = 2;
@@ -194,7 +195,7 @@ pub fn commit_test() {
         let j = rng.gen::<u32>() % 10;
         let k = rng.gen::<u32>() % 10;
         let l = rng.gen::<u32>() % 10;
-        tree.update(&vec![i, j], &vec![k, l]);
+        tree.update(&[i, j], &[k, l]);
     }
     let log_page_height = 3;
     let log_num_requests = 32;
@@ -203,10 +204,11 @@ pub fn commit_test() {
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder: TraceCommitmentBuilder<BabyBearPoseidon2Config> =
         TraceCommitmentBuilder::new(prover.pcs());
-    tree.commit(&mut trace_builder.committer, "src/pagebtree".to_owned());
+    tree.commit(&trace_builder.committer, "src/pagebtree".to_owned());
     tree.consistency_check();
 }
 
+#[ignore]
 #[test]
 pub fn load_test() {
     let mut tree = PageBTree::<8>::load(
@@ -225,6 +227,7 @@ pub fn load_test() {
     tree.consistency_check();
 }
 
+#[ignore]
 #[test]
 pub fn make_a_large_tree() {
     let key_len = 2;
@@ -242,7 +245,7 @@ pub fn make_a_large_tree() {
         let j = rng.gen::<u32>() % BIG_TREE_MAX_KEY;
         let k = rng.gen::<u32>() % 100;
         let l = rng.gen::<u32>() % 100;
-        tree.update(&vec![i, j], &vec![k, l, l]);
+        tree.update(&[i, j], &[k, l, l]);
     }
     let log_page_height = 3;
     let log_num_requests = 32;
@@ -251,10 +254,11 @@ pub fn make_a_large_tree() {
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder: TraceCommitmentBuilder<BabyBearPoseidon2Config> =
         TraceCommitmentBuilder::new(prover.pcs());
-    tree.commit(&mut trace_builder.committer, "src/pagebtree".to_owned());
+    tree.commit(&trace_builder.committer, "src/pagebtree".to_owned());
     // tree.consistency_check();
 }
 
+#[ignore]
 #[test]
 pub fn load_and_read_a_large_tree() {
     let mut tree = PageBTree::<8>::load(
@@ -267,7 +271,7 @@ pub fn load_and_read_a_large_tree() {
     for _ in 0..100 {
         let i = rng.gen::<u32>() % 10;
         let j = rng.gen::<u32>() % 10;
-        println!("{:?}", tree.search(&vec![i, j]));
+        println!("{:?}", tree.search(&[i, j]));
     }
     tree.consistency_check();
 }

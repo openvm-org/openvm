@@ -5,10 +5,17 @@ use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
 use super::columns::LeafPageCols;
+<<<<<<< HEAD
 use super::{LeafPageAir, MyPageAir};
 use crate::final_page::columns::FinalPageCols;
 use crate::is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols};
 use crate::page_rw_checker::my_final_page::columns::MyFinalPageCols;
+=======
+use super::{LeafPageAir, PageRwAir};
+use crate::indexed_output_page_air::columns::IndexedOutputPageCols;
+use crate::is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols};
+use crate::page_rw_checker::final_page::columns::IndexedPageWriteCols;
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
 use crate::sub_chip::SubAirBridge;
 
 impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
@@ -20,7 +27,11 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
         if self.is_init {
             let virtual_cols = (col_indices.metadata.own_commitment)
                 .into_iter()
+<<<<<<< HEAD
                 .chain(iter::once(col_indices.metadata.id))
+=======
+                .chain(iter::once(col_indices.metadata.air_id))
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
                 .map(VirtualPairCol::single_main)
                 .collect::<Vec<_>>();
 
@@ -36,7 +47,11 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                 .into_iter()
                 .chain(range_inclusion_cols.end)
                 .chain(col_indices.metadata.own_commitment)
+<<<<<<< HEAD
                 .chain(iter::once(col_indices.metadata.id))
+=======
+                .chain(iter::once(col_indices.metadata.air_id))
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
                 .map(VirtualPairCol::single_main)
                 .collect::<Vec<_>>();
 
@@ -53,6 +68,7 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> SubAirBridge<F> for LeafPageA
     fn receives(&self, col_indices: LeafPageCols<usize>) -> Vec<Interaction<F>> {
         let mut interactions = vec![];
         match &self.page_chip {
+<<<<<<< HEAD
             MyPageAir::Initial(i) => {
                 interactions.extend(SubAirBridge::receives(i, col_indices.cache_cols.clone()));
             }
@@ -65,6 +81,20 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> SubAirBridge<F> for LeafPageA
                             aux_cols: col_indices
                                 .metadata
                                 .subchip_aux_cols
+=======
+            PageRwAir::Initial(i) => {
+                interactions.extend(SubAirBridge::receives(i, col_indices.cache_cols.clone()));
+            }
+            PageRwAir::Final(fin) => {
+                interactions.extend(SubAirBridge::receives(
+                    fin,
+                    IndexedPageWriteCols {
+                        final_page_cols: IndexedOutputPageCols {
+                            page_cols: col_indices.cache_cols.clone(),
+                            aux_cols: col_indices
+                                .metadata
+                                .subair_aux_cols
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
                                 .clone()
                                 .unwrap()
                                 .final_page_aux
@@ -72,7 +102,11 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> SubAirBridge<F> for LeafPageA
                         },
                         rcv_mult: col_indices
                             .metadata
+<<<<<<< HEAD
                             .subchip_aux_cols
+=======
+                            .subair_aux_cols
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
                             .clone()
                             .unwrap()
                             .final_page_aux
@@ -89,6 +123,7 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> SubAirBridge<F> for LeafPageA
     fn sends(&self, col_indices: LeafPageCols<usize>) -> Vec<Interaction<F>> {
         let mut interactions = vec![];
         match &self.page_chip {
+<<<<<<< HEAD
             MyPageAir::Initial(i) => {
                 interactions.extend(SubAirBridge::sends(i, col_indices.cache_cols.clone()));
             }
@@ -101,6 +136,20 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> SubAirBridge<F> for LeafPageA
                             aux_cols: col_indices
                                 .metadata
                                 .subchip_aux_cols
+=======
+            PageRwAir::Initial(i) => {
+                interactions.extend(SubAirBridge::sends(i, col_indices.cache_cols.clone()));
+            }
+            PageRwAir::Final(fin) => {
+                interactions.extend(SubAirBridge::sends(
+                    fin,
+                    IndexedPageWriteCols {
+                        final_page_cols: IndexedOutputPageCols {
+                            page_cols: col_indices.cache_cols.clone(),
+                            aux_cols: col_indices
+                                .metadata
+                                .subair_aux_cols
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
                                 .clone()
                                 .unwrap()
                                 .final_page_aux
@@ -108,7 +157,11 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> SubAirBridge<F> for LeafPageA
                         },
                         rcv_mult: col_indices
                             .metadata
+<<<<<<< HEAD
                             .subchip_aux_cols
+=======
+                            .subair_aux_cols
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
                             .clone()
                             .unwrap()
                             .final_page_aux
@@ -121,7 +174,11 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> SubAirBridge<F> for LeafPageA
         if !self.is_init {
             let subairs = self.is_less_than_tuple_air.clone().unwrap();
             let range_inclusion = col_indices.metadata.range_inclusion_cols.clone().unwrap();
+<<<<<<< HEAD
             let subair_aux = col_indices.metadata.subchip_aux_cols.clone().unwrap();
+=======
+            let subair_aux = col_indices.metadata.subair_aux_cols.clone().unwrap();
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
             interactions.extend(SubAirBridge::sends(
                 &subairs.idx_start,
                 IsLessThanTupleCols {

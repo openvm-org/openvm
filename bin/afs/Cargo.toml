@@ -11,8 +11,12 @@ clap = { version = "4.5.4", features = ["derive"] }
 color-eyre = "0.6.3"
 logical-interface = { path = "../../logical-interface" }
 rand = "0.8.5"
+<<<<<<< HEAD
 serde = "1.0.203"
 serde_derive = "1.0.203"
+=======
+serde = { version = "1.0.203", features = ["derive"] }
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
 serde_json = "1.0.117"
 tokio = { version = "1.38.0", features = ["rt", "macros"] }
 toml = "0.8.14"
@@ -23,6 +27,12 @@ afs-derive = { path = "../../derive" }
 afs-test-utils = { path = "../../test-utils" }
 afs-chips = { path = "../../chips" }
 p3-uni-stark = { workspace = true }
+<<<<<<< HEAD
+=======
+p3-field = { workspace = true }
+p3-blake3 = { workspace = true }
+p3-keccak = { workspace = true }
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
 
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }

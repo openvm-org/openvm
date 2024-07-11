@@ -1,7 +1,7 @@
 use crate::{
     common::page_cols::PageCols, is_less_than_tuple::columns::IsLessThanTupleAuxCols,
     multitier_page_rw_checker::page_controller::MyLessThanTupleParams,
-    page_rw_checker::my_final_page::columns::MyFinalPageAuxCols,
+    page_rw_checker::final_page::columns::IndexedPageWriteAuxCols,
 };
 
 #[derive(Clone)]
@@ -17,7 +17,7 @@ pub struct LeafPageSubAirCols<T> {
     // check if the upper bound assigned to this page is less than the idx of this row -> want this to be false
     pub end_idx: IsLessThanTupleAuxCols<T>,
     // constrain sortedness (which is done with MyFinalPageAir)
-    pub final_page_aux: MyFinalPageAuxCols<T>,
+    pub final_page_aux: IndexedPageWriteAuxCols<T>,
 }
 
 /// A parent of this page will assign some range of keys - we must prove that range is accurate
@@ -32,9 +32,9 @@ pub struct RangeInclusionCols<T> {
 #[derive(Clone)]
 pub struct LeafPageMetadataCols<T> {
     pub own_commitment: Vec<T>,
-    pub id: T,
+    pub air_id: T,
     pub range_inclusion_cols: Option<RangeInclusionCols<T>>,
-    pub subchip_aux_cols: Option<LeafPageSubAirCols<T>>,
+    pub subair_aux_cols: Option<LeafPageSubAirCols<T>>,
 }
 
 impl<T> LeafPageCols<T> {
@@ -76,9 +76,9 @@ impl<T> LeafPageMetadataCols<T> {
         if is_init {
             LeafPageMetadataCols {
                 own_commitment: cols[0..commitment_len].to_vec(),
-                id: cols[commitment_len].clone(),
+                air_id: cols[commitment_len].clone(),
                 range_inclusion_cols: None,
-                subchip_aux_cols: None,
+                subair_aux_cols: None,
             }
         } else {
             let mut new_start = commitment_len + 1;
@@ -106,7 +106,7 @@ impl<T> LeafPageMetadataCols<T> {
             let subair_cols = LeafPageSubAirCols {
                 idx_start: aux_allocs[0].clone(),
                 end_idx: aux_allocs[1].clone(),
-                final_page_aux: MyFinalPageAuxCols::from_slice(
+                final_page_aux: IndexedPageWriteAuxCols::from_slice(
                     &cols[new_start + 2 * aux_size..],
                     is_less_than_tuple_params.limb_bits,
                     is_less_than_tuple_params.decomp,
@@ -115,9 +115,9 @@ impl<T> LeafPageMetadataCols<T> {
             };
             LeafPageMetadataCols {
                 own_commitment: cols[0..commitment_len].to_vec(),
-                id: cols[commitment_len].clone(),
+                air_id: cols[commitment_len].clone(),
                 range_inclusion_cols: Some(range_inclusion_cols),
-                subchip_aux_cols: Some(subair_cols),
+                subair_aux_cols: Some(subair_cols),
             }
         }
     }

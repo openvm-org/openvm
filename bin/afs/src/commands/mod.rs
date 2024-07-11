@@ -28,12 +28,24 @@ fn write_bytes(bytes: &[u8], path: String) -> Result<()> {
 
 fn create_prefix(config: &PageConfig) -> String {
     format!(
+<<<<<<< HEAD
         "{:?}_{}_{}_{}_{}_{}",
+=======
+        "{:?}_{}_{}_{}_{}_{}-{:?}-{}_{}_{}",
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
         config.page.mode,
         config.page.index_bytes,
         config.page.data_bytes,
         config.page.height,
         config.page.bits_per_fe,
+<<<<<<< HEAD
         config.page.max_rw_ops
+=======
+        config.page.max_rw_ops,
+        config.stark_engine.engine,
+        config.fri_params.log_blowup,
+        config.fri_params.num_queries,
+        config.fri_params.proof_of_work_bits
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
     )
 }

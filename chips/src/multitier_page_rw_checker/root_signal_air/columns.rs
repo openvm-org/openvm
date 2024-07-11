@@ -6,7 +6,7 @@ pub const NUM_COLS: usize = 3;
 #[derive(AlignedBorrow)]
 pub struct RootSignalCols<T> {
     pub root_commitment: Vec<T>,
-    pub id: T,
+    pub air_id: T,
     pub mult: T,
     pub range: Option<(Vec<T>, Vec<T>)>,
 }
@@ -19,14 +19,14 @@ impl<T> RootSignalCols<T> {
         if is_init {
             RootSignalCols {
                 root_commitment: cols[0..commitment_len].to_vec(),
-                id: cols[commitment_len].clone(),
+                air_id: cols[commitment_len].clone(),
                 mult: cols[commitment_len + 1].clone(),
                 range: None,
             }
         } else {
             RootSignalCols {
                 root_commitment: cols[0..commitment_len].to_vec(),
-                id: cols[commitment_len].clone(),
+                air_id: cols[commitment_len].clone(),
                 mult: cols[commitment_len + 1].clone(),
                 range: Some((
                     cols[commitment_len + 2..commitment_len + 2 + idx_len].to_vec(),

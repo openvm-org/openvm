@@ -4,8 +4,12 @@ pub mod tests;
 pub mod types;
 
 use crate::{
+<<<<<<< HEAD
     mock_db::MockDbTable, table::codec::fixed_bytes::FixedBytesCodec,
     utils::fixed_bytes_to_field_vec,
+=======
+    mock_db::MockDbTable, table::codec::fixed_bytes::FixedBytesCodec, utils::fixed_bytes_to_u16_vec,
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
 };
 use afs_chips::common::{page::Page, page_cols::PageCols};
 use serde_derive::{Deserialize, Serialize};
@@ -109,6 +113,11 @@ impl Table {
     }
 
     pub fn to_page(&self, page_index_bytes: usize, page_data_bytes: usize, height: usize) -> Page {
+<<<<<<< HEAD
+=======
+        assert_eq!(self.metadata.index_bytes, page_index_bytes);
+        assert_eq!(self.metadata.data_bytes, page_data_bytes);
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
         if self.body.len() > height {
             panic!(
                 "Table height {} cannot be bigger than `height` {}",
@@ -128,9 +137,15 @@ impl Table {
             .map(|(index, data)| {
                 let is_alloc: u32 = 1;
                 let index_bytes = codec.table_to_db_index_bytes(index.clone());
+<<<<<<< HEAD
                 let index_fields = fixed_bytes_to_field_vec(index_bytes);
                 let data_bytes = codec.table_to_db_data_bytes(data.clone());
                 let data_fields = fixed_bytes_to_field_vec(data_bytes);
+=======
+                let index_fields = fixed_bytes_to_u16_vec(index_bytes);
+                let data_bytes = codec.table_to_db_data_bytes(data.clone());
+                let data_fields = fixed_bytes_to_u16_vec(data_bytes);
+>>>>>>> d74b0541394676b6966e07196adf50328a41d65b
                 PageCols {
                     is_alloc,
                     idx: index_fields,

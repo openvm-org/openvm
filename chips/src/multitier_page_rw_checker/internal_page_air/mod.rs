@@ -15,11 +15,9 @@ pub mod trace;
 #[derive(Clone)]
 pub struct InternalPageSubAirs {
     pub idx1_start: IsLessThanTupleAir,
-    pub end_idx1: IsLessThanTupleAir,
-    pub idx2_start: IsLessThanTupleAir,
     pub end_idx2: IsLessThanTupleAir,
-    pub end_start: IsLessThanTupleAir,
-    pub end_next: IsLessThanTupleAir,
+    pub idx2_idx1: IsLessThanTupleAir,
+    pub idx2_next: IsLessThanTupleAir,
     pub mult_is_1: IsZeroAir,
 }
 
@@ -36,7 +34,7 @@ pub struct InternalPageAir<const COMMITMENT_LEN: usize> {
     is_less_than_tuple_param: MyLessThanTupleParams,
     is_init: bool,
     idx_len: usize,
-    id: u32,
+    air_id: u32,
 }
 
 impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
@@ -47,7 +45,7 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
         lt_bus_index: usize,
         idx_len: usize,
         is_init: bool,
-        id: u32,
+        air_id: u32,
     ) -> Self {
         let subairs = if is_init {
             None
@@ -59,11 +57,9 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
             );
             Some(InternalPageSubAirs {
                 idx1_start: air.clone(),
-                end_idx1: air.clone(),
-                idx2_start: air.clone(),
                 end_idx2: air.clone(),
-                end_start: air.clone(),
-                end_next: air,
+                idx2_idx1: air.clone(),
+                idx2_next: air,
                 mult_is_1: IsZeroAir {},
             })
         };
@@ -74,7 +70,7 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
             is_init,
             is_less_than_tuple_param,
             is_less_than_tuple_air: subairs,
-            id,
+            air_id,
         }
     }
 
@@ -88,9 +84,9 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
         9 + 2 * self.idx_len                    // mult stuff and data
             + 2 * COMMITMENT_LEN                // child commitment and own commitment
             + (1 - self.is_init as usize)
-                * (3 * self.idx_len             // prove sort + range inclusion columns
-                    + 6
-                    + 6 * IsLessThanTupleAuxCols::<usize>::get_width(                  // aux columns?
+                * (2 * self.idx_len             // prove sort + range inclusion columns
+                    + 4
+                    + 4 * IsLessThanTupleAuxCols::<usize>::get_width(                  // aux columns
                         vec![self.is_less_than_tuple_param.limb_bits; self.idx_len],
                         self.is_less_than_tuple_param.decomp,
                         self.idx_len,
