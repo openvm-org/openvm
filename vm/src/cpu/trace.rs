@@ -179,7 +179,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             }
 
             if !vm.options().enabled_instructions().contains(&opcode) {
-                return Err(ExecutionError::DisabledOperation(pc_usize, opcode));
+                return Err(ExecutionError::DisabledOperation(opcode));
             }
 
             match opcode {

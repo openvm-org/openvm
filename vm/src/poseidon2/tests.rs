@@ -61,6 +61,7 @@ macro_rules! run_perm_ops {
                 },
             },
             vec![],
+            vec![],
         );
 
         let write_ops: [[WriteOps; 16]; $num_ops] = core::array::from_fn(|i| {

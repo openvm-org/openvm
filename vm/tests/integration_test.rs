@@ -61,6 +61,7 @@ fn air_test_with_poseidon2(
             },
         },
         program,
+        vec![],
     );
 
     let max_log_degree = vm.max_log_degree().unwrap();
