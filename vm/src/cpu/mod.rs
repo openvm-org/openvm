@@ -78,9 +78,9 @@ impl OpCode {
 
             16 => Some(PERM_POS2),
             17 => Some(COMP_POS2),
-          
-            18 => Some(OpCode::HINT),
-          
+
+            18 => Some(HINT),
+
             _ => None,
         }
     }
