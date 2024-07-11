@@ -1,12 +1,12 @@
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
-use rand::thread_rng;
+use p3_field::extension::BinomialExtensionField;
 use rand::Rng;
+use rand::thread_rng;
 
 use afs_compiler::asm::AsmBuilder;
-use afs_compiler::ir::Var;
 use afs_compiler::ir::PERMUTATION_WIDTH;
+use afs_compiler::ir::Var;
 use afs_compiler::util::end_to_end_test;
 
 type F = BabyBear;
@@ -123,6 +123,9 @@ fn test_compiler_poseidon2_hash_v2() {
         let element = builder.get(&random_state, idx);
         builder.print_f(element);
     });
+
+    builder.halt();
+    end_to_end_test::<WORD_SIZE, _>(builder, vec![]);
 
     // let program = builder.compile_program();
 
