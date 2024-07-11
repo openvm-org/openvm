@@ -50,7 +50,7 @@ fn test_compiler_for_loops() {
 
     let program = builder.compile_isa::<WORD_SIZE>();
     display_program(&program);
-    execute_program::<WORD_SIZE, _>(program);
+    execute_program::<WORD_SIZE, _>(program, vec![]);
 
     // let program = builder.compile_program();
 
@@ -89,7 +89,7 @@ fn test_compiler_nested_array_loop() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE, _>(program);
+    execute_program::<WORD_SIZE, _>(program, vec![]);
 
     // let code = builder.compile_asm();
 
@@ -206,7 +206,7 @@ fn test_compiler_step_by() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE, _>(program);
+    execute_program::<WORD_SIZE, _>(program, vec![]);
 
     // let program = builder.compile_program();
 
@@ -232,7 +232,7 @@ fn test_compiler_bneinc() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE, _>(program);
+    execute_program::<WORD_SIZE, _>(program, vec![]);
 
     // let code = builder.clone().compile_asm();
 

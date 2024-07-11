@@ -1,11 +1,11 @@
-use field_extension_conversion::{convert_field_extension, convert_field_extension_with_base};
 use p3_field::{ExtensionField, PrimeField64};
 
-use crate::asm::{AsmInstruction, AssemblyCode};
-
+use field_extension_conversion::{convert_field_extension, convert_field_extension_with_base};
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode;
 use stark_vm::cpu::OpCode::*;
+
+use crate::asm::{AsmInstruction, AssemblyCode};
 
 pub mod field_extension_conversion;
 
@@ -42,6 +42,7 @@ enum AS {
 }
 
 impl AS {
+    // TODO[INT-1698]
     fn to_field<F: PrimeField64>(self) -> F {
         match self {
             AS::Immediate => F::zero(),
@@ -443,6 +444,14 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 AS::Immediate,
             ),
         ],
+        AsmInstruction::Hint(src) => vec![inst(
+            HINT,
+            register(src),
+            F::zero(),
+            F::zero(),
+            AS::Register,
+            AS::Memory,
+        )],
         AsmInstruction::PrintV(..) | AsmInstruction::PrintF(..) | AsmInstruction::PrintE(..) => {
             if options.compile_prints {
                 convert_print_instruction(instruction)

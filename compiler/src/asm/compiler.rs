@@ -492,19 +492,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     }
                     _ => unimplemented!(),
                 },
-                DslIr::HintLen(dst) => self.push(AsmInstruction::HintLen(dst.fp()), trace),
-                DslIr::HintVars(dst) => match dst {
-                    Array::Dyn(dst, _) => self.push(AsmInstruction::Hint(dst.fp()), trace),
-                    _ => unimplemented!(),
-                },
-                DslIr::HintFelts(dst) => match dst {
-                    Array::Dyn(dst, _) => self.push(AsmInstruction::Hint(dst.fp()), trace),
-                    _ => unimplemented!(),
-                },
-                DslIr::HintExts(dst) => match dst {
-                    Array::Dyn(dst, _) => self.push(AsmInstruction::Hint(dst.fp()), trace),
-                    _ => unimplemented!(),
-                },
+                DslIr::Hint(dst) => self.push(AsmInstruction::Hint(dst.fp()), trace),
                 DslIr::FriFold(m, input_ptr) => {
                     if let Array::Dyn(ptr, _) = input_ptr {
                         self.push(AsmInstruction::FriFold(m.fp(), ptr.fp()), trace);
