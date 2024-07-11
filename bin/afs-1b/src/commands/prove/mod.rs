@@ -5,8 +5,8 @@ use afs_chips::{
     multitier_page_rw_checker::page_controller::{
         gen_some_products_from_prover_data, MyLessThanTupleParams, PageController, PageTreeParams,
     },
+    page_btree::PageBTree,
     page_rw_checker::page_controller::{OpType, Operation},
-    pagebtree::PageBTree,
     range_gate::RangeCheckerGateChip,
 };
 use afs_stark_backend::{
@@ -27,8 +27,11 @@ use clap::Parser;
 use color_eyre::eyre::Result;
 use itertools::Itertools;
 use logical_interface::{
-    afs_input_instructions::{types::InputFileBodyOperation, AfsInputInstructions, AfsOperation},
-    utils::{fixed_bytes_to_field_vec, string_to_be_vec},
+    afs_input::{
+        types::{AfsOperation, InputFileOp},
+        AfsInputFile,
+    },
+    utils::string_to_u16_vec,
 };
 use p3_baby_bear::BabyBear;
 use p3_util::log2_strict_usize;
@@ -109,7 +112,7 @@ impl ProveCommand {
         println!("Proving ops file: {}", self.afi_file_path);
 
         println!("afi_file_path: {}", self.afi_file_path);
-        let instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
+        let instructions = AfsInputFile::open(&self.afi_file_path)?;
         let table_id = instructions.header.table_id.clone();
         let dst_id = table_id.clone() + ".0";
         let mut db = PageBTree::<BABYBEAR_COMMITMENT_LEN>::load(
@@ -260,7 +263,7 @@ impl ProveCommand {
             final_pages.internal_pages,
             final_root_is_leaf,
             0,
-            zk_ops.clone(),
+            &zk_ops,
             trace_degree,
             &mut trace_builder.committer,
             Some((
@@ -394,10 +397,11 @@ fn afi_op_conv(
     data_bytes: usize,
     clk: usize,
 ) -> Operation {
-    let idx_u8 = string_to_be_vec(afi_op.args[0].clone(), idx_bytes);
-    let idx_u16 = fixed_bytes_to_field_vec(idx_u8.clone());
+    let idx_len = (idx_bytes + 1) / 2;
+    let data_len = (data_bytes + 1) / 2;
+    let idx_u16 = string_to_u16_vec(afi_op.args[0].clone(), idx_len);
     match afi_op.operation {
-        InputFileBodyOperation::Read => {
+        InputFileOp::Read => {
             assert!(afi_op.args.len() == 1);
             let data = db.search(&idx_u16).unwrap();
             Operation {
@@ -407,10 +411,9 @@ fn afi_op_conv(
                 op_type: OpType::Read,
             }
         }
-        InputFileBodyOperation::Insert => {
+        InputFileOp::Insert => {
             assert!(afi_op.args.len() == 2);
-            let data_u8 = string_to_be_vec(afi_op.args[1].clone(), data_bytes);
-            let data_u16 = fixed_bytes_to_field_vec(data_u8.clone());
+            let data_u16 = string_to_u16_vec(afi_op.args[1].clone(), data_len);
             db.update(&idx_u16, &data_u16);
             Operation {
                 clk,
@@ -419,10 +422,9 @@ fn afi_op_conv(
                 op_type: OpType::Write,
             }
         }
-        InputFileBodyOperation::Write => {
+        InputFileOp::Write => {
             assert!(afi_op.args.len() == 2);
-            let data_u8 = string_to_be_vec(afi_op.args[1].clone(), data_bytes);
-            let data_u16 = fixed_bytes_to_field_vec(data_u8.clone());
+            let data_u16 = string_to_u16_vec(afi_op.args[1].clone(), data_len);
             db.update(&idx_u16, &data_u16);
             Operation {
                 clk,
@@ -431,5 +433,6 @@ fn afi_op_conv(
                 op_type: OpType::Write,
             }
         }
+        _ => panic!(),
     }
 }

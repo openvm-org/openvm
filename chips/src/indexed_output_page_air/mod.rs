@@ -9,11 +9,7 @@ pub mod trace;
 pub mod tests;
 
 #[derive(Clone, Debug)]
-<<<<<<< HEAD:chips/src/final_page/mod.rs
-pub struct FinalPageAir {
-=======
 pub struct IndexedOutputPageAir {
->>>>>>> d74b0541394676b6966e07196adf50328a41d65b:chips/src/indexed_output_page_air/mod.rs
     range_bus_index: usize,
 
     pub idx_len: usize,

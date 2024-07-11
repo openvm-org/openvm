@@ -6,6 +6,7 @@ use std::{
 };
 
 use afs_chips::{
+    common::page::Page,
     execution_air::ExecutionAir,
     multitier_page_rw_checker::page_controller::{
         MyLessThanTupleParams, PageController, PageTreeParams,
@@ -144,7 +145,8 @@ impl KeygenCommand {
         let blank_internal = vec![vec![0; 2 + 2 * idx_len + BABYBEAR_COMMITMENT_LEN]; height];
 
         // literally use any leaf chip
-        let blank_leaf_trace = page_controller.init_leaf_chips[0].generate_cached_trace(blank_leaf);
+        let blank_leaf_trace = page_controller.init_leaf_chips[0]
+            .generate_cached_trace(Page::from_2d_vec(&blank_leaf, idx_len, data_len));
         let blank_internal_trace =
             page_controller.init_internal_chips[0].generate_cached_trace(blank_internal);
         let blank_leaf_prover_data = trace_builder.committer.commit(vec![blank_leaf_trace]);

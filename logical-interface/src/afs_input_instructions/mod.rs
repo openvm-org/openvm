@@ -13,17 +13,6 @@ use types::{InputFileBodyOperation, InputFileHeaderOperation};
 
 pub const HEADER_SIZE: usize = 3;
 pub const MAX_OPS: usize = 1_048_576; // 2^20
-<<<<<<< HEAD
-
-/// Instructions for reading an AFS input file
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AfsInputInstructions {
-    pub file_path: String,
-    pub header: AfsHeader,
-    pub operations: Vec<AfsOperation>,
-}
-=======
->>>>>>> d74b0541394676b6966e07196adf50328a41d65b
 
 /// Header of an AFS input file, which corresponds to the first 3 lines of the file
 #[derive(Debug, Serialize, Deserialize)]

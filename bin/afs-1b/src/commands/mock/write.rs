@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use afs_chips::pagebtree::PageBTree;
+use afs_chips::page_btree::PageBTree;
 use afs_stark_backend::prover::{trace::TraceCommitter, MultiTraceStarkProver};
 use afs_test_utils::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
@@ -8,7 +8,7 @@ use afs_test_utils::{
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
-use logical_interface::afs_input_instructions::AfsInputInstructions;
+use logical_interface::afs_input::AfsInputFile;
 use p3_util::log2_strict_usize;
 
 use crate::commands::{load_input_file, BABYBEAR_COMMITMENT_LEN, DECOMP_BITS, LIMB_BITS};
@@ -63,7 +63,7 @@ impl WriteCommand {
             None => "".to_owned(),
         };
         println!("afi_file_path: {}", self.afi_file_path);
-        let instructions = AfsInputInstructions::from_file(&self.afi_file_path)?;
+        let instructions = AfsInputFile::open(&self.afi_file_path)?;
         let table_id = instructions.header.table_id.clone();
         let mut db = match PageBTree::<BABYBEAR_COMMITMENT_LEN>::load(
             self.db_folder.clone(),

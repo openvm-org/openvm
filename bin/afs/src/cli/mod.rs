@@ -1,10 +1,3 @@
-<<<<<<< HEAD
-use crate::commands::keygen::KeygenCommand;
-use crate::commands::{cache, keygen, mock, prove, verify};
-use afs_test_utils::page_config::PageConfig;
-use clap::Parser;
-use clap::Subcommand;
-=======
 use crate::commands::cache::CacheCommand;
 use crate::commands::keygen::KeygenCommand;
 use crate::commands::prove::ProveCommand;
@@ -32,20 +25,10 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
->>>>>>> d74b0541394676b6966e07196adf50328a41d65b
 
 #[derive(Debug, Parser)]
 #[command(author, version, about = "AFS CLI")]
 #[command(propagate_version = true)]
-<<<<<<< HEAD
-pub struct Cli {
-    #[command(subcommand)]
-    pub command: CliCommand,
-}
-
-#[derive(Debug, Subcommand)]
-pub enum CliCommand {
-=======
 pub struct Cli<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     #[command(subcommand)]
     pub command: CliCommand<SC, E>,
@@ -53,39 +36,19 @@ pub struct Cli<SC: StarkGenericConfig, E: StarkEngine<SC>> {
 
 #[derive(Debug, Subcommand)]
 pub enum CliCommand<SC: StarkGenericConfig, E: StarkEngine<SC>> {
->>>>>>> d74b0541394676b6966e07196adf50328a41d65b
     #[command(name = "mock", about = "Mock functions")]
     /// Mock functions
     Mock(mock::MockCommand),
 
     #[command(name = "keygen", about = "Generate partial proving and verifying keys")]
     /// Generate partial proving and verifying keys
-<<<<<<< HEAD
-    Keygen(keygen::KeygenCommand),
-=======
     Keygen(keygen::KeygenCommand<SC, E>),
->>>>>>> d74b0541394676b6966e07196adf50328a41d65b
 
     #[command(
         name = "cache",
         about = "Create the cached trace of a page from a page file"
     )]
     /// Create cached trace of a page from a page file
-<<<<<<< HEAD
-    Cache(cache::CacheCommand),
-
-    #[command(name = "prove", about = "Generates a multi-STARK proof")]
-    /// Generates a multi-STARK proof
-    Prove(prove::ProveCommand),
-
-    #[command(name = "verify", about = "Verifies a multi-STARK proof")]
-    /// Verifies a multi-STARK proof
-    Verify(verify::VerifyCommand),
-}
-
-impl Cli {
-    pub fn run(config: &PageConfig) -> Self {
-=======
     Cache(cache::CacheCommand<SC, E>),
 
     #[command(name = "prove", about = "Generates a multi-STARK proof")]
@@ -111,31 +74,12 @@ where
     where
         E: StarkEngine<SC>,
     {
->>>>>>> d74b0541394676b6966e07196adf50328a41d65b
         let cli = Self::parse();
         match &cli.command {
             CliCommand::Mock(mock) => {
                 mock.execute(config).unwrap();
             }
             CliCommand::Keygen(keygen) => {
-<<<<<<< HEAD
-                let cmd = KeygenCommand {
-                    output_folder: keygen.output_folder.clone(),
-                };
-                cmd.execute(config).unwrap();
-            }
-            CliCommand::Cache(cache) => {
-                cache.execute(config).unwrap();
-            }
-            CliCommand::Prove(prove) => {
-                prove.execute(config).unwrap();
-            }
-            CliCommand::Verify(verify) => {
-                verify.execute(config).unwrap();
-            }
-        }
-        cli
-=======
                 let output_folder = keygen.output_folder.clone();
                 KeygenCommand::execute(config, engine, output_folder).unwrap();
             }
@@ -198,6 +142,5 @@ pub fn run(config: &PageConfig) {
                 engine_from_perm(perm, pcs_log_degree, fri_params);
             Cli::run_with_engine(config, &engine)
         }
->>>>>>> d74b0541394676b6966e07196adf50328a41d65b
     }
 }

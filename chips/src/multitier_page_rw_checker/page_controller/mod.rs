@@ -259,7 +259,7 @@ impl<const COMMITMENT_LEN: usize> PageController<COMMITMENT_LEN> {
         final_internal_pages: Vec<Vec<Vec<u32>>>,
         final_root_is_leaf: bool,
         final_root_idx: usize,
-        ops: Vec<Operation>,
+        ops: &[Operation],
         trace_degree: usize,
         trace_committer: &mut TraceCommitter<SC>,
         init_cached_data: Option<(
@@ -347,7 +347,7 @@ impl<const COMMITMENT_LEN: usize> PageController<COMMITMENT_LEN> {
             Page::from_2d_vec(&mega_page, self.params.idx_len, self.params.data_len);
         let offline_checker_trace = self.gen_ops_trace::<SC>(
             &mut mega_page,
-            &ops,
+            ops,
             self.range_checker.clone(),
             trace_degree,
         );
@@ -420,7 +420,9 @@ where
     let leaf_trace = leaf_pages
         .iter()
         .zip(leaf_chips.iter())
-        .map(|(page, chip)| chip.generate_cached_trace::<Val<SC>>(page.clone()))
+        .map(|(page, chip)| {
+            chip.generate_cached_trace::<Val<SC>>(Page::from_2d_vec(page, idx_len, data_len))
+        })
         .collect::<Vec<_>>();
 
     let internal_trace = internal_pages
@@ -460,7 +462,7 @@ where
             commit,
             range,
             range_checker.clone(),
-            &internal_indices,
+            internal_indices,
         );
         leaf_prods.main_traces.push(tmp);
     }

@@ -1,10 +1,10 @@
-use afs_chips::pagebtree::PageBTree;
+use afs_chips::page_btree::PageBTree;
 use afs_stark_backend::prover::trace::ProverTraceData;
 use afs_test_utils::page_config::MultitierPageConfig;
 use color_eyre::eyre::Result;
 use logical_interface::{
-    afs_input_instructions::{types::InputFileBodyOperation, AfsInputInstructions},
-    utils::{fixed_bytes_to_field_vec, string_to_be_vec},
+    afs_input::{types::InputFileOp, AfsInputFile},
+    utils::string_to_u16_vec,
 };
 use p3_uni_stark::StarkGenericConfig;
 use serde::{de::DeserializeOwned, Serialize};
@@ -71,37 +71,36 @@ where
 
 pub fn load_input_file<const COMMITMENT_LEN: usize>(
     db: &mut PageBTree<COMMITMENT_LEN>,
-    instructions: &AfsInputInstructions,
+    instructions: &AfsInputFile,
 ) {
+    let idx_len = (instructions.header.index_bytes + 1) / 2;
+    let data_len = (instructions.header.data_bytes + 1) / 2;
     for op in &instructions.operations {
         match op.operation {
-            InputFileBodyOperation::Read => {}
-            InputFileBodyOperation::Insert => {
+            InputFileOp::Read => {}
+            InputFileOp::Insert => {
                 // if op.args.len() != 2 {
                 //     return Err(eyre!("Invalid number of arguments for insert operation"));
                 // }
                 assert!(op.args.len() == 2);
                 let index_input = op.args[0].clone();
-                let index = string_to_be_vec(index_input, instructions.header.index_bytes);
-                let index = fixed_bytes_to_field_vec(index);
+                let index = string_to_u16_vec(index_input, idx_len);
                 let data_input = op.args[1].clone();
-                let data = string_to_be_vec(data_input, instructions.header.data_bytes);
-                let data = fixed_bytes_to_field_vec(data);
+                let data = string_to_u16_vec(data_input, data_len);
                 db.update(&index, &data)
             }
-            InputFileBodyOperation::Write => {
+            InputFileOp::Write => {
                 // if op.args.len() != 2 {
                 //     return Err(eyre!("Invalid number of arguments for write operation"));
                 // }
                 assert!(op.args.len() == 2);
                 let index_input = op.args[0].clone();
-                let index = string_to_be_vec(index_input, instructions.header.index_bytes);
-                let index = fixed_bytes_to_field_vec(index);
+                let index = string_to_u16_vec(index_input, idx_len);
                 let data_input = op.args[1].clone();
-                let data = string_to_be_vec(data_input, instructions.header.data_bytes);
-                let data = fixed_bytes_to_field_vec(data);
+                let data = string_to_u16_vec(data_input, data_len);
                 db.update(&index, &data)
             }
+            _ => panic!(),
         };
     }
 }

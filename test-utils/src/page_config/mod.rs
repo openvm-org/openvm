@@ -66,17 +66,6 @@ impl PageConfig {
         });
         config
     }
-}
-
-impl MultitierPageConfig {
-    pub fn read_config_file(file: &str) -> MultitierPageConfig {
-        let file_str = std::fs::read_to_string(file).unwrap_or_else(|_| {
-            panic!("`config-1b.toml` is required in the root directory of the project");
-        });
-        let config: MultitierPageConfig = toml::from_str(file_str.as_str()).unwrap_or_else(|e| {
-            panic!("Failed to parse config file {}:\n{}", file, e);
-        });
-        config
 
     pub fn generate_filename(&self) -> String {
         format!(
@@ -96,5 +85,17 @@ impl MultitierPageConfig {
     pub fn save_to_file(&self, file: &str) {
         let file_str = toml::to_string(&self).unwrap();
         fs::write(file, file_str).unwrap();
+    }
+}
+
+impl MultitierPageConfig {
+    pub fn read_config_file(file: &str) -> MultitierPageConfig {
+        let file_str = std::fs::read_to_string(file).unwrap_or_else(|_| {
+            panic!("`config-1b.toml` is required in the root directory of the project");
+        });
+        let config: MultitierPageConfig = toml::from_str(file_str.as_str()).unwrap_or_else(|e| {
+            panic!("Failed to parse config file {}:\n{}", file, e);
+        });
+        config
     }
 }

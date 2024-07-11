@@ -33,7 +33,7 @@ pub fn update_tree() {
     }
     for _ in 0..10 {
         let i = rng.gen::<u32>() % 100;
-        let my_ans = tree.search(&vec![i]);
+        let my_ans = tree.search(&[i]);
         let real_ans = truth.get(&i);
         if my_ans.is_none() {
             assert!(real_ans.is_none());
@@ -80,7 +80,7 @@ pub fn update_tree_key_len() {
     for _ in 0..1000000 {
         let i = rng.gen::<u32>() % 100;
         let j = rng.gen::<u32>() % 100;
-        let my_ans = tree.search(&vec![i, j]);
+        let my_ans = tree.search(&[i, j]);
         let real_ans = truth.get(&vec![i, j]);
         if my_ans.is_none() {
             assert!(real_ans.is_none());
@@ -142,7 +142,7 @@ pub fn wide_tree() {
     for _ in 0..1000000 {
         let i = rng.gen::<u32>() % 100;
         let j = rng.gen::<u32>() % 100;
-        let my_ans = tree.search(&vec![i, j]);
+        let my_ans = tree.search(&[i, j]);
         let real_ans = truth.get(&vec![i, j]);
         if my_ans.is_none() {
             assert!(real_ans.is_none());
@@ -202,7 +202,7 @@ pub fn commit_test() {
     let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(log_num_requests));
 
     let prover = MultiTraceStarkProver::new(&engine.config);
-    let mut trace_builder: TraceCommitmentBuilder<BabyBearPoseidon2Config> =
+    let trace_builder: TraceCommitmentBuilder<BabyBearPoseidon2Config> =
         TraceCommitmentBuilder::new(prover.pcs());
     tree.commit(&trace_builder.committer, "src/pagebtree".to_owned());
     tree.consistency_check();
@@ -221,7 +221,7 @@ pub fn load_test() {
     for _ in 0..100 {
         let i = rng.gen::<u32>() % 10;
         let j = rng.gen::<u32>() % 10;
-        tree.search(&vec![i, j]);
+        tree.search(&[i, j]);
     }
     println!("{:?}", tree);
     tree.consistency_check();
@@ -235,8 +235,8 @@ pub fn make_a_large_tree() {
     let limb_bits = 20;
     let mut tree = PageBTree::<8>::new(limb_bits, key_len, val_len, 32, 32, "large".to_owned());
     let mut rng = create_seeded_rng();
-    const BIG_TREE_SIZE: usize = 1000_000;
-    const BIG_TREE_MAX_KEY: u32 = 1000_000;
+    const BIG_TREE_SIZE: usize = 1_000_000;
+    const BIG_TREE_MAX_KEY: u32 = 1_000_000;
     for i in 0..BIG_TREE_SIZE {
         if i % 10000 == 0 {
             println!("Processed {:?} entries...", i);
@@ -252,7 +252,7 @@ pub fn make_a_large_tree() {
     let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(log_num_requests));
 
     let prover = MultiTraceStarkProver::new(&engine.config);
-    let mut trace_builder: TraceCommitmentBuilder<BabyBearPoseidon2Config> =
+    let trace_builder: TraceCommitmentBuilder<BabyBearPoseidon2Config> =
         TraceCommitmentBuilder::new(prover.pcs());
     tree.commit(&trace_builder.committer, "src/pagebtree".to_owned());
     // tree.consistency_check();

@@ -1,11 +1,14 @@
 use std::{
     cell::RefCell,
-    fs::File,
+    fs::{create_dir_all, File},
     io::{BufReader, BufWriter, Read, Write},
     path::Path,
 };
 
-use afs_stark_backend::{config::Com, prover::trace::TraceCommitter};
+use afs_stark_backend::{
+    config::Com,
+    prover::trace::{ProverTraceData, TraceCommitter},
+};
 use itertools::Itertools;
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
@@ -93,11 +96,7 @@ pub fn matrix_usize_to_u32(mat: Vec<Vec<usize>>) -> Vec<Vec<u32>> {
 }
 
 impl<const COMMITMENT_LEN: usize> PageBTreeUnloadedNode<COMMITMENT_LEN> {
-    fn load_leaf(
-        &self,
-        db_path: String,
-        key_len: usize,
-    ) -> Option<PageBTreeLeafNode<COMMITMENT_LEN>> {
+    fn load_leaf(&self, db_path: String, key_len: usize) -> Option<PageBTreeLeafNode> {
         let s = commit_u32_to_str(&self.commit);
         let file = match File::open(db_path.clone() + "/leaf/" + &s + ".trace") {
             Err(_) => return None,
@@ -239,11 +238,7 @@ impl PageBTreeLeafNode {
         }
     }
 
-    fn update(
-        &mut self,
-        key: &[u32],
-        val: &[u32],
-    ) -> Option<(Vec<u32>, PageBTreeNode<COMMITMENT_LEN>)> {
+    fn update(&mut self, key: &[u32], val: &[u32]) -> Option<(Vec<u32>, PageBTreeLeafNode)> {
         self.trace = None;
         self.commit = None;
         self.add_kv(key, val);
@@ -306,7 +301,7 @@ impl PageBTreeLeafNode {
         trace
     }
 
-    fn gen_all_trace<SC: StarkGenericConfig>(
+    fn gen_all_trace<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>(
         &mut self,
         committer: &mut TraceCommitter<SC>,
         db_path: Option<String>,
@@ -324,7 +319,7 @@ impl PageBTreeLeafNode {
             .push(self.gen_commitment(committer, db_path, key_len, val_len))
     }
 
-    fn gen_commitment<SC: StarkGenericConfig>(
+    fn gen_commitment<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>(
         &mut self,
         committer: &TraceCommitter<SC>,
         db_path: Option<String>,
@@ -357,14 +352,14 @@ impl PageBTreeLeafNode {
                 let file = File::create(db_path.clone() + "/leaf/" + &s + ".cache.bin").unwrap();
                 let mut writer = BufWriter::new(file);
                 let encoded_trace = bincode::serialize(&commitment).unwrap();
-                writer.write(&encoded_trace).unwrap();
+                writer.write_all(&encoded_trace).unwrap();
             }
         }
         self.commit = Some(commit.clone());
         commit
     }
 
-    fn commit<SC: StarkGenericConfig>(
+    fn commit<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>(
         &mut self,
         committer: &TraceCommitter<SC>,
         db_path: String,
@@ -378,7 +373,7 @@ impl PageBTreeLeafNode {
         if self.trace.is_none() {
             self.gen_trace(key_len, val_len);
         }
-        let commit = self.gen_commit(committer, Some(db_path.clone()), key_len, val_len);
+        let commit = self.gen_commitment(committer, Some(db_path.clone()), key_len, val_len);
         let s = commit.iter().fold("".to_owned(), |acc, x| {
             acc.to_owned() + &format!("{:08x}", x)
         });
@@ -387,7 +382,7 @@ impl PageBTreeLeafNode {
             let file = File::create(db_path.clone() + "/leaf/" + &s + ".trace").unwrap();
             let mut writer = BufWriter::new(file);
             let encoded_trace = bincode::serialize(&self.trace.as_ref().unwrap()).unwrap();
-            writer.write(&encoded_trace).unwrap();
+            writer.write_all(&encoded_trace).unwrap();
         }
     }
 }
@@ -410,7 +405,7 @@ impl<const COMMITMENT_LEN: usize> PageBTreeNode<COMMITMENT_LEN> {
     fn search(
         &mut self,
         db_path: Option<String>,
-        key: &Vec<u32>,
+        key: &[u32],
         loaded_pages: &mut PageBTreePages,
     ) -> Option<Vec<u32>> {
         match self {
@@ -422,12 +417,12 @@ impl<const COMMITMENT_LEN: usize> PageBTreeNode<COMMITMENT_LEN> {
     fn update(
         &mut self,
         db_path: Option<String>,
-        key: &Vec<u32>,
-        val: &Vec<u32>,
+        key: &[u32],
+        val: &[u32],
         loaded_pages: &mut PageBTreePages,
     ) -> Option<(Vec<u32>, PageBTreeNode<COMMITMENT_LEN>)> {
         match self {
-            PageBTreeNode::Leaf(l) => l.update(key, val),
+            PageBTreeNode::Leaf(l) => l.update(key, val).map(|(k, n)| (k, PageBTreeNode::Leaf(n))),
             PageBTreeNode::Internal(i) => i.update(db_path, key, val, loaded_pages),
             PageBTreeNode::Unloaded(_) => panic!(),
         }
@@ -541,7 +536,7 @@ impl<const COMMITMENT_LEN: usize> PageBTreeInternalNode<COMMITMENT_LEN> {
     fn search(
         &mut self,
         db_path: Option<String>,
-        key: &Vec<u32>,
+        key: &[u32],
         loaded_pages: &mut PageBTreePages,
     ) -> Option<Vec<u32>> {
         let i = binsearch(&self.keys, key);
@@ -556,13 +551,13 @@ impl<const COMMITMENT_LEN: usize> PageBTreeInternalNode<COMMITMENT_LEN> {
     fn update(
         &mut self,
         db_path: Option<String>,
-        key: &Vec<u32>,
-        val: &Vec<u32>,
+        key: &[u32],
+        val: &[u32],
         loaded_pages: &mut PageBTreePages,
     ) -> Option<(Vec<u32>, PageBTreeNode<COMMITMENT_LEN>)> {
         self.trace = None;
         let mut ret = None;
-        let i = binsearch(&self.keys, &key);
+        let i = binsearch(&self.keys, key);
         if let PageBTreeNode::Unloaded(u) = &self.children[i] {
             self.children[i] = u
                 .load(db_path.clone().unwrap(), key.len(), loaded_pages)
@@ -721,7 +716,7 @@ impl<const COMMITMENT_LEN: usize> PageBTreeInternalNode<COMMITMENT_LEN> {
                     File::create(db_path.clone() + "/internal/" + &s + ".cache.bin").unwrap();
                 let mut writer = BufWriter::new(file);
                 let encoded_trace = bincode::serialize(&commitment).unwrap();
-                writer.write(&encoded_trace).unwrap();
+                writer.write_all(&encoded_trace).unwrap();
             }
         }
         commit
@@ -743,13 +738,13 @@ impl<const COMMITMENT_LEN: usize> PageBTreeInternalNode<COMMITMENT_LEN> {
             self.gen_trace(committer, Some(db_path.clone()), key_len, val_len);
         }
         let commit = self.gen_commitment(committer, Some(db_path.clone()), key_len, val_len);
-        let s = commit_to;
+        let s = commit_u32_to_str(&commit);
         create_dir_all(db_path.clone() + "/internal").unwrap();
         if !Path::new(&(db_path.clone() + "/internal/" + &s + ".trace")).is_file() {
             let file = File::create(db_path.clone() + "/internal/" + &s + ".trace").unwrap();
             let mut writer = BufWriter::new(file);
             let encoded_trace = bincode::serialize(&self.trace.as_ref().unwrap()).unwrap();
-            writer.write(&encoded_trace).unwrap();
+            writer.write_all(&encoded_trace).unwrap();
             false
         } else {
             true
@@ -793,19 +788,18 @@ impl<const COMMITMENT_LEN: usize> PageBTree<COMMITMENT_LEN> {
             commit: None,
         };
         let leaf = PageBTreeNode::Leaf(leaf);
-        let tree = PageBTree {
+        PageBTree {
             limb_bits,
             key_len,
             val_len,
-            root: vec![leaf],
+            root: RefCell::new(leaf),
             loaded_pages: PageBTreePages::new(),
             leaf_page_height,
             internal_page_height,
             depth: 1,
             id,
             src_db_path: None,
-        };
-        tree
+        }
     }
     // pub fn load(root_commit: Vec<u32>) -> Option<Self> {
     //     let s = root_commit.iter().fold("".to_owned(), |acc, x| {
@@ -867,20 +861,24 @@ impl<const COMMITMENT_LEN: usize> PageBTree<COMMITMENT_LEN> {
         })
     }
     pub fn min_key(&self) -> Vec<u32> {
-        self.root[0].min_key()
+        self.root.borrow().min_key()
     }
     pub fn max_key(&self) -> Vec<u32> {
-        self.root[0].max_key()
+        self.root.borrow().max_key()
     }
-    pub fn search(&mut self, key: &Vec<u32>) -> Option<Vec<u32>> {
+    pub fn search(&mut self, key: &[u32]) -> Option<Vec<u32>> {
         for k in key {
             assert!(*k < 1 << self.limb_bits);
         }
         assert!(key.len() == self.key_len);
         if let PageBTreeNode::Unloaded(u) = self.root.get_mut() {
             self.root = RefCell::new(
-                u.load(self.src_db_path.clone(), key.len(), &mut self.loaded_pages)
-                    .unwrap(),
+                u.load(
+                    self.src_db_path.clone().unwrap(),
+                    key.len(),
+                    &mut self.loaded_pages,
+                )
+                .unwrap(),
             );
         }
         self.root
@@ -897,8 +895,12 @@ impl<const COMMITMENT_LEN: usize> PageBTree<COMMITMENT_LEN> {
         assert!(val.len() == self.val_len);
         if let PageBTreeNode::Unloaded(u) = self.root.get_mut() {
             self.root = RefCell::new(
-                u.load(self.src_db_path.clone(), key.len(), &mut self.loaded_pages)
-                    .unwrap(),
+                u.load(
+                    self.src_db_path.clone().unwrap(),
+                    key.len(),
+                    &mut self.loaded_pages,
+                )
+                .unwrap(),
             );
         }
         let ret =
@@ -992,7 +994,10 @@ impl<const COMMITMENT_LEN: usize> PageBTree<COMMITMENT_LEN> {
         self.root
             .get_mut()
             .commit_all(committer, db_path.clone(), self.key_len, self.val_len);
-        let commit = self.root[0].gen_commitment(committer, None, self.key_len, self.val_len);
+        let commit =
+            self.root
+                .get_mut()
+                .gen_commitment(committer, None, self.key_len, self.val_len);
         create_dir_all(db_path.clone() + "/root").unwrap();
         let file = File::create(db_path.clone() + "/root/" + &self.id).unwrap();
         let root_info = PageBTreeRootInfo {

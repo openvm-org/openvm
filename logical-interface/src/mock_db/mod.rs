@@ -1,7 +1,4 @@
-<<<<<<< HEAD
-=======
 use color_eyre::eyre::Result;
->>>>>>> d74b0541394676b6966e07196adf50328a41d65b
 use serde_derive::{Deserialize, Serialize};
 
 use crate::table::types::{TableId, TableMetadata};
@@ -11,11 +8,7 @@ use std::{
     io::{Read, Write},
 };
 
-<<<<<<< HEAD
-#[derive(Serialize, Deserialize)]
-=======
 #[derive(Default, Serialize, Deserialize)]
->>>>>>> d74b0541394676b6966e07196adf50328a41d65b
 pub struct MockDb {
     /// Map of table id to table
     pub tables: BTreeMap<TableId, MockDbTable>,
@@ -42,13 +35,6 @@ impl MockDbTable {
 }
 
 impl MockDb {
-<<<<<<< HEAD
-    pub fn new(default_table_metadata: TableMetadata) -> Self {
-        Self {
-            default_table_metadata,
-            tables: BTreeMap::new(),
-        }
-=======
     pub fn new() -> Self {
         Self::default()
     }
@@ -63,23 +49,6 @@ impl MockDb {
     }
 
     pub fn save_to_file(&self, path: &str) -> Result<()> {
-        let serialized = bincode::serialize(&self).unwrap();
-        let mut file = std::fs::File::create(path).unwrap();
-        file.write_all(&serialized).unwrap();
-        Ok(())
->>>>>>> d74b0541394676b6966e07196adf50328a41d65b
-    }
-
-    pub fn from_file(path: &str) -> Self {
-        let file = File::open(path).unwrap();
-        let mut reader = std::io::BufReader::new(file);
-        let mut serialized = Vec::new();
-        reader.read_to_end(&mut serialized).unwrap();
-        let deserialized: MockDb = bincode::deserialize(&serialized).unwrap();
-        deserialized
-    }
-
-    pub fn save_to_file(&self, path: &str) -> std::io::Result<()> {
         let serialized = bincode::serialize(&self).unwrap();
         let mut file = std::fs::File::create(path).unwrap();
         file.write_all(&serialized).unwrap();

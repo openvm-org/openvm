@@ -2,11 +2,7 @@ use afs_test_utils::page_config::PageConfig;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{
-<<<<<<< HEAD
-    afs_interface::AfsInterface, mock_db::MockDb, table::types::TableMetadata,
-=======
     afs_interface::AfsInterface, mock_db::MockDb, table::types::TableId, utils::string_to_u8_vec,
->>>>>>> d74b0541394676b6966e07196adf50328a41d65b
 };
 
 #[derive(Debug, Parser)]
@@ -34,20 +30,6 @@ pub struct ReadCommand {
 /// `mock read` subcommand
 impl ReadCommand {
     /// Execute the `mock read` command
-<<<<<<< HEAD
-    pub fn execute(self, _config: &PageConfig) -> Result<()> {
-        let mut db = if let Some(db_file_path) = self.db_file_path {
-            println!("db_file_path: {}", db_file_path);
-            MockDb::from_file(&db_file_path)
-        } else {
-            let default_table_metadata = TableMetadata::new(32, 1024);
-            MockDb::new(default_table_metadata)
-        };
-
-        let mut interface = AfsInterface::new(32, 32, &mut db);
-
-        let table_id = self.table_id;
-=======
     pub fn execute(&self, _config: &PageConfig) -> Result<()> {
         let mut db = if let Some(db_file_path) = &self.db_file_path {
             println!("db_file_path: {}", db_file_path);
@@ -69,7 +51,6 @@ impl ReadCommand {
         );
 
         let table_id = &self.table_id;
->>>>>>> d74b0541394676b6966e07196adf50328a41d65b
         let table = interface.get_table(table_id.clone());
         match table {
             Some(table) => {

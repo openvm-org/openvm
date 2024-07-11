@@ -355,11 +355,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         trace_builder.load_trace(self.range_checker.generate_trace());
         trace_builder.load_trace(ops_sender_trace);
 
-<<<<<<< HEAD
-        tracing::info_span!("Trace commitment").in_scope(|| trace_builder.commit_current());
-=======
         tracing::info_span!("Prove trace commitment").in_scope(|| trace_builder.commit_current());
->>>>>>> d74b0541394676b6966e07196adf50328a41d65b
 
         let partial_vk = partial_pk.partial_vk();
 

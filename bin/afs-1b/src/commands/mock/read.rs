@@ -2,7 +2,7 @@ use afs_chips::page_btree::PageBTree;
 use afs_test_utils::page_config::MultitierPageConfig;
 use clap::Parser;
 use color_eyre::eyre::Result;
-use logical_interface::utils::{fixed_bytes_to_field_vec, string_to_be_vec};
+use logical_interface::utils::string_to_u16_vec;
 
 use crate::commands::{BABYBEAR_COMMITMENT_LEN, LIMB_BITS};
 
@@ -59,8 +59,7 @@ impl ReadCommand {
                 "".to_owned(),
             )
         };
-        let idx_bytes = string_to_be_vec(self.idx.clone(), config.page.index_bytes);
-        let idx_u16 = fixed_bytes_to_field_vec(idx_bytes);
+        let idx_u16 = string_to_u16_vec(self.idx.clone(), config.page.index_bytes);
         let data = db.search(&idx_u16).unwrap();
         println!(
             "Table ID: {}",

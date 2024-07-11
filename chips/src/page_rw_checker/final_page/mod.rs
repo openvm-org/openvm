@@ -5,13 +5,8 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-<<<<<<< HEAD:chips/src/page_rw_checker/my_final_page/mod.rs
-#[derive(Debug, Clone)]
-pub(crate) struct MyFinalPageAir {
-=======
 #[derive(Clone, Debug)]
 pub struct IndexedPageWriteAir {
->>>>>>> d74b0541394676b6966e07196adf50328a41d65b:chips/src/page_rw_checker/final_page/mod.rs
     page_bus_index: usize,
 
     final_air: IndexedOutputPageAir,
