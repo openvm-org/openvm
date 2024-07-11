@@ -18,7 +18,6 @@ fn test_single_is_zero() {
     let x = (0..chip.air.page_height)
         .map(|_| {
             (0..chip.air.page_width)
-                // .map(|_| BabyBear::from_canonical_u32(rng.gen_range(0..100)))
                 .map(|_| BabyBear::from_canonical_u32(rng.gen_range(0..3)))
                 .collect()
         })
@@ -35,11 +34,14 @@ fn test_single_is_zero() {
         }
     }
 
-    let pageread_trace = chip.generate_trace(x);
-    let hash_chip = chip.hash_chip.lock();
-    let hash_chip_trace = hash_chip.generate_trace();
+    let pageread_trace = chip.generate_trace(x.clone());
+    let hash_chip_trace = {
+        let hash_chip = chip.hash_chip.lock();
+        hash_chip.generate_trace()
+    };
 
-    let all_chips: Vec<&dyn AnyRap<_>> = vec![&chip.air, &hash_chip.air, &requester];
+    let mut hash_chip_air = chip.hash_chip.lock();
+    let all_airs: Vec<&dyn AnyRap<_>> = vec![&chip.air, &hash_chip_air.air, &requester];
 
     let all_traces = vec![
         pageread_trace.clone(),
@@ -56,9 +58,21 @@ fn test_single_is_zero() {
         .take(chip.air.digest_width)
         .cloned()
         .collect::<Vec<_>>();
-    let all_pis = vec![pis, vec![], vec![]];
+    let all_pis = vec![pis.clone(), vec![], vec![]];
 
-    run_simple_test(all_chips, all_traces, all_pis).expect("Verification failed");
+    run_simple_test(all_airs, all_traces, all_pis).expect("Verification failed");
+
+    let mut expected_anses = vec![BabyBear::zero(); chip.air.hash_width];
+
+    // let num_hashes = chip.air.page_width / chip.air.hash_rate;
+    expected_anses = x
+        .iter()
+        .flat_map(|row| row.chunks(chip.air.hash_rate))
+        .fold(expected_anses, |state, chunk| {
+            hash_chip_air.request(state, chunk.to_vec())
+        });
+
+    assert_eq!(pis, expected_anses[..chip.air.digest_width]);
 }
 
 #[test]
@@ -69,7 +83,6 @@ fn test_single_is_zero_fail() {
     let x = (0..chip.air.page_height)
         .map(|_| {
             (0..chip.air.page_width)
-                // .map(|_| BabyBear::from_canonical_u32(rng.gen_range(0..100)))
                 .map(|_| BabyBear::from_canonical_u32(rng.gen_range(0..3)))
                 .collect()
         })
@@ -90,7 +103,7 @@ fn test_single_is_zero_fail() {
     let hash_chip = chip.hash_chip.lock();
     let hash_chip_trace = hash_chip.generate_trace();
 
-    let all_chips: Vec<&dyn AnyRap<_>> = vec![&chip.air, &hash_chip.air, &requester];
+    let all_airs: Vec<&dyn AnyRap<_>> = vec![&chip.air, &hash_chip.air, &requester];
 
     let all_traces = vec![
         pageread_trace.clone(),
@@ -118,7 +131,7 @@ fn test_single_is_zero_fail() {
                 *debug.lock().unwrap() = false;
             });
             assert_eq!(
-                run_simple_test(all_chips.clone(), all_traces_clone, all_pis.clone()),
+                run_simple_test(all_airs.clone(), all_traces_clone, all_pis.clone()),
                 Err(VerificationError::NonZeroCumulativeSum),
                 "Expected constraint to fail"
             );
