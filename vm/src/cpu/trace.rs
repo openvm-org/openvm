@@ -124,7 +124,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
 
-            let instruction = vm.program_chip.get_instruction(pc_usize);
+            let instruction = vm.program_chip.get_instruction(pc_usize)?;
 
             let opcode = instruction.opcode;
             let a = instruction.op_a;
