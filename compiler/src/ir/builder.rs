@@ -1,7 +1,7 @@
 use std::{iter::Zip, vec::IntoIter};
 
 use backtrace::Backtrace;
-use p3_field::{AbstractExtensionField, AbstractField};
+use p3_field::AbstractField;
 
 use super::{
     Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, Ptr, SymbolicExt,
