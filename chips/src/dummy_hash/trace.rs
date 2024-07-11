@@ -9,7 +9,7 @@ use super::{
 };
 
 impl<F: Field> DummyHashChip<F> {
-    pub fn generate_cached_trace(&self) -> RowMajorMatrix<F> {
+    pub fn generate_trace(&self) -> RowMajorMatrix<F> {
         let rows = (0..self.hash_in_states.len())
             .flat_map(|i| {
                 let mut combined = self.hash_in_states[i].clone();

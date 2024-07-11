@@ -37,7 +37,7 @@ fn test_single_is_zero() {
 
     let pageread_trace = chip.generate_trace(x);
     let hash_chip = chip.hash_chip.lock();
-    let hash_chip_trace = hash_chip.generate_cached_trace();
+    let hash_chip_trace = hash_chip.generate_trace();
 
     let all_chips: Vec<&dyn AnyRap<_>> = vec![&chip.air, &hash_chip.air, &requester];
 
@@ -88,7 +88,7 @@ fn test_single_is_zero_fail() {
 
     let pageread_trace = chip.generate_trace(x);
     let hash_chip = chip.hash_chip.lock();
-    let hash_chip_trace = hash_chip.generate_cached_trace();
+    let hash_chip_trace = hash_chip.generate_trace();
 
     let all_chips: Vec<&dyn AnyRap<_>> = vec![&chip.air, &hash_chip.air, &requester];
 

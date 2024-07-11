@@ -1,26 +1,21 @@
 use crate::flat_hash::FlatHashAir;
-use afs_derive::AlignedBorrow;
 
 pub const NUM_COLS: usize = 3;
 
-#[repr(C)]
-#[derive(AlignedBorrow)]
 pub struct FlatHashCols<T> {
-    pub page_width: usize,
-    pub page_height: usize,
-    pub hash_width: usize,
-    pub hash_rate: usize,
-    pub digest_width: usize,
     pub io: FlatHashIOCols<T>,
     pub aux: FlatHashInternalCols<T>,
 }
 
-#[derive(Clone)]
 pub struct FlatHashIOCols<T> {
     pub page: Vec<T>,
     pub digest: Vec<T>,
 }
 
+/// Hash state indices match to the nth round index vector
+/// Hash chunk indices match to the input for the nth round
+/// Hash output indices match to the output for the nth round (i.e. the next round's input)
+/// All done on the same row
 pub struct FlatHashColIndices {
     pub hash_state_indices: Vec<Vec<usize>>,
     pub hash_chunk_indices: Vec<Vec<usize>>,
@@ -33,30 +28,6 @@ pub struct FlatHashInternalCols<T> {
 }
 
 impl<T: Clone> FlatHashCols<T> {
-    pub fn new(
-        page_width: usize,
-        page_height: usize,
-        hash_width: usize,
-        hash_rate: usize,
-        page: Vec<T>,
-        hashes: Vec<T>,
-        digest_width: usize,
-    ) -> FlatHashCols<T> {
-        let num_hashes = page_width / hash_rate;
-        let digest = hashes
-            [((num_hashes - 1) * hash_width)..((num_hashes - 1) * hash_width + digest_width)]
-            .to_vec();
-        FlatHashCols {
-            page_width,
-            page_height,
-            hash_width,
-            hash_rate,
-            io: FlatHashIOCols { page, digest },
-            aux: FlatHashInternalCols { hashes },
-            digest_width,
-        }
-    }
-
     pub fn flatten(&self) -> Vec<T> {
         let mut combined = self.io.page.clone();
         combined.extend(self.aux.hashes.clone());
@@ -102,18 +73,18 @@ impl<T: Clone> FlatHashCols<T> {
 
     pub fn from_slice(slice: &[T], chip: &FlatHashAir) -> Self {
         let (page, hashes) = slice.split_at(chip.page_width);
-        Self::new(
-            chip.page_width,
-            chip.page_height,
-            chip.hash_width,
-            chip.hash_rate,
-            page.to_vec(),
-            hashes.to_vec(),
-            chip.digest_width,
-        )
-    }
+        let num_hashes = chip.page_width / chip.hash_rate;
+        let digest_start = (num_hashes - 1) * chip.hash_width;
+        let digest = hashes[digest_start..digest_start + chip.digest_width].to_vec();
 
-    pub fn get_width(&self) -> usize {
-        self.page_width + (self.page_width / self.hash_rate + 1) * self.hash_width
+        Self {
+            io: FlatHashIOCols {
+                page: page.to_vec(),
+                digest,
+            },
+            aux: FlatHashInternalCols {
+                hashes: hashes.to_vec(),
+            },
+        }
     }
 }
