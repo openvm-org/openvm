@@ -7,15 +7,16 @@ use afs_chips::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
 
-use super::{
-    columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
-    max_accesses_per_instruction, CpuAir,
-    OpCode::{self, *},
-    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
-};
+use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
 use crate::memory::{compose, decompose};
 use crate::poseidon2::Poseidon2Chip;
-use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
+
+use super::{
+    columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
+    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE,
+    CPU_MAX_WRITES_PER_CYCLE,
+    CpuAir, INST_WIDTH, max_accesses_per_instruction, OpCode::{self, *},
+};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, derive_new::new)]
 pub struct Instruction<F> {
@@ -178,7 +179,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 }};
             }
 
-            if !vm.options().enabled_instructions().contains(&opcode) {
+            if opcode != PRINTF && !vm.options().enabled_instructions().contains(&opcode) {
                 return Err(ExecutionError::DisabledOperation(opcode));
             }
 
