@@ -3,9 +3,7 @@ use afs_test_utils::config::baby_bear_poseidon2::{
 };
 use afs_test_utils::config::fri_params::fri_params_with_80_bits_of_security;
 use afs_test_utils::engine::StarkEngine;
-use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
-use p3_poseidon2::Poseidon2ExternalMatrixGeneral;
-use rand::prelude::StdRng;
+use p3_baby_bear::BabyBear;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
 use stark_vm::vm::config::VmConfig;
