@@ -10,10 +10,7 @@ use logical_interface::{afs_interface::AfsInterface, mock_db::MockDb};
 use p3_util::ceil_div_usize;
 use serde::{Deserialize, Serialize};
 
-<<<<<<< HEAD
-=======
 /// Benchmark row for csv output
->>>>>>> 695e64067829626f269a4d4fc3b65b7a5f541af2
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct BenchmarkRow {
     pub test_type: String,
