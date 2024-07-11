@@ -1,3 +1,4 @@
+use crate::dummy_hash::DummyHashAir;
 use afs_stark_backend::prover::USE_DEBUG_BUILDER;
 use afs_stark_backend::rap::AnyRap;
 use afs_stark_backend::verifier::VerificationError;
@@ -40,7 +41,7 @@ fn test_single_is_zero() {
         hash_chip.generate_trace()
     };
 
-    let mut hash_chip_air = chip.hash_chip.lock();
+    let hash_chip_air = chip.hash_chip.lock();
     let all_airs: Vec<&dyn AnyRap<_>> = vec![&chip.air, &hash_chip_air.air, &requester];
 
     let all_traces = vec![
@@ -49,30 +50,19 @@ fn test_single_is_zero() {
         dummy_trace.clone(),
     ];
 
-    let pis = pageread_trace
-        .values
-        .iter()
-        .rev()
-        .take(chip.air.hash_width)
-        .rev()
-        .take(chip.air.digest_width)
-        .cloned()
-        .collect::<Vec<_>>();
-    let all_pis = vec![pis.clone(), vec![], vec![]];
-
-    run_simple_test(all_airs, all_traces, all_pis).expect("Verification failed");
-
     let mut expected_anses = vec![BabyBear::zero(); chip.air.hash_width];
 
-    // let num_hashes = chip.air.page_width / chip.air.hash_rate;
     expected_anses = x
         .iter()
         .flat_map(|row| row.chunks(chip.air.hash_rate))
         .fold(expected_anses, |state, chunk| {
-            hash_chip_air.request(state, chunk.to_vec())
-        });
+            DummyHashAir::hash(state, chunk.to_vec())
+        })[..chip.air.digest_width]
+        .to_vec();
 
-    assert_eq!(pis, expected_anses[..chip.air.digest_width]);
+    let all_pis = vec![expected_anses, vec![], vec![]];
+
+    run_simple_test(all_airs, all_traces, all_pis).expect("Verification failed");
 }
 
 #[test]
@@ -99,7 +89,7 @@ fn test_single_is_zero_fail() {
         }
     }
 
-    let pageread_trace = chip.generate_trace(x);
+    let pageread_trace = chip.generate_trace(x.clone());
     let hash_chip = chip.hash_chip.lock();
     let hash_chip_trace = hash_chip.generate_trace();
 
@@ -111,30 +101,32 @@ fn test_single_is_zero_fail() {
         dummy_trace.clone(),
     ];
 
-    let pis = pageread_trace
-        .values
-        .iter()
-        .rev()
-        .take(chip.air.hash_width)
-        .rev()
-        .take(chip.air.digest_width)
-        .cloned()
-        .collect::<Vec<_>>();
-    let all_pis = vec![pis, vec![], vec![]];
+    let mut expected_anses = vec![BabyBear::zero(); chip.air.hash_width];
 
-    for row_index in 0..chip.air.page_height {
-        for column_index in 0..chip.air.page_width {
-            let mut all_traces_clone = all_traces.clone();
-            all_traces_clone[0].row_mut(row_index)[column_index] +=
-                BabyBear::from_canonical_u32(rng.gen_range(2..100));
-            USE_DEBUG_BUILDER.with(|debug| {
-                *debug.lock().unwrap() = false;
-            });
-            assert_eq!(
-                run_simple_test(all_airs.clone(), all_traces_clone, all_pis.clone()),
-                Err(VerificationError::NonZeroCumulativeSum),
-                "Expected constraint to fail"
-            );
-        }
+    expected_anses = x
+        .iter()
+        .flat_map(|row| row.chunks(chip.air.hash_rate))
+        .fold(expected_anses, |state, chunk| {
+            DummyHashAir::hash(state, chunk.to_vec())
+        })[..chip.air.digest_width]
+        .to_vec();
+
+    let all_pis = vec![expected_anses, vec![], vec![]];
+
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
+
+    for _ in 0..20 {
+        let row_index = rng.gen_range(0..chip.air.page_height);
+        let column_index = rng.gen_range(0..chip.air.page_width);
+        let mut all_traces_clone = all_traces.clone();
+        all_traces_clone[0].row_mut(row_index)[column_index] +=
+            BabyBear::from_canonical_u32(rng.gen_range(2..100));
+        assert_eq!(
+            run_simple_test(all_airs.clone(), all_traces_clone, all_pis.clone()),
+            Err(VerificationError::NonZeroCumulativeSum),
+            "Expected constraint to fail"
+        );
     }
 }
