@@ -1,6 +1,6 @@
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
 use p3_field::extension::BinomialExtensionField;
+use p3_field::AbstractField;
 
 use afs_compiler::asm::AsmBuilder;
 use afs_compiler::ir::Usize;
@@ -41,9 +41,18 @@ fn test_io() {
         vec![F::zero(), F::zero(), F::two()],
         vec![F::from_canonical_usize(3)],
         vec![
-            F::zero(), F::zero(), F::zero(), F::one(), // 1
-            F::zero(), F::zero(), F::zero(), F::one(), // 1
-            F::zero(), F::zero(), F::zero(), F::two(), // 2
+            F::zero(),
+            F::zero(),
+            F::zero(),
+            F::one(), // 1
+            F::zero(),
+            F::zero(),
+            F::zero(),
+            F::one(), // 1
+            F::zero(),
+            F::zero(),
+            F::zero(),
+            F::two(), // 2
         ],
     ];
 
