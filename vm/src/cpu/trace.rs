@@ -81,7 +81,8 @@ fn memory_access_to_cols<const WORD_SIZE: usize, F: PrimeField64>(
 pub enum ExecutionError {
     Fail(usize),
     PcOutOfBounds(usize, usize),
-    DisabledOperation(usize, OpCode),
+    DisabledOperation(OpCode),
+    HintOutOfBounds(usize, usize),
 }
 
 impl Display for ExecutionError {
@@ -93,9 +94,12 @@ impl Display for ExecutionError {
                 "pc = {} out of bounds for program of length {}",
                 pc, program_len
             ),
-            ExecutionError::DisabledOperation(pc, op) => {
-                write!(f, "at pc = {}, opcode {:?} was not enabled", pc, op)
-            }
+            ExecutionError::DisabledOperation(op) => write!(f, "opcode {:?} was not enabled", op),
+            ExecutionError::HintOutOfBounds(witness_idx, witness_len) => write!(
+                f,
+                "witness index = {} out of bounds for witness_stream of length {}",
+                witness_idx, witness_len
+            ),
         }
     }
 }
@@ -112,10 +116,13 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
         let mut timestamp: usize = 0;
         let mut pc = F::zero();
 
+        let mut witness_idx = 0;
+
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
 
             let instruction = vm.program_chip.get_instruction(pc_usize);
+
             let opcode = instruction.opcode;
             let a = instruction.op_a;
             let b = instruction.op_b;
@@ -232,6 +239,17 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 }
                 PERM_POS2 | COMP_POS2 => {
                     Poseidon2Chip::<16, _>::poseidon2_perm(vm, timestamp, instruction);
+                }
+                HINT => {
+                    if witness_idx >= vm.witness_stream.len() {
+                        return Err(ExecutionError::HintOutOfBounds(
+                            witness_idx,
+                            vm.witness_stream.len(),
+                        ));
+                    }
+                    let next_input = &vm.witness_stream[witness_idx];
+                    witness_idx += 1;
+                    vm.memory_chip.write_hint(a, d, e, next_input);
                 }
             };
 

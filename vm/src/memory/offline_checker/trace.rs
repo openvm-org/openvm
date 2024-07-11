@@ -12,6 +12,7 @@ use afs_chips::is_equal_vec::IsEqualVecAir;
 use afs_chips::is_less_than_tuple::IsLessThanTupleAir;
 use afs_chips::range_gate::RangeCheckerGateChip;
 use afs_chips::sub_chip::LocalTraceInstructions;
+use rayon::prelude::*;
 
 impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
     /// Each row in the trace follow the same order as the Cols struct:
@@ -26,7 +27,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> RowMajorMatrix<F> {
         self.accesses
-            .sort_by_key(|op| (op.address_space, op.address, op.timestamp));
+            .par_sort_by_key(|op| (op.address_space, op.address, op.timestamp));
 
         let mut rows: Vec<F> = vec![];
 
@@ -112,7 +113,11 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             0
         };
         let same_addr = same_addr_space * same_pointer;
-        let same_data = if curr_op.data == prev_op.data { 1 } else { 0 };
+        let same_data = if curr_op.data == prev_op.data && same_addr == 1 {
+            1
+        } else {
+            0
+        };
 
         row.push(F::from_canonical_u8(same_addr_space));
         row.push(F::from_canonical_u8(same_pointer));

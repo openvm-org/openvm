@@ -3,7 +3,7 @@ pub mod tests;
 pub mod utils;
 
 use crate::{
-    afs_input_instructions::{types::InputFileBodyOperation, AfsInputInstructions},
+    afs_input::{types::InputFileOp, AfsInputFile},
     mock_db::MockDb,
     table::{codec::fixed_bytes::FixedBytesCodec, types::TableMetadata, Table},
     utils::string_to_u8_vec,
@@ -49,15 +49,31 @@ impl<'a> AfsInterface<'a> {
     }
 
     pub fn load_input_file(&mut self, path: &str) -> Result<&Table> {
-        let instructions = AfsInputInstructions::from_file(path)?;
+        let instructions = AfsInputFile::open(path)?;
 
         let table_id = instructions.header.table_id;
         let table_id_bytes = string_to_table_id(table_id.clone());
 
+        let get_table = self.get_table(table_id.clone());
+        match get_table {
+            Some(_) => {}
+            None => {
+                self.create_table(
+                    table_id.clone(),
+                    TableMetadata::new(
+                        instructions.header.index_bytes,
+                        instructions.header.data_bytes,
+                    ),
+                )
+                .unwrap();
+                self.get_table(table_id.clone()).unwrap();
+            }
+        }
+
         for op in &instructions.operations {
             match op.operation {
-                InputFileBodyOperation::Read => {}
-                InputFileBodyOperation::Insert => {
+                InputFileOp::Read => {}
+                InputFileOp::Insert => {
                     if op.args.len() != 2 {
                         return Err(eyre!("Invalid number of arguments for insert operation"));
                     }
@@ -77,7 +93,7 @@ impl<'a> AfsInterface<'a> {
                     }
                     self.db_ref.insert_data(table_id_bytes, index, data);
                 }
-                InputFileBodyOperation::Write => {
+                InputFileOp::Write => {
                     if op.args.len() != 2 {
                         return Err(eyre!("Invalid number of arguments for write operation"));
                     }
@@ -97,14 +113,13 @@ impl<'a> AfsInterface<'a> {
                     }
                     self.db_ref.write_data(table_id_bytes, index, data);
                 }
+                InputFileOp::Where => {}
+                InputFileOp::InnerJoin => {}
+                InputFileOp::GroupBy => {}
             };
         }
 
-        let get_table = self.get_table(table_id);
-        match get_table {
-            Some(table) => Ok(table),
-            None => Err(eyre!("Error getting table")),
-        }
+        Ok(self.get_table(table_id).unwrap())
     }
 
     pub fn get_db_ref(&mut self) -> &mut MockDb {
@@ -123,15 +138,6 @@ impl<'a> AfsInterface<'a> {
     pub fn get_table(&mut self, table_id: String) -> Option<&Table> {
         let table_id_bytes = string_to_table_id(table_id);
         let db_table = self.db_ref.get_table(table_id_bytes)?;
-        if self.index_bytes != db_table.db_table_metadata.index_bytes
-            || self.data_bytes != db_table.db_table_metadata.data_bytes
-        {
-            println!(
-                "Table index bytes {}, data bytes {} does not match config",
-                db_table.db_table_metadata.index_bytes, db_table.db_table_metadata.data_bytes
-            );
-            return None;
-        }
         self.current_table = Some(Table::from_db_table(
             db_table,
             self.index_bytes,

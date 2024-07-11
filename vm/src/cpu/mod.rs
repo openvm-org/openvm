@@ -50,6 +50,7 @@ pub enum OpCode {
 
     PERM_POS2 = 16,
     COMP_POS2 = 17,
+    HINT = 18,
 }
 
 impl OpCode {
@@ -77,7 +78,9 @@ impl OpCode {
 
             16 => Some(PERM_POS2),
             17 => Some(COMP_POS2),
-
+          
+            18 => Some(OpCode::HINT),
+          
             _ => None,
         }
     }
@@ -87,7 +90,7 @@ use crate::field_extension::FieldExtensionArithmeticAir;
 use crate::poseidon2::Poseidon2Chip;
 use OpCode::*;
 
-pub const CORE_INSTRUCTIONS: [OpCode; 6] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE];
+pub const CORE_INSTRUCTIONS: [OpCode; 7] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, HINT];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
 
@@ -107,6 +110,7 @@ fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         COMP_POS2 | PERM_POS2 => {
             Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(opcode)
         }
+        HINT => 0,
         _ => panic!(),
     }
 }

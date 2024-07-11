@@ -39,6 +39,7 @@ fn make_vm<const WORD_SIZE: usize>(
             },
         },
         program,
+        vec![],
     )
 }
 

@@ -1,5 +1,7 @@
 use crate::{common::page::Page, is_equal_vec::IsEqualVecAir};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::str::FromStr;
 
 pub mod air;
 pub mod bridge;
@@ -31,6 +33,8 @@ pub struct GroupByAir {
     pub op: GroupByOperation,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum GroupByOperation {
     Sum,
     Product,
@@ -143,5 +147,21 @@ impl GroupByAir {
             Page::from_2d_vec(&grouped_sums, idx_len, 1),
             Page::from_2d_vec(&new_grouped_page, idx_len, 1),
         )
+    }
+}
+
+impl FromStr for GroupByOperation {
+    type Err = std::io::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s_upper = s.to_uppercase();
+        match s_upper.as_str() {
+            "SUM" => Ok(GroupByOperation::Sum),
+            "PRODUCT" => Ok(GroupByOperation::Product),
+            _ => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Invalid operand",
+            )),
+        }
     }
 }

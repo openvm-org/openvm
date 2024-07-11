@@ -26,4 +26,4 @@ jobs:
 
       - name: Run unit tests
         run: |
-          cargo test --workspace --exclude logical-interface
+          cargo test --workspace
