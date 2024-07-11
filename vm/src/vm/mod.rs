@@ -33,12 +33,17 @@ pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub field_arithmetic_chip: FieldArithmeticChip<F>,
     pub field_extension_chip: FieldExtensionArithmeticChip<WORD_SIZE, F>,
     pub range_checker: Arc<RangeCheckerGateChip>,
+    pub witness_stream: Vec<Vec<F>>,
 
     traces: Vec<DenseMatrix<F>>,
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
-    pub fn new(config: VmConfig, program: Vec<Instruction<F>>) -> Self {
+    pub fn new(
+        config: VmConfig,
+        program: Vec<Instruction<F>>,
+        witness_stream: Vec<Vec<F>>,
+    ) -> Self {
         let config = config.vm;
         let decomp = config.decomp;
         let limb_bits = config.limb_bits;
@@ -60,6 +65,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             field_extension_chip,
             range_checker,
             traces: vec![],
+            witness_stream,
         }
     }
 

@@ -11,6 +11,7 @@ use logical_interface::{afs_interface::AfsInterface, mock_db::MockDb};
 use p3_util::ceil_div_usize;
 use serde::{Deserialize, Serialize};
 
+/// Benchmark row for csv output
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct BenchmarkRow {
     pub test_type: String,
@@ -26,16 +27,27 @@ pub struct BenchmarkRow {
     pub log_blowup: usize,
     pub num_queries: usize,
     pub pow_bits: usize,
+    /// Total width of preprocessed AIR
     pub preprocessed: usize,
+    /// Total width of partitioned main AIR
     pub main: usize,
+    /// Total width of after challenge AIR
     pub challenge: usize,
+    /// Keygen time: Time to generate keys
     pub keygen_time: String,
+    /// Cache time: Time to generate cached trace
     pub cache_time: String,
+    /// Prove: Time to generate load_page_and_ops trace
     pub prove_load_trace_gen: String,
+    /// Prove: Time to commit load_page_and_ops trace
     pub prove_load_trace_commit: String,
+    /// Prove: Time to generate trace
     pub prove_generate: String,
+    /// Prove: Time to commit trace
     pub prove_commit: String,
+    /// Prove time: Total time to generate the proof (inclusive of all prove timing items above)
     pub prove_time: String,
+    /// Verify time: Time to verify the proof
     pub verify_time: String,
 }
 

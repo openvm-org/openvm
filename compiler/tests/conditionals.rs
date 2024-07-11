@@ -55,7 +55,7 @@ fn test_compiler_conditionals() {
 
     let program = builder.compile_isa::<WORD_SIZE>();
     display_program(&program);
-    execute_program::<WORD_SIZE, _>(program);
+    execute_program::<WORD_SIZE, _>(program, vec![]);
 
     // let code = builder.compile_asm();
     // println!("{}", code);
@@ -95,7 +95,7 @@ fn test_compiler_conditionals_v2() {
 
     let program = builder.compile_isa::<WORD_SIZE>();
     display_program(&program);
-    execute_program::<WORD_SIZE, _>(program);
+    execute_program::<WORD_SIZE, _>(program, vec![]);
 
     // let code = builder.compile_asm();
     // println!("{}", code);

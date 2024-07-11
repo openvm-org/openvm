@@ -159,10 +159,7 @@ pub enum AsmInstruction<F, EF> {
     /// Convert an extension element to field elements.
     Ext2Felt(i32, i32),
 
-    /// Hint the lenght of the next vector of blocks.
-    HintLen(i32),
-
-    /// Hint a vector of blocks.
+    /// Hint a vector of blocks along with the length.
     Hint(i32),
 
     // FRIFold(m, input).
@@ -1111,7 +1108,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                 write!(f, "print_e ({})fp", dst)
             }
             AsmInstruction::Ext2Felt(dst, src) => write!(f, "ext2felt ({})fp, {})fp", dst, src),
-            AsmInstruction::HintLen(dst) => write!(f, "hint_len ({})fp", dst),
             AsmInstruction::Hint(dst) => write!(f, "hint ({})fp", dst),
             AsmInstruction::FriFold(m, input_ptr) => {
                 write!(f, "fri_fold ({})fp, ({})fp", m, input_ptr)

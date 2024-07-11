@@ -44,6 +44,8 @@ pub enum OpCode {
     FE4SUB = 13,
     BBE4MUL = 14,
     BBE4INV = 15,
+
+    HINT = 16,
 }
 
 impl OpCode {
@@ -65,6 +67,7 @@ impl OpCode {
             13 => Some(OpCode::FE4SUB),
             14 => Some(OpCode::BBE4MUL),
             15 => Some(OpCode::BBE4INV),
+            16 => Some(OpCode::HINT),
             _ => None,
         }
     }
@@ -73,7 +76,7 @@ impl OpCode {
 use crate::field_extension::FieldExtensionArithmeticAir;
 use OpCode::*;
 
-pub const CORE_INSTRUCTIONS: [OpCode; 6] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE];
+pub const CORE_INSTRUCTIONS: [OpCode; 7] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, HINT];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
 
@@ -90,6 +93,7 @@ fn max_accesses_per_instruction(op_code: OpCode) -> usize {
         }
         FAIL => 0,
         PRINTF => 1,
+        HINT => 0,
         _ => panic!(),
     }
 }

@@ -157,20 +157,19 @@ where
             ),
         );
 
-        // Making sure every idx block starts with a write
-        // not same_idx => write
-        // NOTE: constraint degree is 3
-        builder.assert_one(or(
-            AB::Expr::one() - local_cols.is_valid.into(),
-            or(local_cols.same_addr.into(), local_cols.op_type.into()),
-        ));
-
-        // Making sure that every read uses the same data as the last operation
+        // Making sure that every read uses the same data as the last operation if it is not the first
+        // operation in the block
         // read => same_data
         // NOTE: constraint degree is 3
         builder.assert_one(or(
             AB::Expr::one() - local_cols.is_valid.into(),
-            or(local_cols.op_type.into(), local_cols.same_data.into()),
+            or(
+                local_cols.op_type.into(),
+                // if b is 2 (when same_addr = 0 and same_data = 1), then this or will give 0 or 2,
+                // and the outer or will be 0 or 2, failing the constraint
+                // in our trace generation, we set same_data = 0 when same_addr = 0
+                AB::Expr::one() - local_cols.same_addr.into() + local_cols.same_data.into(),
+            ),
         ));
 
         // Making sure is_extra rows are at the bottom
