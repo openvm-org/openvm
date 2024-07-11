@@ -2,15 +2,6 @@
 index_bytes = 32
 data_bytes = 32
 bits_per_fe = 16
-<<<<<<< HEAD
-height = 1048576
-mode = "ReadWrite" # options: "ReadOnly", "ReadWrite"
-max_rw_ops = 65536
-
-[schema]
-key_length = 2
-limb_size = 4
-=======
 height = 256
 mode = "ReadWrite" # options: "ReadOnly", "ReadWrite"
 max_rw_ops = 256
@@ -23,4 +14,3 @@ proof_of_work_bits = 0
 [stark_engine]
 # options: "BabyBearBlake3", "BabyBearKeccak", "BabyBearPoseidon2"
 engine = "BabyBearPoseidon2"
->>>>>>> d74b0541394676b6966e07196adf50328a41d65b
