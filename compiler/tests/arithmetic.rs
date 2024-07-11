@@ -6,6 +6,7 @@ use rand::{thread_rng, Rng};
 use afs_compiler::asm::AsmBuilder;
 use afs_compiler::ir::{Ext, Felt, SymbolicExt};
 use afs_compiler::ir::{ExtConst, Var};
+use afs_compiler::util::{display_program, execute_program};
 
 const WORD_SIZE: usize = 1;
 
@@ -75,9 +76,9 @@ fn test_compiler_arithmetic() {
         builder.assert_ext_eq(-a_ext, (-a_ext_val).cons());
     }
 
-    // let program = builder.compile_isa::<WORD_SIZE>();
-    // display_program(&program);
-    // execute_program::<WORD_SIZE, _>(program, vec![]);
+    let program = builder.compile_isa::<WORD_SIZE>();
+    display_program(&program);
+    execute_program::<WORD_SIZE, _>(program, vec![]);
 
     // let program = builder.compile_program();
 

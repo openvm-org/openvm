@@ -3,13 +3,15 @@ use std::array::from_fn;
 use p3_field::{ExtensionField, PrimeField64};
 
 use field_extension_conversion::{convert_field_extension, convert_field_extension_with_base};
-use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode;
 use stark_vm::cpu::OpCode::*;
+use stark_vm::cpu::trace::Instruction;
 
 use crate::asm::{AsmInstruction, AssemblyCode};
 
 pub mod field_extension_conversion;
+
+const FIELD_EXTENSION_DEGREE: usize = 4;
 
 #[derive(Clone, Copy)]
 pub struct CompilerOptions {
@@ -634,6 +636,64 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 AS::Immediate,
             ),
         ],
+        AsmInstruction::BneE(label, lhs, rhs) => (0..FIELD_EXTENSION_DEGREE)
+            .map(|i|
+            // if register[lhs + i] != register[rhs +i] for i = 0..4, pc <- labels[label]
+            inst(
+                BNE,
+                register(lhs - ((i * WORD_SIZE) as i32)),
+                register(rhs - ((i * WORD_SIZE) as i32)),
+                labels(label) - (pc + F::from_canonical_usize(i)),
+                AS::Register,
+                AS::Register,
+            ))
+            .collect(),
+        AsmInstruction::BneEI(label, lhs, rhs) => (0..FIELD_EXTENSION_DEGREE)
+            .map(|i|
+            // if register[lhs + i] != rhs[i] for i = 0..4, pc <- labels[label]
+            inst(
+                BNE,
+                register(lhs - ((i * WORD_SIZE) as i32)),
+                rhs.as_base_slice()[i],
+                labels(label) - (pc + F::from_canonical_usize(i)),
+                AS::Register,
+                AS::Register,
+            ))
+            .collect(),
+        AsmInstruction::BeqE(label, lhs, rhs) => (0..FIELD_EXTENSION_DEGREE)
+            .rev()
+            .map(|i|
+            // if register[lhs + i] == register[rhs + i] for i = 0..4, pc <- labels[label]
+            inst(
+                if i == 0 { BEQ } else { BNE },
+                register(lhs - ((i * WORD_SIZE) as i32)),
+                register(rhs - ((i * WORD_SIZE) as i32)),
+                if i == 0 {
+                    labels(label) - (pc + F::from_canonical_usize(FIELD_EXTENSION_DEGREE - 1))
+                } else {
+                    F::from_canonical_usize(i + 1)
+                },
+                AS::Register,
+                AS::Register,
+            ))
+            .collect(),
+        AsmInstruction::BeqEI(label, lhs, rhs) => (0..FIELD_EXTENSION_DEGREE)
+            .rev()
+            .map(|i|
+            // if register[lhs + i] == rhs[i] for i = 0..4, pc <- labels[label]
+            inst(
+                if i == 0 { BEQ } else { BNE },
+                register(lhs - ((i * WORD_SIZE) as i32)),
+                rhs.as_base_slice()[i],
+                if i == 0 {
+                    labels(label) - (pc + F::from_canonical_usize(FIELD_EXTENSION_DEGREE - 1))
+                } else {
+                    F::from_canonical_usize(i + 1)
+                },
+                AS::Register,
+                AS::Register,
+            ))
+            .collect(),
         AsmInstruction::Trap => vec![
             // pc <- -1 (causes trace generation to fail)
             inst(
