@@ -1,6 +1,13 @@
 use clap::{Parser, Subcommand};
 
-use crate::commands::{predicate::PredicateCommand, rw::RwCommand};
+use crate::{
+    commands::{
+        benchmark_execute,
+        predicate::{run_predicate_bench, PredicateCommand},
+        rw::{run_rw_bench, RwCommand},
+    },
+    utils::table_gen::{generate_incremental_afi_rw, generate_random_afi_rw},
+};
 
 #[derive(Debug, Parser)]
 #[command(author, version, about = "AFS Benchmark")]
@@ -25,8 +32,32 @@ impl Cli {
     pub fn run() {
         let cli = Self::parse();
         match cli.command {
-            Commands::Rw(rw) => rw.execute().unwrap(),
-            Commands::Predicate(predicate) => predicate.execute().unwrap(),
+            Commands::Rw(rw) => {
+                let benchmark_name = "ReadWrite".to_string();
+                let scenario = format!("r{}%, w{}%", rw.percent_reads, rw.percent_writes);
+                let common = rw.common;
+                benchmark_execute(
+                    benchmark_name,
+                    scenario,
+                    common,
+                    run_rw_bench,
+                    generate_random_afi_rw,
+                )
+                .unwrap();
+            }
+            Commands::Predicate(predicate) => {
+                let benchmark_name = "Predicate".to_string();
+                let scenario = format!("{} {}", predicate.predicate, predicate.value);
+                let common = predicate.common;
+                benchmark_execute(
+                    benchmark_name,
+                    scenario,
+                    common,
+                    run_predicate_bench,
+                    generate_incremental_afi_rw,
+                )
+                .unwrap();
+            }
         }
     }
 }

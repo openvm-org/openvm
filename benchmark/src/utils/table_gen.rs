@@ -111,6 +111,61 @@ pub fn generate_random_afi_rw(
     Ok(())
 }
 
+pub fn generate_incremental_afi_rw(
+    config: &PageConfig,
+    table_id: String,
+    afi_path: String,
+    percent_reads: usize,
+    percent_writes: usize,
+) -> Result<()> {
+    let index_bytes = config.page.index_bytes;
+    let data_bytes = config.page.data_bytes;
+    let height = config.page.height;
+    let max_rw_ops = config.page.max_rw_ops;
+    let max_writes = max_rw_ops * percent_writes / 100;
+    let max_reads = max_rw_ops * percent_reads / 100;
+
+    let mut file = File::create(afi_path.as_str())?;
+
+    // Write AFI header
+    let header = AfsHeader::new(table_id, index_bytes, data_bytes);
+    writeln!(file, "TABLE_ID {}", header.table_id)?;
+    writeln!(file, "INDEX_BYTES {}", header.index_bytes)?;
+    writeln!(file, "DATA_BYTES {}", header.data_bytes)?;
+
+    let max_inserts = min(height, max_writes);
+
+    // Generate `INSERT` instructions
+    let mut index_ctr: usize = 1;
+    for _ in 0..max_inserts {
+        let idx = index_ctr.to_be_bytes().to_vec();
+        let hex_value = hex::encode(idx);
+        let str_val = format!("0x{}", hex_value);
+        writeln!(file, "INSERT {} {}", str_val, str_val)?;
+        index_ctr += 1;
+    }
+
+    // Generate `WRITE` instructions
+    if max_inserts < max_writes {
+        for i in max_inserts..max_writes {
+            let idx = (i % index_ctr).to_be_bytes().to_vec();
+            let hex_value = hex::encode(idx);
+            let str_val = format!("0x{}", hex_value);
+            writeln!(file, "WRITE {} {}", str_val, str_val)?;
+        }
+    }
+
+    // Generate `READ` instructions
+    for i in 0..max_reads {
+        let idx = (i % index_ctr).to_be_bytes().to_vec();
+        let hex_value = hex::encode(idx);
+        let str_val = format!("0x{}", hex_value);
+        writeln!(file, "READ {}", str_val)?;
+    }
+
+    Ok(())
+}
+
 fn generate_random_hex_string(num_bytes: usize) -> String {
     let mut rng = thread_rng();
     let bytes = (0..num_bytes)
