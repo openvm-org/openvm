@@ -11,3 +11,8 @@ Cargo.lock
 **/root
 **/leaf
 **/internal
+
+.cache/
+
+# This directory is used by RustRover (and any other JetBrains IDE)
+.idea/

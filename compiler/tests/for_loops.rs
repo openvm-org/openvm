@@ -9,11 +9,10 @@ use afs_compiler::asm::AsmConfig;
 use afs_compiler::ir::Array;
 use afs_compiler::ir::SymbolicVar;
 use afs_compiler::ir::Var;
+use stark_vm::cpu::WORD_SIZE;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
-
-const WORD_SIZE: usize = 1;
 
 #[test]
 fn test_compiler_for_loops() {
@@ -49,9 +48,9 @@ fn test_compiler_for_loops() {
 
     builder.halt();
 
-    let program = builder.compile_isa();
+    let program = builder.compile_isa::<WORD_SIZE>();
     display_program(&program);
-    execute_program::<WORD_SIZE, _>(program);
+    execute_program::<WORD_SIZE, _>(program, vec![]);
 
     // let program = builder.compile_program();
 
@@ -89,8 +88,8 @@ fn test_compiler_nested_array_loop() {
 
     builder.halt();
 
-    let program = builder.compile_isa();
-    execute_program::<WORD_SIZE, _>(program);
+    let program = builder.compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE, _>(program, vec![]);
 
     // let code = builder.compile_asm();
 
@@ -175,8 +174,8 @@ fn test_compiler_break() {
 
     builder.halt();
 
-    let program = builder.compile_isa();
-    execute_program::<WORD_SIZE, _>(program);
+    // let program = builder.compile_isa();
+    // execute_program::<WORD_SIZE, _>(program);
 
     // println!("{}", code);
 
@@ -206,8 +205,8 @@ fn test_compiler_step_by() {
 
     builder.halt();
 
-    let program = builder.compile_isa();
-    execute_program::<WORD_SIZE, _>(program);
+    let program = builder.compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE, _>(program, vec![]);
 
     // let program = builder.compile_program();
 
@@ -232,8 +231,8 @@ fn test_compiler_bneinc() {
 
     builder.halt();
 
-    let program = builder.compile_isa();
-    execute_program::<WORD_SIZE, _>(program);
+    let program = builder.compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE, _>(program, vec![]);
 
     // let code = builder.clone().compile_asm();
 

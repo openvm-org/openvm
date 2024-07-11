@@ -3,7 +3,7 @@ use logical_interface::{
     afs_interface::AfsInterface,
     mock_db::MockDb,
     table::types::TableMetadata,
-    utils::{string_to_be_vec, uint_to_be_vec},
+    utils::{string_to_u8_vec, uint_to_be_vec},
 };
 
 fn insert_data(interface: &mut AfsInterface, table_id: String, key: Vec<u8>, value: Vec<u8>) {
@@ -16,13 +16,13 @@ fn insert_data(interface: &mut AfsInterface, table_id: String, key: Vec<u8>, val
 
 #[test]
 pub fn test_interface_mock_db() {
-    let default_table_metadata = TableMetadata::new(32, 32);
+    let table_metadata = TableMetadata::new(32, 32);
     let index_bytes = 4;
     let data_bytes = 8;
-    let mut mock_db = MockDb::new(default_table_metadata.clone());
+    let mut mock_db = MockDb::new();
     let mut interface = AfsInterface::new(index_bytes, data_bytes, &mut mock_db);
     let table_id = String::from("0");
-    let create = interface.create_table(table_id.clone(), default_table_metadata);
+    let create = interface.create_table(table_id.clone(), table_metadata);
     assert!(create.is_some());
     insert_data(
         &mut interface,
@@ -40,13 +40,13 @@ pub fn test_interface_mock_db() {
 
 #[test]
 pub fn test_interface_get_table() {
-    let default_table_metadata = TableMetadata::new(32, 32);
+    let table_metadata = TableMetadata::new(32, 32);
     let index_bytes = 4;
     let data_bytes = 8;
-    let mut mock_db = MockDb::new(default_table_metadata.clone());
+    let mut mock_db = MockDb::new();
     let mut interface = AfsInterface::new(index_bytes, data_bytes, &mut mock_db);
     let table_id = String::from("10");
-    let create = interface.create_table(table_id.clone(), default_table_metadata);
+    let create = interface.create_table(table_id.clone(), table_metadata);
     assert!(create.is_some());
     insert_data(
         &mut interface,
@@ -69,18 +69,18 @@ pub fn test_interface_get_table() {
 
 #[test]
 pub fn test_interface_large_values() {
-    let default_table_metadata = TableMetadata::new(32, 1024);
+    let table_metadata = TableMetadata::new(32, 1024);
     let index_bytes = 32;
     let data_bytes = 32;
-    let mut mock_db = MockDb::new(default_table_metadata.clone());
+    let mut mock_db = MockDb::new();
     let mut interface = AfsInterface::new(index_bytes, data_bytes, &mut mock_db);
     let table_id = String::from("0x1234");
-    let create = interface.create_table(table_id.clone(), default_table_metadata);
+    let create = interface.create_table(table_id.clone(), table_metadata);
     assert!(create.is_some());
     insert_data(
         &mut interface,
         table_id.clone(),
-        string_to_be_vec(
+        string_to_u8_vec(
             "0xf221eb52f500a1db8bf0de52d2f2da5d208498b03cef6597be489c2207e1c576".to_string(),
             index_bytes,
         ),
@@ -90,7 +90,7 @@ pub fn test_interface_large_values() {
         &mut interface,
         table_id.clone(),
         uint_to_be_vec(1000, index_bytes),
-        string_to_be_vec(
+        string_to_u8_vec(
             "0x1f221eb52f500a1db8bf0de52d2f2da5d208498b03cef6597be489c2207e1c5".to_string(),
             data_bytes,
         ),
@@ -98,7 +98,7 @@ pub fn test_interface_large_values() {
     let table = interface
         .get_table(table_id.clone())
         .expect("Error getting table");
-    let read0 = table.read(string_to_be_vec(
+    let read0 = table.read(string_to_u8_vec(
         "0xf221eb52f500a1db8bf0de52d2f2da5d208498b03cef6597be489c2207e1c576".to_string(),
         index_bytes,
     ));
@@ -106,7 +106,7 @@ pub fn test_interface_large_values() {
     let read1 = table.read(uint_to_be_vec(1000, index_bytes));
     assert_eq!(
         read1,
-        Some(string_to_be_vec(
+        Some(string_to_u8_vec(
             "0x1f221eb52f500a1db8bf0de52d2f2da5d208498b03cef6597be489c2207e1c5".to_string(),
             data_bytes,
         ))
@@ -125,14 +125,14 @@ pub fn test_interface_large_values() {
 
 #[test]
 pub fn test_interface_large_tables() {
-    let default_table_metadata = TableMetadata::new(32, 1024);
+    let table_metadata = TableMetadata::new(32, 1024);
     let index_bytes = 32;
     let data_bytes = 32;
-    let mut mock_db = MockDb::new(default_table_metadata.clone());
+    let mut mock_db = MockDb::new();
     let mut interface = AfsInterface::new(index_bytes, data_bytes, &mut mock_db);
 
     for table_id in 0..10 {
-        let create = interface.create_table(table_id.to_string(), default_table_metadata.clone());
+        let create = interface.create_table(table_id.to_string(), table_metadata.clone());
         assert!(create.is_some());
         for i in 0..128 {
             let value: Vec<u8> = FixedBytes::<32>::random().to_vec();
@@ -151,13 +151,13 @@ pub fn test_interface_large_tables() {
 #[test]
 #[should_panic]
 pub fn test_table_input_too_large() {
-    let default_table_metadata = TableMetadata::new(2, 1024);
+    let table_metadata = TableMetadata::new(2, 1024);
     let index_bytes = 8;
     let data_bytes = 8;
-    let mut mock_db = MockDb::new(default_table_metadata.clone());
+    let mut mock_db = MockDb::new();
     let mut interface = AfsInterface::new(index_bytes, data_bytes, &mut mock_db);
     let table_id = String::from("0x01");
-    let _create = interface.create_table(table_id.clone(), default_table_metadata);
+    let _create = interface.create_table(table_id.clone(), table_metadata);
     insert_data(
         &mut interface,
         table_id.clone(),
@@ -168,15 +168,15 @@ pub fn test_table_input_too_large() {
 
 #[test]
 pub fn test_vec_index() {
-    let default_table_metadata = TableMetadata::new(32, 1024);
+    let table_metadata = TableMetadata::new(32, 1024);
     let index_bytes = 8;
     let data_bytes = 32;
-    let mut mock_db = MockDb::new(default_table_metadata.clone());
+    let mut mock_db = MockDb::new();
     let idx0 = Vec::from([1; 8]);
     let idx1 = Vec::from([2; 8]);
     let mut interface = AfsInterface::new(index_bytes, data_bytes, &mut mock_db);
     let table_id = String::from("0x100000000");
-    let create = interface.create_table(table_id.clone(), default_table_metadata);
+    let create = interface.create_table(table_id.clone(), table_metadata);
     assert!(create.is_some());
     insert_data(
         &mut interface,
@@ -199,15 +199,15 @@ pub fn test_vec_index() {
 
 #[test]
 pub fn test_vec_data() {
-    let default_table_metadata = TableMetadata::new(32, 1024);
+    let table_metadata = TableMetadata::new(32, 1024);
     let index_bytes = 32;
     let data_bytes = 1024;
-    let mut mock_db = MockDb::new(default_table_metadata.clone());
+    let mut mock_db = MockDb::new();
     let data0 = Vec::from([1; 1024]);
     let data1 = Vec::from([2; 1024]);
     let mut interface = AfsInterface::new(index_bytes, data_bytes, &mut mock_db);
     let table_id = String::from("0xffaaccee");
-    let create = interface.create_table(table_id.clone(), default_table_metadata);
+    let create = interface.create_table(table_id.clone(), table_metadata);
     assert!(create.is_some());
     insert_data(
         &mut interface,

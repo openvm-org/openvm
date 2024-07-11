@@ -1,7 +1,10 @@
 use p3_field::PrimeField32;
-use stark_vm::cpu::{
-    trace::{Instruction, ProgramExecution},
-    CpuAir, CpuOptions,
+use stark_vm::{
+    cpu::trace::Instruction,
+    vm::{
+        config::{VmConfig, VmParamsConfig},
+        VirtualMachine,
+    },
 };
 
 pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
@@ -16,15 +19,25 @@ pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
 
 pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(
     program: Vec<Instruction<F>>,
-) -> ProgramExecution<WORD_SIZE, F> {
-    let cpu = CpuAir::new(CpuOptions {
-        field_arithmetic_enabled: true,
-    });
-    cpu.generate_program_execution(program).unwrap()
+    witness_stream: Vec<Vec<F>>,
+) {
+    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
+        VmConfig {
+            vm: VmParamsConfig {
+                field_arithmetic_enabled: true,
+                field_extension_enabled: false,
+                limb_bits: 28,
+                decomp: 4,
+            },
+        },
+        program,
+        witness_stream,
+    );
+    vm.traces().unwrap();
 }
 
 pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
-    for (pc, instruction) in program.iter().enumerate() {
+    for instruction in program.iter() {
         let Instruction {
             opcode,
             op_a,
@@ -33,9 +46,6 @@ pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
             d,
             e,
         } = instruction;
-        println!(
-            "{} | {:?} {} {} {} {} {}",
-            pc, opcode, op_a, op_b, op_c, d, e
-        );
+        println!("{:?} {} {} {} {} {}", opcode, op_a, op_b, op_c, d, e);
     }
 }

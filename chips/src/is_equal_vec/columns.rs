@@ -31,6 +31,10 @@ pub struct IsEqualVecAuxCols<T> {
 }
 
 impl<T: Clone> IsEqualVecAuxCols<T> {
+    pub fn new(prods: Vec<T>, invs: Vec<T>) -> Self {
+        Self { prods, invs }
+    }
+
     pub fn flatten(&self) -> Vec<T> {
         self.prods.iter().chain(self.invs.iter()).cloned().collect()
     }
@@ -38,6 +42,7 @@ impl<T: Clone> IsEqualVecAuxCols<T> {
     pub fn from_slice(slc: &[T], vec_len: usize) -> Self {
         let prods = slc[0..vec_len].to_vec();
         let invs = slc[vec_len..2 * vec_len].to_vec();
+
         Self { prods, invs }
     }
 

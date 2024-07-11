@@ -4,8 +4,8 @@ use backtrace::Backtrace;
 use p3_field::AbstractField;
 
 use super::{
-    Array, Config, DslIr, Ext, Felt, FromConstant, SymbolicExt, SymbolicFelt, SymbolicUsize,
-    SymbolicVar, Usize, Var, Variable,
+    Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, Ptr, SymbolicExt,
+    SymbolicFelt, SymbolicUsize, SymbolicVar, Usize, Var, Variable,
 };
 
 /// TracedVec is a Vec wrapper that records a trace whenever an element is pushed. When extending
@@ -332,58 +332,33 @@ impl<C: Config> Builder<C> {
         self.operations.push(DslIr::PrintE(dst));
     }
 
-    /// Hint the length of the next vector of variables.
-    pub fn hint_len(&mut self) -> Var<C::N> {
-        let len = self.uninit();
-        self.operations.push(DslIr::HintLen(len));
-        len
-    }
+    /// Hint an array of variables.
+    ///
+    /// Writes the next element of the witness stream into memory and returns it.
+    pub fn hint<V: MemVariable<C>>(&mut self) -> Array<C, V> {
+        // Allocate space for the length. We assume that mem[ptr..] is empty.
+        let ptr = self.alloc(Usize::Const(1), V::size_of());
 
-    /// Hint a single variable.
-    pub fn hint_var(&mut self) -> Var<C::N> {
-        let len = self.hint_len();
-        let arr = self.dyn_array(len);
-        self.operations.push(DslIr::HintVars(arr.clone()));
-        self.get(&arr, 0)
-    }
+        // Write length + data to memory starting at mem[ptr].
+        self.operations.push(DslIr::Hint(ptr));
 
-    /// Hint a single felt.
-    pub fn hint_felt(&mut self) -> Felt<C::F> {
-        let len = self.hint_len();
-        let arr = self.dyn_array(len);
-        self.operations.push(DslIr::HintFelts(arr.clone()));
-        self.get(&arr, 0)
-    }
+        // Copy length into local variable.
+        let index = MemIndex {
+            index: Usize::Const(0),
+            offset: 0,
+            size: V::size_of(),
+        };
+        let vlen: Var<C::N> = self.uninit();
+        self.load(vlen, ptr, index);
 
-    /// Hint a single ext.
-    pub fn hint_ext(&mut self) -> Ext<C::F, C::EF> {
-        let len = self.hint_len();
-        let arr = self.dyn_array(len);
-        self.operations.push(DslIr::HintExts(arr.clone()));
-        self.get(&arr, 0)
-    }
+        // Create array of length vlen starting at mem[ptr + 1].
+        let arr_addr: Var<C::N> = self.eval(ptr.address + C::N::one());
+        let arr_ptr = Ptr::<C::N> { address: arr_addr };
+        let arr = Array::Dyn(arr_ptr, Usize::Var(vlen));
 
-    /// Hint a vector of variables.
-    pub fn hint_vars(&mut self) -> Array<C, Var<C::N>> {
-        let len = self.hint_len();
-        let arr = self.dyn_array(len);
-        self.operations.push(DslIr::HintVars(arr.clone()));
-        arr
-    }
+        // Now allocate post hoc to advance the free memory pointer.
+        self.push(DslIr::Alloc(ptr, vlen.into(), V::size_of()));
 
-    /// Hint a vector of felts.
-    pub fn hint_felts(&mut self) -> Array<C, Felt<C::F>> {
-        let len = self.hint_len();
-        let arr = self.dyn_array(len);
-        self.operations.push(DslIr::HintFelts(arr.clone()));
-        arr
-    }
-
-    /// Hint a vector of exts.
-    pub fn hint_exts(&mut self) -> Array<C, Ext<C::F, C::EF>> {
-        let len = self.hint_len();
-        let arr = self.dyn_array(len);
-        self.operations.push(DslIr::HintExts(arr.clone()));
         arr
     }
 

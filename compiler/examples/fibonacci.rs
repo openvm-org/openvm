@@ -5,6 +5,7 @@ use p3_field::AbstractField;
 
 use afs_compiler::asm::AsmBuilder;
 use afs_compiler::ir::{Felt, Var};
+use stark_vm::cpu::WORD_SIZE;
 
 fn fibonacci(n: u32) -> u32 {
     if n == 0 {
@@ -20,8 +21,6 @@ fn fibonacci(n: u32) -> u32 {
         a
     }
 }
-
-const WORD_SIZE: usize = 1;
 
 fn main() {
     type F = BabyBear;
@@ -46,12 +45,12 @@ fn main() {
     let expected_value = F::from_canonical_u32(fibonacci(n_val));
     builder.assert_felt_eq(a, expected_value);
 
-    builder.print_f(a);
+    //builder.print_f(a);
     builder.halt();
 
-    let program = builder.compile_isa();
+    let program = builder.compile_isa::<WORD_SIZE>();
     display_program(&program);
-    execute_program::<WORD_SIZE, _>(program);
+    execute_program::<WORD_SIZE, _>(program, vec![]);
 
     // let program = code.machine_code();
     // println!("Program size = {}", program.instructions.len());
