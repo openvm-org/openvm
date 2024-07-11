@@ -60,6 +60,23 @@ pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
         println!("{:?} {} {} {} {} {}", opcode, op_a, op_b, op_c, d, e);
     }
 }
+
+pub fn display_program_with_pc<F: PrimeField32>(program: &[Instruction<F>]) {
+    for (pc, instruction) in program.iter().enumerate() {
+        let Instruction {
+            opcode,
+            op_a,
+            op_b,
+            op_c,
+            d,
+            e,
+        } = instruction;
+        println!(
+            "{} | {:?} {} {} {} {} {}",
+            pc, opcode, op_a, op_b, op_c, d, e
+        );
+    }
+}
 pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + TwoAdicField>(
     builder: AsmBuilder<BabyBear, EF>,
     witness_stream: Vec<Vec<BabyBear>>,

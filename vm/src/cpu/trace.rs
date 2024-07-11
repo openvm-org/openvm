@@ -181,6 +181,9 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 }};
             }
 
+            if opcode == FAIL {
+                return Err(ExecutionError::Fail(pc_usize));
+            }
             if opcode != PRINTF && !vm.options().enabled_instructions().contains(&opcode) {
                 return Err(ExecutionError::DisabledOperation(pc_usize, opcode));
             }
@@ -232,7 +235,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                         .calculate(opcode, (operand1, operand2));
                     write!(d, a, result);
                 }
-                FAIL => return Err(ExecutionError::Fail(pc_usize)),
+                FAIL => panic!("Unreachable code"),
                 PRINTF => {
                     let value = read!(d, a);
                     println!("{}", value);

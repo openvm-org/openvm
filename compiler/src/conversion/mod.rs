@@ -1,3 +1,5 @@
+use std::array::from_fn;
+
 use p3_field::{ExtensionField, PrimeField64};
 
 use field_extension_conversion::{convert_field_extension, convert_field_extension_with_base};
@@ -52,8 +54,11 @@ impl AS {
     }
 }
 
+const POSEIDON2_WIDTH: usize = 16;
+const NUM_UTILITY_REGISTERS: usize = POSEIDON2_WIDTH;
+
 fn register<F: PrimeField64>(value: i32) -> F {
-    let value = 1 - value;
+    let value = (NUM_UTILITY_REGISTERS as i32) - value;
     //println!("register index: {}", value);
     assert!(value > 0);
     F::from_canonical_usize(value as usize)
@@ -269,13 +274,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
     options: CompilerOptions,
 ) -> Vec<Instruction<F>> {
     let word_size_i32 = WORD_SIZE as i32;
-
-    let utility_registers = [
-        F::zero(),
-        F::from_canonical_usize(1),
-        F::from_canonical_usize(2),
-        F::from_canonical_usize(3),
-    ];
+    let utility_registers: [F; NUM_UTILITY_REGISTERS] = from_fn(|i| F::from_canonical_usize(i));
     let utility_register = utility_registers[0];
 
     match instruction {
@@ -701,12 +700,13 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         | AsmInstruction::DivE(..)
         | AsmInstruction::DivEI(..)
         | AsmInstruction::DivEIN(..) => {
+            let fe_utility_registers = from_fn(|i| utility_registers[i]);
             if options.field_extension_enabled {
-                convert_field_extension::<WORD_SIZE, F, EF>(instruction, utility_registers)
+                convert_field_extension::<WORD_SIZE, F, EF>(instruction, fe_utility_registers)
             } else if options.field_arithmetic_enabled {
                 convert_field_extension_with_base::<WORD_SIZE, F, EF>(
                     instruction,
-                    utility_registers,
+                    fe_utility_registers,
                 )
             } else {
                 panic!(
@@ -715,6 +715,39 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 )
             }
         }
+        AsmInstruction::Poseidon2Permute(src, dst) => {
+            let mut result = vec![];
+            for i in 0..POSEIDON2_WIDTH {
+                result.push(inst(
+                    LOADW,
+                    utility_registers[i],
+                    F::from_canonical_usize(i),
+                    register(src),
+                    AS::Register,
+                    AS::Memory,
+                ))
+            }
+            result.push(inst(
+                PERM_POS2,
+                utility_registers[0],
+                utility_registers[POSEIDON2_WIDTH / 2],
+                utility_registers[0],
+                AS::Register,
+                AS::Register,
+            ));
+            for i in 0..POSEIDON2_WIDTH {
+                result.push(inst(
+                    STOREW,
+                    utility_registers[i],
+                    F::from_canonical_usize(i),
+                    register(dst),
+                    AS::Register,
+                    AS::Memory,
+                ))
+            }
+            result
+        }
+        AsmInstruction::CycleTracker(_) => vec![],
         _ => panic!("Unsupported instruction {:?}", instruction),
     }
 }
