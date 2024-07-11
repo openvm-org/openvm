@@ -194,6 +194,14 @@ impl Page {
             self.width(),
         )
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = &PageCols<u32>> {
+        self.rows.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut PageCols<u32>> {
+        self.rows.iter_mut()
+    }
 }
 
 /// Provides indexing by a row index

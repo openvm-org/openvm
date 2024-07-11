@@ -8,6 +8,7 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 
 use super::columns::OfflineCheckerCols;
 use super::OfflineChecker;
+use crate::common::indexed_page_editor::IndexedPageEditor;
 use crate::common::page::Page;
 use crate::page_rw_checker::page_controller::{OpType, Operation};
 use crate::range_gate::RangeCheckerGateChip;
@@ -33,6 +34,8 @@ impl OfflineChecker {
     where
         Val<SC>: PrimeField,
     {
+        let mut page_editor = IndexedPageEditor::from_page(page);
+
         // Creating a timestamp bigger than all others
         let max_clk = ops.iter().map(|op| op.clk).max().unwrap_or(0) + 1;
 
@@ -144,12 +147,12 @@ impl OfflineChecker {
                 j += 1;
             }
 
-            if page.contains(&cur_idx) {
+            if page_editor.contains(&cur_idx) {
                 // Adding the is_initial row to the trace
                 rows.push(gen_row(
                     &mut is_first_row,
                     &cur_idx,
-                    &page[&cur_idx],
+                    &page_editor[&cur_idx],
                     true,
                     false,
                     false,
@@ -163,13 +166,13 @@ impl OfflineChecker {
 
             for op in ops.iter().take(j).skip(i) {
                 if op.op_type == OpType::Write {
-                    if !page.contains(&cur_idx) {
-                        page.insert(&cur_idx, &op.data);
+                    if !page_editor.contains(&cur_idx) {
+                        page_editor.insert(&cur_idx, &op.data);
                     } else {
-                        page[&cur_idx].clone_from(&op.data);
+                        page_editor[&cur_idx].clone_from(&op.data);
                     }
                 } else if op.op_type == OpType::Delete {
-                    page.delete(&cur_idx);
+                    page_editor.delete(&cur_idx);
                 }
 
                 rows.push(gen_row(
@@ -187,8 +190,8 @@ impl OfflineChecker {
                 ));
             }
 
-            let final_data = if page.contains(&cur_idx) {
-                &page[&cur_idx]
+            let final_data = if page_editor.contains(&cur_idx) {
+                &page_editor[&cur_idx]
             } else {
                 &vec![0; self.data_len]
             };
@@ -202,7 +205,7 @@ impl OfflineChecker {
                 true,
                 false,
                 max_clk,
-                if page.contains(&cur_idx) { 0 } else { 2 }, // 0 (read) for is_final_write, 2 (delete) for is_final_delete
+                if page_editor.contains(&cur_idx) { 0 } else { 2 }, // 0 (read) for is_final_write, 2 (delete) for is_final_delete
                 &mut last_idx,
                 &mut last_clk,
                 false,
@@ -213,6 +216,8 @@ impl OfflineChecker {
 
         // Ensure that trace degree is a power of two
         assert!(trace_degree > 0 && trace_degree & (trace_degree - 1) == 0);
+
+        *page = page_editor.to_page();
 
         // dummy idx
         let idx = page[0].idx.clone();
