@@ -4,8 +4,8 @@ use backtrace::Backtrace;
 use p3_field::AbstractField;
 
 use super::{
-    Array, Config, DslIr, Ext, Felt, FromConstant, SymbolicExt, SymbolicFelt, SymbolicUsize,
-    SymbolicVar, Usize, Var, Variable,
+    Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, Ptr, SymbolicExt,
+    SymbolicFelt, SymbolicUsize, SymbolicVar, Usize, Var, Variable,
 };
 
 /// TracedVec is a Vec wrapper that records a trace whenever an element is pushed. When extending
@@ -33,7 +33,7 @@ impl<T> From<Vec<T>> for TracedVec<T> {
 }
 
 impl<T> TracedVec<T> {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             vec: Vec::new(),
             traces: Vec::new(),
@@ -96,35 +96,36 @@ pub struct Builder<C: Config> {
     pub(crate) ext_count: u32,
     pub(crate) var_count: u32,
     pub operations: TracedVec<DslIr<C>>,
-    pub nb_public_values: Option<Var<C::N>>,
-    pub public_values_buffer: Option<Array<C, Felt<C::F>>>,
-    pub witness_var_count: u32,
-    pub witness_felt_count: u32,
-    pub witness_ext_count: u32,
-    pub debug: bool,
-    pub po2_table: Option<Array<C, Var<C::N>>>,
+    pub(crate) nb_public_values: Option<Var<C::N>>,
+    pub(crate) witness_var_count: u32,
+    pub(crate) witness_felt_count: u32,
+    pub(crate) witness_ext_count: u32,
+    pub(crate) debug: bool,
+    pub(crate) is_sub_builder: bool,
 }
 
 impl<C: Config> Builder<C> {
     /// Creates a new builder with a given number of counts for each type.
-    pub fn new(
+    pub fn new_sub_builder(
         var_count: u32,
         felt_count: u32,
         ext_count: u32,
         nb_public_values: Option<Var<C::N>>,
+        debug: bool,
     ) -> Self {
         Self {
             felt_count,
             ext_count,
             var_count,
+            // Witness counts are only used when the target is a gnark circuit.  And sub-builders are
+            // not used when the target is a gnark circuit, so it's fine to set the witness counts to 0.
             witness_var_count: 0,
             witness_felt_count: 0,
             witness_ext_count: 0,
             operations: Default::default(),
             nb_public_values,
-            public_values_buffer: None,
-            debug: false,
-            po2_table: None,
+            debug,
+            is_sub_builder: true,
         }
     }
 
@@ -332,62 +333,86 @@ impl<C: Config> Builder<C> {
         self.operations.push(DslIr::PrintE(dst));
     }
 
-    /// Hint the length of the next vector of variables.
-    pub fn hint_len(&mut self) -> Var<C::N> {
-        let len = self.uninit();
-        self.operations.push(DslIr::HintLen(len));
-        len
-    }
-
-    /// Hint a single variable.
     pub fn hint_var(&mut self) -> Var<C::N> {
-        let len = self.hint_len();
-        let arr = self.dyn_array(len);
-        self.operations.push(DslIr::HintVars(arr.clone()));
+        let arr = self.hint_vars();
         self.get(&arr, 0)
     }
 
-    /// Hint a single felt.
     pub fn hint_felt(&mut self) -> Felt<C::F> {
-        let len = self.hint_len();
-        let arr = self.dyn_array(len);
-        self.operations.push(DslIr::HintFelts(arr.clone()));
+        let arr = self.hint_felts();
         self.get(&arr, 0)
     }
 
-    /// Hint a single ext.
     pub fn hint_ext(&mut self) -> Ext<C::F, C::EF> {
-        let len = self.hint_len();
-        let arr = self.dyn_array(len);
-        self.operations.push(DslIr::HintExts(arr.clone()));
+        let arr = self.hint_exts();
         self.get(&arr, 0)
     }
 
     /// Hint a vector of variables.
+    ///
+    /// Writes the next element of the witness stream into memory and returns it.
     pub fn hint_vars(&mut self) -> Array<C, Var<C::N>> {
-        let len = self.hint_len();
-        let arr = self.dyn_array(len);
-        self.operations.push(DslIr::HintVars(arr.clone()));
-        arr
+        self.hint_words()
     }
 
     /// Hint a vector of felts.
     pub fn hint_felts(&mut self) -> Array<C, Felt<C::F>> {
-        let len = self.hint_len();
-        let arr = self.dyn_array(len);
-        self.operations.push(DslIr::HintFelts(arr.clone()));
+        self.hint_words()
+    }
+
+    /// Hints an array of V and assumes V::size_of() == 1.
+    fn hint_words<V: MemVariable<C>>(&mut self) -> Array<C, V> {
+        assert_eq!(V::size_of(), 1);
+
+        // Allocate space for the length variable. We assume that mem[ptr..] is empty.
+        let ptr = self.alloc(Usize::Const(1), 1);
+
+        // Write length + data to memory starting at mem[ptr].
+        self.operations.push(DslIr::Hint(ptr));
+
+        // Copy length into local variable.
+        let index = MemIndex {
+            index: Usize::Const(0),
+            offset: 0,
+            size: 1,
+        };
+        let vlen: Var<C::N> = self.uninit();
+        self.load(vlen, ptr, index);
+
+        // Create array of length vlen starting at mem[ptr + 1].
+        let arr_addr: Var<C::N> = self.eval(ptr.address + C::N::one());
+        let arr_ptr = Ptr::<C::N> { address: arr_addr };
+        let arr = Array::Dyn(arr_ptr, Usize::Var(vlen));
+
+        // Now allocate post hoc to advance the free memory pointer.
+        self.push(DslIr::Alloc(ptr, vlen.into(), 1));
+
         arr
     }
 
     /// Hint a vector of exts.
+    ///
+    /// Emits two hint opcodes: the first for the number of exts, the second for the list of exts
+    /// themselves.
     pub fn hint_exts(&mut self) -> Array<C, Ext<C::F, C::EF>> {
-        let len = self.hint_len();
-        let arr = self.dyn_array(len);
-        self.operations.push(DslIr::HintExts(arr.clone()));
-        arr
+        let len = self.hint_var();
+        let flattened = self.hint_felts();
+
+        let size = <Ext<C::F, C::EF> as MemVariable<C>>::size_of();
+        self.assert_usize_eq(flattened.len(), len * C::N::from_canonical_usize(size));
+
+        // Simply recast memory as Array<Ext>.
+        match flattened {
+            Array::Fixed(_) => panic!("hint array is not dynamic"),
+            Array::Dyn(ptr, _) => Array::Dyn(ptr, Usize::Var(len)),
+        }
     }
 
     pub fn witness_var(&mut self) -> Var<C::N> {
+        assert!(
+            !self.is_sub_builder,
+            "Cannot create a witness var with a sub builder"
+        );
         let witness = self.uninit();
         self.operations
             .push(DslIr::WitnessVar(witness, self.witness_var_count));
@@ -396,6 +421,10 @@ impl<C: Config> Builder<C> {
     }
 
     pub fn witness_felt(&mut self) -> Felt<C::F> {
+        assert!(
+            !self.is_sub_builder,
+            "Cannot create a witness var with a sub builder"
+        );
         let witness = self.uninit();
         self.operations
             .push(DslIr::WitnessFelt(witness, self.witness_felt_count));
@@ -404,6 +433,10 @@ impl<C: Config> Builder<C> {
     }
 
     pub fn witness_ext(&mut self) -> Ext<C::F, C::EF> {
+        assert!(
+            !self.is_sub_builder,
+            "Cannot create a witness var with a sub builder"
+        );
         let witness = self.uninit();
         self.operations
             .push(DslIr::WitnessExt(witness, self.witness_ext_count));
@@ -431,6 +464,10 @@ impl<C: Config> Builder<C> {
 
     /// Register and commits a felt as public value.  This value will be constrained when verified.
     pub fn commit_public_value(&mut self, val: Felt<C::F>) {
+        assert!(
+            !self.is_sub_builder,
+            "Cannot commit to a public value with a sub builder"
+        );
         if self.nb_public_values.is_none() {
             self.nb_public_values = Some(self.eval(C::N::zero()));
         }
@@ -442,6 +479,10 @@ impl<C: Config> Builder<C> {
 
     /// Commits an array of felts in public values.
     pub fn commit_public_values(&mut self, vals: &Array<C, Felt<C::F>>) {
+        assert!(
+            !self.is_sub_builder,
+            "Cannot commit to public values with a sub builder"
+        );
         let len = vals.len();
         self.range(0, len).for_each(|i, builder| {
             let val = builder.get(vals, i);
@@ -491,11 +532,12 @@ impl<'a, C: Config> IfBuilder<'a, C> {
         let condition = self.condition();
 
         // Execute the `then` block and collect the instructions.
-        let mut f_builder = Builder::<C>::new(
+        let mut f_builder = Builder::<C>::new_sub_builder(
             self.builder.var_count,
             self.builder.felt_count,
             self.builder.ext_count,
             self.builder.nb_public_values,
+            self.builder.debug,
         );
         f(&mut f_builder);
         let then_instructions = f_builder.operations;
@@ -538,22 +580,24 @@ impl<'a, C: Config> IfBuilder<'a, C> {
     ) {
         // Get the condition reduced from the expressions for lhs and rhs.
         let condition = self.condition();
-        let mut then_builder = Builder::<C>::new(
+        let mut then_builder = Builder::<C>::new_sub_builder(
             self.builder.var_count,
             self.builder.felt_count,
             self.builder.ext_count,
             self.builder.nb_public_values,
+            self.builder.debug,
         );
 
         // Execute the `then` and `else_then` blocks and collect the instructions.
         then_f(&mut then_builder);
         let then_instructions = then_builder.operations;
 
-        let mut else_builder = Builder::<C>::new(
+        let mut else_builder = Builder::<C>::new_sub_builder(
             self.builder.var_count,
             self.builder.felt_count,
             self.builder.ext_count,
             self.builder.nb_public_values,
+            self.builder.debug,
         );
         else_f(&mut else_builder);
         let else_instructions = else_builder.operations;
@@ -674,7 +718,7 @@ pub struct RangeBuilder<'a, C: Config> {
 }
 
 impl<'a, C: Config> RangeBuilder<'a, C> {
-    pub fn step_by(mut self, step_size: usize) -> Self {
+    pub const fn step_by(mut self, step_size: usize) -> Self {
         self.step_size = step_size;
         self
     }
@@ -682,11 +726,12 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
     pub fn for_each(self, mut f: impl FnMut(Var<C::N>, &mut Builder<C>)) {
         let step_size = C::N::from_canonical_usize(self.step_size);
         let loop_variable: Var<C::N> = self.builder.uninit();
-        let mut loop_body_builder = Builder::<C>::new(
+        let mut loop_body_builder = Builder::<C>::new_sub_builder(
             self.builder.var_count,
             self.builder.felt_count,
             self.builder.ext_count,
             self.builder.nb_public_values,
+            self.builder.debug,
         );
 
         f(loop_variable, &mut loop_body_builder);

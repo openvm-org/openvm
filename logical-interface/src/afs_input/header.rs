@@ -14,6 +14,14 @@ pub struct AfsHeader {
 }
 
 impl AfsHeader {
+    pub fn new(table_id: String, index_bytes: usize, data_bytes: usize) -> AfsHeader {
+        AfsHeader {
+            table_id,
+            index_bytes,
+            data_bytes,
+        }
+    }
+
     pub fn parse(lines: Vec<String>) -> Result<AfsHeader> {
         let mut afs_header = AfsHeader {
             table_id: String::new(),

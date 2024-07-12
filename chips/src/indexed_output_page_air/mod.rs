@@ -8,7 +8,7 @@ pub mod trace;
 #[cfg(test)]
 pub mod tests;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct IndexedOutputPageAir {
     range_bus_index: usize,
 

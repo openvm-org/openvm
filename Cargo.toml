@@ -8,10 +8,11 @@ members = [
     "bin/afs",
     "bin/olap",
     "bin/predicate",
+    "benchmark",
     "logical-interface",
     "vm",
     "vm/bin",
-    "poseidon2",
+    "poseidon2-air",
 ]
 resolver = "2"
 

@@ -1,6 +1,7 @@
 pub mod air;
 pub mod bridge;
 
+#[derive(Clone, Debug)]
 pub struct PageReadAir {
     page_bus: usize,
     idx_len: usize,

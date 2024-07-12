@@ -15,8 +15,10 @@ pub fn test_initialize_interface() {
 #[test]
 pub fn test_initialize_interface_from_file() {
     let file_path = "tests/data/test_input_file_8_8.afi";
+    let index_bytes = 8;
+    let data_bytes = 8;
     let mut db = MockDb::new();
-    let mut interface = AfsInterface::new(8, 8, &mut db);
+    let mut interface = AfsInterface::new(index_bytes, data_bytes, &mut db);
     match interface.load_input_file(file_path) {
         Ok(_) => {}
         Err(e) => panic!("Error loading input file: {}", e),
@@ -30,20 +32,20 @@ pub fn test_initialize_interface_from_file() {
     );
     assert_eq!(
         table
-            .read(string_to_u8_vec(String::from("555"), 4))
+            .read(string_to_u8_vec(String::from("555"), index_bytes))
             .unwrap(),
-        uint_to_be_vec(1, 8)
+        uint_to_be_vec(1, data_bytes)
     );
     assert_eq!(
         table
-            .read(string_to_u8_vec(String::from("5006"), 4))
+            .read(string_to_u8_vec(String::from("5006"), index_bytes))
             .unwrap(),
-        uint_to_be_vec(9, 8)
+        uint_to_be_vec(9, data_bytes)
     );
     assert_eq!(
         table
-            .read(string_to_u8_vec(String::from("26892"), 4))
+            .read(string_to_u8_vec(String::from("26892"), index_bytes))
             .unwrap(),
-        uint_to_be_vec(5, 8)
+        uint_to_be_vec(5, data_bytes)
     );
 }

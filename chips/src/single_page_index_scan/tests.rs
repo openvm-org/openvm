@@ -36,7 +36,7 @@ fn index_scan_test(
     page_controller: &mut PageController<BabyBearPoseidon2Config>,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
 ) -> Result<(), VerificationError> {
-    let page_height = page.rows.len();
+    let page_height = page.height();
     assert!(page_height > 0);
 
     let (input_prover_data, output_prover_data) = page_controller.load_page(
@@ -54,7 +54,7 @@ fn index_scan_test(
 
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
     let page_width = 1 + idx_len + data_len;
-    let page_height = page.rows.len();
+    let page_height = page.height();
 
     page_controller.set_up_keygen_builder(
         &mut keygen_builder,

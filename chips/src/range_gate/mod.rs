@@ -53,4 +53,10 @@ impl RangeCheckerGateChip {
         let val_atomic = &self.count[val as usize];
         val_atomic.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
+
+    pub fn clear(&self) {
+        for i in 0..self.count.len() {
+            self.count[i].store(0, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
 }

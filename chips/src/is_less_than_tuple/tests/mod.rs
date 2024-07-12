@@ -49,7 +49,6 @@ fn test_is_less_than_tuple_chip() {
         (vec![26678, 233], vec![14321, 244]),
     ]);
     let range_checker_trace = range_checker.generate_trace();
-
     run_simple_test_no_pis(
         vec![&chip.air, &range_checker.air],
         vec![trace, range_checker_trace],

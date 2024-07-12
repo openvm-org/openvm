@@ -7,7 +7,7 @@ pub mod trace;
 
 use p3_field::Field;
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 /// A chip that checks if a number equals 0
 pub struct IsZeroAir;
 

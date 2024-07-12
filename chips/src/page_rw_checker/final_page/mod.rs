@@ -5,8 +5,8 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-#[derive(Clone)]
-pub(super) struct IndexedPageWriteAir {
+#[derive(Clone, Debug)]
+pub struct IndexedPageWriteAir {
     page_bus_index: usize,
 
     final_air: IndexedOutputPageAir,

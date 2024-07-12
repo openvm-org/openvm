@@ -122,7 +122,7 @@ where
     pub fn gen_output(&self, page: Page, x: Vec<u32>, page_width: usize, cmp: Comp) -> Page {
         let mut output: Vec<Vec<u32>> = vec![];
 
-        for page_row in &page.rows {
+        for page_row in page.iter() {
             let is_alloc = page_row.is_alloc;
             let idx = page_row.idx.clone();
             let data = page_row.data.clone();
@@ -267,11 +267,11 @@ where
             }
         }
 
-        let num_remaining = page.rows.len() - output.len();
+        let num_remaining = page.height() - output.len();
 
         output.extend((0..num_remaining).map(|_| vec![0; page_width]));
 
-        Page::from_2d_vec(&output, page.rows[0].idx.len(), page.rows[0].data.len())
+        Page::from_2d_vec(&output, page.idx_len(), page.data_len())
     }
 
     pub fn set_up_keygen_builder(
@@ -442,7 +442,7 @@ where
         // idx_decomp can't change between different pages since range_checker depends on it
         assert!(1 << idx_decomp == self.range_checker.range_max());
 
-        assert!(!page_input.rows.is_empty());
+        assert!(!page_input.is_empty());
 
         let bus_index = self.input_chip.air.page_bus_index;
 

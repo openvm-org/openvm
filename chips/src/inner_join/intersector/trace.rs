@@ -30,7 +30,7 @@ impl IntersectorAir {
         let mut t2_idx_mult = HashMap::new();
         let mut all_indices = HashSet::new();
 
-        for row in t1.rows.iter() {
+        for row in t1.iter() {
             if row.is_alloc == 0 {
                 continue;
             }
@@ -38,7 +38,7 @@ impl IntersectorAir {
             all_indices.insert(row.idx.clone());
         }
 
-        for row in t2.rows.iter() {
+        for row in t2.iter() {
             if row.is_alloc == 0 {
                 continue;
             }

@@ -1,3 +1,4 @@
+use color_eyre::eyre::Result;
 use serde_derive::{Deserialize, Serialize};
 
 use crate::table::types::{TableId, TableMetadata};
@@ -47,7 +48,7 @@ impl MockDb {
         deserialized
     }
 
-    pub fn save_to_file(&self, path: &str) -> std::io::Result<()> {
+    pub fn save_to_file(&self, path: &str) -> Result<()> {
         let serialized = bincode::serialize(&self).unwrap();
         let mut file = std::fs::File::create(path).unwrap();
         file.write_all(&serialized).unwrap();
