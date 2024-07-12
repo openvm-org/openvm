@@ -1,9 +1,24 @@
-use crate::indexed_output_page_air::{columns::IndexedOutputPageCols, IndexedOutputPageAir};
+use std::iter;
 
+use crate::indexed_output_page_air::{
+    columns::{IndexedOutputPageAuxCols, IndexedOutputPageCols},
+    IndexedOutputPageAir,
+};
+
+#[derive(Clone)]
 pub struct IndexedPageWriteCols<T> {
     /// The columns for IndexedOutputPageAir, which include the page itself
     /// and the extra columns for ensuring sorting
     pub final_page_cols: IndexedOutputPageCols<T>,
+    /// The multiplicity with which a row is received on the page_bus
+    pub rcv_mult: T,
+}
+
+#[derive(Clone)]
+pub struct IndexedPageWriteAuxCols<T> {
+    /// The columns for FinalPageAir, which include the page itself
+    /// and the extra columns for ensuting sorting
+    pub final_page_aux_cols: IndexedOutputPageAuxCols<T>,
     /// The multiplicity with which a row is received on the page_bus
     pub rcv_mult: T,
 }
@@ -32,5 +47,27 @@ impl<T: Clone> IndexedPageWriteCols<T> {
             ),
             rcv_mult: other[other.len() - 1].clone(),
         }
+    }
+}
+
+impl<T: Clone> IndexedPageWriteAuxCols<T> {
+    pub fn from_slice(slc: &[T], limb_bits: usize, decomp: usize, tuple_len: usize) -> Self {
+        Self {
+            final_page_aux_cols: IndexedOutputPageAuxCols::from_slice(
+                &slc[0..slc.len() - 1],
+                limb_bits,
+                decomp,
+                tuple_len,
+            ),
+            rcv_mult: slc[slc.len() - 1].clone(),
+        }
+    }
+
+    pub fn flatten(&self) -> Vec<T> {
+        self.final_page_aux_cols
+            .flatten()
+            .into_iter()
+            .chain(iter::once(self.rcv_mult.clone()))
+            .collect()
     }
 }

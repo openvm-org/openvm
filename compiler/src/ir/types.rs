@@ -3,9 +3,9 @@ use core::marker::PhantomData;
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use p3_field::AbstractField;
 use p3_field::ExtensionField;
 use p3_field::Field;
+use p3_field::{AbstractExtensionField, AbstractField};
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -96,7 +96,7 @@ impl<N> From<usize> for Usize<N> {
 }
 
 impl<N> Var<N> {
-    pub fn new(id: u32) -> Self {
+    pub const fn new(id: u32) -> Self {
         Self(id, PhantomData)
     }
 
@@ -110,7 +110,7 @@ impl<N> Var<N> {
 }
 
 impl<F> Felt<F> {
-    pub fn new(id: u32) -> Self {
+    pub const fn new(id: u32) -> Self {
         Self(id, PhantomData)
     }
 
@@ -131,7 +131,7 @@ impl<F> Felt<F> {
 }
 
 impl<F, EF> Ext<F, EF> {
-    pub fn new(id: u32) -> Self {
+    pub const fn new(id: u32) -> Self {
         Self(id, PhantomData)
     }
 
@@ -857,7 +857,6 @@ impl<C: Config> MemVariable<C> for Felt<C::F> {
 }
 
 impl<F: Field, EF: ExtensionField<F>> Ext<F, EF> {
-    // Todo: refactor base
     fn assign_with_caches<C: Config<F = F, EF = EF>>(
         &self,
         src: SymbolicExt<F, EF>,
@@ -1239,7 +1238,7 @@ impl<C: Config> Variable<C> for Ext<C::F, C::EF> {
 
 impl<C: Config> MemVariable<C> for Ext<C::F, C::EF> {
     fn size_of() -> usize {
-        1
+        C::EF::D
     }
 
     fn load(&self, ptr: Ptr<C::N>, index: MemIndex<C::N>, builder: &mut Builder<C>) {

@@ -1,4 +1,5 @@
 use enum_utils::FromStr;
+use p3_baby_bear::BabyBear;
 
 #[cfg(test)]
 pub mod tests;
@@ -15,6 +16,7 @@ pub const MEMORY_BUS: usize = 1;
 pub const ARITHMETIC_BUS: usize = 2;
 pub const FIELD_EXTENSION_BUS: usize = 3;
 pub const RANGE_CHECKER_BUS: usize = 4;
+pub const POSEIDON2_BUS: usize = 5;
 
 pub const CPU_MAX_READS_PER_CYCLE: usize = 2;
 pub const CPU_MAX_WRITES_PER_CYCLE: usize = 1;
@@ -24,6 +26,7 @@ pub const WORD_SIZE: usize = 1;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, FromStr, PartialOrd, Ord)]
 #[repr(usize)]
+#[allow(non_camel_case_types)]
 pub enum OpCode {
     LOADW = 0,
     STOREW = 1,
@@ -45,54 +48,68 @@ pub enum OpCode {
     BBE4MUL = 14,
     BBE4INV = 15,
 
-    HINT = 16,
+    PERM_POS2 = 16,
+    COMP_POS2 = 17,
+    HINT = 18,
 }
 
 impl OpCode {
     pub fn from_u8(value: u8) -> Option<Self> {
         match value {
-            0 => Some(OpCode::LOADW),
-            1 => Some(OpCode::STOREW),
-            2 => Some(OpCode::JAL),
-            3 => Some(OpCode::BEQ),
-            4 => Some(OpCode::BNE),
-            5 => Some(OpCode::TERMINATE),
-            6 => Some(OpCode::FADD),
-            7 => Some(OpCode::FSUB),
-            8 => Some(OpCode::FMUL),
-            9 => Some(OpCode::FDIV),
-            10 => Some(OpCode::FAIL),
-            11 => Some(OpCode::PRINTF),
-            12 => Some(OpCode::FE4ADD),
-            13 => Some(OpCode::FE4SUB),
-            14 => Some(OpCode::BBE4MUL),
-            15 => Some(OpCode::BBE4INV),
-            16 => Some(OpCode::HINT),
+            0 => Some(LOADW),
+            1 => Some(STOREW),
+            2 => Some(JAL),
+            3 => Some(BEQ),
+            4 => Some(BNE),
+            5 => Some(TERMINATE),
+
+            6 => Some(FADD),
+            7 => Some(FSUB),
+            8 => Some(FMUL),
+            9 => Some(FDIV),
+
+            10 => Some(FAIL),
+            11 => Some(PRINTF),
+
+            12 => Some(FE4ADD),
+            13 => Some(FE4SUB),
+            14 => Some(BBE4MUL),
+            15 => Some(BBE4INV),
+
+            16 => Some(PERM_POS2),
+            17 => Some(COMP_POS2),
+
+            18 => Some(HINT),
+
             _ => None,
         }
     }
 }
 
 use crate::field_extension::FieldExtensionArithmeticAir;
+use crate::poseidon2::Poseidon2Chip;
 use OpCode::*;
 
 pub const CORE_INSTRUCTIONS: [OpCode; 7] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, HINT];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
 
-fn max_accesses_per_instruction(op_code: OpCode) -> usize {
-    match op_code {
+fn max_accesses_per_instruction(opcode: OpCode) -> usize {
+    match opcode {
         LOADW | STOREW => 3,
         // JAL only does WRITE, but it is done as timestamp + 2
         JAL => 3,
         BEQ | BNE => 2,
         TERMINATE => 0,
-        op_code if FIELD_ARITHMETIC_INSTRUCTIONS.contains(&op_code) => 3,
-        op_code if FIELD_EXTENSION_INSTRUCTIONS.contains(&op_code) => {
-            FieldExtensionArithmeticAir::max_accesses_per_instruction(op_code)
+        opcode if FIELD_ARITHMETIC_INSTRUCTIONS.contains(&opcode) => 3,
+        opcode if FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode) => {
+            FieldExtensionArithmeticAir::max_accesses_per_instruction(opcode)
         }
         FAIL => 0,
         PRINTF => 1,
+        COMP_POS2 | PERM_POS2 => {
+            Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(opcode)
+        }
         HINT => 0,
         _ => panic!(),
     }
@@ -102,9 +119,15 @@ fn max_accesses_per_instruction(op_code: OpCode) -> usize {
 pub struct CpuOptions {
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
+    pub compress_poseidon2_enabled: bool,
+    pub perm_poseidon2_enabled: bool,
 }
 
 impl CpuOptions {
+    pub fn poseidon2_enabled(&self) -> bool {
+        self.compress_poseidon2_enabled || self.perm_poseidon2_enabled
+    }
+
     pub fn enabled_instructions(&self) -> Vec<OpCode> {
         let mut result = CORE_INSTRUCTIONS.to_vec();
         if self.field_extension_enabled {
@@ -112,6 +135,12 @@ impl CpuOptions {
         }
         if self.field_arithmetic_enabled {
             result.extend(FIELD_ARITHMETIC_INSTRUCTIONS);
+        }
+        if self.compress_poseidon2_enabled {
+            result.push(COMP_POS2);
+        }
+        if self.perm_poseidon2_enabled {
+            result.push(PERM_POS2);
         }
         result
     }

@@ -8,6 +8,9 @@ Cargo.lock
 **/*.rs.bk
 **/.env
 .DS_Store
+**/root
+**/leaf
+**/internal
 
 .cache/
 

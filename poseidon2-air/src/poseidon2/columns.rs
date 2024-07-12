@@ -1,4 +1,5 @@
 use crate::poseidon2::Poseidon2Air;
+use p3_field::Field;
 use std::ops::Range;
 
 /// Composed of IO and Aux columns, which are disjoint
@@ -97,16 +98,46 @@ impl<const WIDTH: usize, T: Clone> Poseidon2Cols<WIDTH, T> {
             phase3,
         }
     }
+
+    pub fn flatten(&self) -> Vec<T> {
+        let mut flattened = self.io.input.to_vec();
+        flattened.extend(self.aux.flatten());
+        flattened.extend(self.io.output.to_vec());
+        flattened
+    }
 }
 
-impl<const WIDTH: usize, T> Poseidon2IoCols<WIDTH, T> {
+impl<const WIDTH: usize, T: Field> Poseidon2Cols<WIDTH, T> {
+    pub fn blank_row(poseidon2_air: &Poseidon2Air<WIDTH, T>) -> Self {
+        let zero_row = [T::zero(); WIDTH];
+        Poseidon2Cols::from_slice(
+            poseidon2_air.generate_local_trace(zero_row).as_slice(),
+            &Poseidon2Cols::<WIDTH, T>::index_map(poseidon2_air),
+        )
+    }
+}
+
+impl<const WIDTH: usize, T: Clone> Poseidon2IoCols<WIDTH, T> {
     pub fn get_width() -> usize {
         2 * WIDTH
+    }
+
+    pub fn flatten(&self) -> Vec<T> {
+        let mut flattened = self.input.to_vec();
+        flattened.extend(self.output.to_vec());
+        flattened
     }
 }
 
 impl<const WIDTH: usize, T: Clone> Poseidon2AuxCols<WIDTH, T> {
     pub fn get_width(poseidon2_air: &Poseidon2Air<WIDTH, T>) -> usize {
         (poseidon2_air.rounds_f + poseidon2_air.rounds_p) * WIDTH
+    }
+
+    pub fn flatten(&self) -> Vec<T> {
+        let mut flattened: Vec<T> = self.phase1.iter().flat_map(|s| s.to_vec()).collect();
+        flattened.extend(self.phase2.iter().flat_map(|s| s.to_vec()));
+        flattened.extend(self.phase3.iter().flat_map(|s| s.to_vec()));
+        flattened
     }
 }

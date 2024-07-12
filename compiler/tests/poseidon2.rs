@@ -7,9 +7,12 @@ use rand::Rng;
 use afs_compiler::asm::AsmBuilder;
 use afs_compiler::ir::Var;
 use afs_compiler::ir::PERMUTATION_WIDTH;
+use afs_compiler::util::end_to_end_test;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
+
+const WORD_SIZE: usize = 1;
 
 // #[test]
 // fn test_compiler_poseidon2_permute() {
@@ -84,6 +87,14 @@ fn test_compiler_poseidon2_hash() {
         builder.assert_felt_eq(el, el_x);
     });
 
+    builder.halt();
+
+    // let program = builder.compile_isa::<WORD_SIZE>();
+    // display_program(&program);
+    // execute_program::<WORD_SIZE, _>(program, vec![]);
+
+    end_to_end_test::<WORD_SIZE, _>(builder, vec![]);
+
     // let program = builder.compile_program();
 
     // let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
@@ -112,6 +123,9 @@ fn test_compiler_poseidon2_hash_v2() {
         let element = builder.get(&random_state, idx);
         builder.print_f(element);
     });
+
+    builder.halt();
+    end_to_end_test::<WORD_SIZE, _>(builder, vec![]);
 
     // let program = builder.compile_program();
 

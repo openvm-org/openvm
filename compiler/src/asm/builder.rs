@@ -1,4 +1,5 @@
 use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
+
 use stark_vm::cpu::trace::Instruction;
 
 use crate::{
@@ -20,16 +21,20 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmBu
     }
 
     pub fn compile_isa<const WORD_SIZE: usize>(self) -> Vec<Instruction<F>> {
+        self.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+            compile_prints: true,
+            field_arithmetic_enabled: true,
+            field_extension_enabled: false,
+        })
+    }
+
+    pub fn compile_isa_with_options<const WORD_SIZE: usize>(
+        self,
+        options: CompilerOptions,
+    ) -> Vec<Instruction<F>> {
         let mut compiler = AsmCompiler::new();
         compiler.build(self.operations);
         let asm_code = compiler.code();
-        convert_program::<WORD_SIZE, F, EF>(
-            asm_code,
-            CompilerOptions {
-                compile_prints: true,
-                field_arithmetic_enabled: true,
-                field_extension_enabled: false,
-            },
-        )
+        convert_program::<WORD_SIZE, F, EF>(asm_code, options)
     }
 }

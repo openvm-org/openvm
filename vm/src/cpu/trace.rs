@@ -8,6 +8,7 @@ use afs_chips::{
 };
 
 use crate::memory::{compose, decompose};
+use crate::poseidon2::Poseidon2Chip;
 use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
 
 use super::{
@@ -81,8 +82,8 @@ fn memory_access_to_cols<const WORD_SIZE: usize, F: PrimeField64>(
 pub enum ExecutionError {
     Fail(usize),
     PcOutOfBounds(usize, usize),
-    DisabledOperation(OpCode),
-    HintOutOfBounds(usize, usize),
+    DisabledOperation(usize, OpCode),
+    HintOutOfBounds(usize, usize, usize),
 }
 
 impl Display for ExecutionError {
@@ -94,11 +95,13 @@ impl Display for ExecutionError {
                 "pc = {} out of bounds for program of length {}",
                 pc, program_len
             ),
-            ExecutionError::DisabledOperation(op) => write!(f, "opcode {:?} was not enabled", op),
-            ExecutionError::HintOutOfBounds(witness_idx, witness_len) => write!(
+            ExecutionError::DisabledOperation(pc, op) => {
+                write!(f, "at pc = {}, opcode {:?} was not enabled", pc, op)
+            }
+            ExecutionError::HintOutOfBounds(pc, witness_idx, witness_len) => write!(
                 f,
-                "witness index = {} out of bounds for witness_stream of length {}",
-                witness_idx, witness_len
+                "at pc = {}, witness index = {} out of bounds for witness_stream of length {}",
+                pc, witness_idx, witness_len
             ),
         }
     }
@@ -121,7 +124,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
 
-            let instruction = vm.program_chip.get_instruction(pc_usize);
+            let instruction = vm.program_chip.get_instruction(pc_usize)?;
 
             let opcode = instruction.opcode;
             let a = instruction.op_a;
@@ -178,6 +181,13 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 }};
             }
 
+            if opcode == FAIL {
+                return Err(ExecutionError::Fail(pc_usize));
+            }
+            if opcode != PRINTF && !vm.options().enabled_instructions().contains(&opcode) {
+                return Err(ExecutionError::DisabledOperation(pc_usize, opcode));
+            }
+
             match opcode {
                 // d[a] <- e[d[c] + b]
                 LOADW => {
@@ -216,34 +226,30 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     next_pc = pc;
                 }
                 opcode @ (FADD | FSUB | FMUL | FDIV) => {
-                    if vm.options().field_arithmetic_enabled {
-                        // read from d[b] and e[c]
-                        let operand1 = read!(d, b);
-                        let operand2 = read!(e, c);
-                        // write to d[a]
-                        let result = vm
-                            .field_arithmetic_chip
-                            .calculate(opcode, (operand1, operand2));
-                        write!(d, a, result);
-                    } else {
-                        return Err(ExecutionError::DisabledOperation(opcode));
-                    }
+                    // read from d[b] and e[c]
+                    let operand1 = read!(d, b);
+                    let operand2 = read!(e, c);
+                    // write to d[a]
+                    let result = vm
+                        .field_arithmetic_chip
+                        .calculate(opcode, (operand1, operand2));
+                    write!(d, a, result);
                 }
-                FAIL => return Err(ExecutionError::Fail(pc_usize)),
+                FAIL => panic!("Unreachable code"),
                 PRINTF => {
                     let value = read!(d, a);
                     println!("{}", value);
                 }
-                opcode @ (FE4ADD | FE4SUB | BBE4MUL | BBE4INV) => {
-                    if vm.options().field_extension_enabled {
-                        FieldExtensionArithmeticChip::calculate(
-                            vm, timestamp, opcode, a, b, c, d, e,
-                        );
-                    }
+                FE4ADD | FE4SUB | BBE4MUL | BBE4INV => {
+                    FieldExtensionArithmeticChip::calculate(vm, timestamp, instruction);
+                }
+                PERM_POS2 | COMP_POS2 => {
+                    Poseidon2Chip::<16, _>::poseidon2_perm(vm, timestamp, instruction);
                 }
                 HINT => {
                     if witness_idx >= vm.witness_stream.len() {
                         return Err(ExecutionError::HintOutOfBounds(
+                            pc_usize,
                             witness_idx,
                             vm.witness_stream.len(),
                         ));

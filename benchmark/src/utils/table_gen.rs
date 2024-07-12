@@ -42,9 +42,9 @@ pub fn generate_random_table(
 
     let table = Table::from_page(table_id, page.clone(), index_bytes, data_bytes);
     db.create_table(table_id, metadata);
-    for row in page.rows {
-        let index = u16_vec_to_u8_vec(row.idx);
-        let data = u16_vec_to_u8_vec(row.data);
+    for row in page.iter() {
+        let index = u16_vec_to_u8_vec(row.idx.clone());
+        let data = u16_vec_to_u8_vec(row.data.clone());
         db.write_data(table_id, index, data);
     }
 

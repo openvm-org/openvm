@@ -211,7 +211,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         let trace_span = info_span!("Load page trace generation").entered();
         let mut page = page.clone();
 
-        assert!(!page.rows.is_empty());
+        assert!(!page.is_empty());
         let init_page_trace = self.gen_page_trace(&page);
 
         let offline_checker_trace =
@@ -238,7 +238,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         let final_page_aux_trace = self.final_chip.gen_aux_trace::<SC>(
             &page,
             self.range_checker.clone(),
-            final_write_indices,
+            &final_write_indices,
         );
         trace_span.exit();
 

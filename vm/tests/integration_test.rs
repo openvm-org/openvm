@@ -1,7 +1,11 @@
-use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
+use afs_test_utils::config::baby_bear_poseidon2::{
+    engine_from_perm, random_perm, run_simple_test_no_pis,
+};
+use afs_test_utils::config::fri_params::fri_params_with_80_bits_of_security;
+use afs_test_utils::engine::StarkEngine;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
 use stark_vm::vm::config::VmConfig;
@@ -24,6 +28,8 @@ fn air_test(
             vm: VmParamsConfig {
                 field_arithmetic_enabled,
                 field_extension_enabled,
+                compress_poseidon2_enabled: false,
+                perm_poseidon2_enabled: false,
                 limb_bits: LIMB_BITS,
                 decomp: DECOMP,
             },
@@ -35,6 +41,42 @@ fn air_test(
     let traces = vm.traces().unwrap();
     let chips = get_chips(&vm);
     run_simple_test_no_pis(chips, traces).expect("Verification failed");
+}
+
+fn air_test_with_poseidon2(
+    field_arithmetic_enabled: bool,
+    field_extension_enabled: bool,
+    compress_poseidon2_enabled: bool,
+    program: Vec<Instruction<BabyBear>>,
+) {
+    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
+        VmConfig {
+            vm: VmParamsConfig {
+                field_arithmetic_enabled,
+                field_extension_enabled,
+                compress_poseidon2_enabled,
+                perm_poseidon2_enabled: false,
+                limb_bits: LIMB_BITS,
+                decomp: DECOMP,
+            },
+        },
+        program,
+        vec![],
+    );
+
+    let max_log_degree = vm.max_log_degree().unwrap();
+    let traces = vm.traces().unwrap();
+    let chips = get_chips(&vm);
+
+    let perm = random_perm();
+    let fri_params = fri_params_with_80_bits_of_security()[1];
+    let engine = engine_from_perm(perm, max_log_degree, fri_params);
+
+    let num_chips = chips.len();
+
+    engine
+        .run_simple_test(chips, traces, vec![vec![]; num_chips])
+        .expect("Verification failed");
 }
 
 #[test]
@@ -182,4 +224,74 @@ fn test_vm_hint() {
         program,
         witness_stream,
     );
+}
+
+#[test]
+fn test_vm_compress_poseidon2() {
+    let mut program = vec![];
+    let input_a = 37;
+    for i in 0..8 {
+        program.push(Instruction::from_isize(
+            STOREW,
+            43 - (7 * i),
+            input_a + i,
+            0,
+            0,
+            1,
+        ));
+    }
+    let input_b = 108;
+    for i in 0..8 {
+        program.push(Instruction::from_isize(
+            STOREW,
+            2 + (18 * i),
+            input_b + i,
+            0,
+            0,
+            1,
+        ));
+    }
+    let output = 4;
+    program.push(Instruction::from_isize(
+        COMP_POS2, input_a, input_b, output, 0, 1,
+    ));
+    program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
+
+    air_test_with_poseidon2(false, false, true, program);
+}
+
+#[test]
+fn test_vm_compress_poseidon2_as2() {
+    let mut program = vec![];
+    let input_a = 37;
+    for i in 0..8 {
+        program.push(Instruction::from_isize(
+            STOREW,
+            43 - (7 * i),
+            input_a + i,
+            0,
+            0,
+            2,
+        ));
+    }
+    let input_b = 108;
+    for i in 0..8 {
+        program.push(Instruction::from_isize(
+            STOREW,
+            2 + (18 * i),
+            input_b + i,
+            0,
+            0,
+            2,
+        ));
+    }
+    let output = 4;
+    program.push(Instruction::from_isize(STOREW, input_a, 0, 0, 0, 1));
+    program.push(Instruction::from_isize(STOREW, input_b, 1, 0, 0, 1));
+    program.push(Instruction::from_isize(STOREW, output, 2, 0, 0, 1));
+
+    program.push(Instruction::from_isize(COMP_POS2, 0, 1, 2, 1, 2));
+    program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
+
+    air_test_with_poseidon2(false, false, true, program);
 }

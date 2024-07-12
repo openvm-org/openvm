@@ -86,7 +86,7 @@ impl PageIndexScanInputChip {
     {
         let mut rows: Vec<Val<SC>> = vec![];
 
-        for page_row in &page.rows {
+        for page_row in page.iter() {
             let mut row: Vec<Val<SC>> = vec![];
 
             let is_alloc = Val::<SC>::from_canonical_u32(page_row.is_alloc);

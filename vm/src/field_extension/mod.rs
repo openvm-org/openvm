@@ -1,5 +1,6 @@
 use p3_field::{Field, PrimeField32};
 
+use crate::cpu::trace::Instruction;
 use crate::cpu::FIELD_EXTENSION_INSTRUCTIONS;
 use crate::{cpu::OpCode, vm::VirtualMachine};
 
@@ -146,13 +147,18 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
     pub fn calculate(
         vm: &mut VirtualMachine<WORD_SIZE, F>,
         start_timestamp: usize,
-        opcode: OpCode,
-        op_a: F,
-        op_b: F,
-        op_c: F,
-        d: F,
-        e: F,
+        instruction: Instruction<F>,
     ) -> [F; EXTENSION_DEGREE] {
+        let Instruction {
+            opcode,
+            op_a,
+            op_b,
+            op_c,
+            d,
+            e,
+        } = instruction;
+        assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
+
         let operand1 =
             FieldExtensionArithmeticChip::read_extension_element(vm, start_timestamp, d, op_b);
         let operand2 = if opcode == OpCode::BBE4INV {
