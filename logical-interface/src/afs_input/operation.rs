@@ -75,17 +75,17 @@ impl InsertOp {
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct WhereOp {
+pub struct FilterOp {
     pub table_id: TableId,
     pub operand: Operand,
     pub predicate: Comp,
     pub value: String,
 }
 
-impl WhereOp {
+impl FilterOp {
     pub fn parse(args: Vec<String>) -> Result<Self> {
         if args.len() != 4 {
-            return Err(eyre!("Invalid number of arguments for WHERE op"));
+            return Err(eyre!("Invalid number of arguments for predicate filter op"));
         }
         let table_id = string_to_table_id(args[0].clone());
         let operand = Operand::from_str(&args[1])?;

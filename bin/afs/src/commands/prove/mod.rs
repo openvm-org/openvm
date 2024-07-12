@@ -297,8 +297,8 @@ fn afi_op_conv(
         InputFileOp::InnerJoin => {
             panic!("InnerJoin not supported yet")
         }
-        InputFileOp::Where => {
-            panic!("Where not supported yet")
+        InputFileOp::Filter => {
+            panic!("Filter not supported yet")
         }
     }
 }

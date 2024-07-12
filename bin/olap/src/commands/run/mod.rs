@@ -1,7 +1,6 @@
+pub mod filter;
 pub mod group_by;
 pub mod inner_join;
-pub mod utils;
-pub mod where_op;
 
 use afs_test_utils::page_config::PageConfig;
 use clap::Parser;
@@ -10,7 +9,7 @@ use group_by::execute_group_by;
 use inner_join::execute_inner_join;
 use logical_interface::{
     afs_input::{
-        operation::{GroupByOp, InnerJoinOp, WhereOp},
+        operation::{FilterOp, GroupByOp, InnerJoinOp},
         operations_file::AfsOperationsFile,
         types::InputFileOp,
     },
@@ -18,7 +17,7 @@ use logical_interface::{
 };
 use p3_uni_stark::StarkGenericConfig;
 
-use self::where_op::execute_where_op;
+use self::filter::execute_filter_op;
 
 #[derive(Debug, Parser)]
 pub struct RunCommand {
@@ -63,9 +62,9 @@ impl RunCommand {
             InputFileOp::Insert | InputFileOp::Write | InputFileOp::Read => {
                 panic!("Operation not supported");
             }
-            InputFileOp::Where => {
-                let where_op = WhereOp::parse(op.args.clone()).unwrap();
-                execute_where_op::<SC>(cfg, self, &mut db, where_op).unwrap();
+            InputFileOp::Filter => {
+                let filter = FilterOp::parse(op.args.clone()).unwrap();
+                execute_filter_op::<SC>(cfg, self, &mut db, filter).unwrap();
             }
             InputFileOp::GroupBy => {
                 let group_by = GroupByOp::parse(op.args.clone()).unwrap();

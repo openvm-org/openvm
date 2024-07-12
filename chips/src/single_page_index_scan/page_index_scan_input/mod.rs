@@ -2,8 +2,6 @@ use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
-
 use crate::{
     is_equal_vec::{columns::IsEqualVecAuxCols, IsEqualVecAir},
     is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},

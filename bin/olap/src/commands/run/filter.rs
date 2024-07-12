@@ -11,7 +11,7 @@ use afs_stark_backend::{
 use afs_test_utils::{config, page_config::PageConfig};
 use color_eyre::eyre::Result;
 use logical_interface::{
-    afs_input::operation::WhereOp,
+    afs_input::operation::FilterOp,
     afs_interface::AfsInterface,
     mock_db::MockDb,
     utils::{fixed_bytes_to_u16_vec, string_to_u8_vec},
@@ -19,23 +19,21 @@ use logical_interface::{
 use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_strict_usize;
 
-use crate::commands::run::utils::pretty_print_page;
-
 use super::RunCommand;
 
 const PAGE_BUS_INDEX: usize = 0;
 const RANGE_BUS_INDEX: usize = 1;
 
-pub fn execute_where_op<SC: StarkGenericConfig>(
+pub fn execute_filter_op<SC: StarkGenericConfig>(
     cfg: &PageConfig,
     cli: &RunCommand,
     db: &mut MockDb,
-    op: WhereOp,
+    op: FilterOp,
 ) -> Result<()> {
-    println!("where: {:?}", op);
+    println!("filter: {:?}", op);
 
     let height = cfg.page.height;
-    let limb_bits = cfg.page.bits_per_fe;
+    let bits_per_fe = cfg.page.bits_per_fe;
     let degree = log2_strict_usize(height);
 
     // Get input page from database
@@ -44,13 +42,13 @@ pub fn execute_where_op<SC: StarkGenericConfig>(
     let index_bytes = input_table.metadata.index_bytes;
     let data_bytes = input_table.metadata.data_bytes;
     let input_page = input_table.to_page(index_bytes, data_bytes, height);
-    let index_len = input_page.rows[0].idx.len();
-    let data_len = input_page.rows[0].data.len();
+    let index_len = input_page.idx_len();
+    let data_len = input_page.data_len();
     let page_width = 1 + index_len + data_len;
 
     if !cli.silent {
         println!("Input page:");
-        pretty_print_page(&input_page);
+        input_page.pretty_print(bits_per_fe);
     }
 
     let mut page_controller = PageController::new(
@@ -59,7 +57,7 @@ pub fn execute_where_op<SC: StarkGenericConfig>(
         index_len,
         data_len,
         height as u32,
-        limb_bits,
+        bits_per_fe,
         degree,
         op.predicate.clone(),
     );
@@ -71,7 +69,7 @@ pub fn execute_where_op<SC: StarkGenericConfig>(
 
     if !cli.silent {
         println!("Output page:");
-        pretty_print_page(&output_page);
+        output_page.pretty_print(bits_per_fe);
     }
 
     let engine = config::baby_bear_poseidon2::default_engine(degree);
@@ -86,7 +84,7 @@ pub fn execute_where_op<SC: StarkGenericConfig>(
         value.clone(),
         index_len,
         data_len,
-        limb_bits,
+        bits_per_fe,
         degree,
         &mut trace_builder.committer,
     );

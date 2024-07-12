@@ -3,7 +3,7 @@ use std::{
     io::{BufWriter, Write},
 };
 
-use crate::commands::run::{utils::pretty_print_page, PageConfig, RunCommand};
+use crate::commands::run::{PageConfig, RunCommand};
 use afs_chips::{
     common::page::Page,
     inner_join::controller::{FKInnerJoinController, IJBuses, T2Format, TableFormat},
@@ -33,7 +33,7 @@ pub fn execute_inner_join<SC: StarkGenericConfig>(
     println!("inner_join: {:?}", op);
 
     let height = cfg.page.height;
-    let limb_bits = cfg.page.bits_per_fe;
+    let bits_per_fe = cfg.page.bits_per_fe;
     let degree = log2_strict_usize(height);
     let range_chip_idx_decomp = 4;
 
@@ -60,9 +60,9 @@ pub fn execute_inner_join<SC: StarkGenericConfig>(
 
     if !cli.silent {
         println!("Left page:");
-        pretty_print_page(&page_left);
+        page_left.pretty_print(bits_per_fe);
         println!("Right page:");
-        pretty_print_page(&page_right);
+        page_right.pretty_print(bits_per_fe);
     }
 
     let inner_join_buses = IJBuses {
@@ -73,8 +73,8 @@ pub fn execute_inner_join<SC: StarkGenericConfig>(
         t1_output_bus_index: T1_OUTPUT_BUS,
         t2_output_bus_index: T2_OUTPUT_BUS,
     };
-    let t1_format = TableFormat::new(index_len_left, data_len_left, limb_bits);
-    let t2_table_format = TableFormat::new(index_len_right, data_len_right, limb_bits);
+    let t1_format = TableFormat::new(index_len_left, data_len_left, bits_per_fe);
+    let t2_table_format = TableFormat::new(index_len_right, data_len_right, bits_per_fe);
     let t2_format = T2Format::new(t2_table_format, op.fkey_start, op.fkey_end);
 
     let mut inner_join_controller = FKInnerJoinController::new(
@@ -110,7 +110,7 @@ pub fn execute_inner_join<SC: StarkGenericConfig>(
 
     if !cli.silent {
         println!("Output page:");
-        pretty_print_page(&output_page);
+        output_page.pretty_print(bits_per_fe);
     }
 
     let output_path = if let Some(output_path) = &cli.output_path {

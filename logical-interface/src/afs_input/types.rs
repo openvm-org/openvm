@@ -39,7 +39,7 @@ pub enum InputFileOp {
     Read,
     Insert,
     Write,
-    Where,
+    Filter,
     InnerJoin,
     GroupBy,
 }
@@ -52,7 +52,7 @@ impl FromStr for InputFileOp {
             "READ" => Ok(Self::Read),
             "INSERT" => Ok(Self::Insert),
             "WRITE" => Ok(Self::Write),
-            "WHERE" => Ok(Self::Where),
+            "FILTER" => Ok(Self::Filter),
             "INNER_JOIN" => Ok(Self::InnerJoin),
             "GROUP_BY" => Ok(Self::GroupBy),
             _ => Err(eyre!("Invalid operation: {}", s)),
@@ -66,7 +66,7 @@ impl Display for InputFileOp {
             InputFileOp::Read => "READ",
             InputFileOp::Insert => "INSERT",
             InputFileOp::Write => "WRITE",
-            InputFileOp::Where => "WHERE",
+            InputFileOp::Filter => "FILTER",
             InputFileOp::InnerJoin => "INNER_JOIN",
             InputFileOp::GroupBy => "GROUP_BY",
         };

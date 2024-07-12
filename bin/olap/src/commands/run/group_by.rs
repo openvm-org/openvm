@@ -3,7 +3,7 @@ use std::{
     io::{BufWriter, Write},
 };
 
-use crate::commands::run::{utils::pretty_print_page, PageConfig, RunCommand};
+use crate::commands::run::{PageConfig, RunCommand};
 use afs_chips::{common::page::Page, group_by::page_controller::PageController};
 use afs_stark_backend::{keygen::MultiStarkKeygenBuilder, prover::trace::TraceCommitmentBuilder};
 use afs_test_utils::{
@@ -32,12 +32,11 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
         println!("agg col: {:?}", op.agg_col);
         println!("group operation: {:?}", op.op);
     }
-    unimplemented!("group_by cli is unimplemented until group_by chip is fixed");
 
     let index_bytes = cfg.page.index_bytes;
     let data_bytes = cfg.page.data_bytes;
     let height = 16; //cfg.page.height;
-    let limb_bits = 16; //cfg.page.bits_per_fe;
+    let bits_per_fe = 16; //cfg.page.bits_per_fe;
     let idx_len = (index_bytes + 1) / 2;
     let data_len = (data_bytes + 1) / 2;
     let page_width = 1 + idx_len + data_len;
@@ -55,7 +54,7 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
 
     if !cli.silent {
         println!("Input page");
-        pretty_print_page(&page);
+        page.pretty_print(bits_per_fe);
     }
 
     let mut page_controller = PageController::<BabyBearPoseidon2Config>::new(
@@ -65,7 +64,7 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
         INTERNAL_BUS,
         OUTPUT_BUS,
         RANGE_BUS,
-        limb_bits,
+        bits_per_fe,
         decomp,
         false,
         op.op,
@@ -85,7 +84,7 @@ pub fn execute_group_by<SC: StarkGenericConfig>(
     let output_page = Page::from_trace(&final_page_trace, op.group_by_cols.len(), 1);
     if !cli.silent {
         println!("Output page");
-        pretty_print_page(&output_page);
+        output_page.pretty_print(bits_per_fe);
     }
 
     let partial_pk = keygen_builder.generate_partial_pk();
