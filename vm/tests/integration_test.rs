@@ -1,5 +1,10 @@
-use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use afs_test_utils::config::baby_bear_poseidon2::{
+    engine_from_perm, random_perm, run_simple_test_no_pis,
+};
+use afs_test_utils::config::fri_params::fri_params_with_80_bits_of_security;
+use afs_test_utils::engine::StarkEngine;
 use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
 
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
@@ -9,23 +14,69 @@ use stark_vm::vm::get_chips;
 use stark_vm::vm::VirtualMachine;
 
 const WORD_SIZE: usize = 1;
-const LIMB_BITS: usize = 8;
-const DECOMP: usize = 4;
+const LIMB_BITS: usize = 16;
+const DECOMP: usize = 8;
 
-fn air_test(field_arithmetic_enabled: bool, program: Vec<Instruction<BabyBear>>) {
+fn air_test(
+    field_arithmetic_enabled: bool,
+    field_extension_enabled: bool,
+    program: Vec<Instruction<BabyBear>>,
+    witness_stream: Vec<Vec<BabyBear>>,
+) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
             vm: VmParamsConfig {
                 field_arithmetic_enabled,
+                field_extension_enabled,
+                compress_poseidon2_enabled: false,
+                perm_poseidon2_enabled: false,
                 limb_bits: LIMB_BITS,
                 decomp: DECOMP,
             },
         },
         program,
+        witness_stream,
     );
+
     let traces = vm.traces().unwrap();
     let chips = get_chips(&vm);
     run_simple_test_no_pis(chips, traces).expect("Verification failed");
+}
+
+fn air_test_with_poseidon2(
+    field_arithmetic_enabled: bool,
+    field_extension_enabled: bool,
+    compress_poseidon2_enabled: bool,
+    program: Vec<Instruction<BabyBear>>,
+) {
+    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
+        VmConfig {
+            vm: VmParamsConfig {
+                field_arithmetic_enabled,
+                field_extension_enabled,
+                compress_poseidon2_enabled,
+                perm_poseidon2_enabled: false,
+                limb_bits: LIMB_BITS,
+                decomp: DECOMP,
+            },
+        },
+        program,
+        vec![],
+    );
+
+    let max_log_degree = vm.max_log_degree().unwrap();
+    let traces = vm.traces().unwrap();
+    let chips = get_chips(&vm);
+
+    let perm = random_perm();
+    let fri_params = fri_params_with_80_bits_of_security()[1];
+    let engine = engine_from_perm(perm, max_log_degree, fri_params);
+
+    let num_chips = chips.len();
+
+    engine
+        .run_simple_test(chips, traces, vec![vec![]; num_chips])
+        .expect("Verification failed");
 }
 
 #[test]
@@ -52,12 +103,13 @@ fn test_vm_1() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(true, program);
+    air_test(true, false, program, vec![]);
 }
 
 #[test]
 fn test_vm_without_field_arithmetic() {
     let field_arithmetic_enabled = false;
+    let field_extension_enabled = false;
 
     /*
     Instruction 0 assigns word[0]_1 to 5.
@@ -79,7 +131,12 @@ fn test_vm_without_field_arithmetic() {
         Instruction::from_isize(BEQ, 0, 5, -1, 1, 0),
     ];
 
-    air_test(field_arithmetic_enabled, program);
+    air_test(
+        field_arithmetic_enabled,
+        field_extension_enabled,
+        program,
+        vec![],
+    );
 }
 
 #[test]
@@ -100,5 +157,105 @@ fn test_vm_fibonacci_old() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(true, program.clone());
+    air_test(true, false, program.clone(), vec![]);
+}
+
+#[test]
+fn test_vm_field_extension_arithmetic() {
+    let field_arithmetic_enabled = true;
+    let field_extension_enabled = true;
+
+    let program = vec![
+        Instruction::from_isize(STOREW, 1, 0, 0, 0, 1),
+        Instruction::from_isize(STOREW, 2, 1, 0, 0, 1),
+        Instruction::from_isize(STOREW, 1, 2, 0, 0, 1),
+        Instruction::from_isize(STOREW, 2, 3, 0, 0, 1),
+        Instruction::from_isize(STOREW, 2, 4, 0, 0, 1),
+        Instruction::from_isize(STOREW, 1, 5, 0, 0, 1),
+        Instruction::from_isize(STOREW, 1, 6, 0, 0, 1),
+        Instruction::from_isize(STOREW, 2, 7, 0, 0, 1),
+        Instruction::from_isize(FE4ADD, 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4SUB, 12, 0, 4, 1, 1),
+        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
+    ];
+
+    air_test(
+        field_arithmetic_enabled,
+        field_extension_enabled,
+        program,
+        vec![],
+    );
+}
+
+#[test]
+fn test_vm_hint() {
+    let field_arithmetic_enabled = true;
+    let field_extension_enabled = false;
+
+    let program = vec![
+        Instruction::from_isize(STOREW, 0, 0, 1, 0, 1),
+        Instruction::from_isize(FADD, 5, 1, 100, 1, 0),
+        Instruction::from_isize(FADD, 18, 5, 0, 1, 0),
+        Instruction::from_isize(FADD, 5, 5, 1, 1, 0),
+        Instruction::from_isize(HINT, 18, 0, 0, 1, 2),
+        Instruction::from_isize(LOADW, 21, 0, 18, 1, 2),
+        Instruction::from_isize(FADD, 24, 18, 1, 1, 0),
+        Instruction::from_isize(FADD, 18, 5, 0, 1, 0),
+        Instruction::from_isize(FMUL, 9, 21, 1, 1, 0),
+        Instruction::from_isize(FADD, 5, 5, 9, 1, 1),
+        Instruction::from_isize(FADD, 27, 1, 0, 1, 0),
+        Instruction::from_isize(JAL, 9, 7, 0, 1, 0),
+        Instruction::from_isize(FMUL, 0, 27, 1, 1, 0),
+        Instruction::from_isize(FADD, 0, 24, 0, 1, 1),
+        Instruction::from_isize(LOADW, 30, 0, 0, 1, 2),
+        Instruction::from_isize(FADD, 27, 27, 1, 1, 0),
+        Instruction::from_isize(BNE, 27, 21, 2013265916, 1, 1),
+        Instruction::from_isize(BNE, 27, 21, 2013265915, 1, 1),
+        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
+    ];
+
+    type F = BabyBear;
+
+    let witness_stream: Vec<Vec<F>> = vec![vec![F::zero(), F::zero(), F::one()]];
+
+    air_test(
+        field_arithmetic_enabled,
+        field_extension_enabled,
+        program,
+        witness_stream,
+    );
+}
+
+#[test]
+fn test_vm_compress_poseidon2() {
+    let mut program = vec![];
+    let input_a = 37;
+    for i in 0..8 {
+        program.push(Instruction::from_isize(
+            STOREW,
+            43 - (7 * i),
+            input_a + i,
+            0,
+            0,
+            1,
+        ));
+    }
+    let input_b = 108;
+    for i in 0..8 {
+        program.push(Instruction::from_isize(
+            STOREW,
+            2 + (18 * i),
+            input_b + i,
+            0,
+            0,
+            1,
+        ));
+    }
+    let output = 4;
+    program.push(Instruction::from_isize(
+        COMP_POS2, input_a, input_b, output, 1, 1,
+    ));
+    program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
+
+    air_test_with_poseidon2(false, false, true, program);
 }

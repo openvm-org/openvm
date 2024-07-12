@@ -136,7 +136,6 @@ fn page_offline_checker_test() {
     }
     let mut clks: Vec<usize> = clks.into_iter().collect();
     clks.sort();
-
     let mut ops: Vec<Operation> = vec![];
     for &clk in clks.iter() {
         let op_type = {

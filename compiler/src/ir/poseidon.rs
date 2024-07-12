@@ -75,6 +75,11 @@ impl<C: Config> Builder<C> {
     /// Reference: [p3_symmetric::PaddingFreeSponge]
     pub fn poseidon2_hash(&mut self, array: &Array<C, Felt<C::F>>) -> Array<C, Felt<C::F>> {
         let mut state: Array<C, Felt<C::F>> = self.dyn_array(PERMUTATION_WIDTH);
+        // initialize to 0 since our VM doesn't do that automatically
+        self.range(0, state.len()).for_each(|i, builder| {
+            let zero = builder.eval(C::F::zero());
+            builder.set_value(&mut state, i, zero);
+        });
 
         let break_flag: Var<_> = self.eval(C::N::zero());
         let last_index: Usize<_> = self.eval(array.len() - 1);
@@ -108,6 +113,11 @@ impl<C: Config> Builder<C> {
     ) -> Array<C, Felt<C::F>> {
         self.cycle_tracker("poseidon2-hash");
         let mut state: Array<C, Felt<C::F>> = self.dyn_array(PERMUTATION_WIDTH);
+        // initialize to 0 since our VM doesn't do that automatically
+        self.range(0, state.len()).for_each(|i, builder| {
+            let zero = builder.eval(C::F::zero());
+            builder.set_value(&mut state, i, zero);
+        });
 
         let idx: Var<_> = self.eval(C::N::zero());
         self.range(0, array.len()).for_each(|i, builder| {

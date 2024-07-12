@@ -17,7 +17,7 @@ Run these commands from the root of the repository.
 Generate proving and verifying keys and save them to disk
 
 ```bash
-cargo run --bin predicate -- keygen -p lt -v 0x20 -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -d bin/common/data/input_file_32_32.mockdb
+cargo run --release --bin predicate -- keygen -p lt
 ```
 
 ### Prove
@@ -25,7 +25,7 @@ cargo run --bin predicate -- keygen -p lt -v 0x20 -t 0x155687649d5789a399211641b
 Generate a proof of the predicate operation on the table
 
 ```bash
-cargo run --bin predicate -- prove -p lt -v 0x20 -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -d bin/common/data/input_file_32_32.mockdb
+cargo run --release --bin predicate -- prove -p lt -v 0x20 -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -d bin/common/data/input_file_32_32.mockdb -i bin/common/data/predicate/0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711.cache.bin
 ```
 
 ### Verify
@@ -33,7 +33,7 @@ cargo run --bin predicate -- prove -p lt -v 0x20 -t 0x155687649d5789a399211641b3
 Verify the generated proof
 
 ```bash
-cargo run --bin predicate -- verify -p lt -v 0x20 -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -d bin/common/data/input_file_32_32.mockdb
+cargo run --release --bin predicate -- verify -p lt -v 0x20 -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711
 ```
 
 ## Full test
@@ -63,5 +63,5 @@ cargo run --release --bin predicate -- keygen -p lt
 cargo run --release --bin predicate -- prove -p lt -v 0x20 -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -d bin/common/data/input_file_32_32.mockdb -i bin/common/data/predicate/0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711.cache.bin
 
 # Verify the proof
-cargo run --release --bin predicate -- verify -p lt -v 0x20 -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711 -d bin/common/data/input_file_32_32.mockdb
+cargo run --release --bin predicate -- verify -p lt -v 0x20 -t 0x155687649d5789a399211641b38bb93139f8ceca042466aa98e500a904657711
 ```

@@ -164,7 +164,7 @@ fn test_offline_checker() {
 }
 
 #[test]
-fn test_offline_checker_negative_invalid_read() {
+fn test_offline_checker_valid_first_read() {
     let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
     let mut memory_chip = MemoryChip::new(
         ADDR_SPACE_LIMB_BITS,
@@ -174,13 +174,13 @@ fn test_offline_checker_negative_invalid_read() {
     );
     let requester = DummyInteractionAir::new(2 + memory_chip.air.mem_width(), true, MEMORY_BUS);
 
-    // should fail because we can't read before writing
     memory_chip.write_word(
         0,
         BabyBear::one(),
         BabyBear::zero(),
         [BabyBear::zero(), BabyBear::zero(), BabyBear::zero()],
     );
+    // read before writing, but first operation in block so should pass
     memory_chip.accesses[0].op_type = OpType::Read;
 
     let memory_trace = memory_chip.generate_trace(range_checker.clone());
@@ -208,17 +208,11 @@ fn test_offline_checker_negative_invalid_read() {
         1 + requester.field_width(),
     );
 
-    USE_DEBUG_BUILDER.with(|debug| {
-        *debug.lock().unwrap() = false;
-    });
-    assert_eq!(
-        run_simple_test_no_pis(
-            vec![&memory_chip.air, &range_checker.air, &requester],
-            vec![memory_trace, range_checker_trace, requester_trace],
-        ),
-        Err(VerificationError::OodEvaluationMismatch),
-        "Expected verification to fail, but it passed"
-    );
+    run_simple_test_no_pis(
+        vec![&memory_chip.air, &range_checker.air, &requester],
+        vec![memory_trace, range_checker_trace, requester_trace],
+    )
+    .expect("Verification failed");
 }
 
 #[test]

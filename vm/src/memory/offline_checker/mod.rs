@@ -1,9 +1,11 @@
+use std::collections::hash_map::Entry;
 use std::{array::from_fn, collections::HashMap};
 
-use afs_chips::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 use p3_field::PrimeField32;
 
-use crate::memory::OpType;
+use afs_chips::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
+
+use crate::memory::{compose, decompose, OpType};
 
 use super::MemoryAccess;
 
@@ -65,7 +67,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
     }
 
     pub fn read_word(&mut self, timestamp: usize, address_space: F, address: F) -> [F; WORD_SIZE] {
-        assert!(address_space != F::zero());
+        if address_space == F::zero() {
+            return decompose(address);
+        }
         if let Some(last_timestamp) = self.last_timestamp {
             assert!(timestamp > last_timestamp);
         }
@@ -104,5 +108,50 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             address,
             data,
         });
+    }
+
+    /// Writes the length and contents of `hint` into memory starting at `e[d[a]]`.
+    ///
+    /// First writes `hint.len()` into `e[d[a]]`. Then writes `hint` into `e[d[a] + 1, ..., d[a] + hint.len()]`.
+    /// Panics if any of these writes are not the first write to the corresponding memory locations.
+    pub fn write_hint(&mut self, op_a: F, d: F, e: F, hint: &[F]) {
+        let address = if d != F::zero() {
+            self.memory[&(d, op_a)]
+        } else {
+            op_a
+        };
+        self.init_memory(e, address, F::from_canonical_usize(hint.len()));
+
+        for (i, &datum) in hint.iter().enumerate() {
+            self.init_memory(
+                e,
+                address + F::from_canonical_usize((i + 1) * WORD_SIZE),
+                datum,
+            );
+        }
+    }
+
+    fn init_memory(&mut self, addr_space: F, addr: F, value: F) {
+        let decomp = decompose::<WORD_SIZE, _>(value);
+        for (j, &value) in decomp.iter().enumerate() {
+            let loc = (addr_space, addr + F::from_canonical_usize(j));
+            match self.memory.entry(loc) {
+                Entry::Occupied(_) => panic!(
+                    "cannot initialize previously used memory ({}, {})",
+                    addr_space, addr
+                ),
+                Entry::Vacant(v) => {
+                    v.insert(value);
+                }
+            }
+        }
+    }
+
+    pub fn read_elem(&mut self, timestamp: usize, address_space: F, address: F) -> F {
+        compose(self.read_word(timestamp, address_space, address))
+    }
+
+    pub fn write_elem(&mut self, timestamp: usize, address_space: F, address: F, data: F) {
+        self.write_word(timestamp, address_space, address, decompose(data));
     }
 }

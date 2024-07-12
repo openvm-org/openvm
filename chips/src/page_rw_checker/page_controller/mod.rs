@@ -208,7 +208,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     where
         Val<SC>: PrimeField,
     {
-        let trace_span = info_span!("Trace generation").entered();
+        let trace_span = info_span!("Load page trace generation").entered();
         let mut page = page.clone();
 
         assert!(!page.rows.is_empty());
@@ -238,11 +238,11 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         let final_page_aux_trace = self.final_chip.gen_aux_trace::<SC>(
             &page,
             self.range_checker.clone(),
-            final_write_indices,
+            &final_write_indices,
         );
         trace_span.exit();
 
-        let trace_commit_span = info_span!("Trace commitment").entered();
+        let trace_commit_span = info_span!("Load page trace commitment").entered();
         let init_page_pdata = match init_page_pdata {
             Some(prover_data) => prover_data,
             None => Arc::new(trace_committer.commit(vec![init_page_trace.clone()])),
@@ -355,7 +355,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         trace_builder.load_trace(self.range_checker.generate_trace());
         trace_builder.load_trace(ops_sender_trace);
 
-        tracing::info_span!("Trace commitment").in_scope(|| trace_builder.commit_current());
+        tracing::info_span!("Prove trace commitment").in_scope(|| trace_builder.commit_current());
 
         let partial_vk = partial_pk.partial_vk();
 

@@ -16,7 +16,7 @@ impl IndexedPageWriteAir {
         &self,
         page: &Page,
         range_checker: Arc<RangeCheckerGateChip>,
-        internal_indices: HashSet<Vec<u32>>,
+        internal_indices: &HashSet<Vec<u32>>,
     ) -> RowMajorMatrix<Val<SC>>
     where
         Val<SC>: PrimeField,

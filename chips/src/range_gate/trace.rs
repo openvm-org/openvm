@@ -14,7 +14,6 @@ impl RangeCheckerGateChip {
                 vec![F::from_canonical_usize(i), F::from_canonical_u32(c)]
             })
             .collect();
-
         RowMajorMatrix::new(rows, NUM_RANGE_GATE_COLS)
     }
 }
