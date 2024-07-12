@@ -6,7 +6,7 @@ use super::DummyHashAir;
 
 impl<F: Field> AirBridge<F> for DummyHashAir {
     fn receives(&self) -> Vec<Interaction<F>> {
-        let fields = (0..self.hash_width)
+        let fields = (0..2 * self.hash_width + self.rate)
             .map(|i| VirtualPairCol::single_main(i))
             .collect();
 
@@ -20,18 +20,19 @@ impl<F: Field> AirBridge<F> for DummyHashAir {
     }
 
     fn sends(&self) -> Vec<Interaction<F>> {
-        let n = self.hash_width;
-        let r = self.rate;
-        let fields = (n + r..2 * n + r)
-            .map(|i| VirtualPairCol::single_main(i))
-            .collect();
+        // let n = self.hash_width;
+        // let r = self.rate;
+        // let fields = (n + r..2 * n + r)
+        //     .map(|i| VirtualPairCol::single_main(i))
+        //     .collect();
 
-        let count = VirtualPairCol::constant(F::one());
+        // let count = VirtualPairCol::constant(F::one());
 
-        vec![Interaction {
-            fields,
-            count,
-            argument_index: self.bus_index(),
-        }]
+        // vec![Interaction {
+        //     fields,
+        //     count,
+        //     argument_index: self.bus_index(),
+        // }]
+        vec![]
     }
 }
