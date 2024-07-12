@@ -12,16 +12,16 @@ fn wrap_string(s: String, width: usize) -> Vec<String> {
 
 pub fn print_page(p: &Page, idx_wrap_bytes: usize, data_wrap_bytes: usize, max_rows: usize) {
     let idx_wrap_chars = if idx_wrap_bytes == 0 {
-        &p.rows[0].idx.len() * 4
+        p.idx_len() * 4
     } else {
         idx_wrap_bytes * 2
     };
     let data_wrap_chars = if data_wrap_bytes == 0 {
-        &p.rows[0].data.len() * 4
+        p.data_len() * 4
     } else {
         data_wrap_bytes * 2
     };
-    for row in &p.rows {
+    for row in p.iter() {
         let idx = u16_vec_to_hex_string(row.idx.clone())
             .strip_prefix("0x")
             .unwrap()
@@ -56,7 +56,7 @@ pub fn print_page(p: &Page, idx_wrap_bytes: usize, data_wrap_bytes: usize, max_r
             }
         }
     }
-    println!("Height: {}", p.rows.len());
+    println!("Height: {}", p.height());
 }
 
 pub fn print_page_nowrap_upto(p: &Page, max_rows: usize) {

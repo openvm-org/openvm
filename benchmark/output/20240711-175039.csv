@@ -1,0 +1,3 @@
+benchmark,,stark engine,page config,,,,,,,fri params,,,air width,,,timing,,,,,,,
+test_type,scenario,engine,index_bytes,data_bytes,page_width,height,max_rw_ops,bits_per_fe,mode,log_blowup,num_queries,pow_bits,preprocessed,main,challenge,keygen_time,cache_time,prove_load_trace_gen,prove_load_trace_commit,prove_generate,prove_commit,prove_time,verify_time
+ReadWrite,90%r/10%w,BabyBearPoseidon2,32,32,33,16384,16384,16,ReadWrite,2,103,0,0,448,113,1.38ms,54.0ms,983ms,36.8ms,7.19ms,1.08s,5.50s,103ms

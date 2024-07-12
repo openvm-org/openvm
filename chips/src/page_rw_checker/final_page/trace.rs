@@ -24,7 +24,7 @@ impl IndexedPageWriteAir {
         let mut final_page_aux_trace = self.final_air.gen_aux_trace::<SC>(page, range_checker);
 
         let mut aux_trace_flat: Vec<Val<SC>> = vec![];
-        for (r, page_row) in page.rows.iter().enumerate() {
+        for (r, page_row) in page.iter().enumerate() {
             let fp_aux_row = final_page_aux_trace.row_mut(r);
             aux_trace_flat.extend_from_slice(fp_aux_row);
 

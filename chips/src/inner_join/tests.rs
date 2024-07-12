@@ -104,7 +104,7 @@ fn inner_join_test() {
     );
 
     // Assigning foreign key in t2 rows
-    for row in t2.rows.iter_mut() {
+    for row in t2.iter_mut() {
         row.data[fkey_start..fkey_end].clone_from_slice(&t1.get_random_idx(&mut rng));
     }
 
@@ -151,7 +151,7 @@ fn inner_join_test() {
     .expect("Verification failed");
 
     // Making a test where foreign key sometimes doesn't exist in t1
-    for row in t2.rows.iter_mut() {
+    for row in t2.iter_mut() {
         if rng.gen::<bool>() {
             row.data[fkey_start..fkey_end].clone_from_slice(
                 (fkey_start..fkey_end)
@@ -176,7 +176,7 @@ fn inner_join_test() {
 
     // Making a test where foreign key always doens't exist in t1
     // This should produce a fully-unallocated output page
-    for row in t2.rows.iter_mut() {
+    for row in t2.iter_mut() {
         row.data[fkey_start..fkey_end].clone_from_slice(
             (fkey_start..fkey_end)
                 .map(|_| rng.gen::<u32>() % MAX_VAL)
@@ -219,7 +219,7 @@ fn inner_join_test() {
         t2_height / 2,
     );
 
-    for row in t2.rows.iter_mut() {
+    for row in t2.iter_mut() {
         if rng.gen::<bool>() {
             row.data[fkey_start..fkey_end].clone_from_slice(&t1.get_random_idx(&mut rng));
         }
