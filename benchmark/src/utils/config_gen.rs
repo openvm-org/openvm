@@ -31,8 +31,8 @@ pub fn generate_configs() -> Vec<PageConfig> {
     let data_bytes_vec = vec![32, 256, 1024];
 
     // Currently we have the max_rw_ops use the height vec to reduce the number of permutations
-    let height_vec = vec![65536, 262_144, 1_048_576];
-    // let height_vec = vec![16, 64]; // Run a mini-benchmark for testing
+    // let height_vec = vec![65536, 262_144, 1_048_576];
+    let height_vec = vec![16, 64]; // Run a mini-benchmark for testing
 
     let engine_vec = vec![
         EngineType::BabyBearPoseidon2,

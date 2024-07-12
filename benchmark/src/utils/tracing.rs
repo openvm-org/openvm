@@ -50,7 +50,6 @@ pub fn setup_benchmark_tracing() -> WorkerGuard {
 pub fn clear_tracing_log(file_path: &str) -> Result<()> {
     let mut file = File::create(file_path)?;
     file.write_all(b"")?;
-    file.flush()?;
     Ok(())
 }
 

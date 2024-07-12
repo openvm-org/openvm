@@ -28,11 +28,11 @@ pub struct BenchmarkRow {
     pub num_queries: usize,
     pub pow_bits: usize,
     /// Total width of preprocessed AIR
-    pub preprocessed: usize,
+    pub preprocessed: String,
     /// Total width of partitioned main AIR
-    pub main: usize,
+    pub main: String,
     /// Total width of after challenge AIR
-    pub challenge: usize,
+    pub challenge: String,
     /// Keygen time: Time to generate keys
     pub keygen_time: String,
     /// Cache time: Time to generate cached trace
@@ -165,15 +165,15 @@ pub fn write_csv_line(
         preprocessed: log_data
             .get("Total air width: preprocessed=")
             .unwrap_or(&"-".to_string())
-            .parse::<usize>()?,
+            .to_owned(),
         main: log_data
             .get("Total air width: partitioned_main=")
             .unwrap_or(&"-".to_string())
-            .parse::<usize>()?,
+            .to_owned(),
         challenge: log_data
             .get("Total air width: after_challenge=")
             .unwrap_or(&"-".to_string())
-            .parse::<usize>()?,
+            .to_owned(),
         keygen_time: log_data
             .get("Benchmark keygen: benchmark")
             .unwrap_or(&"-".to_string())
@@ -208,11 +208,7 @@ pub fn write_csv_line(
             .to_owned(),
     };
 
-    writer.serialize(row)?;
+    writer.serialize(&row)?;
     writer.flush()?;
     Ok(())
-}
-
-pub fn display_output(data: String) {
-    println!("{}", data);
 }
