@@ -210,6 +210,10 @@ impl Page {
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut PageCols<u32>> {
         self.rows.iter_mut()
     }
+
+    pub fn into_iter(self) -> impl Iterator<Item = PageCols<u32>> {
+        self.rows.into_iter()
+    }
 }
 
 /// Provides indexing by a row index

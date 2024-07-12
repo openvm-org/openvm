@@ -34,7 +34,7 @@ impl OfflineChecker {
     where
         Val<SC>: PrimeField,
     {
-        let mut page_editor = IndexedPageEditor::from_page(page);
+        let mut page_editor = IndexedPageEditor::from_page(page.clone());
 
         // Creating a timestamp bigger than all others
         let max_clk = ops.iter().map(|op| op.clk).max().unwrap_or(0) + 1;
@@ -166,11 +166,7 @@ impl OfflineChecker {
 
             for op in ops.iter().take(j).skip(i) {
                 if op.op_type == OpType::Write {
-                    if !page_editor.contains(&cur_idx) {
-                        page_editor.insert(&cur_idx, &op.data);
-                    } else {
-                        page_editor[&cur_idx].clone_from(&op.data);
-                    }
+                    page_editor.insert(&cur_idx, &op.data);
                 } else if op.op_type == OpType::Delete {
                     page_editor.delete(&cur_idx);
                 }
@@ -190,17 +186,16 @@ impl OfflineChecker {
                 ));
             }
 
-            let final_data = if page_editor.contains(&cur_idx) {
-                &page_editor[&cur_idx]
-            } else {
-                &vec![0; self.data_len]
-            };
+            let final_data = page_editor
+                .get(&cur_idx)
+                .cloned()
+                .unwrap_or(vec![0; self.data_len]);
 
             // Adding the is_final row to the trace
             rows.push(gen_row(
                 &mut is_first_row,
                 &cur_idx,
-                final_data,
+                &final_data,
                 false,
                 true,
                 false,
@@ -217,7 +212,7 @@ impl OfflineChecker {
         // Ensure that trace degree is a power of two
         assert!(trace_degree > 0 && trace_degree & (trace_degree - 1) == 0);
 
-        *page = page_editor.to_page();
+        *page = page_editor.into_page();
 
         // dummy idx
         let idx = page[0].idx.clone();

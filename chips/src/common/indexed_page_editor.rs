@@ -14,9 +14,13 @@ pub struct IndexedPageEditor {
 }
 
 impl IndexedPageEditor {
-    pub fn from_page(page: &Page) -> Self {
+    pub fn from_page(page: Page) -> Self {
+        let idx_len = page.idx_len();
+        let data_len = page.data_len();
+        let height = page.height();
+
         let mut idx_data_map = BTreeMap::new();
-        for row in page.iter() {
+        for row in page.into_iter() {
             if row.is_alloc == 1 {
                 assert!(!idx_data_map.contains_key(&row.idx));
                 idx_data_map.insert(row.idx.clone(), row.data.clone());
@@ -24,16 +28,16 @@ impl IndexedPageEditor {
         }
 
         Self {
-            idx_len: page.idx_len(),
-            data_len: page.data_len(),
-            height: page.height(),
+            idx_len,
+            data_len,
+            height,
             idx_data_map,
         }
     }
 
-    pub fn to_page(&self) -> Page {
+    pub fn into_page(self) -> Page {
         let mut page_2d_vec = vec![];
-        for (idx, data) in self.idx_data_map.iter() {
+        for (idx, data) in self.idx_data_map.into_iter() {
             page_2d_vec.push(
                 iter::once(1)
                     .chain(idx.iter().copied())
@@ -54,10 +58,13 @@ impl IndexedPageEditor {
         self.idx_data_map.contains_key(idx)
     }
 
+    pub fn get(&self, idx: &[u32]) -> Option<&Vec<u32>> {
+        self.idx_data_map.get(idx)
+    }
+
     /// This function inserts (idx, data) into the page
     /// It assumes that the page is not full and that the idx is not already in the page
     pub fn insert(&mut self, idx: &[u32], data: &[u32]) {
-        assert!(!self.contains(idx));
         assert!(
             self.idx_data_map.len() < self.height,
             "Can't insert into a full Page"
@@ -65,38 +72,43 @@ impl IndexedPageEditor {
         assert!(idx.len() == self.idx_len);
         assert!(data.len() == self.data_len);
 
-        self.idx_data_map.insert(idx.to_vec(), data.to_vec());
+        assert!(
+            self.idx_data_map
+                .insert(idx.to_vec(), data.to_vec())
+                .is_none(),
+            "Index already exists in Page"
+        );
     }
 
     /// This function deletes the row with index idx
     /// It assumes that the page contains an allocated row with index idx
     pub fn delete(&mut self, idx: &[u32]) {
-        assert!(self.contains(idx));
-
-        self.idx_data_map.remove(idx);
+        self.idx_data_map
+            .remove(idx)
+            .expect("Index doesn't exist in Page");
     }
 }
 
 /// This provides indexing by an idx (Vec<u32>)
 /// It assumes that the page contains an allocated row with
 /// index idx and returns a reference to its data
-impl Index<&Vec<u32>> for IndexedPageEditor {
+impl Index<&[u32]> for IndexedPageEditor {
     type Output = Vec<u32>;
 
-    fn index(&self, idx: &Vec<u32>) -> &Self::Output {
+    fn index(&self, idx: &[u32]) -> &Self::Output {
         self.idx_data_map
             .get(idx)
-            .expect("Indexed doesn't exist in Page")
+            .expect("Index doesn't exist in Page")
     }
 }
 
 /// This provides mutable indexing by an idx (Vec<u32>)
 /// It assumes that the page contains an allocated row with
 /// index idx and returns a mutable reference to its data
-impl IndexMut<&Vec<u32>> for IndexedPageEditor {
-    fn index_mut(&mut self, idx: &Vec<u32>) -> &mut Self::Output {
+impl IndexMut<&[u32]> for IndexedPageEditor {
+    fn index_mut(&mut self, idx: &[u32]) -> &mut Self::Output {
         self.idx_data_map
             .get_mut(idx)
-            .expect("Indexed doesn't exist in Page")
+            .expect("Index doesn't exist in Page")
     }
 }
