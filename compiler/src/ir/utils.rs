@@ -209,7 +209,7 @@ impl<C: Config> Builder<C> {
                     offset: 0,
                     size: C::EF::D,
                 };
-                self.load(value, ptr, index);
+                self.store(ptr, index, value);
             }
             Array::Fixed(_) => panic!("unreachable"),
         }
