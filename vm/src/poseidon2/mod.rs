@@ -7,9 +7,9 @@ use columns::{Poseidon2ChipCols, Poseidon2ChipIoCols};
 use poseidon2_air::poseidon2::Poseidon2Air;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
+use crate::cpu::trace::Instruction;
 use crate::cpu::OpCode;
 use crate::cpu::OpCode::*;
-use crate::cpu::trace::Instruction;
 use crate::poseidon2::columns::Poseidon2ChipAuxCols;
 use crate::vm::VirtualMachine;
 

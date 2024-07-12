@@ -17,9 +17,9 @@ use afs_test_utils::engine::StarkEngine;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::create_seeded_rng;
 
-use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
-use crate::cpu::OpCode::{COMP_POS2, PERM_POS2};
 use crate::cpu::trace::Instruction;
+use crate::cpu::OpCode::{COMP_POS2, PERM_POS2};
+use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
 use crate::vm::config::{VmConfig, VmParamsConfig};
 use crate::vm::VirtualMachine;
 

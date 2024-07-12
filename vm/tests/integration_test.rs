@@ -6,8 +6,8 @@ use afs_test_utils::config::baby_bear_poseidon2::{
 };
 use afs_test_utils::config::fri_params::fri_params_with_80_bits_of_security;
 use afs_test_utils::engine::StarkEngine;
-use stark_vm::cpu::OpCode::*;
 use stark_vm::cpu::trace::Instruction;
+use stark_vm::cpu::OpCode::*;
 use stark_vm::vm::config::VmConfig;
 use stark_vm::vm::config::VmParamsConfig;
 use stark_vm::vm::get_chips;
