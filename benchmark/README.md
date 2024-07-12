@@ -32,7 +32,7 @@ We generate the following benchmark data for each run:
 - prove_time: Total time to generate the proof prove (inclusive of all prove timing items above)
   - prove_load_trace_gen: Time to generate load_page_and_ops trace
   - prove_load_trace_commit: Time to commit load_page_and_ops trace
-  - prove_generate: Time to generate trace
+  - prove_ops_sender_gen: Time to generate the ops_sender trace
   - prove_commit: Time to commit trace
 - verify_time: Total time to verify the proof
 

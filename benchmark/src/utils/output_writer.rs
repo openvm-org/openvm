@@ -41,7 +41,7 @@ pub struct BenchmarkRow {
     pub prove_load_trace_gen: String,
     /// Prove: Time to commit load_page_and_ops trace
     pub prove_load_trace_commit: String,
-    /// Prove: Time to generate trace
+    /// Prove: Time to generate the ops_sender trace
     pub prove_ops_sender_gen: String,
     /// Prove: Time to commit trace
     pub prove_commit: String,
