@@ -34,7 +34,11 @@ fn generate_cols<T: Field>(
         x[3] + add_sub_coeff * y[3],
     ];
     let product = FieldExtensionArithmeticAir::solve(OpCode::BBE4MUL, x, y).unwrap();
-    let inv = FieldExtensionArithmeticAir::solve(OpCode::BBE4INV, x, y).unwrap();
+    let inv = if x[0] == T::zero() && x[1] == T::zero() && x[2] == T::zero() && x[3] == T::zero() {
+        [T::zero(), T::zero(), T::zero(), T::zero()]
+    } else {
+        FieldExtensionArithmeticAir::solve(OpCode::BBE4INV, x, y).unwrap()
+    };
 
     FieldExtensionArithmeticCols {
         io: FieldExtensionArithmeticIoCols {
