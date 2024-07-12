@@ -357,7 +357,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ];
 
             for i in 0..EF::D {
-                // register[dst] <- mem[register[util] + offset - (i * WORD_SIZE)]
+                // register[dst] <- mem[register[util] + offset + (i * WORD_SIZE)]
                 result.push(inst(
                     LOADW,
                     register(dst - ((i * WORD_SIZE) as i32)),
@@ -371,7 +371,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         }
         AsmInstruction::LoadEI(dst, src, index, offset, size) => (0..EF::D)
             .map(|i|
-                // mem[register[addr] + ((index * size) + offset)] <- register[val]
+                // register[dst] <- mem[register[src] + ((index * size) + offset + (i * WORD_SIZE))]
                 inst(
                     LOADW,
                     register(dst - ((i * WORD_SIZE) as i32)),
@@ -444,6 +444,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ];
 
             for i in 0..EF::D {
+                // mem[register[util] + offset + (i * WORD_SIZE)] <- register[val]
                 result.push(inst(
                     STOREW,
                     register(val - ((i * WORD_SIZE) as i32)),
@@ -457,7 +458,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         }
         AsmInstruction::StoreEI(val, addr, index, offset, size) => (0..EF::D)
             .map(|i|
-                // mem[register[addr] + ((index * size) + offset)] <- register[val]
+                // mem[register[addr] + ((index * size) + offset + (i * WORD_SIZE))] <- register[val]
                 inst(
                     STOREW,
                     register(val - ((i * WORD_SIZE) as i32)),

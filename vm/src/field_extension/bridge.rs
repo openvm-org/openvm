@@ -30,7 +30,7 @@ fn get_rw_interactions<T: Field>(
         );
 
         let pointer = VirtualPairCol::new(
-            vec![(PairCol::Main(address), T::from_canonical_usize(1))],
+            vec![(PairCol::Main(address), T::one())],
             T::from_canonical_usize(i * WORD_SIZE),
         );
 
