@@ -10,8 +10,8 @@ use poseidon2_air::poseidon2::Poseidon2Config;
 use crate::cpu::trace::Instruction;
 use crate::cpu::OpCode;
 use crate::cpu::OpCode::*;
+use crate::memory::offline_checker::MemoryChip;
 use crate::poseidon2::columns::Poseidon2ChipAuxCols;
-use crate::vm::VirtualMachine;
 
 #[cfg(test)]
 pub mod tests;
@@ -80,7 +80,8 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     /// the given instruction using the subair, storing it in `rows`. Then, writes output to memory,
     /// truncating if the instruction is a compression.
     pub fn poseidon2_perm<const WORD_SIZE: usize>(
-        vm: &mut VirtualMachine<WORD_SIZE, F>,
+        &mut self,
+        memory_chip: &mut MemoryChip<WORD_SIZE, F>,
         start_timestamp: usize,
         instruction: Instruction<F>,
     ) {
@@ -98,36 +99,28 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
 
         let addresses = [op_a, op_b, op_c].map(|operand| {
             timestamp += 1;
-            vm.memory_chip.read_elem(timestamp - 1, d, operand)
+            memory_chip.read_elem(timestamp - 1, d, operand)
         });
 
         let data_1: Vec<F> = (0..WIDTH / 2)
             .map(|i| {
                 timestamp += 1;
-                vm.memory_chip.read_elem(
-                    timestamp - 1,
-                    e,
-                    addresses[0] + F::from_canonical_usize(i),
-                )
+                memory_chip.read_elem(timestamp - 1, e, addresses[0] + F::from_canonical_usize(i))
             })
             .collect();
         let data_2: Vec<F> = (0..WIDTH / 2)
             .map(|i| {
                 timestamp += 1;
-                vm.memory_chip.read_elem(
-                    timestamp - 1,
-                    e,
-                    addresses[1] + F::from_canonical_usize(i),
-                )
+                memory_chip.read_elem(timestamp - 1, e, addresses[1] + F::from_canonical_usize(i))
             })
             .collect();
 
         // SAFETY: only allowed because WIDTH constrained to 16 above
         let input_state: [F; WIDTH] = [data_1, data_2].concat().try_into().unwrap();
-        let internal = vm.poseidon2_chip.air.generate_trace_row(input_state);
+        let internal = self.air.generate_trace_row(input_state);
         let output = internal.io.output;
         let is_zero_row = IsZeroAir {}.generate_trace_row(d);
-        vm.poseidon2_chip.rows.push(Poseidon2ChipCols {
+        self.rows.push(Poseidon2ChipCols {
             io: make_io_cols(start_timestamp, instruction),
             aux: Poseidon2ChipAuxCols {
                 addresses,
@@ -144,7 +137,7 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
         };
 
         for (i, &output_elem) in iter_range {
-            vm.memory_chip.write_elem(
+            memory_chip.write_elem(
                 timestamp,
                 e,
                 addresses[2] + F::from_canonical_usize(i),

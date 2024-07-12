@@ -97,8 +97,8 @@ macro_rules! run_perm_ops {
 
         (0..$num_ops).for_each(|i| {
             let start_timestamp = 16 * $num_ops + (time_per * i);
-            Poseidon2Chip::<16, BabyBear>::poseidon2_perm(
-                &mut vm,
+            vm.poseidon2_chip.poseidon2_perm(
+                &mut vm.memory_chip,
                 start_timestamp,
                 $instructions[i],
             );

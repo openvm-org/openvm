@@ -8,8 +8,7 @@ use afs_chips::{
 };
 
 use crate::memory::{compose, decompose};
-use crate::poseidon2::Poseidon2Chip;
-use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
+use crate::vm::VirtualMachine;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
@@ -241,10 +240,12 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     println!("{}", value);
                 }
                 FE4ADD | FE4SUB | BBE4MUL | BBE4INV => {
-                    FieldExtensionArithmeticChip::calculate(vm, timestamp, instruction);
+                    vm.field_extension_chip
+                        .calculate(&mut vm.memory_chip, timestamp, instruction);
                 }
                 PERM_POS2 | COMP_POS2 => {
-                    Poseidon2Chip::<16, _>::poseidon2_perm(vm, timestamp, instruction);
+                    vm.poseidon2_chip
+                        .poseidon2_perm(&mut vm.memory_chip, timestamp, instruction);
                 }
                 HINT => {
                     if witness_idx >= vm.witness_stream.len() {
