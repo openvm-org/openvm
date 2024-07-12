@@ -29,6 +29,3 @@ pub mod xor_lookup;
 
 pub mod dummy_hash;
 pub mod flat_hash;
-pub mod is_equal;
-pub mod is_equal_vec;
-pub mod is_zero;
