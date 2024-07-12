@@ -9,7 +9,7 @@ use afs_test_utils::{
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
-use stark_vm::vm::{config::VmConfig, get_chips, VirtualMachine};
+use stark_vm::vm::{config::VmParamsConfig, get_chips, VirtualMachine};
 
 use crate::{
     asm::parse_asm_file,
@@ -41,7 +41,7 @@ pub struct ProveCommand {
 
 impl ProveCommand {
     /// Execute the `prove` command
-    pub fn execute(&self, config: VmConfig) -> Result<()> {
+    pub fn execute(&self, config: VmParamsConfig) -> Result<()> {
         let start = Instant::now();
         self.execute_helper(config)?;
 
@@ -51,12 +51,12 @@ impl ProveCommand {
         Ok(())
     }
 
-    pub fn execute_helper(&self, config: VmConfig) -> Result<()> {
+    pub fn execute_helper(&self, config: VmParamsConfig) -> Result<()> {
         println!("Proving program: {}", self.asm_file_path);
         let instructions = parse_asm_file(Path::new(&self.asm_file_path.clone()))?;
         let mut vm = VirtualMachine::<WORD_SIZE, _>::new(config, instructions, vec![]);
 
-        let engine = config::baby_bear_poseidon2::default_engine(vm.max_log_degree()?);
+        let engine = config::baby_bear_poseidon2::default_engine(vm.segments[0].max_log_degree()?);
         let encoded_pk = read_from_path(&Path::new(&self.keys_folder.clone()).join("partial.pk"))?;
         let partial_pk: MultiStarkPartialProvingKey<BabyBearPoseidon2Config> =
             bincode::deserialize(&encoded_pk)?;
@@ -66,12 +66,12 @@ impl ProveCommand {
         let prover = engine.prover();
         let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-        for trace in vm.traces()? {
+        for trace in vm.segments[0].traces()? {
             trace_builder.load_trace(trace);
         }
         trace_builder.commit_current();
 
-        let chips = get_chips(&vm);
+        let chips = get_chips(&vm.segments[0]);
         let num_chips = chips.len();
 
         let main_trace_data = trace_builder.view(&partial_vk, chips);

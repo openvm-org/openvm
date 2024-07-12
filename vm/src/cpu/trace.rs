@@ -9,7 +9,7 @@ use afs_chips::{
 
 use crate::memory::{compose, decompose};
 use crate::poseidon2::Poseidon2Chip;
-use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
+use crate::{field_extension::FieldExtensionArithmeticChip, vm::ExecutionSegment};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
@@ -111,7 +111,7 @@ impl Error for ExecutionError {}
 
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
     pub fn generate_trace<F: PrimeField32>(
-        vm: &mut VirtualMachine<WORD_SIZE, F>,
+        vm: &mut ExecutionSegment<WORD_SIZE, F>,
     ) -> Result<RowMajorMatrix<F>, ExecutionError> {
         let mut rows = vec![];
 

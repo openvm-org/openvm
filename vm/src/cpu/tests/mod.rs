@@ -2,7 +2,7 @@ use crate::cpu::columns::{CpuCols, CpuIoCols};
 use crate::cpu::{max_accesses_per_instruction, CpuAir, CpuOptions};
 use crate::field_arithmetic::ArithmeticOperation;
 use crate::memory::{decompose, MemoryAccess, OpType};
-use crate::vm::config::{VmConfig, VmParamsConfig};
+use crate::vm::config::VmParamsConfig;
 use crate::vm::VirtualMachine;
 use afs_chips::is_zero::IsZeroAir;
 use afs_stark_backend::verifier::VerificationError;
@@ -28,15 +28,13 @@ fn make_vm<const WORD_SIZE: usize>(
     field_extension_enabled: bool,
 ) -> VirtualMachine<WORD_SIZE, BabyBear> {
     VirtualMachine::<WORD_SIZE, BabyBear>::new(
-        VmConfig {
-            vm: VmParamsConfig {
-                field_arithmetic_enabled,
-                field_extension_enabled,
-                compress_poseidon2_enabled: false,
-                perm_poseidon2_enabled: false,
-                limb_bits: LIMB_BITS,
-                decomp: DECOMP,
-            },
+        VmParamsConfig {
+            field_arithmetic_enabled,
+            field_extension_enabled,
+            compress_poseidon2_enabled: false,
+            perm_poseidon2_enabled: false,
+            limb_bits: LIMB_BITS,
+            decomp: DECOMP,
         },
         program,
         vec![],
@@ -122,9 +120,9 @@ fn execution_test<const WORD_SIZE: usize>(
         field_arithmetic_enabled,
         field_extension_enabled,
     );
-    let mut trace = CpuAir::generate_trace(&mut vm).unwrap();
+    let mut trace = CpuAir::generate_trace(&mut vm.segments[0]).unwrap();
 
-    let mut actual_memory_log = vm.memory_chip.accesses.clone();
+    let mut actual_memory_log = vm.segments[0].memory_chip.accesses.clone();
     // temporary
     for access in actual_memory_log.iter_mut() {
         access.address = access.address / BabyBear::from_canonical_usize(WORD_SIZE);
@@ -132,7 +130,7 @@ fn execution_test<const WORD_SIZE: usize>(
 
     assert_eq!(actual_memory_log, expected_memory_log);
     assert_eq!(
-        vm.field_arithmetic_chip.operations,
+        vm.segments[0].field_arithmetic_chip.operations,
         expected_arithmetic_operations
     );
 
@@ -157,7 +155,7 @@ fn execution_test<const WORD_SIZE: usize>(
         assert_eq!(cols.io, expected_io);
     }
 
-    let mut execution_frequency_check = vm.program_chip.execution_frequencies.clone();
+    let mut execution_frequency_check = vm.segments[0].program_chip.execution_frequencies.clone();
     for pc in expected_execution {
         execution_frequency_check[pc] -= 1;
     }
@@ -196,8 +194,8 @@ fn air_test_change_pc<const WORD_SIZE: usize>(
         |rows, vm| {
             let old = rows[change_row].io.pc.as_canonical_u64() as usize;
             rows[change_row].io.pc = BabyBear::from_canonical_usize(new);
-            vm.program_chip.execution_frequencies[new] += 1;
-            vm.program_chip.execution_frequencies[old] -= 1;
+            vm.segments[0].program_chip.execution_frequencies[new] += 1;
+            vm.segments[0].program_chip.execution_frequencies[old] -= 1;
         },
     );
 }
@@ -217,7 +215,7 @@ fn air_test_change<
         field_arithmetic_enabled,
         field_extension_enabled,
     );
-    let mut trace = CpuAir::generate_trace(&mut vm).unwrap();
+    let mut trace = CpuAir::generate_trace(&mut vm.segments[0]).unwrap();
     let mut rows = vec![];
     for i in 0..trace.height() {
         rows.push(CpuCols::<WORD_SIZE, BabyBear>::from_slice(
@@ -236,7 +234,7 @@ fn air_test_change<
     let mut program_rows = vec![];
     for (pc, instruction) in program.iter().enumerate() {
         program_rows.extend(vec![
-            BabyBear::from_canonical_usize(vm.program_chip.execution_frequencies[pc]),
+            BabyBear::from_canonical_usize(vm.segments[0].program_chip.execution_frequencies[pc]),
             BabyBear::from_canonical_usize(pc),
             BabyBear::from_canonical_usize(instruction.opcode as usize),
             instruction.op_a,
@@ -253,7 +251,7 @@ fn air_test_change<
 
     let memory_air = DummyInteractionAir::new(5, false, MEMORY_BUS);
     let mut memory_rows = vec![];
-    for memory_access in vm.memory_chip.accesses.iter() {
+    for memory_access in vm.segments[0].memory_chip.accesses.iter() {
         memory_rows.extend(vec![
             BabyBear::one(),
             BabyBear::from_canonical_usize(memory_access.timestamp),
@@ -270,7 +268,7 @@ fn air_test_change<
 
     let arithmetic_air = DummyInteractionAir::new(4, false, ARITHMETIC_BUS);
     let mut arithmetic_rows = vec![];
-    for arithmetic_op in vm.field_arithmetic_chip.operations.iter() {
+    for arithmetic_op in vm.segments[0].field_arithmetic_chip.operations.iter() {
         arithmetic_rows.extend(vec![
             BabyBear::one(),
             BabyBear::from_canonical_usize(arithmetic_op.opcode as usize),
@@ -286,12 +284,17 @@ fn air_test_change<
 
     let test_result = if field_arithmetic_enabled {
         run_simple_test_no_pis(
-            vec![&vm.cpu_air, &program_air, &memory_air, &arithmetic_air],
+            vec![
+                &vm.segments[0].cpu_air,
+                &program_air,
+                &memory_air,
+                &arithmetic_air,
+            ],
             vec![trace, program_trace, memory_trace, arithmetic_trace],
         )
     } else {
         run_simple_test_no_pis(
-            vec![&vm.cpu_air, &program_air, &memory_air],
+            vec![&vm.segments[0].cpu_air, &program_air, &memory_air],
             vec![trace, program_trace, memory_trace],
         )
     };
@@ -491,7 +494,7 @@ fn test_cpu_negative_hasnt_terminated() {
         true,
         |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
             rows.remove(rows.len() - 1);
-            vm.program_chip.execution_frequencies[1] = 0;
+            vm.segments[0].program_chip.execution_frequencies[1] = 0;
         },
     );
 }
@@ -527,7 +530,8 @@ fn test_cpu_negative_secret_write() {
                 data: decompose(AbstractField::from_canonical_usize(115)),
             };
 
-            vm.memory_chip
+            vm.segments[0]
+                .memory_chip
                 .accesses
                 .push(MemoryAccess::from_isize(0, OpType::Write, 1, 0, 115));
         },
@@ -551,7 +555,7 @@ fn test_cpu_negative_disable_write() {
         true,
         |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
             rows[0].aux.accesses[2].enabled = AbstractField::zero();
-            vm.memory_chip.accesses.remove(0);
+            vm.segments[0].memory_chip.accesses.remove(0);
         },
     );
 }
@@ -575,7 +579,7 @@ fn test_cpu_negative_disable_read0() {
         true,
         |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
             rows[1].aux.accesses[0].enabled = AbstractField::zero();
-            vm.memory_chip.accesses.remove(1);
+            vm.segments[0].memory_chip.accesses.remove(1);
         },
     );
 }
@@ -599,7 +603,7 @@ fn test_cpu_negative_disable_read1() {
         true,
         |rows, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
             rows[1].aux.accesses[1].enabled = AbstractField::zero();
-            vm.memory_chip.accesses.remove(2);
+            vm.segments[0].memory_chip.accesses.remove(2);
         },
     );
 }

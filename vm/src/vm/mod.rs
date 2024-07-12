@@ -28,10 +28,13 @@ pub mod config;
 
 pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub config: VmParamsConfig,
+    pub program: Vec<Instruction<F>>,
+    pub witness_stream: Vec<Vec<F>>,
     pub segments: Vec<ExecutionSegment<WORD_SIZE, F>>,
 }
 
 pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
+    pub config: VmParamsConfig,
     pub cpu_air: CpuAir<WORD_SIZE>,
     pub program_chip: ProgramChip<F>,
     pub memory_chip: MemoryChip<WORD_SIZE, F>,
@@ -40,18 +43,31 @@ pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub range_checker: Arc<RangeCheckerGateChip>,
     pub poseidon2_chip: Poseidon2Chip<16, F>,
     pub witness_stream: Vec<Vec<F>>,
-    pub vm: VirtualMachine<WORD_SIZE, F>,
 
     traces: Vec<DenseMatrix<F>>,
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
-    pub fn new_segment(
-        self,
+    pub fn new(
+        config: VmParamsConfig,
         program: Vec<Instruction<F>>,
         witness_stream: Vec<Vec<F>>,
-    ) -> ExecutionSegment<WORD_SIZE, F> {
-        ExecutionSegment::new(self, program, witness_stream)
+    ) -> Self {
+        let mut vm = Self {
+            config,
+            program,
+            witness_stream,
+            segments: vec![],
+        };
+        vm.new_segment();
+        vm
+    }
+
+    pub fn new_segment(&mut self) {
+        let program = self.program.clone();
+        let witness_stream = self.witness_stream.clone();
+        let segment = ExecutionSegment::new(self, program, witness_stream);
+        self.segments.push(segment);
     }
 
     pub fn options(&self) -> CpuOptions {
@@ -61,7 +77,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
 
 impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
     pub fn new(
-        vm: VirtualMachine<WORD_SIZE, F>,
+        vm: &mut VirtualMachine<WORD_SIZE, F>,
         program: Vec<Instruction<F>>,
         witness_stream: Vec<Vec<F>>,
     ) -> Self {
@@ -82,7 +98,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         );
 
         Self {
-            vm,
+            config,
             cpu_air,
             program_chip,
             memory_chip,
@@ -96,20 +112,20 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
     }
 
     fn generate_traces(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
-        let cpu_trace = CpuAir::generate_trace(&mut self.vm)?;
+        let cpu_trace = CpuAir::generate_trace(self)?;
         let mut result = vec![
             cpu_trace,
             self.program_chip.generate_trace(),
             self.memory_chip.generate_trace(self.range_checker.clone()),
             self.range_checker.generate_trace(),
         ];
-        if self.vm.options().field_arithmetic_enabled {
+        if self.config.cpu_options().field_arithmetic_enabled {
             result.push(self.field_arithmetic_chip.generate_trace());
         }
-        if self.vm.options().field_extension_enabled {
+        if self.config.cpu_options().field_extension_enabled {
             result.push(self.field_extension_chip.generate_trace());
         }
-        if self.vm.options().poseidon2_enabled() {
+        if self.config.cpu_options().poseidon2_enabled() {
             result.push(self.poseidon2_chip.generate_trace());
         }
         Ok(result)
@@ -129,6 +145,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         }
         Ok(log2_strict_usize(checker_trace_degree))
     }
+
+    pub fn options(&self) -> CpuOptions {
+        self.config.cpu_options()
+    }
 }
 
 pub fn get_chips<const WORD_SIZE: usize, SC: StarkGenericConfig>(
@@ -143,13 +163,13 @@ where
         &segment.memory_chip.air,
         &segment.range_checker.air,
     ];
-    if segment.vm.options().field_arithmetic_enabled {
+    if segment.config.cpu_options().field_arithmetic_enabled {
         result.push(&segment.field_arithmetic_chip.air as &dyn AnyRap<SC>);
     }
-    if segment.vm.options().field_extension_enabled {
+    if segment.config.cpu_options().field_extension_enabled {
         result.push(&segment.field_extension_chip.air as &dyn AnyRap<SC>);
     }
-    if segment.vm.options().poseidon2_enabled() {
+    if segment.config.cpu_options().poseidon2_enabled() {
         result.push(&segment.poseidon2_chip as &dyn AnyRap<SC>);
     }
     result

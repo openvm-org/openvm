@@ -2,7 +2,7 @@ use crate::commands::keygen::KeygenCommand;
 use crate::commands::{keygen, prove, verify};
 use clap::Parser;
 use clap::Subcommand;
-use stark_vm::vm::config::VmConfig;
+use stark_vm::vm::config::VmParamsConfig;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about = "VM STARK CLI")]
@@ -28,7 +28,7 @@ pub enum CliCommand {
 }
 
 impl Cli {
-    pub fn run(config: VmConfig) -> Self {
+    pub fn run(config: VmParamsConfig) -> Self {
         let cli = Self::parse();
         match &cli.command {
             CliCommand::Keygen(keygen) => {

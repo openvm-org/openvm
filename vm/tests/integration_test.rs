@@ -8,7 +8,6 @@ use p3_field::AbstractField;
 
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
-use stark_vm::vm::config::VmConfig;
 use stark_vm::vm::config::VmParamsConfig;
 use stark_vm::vm::get_chips;
 use stark_vm::vm::VirtualMachine;
@@ -24,22 +23,20 @@ fn air_test(
     witness_stream: Vec<Vec<BabyBear>>,
 ) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
-        VmConfig {
-            vm: VmParamsConfig {
-                field_arithmetic_enabled,
-                field_extension_enabled,
-                compress_poseidon2_enabled: false,
-                perm_poseidon2_enabled: false,
-                limb_bits: LIMB_BITS,
-                decomp: DECOMP,
-            },
+        VmParamsConfig {
+            field_arithmetic_enabled,
+            field_extension_enabled,
+            compress_poseidon2_enabled: false,
+            perm_poseidon2_enabled: false,
+            limb_bits: LIMB_BITS,
+            decomp: DECOMP,
         },
         program,
         witness_stream,
     );
 
-    let traces = vm.traces().unwrap();
-    let chips = get_chips(&vm);
+    let traces = vm.segments[0].traces().unwrap();
+    let chips = get_chips(&vm.segments[0]);
     run_simple_test_no_pis(chips, traces).expect("Verification failed");
 }
 
@@ -50,23 +47,21 @@ fn air_test_with_poseidon2(
     program: Vec<Instruction<BabyBear>>,
 ) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
-        VmConfig {
-            vm: VmParamsConfig {
-                field_arithmetic_enabled,
-                field_extension_enabled,
-                compress_poseidon2_enabled,
-                perm_poseidon2_enabled: false,
-                limb_bits: LIMB_BITS,
-                decomp: DECOMP,
-            },
+        VmParamsConfig {
+            field_arithmetic_enabled,
+            field_extension_enabled,
+            compress_poseidon2_enabled,
+            perm_poseidon2_enabled: false,
+            limb_bits: LIMB_BITS,
+            decomp: DECOMP,
         },
         program,
         vec![],
     );
 
-    let max_log_degree = vm.max_log_degree().unwrap();
-    let traces = vm.traces().unwrap();
-    let chips = get_chips(&vm);
+    let max_log_degree = vm.segments[0].max_log_degree().unwrap();
+    let traces = vm.segments[0].traces().unwrap();
+    let chips = get_chips(&vm.segments[0]);
 
     let perm = random_perm();
     let fri_params = fri_params_with_80_bits_of_security()[1];

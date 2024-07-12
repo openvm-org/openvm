@@ -7,7 +7,7 @@ use afs_compiler::asm::AsmBuilder;
 use afs_compiler::ir::{Ext, Felt, SymbolicExt};
 use afs_compiler::ir::{ExtConst, Var};
 
-const WORD_SIZE: usize = 1;
+// const WORD_SIZE: usize = 1;
 
 #[test]
 fn test_compiler_arithmetic() {

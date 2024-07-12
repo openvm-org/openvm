@@ -7,7 +7,7 @@ use afs_test_utils::{
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
-use stark_vm::vm::{config::VmConfig, get_chips, VirtualMachine};
+use stark_vm::vm::{config::VmParamsConfig, get_chips, VirtualMachine};
 
 use crate::{
     asm::parse_asm_file,
@@ -47,7 +47,7 @@ pub struct VerifyCommand {
 
 impl VerifyCommand {
     /// Execute the `verify` command
-    pub fn execute(&self, config: VmConfig) -> Result<()> {
+    pub fn execute(&self, config: VmParamsConfig) -> Result<()> {
         let start = Instant::now();
 
         self.execute_helper(config)?;
@@ -58,7 +58,7 @@ impl VerifyCommand {
         Ok(())
     }
 
-    pub fn execute_helper(&self, config: VmConfig) -> Result<()> {
+    pub fn execute_helper(&self, config: VmParamsConfig) -> Result<()> {
         println!("Verifying proof file: {}", self.proof_file);
         let instructions = parse_asm_file(Path::new(&self.asm_file_path))?;
         let mut vm = VirtualMachine::<WORD_SIZE, _>::new(config, instructions, vec![]);
@@ -69,9 +69,9 @@ impl VerifyCommand {
         let encoded_proof = read_from_path(Path::new(&self.proof_file))?;
         let proof: Proof<BabyBearPoseidon2Config> = bincode::deserialize(&encoded_proof)?;
 
-        let engine = config::baby_bear_poseidon2::default_engine(vm.max_log_degree()?);
+        let engine = config::baby_bear_poseidon2::default_engine(vm.segments[0].max_log_degree()?);
 
-        let chips = get_chips(&vm);
+        let chips = get_chips(&vm.segments[0]);
         let num_chips = chips.len();
 
         let mut challenger = engine.new_challenger();

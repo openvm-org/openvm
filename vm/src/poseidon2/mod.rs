@@ -1,7 +1,7 @@
 use crate::cpu::trace::Instruction;
 use crate::cpu::OpCode;
 use crate::cpu::OpCode::*;
-use crate::vm::VirtualMachine;
+use crate::vm::ExecutionSegment;
 use afs_chips::sub_chip::LocalTraceInstructions;
 use columns::{Poseidon2ChipCols, Poseidon2ChipIoCols};
 use p3_field::Field;
@@ -76,7 +76,7 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     /// the given instruction using the subair, storing it in `rows`. Then, writes output to memory,
     /// truncating if the instruction is a compression.
     pub fn poseidon2_perm<const WORD_SIZE: usize>(
-        vm: &mut VirtualMachine<WORD_SIZE, F>,
+        vm: &mut ExecutionSegment<WORD_SIZE, F>,
         start_timestamp: usize,
         instruction: Instruction<F>,
     ) {

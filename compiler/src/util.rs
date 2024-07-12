@@ -7,10 +7,7 @@ use afs_test_utils::engine::StarkEngine;
 use stark_vm::vm::get_chips;
 use stark_vm::{
     cpu::trace::Instruction,
-    vm::{
-        config::{VmConfig, VmParamsConfig},
-        VirtualMachine,
-    },
+    vm::{config::VmParamsConfig, VirtualMachine},
 };
 
 use crate::asm::AsmBuilder;
@@ -31,20 +28,18 @@ pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(
     witness_stream: Vec<Vec<F>>,
 ) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
-        VmConfig {
-            vm: VmParamsConfig {
-                field_arithmetic_enabled: true,
-                field_extension_enabled: false,
-                limb_bits: 28,
-                decomp: 4,
-                compress_poseidon2_enabled: true,
-                perm_poseidon2_enabled: true,
-            },
+        VmParamsConfig {
+            field_arithmetic_enabled: true,
+            field_extension_enabled: false,
+            limb_bits: 28,
+            decomp: 4,
+            compress_poseidon2_enabled: true,
+            perm_poseidon2_enabled: true,
         },
         program,
         witness_stream,
     );
-    vm.traces().unwrap();
+    vm.segments[0].traces().unwrap();
 }
 
 pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
@@ -87,22 +82,20 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
         field_extension_enabled: true,
     });
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
-        VmConfig {
-            vm: VmParamsConfig {
-                field_arithmetic_enabled: true,
-                field_extension_enabled: false,
-                limb_bits: 28,
-                decomp: 4,
-                compress_poseidon2_enabled: true,
-                perm_poseidon2_enabled: true,
-            },
+        VmParamsConfig {
+            field_arithmetic_enabled: true,
+            field_extension_enabled: false,
+            limb_bits: 28,
+            decomp: 4,
+            compress_poseidon2_enabled: true,
+            perm_poseidon2_enabled: true,
         },
         program,
         witness_stream,
     );
-    let max_log_degree = vm.max_log_degree().unwrap();
-    let traces = vm.traces().unwrap();
-    let chips = get_chips(&vm);
+    let max_log_degree = vm.segments[0].max_log_degree().unwrap();
+    let traces = vm.segments[0].traces().unwrap();
+    let chips = get_chips(&vm.segments[0]);
 
     let perm = random_perm();
     let fri_params = fri_params_with_80_bits_of_security()[1];
