@@ -57,6 +57,7 @@ impl RwCommand {
     pub fn bench_all<SC: StarkGenericConfig, E: StarkEngine<SC>>(
         config: &PageConfig,
         engine: &E,
+        _extra_data: String,
     ) -> Result<()>
     where
         Val<SC>: PrimeField64,
@@ -70,12 +71,12 @@ impl RwCommand {
         let proof_file = DB_FILE_PATH.to_string() + ".prove.bin";
 
         // Run keygen
-        let keygen_span = info_span!("ReadWrite keygen").entered();
+        let keygen_span = info_span!("Benchmark keygen").entered();
         KeygenCommand::execute(config, engine, TMP_FOLDER.to_string())?;
         keygen_span.exit();
 
         // Run cache
-        let cache_span = info_span!("ReadWrite cache").entered();
+        let cache_span = info_span!("Benchmark cache").entered();
         CacheCommand::execute(
             config,
             engine,
@@ -86,7 +87,7 @@ impl RwCommand {
         cache_span.exit();
 
         // Run prove
-        let prove_span = info_span!("ReadWrite prove").entered();
+        let prove_span = info_span!("Benchmark prove").entered();
         ProveCommand::execute(
             config,
             engine,
@@ -99,7 +100,7 @@ impl RwCommand {
         prove_span.exit();
 
         // Run verify
-        let verify_span = info_span!("ReadWrite verify").entered();
+        let verify_span = info_span!("Benchmark verify").entered();
         VerifyCommand::execute(
             config,
             engine,
@@ -113,7 +114,7 @@ impl RwCommand {
     }
 }
 
-pub fn run_rw_bench(config: &PageConfig) -> Result<()> {
+pub fn run_rw_bench(config: &PageConfig, extra_data: String) -> Result<()> {
     let checker_trace_degree = config.page.max_rw_ops * 4;
     let pcs_log_degree = log2_strict_usize(checker_trace_degree)
         .max(log2_strict_usize(config.page.height))
@@ -124,18 +125,18 @@ pub fn run_rw_bench(config: &PageConfig) -> Result<()> {
         EngineType::BabyBearBlake3 => {
             let engine: BabyBearBlake3Engine =
                 engine_from_byte_hash(Blake3, pcs_log_degree, fri_params);
-            RwCommand::bench_all(config, &engine)
+            RwCommand::bench_all(config, &engine, extra_data)
         }
         EngineType::BabyBearKeccak => {
             let engine: BabyBearKeccakEngine =
                 engine_from_byte_hash(Keccak256Hash, pcs_log_degree, fri_params);
-            RwCommand::bench_all(config, &engine)
+            RwCommand::bench_all(config, &engine, extra_data)
         }
         EngineType::BabyBearPoseidon2 => {
             let perm = random_perm();
             let engine: BabyBearPoseidon2Engine =
                 engine_from_perm(perm, pcs_log_degree, fri_params);
-            RwCommand::bench_all(config, &engine)
+            RwCommand::bench_all(config, &engine, extra_data)
         }
     }
 }

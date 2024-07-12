@@ -36,10 +36,12 @@ impl Cli {
                 let benchmark_name = "ReadWrite".to_string();
                 let scenario = format!("r{}%, w{}%", rw.percent_reads, rw.percent_writes);
                 let common = rw.common;
+                let extra_data = format!("{} {}", rw.percent_reads, rw.percent_writes);
                 benchmark_execute(
                     benchmark_name,
                     scenario,
                     common,
+                    extra_data,
                     run_rw_bench,
                     generate_random_afi_rw,
                 )
@@ -49,10 +51,12 @@ impl Cli {
                 let benchmark_name = "Predicate".to_string();
                 let scenario = format!("{} {}", predicate.predicate, predicate.value);
                 let common = predicate.common;
+                let extra_data = format!("0 100 {} {}", predicate.predicate, predicate.value);
                 benchmark_execute(
                     benchmark_name,
                     scenario,
                     common,
+                    extra_data,
                     run_predicate_bench,
                     generate_incremental_afi_rw,
                 )

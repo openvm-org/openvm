@@ -11,7 +11,6 @@ use crate::{
         output_writer::{
             default_output_filename, save_afi_to_new_db, write_csv_header, write_csv_line,
         },
-        table_gen::generate_random_afi_rw,
         tracing::{clear_tracing_log, extract_event_data_from_log, extract_timing_data_from_log},
     },
     AFI_FILE_PATH, DB_FILE_PATH, TABLE_ID, TMP_FOLDER, TMP_TRACING_LOG,
@@ -62,8 +61,9 @@ pub fn benchmark_setup(
     let output_file = output_file
         .clone()
         .unwrap_or(default_output_filename(benchmark_name.clone()));
-    write_csv_header(output_file.clone()).unwrap();
+
     println!("Output file: {}", output_file.clone());
+    write_csv_header(output_file.clone()).unwrap();
 
     (configs, output_file)
 }
@@ -72,7 +72,8 @@ pub fn benchmark_execute(
     benchmark_name: String,
     scenario: String,
     common: CommonCommands,
-    benchmark_fn: fn(&PageConfig) -> Result<()>,
+    extra_data: String,
+    benchmark_fn: fn(&PageConfig, String) -> Result<()>,
     afi_gen_fn: fn(&PageConfig, String, String, usize, usize) -> Result<()>,
 ) -> Result<()> {
     println!("Executing [{}: {}] benchmark...", benchmark_name, scenario);
@@ -84,6 +85,13 @@ pub fn benchmark_execute(
     );
     let configs_len = configs.len();
     println!("Output file: {}", output_file.clone());
+
+    let (percent_reads, percent_writes) = {
+        let parts: Vec<&str> = extra_data.split_whitespace().collect();
+        let percent_reads = parts[0].parse::<usize>()?;
+        let percent_writes = parts[1].parse::<usize>()?;
+        (percent_reads, percent_writes)
+    };
 
     // Run benchmark for each config
     for (idx, config) in configs.iter().rev().enumerate() {
@@ -104,8 +112,8 @@ pub fn benchmark_execute(
             config,
             TABLE_ID.to_string(),
             AFI_FILE_PATH.to_string(),
-            0,
-            100,
+            percent_reads,
+            percent_writes,
         )?;
         let generate_afi_duration = generate_afi_instant.elapsed();
         println!("Setup: generate AFI duration: {:?}", generate_afi_duration);
@@ -116,7 +124,8 @@ pub fn benchmark_execute(
         let save_afi_duration = save_afi_instant.elapsed();
         println!("Setup: save AFI to DB duration: {:?}", save_afi_duration);
 
-        benchmark_fn(config).unwrap();
+        // Run the benchmark function
+        benchmark_fn(config, extra_data.clone()).unwrap();
 
         let event_data = extract_event_data_from_log(
             TMP_TRACING_LOG.as_str(),
@@ -129,14 +138,14 @@ pub fn benchmark_execute(
         let timing_data = extract_timing_data_from_log(
             TMP_TRACING_LOG.as_str(),
             &[
-                "ReadWrite keygen",
-                "ReadWrite cache",
-                "ReadWrite prove",
+                "Benchmark keygen",
+                "Benchmark cache",
+                "Benchmark prove",
                 "prove:Load page trace generation: afs_chips::page_rw_checker::page_controller",
                 "prove:Load page trace commitment: afs_chips::page_rw_checker::page_controller",
                 "Prove.generate_trace",
                 "prove:Prove trace commitment",
-                "ReadWrite verify",
+                "Benchmark verify",
             ],
         )?;
 
