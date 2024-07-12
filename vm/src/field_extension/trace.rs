@@ -48,6 +48,8 @@ fn generate_cols<T: Field>(
             z: op.result,
         },
         aux: FieldExtensionArithmeticAuxCols {
+            is_valid: T::one(),
+            valid_y_read: T::one() - is_inv,
             start_timestamp: T::from_canonical_usize(op.start_timestamp),
             op_a: op.op_a,
             op_b: op.op_b,

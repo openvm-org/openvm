@@ -30,6 +30,14 @@ impl<AB: AirBuilder> Air<AB> for FieldExtensionArithmeticAir {
 
         let FieldExtensionArithmeticCols { io, aux } = local_cols;
 
+        builder.assert_bool(aux.is_valid);
+        builder.assert_bool(aux.valid_y_read);
+        // valid_y_read is 1 iff is_valid and not is_inv
+        builder.assert_eq(
+            aux.valid_y_read,
+            aux.is_valid * (AB::Expr::one() - aux.is_inv),
+        );
+
         builder.assert_bool(aux.opcode_lo);
         builder.assert_bool(aux.opcode_hi);
 
