@@ -113,7 +113,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::AddFI(dst.fp(), ZERO, src), trace);
                 }
                 DslIr::ImmE(dst, src) => {
-                    self.push(AsmInstruction::AddEI(dst.fp(), ZERO, src), trace);
+                    self.push(AsmInstruction::ImmE(dst.fp(), src), trace);
                 }
                 DslIr::AddV(dst, lhs, rhs) => {
                     self.push(AsmInstruction::AddF(dst.fp(), lhs.fp(), rhs.fp()), trace);

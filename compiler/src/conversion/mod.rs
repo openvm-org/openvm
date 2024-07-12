@@ -280,6 +280,17 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
     let utility_register = utility_registers[0];
 
     match instruction {
+        AsmInstruction::ImmE(dst, val) => {
+            let val_slice = val.as_base_slice();
+            vec![inst(
+                STOREW,
+                val_slice[0],
+                F::from_canonical_usize(dst as usize),
+                F::zero(),
+                AS::Immediate,
+                AS::Register,
+            )]
+        }
         AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
         AsmInstruction::LoadF(dst, src, index, offset, size) => vec![
             // register[util] <- register[index] * size
