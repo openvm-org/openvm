@@ -80,13 +80,11 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         let curr_height = self.operations.len();
         let correct_height = curr_height.next_power_of_two();
         trace.extend(
-            empty_row
-                .iter()
-                .cloned()
-                .cycle()
-                .take((correct_height - curr_height) * FieldExtensionArithmeticCols::<F>::NUM_COLS),
+            empty_row.iter().cloned().cycle().take(
+                (correct_height - curr_height) * FieldExtensionArithmeticCols::<F>::get_width(),
+            ),
         );
 
-        RowMajorMatrix::new(trace, FieldExtensionArithmeticCols::<F>::NUM_COLS)
+        RowMajorMatrix::new(trace, FieldExtensionArithmeticCols::<F>::get_width())
     }
 }

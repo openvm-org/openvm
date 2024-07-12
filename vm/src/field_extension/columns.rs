@@ -51,8 +51,6 @@ pub struct FieldExtensionArithmeticAuxCols<T> {
 }
 
 impl<T: Clone> FieldExtensionArithmeticCols<T> {
-    pub const NUM_COLS: usize = 6 * EXTENSION_DEGREE + 13;
-
     pub fn get_width() -> usize {
         FieldExtensionArithmeticIoCols::<T>::get_width()
             + FieldExtensionArithmeticAuxCols::<T>::get_width()
