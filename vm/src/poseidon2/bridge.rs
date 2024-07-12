@@ -52,7 +52,7 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
             let fields = vec![
                 timestamp,
                 VirtualPairCol::constant(T::from_bool(false)),
-                VirtualPairCol::single_main(col_indices.io.e),
+                VirtualPairCol::single_main(col_indices.io.d),
                 VirtualPairCol::single_main(address_col),
                 VirtualPairCol::single_main(col_indices.aux.addresses[i]),
             ];

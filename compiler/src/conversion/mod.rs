@@ -3,9 +3,9 @@ use std::array::from_fn;
 use p3_field::{ExtensionField, PrimeField64};
 
 use field_extension_conversion::{convert_field_extension, convert_field_extension_with_base};
-use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode;
 use stark_vm::cpu::OpCode::*;
+use stark_vm::cpu::trace::Instruction;
 
 use crate::asm::{AsmInstruction, AssemblyCode};
 
@@ -715,38 +715,24 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 )
             }
         }
-        AsmInstruction::Poseidon2Permute(src, dst) => {
-            let mut result = vec![];
-            for i in 0..POSEIDON2_WIDTH {
-                result.push(inst(
-                    LOADW,
-                    utility_registers[i],
-                    F::from_canonical_usize(i),
-                    register(src),
-                    AS::Register,
-                    AS::Memory,
-                ))
-            }
-            result.push(inst(
+        AsmInstruction::Poseidon2Permute(src, dst) => vec![
+            inst(
+                FADD,
+                utility_register,
+                register(src),
+                F::from_canonical_usize(POSEIDON2_WIDTH / 2),
+                AS::Register,
+                AS::Immediate,
+            ),
+            inst(
                 PERM_POS2,
-                utility_registers[0],
-                utility_registers[POSEIDON2_WIDTH / 2],
-                utility_registers[0],
+                register(src),
+                utility_register,
+                register(dst),
                 AS::Register,
-                AS::Register,
-            ));
-            for i in 0..POSEIDON2_WIDTH {
-                result.push(inst(
-                    STOREW,
-                    utility_registers[i],
-                    F::from_canonical_usize(i),
-                    register(dst),
-                    AS::Register,
-                    AS::Memory,
-                ))
-            }
-            result
-        }
+                AS::Memory,
+            ),
+        ],
         AsmInstruction::CycleTracker(_) => vec![],
         _ => panic!("Unsupported instruction {:?}", instruction),
     }

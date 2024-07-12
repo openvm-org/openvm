@@ -259,3 +259,39 @@ fn test_vm_compress_poseidon2() {
 
     air_test_with_poseidon2(false, false, true, program);
 }
+
+#[test]
+fn test_vm_compress_poseidon2_as2() {
+    let mut program = vec![];
+    let input_a = 37;
+    for i in 0..8 {
+        program.push(Instruction::from_isize(
+            STOREW,
+            43 - (7 * i),
+            input_a + i,
+            0,
+            0,
+            2,
+        ));
+    }
+    let input_b = 108;
+    for i in 0..8 {
+        program.push(Instruction::from_isize(
+            STOREW,
+            2 + (18 * i),
+            input_b + i,
+            0,
+            0,
+            2,
+        ));
+    }
+    let output = 4;
+    program.push(Instruction::from_isize(STOREW, input_a, 0, 0, 0, 1));
+    program.push(Instruction::from_isize(STOREW, input_b, 1, 0, 0, 1));
+    program.push(Instruction::from_isize(STOREW, output, 2, 0, 0, 1));
+
+    program.push(Instruction::from_isize(COMP_POS2, 0, 1, 2, 1, 2));
+    program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
+
+    air_test_with_poseidon2(false, false, true, program);
+}
