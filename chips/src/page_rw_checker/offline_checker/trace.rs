@@ -34,7 +34,7 @@ impl OfflineChecker {
     where
         Val<SC>: PrimeField,
     {
-        let mut page_editor = IndexedPageEditor::from_page(page.clone());
+        let mut page_editor = IndexedPageEditor::from_page(page);
 
         // Creating a timestamp bigger than all others
         let max_clk = ops.iter().map(|op| op.clk).max().unwrap_or(0) + 1;
@@ -166,7 +166,7 @@ impl OfflineChecker {
 
             for op in ops.iter().take(j).skip(i) {
                 if op.op_type == OpType::Write {
-                    page_editor.insert(&cur_idx, &op.data);
+                    page_editor.write(&cur_idx, &op.data);
                 } else if op.op_type == OpType::Delete {
                     page_editor.delete(&cur_idx);
                 }

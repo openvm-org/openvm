@@ -14,13 +14,13 @@ pub struct IndexedPageEditor {
 }
 
 impl IndexedPageEditor {
-    pub fn from_page(page: Page) -> Self {
+    pub fn from_page(page: &Page) -> Self {
         let idx_len = page.idx_len();
         let data_len = page.data_len();
         let height = page.height();
 
         let mut idx_data_map = BTreeMap::new();
-        for row in page.into_iter() {
+        for row in page.iter() {
             if row.is_alloc == 1 {
                 assert!(!idx_data_map.contains_key(&row.idx));
                 idx_data_map.insert(row.idx.clone(), row.data.clone());
@@ -77,6 +77,19 @@ impl IndexedPageEditor {
                 .insert(idx.to_vec(), data.to_vec())
                 .is_none(),
             "Index already exists in Page"
+        );
+    }
+
+    /// This function writes (idx, data) into the page. Does an insert if idx doesn't already exist.
+    /// Assumes that the page is not full
+    pub fn write(&mut self, idx: &[u32], data: &[u32]) {
+        assert!(idx.len() == self.idx_len);
+        assert!(data.len() == self.data_len);
+
+        self.idx_data_map.insert(idx.to_vec(), data.to_vec());
+        assert!(
+            self.idx_data_map.len() <= self.height,
+            "Page is over capacity after writing"
         );
     }
 
