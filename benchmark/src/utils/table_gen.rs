@@ -52,6 +52,8 @@ pub fn generate_random_table(
     Ok(table)
 }
 
+/// Generates a .afi file with random values that includes some amount of INSERT, WRITE, and READ commands
+/// based on the height, max_rw_ops, and passed in percentage of reads/writes.
 pub fn generate_random_afi_rw(
     config: &PageConfig,
     table_id: String,
@@ -111,6 +113,8 @@ pub fn generate_random_afi_rw(
     Ok(())
 }
 
+/// Generates a .afi file with values incrementing from 1 in idx and data that includes some amount of INSERT,
+/// WRITE, and READ commands based on the height, max_rw_ops, and passed in percentage of reads/writes.
 pub fn generate_incremental_afi_rw(
     config: &PageConfig,
     table_id: String,

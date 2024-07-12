@@ -46,6 +46,7 @@ pub struct CommonCommands {
     pub silent: bool,
 }
 
+/// Function for setting up the benchmark
 pub fn benchmark_setup(
     benchmark_name: String,
     config_folder: Option<String>,
@@ -68,6 +69,8 @@ pub fn benchmark_setup(
     (configs, output_file)
 }
 
+/// Function for setting up and running benchmarks. Takes in a `benchmark_fn` that runs the benchmarks themselves
+/// as well as an `afi_gen_fn` that generates AFI files in a predetermined fashion.
 pub fn benchmark_execute(
     benchmark_name: String,
     scenario: String,
