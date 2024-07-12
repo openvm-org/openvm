@@ -3,9 +3,9 @@ use std::array::from_fn;
 use p3_field::{ExtensionField, PrimeField64};
 
 use field_extension_conversion::{convert_field_extension, convert_field_extension_with_base};
+use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode;
 use stark_vm::cpu::OpCode::*;
-use stark_vm::cpu::trace::Instruction;
 
 use crate::asm::{AsmInstruction, AssemblyCode};
 
@@ -239,7 +239,7 @@ fn convert_print_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: Extens
             ),
             inst(
                 PRINTF,
-                register(src + word_size_i32),
+                register(src - word_size_i32),
                 F::zero(),
                 F::zero(),
                 AS::Register,
@@ -247,7 +247,7 @@ fn convert_print_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: Extens
             ),
             inst(
                 PRINTF,
-                register(src + 2 * word_size_i32),
+                register(src - 2 * word_size_i32),
                 F::zero(),
                 F::zero(),
                 AS::Register,
@@ -255,7 +255,7 @@ fn convert_print_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: Extens
             ),
             inst(
                 PRINTF,
-                register(src + 3 * word_size_i32),
+                register(src - 3 * word_size_i32),
                 F::zero(),
                 F::zero(),
                 AS::Register,
@@ -351,7 +351,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
             inst(
                 LOADW,
-                register(dst + word_size_i32),
+                register(dst - word_size_i32),
                 offset + F::from_canonical_usize(WORD_SIZE),
                 utility_register,
                 AS::Register,
@@ -359,7 +359,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
             inst(
                 LOADW,
-                register(dst + 2 * word_size_i32),
+                register(dst - 2 * word_size_i32),
                 offset + F::from_canonical_usize(2 * WORD_SIZE),
                 utility_register,
                 AS::Register,
@@ -367,7 +367,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
             inst(
                 LOADW,
-                register(dst + 3 * word_size_i32),
+                register(dst - 3 * word_size_i32),
                 offset + F::from_canonical_usize(3 * WORD_SIZE),
                 utility_register,
                 AS::Register,
@@ -386,7 +386,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
             inst(
                 LOADW,
-                register(dst + word_size_i32),
+                register(dst - word_size_i32),
                 (index * size) + offset + F::from_canonical_usize(WORD_SIZE),
                 register(src),
                 AS::Register,
@@ -394,7 +394,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
             inst(
                 LOADW,
-                register(dst + 2 * word_size_i32),
+                register(dst - 2 * word_size_i32),
                 (index * size) + offset + F::from_canonical_usize(2 * WORD_SIZE),
                 register(src),
                 AS::Register,
@@ -402,7 +402,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
             inst(
                 LOADW,
-                register(dst + 3 * word_size_i32),
+                register(dst - 3 * word_size_i32),
                 (index * size) + offset + F::from_canonical_usize(3 * WORD_SIZE),
                 register(src),
                 AS::Register,
@@ -479,7 +479,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
             inst(
                 STOREW,
-                register(val + word_size_i32),
+                register(val - word_size_i32),
                 offset + F::from_canonical_usize(WORD_SIZE),
                 utility_register,
                 AS::Register,
@@ -487,7 +487,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
             inst(
                 STOREW,
-                register(val + 2 * word_size_i32),
+                register(val - 2 * word_size_i32),
                 offset + F::from_canonical_usize(2 * WORD_SIZE),
                 utility_register,
                 AS::Register,
@@ -495,7 +495,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
             inst(
                 STOREW,
-                register(val + 3 * word_size_i32),
+                register(val - 3 * word_size_i32),
                 offset + F::from_canonical_usize(3 * WORD_SIZE),
                 utility_register,
                 AS::Register,
@@ -514,7 +514,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
             inst(
                 STOREW,
-                register(val + word_size_i32),
+                register(val - word_size_i32),
                 (index * size) + offset + F::from_canonical_usize(WORD_SIZE),
                 register(addr),
                 AS::Register,
@@ -522,7 +522,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
             inst(
                 STOREW,
-                register(val + 2 * word_size_i32),
+                register(val - 2 * word_size_i32),
                 (index * size) + offset + F::from_canonical_usize(2 * WORD_SIZE),
                 register(addr),
                 AS::Register,
@@ -530,7 +530,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
             inst(
                 STOREW,
-                register(val + 3 * word_size_i32),
+                register(val - 3 * word_size_i32),
                 (index * size) + offset + F::from_canonical_usize(3 * WORD_SIZE),
                 register(addr),
                 AS::Register,
