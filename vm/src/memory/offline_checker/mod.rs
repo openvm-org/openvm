@@ -61,11 +61,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         }
     }
 
-    pub fn read_elem(&mut self, timestamp: usize, address_space: F, address: F) -> F {
-        let word = self.read_word(timestamp, address_space, address);
-        word[0]
-    }
-
     pub fn read_word(&mut self, timestamp: usize, address_space: F, address: F) -> [F; WORD_SIZE] {
         if address_space == F::zero() {
             return decompose(address);
