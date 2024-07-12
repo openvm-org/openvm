@@ -72,7 +72,7 @@ impl PredicateCommand {
             predicate,
             cache_folder: TMP_FOLDER.to_string(),
             output_folder: TMP_FOLDER.to_string(),
-            silent: false,
+            silent: true,
         };
         let input_trace_file = format!(
             "{}/{}.cache.bin",
