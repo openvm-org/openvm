@@ -1,7 +1,9 @@
 use p3_field::{AbstractExtensionField, AbstractField};
 use std::ops::{Add, Mul, MulAssign};
 
-use super::{Array, Builder, Config, DslIr, Ext, Felt, MemIndex, SymbolicExt, Usize, Var, Variable};
+use super::{
+    Array, Builder, Config, DslIr, Ext, Felt, MemIndex, SymbolicExt, Usize, Var, Variable,
+};
 
 impl<C: Config> Builder<C> {
     /// The generator for the field.
