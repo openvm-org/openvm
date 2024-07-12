@@ -1,15 +1,18 @@
+use std::fs;
+
 use serde::{Deserialize, Serialize};
 
 use crate::config::{EngineType, FriParameters};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub enum PageMode {
-    ReadOnly,
+    #[default]
     ReadWrite,
+    ReadOnly,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PageParamsConfig {
     pub index_bytes: usize,
     pub data_bytes: usize,
@@ -19,7 +22,7 @@ pub struct PageParamsConfig {
     pub max_rw_ops: usize,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StarkEngineConfig {
     pub engine: EngineType,
 }
@@ -40,5 +43,25 @@ impl PageConfig {
             panic!("Failed to parse config file {}:\n{}", file, e);
         });
         config
+    }
+
+    pub fn generate_filename(&self) -> String {
+        format!(
+            "{:?}_{}x{}x{}-{}-{}_{}-{}-{}.toml",
+            self.stark_engine.engine,
+            self.page.index_bytes,
+            self.page.data_bytes,
+            self.page.height,
+            self.page.max_rw_ops,
+            self.page.bits_per_fe,
+            self.fri_params.log_blowup,
+            self.fri_params.num_queries,
+            self.fri_params.proof_of_work_bits,
+        )
+    }
+
+    pub fn save_to_file(&self, file: &str) {
+        let file_str = toml::to_string(&self).unwrap();
+        fs::write(file, file_str).unwrap();
     }
 }

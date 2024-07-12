@@ -2,6 +2,7 @@ use std::iter;
 
 use crate::{common::page_cols::PageCols, is_less_than_tuple::columns::IsLessThanTupleAuxCols};
 
+#[derive(Clone)]
 pub struct IndexedOutputPageCols<T> {
     /// The columns for the page itself
     pub page_cols: PageCols<T>,

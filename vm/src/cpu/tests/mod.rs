@@ -1,45 +1,45 @@
+use crate::cpu::columns::{CpuCols, CpuIoCols};
+use crate::cpu::{max_accesses_per_instruction, CpuAir, CpuOptions};
+use crate::field_arithmetic::ArithmeticOperation;
+use crate::memory::{decompose, MemoryAccess, OpType};
+use crate::vm::config::{VmConfig, VmParamsConfig};
+use crate::vm::VirtualMachine;
 use afs_chips::is_zero::IsZeroAir;
 use afs_stark_backend::verifier::VerificationError;
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField32, PrimeField64};
+use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_matrix::Matrix;
-
-use crate::cpu::columns::{CpuCols, CpuIoCols};
-use crate::cpu::{CpuAir, CpuOptions};
-use crate::field_arithmetic::ArithmeticOperation;
-use crate::memory::{decompose, MemoryAccess, OpType};
-use crate::vm::config::{VmConfig, VmParamsConfig};
-use crate::vm::VirtualMachine;
 
 use super::columns::MemoryAccessCols;
 use super::trace::isize_to_field;
 use super::{trace::Instruction, OpCode::*};
-use super::{ARITHMETIC_BUS, MAX_ACCESSES_PER_CYCLE, MEMORY_BUS, READ_INSTRUCTION_BUS};
+use super::{ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS};
 
 const TEST_WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 16;
 const DECOMP: usize = 8;
 
-const MAX_ACCESSES_PER_CYCLE_ISIZE: isize = MAX_ACCESSES_PER_CYCLE as isize;
-
-fn make_vm<const WORD_SIZE: usize, F: PrimeField32>(
-    program: Vec<Instruction<F>>,
+fn make_vm<const WORD_SIZE: usize>(
+    program: Vec<Instruction<BabyBear>>,
     field_arithmetic_enabled: bool,
     field_extension_enabled: bool,
-) -> VirtualMachine<WORD_SIZE, F> {
-    VirtualMachine::<WORD_SIZE, F>::new(
+) -> VirtualMachine<WORD_SIZE, BabyBear> {
+    VirtualMachine::<WORD_SIZE, BabyBear>::new(
         VmConfig {
             vm: VmParamsConfig {
                 field_arithmetic_enabled,
                 field_extension_enabled,
+                compress_poseidon2_enabled: false,
+                perm_poseidon2_enabled: false,
                 limb_bits: LIMB_BITS,
                 decomp: DECOMP,
             },
         },
         program,
+        vec![],
     )
 }
 
@@ -66,6 +66,8 @@ fn test_flatten_fromslice_roundtrip() {
     let options = CpuOptions {
         field_arithmetic_enabled: true,
         field_extension_enabled: false,
+        compress_poseidon2_enabled: false,
+        perm_poseidon2_enabled: false,
     };
     let num_cols = CpuCols::<TEST_WORD_SIZE, usize>::get_width(options);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
@@ -107,13 +109,13 @@ fn test_flatten_fromslice_roundtrip() {
     );
 }*/
 
-fn execution_test<const WORD_SIZE: usize, F: PrimeField32>(
+fn execution_test<const WORD_SIZE: usize>(
     field_arithmetic_enabled: bool,
     field_extension_enabled: bool,
-    program: Vec<Instruction<F>>,
+    program: Vec<Instruction<BabyBear>>,
     mut expected_execution: Vec<usize>,
-    expected_memory_log: Vec<MemoryAccess<WORD_SIZE, F>>,
-    expected_arithmetic_operations: Vec<ArithmeticOperation<F>>,
+    expected_memory_log: Vec<MemoryAccess<WORD_SIZE, BabyBear>>,
+    expected_arithmetic_operations: Vec<ArithmeticOperation<BabyBear>>,
 ) {
     let mut vm = make_vm(
         program.clone(),
@@ -125,7 +127,7 @@ fn execution_test<const WORD_SIZE: usize, F: PrimeField32>(
     let mut actual_memory_log = vm.memory_chip.accesses.clone();
     // temporary
     for access in actual_memory_log.iter_mut() {
-        access.address = access.address / F::from_canonical_usize(WORD_SIZE);
+        access.address = access.address / BabyBear::from_canonical_usize(WORD_SIZE);
     }
 
     assert_eq!(actual_memory_log, expected_memory_log);
@@ -140,11 +142,12 @@ fn execution_test<const WORD_SIZE: usize, F: PrimeField32>(
 
     assert_eq!(trace.height(), expected_execution.len());
     for (i, &pc) in expected_execution.iter().enumerate() {
-        let cols = CpuCols::<WORD_SIZE, F>::from_slice(trace.row_mut(i), vm.options());
+        let cols = CpuCols::<WORD_SIZE, BabyBear>::from_slice(trace.row_mut(i), vm.options());
         let expected_io = CpuIoCols {
-            clock_cycle: F::from_canonical_u64(i as u64),
-            pc: F::from_canonical_u64(pc as u64),
-            opcode: F::from_canonical_u64(program[pc].opcode as u64),
+            // don't check timestamp
+            timestamp: cols.io.timestamp,
+            pc: BabyBear::from_canonical_u64(pc as u64),
+            opcode: BabyBear::from_canonical_u64(program[pc].opcode as u64),
             op_a: program[pc].op_a,
             op_b: program[pc].op_b,
             op_c: program[pc].op_c,
@@ -337,41 +340,22 @@ fn test_cpu_1() {
     }
     expected_execution.push(4);
 
+    let storew_time = max_accesses_per_instruction(STOREW) as isize;
+    let beq_time = max_accesses_per_instruction(BEQ) as isize;
+    let fsub_time = max_accesses_per_instruction(FSUB) as isize;
+    let jal_time = max_accesses_per_instruction(JAL) as isize;
+
     let mut expected_memory_log = vec![
         MemoryAccess::from_isize(2, OpType::Write, 1, 0, n),
-        MemoryAccess::from_isize(MAX_ACCESSES_PER_CYCLE_ISIZE, OpType::Read, 1, 0, n),
+        MemoryAccess::from_isize(storew_time, OpType::Read, 1, 0, n),
     ];
     for t in 0..n {
-        let clock = 2 + (3 * t);
+        let base = storew_time + beq_time + ((fsub_time + jal_time + beq_time) * t);
         expected_memory_log.extend(vec![
-            MemoryAccess::from_isize(
-                MAX_ACCESSES_PER_CYCLE_ISIZE * clock,
-                OpType::Read,
-                1,
-                0,
-                n - t,
-            ),
-            MemoryAccess::from_isize(
-                (MAX_ACCESSES_PER_CYCLE_ISIZE * clock) + 2,
-                OpType::Write,
-                1,
-                0,
-                n - t - 1,
-            ),
-            MemoryAccess::from_isize(
-                (MAX_ACCESSES_PER_CYCLE_ISIZE * (clock + 1)) + 2,
-                OpType::Write,
-                1,
-                2,
-                4,
-            ),
-            MemoryAccess::from_isize(
-                MAX_ACCESSES_PER_CYCLE_ISIZE * (clock + 2),
-                OpType::Read,
-                1,
-                0,
-                n - t - 1,
-            ),
+            MemoryAccess::from_isize(base, OpType::Read, 1, 0, n - t),
+            MemoryAccess::from_isize(base + 2, OpType::Write, 1, 0, n - t - 1),
+            MemoryAccess::from_isize(base + fsub_time + 2, OpType::Write, 1, 2, 4),
+            MemoryAccess::from_isize(base + fsub_time + jal_time, OpType::Read, 1, 0, n - t - 1),
         ]);
     }
 
@@ -385,7 +369,7 @@ fn test_cpu_1() {
         ));
     }
 
-    execution_test::<TEST_WORD_SIZE, BabyBear>(
+    execution_test::<TEST_WORD_SIZE>(
         true,
         false,
         program.clone(),
@@ -423,13 +407,16 @@ fn test_cpu_without_field_arithmetic() {
 
     let expected_execution: Vec<usize> = vec![0, 1, 4, 3];
 
+    let storew_time = max_accesses_per_instruction(STOREW) as isize;
+    let bne_time = max_accesses_per_instruction(BNE) as isize;
+
     let expected_memory_log = vec![
         MemoryAccess::from_isize(2, OpType::Write, 1, 0, 5),
-        MemoryAccess::from_isize(MAX_ACCESSES_PER_CYCLE_ISIZE, OpType::Read, 1, 0, 5),
-        MemoryAccess::from_isize(2 * MAX_ACCESSES_PER_CYCLE_ISIZE, OpType::Read, 1, 0, 5),
+        MemoryAccess::from_isize(storew_time, OpType::Read, 1, 0, 5),
+        MemoryAccess::from_isize(storew_time + bne_time, OpType::Read, 1, 0, 5),
     ];
 
-    execution_test::<TEST_WORD_SIZE, BabyBear>(
+    execution_test::<TEST_WORD_SIZE>(
         field_arithmetic_enabled,
         field_extension_enabled,
         program.clone(),

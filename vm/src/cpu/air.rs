@@ -12,9 +12,9 @@ use afs_chips::{
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    CpuAir,
+    max_accesses_per_instruction, CpuAir,
     OpCode::*,
-    FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH, MAX_READS_PER_CYCLE,
+    CPU_MAX_READS_PER_CYCLE, FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH,
 };
 
 impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for CpuAir<WORD_SIZE> {
@@ -54,7 +54,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
         let CpuCols { io: next_io, .. } = next_cols;
 
         let CpuIoCols {
-            clock_cycle: clock,
+            timestamp,
             pc,
             opcode,
             op_a: a,
@@ -64,7 +64,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
             e,
         } = io;
         let CpuIoCols {
-            clock_cycle: next_clock,
+            timestamp: next_timestamp,
             pc: next_pc,
             ..
         } = next_io;
@@ -78,7 +78,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
 
         let read1 = &accesses[0];
         let read2 = &accesses[1];
-        let write = &accesses[MAX_READS_PER_CYCLE];
+        let write = &accesses[CPU_MAX_READS_PER_CYCLE];
 
         // set correct operation flag
         for &flag in operation_flags.values() {
@@ -270,12 +270,17 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
 
         // make sure program starts at beginning
         builder.when_first_row().assert_zero(pc);
-        builder.when_first_row().assert_zero(clock);
+        builder.when_first_row().assert_zero(timestamp);
 
-        // make sure time works like it usually does
-        builder
-            .when_transition()
-            .assert_eq(next_clock, clock + AB::Expr::one());
+        // update the timestamp correctly
+        for (&opcode, &flag) in operation_flags.iter() {
+            if opcode != TERMINATE {
+                builder.when(flag).assert_eq(
+                    next_timestamp,
+                    timestamp + AB::F::from_canonical_usize(max_accesses_per_instruction(opcode)),
+                )
+            }
+        }
 
         // make sure program terminates
         builder

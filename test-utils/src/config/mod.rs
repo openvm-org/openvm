@@ -30,10 +30,11 @@ pub struct FriParameters {
     pub proof_of_work_bits: usize,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub enum EngineType {
+    #[default]
+    BabyBearPoseidon2,
     BabyBearBlake3,
     BabyBearKeccak,
-    BabyBearPoseidon2,
 }

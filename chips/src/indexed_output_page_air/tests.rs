@@ -111,7 +111,7 @@ fn final_page_chip_test() {
         })
         .collect();
 
-    let mut page = Page::from_2d_vec(&page, idx_len, data_len);
+    let page = Page::from_2d_vec(&page, idx_len, data_len);
 
     let final_page_chip = IndexedOutputPageAir::new(
         range_bus_index,
@@ -152,8 +152,10 @@ fn final_page_chip_test() {
     )
     .expect("Verification Failed");
 
-    // Swap the first two rows of the page so it's no longer sorted
-    page.rows.swap(0, 1);
+    // Creating a new page with the first two rows swapped
+    let mut page_rows = page.to_2d_vec();
+    page_rows.swap(0, 1);
+    let page = Page::from_2d_vec(&page_rows, idx_len, data_len);
 
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;

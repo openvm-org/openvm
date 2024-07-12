@@ -8,13 +8,14 @@ use afs_chips::{
 };
 
 use crate::memory::{compose, decompose};
+use crate::poseidon2::Poseidon2Chip;
 use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
-    CpuAir,
+    max_accesses_per_instruction, CpuAir,
     OpCode::{self, *},
-    INST_WIDTH, MAX_ACCESSES_PER_CYCLE, MAX_READS_PER_CYCLE, MAX_WRITES_PER_CYCLE,
+    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
 };
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, derive_new::new)]
@@ -81,7 +82,8 @@ fn memory_access_to_cols<const WORD_SIZE: usize, F: PrimeField64>(
 pub enum ExecutionError {
     Fail(usize),
     PcOutOfBounds(usize, usize),
-    DisabledOperation(OpCode),
+    DisabledOperation(usize, OpCode),
+    HintOutOfBounds(usize, usize, usize),
 }
 
 impl Display for ExecutionError {
@@ -93,7 +95,14 @@ impl Display for ExecutionError {
                 "pc = {} out of bounds for program of length {}",
                 pc, program_len
             ),
-            ExecutionError::DisabledOperation(op) => write!(f, "opcode {:?} was not enabled", op),
+            ExecutionError::DisabledOperation(pc, op) => {
+                write!(f, "at pc = {}, opcode {:?} was not enabled", pc, op)
+            }
+            ExecutionError::HintOutOfBounds(pc, witness_idx, witness_len) => write!(
+                f,
+                "at pc = {}, witness index = {} out of bounds for witness_stream of length {}",
+                pc, witness_idx, witness_len
+            ),
         }
     }
 }
@@ -107,12 +116,16 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
         let mut rows = vec![];
 
         let mut clock_cycle: usize = 0;
+        let mut timestamp: usize = 0;
         let mut pc = F::zero();
+
+        let mut witness_idx = 0;
 
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
 
-            let instruction = vm.program_chip.get_instruction(pc_usize);
+            let instruction = vm.program_chip.get_instruction(pc_usize)?;
+
             let opcode = instruction.opcode;
             let a = instruction.op_a;
             let b = instruction.op_b;
@@ -121,7 +134,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             let e = instruction.e;
 
             let io = CpuIoCols {
-                clock_cycle: F::from_canonical_usize(clock_cycle),
+                timestamp: F::from_canonical_usize(timestamp),
                 pc,
                 opcode: F::from_canonical_usize(opcode as usize),
                 op_a: a,
@@ -133,18 +146,19 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
 
             let mut next_pc = pc + F::one();
 
-            let mut accesses = [disabled_memory_cols(); MAX_ACCESSES_PER_CYCLE];
+            let mut accesses = [disabled_memory_cols(); CPU_MAX_ACCESSES_PER_CYCLE];
             let mut num_reads = 0;
             let mut num_writes = 0;
 
             macro_rules! read {
                 ($address_space: expr, $address: expr) => {{
                     num_reads += 1;
-                    assert!(num_reads <= MAX_READS_PER_CYCLE);
-                    let timestamp = (MAX_ACCESSES_PER_CYCLE * clock_cycle) + (num_reads - 1);
-                    let data = vm
-                        .memory_chip
-                        .read_word(timestamp, $address_space, $address);
+                    assert!(num_reads <= CPU_MAX_READS_PER_CYCLE);
+                    let data = vm.memory_chip.read_word(
+                        timestamp + (num_reads - 1),
+                        $address_space,
+                        $address,
+                    );
                     accesses[num_reads - 1] =
                         memory_access_to_cols(true, $address_space, $address, data);
                     compose(data)
@@ -154,15 +168,24 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             macro_rules! write {
                 ($address_space: expr, $address: expr, $data: expr) => {{
                     num_writes += 1;
-                    assert!(num_writes <= MAX_WRITES_PER_CYCLE);
-                    let timestamp = (MAX_ACCESSES_PER_CYCLE * clock_cycle)
-                        + (MAX_READS_PER_CYCLE + num_writes - 1);
+                    assert!(num_writes <= CPU_MAX_WRITES_PER_CYCLE);
                     let word = decompose($data);
-                    vm.memory_chip
-                        .write_word(timestamp, $address_space, $address, word);
-                    accesses[MAX_READS_PER_CYCLE + num_writes - 1] =
+                    vm.memory_chip.write_word(
+                        timestamp + CPU_MAX_READS_PER_CYCLE + (num_writes - 1),
+                        $address_space,
+                        $address,
+                        word,
+                    );
+                    accesses[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
                         memory_access_to_cols(true, $address_space, $address, word);
                 }};
+            }
+
+            if opcode == FAIL {
+                return Err(ExecutionError::Fail(pc_usize));
+            }
+            if opcode != PRINTF && !vm.options().enabled_instructions().contains(&opcode) {
+                return Err(ExecutionError::DisabledOperation(pc_usize, opcode));
             }
 
             match opcode {
@@ -203,37 +226,37 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     next_pc = pc;
                 }
                 opcode @ (FADD | FSUB | FMUL | FDIV) => {
-                    if vm.options().field_arithmetic_enabled {
-                        // read from d[b] and e[c]
-                        let operand1 = read!(d, b);
-                        let operand2 = read!(e, c);
-                        // write to d[a]
-                        let result = vm
-                            .field_arithmetic_chip
-                            .calculate(opcode, (operand1, operand2));
-                        write!(d, a, result);
-                    } else {
-                        return Err(ExecutionError::DisabledOperation(opcode));
-                    }
+                    // read from d[b] and e[c]
+                    let operand1 = read!(d, b);
+                    let operand2 = read!(e, c);
+                    // write to d[a]
+                    let result = vm
+                        .field_arithmetic_chip
+                        .calculate(opcode, (operand1, operand2));
+                    write!(d, a, result);
                 }
-                FAIL => return Err(ExecutionError::Fail(pc_usize)),
+                FAIL => panic!("Unreachable code"),
                 PRINTF => {
                     let value = read!(d, a);
                     println!("{}", value);
                 }
-                opcode @ (FE4ADD | FE4SUB | BBE4MUL | BBE4INV) => {
-                    if vm.options().field_extension_enabled {
-                        FieldExtensionArithmeticChip::calculate(
-                            vm,
-                            clock_cycle,
-                            opcode,
-                            a,
-                            b,
-                            c,
-                            d,
-                            e,
-                        );
+                FE4ADD | FE4SUB | BBE4MUL | BBE4INV => {
+                    FieldExtensionArithmeticChip::calculate(vm, timestamp, instruction);
+                }
+                PERM_POS2 | COMP_POS2 => {
+                    Poseidon2Chip::<16, _>::poseidon2_perm(vm, timestamp, instruction);
+                }
+                HINT => {
+                    if witness_idx >= vm.witness_stream.len() {
+                        return Err(ExecutionError::HintOutOfBounds(
+                            pc_usize,
+                            witness_idx,
+                            vm.witness_stream.len(),
+                        ));
                     }
+                    let next_input = &vm.witness_stream[witness_idx];
+                    witness_idx += 1;
+                    vm.memory_chip.write_hint(a, d, e, next_input);
                 }
             };
 
@@ -261,8 +284,9 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             rows.extend(cols.flatten(vm.options()));
 
             pc = next_pc;
-            clock_cycle += 1;
+            timestamp += max_accesses_per_instruction(opcode);
 
+            clock_cycle += 1;
             if opcode == TERMINATE && clock_cycle.is_power_of_two() {
                 break;
             }

@@ -1,3 +1,7 @@
+use crate::commands::cache::CacheCommand;
+use crate::commands::keygen::KeygenCommand;
+use crate::commands::prove::ProveCommand;
+use crate::commands::verify::VerifyCommand;
 use crate::commands::{cache, keygen, mock, prove, verify};
 use afs_stark_backend::config::Com;
 use afs_stark_backend::config::PcsProof;
@@ -76,19 +80,41 @@ where
                 mock.execute(config).unwrap();
             }
             CliCommand::Keygen(keygen) => {
-                keygen.execute(config, engine).unwrap();
+                let output_folder = keygen.output_folder.clone();
+                KeygenCommand::execute(config, engine, output_folder).unwrap();
             }
             CliCommand::Cache(cache) => {
-                cache.execute(config, engine).unwrap();
+                let table_id = cache.table_id.clone();
+                let db_file_path = cache.db_file_path.clone();
+                let output_folder = cache.output_folder.clone();
+                CacheCommand::execute(config, engine, table_id, db_file_path, output_folder)
+                    .unwrap();
             }
             CliCommand::Prove(prove) => {
-                prove.execute(config, engine).unwrap();
+                let afi_file_path = prove.afi_file_path.clone();
+                let db_file_path = prove.db_file_path.clone();
+                let keys_folder = prove.keys_folder.clone();
+                let cache_folder = prove.cache_folder.clone();
+                let silent = prove.silent;
+                ProveCommand::execute(
+                    config,
+                    engine,
+                    afi_file_path,
+                    db_file_path,
+                    keys_folder,
+                    cache_folder,
+                    silent,
+                )
+                .unwrap();
             }
             CliCommand::Verify(verify) => {
-                verify.execute(config, engine).unwrap();
+                let proof_file = verify.proof_file.clone();
+                let init_db_file_path = verify.init_db_file_path.clone();
+                let keys_folder = verify.keys_folder.clone();
+                VerifyCommand::execute(config, engine, proof_file, init_db_file_path, keys_folder)
+                    .unwrap();
             }
         }
-        // cli
     }
 }
 

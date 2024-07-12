@@ -44,7 +44,7 @@ fn generate_cols<T: Field>(
             z: op.result,
         },
         aux: FieldExtensionArithmeticAuxCols {
-            clock_cycle: T::from_canonical_usize(op.clock_cycle),
+            start_timestamp: T::from_canonical_usize(op.start_timestamp),
             op_a: op.op_a,
             op_b: op.op_b,
             op_c: op.op_c,

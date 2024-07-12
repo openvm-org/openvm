@@ -1,17 +1,12 @@
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 
 use afs_chips::single_page_index_scan::page_controller::PageController;
 use afs_stark_backend::{
+    config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkPartialProvingKey,
-    prover::{
-        trace::{ProverTraceData, TraceCommitmentBuilder},
-        MultiTraceStarkProver,
-    },
+    prover::trace::{ProverTraceData, TraceCommitmentBuilder},
 };
-use afs_test_utils::{
-    config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
-    page_config::PageConfig,
-};
+use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
 use bin_common::utils::{
     io::{create_prefix, read_from_path, write_bytes},
     page::print_page_nowrap,
@@ -19,11 +14,14 @@ use bin_common::utils::{
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{afs_interface::AfsInterface, mock_db::MockDb, utils::string_to_u16_vec};
+use p3_field::PrimeField64;
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use serde::{de::DeserializeOwned, Serialize};
 
 use super::{common_setup, comp_value_to_string, CommonCommands, PAGE_BUS_INDEX, RANGE_BUS_INDEX};
 
 #[derive(Debug, Parser)]
-pub struct ProveCommand {
+pub struct ProveCommand<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     #[arg(
         long = "value",
         short = 'v',
@@ -76,13 +74,34 @@ pub struct ProveCommand {
 
     #[command(flatten)]
     pub common: CommonCommands,
+
+    #[clap(skip)]
+    _marker: PhantomData<(SC, E)>,
 }
 
-impl ProveCommand {
-    pub fn execute(self, config: &PageConfig) -> Result<()> {
-        let table_id = self.table_id;
-        let db_file_path = self.db_file_path;
-        let output_folder = self.common.output_folder;
+impl<SC: StarkGenericConfig, E: StarkEngine<SC>> ProveCommand<SC, E>
+where
+    Val<SC>: PrimeField64,
+    PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
+    PcsProof<SC>: Send + Sync,
+    Domain<SC>: Send + Sync,
+    Com<SC>: Send + Sync,
+    SC::Pcs: Sync,
+    SC::Challenge: Send + Sync,
+{
+    #[allow(clippy::too_many_arguments)]
+    pub fn execute(
+        config: &PageConfig,
+        engine: &E,
+        common: &CommonCommands,
+        value: String,
+        table_id: String,
+        db_file_path: String,
+        keys_folder: String,
+        input_trace_file: String,
+        output_trace_folder: String,
+    ) -> Result<()> {
+        let output_folder = common.output_folder.clone();
 
         let (
             start,
@@ -94,8 +113,8 @@ impl ProveCommand {
             idx_limb_bits,
             idx_decomp,
             range_max,
-        ) = common_setup(config, self.common.predicate);
-        let value = string_to_u16_vec(self.value, idx_len);
+        ) = common_setup(config, common.predicate.clone());
+        let value = string_to_u16_vec(value, idx_len);
 
         // Get Page from db
         let mut db = MockDb::from_file(db_file_path.as_str());
@@ -103,20 +122,20 @@ impl ProveCommand {
         let table = interface.current_table().unwrap();
 
         // Handle prover trace data
-        let input_trace_file = read_from_path(self.input_trace_file).unwrap();
-        let input_trace_file: ProverTraceData<BabyBearPoseidon2Config> =
+        let input_trace_file = read_from_path(input_trace_file).unwrap();
+        let input_trace_file: ProverTraceData<SC> =
             bincode::deserialize(&input_trace_file).unwrap();
 
         // Get input page from trace data
         let page_input =
             table.to_page(config.page.index_bytes, config.page.data_bytes, page_height);
 
-        if !self.common.silent {
+        if !common.silent {
             println!("Input page:");
             print_page_nowrap(&page_input);
         }
 
-        let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
+        let mut page_controller: PageController<SC> = PageController::new(
             PAGE_BUS_INDEX,
             RANGE_BUS_INDEX,
             idx_len,
@@ -131,8 +150,7 @@ impl ProveCommand {
         let page_output =
             page_controller.gen_output(page_input.clone(), value.clone(), page_width, comp.clone());
 
-        let engine = config::baby_bear_poseidon2::default_engine(idx_decomp);
-        let prover = MultiTraceStarkProver::new(&engine.config);
+        let prover = engine.prover();
         let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
         let (input_prover_data, output_prover_data) = page_controller.load_page(
@@ -149,7 +167,7 @@ impl ProveCommand {
         );
 
         // let output_trace = page_output.gen_trace::<BabyBear>();
-        let output_trace_path = self.output_trace_folder.clone()
+        let output_trace_path = output_trace_folder.clone()
             + "/"
             + &table_id.clone()
             + comp_value_to_string(comp.clone(), value.clone()).as_str()
@@ -162,13 +180,13 @@ impl ProveCommand {
         // Load from disk and deserialize partial proving key
         let prefix = create_prefix(config);
         let encoded_pk =
-            read_from_path(self.keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
-        let partial_pk: MultiStarkPartialProvingKey<BabyBearPoseidon2Config> =
+            read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
+        let partial_pk: MultiStarkPartialProvingKey<SC> =
             bincode::deserialize(&encoded_pk).unwrap();
 
         // Prove
         let proof = page_controller.prove(
-            &engine,
+            engine,
             &partial_pk,
             &mut trace_builder,
             input_prover_data,
@@ -182,7 +200,7 @@ impl ProveCommand {
             output_folder.clone() + "/" + &table_id.clone() + "-" + &prefix + ".prove.bin";
         write_bytes(&encoded_proof, proof_path.clone()).unwrap();
 
-        if !self.common.silent {
+        if !common.silent {
             println!("Output page:");
             print_page_nowrap(&page_output);
             println!("Proving completed in {:?}", start.elapsed());

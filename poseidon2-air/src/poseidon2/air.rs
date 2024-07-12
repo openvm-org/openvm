@@ -1,5 +1,6 @@
-use super::columns::Poseidon2Cols;
+use super::columns::{Poseidon2AuxCols, Poseidon2Cols, Poseidon2IoCols};
 use super::Poseidon2Air;
+use afs_chips::sub_chip::{AirConfig, SubAir};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -9,6 +10,10 @@ impl<const WIDTH: usize, F: Field> BaseAir<F> for Poseidon2Air<WIDTH, F> {
     fn width(&self) -> usize {
         self.get_width()
     }
+}
+
+impl<const WIDTH: usize, F: Clone> AirConfig for Poseidon2Air<WIDTH, F> {
+    type Cols<T> = Poseidon2Cols<WIDTH, T>;
 }
 
 impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Air<WIDTH, AB::F> {
@@ -21,6 +26,15 @@ impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Air<WIDTH, AB::F> 
         let poseidon2_cols = Poseidon2Cols::from_slice(local, &index_map);
         let Poseidon2Cols { io, aux } = poseidon2_cols;
 
+        SubAir::<AB>::eval(self, builder, io, aux);
+    }
+}
+
+impl<AB: AirBuilder, const WIDTH: usize> SubAir<AB> for Poseidon2Air<WIDTH, AB::F> {
+    type IoView = Poseidon2IoCols<WIDTH, AB::Var>;
+    type AuxView = Poseidon2AuxCols<WIDTH, AB::Var>;
+
+    fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
         let half_ext_rounds = self.rounds_f / 2;
         for phase1_index in 0..half_ext_rounds {
             // regenerate state as Expr from trace variables on each round

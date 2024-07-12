@@ -13,7 +13,6 @@ impl GroupByAir {
     /// Solves for each segment of the trace independently, then zips them all together
     pub fn gen_aux_trace<F: Field>(&self, grouped_page: &Page) -> RowMajorMatrix<F> {
         let page_f: Vec<Vec<F>> = grouped_page
-            .rows
             .iter()
             .map(|row| {
                 row.to_vec()
@@ -48,7 +47,7 @@ impl GroupByAir {
         // is_final = is_alloc AND !eq_next
         let is_final = is_equal
             .iter()
-            .zip(grouped_page.rows.iter())
+            .zip(grouped_page.iter())
             .map(|(is_eq, row)| vec![F::from_canonical_u32(row.is_alloc) * (F::one() - is_eq[0])])
             .collect::<Vec<Vec<F>>>();
 

@@ -27,7 +27,7 @@ fn generate_field_extension_operations(
         let op = OpCode::from_u8(rng.gen_range(12..=15)).unwrap();
 
         // dummy values for clock cycle and addr_space and pointers
-        let clock_cycle: usize = 0;
+        let timestamp: usize = 0;
         let op_a = BabyBear::zero();
         let op_b = BabyBear::zero();
         let op_c = BabyBear::zero();
@@ -50,7 +50,7 @@ fn generate_field_extension_operations(
         let result = FieldExtensionArithmeticAir::solve(op, operand1, operand2).unwrap();
 
         requests.push(FieldExtensionArithmeticOperation {
-            clock_cycle,
+            start_timestamp: timestamp,
             opcode: op,
             op_a,
             op_b,

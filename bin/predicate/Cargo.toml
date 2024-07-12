@@ -15,5 +15,9 @@ color-eyre = "0.6.3"
 logical-interface = { path = "../../logical-interface" }
 serde = { version = "1.0.203", features = ["derive"] }
 p3-util = { workspace = true }
+p3-uni-stark = { workspace = true }
+p3-field = { workspace = true }
+p3-blake3 = { workspace = true }
+p3-keccak = { workspace = true }
 bin-common = { path = "../common" }
 hex = "0.4.3"
