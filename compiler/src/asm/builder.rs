@@ -35,13 +35,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmBu
         let mut compiler = AsmCompiler::new();
         compiler.build(self.operations);
         let asm_code = compiler.code();
-        convert_program::<WORD_SIZE, F, EF>(
-            asm_code,
-            CompilerOptions {
-                compile_prints: true,
-                field_arithmetic_enabled: true,
-                field_extension_enabled: true,
-            },
-        )
+        convert_program::<WORD_SIZE, F, EF>(asm_code, options)
     }
 }
