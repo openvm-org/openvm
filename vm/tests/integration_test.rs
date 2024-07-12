@@ -1,13 +1,13 @@
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
+
 use afs_test_utils::config::baby_bear_poseidon2::{
     engine_from_perm, random_perm, run_simple_test_no_pis,
 };
 use afs_test_utils::config::fri_params::fri_params_with_80_bits_of_security;
 use afs_test_utils::engine::StarkEngine;
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-
-use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
+use stark_vm::cpu::trace::Instruction;
 use stark_vm::vm::config::VmConfig;
 use stark_vm::vm::config::VmParamsConfig;
 use stark_vm::vm::get_chips;
@@ -253,7 +253,7 @@ fn test_vm_compress_poseidon2() {
     }
     let output = 4;
     program.push(Instruction::from_isize(
-        COMP_POS2, input_a, input_b, output, 1, 1,
+        COMP_POS2, input_a, input_b, output, 0, 1,
     ));
     program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
 
