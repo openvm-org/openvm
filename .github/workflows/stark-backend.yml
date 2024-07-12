@@ -1,14 +1,12 @@
-name: Default Unit Tests
+name: Stark Backend Tests
 
 on:
   push:
     branches: ["main"]
   pull_request:
     branches: ["main"]
-    paths-ignore:
+    paths:
       - "stark-backend/**"
-      - "vm/**"
-      - "compiler/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -28,6 +26,7 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Run unit tests
+      - name: Run tests
+        working-directory: stark-backend
         run: |
-          cargo test --workspace --exclude stark-backend --exclude vm --exclude compiler
+          cargo test
