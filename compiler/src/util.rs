@@ -90,7 +90,7 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
         VmConfig {
             vm: VmParamsConfig {
                 field_arithmetic_enabled: true,
-                field_extension_enabled: false,
+                field_extension_enabled: true,
                 limb_bits: 28,
                 decomp: 4,
                 compress_poseidon2_enabled: true,

@@ -7,7 +7,7 @@ use rand::{thread_rng, Rng};
 use afs_compiler::asm::AsmBuilder;
 use afs_compiler::ir::{Ext, Felt, SymbolicExt};
 use afs_compiler::ir::{ExtConst, Var};
-use afs_compiler::util::{display_program, execute_program};
+use afs_compiler::util::{display_program, end_to_end_test, execute_program};
 
 const WORD_SIZE: usize = 1;
 
@@ -83,21 +83,23 @@ fn test_compiler_arithmetic() {
 
     builder.halt();
 
-    // generate program with only base field operations
-    let program = builder.clone().compile_isa::<WORD_SIZE>();
-    display_program(&program);
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    end_to_end_test::<WORD_SIZE, EF>(builder, vec![]);
 
-    let options = CompilerOptions {
-        compile_prints: true,
-        field_arithmetic_enabled: true,
-        field_extension_enabled: true,
-    };
+    // // generate program with only base field operations
+    // let program = builder.clone().compile_isa::<WORD_SIZE>();
+    // display_program(&program);
+    // execute_program::<WORD_SIZE, _>(program, vec![]);
 
-    // use extension field operations
-    let program = builder.compile_isa_with_options::<WORD_SIZE>(options);
-    display_program(&program);
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    // let options = CompilerOptions {
+    //     compile_prints: true,
+    //     field_arithmetic_enabled: true,
+    //     field_extension_enabled: true,
+    // };
+
+    // // use extension field operations
+    // let program = builder.compile_isa_with_options::<WORD_SIZE>(options);
+    // display_program(&program);
+    // execute_program::<WORD_SIZE, _>(program, vec![]);
 
     // let program = builder.compile_program();
 

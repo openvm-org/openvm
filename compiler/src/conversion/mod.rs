@@ -11,8 +11,6 @@ use crate::asm::{AsmInstruction, AssemblyCode};
 
 pub mod field_extension_conversion;
 
-const FIELD_EXTENSION_DEGREE: usize = 4;
-
 #[derive(Clone, Copy)]
 pub struct CompilerOptions {
     pub compile_prints: bool,
@@ -282,7 +280,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         AsmInstruction::ImmE(dst, val) => {
             let val_slice = val.as_base_slice();
 
-            (0..FIELD_EXTENSION_DEGREE)
+            (0..EF::D)
                 .map(|i|
                 // register[dst + i * WORD_SIZE] <- val_slice[i]
                 inst(
@@ -358,7 +356,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 ),
             ];
 
-            for i in 0..FIELD_EXTENSION_DEGREE {
+            for i in 0..EF::D {
                 // register[dst] <- mem[register[util] + offset - (i * WORD_SIZE)]
                 result.push(inst(
                     LOADW,
@@ -371,7 +369,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             }
             result
         }
-        AsmInstruction::LoadEI(dst, src, index, offset, size) => (0..FIELD_EXTENSION_DEGREE)
+        AsmInstruction::LoadEI(dst, src, index, offset, size) => (0..EF::D)
             .map(|i|
                 // mem[register[addr] + ((index * size) + offset)] <- register[val]
                 inst(
@@ -445,7 +443,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 ),
             ];
 
-            for i in 0..FIELD_EXTENSION_DEGREE {
+            for i in 0..EF::D {
                 result.push(inst(
                     STOREW,
                     register(val - ((i * WORD_SIZE) as i32)),
@@ -457,7 +455,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             }
             result
         }
-        AsmInstruction::StoreEI(val, addr, index, offset, size) => (0..FIELD_EXTENSION_DEGREE)
+        AsmInstruction::StoreEI(val, addr, index, offset, size) => (0..EF::D)
             .map(|i|
                 // mem[register[addr] + ((index * size) + offset)] <- register[val]
                 inst(
@@ -568,7 +566,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 AS::Immediate,
             ),
         ],
-        AsmInstruction::BneE(label, lhs, rhs) => (0..FIELD_EXTENSION_DEGREE)
+        AsmInstruction::BneE(label, lhs, rhs) => (0..EF::D)
             .map(|i|
             // if register[lhs + i] != register[rhs +i] for i = 0..4, pc <- labels[label]
             inst(
@@ -580,7 +578,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 AS::Register,
             ))
             .collect(),
-        AsmInstruction::BneEI(label, lhs, rhs) => (0..FIELD_EXTENSION_DEGREE)
+        AsmInstruction::BneEI(label, lhs, rhs) => (0..EF::D)
             .map(|i|
             // if register[lhs + i] != rhs[i] for i = 0..4, pc <- labels[label]
             inst(
@@ -592,7 +590,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 AS::Register,
             ))
             .collect(),
-        AsmInstruction::BeqE(label, lhs, rhs) => (0..FIELD_EXTENSION_DEGREE)
+        AsmInstruction::BeqE(label, lhs, rhs) => (0..EF::D)
             .rev()
             .map(|i|
             // if register[lhs + i] == register[rhs + i] for i = 0..4, pc <- labels[label]
@@ -601,7 +599,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 register(lhs - ((i * WORD_SIZE) as i32)),
                 register(rhs - ((i * WORD_SIZE) as i32)),
                 if i == 0 {
-                    labels(label) - (pc + F::from_canonical_usize(FIELD_EXTENSION_DEGREE - 1))
+                    labels(label) - (pc + F::from_canonical_usize(EF::D - 1))
                 } else {
                     F::from_canonical_usize(i + 1)
                 },
@@ -609,7 +607,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 AS::Register,
             ))
             .collect(),
-        AsmInstruction::BeqEI(label, lhs, rhs) => (0..FIELD_EXTENSION_DEGREE)
+        AsmInstruction::BeqEI(label, lhs, rhs) => (0..EF::D)
             .rev()
             .map(|i|
             // if register[lhs + i] == rhs[i] for i = 0..4, pc <- labels[label]
@@ -618,7 +616,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 register(lhs - ((i * WORD_SIZE) as i32)),
                 rhs.as_base_slice()[i],
                 if i == 0 {
-                    labels(label) - (pc + F::from_canonical_usize(FIELD_EXTENSION_DEGREE - 1))
+                    labels(label) - (pc + F::from_canonical_usize(EF::D - 1))
                 } else {
                     F::from_canonical_usize(i + 1)
                 },
