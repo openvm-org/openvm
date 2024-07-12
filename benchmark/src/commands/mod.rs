@@ -138,14 +138,14 @@ pub fn benchmark_execute(
         let timing_data = extract_timing_data_from_log(
             TMP_TRACING_LOG.as_str(),
             &[
-                "Benchmark keygen",
-                "Benchmark cache",
-                "Benchmark prove",
-                "prove:Load page trace generation: afs_chips::page_rw_checker::page_controller",
-                "prove:Load page trace commitment: afs_chips::page_rw_checker::page_controller",
-                "Prove.generate_trace",
+                "Benchmark keygen: benchmark",
+                "Benchmark cache: benchmark",
+                "Benchmark prove: benchmark",
+                "prove:Load page trace generation",
+                "prove:Load page trace commitment",
+                "Generate ops_sender trace",
                 "prove:Prove trace commitment",
-                "Benchmark verify",
+                "Benchmark verify: benchmark",
             ],
         )?;
 

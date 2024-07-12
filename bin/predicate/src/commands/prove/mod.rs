@@ -170,7 +170,6 @@ where
             &mut trace_builder.committer,
         );
 
-        // let output_trace = page_output.gen_trace::<BabyBear>();
         let output_trace_path = output_trace_folder.clone()
             + "/"
             + &table_id.clone()

@@ -42,7 +42,7 @@ pub struct BenchmarkRow {
     /// Prove: Time to commit load_page_and_ops trace
     pub prove_load_trace_commit: String,
     /// Prove: Time to generate trace
-    pub prove_generate: String,
+    pub prove_ops_sender_gen: String,
     /// Prove: Time to commit trace
     pub prove_commit: String,
     /// Prove time: Total time to generate the proof (inclusive of all prove timing items above)
@@ -124,7 +124,7 @@ pub fn write_csv_header(path: String) -> Result<()> {
         "cache_time",
         "prove_load_trace_gen",
         "prove_load_trace_commit",
-        "prove_generate",
+        "prove_ops_sender_gen",
         "prove_commit",
         "prove_time",
         "verify_time",
@@ -164,33 +164,48 @@ pub fn write_csv_line(
         pow_bits: config.fri_params.proof_of_work_bits,
         preprocessed: log_data
             .get("Total air width: preprocessed=")
-            .unwrap()
+            .unwrap_or(&"-".to_string())
             .parse::<usize>()?,
         main: log_data
             .get("Total air width: partitioned_main=")
-            .unwrap()
+            .unwrap_or(&"-".to_string())
             .parse::<usize>()?,
         challenge: log_data
             .get("Total air width: after_challenge=")
-            .unwrap()
+            .unwrap_or(&"-".to_string())
             .parse::<usize>()?,
-        keygen_time: log_data.get("ReadWrite keygen").unwrap().to_owned(),
-        cache_time: log_data.get("ReadWrite cache").unwrap().to_owned(),
+        keygen_time: log_data
+            .get("Benchmark keygen: benchmark")
+            .unwrap_or(&"-".to_string())
+            .to_owned(),
+        cache_time: log_data
+            .get("Benchmark cache: benchmark")
+            .unwrap_or(&"-".to_string())
+            .to_owned(),
         prove_load_trace_gen: log_data
-            .get("prove:Load page trace generation: afs_chips::page_rw_checker::page_controller")
-            .unwrap()
+            .get("prove:Load page trace generation")
+            .unwrap_or(&"-".to_string())
             .to_owned(),
         prove_load_trace_commit: log_data
-            .get("prove:Load page trace commitment: afs_chips::page_rw_checker::page_controller")
-            .unwrap()
+            .get("prove:Load page trace commitment")
+            .unwrap_or(&"-".to_string())
             .to_owned(),
-        prove_generate: log_data.get("Prove.generate_trace").unwrap().to_owned(),
+        prove_ops_sender_gen: log_data
+            .get("Generate ops_sender trace")
+            .unwrap_or(&"-".to_string())
+            .to_owned(),
         prove_commit: log_data
             .get("prove:Prove trace commitment")
-            .unwrap()
+            .unwrap_or(&"-".to_string())
             .to_owned(),
-        prove_time: log_data.get("ReadWrite prove").unwrap().to_owned(),
-        verify_time: log_data.get("ReadWrite verify").unwrap().to_owned(),
+        prove_time: log_data
+            .get("Benchmark prove: benchmark")
+            .unwrap_or(&"-".to_string())
+            .to_owned(),
+        verify_time: log_data
+            .get("Benchmark verify: benchmark")
+            .unwrap_or(&"-".to_string())
+            .to_owned(),
     };
 
     writer.serialize(row)?;
