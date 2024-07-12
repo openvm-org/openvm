@@ -1,3 +1,4 @@
+use afs_compiler::conversion::CompilerOptions;
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
@@ -82,7 +83,19 @@ fn test_compiler_arithmetic() {
 
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
+    // generate program with only base field operations
+    let program = builder.clone().compile_isa::<WORD_SIZE>();
+    display_program(&program);
+    execute_program::<WORD_SIZE, _>(program, vec![]);
+
+    let options = CompilerOptions {
+        compile_prints: true,
+        field_arithmetic_enabled: true,
+        field_extension_enabled: true,
+    };
+
+    // use extension field operations
+    let program = builder.compile_isa_with_options::<WORD_SIZE>(options);
     display_program(&program);
     execute_program::<WORD_SIZE, _>(program, vec![]);
 
