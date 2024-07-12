@@ -73,22 +73,19 @@ impl OfflineChecker {
             let last_idx = my_last_idx;
             let last_clk = my_last_clk;
 
-            let lt_cols = LocalTraceInstructions::generate_trace_row(
-                &self.lt_idx_clk_air,
-                (
-                    last_idx
-                        .iter()
-                        .copied()
-                        .chain(iter::once(last_clk as u32))
-                        .collect(),
-                    cur_idx
-                        .iter()
-                        .copied()
-                        .chain(iter::once(clk as u32))
-                        .collect(),
-                    range_checker.clone(),
-                ),
-            );
+            let lt_cols = self.lt_idx_clk_air.generate_trace_row((
+                last_idx
+                    .iter()
+                    .copied()
+                    .chain(iter::once(last_clk as u32))
+                    .collect(),
+                cur_idx
+                    .iter()
+                    .copied()
+                    .chain(iter::once(clk as u32))
+                    .collect(),
+                range_checker.clone(),
+            ));
 
             // those are used later to initialize the Cols struct
             let my_cur_idx = cur_idx.clone();
@@ -97,10 +94,9 @@ impl OfflineChecker {
             let last_idx = to_field_vec(last_idx);
             let cur_idx = to_field_vec(cur_idx.to_vec());
 
-            let is_equal_idx_cols = LocalTraceInstructions::generate_trace_row(
-                &self.is_equal_idx_air,
-                (last_idx, cur_idx),
-            );
+            let is_equal_idx_cols = self
+                .is_equal_idx_air
+                .generate_trace_row((last_idx, cur_idx));
 
             let is_final_write = is_final && op_type == 0;
             let is_final_delete = is_final && op_type == 2;
