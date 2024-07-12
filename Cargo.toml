@@ -56,17 +56,8 @@ p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa"
 p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa", features = [
     "parallel",
 ] }
-<<<<<<< HEAD
-<<<<<<< HEAD
 p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
-=======
-p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", branch = "sp1" }
-=======
-p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
->>>>>>> 56814680 (Don't use Plonky3 sp1 branch)
-zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9"}
->>>>>>> 0bf58878 (wip)
 
 # For local development. Add to your `.cargo/config.toml`
 # [patch."https://github.com/Plonky3/Plonky3.git"]

@@ -64,7 +64,8 @@ impl AxiomVerifier<InnerConfig> {
         };
         Self::verify(&mut builder, &pcs, raps, chip_dims, &input);
 
-        builder.compile_isa()
+        const WORD_SIZE: usize = 1;
+        builder.compile_isa::<WORD_SIZE>()
     }
 }
 

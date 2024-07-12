@@ -210,7 +210,7 @@ fn test_interactions() {
         &engine.fri_params,
     );
     display_program(&program);
-    execute_program::<4, _>(program);
+    execute_program::<1, _>(program, vec![]);
 
     // TODO: pass logical inputs
     // runtime.witness_stream = witness_stream.into();
