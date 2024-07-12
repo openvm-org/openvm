@@ -42,8 +42,7 @@ impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Chip<WIDTH, AB::F>
         // can only be comparing if row is allocated
         builder.assert_eq(cols.io.is_alloc * cols.io.cmp, cols.io.cmp);
         // immediates
-        for i in 0..3 {
-            let operand = [cols.io.a, cols.io.b, cols.io.c][i];
+        for (i, operand) in [cols.io.a, cols.io.b, cols.io.c].into_iter().enumerate() {
             builder
                 .when(cols.aux.d_is_zero)
                 .assert_eq(cols.aux.addresses[i], operand);
