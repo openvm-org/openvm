@@ -143,6 +143,7 @@ fn test_ext2felt() {
         let rhs: Felt<F> = builder.constant(fe);
         builder.assert_felt_eq(lhs, rhs);
     }
+    builder.halt();
 
     let program = builder.compile_isa::<1>();
     display_program(&program);
