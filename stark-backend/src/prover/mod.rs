@@ -10,7 +10,7 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::instrument;
 
 use crate::{
-    air_builders::debug::check_constraints::{check_constraints, check_cumulative_sums},
+    air_builders::debug::check_constraints::{check_constraints, check_logup},
     commit::CommittedSingleMatrixView,
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkPartialProvingKey,
@@ -183,7 +183,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
                     partitioned_main.push(partitioned_main_trace.as_slice());
                     permutation.push(perm_trace);
                 }
-                check_cumulative_sums(&raps, &preprocessed, &partitioned_main, &permutation);
+                check_logup(&raps, &preprocessed, &partitioned_main);
             }
         });
 
