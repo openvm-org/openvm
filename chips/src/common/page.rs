@@ -206,7 +206,8 @@ impl Page {
 
     pub fn resize(&mut self, new_len: usize, value: PageCols<u32>) {
         self.rows.resize(new_len, value);
-        
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &PageCols<u32>> {
         self.rows.iter()
     }

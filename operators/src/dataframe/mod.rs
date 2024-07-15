@@ -12,6 +12,7 @@ pub enum DataFrameType {
     Unindexed,
 }
 
+/// TODO: update this comment to say it doesn't have to be of fixed length
 /// A DataFrame is a list of fixed length of page commitments
 /// An IndexedDataFrame is a DataFrame for indexed pages
 /// TODO: add comment about the start and the end
@@ -33,16 +34,21 @@ impl<const COMMIT_LEN: usize> DataFrame<COMMIT_LEN> {
         }
     }
 
-    pub fn empty(len: usize, df_type: DataFrameType) -> Self {
+    pub fn empty(df_type: DataFrameType) -> Self {
         Self {
             commit: Commitment::<COMMIT_LEN>::default(), // TODO: change this to be the correct commitment
-            page_commits: vec![Commitment::<COMMIT_LEN>::default(); len], // TODO: change this to be the correct commitment
+            page_commits: vec![], // TODO: change this to be the correct commitment
             df_type,
         }
     }
 
     pub fn len(&self) -> usize {
         self.page_commits.len()
+    }
+
+    pub fn push(&mut self, commit: Commitment<COMMIT_LEN>) {
+        self.page_commits.push(commit);
+        // TODO: update self.commit
     }
 
     pub fn get_index_range(&self, index: usize) -> IndexRange {
