@@ -30,7 +30,7 @@ fn get_rw_interactions<T: Field>(
         );
 
         let pointer = VirtualPairCol::new(
-            vec![(PairCol::Main(address), T::from_canonical_usize(1))],
+            vec![(PairCol::Main(address), T::one())],
             T::from_canonical_usize(i * WORD_SIZE),
         );
 
@@ -44,17 +44,24 @@ fn get_rw_interactions<T: Field>(
         // handle WORD_SIZE > 1 later
         fields.push(VirtualPairCol::single_main(element));
 
-        interactions.push(Interaction {
-            fields,
-            count: VirtualPairCol::one(),
-            argument_index: MEMORY_BUS,
-        });
+        if ext_element_ind == 1 {
+            interactions.push(Interaction {
+                fields,
+                count: VirtualPairCol::single_main(cols_numbered.aux.valid_y_read),
+                argument_index: MEMORY_BUS,
+            });
+        } else {
+            interactions.push(Interaction {
+                fields,
+                count: VirtualPairCol::single_main(cols_numbered.aux.is_valid),
+                argument_index: MEMORY_BUS,
+            });
+        }
     }
 
     interactions
 }
 
-/// Receives all IO columns from another chip on bus 4 (FieldExtensionArithmeticAir::BUS_INDEX).
 impl<T: Field> AirBridge<T> for FieldExtensionArithmeticAir {
     fn sends(&self) -> Vec<Interaction<T>> {
         let all_cols = (0..FieldExtensionArithmeticCols::<T>::get_width()).collect::<Vec<usize>>();
@@ -90,6 +97,7 @@ impl<T: Field> AirBridge<T> for FieldExtensionArithmeticAir {
         interactions
     }
 
+    // Receives all IO columns from another chip on bus 3 (FIELD_EXTENSION_BUS)
     fn receives(&self) -> Vec<Interaction<T>> {
         let all_cols = (0..FieldExtensionArithmeticCols::<T>::get_width()).collect::<Vec<usize>>();
         let cols_numbered = FieldExtensionArithmeticCols::<usize>::from_slice(&all_cols);
@@ -103,7 +111,7 @@ impl<T: Field> AirBridge<T> for FieldExtensionArithmeticAir {
                 VirtualPairCol::single_main(cols_numbered.aux.d),
                 VirtualPairCol::single_main(cols_numbered.aux.e),
             ],
-            count: VirtualPairCol::one(),
+            count: VirtualPairCol::single_main(cols_numbered.aux.is_valid),
             argument_index: FIELD_EXTENSION_BUS,
         }]
     }

@@ -167,12 +167,8 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     }
 
     /// Set up the keygen builder for the group-by test case by querying trace widths.
-    pub fn set_up_keygen_builder(
-        &self,
-        keygen_builder: &mut MultiStarkKeygenBuilder<SC>,
-        height: usize,
-        range_checker_height: usize,
-    ) where
+    pub fn set_up_keygen_builder(&self, keygen_builder: &mut MultiStarkKeygenBuilder<SC>)
+    where
         Val<SC>: PrimeField64,
     {
         let group_by_ptr = keygen_builder.add_cached_main_matrix(self.group_by.page_width);
@@ -181,26 +177,15 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         let final_page_aux_ptr = keygen_builder.add_main_matrix(self.final_chip.aux_width());
         let range_checker_ptr = keygen_builder.add_main_matrix(self.range_checker.air_width());
 
-        keygen_builder.add_partitioned_air(
-            &self.group_by,
-            height,
-            0,
-            vec![group_by_ptr, group_by_aux_ptr],
-        );
+        keygen_builder.add_partitioned_air(&self.group_by, 0, vec![group_by_ptr, group_by_aux_ptr]);
 
         keygen_builder.add_partitioned_air(
             &self.final_chip,
-            height,
             0,
             vec![final_page_ptr, final_page_aux_ptr],
         );
 
-        keygen_builder.add_partitioned_air(
-            &self.range_checker.air,
-            range_checker_height,
-            0,
-            vec![range_checker_ptr],
-        );
+        keygen_builder.add_partitioned_air(&self.range_checker.air, 0, vec![range_checker_ptr]);
     }
 
     pub fn prove(

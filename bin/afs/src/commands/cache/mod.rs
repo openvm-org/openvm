@@ -5,7 +5,10 @@ use afs_stark_backend::{config::PcsProverData, prover::trace::TraceCommitmentBui
 use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
 use clap::Parser;
 use color_eyre::eyre::Result;
-use logical_interface::{afs_interface::AfsInterface, mock_db::MockDb};
+use logical_interface::{
+    afs_interface::{utils::string_to_table_id, AfsInterface},
+    mock_db::MockDb,
+};
 use p3_field::PrimeField;
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::Serialize;
@@ -75,7 +78,8 @@ where
         let trace_builder = TraceCommitmentBuilder::<SC>::new(prover.pcs());
         let prover_trace_data = trace_builder.committer.commit(vec![trace]);
         let encoded_data = bincode::serialize(&prover_trace_data).unwrap();
-        let path = output_folder.clone() + "/" + &table_id + ".cache.bin";
+        let table_id_full = string_to_table_id(table_id.clone()).to_string();
+        let path = output_folder.clone() + "/" + &table_id_full + ".cache.bin";
         write_bytes(&encoded_data, path).unwrap();
 
         let duration = start.elapsed();

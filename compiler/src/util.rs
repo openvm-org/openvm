@@ -2,7 +2,9 @@ use p3_baby_bear::BabyBear;
 use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
 
 use afs_test_utils::config::baby_bear_poseidon2::{engine_from_perm, random_perm};
-use afs_test_utils::config::fri_params::fri_params_with_80_bits_of_security;
+use afs_test_utils::config::fri_params::{
+    fri_params_fast_testing, fri_params_with_80_bits_of_security,
+};
 use afs_test_utils::engine::StarkEngine;
 use stark_vm::vm::get_chips;
 use stark_vm::{
@@ -34,7 +36,7 @@ pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(
         VmConfig {
             vm: VmParamsConfig {
                 field_arithmetic_enabled: true,
-                field_extension_enabled: false,
+                field_extension_enabled: true,
                 limb_bits: 28,
                 decomp: 4,
                 compress_poseidon2_enabled: true,
@@ -90,7 +92,7 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
         VmConfig {
             vm: VmParamsConfig {
                 field_arithmetic_enabled: true,
-                field_extension_enabled: false,
+                field_extension_enabled: true,
                 limb_bits: 28,
                 decomp: 4,
                 compress_poseidon2_enabled: true,
@@ -105,7 +107,12 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
     let chips = get_chips(&vm);
 
     let perm = random_perm();
-    let fri_params = fri_params_with_80_bits_of_security()[1];
+    // blowup factor 8 for poseidon2 chip
+    let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
+        fri_params_fast_testing()[1]
+    } else {
+        fri_params_with_80_bits_of_security()[1]
+    };
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
 
     let num_chips = chips.len();

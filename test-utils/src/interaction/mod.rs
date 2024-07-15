@@ -7,7 +7,6 @@ use afs_stark_backend::verifier::{MultiTraceStarkVerifier, VerificationError};
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_matrix::Matrix;
 
 use crate::config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config};
 
@@ -25,9 +24,8 @@ pub fn verify_interactions(
     let config = config::baby_bear_poseidon2::default_config(&perm, log_trace_degree);
 
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&config);
-    for ((air, trace), pis) in airs.iter().zip_eq(&traces).zip_eq(&pis) {
-        let height = trace.height();
-        keygen_builder.add_air(*air, height, pis.len());
+    for (air, pis) in airs.iter().zip_eq(&pis) {
+        keygen_builder.add_air(*air, pis.len());
     }
     let partial_pk = keygen_builder.generate_partial_pk();
     let partial_vk = partial_pk.partial_vk();

@@ -1,9 +1,13 @@
-use super::{make_io_cols, Poseidon2Chip};
-use crate::cpu::trace::Instruction;
-use crate::cpu::OpCode::{COMP_POS2, PERM_POS2};
-use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
-use crate::vm::config::{VmConfig, VmParamsConfig};
-use crate::vm::VirtualMachine;
+use core::array::from_fn;
+
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
+use p3_matrix::dense::RowMajorMatrix;
+use p3_matrix::Matrix;
+use p3_util::log2_strict_usize;
+use rand::Rng;
+use rand::RngCore;
+
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::config::{
     baby_bear_poseidon2::{engine_from_perm, random_perm},
@@ -12,14 +16,14 @@ use afs_test_utils::config::{
 use afs_test_utils::engine::StarkEngine;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::create_seeded_rng;
-use core::array::from_fn;
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrix;
-use p3_matrix::Matrix;
-use p3_util::log2_strict_usize;
-use rand::Rng;
-use rand::RngCore;
+
+use crate::cpu::trace::Instruction;
+use crate::cpu::OpCode::{COMP_POS2, PERM_POS2};
+use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
+use crate::vm::config::{VmConfig, VmParamsConfig};
+use crate::vm::VirtualMachine;
+
+use super::{make_io_cols, Poseidon2Chip};
 
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 16;
@@ -69,14 +73,14 @@ macro_rules! run_perm_ops {
                 if j < 8 {
                     WriteOps {
                         clk: 16 * i + j,
-                        ad_s: $instructions[i].d,
+                        ad_s: $instructions[i].e,
                         address: $instructions[i].op_a + BabyBear::from_canonical_usize(j),
                         data: [$data[i][j]],
                     }
                 } else {
                     WriteOps {
                         clk: 16 * i + j,
-                        ad_s: $instructions[i].d,
+                        ad_s: $instructions[i].e,
                         address: $instructions[i].op_b + BabyBear::from_canonical_usize(j - 8),
                         data: [$data[i][j]],
                     }
@@ -169,9 +173,8 @@ macro_rules! run_perm_ops {
 /// Create random instructions for the poseidon2 chip.
 fn random_instructions<const NUM_OPS: usize>() -> [Instruction<BabyBear>; NUM_OPS] {
     let mut rng = create_seeded_rng();
-    core::array::from_fn(|_| {
-        let [a, b, c, d, e] =
-            core::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6) + 1));
+    from_fn(|_| {
+        let [a, b, c, e] = from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 6) + 1));
         Instruction {
             opcode: if rng.next_u32() % 2 == 0 {
                 PERM_POS2
@@ -181,7 +184,7 @@ fn random_instructions<const NUM_OPS: usize>() -> [Instruction<BabyBear>; NUM_OP
             op_a: a,
             op_b: b,
             op_c: c,
-            d,
+            d: BabyBear::zero(),
             e,
         }
     })

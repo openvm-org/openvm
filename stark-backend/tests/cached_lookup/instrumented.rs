@@ -31,7 +31,7 @@ fn instrumented_verify<SC: StarkGenericConfig, E: StarkEngineWithHashInstrumenta
     proof: Proof<SC>,
     pis: Vec<Vec<Val<SC>>>,
 ) -> StarkHashStatistics<BenchParams> {
-    let degree = vk.per_air[0].degree;
+    let degree = proof.degrees[0];
     let log_degree = log2_ceil_usize(degree);
 
     engine.clear_instruments();

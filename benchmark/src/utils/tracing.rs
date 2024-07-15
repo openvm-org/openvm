@@ -17,6 +17,7 @@ use crate::TMP_TRACING_LOG;
 
 const TIME_PREFIX: &str = "time.busy=";
 
+/// Sets up tracing to print to terminal and write to log file in parallel
 pub fn setup_benchmark_tracing() -> WorkerGuard {
     let env_filter = EnvFilter::builder()
         .with_default_directive(Level::INFO.into())

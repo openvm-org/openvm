@@ -1,11 +1,11 @@
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
+
 use afs_test_utils::config::baby_bear_poseidon2::{
     engine_from_perm, random_perm, run_simple_test_no_pis,
 };
 use afs_test_utils::config::fri_params::fri_params_with_80_bits_of_security;
 use afs_test_utils::engine::StarkEngine;
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
 use stark_vm::vm::config::VmConfig;
@@ -253,8 +253,44 @@ fn test_vm_compress_poseidon2() {
     }
     let output = 4;
     program.push(Instruction::from_isize(
-        COMP_POS2, input_a, input_b, output, 1, 1,
+        COMP_POS2, input_a, input_b, output, 0, 1,
     ));
+    program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
+
+    air_test_with_poseidon2(false, false, true, program);
+}
+
+#[test]
+fn test_vm_compress_poseidon2_as2() {
+    let mut program = vec![];
+    let input_a = 37;
+    for i in 0..8 {
+        program.push(Instruction::from_isize(
+            STOREW,
+            43 - (7 * i),
+            input_a + i,
+            0,
+            0,
+            2,
+        ));
+    }
+    let input_b = 108;
+    for i in 0..8 {
+        program.push(Instruction::from_isize(
+            STOREW,
+            2 + (18 * i),
+            input_b + i,
+            0,
+            0,
+            2,
+        ));
+    }
+    let output = 4;
+    program.push(Instruction::from_isize(STOREW, input_a, 0, 0, 0, 1));
+    program.push(Instruction::from_isize(STOREW, input_b, 1, 0, 0, 1));
+    program.push(Instruction::from_isize(STOREW, output, 2, 0, 0, 1));
+
+    program.push(Instruction::from_isize(COMP_POS2, 0, 1, 2, 1, 2));
     program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
 
     air_test_with_poseidon2(false, false, true, program);

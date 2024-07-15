@@ -4,6 +4,7 @@ use afs_test_utils::{
     config::EngineType,
     page_config::{PageConfig, PageMode},
 };
+use chrono::Local;
 use color_eyre::eyre::Result;
 use csv::{Writer, WriterBuilder};
 use logical_interface::{afs_interface::AfsInterface, mock_db::MockDb};
@@ -27,11 +28,11 @@ pub struct BenchmarkRow {
     pub num_queries: usize,
     pub pow_bits: usize,
     /// Total width of preprocessed AIR
-    pub preprocessed: usize,
+    pub preprocessed: String,
     /// Total width of partitioned main AIR
-    pub main: usize,
+    pub main: String,
     /// Total width of after challenge AIR
-    pub challenge: usize,
+    pub challenge: String,
     /// Keygen time: Time to generate keys
     pub keygen_time: String,
     /// Cache time: Time to generate cached trace
@@ -40,8 +41,8 @@ pub struct BenchmarkRow {
     pub prove_load_trace_gen: String,
     /// Prove: Time to commit load_page_and_ops trace
     pub prove_load_trace_commit: String,
-    /// Prove: Time to generate trace
-    pub prove_generate: String,
+    /// Prove: Time to generate the ops_sender trace
+    pub prove_ops_sender_gen: String,
     /// Prove: Time to commit trace
     pub prove_commit: String,
     /// Prove time: Total time to generate the proof (inclusive of all prove timing items above)
@@ -60,6 +61,14 @@ pub fn save_afi_to_new_db(
     interface.load_input_file(afi_path.as_str())?;
     db.save_to_file(db_file_path.as_str())?;
     Ok(())
+}
+
+pub fn default_output_filename(benchmark_name: String) -> String {
+    format!(
+        "benchmark/output/{}-{}.csv",
+        benchmark_name,
+        Local::now().format("%Y%m%d-%H%M%S")
+    )
 }
 
 pub fn write_csv_header(path: String) -> Result<()> {
@@ -115,7 +124,7 @@ pub fn write_csv_header(path: String) -> Result<()> {
         "cache_time",
         "prove_load_trace_gen",
         "prove_load_trace_commit",
-        "prove_generate",
+        "prove_ops_sender_gen",
         "prove_commit",
         "prove_time",
         "verify_time",
@@ -128,15 +137,13 @@ pub fn write_csv_header(path: String) -> Result<()> {
 pub fn write_csv_line(
     path: String,
     test_type: String,
+    scenario: String,
     config: &PageConfig,
     log_data: &HashMap<String, String>,
-    percent_reads: usize,
-    percent_writes: usize,
 ) -> Result<()> {
     let file = OpenOptions::new().append(true).open(path).unwrap();
     let mut writer = WriterBuilder::new().has_headers(false).from_writer(file);
 
-    let scenario = format!("{}%r/{}%w", percent_reads, percent_writes);
     let bytes_divisor = ceil_div_usize(config.page.bits_per_fe, 8);
     let idx_len = ceil_div_usize(config.page.index_bytes, bytes_divisor);
     let data_len = ceil_div_usize(config.page.data_bytes, bytes_divisor);
@@ -157,40 +164,51 @@ pub fn write_csv_line(
         pow_bits: config.fri_params.proof_of_work_bits,
         preprocessed: log_data
             .get("Total air width: preprocessed=")
-            .unwrap()
-            .parse::<usize>()?,
+            .unwrap_or(&"-".to_string())
+            .to_owned(),
         main: log_data
             .get("Total air width: partitioned_main=")
-            .unwrap()
-            .parse::<usize>()?,
+            .unwrap_or(&"-".to_string())
+            .to_owned(),
         challenge: log_data
             .get("Total air width: after_challenge=")
-            .unwrap()
-            .parse::<usize>()?,
-        keygen_time: log_data.get("ReadWrite keygen").unwrap().to_owned(),
-        cache_time: log_data.get("ReadWrite cache").unwrap().to_owned(),
+            .unwrap_or(&"-".to_string())
+            .to_owned(),
+        keygen_time: log_data
+            .get("Benchmark keygen: benchmark")
+            .unwrap_or(&"-".to_string())
+            .to_owned(),
+        cache_time: log_data
+            .get("Benchmark cache: benchmark")
+            .unwrap_or(&"-".to_string())
+            .to_owned(),
         prove_load_trace_gen: log_data
-            .get("prove:Load page trace generation: afs_chips::page_rw_checker::page_controller")
-            .unwrap()
+            .get("prove:Load page trace generation")
+            .unwrap_or(&"-".to_string())
             .to_owned(),
         prove_load_trace_commit: log_data
-            .get("prove:Load page trace commitment: afs_chips::page_rw_checker::page_controller")
-            .unwrap()
+            .get("prove:Load page trace commitment")
+            .unwrap_or(&"-".to_string())
             .to_owned(),
-        prove_generate: log_data.get("Prove.generate_trace").unwrap().to_owned(),
+        prove_ops_sender_gen: log_data
+            .get("Generate ops_sender trace")
+            .unwrap_or(&"-".to_string())
+            .to_owned(),
         prove_commit: log_data
             .get("prove:Prove trace commitment")
-            .unwrap()
+            .unwrap_or(&"-".to_string())
             .to_owned(),
-        prove_time: log_data.get("ReadWrite prove").unwrap().to_owned(),
-        verify_time: log_data.get("ReadWrite verify").unwrap().to_owned(),
+        prove_time: log_data
+            .get("Benchmark prove: benchmark")
+            .unwrap_or(&"-".to_string())
+            .to_owned(),
+        verify_time: log_data
+            .get("Benchmark verify: benchmark")
+            .unwrap_or(&"-".to_string())
+            .to_owned(),
     };
 
-    writer.serialize(row)?;
+    writer.serialize(&row)?;
     writer.flush()?;
     Ok(())
-}
-
-pub fn display_output(data: String) {
-    println!("{}", data);
 }

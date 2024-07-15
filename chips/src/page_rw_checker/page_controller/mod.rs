@@ -275,10 +275,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     pub fn set_up_keygen_builder(
         &self,
         keygen_builder: &mut MultiStarkKeygenBuilder<SC>,
-        page_height: usize,
-        offline_checker_trace_degree: usize,
         ops_sender: &dyn AnyRap<SC>,
-        ops_sender_trace_degree: usize,
     ) where
         Val<SC>: PrimeField,
     {
@@ -286,24 +283,19 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         let final_page_ptr = keygen_builder.add_cached_main_matrix(self.final_chip.page_width());
         let final_page_aux_ptr = keygen_builder.add_main_matrix(self.final_chip.aux_width());
 
-        keygen_builder.add_partitioned_air(&self.init_chip, page_height, 0, vec![init_page_ptr]);
+        keygen_builder.add_partitioned_air(&self.init_chip, 0, vec![init_page_ptr]);
 
         keygen_builder.add_partitioned_air(
             &self.final_chip,
-            page_height,
             0,
             vec![final_page_ptr, final_page_aux_ptr],
         );
 
-        keygen_builder.add_air(&self.offline_checker, offline_checker_trace_degree, 0);
+        keygen_builder.add_air(&self.offline_checker, 0);
 
-        keygen_builder.add_air(
-            &self.range_checker.air,
-            self.range_checker.range_max() as usize,
-            0,
-        );
+        keygen_builder.add_air(&self.range_checker.air, 0);
 
-        keygen_builder.add_air(ops_sender, ops_sender_trace_degree, 0);
+        keygen_builder.add_air(ops_sender, 0);
     }
 
     /// This function clears the trace_builder, loads in the traces for all involved chips

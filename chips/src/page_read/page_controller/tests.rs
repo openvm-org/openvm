@@ -132,12 +132,11 @@ fn page_read_chip_test() {
     let page_metadata_ptr = keygen_builder.add_main_matrix(2);
     keygen_builder.add_partitioned_air(
         &page_controller.page_read_air,
-        page_height,
         0,
         vec![page_data_ptr, page_metadata_ptr],
     );
 
-    keygen_builder.add_air(&page_requester, num_requests, 0);
+    keygen_builder.add_air(&page_requester, 0);
 
     let partial_pk = keygen_builder.generate_partial_pk();
 

@@ -54,15 +54,8 @@ fn index_scan_test(
 
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
     let page_width = 1 + idx_len + data_len;
-    let page_height = page.height();
 
-    page_controller.set_up_keygen_builder(
-        &mut keygen_builder,
-        page_width,
-        page_height,
-        idx_len,
-        idx_decomp,
-    );
+    page_controller.set_up_keygen_builder(&mut keygen_builder, page_width, idx_len);
 
     let partial_pk = keygen_builder.generate_partial_pk();
 

@@ -34,7 +34,11 @@ fn generate_cols<T: Field>(
         x[3] + add_sub_coeff * y[3],
     ];
     let product = FieldExtensionArithmeticAir::solve(OpCode::BBE4MUL, x, y).unwrap();
-    let inv = FieldExtensionArithmeticAir::solve(OpCode::BBE4INV, x, y).unwrap();
+    let inv = if x[0] == T::zero() && x[1] == T::zero() && x[2] == T::zero() && x[3] == T::zero() {
+        [T::zero(), T::zero(), T::zero(), T::zero()]
+    } else {
+        FieldExtensionArithmeticAir::solve(OpCode::BBE4INV, x, y).unwrap()
+    };
 
     FieldExtensionArithmeticCols {
         io: FieldExtensionArithmeticIoCols {
@@ -44,6 +48,8 @@ fn generate_cols<T: Field>(
             z: op.result,
         },
         aux: FieldExtensionArithmeticAuxCols {
+            is_valid: T::one(),
+            valid_y_read: T::one() - is_inv,
             start_timestamp: T::from_canonical_usize(op.start_timestamp),
             op_a: op.op_a,
             op_b: op.op_b,
@@ -74,13 +80,11 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         let curr_height = self.operations.len();
         let correct_height = curr_height.next_power_of_two();
         trace.extend(
-            empty_row
-                .iter()
-                .cloned()
-                .cycle()
-                .take((correct_height - curr_height) * FieldExtensionArithmeticCols::<F>::NUM_COLS),
+            empty_row.iter().cloned().cycle().take(
+                (correct_height - curr_height) * FieldExtensionArithmeticCols::<F>::get_width(),
+            ),
         );
 
-        RowMajorMatrix::new(trace, FieldExtensionArithmeticCols::<F>::NUM_COLS)
+        RowMajorMatrix::new(trace, FieldExtensionArithmeticCols::<F>::get_width())
     }
 }

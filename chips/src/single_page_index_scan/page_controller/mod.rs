@@ -16,6 +16,7 @@ use afs_test_utils::engine::StarkEngine;
 use p3_field::{AbstractField, PrimeField, PrimeField64};
 use p3_matrix::dense::DenseMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use tracing::info_span;
 
 use crate::{common::page::Page, range_gate::RangeCheckerGateChip};
 
@@ -278,9 +279,7 @@ where
         &self,
         keygen_builder: &mut MultiStarkKeygenBuilder<SC>,
         page_width: usize,
-        page_height: usize,
         idx_len: usize,
-        decomp: usize,
     ) {
         let input_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
         let output_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
@@ -290,24 +289,17 @@ where
 
         keygen_builder.add_partitioned_air(
             &self.input_chip.air,
-            page_height,
             idx_len,
             vec![input_page_ptr, input_page_aux_ptr],
         );
 
         keygen_builder.add_partitioned_air(
             &self.output_chip.air,
-            page_height,
             0,
             vec![output_page_ptr, output_page_aux_ptr],
         );
 
-        keygen_builder.add_partitioned_air(
-            &self.range_checker.air,
-            1 << decomp,
-            0,
-            vec![range_checker_ptr],
-        );
+        keygen_builder.add_partitioned_air(&self.range_checker.air, 0, vec![range_checker_ptr]);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -360,7 +352,7 @@ where
         trace_builder.load_trace(output_chip_aux_trace);
         trace_builder.load_trace(range_checker_trace);
 
-        trace_builder.commit_current();
+        tracing::info_span!("Prove trace commitment").in_scope(|| trace_builder.commit_current());
 
         let partial_vk = partial_pk.partial_vk();
 
@@ -444,6 +436,7 @@ where
 
         assert!(!page_input.is_empty());
 
+        let trace_span = info_span!("Load page trace generation").entered();
         let bus_index = self.input_chip.air.page_bus_index;
 
         self.input_chip = PageIndexScanInputChip::new(
@@ -470,7 +463,9 @@ where
 
         self.output_chip_trace = Some(self.output_chip.gen_page_trace::<SC>(&page_output));
         self.output_chip_aux_trace = Some(self.output_chip.gen_aux_trace::<SC>(&page_output));
+        trace_span.exit();
 
+        let trace_commit_span = info_span!("Load page trace commitment").entered();
         let page_input_prover_data = match page_input_pdata {
             Some(pdata) => pdata,
             None => Arc::new(trace_committer.commit(vec![self.input_chip_trace.clone().unwrap()])),
@@ -479,6 +474,7 @@ where
             Some(pdata) => pdata,
             None => Arc::new(trace_committer.commit(vec![self.output_chip_trace.clone().unwrap()])),
         };
+        trace_commit_span.exit();
 
         self.input_commitment = Some(page_input_prover_data.commit.clone());
         self.output_commitment = Some(page_output_prover_data.commit.clone());

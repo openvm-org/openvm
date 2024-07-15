@@ -15,7 +15,7 @@ impl AirConfig for FieldExtensionArithmeticAir {
 
 impl<F: Field> BaseAir<F> for FieldExtensionArithmeticAir {
     fn width(&self) -> usize {
-        FieldExtensionArithmeticCols::<F>::NUM_COLS
+        FieldExtensionArithmeticCols::<F>::get_width()
     }
 }
 
@@ -29,6 +29,14 @@ impl<AB: AirBuilder> Air<AB> for FieldExtensionArithmeticAir {
         let local_cols: &FieldExtensionArithmeticCols<AB::Var> = (*local).borrow();
 
         let FieldExtensionArithmeticCols { io, aux } = local_cols;
+
+        builder.assert_bool(aux.is_valid);
+        // valid_y_read is 1 iff is_valid and not is_inv
+        // the previous constraint along with this one imply valid_y_read is boolean
+        builder.assert_eq(
+            aux.valid_y_read,
+            aux.is_valid * (AB::Expr::one() - aux.is_inv),
+        );
 
         builder.assert_bool(aux.opcode_lo);
         builder.assert_bool(aux.opcode_hi);
@@ -81,7 +89,8 @@ impl<AB: AirBuilder> Air<AB> for FieldExtensionArithmeticAir {
         );
 
         // constrain inverse using multiplication: x * x^(-1) = 1
-        builder.assert_one(
+        // ignores when not inv compute (will fail if x = 0 and try to compute inv)
+        builder.when(aux.is_inv).assert_one(
             io.x[0] * aux.inv[0]
                 + beta_f.clone()
                     * (io.x[1] * aux.inv[3] + io.x[2] * aux.inv[2] + io.x[3] * aux.inv[1]),
