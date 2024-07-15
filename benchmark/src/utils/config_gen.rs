@@ -1,3 +1,6 @@
+#[cfg(test)]
+use std::fs::create_dir_all;
+
 use itertools::iproduct;
 
 use afs_test_utils::{
@@ -75,11 +78,13 @@ pub fn generate_configs() -> Vec<PageConfig> {
 #[test]
 #[ignore]
 fn run_generate_configs() {
+    let folder = "config/rw";
     let configs = generate_configs();
     let configs_len = configs.len();
     for config in configs {
         let filename = config.generate_filename();
-        let filepath = format!("config/rw/{}", filename);
+        let _ = create_dir_all(folder);
+        let filepath = format!("{}/{}", folder, filename);
         println!("Saving to {}", filepath);
         config.save_to_file(&filepath);
     }

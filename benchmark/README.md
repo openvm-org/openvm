@@ -43,3 +43,15 @@ Run these commands from the root of the repository
 ```bash
 cargo run --release --bin benchmark -- rw -r 90 -w 10
 ```
+
+For running tests with only the large configs
+
+```bash
+cargo run --release --bin benchmark -- rw -r 90 -w 10 --config-folder benchmark/config/rw-large
+```
+
+To run only small configs for testing
+
+```bash
+cargo run --release --bin benchmark -- rw -r 90 -w 10 --config-folder benchmark/config/rw-mini
+```
