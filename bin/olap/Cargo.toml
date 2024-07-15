@@ -14,8 +14,11 @@ afs-chips = { path = "../../chips" }
 afs-test-utils = { path = "../../test-utils" }
 afs-stark-backend = { path = "../../stark-backend" }
 afs-derive = { path = "../../derive" }
+bin-common = { path = "../common" }
 logical-interface = { path = "../../logical-interface" }
 p3-util = { workspace = true }
 p3-uni-stark = { workspace = true }
 p3-baby-bear = { workspace = true }
 p3-field = { workspace = true }
+p3-blake3 = { workspace = true }
+p3-keccak = { workspace = true }
