@@ -9,7 +9,6 @@ use afs_test_utils::engine::StarkEngine;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
 use stark_vm::vm::config::VmConfig;
-use stark_vm::vm::config::VmParamsConfig;
 use stark_vm::vm::get_chips;
 use stark_vm::vm::VirtualMachine;
 
@@ -25,14 +24,12 @@ fn air_test(
 ) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
-            vm: VmParamsConfig {
-                field_arithmetic_enabled,
-                field_extension_enabled,
-                compress_poseidon2_enabled: false,
-                perm_poseidon2_enabled: false,
-                limb_bits: LIMB_BITS,
-                decomp: DECOMP,
-            },
+            field_arithmetic_enabled,
+            field_extension_enabled,
+            compress_poseidon2_enabled: false,
+            perm_poseidon2_enabled: false,
+            limb_bits: LIMB_BITS,
+            decomp: DECOMP,
         },
         program,
         witness_stream,
@@ -51,14 +48,12 @@ fn air_test_with_poseidon2(
 ) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
-            vm: VmParamsConfig {
-                field_arithmetic_enabled,
-                field_extension_enabled,
-                compress_poseidon2_enabled,
-                perm_poseidon2_enabled: false,
-                limb_bits: LIMB_BITS,
-                decomp: DECOMP,
-            },
+            field_arithmetic_enabled,
+            field_extension_enabled,
+            compress_poseidon2_enabled,
+            perm_poseidon2_enabled: false,
+            limb_bits: LIMB_BITS,
+            decomp: DECOMP,
         },
         program,
         vec![],

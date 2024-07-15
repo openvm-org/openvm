@@ -9,10 +9,7 @@ use afs_test_utils::engine::StarkEngine;
 use stark_vm::vm::get_chips;
 use stark_vm::{
     cpu::trace::Instruction,
-    vm::{
-        config::{VmConfig, VmParamsConfig},
-        VirtualMachine,
-    },
+    vm::{config::VmConfig, VirtualMachine},
 };
 
 use crate::asm::AsmBuilder;
@@ -34,14 +31,12 @@ pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(
 ) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
-            vm: VmParamsConfig {
-                field_arithmetic_enabled: true,
-                field_extension_enabled: true,
-                limb_bits: 28,
-                decomp: 4,
-                compress_poseidon2_enabled: true,
-                perm_poseidon2_enabled: true,
-            },
+            field_arithmetic_enabled: true,
+            field_extension_enabled: true,
+            limb_bits: 28,
+            decomp: 4,
+            compress_poseidon2_enabled: true,
+            perm_poseidon2_enabled: true,
         },
         program,
         witness_stream,
@@ -90,14 +85,12 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
     });
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
-            vm: VmParamsConfig {
-                field_arithmetic_enabled: true,
-                field_extension_enabled: true,
-                limb_bits: 28,
-                decomp: 4,
-                compress_poseidon2_enabled: true,
-                perm_poseidon2_enabled: true,
-            },
+            field_arithmetic_enabled: true,
+            field_extension_enabled: true,
+            limb_bits: 28,
+            decomp: 4,
+            compress_poseidon2_enabled: true,
+            perm_poseidon2_enabled: true,
         },
         program,
         witness_stream,
