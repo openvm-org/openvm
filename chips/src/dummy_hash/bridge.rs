@@ -6,11 +6,11 @@ use super::DummyHashAir;
 
 impl<F: Field> AirBridge<F> for DummyHashAir {
     fn receives(&self) -> Vec<Interaction<F>> {
-        let fields = (0..2 * self.hash_width + self.rate)
+        let fields = (1..2 * self.hash_width + self.rate + 1)
             .map(|i| VirtualPairCol::single_main(i))
             .collect();
 
-        let count = VirtualPairCol::one();
+        let count = VirtualPairCol::single_main(0);
 
         vec![Interaction {
             fields,

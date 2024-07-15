@@ -12,10 +12,10 @@ impl<F: Field> DummyHashChip<F> {
     pub fn generate_trace(&self) -> RowMajorMatrix<F> {
         let rows = (0..self.hash_in_states.len())
             .flat_map(|i| {
-                let mut combined = self.hash_in_states[i].clone();
+                let mut combined = vec![F::one()];
+                combined.extend(self.hash_in_states[i].clone());
                 combined.extend(self.hash_slices[i].clone());
                 combined.extend(self.hash_out_states[i].clone());
-                combined.push(F::one());
                 combined.into_iter()
             })
             .collect::<Vec<_>>();
@@ -58,10 +58,10 @@ impl<F: Field> LocalTraceInstructions<F> for DummyHashAir {
 
         DummyHashCols {
             io: DummyHashIOCols {
+                is_alloc: F::one(),
                 curr_state: curr_state.clone(),
                 to_absorb: to_absorb.clone(),
                 new_state,
-                count: vec![F::one()],
             },
             aux: DummyHashAuxCols {},
             width: self.hash_width,

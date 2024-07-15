@@ -7,17 +7,18 @@ pub struct DummyHashCols<T> {
 
 #[derive(Clone)]
 pub struct DummyHashIOCols<F> {
+    pub is_alloc: F,
     pub curr_state: Vec<F>,
     pub to_absorb: Vec<F>,
     pub new_state: Vec<F>,
-    pub count: Vec<F>,
 }
 
 #[derive(Copy, Clone)]
 pub struct DummyHashAuxCols {}
 
-impl<F: Clone> DummyHashCols<F> {
-    pub const fn new(
+impl<F: Copy> DummyHashCols<F> {
+    pub fn new(
+        is_alloc: F,
         curr_state: Vec<F>,
         to_absorb: Vec<F>,
         new_state: Vec<F>,
@@ -26,10 +27,10 @@ impl<F: Clone> DummyHashCols<F> {
     ) -> DummyHashCols<F> {
         DummyHashCols {
             io: DummyHashIOCols {
+                is_alloc,
                 curr_state,
                 to_absorb,
                 new_state,
-                count: vec![],
             },
             aux: DummyHashAuxCols {},
             width,
@@ -38,30 +39,30 @@ impl<F: Clone> DummyHashCols<F> {
     }
 
     pub fn flatten(&self) -> Vec<F> {
-        let mut result = Vec::with_capacity(2 * self.width + self.rate);
+        let mut result = Vec::with_capacity(2 * self.width + self.rate + 1);
+        result.push(self.io.is_alloc);
         result.extend_from_slice(&self.io.curr_state);
         result.extend_from_slice(&self.io.to_absorb);
         result.extend_from_slice(&self.io.new_state);
-        result.extend_from_slice(&self.io.count);
         result
     }
 
     pub fn get_width(&self) -> usize {
-        2 * self.width + self.rate
+        2 * self.width + self.rate + 1
     }
 
     pub fn from_slice(slc: &[F], width: usize, rate: usize) -> Self {
-        let curr_state = slc[0..width].to_vec();
-        let to_absorb = slc[width..width + rate].to_vec();
-        let new_state = slc[width + rate..2 * width + rate].to_vec();
-        let count = slc[2 * width + rate..2 * width + rate + 1].to_vec();
+        let is_alloc = slc[0];
+        let curr_state = slc[1..width + 1].to_vec();
+        let to_absorb = slc[width + 1..width + rate + 1].to_vec();
+        let new_state = slc[width + rate + 1..2 * width + rate + 1].to_vec();
 
         Self {
             io: DummyHashIOCols {
+                is_alloc,
                 curr_state,
                 to_absorb,
                 new_state,
-                count,
             },
             aux: DummyHashAuxCols {},
             width,
