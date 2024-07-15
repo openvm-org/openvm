@@ -31,6 +31,7 @@ pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub program: Vec<Instruction<F>>,
     pub witness_stream: Vec<Vec<F>>,
     pub segments: Vec<Box<ExecutionSegment<WORD_SIZE, F>>>,
+    pub traces: Vec<DenseMatrix<F>>,
 }
 
 pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
@@ -58,6 +59,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             program,
             witness_stream,
             segments: vec![],
+            traces: vec![],
         };
         vm.new_segment();
         vm
@@ -99,7 +101,16 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             result.extend(self.segments.last_mut().unwrap().generate_commitments()?);
             self.next_segment();
         }
+        self.traces.clone_from(&result);
         Ok(result)
+    }
+
+    pub fn max_log_degree(&self) -> Result<usize, ExecutionError> {
+        let mut checker_trace_degree = 0;
+        for trace in &self.traces {
+            checker_trace_degree = std::cmp::max(checker_trace_degree, trace.height());
+        }
+        Ok(log2_strict_usize(checker_trace_degree))
     }
 }
 
@@ -212,4 +223,17 @@ where
         result.push(&segment.poseidon2_chip as &dyn AnyRap<SC>);
     }
     result
+}
+
+// TODO: make into struct method
+pub fn get_all_chips<const WORD_SIZE: usize, SC: StarkGenericConfig>(
+    vm: &VirtualMachine<WORD_SIZE, Val<SC>>,
+) -> Vec<&dyn AnyRap<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    vm.segments
+        .iter()
+        .flat_map(|segment| get_chips(segment))
+        .collect()
 }

@@ -9,7 +9,7 @@ use afs_test_utils::engine::StarkEngine;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
 use stark_vm::vm::config::VmParamsConfig;
-use stark_vm::vm::get_chips;
+use stark_vm::vm::get_all_chips;
 use stark_vm::vm::VirtualMachine;
 
 const WORD_SIZE: usize = 1;
@@ -36,7 +36,7 @@ fn air_test(
     );
 
     let traces = vm.execute().unwrap();
-    let chips = get_chips(&vm.segments[0]);
+    let chips = get_all_chips(&vm);
     run_simple_test_no_pis(chips, traces).expect("Verification failed");
 }
 
@@ -59,9 +59,9 @@ fn air_test_with_poseidon2(
         vec![],
     );
 
-    let max_log_degree = vm.segments[0].max_log_degree().unwrap();
-    let traces = vm.segments[0].traces().unwrap();
-    let chips = get_chips(&vm.segments[0]);
+    let traces = vm.execute().unwrap();
+    let chips = get_all_chips(&vm);
+    let max_log_degree = vm.max_log_degree().unwrap();
 
     let perm = random_perm();
     let fri_params = fri_params_with_80_bits_of_security()[1];
