@@ -22,23 +22,6 @@ use p3_util::log2_strict_usize;
 use rand::Rng;
 use rand::RngCore;
 
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use afs_test_utils::config::{
-    baby_bear_poseidon2::{engine_from_perm, random_perm},
-    fri_params::fri_params_with_80_bits_of_security,
-};
-use afs_test_utils::engine::StarkEngine;
-use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
-use afs_test_utils::utils::create_seeded_rng;
-
-use crate::cpu::trace::Instruction;
-use crate::cpu::OpCode::{COMP_POS2, PERM_POS2};
-use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
-use crate::vm::config::{VmConfig, VmParamsConfig};
-use crate::vm::VirtualMachine;
-
-use super::{make_io_cols, Poseidon2Chip};
-
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 16;
 const DECOMP: usize = 8;
