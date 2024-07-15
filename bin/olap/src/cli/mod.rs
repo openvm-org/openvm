@@ -22,10 +22,6 @@ use p3_util::log2_strict_usize;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::commands::inner_join::InnerJoinCli;
-use crate::commands::inner_join::InnerJoinCommand;
-use crate::commands::inner_join::InnerJoinCommonCommands;
-
 #[derive(Debug, Parser)]
 #[command(author, version, about = "OLAP CLI")]
 #[command(propagate_version = true)]
@@ -36,9 +32,9 @@ pub struct Cli<SC: StarkGenericConfig, E: StarkEngine<SC>> {
 
 #[derive(Debug, Subcommand)]
 pub enum CliCommand<SC: StarkGenericConfig, E: StarkEngine<SC>> {
-    #[command(name = "inner_join", about = "Run InnerJoin operations")]
-    /// Run InnerJoin operations
-    InnerJoin(InnerJoinCli<SC, E>),
+    #[command(name = "keygen", about = "Run key generation")]
+    /// Run key generation
+    Keygen(KeygenCommand<SC, E>),
 }
 
 impl<SC: StarkGenericConfig, E: StarkEngine<SC>> Cli<SC, E>
@@ -57,14 +53,14 @@ where
     {
         let cli = Self::parse();
         match &cli.command {
-            CliCommand::InnerJoin(inner_join) => {
-                let common = InnerJoinCommonCommands {
-                    db_path: inner_join.common.db_path.clone(),
-                    afo_path: inner_join.common.afo_path.clone(),
-                    output_path: inner_join.common.output_path.clone(),
-                    silent: inner_join.common.silent,
+            CliCommand::Keygen(keygen) => {
+                let common = CommonCommands {
+                    db_path: keygen.common.db_path.clone(),
+                    afo_path: keygen.common.afo_path.clone(),
+                    output_path: keygen.common.output_path.clone(),
+                    silent: keygen.common.silent,
                 };
-                InnerJoinCommand::execute(config, engine, &common, &inner_join.command).unwrap();
+                KeygenCommand::execute(config, engine, &common, &inner_join.command).unwrap();
             }
         }
     }

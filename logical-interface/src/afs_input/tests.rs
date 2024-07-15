@@ -4,7 +4,7 @@ use afs_chips::{
 
 use crate::{
     afs_input::{
-        operation::{InnerJoinOp, Operand, ReadOp, WhereOp, WriteOp},
+        operation::{FilterOp, InnerJoinOp, Operand, ReadOp, WriteOp},
         types::InputFileOp,
     },
     afs_interface::utils::string_to_table_id,
@@ -83,17 +83,17 @@ pub fn test_parse_insert_op() {
 }
 
 #[test]
-pub fn test_parse_where_op() {
+pub fn test_parse_filter_op() {
     let args = vec![
         "0x15".to_string(),
         "INDEX".to_string(),
         "<".to_string(),
         "0x55".to_string(),
     ];
-    let op = WhereOp::parse(args).unwrap();
+    let op = FilterOp::parse(args).unwrap();
     assert_eq!(
         op,
-        WhereOp {
+        FilterOp {
             table_id: string_to_table_id("0x15".to_string()),
             operand: Operand::Index,
             predicate: Comp::Lt,
