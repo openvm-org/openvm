@@ -27,7 +27,7 @@ pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
 
 pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(
     program: Vec<Instruction<F>>,
-    witness_stream: Vec<Vec<F>>,
+    input_stream: Vec<Vec<F>>,
 ) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
@@ -39,7 +39,7 @@ pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(
             perm_poseidon2_enabled: true,
         },
         program,
-        witness_stream,
+        input_stream,
     );
     vm.traces().unwrap();
 }
@@ -76,7 +76,7 @@ pub fn display_program_with_pc<F: PrimeField32>(program: &[Instruction<F>]) {
 }
 pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + TwoAdicField>(
     builder: AsmBuilder<BabyBear, EF>,
-    witness_stream: Vec<Vec<BabyBear>>,
+    input_stream: Vec<Vec<BabyBear>>,
 ) {
     let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
         compile_prints: false,
@@ -93,7 +93,7 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
             perm_poseidon2_enabled: true,
         },
         program,
-        witness_stream,
+        input_stream,
     );
     let max_log_degree = vm.max_log_degree().unwrap();
     let traces = vm.traces().unwrap();
