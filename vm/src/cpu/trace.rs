@@ -117,7 +117,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
 
         let mut clock_cycle: usize = 0;
         let mut timestamp: usize = 0;
-        let mut pc = F::zero();
+        let mut pc = F::from_canonical_usize(vm.cpu_air.pc);
 
         let mut witness_idx = 0;
 
@@ -288,6 +288,10 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
 
             clock_cycle += 1;
             if opcode == TERMINATE && clock_cycle.is_power_of_two() {
+                vm.cpu_air.is_done = true;
+                break;
+            }
+            if vm.switch_segments()? {
                 break;
             }
         }

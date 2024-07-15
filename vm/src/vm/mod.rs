@@ -30,7 +30,7 @@ pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub config: VmParamsConfig,
     pub program: Vec<Instruction<F>>,
     pub witness_stream: Vec<Vec<F>>,
-    pub segments: Vec<ExecutionSegment<WORD_SIZE, F>>,
+    pub segments: Vec<Box<ExecutionSegment<WORD_SIZE, F>>>,
 }
 
 pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
@@ -67,11 +67,39 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
         let program = self.program.clone();
         let witness_stream = self.witness_stream.clone();
         let segment = ExecutionSegment::new(self, program, witness_stream);
-        self.segments.push(segment);
+        self.segments.push(Box::new(segment));
+    }
+
+    pub fn next_segment(&mut self) {
+        let pc = self.segments.last().unwrap().cpu_air.pc;
+        let state = self.segments.last().unwrap().memory_chip.get_memory();
+
+        self.new_segment();
+
+        self.segments.last_mut().unwrap().cpu_air.pc = pc;
+        self.segments
+            .last_mut()
+            .unwrap()
+            .memory_chip
+            .install_memory(state);
     }
 
     pub fn options(&self) -> CpuOptions {
         self.config.cpu_options()
+    }
+
+    pub fn execute(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
+        let mut result = vec![];
+        loop {
+            result.extend(self.segments.last_mut().unwrap().generate_traces()?);
+            if self.segments.last_mut().unwrap().cpu_air.is_done {
+                break;
+            }
+            // Add additional traces for committing, if needed
+            result.extend(self.segments.last_mut().unwrap().generate_commitments()?);
+            self.next_segment();
+        }
+        Ok(result)
     }
 }
 
@@ -111,6 +139,12 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         }
     }
 
+    pub fn switch_segments(&mut self) -> Result<bool, ExecutionError> {
+        Ok(false)
+    }
+
+    /// Execution is determined by CPU trace generation, in turn determined by segment::continue_execution()
+    /// which determines whether to continue execution or not
     fn generate_traces(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
         let cpu_trace = CpuAir::generate_trace(self)?;
         let mut result = vec![
@@ -148,6 +182,11 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
 
     pub fn options(&self) -> CpuOptions {
         self.config.cpu_options()
+    }
+
+    /// Generate Merkle proof/memory diff traces
+    pub fn generate_commitments(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
+        Ok(vec![])
     }
 }
 

@@ -35,7 +35,7 @@ fn air_test(
         witness_stream,
     );
 
-    let traces = vm.segments[0].traces().unwrap();
+    let traces = vm.execute().unwrap();
     let chips = get_chips(&vm.segments[0]);
     run_simple_test_no_pis(chips, traces).expect("Verification failed");
 }

@@ -153,10 +153,16 @@ impl CpuOptions {
 #[derive(Default, Clone)]
 pub struct CpuAir<const WORD_SIZE: usize> {
     pub options: CpuOptions,
+    pub is_done: bool,
+    pub pc: usize,
 }
 
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
     pub fn new(options: CpuOptions) -> Self {
-        Self { options }
+        Self {
+            options,
+            is_done: false,
+            pc: 0,
+        }
     }
 }

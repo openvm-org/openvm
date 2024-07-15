@@ -142,6 +142,14 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         }
     }
 
+    pub fn install_memory(&mut self, memory: HashMap<(F, F), F>) {
+        self.memory = memory;
+    }
+
+    pub fn get_memory(&self) -> HashMap<(F, F), F> {
+        self.memory.clone()
+    }
+
     pub fn read_elem(&mut self, timestamp: usize, address_space: F, address: F) -> F {
         compose(self.read_word(timestamp, address_space, address))
     }
