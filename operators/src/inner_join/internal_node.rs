@@ -1,17 +1,7 @@
-// TODO: remove this
-// general points:
-// - verify function should not mutate the circuit in any way. It should only verify it
-// - generate_trace can mutate the circuit though, so a state wrapped in a mutex might be needed
-// - generating public values for the circuits is a part of generating the trace
-// - generally, parent.prove() should call parent.verify() and child.prove()
-// - So there are three parts: generate_trace, prove, and verify
-// - eventually, to parallelize trace generation, we should get rid of the mutex and generate
-//   the public values in a smartmer way
-
 use std::sync::Arc;
 
 use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
-use afs_test_utils::engine::{self, StarkEngine};
+use afs_test_utils::engine::StarkEngine;
 use p3_field::PrimeField;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use parking_lot::Mutex;
@@ -32,10 +22,6 @@ pub struct InternalNode<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: Star
     children: Vec<Arc<JoinCircuit<COMMIT_LEN, SC, E>>>,
     pairs: Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)>,
 
-    /// TODO: update this comment
-    /// This field should be updated only in Verifiable::verify() and
-    /// is used to keep track of the verification process while verifying
-    /// children
     state: Mutex<InternalNodeState<COMMIT_LEN>>,
 
     pis: InternalNodePis<COMMIT_LEN>,
@@ -44,8 +30,6 @@ pub struct InternalNode<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: Star
 #[derive(Clone, derive_new::new)]
 pub struct InternalNodePis<const COMMIT_LEN: usize> {
     init_running_df_commit: Commitment<COMMIT_LEN>,
-    // TODO: maybe move this parameter to be part of the dataframe struct
-    df_cur_page: u32,
     pairs_commit: Commitment<COMMIT_LEN>,
     pairs_list_index: u32,
     final_rannung_df_commit: Commitment<COMMIT_LEN>,
@@ -53,19 +37,19 @@ pub struct InternalNodePis<const COMMIT_LEN: usize> {
     child_table_commit: Commitment<COMMIT_LEN>,
 }
 
-/// This struct is used in the process of verifying children
-/// of InternalNode. It holds some information used in the
-/// verification process.
-/// TODO: maybe add a note what the role of this is in the VM context?
+/// This struct is used during the verification process of this
+/// node. After the verification process of this node is done,
+/// the state is queried by the parent to get some information
+/// about the node.
 #[derive(Default, Clone)]
 struct InternalNodeState<const COMMIT_LEN: usize> {
     /// Keeps track of the number of PageLevelJoin circuits in this subtree
     /// Starts at 0 and is updated when verifying children
     page_level_cnt: u32,
 
-    /// Starts as None, is updated when verifying children,
-    /// and should match the final dataframe commitment after
-    /// verifying all children
+    /// Starts as the initial dataframe commitment, is updated when
+    /// verifying children, and should match the final dataframe
+    /// commitment after verifying all children
     running_df_commit: Option<Commitment<COMMIT_LEN>>,
 }
 
@@ -102,7 +86,6 @@ where
         for child in self.children.iter() {
             match child.as_ref() {
                 JoinCircuit::PageLevelJoin(circuit) => {
-                    // TODO: note that here I pass pairs_list_index twice
                     circuit.generate_trace(output_df, *pairs_list_index);
                     *pairs_list_index += 1;
                 }
@@ -122,7 +105,6 @@ where
     }
 
     pub fn prove(&self, engine: &E) {
-        // TODO: generate the proof for this circuit and call verify
         for child in self.children.iter() {
             match child.as_ref() {
                 JoinCircuit::PageLevelJoin(circuit) => circuit.prove(engine),
@@ -149,8 +131,6 @@ where
     }
 
     fn verify_child(&self, circuit: Arc<JoinCircuit<COMMIT_LEN, SC, E>>, _engine: &E) {
-        // TODO: make an enum actually to avoid downcasting
-
         match circuit.as_ref() {
             JoinCircuit::TwoPointersProgram(tp_program) => {
                 assert_eq!(
@@ -206,11 +186,6 @@ where
                 assert_eq!(
                     *state.running_df_commit.as_ref().unwrap(),
                     internal_node_circuit.pis.init_running_df_commit
-                );
-
-                assert_eq!(
-                    internal_node_circuit.pis.df_cur_page,
-                    self.pis.df_cur_page + state.page_level_cnt
                 );
 
                 assert_eq!(

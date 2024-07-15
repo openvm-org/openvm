@@ -1,3 +1,8 @@
+use afs_test_utils::config::baby_bear_poseidon2::random_perm;
+use p3_field::AbstractField;
+use p3_symmetric::{CryptographicHasher, PaddingFreeSponge};
+use p3_uni_stark::StarkGenericConfig;
+
 #[derive(PartialEq, Clone, Debug)]
 pub struct Commitment<const LEN: usize> {
     commit: [u32; LEN],
@@ -9,14 +14,7 @@ impl<const LEN: usize> Default for Commitment<LEN> {
     }
 }
 
-impl<const LEN: usize> Commitment<LEN> {
-    pub fn from_slice(slice: &[u32]) -> Self {
-        Self {
-            commit: slice.try_into().unwrap(),
-        }
-    }
-
-    pub fn flatten(&self) -> Vec<u32> {
-        self.commit.to_vec()
-    }
+pub fn poseidon2_hash<SC: StarkGenericConfig, F: AbstractField>(input: &[F]) -> [&F; 8] {
+    let hash = PaddingFreeSponge::<_, 16, 8, 8>::new(random_perm());
+    hash.hash_iter(input)
 }

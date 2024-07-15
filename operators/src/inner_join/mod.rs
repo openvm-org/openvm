@@ -127,7 +127,6 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
 
         let init_running_df_commit = output_df.commit.clone();
         // TODO: make sure those are updated
-        let init_df_cur_page = *df_cur_page;
         let init_pairs_list_index = *pairs_list_index;
 
         let mid = (l + r) / 2;
@@ -158,7 +157,6 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
             pairs.clone(), // TODO: I think pairs should be removed from here
             InternalNodePis::new(
                 init_running_df_commit,
-                init_df_cur_page,
                 pairs_commit.clone(),
                 init_pairs_list_index,
                 final_running_df_commit.clone(),

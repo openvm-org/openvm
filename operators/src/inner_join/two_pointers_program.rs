@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
 
-use afs_stark_backend::prover::types::Proof;
 use afs_test_utils::engine::StarkEngine;
 use p3_uni_stark::StarkGenericConfig;
 
