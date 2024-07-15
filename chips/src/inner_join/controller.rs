@@ -1,4 +1,4 @@
-use std::{iter, sync::Arc};
+use std::{collections::HashMap, iter, sync::Arc};
 
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
@@ -235,35 +235,36 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
 
         let output_table = self.inner_join(t1, t2, fkey_start, fkey_end);
 
-        // Calculating the multiplicity with which T1 indices appear in the output_table
-        let mut t1_out_mult = vec![];
-        for row in t1.rows.iter() {
+        // Calculating the multiplicity with which T1 and T2 indices appear in the output_table
+        let mut t1_idx_out_mult = HashMap::new();
+        let mut t2_idx_out_mult = HashMap::new();
+        for row in output_table.iter() {
             if row.is_alloc == 1 {
-                t1_out_mult.push(
-                    output_table
-                        .rows
-                        .iter()
-                        .filter(|out_row| {
-                            out_row.is_alloc == 1 && out_row.data[fkey_start..fkey_end] == row.idx
-                        })
-                        .count() as u32,
-                );
+                t1_idx_out_mult
+                    .entry(row.data[fkey_start..fkey_end].to_vec())
+                    .and_modify(|e| *e += 1)
+                    .or_insert(1);
+
+                t2_idx_out_mult
+                    .entry(row.idx.clone())
+                    .and_modify(|e| *e += 1)
+                    .or_insert(1);
+            }
+        }
+
+        let mut t1_out_mult = vec![];
+        for row in t1.iter() {
+            if row.is_alloc == 1 {
+                t1_out_mult.push(*t1_idx_out_mult.get(&row.idx).unwrap_or(&0));
             } else {
                 t1_out_mult.push(0);
             }
         }
 
-        // Figuring out whether each row of T2 appears in the output_table
         let mut t2_fkey_present = vec![];
-        for row in t2.rows.iter() {
+        for row in t2.iter() {
             if row.is_alloc == 1 {
-                t2_fkey_present.push(
-                    output_table
-                        .rows
-                        .iter()
-                        .filter(|out_row| out_row.is_alloc == 1 && out_row.idx == row.idx)
-                        .count() as u32,
-                );
+                t2_fkey_present.push(*t2_idx_out_mult.get(&row.idx).unwrap_or(&0));
             } else {
                 t2_fkey_present.push(0);
             }
@@ -461,7 +462,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
     fn inner_join(&self, t1: &Page, t2: &Page, fkey_start: usize, fkey_end: usize) -> Page {
         let mut output_table = vec![];
 
-        for row in t2.rows.iter() {
+        for row in t2.iter() {
             if row.is_alloc == 0 {
                 continue;
             }

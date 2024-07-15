@@ -23,24 +23,24 @@ use super::{
 ///
 /// ## Panics
 /// - If `partitioned_main` is empty.
-pub fn generate_permutation_trace<F, C, EF>(
-    chip: &C,
+pub fn generate_permutation_trace<F, A, EF>(
+    air: &A,
     preprocessed: &Option<RowMajorMatrixView<F>>,
     partitioned_main: &[RowMajorMatrixView<F>],
     permutation_randomness: Option<[EF; 2]>,
 ) -> Option<RowMajorMatrix<EF>>
 where
     F: Field,
-    C: AirBridge<F> + ?Sized,
+    A: AirBridge<F> + ?Sized,
     EF: ExtensionField<F>,
 {
-    let all_interactions = chip.all_interactions();
+    let all_interactions = air.all_interactions();
     if all_interactions.is_empty() {
         return None;
     }
     let [alpha, beta] = permutation_randomness.expect("Not enough permutation challenges");
 
-    let alphas = generate_rlc_elements(chip, alpha);
+    let alphas = generate_rlc_elements(air, alpha);
     let betas = beta.powers();
 
     // Compute the reciprocal columns
@@ -63,6 +63,13 @@ where
     let perm_values: Vec<EF> = (0..height)
         .into_par_iter()
         .flat_map(|n| {
+            let preprocessed_row = preprocessed
+                .as_ref()
+                .map(|preprocessed| {
+                    // manual implementation of row_slice because of a drop issue
+                    &preprocessed.values[n * preprocessed.width..(n + 1) * preprocessed.width]
+                })
+                .unwrap_or(&[]);
             // !!TODO!! This copies all rows, BAD for performance
             let main_row: Vec<F> = partitioned_main
                 .iter()
@@ -72,13 +79,6 @@ where
             let mut row = vec![EF::zero(); perm_width];
             for (row_j, (interaction, _)) in row.iter_mut().zip(&all_interactions) {
                 let alpha_m = alphas[interaction.argument_index];
-                let preprocessed_row = preprocessed
-                    .as_ref()
-                    .map(|preprocessed| {
-                        // manual implementation of row_slice because of a drop issue
-                        &preprocessed.values[n * preprocessed.width..(n + 1) * preprocessed.width]
-                    })
-                    .unwrap_or(&[]);
                 *row_j = reduce_row(
                     preprocessed_row,
                     &main_row,

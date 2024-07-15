@@ -21,3 +21,4 @@ p3-blake3 = { workspace = true }
 p3-keccak = { workspace = true }
 bin-common = { path = "../common" }
 hex = "0.4.3"
+tracing = "0.1.40"

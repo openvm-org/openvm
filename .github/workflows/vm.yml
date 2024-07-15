@@ -1,12 +1,11 @@
-name: Default Unit Tests
+name: VM STARK and Compiler Tests
 
 on:
   push:
     branches: ["main"]
   pull_request:
     branches: ["main"]
-    paths-ignore:
-      - "stark-backend/**"
+    paths:
       - "vm/**"
       - "compiler/**"
 
@@ -28,6 +27,12 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Run unit tests
+      - name: Run vm crate tests
+        working-directory: vm
         run: |
-          cargo test --workspace --exclude stark-backend --exclude vm --exclude compiler
+          cargo test
+
+      - name: Run compiler crate tests
+        working-directory: vm
+        run: |
+          cargo test

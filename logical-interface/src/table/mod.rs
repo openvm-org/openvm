@@ -62,11 +62,10 @@ impl Table {
         let codec = FixedBytesCodec::new(
             index_bytes,
             data_bytes,
-            page.rows[0].idx.len() * 2,
-            page.rows[0].data.len() * 2,
+            page.idx_len() * 2,
+            page.data_len() * 2,
         );
         let mut body = page
-            .rows
             .iter()
             .filter_map(|row| {
                 let is_alloc_bytes = row.is_alloc.to_be_bytes();
@@ -148,7 +147,7 @@ impl Table {
         for _ in 0..remaining_rows {
             rows.push(zeros.clone());
         }
-        Page { rows }
+        Page::from_page_cols(rows)
     }
 
     pub fn id(&self) -> TableId {

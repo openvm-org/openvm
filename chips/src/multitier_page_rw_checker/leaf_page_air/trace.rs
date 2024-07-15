@@ -37,8 +37,7 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
             _ => RowMajorMatrix::new(vec![], 1),
         };
         RowMajorMatrix::new(
-            page.rows
-                .iter()
+            page.iter()
                 .enumerate()
                 .flat_map(|(i, row)| {
                     let mut trace_row = vec![];

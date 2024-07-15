@@ -1,14 +1,16 @@
-use super::Poseidon2Chip;
+use std::array::from_fn;
+
 use p3_field::Field;
+
 use poseidon2_air::poseidon2::columns::{Poseidon2Cols, Poseidon2ColsIndexMap};
 use poseidon2_air::poseidon2::Poseidon2Air;
-/// Columns for field arithmetic chip.
-///
-/// Five IO columns for rcv_count, opcode, x, y, result.
-/// Eight aux columns for interpreting opcode, evaluating indicators, inverse, and explicit computations.
+
+use super::Poseidon2Chip;
+
+/// Columns for Poseidon2 chip.
 pub struct Poseidon2ChipCols<const WIDTH: usize, T> {
     pub io: Poseidon2ChipIoCols<T>,
-    pub internal: Poseidon2Cols<WIDTH, T>,
+    pub aux: Poseidon2ChipAuxCols<WIDTH, T>,
 }
 
 /// IO columns for Poseidon2Chip.
@@ -28,15 +30,25 @@ pub struct Poseidon2ChipIoCols<T> {
     pub cmp: T,
 }
 
+/// Auxiliary columns for Poseidon2Chip.
+/// * `addresses`: addresses where inputs/outputs for Poseidon2 are located
+/// * `internal`: auxiliary columns used by Poseidon2Air for interpreting opcode, evaluating indicators, inverse, and explicit computations.
+pub struct Poseidon2ChipAuxCols<const WIDTH: usize, T> {
+    pub addresses: [T; 3],
+    pub d_is_zero: T,
+    pub is_zero_inv: T,
+    pub internal: Poseidon2Cols<WIDTH, T>,
+}
+
 impl<const WIDTH: usize, T: Clone> Poseidon2ChipCols<WIDTH, T> {
     pub fn get_width(poseidon2_chip: &Poseidon2Chip<WIDTH, T>) -> usize {
         Poseidon2ChipIoCols::<T>::get_width()
-            + Poseidon2Cols::<WIDTH, T>::get_width(&poseidon2_chip.air)
+            + Poseidon2ChipAuxCols::<WIDTH, T>::get_width(&poseidon2_chip.air)
     }
 
     pub fn flatten(&self) -> Vec<T> {
         let mut result = self.io.flatten();
-        result.extend(self.internal.flatten());
+        result.extend(self.aux.flatten());
         result
     }
 
@@ -47,7 +59,7 @@ impl<const WIDTH: usize, T: Clone> Poseidon2ChipCols<WIDTH, T> {
         let io_width = Poseidon2ChipIoCols::<T>::get_width();
         Self {
             io: Poseidon2ChipIoCols::<T>::from_slice(&slice[..io_width]),
-            internal: Poseidon2Cols::<WIDTH, T>::from_slice(&slice[io_width..], index_map),
+            aux: Poseidon2ChipAuxCols::<WIDTH, T>::from_slice(&slice[io_width..], index_map),
         }
     }
 }
@@ -58,7 +70,7 @@ impl<const WIDTH: usize, T: Field> Poseidon2ChipCols<WIDTH, T> {
     pub fn blank_row(poseidon2_air: &Poseidon2Air<WIDTH, T>) -> Self {
         Self {
             io: Poseidon2ChipIoCols::<T>::blank_row(),
-            internal: Poseidon2Cols::<WIDTH, T>::blank_row(poseidon2_air),
+            aux: Poseidon2ChipAuxCols::<WIDTH, T>::blank_row(poseidon2_air),
         }
     }
 }
@@ -102,9 +114,42 @@ impl<T: Field> Poseidon2ChipIoCols<T> {
             a: T::zero(),
             b: T::zero(),
             c: T::zero(),
-            d: T::zero(),
+            d: T::one(),
             e: T::zero(),
             cmp: T::zero(),
+        }
+    }
+}
+
+impl<const WIDTH: usize, T: Clone> Poseidon2ChipAuxCols<WIDTH, T> {
+    pub fn get_width(air: &Poseidon2Air<WIDTH, T>) -> usize {
+        3 + 2 + Poseidon2Cols::<WIDTH, T>::get_width(air)
+    }
+
+    pub fn flatten(&self) -> Vec<T> {
+        let mut result = self.addresses.to_vec();
+        result.push(self.d_is_zero.clone());
+        result.push(self.is_zero_inv.clone());
+        result.extend(self.internal.flatten());
+        result
+    }
+
+    pub fn from_slice(slice: &[T], index_map: &Poseidon2ColsIndexMap<WIDTH>) -> Self {
+        Self {
+            addresses: from_fn(|i| slice[i].clone()),
+            d_is_zero: slice[3].clone(),
+            is_zero_inv: slice[4].clone(),
+            internal: Poseidon2Cols::from_slice(&slice[5..], index_map),
+        }
+    }
+}
+impl<const WIDTH: usize, T: Field> Poseidon2ChipAuxCols<WIDTH, T> {
+    pub fn blank_row(air: &Poseidon2Air<WIDTH, T>) -> Self {
+        Self {
+            addresses: [T::zero(); 3],
+            d_is_zero: T::zero(),
+            is_zero_inv: T::one(),
+            internal: Poseidon2Cols::blank_row(air),
         }
     }
 }

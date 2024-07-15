@@ -199,7 +199,7 @@ fn convert_field_extension_mult<const WORD_SIZE: usize, F: PrimeField64>(
 }
 
 fn convert_field_extension_inv<const WORD_SIZE: usize, F: PrimeField64>(
-    dst: i32,
+    dst_registers: [F; 4],
     src: i32,
     utility_registers: [F; 4],
 ) -> Vec<Instruction<F>> {
@@ -211,10 +211,10 @@ fn convert_field_extension_inv<const WORD_SIZE: usize, F: PrimeField64>(
     let x2 = utility_registers[2];
     let x3 = utility_registers[3];
 
-    let a0 = dst;
-    let a1 = dst - word_size_i32;
-    let a2 = dst - 2 * word_size_i32;
-    let a3 = dst - 3 * word_size_i32;
+    let a0 = dst_registers[0];
+    let a1 = dst_registers[1];
+    let a2 = dst_registers[2];
+    let a3 = dst_registers[3];
 
     let b0 = src;
     let b1 = src - word_size_i32;
@@ -305,88 +305,32 @@ fn convert_field_extension_inv<const WORD_SIZE: usize, F: PrimeField64>(
 
     // We compute the constant term of the result: b_0 * n - 11 * b_2 * m
     let a0_inst = vec![
-        inst(
-            FMUL,
-            register(a0),
-            register(b0),
-            x0,
-            AS::Register,
-            AS::Register,
-        ),
+        inst(FMUL, a0, register(b0), x0, AS::Register, AS::Register),
         inst(FMUL, x2, register(b2), x1, AS::Register, AS::Register),
         inst(FMUL, x2, x2, beta_f, AS::Register, AS::Immediate),
-        inst(
-            FSUB,
-            register(a0),
-            register(a0),
-            x2,
-            AS::Register,
-            AS::Register,
-        ),
+        inst(FSUB, a0, a0, x2, AS::Register, AS::Register),
     ];
 
     // We compute the coefficient of x: -b_1 * n + 11 * b_3 * m
     let a1_inst = vec![
-        inst(
-            FMUL,
-            register(a1),
-            register(b1),
-            x0,
-            AS::Register,
-            AS::Register,
-        ),
+        inst(FMUL, a1, register(b1), x0, AS::Register, AS::Register),
         inst(FMUL, x2, register(b3), x1, AS::Register, AS::Register),
         inst(FMUL, x2, x2, beta_f, AS::Register, AS::Immediate),
-        inst(
-            FSUB,
-            register(a1),
-            x2,
-            register(a1),
-            AS::Register,
-            AS::Register,
-        ),
+        inst(FSUB, a1, x2, a1, AS::Register, AS::Register),
     ];
 
     // Here, we compute the coefficient of x^2: b_2 * n - b_0 * m
     let a2_inst = vec![
-        inst(
-            FMUL,
-            register(a2),
-            register(b2),
-            x0,
-            AS::Register,
-            AS::Register,
-        ),
+        inst(FMUL, a2, register(b2), x0, AS::Register, AS::Register),
         inst(FMUL, x2, register(b0), x1, AS::Register, AS::Register),
-        inst(
-            FSUB,
-            register(a2),
-            register(a2),
-            x2,
-            AS::Register,
-            AS::Register,
-        ),
+        inst(FSUB, a2, a2, x2, AS::Register, AS::Register),
     ];
 
     // Finally, we compute the coefficient of x^3: b_1 * m - b_3 * n
     let a3_inst = vec![
-        inst(
-            FMUL,
-            register(a3),
-            register(b1),
-            x1,
-            AS::Register,
-            AS::Register,
-        ),
+        inst(FMUL, a3, register(b1), x1, AS::Register, AS::Register),
         inst(FMUL, x2, register(b3), x0, AS::Register, AS::Register),
-        inst(
-            FSUB,
-            register(a3),
-            register(a3),
-            x2,
-            AS::Register,
-            AS::Register,
-        ),
+        inst(FSUB, a3, a3, x2, AS::Register, AS::Register),
     ];
 
     instructions.extend(n_inst);
@@ -444,12 +388,21 @@ pub fn convert_field_extension_with_base<
     EF: ExtensionField<F>,
 >(
     instruction: AsmInstruction<F, EF>,
-    utility_registers: [F; 4],
+    utility_registers: [F; 8],
 ) -> Vec<Instruction<F>> {
     let x0 = utility_registers[0];
     let x1 = utility_registers[1];
     let x2 = utility_registers[2];
     let x3 = utility_registers[3];
+
+    let main_utility = [x0, x1, x2, x3];
+
+    let div_utility = [
+        utility_registers[4],
+        utility_registers[5],
+        utility_registers[6],
+        utility_registers[7],
+    ];
 
     let word_size_i32: i32 = WORD_SIZE as i32;
 
@@ -729,9 +682,9 @@ pub fn convert_field_extension_with_base<
         AsmInstruction::MulE(dst, lhs, rhs) => {
             let rhs_register = [
                 register(rhs),
-                register(rhs + word_size_i32),
-                register(rhs + 2 * word_size_i32),
-                register(rhs + 3 * word_size_i32),
+                register(rhs - word_size_i32),
+                register(rhs - 2 * word_size_i32),
+                register(rhs - 3 * word_size_i32),
             ];
             convert_field_extension_mult::<WORD_SIZE, F>(dst, lhs, rhs_register, AS::Register, x0)
         }
@@ -741,18 +694,12 @@ pub fn convert_field_extension_with_base<
         }
         AsmInstruction::DivE(dst, lhs, rhs) => {
             let inv_instr =
-                convert_field_extension_inv::<WORD_SIZE, F>(dst, rhs, utility_registers);
+                convert_field_extension_inv::<WORD_SIZE, F>(div_utility, rhs, main_utility);
 
-            let rhs_register = [
-                register(rhs),
-                register(rhs + word_size_i32),
-                register(rhs + 2 * word_size_i32),
-                register(rhs + 3 * word_size_i32),
-            ];
             let mul_instr = convert_field_extension_mult::<WORD_SIZE, F>(
                 dst,
                 lhs,
-                rhs_register,
+                div_utility,
                 AS::Register,
                 x0,
             );
@@ -766,7 +713,7 @@ pub fn convert_field_extension_with_base<
         }
         AsmInstruction::DivEIN(dst, lhs, rhs) => {
             let inv_instr =
-                convert_field_extension_inv::<WORD_SIZE, F>(dst, rhs, utility_registers);
+                convert_field_extension_inv::<WORD_SIZE, F>(div_utility, rhs, main_utility);
 
             let lhs_slc = lhs.as_base_slice().try_into().unwrap();
             let mul_instr =
@@ -782,7 +729,7 @@ pub fn convert_field_extension_with_base<
 
 pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
-    utility_registers: [F; 4],
+    utility_registers: [F; 8],
 ) -> Vec<Instruction<F>> {
     match instruction {
         AsmInstruction::AddE(dst, lhs, rhs) => vec![inst(

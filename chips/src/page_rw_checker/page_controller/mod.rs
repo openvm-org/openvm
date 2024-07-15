@@ -211,7 +211,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         let trace_span = info_span!("Load page trace generation").entered();
         let mut page = page.clone();
 
-        assert!(!page.rows.is_empty());
+        assert!(!page.is_empty());
         let init_page_trace = self.gen_page_trace(&page);
 
         let offline_checker_trace =

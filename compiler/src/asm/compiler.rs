@@ -32,6 +32,9 @@ pub(crate) const HEAP_START_ADDRESS: usize = STACK_SIZE + 4;
 /// The address of A0.
 pub(crate) const A0: i32 = -8;
 
+// sizeof(var) = sizeof(felt) = 1 and sizeof(ext) == 4
+pub const FP_INCREMENT: i32 = 6;
+
 pub const STACK_SIZE: usize = 1 << 24;
 
 /// The assembly compiler.
@@ -48,21 +51,21 @@ pub struct AsmCompiler<F, EF> {
 impl<F> Var<F> {
     /// Gets the frame pointer for a var.
     pub const fn fp(&self) -> i32 {
-        -((self.0 as i32) * 3 + 1 + STACK_START_OFFSET)
+        -((self.0 as i32) * FP_INCREMENT + STACK_START_OFFSET)
     }
 }
 
 impl<F> Felt<F> {
     /// Gets the frame pointer for a felt.
     pub const fn fp(&self) -> i32 {
-        -((self.0 as i32) * 3 + 2 + STACK_START_OFFSET)
+        -((self.0 as i32) * FP_INCREMENT + 1 + STACK_START_OFFSET)
     }
 }
 
 impl<F, EF> Ext<F, EF> {
     /// Gets the frame pointer for an extension element
     pub const fn fp(&self) -> i32 {
-        -((self.0 as i32) * 3 + STACK_START_OFFSET)
+        -((self.0 as i32) * FP_INCREMENT + 2 + STACK_START_OFFSET)
     }
 }
 
@@ -113,7 +116,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::AddFI(dst.fp(), ZERO, src), trace);
                 }
                 DslIr::ImmE(dst, src) => {
-                    self.push(AsmInstruction::AddEI(dst.fp(), ZERO, src), trace);
+                    self.push(AsmInstruction::ImmE(dst.fp(), src), trace);
                 }
                 DslIr::AddV(dst, lhs, rhs) => {
                     self.push(AsmInstruction::AddF(dst.fp(), lhs.fp(), rhs.fp()), trace);

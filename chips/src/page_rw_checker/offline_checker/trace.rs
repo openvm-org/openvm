@@ -8,6 +8,7 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 
 use super::columns::OfflineCheckerCols;
 use super::OfflineChecker;
+use crate::common::indexed_page_editor::IndexedPageEditor;
 use crate::common::page::Page;
 use crate::page_rw_checker::page_controller::{OpType, Operation};
 use crate::range_gate::RangeCheckerGateChip;
@@ -33,6 +34,8 @@ impl OfflineChecker {
     where
         Val<SC>: PrimeField,
     {
+        let mut page_editor = IndexedPageEditor::from_page(page);
+
         // Creating a timestamp bigger than all others
         let max_clk = ops.iter().map(|op| op.clk).max().unwrap_or(0) + 1;
 
@@ -70,22 +73,19 @@ impl OfflineChecker {
             let last_idx = my_last_idx;
             let last_clk = my_last_clk;
 
-            let lt_cols = LocalTraceInstructions::generate_trace_row(
-                &self.lt_idx_clk_air,
-                (
-                    last_idx
-                        .iter()
-                        .copied()
-                        .chain(iter::once(last_clk as u32))
-                        .collect(),
-                    cur_idx
-                        .iter()
-                        .copied()
-                        .chain(iter::once(clk as u32))
-                        .collect(),
-                    range_checker.clone(),
-                ),
-            );
+            let lt_cols = self.lt_idx_clk_air.generate_trace_row((
+                last_idx
+                    .iter()
+                    .copied()
+                    .chain(iter::once(last_clk as u32))
+                    .collect(),
+                cur_idx
+                    .iter()
+                    .copied()
+                    .chain(iter::once(clk as u32))
+                    .collect(),
+                range_checker.clone(),
+            ));
 
             // those are used later to initialize the Cols struct
             let my_cur_idx = cur_idx.clone();
@@ -94,10 +94,9 @@ impl OfflineChecker {
             let last_idx = to_field_vec(last_idx);
             let cur_idx = to_field_vec(cur_idx.to_vec());
 
-            let is_equal_idx_cols = LocalTraceInstructions::generate_trace_row(
-                &self.is_equal_idx_air,
-                (last_idx, cur_idx),
-            );
+            let is_equal_idx_cols = self
+                .is_equal_idx_air
+                .generate_trace_row((last_idx, cur_idx));
 
             let is_final_write = is_final && op_type == 0;
             let is_final_delete = is_final && op_type == 2;
@@ -144,12 +143,12 @@ impl OfflineChecker {
                 j += 1;
             }
 
-            if page.contains(&cur_idx) {
+            if page_editor.contains(&cur_idx) {
                 // Adding the is_initial row to the trace
                 rows.push(gen_row(
                     &mut is_first_row,
                     &cur_idx,
-                    &page[&cur_idx],
+                    &page_editor[&cur_idx],
                     true,
                     false,
                     false,
@@ -163,13 +162,9 @@ impl OfflineChecker {
 
             for op in ops.iter().take(j).skip(i) {
                 if op.op_type == OpType::Write {
-                    if !page.contains(&cur_idx) {
-                        page.insert(&cur_idx, &op.data);
-                    } else {
-                        page[&cur_idx].clone_from(&op.data);
-                    }
+                    page_editor.write(&cur_idx, &op.data);
                 } else if op.op_type == OpType::Delete {
-                    page.delete(&cur_idx);
+                    page_editor.delete(&cur_idx);
                 }
 
                 rows.push(gen_row(
@@ -187,22 +182,21 @@ impl OfflineChecker {
                 ));
             }
 
-            let final_data = if page.contains(&cur_idx) {
-                &page[&cur_idx]
-            } else {
-                &vec![0; self.data_len]
-            };
+            let final_data = page_editor
+                .get(&cur_idx)
+                .cloned()
+                .unwrap_or(vec![0; self.data_len]);
 
             // Adding the is_final row to the trace
             rows.push(gen_row(
                 &mut is_first_row,
                 &cur_idx,
-                final_data,
+                &final_data,
                 false,
                 true,
                 false,
                 max_clk,
-                if page.contains(&cur_idx) { 0 } else { 2 }, // 0 (read) for is_final_write, 2 (delete) for is_final_delete
+                if page_editor.contains(&cur_idx) { 0 } else { 2 }, // 0 (read) for is_final_write, 2 (delete) for is_final_delete
                 &mut last_idx,
                 &mut last_clk,
                 false,
@@ -213,6 +207,8 @@ impl OfflineChecker {
 
         // Ensure that trace degree is a power of two
         assert!(trace_degree > 0 && trace_degree & (trace_degree - 1) == 0);
+
+        *page = page_editor.into_page();
 
         // dummy idx
         let idx = page[0].idx.clone();

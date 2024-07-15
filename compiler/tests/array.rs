@@ -1,6 +1,6 @@
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
-use p3_field::AbstractField;
+use p3_field::{AbstractExtensionField, AbstractField};
 use rand::{thread_rng, Rng};
 
 use afs_compiler::asm::AsmBuilder;
@@ -12,6 +12,7 @@ use afs_compiler::prelude::MemIndex;
 use afs_compiler::prelude::MemVariable;
 use afs_compiler::prelude::Ptr;
 use afs_compiler::prelude::Variable;
+use afs_compiler::util::{display_program, execute_program};
 use afs_derive::DslVariable;
 
 #[derive(DslVariable, Clone, Debug)]
@@ -121,4 +122,30 @@ fn test_compiler_array() {
     // let config = SC::default();
     // let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
     // runtime.run();
+}
+
+#[test]
+fn test_ext2felt() {
+    const D: usize = 4;
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, D>;
+
+    let mut builder = AsmBuilder::<F, EF>::default();
+
+    let mut rng = thread_rng();
+    let val = rng.gen::<EF>();
+
+    let ext: Ext<F, EF> = builder.constant(val);
+    let felts = builder.ext2felt(ext);
+
+    for (i, &fe) in val.as_base_slice().iter().enumerate() {
+        let lhs = builder.get(&felts, i);
+        let rhs: Felt<F> = builder.constant(fe);
+        builder.assert_felt_eq(lhs, rhs);
+    }
+    builder.halt();
+
+    let program = builder.compile_isa::<1>();
+    display_program(&program);
+    execute_program::<1, _>(program, vec![]);
 }
