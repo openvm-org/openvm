@@ -27,9 +27,8 @@ impl VmConfig {
 
 impl VmConfig {
     pub fn read_config_file(file: &str) -> Result<Self, String> {
-        let file_str = std::fs::read_to_string(file).map_err(|_| {
-            format!("Could not load config file from: {file}")
-        })?;
+        let file_str = std::fs::read_to_string(file)
+            .map_err(|_| format!("Could not load config file from: {file}"))?;
         let config: Self = toml::from_str(file_str.as_str())
             .map_err(|e| format!("Failed to parse config file {}:\n{}", file, e))?;
         Ok(config)
