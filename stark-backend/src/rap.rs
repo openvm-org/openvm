@@ -1,7 +1,7 @@
 //! # RAP (Randomized Air with Preprocessing)
 //! See <https://hackmd.io/@aztec-network/plonk-arithmetiization-air> for formal definition.
 
-use p3_air::{BaseAir, PairBuilder, PermutationAirBuilder};
+use p3_air::{BaseAir, PermutationAirBuilder};
 use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::{
@@ -25,7 +25,7 @@ use crate::{
 /// around dynamic dispatch.
 pub trait Rap<AB>: Sync
 where
-    AB: PairBuilder + PermutationAirBuilder,
+    AB: PermutationAirBuilder,
 {
     fn eval(&self, builder: &mut AB);
 }

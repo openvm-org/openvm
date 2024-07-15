@@ -17,10 +17,58 @@ pub enum InteractionType {
 }
 
 #[derive(Clone, Debug)]
-pub struct Interaction<F: Field> {
-    pub fields: Vec<VirtualPairCol<F>>,
-    pub count: VirtualPairCol<F>,
-    pub argument_index: usize,
+pub struct Interaction<Expr> {
+    pub fields: Vec<Expr>,
+    pub count: Expr,
+    pub bus_index: usize,
+    pub interaction_type: InteractionType,
+}
+
+/// An [AirBuilder] with additional functionality to build special logUp arguments for
+/// communication between AIRs across buses. These arguments use randomness to
+/// add additional trace columns (in the extension field) and constraints to the AIR.
+pub trait InteractionBuilder: AirBuilder {
+    /// Stores a new send interaction in the builder.
+    /// `count` can only refer to "local" (current row) variables.
+    fn push_send<E: Into<Self::Expr>>(
+        &mut self,
+        bus_index: usize,
+        fields: impl IntoIterator<Item = E>,
+        count: impl Into<Self::Expr>,
+    ) {
+        self.push_interaction(bus_index, fields, count, InteractionType::Send);
+    }
+
+    /// Stores a new receive interaction in the builder.
+    /// `count` can only refer to "local" (current row) variables.
+    fn push_receive<E: Into<Self::Expr>>(
+        &mut self,
+        bus_index: usize,
+        fields: impl IntoIterator<Item = E>,
+        count: impl Into<Self::Expr>,
+    ) {
+        self.push_interaction(bus_index, fields, count, InteractionType::Receive);
+    }
+
+    /// Stores a new interaction in the builder.
+    /// `count` can only refer to "local" (current row) variables.
+    fn push_interaction<E: Into<Self::Expr>>(
+        &mut self,
+        bus_index: usize,
+        fields: impl IntoIterator<Item = E>,
+        count: impl Into<Self::Expr>,
+        interaction_type: InteractionType,
+    );
+
+    /// Returns the current number of interactions.
+    fn num_interactions(&self) -> usize;
+
+    /// Returns all interactions stored.
+    fn all_interactions(&self) -> &[Interaction<Self::Expr>];
+
+    /// For internal use. For each interaction, the expression for the multiplicity on the _next_ row.
+    // This could be supplied by the user, but the devex seems worse.
+    fn all_multiplicities_next(&self) -> Vec<Self::Expr>;
 }
 
 pub trait AirBridge<F: Field> {

@@ -61,6 +61,51 @@ impl<F: Field> SymbolicExpression<F> {
             } => *degree_multiple,
         }
     }
+
+    pub fn rotate(&self, offset: usize) -> Self {
+        match self {
+            SymbolicExpression::Variable(v) => v.rotate(offset).into(),
+            SymbolicExpression::IsFirstRow => unreachable!("IsFirstRow should not be rotated"),
+            SymbolicExpression::IsLastRow => unreachable!("IsLastRow should not be rotated"),
+            SymbolicExpression::IsTransition => unreachable!("IsTransition should not be rotated"),
+            SymbolicExpression::Constant(c) => Self::Constant(*c),
+            SymbolicExpression::Add {
+                x,
+                y,
+                degree_multiple,
+            } => Self::Add {
+                x: Arc::new(x.rotate(offset)),
+                y: Arc::new(y.rotate(offset)),
+                degree_multiple: *degree_multiple,
+            },
+            SymbolicExpression::Sub {
+                x,
+                y,
+                degree_multiple,
+            } => Self::Sub {
+                x: Arc::new(x.rotate(offset)),
+                y: Arc::new(y.rotate(offset)),
+                degree_multiple: *degree_multiple,
+            },
+            SymbolicExpression::Neg { x, degree_multiple } => Self::Neg {
+                x: Arc::new(x.rotate(offset)),
+                degree_multiple: *degree_multiple,
+            },
+            SymbolicExpression::Mul {
+                x,
+                y,
+                degree_multiple,
+            } => Self::Mul {
+                x: Arc::new(x.rotate(offset)),
+                y: Arc::new(y.rotate(offset)),
+                degree_multiple: *degree_multiple,
+            },
+        }
+    }
+
+    pub fn next(&self) -> Self {
+        self.rotate(1)
+    }
 }
 
 impl<F: Field> Default for SymbolicExpression<F> {

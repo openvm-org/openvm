@@ -17,6 +17,28 @@ pub enum Entry {
     Exposed,
 }
 
+impl Entry {
+    /// Advance the internal offset of the entry by the given `offset`.
+    pub fn rotate(&self, offset: usize) -> Self {
+        match self {
+            Entry::Preprocessed { offset: old_offset } => Entry::Preprocessed {
+                offset: old_offset + offset,
+            },
+            Entry::Main { offset: old_offset } => Entry::Main {
+                offset: old_offset + offset,
+            },
+            Entry::Permutation { offset: old_offset } => Entry::Permutation {
+                offset: old_offset + offset,
+            },
+            Entry::Public | Entry::Challenge | Entry::Exposed => self,
+        }
+    }
+
+    pub fn next(&self) -> Self {
+        self.rotate(1)
+    }
+}
+
 /// A variable within the evaluation window, i.e. a column in either the local or next row.
 #[derive(Copy, Clone, Debug)]
 pub struct SymbolicVariable<F: Field> {
@@ -39,6 +61,18 @@ impl<F: Field> SymbolicVariable<F> {
             Entry::Preprocessed { .. } | Entry::Main { .. } | Entry::Permutation { .. } => 1,
             Entry::Public | Entry::Challenge | Entry::Exposed => 0,
         }
+    }
+
+    pub fn rotate(&self, offset: usize) -> Self {
+        Self {
+            entry: self.entry.rotate(offset),
+            index: self.index,
+            _phantom: PhantomData,
+        }
+    }
+
+    pub fn next(&self) -> Self {
+        self.rotate(1)
     }
 }
 

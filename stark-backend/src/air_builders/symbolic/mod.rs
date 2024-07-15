@@ -9,6 +9,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_util::log2_ceil_usize;
 use tracing::instrument;
 
+use crate::interaction::{Interaction, InteractionBuilder, InteractionType};
 use crate::keygen::types::TraceWidth;
 use crate::rap::{PermutationAirBuilderWithExposedValues, Rap};
 
@@ -106,6 +107,7 @@ pub struct SymbolicRapBuilder<F: Field> {
     challenges: Vec<Vec<SymbolicVariable<F>>>,
     exposed_values_after_challenge: Vec<Vec<SymbolicVariable<F>>>,
     constraints: Vec<SymbolicExpression<F>>,
+    interactions: Vec<Interaction<SymbolicExpression<F>>>,
 }
 
 impl<F: Field> SymbolicRapBuilder<F> {
@@ -186,6 +188,7 @@ impl<F: Field> SymbolicRapBuilder<F> {
             challenges,
             exposed_values_after_challenge,
             constraints: vec![],
+            interactions: vec![],
         }
     }
 
@@ -282,6 +285,33 @@ impl<F: Field> PermutationAirBuilderWithExposedValues for SymbolicRapBuilder<F> 
             .first()
             .map(|c| c.as_slice())
             .expect("Challenge phase not supported")
+    }
+}
+
+impl<F: Field> InteractionBuilder for SymbolicRapBuilder<F> {
+    fn push_interaction<E: Into<Self::Expr>>(
+        &mut self,
+        bus_index: usize,
+        fields: impl IntoIterator<Item = E>,
+        count: impl Into<Self::Expr>,
+        interaction_type: InteractionType,
+    ) {
+        let fields = fields.into_iter().map(|f| f.into()).collect();
+        let count = count.into();
+        self.interactions.push(Interaction {
+            bus_index,
+            fields,
+            count,
+            interaction_type,
+        });
+    }
+
+    fn num_interactions(&self) -> usize {
+        self.interactions.len()
+    }
+
+    fn all_interactions(&self) -> &[Interaction<Self::Expr>] {
+        &self.interactions
     }
 }
 
