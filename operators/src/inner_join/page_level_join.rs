@@ -1,31 +1,34 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, sync::Arc};
 
-use afs_chips::{
-    common::page::Page,
-    inner_join::controller::{FKInnerJoinController, IJBuses, T2Format, TableFormat},
-};
+use afs_chips::inner_join::controller::{FKInnerJoinController, IJBuses, T2Format, TableFormat};
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
-    keygen::{types::MultiStarkPartialVerifyingKey, MultiStarkKeygenBuilder},
-    prover::{trace::TraceCommitmentBuilder, types::Proof, MultiTraceStarkProver},
+    keygen::{
+        types::{MultiStarkPartialProvingKey, MultiStarkPartialVerifyingKey},
+        MultiStarkKeygenBuilder,
+    },
+    prover::{
+        trace::{ProverTraceData, TraceCommitmentBuilder},
+        types::Proof,
+        MultiTraceStarkProver,
+    },
 };
-use afs_test_utils::{engine::StarkEngine, utils::create_seeded_rng};
+use afs_test_utils::engine::StarkEngine;
 use p3_field::PrimeField;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use parking_lot::Mutex;
 
-use crate::{common::Commitment, dataframe::DataFrame};
+use crate::{common::Commitment, dataframe::DataFrame, page_db::PageDb};
 
-#[derive(derive_new::new)]
+// TODO: this doesn't look good. Just write the whole struct around a mutex instead
+// of wrapping each field in a mutex
+
 pub struct PageLevelJoin<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>> {
-    parent_page: Page,
-    child_page: Page,
-
     pub pis: Mutex<PageLevelJoinPis<COMMIT_LEN>>,
-
     ij_controller: Mutex<FKInnerJoinController<SC>>,
-
-    proof: Mutex<Option<Proof<SC>>>, // TODO: might be a good idea to store this to disk and load it for verification
+    page_prover_data: Mutex<Option<Vec<ProverTraceData<SC>>>>,
+    proof: Mutex<Option<Proof<SC>>>,
+    partial_pk: Mutex<MultiStarkPartialProvingKey<SC>>,
 
     _marker2: PhantomData<E>,
 }
@@ -33,7 +36,7 @@ pub struct PageLevelJoin<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: Sta
 // TODO: think about the public values for this the page-level circuit
 // I think a lot of those public values can be removed?
 // Actually, if we ma
-#[derive(Clone, derive_new::new)]
+#[derive(Clone, derive_new::new, Default)]
 pub struct PageLevelJoinPis<const COMMIT_LEN: usize> {
     pub init_running_df_commit: Commitment<COMMIT_LEN>,
     pub pairs_list_index: u32,
@@ -46,69 +49,92 @@ pub struct PageLevelJoinPis<const COMMIT_LEN: usize> {
 impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<SC> + 'static>
     PageLevelJoin<COMMIT_LEN, SC, E>
 {
-    pub fn load_pages_from_commits(
+    pub fn new(
         parent_page_commit: Commitment<COMMIT_LEN>,
         child_page_commit: Commitment<COMMIT_LEN>,
+        t1_format: TableFormat,
+        t2_format: T2Format,
+        decomp: usize,
     ) -> Self {
-        let mut rng = create_seeded_rng();
-        let idx_len = 5;
-        let data_len = 10;
-        let max_idx = 128;
-        let max_data = 100;
-        let height = 1024;
-        let fkey_start = 0;
-        let fkey_end = 10;
-
-        let idx_limb_bits = 7;
-        let decomp = 3;
-
-        // TODO: replace this with actual page loading
-        let parent_page = Page::random(
-            &mut rng, idx_len, data_len, max_idx, max_data, height, height,
-        );
-
-        Self::new(
-            parent_page.clone(),
-            parent_page,
-            Mutex::new(PageLevelJoinPis::new(
-                Commitment::<COMMIT_LEN>::default(), // This should be updated in trace generation
-                u32::MAX,                            // This should be updated in trace generation
+        Self {
+            // Note that all public values except the input page commitments
+            // are updated in generate_trace. Placeholders are used here.
+            pis: Mutex::new(PageLevelJoinPis::new(
+                Commitment::<COMMIT_LEN>::default(),
+                0,
                 parent_page_commit,
                 child_page_commit,
-                Commitment::<COMMIT_LEN>::default(), // This should be updated in trace generation
-                Commitment::<COMMIT_LEN>::default(), // This should be updated in trace generation
+                Commitment::<COMMIT_LEN>::default(),
+                Commitment::<COMMIT_LEN>::default(),
             )),
-            Mutex::new(FKInnerJoinController::<SC>::new(
+            ij_controller: Mutex::new(FKInnerJoinController::<SC>::new(
                 IJBuses::default(),
-                TableFormat::new(idx_len, data_len, idx_limb_bits),
-                T2Format::new(
-                    TableFormat::new(idx_len, data_len, idx_limb_bits),
-                    fkey_start,
-                    fkey_end,
-                ),
+                t1_format,
+                t2_format,
                 decomp,
             )),
-            Mutex::new(None),
-        )
+            proof: Mutex::new(None),
+            page_prover_data: Mutex::new(None),
+            partial_pk: Mutex::new(MultiStarkPartialProvingKey::<SC>::default()),
+            _marker2: PhantomData,
+        }
     }
 
-    pub fn generate_trace(&self, output_df: &mut DataFrame<COMMIT_LEN>, pairs_list_index: u32) {
+    /// Note that, currently, this function does not only trace generation
+    /// This function does part of the proof (specifically, caching input and output pages)
+    /// TODO: maybe provide functionality to allow it to be purely trace generation
+    pub fn generate_trace(
+        &self,
+        page_db: Arc<PageDb<COMMIT_LEN>>,
+        output_df: &mut DataFrame<COMMIT_LEN>,
+        pairs_list_index: &mut u32,
+        engine: &E,
+    ) where
+        Val<SC>: PrimeField,
+    {
         let mut pis = self.pis.lock();
 
-        pis.init_running_df_commit = output_df.commit.clone();
-        pis.pairs_list_index = pairs_list_index;
+        let parent_page = page_db.get_page(&pis.parent_page_commit).unwrap();
+        let child_page = page_db.get_page(&pis.child_page_commit).unwrap();
 
-        // TODO: this is bad design -- I'm calling inner_join twice
-        // Note: we need to store data from here on disk to parallelize trace generation
+        pis.init_running_df_commit = output_df.commit.clone();
+        pis.pairs_list_index = *pairs_list_index;
+
         let _output_page = self
             .ij_controller
             .lock()
-            .inner_join(&self.parent_page, &self.child_page);
+            .inner_join(&parent_page, &child_page);
 
         let output_page_commit = Commitment::<COMMIT_LEN>::default(); // TODO: update this to be the correct commitment
         output_df.push(output_page_commit.clone());
+        *pairs_list_index += 1;
 
         pis.final_running_df_commit = output_df.commit.clone();
+
+        let mut ij_controller = self.ij_controller.lock();
+
+        let intersector_trace_degree = 2 * parent_page.height().max(child_page.height());
+
+        let prover = MultiTraceStarkProver::new(engine.config());
+        let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
+        let prover_data = ij_controller.load_tables(
+            &parent_page,
+            &child_page,
+            intersector_trace_degree,
+            &mut trace_builder.committer,
+        );
+        *self.page_prover_data.lock() = Some(prover_data);
+    }
+
+    pub fn set_up_keygen_builder(&self, engine: &E)
+    where
+        Val<SC>: PrimeField,
+    {
+        let mut keygen_builder: MultiStarkKeygenBuilder<SC> =
+            MultiStarkKeygenBuilder::new(&engine.config());
+        let ij_controller = self.ij_controller.lock();
+        ij_controller.set_up_keygen_builder(&mut keygen_builder);
+        *self.partial_pk.lock() = keygen_builder.generate_partial_pk();
     }
 
     pub fn prove(&self, engine: &E)
@@ -122,24 +148,18 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
     {
-        let mut ij_controller = self.ij_controller.lock();
+        let ij_controller = self.ij_controller.lock();
+        let prover_data = self.page_prover_data.lock().take().unwrap();
 
-        let mut keygen_builder: MultiStarkKeygenBuilder<SC> =
-            MultiStarkKeygenBuilder::new(&engine.config());
-        ij_controller.set_up_keygen_builder(&mut keygen_builder);
-
-        let intersector_trace_degree = 2 * self.parent_page.height().max(self.child_page.height());
-
-        let partial_pk = keygen_builder.generate_partial_pk();
         let prover = MultiTraceStarkProver::new(engine.config());
         let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
-        let prover_data = ij_controller.load_tables(
-            &self.parent_page,
-            &self.child_page,
-            intersector_trace_degree,
-            &mut trace_builder.committer,
+
+        let proof = ij_controller.prove(
+            engine,
+            &self.partial_pk.lock(),
+            &mut trace_builder,
+            prover_data,
         );
-        let proof = ij_controller.prove(engine, &partial_pk, &mut trace_builder, prover_data);
         *self.proof.lock() = Some(proof);
     }
 
@@ -160,13 +180,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
 
         let pis = self.pis.lock();
 
-        let mut keygen_builder: MultiStarkKeygenBuilder<SC> =
-            MultiStarkKeygenBuilder::new(&engine.config());
-
-        let ij_controller = self.ij_controller.lock();
-
-        ij_controller.set_up_keygen_builder(&mut keygen_builder);
-        let partial_pk = keygen_builder.generate_partial_pk();
+        let partial_pk = self.partial_pk.lock();
         let partial_vk = partial_pk.partial_vk();
 
         let (parent_page_commit, child_page_commit, output_page_commit) =
@@ -179,6 +193,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         output_df.push(output_page_commit.clone());
         assert_eq!(output_df.commit, pis.final_running_df_commit);
 
+        let ij_controller = self.ij_controller.lock();
         ij_controller
             .verify(engine, partial_pk.partial_vk(), proof)
             .expect("proof failed to verify");

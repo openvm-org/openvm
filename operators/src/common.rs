@@ -3,7 +3,7 @@ use p3_field::AbstractField;
 use p3_symmetric::{CryptographicHasher, PaddingFreeSponge};
 use p3_uni_stark::StarkGenericConfig;
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug, Eq, Hash)]
 pub struct Commitment<const LEN: usize> {
     commit: [u32; LEN],
 }
@@ -14,7 +14,7 @@ impl<const LEN: usize> Default for Commitment<LEN> {
     }
 }
 
-pub fn poseidon2_hash<SC: StarkGenericConfig, F: AbstractField>(input: &[F]) -> [&F; 8] {
-    let hash = PaddingFreeSponge::<_, 16, 8, 8>::new(random_perm());
-    hash.hash_iter(input)
-}
+// pub fn poseidon2_hash<SC: StarkGenericConfig, F: AbstractField>(input: &[F]) -> [&F; 8] {
+//     let hash = PaddingFreeSponge::<_, 16, 8, 8>::new(random_perm());
+//     hash.hash_iter(input)
+// }

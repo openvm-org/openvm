@@ -1,3 +1,5 @@
+// TODO: make sure all pubic values are computed correctly after calls to generate_trace for all circuits
+
 pub mod internal_node;
 pub mod page_level_join;
 pub mod two_pointers_program;
@@ -5,25 +7,25 @@ pub mod two_pointers_program;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use afs_chips::inner_join::controller::{T2Format, TableFormat};
 use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
 use afs_test_utils::engine::StarkEngine;
 use p3_field::PrimeField;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
-use crate::common::Commitment;
-use crate::dataframe::DataFrameType;
-use crate::inner_join::internal_node::InternalNodePis;
 use crate::inner_join::page_level_join::PageLevelJoin;
-use crate::inner_join::two_pointers_program::{TwoPointersProgram, TwoPointersProgramPis};
+use crate::inner_join::two_pointers_program::TwoPointersProgram;
+use crate::{common::Commitment, page_db::PageDb};
 
 use self::internal_node::{InternalNode, JoinCircuit};
 use super::dataframe::DataFrame;
 
-#[derive(derive_new::new)]
 pub struct TableJoinController<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>>
 {
     parent_table_df: DataFrame<COMMIT_LEN>,
     child_table_df: DataFrame<COMMIT_LEN>,
+    page_db: Arc<PageDb<COMMIT_LEN>>,
+    root: InternalNode<COMMIT_LEN, SC, E>,
 
     _phantom: PhantomData<SC>,       // TODO: try removing this later
     _phantom_engine: PhantomData<E>, // TODO: try removing this later
@@ -32,7 +34,15 @@ pub struct TableJoinController<const COMMIT_LEN: usize, SC: StarkGenericConfig, 
 impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<SC> + 'static>
     TableJoinController<COMMIT_LEN, SC, E>
 {
-    pub fn build_tree(&self) -> InternalNode<COMMIT_LEN, SC, E>
+    pub fn new(
+        parent_df: DataFrame<COMMIT_LEN>,
+        child_df: DataFrame<COMMIT_LEN>,
+        page_db: Arc<PageDb<COMMIT_LEN>>,
+        parent_table_format: &TableFormat,
+        child_table_format: &T2Format,
+        decomp: usize,
+        engine: &E,
+    ) -> Self
     where
         Val<SC>: PrimeField,
         Domain<SC>: Send + Sync,
@@ -46,55 +56,69 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         let mut leaves: Vec<Option<Box<JoinCircuit<COMMIT_LEN, SC, E>>>> = vec![];
 
         // Adding the two-pointers program as a leaf
-        let mut tp_program =
-            TwoPointersProgram::<COMMIT_LEN, SC, E>::new(TwoPointersProgramPis::new(
-                self.parent_table_df.commit.clone(),
-                self.child_table_df.commit.clone(),
-                Commitment::<COMMIT_LEN>::default(), // This is a placeholder. Should be updated later when program.run() is called
-            ));
-        let pairs = tp_program.run(&self.parent_table_df, &self.child_table_df);
+        let tp_program = TwoPointersProgram::<COMMIT_LEN, SC, E>::default();
 
-        let pairs_commit = tp_program.pis.pairs_commit.clone();
+        let pairs = tp_program.pairs.lock().clone();
+        let pairs_commit = tp_program.pis.lock().pairs_commit.clone();
 
         leaves.push(Some(Box::new(JoinCircuit::TwoPointersProgram(tp_program))));
 
-        let mut output_df = DataFrame::<COMMIT_LEN>::empty(DataFrameType::Unindexed);
-
         for (parent_commit, child_commit) in pairs.iter() {
-            let page_level_join = PageLevelJoin::<COMMIT_LEN, SC, E>::load_pages_from_commits(
+            let page_level_join = PageLevelJoin::<COMMIT_LEN, SC, E>::new(
                 parent_commit.clone(),
                 child_commit.clone(),
+                parent_table_format.clone(),
+                child_table_format.clone(),
+                decomp,
             );
 
             leaves.push(Some(Box::new(JoinCircuit::PageLevelJoin(page_level_join))));
         }
 
+        assert!(leaves.len() > 1);
+
         let mut df_cur_page = 0;
         let mut pairs_list_index = 0;
 
-        self.build_tree_dfs(
+        let (root, _) = Self::build_tree_dfs(
             0,
             leaves.len() - 1,
             leaves,
-            &mut output_df,
             &mut df_cur_page,
             &pairs,
             &pairs_commit,
             &mut pairs_list_index,
+            &engine,
         );
-        todo!()
+
+        let root = match *root {
+            JoinCircuit::InternalNode(node) => node,
+            _ => unreachable!(),
+        };
+
+        Self {
+            parent_table_df: parent_df,
+            child_table_df: child_df,
+            page_db,
+            root,
+            _phantom: PhantomData,
+            _phantom_engine: PhantomData,
+        }
     }
 
+    // pub fn generate_trace(&self) {
+    //     self.root.generate_trace_for_tree();
+    // }
+
     fn build_tree_dfs(
-        &self,
         l: usize,
         r: usize,
         mut leaves: Vec<Option<Box<JoinCircuit<COMMIT_LEN, SC, E>>>>,
-        output_df: &mut DataFrame<COMMIT_LEN>,
         df_cur_page: &mut u32,
         pairs: &Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)>,
         pairs_commit: &Commitment<COMMIT_LEN>,
         pairs_list_index: &mut u32,
+        engine: &E,
     ) -> (
         Box<JoinCircuit<COMMIT_LEN, SC, E>>,
         Vec<Option<Box<JoinCircuit<COMMIT_LEN, SC, E>>>>,
@@ -110,59 +134,34 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         PcsProof<SC>: Send + Sync,
     {
         if l == r {
-            // TODO: is df_cur_page exactly pairs_list_index? maybe make them the same
-
-            let mut leaf = leaves[l].take().unwrap();
-
-            match leaf.as_mut() {
-                JoinCircuit::PageLevelJoin(ref mut page_level_join) => {
-                    page_level_join.generate_trace(output_df, *pairs_list_index);
-                    *pairs_list_index += 1;
-                }
-                _ => {}
-            }
-
-            return (leaf, leaves);
+            return (leaves[l].take().unwrap(), leaves);
         }
 
-        let init_running_df_commit = output_df.commit.clone();
-        // TODO: make sure those are updated
-        let init_pairs_list_index = *pairs_list_index;
-
         let mid = (l + r) / 2;
-        let (left, leaves) = self.build_tree_dfs(
+        let (left, leaves) = Self::build_tree_dfs(
             l,
             mid,
             leaves,
-            output_df,
             df_cur_page,
             pairs,
             pairs_commit,
             pairs_list_index,
+            engine,
         );
-        let (right, leaves) = self.build_tree_dfs(
+        let (right, leaves) = Self::build_tree_dfs(
             mid + 1,
             r,
             leaves,
-            output_df,
             df_cur_page,
             pairs,
             pairs_commit,
             pairs_list_index,
+            engine,
         );
-        let final_running_df_commit = output_df.commit.clone();
 
         let internal_node = InternalNode::<COMMIT_LEN, SC, E>::new(
             vec![Arc::from(*left), Arc::from(*right)],
             pairs.clone(), // TODO: I think pairs should be removed from here
-            InternalNodePis::new(
-                init_running_df_commit,
-                pairs_commit.clone(),
-                init_pairs_list_index,
-                final_running_df_commit.clone(),
-                self.parent_table_df.commit.clone(),
-                self.child_table_df.commit.clone(),
-            ),
         );
 
         (Box::new(JoinCircuit::InternalNode(internal_node)), leaves)

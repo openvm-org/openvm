@@ -2,12 +2,14 @@ use std::marker::PhantomData;
 
 use afs_test_utils::engine::StarkEngine;
 use p3_uni_stark::StarkGenericConfig;
+use parking_lot::Mutex;
 
 use crate::{common::Commitment, dataframe::DataFrame};
 
-#[derive(Clone, derive_new::new)]
+#[derive(Default)]
 pub struct TwoPointersProgram<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>> {
-    pub pis: TwoPointersProgramPis<COMMIT_LEN>,
+    pub pairs: Mutex<Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)>>,
+    pub pis: Mutex<TwoPointersProgramPis<COMMIT_LEN>>,
 
     _marker1: PhantomData<SC>, // This should be removed eventually
     _marker2: PhantomData<E>,  // This should be removed eventually
@@ -16,8 +18,50 @@ pub struct TwoPointersProgram<const COMMIT_LEN: usize, SC: StarkGenericConfig, E
 impl<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>>
     TwoPointersProgram<COMMIT_LEN, SC, E>
 {
-    pub fn run(
-        &mut self,
+    pub fn default() -> Self {
+        Self {
+            pairs: Mutex::new(vec![]),
+            pis: Mutex::new(TwoPointersProgramPis::default()),
+            _marker1: PhantomData::<SC>::default(),
+            _marker2: PhantomData::<E>::default(),
+        }
+    }
+
+    pub fn generate_trace(
+        &self,
+        parent_df: &DataFrame<COMMIT_LEN>,
+        child_df: &DataFrame<COMMIT_LEN>,
+    ) {
+        let mut pis = self.pis.lock();
+        let mut pairs = self.pairs.lock();
+
+        pis.parent_table_commit = parent_df.commit.clone();
+        pis.child_table_commit = child_df.commit.clone();
+        *pairs = Self::run(parent_df, child_df);
+        // TODO: update this to be the commitment of the pairs
+        pis.pairs_commit = Commitment::<COMMIT_LEN>::default();
+    }
+
+    pub fn prove(&self, _engine: &E) {
+        todo!("implement this")
+    }
+
+    pub fn verify(
+        &self,
+        _engine: &E,
+        parent_df: &DataFrame<COMMIT_LEN>,
+        child_df: &DataFrame<COMMIT_LEN>,
+    ) {
+        let pis = self.pis.lock();
+
+        assert_eq!(parent_df.commit, pis.parent_table_commit);
+        assert_eq!(child_df.commit, pis.child_table_commit);
+
+        let _pairs = Self::run(parent_df, child_df);
+        // TODO: assert that pairs.commit == self.pis.pairs_commit
+    }
+
+    fn run(
         parent_df: &DataFrame<COMMIT_LEN>,
         child_df: &DataFrame<COMMIT_LEN>,
     ) -> Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)> {
@@ -50,32 +94,11 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>>
             }
         }
 
-        // TODO: update this to be the commitment of the pairs
-        self.pis.pairs_commit = Commitment::<COMMIT_LEN>::default();
-
         ret
-    }
-
-    pub fn generate_trace(&self) {}
-
-    pub fn prove(&self, _engine: &E) {
-        todo!("implement this")
-    }
-
-    pub fn verify(
-        &self,
-        _engine: &E,
-        parent_df: DataFrame<COMMIT_LEN>,
-        child_df: DataFrame<COMMIT_LEN>,
-    ) {
-        assert_eq!(parent_df.commit, self.pis.parent_table_commit);
-        assert_eq!(child_df.commit, self.pis.child_table_commit);
-
-        // TODO: assert that output commit is correct
     }
 }
 
-#[derive(Clone, derive_new::new)]
+#[derive(Clone, derive_new::new, Default)]
 pub struct TwoPointersProgramPis<const COMMIT_LEN: usize> {
     pub parent_table_commit: Commitment<COMMIT_LEN>,
     pub child_table_commit: Commitment<COMMIT_LEN>,

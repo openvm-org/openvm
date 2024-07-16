@@ -7,10 +7,7 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use parking_lot::Mutex;
 
 use super::{page_level_join::PageLevelJoin, two_pointers_program::TwoPointersProgram};
-use crate::{
-    common::Commitment,
-    dataframe::{DataFrame, DataFrameType},
-};
+use crate::{common::Commitment, dataframe::DataFrame, page_db::PageDb};
 
 pub enum JoinCircuit<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>> {
     PageLevelJoin(PageLevelJoin<COMMIT_LEN, SC, E>),
@@ -24,10 +21,10 @@ pub struct InternalNode<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: Star
 
     state: Mutex<InternalNodeState<COMMIT_LEN>>,
 
-    pis: InternalNodePis<COMMIT_LEN>,
+    pis: Mutex<InternalNodePis<COMMIT_LEN>>,
 }
 
-#[derive(Clone, derive_new::new)]
+#[derive(Clone, derive_new::new, Default)]
 pub struct InternalNodePis<const COMMIT_LEN: usize> {
     init_running_df_commit: Commitment<COMMIT_LEN>,
     pairs_commit: Commitment<COMMIT_LEN>,
@@ -68,40 +65,54 @@ where
     pub fn new(
         children: Vec<Arc<JoinCircuit<COMMIT_LEN, SC, E>>>,
         pairs: Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)>,
-        pis: InternalNodePis<COMMIT_LEN>,
     ) -> Self {
         Self {
             children,
             pairs,
             state: Mutex::new(InternalNodeState::<COMMIT_LEN>::default()),
-            pis,
+            pis: Mutex::new(InternalNodePis::<COMMIT_LEN>::default()),
         }
     }
 
-    pub fn generate_trace_internal(
+    pub fn generate_trace_for_tree(
         &self,
+        page_db: Arc<PageDb<COMMIT_LEN>>,
         output_df: &mut DataFrame<COMMIT_LEN>,
+        pairs_commit: &Commitment<COMMIT_LEN>,
         pairs_list_index: &mut u32,
+        parent_df: &DataFrame<COMMIT_LEN>,
+        child_df: &DataFrame<COMMIT_LEN>,
+        engine: &E,
     ) {
+        let mut pis = self.pis.lock();
+
+        pis.init_running_df_commit = output_df.commit.clone();
+        pis.pairs_commit = pairs_commit.clone();
+        pis.pairs_list_index = *pairs_list_index;
+        pis.parent_table_commit = parent_df.commit.clone();
+        pis.child_table_commit = child_df.commit.clone();
+
         for child in self.children.iter() {
             match child.as_ref() {
                 JoinCircuit::PageLevelJoin(circuit) => {
-                    circuit.generate_trace(output_df, *pairs_list_index);
-                    *pairs_list_index += 1;
+                    circuit.generate_trace(page_db.clone(), output_df, pairs_list_index, engine);
                 }
-                JoinCircuit::TwoPointersProgram(circuit) => circuit.generate_trace(),
-                JoinCircuit::InternalNode(circuit) => {
-                    circuit.generate_trace_internal(output_df, pairs_list_index)
+                JoinCircuit::TwoPointersProgram(circuit) => {
+                    circuit.generate_trace(parent_df, child_df)
                 }
+                JoinCircuit::InternalNode(circuit) => circuit.generate_trace_for_tree(
+                    page_db.clone(),
+                    output_df,
+                    pairs_commit,
+                    pairs_list_index,
+                    parent_df,
+                    child_df,
+                    engine,
+                ),
             }
         }
-    }
 
-    pub fn generate_trace(&self) {
-        let mut output_df = DataFrame::empty(DataFrameType::Unindexed);
-        let mut pairs_list_index = 0;
-
-        self.generate_trace_internal(&mut output_df, &mut pairs_list_index);
+        pis.final_rannung_df_commit = output_df.commit.clone();
     }
 
     pub fn prove(&self, engine: &E) {
@@ -115,8 +126,10 @@ where
     }
 
     pub fn verify(&self, engine: &E) {
+        let pis = self.pis.lock();
+
         let mut state = self.state.lock();
-        state.running_df_commit = Some(self.pis.init_running_df_commit.clone());
+        state.running_df_commit = Some(pis.init_running_df_commit.clone());
 
         let children = self.children.clone();
 
@@ -126,22 +139,20 @@ where
 
         assert_eq!(
             *state.running_df_commit.as_ref().unwrap(),
-            self.pis.final_rannung_df_commit
+            pis.final_rannung_df_commit
         );
     }
 
     fn verify_child(&self, circuit: Arc<JoinCircuit<COMMIT_LEN, SC, E>>, _engine: &E) {
+        let pis = self.pis.lock();
+
         match circuit.as_ref() {
             JoinCircuit::TwoPointersProgram(tp_program) => {
-                assert_eq!(
-                    tp_program.pis.parent_table_commit,
-                    self.pis.parent_table_commit
-                );
-                assert_eq!(
-                    tp_program.pis.child_table_commit,
-                    self.pis.child_table_commit
-                );
-                assert_eq!(tp_program.pis.pairs_commit, self.pis.pairs_commit);
+                let tp_pis = tp_program.pis.lock();
+
+                assert_eq!(tp_pis.parent_table_commit, pis.parent_table_commit);
+                assert_eq!(tp_pis.child_table_commit, pis.child_table_commit);
+                assert_eq!(tp_pis.pairs_commit, pis.pairs_commit);
             }
             JoinCircuit::PageLevelJoin(page_level_circuit) => {
                 let mut state = self.state.lock();
@@ -156,60 +167,52 @@ where
 
                 assert_eq!(
                     child_pis.pairs_list_index,
-                    self.pis.pairs_list_index + state.page_level_cnt
+                    pis.pairs_list_index + state.page_level_cnt
                 );
 
                 // Ensuring that the page-level circuit has the right parent_page_commit
                 assert_eq!(
                     child_pis.parent_page_commit,
-                    self.pairs[(self.pis.pairs_list_index + state.page_level_cnt) as usize].0
+                    self.pairs[(pis.pairs_list_index + state.page_level_cnt) as usize].0
                 );
 
                 // Ensuring that the page-level circuit has the right child_page_commit
                 assert_eq!(
                     child_pis.child_page_commit,
-                    self.pairs[(self.pis.pairs_list_index + state.page_level_cnt) as usize].1
+                    self.pairs[(pis.pairs_list_index + state.page_level_cnt) as usize].1
                 );
 
                 // TODO: decommit self.pis.pairs_commit corresponds to self.pairs. think if this is necessary
 
                 // TODO: I don't think this is necessary?
-                assert_eq!(child_pis.pairs_commit, self.pis.pairs_commit);
+                assert_eq!(child_pis.pairs_commit, pis.pairs_commit);
 
                 // Updating state
                 state.running_df_commit = Some(child_pis.final_running_df_commit.clone());
                 state.page_level_cnt += 1;
             }
             JoinCircuit::InternalNode(internal_node_circuit) => {
+                let child_pis = internal_node_circuit.pis.lock();
+
                 let mut state = self.state.lock();
 
                 assert_eq!(
                     *state.running_df_commit.as_ref().unwrap(),
-                    internal_node_circuit.pis.init_running_df_commit
+                    child_pis.init_running_df_commit
                 );
 
                 assert_eq!(
-                    internal_node_circuit.pis.pairs_list_index,
-                    self.pis.pairs_list_index + state.page_level_cnt
+                    child_pis.pairs_list_index,
+                    pis.pairs_list_index + state.page_level_cnt
                 );
 
-                assert_eq!(
-                    self.pis.pairs_commit,
-                    internal_node_circuit.pis.pairs_commit
-                );
+                assert_eq!(pis.pairs_commit, child_pis.pairs_commit);
 
-                assert_eq!(
-                    self.pis.parent_table_commit,
-                    internal_node_circuit.pis.parent_table_commit
-                );
+                assert_eq!(pis.parent_table_commit, child_pis.parent_table_commit);
 
-                assert_eq!(
-                    self.pis.child_table_commit,
-                    internal_node_circuit.pis.child_table_commit
-                );
+                assert_eq!(pis.child_table_commit, child_pis.child_table_commit);
 
-                state.running_df_commit =
-                    Some(internal_node_circuit.pis.final_rannung_df_commit.clone());
+                state.running_df_commit = Some(child_pis.final_rannung_df_commit.clone());
 
                 // TODO: I think to parallelize, I should avoid doing this
                 let child_state = internal_node_circuit.state.lock();
