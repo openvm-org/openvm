@@ -31,7 +31,7 @@ pub trait LocalTraceInstructions<F>: AirConfig {
 /// Trait that specifies an interface for defining the bus connections of this AIR.
 /// It is optional to implement this trait, and the interactions are only enabled if they
 /// are evaluated within the `Air::eval` function.
-pub trait SubAirBridge<AB: InteractionBuilder>: Air<AB> {
+pub trait SubAirBridge<AB: InteractionBuilder> {
     /// View of the parts of matrix needed for evaluating interaction expressions.
     type View;
 

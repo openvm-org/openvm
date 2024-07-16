@@ -1,15 +1,13 @@
-use afs_stark_backend::interaction::{AirBridge, Interaction};
-use p3_air::VirtualPairCol;
-use p3_field::PrimeField;
+use afs_stark_backend::interaction::InteractionBuilder;
 
-use super::{columns::RANGE_GATE_COL_MAP, RangeCheckerGateAir};
+use crate::sub_chip::SubAirBridge;
 
-impl<F: PrimeField> AirBridge<F> for RangeCheckerGateAir {
-    fn receives(&self) -> Vec<Interaction<F>> {
-        vec![Interaction {
-            fields: vec![VirtualPairCol::single_main(RANGE_GATE_COL_MAP.counter)],
-            count: VirtualPairCol::single_main(RANGE_GATE_COL_MAP.mult),
-            argument_index: self.bus_index,
-        }]
+use super::{columns::RangeGateCols, RangeCheckerGateAir};
+
+impl<AB: InteractionBuilder> SubAirBridge<AB> for RangeCheckerGateAir {
+    type View = RangeGateCols<AB::Var>;
+
+    fn eval_interactions(&self, builder: &mut AB, local: Self::View) {
+        builder.push_receive(self.bus_index, vec![local.counter], local.mult);
     }
 }
