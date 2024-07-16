@@ -2,7 +2,7 @@ use std::array::from_fn;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use p3_field::{Field, PrimeField64};
+use p3_field::{PrimeField32, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::memory::expand::columns::ExpandCols;
@@ -12,10 +12,10 @@ use crate::memory::tree::MemoryNode::Leaf;
 use crate::memory::tree::MemoryNode::NonLeaf;
 
 impl<const CHUNK: usize> ExpandAir<CHUNK> {
-    pub fn generate_trace_and_final_tree<F: PrimeField64>(
-        &mut self,
+    pub fn generate_trace_and_final_tree<F: PrimeField32>(
+        &self,
         initial_trees: HashMap<F, MemoryNode<CHUNK, F>>,
-        touched_addresses: Vec<(F, F)>,
+        touched_addresses: HashSet<(F, F)>,
         final_memory: &HashMap<(F, F), F>,
         trace_degree: usize,
     ) -> (RowMajorMatrix<F>, HashMap<F, MemoryNode<CHUNK, F>>) {
@@ -51,13 +51,16 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
                 ),
             );
         }
+        while rows.len() != trace_degree * ExpandCols::<CHUNK, F>::get_width() {
+            rows.push(F::zero());
+        }
         let trace = RowMajorMatrix::new(rows, ExpandCols::<CHUNK, F>::get_width());
         (trace, final_trees)
     }
 }
 
 /// Expects `initial_node`, `final_node` to be NonLeaf
-fn add_trace_rows<const CHUNK: usize, F: Field>(
+fn add_trace_rows<const CHUNK: usize, F: PrimeField32>(
     height: usize,
     label: usize,
     initial_node: MemoryNode<CHUNK, F>,
@@ -109,7 +112,7 @@ fn add_trace_rows<const CHUNK: usize, F: Field>(
     trace_rows.extend(final_cols.flatten());
 }
 
-fn recur<const CHUNK: usize, F: Field>(
+fn recur<const CHUNK: usize, F: PrimeField32>(
     height: usize,
     initial_node: MemoryNode<CHUNK, F>,
     label: usize,

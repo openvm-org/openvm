@@ -63,6 +63,6 @@ impl<const CHUNK: usize, T: Clone> ExpandCols<CHUNK, T> {
     }
 
     pub fn get_width() -> usize {
-        4 + (3 * CHUNK) + 2
+        5 + (3 * CHUNK) + 2
     }
 }
