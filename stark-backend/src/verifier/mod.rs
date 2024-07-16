@@ -279,6 +279,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
                 .collect_vec();
             verify_single_rap_constraints(
                 rap,
+                vk,
                 preprocessed_values,
                 partitioned_main_values,
                 after_challenge_values,

@@ -5,7 +5,7 @@
 
 use afs_stark_backend::air_builders::PartitionedAirBuilder;
 use p3_air::{Air, BaseAir};
-use p3_field::{AbstractField, Field};
+use p3_field::AbstractField;
 use p3_matrix::Matrix;
 
 /// Inner value is width of y-submatrix

@@ -4,7 +4,10 @@
 //! Chip will either send or receive the fields with multiplicity count.
 //! The main Air has no constraints, the only constraints are specified by the Chip trait
 
-use afs_stark_backend::interaction::{InteractionBuilder, InteractionType};
+use afs_stark_backend::{
+    air_builders::PartitionedAirBuilder,
+    interaction::{InteractionBuilder, InteractionType},
+};
 use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -21,9 +24,11 @@ impl DummyInteractionCols {
 
 pub struct DummyInteractionAir {
     field_width: usize,
-    // Send if true. Receive if false.
+    /// Send if true. Receive if false.
     pub is_send: bool,
     bus_index: usize,
+    /// If true, then | count | and | fields[..] | are in separate main trace partitions.
+    pub partition: bool,
 }
 
 impl DummyInteractionAir {
@@ -32,6 +37,14 @@ impl DummyInteractionAir {
             field_width,
             is_send,
             bus_index,
+            partition: false,
+        }
+    }
+
+    pub fn partition(self) -> Self {
+        Self {
+            partition: true,
+            ..self
         }
     }
 
@@ -50,14 +63,23 @@ impl<F: Field> BaseAir<F> for DummyInteractionAir {
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for DummyInteractionAir {
+impl<AB: InteractionBuilder + PartitionedAirBuilder> Air<AB> for DummyInteractionAir {
     fn eval(&self, builder: &mut AB) {
-        let main = builder.main();
-        let local = main.row_slice(0);
-        let count = local[DummyInteractionCols::count_col()];
-        let fields: Vec<_> = (0..self.field_width)
-            .map(|i| local[DummyInteractionCols::field_col(i)])
-            .collect();
+        let (fields, count) = if self.partition {
+            let local_0 = builder.partitioned_main()[0].row_slice(0);
+            let local_1 = builder.partitioned_main()[1].row_slice(0);
+            let count = local_0[0];
+            let fields = local_1.to_vec();
+            (fields, count)
+        } else {
+            let main = builder.main();
+            let local = main.row_slice(0);
+            let count = local[DummyInteractionCols::count_col()];
+            let fields: Vec<_> = (0..self.field_width)
+                .map(|i| local[DummyInteractionCols::field_col(i)])
+                .collect();
+            (fields, count)
+        };
         let interaction_type = if self.is_send {
             InteractionType::Send
         } else {

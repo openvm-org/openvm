@@ -9,6 +9,7 @@ use p3_uni_stark::Val;
 use tracing::instrument;
 
 use crate::air_builders::verifier::VerifierConstraintFolder;
+use crate::keygen::types::StarkVerifyingKey;
 use crate::prover::opener::AdjacentOpenedValues;
 use crate::rap::Rap;
 
@@ -18,6 +19,7 @@ use super::error::VerificationError;
 #[instrument(skip_all)]
 pub fn verify_single_rap_constraints<SC, R>(
     rap: &R,
+    vk: &StarkVerifyingKey<SC>,
     preprocessed_values: Option<&AdjacentOpenedValues<SC::Challenge>>,
     partitioned_main_values: Vec<&AdjacentOpenedValues<SC::Challenge>>,
     after_challenge_values: Vec<&AdjacentOpenedValues<SC::Challenge>>,
@@ -124,6 +126,9 @@ where
         challenges,
         public_values,
         exposed_values_after_challenge,
+
+        symbolic_interactions: &vk.symbolic_constraints.interactions,
+        interactions: vec![],
     };
     rap.eval(&mut folder);
 

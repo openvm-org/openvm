@@ -7,7 +7,7 @@ use p3_matrix::Matrix;
 use p3_uni_stark::{PackedChallenge, PackedVal, StarkGenericConfig, Val};
 
 use crate::{
-    interaction::{Interaction, InteractionBuilder, SymbolicInteraction},
+    interaction::{Interaction, InteractionBuilder, InteractionType, SymbolicInteraction},
     rap::PermutationAirBuilderWithExposedValues,
 };
 
@@ -167,7 +167,7 @@ where
         bus_index: usize,
         fields: impl IntoIterator<Item = E>,
         count: impl Into<Self::Expr>,
-        interaction_type: crate::interaction::InteractionType,
+        interaction_type: InteractionType,
     ) {
         let fields = fields.into_iter().map(|f| f.into()).collect();
         let count = count.into();

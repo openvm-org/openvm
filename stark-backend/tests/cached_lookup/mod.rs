@@ -35,7 +35,7 @@ pub fn prove_and_verify_indexless_lookups(
     );
 
     let sender_air = DummyInteractionAir::new(sender[0].1.len(), true, 0);
-    let receiver_air = DummyInteractionAir::new(receiver[0].1.len(), false, 0);
+    let receiver_air = DummyInteractionAir::new(receiver[0].1.len(), false, 0).partition();
 
     // Single row major matrix for |count|fields[..]|
     let sender_trace = RowMajorMatrix::new(

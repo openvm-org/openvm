@@ -7,7 +7,7 @@ use std::{
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkVerifyingKey,
-    prover::{trace::TraceCommitmentBuilder, types::Proof},
+    prover::{trace::TraceCommitmentBuilder, types::Proof, USE_DEBUG_BUILDER},
 };
 use afs_test_utils::{
     config::{
@@ -47,7 +47,8 @@ where
 {
     // tracing_setup();
 
-    let air = DummyInteractionAir::new(trace[0].1.len(), false, 0);
+    let mut air = DummyInteractionAir::new(trace[0].1.len(), false, 0);
+    air.partition = partition;
 
     // Single row major matrix for |count|fields[..]|
     let nopart_trace = RowMajorMatrix::new(
@@ -115,6 +116,10 @@ where
     let main_trace_data = trace_builder.view(&vk, vec![&air]);
     let pis = vec![vec![]];
 
+    // Disable debug prover since we don't balance the buses
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
     let mut challenger = engine.new_challenger();
     let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
     benchmarks.prove_time = start.elapsed().as_micros();
