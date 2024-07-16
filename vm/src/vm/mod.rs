@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use afs_chips::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::rap::AnyRap;
+use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::PrimeField32;
 use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_uni_stark::{StarkGenericConfig, Val};

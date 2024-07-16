@@ -333,6 +333,10 @@ impl<F: Field> InteractionBuilder for SymbolicRapBuilder<F> {
     ) {
         let fields = fields.into_iter().map(|f| f.into()).collect();
         let count = count.into();
+        assert!(
+            LocalOnlyChecker::check_expr(&count),
+            "Interaction count expression can only use local row"
+        );
         self.interactions.push(Interaction {
             bus_index,
             fields,
@@ -378,5 +382,34 @@ impl<F: Field> InteractionBuilder for SymbolicRapBuilder<F> {
 impl<F: Field> PartitionedAirBuilder for SymbolicRapBuilder<F> {
     fn partitioned_main(&self) -> &[Self::M] {
         &self.partitioned_main
+    }
+}
+
+struct LocalOnlyChecker;
+
+impl LocalOnlyChecker {
+    fn check_var<F: Field>(var: SymbolicVariable<F>) -> bool {
+        match var.entry {
+            Entry::Preprocessed { offset } => offset == 0,
+            Entry::Main { offset, .. } => offset == 0,
+            Entry::Permutation { offset } => offset == 0,
+            Entry::Public => true,
+            Entry::Challenge => true,
+            Entry::Exposed => true,
+        }
+    }
+
+    fn check_expr<F: Field>(expr: &SymbolicExpression<F>) -> bool {
+        match expr {
+            SymbolicExpression::Variable(var) => Self::check_var(*var),
+            SymbolicExpression::IsFirstRow => false,
+            SymbolicExpression::IsLastRow => false,
+            SymbolicExpression::IsTransition => false,
+            SymbolicExpression::Constant(_) => true,
+            SymbolicExpression::Add { x, y, .. } => Self::check_expr(x) && Self::check_expr(y),
+            SymbolicExpression::Sub { x, y, .. } => Self::check_expr(x) && Self::check_expr(y),
+            SymbolicExpression::Neg { x, .. } => Self::check_expr(x),
+            SymbolicExpression::Mul { x, y, .. } => Self::check_expr(x) && Self::check_expr(y),
+        }
     }
 }
