@@ -13,6 +13,7 @@ use afs_test_utils::engine::StarkEngine;
 use p3_field::PrimeField;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
+use crate::dataframe::DataFrameType;
 use crate::inner_join::page_level_join::PageLevelJoin;
 use crate::inner_join::two_pointers_program::TwoPointersProgram;
 use crate::{common::Commitment, page_db::PageDb};
@@ -26,6 +27,8 @@ pub struct TableJoinController<const COMMIT_LEN: usize, SC: StarkGenericConfig, 
     child_table_df: DataFrame<COMMIT_LEN>,
     page_db: Arc<PageDb<COMMIT_LEN>>,
     root: InternalNode<COMMIT_LEN, SC, E>,
+    pairs: Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)>,
+    pairs_commit: Commitment<COMMIT_LEN>,
 
     _phantom: PhantomData<SC>,       // TODO: try removing this later
     _phantom_engine: PhantomData<E>, // TODO: try removing this later
@@ -100,15 +103,64 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
             parent_table_df: parent_df,
             child_table_df: child_df,
             page_db,
+            pairs,
+            pairs_commit,
             root,
             _phantom: PhantomData,
             _phantom_engine: PhantomData,
         }
     }
 
-    // pub fn generate_trace(&self) {
-    //     self.root.generate_trace_for_tree();
-    // }
+    pub fn generate_trace(&self, engine: &E)
+    where
+        Val<SC>: PrimeField,
+    {
+        let mut output_df = DataFrame::<COMMIT_LEN>::empty(DataFrameType::new_unindexed());
+        let mut pairs_list_index = 0;
+
+        self.root.generate_trace_for_tree(
+            self.page_db.clone(),
+            &mut output_df,
+            &self.pairs_commit,
+            &mut pairs_list_index,
+            &self.parent_table_df,
+            &self.child_table_df,
+            engine,
+        );
+    }
+
+    pub fn prove(&self, engine: &E)
+    where
+        Val<SC>: PrimeField,
+        Domain<SC>: Send + Sync,
+        SC::Pcs: Sync,
+        Domain<SC>: Send + Sync,
+        PcsProverData<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Challenge: Send + Sync,
+        PcsProof<SC>: Send + Sync,
+    {
+        self.root.prove_tree(engine);
+    }
+
+    pub fn verify(&self, engine: &E, output_df: &mut DataFrame<COMMIT_LEN>)
+    where
+        Val<SC>: PrimeField,
+        Domain<SC>: Send + Sync,
+        SC::Pcs: Sync,
+        Domain<SC>: Send + Sync,
+        PcsProverData<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Challenge: Send + Sync,
+        PcsProof<SC>: Send + Sync,
+    {
+        self.root.verify_tree(
+            engine,
+            &self.parent_table_df,
+            &self.child_table_df,
+            output_df,
+        );
+    }
 
     fn build_tree_dfs(
         l: usize,

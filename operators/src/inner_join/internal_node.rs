@@ -52,15 +52,6 @@ struct InternalNodeState<const COMMIT_LEN: usize> {
 
 impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<SC> + 'static>
     InternalNode<COMMIT_LEN, SC, E>
-where
-    Val<SC>: PrimeField,
-    Domain<SC>: Send + Sync,
-    SC::Pcs: Sync,
-    Domain<SC>: Send + Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
-    PcsProof<SC>: Send + Sync,
 {
     pub fn new(
         children: Vec<Arc<JoinCircuit<COMMIT_LEN, SC, E>>>,
@@ -83,7 +74,9 @@ where
         parent_df: &DataFrame<COMMIT_LEN>,
         child_df: &DataFrame<COMMIT_LEN>,
         engine: &E,
-    ) {
+    ) where
+        Val<SC>: PrimeField,
+    {
         let mut pis = self.pis.lock();
 
         pis.init_running_df_commit = output_df.commit.clone();
@@ -115,12 +108,52 @@ where
         pis.final_rannung_df_commit = output_df.commit.clone();
     }
 
-    pub fn prove(&self, engine: &E) {
+    pub fn prove_tree(&self, engine: &E)
+    where
+        Val<SC>: PrimeField,
+        Domain<SC>: Send + Sync,
+        SC::Pcs: Sync,
+        Domain<SC>: Send + Sync,
+        PcsProverData<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Challenge: Send + Sync,
+        PcsProof<SC>: Send + Sync,
+    {
         for child in self.children.iter() {
             match child.as_ref() {
                 JoinCircuit::PageLevelJoin(circuit) => circuit.prove(engine),
                 JoinCircuit::TwoPointersProgram(circuit) => circuit.prove(engine),
-                JoinCircuit::InternalNode(circuit) => circuit.prove(engine),
+                JoinCircuit::InternalNode(circuit) => circuit.prove_tree(engine),
+            }
+        }
+    }
+
+    pub fn verify_tree(
+        &self,
+        engine: &E,
+        parent_df: &DataFrame<COMMIT_LEN>,
+        child_df: &DataFrame<COMMIT_LEN>,
+        output_df: &mut DataFrame<COMMIT_LEN>,
+    ) where
+        Val<SC>: PrimeField,
+        Domain<SC>: Send + Sync,
+        SC::Pcs: Sync,
+        Domain<SC>: Send + Sync,
+        PcsProverData<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Challenge: Send + Sync,
+        PcsProof<SC>: Send + Sync,
+    {
+        self.verify(engine);
+        for child in self.children.iter() {
+            match child.as_ref() {
+                JoinCircuit::PageLevelJoin(circuit) => circuit.verify(engine, output_df),
+                JoinCircuit::TwoPointersProgram(circuit) => {
+                    circuit.verify(engine, parent_df, child_df)
+                }
+                JoinCircuit::InternalNode(circuit) => {
+                    circuit.verify_tree(engine, parent_df, child_df, output_df)
+                }
             }
         }
     }
@@ -131,9 +164,7 @@ where
         let mut state = self.state.lock();
         state.running_df_commit = Some(pis.init_running_df_commit.clone());
 
-        let children = self.children.clone();
-
-        for child in children.iter() {
+        for child in self.children.iter() {
             self.verify_child(child.clone(), engine);
         }
 

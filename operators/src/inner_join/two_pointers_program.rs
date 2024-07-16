@@ -42,9 +42,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>>
         pis.pairs_commit = Commitment::<COMMIT_LEN>::default();
     }
 
-    pub fn prove(&self, _engine: &E) {
-        todo!("implement this")
-    }
+    pub fn prove(&self, _engine: &E) {}
 
     pub fn verify(
         &self,
