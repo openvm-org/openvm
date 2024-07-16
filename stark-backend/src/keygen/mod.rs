@@ -7,7 +7,7 @@ use tracing::instrument;
 pub mod types;
 
 use crate::{
-    air_builders::symbolic::populate_symbolic_builder,
+    air_builders::symbolic::get_symbolic_builder,
     commit::{MatrixCommitmentPointers, SingleMatrixCommitPtr},
     prover::trace::TraceCommitter,
     rap::AnyRap,
@@ -150,7 +150,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             partitioned_main: main_widths,
             after_challenge: vec![],
         };
-        let symbolic_builder = populate_symbolic_builder(air, &width, num_public_values, &[], &[]);
+        let symbolic_builder = get_symbolic_builder(air, &width, num_public_values, &[], &[]);
 
         let params = symbolic_builder.params();
         let symbolic_constraints = symbolic_builder.constraints();

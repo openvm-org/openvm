@@ -28,26 +28,26 @@ pub enum Entry {
 
 impl Entry {
     /// Advance the internal offset of the entry by the given `offset`.
-    pub fn rotate(&self, offset: usize) -> Self {
+    pub fn rotate(self, offset: usize) -> Self {
         match self {
             Entry::Preprocessed { offset: old_offset } => Entry::Preprocessed {
-                offset: *old_offset + offset,
+                offset: old_offset + offset,
             },
             Entry::Main {
                 part_index,
                 offset: old_offset,
             } => Entry::Main {
-                part_index: *part_index,
-                offset: *old_offset + offset,
+                part_index,
+                offset: old_offset + offset,
             },
             Entry::Permutation { offset: old_offset } => Entry::Permutation {
-                offset: *old_offset + offset,
+                offset: old_offset + offset,
             },
-            Entry::Public | Entry::Challenge | Entry::Exposed => *self,
+            Entry::Public | Entry::Challenge | Entry::Exposed => self,
         }
     }
 
-    pub fn next(&self) -> Self {
+    pub fn next(self) -> Self {
         self.rotate(1)
     }
 }
@@ -76,7 +76,7 @@ impl<F: Field> SymbolicVariable<F> {
         }
     }
 
-    pub fn rotate(&self, offset: usize) -> Self {
+    pub fn rotate(self, offset: usize) -> Self {
         Self {
             entry: self.entry.rotate(offset),
             index: self.index,
@@ -84,7 +84,7 @@ impl<F: Field> SymbolicVariable<F> {
         }
     }
 
-    pub fn next(&self) -> Self {
+    pub fn next(self) -> Self {
         self.rotate(1)
     }
 }
