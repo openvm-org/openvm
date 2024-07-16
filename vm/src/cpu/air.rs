@@ -259,7 +259,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
         let is_equal_vec_io_cols = IsEqualVecIOCols {
             x: read1.data.to_vec(),
             y: read2.data.to_vec(),
-            prod: read0_equals_read1,
+            is_equal: read0_equals_read1,
         };
         SubAir::eval(
             &IsEqualVecAir::new(WORD_SIZE),

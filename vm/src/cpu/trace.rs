@@ -270,7 +270,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 (accesses[0].data.to_vec(), accesses[1].data.to_vec()),
             );
 
-            let read0_equals_read1 = is_equal_vec_cols.io.prod;
+            let read0_equals_read1 = is_equal_vec_cols.io.is_equal;
             let is_equal_vec_aux = is_equal_vec_cols.aux;
 
             let aux = CpuAuxCols {

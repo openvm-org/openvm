@@ -91,7 +91,7 @@ impl<AB: PartitionedAirBuilder> SubAir<AB> for GroupByAir {
             y: iter::once(next_grouped.is_alloc)
                 .chain(next_grouped.group_by)
                 .collect(),
-            prod: local_aux.eq_next,
+            is_equal: local_aux.eq_next,
         };
 
         // constrain eq_next to hold the correct value
