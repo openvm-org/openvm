@@ -384,7 +384,7 @@ impl<C: Config> Builder<C> {
         let arr = self.dyn_array(vlen);
         let ptr = match arr {
             Array::Dyn(ptr, _) => ptr,
-            Array::Fixed(_) => panic!("unreachable"),
+            Array::Fixed(_) => unreachable!(),
         };
 
         // Write the content hints directly into the array memory.

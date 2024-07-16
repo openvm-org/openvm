@@ -213,7 +213,7 @@ impl<C: Config> Builder<C> {
                 };
                 self.store(ptr, index, value);
             }
-            Array::Fixed(_) => panic!("unreachable"),
+            Array::Fixed(_) => unreachable!(),
         }
         result
     }

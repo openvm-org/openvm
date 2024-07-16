@@ -12,7 +12,7 @@ impl<C: Config> Builder<C> {
         let output = self.dyn_array::<Var<_>>(NUM_BITS);
         let ptr = match output {
             Array::Dyn(ptr, _) => ptr,
-            Array::Fixed(_) => panic!("unreachable"),
+            Array::Fixed(_) => unreachable!(),
         };
 
         let sum: Var<_> = self.eval(C::N::zero());
@@ -55,7 +55,7 @@ impl<C: Config> Builder<C> {
         let output = self.dyn_array::<Var<_>>(NUM_BITS);
         let ptr = match output {
             Array::Dyn(ptr, _) => ptr,
-            Array::Fixed(_) => panic!("unreachable"),
+            Array::Fixed(_) => unreachable!(),
         };
 
         let sum: Felt<_> = self.eval(C::F::zero());
