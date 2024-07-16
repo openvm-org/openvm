@@ -22,6 +22,7 @@ where
     fn eval(&self, builder: &mut AB) {
         // Constraits for the main trace:
         Air::eval(self, builder);
+        builder.finalize_interactions();
         // Constraints for the permutation trace:
         // If no interactions, nothing to do
         if builder.num_interactions() > 0 {

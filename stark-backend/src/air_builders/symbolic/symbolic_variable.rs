@@ -4,10 +4,11 @@ use core::marker::PhantomData;
 use core::ops::{Add, Mul, Sub};
 
 use p3_field::Field;
+use serde::{Deserialize, Serialize};
 
 use super::symbolic_expression::SymbolicExpression;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Entry {
     Preprocessed { offset: usize },
     Main { offset: usize },
@@ -22,15 +23,15 @@ impl Entry {
     pub fn rotate(&self, offset: usize) -> Self {
         match self {
             Entry::Preprocessed { offset: old_offset } => Entry::Preprocessed {
-                offset: old_offset + offset,
+                offset: *old_offset + offset,
             },
             Entry::Main { offset: old_offset } => Entry::Main {
-                offset: old_offset + offset,
+                offset: *old_offset + offset,
             },
             Entry::Permutation { offset: old_offset } => Entry::Permutation {
-                offset: old_offset + offset,
+                offset: *old_offset + offset,
             },
-            Entry::Public | Entry::Challenge | Entry::Exposed => self,
+            Entry::Public | Entry::Challenge | Entry::Exposed => *self,
         }
     }
 
@@ -40,7 +41,7 @@ impl Entry {
 }
 
 /// A variable within the evaluation window, i.e. a column in either the local or next row.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct SymbolicVariable<F: Field> {
     pub entry: Entry,
     pub index: usize,

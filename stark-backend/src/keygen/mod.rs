@@ -7,9 +7,8 @@ use tracing::instrument;
 pub mod types;
 
 use crate::{
-    air_builders::symbolic::get_log_quotient_degree,
+    air_builders::symbolic::get_symbolic_constraints,
     commit::{MatrixCommitmentPointers, SingleMatrixCommitPtr},
-    interaction::AirBridge,
     prover::trace::TraceCommitter,
     rap::AnyRap,
 };
@@ -18,10 +17,6 @@ use self::types::{
     create_commit_to_air_graph, MultiStarkPartialProvingKey, ProverOnlySinglePreprocessedData,
     StarkPartialProvingKey, StarkPartialVerifyingKey, TraceWidth, VerifierSinglePreprocessedData,
 };
-
-/// Constants for interactive AIRs
-const NUM_PERM_CHALLENGES: usize = 2;
-const NUM_PERM_EXPOSED_VALUES: usize = 1;
 
 /// Stateful builder to create multi-stark proving and verifying keys
 /// for system of multiple RAPs with multiple multi-matrix commitments
@@ -139,7 +134,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
         let (prep_prover_data, prep_verifier_data): (Option<_>, Option<_>) =
             self.get_single_preprocessed_data(air).unzip();
         let preprocessed_width = prep_prover_data.as_ref().map(|d| d.trace.width());
-        let perm_width = <dyn AnyRap<SC> as AirBridge<Val<SC>>>::permutation_width(air);
+
         let main_widths = partitioned_main_ptrs
             .iter()
             .map(|ptr| self.placeholder_main_matrix_in_commit[ptr.commit_index][ptr.matrix_index])
@@ -147,25 +142,12 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
         let width = TraceWidth {
             preprocessed: preprocessed_width,
             partitioned_main: main_widths,
-            after_challenge: perm_width.into_iter().collect(),
+            after_challenge: vec![],
         };
-        let num_challenges_to_sample = if width.after_challenge.is_empty() {
-            vec![]
-        } else {
-            vec![NUM_PERM_CHALLENGES]
-        };
-        let num_exposed_values = if width.after_challenge.is_empty() {
-            vec![]
-        } else {
-            vec![NUM_PERM_EXPOSED_VALUES]
-        };
-        let log_quotient_degree = get_log_quotient_degree(
-            air,
-            &width,
-            &num_challenges_to_sample,
-            num_public_values,
-            &num_exposed_values,
-        );
+        let symbolic_constraints =
+            get_symbolic_constraints(air, &width, &[], num_public_values, &[]);
+        let log_quotient_degree = symbolic_constraints.get_log_quotient_degree();
+
         let quotient_degree = 1 << log_quotient_degree;
         let vk = StarkPartialVerifyingKey {
             preprocessed_data: prep_verifier_data,

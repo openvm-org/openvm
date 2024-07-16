@@ -1,8 +1,7 @@
-use std::iter;
-
-use p3_air::{Air, AirBuilder, PermutationAirBuilder, VirtualPairCol};
+use p3_air::{Air, AirBuilder, PermutationAirBuilder};
 use p3_field::Field;
 use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
+use serde::{Deserialize, Serialize};
 
 /// Interaction debugging tools
 pub mod debug;
@@ -10,13 +9,17 @@ pub mod rap;
 pub mod trace;
 mod utils;
 
-#[derive(Copy, Clone, Debug)]
+/// Constants for interactive AIRs
+pub const NUM_PERM_CHALLENGES: usize = 2;
+pub const NUM_PERM_EXPOSED_VALUES: usize = 1;
+
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum InteractionType {
     Send,
     Receive,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Interaction<Expr> {
     pub fields: Vec<Expr>,
     pub count: Expr,
@@ -66,42 +69,18 @@ pub trait InteractionBuilder: AirBuilder {
     /// Returns all interactions stored.
     fn all_interactions(&self) -> &[Interaction<Self::Expr>];
 
+    /// For internal use. Called after all constraints prior to challenge phases have been evaluated.
+    fn finalize_interactions(&mut self);
+
     /// For internal use. For each interaction, the expression for the multiplicity on the _next_ row.
     // This could be supplied by the user, but the devex seems worse.
     fn all_multiplicities_next(&self) -> Vec<Self::Expr>;
 }
 
-pub trait AirBridge<F: Field> {
-    fn sends(&self) -> Vec<Interaction<F>> {
-        vec![]
-    }
-
-    fn receives(&self) -> Vec<Interaction<F>> {
-        vec![]
-    }
-
-    fn all_interactions(&self) -> Vec<(Interaction<F>, InteractionType)> {
-        iter::empty()
-            .chain(self.sends().into_iter().map(|i| (i, InteractionType::Send)))
-            .chain(
-                self.receives()
-                    .into_iter()
-                    .map(|i| (i, InteractionType::Receive)),
-            )
-            .collect()
-    }
-
-    /// Width of the permutation trace.
-    fn permutation_width(&self) -> Option<usize> {
-        let num_interactions = self.sends().len() + self.receives().len();
-        (num_interactions != 0).then_some(num_interactions + 1)
-    }
-}
-
 /// An interactive AIR is a AIR that can specify buses for sending and receiving data
 /// to other AIRs. The original AIR is augmented by virtual columns determined by
 /// the interactions to define a [RAP](crate::rap::Rap).
-pub trait InteractiveAir<AB: AirBuilder>: Air<AB> + AirBridge<AB::F> {
+pub trait InteractiveAir<AB: InteractionBuilder>: Air<AB> {
     /// Generates the permutation trace for the RAP given the main trace.
     /// The permutation trace depends on two random values which the challenger draws
     /// after committing to all parts of the main trace, including multiplicities.
@@ -127,7 +106,7 @@ pub trait InteractiveAir<AB: AirBuilder>: Air<AB> + AirBridge<AB::F> {
 
 impl<AB, A> InteractiveAir<AB> for A
 where
-    AB: AirBuilder,
-    A: Air<AB> + AirBridge<AB::F>,
+    A: Air<AB>,
+    AB: InteractionBuilder,
 {
 }
