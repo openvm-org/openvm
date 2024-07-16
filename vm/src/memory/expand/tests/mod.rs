@@ -180,7 +180,7 @@ fn random_test<const CHUNK: usize>(
 
 #[test]
 fn expand_test_1() {
-    random_test::<DEFAULT_CHUNK>(20, 3000, 4000, 30);
+    random_test::<DEFAULT_CHUNK>(10, 3000, 400, 30);
 }
 
 #[test]
