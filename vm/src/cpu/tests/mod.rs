@@ -1,5 +1,5 @@
 use crate::cpu::columns::{CpuCols, CpuIoCols};
-use crate::cpu::{max_accesses_per_instruction, CpuAir, CpuOptions};
+use crate::cpu::{max_accesses_per_instruction, CpuChip, CpuOptions};
 use crate::field_arithmetic::ArithmeticOperation;
 use crate::memory::{decompose, MemoryAccess, OpType};
 use crate::vm::config::VmParamsConfig;
@@ -120,7 +120,7 @@ fn execution_test<const WORD_SIZE: usize>(
         field_arithmetic_enabled,
         field_extension_enabled,
     );
-    let mut trace = CpuAir::generate_trace(&mut vm.segments[0]).unwrap();
+    let mut trace = CpuChip::generate_trace(&mut vm.segments[0]).unwrap();
 
     let mut actual_memory_log = vm.segments[0].memory_chip.accesses.clone();
     // temporary
@@ -215,7 +215,7 @@ fn air_test_change<
         field_arithmetic_enabled,
         field_extension_enabled,
     );
-    let mut trace = CpuAir::generate_trace(&mut vm.segments[0]).unwrap();
+    let mut trace = CpuChip::generate_trace(&mut vm.segments[0]).unwrap();
     let mut rows = vec![];
     for i in 0..trace.height() {
         rows.push(CpuCols::<WORD_SIZE, BabyBear>::from_slice(
@@ -285,7 +285,7 @@ fn air_test_change<
     let test_result = if field_arithmetic_enabled {
         run_simple_test_no_pis(
             vec![
-                &vm.segments[0].cpu_air,
+                &vm.segments[0].cpu_chip.air,
                 &program_air,
                 &memory_air,
                 &arithmetic_air,
@@ -294,7 +294,7 @@ fn air_test_change<
         )
     } else {
         run_simple_test_no_pis(
-            vec![&vm.segments[0].cpu_air, &program_air, &memory_air],
+            vec![&vm.segments[0].cpu_chip.air, &program_air, &memory_air],
             vec![trace, program_trace, memory_trace],
         )
     };

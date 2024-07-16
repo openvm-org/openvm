@@ -5,7 +5,7 @@ use super::VmParamsConfig;
 use crate::{
     cpu::{
         trace::{ExecutionError, Instruction},
-        CpuAir, CpuOptions, POSEIDON2_BUS, RANGE_CHECKER_BUS,
+        CpuChip, CpuOptions, POSEIDON2_BUS, RANGE_CHECKER_BUS,
     },
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
@@ -22,7 +22,7 @@ use p3_util::log2_strict_usize;
 
 pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub config: VmParamsConfig,
-    pub cpu_air: CpuAir<WORD_SIZE>,
+    pub cpu_chip: CpuChip<WORD_SIZE, F>,
     pub program_chip: ProgramChip<F>,
     pub memory_chip: MemoryChip<WORD_SIZE, F>,
     pub field_arithmetic_chip: FieldArithmeticChip<F>,
@@ -46,7 +46,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
 
         let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, 1 << decomp));
 
-        let cpu_air = CpuAir::new(config.cpu_options());
+        // TODO: reduce cloning
+        let cpu_chip = CpuChip::new(config.cpu_options());
         let program_chip = ProgramChip::new(program.clone());
         let memory_chip = MemoryChip::new(limb_bits, limb_bits, limb_bits, decomp);
         let field_arithmetic_chip = FieldArithmeticChip::new();
@@ -58,7 +59,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
 
         Self {
             config,
-            cpu_air,
+            cpu_chip,
             program_chip,
             memory_chip,
             field_arithmetic_chip,
@@ -77,7 +78,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
     /// Execution is determined by CPU trace generation, in turn determined by segment::continue_execution()
     /// which determines whether to continue execution or not
     pub fn generate_traces(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
-        let cpu_trace = CpuAir::generate_trace(self)?;
+        let cpu_trace = CpuChip::generate_trace(self)?;
         let mut result = vec![
             cpu_trace,
             self.program_chip.generate_trace(),
@@ -96,6 +97,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         Ok(result)
     }
 
+    /// TODO: reduce cloning
     pub fn traces(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
         if self.traces.is_empty() {
             self.traces = self.generate_traces()?;

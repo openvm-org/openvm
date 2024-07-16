@@ -157,4 +157,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
     pub fn write_elem(&mut self, timestamp: usize, address_space: F, address: F, data: F) {
         self.write_word(timestamp, address_space, address, decompose(data));
     }
+
+    pub fn current_height(&self) -> usize {
+        self.accesses.len()
+    }
 }

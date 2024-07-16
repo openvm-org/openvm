@@ -153,16 +153,32 @@ impl CpuOptions {
 #[derive(Default, Clone)]
 pub struct CpuAir<const WORD_SIZE: usize> {
     pub options: CpuOptions,
-    pub is_done: bool,
-    pub pc: usize,
 }
 
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
     pub fn new(options: CpuOptions) -> Self {
+        Self { options }
+    }
+}
+
+pub struct CpuChip<const WORD_SIZE: usize, F: Clone> {
+    pub air: CpuAir<WORD_SIZE>,
+    pub rows: Vec<Vec<F>>,
+    pub is_done: bool,
+    pub pc: usize,
+}
+
+impl<const WORD_SIZE: usize, F: Clone> CpuChip<WORD_SIZE, F> {
+    pub fn new(options: CpuOptions) -> Self {
         Self {
-            options,
+            air: CpuAir::new(options),
+            rows: vec![],
             is_done: false,
             pc: 0,
         }
+    }
+
+    pub fn current_height(&self) -> usize {
+        self.rows.len()
     }
 }

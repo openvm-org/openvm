@@ -70,6 +70,10 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
         3 + (2 * WIDTH)
     }
+
+    pub fn current_height(&self) -> usize {
+        self.rows.len()
+    }
 }
 
 const WIDTH: usize = 16;

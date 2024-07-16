@@ -13,7 +13,7 @@ use crate::{field_extension::FieldExtensionArithmeticChip, vm::ExecutionSegment}
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
-    max_accesses_per_instruction, CpuAir,
+    max_accesses_per_instruction, CpuChip,
     OpCode::{self, *},
     CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
 };
@@ -109,15 +109,13 @@ impl Display for ExecutionError {
 
 impl Error for ExecutionError {}
 
-impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
-    pub fn generate_trace<F: PrimeField32>(
+impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
+    pub fn generate_trace(
         vm: &mut ExecutionSegment<WORD_SIZE, F>,
     ) -> Result<RowMajorMatrix<F>, ExecutionError> {
-        let mut rows = vec![];
-
         let mut clock_cycle: usize = 0;
         let mut timestamp: usize = 0;
-        let mut pc = F::from_canonical_usize(vm.cpu_air.pc);
+        let mut pc = F::from_canonical_usize(vm.cpu_chip.pc);
 
         let mut witness_idx = 0;
 
@@ -281,14 +279,14 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             };
 
             let cols = CpuCols { io, aux };
-            rows.extend(cols.flatten(vm.options()));
+            vm.cpu_chip.rows.push(cols.flatten(vm.options()));
 
             pc = next_pc;
             timestamp += max_accesses_per_instruction(opcode);
 
             clock_cycle += 1;
             if opcode == TERMINATE && clock_cycle.is_power_of_two() {
-                vm.cpu_air.is_done = true;
+                vm.cpu_chip.is_done = true;
                 break;
             }
             if vm.switch_segments()? {
@@ -297,7 +295,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
         }
 
         Ok(RowMajorMatrix::new(
-            rows,
+            vm.cpu_chip.rows.concat(),
             CpuCols::<WORD_SIZE, F>::get_width(vm.options()),
         ))
     }

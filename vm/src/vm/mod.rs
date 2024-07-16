@@ -51,12 +51,12 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
     }
 
     pub fn next_segment(&mut self) {
-        let pc = self.segments.last().unwrap().cpu_air.pc;
+        let pc = self.segments.last().unwrap().cpu_chip.pc;
         let state = self.segments.last().unwrap().memory_chip.get_memory();
 
         self.new_segment();
 
-        self.segments.last_mut().unwrap().cpu_air.pc = pc;
+        self.segments.last_mut().unwrap().cpu_chip.pc = pc;
         self.segments
             .last_mut()
             .unwrap()
@@ -72,7 +72,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
         let mut result = vec![];
         loop {
             result.extend(self.segments.last_mut().unwrap().generate_traces()?);
-            if self.segments.last_mut().unwrap().cpu_air.is_done {
+            if self.segments.last_mut().unwrap().cpu_chip.is_done {
                 break;
             }
             // Add additional traces for committing, if needed
@@ -99,7 +99,7 @@ where
     Val<SC>: PrimeField32,
 {
     let mut result: Vec<&dyn AnyRap<SC>> = vec![
-        &segment.cpu_air,
+        &segment.cpu_chip.air,
         &segment.program_chip.air,
         &segment.memory_chip.air,
         &segment.range_checker.air,

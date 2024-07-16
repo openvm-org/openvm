@@ -237,6 +237,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
             );
         }
     }
+
+    pub fn current_height(&self) -> usize {
+        self.operations.len()
+    }
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> Default
