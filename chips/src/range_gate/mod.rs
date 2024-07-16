@@ -5,6 +5,9 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Default)]
 pub struct RangeCheckerGateAir {
     pub bus_index: usize,

@@ -7,13 +7,16 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-#[derive(Default)]
+#[cfg(test)]
+pub mod tests;
+
+#[derive(Clone, Copy, Default, Debug)]
 pub struct RangeCheckerAir {
     bus_index: usize,
     range_max: u32,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default, Debug)]
 pub struct RangeCheckerChip {
     pub air: RangeCheckerAir,
     count: Vec<Arc<AtomicU32>>,
