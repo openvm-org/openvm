@@ -8,7 +8,6 @@ use logical_interface::{
     afs_interface::AfsInterface,
     mock_db::MockDb,
 };
-use p3_util::log2_strict_usize;
 
 use crate::commands::CommonCommands;
 
@@ -46,13 +45,10 @@ pub fn inner_join_setup(
     Page,
     usize,
     usize,
-    usize,
-    usize,
 ) {
     let mut db = MockDb::from_file(&common.db_path);
     let height = config.page.height;
     let bits_per_fe = config.page.bits_per_fe;
-    let degree = log2_strict_usize(height);
     let range_chip_idx_decomp = 4;
 
     let inner_join_op = InnerJoinOp::parse(op.args).unwrap();
@@ -94,8 +90,6 @@ pub fn inner_join_setup(
         page_left,
         page_right,
         height,
-        bits_per_fe,
-        degree,
         range_chip_idx_decomp,
     )
 }

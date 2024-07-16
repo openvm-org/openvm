@@ -39,8 +39,6 @@ where
             page_left,
             page_right,
             height,
-            _bits_per_fe,
-            _degree,
             range_chip_idx_decomp,
         ) = inner_join_setup(config, common, op);
 

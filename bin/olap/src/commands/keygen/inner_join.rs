@@ -38,9 +38,7 @@ where
             _inner_join_op,
             _page_left,
             _page_right,
-            height,
-            _bits_per_fe,
-            _degree,
+            _height,
             range_chip_idx_decomp,
         ) = inner_join_setup(config, common, op);
 
@@ -51,12 +49,7 @@ where
             range_chip_idx_decomp,
         );
         let mut keygen_builder = engine.keygen_builder();
-        inner_join_controller.set_up_keygen_builder(
-            &mut keygen_builder,
-            height,
-            height,
-            2 * height,
-        );
+        inner_join_controller.set_up_keygen_builder(&mut keygen_builder);
         let partial_pk = keygen_builder.generate_partial_pk();
         let partial_vk = partial_pk.partial_vk();
 
