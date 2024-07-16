@@ -1,20 +1,20 @@
-use std::collections::{HashMap, HashSet};
+use std::array::from_fn;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use p3_field::PrimeField32;
 
-use afs_chips::sub_chip::LocalTraceInstructions;
-use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
 use MemoryNode::*;
 
 fn hash<const CHUNK: usize, F: PrimeField32>(left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK] {
-    assert_eq!(CHUNK, 8);
+    from_fn(|i| left[i] + right[i])
+    /*assert_eq!(CHUNK, 8);
     let air =
         Poseidon2Air::<16, F>::from_config(Poseidon2Config::<16, F>::new_p3_baby_bear_16(), 0);
     let input_state = [left, right].concat().try_into().unwrap();
     let internal = air.generate_trace_row(input_state);
     let output = internal.io.output.to_vec();
-    output.try_into().unwrap()
+    output[0..8].try_into().unwrap()*/
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -61,7 +61,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
             }
             Leaf(values)
         } else {
-            let midpoint: usize = 1 << (height - 1);
+            let midpoint: usize = CHUNK << (height - 1);
             let mut left_memory = HashMap::new();
             let mut right_memory = HashMap::new();
             for (address, value) in memory {
@@ -80,14 +80,11 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
 
 pub fn trees_from_full_memory<const CHUNK: usize, F: PrimeField32>(
     height: usize,
+    address_spaces: &[F],
     memory: &HashMap<(F, F), F>,
 ) -> HashMap<F, MemoryNode<CHUNK, F>> {
     let mut trees = HashMap::new();
-    for &address_space in memory
-        .keys()
-        .map(|(address_space, _)| address_space)
-        .collect::<HashSet<_>>()
-    {
+    for &address_space in address_spaces {
         let mut memory_here = HashMap::new();
         for (&(relevant_address_space, address), &value) in memory {
             if relevant_address_space == address_space {

@@ -5,7 +5,8 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use crate::memory::expand::columns::ExpandCols;
-use crate::memory::expand::ExpandAir;
+
+pub struct ExpandAir<const CHUNK: usize> {}
 
 impl<const CHUNK: usize, F: Field> BaseAir<F> for ExpandAir<CHUNK> {
     fn width(&self) -> usize {

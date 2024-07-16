@@ -55,7 +55,7 @@ fn add_trace_rows<const CHUNK: usize, F: PrimeField32>(
     let initial_cols = if let NonLeaf(hash, left, right) = initial_node {
         ExpandCols {
             multiplicity: F::one(),
-            is_compress: F::neg_one(),
+            is_compress: F::zero(),
             address_space,
             parent_height: F::from_canonical_usize(height - 1),
             parent_label: F::from_canonical_usize(label),
@@ -105,10 +105,12 @@ fn recur<const CHUNK: usize, F: PrimeField32>(
 ) -> MemoryNode<CHUNK, F> {
     if height == 0 {
         Leaf(from_fn(|i| {
-            final_memory[&(
-                address_space,
-                F::from_canonical_usize(CHUNK * label) + F::from_canonical_usize(i),
-            )]
+            *final_memory
+                .get(&(
+                    address_space,
+                    F::from_canonical_usize(CHUNK * label) + F::from_canonical_usize(i),
+                ))
+                .unwrap_or(&F::zero())
         }))
     } else if let NonLeaf(_, initial_left_node, initial_right_node) = initial_node.clone() {
         let left_label = 2 * label;
@@ -135,7 +137,7 @@ fn recur<const CHUNK: usize, F: PrimeField32>(
             Arc::new(recur(
                 height - 1,
                 (*initial_right_node).clone(),
-                left_label,
+                right_label,
                 address_space,
                 final_memory,
                 touched_nodes,
@@ -153,6 +155,10 @@ fn recur<const CHUNK: usize, F: PrimeField32>(
             right_is_final,
             address_space,
             trace_rows,
+        );
+        println!(
+            "recur(as = {}, height = {}, label = {}) -> final_node = {:?}",
+            address_space, height, label, final_node
         );
         final_node
     } else {

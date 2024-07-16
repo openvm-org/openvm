@@ -3,8 +3,9 @@ use p3_field::Field;
 
 use afs_stark_backend::interaction::{AirBridge, Interaction};
 
+use crate::memory::expand::air::ExpandAir;
 use crate::memory::expand::columns::ExpandCols;
-use crate::memory::expand::{ExpandAir, EXPAND_BUS};
+use crate::memory::expand::EXPAND_BUS;
 
 fn interaction<const CHUNK: usize, F: Field>(
     sends: VirtualPairCol<F>,

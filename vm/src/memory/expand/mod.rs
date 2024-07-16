@@ -2,17 +2,18 @@ use std::collections::{HashMap, HashSet};
 
 use p3_field::PrimeField32;
 
+use crate::memory::expand::air::ExpandAir;
 use crate::memory::tree::MemoryNode;
 
 pub mod air;
 pub mod bridge;
 pub mod columns;
-mod tests;
 pub mod trace;
 
-pub const EXPAND_BUS: usize = 4;
+#[cfg(test)]
+mod tests;
 
-pub struct ExpandAir<const CHUNK: usize> {}
+pub const EXPAND_BUS: usize = 4;
 
 pub struct ExpandChip<const CHUNK: usize, F: PrimeField32> {
     pub height: usize,
@@ -36,12 +37,14 @@ impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {
         }
     }
 
-    pub fn air() -> ExpandAir<CHUNK> {
+    pub fn air(&self) -> ExpandAir<CHUNK> {
         ExpandAir {}
     }
 
     fn touch_node(&mut self, address_space: F, height: usize, label: usize) {
+        println!("touch_node({}, {}, {})", address_space, height, label);
         if self.touched_nodes.insert((address_space, height, label)) {
+            assert_ne!(height, self.height);
             if height != 0 {
                 self.num_touched_nonleaves += 1;
             }
