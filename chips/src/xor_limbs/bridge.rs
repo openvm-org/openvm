@@ -1,23 +1,26 @@
-use super::columns::XorLimbsCols;
-use afs_stark_backend::interaction::{AirBridge, Interaction};
-use p3_field::PrimeField64;
+use crate::sub_chip::SubAirBridge;
 
-use super::XorLimbsAir;
+use super::{air::XorLimbsAir, columns::XorLimbsCols};
+use afs_stark_backend::interaction::InteractionBuilder;
+use itertools::izip;
+use p3_field::AbstractField;
 
-impl<F: PrimeField64, const N: usize, const M: usize> AirBridge<F> for XorLimbsAir<N, M> {
-    fn sends(&self) -> Vec<Interaction<F>> {
-        let num_cols = XorLimbsCols::<N, M, F>::get_width();
-        let all_cols = (0..num_cols).collect::<Vec<usize>>();
+impl<AB: InteractionBuilder, const N: usize, const M: usize> SubAirBridge<AB>
+    for XorLimbsAir<N, M>
+{
+    type View = XorLimbsCols<N, M, AB::Var>;
 
-        let cols_numbered = XorLimbsCols::<N, M, F>::cols_numbered(&all_cols);
-        self.sends_custom(cols_numbered)
-    }
+    fn eval_interactions(&self, builder: &mut AB, local: Self::View) {
+        // Send (x, y, z) where x and y have M bits.
+        for (x, y, z) in izip!(local.x_limbs, local.y_limbs, local.z_limbs) {
+            builder.push_send(self.bus_index, vec![x, y, z], AB::F::one());
+        }
 
-    fn receives(&self) -> Vec<Interaction<F>> {
-        let num_cols = XorLimbsCols::<N, M, F>::get_width();
-        let all_cols = (0..num_cols).collect::<Vec<usize>>();
-
-        let cols_numbered = XorLimbsCols::<N, M, F>::cols_numbered(&all_cols);
-        self.receives_custom(cols_numbered)
+        // Receive (x, y, z) where x and y have N bits.
+        builder.push_receive(
+            self.bus_index,
+            vec![local.x, local.y, local.z],
+            AB::F::one(),
+        );
     }
 }

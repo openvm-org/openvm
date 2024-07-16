@@ -1,6 +1,5 @@
-use afs_stark_backend::interaction::{Interaction, InteractionBuilder};
-use p3_air::{Air, AirBuilder};
-use p3_field::Field;
+use afs_stark_backend::interaction::InteractionBuilder;
+use p3_air::AirBuilder;
 
 pub trait AirConfig {
     /// Column struct over generic type

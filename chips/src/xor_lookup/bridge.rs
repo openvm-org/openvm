@@ -1,22 +1,21 @@
-use afs_stark_backend::interaction::{AirBridge, Interaction};
-use p3_air::VirtualPairCol;
-use p3_field::PrimeField64;
+use afs_stark_backend::interaction::InteractionBuilder;
+
+use crate::sub_chip::SubAirBridge;
 
 use super::{
-    columns::{XOR_LOOKUP_COL_MAP, XOR_LOOKUP_PREPROCESSED_COL_MAP},
+    columns::{XorLookupCols, XorLookupPreprocessedCols},
     XorLookupAir,
 };
 
-impl<F: PrimeField64, const M: usize> AirBridge<F> for XorLookupAir<M> {
-    fn receives(&self) -> Vec<Interaction<F>> {
-        vec![Interaction {
-            fields: vec![
-                VirtualPairCol::single_preprocessed(XOR_LOOKUP_PREPROCESSED_COL_MAP.x),
-                VirtualPairCol::single_preprocessed(XOR_LOOKUP_PREPROCESSED_COL_MAP.y),
-                VirtualPairCol::single_preprocessed(XOR_LOOKUP_PREPROCESSED_COL_MAP.z),
-            ],
-            count: VirtualPairCol::single_main(XOR_LOOKUP_COL_MAP.mult),
-            argument_index: self.bus_index,
-        }]
+impl<AB: InteractionBuilder, const M: usize> SubAirBridge<AB> for XorLookupAir<M> {
+    /// Local preprocessed and main trace rows.
+    type View = (XorLookupPreprocessedCols<AB::Var>, XorLookupCols<AB::Var>);
+
+    fn eval_interactions(&self, builder: &mut AB, (preprocessed, main): Self::View) {
+        builder.push_receive(
+            self.bus_index,
+            vec![preprocessed.x, preprocessed.y, preprocessed.z],
+            main.mult,
+        );
     }
 }
