@@ -1116,10 +1116,10 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::HintInputVec() => write!(f, "hint_vec"),
             AsmInstruction::StoreHintWord(dst, index, offset, size) => {
                 write!(f, "shintw ({})fp ({})fp {} {}", dst, index, offset, size)
-            },
+            }
             AsmInstruction::StoreHintWordI(dst, index, offset, size) => {
                 write!(f, "shintw ({})fp {} {} {}", dst, index, offset, size)
-            },
+            }
             AsmInstruction::FriFold(m, input_ptr) => {
                 write!(f, "fri_fold ({})fp, ({})fp", m, input_ptr)
             }

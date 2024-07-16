@@ -1,7 +1,7 @@
-use std::{collections::BTreeMap, error::Error, fmt::Display};
-use std::collections::VecDeque;
 use p3_field::{Field, PrimeField32, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
+use std::collections::VecDeque;
+use std::{collections::BTreeMap, error::Error, fmt::Display};
 
 use afs_chips::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
@@ -100,16 +100,8 @@ impl Display for ExecutionError {
             ExecutionError::DisabledOperation(pc, op) => {
                 write!(f, "at pc = {}, opcode {:?} was not enabled", pc, op)
             }
-            ExecutionError::HintOutOfBounds(pc) => write!(
-                f,
-                "at pc = {}",
-                pc
-            ),
-            ExecutionError::EndOfInputStream(pc) => write!(
-                f,
-                "at pc = {}",
-                pc
-            )
+            ExecutionError::HintOutOfBounds(pc) => write!(f, "at pc = {}", pc),
+            ExecutionError::EndOfInputStream(pc) => write!(f, "at pc = {}", pc),
         }
     }
 }
@@ -256,7 +248,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 HINTVEC => {
                     let hint = match vm.input_stream.pop_front() {
                         Some(hint) => hint,
-                        None => return Err(ExecutionError::EndOfInputStream(pc_usize))
+                        None => return Err(ExecutionError::EndOfInputStream(pc_usize)),
                     };
                     hint_stream = VecDeque::new();
                     hint_stream.push_back(F::from_canonical_usize(hint.len()));
@@ -276,7 +268,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 SHINTW => {
                     let hint = match hint_stream.pop_front() {
                         Some(hint) => hint,
-                        None => return Err(ExecutionError::HintOutOfBounds(pc_usize))
+                        None => return Err(ExecutionError::HintOutOfBounds(pc_usize)),
                     };
                     let base_pointer = read!(d, a);
                     write!(e, base_pointer + b, hint);

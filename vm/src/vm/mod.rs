@@ -43,11 +43,7 @@ pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
-    pub fn new(
-        config: VmConfig,
-        program: Vec<Instruction<F>>,
-        input_stream: Vec<Vec<F>>,
-    ) -> Self {
+    pub fn new(config: VmConfig, program: Vec<Instruction<F>>, input_stream: Vec<Vec<F>>) -> Self {
         let decomp = config.decomp;
         let limb_bits = config.limb_bits;
 

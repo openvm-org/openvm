@@ -99,7 +99,9 @@ use crate::field_extension::FieldExtensionArithmeticAir;
 use crate::poseidon2::Poseidon2Chip;
 use OpCode::*;
 
-pub const CORE_INSTRUCTIONS: [OpCode; 9] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, SHINTW, HINTVEC, HINTBITS];
+pub const CORE_INSTRUCTIONS: [OpCode; 9] = [
+    LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, SHINTW, HINTVEC, HINTBITS,
+];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
 

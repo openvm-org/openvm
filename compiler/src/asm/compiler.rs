@@ -458,13 +458,13 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 },
                 DslIr::HintBitsF(var) => {
                     self.push(AsmInstruction::HintBits(var.fp()), trace);
-                },
+                }
                 DslIr::HintBitsV(var) => {
                     self.push(AsmInstruction::HintBits(var.fp()), trace);
-                },
+                }
                 DslIr::HintBitsU(_) => {
                     todo!()
-                },
+                }
                 DslIr::Poseidon2PermuteBabyBear(dst, src) => match (dst, src) {
                     (Array::Dyn(dst, _), Array::Dyn(src, _)) => {
                         self.push(AsmInstruction::Poseidon2Permute(dst.fp(), src.fp()), trace)
@@ -477,7 +477,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::PrintE(dst) => self.push(AsmInstruction::PrintE(dst.fp()), trace),
                 DslIr::HintInputVec() => {
                     self.push(AsmInstruction::HintInputVec(), trace);
-                },
+                }
                 DslIr::StoreHintWord(ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
                         AsmInstruction::StoreHintWordI(ptr.fp(), index, offset, size),
