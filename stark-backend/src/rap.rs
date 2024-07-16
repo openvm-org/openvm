@@ -4,12 +4,9 @@
 use p3_air::{BaseAir, PermutationAirBuilder};
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::{
-    air_builders::{
-        debug::DebugConstraintBuilder, prover::ProverConstraintFolder,
-        symbolic::SymbolicRapBuilder, verifier::VerifierConstraintFolder,
-    },
-    interaction::InteractiveAir,
+use crate::air_builders::{
+    debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicRapBuilder,
+    verifier::VerifierConstraintFolder,
 };
 
 /// An AIR that works with a particular `AirBuilder` which allows preprocessing
@@ -43,23 +40,21 @@ pub trait PermutationAirBuilderWithExposedValues: PermutationAirBuilder {
 /// RAP trait for all-purpose dynamic dispatch use.
 /// This trait is auto-implemented if you implement `Air` and `Chip` traits.
 pub trait AnyRap<SC: StarkGenericConfig>:
-for<'a> InteractiveAir<ProverConstraintFolder<'a, SC>> // for prover permutation trace generation
+    Rap<SymbolicRapBuilder<Val<SC>>> // for keygen to extract fixed data about the RAP
     + for<'a> Rap<ProverConstraintFolder<'a, SC>> // for prover quotient polynomial calculation
     + for<'a> Rap<VerifierConstraintFolder<'a, SC>> // for verifier quotient polynomial calculation
     + for<'a> Rap<DebugConstraintBuilder<'a, SC>> // for debugging
-    + BaseAir<Val<SC>> + AirBridge<Val<SC>> + Rap<SymbolicRapBuilder<Val<SC>>> // for keygen to extract fixed data about the RAP
+    + BaseAir<Val<SC>>
 {
 }
 
 impl<SC, T> AnyRap<SC> for T
 where
     SC: StarkGenericConfig,
-    T: for<'a> InteractiveAir<ProverConstraintFolder<'a, SC>>
+    T: Rap<SymbolicRapBuilder<Val<SC>>>
         + for<'a> Rap<ProverConstraintFolder<'a, SC>>
         + for<'a> Rap<VerifierConstraintFolder<'a, SC>>
         + for<'a> Rap<DebugConstraintBuilder<'a, SC>>
-        + BaseAir<Val<SC>>
-        + AirBridge<Val<SC>>
-        + Rap<SymbolicRapBuilder<Val<SC>>>,
+        + BaseAir<Val<SC>>,
 {
 }

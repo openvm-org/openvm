@@ -6,7 +6,7 @@ use std::{
 
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
-    keygen::types::MultiStarkPartialVerifyingKey,
+    keygen::types::MultiStarkVerifyingKey,
     prover::{trace::TraceCommitmentBuilder, types::Proof},
 };
 use afs_test_utils::{
@@ -31,7 +31,7 @@ pub fn prove<SC: StarkGenericConfig, E: StarkEngine<SC>>(
     trace: Vec<(u32, Vec<u32>)>,
     partition: bool,
 ) -> (
-    MultiStarkPartialVerifyingKey<SC>,
+    MultiStarkVerifyingKey<SC>,
     DummyInteractionAir,
     Proof<SC>,
     Vec<Vec<Val<SC>>>,

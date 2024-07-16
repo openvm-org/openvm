@@ -13,6 +13,7 @@ use crate::{
     air_builders::debug::check_constraints::{check_constraints, check_logup},
     commit::CommittedSingleMatrixView,
     config::{Com, PcsProof, PcsProverData},
+    interaction::trace::generate_permutation_trace,
     keygen::types::MultiStarkProvingKey,
     prover::trace::SingleRapCommittedTraceView,
     rap::AnyRap,
@@ -111,13 +112,16 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
                     .per_air
                     .par_iter()
                     .zip_eq(main_trace_data.air_traces.par_iter())
-                    .map(|(pk, main)| {
-                        let air = main.air;
+                    .zip_eq(public_values.par_iter())
+                    .map(|((pk, main), public_values)| {
+                        let interactions = &pk.vk.symbolic_constraints.interactions;
                         let preprocessed_trace =
                             pk.preprocessed_data.as_ref().map(|d| d.trace.as_view());
-                        air.generate_permutation_trace(
+                        generate_permutation_trace(
+                            interactions,
                             &preprocessed_trace,
                             &main.partitioned_main_trace,
+                            public_values,
                             perm_challenges,
                         )
                     })
@@ -149,10 +153,8 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         #[cfg(debug_assertions)]
         USE_DEBUG_BUILDER.with(|debug| {
             if *debug.lock().unwrap() {
-                let mut raps = vec![];
                 let mut preprocessed = vec![];
                 let mut partitioned_main = vec![];
-                let mut permutation = vec![];
                 for (
                     (((preprocessed_trace, main_data), perm_trace), cumulative_sum_and_index),
                     pis,
@@ -178,12 +180,20 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
                         cumulative_sum.map(|c| vec![c]).as_slice(),
                     );
 
-                    raps.push(rap);
                     preprocessed.push(preprocessed_trace);
                     partitioned_main.push(partitioned_main_trace.as_slice());
-                    permutation.push(perm_trace);
                 }
-                check_logup(&raps, &preprocessed, &partitioned_main);
+                let interactions = pk
+                    .per_air
+                    .iter()
+                    .map(|pk| &pk.vk.symbolic_constraints.interactions[..])
+                    .collect_vec();
+                check_logup(
+                    &interactions,
+                    &preprocessed,
+                    &partitioned_main,
+                    public_values,
+                );
             }
         });
 
@@ -323,12 +333,8 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             .map(|pk| pk.vk.quotient_degree)
             .collect_vec();
         let quotient_committer = QuotientCommitter::new(pcs, challenges, alpha);
-        let quotient_values = quotient_committer.quotient_values(
-            raps,
-            trace_views.clone(),
-            &quotient_degrees,
-            public_values,
-        );
+        let quotient_values =
+            quotient_committer.quotient_values(raps, pk, trace_views.clone(), public_values);
         // Commit to quotient polynomias. One shared commit for all quotient polynomials
         let quotient_data = quotient_committer.commit(quotient_values);
 

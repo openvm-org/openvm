@@ -6,6 +6,7 @@ use p3_air::{
 };
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
+use p3_matrix::Matrix;
 use p3_util::log2_ceil_usize;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
@@ -112,12 +113,14 @@ impl<F: Field> SymbolicRapBuilder<F> {
         let partitioned_main: Vec<_> = width
             .partitioned_main
             .iter()
-            .map(|&width| {
+            .enumerate()
+            .map(|(part_index, &width)| {
                 let mat_values = [0, 1]
                     .into_iter()
                     .flat_map(|offset| {
-                        (0..width)
-                            .map(move |index| SymbolicVariable::new(Entry::Main { offset }, index))
+                        (0..width).map(move |index| {
+                            SymbolicVariable::new(Entry::Main { part_index, offset }, index)
+                        })
                     })
                     .collect_vec();
                 RowMajorMatrix::new(mat_values, width)
@@ -168,7 +171,7 @@ impl<F: Field> SymbolicRapBuilder<F> {
     pub fn width(&self) -> TraceWidth {
         let preprocessed_width = self.preprocessed.width();
         TraceWidth {
-            preprocessed: (preprocessed_width != 0).then(|| preprocessed_width),
+            preprocessed: (preprocessed_width != 0).then_some(preprocessed_width),
             partitioned_main: self.partitioned_main.iter().map(|m| m.width()).collect(),
             after_challenge: self.after_challenge.iter().map(|m| m.width()).collect(),
         }

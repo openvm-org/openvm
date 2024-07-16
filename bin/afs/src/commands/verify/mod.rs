@@ -6,7 +6,7 @@ use std::{
 };
 
 use afs_chips::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
-use afs_stark_backend::{keygen::types::MultiStarkPartialVerifyingKey, prover::types::Proof};
+use afs_stark_backend::{keygen::types::MultiStarkVerifyingKey, prover::types::Proof};
 use afs_test_utils::{
     engine::StarkEngine,
     page_config::{PageConfig, PageMode},
@@ -108,7 +108,7 @@ where
         println!("Verifying proof file: {}", proof_file);
 
         let encoded_vk = read_from_path(keys_folder.clone() + "/" + &prefix + ".vk").unwrap();
-        let vk: MultiStarkPartialVerifyingKey<SC> = bincode::deserialize(&encoded_vk).unwrap();
+        let vk: MultiStarkVerifyingKey<SC> = bincode::deserialize(&encoded_vk).unwrap();
 
         let encoded_proof = read_from_path(proof_file.clone()).unwrap();
         let proof: Proof<SC> = bincode::deserialize(&encoded_proof).unwrap();

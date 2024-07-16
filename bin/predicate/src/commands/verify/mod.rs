@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use afs_chips::single_page_index_scan::page_controller::PageController;
 use afs_stark_backend::{
-    config::PcsProverData, keygen::types::MultiStarkPartialVerifyingKey, prover::types::Proof,
+    config::PcsProverData, keygen::types::MultiStarkVerifyingKey, prover::types::Proof,
 };
 use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
 use bin_common::utils::io::{create_prefix, read_from_path};
@@ -93,7 +93,7 @@ where
         // Load from disk and deserialize partial verifying key
         let prefix = create_prefix(config);
         let encoded_vk = read_from_path(keys_folder.clone() + "/" + &prefix + ".vk").unwrap();
-        let vk: MultiStarkPartialVerifyingKey<SC> = bincode::deserialize(&encoded_vk).unwrap();
+        let vk: MultiStarkVerifyingKey<SC> = bincode::deserialize(&encoded_vk).unwrap();
 
         // Get proof
         let prefix = create_prefix(config);

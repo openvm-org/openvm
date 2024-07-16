@@ -4,7 +4,9 @@ use itertools::Itertools;
 use p3_field::Field;
 use p3_matrix::{dense::RowMajorMatrixView, Matrix};
 
-use super::{AirBridge, InteractionType};
+use crate::air_builders::symbolic::symbolic_expression::SymbolicEvaluator;
+
+use super::{trace::Evaluator, InteractionType, SymbolicInteraction};
 
 /// The actual interactions that are sent/received during a single run
 /// of trace generation. For debugging purposes only.
@@ -15,17 +17,14 @@ pub struct LogicalInteractions<F: Field> {
     pub at_bus: BTreeMap<usize, HashMap<Vec<F>, Vec<(usize, InteractionType, F)>>>,
 }
 
-pub fn generate_logical_interactions<F, A>(
+pub fn generate_logical_interactions<F: Field>(
     air_idx: usize,
-    air: &A,
+    all_interactions: &[SymbolicInteraction<F>],
     preprocessed: &Option<RowMajorMatrixView<F>>,
     partitioned_main: &[RowMajorMatrixView<F>],
+    public_values: &[F],
     logical_interactions: &mut LogicalInteractions<F>,
-) where
-    F: Field,
-    A: AirBridge<F> + ?Sized,
-{
-    let all_interactions = air.all_interactions();
+) {
     if all_interactions.is_empty() {
         return;
     }
@@ -33,34 +32,30 @@ pub fn generate_logical_interactions<F, A>(
     let height = partitioned_main[0].height();
 
     for n in 0..height {
-        let preprocessed_row = preprocessed
-            .as_ref()
-            .map(|preprocessed| {
-                // manual implementation of row_slice because of a drop issue
-                &preprocessed.values[n * preprocessed.width..(n + 1) * preprocessed.width]
-            })
-            .unwrap_or(&[]);
-        let main_row: Vec<F> = partitioned_main
-            .iter()
-            .flat_map(|main_part| main_part.row_slice(n).to_vec())
-            .collect();
-        for (interaction, interaction_type) in &all_interactions {
+        let evaluator = Evaluator {
+            preprocessed,
+            partitioned_main,
+            public_values,
+            height,
+            local_index: n,
+        };
+        for interaction in all_interactions {
             let fields = interaction
                 .fields
                 .iter()
-                .map(|columns| columns.apply::<F, F>(preprocessed_row, &main_row))
+                .map(|expr| evaluator.eval_expr(expr))
                 .collect_vec();
-            let count = interaction.count.apply::<F, F>(preprocessed_row, &main_row);
+            let count = evaluator.eval_expr(&interaction.count);
             if count.is_zero() {
                 continue;
             }
             logical_interactions
                 .at_bus
-                .entry(interaction.argument_index)
+                .entry(interaction.bus_index)
                 .or_default()
                 .entry(fields)
                 .or_default()
-                .push((air_idx, *interaction_type, count));
+                .push((air_idx, interaction.interaction_type, count));
         }
     }
 }

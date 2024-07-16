@@ -9,7 +9,10 @@ use p3_uni_stark::{Domain, PackedChallenge, PackedVal, StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 use tracing::instrument;
 
-use crate::{air_builders::prover::ProverConstraintFolder, rap::Rap};
+use crate::{
+    air_builders::{prover::ProverConstraintFolder, symbolic::SymbolicConstraints},
+    rap::Rap,
+};
 
 // Starting reference: p3_uni_stark::prover::quotient_values
 // TODO: make this into a trait that is auto-implemented so we can dynamic dispatch the trait
@@ -20,6 +23,7 @@ use crate::{air_builders::prover::ProverConstraintFolder, rap::Rap};
 #[instrument(name = "compute single RAP quotient polynomial", skip_all)]
 pub fn compute_single_rap_quotient_values<'a, SC, R, Mat>(
     rap: &'a R,
+    symbolic_constraints: &SymbolicConstraints<Val<SC>>,
     trace_domain: Domain<SC>,
     quotient_domain: Domain<SC>,
     preprocessed_trace_on_quotient_domain: Mat,
@@ -151,6 +155,9 @@ where
                 accumulator,
                 public_values,
                 exposed_values_after_challenge,
+
+                symbolic_interactions: &symbolic_constraints.interactions,
+                interactions: vec![],
             };
             rap.eval(&mut folder);
 

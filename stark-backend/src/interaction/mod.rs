@@ -1,7 +1,7 @@
-use p3_air::{Air, AirBuilder, PermutationAirBuilder};
-use p3_field::Field;
-use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
+use p3_air::AirBuilder;
 use serde::{Deserialize, Serialize};
+
+use crate::air_builders::symbolic::symbolic_expression::SymbolicExpression;
 
 /// Interaction debugging tools
 pub mod debug;
@@ -27,9 +27,15 @@ pub struct Interaction<Expr> {
     pub interaction_type: InteractionType,
 }
 
+pub type SymbolicInteraction<F> = Interaction<SymbolicExpression<F>>;
+
 /// An [AirBuilder] with additional functionality to build special logUp arguments for
 /// communication between AIRs across buses. These arguments use randomness to
 /// add additional trace columns (in the extension field) and constraints to the AIR.
+///
+/// An interactive AIR is a AIR that can specify buses for sending and receiving data
+/// to other AIRs. The original AIR is augmented by virtual columns determined by
+/// the interactions to define a [RAP](crate::rap::Rap).
 pub trait InteractionBuilder: AirBuilder {
     /// Stores a new send interaction in the builder.
     /// `count` can only refer to "local" (current row) variables.
@@ -75,38 +81,4 @@ pub trait InteractionBuilder: AirBuilder {
     /// For internal use. For each interaction, the expression for the multiplicity on the _next_ row.
     // This could be supplied by the user, but the devex seems worse.
     fn all_multiplicities_next(&self) -> Vec<Self::Expr>;
-}
-
-/// An interactive AIR is a AIR that can specify buses for sending and receiving data
-/// to other AIRs. The original AIR is augmented by virtual columns determined by
-/// the interactions to define a [RAP](crate::rap::Rap).
-pub trait InteractiveAir<AB: InteractionBuilder>: Air<AB> {
-    /// Generates the permutation trace for the RAP given the main trace.
-    /// The permutation trace depends on two random values which the challenger draws
-    /// after committing to all parts of the main trace, including multiplicities.
-    ///
-    /// Returns the permutation trace as a matrix of extension field elements.
-    fn generate_permutation_trace(
-        &self,
-        preprocessed_trace: &Option<RowMajorMatrixView<AB::F>>,
-        partitioned_main_trace: &[RowMajorMatrixView<AB::F>],
-        permutation_randomness: Option<[AB::EF; 2]>,
-    ) -> Option<RowMajorMatrix<AB::EF>>
-    where
-        AB: PermutationAirBuilder,
-    {
-        self::trace::generate_permutation_trace(
-            self,
-            preprocessed_trace,
-            partitioned_main_trace,
-            permutation_randomness,
-        )
-    }
-}
-
-impl<AB, A> InteractiveAir<AB> for A
-where
-    A: Air<AB>,
-    AB: InteractionBuilder,
-{
 }

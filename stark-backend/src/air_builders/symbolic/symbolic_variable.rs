@@ -10,9 +10,17 @@ use super::symbolic_expression::SymbolicExpression;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Entry {
-    Preprocessed { offset: usize },
-    Main { offset: usize },
-    Permutation { offset: usize },
+    Preprocessed {
+        offset: usize,
+    },
+    /// Main may be partitioned
+    Main {
+        part_index: usize,
+        offset: usize,
+    },
+    Permutation {
+        offset: usize,
+    },
     Public,
     Challenge,
     Exposed,
@@ -25,7 +33,11 @@ impl Entry {
             Entry::Preprocessed { offset: old_offset } => Entry::Preprocessed {
                 offset: *old_offset + offset,
             },
-            Entry::Main { offset: old_offset } => Entry::Main {
+            Entry::Main {
+                part_index,
+                offset: old_offset,
+            } => Entry::Main {
+                part_index: *part_index,
                 offset: *old_offset + offset,
             },
             Entry::Permutation { offset: old_offset } => Entry::Permutation {

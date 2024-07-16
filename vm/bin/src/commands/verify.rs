@@ -1,6 +1,6 @@
 use std::{path::Path, time::Instant};
 
-use afs_stark_backend::{keygen::types::MultiStarkPartialVerifyingKey, prover::types::Proof};
+use afs_stark_backend::{keygen::types::MultiStarkVerifyingKey, prover::types::Proof};
 use afs_test_utils::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
     engine::StarkEngine,
@@ -63,7 +63,7 @@ impl VerifyCommand {
         let instructions = parse_asm_file(Path::new(&self.asm_file_path))?;
         let mut vm = VirtualMachine::<WORD_SIZE, _>::new(config, instructions, vec![]);
         let encoded_vk = read_from_path(&Path::new(&self.keys_folder).join("vk"))?;
-        let vk: MultiStarkPartialVerifyingKey<BabyBearPoseidon2Config> =
+        let vk: MultiStarkVerifyingKey<BabyBearPoseidon2Config> =
             bincode::deserialize(&encoded_vk)?;
 
         let encoded_proof = read_from_path(Path::new(&self.proof_file))?;

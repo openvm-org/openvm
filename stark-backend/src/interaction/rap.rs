@@ -63,13 +63,7 @@ where
     let phi_local = perm_local[num_interactions];
     let phi_next = perm_next[num_interactions];
 
-    let max_bus_index = all_interactions
-        .iter()
-        .map(|interaction| interaction.bus_index)
-        .max()
-        .unwrap_or(0);
-
-    let alphas = generate_rlc_elements(rand_elems[0].into(), max_bus_index + 1);
+    let alphas = generate_rlc_elements(rand_elems[0].into(), &all_interactions);
     let betas = rand_elems[1].into().powers();
 
     let lhs = phi_next.into() - phi_local.into();

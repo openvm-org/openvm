@@ -315,3 +315,19 @@ impl<F: Field> Product<F> for SymbolicExpression<F> {
         iter.map(|x| Self::from(x)).product()
     }
 }
+
+pub trait SymbolicEvaluator<F: Field, E: AbstractField + From<F>> {
+    fn eval_var(&self, symbolic_var: SymbolicVariable<F>) -> E;
+
+    fn eval_expr(&self, symbolic_expr: &SymbolicExpression<F>) -> E {
+        match symbolic_expr {
+            SymbolicExpression::Variable(var) => self.eval_var(*var),
+            SymbolicExpression::Constant(c) => (*c).into(),
+            SymbolicExpression::Add { x, y, .. } => self.eval_expr(x) + self.eval_expr(y),
+            SymbolicExpression::Sub { x, y, .. } => self.eval_expr(x) - self.eval_expr(y),
+            SymbolicExpression::Neg { x, .. } => -self.eval_expr(x),
+            SymbolicExpression::Mul { x, y, .. } => self.eval_expr(x) * self.eval_expr(y),
+            _ => unreachable!("Expression cannot be evaluated"),
+        }
+    }
+}

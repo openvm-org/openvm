@@ -47,9 +47,9 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             .iter()
             .map(|pk| {
                 // Consistency check
-                let num = pk.vk.width.after_challenge.len();
-                assert_eq!(num, pk.vk.num_challenges_to_sample.len());
-                assert_eq!(num, pk.vk.num_exposed_values_after_challenge.len());
+                let num = pk.vk.width().after_challenge.len();
+                assert_eq!(num, pk.vk.params.num_challenges_to_sample.len());
+                assert_eq!(num, pk.vk.params.num_exposed_values_after_challenge.len());
                 num
             })
             .max()
@@ -58,7 +58,13 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             .map(|phase_idx| {
                 pk.per_air
                     .iter()
-                    .map(|pk| *pk.vk.num_challenges_to_sample.get(phase_idx).unwrap_or(&0))
+                    .map(|pk| {
+                        *pk.vk
+                            .params
+                            .num_challenges_to_sample
+                            .get(phase_idx)
+                            .unwrap_or(&0)
+                    })
                     .max()
                     .unwrap_or_else(|| panic!("No challenges used in challenge phase {phase_idx}"))
             })
@@ -144,7 +150,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             partitioned_main: main_widths,
             after_challenge: vec![],
         };
-        let symbolic_builder = populate_symbolic_builder(air, &width, &[], num_public_values, &[]);
+        let symbolic_builder = populate_symbolic_builder(air, &width, num_public_values, &[], &[]);
 
         let params = symbolic_builder.params();
         let symbolic_constraints = symbolic_builder.constraints();

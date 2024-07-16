@@ -66,6 +66,12 @@ pub struct StarkVerifyingKey<SC: StarkGenericConfig> {
     pub quotient_degree: usize,
 }
 
+impl<SC: StarkGenericConfig> StarkVerifyingKey<SC> {
+    pub fn width(&self) -> &TraceWidth {
+        &self.params.width
+    }
+}
+
 /// Prover only data for preprocessed trace for a single AIR.
 /// Currently assumes each AIR has it's own preprocessed commitment
 #[derive(Serialize, Deserialize)]
@@ -224,16 +230,16 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
         let mut total_partitioned_main = 0;
         let mut total_after_challenge = 0;
         for (air_idx, per_air) in self.per_air.iter().enumerate() {
-            let preprocessed_width = per_air.width.preprocessed.unwrap_or(0);
+            let preprocessed_width = per_air.width().preprocessed.unwrap_or(0);
             total_preprocessed += preprocessed_width;
             let partitioned_main_width = per_air
-                .width
+                .width()
                 .partitioned_main
                 .iter()
                 .fold(0, |acc, x| acc + *x);
             total_partitioned_main += partitioned_main_width;
             let after_challenge_width = per_air
-                .width
+                .width()
                 .after_challenge
                 .iter()
                 .fold(0, |acc, x| acc + *x);
