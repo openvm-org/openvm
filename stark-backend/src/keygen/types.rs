@@ -43,8 +43,6 @@ pub struct StarkPartialProvingKey<SC: StarkGenericConfig> {
     deserialize = "Com<SC>: Deserialize<'de>"
 ))]
 pub struct StarkPartialVerifyingKey<SC: StarkGenericConfig> {
-    /// Height of trace matrix.
-    pub degree: usize,
     /// Preprocessed trace data, if any
     pub preprocessed_data: Option<VerifierSinglePreprocessedData<SC>>,
     /// Trace sub-matrix widths

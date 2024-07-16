@@ -147,8 +147,8 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
         let (domains, quotient_chunks_domains): (Vec<_>, Vec<Vec<_>>) = vk
             .per_air
             .iter()
-            .map(|vk| {
-                let degree = vk.degree;
+            .zip_eq(proof.degrees)
+            .map(|(vk, degree)| {
                 let quotient_degree = vk.quotient_degree;
                 let domain = pcs.natural_domain_for_degree(degree);
                 let quotient_domain = domain.create_disjoint_domain(degree * quotient_degree);

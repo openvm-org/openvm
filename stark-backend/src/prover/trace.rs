@@ -80,9 +80,11 @@ impl<'a, SC: StarkGenericConfig> TraceCommitmentBuilder<'a, SC> {
                     .iter()
                     .map(|ptr| self.committed_traces[ptr.commit_index][ptr.matrix_index].as_view())
                     .collect_vec();
+                // There must be at least one main trace matrix
+                let degree = partitioned_main_trace[0].height();
                 SingleAirCommittedTrace {
                     air,
-                    domain: self.committer.pcs.natural_domain_for_degree(vk.degree),
+                    domain: self.committer.pcs.natural_domain_for_degree(degree),
                     partitioned_main_trace,
                 }
             })

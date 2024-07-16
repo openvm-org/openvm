@@ -8,6 +8,9 @@ use super::A0;
 
 #[derive(Debug, Clone)]
 pub enum AsmInstruction<F, EF> {
+    /// Load extension immediate (address, value)
+    ImmE(i32, EF),
+
     /// Load word (dst, src, index, offset, size).
     ///
     /// Load a value from the address stored at src(fp) into dstfp).
@@ -865,6 +868,9 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
             AsmInstruction::LessThan(dst, left, right) => {
                 write!(f, "lt  ({})fp, {}, {}", dst, left, right,)
+            }
+            AsmInstruction::ImmE(dst, val) => {
+                write!(f, "imme   ({})fp, {}", dst, val)
             }
             AsmInstruction::LoadF(dst, src, index, offset, size) => {
                 write!(

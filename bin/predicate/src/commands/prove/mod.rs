@@ -13,7 +13,11 @@ use bin_common::utils::{
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
-use logical_interface::{afs_interface::AfsInterface, mock_db::MockDb, utils::string_to_u16_vec};
+use logical_interface::{
+    afs_interface::{utils::string_to_table_id, AfsInterface},
+    mock_db::MockDb,
+    utils::string_to_u16_vec,
+};
 use p3_field::PrimeField64;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{de::DeserializeOwned, Serialize};
@@ -166,7 +170,6 @@ where
             &mut trace_builder.committer,
         );
 
-        // let output_trace = page_output.gen_trace::<BabyBear>();
         let output_trace_path = output_trace_folder.clone()
             + "/"
             + &table_id.clone()
@@ -196,8 +199,9 @@ where
         );
 
         let encoded_proof: Vec<u8> = bincode::serialize(&proof).unwrap();
+        let table_id_full = string_to_table_id(table_id.clone()).to_string();
         let proof_path =
-            output_folder.clone() + "/" + &table_id.clone() + "-" + &prefix + ".prove.bin";
+            output_folder.clone() + "/" + &table_id_full + "-" + &prefix + ".prove.bin";
         write_bytes(&encoded_proof, proof_path.clone()).unwrap();
 
         if !common.silent {

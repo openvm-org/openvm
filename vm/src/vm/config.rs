@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::cpu::CpuOptions;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct VmParamsConfig {
+pub struct VmConfig {
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
     pub compress_poseidon2_enabled: bool,
@@ -14,7 +14,7 @@ pub struct VmParamsConfig {
     pub max_operations: usize,*/
 }
 
-impl VmParamsConfig {
+impl VmConfig {
     pub fn cpu_options(&self) -> CpuOptions {
         CpuOptions {
             field_arithmetic_enabled: self.field_arithmetic_enabled,
@@ -25,17 +25,11 @@ impl VmParamsConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct VmConfig {
-    pub vm: VmParamsConfig,
-}
-
 impl VmConfig {
-    pub fn read_config_file(file: &str) -> Result<VmConfig, String> {
-        let file_str = std::fs::read_to_string(file).map_err(|_| {
-            String::from("`config.toml` is required in the root directory of the project")
-        })?;
-        let config: VmConfig = toml::from_str(file_str.as_str())
+    pub fn read_config_file(file: &str) -> Result<Self, String> {
+        let file_str = std::fs::read_to_string(file)
+            .map_err(|_| format!("Could not load config file from: {file}"))?;
+        let config: Self = toml::from_str(file_str.as_str())
             .map_err(|e| format!("Failed to parse config file {}:\n{}", file, e))?;
         Ok(config)
     }

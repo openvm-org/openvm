@@ -5,7 +5,7 @@ use afs_stark_backend::{
     rap::AnyRap,
     verifier::{MultiTraceStarkVerifier, VerificationError},
 };
-use p3_matrix::{dense::DenseMatrix, Matrix};
+use p3_matrix::dense::DenseMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 use crate::config::instrument::StarkHashStatistics;
@@ -78,11 +78,7 @@ where
     let mut keygen_builder = engine.keygen_builder();
 
     for i in 0..chips.len() {
-        keygen_builder.add_air(
-            chips[i] as &dyn AnyRap<SC>,
-            traces[i].height(),
-            public_values[i].len(),
-        );
+        keygen_builder.add_air(chips[i] as &dyn AnyRap<SC>, public_values[i].len());
     }
 
     let partial_pk = keygen_builder.generate_partial_pk();

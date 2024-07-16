@@ -106,6 +106,7 @@ impl GroupByTest {
     }
 
     /// The height of the range checker.
+    #[allow(dead_code)]
     pub fn range_height(&self) -> usize {
         1 << self.idx_decomp
     }
@@ -168,21 +169,18 @@ impl GroupByTest {
 
         keygen_builder.add_partitioned_air(
             &page_controller.group_by,
-            self.page_height(),
             0,
             vec![group_by_ptr, group_by_aux_ptr],
         );
 
         keygen_builder.add_partitioned_air(
             &page_controller.final_chip,
-            self.page_height(),
             0,
             vec![final_page_ptr, final_page_aux_ptr],
         );
 
         keygen_builder.add_partitioned_air(
             &page_controller.range_checker.air,
-            self.range_height(),
             0,
             vec![range_checker_ptr],
         );
@@ -351,7 +349,7 @@ fn test_static_values() {
     let engine = config::baby_bear_poseidon2::default_engine(degree);
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-    page_controller.set_up_keygen_builder(&mut keygen_builder, height, 1 << idx_decomp);
+    page_controller.set_up_keygen_builder(&mut keygen_builder);
 
     let prover = engine.prover();
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -489,11 +487,7 @@ fn group_by_sorted_test() {
         config::baby_bear_poseidon2::default_engine(max(test.log_page_height, test.idx_decomp));
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-    page_controller.set_up_keygen_builder(
-        &mut keygen_builder,
-        test.page_height(),
-        1 << test.idx_decomp,
-    );
+    page_controller.set_up_keygen_builder(&mut keygen_builder);
 
     let partial_pk = keygen_builder.generate_partial_pk();
 

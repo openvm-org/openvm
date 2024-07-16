@@ -220,7 +220,6 @@ where
     for i in 0..init_param.leaf_cap {
         keygen_builder.add_partitioned_air(
             &page_controller.init_leaf_chips[i],
-            page_height,
             BABYBEAR_COMMITMENT_LEN,
             vec![init_leaf_data_ptrs[i], init_leaf_main_ptrs[i]],
         );
@@ -229,7 +228,6 @@ where
     for i in 0..init_param.internal_cap {
         keygen_builder.add_partitioned_air(
             &page_controller.init_internal_chips[i],
-            page_height,
             BABYBEAR_COMMITMENT_LEN,
             vec![init_internal_data_ptrs[i], init_internal_main_ptrs[i]],
         );
@@ -238,7 +236,6 @@ where
     for i in 0..final_param.leaf_cap {
         keygen_builder.add_partitioned_air(
             &page_controller.final_leaf_chips[i],
-            page_height,
             BABYBEAR_COMMITMENT_LEN,
             vec![final_leaf_data_ptrs[i], final_leaf_main_ptrs[i]],
         );
@@ -247,36 +244,28 @@ where
     for i in 0..final_param.internal_cap {
         keygen_builder.add_partitioned_air(
             &page_controller.final_internal_chips[i],
-            page_height,
             BABYBEAR_COMMITMENT_LEN,
             vec![final_internal_data_ptrs[i], final_internal_main_ptrs[i]],
         );
     }
 
-    keygen_builder.add_partitioned_air(
-        &page_controller.offline_checker,
-        trace_degree,
-        0,
-        vec![ops_ptr],
-    );
+    keygen_builder.add_partitioned_air(&page_controller.offline_checker, 0, vec![ops_ptr]);
 
     keygen_builder.add_partitioned_air(
         &page_controller.init_root_signal,
-        1,
         BABYBEAR_COMMITMENT_LEN,
         vec![init_root_ptr],
     );
 
     keygen_builder.add_partitioned_air(
         &page_controller.final_root_signal,
-        1,
         BABYBEAR_COMMITMENT_LEN,
         vec![final_root_ptr],
     );
 
-    keygen_builder.add_air(&page_controller.range_checker.air, 1 << DECOMP_BITS, 0);
+    keygen_builder.add_air(&page_controller.range_checker.air, 0);
 
-    keygen_builder.add_air(&ops_sender, num_ops, 0);
+    keygen_builder.add_air(&ops_sender, 0);
 
     let partial_pk = keygen_builder.generate_partial_pk();
     let (init_pages, init_root_is_leaf, final_pages, final_root_is_leaf, ops) = generate_inputs(
