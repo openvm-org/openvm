@@ -92,10 +92,8 @@ where
 
         // Load from disk and deserialize partial verifying key
         let prefix = create_prefix(config);
-        let encoded_vk =
-            read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.vk").unwrap();
-        let partial_vk: MultiStarkPartialVerifyingKey<SC> =
-            bincode::deserialize(&encoded_vk).unwrap();
+        let encoded_vk = read_from_path(keys_folder.clone() + "/" + &prefix + ".vk").unwrap();
+        let vk: MultiStarkPartialVerifyingKey<SC> = bincode::deserialize(&encoded_vk).unwrap();
 
         // Get proof
         let prefix = create_prefix(config);
@@ -106,9 +104,7 @@ where
 
         let proof: Proof<SC> = bincode::deserialize(&encoded_proof).unwrap();
 
-        page_controller
-            .verify(engine, partial_vk, proof, value)
-            .unwrap();
+        page_controller.verify(engine, vk, proof, value).unwrap();
 
         if !common.silent {
             println!("Proof verified in {:?}", start.elapsed());

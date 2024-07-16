@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::{
+    air_builders::symbolic::SymbolicConstraints,
     commit::MatrixCommitmentPointers,
     config::{Com, PcsProverData},
 };
@@ -18,46 +19,51 @@ pub struct TraceWidth {
     pub after_challenge: Vec<usize>,
 }
 
-/// Proving key for a single STARK (corresponding to single AIR matrix)
-///
-/// !! This is not the full proving key right now. It is missing AIR constraints
-#[derive(Serialize, Deserialize)]
-#[serde(bound(
-    serialize = "PcsProverData<SC>: Serialize",
-    deserialize = "PcsProverData<SC>: Deserialize<'de>"
-))]
-pub struct StarkPartialProvingKey<SC: StarkGenericConfig> {
-    /// Verifying key
-    pub vk: StarkPartialVerifyingKey<SC>,
-    /// Prover only data for preprocessed trace
-    pub preprocessed_data: Option<ProverOnlySinglePreprocessedData<SC>>,
-}
-
-/// Verifying key for a single STARK (corresponding to single AIR matrix)
-///
-/// !! This is not the full proving key right now. It is missing AIR constraints
-#[derive(Derivative, Serialize, Deserialize)]
-#[derivative(Clone(bound = "Com<SC>: Clone"))]
-#[serde(bound(
-    serialize = "Com<SC>: Serialize",
-    deserialize = "Com<SC>: Deserialize<'de>"
-))]
-pub struct StarkPartialVerifyingKey<SC: StarkGenericConfig> {
-    /// Preprocessed trace data, if any
-    pub preprocessed_data: Option<VerifierSinglePreprocessedData<SC>>,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StarkVerifyingParams {
     /// Trace sub-matrix widths
     pub width: TraceWidth,
-    /// [MatrixCommitmentPointers] for partitioned main trace matrix
-    pub main_graph: MatrixCommitmentPointers,
-    /// The factor to multiple the trace degree by to get the degree of the quotient polynomial. Determined from the max constraint degree of the AIR constraints.
-    /// This is equivalently the number of chunks the quotient polynomial is split into.
-    pub quotient_degree: usize,
     /// Number of public values for this STARK only
     pub num_public_values: usize,
     /// Number of values to expose to verifier in each trace challenge phase
     pub num_exposed_values_after_challenge: Vec<usize>,
     /// For only this RAP, how many challenges are needed in each trace challenge phase
     pub(crate) num_challenges_to_sample: Vec<usize>,
+}
+
+/// Proving key for a single STARK (corresponding to single AIR matrix)
+#[derive(Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "PcsProverData<SC>: Serialize",
+    deserialize = "PcsProverData<SC>: Deserialize<'de>"
+))]
+pub struct StarkProvingKey<SC: StarkGenericConfig> {
+    /// Verifying key
+    pub vk: StarkVerifyingKey<SC>,
+    /// Prover only data for preprocessed trace
+    pub preprocessed_data: Option<ProverOnlySinglePreprocessedData<SC>>,
+}
+
+/// Verifying key for a single STARK (corresponding to single AIR matrix)
+#[derive(Derivative, Serialize, Deserialize)]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
+#[serde(bound(
+    serialize = "Com<SC>: Serialize",
+    deserialize = "Com<SC>: Deserialize<'de>"
+))]
+pub struct StarkVerifyingKey<SC: StarkGenericConfig> {
+    /// Preprocessed trace data, if any
+    pub preprocessed_data: Option<VerifierSinglePreprocessedData<SC>>,
+    /// Parameters of the STARK
+    pub params: StarkVerifyingParams,
+    /// Symbolic constraints of the AIR in all challenge phases. This is
+    /// a serialization of the constraints in the AIR.
+    pub symbolic_constraints: SymbolicConstraints<Val<SC>>,
+    /// [MatrixCommitmentPointers] for partitioned main trace matrix
+    pub main_graph: MatrixCommitmentPointers,
+    /// The factor to multiple the trace degree by to get the degree of the quotient polynomial. Determined from the max constraint degree of the AIR constraints.
+    /// This is equivalently the number of chunks the quotient polynomial is split into.
+    pub quotient_degree: usize,
 }
 
 /// Prover only data for preprocessed trace for a single AIR.
@@ -100,8 +106,8 @@ pub struct VerifierSinglePreprocessedData<SC: StarkGenericConfig> {
     serialize = "PcsProverData<SC>: Serialize",
     deserialize = "PcsProverData<SC>: Deserialize<'de>"
 ))]
-pub struct MultiStarkPartialProvingKey<SC: StarkGenericConfig> {
-    pub per_air: Vec<StarkPartialProvingKey<SC>>,
+pub struct MultiStarkProvingKey<SC: StarkGenericConfig> {
+    pub per_air: Vec<StarkProvingKey<SC>>,
     /// Number of multi-matrix commitments that hold commitments to the partitioned main trace matrices across all AIRs.
     pub num_main_trace_commitments: usize,
     /// Mapping from commit_idx to global AIR index for matrix in commitment, in order.
@@ -111,13 +117,13 @@ pub struct MultiStarkPartialProvingKey<SC: StarkGenericConfig> {
     pub num_challenges_to_sample: Vec<usize>,
 }
 
-impl<SC: StarkGenericConfig> Default for MultiStarkPartialProvingKey<SC> {
+impl<SC: StarkGenericConfig> Default for MultiStarkProvingKey<SC> {
     fn default() -> Self {
         Self::empty()
     }
 }
 
-impl<SC: StarkGenericConfig> MultiStarkPartialProvingKey<SC> {
+impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
     /// Empty with 1 main trace commitment
     pub fn empty() -> Self {
         Self {
@@ -131,7 +137,7 @@ impl<SC: StarkGenericConfig> MultiStarkPartialProvingKey<SC> {
     }
 
     pub fn new(
-        per_air: Vec<StarkPartialProvingKey<SC>>,
+        per_air: Vec<StarkProvingKey<SC>>,
         num_main_trace_commitments: usize,
         num_challenges_to_sample: Vec<usize>,
     ) -> Self {
@@ -149,8 +155,8 @@ impl<SC: StarkGenericConfig> MultiStarkPartialProvingKey<SC> {
         }
     }
 
-    pub fn partial_vk(&self) -> MultiStarkPartialVerifyingKey<SC> {
-        MultiStarkPartialVerifyingKey {
+    pub fn vk(&self) -> MultiStarkVerifyingKey<SC> {
+        MultiStarkVerifyingKey {
             per_air: self.per_air.iter().map(|pk| pk.vk.clone()).collect(),
             main_commit_to_air_graph: self.main_commit_to_air_graph.clone(),
             num_main_trace_commitments: self.num_main_trace_commitments,
@@ -185,8 +191,8 @@ impl<SC: StarkGenericConfig> MultiStarkPartialProvingKey<SC> {
     serialize = "Com<SC>: Serialize",
     deserialize = "Com<SC>: Deserialize<'de>"
 ))]
-pub struct MultiStarkPartialVerifyingKey<SC: StarkGenericConfig> {
-    pub per_air: Vec<StarkPartialVerifyingKey<SC>>,
+pub struct MultiStarkVerifyingKey<SC: StarkGenericConfig> {
+    pub per_air: Vec<StarkVerifyingKey<SC>>,
     /// Number of multi-matrix commitments that hold commitments to the partitioned main trace matrices across all AIRs.
     pub num_main_trace_commitments: usize,
     /// Mapping from commit_idx to global AIR index for matrix in commitment, in order.
@@ -196,9 +202,9 @@ pub struct MultiStarkPartialVerifyingKey<SC: StarkGenericConfig> {
     pub num_challenges_to_sample: Vec<usize>,
 }
 
-impl<SC: StarkGenericConfig> MultiStarkPartialVerifyingKey<SC> {
+impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
     pub fn new(
-        per_air: Vec<StarkPartialVerifyingKey<SC>>,
+        per_air: Vec<StarkVerifyingKey<SC>>,
         num_main_trace_commitments: usize,
         num_challenges_to_sample: Vec<usize>,
     ) -> Self {

@@ -57,20 +57,20 @@ fn index_scan_test(
 
     page_controller.set_up_keygen_builder(&mut keygen_builder, page_width, idx_len);
 
-    let partial_pk = keygen_builder.generate_partial_pk();
+    let pk = keygen_builder.generate_pk();
 
     let proof = page_controller.prove(
         engine,
-        &partial_pk,
+        &pk,
         trace_builder,
         input_prover_data,
         output_prover_data,
         x.clone(),
         idx_decomp,
     );
-    let partial_vk = partial_pk.partial_vk();
+    let vk = pk.vk();
 
-    page_controller.verify(engine, partial_vk, proof, x.clone())
+    page_controller.verify(engine, vk, proof, x.clone())
 }
 
 #[test]

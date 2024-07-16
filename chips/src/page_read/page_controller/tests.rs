@@ -4,7 +4,7 @@ use crate::page_read::page_controller;
 use afs_stark_backend::prover::USE_DEBUG_BUILDER;
 use afs_stark_backend::verifier::VerificationError;
 use afs_stark_backend::{
-    keygen::{types::MultiStarkPartialProvingKey, MultiStarkKeygenBuilder},
+    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
 };
 use afs_test_utils::config::{
@@ -30,7 +30,7 @@ fn load_page_test(
     page_controller: &mut page_controller::PageController<BabyBearPoseidon2Config>,
     page_requester: &DummyInteractionAir,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
-    partial_pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
+    pk: &MultiStarkProvingKey<BabyBearPoseidon2Config>,
     num_requests: usize,
 ) -> Result<(), VerificationError> {
     let mut rng = create_seeded_rng();
@@ -70,25 +70,23 @@ fn load_page_test(
 
     trace_builder.commit_current();
 
-    let partial_vk = partial_pk.partial_vk();
+    let vk = pk.vk();
 
-    let main_trace_data = trace_builder.view(
-        &partial_vk,
-        vec![&page_controller.page_read_air, page_requester],
-    );
+    let main_trace_data =
+        trace_builder.view(&vk, vec![&page_controller.page_read_air, page_requester]);
 
-    let pis = vec![vec![]; partial_vk.per_air.len()];
+    let pis = vec![vec![]; vk.per_air.len()];
 
     let prover = engine.prover();
     let verifier = engine.verifier();
 
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, partial_pk, main_trace_data, &pis);
+    let proof = prover.prove(&mut challenger, pk, main_trace_data, &pis);
 
     let mut challenger = engine.new_challenger();
     verifier.verify(
         &mut challenger,
-        partial_vk,
+        vk,
         vec![&page_controller.page_read_air, page_requester],
         proof,
         &pis,
@@ -138,7 +136,7 @@ fn page_read_chip_test() {
 
     keygen_builder.add_air(&page_requester, 0);
 
-    let partial_pk = keygen_builder.generate_partial_pk();
+    let pk = keygen_builder.generate_pk();
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -150,7 +148,7 @@ fn page_read_chip_test() {
         &mut page_controller,
         &page_requester,
         &mut trace_builder,
-        &partial_pk,
+        &pk,
         num_requests,
     )
     .expect("Verification failed");
@@ -162,7 +160,7 @@ fn page_read_chip_test() {
         &mut page_controller,
         &page_requester,
         &mut trace_builder,
-        &partial_pk,
+        &pk,
         num_requests,
     )
     .expect("Verification failed");
@@ -178,7 +176,7 @@ fn page_read_chip_test() {
         &mut page_controller,
         &page_requester,
         &mut trace_builder,
-        &partial_pk,
+        &pk,
         num_requests,
     );
 

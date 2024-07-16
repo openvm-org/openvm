@@ -9,7 +9,7 @@ use crate::{
         debug::DebugConstraintBuilder, prover::ProverConstraintFolder,
         symbolic::SymbolicRapBuilder, verifier::VerifierConstraintFolder,
     },
-    interaction::{AirBridge, InteractiveAir},
+    interaction::InteractiveAir,
 };
 
 /// An AIR that works with a particular `AirBuilder` which allows preprocessing

@@ -13,7 +13,7 @@ use tracing::instrument;
 use crate::interaction::{
     Interaction, InteractionBuilder, InteractionType, NUM_PERM_CHALLENGES, NUM_PERM_EXPOSED_VALUES,
 };
-use crate::keygen::types::TraceWidth;
+use crate::keygen::types::{StarkVerifyingParams, TraceWidth};
 use crate::rap::{PermutationAirBuilderWithExposedValues, Rap};
 
 use super::PartitionedAirBuilder;
@@ -56,25 +56,25 @@ impl<F: Field> SymbolicConstraints<F> {
 }
 
 #[instrument(name = "evaluate constraints symbolically", skip_all, level = "debug")]
-pub fn get_symbolic_constraints<F, R>(
+pub fn populate_symbolic_builder<F, R>(
     rap: &R,
     width: &TraceWidth,
-    num_challenges_to_sample: &[usize],
     num_public_values: usize,
+    num_challenges_to_sample: &[usize],
     num_exposed_values_after_challenge: &[usize],
-) -> SymbolicConstraints<F>
+) -> SymbolicRapBuilder<F>
 where
     F: Field,
     R: Rap<SymbolicRapBuilder<F>> + ?Sized,
 {
     let mut builder = SymbolicRapBuilder::new(
         width,
-        num_challenges_to_sample,
         num_public_values,
+        num_challenges_to_sample,
         num_exposed_values_after_challenge,
     );
     Rap::eval(rap, &mut builder);
-    builder.constraints()
+    builder
 }
 
 /// An `AirBuilder` for evaluating constraints symbolically, and recording them for later use.
@@ -95,8 +95,8 @@ impl<F: Field> SymbolicRapBuilder<F> {
     /// - `num_exposed_values_after_challenge`: in each challenge phase, how many values to expose to verifier
     pub(crate) fn new(
         width: &TraceWidth,
-        num_challenges_to_sample: &[usize],
         num_public_values: usize,
+        num_challenges_to_sample: &[usize],
         num_exposed_values_after_challenge: &[usize],
     ) -> Self {
         let preprocessed_width = width.preprocessed.unwrap_or(0);
@@ -146,7 +146,46 @@ impl<F: Field> SymbolicRapBuilder<F> {
         }
     }
 
-    pub fn new_after_challenge(
+    pub fn constraints(self) -> SymbolicConstraints<F> {
+        SymbolicConstraints {
+            constraints: self.constraints,
+            interactions: self.interactions,
+        }
+    }
+
+    pub fn params(&self) -> StarkVerifyingParams {
+        let width = self.width();
+        let num_exposed_values_after_challenge = self.num_exposed_values_after_challenge();
+        let num_challenges_to_sample = self.num_challenges_to_sample();
+        StarkVerifyingParams {
+            width,
+            num_public_values: self.public_values.len(),
+            num_exposed_values_after_challenge,
+            num_challenges_to_sample,
+        }
+    }
+
+    pub fn width(&self) -> TraceWidth {
+        let preprocessed_width = self.preprocessed.width();
+        TraceWidth {
+            preprocessed: (preprocessed_width != 0).then(|| preprocessed_width),
+            partitioned_main: self.partitioned_main.iter().map(|m| m.width()).collect(),
+            after_challenge: self.after_challenge.iter().map(|m| m.width()).collect(),
+        }
+    }
+
+    pub fn num_exposed_values_after_challenge(&self) -> Vec<usize> {
+        self.exposed_values_after_challenge
+            .iter()
+            .map(|c| c.len())
+            .collect()
+    }
+
+    pub fn num_challenges_to_sample(&self) -> Vec<usize> {
+        self.challenges.iter().map(|c| c.len()).collect()
+    }
+
+    fn new_after_challenge(
         width_after_phase: &[usize],
     ) -> Vec<RowMajorMatrix<SymbolicVariable<F>>> {
         width_after_phase
@@ -165,7 +204,7 @@ impl<F: Field> SymbolicRapBuilder<F> {
             .collect_vec()
     }
 
-    pub fn new_challenges(num_challenges_to_sample: &[usize]) -> Vec<Vec<SymbolicVariable<F>>> {
+    fn new_challenges(num_challenges_to_sample: &[usize]) -> Vec<Vec<SymbolicVariable<F>>> {
         num_challenges_to_sample
             .iter()
             .map(|&num_challenges| {
@@ -176,7 +215,7 @@ impl<F: Field> SymbolicRapBuilder<F> {
             .collect_vec()
     }
 
-    pub fn new_exposed_values_after_challenge(
+    fn new_exposed_values_after_challenge(
         num_exposed_values_after_challenge: &[usize],
     ) -> Vec<Vec<SymbolicVariable<F>>> {
         num_exposed_values_after_challenge
@@ -186,14 +225,7 @@ impl<F: Field> SymbolicRapBuilder<F> {
                     .map(|index| SymbolicVariable::new(Entry::Exposed, index))
                     .collect_vec()
             })
-            .collect_vec();
-    }
-
-    pub(crate) fn constraints(self) -> SymbolicConstraints<F> {
-        SymbolicConstraints {
-            constraints: self.constraints,
-            interactions: self.interactions,
-        }
+            .collect_vec()
     }
 }
 

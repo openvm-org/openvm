@@ -107,10 +107,8 @@ where
         let idx_decomp = 8;
         println!("Verifying proof file: {}", proof_file);
 
-        let encoded_vk =
-            read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.vk").unwrap();
-        let partial_vk: MultiStarkPartialVerifyingKey<SC> =
-            bincode::deserialize(&encoded_vk).unwrap();
+        let encoded_vk = read_from_path(keys_folder.clone() + "/" + &prefix + ".vk").unwrap();
+        let vk: MultiStarkPartialVerifyingKey<SC> = bincode::deserialize(&encoded_vk).unwrap();
 
         let encoded_proof = read_from_path(proof_file.clone()).unwrap();
         let proof: Proof<SC> = bincode::deserialize(&encoded_proof).unwrap();
@@ -124,7 +122,7 @@ where
             idx_decomp,
         );
         let ops_sender = ExecutionAir::new(ops_bus_index, idx_len, data_len);
-        let result = page_controller.verify(engine, partial_vk, proof, &ops_sender);
+        let result = page_controller.verify(engine, vk, proof, &ops_sender);
         if result.is_err() {
             println!("Verification Unsuccessful");
         } else {

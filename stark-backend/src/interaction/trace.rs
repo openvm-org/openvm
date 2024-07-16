@@ -9,7 +9,7 @@ use crate::utils::batch_multiplicative_inverse_allowing_zero;
 
 use super::{
     utils::{generate_rlc_elements, reduce_row},
-    AirBridge, InteractionType,
+    InteractionType,
 };
 
 // Copied from valida/machine/src/chip.rs, modified to allow partitioned main trace
