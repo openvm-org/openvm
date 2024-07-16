@@ -386,7 +386,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         let mut challenger = engine.new_challenger();
         verifier.verify(
             &mut challenger,
-            partial_vk,
+            &partial_vk,
             vec![
                 &self.init_chip,
                 &self.final_chip,
@@ -394,7 +394,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
                 &self.range_checker.air,
                 ops_sender,
             ],
-            proof,
+            &proof,
             &pis,
         )
     }

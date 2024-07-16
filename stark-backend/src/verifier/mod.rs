@@ -1,4 +1,4 @@
-use itertools::Itertools;
+use itertools::{izip, Itertools};
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::{AbstractExtensionField, AbstractField};
@@ -34,9 +34,9 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
     pub fn verify(
         &self,
         challenger: &mut SC::Challenger,
-        vk: MultiStarkPartialVerifyingKey<SC>,
+        vk: &MultiStarkPartialVerifyingKey<SC>,
         raps: Vec<&dyn AnyRap<SC>>,
-        proof: Proof<SC>,
+        proof: &Proof<SC>,
         public_values: &[Vec<Val<SC>>],
     ) -> Result<(), VerificationError> {
         let cumulative_sums = proof
@@ -82,9 +82,9 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
     pub fn verify_raps(
         &self,
         challenger: &mut SC::Challenger,
-        vk: MultiStarkPartialVerifyingKey<SC>,
+        vk: &MultiStarkPartialVerifyingKey<SC>,
         raps: Vec<&dyn AnyRap<SC>>,
-        proof: Proof<SC>,
+        proof: &Proof<SC>,
         public_values: &[Vec<Val<SC>>],
     ) -> Result<(), VerificationError> {
         // Challenger must observe public values
@@ -147,17 +147,17 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
         let (domains, quotient_chunks_domains): (Vec<_>, Vec<Vec<_>>) = vk
             .per_air
             .iter()
-            .zip_eq(proof.degrees)
+            .zip_eq(&proof.degrees)
             .map(|(vk, degree)| {
                 let quotient_degree = vk.quotient_degree;
-                let domain = pcs.natural_domain_for_degree(degree);
+                let domain = pcs.natural_domain_for_degree(*degree);
                 let quotient_domain = domain.create_disjoint_domain(degree * quotient_degree);
                 let qc_domains = quotient_domain.split_domains(quotient_degree);
                 (domain, qc_domains)
             })
             .unzip();
         // Verify all opening proofs
-        let opened_values = proof.opening.values;
+        let opened_values = &proof.opening.values;
         let trace_domain_and_openings =
             |domain: Domain<SC>,
              zeta: SC::Challenge,
@@ -190,7 +190,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
         opened_values
             .main
             .iter()
-            .zip_eq(proof.commitments.main_trace)
+            .zip_eq(&proof.commitments.main_trace)
             .enumerate()
             .for_each(|(commit_idx, (values_per_mat, commit))| {
                 let domains_and_openings = values_per_mat
@@ -209,7 +209,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
         opened_values
             .after_challenge
             .iter()
-            .zip_eq(proof.commitments.after_challenge)
+            .zip_eq(&proof.commitments.after_challenge)
             .enumerate()
             .for_each(|(phase_idx, (values_per_mat, commit))| {
                 // Filter RAPs by those that have non-empty trace matrix in this phase
@@ -237,7 +237,10 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
                     .collect_vec()
             })
             .collect_vec();
-        rounds.push((proof.commitments.quotient, quotient_domains_and_openings));
+        rounds.push((
+            proof.commitments.quotient.clone(),
+            quotient_domains_and_openings,
+        ));
 
         pcs.verify(rounds, &proof.opening.proof, challenger)
             .map_err(|e| VerificationError::InvalidOpeningArgument(format!("{:?}", e)))?;
@@ -246,18 +249,15 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
         let mut after_challenge_idx = vec![0usize; vk.num_challenges_to_sample.len()];
 
         // Verify each RAP's constraints
-        for (
-            (((((rap, domain), qc_domains), quotient_chunks), vk), public_values),
-            exposed_values,
-        ) in raps
-            .into_iter()
-            .zip_eq(domains)
-            .zip_eq(&quotient_chunks_domains)
-            .zip_eq(&opened_values.quotient)
-            .zip_eq(&vk.per_air)
-            .zip_eq(public_values)
-            .zip_eq(&proof.exposed_values_after_challenge)
-        {
+        for (rap, domain, qc_domains, quotient_chunks, vk, public_values, exposed_values) in izip!(
+            raps,
+            domains,
+            quotient_chunks_domains,
+            &opened_values.quotient,
+            &vk.per_air,
+            public_values,
+            &proof.exposed_values_after_challenge
+        ) {
             let preprocessed_values = vk.preprocessed_data.as_ref().map(|_| {
                 let values = &opened_values.preprocessed[preprocessed_idx];
                 preprocessed_idx += 1;
@@ -284,7 +284,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
                 after_challenge_values,
                 quotient_chunks,
                 domain,
-                qc_domains,
+                &qc_domains,
                 zeta,
                 alpha,
                 &challenges,

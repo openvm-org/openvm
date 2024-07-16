@@ -22,12 +22,12 @@ use crate::{
     program::ProgramChip,
 };
 
-use self::config::{VmConfig, VmParamsConfig};
+use self::config::VmConfig;
 
 pub mod config;
 
 pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
-    pub config: VmParamsConfig,
+    pub config: VmConfig,
 
     pub cpu_air: CpuAir<WORD_SIZE>,
     pub program_chip: ProgramChip<F>,
@@ -47,7 +47,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
         program: Vec<Instruction<F>>,
         witness_stream: Vec<Vec<F>>,
     ) -> Self {
-        let config = config.vm;
         let decomp = config.decomp;
         let limb_bits = config.limb_bits;
 

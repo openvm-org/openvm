@@ -88,9 +88,9 @@ fn load_page_test(
     let mut challenger = engine.new_challenger();
     verifier.verify(
         &mut challenger,
-        partial_vk,
+        &partial_vk,
         vec![&page_controller.page_read_air, page_requester],
-        proof,
+        &proof,
         &pis,
     )
 }

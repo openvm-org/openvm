@@ -102,9 +102,9 @@ pub fn prove_and_verify_indexless_lookups(
     let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier.verify(
         &mut challenger,
-        partial_vk,
+        &partial_vk,
         vec![&receiver_air, &sender_air],
-        proof,
+        &proof,
         &pis,
     )
 }

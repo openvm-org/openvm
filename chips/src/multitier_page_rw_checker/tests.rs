@@ -451,7 +451,7 @@ fn load_page_test(
     let proof = prover.prove(&mut challenger, partial_pk, main_trace_data, &pis);
 
     let mut challenger = engine.new_challenger();
-    verifier.verify(&mut challenger, partial_vk, airs, proof, &pis)
+    verifier.verify(&mut challenger, &partial_vk, airs, &proof, &pis)
 }
 
 #[allow(clippy::type_complexity)]
