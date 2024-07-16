@@ -78,9 +78,9 @@ impl VerifyCommand {
         let verifier = engine.verifier();
         let result = verifier.verify(
             &mut challenger,
-            partial_vk,
+            &partial_vk,
             chips,
-            proof,
+            &proof,
             &vec![vec![]; num_chips],
         );
 

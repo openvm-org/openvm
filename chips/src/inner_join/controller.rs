@@ -424,7 +424,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
         let mut challenger = engine.new_challenger();
         verifier.verify(
             &mut challenger,
-            partial_vk,
+            &partial_vk,
             vec![
                 &self.t1_chip,
                 &self.t2_chip,
@@ -432,7 +432,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
                 &self.intersector_chip,
                 &self.range_checker.air,
             ],
-            proof,
+            &proof,
             &pis,
         )
     }

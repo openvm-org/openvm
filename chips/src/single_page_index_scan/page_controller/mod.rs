@@ -403,13 +403,13 @@ where
         let mut challenger = engine.new_challenger();
         verifier.verify(
             &mut challenger,
-            partial_vk,
+            &partial_vk,
             vec![
                 &self.input_chip.air,
                 &self.output_chip.air,
                 &self.range_checker.air,
             ],
-            proof,
+            &proof,
             &pis,
         )
     }
