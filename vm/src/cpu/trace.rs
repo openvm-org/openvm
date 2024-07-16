@@ -245,7 +245,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 PERM_POS2 | COMP_POS2 => {
                     Poseidon2Chip::<16, _>::poseidon2_perm(vm, timestamp, instruction);
                 }
-                HINTVEC => {
+                HINT_INPUT => {
                     let hint = match vm.input_stream.pop_front() {
                         Some(hint) => hint,
                         None => return Err(ExecutionError::EndOfInputStream(pc_usize)),
@@ -254,7 +254,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     hint_stream.push_back(F::from_canonical_usize(hint.len()));
                     hint_stream.extend(hint);
                 }
-                HINTBITS => {
+                HINT_BITS => {
                     let val = vm.memory_chip.unsafe_read_elem(d, a);
                     let mut val = val.as_canonical_u32();
 

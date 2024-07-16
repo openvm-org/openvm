@@ -192,7 +192,7 @@ fn test_vm_hint() {
         Instruction::from_isize(FADD, 20, 16, 16777220, 1, 0),
         Instruction::from_isize(FADD, 32, 20, 0, 1, 0),
         Instruction::from_isize(FADD, 20, 20, 1, 1, 0),
-        Instruction::from_isize(HINTVEC, 0, 0, 0, 1, 2),
+        Instruction::from_isize(HINT_INPUT, 0, 0, 0, 1, 2),
         Instruction::from_isize(SHINTW, 32, 0, 0, 1, 2),
         Instruction::from_isize(LOADW, 38, 0, 32, 1, 2),
         Instruction::from_isize(FADD, 44, 20, 0, 1, 0),

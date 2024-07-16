@@ -648,7 +648,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
         ],
         AsmInstruction::HintInputVec() => vec![inst(
-            HINTVEC,
+            HINT_INPUT,
             F::zero(),
             F::zero(),
             F::zero(),
@@ -656,7 +656,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             AS::Memory,
         )],
         AsmInstruction::HintBits(src) => vec![inst(
-            HINTBITS,
+            HINT_BITS,
             register(src),
             F::zero(),
             F::zero(),

@@ -55,9 +55,9 @@ pub enum OpCode {
     SHINTW = 18,
 
     /// Psuedo-instruction to prepare the next input vector for hinting.
-    HINTVEC = 19,
+    HINT_INPUT = 19,
     /// Psuedo-instruction to prepare the little-endian bit decomposition of a variable for hinting.
-    HINTBITS = 20,
+    HINT_BITS = 20,
 }
 
 impl OpCode {
@@ -87,8 +87,8 @@ impl OpCode {
             17 => Some(COMP_POS2),
 
             18 => Some(SHINTW),
-            19 => Some(HINTVEC),
-            20 => Some(HINTBITS),
+            19 => Some(HINT_INPUT),
+            20 => Some(HINT_BITS),
 
             _ => None,
         }
@@ -100,7 +100,7 @@ use crate::poseidon2::Poseidon2Chip;
 use OpCode::*;
 
 pub const CORE_INSTRUCTIONS: [OpCode; 9] = [
-    LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, SHINTW, HINTVEC, HINTBITS,
+    LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, SHINTW, HINT_INPUT, HINT_BITS,
 ];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
@@ -122,7 +122,7 @@ fn max_accesses_per_instruction(opcode: OpCode) -> usize {
             Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(opcode)
         }
         SHINTW => 3,
-        HINTVEC | HINTBITS => 0,
+        HINT_INPUT | HINT_BITS => 0,
         _ => panic!(),
     }
 }
