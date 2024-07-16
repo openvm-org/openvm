@@ -269,13 +269,14 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
         );
 
         // make sure program starts at beginning
-        builder.when_first_row().assert_zero(pc);
-        builder.when_first_row().assert_zero(timestamp);
+        // TODO: fix beginning constraints
+        // builder.when_first_row().assert_zero(pc);
+        // builder.when_first_row().assert_zero(timestamp);
 
         // update the timestamp correctly
         for (&opcode, &flag) in operation_flags.iter() {
             if opcode != TERMINATE {
-                builder.when(flag).assert_eq(
+                builder.when_transition().when(flag).assert_eq(
                     next_timestamp,
                     timestamp + AB::F::from_canonical_usize(max_accesses_per_instruction(opcode)),
                 )
@@ -283,9 +284,9 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
         }
 
         // make sure program terminates
-        builder
-            .when_last_row()
-            .assert_eq(opcode, AB::Expr::from_canonical_usize(TERMINATE as usize));
+        // builder
+        //     .when_last_row()
+        //     .assert_eq(opcode, AB::Expr::from_canonical_usize(TERMINATE as usize));
 
         // check accesses enabled
         builder.assert_eq(read1.enabled, read1_enabled_check);

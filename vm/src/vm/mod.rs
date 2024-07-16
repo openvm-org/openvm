@@ -51,17 +51,21 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
     }
 
     pub fn next_segment(&mut self) {
-        let pc = self.segments.last().unwrap().cpu_chip.pc;
-        let state = self.segments.last().unwrap().memory_chip.get_memory();
+        let mem_state = self.segments.last().unwrap().memory_chip.get_memory();
+        let cpu_state = self.segments.last().unwrap().cpu_chip.get_state();
 
         self.new_segment();
 
-        self.segments.last_mut().unwrap().cpu_chip.pc = pc;
+        self.segments
+            .last_mut()
+            .unwrap()
+            .cpu_chip
+            .transfer_state(cpu_state);
         self.segments
             .last_mut()
             .unwrap()
             .memory_chip
-            .install_memory(state);
+            .install_memory(mem_state);
     }
 
     pub fn options(&self) -> CpuOptions {

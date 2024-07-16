@@ -113,8 +113,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
     pub fn generate_trace(
         vm: &mut ExecutionSegment<WORD_SIZE, F>,
     ) -> Result<RowMajorMatrix<F>, ExecutionError> {
-        let mut clock_cycle: usize = 0;
-        let mut timestamp: usize = 0;
+        let mut clock_cycle: usize = vm.cpu_chip.clock_cycle;
+        let mut timestamp: usize = vm.cpu_chip.timestamp;
         let mut pc = F::from_canonical_usize(vm.cpu_chip.pc);
 
         let mut witness_idx = 0;
@@ -293,6 +293,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 break;
             }
         }
+
+        vm.cpu_chip
+            .transfer_state((clock_cycle, timestamp, pc.as_canonical_u64() as usize));
 
         Ok(RowMajorMatrix::new(
             vm.cpu_chip.rows.concat(),

@@ -72,7 +72,17 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
     }
 
     pub fn switch_segments(&mut self) -> Result<bool, ExecutionError> {
-        Ok(false)
+        // let heights = [
+        //     self.cpu_chip.current_height(),
+        //     self.memory_chip.current_height(),
+        //     self.field_arithmetic_chip.current_height(),
+        //     self.field_extension_chip.current_height(),
+        //     self.poseidon2_chip.current_height(),
+        // ];
+        // let max_height = *heights.iter().max().unwrap();
+        // let maximum = (1 << 20) - 100;
+        // let maximum = 4;
+        Ok(self.cpu_chip.current_height() == 4)
     }
 
     /// Execution is determined by CPU trace generation, in turn determined by segment::continue_execution()

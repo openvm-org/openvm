@@ -166,6 +166,8 @@ pub struct CpuChip<const WORD_SIZE: usize, F: Clone> {
     pub rows: Vec<Vec<F>>,
     pub is_done: bool,
     pub pc: usize,
+    pub clock_cycle: usize,
+    pub timestamp: usize,
 }
 
 impl<const WORD_SIZE: usize, F: Clone> CpuChip<WORD_SIZE, F> {
@@ -175,10 +177,22 @@ impl<const WORD_SIZE: usize, F: Clone> CpuChip<WORD_SIZE, F> {
             rows: vec![],
             is_done: false,
             pc: 0,
+            clock_cycle: 0,
+            timestamp: 0,
         }
     }
 
     pub fn current_height(&self) -> usize {
         self.rows.len()
+    }
+
+    pub fn get_state(&self) -> (usize, usize, usize) {
+        (self.clock_cycle, self.timestamp, self.pc)
+    }
+
+    pub fn transfer_state(&mut self, state: (usize, usize, usize)) {
+        self.clock_cycle = state.0;
+        self.timestamp = state.1;
+        self.pc = state.2;
     }
 }
