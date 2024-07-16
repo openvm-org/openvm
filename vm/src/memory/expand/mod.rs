@@ -42,7 +42,6 @@ impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {
     }
 
     fn touch_node(&mut self, address_space: F, height: usize, label: usize) {
-        println!("touch_node({}, {}, {})", address_space, height, label);
         if self.touched_nodes.insert((address_space, height, label)) {
             assert_ne!(height, self.height);
             if height != 0 {

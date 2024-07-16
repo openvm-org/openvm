@@ -57,7 +57,7 @@ fn add_trace_rows<const CHUNK: usize, F: PrimeField32>(
             multiplicity: F::one(),
             is_compress: F::zero(),
             address_space,
-            parent_height: F::from_canonical_usize(height - 1),
+            parent_height: F::from_canonical_usize(height),
             parent_label: F::from_canonical_usize(label),
             parent_hash: hash,
             left_child_hash: left.hash(),
@@ -76,7 +76,7 @@ fn add_trace_rows<const CHUNK: usize, F: PrimeField32>(
             multiplicity: F::neg_one(),
             is_compress: F::one(),
             address_space,
-            parent_height: F::from_canonical_usize(height - 1),
+            parent_height: F::from_canonical_usize(height),
             parent_label: F::from_canonical_usize(label),
             parent_hash: hash,
             left_child_hash: left.hash(),
@@ -155,10 +155,6 @@ fn recur<const CHUNK: usize, F: PrimeField32>(
             right_is_final,
             address_space,
             trace_rows,
-        );
-        println!(
-            "recur(as = {}, height = {}, label = {}) -> final_node = {:?}",
-            address_space, height, label, final_node
         );
         final_node
     } else {

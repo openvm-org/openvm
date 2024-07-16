@@ -37,9 +37,6 @@ fn test<const CHUNK: usize>(
     touched_addresses: HashSet<(BabyBear, BabyBear)>,
     final_memory: &HashMap<(BabyBear, BabyBear), BabyBear>,
 ) {
-    /*println!("initial_memory = {:?}", initial_memory);
-    println!("final_memory = {:?}", final_memory);
-    println!("touched_addresses = {:?}", touched_addresses);*/
     // checking validity of test data
     for (address, value) in final_memory {
         assert!((address.0.as_canonical_u64() as usize) < (1 << height));
@@ -171,7 +168,7 @@ fn random_test<const CHUNK: usize>(
             if is_touched && num_touched_addresses != 0 {
                 num_touched_addresses -= 1;
                 touched_addresses.insert(address);
-                if value_changes {
+                if value_changes || !is_initial {
                     final_memory.insert(address, changed_value);
                 }
             }
@@ -189,4 +186,21 @@ fn expand_test_1() {
 #[test]
 fn expand_test_2() {
     random_test::<DEFAULT_CHUNK>(3, 3000, 3, 2);
+}
+
+#[test]
+#[should_panic]
+fn expand_negative_test() {
+    let height = 1;
+
+    let address_spaces = [BabyBear::one()];
+    let memory = HashMap::new();
+    let trees = trees_from_full_memory::<DEFAULT_CHUNK, _>(height, &address_spaces, &memory);
+
+    let mut chip = ExpandChip::new(height, trees.clone());
+
+    let trace_degree = 2;
+    let (trace, _) = chip.generate_trace_and_final_tree(&memory, trace_degree);
+
+    run_simple_test_no_pis(vec![&chip.air()], vec![trace]).expect("This should occur");
 }

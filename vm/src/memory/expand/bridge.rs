@@ -62,7 +62,7 @@ impl<const CHUNK: usize, F: Field> AirBridge<F> for ExpandAir<CHUNK> {
                 ]),
                 child_height.clone(),
                 VirtualPairCol::new(
-                    vec![(PairCol::Main(cols_numbered.is_compress), F::two())],
+                    vec![(PairCol::Main(cols_numbered.parent_label), F::two())],
                     F::zero(),
                 ),
                 cols_numbered.address_space,
@@ -76,7 +76,7 @@ impl<const CHUNK: usize, F: Field> AirBridge<F> for ExpandAir<CHUNK> {
                 ]),
                 child_height,
                 VirtualPairCol::new(
-                    vec![(PairCol::Main(cols_numbered.is_compress), F::two())],
+                    vec![(PairCol::Main(cols_numbered.parent_label), F::two())],
                     F::one(),
                 ),
                 cols_numbered.address_space,
