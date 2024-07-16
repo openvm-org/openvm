@@ -2,51 +2,33 @@ use std::array::from_fn;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use p3_field::{PrimeField32, PrimeField64};
+use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::memory::expand::columns::ExpandCols;
-use crate::memory::expand::ExpandAir;
+use crate::memory::expand::ExpandChip;
 use crate::memory::tree::MemoryNode;
 use crate::memory::tree::MemoryNode::Leaf;
 use crate::memory::tree::MemoryNode::NonLeaf;
 
-impl<const CHUNK: usize> ExpandAir<CHUNK> {
-    pub fn generate_trace_and_final_tree<F: PrimeField32>(
+impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {
+    pub fn generate_trace_and_final_tree(
         &self,
-        initial_trees: HashMap<F, MemoryNode<CHUNK, F>>,
-        touched_addresses: HashSet<(F, F)>,
         final_memory: &HashMap<(F, F), F>,
         trace_degree: usize,
     ) -> (RowMajorMatrix<F>, HashMap<F, MemoryNode<CHUNK, F>>) {
-        let mut touched_nodes_map = HashMap::new();
-        for address_space in initial_trees.keys() {
-            touched_nodes_map.insert(address_space, HashSet::new());
-        }
-        for (address_space, address) in touched_addresses {
-            let mut node_label = address.as_canonical_u64() as usize;
-            let touched_nodes = touched_nodes_map.get_mut(&address_space).unwrap();
-            for _ in 0..self.height {
-                if !touched_nodes.insert(node_label) {
-                    // this break only necessary for optimization
-                    break;
-                }
-                node_label /= 2;
-            }
-        }
         let mut rows = vec![];
         let mut final_trees = HashMap::new();
-        for &address_space in initial_trees.keys() {
-            let touched_nodes = &touched_nodes_map[&address_space];
+        for (address_space, initial_tree) in self.initial_trees.clone() {
             final_trees.insert(
                 address_space,
                 recur(
                     self.height,
-                    initial_trees[&address_space].clone(),
+                    initial_tree,
                     0,
                     address_space,
                     final_memory,
-                    touched_nodes,
+                    &self.touched_nodes,
                     &mut rows,
                 ),
             );
@@ -118,7 +100,7 @@ fn recur<const CHUNK: usize, F: PrimeField32>(
     label: usize,
     address_space: F,
     final_memory: &HashMap<(F, F), F>,
-    touched_nodes: &HashSet<usize>,
+    touched_nodes: &HashSet<(F, usize, usize)>,
     trace_rows: &mut Vec<F>,
 ) -> MemoryNode<CHUNK, F> {
     if height == 0 {
@@ -130,7 +112,7 @@ fn recur<const CHUNK: usize, F: PrimeField32>(
         }))
     } else if let NonLeaf(_, initial_left_node, initial_right_node) = initial_node.clone() {
         let left_label = 2 * label;
-        let left_is_final = !touched_nodes.contains(&left_label);
+        let left_is_final = !touched_nodes.contains(&(address_space, height - 1, left_label));
         let final_left_node = if left_is_final {
             initial_left_node
         } else {
@@ -146,7 +128,7 @@ fn recur<const CHUNK: usize, F: PrimeField32>(
         };
 
         let right_label = (2 * label) + 1;
-        let right_is_final = !touched_nodes.contains(&right_label);
+        let right_is_final = !touched_nodes.contains(&(address_space, height - 1, right_label));
         let final_right_node = if right_is_final {
             initial_right_node
         } else {

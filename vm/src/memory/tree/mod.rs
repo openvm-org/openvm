@@ -4,8 +4,8 @@ use std::sync::Arc;
 use p3_field::PrimeField32;
 
 use afs_chips::sub_chip::LocalTraceInstructions;
-use MemoryNode::*;
 use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
+use MemoryNode::*;
 
 fn hash<const CHUNK: usize, F: PrimeField32>(left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK] {
     assert_eq!(CHUNK, 8);
