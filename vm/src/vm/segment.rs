@@ -1,3 +1,5 @@
+use afs_stark_backend::config::{StarkGenericConfig, Val};
+use afs_stark_backend::rap::AnyRap;
 use std::sync::Arc;
 
 use super::VirtualMachine;
@@ -32,6 +34,7 @@ pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub witness_stream: Vec<Vec<F>>,
 
     traces: Vec<DenseMatrix<F>>,
+    max_len: usize,
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
@@ -68,7 +71,12 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             poseidon2_chip,
             traces: vec![],
             witness_stream,
+            max_len: 1 << 20,
         }
+    }
+
+    pub fn set_test_segments(&mut self, max_len: usize) {
+        self.max_len = max_len;
     }
 
     pub fn switch_segments(&mut self) -> Result<bool, ExecutionError> {
@@ -82,7 +90,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         // let max_height = *heights.iter().max().unwrap();
         // let maximum = (1 << 20) - 100;
         // let maximum = 4;
-        Ok(self.cpu_chip.current_height() == 4)
+        Ok(self.cpu_chip.current_height() == self.max_len)
     }
 
     /// Execution is determined by CPU trace generation, in turn determined by segment::continue_execution()
@@ -131,4 +139,28 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
     pub fn generate_commitments(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
         Ok(vec![])
     }
+}
+
+pub fn get_chips<const WORD_SIZE: usize, SC: StarkGenericConfig>(
+    segment: &ExecutionSegment<WORD_SIZE, Val<SC>>,
+) -> Vec<&dyn AnyRap<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    let mut result: Vec<&dyn AnyRap<SC>> = vec![
+        &segment.cpu_chip.air,
+        &segment.program_chip.air,
+        &segment.memory_chip.air,
+        &segment.range_checker.air,
+    ];
+    if segment.config.cpu_options().field_arithmetic_enabled {
+        result.push(&segment.field_arithmetic_chip.air as &dyn AnyRap<SC>);
+    }
+    if segment.config.cpu_options().field_extension_enabled {
+        result.push(&segment.field_extension_chip.air as &dyn AnyRap<SC>);
+    }
+    if segment.config.cpu_options().poseidon2_enabled() {
+        result.push(&segment.poseidon2_chip as &dyn AnyRap<SC>);
+    }
+    result
 }

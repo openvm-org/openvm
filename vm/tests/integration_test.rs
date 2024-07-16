@@ -34,15 +34,11 @@ fn air_test(
         program,
         witness_stream,
     );
+    vm.set_test_segments(4);
 
-    let traces = vm.execute().unwrap();
+    vm.execute().unwrap();
+    let traces = vm.get_traces();
     let chips = get_all_chips(&vm);
-
-    let (traces, chips): (Vec<_>, Vec<_>) = traces
-        .into_iter()
-        .zip(chips)
-        .filter(|(trace, _)| !trace.values.is_empty())
-        .unzip();
 
     run_simple_test_no_pis(chips, traces).expect("Verification failed");
 }
@@ -65,15 +61,11 @@ fn air_test_with_poseidon2(
         program,
         vec![],
     );
+    vm.set_test_segments(4);
 
-    let traces = vm.execute().unwrap();
+    vm.execute().unwrap();
+    let traces = vm.get_traces();
     let chips = get_all_chips(&vm);
-
-    let (traces, chips): (Vec<_>, Vec<_>) = traces
-        .into_iter()
-        .zip(chips)
-        .filter(|(trace, _)| !trace.values.is_empty())
-        .unzip();
 
     let max_log_degree = vm.max_log_degree().unwrap();
 

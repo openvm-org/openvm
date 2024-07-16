@@ -5,7 +5,7 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 
 mod segment;
-pub use segment::ExecutionSegment;
+pub use segment::{get_chips, ExecutionSegment};
 
 pub enum Void {}
 
@@ -18,12 +18,16 @@ use self::config::VmParamsConfig;
 
 pub mod config;
 
+pub const DEFAULT_MAX_LEN: usize = 1 << 20;
+
 pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub config: VmParamsConfig,
     pub program: Vec<Instruction<F>>,
     pub witness_stream: Vec<Vec<F>>,
     pub segments: Vec<Box<ExecutionSegment<WORD_SIZE, F>>>,
     pub traces: Vec<DenseMatrix<F>>,
+    // NOT PUBLIC by design, adjust only for testing
+    max_len: usize,
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
@@ -38,15 +42,24 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             witness_stream,
             segments: vec![],
             traces: vec![],
+            max_len: DEFAULT_MAX_LEN,
         };
         vm.new_segment();
         vm
     }
 
+    pub fn set_test_segments(&mut self, max_len: usize) {
+        self.max_len = max_len;
+        self.segments[0].set_test_segments(max_len);
+    }
+
     pub fn new_segment(&mut self) {
         let program = self.program.clone();
         let witness_stream = self.witness_stream.clone();
-        let segment = ExecutionSegment::new(self, program, witness_stream);
+        let mut segment = ExecutionSegment::new(self, program, witness_stream);
+        if self.max_len != DEFAULT_MAX_LEN {
+            segment.set_test_segments(self.max_len);
+        }
         self.segments.push(Box::new(segment));
     }
 
@@ -72,7 +85,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
         self.config.cpu_options()
     }
 
-    pub fn execute(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
+    pub fn execute(&mut self) -> Result<(), ExecutionError> {
         let mut result = vec![];
         loop {
             result.extend(self.segments.last_mut().unwrap().generate_traces()?);
@@ -83,8 +96,16 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             result.extend(self.segments.last_mut().unwrap().generate_commitments()?);
             self.next_segment();
         }
-        self.traces.clone_from(&result);
-        Ok(result)
+        self.traces = result;
+        Ok(())
+    }
+
+    pub fn get_traces(&self) -> Vec<DenseMatrix<F>> {
+        self.traces
+            .clone()
+            .into_iter()
+            .filter(|trace| !trace.values.is_empty())
+            .collect()
     }
 
     pub fn max_log_degree(&self) -> Result<usize, ExecutionError> {
@@ -96,30 +117,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
     }
 }
 
-pub fn get_chips<const WORD_SIZE: usize, SC: StarkGenericConfig>(
-    segment: &ExecutionSegment<WORD_SIZE, Val<SC>>,
-) -> Vec<&dyn AnyRap<SC>>
-where
-    Val<SC>: PrimeField32,
-{
-    let mut result: Vec<&dyn AnyRap<SC>> = vec![
-        &segment.cpu_chip.air,
-        &segment.program_chip.air,
-        &segment.memory_chip.air,
-        &segment.range_checker.air,
-    ];
-    if segment.config.cpu_options().field_arithmetic_enabled {
-        result.push(&segment.field_arithmetic_chip.air as &dyn AnyRap<SC>);
-    }
-    if segment.config.cpu_options().field_extension_enabled {
-        result.push(&segment.field_extension_chip.air as &dyn AnyRap<SC>);
-    }
-    if segment.config.cpu_options().poseidon2_enabled() {
-        result.push(&segment.poseidon2_chip as &dyn AnyRap<SC>);
-    }
-    result
-}
-
 // TODO: make into struct method
 pub fn get_all_chips<const WORD_SIZE: usize, SC: StarkGenericConfig>(
     vm: &VirtualMachine<WORD_SIZE, Val<SC>>,
@@ -127,8 +124,18 @@ pub fn get_all_chips<const WORD_SIZE: usize, SC: StarkGenericConfig>(
 where
     Val<SC>: PrimeField32,
 {
-    vm.segments
+    let chips: Vec<_> = vm
+        .segments
         .iter()
-        .flat_map(|segment| get_chips(segment))
-        .collect()
+        .flat_map(|segment| get_chips::<WORD_SIZE, SC>(segment))
+        .collect();
+
+    let chips: Vec<_> = vm
+        .traces
+        .iter()
+        .zip(chips)
+        .filter(|(trace, _)| !trace.values.is_empty())
+        .map(|(_, chip)| chip)
+        .collect();
+    chips
 }
