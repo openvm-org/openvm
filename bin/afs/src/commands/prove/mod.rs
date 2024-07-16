@@ -13,6 +13,7 @@ use afs_test_utils::{
     engine::StarkEngine,
     page_config::{PageConfig, PageMode},
 };
+use bin_common::utils::io::{read_from_path, write_bytes};
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{
@@ -29,10 +30,6 @@ use p3_field::PrimeField64;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::de::DeserializeOwned;
 use tracing::info_span;
-
-use crate::commands::{read_from_path, write_bytes};
-
-use super::create_prefix;
 
 /// `afs prove` command
 /// Uses information from config.toml to generate a proof of the changes made by a .afi file to a table
@@ -107,7 +104,7 @@ where
         // durations: Option<&mut (Duration, Duration)>,
     ) -> Result<()> {
         let start = Instant::now();
-        let prefix = create_prefix(config);
+        let prefix = config.generate_filename();
         match config.page.mode {
             PageMode::ReadWrite => Self::execute_rw(
                 config,

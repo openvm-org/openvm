@@ -137,7 +137,7 @@ impl GroupByOp {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct InnerJoinOp {
     pub table_id_left: TableId,
     pub table_id_right: TableId,

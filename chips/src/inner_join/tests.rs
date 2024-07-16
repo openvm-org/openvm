@@ -39,7 +39,8 @@ fn load_tables_test(
         &mut trace_builder.committer,
     );
 
-    let proof = ij_controller.prove(engine, partial_pk, trace_builder, prover_data);
+    let traces = ij_controller.traces().unwrap();
+    let proof = ij_controller.prove(engine, partial_pk, trace_builder, prover_data, traces);
     ij_controller.verify(engine, partial_pk.partial_vk(), proof)
 }
 

@@ -22,6 +22,11 @@ use p3_util::log2_strict_usize;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
+use crate::commands::cache::CacheCommand;
+use crate::commands::keygen::KeygenCommand;
+use crate::commands::prove::ProveCommand;
+use crate::commands::verify::VerifyCommand;
+
 #[derive(Debug, Parser)]
 #[command(author, version, about = "OLAP CLI")]
 #[command(propagate_version = true)]
@@ -32,9 +37,21 @@ pub struct Cli<SC: StarkGenericConfig, E: StarkEngine<SC>> {
 
 #[derive(Debug, Subcommand)]
 pub enum CliCommand<SC: StarkGenericConfig, E: StarkEngine<SC>> {
-    #[command(name = "keygen", about = "Run key generation")]
+    #[command(name = "keygen", about = "Generate proving and verifying keys")]
     /// Run key generation
     Keygen(KeygenCommand<SC, E>),
+
+    #[command(name = "cache", about = "Cache trace data")]
+    /// Run cache command
+    Cache(CacheCommand<SC, E>),
+
+    #[command(name = "prove", about = "Run proof generation")]
+    /// Run proof generation
+    Prove(ProveCommand<SC, E>),
+
+    #[command(name = "verify", about = "Verify the proof")]
+    /// Run proof verification
+    Verify(VerifyCommand<SC, E>),
 }
 
 impl<SC: StarkGenericConfig, E: StarkEngine<SC>> Cli<SC, E>
@@ -54,13 +71,32 @@ where
         let cli = Self::parse();
         match &cli.command {
             CliCommand::Keygen(keygen) => {
-                let common = CommonCommands {
-                    db_path: keygen.common.db_path.clone(),
-                    afo_path: keygen.common.afo_path.clone(),
-                    output_path: keygen.common.output_path.clone(),
-                    silent: keygen.common.silent,
-                };
-                KeygenCommand::execute(config, engine, &common, &inner_join.command).unwrap();
+                KeygenCommand::execute(config, engine, &keygen.common, keygen.keys_folder.clone())
+                    .unwrap();
+            }
+            CliCommand::Cache(cache) => {
+                CacheCommand::execute(config, engine, &cache.common, cache.cache_folder.clone())
+                    .unwrap();
+            }
+            CliCommand::Prove(prove) => {
+                ProveCommand::execute(
+                    config,
+                    engine,
+                    &prove.common,
+                    prove.keys_folder.clone(),
+                    prove.cache_folder.clone(),
+                )
+                .unwrap();
+            }
+            CliCommand::Verify(verify) => {
+                VerifyCommand::execute(
+                    config,
+                    engine,
+                    &verify.common,
+                    verify.keys_folder.clone(),
+                    verify.proof_path.clone(),
+                )
+                .unwrap();
             }
         }
     }

@@ -11,14 +11,11 @@ use afs_test_utils::{
     engine::StarkEngine,
     page_config::{PageConfig, PageMode},
 };
+use bin_common::utils::io::read_from_path;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use p3_field::PrimeField64;
 use p3_uni_stark::{StarkGenericConfig, Val};
-
-use crate::commands::read_from_path;
-
-use super::create_prefix;
 
 /// `afs verify` command
 /// Uses information from config.toml to verify a proof using the verifying key in `output-folder`
@@ -67,7 +64,7 @@ where
         keys_folder: String,
     ) -> Result<()> {
         let start = Instant::now();
-        let prefix = create_prefix(config);
+        let prefix = config.generate_filename();
         match config.page.mode {
             PageMode::ReadWrite => Self::execute_rw(
                 config,
