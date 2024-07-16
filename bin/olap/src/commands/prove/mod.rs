@@ -7,7 +7,7 @@ use color_eyre::eyre::Result;
 use logical_interface::afs_input::types::InputFileOp;
 use p3_field::PrimeField64;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::de::DeserializeOwned;
 
 use self::inner_join::ProveInnerJoinCommand;
 

@@ -6,7 +6,7 @@ use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
 use bin_common::utils::io::write_bytes;
 use clap::Parser;
 use color_eyre::eyre::Result;
-use logical_interface::afs_input::{operation::InnerJoinOp, types::AfsOperation};
+use logical_interface::afs_input::types::AfsOperation;
 use p3_field::PrimeField64;
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::Serialize;

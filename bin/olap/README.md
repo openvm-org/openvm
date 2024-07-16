@@ -23,7 +23,7 @@ cargo run --bin olap -- cache -d bin/olap/tests/data/db.mockdb -f bin/olap/tests
 cargo run --bin olap -- prove -d bin/olap/tests/data/db.mockdb -f bin/olap/tests/data/innerjoin_0x11_0x12.afo
 
 # Verify
-cargo run --bin olap -- verify -p bin/olap/tmp/proof.bin
+cargo run --bin olap -- verify -d bin/olap/tests/data/db.mockdb -f bin/olap/tests/data/innerjoin_0x11_0x12.afo
 
 ```
 

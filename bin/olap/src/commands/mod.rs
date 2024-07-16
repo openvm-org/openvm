@@ -43,21 +43,4 @@ pub struct CommonCommands {
 
 pub fn parse_afo_file(afo_path: String) -> AfsOperationsFile {
     AfsOperationsFile::open(afo_path.clone())
-    // afo.operations.iter().for_each(|op| match op.operation {
-    //     InputFileOp::Insert | InputFileOp::Write | InputFileOp::Read => {
-    //         panic!("Operation not supported");
-    //     }
-    //     InputFileOp::Filter => {
-    //         let filter = FilterOp::parse(op.args.clone()).unwrap();
-    //         execute_filter_op::<SC>(cfg, self, &mut db, filter).unwrap();
-    //     }
-    //     InputFileOp::GroupBy => {
-    //         let group_by = GroupByOp::parse(op.args.clone()).unwrap();
-    //         execute_group_by::<SC>(cfg, self, &mut db, group_by).unwrap();
-    //     }
-    //     InputFileOp::InnerJoin => {
-    //         let inner_join = InnerJoinOp::parse(op.args.clone()).unwrap();
-    //         execute_inner_join::<SC>(cfg, self, &mut db, inner_join).unwrap();
-    //     }
-    // });
 }

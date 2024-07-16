@@ -7,7 +7,6 @@ use logical_interface::{
     afs_input::{operation::InnerJoinOp, types::AfsOperation},
     afs_interface::AfsInterface,
     mock_db::MockDb,
-    table::Table,
 };
 use p3_util::log2_strict_usize;
 
