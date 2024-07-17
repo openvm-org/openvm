@@ -1,16 +1,14 @@
-use crate::sub_chip::SubAirBridge;
-
 use super::{air::XorLimbsAir, columns::XorLimbsCols};
 use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::izip;
 use p3_field::AbstractField;
 
-impl<AB: InteractionBuilder, const N: usize, const M: usize> SubAirBridge<AB>
-    for XorLimbsAir<N, M>
-{
-    type View = XorLimbsCols<N, M, AB::Var>;
-
-    fn eval_interactions(&self, builder: &mut AB, local: Self::View) {
+impl<const N: usize, const M: usize> XorLimbsAir<N, M> {
+    pub fn eval_interactions<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        local: XorLimbsCols<N, M, AB::Var>,
+    ) {
         // Send (x, y, z) where x and y have M bits.
         for (x, y, z) in izip!(local.x_limbs, local.y_limbs, local.z_limbs) {
             builder.push_send(self.bus_index, vec![x, y, z], AB::F::one());

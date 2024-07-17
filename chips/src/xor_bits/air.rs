@@ -6,7 +6,7 @@ use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use crate::sub_chip::{AirConfig, SubAir, SubAirBridge};
+use crate::sub_chip::{AirConfig, SubAir};
 
 use super::columns::{XorBitCols, XorCols, XorIoCols};
 

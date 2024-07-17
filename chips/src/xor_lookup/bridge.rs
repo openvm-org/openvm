@@ -1,21 +1,21 @@
 use afs_stark_backend::interaction::InteractionBuilder;
 
-use crate::sub_chip::SubAirBridge;
-
 use super::{
     columns::{XorLookupCols, XorLookupPreprocessedCols},
     XorLookupAir,
 };
 
-impl<AB: InteractionBuilder, const M: usize> SubAirBridge<AB> for XorLookupAir<M> {
-    /// Local preprocessed and main trace rows.
-    type View = (XorLookupPreprocessedCols<AB::Var>, XorLookupCols<AB::Var>);
-
-    fn eval_interactions(&self, builder: &mut AB, (preprocessed, main): Self::View) {
+impl<const M: usize> XorLookupAir<M> {
+    pub fn eval_interactions<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        prep_local: XorLookupPreprocessedCols<AB::Var>,
+        local: XorLookupCols<AB::Var>,
+    ) {
         builder.push_receive(
             self.bus_index,
-            vec![preprocessed.x, preprocessed.y, preprocessed.z],
-            main.mult,
+            vec![prep_local.x, prep_local.y, prep_local.z],
+            local.mult,
         );
     }
 }

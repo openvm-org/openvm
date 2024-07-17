@@ -5,8 +5,6 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use crate::sub_chip::SubAirBridge;
-
 use super::columns::RangeGateCols;
 use super::columns::NUM_RANGE_GATE_COLS;
 use super::RangeCheckerGateAir;
@@ -32,6 +30,6 @@ impl<AB: InteractionBuilder> Air<AB> for RangeCheckerGateAir {
             .when_transition()
             .assert_eq(local.counter + AB::Expr::one(), next.counter);
 
-        self.eval_interactions(builder, *local);
+        self.eval_interactions(builder, local.counter, local.mult);
     }
 }

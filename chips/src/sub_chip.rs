@@ -1,4 +1,3 @@
-use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::AirBuilder;
 
 pub trait AirConfig {
@@ -25,14 +24,4 @@ pub trait LocalTraceInstructions<F>: AirConfig {
     type LocalInput;
 
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F>;
-}
-
-/// Trait that specifies an interface for defining the bus connections of this AIR.
-/// It is optional to implement this trait, and the interactions are only enabled if they
-/// are evaluated within the `Air::eval` function.
-pub trait SubAirBridge<AB: InteractionBuilder> {
-    /// View of the parts of matrix needed for evaluating interaction expressions.
-    type View;
-
-    fn eval_interactions(&self, builder: &mut AB, view: Self::View);
 }

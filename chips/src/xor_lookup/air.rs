@@ -5,8 +5,6 @@ use p3_air::{Air, BaseAir, PairBuilder};
 use p3_field::Field;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
-use crate::sub_chip::SubAirBridge;
-
 use super::columns::{XorLookupCols, XorLookupPreprocessedCols, NUM_XOR_LOOKUP_COLS};
 
 #[derive(Clone, Copy, Debug)]
@@ -56,6 +54,6 @@ where
         let local = main.row_slice(0);
         let local: &XorLookupCols<AB::Var> = (*local).borrow();
 
-        self.eval_interactions(builder, (*prep_local, *local));
+        self.eval_interactions(builder, *prep_local, *local);
     }
 }
