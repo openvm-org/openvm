@@ -1,10 +1,10 @@
-use std::sync::Arc;
+use std::{cell::RefCell, sync::Arc};
 
 use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
 use afs_test_utils::engine::StarkEngine;
+use p3_baby_bear::BabyBear;
 use p3_field::PrimeField;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
-use parking_lot::Mutex;
 
 use super::{page_level_join::PageLevelJoin, two_pointers_program::TwoPointersProgram};
 use crate::{common::Commitment, dataframe::DataFrame, page_db::PageDb};
@@ -17,11 +17,8 @@ pub enum JoinCircuit<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEn
 
 pub struct InternalNode<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>> {
     children: Vec<Arc<JoinCircuit<COMMIT_LEN, SC, E>>>,
-    pairs: Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)>,
-
-    state: Mutex<InternalNodeState<COMMIT_LEN>>,
-
-    pis: Mutex<InternalNodePis<COMMIT_LEN>>,
+    state: RefCell<InternalNodeState<COMMIT_LEN>>,
+    pis: RefCell<InternalNodePis<COMMIT_LEN>>,
 }
 
 #[derive(Clone, derive_new::new, Default)]
@@ -53,15 +50,11 @@ struct InternalNodeState<const COMMIT_LEN: usize> {
 impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<SC> + 'static>
     InternalNode<COMMIT_LEN, SC, E>
 {
-    pub fn new(
-        children: Vec<Arc<JoinCircuit<COMMIT_LEN, SC, E>>>,
-        pairs: Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)>,
-    ) -> Self {
+    pub fn new(children: Vec<Arc<JoinCircuit<COMMIT_LEN, SC, E>>>) -> Self {
         Self {
             children,
-            pairs,
-            state: Mutex::new(InternalNodeState::<COMMIT_LEN>::default()),
-            pis: Mutex::new(InternalNodePis::<COMMIT_LEN>::default()),
+            state: RefCell::new(InternalNodeState::<COMMIT_LEN>::default()),
+            pis: RefCell::new(InternalNodePis::<COMMIT_LEN>::default()),
         }
     }
 
@@ -77,7 +70,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
     ) where
         Val<SC>: PrimeField,
     {
-        let mut pis = self.pis.lock();
+        let mut pis = self.pis.borrow_mut();
 
         pis.init_running_df_commit = output_df.commit.clone();
         pis.pairs_commit = pairs_commit.clone();
@@ -134,6 +127,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         parent_df: &DataFrame<COMMIT_LEN>,
         child_df: &DataFrame<COMMIT_LEN>,
         output_df: &mut DataFrame<COMMIT_LEN>,
+        pairs: &Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)>,
     ) where
         Val<SC>: PrimeField,
         Domain<SC>: Send + Sync,
@@ -143,8 +137,9 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         Com<SC>: Send + Sync,
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
+        Com<SC>: Into<[BabyBear; COMMIT_LEN]>,
     {
-        self.verify(engine);
+        self.verify(pairs);
         for child in self.children.iter() {
             match child.as_ref() {
                 JoinCircuit::PageLevelJoin(circuit) => circuit.verify(engine, output_df),
@@ -152,20 +147,20 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
                     circuit.verify(engine, parent_df, child_df)
                 }
                 JoinCircuit::InternalNode(circuit) => {
-                    circuit.verify_tree(engine, parent_df, child_df, output_df)
+                    circuit.verify_tree(engine, parent_df, child_df, output_df, pairs)
                 }
             }
         }
     }
 
-    pub fn verify(&self, engine: &E) {
-        let pis = self.pis.lock();
+    pub fn verify(&self, pairs: &Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)>) {
+        let pis = self.pis.borrow();
 
-        let mut state = self.state.lock();
+        let mut state = self.state.borrow_mut();
         state.running_df_commit = Some(pis.init_running_df_commit.clone());
 
         for child in self.children.iter() {
-            self.verify_child(child.clone(), engine);
+            self.verify_child(child.clone(), pairs);
         }
 
         assert_eq!(
@@ -174,22 +169,24 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         );
     }
 
-    fn verify_child(&self, circuit: Arc<JoinCircuit<COMMIT_LEN, SC, E>>, _engine: &E) {
-        let pis = self.pis.lock();
+    fn verify_child(
+        &self,
+        circuit: Arc<JoinCircuit<COMMIT_LEN, SC, E>>,
+        pairs: &Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)>,
+    ) {
+        let pis = self.pis.borrow();
 
         match circuit.as_ref() {
             JoinCircuit::TwoPointersProgram(tp_program) => {
-                let tp_pis = tp_program.pis.lock();
+                let tp_pis = tp_program.pis.borrow();
 
                 assert_eq!(tp_pis.parent_table_commit, pis.parent_table_commit);
                 assert_eq!(tp_pis.child_table_commit, pis.child_table_commit);
                 assert_eq!(tp_pis.pairs_commit, pis.pairs_commit);
             }
             JoinCircuit::PageLevelJoin(page_level_circuit) => {
-                let mut state = self.state.lock();
-                // TODO: ideally I shouldn't have a lock around the public inputs for child, but seems like
-                // that might be necessary...
-                let child_pis = page_level_circuit.pis.lock();
+                let mut state = self.state.borrow_mut();
+                let child_pis = page_level_circuit.pis.borrow();
 
                 assert_eq!(
                     *state.running_df_commit.as_ref().unwrap(),
@@ -204,13 +201,13 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
                 // Ensuring that the page-level circuit has the right parent_page_commit
                 assert_eq!(
                     child_pis.parent_page_commit,
-                    self.pairs[(pis.pairs_list_index + state.page_level_cnt) as usize].0
+                    pairs[(pis.pairs_list_index + state.page_level_cnt) as usize].0
                 );
 
                 // Ensuring that the page-level circuit has the right child_page_commit
                 assert_eq!(
                     child_pis.child_page_commit,
-                    self.pairs[(pis.pairs_list_index + state.page_level_cnt) as usize].1
+                    pairs[(pis.pairs_list_index + state.page_level_cnt) as usize].1
                 );
 
                 // TODO: decommit self.pis.pairs_commit corresponds to self.pairs. think if this is necessary
@@ -223,9 +220,8 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
                 state.page_level_cnt += 1;
             }
             JoinCircuit::InternalNode(internal_node_circuit) => {
-                let child_pis = internal_node_circuit.pis.lock();
-
-                let mut state = self.state.lock();
+                let child_pis = internal_node_circuit.pis.borrow();
+                let mut state = self.state.borrow_mut();
 
                 assert_eq!(
                     *state.running_df_commit.as_ref().unwrap(),
@@ -245,8 +241,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
 
                 state.running_df_commit = Some(child_pis.final_rannung_df_commit.clone());
 
-                // TODO: I think to parallelize, I should avoid doing this
-                let child_state = internal_node_circuit.state.lock();
+                let child_state = internal_node_circuit.state.borrow();
                 state.page_level_cnt += child_state.page_level_cnt;
             }
         }

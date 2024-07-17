@@ -4,12 +4,12 @@ pub mod internal_node;
 pub mod page_level_join;
 pub mod two_pointers_program;
 
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 use afs_chips::inner_join::controller::{T2Format, TableFormat};
 use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
 use afs_test_utils::engine::StarkEngine;
+use p3_baby_bear::BabyBear;
 use p3_field::PrimeField;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
@@ -29,9 +29,6 @@ pub struct TableJoinController<const COMMIT_LEN: usize, SC: StarkGenericConfig, 
     root: InternalNode<COMMIT_LEN, SC, E>,
     pairs: Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)>,
     pairs_commit: Commitment<COMMIT_LEN>,
-
-    _phantom: PhantomData<SC>,       // TODO: try removing this later
-    _phantom_engine: PhantomData<E>, // TODO: try removing this later
 }
 
 impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<SC> + 'static>
@@ -61,8 +58,8 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         // Adding the two-pointers program as a leaf
         let tp_program = TwoPointersProgram::<COMMIT_LEN, SC, E>::default();
 
-        let pairs = tp_program.pairs.lock().clone();
-        let pairs_commit = tp_program.pis.lock().pairs_commit.clone();
+        let pairs = tp_program.pairs.borrow().clone();
+        let pairs_commit = tp_program.pis.borrow().pairs_commit.clone();
 
         leaves.push(Some(Box::new(JoinCircuit::TwoPointersProgram(tp_program))));
 
@@ -106,12 +103,10 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
             pairs,
             pairs_commit,
             root,
-            _phantom: PhantomData,
-            _phantom_engine: PhantomData,
         }
     }
 
-    pub fn generate_trace(&self, engine: &E)
+    pub fn generate_trace(&mut self, engine: &E)
     where
         Val<SC>: PrimeField,
     {
@@ -153,12 +148,14 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         Com<SC>: Send + Sync,
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
+        Com<SC>: Into<[BabyBear; COMMIT_LEN]>,
     {
         self.root.verify_tree(
             engine,
             &self.parent_table_df,
             &self.child_table_df,
             output_df,
+            &self.pairs,
         );
     }
 
@@ -211,14 +208,9 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
             engine,
         );
 
-        let internal_node = InternalNode::<COMMIT_LEN, SC, E>::new(
-            vec![Arc::from(*left), Arc::from(*right)],
-            pairs.clone(), // TODO: I think pairs should be removed from here
-        );
+        let internal_node =
+            InternalNode::<COMMIT_LEN, SC, E>::new(vec![Arc::from(*left), Arc::from(*right)]);
 
         (Box::new(JoinCircuit::InternalNode(internal_node)), leaves)
     }
-
-    // TODO: Consider adding generate_trace, prove, and verify functions to the controller
-    // that will just call the corresponding functions on the root
 }

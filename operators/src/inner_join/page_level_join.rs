@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::{cell::RefCell, marker::PhantomData, sync::Arc};
 
 use afs_chips::inner_join::controller::{FKInnerJoinController, IJBuses, T2Format, TableFormat};
 use afs_stark_backend::{
@@ -14,28 +14,22 @@ use afs_stark_backend::{
     },
 };
 use afs_test_utils::engine::StarkEngine;
+use p3_baby_bear::BabyBear;
 use p3_field::PrimeField;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
-use parking_lot::Mutex;
 
 use crate::{common::Commitment, dataframe::DataFrame, page_db::PageDb};
 
-// TODO: this doesn't look good. Just write the whole struct around a mutex instead
-// of wrapping each field in a mutex
-
 pub struct PageLevelJoin<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>> {
-    pub pis: Mutex<PageLevelJoinPis<COMMIT_LEN>>,
-    ij_controller: Mutex<FKInnerJoinController<SC>>,
-    page_prover_data: Mutex<Option<Vec<ProverTraceData<SC>>>>,
-    proof: Mutex<Option<Proof<SC>>>,
-    partial_pk: Mutex<MultiStarkPartialProvingKey<SC>>,
+    pub pis: RefCell<PageLevelJoinPis<COMMIT_LEN>>,
+    ij_controller: RefCell<FKInnerJoinController<SC>>,
+    page_prover_data: RefCell<Option<Vec<ProverTraceData<SC>>>>,
+    proof: RefCell<Option<Proof<SC>>>,
+    partial_pk: RefCell<MultiStarkPartialProvingKey<SC>>,
 
     _marker2: PhantomData<E>,
 }
 
-// TODO: think about the public values for this the page-level circuit
-// I think a lot of those public values can be removed?
-// Actually, if we ma
 #[derive(Clone, derive_new::new, Default)]
 pub struct PageLevelJoinPis<const COMMIT_LEN: usize> {
     pub init_running_df_commit: Commitment<COMMIT_LEN>,
@@ -59,7 +53,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         Self {
             // Note that all public values except the input page commitments
             // are updated in generate_trace. Placeholders are used here.
-            pis: Mutex::new(PageLevelJoinPis::new(
+            pis: RefCell::new(PageLevelJoinPis::new(
                 Commitment::<COMMIT_LEN>::default(),
                 0,
                 parent_page_commit,
@@ -67,15 +61,15 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
                 Commitment::<COMMIT_LEN>::default(),
                 Commitment::<COMMIT_LEN>::default(),
             )),
-            ij_controller: Mutex::new(FKInnerJoinController::<SC>::new(
+            ij_controller: RefCell::new(FKInnerJoinController::<SC>::new(
                 IJBuses::default(),
                 t1_format,
                 t2_format,
                 decomp,
             )),
-            proof: Mutex::new(None),
-            page_prover_data: Mutex::new(None),
-            partial_pk: Mutex::new(MultiStarkPartialProvingKey::<SC>::default()),
+            proof: RefCell::new(None),
+            page_prover_data: RefCell::new(None),
+            partial_pk: RefCell::new(MultiStarkPartialProvingKey::<SC>::default()),
             _marker2: PhantomData,
         }
     }
@@ -92,7 +86,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
     ) where
         Val<SC>: PrimeField,
     {
-        let mut pis = self.pis.lock();
+        let mut pis = self.pis.borrow_mut();
 
         let parent_page = page_db.get_page(&pis.parent_page_commit).unwrap();
         let child_page = page_db.get_page(&pis.child_page_commit).unwrap();
@@ -100,18 +94,15 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         pis.init_running_df_commit = output_df.commit.clone();
         pis.pairs_list_index = *pairs_list_index;
 
-        let _output_page = self
-            .ij_controller
-            .lock()
-            .inner_join(&parent_page, &child_page);
+        let mut ij_controller = self.ij_controller.borrow_mut();
+
+        let _output_page = ij_controller.inner_join(&parent_page, &child_page);
 
         let output_page_commit = Commitment::<COMMIT_LEN>::default(); // TODO: update this to be the correct commitment
         output_df.push(output_page_commit.clone());
         *pairs_list_index += 1;
 
         pis.final_running_df_commit = output_df.commit.clone();
-
-        let mut ij_controller = self.ij_controller.lock();
 
         let intersector_trace_degree = 2 * parent_page.height().max(child_page.height());
 
@@ -123,7 +114,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
             intersector_trace_degree,
             &mut trace_builder.committer,
         );
-        *self.page_prover_data.lock() = Some(prover_data);
+        *self.page_prover_data.borrow_mut() = Some(prover_data);
     }
 
     pub fn set_up_keygen_builder(&self, engine: &E)
@@ -132,9 +123,9 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
     {
         let mut keygen_builder: MultiStarkKeygenBuilder<SC> =
             MultiStarkKeygenBuilder::new(&engine.config());
-        let ij_controller = self.ij_controller.lock();
+        let ij_controller = self.ij_controller.borrow_mut();
         ij_controller.set_up_keygen_builder(&mut keygen_builder);
-        *self.partial_pk.lock() = keygen_builder.generate_partial_pk();
+        *self.partial_pk.borrow_mut() = keygen_builder.generate_partial_pk();
     }
 
     pub fn prove(&self, engine: &E)
@@ -148,19 +139,19 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
     {
-        let ij_controller = self.ij_controller.lock();
-        let prover_data = self.page_prover_data.lock().take().unwrap();
+        let ij_controller = self.ij_controller.borrow();
+        let prover_data = self.page_prover_data.borrow_mut().take().unwrap();
 
         let prover = MultiTraceStarkProver::new(engine.config());
         let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
         let proof = ij_controller.prove(
             engine,
-            &self.partial_pk.lock(),
+            &self.partial_pk.borrow(),
             &mut trace_builder,
             prover_data,
         );
-        *self.proof.lock() = Some(proof);
+        *self.proof.borrow_mut() = Some(proof);
     }
 
     pub fn verify(&self, engine: &E, output_df: &mut DataFrame<COMMIT_LEN>)
@@ -173,14 +164,15 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         Com<SC>: Send + Sync,
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
+        Com<SC>: Into<[BabyBear; COMMIT_LEN]>,
     {
         // Note that this consumes the proof stored in self.proof
         // In the future we might want to load the proof directly from disk anyway
-        let proof = self.proof.lock().take().unwrap();
+        let proof = self.proof.borrow_mut().take().unwrap();
 
-        let pis = self.pis.lock();
+        let pis = self.pis.borrow();
 
-        let partial_pk = self.partial_pk.lock();
+        let partial_pk = self.partial_pk.borrow();
         let partial_vk = partial_pk.partial_vk();
 
         let (parent_page_commit, child_page_commit, output_page_commit) =
@@ -193,7 +185,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         output_df.push(output_page_commit.clone());
         assert_eq!(output_df.commit, pis.final_running_df_commit);
 
-        let ij_controller = self.ij_controller.lock();
+        let ij_controller = self.ij_controller.borrow();
         ij_controller
             .verify(engine, partial_pk.partial_vk(), proof)
             .expect("proof failed to verify");
@@ -206,38 +198,43 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         Commitment<COMMIT_LEN>,
         Commitment<COMMIT_LEN>,
         Commitment<COMMIT_LEN>,
-    ) {
-        let _parent_page_commit = proof.commitments.main_trace[partial_vk.per_air[0]
-            .main_graph
-            .matrix_ptrs
-            .get(0)
-            .unwrap()
-            .commit_index]
-            .clone();
+    )
+    where
+        Com<SC>: Into<[BabyBear; COMMIT_LEN]>,
+    {
+        let parent_page_commit = Commitment::<COMMIT_LEN>::new(
+            proof.commitments.main_trace[partial_vk.per_air[0]
+                .main_graph
+                .matrix_ptrs
+                .get(0)
+                .unwrap()
+                .commit_index]
+                .clone()
+                .into(),
+        );
 
-        let _child_page_commit = proof.commitments.main_trace[partial_vk.per_air[1]
-            .main_graph
-            .matrix_ptrs
-            .get(0)
-            .unwrap()
-            .commit_index]
-            .clone();
+        let child_page_commit = Commitment::<COMMIT_LEN>::new(
+            proof.commitments.main_trace[partial_vk.per_air[1]
+                .main_graph
+                .matrix_ptrs
+                .get(0)
+                .unwrap()
+                .commit_index]
+                .clone()
+                .into(),
+        );
 
-        let _output_page_commit = proof.commitments.main_trace[partial_vk.per_air[2]
-            .main_graph
-            .matrix_ptrs
-            .get(0)
-            .unwrap()
-            .commit_index]
-            .clone();
+        let output_page_commit = Commitment::<COMMIT_LEN>::new(
+            proof.commitments.main_trace[partial_vk.per_air[2]
+                .main_graph
+                .matrix_ptrs
+                .get(0)
+                .unwrap()
+                .commit_index]
+                .clone()
+                .into(),
+        );
 
-        // TODO: figure this out
-        let placeholder = Commitment::<COMMIT_LEN>::default();
-
-        (
-            placeholder.clone(),
-            placeholder.clone(),
-            placeholder.clone(),
-        )
+        (parent_page_commit, child_page_commit, output_page_commit)
     }
 }

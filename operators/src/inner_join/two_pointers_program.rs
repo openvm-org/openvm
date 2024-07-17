@@ -1,15 +1,14 @@
-use std::marker::PhantomData;
+use std::{cell::RefCell, marker::PhantomData};
 
 use afs_test_utils::engine::StarkEngine;
 use p3_uni_stark::StarkGenericConfig;
-use parking_lot::Mutex;
 
 use crate::{common::Commitment, dataframe::DataFrame};
 
 #[derive(Default)]
 pub struct TwoPointersProgram<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>> {
-    pub pairs: Mutex<Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)>>,
-    pub pis: Mutex<TwoPointersProgramPis<COMMIT_LEN>>,
+    pub pairs: RefCell<Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)>>,
+    pub pis: RefCell<TwoPointersProgramPis<COMMIT_LEN>>,
 
     _marker1: PhantomData<SC>, // This should be removed eventually
     _marker2: PhantomData<E>,  // This should be removed eventually
@@ -20,8 +19,8 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>>
 {
     pub fn default() -> Self {
         Self {
-            pairs: Mutex::new(vec![]),
-            pis: Mutex::new(TwoPointersProgramPis::default()),
+            pairs: RefCell::new(vec![]),
+            pis: RefCell::new(TwoPointersProgramPis::default()),
             _marker1: PhantomData::<SC>::default(),
             _marker2: PhantomData::<E>::default(),
         }
@@ -32,8 +31,8 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>>
         parent_df: &DataFrame<COMMIT_LEN>,
         child_df: &DataFrame<COMMIT_LEN>,
     ) {
-        let mut pis = self.pis.lock();
-        let mut pairs = self.pairs.lock();
+        let mut pis = self.pis.borrow_mut();
+        let mut pairs = self.pairs.borrow_mut();
 
         pis.parent_table_commit = parent_df.commit.clone();
         pis.child_table_commit = child_df.commit.clone();
@@ -50,7 +49,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>>
         parent_df: &DataFrame<COMMIT_LEN>,
         child_df: &DataFrame<COMMIT_LEN>,
     ) {
-        let pis = self.pis.lock();
+        let pis = self.pis.borrow();
 
         assert_eq!(parent_df.commit, pis.parent_table_commit);
         assert_eq!(child_df.commit, pis.child_table_commit);
