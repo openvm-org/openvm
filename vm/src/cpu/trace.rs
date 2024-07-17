@@ -220,7 +220,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                         next_pc = pc + c;
                     }
                 }
-                TERMINATE => {
+                TERMINATE | NOP => {
                     next_pc = pc;
                 }
                 opcode @ (FADD | FSUB | FMUL | FDIV) => {

@@ -51,6 +51,8 @@ pub enum OpCode {
     PERM_POS2 = 16,
     COMP_POS2 = 17,
     HINT = 18,
+
+    NOP = 100,
 }
 
 impl OpCode {
@@ -81,6 +83,8 @@ impl OpCode {
 
             18 => Some(HINT),
 
+            100 => Some(NOP),
+
             _ => None,
         }
     }
@@ -90,7 +94,7 @@ use crate::field_extension::FieldExtensionArithmeticAir;
 use crate::poseidon2::Poseidon2Chip;
 use OpCode::*;
 
-pub const CORE_INSTRUCTIONS: [OpCode; 7] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, HINT];
+pub const CORE_INSTRUCTIONS: [OpCode; 8] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, HINT, NOP];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
 
