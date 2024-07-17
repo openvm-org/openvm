@@ -7,7 +7,7 @@ use std::str::FromStr;
 
 use crate::{afs_interface::utils::string_to_table_id, table::types::TableId};
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Operand {
     Index,
@@ -74,7 +74,7 @@ impl InsertOp {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct FilterOp {
     pub table_id: TableId,
     pub operand: Operand,
