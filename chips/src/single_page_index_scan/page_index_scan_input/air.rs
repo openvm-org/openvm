@@ -216,7 +216,7 @@ where
                         x: page_cols.idx.clone(),
                         y: local_cols.x.clone(),
                         // use the equal_comp_ind
-                        prod: equal_comp_ind.unwrap(),
+                        is_equal: equal_comp_ind.unwrap(),
                     },
                     aux: is_equal_vec_aux.clone(),
                 };

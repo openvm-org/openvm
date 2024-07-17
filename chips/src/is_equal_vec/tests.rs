@@ -10,13 +10,13 @@ use crate::is_equal_vec::IsEqualVecAir;
 
 use test_case::test_case;
 
-#[test_case([1, 2, 3], [1, 2, 3], [1, 1, 1] ; "1, 2, 3 == 1, 2, 3")]
-#[test_case([1, 2, 3], [1, 2, 1], [1, 1, 0] ; "1, 2, 3 != 1, 2, 1")]
-#[test_case([2, 2, 7], [3, 5, 1], [0, 0, 0] ; "2, 2, 7 != 3, 5, 1")]
-#[test_case([17, 23, 4], [17, 23, 4], [1, 1, 1] ; "17, 23, 4 == 17, 23, 4")]
-#[test_case([92, 27, 32], [92, 27, 32], [1, 1, 1] ; "92, 27, 32 == 92, 27, 32")]
-#[test_case([1, 27, 4], [1, 2, 43], [1, 0, 0] ; "1, 27, 4 != 1, 2, 43")]
-fn test_vec_is_equal_vec(x: [u32; 3], y: [u32; 3], expected: [u32; 3]) {
+#[test_case([1, 2, 3], [1, 2, 3], 1, [1, 1] ; "1, 2, 3 == 1, 2, 3")]
+#[test_case([1, 2, 3], [1, 2, 1], 0, [1, 1] ; "1, 2, 3 != 1, 2, 1")]
+#[test_case([2, 2, 7], [3, 5, 1], 0, [0, 0] ; "2, 2, 7 != 3, 5, 1")]
+#[test_case([17, 23, 4], [17, 23, 4], 1, [1, 1] ; "17, 23, 4 == 17, 23, 4")]
+#[test_case([92, 27, 32], [92, 27, 32], 1, [1, 1] ; "92, 27, 32 == 92, 27, 32")]
+#[test_case([1, 27, 4], [1, 2, 43], 0, [1, 0] ; "1, 27, 4 != 1, 2, 43")]
+fn test_vec_is_equal_vec(x: [u32; 3], y: [u32; 3], is_equal: u32, expected_prods: [u32; 2]) {
     let x = x
         .into_iter()
         .map(AbstractField::from_canonical_u32)
@@ -30,9 +30,13 @@ fn test_vec_is_equal_vec(x: [u32; 3], y: [u32; 3], expected: [u32; 3]) {
 
     let trace = chip.generate_trace(vec![x], vec![y]);
 
-    for (i, value) in expected.iter().enumerate() {
+    println!("{:?}", trace.values);
+
+    assert_eq!(trace.values[6], AbstractField::from_canonical_u32(is_equal));
+
+    for (i, value) in expected_prods.iter().enumerate() {
         assert_eq!(
-            trace.values[6 + i],
+            trace.values[7 + i],
             AbstractField::from_canonical_u32(*value)
         );
     }
