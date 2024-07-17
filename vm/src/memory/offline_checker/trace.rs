@@ -155,7 +155,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             .flatten()[3];
         let is_equal_data_aux = is_equal_data_air
             .generate_trace_row((prev_op.data.to_vec(), curr_op.data.to_vec()))
-            .flatten()[2 * WORD_SIZE..]
+            .flatten()[2 * WORD_SIZE + 1..]
             .to_vec();
         let lt_aux: Vec<F> = lt_air
             .generate_trace_row((

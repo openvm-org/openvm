@@ -84,9 +84,6 @@ impl GroupByAir {
             )
             .collect();
 
-        println!("{:?}", trace.len());
-        println!("{:?}", self.aux_width());
-
         RowMajorMatrix::new(trace, self.aux_width())
     }
 }
