@@ -7,12 +7,13 @@ use color_eyre::eyre::Result;
 use logical_interface::afs_input::types::InputFileOp;
 use p3_field::PrimeField64;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
-use serde::de::DeserializeOwned;
+use serde::{de::DeserializeOwned, Serialize};
 
-use self::inner_join::ProveInnerJoinCommand;
+use self::{filter::ProveFilterCommand, inner_join::ProveInnerJoinCommand};
 
 use super::{parse_afo_file, CommonCommands};
 
+pub mod filter;
 pub mod inner_join;
 
 #[derive(Debug, Parser)]
@@ -45,7 +46,7 @@ pub struct ProveCommand<SC: StarkGenericConfig, E: StarkEngine<SC>> {
 impl<SC: StarkGenericConfig, E: StarkEngine<SC>> ProveCommand<SC, E>
 where
     Val<SC>: PrimeField64,
-    PcsProverData<SC>: DeserializeOwned + Send + Sync,
+    PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
     PcsProof<SC>: Send + Sync,
     Domain<SC>: Send + Sync,
     Com<SC>: Send + Sync,
@@ -62,9 +63,17 @@ where
         let afo = parse_afo_file(common.afo_path.clone());
         for op in afo.operations {
             match op.operation {
-                // InputFileOp::Filter => {
-                //     ProveFilterCommand::execute(config, engine, common, op).unwrap();
-                // }
+                InputFileOp::Filter => {
+                    ProveFilterCommand::execute(
+                        config,
+                        engine,
+                        common,
+                        op,
+                        keys_folder.clone(),
+                        cache_folder.clone(),
+                    )
+                    .unwrap();
+                }
                 // InputFileOp::GroupBy => {
                 //     ProveGroupByCommand::execute(config, engine, common, op).unwrap();
                 // }

@@ -9,10 +9,11 @@ use p3_field::PrimeField64;
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::de::DeserializeOwned;
 
-use self::inner_join::VerifyInnerJoinCommand;
+use self::{filter::VerifyFilterCommand, inner_join::VerifyInnerJoinCommand};
 
 use super::{parse_afo_file, CommonCommands};
 
+pub mod filter;
 pub mod inner_join;
 
 #[derive(Debug, Parser)]
@@ -56,9 +57,17 @@ where
         let afo = parse_afo_file(common.afo_path.clone());
         for op in afo.operations {
             match op.operation {
-                // InputFileOp::Filter => {
-                //     VerifyFilterCommand::execute(config, engine, common, op).unwrap();
-                // }
+                InputFileOp::Filter => {
+                    VerifyFilterCommand::execute(
+                        config,
+                        engine,
+                        common,
+                        op,
+                        keys_folder.clone(),
+                        proof_path.clone(),
+                    )
+                    .unwrap();
+                }
                 // InputFileOp::GroupBy => {
                 //     VerifyGroupByCommand::execute(config, engine, common, op).unwrap();
                 // }

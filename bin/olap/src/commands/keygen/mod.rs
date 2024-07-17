@@ -9,10 +9,11 @@ use p3_field::PrimeField64;
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::Serialize;
 
-use self::inner_join::KeygenInnerJoinCommand;
+use self::{filter::KeygenFilterCommand, inner_join::KeygenInnerJoinCommand};
 
 use super::{parse_afo_file, CommonCommands};
 
+pub mod filter;
 pub mod inner_join;
 
 #[derive(Debug, Parser)]
@@ -47,6 +48,10 @@ where
         let afo = parse_afo_file(common.afo_path.clone());
         for op in afo.operations {
             match op.operation {
+                InputFileOp::Filter => {
+                    KeygenFilterCommand::execute(config, engine, common, op, keys_folder.clone())
+                        .unwrap();
+                }
                 InputFileOp::InnerJoin => {
                     KeygenInnerJoinCommand::execute(
                         config,

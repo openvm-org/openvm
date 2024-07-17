@@ -59,11 +59,14 @@ where
             bincode::deserialize(&encoded_pk).unwrap();
         let partial_vk = partial_pk.partial_vk();
 
+        // Get proof from disk
         let table_id_full = inner_join_op.table_id_left.to_string();
         let default_proof_path = format!("bin/olap/tmp/cache/{}.proof.bin", table_id_full);
         let proof_path = proof_path.unwrap_or(default_proof_path);
         let encoded_proof = read_from_path(proof_path).unwrap();
         let proof: Proof<SC> = bincode::deserialize(&encoded_proof).unwrap();
+
+        // Verify proof
         inner_join_controller
             .verify(engine, partial_vk, proof)
             .unwrap();
