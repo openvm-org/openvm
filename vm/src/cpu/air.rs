@@ -5,7 +5,7 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use afs_chips::{
-    is_equal_vec::{columns::IsEqualVecIOCols, IsEqualVecAir},
+    is_equal_vec::{columns::IsEqualVecIoCols, IsEqualVecAir},
     is_zero::{columns::IsZeroIOCols, IsZeroAir},
     sub_chip::SubAir,
 };
@@ -256,7 +256,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
 
         // evaluate equality between read1 and read2
 
-        let is_equal_vec_io_cols = IsEqualVecIOCols {
+        let is_equal_vec_io_cols = IsEqualVecIoCols {
             x: read1.data.to_vec(),
             y: read2.data.to_vec(),
             is_equal: read0_equals_read1,

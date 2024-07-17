@@ -1,11 +1,11 @@
 #[derive(Default)]
-pub struct IsEqualVecIOCols<T> {
+pub struct IsEqualVecIoCols<T> {
     pub x: Vec<T>,
     pub y: Vec<T>,
     pub is_equal: T,
 }
 
-impl<T: Clone> IsEqualVecIOCols<T> {
+impl<T: Clone> IsEqualVecIoCols<T> {
     pub fn flatten(&self) -> Vec<T> {
         let mut res: Vec<T> = self.x.iter().chain(self.y.iter()).cloned().collect();
         res.push(self.is_equal.clone());
@@ -53,14 +53,14 @@ impl<T: Clone> IsEqualVecAuxCols<T> {
 
 #[derive(Default)]
 pub struct IsEqualVecCols<T> {
-    pub io: IsEqualVecIOCols<T>,
+    pub io: IsEqualVecIoCols<T>,
     pub aux: IsEqualVecAuxCols<T>,
 }
 
 impl<T: Clone> IsEqualVecCols<T> {
     pub fn new(x: Vec<T>, y: Vec<T>, is_equal: T, prods: Vec<T>, invs: Vec<T>) -> Self {
         Self {
-            io: IsEqualVecIOCols { x, y, is_equal },
+            io: IsEqualVecIoCols { x, y, is_equal },
             aux: IsEqualVecAuxCols { prods, invs },
         }
     }
@@ -73,7 +73,7 @@ impl<T: Clone> IsEqualVecCols<T> {
         let invs = slc[3 * vec_len..4 * vec_len].to_vec();
 
         Self {
-            io: IsEqualVecIOCols { x, y, is_equal },
+            io: IsEqualVecIoCols { x, y, is_equal },
             aux: IsEqualVecAuxCols { prods, invs },
         }
     }

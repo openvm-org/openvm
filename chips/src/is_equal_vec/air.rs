@@ -9,7 +9,7 @@ use p3_matrix::Matrix;
 use crate::sub_chip::{AirConfig, SubAir};
 
 use super::{
-    columns::{IsEqualVecAuxCols, IsEqualVecCols, IsEqualVecIOCols},
+    columns::{IsEqualVecAuxCols, IsEqualVecCols, IsEqualVecIoCols},
     IsEqualVecAir,
 };
 
@@ -51,11 +51,11 @@ impl<AB: AirBuilder> Air<AB> for IsEqualVecAir {
 }
 
 impl<AB: AirBuilder> SubAir<AB> for IsEqualVecAir {
-    type IoView = IsEqualVecIOCols<AB::Var>;
+    type IoView = IsEqualVecIoCols<AB::Var>;
     type AuxView = IsEqualVecAuxCols<AB::Var>;
 
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
-        let IsEqualVecIOCols { x, y, is_equal } = io;
+        let IsEqualVecIoCols { x, y, is_equal } = io;
         let IsEqualVecAuxCols { prods, invs } = aux;
         let vec_len = self.vec_len;
 
