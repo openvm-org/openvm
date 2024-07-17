@@ -224,7 +224,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
                 let domain = main.domain;
                 let preprocessed = pk.preprocessed_data.as_ref().map(|p| {
                     // TODO: currently assuming each chip has it's own preprocessed commitment
-                    CommittedSingleMatrixView::new(&p.data, 0)
+                    CommittedSingleMatrixView::new(p.data.as_ref(), 0)
                 });
                 let matrix_ptrs = &pk.vk.main_graph.matrix_ptrs;
                 assert_eq!(main.partitioned_main_trace.len(), matrix_ptrs.len());

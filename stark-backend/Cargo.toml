@@ -19,13 +19,14 @@ itertools = "0.13.0"
 serde = { version = "1.0", default-features = false, features = [
     "derive",
     "alloc",
+    "rc",
 ] }
 tracing = "0.1.37"
 derivative = "2.2.0"
 
 [dev-dependencies]
 afs-derive = { path = "../derive" }
-afs-test-utils = { path = "../test-utils"}
+afs-test-utils = { path = "../test-utils" }
 
 p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }

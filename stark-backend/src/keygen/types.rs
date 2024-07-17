@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use derivative::Derivative;
 use itertools::Itertools;
 use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
@@ -62,7 +64,7 @@ pub struct StarkPartialVerifyingKey<SC: StarkGenericConfig> {
 
 /// Prover only data for preprocessed trace for a single AIR.
 /// Currently assumes each AIR has it's own preprocessed commitment
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(bound(
     serialize = "PcsProverData<SC>: Serialize",
     deserialize = "PcsProverData<SC>: Deserialize<'de>"
@@ -71,7 +73,7 @@ pub struct ProverOnlySinglePreprocessedData<SC: StarkGenericConfig> {
     /// Preprocessed trace matrix.
     pub trace: RowMajorMatrix<Val<SC>>,
     /// Prover data, such as a Merkle tree, for the trace commitment.
-    pub data: PcsProverData<SC>,
+    pub data: Arc<PcsProverData<SC>>,
 }
 
 /// Verifier data for preprocessed trace for a single AIR.
