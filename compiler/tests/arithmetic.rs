@@ -8,6 +8,7 @@ use afs_compiler::ir::{Ext, Felt, SymbolicExt};
 use afs_compiler::ir::{ExtConst, Var};
 use afs_compiler::util::end_to_end_test;
 
+#[allow(dead_code)]
 const WORD_SIZE: usize = 1;
 
 #[test]

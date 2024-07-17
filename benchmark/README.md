@@ -6,15 +6,45 @@
 
 Setting a `--config-folder` will get benchmark utility to read all .toml files from that folder and parse each as a `PageConfig`. For each `PageConfig` parsed, it will run the benchmark with the configuration and output it to a csv file in `benchmark/output`.
 
-### `--percent-writes`
+## ReadWrite
+
+Run from the root of the repository
+
+```bash
+cargo run --release --bin benchmark -- rw -r 90 -w 10
+```
+
+### `--percent-writes` (`-w`)
 
 Percentage (where 100 = 100%) of config file's `max_rw_ops` that are writes to the database. Will create random `INSERT` commands up to the page height, and then create `WRITE` instructions for the remaining values.
 
 Note that `--percent-reads` and `--percent-writes` must be less than or equal to 100, but do not need to total 100.
 
-### `--percent-reads`
+### `--percent-reads` (`-r`)
 
 Percentage (where 100 = 100%) of config file's `max_rw_ops` that are `READ`s. Note that there must be at least one value already inserted.
+
+## Predicate
+
+Run these commands from the root of the repository
+
+```bash
+cargo run --release --bin benchmark -- predicate --p lt 20000
+```
+
+### `--predicate` (`-p`)
+
+The comparison predicate operator. Valid values:
+
+- `eq` or `=`: Equal
+- `lt` or `<`: Less than
+- `lte` or `<=`: Less than equal
+- `gt` or `<`: Greater than
+- `gte` or `<=`: Greater than equal
+
+### `--value` (`-v`)
+
+The value to run the comparison predicate on
 
 ## `PageConfig` generation
 
@@ -32,14 +62,20 @@ We generate the following benchmark data for each run:
 - prove_time: Total time to generate the proof prove (inclusive of all prove timing items above)
   - prove_load_trace_gen: Time to generate load_page_and_ops trace
   - prove_load_trace_commit: Time to commit load_page_and_ops trace
-  - prove_ops_sender_gen: Time to generate the ops_sender trace
+  - prove_ops_sender_gen: Time to generate the ops_sender trace (not applicable for Predicate)
   - prove_commit: Time to commit trace
 - verify_time: Total time to verify the proof
 
-## Commands
+## Additional test commands
 
-Run these commands from the root of the repository
+To run only small configs for testing
 
 ```bash
-cargo run --release --bin benchmark -- rw -r 90 -w 10
+cargo run --release --bin benchmark -- rw -r 90 -w 10 --config-folder benchmark/config/mini
+```
+
+For running tests with only the large configs
+
+```bash
+cargo run --release --bin benchmark -- rw -r 90 -w 10 --config-folder benchmark/config/large
 ```

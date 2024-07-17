@@ -647,14 +647,59 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 AS::Immediate,
             ),
         ],
-        AsmInstruction::Hint(src) => vec![inst(
-            HINT,
+        AsmInstruction::HintInputVec() => vec![inst(
+            HINT_INPUT,
+            F::zero(),
+            F::zero(),
+            F::zero(),
+            AS::Register,
+            AS::Memory,
+        )],
+        AsmInstruction::HintBits(src) => vec![inst(
+            HINT_BITS,
             register(src),
             F::zero(),
             F::zero(),
             AS::Register,
             AS::Memory,
         )],
+        AsmInstruction::StoreHintWordI(val, offset, index, size) => vec![inst(
+            SHINTW,
+            register(val),
+            (index * size) + offset,
+            F::zero(),
+            AS::Register,
+            AS::Memory,
+        )],
+        AsmInstruction::StoreHintWord(addr, index, offset, size) => vec![
+            // register[util] <- register[index] * size
+            inst(
+                FMUL,
+                utility_register,
+                register(index),
+                size,
+                AS::Register,
+                AS::Immediate,
+            ),
+            // register[util] <- register[src] + register[util]
+            inst(
+                FADD,
+                utility_register,
+                register(addr),
+                utility_register,
+                AS::Register,
+                AS::Register,
+            ),
+            //  mem[register[util] + offset] <- hint_word
+            inst(
+                SHINTW,
+                utility_register,
+                offset,
+                F::zero(),
+                AS::Register,
+                AS::Memory,
+            ),
+        ],
         AsmInstruction::PrintV(..) | AsmInstruction::PrintF(..) | AsmInstruction::PrintE(..) => {
             if options.compile_prints {
                 convert_print_instruction::<WORD_SIZE, F, EF>(instruction)

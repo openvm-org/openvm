@@ -80,6 +80,13 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         data
     }
 
+    /// Reads a word directly from memory without updating internal state.
+    ///
+    /// Any value returned is unconstrained.
+    pub fn unsafe_read_word(&self, address_space: F, address: F) -> [F; WORD_SIZE] {
+        from_fn(|i| self.memory[&(address_space, address + F::from_canonical_usize(i))])
+    }
+
     pub fn write_word(
         &mut self,
         timestamp: usize,
@@ -152,6 +159,13 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
 
     pub fn read_elem(&mut self, timestamp: usize, address_space: F, address: F) -> F {
         compose(self.read_word(timestamp, address_space, address))
+    }
+
+    /// Reads an element directly from memory without updating internal state.
+    ///
+    /// Any value returned is unconstrained.
+    pub fn unsafe_read_elem(&self, address_space: F, address: F) -> F {
+        compose(self.unsafe_read_word(address_space, address))
     }
 
     pub fn write_elem(&mut self, timestamp: usize, address_space: F, address: F, data: F) {

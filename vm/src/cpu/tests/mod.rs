@@ -2,7 +2,7 @@ use crate::cpu::columns::{CpuCols, CpuIoCols};
 use crate::cpu::{max_accesses_per_instruction, CpuChip, CpuOptions};
 use crate::field_arithmetic::ArithmeticOperation;
 use crate::memory::{decompose, MemoryAccess, OpType};
-use crate::vm::config::VmParamsConfig;
+use crate::vm::config::VmConfig;
 use crate::vm::VirtualMachine;
 use afs_chips::is_zero::IsZeroAir;
 use afs_stark_backend::verifier::VerificationError;
@@ -28,7 +28,7 @@ fn make_vm<const WORD_SIZE: usize>(
     field_extension_enabled: bool,
 ) -> VirtualMachine<WORD_SIZE, BabyBear> {
     VirtualMachine::<WORD_SIZE, BabyBear>::new(
-        VmParamsConfig {
+        VmConfig {
             field_arithmetic_enabled,
             field_extension_enabled,
             compress_poseidon2_enabled: false,

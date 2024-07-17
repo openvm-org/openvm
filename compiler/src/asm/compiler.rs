@@ -456,25 +456,15 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         trace,
                     ),
                 },
-
-                DslIr::HintBitsU(dst, src) => match (dst, src) {
-                    (Array::Dyn(dst, _), Usize::Var(src)) => {
-                        self.push(AsmInstruction::HintBits(dst.fp(), src.fp()), trace);
-                    }
-                    _ => unimplemented!(),
-                },
-                DslIr::HintBitsF(dst, src) => match dst {
-                    Array::Dyn(dst, _) => {
-                        self.push(AsmInstruction::HintBits(dst.fp(), src.fp()), trace);
-                    }
-                    _ => unimplemented!(),
-                },
-                DslIr::HintBitsV(dst, src) => match dst {
-                    Array::Dyn(dst, _) => {
-                        self.push(AsmInstruction::HintBits(dst.fp(), src.fp()), trace);
-                    }
-                    _ => unimplemented!(),
-                },
+                DslIr::HintBitsF(var) => {
+                    self.push(AsmInstruction::HintBits(var.fp()), trace);
+                }
+                DslIr::HintBitsV(var) => {
+                    self.push(AsmInstruction::HintBits(var.fp()), trace);
+                }
+                DslIr::HintBitsU(_) => {
+                    todo!()
+                }
                 DslIr::Poseidon2PermuteBabyBear(dst, src) => match (dst, src) {
                     (Array::Dyn(dst, _), Array::Dyn(src, _)) => {
                         self.push(AsmInstruction::Poseidon2Permute(dst.fp(), src.fp()), trace)
@@ -485,13 +475,19 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::PrintF(dst) => self.push(AsmInstruction::PrintF(dst.fp()), trace),
                 DslIr::PrintV(dst) => self.push(AsmInstruction::PrintV(dst.fp()), trace),
                 DslIr::PrintE(dst) => self.push(AsmInstruction::PrintE(dst.fp()), trace),
-                DslIr::HintExt2Felt(dst, src) => match (dst, src) {
-                    (Array::Dyn(dst, _), src) => {
-                        self.push(AsmInstruction::HintExt2Felt(dst.fp(), src.fp()), trace)
-                    }
-                    _ => unimplemented!(),
+                DslIr::HintInputVec() => {
+                    self.push(AsmInstruction::HintInputVec(), trace);
+                }
+                DslIr::StoreHintWord(ptr, index) => match index.fp() {
+                    IndexTriple::Const(index, offset, size) => self.push(
+                        AsmInstruction::StoreHintWordI(ptr.fp(), index, offset, size),
+                        trace,
+                    ),
+                    IndexTriple::Var(index, offset, size) => self.push(
+                        AsmInstruction::StoreHintWord(ptr.fp(), index, offset, size),
+                        trace,
+                    ),
                 },
-                DslIr::Hint(dst) => self.push(AsmInstruction::Hint(dst.fp()), trace),
                 DslIr::FriFold(m, input_ptr) => {
                     if let Array::Dyn(ptr, _) = input_ptr {
                         self.push(AsmInstruction::FriFold(m.fp(), ptr.fp()), trace);
@@ -513,7 +509,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         _ => unimplemented!(),
                     }
                 }
-
                 DslIr::Commit(val, index) => {
                     self.push(AsmInstruction::Commit(val.fp(), index.fp()), trace);
                 }

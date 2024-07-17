@@ -8,5 +8,5 @@ fn main() {
     }
     let config = VmConfig::read_config_file("config.toml").unwrap();
     setup_tracing();
-    let _cli = Cli::run(config.vm);
+    let _cli = Cli::run(config);
 }

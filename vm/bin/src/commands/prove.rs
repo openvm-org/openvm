@@ -9,7 +9,7 @@ use afs_test_utils::{
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
-use stark_vm::vm::{config::VmParamsConfig, get_chips, VirtualMachine};
+use stark_vm::vm::{config::VmConfig, get_chips, VirtualMachine};
 
 use crate::{
     asm::parse_asm_file,
@@ -41,7 +41,7 @@ pub struct ProveCommand {
 
 impl ProveCommand {
     /// Execute the `prove` command
-    pub fn execute(&self, config: VmParamsConfig) -> Result<()> {
+    pub fn execute(&self, config: VmConfig) -> Result<()> {
         let start = Instant::now();
         self.execute_helper(config)?;
 
@@ -51,7 +51,7 @@ impl ProveCommand {
         Ok(())
     }
 
-    pub fn execute_helper(&self, config: VmParamsConfig) -> Result<()> {
+    pub fn execute_helper(&self, config: VmConfig) -> Result<()> {
         println!("Proving program: {}", self.asm_file_path);
         let instructions = parse_asm_file(Path::new(&self.asm_file_path.clone()))?;
         let mut vm = VirtualMachine::<WORD_SIZE, _>::new(config, instructions, vec![]);

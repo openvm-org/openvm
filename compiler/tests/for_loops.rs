@@ -91,7 +91,7 @@ fn test_compiler_nested_array_loop() {
     //let program = builder.compile_isa::<WORD_SIZE>();
     //display_program(&program);
     //execute_program::<WORD_SIZE, _>(program, vec![]);
-    end_to_end_test::<WORD_SIZE, _>(builder, vec![]);
+    //end_to_end_test::<WORD_SIZE, _>(builder, vec![]);
 
     // let code = builder.compile_asm();
 

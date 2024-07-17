@@ -118,10 +118,10 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     /// - Generates preprocessed trace and creates a dedicated commitment for it.
     /// - Adds main trace to the last main trace commitment.
     #[instrument(level = "debug", skip_all)]
-    pub fn add_air(&mut self, air: &dyn AnyRap<SC>, degree: usize, num_public_values: usize) {
+    pub fn add_air(&mut self, air: &dyn AnyRap<SC>, num_public_values: usize) {
         let main_width = <dyn AnyRap<SC> as BaseAir<Val<SC>>>::width(air);
         let ptr = self.add_main_matrix(main_width);
-        self.add_partitioned_air(air, degree, num_public_values, vec![ptr]);
+        self.add_partitioned_air(air, num_public_values, vec![ptr]);
     }
 
     /// Add a single Interactive AIR with partitioned main trace.
@@ -133,7 +133,6 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     pub fn add_partitioned_air(
         &mut self,
         air: &dyn AnyRap<SC>,
-        degree: usize,
         num_public_values: usize,
         partitioned_main_ptrs: Vec<SingleMatrixCommitPtr>,
     ) {
@@ -169,7 +168,6 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
         );
         let quotient_degree = 1 << log_quotient_degree;
         let vk = StarkPartialVerifyingKey {
-            degree,
             preprocessed_data: prep_verifier_data,
             width,
             main_graph: MatrixCommitmentPointers::new(partitioned_main_ptrs),

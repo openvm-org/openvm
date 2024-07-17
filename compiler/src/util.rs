@@ -2,12 +2,14 @@ use p3_baby_bear::BabyBear;
 use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
 
 use afs_test_utils::config::baby_bear_poseidon2::{engine_from_perm, random_perm};
-use afs_test_utils::config::fri_params::fri_params_with_80_bits_of_security;
+use afs_test_utils::config::fri_params::{
+    fri_params_fast_testing, fri_params_with_80_bits_of_security,
+};
 use afs_test_utils::engine::StarkEngine;
 use stark_vm::vm::get_chips;
 use stark_vm::{
     cpu::trace::Instruction,
-    vm::{config::VmParamsConfig, VirtualMachine},
+    vm::{config::VmConfig, VirtualMachine},
 };
 
 use crate::asm::AsmBuilder;
@@ -25,19 +27,19 @@ pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
 
 pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(
     program: Vec<Instruction<F>>,
-    witness_stream: Vec<Vec<F>>,
+    input_stream: Vec<Vec<F>>,
 ) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
-        VmParamsConfig {
+        VmConfig {
             field_arithmetic_enabled: true,
-            field_extension_enabled: false,
+            field_extension_enabled: true,
             limb_bits: 28,
             decomp: 4,
             compress_poseidon2_enabled: true,
             perm_poseidon2_enabled: true,
         },
         program,
-        witness_stream,
+        input_stream,
     );
     vm.segments[0].traces().unwrap();
 }
@@ -74,7 +76,7 @@ pub fn display_program_with_pc<F: PrimeField32>(program: &[Instruction<F>]) {
 }
 pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + TwoAdicField>(
     builder: AsmBuilder<BabyBear, EF>,
-    witness_stream: Vec<Vec<BabyBear>>,
+    input_stream: Vec<Vec<BabyBear>>,
 ) {
     let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
         compile_prints: false,
@@ -82,7 +84,7 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
         field_extension_enabled: true,
     });
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
-        VmParamsConfig {
+        VmConfig {
             field_arithmetic_enabled: true,
             field_extension_enabled: true,
             limb_bits: 28,
@@ -91,14 +93,19 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
             perm_poseidon2_enabled: true,
         },
         program,
-        witness_stream,
+        input_stream,
     );
     let max_log_degree = vm.segments[0].max_log_degree().unwrap();
     let traces = vm.segments[0].traces().unwrap();
     let chips = get_chips(&vm.segments[0]);
 
     let perm = random_perm();
-    let fri_params = fri_params_with_80_bits_of_security()[1];
+    // blowup factor 8 for poseidon2 chip
+    let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
+        fri_params_fast_testing()[1]
+    } else {
+        fri_params_with_80_bits_of_security()[1]
+    };
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
 
     let num_chips = chips.len();

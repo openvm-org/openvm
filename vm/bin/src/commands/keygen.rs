@@ -12,7 +12,7 @@ use clap::Parser;
 use color_eyre::eyre::Result;
 use itertools::Itertools;
 use p3_matrix::Matrix;
-use stark_vm::vm::{config::VmParamsConfig, get_chips, VirtualMachine};
+use stark_vm::vm::{config::VmConfig, get_chips, VirtualMachine};
 
 use crate::asm::parse_asm_file;
 
@@ -42,7 +42,7 @@ pub struct KeygenCommand {
 
 impl KeygenCommand {
     /// Execute the `keygen` command
-    pub fn execute(self, config: VmParamsConfig) -> Result<()> {
+    pub fn execute(self, config: VmConfig) -> Result<()> {
         let start = Instant::now();
         self.execute_helper(config)?;
         let duration = start.elapsed();
@@ -50,7 +50,7 @@ impl KeygenCommand {
         Ok(())
     }
 
-    fn execute_helper(self, config: VmParamsConfig) -> Result<()> {
+    fn execute_helper(self, config: VmConfig) -> Result<()> {
         let instructions = parse_asm_file(Path::new(&self.asm_file_path.clone()))?;
         let mut vm = VirtualMachine::<WORD_SIZE, _>::new(config, instructions, vec![]);
         let engine = config::baby_bear_poseidon2::default_engine(vm.segments[0].max_log_degree()?);
@@ -59,8 +59,8 @@ impl KeygenCommand {
         let traces = vm.segments[0].traces()?;
         let chips = get_chips(&vm.segments[0]);
 
-        for (chip, trace) in chips.into_iter().zip_eq(traces) {
-            keygen_builder.add_air(chip, trace.height(), 0);
+        for chip in chips {
+            keygen_builder.add_air(chip, 0);
         }
 
         let partial_pk = keygen_builder.generate_partial_pk();

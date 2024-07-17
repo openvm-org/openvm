@@ -7,7 +7,7 @@ use afs_test_utils::{
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
-use stark_vm::vm::{config::VmParamsConfig, get_chips, VirtualMachine};
+use stark_vm::vm::{config::VmConfig, get_chips, VirtualMachine};
 
 use crate::{
     asm::parse_asm_file,
@@ -47,7 +47,7 @@ pub struct VerifyCommand {
 
 impl VerifyCommand {
     /// Execute the `verify` command
-    pub fn execute(&self, config: VmParamsConfig) -> Result<()> {
+    pub fn execute(&self, config: VmConfig) -> Result<()> {
         let start = Instant::now();
 
         self.execute_helper(config)?;
@@ -58,7 +58,7 @@ impl VerifyCommand {
         Ok(())
     }
 
-    pub fn execute_helper(&self, config: VmParamsConfig) -> Result<()> {
+    pub fn execute_helper(&self, config: VmConfig) -> Result<()> {
         println!("Verifying proof file: {}", self.proof_file);
         let instructions = parse_asm_file(Path::new(&self.asm_file_path))?;
         let mut vm = VirtualMachine::<WORD_SIZE, _>::new(config, instructions, vec![]);
@@ -78,9 +78,9 @@ impl VerifyCommand {
         let verifier = engine.verifier();
         let result = verifier.verify(
             &mut challenger,
-            partial_vk,
+            &partial_vk,
             chips,
-            proof,
+            &proof,
             &vec![vec![]; num_chips],
         );
 

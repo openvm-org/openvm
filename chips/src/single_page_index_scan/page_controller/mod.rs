@@ -279,9 +279,7 @@ where
         &self,
         keygen_builder: &mut MultiStarkKeygenBuilder<SC>,
         page_width: usize,
-        page_height: usize,
         idx_len: usize,
-        decomp: usize,
     ) {
         let input_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
         let output_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
@@ -291,24 +289,17 @@ where
 
         keygen_builder.add_partitioned_air(
             &self.input_chip.air,
-            page_height,
             idx_len,
             vec![input_page_ptr, input_page_aux_ptr],
         );
 
         keygen_builder.add_partitioned_air(
             &self.output_chip.air,
-            page_height,
             0,
             vec![output_page_ptr, output_page_aux_ptr],
         );
 
-        keygen_builder.add_partitioned_air(
-            &self.range_checker.air,
-            1 << decomp,
-            0,
-            vec![range_checker_ptr],
-        );
+        keygen_builder.add_partitioned_air(&self.range_checker.air, 0, vec![range_checker_ptr]);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -412,13 +403,13 @@ where
         let mut challenger = engine.new_challenger();
         verifier.verify(
             &mut challenger,
-            partial_vk,
+            &partial_vk,
             vec![
                 &self.input_chip.air,
                 &self.output_chip.air,
                 &self.range_checker.air,
             ],
-            proof,
+            &proof,
             &pis,
         )
     }

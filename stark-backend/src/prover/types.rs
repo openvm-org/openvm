@@ -82,6 +82,8 @@ pub struct Commitments<SC: StarkGenericConfig> {
 #[derive(Serialize, Deserialize)]
 #[serde(bound = "")]
 pub struct Proof<SC: StarkGenericConfig> {
+    /// For each RAP, the height of trace matrix.
+    pub degrees: Vec<usize>,
     /// The PCS commitments
     pub commitments: Commitments<SC>,
     // Opening proofs separated by partition, but this may change

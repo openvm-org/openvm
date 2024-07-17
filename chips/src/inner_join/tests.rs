@@ -125,12 +125,7 @@ fn inner_join_test() {
     );
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-    ij_controller.set_up_keygen_builder(
-        &mut keygen_builder,
-        t1_height,
-        t2_height,
-        intersector_trace_degree,
-    );
+    ij_controller.set_up_keygen_builder(&mut keygen_builder);
 
     let partial_pk = keygen_builder.generate_partial_pk();
 

@@ -1,3 +1,7 @@
+use std::collections::VecDeque;
+use std::sync::Arc;
+
+use afs_chips::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::rap::AnyRap;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::DenseMatrix, Matrix};
@@ -14,14 +18,14 @@ use crate::cpu::{
     CpuOptions,
 };
 
-use self::config::VmParamsConfig;
+use self::config::VmConfig;
 
 pub mod config;
 
 pub const DEFAULT_MAX_LEN: usize = 1 << 20;
 
 pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
-    pub config: VmParamsConfig,
+    pub config: VmConfig,
     pub program: Vec<Instruction<F>>,
     pub witness_stream: Vec<Vec<F>>,
     pub segments: Vec<Box<ExecutionSegment<WORD_SIZE, F>>>,
@@ -32,7 +36,7 @@ pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
 
 impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
     pub fn new(
-        config: VmParamsConfig,
+        config: VmConfig,
         program: Vec<Instruction<F>>,
         witness_stream: Vec<Vec<F>>,
     ) -> Self {

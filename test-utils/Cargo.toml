@@ -4,7 +4,6 @@ version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
-
 [dependencies]
 p3-air = { workspace = true }
 p3-challenger = { workspace = true }
@@ -38,3 +37,6 @@ p3-mds = { workspace = true }
 toml = "0.8.14"
 p3-blake3 = { workspace = true }
 p3-keccak = { workspace = true }
+
+[features]
+default = []

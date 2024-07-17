@@ -15,6 +15,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  AXIOM_FAST_TEST: "1"
 
 jobs:
   build:

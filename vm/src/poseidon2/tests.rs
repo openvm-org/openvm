@@ -2,7 +2,7 @@ use super::{make_io_cols, Poseidon2Chip};
 use crate::cpu::trace::Instruction;
 use crate::cpu::OpCode::{COMP_POS2, PERM_POS2};
 use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
-use crate::vm::config::VmParamsConfig;
+use crate::vm::config::VmConfig;
 use crate::vm::VirtualMachine;
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::config::{
@@ -51,7 +51,7 @@ macro_rules! run_perm_ops {
 
         // default VM with poseidon2 enabled
         let mut vm = VirtualMachine::<1, BabyBear>::new(
-            VmParamsConfig {
+            VmConfig {
                 field_arithmetic_enabled: true,
                 field_extension_enabled: false,
                 compress_poseidon2_enabled: true,

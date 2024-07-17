@@ -36,7 +36,7 @@ where
             idx_len,
             data_len,
             page_width,
-            page_height,
+            _page_height,
             idx_limb_bits,
             idx_decomp,
             range_max,
@@ -54,13 +54,7 @@ where
         );
 
         let mut keygen_builder = engine.keygen_builder();
-        page_controller.set_up_keygen_builder(
-            &mut keygen_builder,
-            page_width,
-            page_height,
-            idx_len,
-            idx_decomp,
-        );
+        page_controller.set_up_keygen_builder(&mut keygen_builder, page_width, idx_len);
 
         // Write the partial pk and vk to disk
         let partial_pk = keygen_builder.generate_partial_pk();

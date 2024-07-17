@@ -170,13 +170,7 @@ fn execution_air_test() {
     );
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-    page_controller.set_up_keygen_builder(
-        &mut keygen_builder,
-        page_height,
-        trace_degree,
-        &ops_sender,
-        4 * num_ops,
-    );
+    page_controller.set_up_keygen_builder(&mut keygen_builder, &ops_sender);
 
     let partial_pk = keygen_builder.generate_partial_pk();
 
