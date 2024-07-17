@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use crate::is_equal_vec::columns::IsEqualVecAuxCols;
 use crate::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 
@@ -20,6 +22,11 @@ pub struct OfflineChecker<const WORD_SIZE: usize> {
     data_len: usize,
     range_bus: usize,
     ops_bus: usize,
+}
+
+pub struct OfflineCheckerChip<const WORD_SIZE: usize, F, Operation: OfflineCheckerOperation<F>> {
+    _marker: PhantomData<(F, Operation)>,
+    pub air: OfflineChecker<WORD_SIZE>,
 }
 
 impl<const WORD_SIZE: usize> OfflineChecker<WORD_SIZE> {

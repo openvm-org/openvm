@@ -3,10 +3,12 @@ use std::iter;
 
 use afs_stark_backend::air_builders::PartitionedAirBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{AbstractField, Field};
+use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::Matrix;
 
-use super::{columns::OfflineCheckerCols, OfflineChecker};
+use super::{
+    columns::OfflineCheckerCols, OfflineChecker, OfflineCheckerChip, OfflineCheckerOperation,
+};
 use crate::{
     is_equal_vec::{columns::IsEqualVecCols, IsEqualVecAir},
     is_less_than_tuple::{columns::IsLessThanTupleIOCols, IsLessThanTupleAir},
@@ -14,6 +16,12 @@ use crate::{
 };
 
 impl<const WORD_SIZE: usize> AirConfig for OfflineChecker<WORD_SIZE> {
+    type Cols<T> = OfflineCheckerCols<T>;
+}
+
+impl<const WORD_SIZE: usize, F: PrimeField32, Operation: OfflineCheckerOperation<F>> AirConfig
+    for OfflineCheckerChip<WORD_SIZE, F, Operation>
+{
     type Cols<T> = OfflineCheckerCols<T>;
 }
 
