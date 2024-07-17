@@ -3,22 +3,10 @@ use std::sync::Arc;
 
 use p3_field::PrimeField32;
 
-use afs_chips::sub_chip::LocalTraceInstructions;
 use MemoryNode::*;
-use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
 
 pub trait HashProvider<const CHUNK: usize, F> {
     fn hash(&mut self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK];
-}
-
-fn hashwef<const CHUNK: usize, F: PrimeField32>(left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK] {
-    assert_eq!(CHUNK, 8);
-    let air =
-        Poseidon2Air::<16, F>::from_config(Poseidon2Config::<16, F>::new_p3_baby_bear_16(), 0);
-    let input_state = [left, right].concat().try_into().unwrap();
-    let internal = air.generate_trace_row(input_state);
-    let output = internal.io.output.to_vec();
-    output[0..8].try_into().unwrap()
 }
 
 #[derive(Clone, Debug, PartialEq)]

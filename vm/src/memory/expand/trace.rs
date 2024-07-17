@@ -7,9 +7,9 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::memory::expand::columns::ExpandCols;
 use crate::memory::expand::ExpandChip;
-use crate::memory::tree::{HashProvider, MemoryNode};
 use crate::memory::tree::MemoryNode::Leaf;
 use crate::memory::tree::MemoryNode::NonLeaf;
+use crate::memory::tree::{HashProvider, MemoryNode};
 
 impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {
     pub fn generate_trace_and_final_tree(
