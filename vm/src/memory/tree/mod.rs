@@ -7,7 +7,11 @@ use afs_chips::sub_chip::LocalTraceInstructions;
 use MemoryNode::*;
 use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
 
-fn hash<const CHUNK: usize, F: PrimeField32>(left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK] {
+pub trait HashProvider<const CHUNK: usize, F> {
+    fn hash(&mut self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK];
+}
+
+fn hashwef<const CHUNK: usize, F: PrimeField32>(left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK] {
     assert_eq!(CHUNK, 8);
     let air =
         Poseidon2Air::<16, F>::from_config(Poseidon2Config::<16, F>::new_p3_baby_bear_16(), 0);
@@ -38,22 +42,30 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     pub fn new_nonleaf(
         left: Arc<MemoryNode<CHUNK, F>>,
         right: Arc<MemoryNode<CHUNK, F>>,
+        hash_provider: &mut impl HashProvider<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
-        NonLeaf(hash(left.hash(), right.hash()), left, right)
+        NonLeaf(hash_provider.hash(left.hash(), right.hash()), left, right)
     }
 
-    pub fn construct_all_zeros(height: usize) -> MemoryNode<CHUNK, F> {
+    pub fn construct_all_zeros(
+        height: usize,
+        hash_provider: &mut impl HashProvider<CHUNK, F>,
+    ) -> MemoryNode<CHUNK, F> {
         if height == 0 {
             Leaf([F::zero(); CHUNK])
         } else {
-            let child = Arc::new(Self::construct_all_zeros(height - 1));
-            Self::new_nonleaf(child.clone(), child)
+            let child = Arc::new(Self::construct_all_zeros(height - 1, hash_provider));
+            Self::new_nonleaf(child.clone(), child, hash_provider)
         }
     }
 
-    pub fn from_memory(height: usize, memory: HashMap<usize, F>) -> MemoryNode<CHUNK, F> {
+    pub fn from_memory(
+        height: usize,
+        memory: HashMap<usize, F>,
+        hash_provider: &mut impl HashProvider<CHUNK, F>,
+    ) -> MemoryNode<CHUNK, F> {
         if memory.is_empty() {
-            Self::construct_all_zeros(height)
+            Self::construct_all_zeros(height, hash_provider)
         } else if height == 0 {
             let mut values = [F::zero(); CHUNK];
             for (address, value) in memory {
@@ -71,9 +83,9 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
                     right_memory.insert(address - midpoint, value);
                 }
             }
-            let left = Self::from_memory(height - 1, left_memory);
-            let right = Self::from_memory(height - 1, right_memory);
-            Self::new_nonleaf(Arc::new(left), Arc::new(right))
+            let left = Self::from_memory(height - 1, left_memory, hash_provider);
+            let right = Self::from_memory(height - 1, right_memory, hash_provider);
+            Self::new_nonleaf(Arc::new(left), Arc::new(right), hash_provider)
         }
     }
 }
@@ -82,6 +94,7 @@ pub fn trees_from_full_memory<const CHUNK: usize, F: PrimeField32>(
     height: usize,
     address_spaces: &[F],
     memory: &HashMap<(F, F), F>,
+    hash_provider: &mut impl HashProvider<CHUNK, F>,
 ) -> HashMap<F, MemoryNode<CHUNK, F>> {
     let mut trees = HashMap::new();
     for &address_space in address_spaces {
@@ -91,7 +104,10 @@ pub fn trees_from_full_memory<const CHUNK: usize, F: PrimeField32>(
                 memory_here.insert(address.as_canonical_u64() as usize, value);
             }
         }
-        trees.insert(address_space, MemoryNode::from_memory(height, memory_here));
+        trees.insert(
+            address_space,
+            MemoryNode::from_memory(height, memory_here, hash_provider),
+        );
     }
     trees
 }

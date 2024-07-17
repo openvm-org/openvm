@@ -7,7 +7,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::memory::expand::columns::ExpandCols;
 use crate::memory::expand::ExpandChip;
-use crate::memory::tree::MemoryNode;
+use crate::memory::tree::{HashProvider, MemoryNode};
 use crate::memory::tree::MemoryNode::Leaf;
 use crate::memory::tree::MemoryNode::NonLeaf;
 
@@ -16,6 +16,7 @@ impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {
         &self,
         final_memory: &HashMap<(F, F), F>,
         trace_degree: usize,
+        hash_provider: &mut impl HashProvider<CHUNK, F>,
     ) -> (RowMajorMatrix<F>, HashMap<F, MemoryNode<CHUNK, F>>) {
         let mut rows = vec![];
         let mut final_trees = HashMap::new();
@@ -30,15 +31,24 @@ impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {
                     final_memory,
                     &self.touched_nodes,
                     &mut rows,
+                    hash_provider,
                 ),
             );
         }
         while rows.len() != trace_degree * ExpandCols::<CHUNK, F>::get_width() {
-            rows.push(F::zero());
+            rows.extend(unused_row(hash_provider).flatten());
         }
         let trace = RowMajorMatrix::new(rows, ExpandCols::<CHUNK, F>::get_width());
         (trace, final_trees)
     }
+}
+
+fn unused_row<const CHUNK: usize, F: PrimeField32>(
+    hash_provider: &mut impl HashProvider<CHUNK, F>,
+) -> ExpandCols<CHUNK, F> {
+    let mut result = ExpandCols::from_slice(&vec![F::zero(); ExpandCols::<CHUNK, F>::get_width()]);
+    result.parent_hash = hash_provider.hash([F::zero(); CHUNK], [F::zero(); CHUNK]);
+    result
 }
 
 /// Expects `initial_node`, `final_node` to be NonLeaf
@@ -102,6 +112,7 @@ fn recur<const CHUNK: usize, F: PrimeField32>(
     final_memory: &HashMap<(F, F), F>,
     touched_nodes: &HashSet<(F, usize, usize)>,
     trace_rows: &mut Vec<F>,
+    hash_provider: &mut impl HashProvider<CHUNK, F>,
 ) -> MemoryNode<CHUNK, F> {
     if height == 0 {
         Leaf(from_fn(|i| {
@@ -113,6 +124,8 @@ fn recur<const CHUNK: usize, F: PrimeField32>(
                 .unwrap_or(&F::zero())
         }))
     } else if let NonLeaf(_, initial_left_node, initial_right_node) = initial_node.clone() {
+        hash_provider.hash(initial_left_node.hash(), initial_right_node.hash());
+
         let left_label = 2 * label;
         let left_is_final = !touched_nodes.contains(&(address_space, height - 1, left_label));
         let final_left_node = if left_is_final {
@@ -126,6 +139,7 @@ fn recur<const CHUNK: usize, F: PrimeField32>(
                 final_memory,
                 touched_nodes,
                 trace_rows,
+                hash_provider,
             ))
         };
 
@@ -142,10 +156,11 @@ fn recur<const CHUNK: usize, F: PrimeField32>(
                 final_memory,
                 touched_nodes,
                 trace_rows,
+                hash_provider,
             ))
         };
 
-        let final_node = MemoryNode::new_nonleaf(final_left_node, final_right_node);
+        let final_node = MemoryNode::new_nonleaf(final_left_node, final_right_node, hash_provider);
         add_trace_rows(
             height,
             label,

@@ -3,9 +3,9 @@ use p3_field::Field;
 
 use afs_stark_backend::interaction::{AirBridge, Interaction};
 
+use crate::memory::expand::{EXPAND_BUS, POSEIDON2_DIRECT_REQUEST_BUS};
 use crate::memory::expand::air::ExpandAir;
 use crate::memory::expand::columns::ExpandCols;
-use crate::memory::expand::EXPAND_BUS;
 
 fn interaction<const CHUNK: usize, F: Field>(
     sends: VirtualPairCol<F>,
@@ -33,14 +33,21 @@ impl<const CHUNK: usize, F: Field> AirBridge<F> for ExpandAir<CHUNK> {
         let all_cols = (0..ExpandCols::<CHUNK, F>::get_width()).collect::<Vec<usize>>();
         let cols_numbered = ExpandCols::<CHUNK, usize>::from_slice(&all_cols);
 
-        let compress_sign =
-            VirtualPairCol::new_main(vec![(cols_numbered.is_compress, F::two())], F::neg_one());
-        let expand_sign = VirtualPairCol::new_main(
-            vec![(cols_numbered.is_compress, F::neg(F::two()))],
-            F::one(),
-        );
         let child_height =
             VirtualPairCol::new_main(vec![(cols_numbered.parent_height, F::one())], F::neg_one());
+
+        let mut poseidon2_fields = vec![];
+        poseidon2_fields.extend(
+            cols_numbered
+                .left_child_hash
+                .map(VirtualPairCol::single_main),
+        );
+        poseidon2_fields.extend(
+            cols_numbered
+                .right_child_hash
+                .map(VirtualPairCol::single_main),
+        );
+        poseidon2_fields.extend(cols_numbered.parent_hash.map(VirtualPairCol::single_main));
 
         vec![
             interaction(
@@ -82,6 +89,11 @@ impl<const CHUNK: usize, F: Field> AirBridge<F> for ExpandAir<CHUNK> {
                 cols_numbered.address_space,
                 cols_numbered.right_child_hash,
             ),
+            Interaction {
+                fields: poseidon2_fields,
+                count: VirtualPairCol::constant(F::one()),
+                argument_index: POSEIDON2_DIRECT_REQUEST_BUS,
+            },
         ]
     }
 }

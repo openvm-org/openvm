@@ -14,6 +14,7 @@ pub mod trace;
 mod tests;
 
 pub const EXPAND_BUS: usize = 4;
+pub const POSEIDON2_DIRECT_REQUEST_BUS: usize = 6;
 
 pub struct ExpandChip<const CHUNK: usize, F: PrimeField32> {
     pub height: usize,
