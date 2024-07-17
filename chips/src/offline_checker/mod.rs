@@ -1,5 +1,3 @@
-use p3_field::PrimeField32;
-
 use crate::is_equal_vec::columns::IsEqualVecAuxCols;
 use crate::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 
@@ -8,7 +6,7 @@ mod bridge;
 mod columns;
 mod trace;
 
-pub trait OfflineCheckerOperation<F: PrimeField32> {
+pub trait OfflineCheckerOperation<F> {
     fn get_timestamp(&self) -> usize;
     fn get_idx(&self) -> Vec<F>;
     fn get_data(&self) -> Vec<F>;

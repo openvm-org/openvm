@@ -80,7 +80,6 @@ where
             self.op_type.clone(),
             self.same_idx.clone(),
             self.same_data.clone(),
-            self.same_idx_and_data.clone(),
             self.lt_bit.clone(),
             self.is_valid.clone(),
         ]);

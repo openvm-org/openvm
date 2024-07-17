@@ -40,6 +40,20 @@ where
         let local_cols = OfflineCheckerCols::from_slice(local, self);
         let next_cols = OfflineCheckerCols::from_slice(next, self);
 
+        SubAir::eval(self, builder, (local_cols, next_cols), ());
+    }
+}
+
+impl<const WORD_SIZE: usize, AB: PartitionedAirBuilder> SubAir<AB> for OfflineChecker<WORD_SIZE>
+where
+    AB::M: Clone,
+{
+    type IoView = (OfflineCheckerCols<AB::Var>, OfflineCheckerCols<AB::Var>);
+    type AuxView = ();
+
+    fn eval(&self, builder: &mut AB, io: Self::IoView, _: Self::AuxView) {
+        let (local_cols, next_cols) = io;
+
         // Some helpers
         let not = |a: AB::Expr| AB::Expr::one() - a;
         let and = |a: AB::Expr, b: AB::Expr| a * b;

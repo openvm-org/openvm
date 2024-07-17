@@ -19,7 +19,7 @@ impl<const WORD_SIZE: usize> OfflineChecker<WORD_SIZE> {
     /// The trace is sorted by addr (addr_space and pointer) and then by clk, so every addr has a block of consective rows in the trace with the following structure
     /// A row is added to the trace for every read/write operation with the corresponding data
     /// The trace is padded at the end to be of height trace_degree
-    pub fn generate_trace<F: PrimeField32, Operation: OfflineCheckerOperation<F>, OpType>(
+    pub fn generate_trace<F: PrimeField32, Operation: OfflineCheckerOperation<F>>(
         &mut self,
         range_checker: Arc<RangeCheckerGateChip>,
         // should be already sorted by address_space, address, timestamp
@@ -29,59 +29,59 @@ impl<const WORD_SIZE: usize> OfflineChecker<WORD_SIZE> {
         let mut rows: Vec<F> = vec![];
 
         if !accesses.is_empty() {
-            rows.extend(self.generate_trace_row::<F, Operation, OpType>(
+            rows.extend(self.generate_trace_row((
                 true,
                 1,
                 &accesses[0],
                 &dummy_op,
                 range_checker.clone(),
-            ));
+            )));
         }
 
         for i in 1..accesses.len() {
-            rows.extend(self.generate_trace_row::<F, Operation, OpType>(
+            rows.extend(self.generate_trace_row((
                 false,
                 1,
                 &accesses[i],
                 &accesses[i - 1],
                 range_checker.clone(),
-            ));
+            )));
         }
 
         // Ensure that trace degree is a power of two
         let trace_degree = accesses.len().next_power_of_two();
 
         if accesses.len() < trace_degree {
-            rows.extend(self.generate_trace_row::<F, Operation, OpType>(
+            rows.extend(self.generate_trace_row((
                 false,
                 0,
                 &dummy_op,
                 &accesses[accesses.len() - 1],
                 range_checker.clone(),
-            ));
+            )));
         }
 
         for _i in 1..(trace_degree - accesses.len()) {
-            rows.extend(self.generate_trace_row::<F, Operation, OpType>(
+            rows.extend(self.generate_trace_row((
                 false,
                 0,
                 &dummy_op,
                 &dummy_op,
                 range_checker.clone(),
-            ));
+            )));
         }
 
         RowMajorMatrix::new(rows, self.air_width())
     }
+}
 
-    pub fn generate_trace_row<F: PrimeField32, Operation: OfflineCheckerOperation<F>, OpType>(
-        &self,
-        is_first_row: bool,
-        is_valid: u8,
-        curr_op: &Operation,
-        prev_op: &Operation,
-        range_checker: Arc<RangeCheckerGateChip>,
-    ) -> Vec<F> {
+impl<const WORD_SIZE: usize, F: PrimeField32> LocalTraceInstructions<F>
+    for OfflineChecker<WORD_SIZE>
+{
+    type LocalInput = (bool, u8, Operation, Operation, Arc<RangeCheckerGateChip>);
+
+    fn generate_trace_row(&self, input: Self::LocalInput) -> Vec<F> {
+        let (is_first_row, is_valid, curr_op, prev_op, range_checker) = input;
         let mut row: Vec<F> = vec![];
         let op_type = curr_op.get_op_type();
 
