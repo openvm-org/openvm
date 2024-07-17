@@ -3,7 +3,10 @@ use std::{cell::RefCell, marker::PhantomData};
 use afs_test_utils::engine::StarkEngine;
 use p3_uni_stark::StarkGenericConfig;
 
-use crate::{common::Commitment, dataframe::DataFrame};
+use crate::{
+    common::{hash_struct, Commitment},
+    dataframe::DataFrame,
+};
 
 #[derive(Default)]
 pub struct TwoPointersProgram<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>> {
@@ -34,11 +37,10 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>>
         let mut pis = self.pis.borrow_mut();
         let mut pairs = self.pairs.borrow_mut();
 
-        pis.parent_table_commit = parent_df.commit.clone();
-        pis.child_table_commit = child_df.commit.clone();
+        pis.parent_table_commit = hash_struct(&parent_df.page_commits);
+        pis.child_table_commit = hash_struct(&child_df.page_commits);
         *pairs = Self::run(parent_df, child_df);
-        // TODO: update this to be the commitment of the pairs
-        pis.pairs_commit = Commitment::<COMMIT_LEN>::default();
+        pis.pairs_commit = hash_struct(&*pairs);
     }
 
     pub fn prove(&self, _engine: &E) {}
@@ -51,11 +53,14 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>>
     ) {
         let pis = self.pis.borrow();
 
-        assert_eq!(parent_df.commit, pis.parent_table_commit);
-        assert_eq!(child_df.commit, pis.child_table_commit);
+        assert_eq!(
+            hash_struct(&parent_df.page_commits),
+            pis.parent_table_commit
+        );
+        assert_eq!(hash_struct(&child_df.page_commits), pis.child_table_commit);
 
-        let _pairs = Self::run(parent_df, child_df);
-        // TODO: assert that pairs.commit == self.pis.pairs_commit
+        let pairs = Self::run(parent_df, child_df);
+        assert_eq!(hash_struct(&pairs), pis.pairs_commit);
     }
 
     fn run(

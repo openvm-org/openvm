@@ -18,7 +18,14 @@ use p3_baby_bear::BabyBear;
 use p3_field::PrimeField;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
-use crate::{common::Commitment, dataframe::DataFrame, page_db::PageDb};
+use crate::{
+    common::{
+        hash_struct,
+        provider::{BTreeMapPageLoader, PageProvider},
+        Commitment,
+    },
+    dataframe::DataFrame,
+};
 
 pub struct PageLevelJoin<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>> {
     pub pis: RefCell<PageLevelJoinPis<COMMIT_LEN>>,
@@ -79,7 +86,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
     /// TODO: maybe provide functionality to allow it to be purely trace generation
     pub fn generate_trace(
         &self,
-        page_db: Arc<PageDb<COMMIT_LEN>>,
+        page_provider: Arc<BTreeMapPageLoader<SC, COMMIT_LEN>>,
         output_df: &mut DataFrame<COMMIT_LEN>,
         pairs_list_index: &mut u32,
         engine: &E,
@@ -88,10 +95,14 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
     {
         let mut pis = self.pis.borrow_mut();
 
-        let parent_page = page_db.get_page(&pis.parent_page_commit).unwrap();
-        let child_page = page_db.get_page(&pis.child_page_commit).unwrap();
+        let parent_page = page_provider
+            .load_page_by_commitment(&pis.parent_page_commit)
+            .unwrap();
+        let child_page = page_provider
+            .load_page_by_commitment(&pis.child_page_commit)
+            .unwrap();
 
-        pis.init_running_df_commit = output_df.commit.clone();
+        pis.init_running_df_commit = hash_struct(&output_df.page_commits);
         pis.pairs_list_index = *pairs_list_index;
 
         let mut ij_controller = self.ij_controller.borrow_mut();
@@ -102,7 +113,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         output_df.push(output_page_commit.clone());
         *pairs_list_index += 1;
 
-        pis.final_running_df_commit = output_df.commit.clone();
+        pis.final_running_df_commit = hash_struct(&output_df.page_commits);
 
         let intersector_trace_degree = 2 * parent_page.height().max(child_page.height());
 
@@ -111,6 +122,9 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         let prover_data = ij_controller.load_tables(
             &parent_page,
             &child_page,
+            None,
+            None,
+            None,
             intersector_trace_degree,
             &mut trace_builder.committer,
         );
@@ -181,9 +195,15 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         assert_eq!(pis.parent_page_commit, parent_page_commit);
         assert_eq!(pis.child_page_commit, child_page_commit);
 
-        assert_eq!(output_df.commit, pis.init_running_df_commit);
+        assert_eq!(
+            hash_struct(&output_df.page_commits),
+            pis.init_running_df_commit
+        );
         output_df.push(output_page_commit.clone());
-        assert_eq!(output_df.commit, pis.final_running_df_commit);
+        assert_eq!(
+            hash_struct(&output_df.page_commits),
+            pis.final_running_df_commit
+        );
 
         let ij_controller = self.ij_controller.borrow();
         ij_controller

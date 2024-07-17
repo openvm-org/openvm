@@ -7,7 +7,10 @@ use p3_field::PrimeField;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 use super::{page_level_join::PageLevelJoin, two_pointers_program::TwoPointersProgram};
-use crate::{common::Commitment, dataframe::DataFrame, page_db::PageDb};
+use crate::{
+    common::{hash_struct, provider::BTreeMapPageLoader, Commitment},
+    dataframe::DataFrame,
+};
 
 pub enum JoinCircuit<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>> {
     PageLevelJoin(PageLevelJoin<COMMIT_LEN, SC, E>),
@@ -60,7 +63,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
 
     pub fn generate_trace_for_tree(
         &self,
-        page_db: Arc<PageDb<COMMIT_LEN>>,
+        page_provider: Arc<BTreeMapPageLoader<SC, COMMIT_LEN>>,
         output_df: &mut DataFrame<COMMIT_LEN>,
         pairs_commit: &Commitment<COMMIT_LEN>,
         pairs_list_index: &mut u32,
@@ -72,22 +75,27 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
     {
         let mut pis = self.pis.borrow_mut();
 
-        pis.init_running_df_commit = output_df.commit.clone();
+        pis.init_running_df_commit = hash_struct(&output_df.page_commits);
         pis.pairs_commit = pairs_commit.clone();
         pis.pairs_list_index = *pairs_list_index;
-        pis.parent_table_commit = parent_df.commit.clone();
-        pis.child_table_commit = child_df.commit.clone();
+        pis.parent_table_commit = hash_struct(&parent_df.page_commits);
+        pis.child_table_commit = hash_struct(&child_df.page_commits);
 
         for child in self.children.iter() {
             match child.as_ref() {
                 JoinCircuit::PageLevelJoin(circuit) => {
-                    circuit.generate_trace(page_db.clone(), output_df, pairs_list_index, engine);
+                    circuit.generate_trace(
+                        page_provider.clone(),
+                        output_df,
+                        pairs_list_index,
+                        engine,
+                    );
                 }
                 JoinCircuit::TwoPointersProgram(circuit) => {
                     circuit.generate_trace(parent_df, child_df)
                 }
                 JoinCircuit::InternalNode(circuit) => circuit.generate_trace_for_tree(
-                    page_db.clone(),
+                    page_provider.clone(),
                     output_df,
                     pairs_commit,
                     pairs_list_index,
@@ -98,7 +106,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
             }
         }
 
-        pis.final_rannung_df_commit = output_df.commit.clone();
+        pis.final_rannung_df_commit = hash_struct(&output_df.page_commits);
     }
 
     pub fn prove_tree(&self, engine: &E)
@@ -210,9 +218,8 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
                     pairs[(pis.pairs_list_index + state.page_level_cnt) as usize].1
                 );
 
-                // TODO: decommit self.pis.pairs_commit corresponds to self.pairs. think if this is necessary
+                assert_eq!(hash_struct(pairs), pis.pairs_commit);
 
-                // TODO: I don't think this is necessary?
                 assert_eq!(child_pis.pairs_commit, pis.pairs_commit);
 
                 // Updating state

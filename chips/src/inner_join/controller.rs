@@ -225,6 +225,9 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
         &mut self,
         t1: &Page,
         t2: &Page,
+        t1_pdata: Option<ProverTraceData<SC>>,
+        t2_pdata: Option<ProverTraceData<SC>>,
+        output_pdata: Option<ProverTraceData<SC>>,
         intersector_trace_degree: usize,
         trace_committer: &mut TraceCommitter<SC>,
     ) -> Vec<ProverTraceData<SC>>
@@ -294,11 +297,22 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
             .output_chip
             .gen_aux_trace::<SC>(&output_table, self.range_checker.clone());
 
-        let prover_data = vec![
-            trace_committer.commit(vec![t1_main_trace.clone()]),
-            trace_committer.commit(vec![t2_main_trace.clone()]),
-            trace_committer.commit(vec![output_main_trace.clone()]),
-        ];
+        let t1_pdata = match t1_pdata {
+            Some(pdata) => pdata,
+            None => trace_committer.commit(vec![t1_main_trace.clone()]),
+        };
+
+        let t2_pdata = match t2_pdata {
+            Some(pdata) => pdata,
+            None => trace_committer.commit(vec![t2_main_trace.clone()]),
+        };
+
+        let output_pdata = match output_pdata {
+            Some(pdata) => pdata,
+            None => trace_committer.commit(vec![output_main_trace.clone()]),
+        };
+
+        let prover_data = vec![t1_pdata, t2_pdata, output_pdata];
 
         self.table_commitments = Some(TableCommitments {
             t1_commitment: prover_data[0].commit.clone(),

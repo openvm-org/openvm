@@ -905,7 +905,7 @@ where
     })
 }
 
-fn commit_u32_to_str(commit: &[u32]) -> String {
+pub fn commit_u32_to_str(commit: &[u32]) -> String {
     commit.iter().fold("".to_owned(), |acc, x| {
         acc.to_owned() + &format!("{:08x}", x)
     })

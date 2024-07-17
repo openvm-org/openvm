@@ -4,6 +4,9 @@ pub mod internal_node;
 pub mod page_level_join;
 pub mod two_pointers_program;
 
+#[cfg(test)]
+mod tests;
+
 use std::sync::Arc;
 
 use afs_chips::inner_join::controller::{T2Format, TableFormat};
@@ -13,10 +16,11 @@ use p3_baby_bear::BabyBear;
 use p3_field::PrimeField;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
+use crate::common::provider::BTreeMapPageLoader;
+use crate::common::Commitment;
 use crate::dataframe::DataFrameType;
 use crate::inner_join::page_level_join::PageLevelJoin;
 use crate::inner_join::two_pointers_program::TwoPointersProgram;
-use crate::{common::Commitment, page_db::PageDb};
 
 use self::internal_node::{InternalNode, JoinCircuit};
 use super::dataframe::DataFrame;
@@ -25,7 +29,7 @@ pub struct TableJoinController<const COMMIT_LEN: usize, SC: StarkGenericConfig, 
 {
     parent_table_df: DataFrame<COMMIT_LEN>,
     child_table_df: DataFrame<COMMIT_LEN>,
-    page_db: Arc<PageDb<COMMIT_LEN>>,
+    page_provider: Arc<BTreeMapPageLoader<SC, COMMIT_LEN>>,
     root: InternalNode<COMMIT_LEN, SC, E>,
     pairs: Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)>,
     pairs_commit: Commitment<COMMIT_LEN>,
@@ -37,7 +41,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
     pub fn new(
         parent_df: DataFrame<COMMIT_LEN>,
         child_df: DataFrame<COMMIT_LEN>,
-        page_db: Arc<PageDb<COMMIT_LEN>>,
+        page_provider: Arc<BTreeMapPageLoader<SC, COMMIT_LEN>>,
         parent_table_format: &TableFormat,
         child_table_format: &T2Format,
         decomp: usize,
@@ -99,7 +103,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         Self {
             parent_table_df: parent_df,
             child_table_df: child_df,
-            page_db,
+            page_provider,
             pairs,
             pairs_commit,
             root,
@@ -114,7 +118,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         let mut pairs_list_index = 0;
 
         self.root.generate_trace_for_tree(
-            self.page_db.clone(),
+            self.page_provider.clone(),
             &mut output_df,
             &self.pairs_commit,
             &mut pairs_list_index,

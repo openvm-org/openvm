@@ -12,15 +12,12 @@ pub enum DataFrameType {
     Unindexed,
 }
 
-/// TODO: update this comment to say it doesn't have to be of fixed length
-/// A DataFrame is a list of fixed length of page commitments
-/// An IndexedDataFrame is a DataFrame for indexed pages
-/// TODO: add comment about the start and the end
-/// TODO: maybe add struct indexing
-/// TODO: this should probably be changed to be a struct for every page
+/// A DataFrame is a list of page commitments
+/// A DataFrame with type Indexed is a DataFrame for indexed pages:
+/// alongside the page commitments, it stores the start and end indices
+/// for the pages
 #[derive(Clone)]
 pub struct DataFrame<const COMMIT_LEN: usize> {
-    pub commit: Commitment<COMMIT_LEN>,
     pub page_commits: Vec<Commitment<COMMIT_LEN>>,
     pub df_type: DataFrameType,
 }
@@ -28,16 +25,16 @@ pub struct DataFrame<const COMMIT_LEN: usize> {
 impl<const COMMIT_LEN: usize> DataFrame<COMMIT_LEN> {
     pub fn new(page_commits: Vec<Commitment<COMMIT_LEN>>, df_type: DataFrameType) -> Self {
         Self {
-            commit: Commitment::<COMMIT_LEN>::default(), // TODO: change this to be the correct commitment
             page_commits,
             df_type,
         }
     }
 
     pub fn empty(df_type: DataFrameType) -> Self {
+        let empty_vec: Vec<Commitment<COMMIT_LEN>> = vec![];
+
         Self {
-            commit: Commitment::<COMMIT_LEN>::default(), // TODO: change this to be the correct commitment
-            page_commits: vec![], // TODO: change this to be the correct commitment
+            page_commits: empty_vec,
             df_type,
         }
     }
@@ -48,7 +45,6 @@ impl<const COMMIT_LEN: usize> DataFrame<COMMIT_LEN> {
 
     pub fn push(&mut self, commit: Commitment<COMMIT_LEN>) {
         self.page_commits.push(commit);
-        // TODO: update self.commit
     }
 
     pub fn get_index_range(&self, index: usize) -> IndexRange {
@@ -60,6 +56,5 @@ impl<const COMMIT_LEN: usize> DataFrame<COMMIT_LEN> {
 
     pub fn edit_page_commit(&mut self, index: usize, new_commit: Commitment<COMMIT_LEN>) {
         self.page_commits[index] = new_commit;
-        // TODO: update self.commit
     }
 }
