@@ -168,12 +168,12 @@ where
         }
 
         let alpha = challenger.sample_ext(builder);
-        builder.print_e(alpha);
+        // builder.print_e(alpha);
 
         challenger.observe(builder, quotient_commit.clone());
 
         let zeta = challenger.sample_ext(builder);
-        builder.print_e(zeta);
+        // builder.print_e(zeta);
 
         let mut trace_domains =
             builder.dyn_array::<TwoAdicMultiplicativeCosetVariable<_>>(num_airs);
@@ -467,6 +467,7 @@ where
         }
 
         builder.cycle_tracker("stage-e-verify-constraints");
+        // TODO[jpw] cumulative sum check
     }
 
     /// Reference: [afs_stark_backend::verifier::constraints::verify_single_rap_constraints]
