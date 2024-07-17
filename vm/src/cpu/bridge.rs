@@ -1,5 +1,5 @@
 use super::{
-    columns::CpuCols, CpuAir, ARITHMETIC_BUS, CPU_MAX_READS_PER_CYCLE,
+    columns::CpuCols, CpuAir, OpCode, ARITHMETIC_BUS, CPU_MAX_READS_PER_CYCLE,
     FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_BUS, FIELD_EXTENSION_INSTRUCTIONS, MEMORY_BUS,
     POSEIDON2_BUS, READ_INSTRUCTION_BUS,
 };
@@ -27,7 +27,13 @@ impl<const WORD_SIZE: usize, F: PrimeField64> AirBridge<F> for CpuAir<WORD_SIZE>
                 VirtualPairCol::single_main(cols_numbered.io.d),
                 VirtualPairCol::single_main(cols_numbered.io.e),
             ],
-            count: VirtualPairCol::constant(F::one()),
+            count: VirtualPairCol::new_main(
+                vec![(
+                    cols_numbered.aux.operation_flags[&OpCode::NOP],
+                    F::zero() - F::one(),
+                )],
+                F::one(),
+            ),
             argument_index: READ_INSTRUCTION_BUS,
         });
 

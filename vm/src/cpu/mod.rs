@@ -115,6 +115,7 @@ fn max_accesses_per_instruction(opcode: OpCode) -> usize {
             Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(opcode)
         }
         HINT => 0,
+        NOP => 0,
         _ => panic!(),
     }
 }
