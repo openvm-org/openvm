@@ -1,4 +1,4 @@
-use std::{iter, sync::Arc};
+use std::{collections::HashMap, iter, sync::Arc};
 
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
@@ -235,35 +235,36 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
 
         let output_table = self.inner_join(t1, t2, fkey_start, fkey_end);
 
-        // Calculating the multiplicity with which T1 indices appear in the output_table
-        let mut t1_out_mult = vec![];
-        for row in t1.rows.iter() {
+        // Calculating the multiplicity with which T1 and T2 indices appear in the output_table
+        let mut t1_idx_out_mult = HashMap::new();
+        let mut t2_idx_out_mult = HashMap::new();
+        for row in output_table.iter() {
             if row.is_alloc == 1 {
-                t1_out_mult.push(
-                    output_table
-                        .rows
-                        .iter()
-                        .filter(|out_row| {
-                            out_row.is_alloc == 1 && out_row.data[fkey_start..fkey_end] == row.idx
-                        })
-                        .count() as u32,
-                );
+                t1_idx_out_mult
+                    .entry(row.data[fkey_start..fkey_end].to_vec())
+                    .and_modify(|e| *e += 1)
+                    .or_insert(1);
+
+                t2_idx_out_mult
+                    .entry(row.idx.clone())
+                    .and_modify(|e| *e += 1)
+                    .or_insert(1);
+            }
+        }
+
+        let mut t1_out_mult = vec![];
+        for row in t1.iter() {
+            if row.is_alloc == 1 {
+                t1_out_mult.push(*t1_idx_out_mult.get(&row.idx).unwrap_or(&0));
             } else {
                 t1_out_mult.push(0);
             }
         }
 
-        // Figuring out whether each row of T2 appears in the output_table
         let mut t2_fkey_present = vec![];
-        for row in t2.rows.iter() {
+        for row in t2.iter() {
             if row.is_alloc == 1 {
-                t2_fkey_present.push(
-                    output_table
-                        .rows
-                        .iter()
-                        .filter(|out_row| out_row.is_alloc == 1 && out_row.idx == row.idx)
-                        .count() as u32,
-                );
+                t2_fkey_present.push(*t2_idx_out_mult.get(&row.idx).unwrap_or(&0));
             } else {
                 t2_fkey_present.push(0);
             }
@@ -313,13 +314,8 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
 
     /// Sets up keygen with the different trace partitions for all the
     /// chips the struct owns (t1_chip, t2_chip, output_chip, intersector_chip)
-    pub fn set_up_keygen_builder(
-        &self,
-        keygen_builder: &mut MultiStarkKeygenBuilder<SC>,
-        t1_height: usize,
-        t2_height: usize,
-        intersector_trace_degree: usize,
-    ) where
+    pub fn set_up_keygen_builder(&self, keygen_builder: &mut MultiStarkKeygenBuilder<SC>)
+    where
         Val<SC>: PrimeField,
     {
         let t1_main_ptr = keygen_builder.add_cached_main_matrix(self.t1_chip.table_width());
@@ -329,33 +325,18 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
         let t2_aux_ptr = keygen_builder.add_main_matrix(self.t2_chip.aux_width());
         let output_aux_ptr = keygen_builder.add_main_matrix(self.output_chip.aux_width());
 
-        keygen_builder.add_partitioned_air(
-            &self.t1_chip,
-            t1_height,
-            0,
-            vec![t1_main_ptr, t1_aux_ptr],
-        );
+        keygen_builder.add_partitioned_air(&self.t1_chip, 0, vec![t1_main_ptr, t1_aux_ptr]);
 
-        keygen_builder.add_partitioned_air(
-            &self.t2_chip,
-            t2_height,
-            0,
-            vec![t2_main_ptr, t2_aux_ptr],
-        );
+        keygen_builder.add_partitioned_air(&self.t2_chip, 0, vec![t2_main_ptr, t2_aux_ptr]);
 
         keygen_builder.add_partitioned_air(
             &self.output_chip,
-            t2_height,
             0,
             vec![output_main_ptr, output_aux_ptr],
         );
 
-        keygen_builder.add_air(&self.intersector_chip, intersector_trace_degree, 0);
-        keygen_builder.add_air(
-            &self.range_checker.air,
-            self.range_checker.range_max() as usize,
-            0,
-        );
+        keygen_builder.add_air(&self.intersector_chip, 0);
+        keygen_builder.add_air(&self.range_checker.air, 0);
     }
 
     /// This function clears the trace_builder, loads in the traces for all involved chips
@@ -443,7 +424,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
         let mut challenger = engine.new_challenger();
         verifier.verify(
             &mut challenger,
-            partial_vk,
+            &partial_vk,
             vec![
                 &self.t1_chip,
                 &self.t2_chip,
@@ -451,7 +432,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
                 &self.intersector_chip,
                 &self.range_checker.air,
             ],
-            proof,
+            &proof,
             &pis,
         )
     }
@@ -461,7 +442,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
     fn inner_join(&self, t1: &Page, t2: &Page, fkey_start: usize, fkey_end: usize) -> Page {
         let mut output_table = vec![];
 
-        for row in t2.rows.iter() {
+        for row in t2.iter() {
             if row.is_alloc == 0 {
                 continue;
             }

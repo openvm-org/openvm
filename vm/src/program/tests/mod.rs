@@ -1,12 +1,12 @@
-use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
-use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 
-use crate::cpu::READ_INSTRUCTION_BUS;
+use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 
+use crate::cpu::READ_INSTRUCTION_BUS;
 use crate::cpu::{trace::Instruction, OpCode::*};
 use crate::program::columns::ProgramPreprocessedCols;
 use crate::program::ProgramChip;
@@ -31,7 +31,7 @@ fn interaction_test(program: Vec<Instruction<BabyBear>>, execution: Vec<usize>) 
     let mut execution_frequencies = vec![0; program.len()];
     for pc in execution {
         execution_frequencies[pc] += 1;
-        chip.get_instruction(pc);
+        chip.get_instruction(pc).unwrap();
     }
     let trace = chip.generate_trace();
 
@@ -114,7 +114,7 @@ fn test_program_negative() {
     let mut chip = ProgramChip::new(program.clone());
     let execution_frequencies = vec![1; program.len()];
     for pc in 0..program.len() {
-        chip.get_instruction(pc);
+        chip.get_instruction(pc).unwrap();
     }
     let trace = chip.generate_trace();
 

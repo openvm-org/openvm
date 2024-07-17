@@ -50,8 +50,6 @@ where
                 engine,
                 (config.page.index_bytes + 1) / 2,
                 (config.page.data_bytes + 1) / 2,
-                config.page.max_rw_ops,
-                config.page.height,
                 config.page.bits_per_fe,
                 prefix,
                 output_folder,
@@ -69,8 +67,6 @@ where
         engine: &E,
         idx_len: usize,
         data_len: usize,
-        max_ops: usize,
-        height: usize,
         limb_bits: usize,
         prefix: String,
         output_folder: String,
@@ -79,8 +75,6 @@ where
         let range_bus_index = 1;
         let ops_bus_index = 2;
 
-        let page_height = height;
-        let checker_trace_degree = max_ops * 4;
         let idx_limb_bits = limb_bits;
 
         let idx_decomp = 8;
@@ -98,13 +92,7 @@ where
 
         let mut keygen_builder: MultiStarkKeygenBuilder<SC> = engine.keygen_builder();
 
-        page_controller.set_up_keygen_builder(
-            &mut keygen_builder,
-            page_height,
-            checker_trace_degree,
-            &ops_sender,
-            max_ops,
-        );
+        page_controller.set_up_keygen_builder(&mut keygen_builder, &ops_sender);
 
         let partial_pk = keygen_builder.generate_partial_pk();
         let partial_vk = partial_pk.partial_vk();

@@ -1,0 +1,15 @@
+[page]
+index_bytes = 32
+data_bytes = 256
+bits_per_fe = 16
+height = 16
+mode = "ReadWrite"
+max_rw_ops = 16
+
+[fri_params]
+log_blowup = 4
+num_queries = 57
+proof_of_work_bits = 0
+
+[stark_engine]
+engine = "BabyBearKeccak"

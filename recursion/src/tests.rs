@@ -151,14 +151,15 @@ fn test_interactions() {
 
     let mut challenger = engine.new_challenger();
     let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pvs);
+    let log_degree_per_air = proof
+        .degrees
+        .iter()
+        .map(|degree| log2_strict_usize(*degree))
+        .collect();
 
     let input = AxiomMemoryLayout {
         proof,
-        log_degree_per_air: partial_vk
-            .per_air
-            .iter()
-            .map(|air| log2_strict_usize(air.degree))
-            .collect(),
+        log_degree_per_air,
         public_values: pvs.clone(),
     };
 
@@ -173,14 +174,14 @@ fn test_interactions() {
     verifier
         .verify(
             &mut engine.new_challenger(),
-            partial_vk,
+            &partial_vk,
             vec![
                 &sum_chip.air,
                 &sender_air,
                 &receiver_air,
                 &sum_chip.range_checker.air,
             ],
-            input.proof,
+            &input.proof,
             &pvs,
         )
         .expect("afs proof should verify");

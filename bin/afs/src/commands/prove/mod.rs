@@ -20,7 +20,7 @@ use logical_interface::{
         types::{AfsOperation, InputFileOp},
         AfsInputFile,
     },
-    afs_interface::AfsInterface,
+    afs_interface::{utils::string_to_table_id, AfsInterface},
     mock_db::MockDb,
     table::codec::fixed_bytes::FixedBytesCodec,
     utils::{fixed_bytes_to_u16_vec, string_to_u8_vec},
@@ -104,7 +104,6 @@ where
         keys_folder: String,
         cache_folder: String,
         silent: bool,
-        // durations: Option<&mut (Duration, Duration)>,
     ) -> Result<()> {
         let start = Instant::now();
         let prefix = create_prefix(config);
@@ -118,7 +117,6 @@ where
                 keys_folder,
                 cache_folder,
                 silent,
-                // durations,
             )?,
             PageMode::ReadOnly => panic!(),
         }
@@ -191,8 +189,9 @@ where
         let prover = engine.prover();
         let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
+        let table_id_full = string_to_table_id(table_id.clone()).to_string();
         let init_prover_data_encoded =
-            read_from_path(cache_folder.clone() + "/" + &table_id + ".cache.bin").unwrap();
+            read_from_path(cache_folder.clone() + "/" + &table_id_full + ".cache.bin").unwrap();
         let init_prover_data: ProverTraceData<SC> =
             bincode::deserialize(&init_prover_data_encoded).unwrap();
 
@@ -206,7 +205,7 @@ where
         );
 
         // Generating trace for ops_sender and making sure it has height num_ops
-        let trace_span = info_span!("Prove.generate_trace").entered();
+        let trace_span = info_span!("Generate ops_sender trace").entered();
         let ops_sender_trace = ops_sender.generate_trace(&zk_ops, config.page.max_rw_ops);
         trace_span.exit();
 

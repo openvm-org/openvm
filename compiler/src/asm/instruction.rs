@@ -8,6 +8,9 @@ use super::A0;
 
 #[derive(Debug, Clone)]
 pub enum AsmInstruction<F, EF> {
+    /// Load extension immediate (address, value)
+    ImmE(i32, EF),
+
     /// Load word (dst, src, index, offset, size).
     ///
     /// Load a value from the address stored at src(fp) into dstfp).
@@ -157,18 +160,18 @@ pub enum AsmInstruction<F, EF> {
     PrintE(i32),
 
     /// Convert an extension element to field elements.
-    Ext2Felt(i32, i32),
+    HintExt2Felt(i32, i32),
 
     /// Hint a vector of blocks along with the length.
     Hint(i32),
 
-    // FRIFold(m, input).
+    /// FRIFold(m, input).
     FriFold(i32, i32),
 
-    // Commit(val, index).
+    /// Commit(val, index).
     Commit(i32, i32),
 
-    // RegisterPublicValue(val).
+    /// RegisterPublicValue(val).
     RegisterPublicValue(i32),
 
     LessThan(i32, i32, i32),
@@ -780,8 +783,8 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
     //             false,
     //             name,
     //         ),
-    //         AsmInstruction::Ext2Felt(dst, src) => Instruction::new(
-    //             Opcode::Ext2Felt,
+    //         AsmInstruction::HintExt2Felt(dst, src) => Instruction::new(
+    //             Opcode::HintExt2Felt,
     //             i32_f(dst),
     //             i32_f_arr(src),
     //             f_u32(F::zero()),
@@ -865,6 +868,9 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
             AsmInstruction::LessThan(dst, left, right) => {
                 write!(f, "lt  ({})fp, {}, {}", dst, left, right,)
+            }
+            AsmInstruction::ImmE(dst, val) => {
+                write!(f, "imme   ({})fp, {}", dst, val)
             }
             AsmInstruction::LoadF(dst, src, index, offset, size) => {
                 write!(
@@ -1107,7 +1113,9 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::PrintE(dst) => {
                 write!(f, "print_e ({})fp", dst)
             }
-            AsmInstruction::Ext2Felt(dst, src) => write!(f, "ext2felt ({})fp, {})fp", dst, src),
+            AsmInstruction::HintExt2Felt(dst, src) => {
+                write!(f, "hintExt2felt ({})fp, {})fp", dst, src)
+            }
             AsmInstruction::Hint(dst) => write!(f, "hint ({})fp", dst),
             AsmInstruction::FriFold(m, input_ptr) => {
                 write!(f, "fri_fold ({})fp, ({})fp", m, input_ptr)

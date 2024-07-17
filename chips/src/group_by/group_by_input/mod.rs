@@ -83,15 +83,12 @@ impl GroupByAir {
 
     pub fn select_and_sort(&self, page: &Page) -> Vec<Vec<u32>> {
         if self.sorted {
-            page.rows
-                .clone()
-                .iter()
+            page.iter()
                 .filter(|row| row.is_alloc == 1)
                 .map(|row| row.data.clone())
                 .collect()
         } else {
             let mut grouped_page: Vec<Vec<u32>> = page
-                .rows
                 .iter()
                 .filter(|row| row.is_alloc == 1)
                 .map(|row| {

@@ -194,13 +194,7 @@ fn page_offline_checker_test() {
     );
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-    page_controller.set_up_keygen_builder(
-        &mut keygen_builder,
-        page_height,
-        trace_degree,
-        &ops_sender,
-        num_ops,
-    );
+    page_controller.set_up_keygen_builder(&mut keygen_builder, &ops_sender);
 
     let partial_pk = keygen_builder.generate_partial_pk();
 
@@ -226,7 +220,7 @@ fn page_offline_checker_test() {
     let rows_allocated = rng.gen::<usize>() % (page_height + 1);
     for i in rows_allocated..page_height {
         // Making sure the first operation using this index is a write
-        let idx = initial_page.rows[i].idx.clone();
+        let idx = initial_page[i].idx.clone();
         for op in ops.iter_mut() {
             if op.idx == idx {
                 op.op_type = OpType::Write;
@@ -235,7 +229,7 @@ fn page_offline_checker_test() {
         }
 
         // Zeroing out the row
-        initial_page.rows[i] = PageCols::from_slice(
+        initial_page[i] = PageCols::from_slice(
             vec![0; idx_len + data_len + 1].as_slice(),
             idx_len,
             data_len,
@@ -259,7 +253,7 @@ fn page_offline_checker_test() {
     // Testing a fully unallocated page
     for i in 0..page_height {
         // Making sure the first operation that uses every index is a write
-        let idx = initial_page.rows[i].idx.clone();
+        let idx = initial_page[i].idx.clone();
         for op in ops.iter_mut() {
             if op.idx == idx {
                 op.op_type = OpType::Write;
@@ -267,7 +261,7 @@ fn page_offline_checker_test() {
             }
         }
 
-        initial_page.rows[i] = PageCols::from_slice(
+        initial_page[i] = PageCols::from_slice(
             vec![0; 1 + idx_len + data_len].as_slice(),
             idx_len,
             data_len,

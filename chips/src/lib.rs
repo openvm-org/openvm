@@ -26,3 +26,6 @@ pub mod utils;
 pub mod xor_bits;
 pub mod xor_limbs;
 pub mod xor_lookup;
+
+pub mod dummy_hash;
+pub mod flat_hash;

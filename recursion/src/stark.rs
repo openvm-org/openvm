@@ -10,8 +10,7 @@ use afs_compiler::ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt,
 use afs_stark_backend::interaction::{AirBridge, InteractiveAir};
 use afs_stark_backend::prover::opener::AdjacentOpenedValues;
 use afs_stark_backend::rap::Rap;
-use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use afs_test_utils::config::FriParameters;
+use afs_test_utils::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
 use stark_vm::cpu::trace::Instruction;
 
 use crate::challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger};
