@@ -20,6 +20,9 @@ pub struct OfflineCheckerCols<T> {
     pub same_idx: T,
     /// this bit indicates if the data matches the one in the previous row (should be 0 in first row)
     pub same_data: T,
+    /// this bit indicates if the idx and data match the one in the previous row (should be 0 in first row)
+    /// this is used to reduce the degree of a constraint
+    pub same_idx_and_data: T,
 
     /// this bit indicates if (idx, clk) is strictly more than the one in the previous row
     pub lt_bit: T,
@@ -46,6 +49,7 @@ where
         op_type: T,
         same_idx: T,
         same_data: T,
+        same_idx_and_data: T,
         lt_bit: T,
         is_valid: T,
         is_equal_idx_aux: IsEqualVecAuxCols<T>,
@@ -59,6 +63,7 @@ where
             op_type,
             same_idx,
             same_data,
+            same_idx_and_data,
             lt_bit,
             is_valid,
             is_equal_idx_aux,
@@ -75,6 +80,7 @@ where
             self.op_type.clone(),
             self.same_idx.clone(),
             self.same_data.clone(),
+            self.same_idx_and_data.clone(),
             self.lt_bit.clone(),
             self.is_valid.clone(),
         ]);
@@ -98,19 +104,20 @@ where
             op_type: slc[1 + idx_len + data_len].clone(),
             same_idx: slc[2 + idx_len + data_len].clone(),
             same_data: slc[3 + idx_len + data_len].clone(),
-            lt_bit: slc[4 + idx_len + data_len].clone(),
-            is_valid: slc[5 + idx_len + data_len].clone(),
+            same_idx_and_data: slc[4 + idx_len + data_len].clone(),
+            lt_bit: slc[5 + idx_len + data_len].clone(),
+            is_valid: slc[6 + idx_len + data_len].clone(),
             is_equal_idx_aux: IsEqualVecAuxCols::from_slice(
-                &slc[6 + idx_len + data_len..6 + 3 * idx_len + data_len],
+                &slc[7 + idx_len + data_len..7 + 3 * idx_len + data_len],
                 idx_len,
             ),
             is_equal_data_aux: IsEqualVecAuxCols::from_slice(
-                &slc[6 + 3 * idx_len + data_len..6 + 3 * idx_len + 2 * data_len],
+                &slc[7 + 3 * idx_len + data_len..7 + 3 * idx_len + 2 * data_len],
                 data_len,
             ),
             lt_aux: IsLessThanTupleAuxCols::from_slice(
-                &slc[6 + 3 * idx_len + 2 * data_len..],
-                oc.addr_clk_limb_bits.clone(),
+                &slc[7 + 3 * idx_len + 2 * data_len..],
+                oc.idx_clk_limb_bits.clone(),
                 oc.decomp,
                 // extra 1 for clk
                 idx_len + 1,

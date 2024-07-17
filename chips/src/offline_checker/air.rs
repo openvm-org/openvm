@@ -52,6 +52,12 @@ where
         builder.assert_bool(local_cols.same_data);
         builder.assert_bool(local_cols.is_valid);
 
+        // Constrain that same_idx_and_data is same_idx * same_data
+        builder.assert_eq(
+            local_cols.same_idx_and_data,
+            local_cols.same_idx * local_cols.same_data,
+        );
+
         // Making sure first row starts with same_idx, same_data being false
         builder.when_first_row().assert_zero(local_cols.same_idx);
         builder.when_first_row().assert_zero(local_cols.same_data);
@@ -60,6 +66,7 @@ where
         let is_equal_idx_cols = IsEqualVecCols::new(
             local_cols.idx.clone(),
             next_cols.idx.clone(),
+            next_cols.same_idx,
             next_cols.is_equal_idx_aux.prods.clone(),
             next_cols.is_equal_idx_aux.invs,
         );
@@ -82,6 +89,7 @@ where
         let is_equal_data = IsEqualVecCols::new(
             local_cols.data.to_vec(),
             next_cols.data.to_vec(),
+            next_cols.same_data,
             next_cols.is_equal_data_aux.prods.clone(),
             next_cols.is_equal_data_aux.invs,
         );
@@ -93,15 +101,6 @@ where
             is_equal_data.io,
             is_equal_data.aux,
         );
-
-        // Make sure that same_data comes from is_equal_data_aux (last element of prods indicates whether equal)
-        // Unless new index, in which case same_data should be 0
-        builder.assert_one(or(
-            AB::Expr::one()
-                - (local_cols.same_data.into()
-                    - next_cols.is_equal_data_aux.prods[self.data_len - 1]),
-            AB::Expr::one() - next_cols.same_idx,
-        ));
 
         // Ensuring all rows are sorted by (idx, clk)
         let lt_io_cols = IsLessThanTupleIOCols::<AB::Var> {
@@ -121,7 +120,7 @@ where
         };
 
         let lt_chip =
-            IsLessThanTupleAir::new(self.range_bus, self.addr_clk_limb_bits.clone(), self.decomp);
+            IsLessThanTupleAir::new(self.range_bus, self.idx_clk_limb_bits.clone(), self.decomp);
 
         SubAir::eval(
             &lt_chip,
@@ -138,16 +137,14 @@ where
 
         // Making sure that every read uses the same data as the last operation if it is not the first
         // operation in the block
-        // read => same_data
-        // NOTE: constraint degree is 3
+        // NOTE: constraint degree is 4
         builder.assert_one(or(
             AB::Expr::one() - local_cols.is_valid.into(),
             or(
                 local_cols.op_type.into(),
-                // if b is 2 (when same_addr = 0 and same_data = 1), then this or will give 0 or 2,
-                // and the outer or will be 0 or 2, failing the constraint
-                // in our trace generation, we set same_data = 0 when same_addr = 0
-                AB::Expr::one() - local_cols.same_idx.into() + local_cols.same_data.into(),
+                // if same_idx = 0 and read, then same_data can be anything
+                // if same_idx = 1 and read, then same_data must be 1
+                AB::Expr::one() - local_cols.same_idx.into() + local_cols.same_idx_and_data,
             ),
         ));
 
