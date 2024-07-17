@@ -260,8 +260,8 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
 
                     hint_stream = VecDeque::new();
                     for _ in 0..32 {
-                        hint_stream.push_back(F::from_canonical_u32(val % 2));
-                        val /= 2;
+                        hint_stream.push_back(F::from_canonical_u32(val & 1));
+                        val >>= 1;
                     }
                 }
                 // e[d[a] + b] <- hint_stream.next()

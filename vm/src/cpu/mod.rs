@@ -54,9 +54,9 @@ pub enum OpCode {
     /// Instruction to write the next hint word into memory.
     SHINTW = 18,
 
-    /// Psuedo-instruction to prepare the next input vector for hinting.
+    /// Phantom instruction to prepare the next input vector for hinting.
     HINT_INPUT = 19,
-    /// Psuedo-instruction to prepare the little-endian bit decomposition of a variable for hinting.
+    /// Phantom instruction to prepare the little-endian bit decomposition of a variable for hinting.
     HINT_BITS = 20,
 }
 
