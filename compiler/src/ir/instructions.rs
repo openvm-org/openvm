@@ -205,12 +205,6 @@ pub enum DslIr<C: Config> {
     // CircuitPoseidon2PermuteBabyBear([Felt<C::F>; 16]),
 
     // Miscellaneous instructions.
-    /// Decompose hint operation of a usize into an array. (output = num2bits(usize)).
-    HintBitsU(Array<C, Var<C::N>>, Usize<C::N>),
-    /// Decompose hint operation of a variable into an array. (output = num2bits(var)).
-    HintBitsV(Array<C, Var<C::N>>, Var<C::N>),
-    /// Decompose hint operation of a field element into an array. (output = num2bits(felt)).
-    HintBitsF(Array<C, Var<C::N>>, Felt<C::F>),
     /// Prints a variable.
     PrintV(Var<C::N>),
     /// Prints a field element.
@@ -220,10 +214,17 @@ pub enum DslIr<C: Config> {
     /// Throws an error.
     Error(),
 
-    /// Converts an ext to a slice of felts.
-    HintExt2Felt(Array<C, Felt<C::F>>, Ext<C::F, C::EF>),
-    /// Hint the next array and its length.
-    Hint(Ptr<C::N>),
+    /// Prepare next input vector (preceded by its length) for hinting.
+    HintInputVec(),
+    /// Prepare bit decomposition for hinting.
+    HintBitsU(Usize<C::N>),
+    /// Prepare bit decomposition for hinting.
+    HintBitsV(Var<C::N>),
+    /// Prepare bit decomposition for hinting.
+    HintBitsF(Felt<C::F>),
+
+    StoreHintWord(Ptr<C::N>, MemIndex<C::N>),
+
     /// Witness a variable. Should only be used when target is a gnark circuit.
     WitnessVar(Var<C::N>, u32),
     /// Witness a field element. Should only be used when target is a gnark circuit.

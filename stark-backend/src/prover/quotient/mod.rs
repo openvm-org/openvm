@@ -60,14 +60,14 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
     pub fn quotient_values<'a>(
         &self,
         raps: Vec<&'a dyn AnyRap<SC>>,
-        pk: &MultiStarkProvingKey<SC>,
+        pk: &'a MultiStarkProvingKey<SC>,
         traces: Vec<SingleRapCommittedTraceView<'a, SC>>,
         public_values: &'a [Vec<Val<SC>>],
     ) -> QuotientData<SC>
     where
-        Domain<SC>: Send + Sync,
         SC::Pcs: Sync,
-        PcsProverData<SC>: Sync,
+        Domain<SC>: Send + Sync,
+        PcsProverData<SC>: Send + Sync,
         Com<SC>: Send + Sync,
     {
         let inner = (raps, &pk.per_air, traces, public_values)

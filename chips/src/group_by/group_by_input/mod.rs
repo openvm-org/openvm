@@ -66,18 +66,18 @@ impl GroupByAir {
     /// Width of entire trace
     pub fn get_width(&self) -> usize {
         if !self.sorted {
-            self.page_width + 3 * self.group_by_cols.len() + 7
+            self.page_width + 3 * self.group_by_cols.len() + 6
         } else {
-            3 * self.group_by_cols.len() + 7
+            3 * self.group_by_cols.len() + 6
         }
     }
 
     /// Width of auxilliary trace, i.e. all non-input-page columns
     pub fn aux_width(&self) -> usize {
         if !self.sorted {
-            3 * self.group_by_cols.len() + 7
+            3 * self.group_by_cols.len() + 6
         } else {
-            2 * self.group_by_cols.len() + 5
+            2 * self.group_by_cols.len() + 4
         }
     }
 

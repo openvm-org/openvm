@@ -39,7 +39,7 @@ fn instrumented_verify<SC: StarkGenericConfig, E: StarkEngineWithHashInstrumenta
     let verifier = engine.verifier();
     // Do not check cumulative sum
     verifier
-        .verify_raps(&mut challenger, vk, vec![&air], proof, &pis)
+        .verify_raps(&mut challenger, &vk, vec![&air], &proof, &pis)
         .unwrap();
 
     let bench_params = BenchParams {

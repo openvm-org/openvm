@@ -97,6 +97,7 @@ where
         let is_equal_idx_cols = IsEqualVecCols::new(
             local_cols.idx.to_vec(),
             next_cols.idx.to_vec(),
+            next_cols.same_idx,
             next_cols.is_equal_idx_aux.prods,
             next_cols.is_equal_idx_aux.invs,
         );

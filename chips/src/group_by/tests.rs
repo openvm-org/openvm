@@ -257,13 +257,13 @@ impl GroupByTest {
 
         verifier.verify(
             &mut challenger,
-            vk,
+            &vk,
             vec![
                 &page_controller.group_by,
                 &page_controller.final_chip,
                 &page_controller.range_checker.air,
             ],
-            proof,
+            &proof,
             &pis,
         )
     }

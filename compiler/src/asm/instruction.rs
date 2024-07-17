@@ -140,12 +140,6 @@ pub enum AsmInstruction<F, EF> {
     /// Break(label)
     Break(F),
 
-    /// HintBits(dst, src).
-    ///
-    /// Decompose the field element `src` into bits and write them to the array
-    /// starting at the address stored at `dst`.
-    HintBits(i32, i32),
-
     /// Perform a permutation of the Poseidon2 hash function on the array specified by the ptr.
     Poseidon2Permute(i32, i32),
     Poseidon2Compress(i32, i32, i32),
@@ -159,11 +153,17 @@ pub enum AsmInstruction<F, EF> {
     /// Print an extension element.
     PrintE(i32),
 
-    /// Convert an extension element to field elements.
-    HintExt2Felt(i32, i32),
+    /// Add next input vector to hint stream.
+    HintInputVec(),
 
-    /// Hint a vector of blocks along with the length.
-    Hint(i32),
+    /// HintBits(dst, src).
+    ///
+    /// Bit decompose the field element `src` and add in little endian to hint stream.
+    HintBits(i32),
+
+    /// Stores the next hint stream word at `dst`.
+    StoreHintWord(i32, i32, F, F),
+    StoreHintWordI(i32, F, F, F),
 
     /// FRIFold(m, input).
     FriFold(i32, i32),
@@ -1100,7 +1100,7 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::Trap => write!(f, "trap"),
             AsmInstruction::Halt => write!(f, "halt"),
-            AsmInstruction::HintBits(dst, src) => write!(f, "hint_bits ({})fp, ({})fp", dst, src),
+            AsmInstruction::HintBits(dst) => write!(f, "hint_bits ({})fp", dst),
             AsmInstruction::Poseidon2Permute(dst, src) => {
                 write!(f, "poseidon2_permute ({})fp, ({})fp", dst, src)
             }
@@ -1113,10 +1113,13 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::PrintE(dst) => {
                 write!(f, "print_e ({})fp", dst)
             }
-            AsmInstruction::HintExt2Felt(dst, src) => {
-                write!(f, "hintExt2felt ({})fp, {})fp", dst, src)
+            AsmInstruction::HintInputVec() => write!(f, "hint_vec"),
+            AsmInstruction::StoreHintWord(dst, index, offset, size) => {
+                write!(f, "shintw ({})fp ({})fp {} {}", dst, index, offset, size)
             }
-            AsmInstruction::Hint(dst) => write!(f, "hint ({})fp", dst),
+            AsmInstruction::StoreHintWordI(dst, index, offset, size) => {
+                write!(f, "shintw ({})fp {} {} {}", dst, index, offset, size)
+            }
             AsmInstruction::FriFold(m, input_ptr) => {
                 write!(f, "fri_fold ({})fp, ({})fp", m, input_ptr)
             }

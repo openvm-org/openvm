@@ -262,9 +262,9 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         let mut challenger = engine.new_challenger();
         verifier.verify(
             &mut challenger,
-            vk,
+            &vk,
             vec![&self.group_by, &self.final_chip, &self.range_checker.air],
-            proof,
+            &proof,
             &pis,
         )
     }

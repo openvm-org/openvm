@@ -56,9 +56,9 @@ fn test_single_page(
     let mut challenger = engine.new_challenger();
     verifier.verify(
         &mut challenger,
-        vk,
+        &vk,
         vec![final_page_chip, &range_checker.air],
-        proof,
+        &proof,
         &pis,
     )
 }

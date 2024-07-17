@@ -76,7 +76,13 @@ impl VerifyCommand {
 
         let mut challenger = engine.new_challenger();
         let verifier = engine.verifier();
-        let result = verifier.verify(&mut challenger, vk, chips, proof, &vec![vec![]; num_chips]);
+        let result = verifier.verify(
+            &mut challenger,
+            &vk,
+            chips,
+            &proof,
+            &vec![vec![]; num_chips],
+        );
 
         if result.is_err() {
             println!("Verification Unsuccessful");
