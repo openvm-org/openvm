@@ -297,7 +297,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
         vm.cpu_chip
             .transfer_state((clock_cycle, timestamp, pc.as_canonical_u64() as usize));
 
-        Self::pad_rows(vm);
+        if !vm.cpu_chip.is_done {
+            Self::pad_rows(vm);
+        }
 
         Ok(RowMajorMatrix::new(
             vm.cpu_chip.rows.concat(),
@@ -310,7 +312,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
         let timestamp = F::from_canonical_usize(vm.cpu_chip.timestamp);
         let nop_row =
             CpuCols::<WORD_SIZE, F>::nop_row(vm.options(), pc, timestamp).flatten(vm.options());
-        let correct_len = vm.cpu_chip.rows.len().next_power_of_two();
+        let correct_len = (vm.cpu_chip.rows.len() + 1).next_power_of_two();
         vm.cpu_chip.rows.resize(correct_len, nop_row);
     }
 }
