@@ -1,15 +1,20 @@
+use afs_stark_backend::commit::MatrixCommitmentPointers;
+use afs_stark_backend::config::Com;
 use p3_field::{AbstractField, PrimeField32, TwoAdicField};
 use p3_uni_stark::{StarkGenericConfig, Val};
 
 use afs_compiler::asm::AsmConfig;
 use afs_compiler::ir::{Array, Builder, Config, Ext, ExtConst, Felt, Var};
 use afs_compiler::prelude::*;
-use afs_stark_backend::keygen::types::MultiStarkPartialVerifyingKey;
+use afs_stark_backend::keygen::types::{
+    CommitmentToAirGraph, MultiStarkPartialVerifyingKey, StarkPartialVerifyingKey, TraceWidth,
+};
 use afs_stark_backend::prover::types::Proof;
+use p3_util::log2_strict_usize;
 
 use crate::challenger::DuplexChallengerVariable;
-use crate::fri::TwoAdicFriPcsVariable;
 use crate::fri::types::{DigestVariable, TwoAdicPcsProofVariable};
+use crate::fri::TwoAdicFriPcsVariable;
 use crate::hints::{InnerChallenge, InnerVal};
 use crate::stark::{AxiomStarkVerifier, AxiomVerifier, DynRapForRecursion};
 
@@ -29,42 +34,39 @@ where
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
         raps: Vec<&dyn DynRapForRecursion<C>>,
-        chip_dims: Vec<ChipDimensions>,
+        constants: MultiStarkVerificationAdvice<C>,
         input: &AxiomMemoryLayoutVariable<C>,
     ) {
         let proof = &input.proof;
 
         let cumulative_sum: Ext<C::F, C::EF> = builder.eval(C::F::zero());
-        builder
-            .range(0, proof.exposed_values_after_challenge.len())
-            .for_each(|i, builder| {
-                let exposed_values = builder.get(&proof.exposed_values_after_challenge, i);
+        let num_phases = constants.num_challenges_to_sample.len();
+        // Currently only support 0 or 1 phase is supported.
+        assert!(num_phases <= 1);
+        // Tmp solution to support 0 or 1 phase.
+        if num_phases > 0 {
+            builder
+                .range(0, proof.exposed_values_after_challenge.len())
+                .for_each(|i, builder| {
+                    let exposed_values = builder.get(&proof.exposed_values_after_challenge, i);
 
-                // Verifier does not support more than 1 challenge phase
-                builder.assert_usize_eq(exposed_values.len(), 1);
+                    // Verifier does not support more than 1 challenge phase
+                    builder.assert_usize_eq(exposed_values.len(), 1);
 
-                let values = builder.get(&exposed_values, 0);
+                    let values = builder.get(&exposed_values, 0);
 
-                // Only exposed value should be cumulative sum
-                builder.assert_usize_eq(values.len(), 1);
+                    // Only exposed value should be cumulative sum
+                    builder.assert_usize_eq(values.len(), 1);
 
-                let summand = builder.get(&values, 0);
-                builder.assign(cumulative_sum, cumulative_sum + summand);
-            });
+                    let summand = builder.get(&values, 0);
+                    builder.assign(cumulative_sum, cumulative_sum + summand);
+                });
+        }
         builder.assert_ext_eq(cumulative_sum, C::EF::zero().cons());
 
         let mut challenger = DuplexChallengerVariable::new(builder);
 
-        AxiomStarkVerifier::<C>::verify_raps(
-            builder,
-            pcs,
-            raps,
-            chip_dims,
-            &mut challenger,
-            &input.proof,
-            &input.vk,
-            input.public_values.clone(),
-        );
+        AxiomStarkVerifier::<C>::verify_raps(builder, pcs, raps, constants, &mut challenger, input);
 
         builder.halt();
 
@@ -102,32 +104,15 @@ where
 
 pub struct AxiomMemoryLayout<SC: StarkGenericConfig> {
     pub proof: Proof<SC>,
-    pub vk: MultiStarkPartialVerifyingKey<SC>,
+    pub log_degree_per_air: Vec<usize>,
     pub public_values: Vec<Vec<Val<SC>>>,
 }
 
 #[derive(DslVariable, Clone)]
 pub struct AxiomMemoryLayoutVariable<C: Config> {
     pub proof: AxiomProofVariable<C>,
-    pub vk: MultiStarkPartialVerifyingKeyVariable<C>,
+    pub log_degree_per_air: Array<C, Var<C::N>>,
     pub public_values: Array<C, Array<C, Felt<C::F>>>,
-}
-
-#[derive(DslVariable, Clone)]
-pub struct MultiStarkPartialVerifyingKeyVariable<C: Config> {
-    pub per_air: Array<C, StarkPartialVerifyingKeyVariable<C>>,
-    pub num_challenges_to_sample: Array<C, Var<C::N>>,
-    pub num_main_trace_commitments: Var<C::N>,
-}
-
-#[derive(DslVariable, Clone)]
-pub struct StarkPartialVerifyingKeyVariable<C: Config> {
-    pub log_degree: Var<C::N>,
-    pub degree: Var<C::N>,
-    pub log_quotient_degree: Var<C::N>,
-    pub quotient_degree: Var<C::N>,
-    pub width: TraceWidthVariable<C>,
-    pub num_exposed_values_after_challenge: Array<C, Var<C::N>>,
 }
 
 #[derive(DslVariable, Clone)]
@@ -159,7 +144,7 @@ pub struct OpeningProofVariable<C: Config> {
 
 #[derive(DslVariable, Clone)]
 pub struct OpenedValuesVariable<C: Config> {
-    // pub preprocessed: Array<C, AirOpenedValuesVariable<C>>,
+    pub preprocessed: Array<C, AdjacentOpenedValuesVariable<C>>,
     pub main: Array<C, Array<C, AdjacentOpenedValuesVariable<C>>>,
     pub after_challenge: Array<C, Array<C, AdjacentOpenedValuesVariable<C>>>,
     pub quotient: Array<C, Array<C, Array<C, Ext<C::F, C::EF>>>>,
@@ -171,10 +156,99 @@ pub struct AdjacentOpenedValuesVariable<C: Config> {
     pub next: Array<C, Ext<C::F, C::EF>>,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct ChipDimensions {
-    pub preprocessed_width: usize,
-    pub main_width: usize,
-    pub permutation_width: usize,
-    pub log_quotient_degree: usize,
+pub struct VerifierSinglePreprocessedDataInProgram<C: Config> {
+    pub commit: Vec<C::F>,
+}
+
+/// Constants determied by AIRs.
+///
+/// !! This should be moved to the backend. !!
+pub struct StarkVerificationAdvice<C: Config> {
+    /// Preprocessed trace data, if any
+    pub preprocessed_data: Option<VerifierSinglePreprocessedDataInProgram<C>>,
+    /// Trace sub-matrix widths
+    pub width: TraceWidth,
+    /// [MatrixCommitmentPointers] for partitioned main trace matrix
+    pub main_graph: MatrixCommitmentPointers,
+    /// The factor to multiple the trace degree by to get the degree of the quotient polynomial. Determined from the max constraint degree of the AIR constraints.
+    /// This is equivalently the number of chunks the quotient polynomial is split into.
+    pub quotient_degree: usize,
+    /// Number of public values for this STARK only
+    pub num_public_values: usize,
+    /// Number of values to expose to verifier in each trace challenge phase
+    pub num_exposed_values_after_challenge: Vec<usize>,
+}
+
+impl<C: Config> StarkVerificationAdvice<C> {
+    pub fn new_from_vk<SC: StarkGenericConfig, const DIGEST_SIZE: usize>(
+        vk: StarkPartialVerifyingKey<SC>,
+    ) -> Self
+    where
+        Com<SC>: Into<[C::F; DIGEST_SIZE]>,
+    {
+        let StarkPartialVerifyingKey::<SC> {
+            preprocessed_data,
+            width,
+            main_graph,
+            quotient_degree,
+            num_public_values,
+            num_exposed_values_after_challenge,
+            ..
+        } = vk;
+        Self {
+            preprocessed_data: preprocessed_data.map(|data| {
+                VerifierSinglePreprocessedDataInProgram {
+                    commit: data.commit.clone().into().to_vec(),
+                }
+            }),
+            width,
+            main_graph,
+            quotient_degree,
+            num_public_values,
+            num_exposed_values_after_challenge,
+        }
+    }
+    pub fn log_quotient_degree(&self) -> usize {
+        log2_strict_usize(self.quotient_degree)
+    }
+}
+
+/// Constants determied by multiple AIRs.
+///
+/// !! This should be moved to the backend. !!
+pub struct MultiStarkVerificationAdvice<C: Config> {
+    pub per_air: Vec<StarkVerificationAdvice<C>>,
+    /// Number of multi-matrix commitments that hold commitments to the partitioned main trace matrices across all AIRs.
+    pub num_main_trace_commitments: usize,
+    /// Mapping from commit_idx to global AIR index for matrix in commitment, in order.
+    pub main_commit_to_air_graph: CommitmentToAirGraph,
+    /// The number of challenges to sample in each challenge phase.
+    /// The length determines the global number of challenge phases.
+    pub num_challenges_to_sample: Vec<usize>,
+}
+
+impl<C: Config> MultiStarkVerificationAdvice<C> {
+    pub fn new_from_multi_vk<SC: StarkGenericConfig, const DIGEST_SIZE: usize>(
+        vk: &MultiStarkPartialVerifyingKey<SC>,
+    ) -> Self
+    where
+        Com<SC>: Into<[C::F; DIGEST_SIZE]>,
+    {
+        let MultiStarkPartialVerifyingKey::<SC> {
+            per_air,
+            num_main_trace_commitments,
+            main_commit_to_air_graph,
+            num_challenges_to_sample,
+        } = vk;
+        Self {
+            per_air: per_air
+                .clone()
+                .into_iter()
+                .map(StarkVerificationAdvice::new_from_vk)
+                .collect(),
+            num_main_trace_commitments: *num_main_trace_commitments,
+            main_commit_to_air_graph: main_commit_to_air_graph.clone(),
+            num_challenges_to_sample: num_challenges_to_sample.clone(),
+        }
+    }
 }

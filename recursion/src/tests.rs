@@ -15,14 +15,14 @@ use afs_stark_backend::keygen::types::MultiStarkPartialVerifyingKey;
 use afs_stark_backend::prover::trace::TraceCommitmentBuilder;
 use afs_stark_backend::rap::AnyRap;
 use afs_stark_backend::verifier::MultiTraceStarkVerifier;
-use afs_test_utils::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, default_engine};
+use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
 use afs_test_utils::engine::StarkEngine;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::to_field_vec;
 
 use crate::hints::Hintable;
 use crate::stark::AxiomVerifier;
-use crate::types::{AxiomMemoryLayout, ChipDimensions};
+use crate::types::{AxiomMemoryLayout, MultiStarkVerificationAdvice};
 
 pub struct FibonacciAir;
 
@@ -133,8 +133,8 @@ fn test_interactions() {
     let config = engine.config();
 
     let mut keygen_builder = engine.keygen_builder();
-    for (&rap, &trace_height, &num_pv) in izip!(raps.iter(), trace_heights.iter(), num_pvs.iter()) {
-        keygen_builder.add_air(rap, trace_height, num_pv);
+    for (&rap, &num_pv) in raps.iter().zip(num_pvs.iter()) {
+        keygen_builder.add_air(rap, num_pv);
     }
 
     let partial_pk = keygen_builder.generate_partial_pk();
@@ -152,21 +152,21 @@ fn test_interactions() {
     let mut challenger = engine.new_challenger();
     let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pvs);
 
-    let per_air = partial_vk.per_air.clone();
-
     let input = AxiomMemoryLayout {
         proof,
-        vk: MultiStarkPartialVerifyingKey {
-            per_air: partial_vk.per_air.clone(),
-            num_main_trace_commitments: partial_vk.num_main_trace_commitments,
-            main_commit_to_air_graph: partial_vk.main_commit_to_air_graph.clone(),
-            num_challenges_to_sample: partial_vk.num_challenges_to_sample.clone(),
-        },
+        log_degree_per_air: partial_vk
+            .per_air
+            .iter()
+            .map(|air| log2_strict_usize(air.degree))
+            .collect(),
         public_values: pvs.clone(),
     };
 
     let mut witness_stream = Vec::new();
     witness_stream.extend(input.write());
+
+    // Prepare verification parameters outside of eDSL.
+    let constants = MultiStarkVerificationAdvice::new_from_multi_vk(&partial_vk);
 
     // Make sure proof verifies outside eDSL...
     let verifier = MultiTraceStarkVerifier::new(prover.config);
@@ -185,18 +185,6 @@ fn test_interactions() {
         )
         .expect("afs proof should verify");
 
-    // Prepare verification parameters outside of eDSL.
-
-    let chip_dimensions = per_air
-        .iter()
-        .map(|vk| ChipDimensions {
-            preprocessed_width: 0,
-            main_width: vk.width.partitioned_main[0],
-            permutation_width: vk.width.after_challenge[0],
-            log_quotient_degree: log2_strict_usize(vk.quotient_degree),
-        })
-        .collect();
-
     // Build verification program in eDSL.
     let program = AxiomVerifier::build(
         vec![
@@ -205,7 +193,7 @@ fn test_interactions() {
             &receiver_air,
             &sum_chip.range_checker.air,
         ],
-        chip_dimensions,
+        constants,
         config,
         &engine.fri_params,
     );
@@ -216,7 +204,6 @@ fn test_interactions() {
     // runtime.witness_stream = witness_stream.into();
     // runtime.run();
     // runtime.print_stats();
-
 
     // let machine = RecursionAirSkinnyDeg7::machine(config);
     // let (pk, vk) = machine.setup(&program);
