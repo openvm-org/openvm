@@ -51,14 +51,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
         let next: &[AB::Var] = (*next).borrow();
         let next_cols = CpuCols::<WORD_SIZE, AB::Var>::from_slice(next, self.options);
         let CpuCols { io, aux } = local_cols;
-        let CpuCols {
-            io: next_io,
-            aux:
-                CpuAuxCols {
-                    operation_flags: next_operation_flags,
-                    ..
-                },
-        } = next_cols;
+        let CpuCols { io: next_io, .. } = next_cols;
 
         let CpuIoCols {
             timestamp,
@@ -209,18 +202,12 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
             .when(AB::Expr::one() - read0_equals_read1)
             .assert_eq(next_pc, pc + c);
 
-        // NOP
+        // NOP constraints same pc and timestamp as next row
         let nop_flag = operation_flags[&NOP];
-        let next_nop_flag = next_operation_flags[&NOP];
-        let mut transition = builder.when_transition();
-        transition.when(nop_flag).assert_eq(next_pc, pc);
-        transition.when(next_nop_flag).assert_eq(next_pc, pc);
-
-        transition
-            .when(nop_flag)
-            .assert_eq(next_timestamp, timestamp);
-        transition
-            .when(next_nop_flag)
+        let mut when_nop = builder.when(nop_flag);
+        when_nop.when_transition().assert_eq(next_pc, pc);
+        when_nop
+            .when_transition()
             .assert_eq(next_timestamp, timestamp);
 
         // TERMINATE
@@ -304,10 +291,11 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
             }
         }
 
-        // make sure program terminates
-        // builder
-        //     .when_last_row()
-        //     .assert_eq(opcode, AB::Expr::from_canonical_usize(TERMINATE as usize));
+        // make sure program terminates or shards with NOP
+        builder.when_last_row().assert_zero(
+            (opcode - AB::Expr::from_canonical_usize(TERMINATE as usize))
+                * (opcode - AB::Expr::from_canonical_usize(NOP as usize)),
+        );
 
         // check accesses enabled
         builder.assert_eq(read1.enabled, read1_enabled_check);
