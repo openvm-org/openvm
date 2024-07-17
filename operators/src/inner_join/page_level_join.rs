@@ -202,39 +202,37 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
     where
         Com<SC>: Into<[BabyBear; COMMIT_LEN]>,
     {
-        let parent_page_commit = Commitment::<COMMIT_LEN>::new(
-            proof.commitments.main_trace[partial_vk.per_air[0]
-                .main_graph
-                .matrix_ptrs
-                .get(0)
-                .unwrap()
-                .commit_index]
-                .clone()
-                .into(),
-        );
+        let parent_page_commit = proof.commitments.main_trace[partial_vk.per_air[0]
+            .main_graph
+            .matrix_ptrs
+            .get(0)
+            .unwrap()
+            .commit_index]
+            .clone()
+            .into();
 
-        let child_page_commit = Commitment::<COMMIT_LEN>::new(
-            proof.commitments.main_trace[partial_vk.per_air[1]
-                .main_graph
-                .matrix_ptrs
-                .get(0)
-                .unwrap()
-                .commit_index]
-                .clone()
-                .into(),
-        );
+        let child_page_commit = proof.commitments.main_trace[partial_vk.per_air[1]
+            .main_graph
+            .matrix_ptrs
+            .get(0)
+            .unwrap()
+            .commit_index]
+            .clone()
+            .into();
 
-        let output_page_commit = Commitment::<COMMIT_LEN>::new(
-            proof.commitments.main_trace[partial_vk.per_air[2]
-                .main_graph
-                .matrix_ptrs
-                .get(0)
-                .unwrap()
-                .commit_index]
-                .clone()
-                .into(),
-        );
+        let output_page_commit = proof.commitments.main_trace[partial_vk.per_air[2]
+            .main_graph
+            .matrix_ptrs
+            .get(0)
+            .unwrap()
+            .commit_index]
+            .clone()
+            .into();
 
-        (parent_page_commit, child_page_commit, output_page_commit)
+        (
+            parent_page_commit.into(),
+            child_page_commit.into(),
+            output_page_commit.into(),
+        )
     }
 }
