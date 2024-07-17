@@ -75,8 +75,8 @@ impl<const WORD_SIZE: usize> OfflineChecker<WORD_SIZE> {
     }
 }
 
-impl<const WORD_SIZE: usize, F: PrimeField32> LocalTraceInstructions<F>
-    for OfflineChecker<WORD_SIZE>
+impl<const WORD_SIZE: usize, F: PrimeField32, Operation: OfflineCheckerOperation<F>>
+    LocalTraceInstructions<F> for OfflineChecker<WORD_SIZE>
 {
     type LocalInput = (bool, u8, Operation, Operation, Arc<RangeCheckerGateChip>);
 
