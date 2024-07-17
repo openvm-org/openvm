@@ -99,11 +99,11 @@ where
             lt_bit: slc[11 + page_row_width].clone(),
             is_extra: slc[12 + page_row_width].clone(),
             is_equal_idx_aux: IsEqualVecAuxCols::from_slice(
-                &slc[13 + page_row_width..13 + page_row_width + 2 * oc.idx_len],
+                &slc[13 + page_row_width..13 + page_row_width + 2 * oc.idx_len - 1],
                 oc.idx_len,
             ),
             lt_aux: IsLessThanTupleAuxCols::from_slice(
-                &slc[13 + page_row_width + 2 * oc.idx_len..],
+                &slc[13 + page_row_width + 2 * oc.idx_len - 1..],
                 oc.lt_idx_clk_air.limb_bits(),
                 oc.idx_decomp,
                 oc.idx_len + 1,

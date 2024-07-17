@@ -45,11 +45,11 @@ impl PageIndexScanInputChip {
         Val<SC>: AbstractField + PrimeField64,
     {
         // satisfies_pred, send_row, is_equal_vec_aux_cols
-        row.push(is_equal_vec_trace[3 * self.air.idx_len - 1]);
-        let send_row = is_equal_vec_trace[3 * self.air.idx_len - 1] * is_alloc;
+        row.push(is_equal_vec_trace[2 * self.air.idx_len]);
+        let send_row = is_equal_vec_trace[2 * self.air.idx_len] * is_alloc;
         row.push(send_row);
 
-        row.extend_from_slice(&is_equal_vec_trace[2 * self.air.idx_len..]);
+        row.extend_from_slice(&is_equal_vec_trace[2 * self.air.idx_len + 1..]);
     }
 
     /// Helper function to handle trace generation with an IsLessThanTupleAir and an IsEqualVecAir
@@ -64,15 +64,15 @@ impl PageIndexScanInputChip {
     {
         // satisfies_pred, send_row, satisfies_strict_comp, satisfies_eq_comp, is_less_than_tuple_aux_cols, is_equal_vec_aux_cols
         let satisfies_pred = is_less_than_tuple_trace[2 * self.air.idx_len]
-            + is_equal_vec_trace[3 * self.air.idx_len - 1];
+            + is_equal_vec_trace[2 * self.air.idx_len];
         row.push(satisfies_pred);
         row.push(satisfies_pred * is_alloc);
 
         row.push(is_less_than_tuple_trace[2 * self.air.idx_len]);
-        row.push(is_equal_vec_trace[3 * self.air.idx_len - 1]);
+        row.push(is_equal_vec_trace[2 * self.air.idx_len]);
 
         row.extend_from_slice(&is_less_than_tuple_trace[2 * self.air.idx_len + 1..]);
-        row.extend_from_slice(&is_equal_vec_trace[2 * self.air.idx_len..]);
+        row.extend_from_slice(&is_equal_vec_trace[2 * self.air.idx_len + 1..]);
     }
 
     /// Generate the trace for the auxiliary columns

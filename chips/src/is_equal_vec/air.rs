@@ -9,7 +9,7 @@ use p3_matrix::Matrix;
 use crate::sub_chip::{AirConfig, SubAir};
 
 use super::{
-    columns::{IsEqualVecAuxCols, IsEqualVecCols, IsEqualVecIOCols},
+    columns::{IsEqualVecAuxCols, IsEqualVecCols, IsEqualVecIoCols},
     IsEqualVecAir,
 };
 
@@ -51,26 +51,42 @@ impl<AB: AirBuilder> Air<AB> for IsEqualVecAir {
 }
 
 impl<AB: AirBuilder> SubAir<AB> for IsEqualVecAir {
-    type IoView = IsEqualVecIOCols<AB::Var>;
+    type IoView = IsEqualVecIoCols<AB::Var>;
     type AuxView = IsEqualVecAuxCols<AB::Var>;
 
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
-        let IsEqualVecIOCols { x, y, prod: _ } = io;
+        let IsEqualVecIoCols { x, y, is_equal } = io;
         let IsEqualVecAuxCols { prods, invs } = aux;
         let vec_len = self.vec_len;
-        // initialize prods[0] = is_equal(x[0], y[0])
-        builder.assert_eq(prods[0] + (x[0] - y[0]) * invs[0], AB::F::one());
 
-        for i in 0..vec_len {
-            // constrain prods[i] = 0 if x[i] != y[i]
-            builder.assert_zero(prods[i] * (x[i] - y[i]));
+        // if vec_len == 1, then prods will be empty and we only need to check the constraint that
+        // is_equal indicates whether x[0] = y[0]
+        if vec_len > 1 {
+            // initialize prods[0] = is_equal(x[0], y[0])
+            builder.assert_eq(prods[0] + (x[0] - y[0]) * invs[0], AB::F::one());
+
+            for i in 0..vec_len - 1 {
+                // constrain prods[i] = 0 if x[i] != y[i]
+                builder.assert_zero(prods[i] * (x[i] - y[i]));
+            }
+
+            for i in 0..vec_len - 2 {
+                // if prod[i] == 0 all after are 0
+                builder.assert_eq(prods[i] * prods[i + 1], prods[i + 1]);
+                // prods[i] == 1 forces prods[i+1] == is_equal(x[i+1], y[i+1])
+                builder.assert_eq(prods[i + 1] + (x[i + 1] - y[i + 1]) * invs[i + 1], prods[i]);
+            }
+
+            // if prods[vec_len - 2] == 0, then is_equal == 0
+            builder.assert_eq(prods[vec_len - 2] * is_equal, is_equal);
+            // if prods[vec_len - 2] == 1, then is_equal == is_equal(x[vec_len - 1], y[vec_len - 1])
+            builder.assert_eq(
+                is_equal + (x[vec_len - 1] - y[vec_len - 1]) * invs[vec_len - 1],
+                prods[vec_len - 2],
+            );
         }
 
-        for i in 0..vec_len - 1 {
-            // if prod[i] == 0 all after are 0
-            builder.assert_eq(prods[i] * prods[i + 1], prods[i + 1]);
-            // prods[i] == 1 forces prods[i+1] == is_equal(x[i+1], y[i+1])
-            builder.assert_eq(prods[i + 1] + (x[i + 1] - y[i + 1]) * invs[i + 1], prods[i]);
-        }
+        // constrain is_equal = 0 if x[vec_len - 1] != y[vec_len - 1]
+        builder.assert_zero(is_equal * (x[vec_len - 1] - y[vec_len - 1]));
     }
 }
