@@ -34,7 +34,7 @@ fn air_test(
         program,
         witness_stream,
     );
-    vm.set_test_segments(4);
+    vm.set_test_segments(3);
 
     vm.execute().unwrap();
     let traces = vm.get_traces();
@@ -61,7 +61,7 @@ fn air_test_with_poseidon2(
         program,
         vec![],
     );
-    vm.set_test_segments(4);
+    vm.set_test_segments(3);
 
     vm.execute().unwrap();
     let traces = vm.get_traces();
