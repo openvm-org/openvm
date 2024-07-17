@@ -29,46 +29,46 @@ impl<const WORD_SIZE: usize> OfflineChecker<WORD_SIZE> {
         let mut rows: Vec<F> = vec![];
 
         if !accesses.is_empty() {
-            rows.extend(self.generate_trace_row((
-                true,
-                1,
-                &accesses[0],
-                &dummy_op,
-                range_checker.clone(),
-            )));
+            rows.extend(
+                self.generate_trace_row((true, 1, &accesses[0], &dummy_op, range_checker.clone()))
+                    .flatten(),
+            );
         }
 
         for i in 1..accesses.len() {
-            rows.extend(self.generate_trace_row((
-                false,
-                1,
-                &accesses[i],
-                &accesses[i - 1],
-                range_checker.clone(),
-            )));
+            rows.extend(
+                self.generate_trace_row((
+                    false,
+                    1,
+                    &accesses[i],
+                    &accesses[i - 1],
+                    range_checker.clone(),
+                ))
+                .flatten(),
+            );
         }
 
         // Ensure that trace degree is a power of two
         let trace_degree = accesses.len().next_power_of_two();
 
         if accesses.len() < trace_degree {
-            rows.extend(self.generate_trace_row((
-                false,
-                0,
-                &dummy_op,
-                &accesses[accesses.len() - 1],
-                range_checker.clone(),
-            )));
+            rows.extend(
+                self.generate_trace_row((
+                    false,
+                    0,
+                    &dummy_op,
+                    &accesses[accesses.len() - 1],
+                    range_checker.clone(),
+                ))
+                .flatten(),
+            );
         }
 
         for _i in 1..(trace_degree - accesses.len()) {
-            rows.extend(self.generate_trace_row((
-                false,
-                0,
-                &dummy_op,
-                &dummy_op,
-                range_checker.clone(),
-            )));
+            rows.extend(
+                self.generate_trace_row((false, 0, &dummy_op, &dummy_op, range_checker.clone()))
+                    .flatten(),
+            );
         }
 
         RowMajorMatrix::new(rows, self.air_width())
