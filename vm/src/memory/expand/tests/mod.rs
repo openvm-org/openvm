@@ -73,7 +73,7 @@ fn test<const CHUNK: usize>(
         chip.touch_address(address_space, address);
     }
 
-    let trace_degree = (2 * height * touched_addresses.len()).next_power_of_two();
+    let trace_degree = chip.get_trace_height().next_power_of_two();
     let mut hash_test_chip = HashTestChip::new();
     let (trace, final_trees) =
         chip.generate_trace_and_final_tree(final_memory, trace_degree, &mut hash_test_chip);
