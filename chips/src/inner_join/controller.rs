@@ -59,8 +59,8 @@ pub struct IJBuses {
     pub t2_output_bus_index: usize,
 }
 
-impl IJBuses {
-    pub fn default() -> Self {
+impl Default for IJBuses {
+    fn default() -> Self {
         Self::new(0, 1, 2, 3, 4, 5)
     }
 }
@@ -221,6 +221,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
     ///
     /// Returns ProverTraceData for the actual tables (T1, T2, output_tables). Moreover,
     /// a copy of the traces and the commitments for the tables is stored in the struct.
+    #[allow(clippy::too_many_arguments)]
     pub fn load_tables(
         &mut self,
         t1: &Page,

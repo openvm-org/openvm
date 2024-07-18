@@ -47,13 +47,13 @@ impl<const COMMIT_LEN: usize> DataFrame<COMMIT_LEN> {
         }
     }
 
-    pub fn from_pages_with_ranges(pages: Vec<&Page>, ranges: &Vec<IndexRange>) -> Self {
-        let page_commits = pages.iter().map(|p| hash_struct(p)).collect();
-        Self::new(page_commits, DataFrameType::Indexed(ranges.clone()))
+    pub fn from_pages_with_ranges(pages: Vec<&Page>, ranges: &[IndexRange]) -> Self {
+        let page_commits = pages.iter().map(hash_struct).collect();
+        Self::new(page_commits, DataFrameType::Indexed(ranges.to_vec()))
     }
 
     pub fn from_indexed_pages(pages: Vec<&Page>) -> Self {
-        let page_commits = pages.iter().map(|p| hash_struct(p)).collect();
+        let page_commits = pages.iter().map(hash_struct).collect();
         let ranges = pages
             .iter()
             .map(|p| {
@@ -67,6 +67,10 @@ impl<const COMMIT_LEN: usize> DataFrame<COMMIT_LEN> {
 
     pub fn len(&self) -> usize {
         self.page_commits.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.page_commits.is_empty()
     }
 
     pub fn push_indexed_page(&mut self, commit: Commitment<COMMIT_LEN>, range: IndexRange) {

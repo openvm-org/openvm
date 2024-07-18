@@ -8,7 +8,6 @@ use crate::{
     dataframe::DataFrame,
 };
 
-#[derive(Default)]
 pub struct TwoPointersProgram<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>> {
     pub pairs: RefCell<Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)>>,
     pub pis: RefCell<TwoPointersProgramPis<COMMIT_LEN>>,
@@ -17,18 +16,22 @@ pub struct TwoPointersProgram<const COMMIT_LEN: usize, SC: StarkGenericConfig, E
     _marker2: PhantomData<E>,  // This should be removed eventually
 }
 
-impl<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>>
-    TwoPointersProgram<COMMIT_LEN, SC, E>
+impl<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>> Default
+    for TwoPointersProgram<COMMIT_LEN, SC, E>
 {
-    pub fn default() -> Self {
+    fn default() -> Self {
         Self {
             pairs: RefCell::new(vec![]),
             pis: RefCell::new(TwoPointersProgramPis::default()),
-            _marker1: PhantomData::<SC>::default(),
-            _marker2: PhantomData::<E>::default(),
+            _marker1: PhantomData::<SC>,
+            _marker2: PhantomData::<E>,
         }
     }
+}
 
+impl<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>>
+    TwoPointersProgram<COMMIT_LEN, SC, E>
+{
     pub fn generate_trace(
         &self,
         parent_df: &DataFrame<COMMIT_LEN>,

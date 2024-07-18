@@ -43,7 +43,6 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         parent_table_format: &TableFormat,
         child_table_format: &T2Format,
         decomp: usize,
-        engine: &E,
     ) -> Self
     where
         Val<SC>: PrimeField,
@@ -55,7 +54,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
     {
-        let mut leaves: Vec<Option<Box<JoinCircuit<COMMIT_LEN, SC, E>>>> = vec![];
+        let mut leaves: Vec<Option<JoinCircuit<COMMIT_LEN, SC, E>>> = vec![];
 
         // Adding the two-pointers program as a leaf
         let tp_program = TwoPointersProgram::<COMMIT_LEN, SC, E>::default();
@@ -63,7 +62,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         let pairs = TwoPointersProgram::<COMMIT_LEN, SC, E>::run(&parent_df, &child_df);
         let pairs_commit = hash_struct(&pairs);
 
-        leaves.push(Some(Box::new(JoinCircuit::TwoPointersProgram(tp_program))));
+        leaves.push(Some(JoinCircuit::TwoPointersProgram(tp_program)));
 
         for (parent_commit, child_commit) in pairs.iter() {
             let page_level_join = PageLevelJoin::<COMMIT_LEN, SC, E>::new(
@@ -74,29 +73,18 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
                 decomp,
             );
 
-            leaves.push(Some(Box::new(JoinCircuit::PageLevelJoin(page_level_join))));
+            leaves.push(Some(JoinCircuit::PageLevelJoin(page_level_join)));
         }
 
-        let root = match leaves.len() {
-            1 => Box::new(JoinCircuit::InternalNode(
-                InternalNode::<COMMIT_LEN, SC, E>::new(vec![Arc::from(leaves[0].take().unwrap())]),
-            )),
-            _ => {
-                let mut pairs_list_index = 0;
-                let (root, _) = Self::build_tree_dfs(
-                    0,
-                    leaves.len() - 1,
-                    leaves,
-                    &pairs,
-                    &pairs_commit,
-                    &mut pairs_list_index,
-                    &engine,
-                );
-                root
-            }
-        };
+        let root =
+            match leaves.len() {
+                1 => JoinCircuit::InternalNode(InternalNode::<COMMIT_LEN, SC, E>::new(vec![
+                    Arc::from(leaves[0].take().unwrap()),
+                ])),
+                _ => Self::build_tree_dfs(0, leaves.len() - 1, &mut leaves),
+            };
 
-        let root = match *root {
+        let root = match root {
             JoinCircuit::InternalNode(node) => node,
             _ => unreachable!(),
         };
@@ -176,15 +164,8 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
     fn build_tree_dfs(
         l: usize,
         r: usize,
-        mut leaves: Vec<Option<Box<JoinCircuit<COMMIT_LEN, SC, E>>>>,
-        pairs: &Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)>,
-        pairs_commit: &Commitment<COMMIT_LEN>,
-        pairs_list_index: &mut u32,
-        engine: &E,
-    ) -> (
-        Box<JoinCircuit<COMMIT_LEN, SC, E>>,
-        Vec<Option<Box<JoinCircuit<COMMIT_LEN, SC, E>>>>,
-    )
+        leaves: &mut Vec<Option<JoinCircuit<COMMIT_LEN, SC, E>>>,
+    ) -> JoinCircuit<COMMIT_LEN, SC, E>
     where
         Val<SC>: PrimeField,
         Domain<SC>: Send + Sync,
@@ -196,32 +177,16 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         PcsProof<SC>: Send + Sync,
     {
         if l == r {
-            return (leaves[l].take().unwrap(), leaves);
+            return leaves[l].take().unwrap();
         }
 
         let mid = (l + r) / 2;
-        let (left, leaves) = Self::build_tree_dfs(
-            l,
-            mid,
-            leaves,
-            pairs,
-            pairs_commit,
-            pairs_list_index,
-            engine,
-        );
-        let (right, leaves) = Self::build_tree_dfs(
-            mid + 1,
-            r,
-            leaves,
-            pairs,
-            pairs_commit,
-            pairs_list_index,
-            engine,
-        );
+        let left = Self::build_tree_dfs(l, mid, leaves);
+        let right = Self::build_tree_dfs(mid + 1, r, leaves);
 
         let internal_node =
-            InternalNode::<COMMIT_LEN, SC, E>::new(vec![Arc::from(*left), Arc::from(*right)]);
+            InternalNode::<COMMIT_LEN, SC, E>::new(vec![Arc::from(left), Arc::from(right)]);
 
-        (Box::new(JoinCircuit::InternalNode(internal_node)), leaves)
+        JoinCircuit::InternalNode(internal_node)
     }
 }

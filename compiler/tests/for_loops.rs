@@ -60,7 +60,6 @@ fn test_compiler_for_loops() {
 }
 
 #[test]
-#[ignore]
 fn test_compiler_nested_array_loop() {
     let mut builder = AsmBuilder::<F, EF>::default();
     type C = AsmConfig<F, EF>;

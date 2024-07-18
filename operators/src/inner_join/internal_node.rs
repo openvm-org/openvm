@@ -16,6 +16,8 @@ use crate::{
     dataframe::DataFrame,
 };
 
+// This bypassing should be revisited later when all the structs are finalized
+#[allow(clippy::large_enum_variant)]
 pub enum JoinCircuit<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>> {
     PageLevelJoin(PageLevelJoin<COMMIT_LEN, SC, E>),
     TwoPointersProgram(TwoPointersProgram<COMMIT_LEN, SC, E>),
@@ -66,6 +68,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn generate_trace_for_tree(
         &self,
         page_loader: &mut PageDataLoader<SC, COMMIT_LEN>,

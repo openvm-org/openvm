@@ -144,7 +144,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         Val<SC>: PrimeField,
     {
         let mut keygen_builder: MultiStarkKeygenBuilder<SC> =
-            MultiStarkKeygenBuilder::new(&engine.config());
+            MultiStarkKeygenBuilder::new(engine.config());
         let ij_controller = self.ij_controller.borrow_mut();
         ij_controller.set_up_keygen_builder(&mut keygen_builder);
         *self.partial_pk.borrow_mut() = keygen_builder.generate_partial_pk();
@@ -227,7 +227,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         let parent_page_commit = proof.commitments.main_trace[partial_vk.per_air[0]
             .main_graph
             .matrix_ptrs
-            .get(0)
+            .first()
             .unwrap()
             .commit_index]
             .clone()
@@ -236,7 +236,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         let child_page_commit = proof.commitments.main_trace[partial_vk.per_air[1]
             .main_graph
             .matrix_ptrs
-            .get(0)
+            .first()
             .unwrap()
             .commit_index]
             .clone()
@@ -245,7 +245,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         let output_page_commit = proof.commitments.main_trace[partial_vk.per_air[2]
             .main_graph
             .matrix_ptrs
-            .get(0)
+            .first()
             .unwrap()
             .commit_index]
             .clone()

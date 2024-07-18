@@ -40,7 +40,6 @@ pub fn one_page_table_inner_join_test() {
         &parent_page_format,
         &child_page_format,
         decomp,
-        &engine,
     );
 
     ij_table_controller.generate_trace(&engine, &mut page_loader);
@@ -148,7 +147,7 @@ fn generate_two_tables(
             .iter()
             .skip(page_idx * page_height)
             .take(page_height)
-            .map(|row| row.clone())
+            .cloned()
             .collect::<Vec<PageCols<u32>>>();
 
         // Every individual child page should be sorted by index
@@ -183,7 +182,7 @@ fn fkey_page_range(page: &Page, fkey_start: usize, fkey_end: usize) -> IndexRang
     for row in page.iter() {
         let cur_fkey = row.data[fkey_start..fkey_end].to_vec();
         if cur_fkey < smallest_fkey {
-            smallest_fkey = cur_fkey.clone();
+            smallest_fkey.clone_from(&cur_fkey);
         }
         if cur_fkey > largest_fkey {
             largest_fkey = cur_fkey;

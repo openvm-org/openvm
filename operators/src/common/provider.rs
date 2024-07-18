@@ -62,7 +62,7 @@ impl<SC: StarkGenericConfig, const COMMIT_LEN: usize> PageDataLoader<SC, COMMIT_
         Val<SC>: PrimeField,
         Com<SC>: Into<[BabyBear; COMMIT_LEN]>,
     {
-        let prover = MultiTraceStarkProver::<SC>::new(&engine.config());
+        let prover = MultiTraceStarkProver::<SC>::new(engine.config());
         let trace_builder = TraceCommitmentBuilder::<SC>::new(prover.pcs());
         let trace_committer = trace_builder.committer;
 
