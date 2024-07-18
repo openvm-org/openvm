@@ -336,7 +336,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
 
     /// Sets up keygen with the different trace partitions for all the
     /// chips the struct owns (t1_chip, t2_chip, output_chip, intersector_chip)
-    pub fn set_up_keygen_builder(&mut self, keygen_builder: &mut MultiStarkKeygenBuilder<SC>)
+    pub fn set_up_keygen_builder(&self, keygen_builder: &mut MultiStarkKeygenBuilder<SC>)
     where
         Val<SC>: PrimeField,
     {
@@ -366,7 +366,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
     /// cached_traces_prover_data is a vector of ProverTraceData object for the cached tables
     /// (T1, T2, output_table in that order)
     pub fn prove(
-        &mut self,
+        &self,
         engine: &impl StarkEngine<SC>,
         partial_pk: &MultiStarkPartialProvingKey<SC>,
         trace_builder: &mut TraceCommitmentBuilder<SC>,
@@ -431,7 +431,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
 
     /// This function takes a proof (returned by the prove function) and verifies it
     pub fn verify(
-        &mut self,
+        &self,
         engine: &impl StarkEngine<SC>,
         partial_vk: MultiStarkPartialVerifyingKey<SC>,
         proof: Proof<SC>,

@@ -42,7 +42,7 @@ where
             range_chip_idx_decomp,
         ) = inner_join_setup(config, common, op);
 
-        let mut inner_join_controller = FKInnerJoinController::new(
+        let inner_join_controller = FKInnerJoinController::new(
             inner_join_buses,
             t1_format,
             t2_format,
