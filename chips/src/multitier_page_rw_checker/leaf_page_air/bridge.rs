@@ -7,7 +7,7 @@ use p3_field::PrimeField64;
 use super::columns::LeafPageCols;
 use super::{LeafPageAir, PageRwAir};
 use crate::indexed_output_page_air::columns::IndexedOutputPageCols;
-use crate::is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols};
+use crate::is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIoCols};
 use crate::page_rw_checker::final_page::columns::IndexedPageWriteCols;
 use crate::sub_chip::SubAirBridge;
 
@@ -125,7 +125,7 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> SubAirBridge<F> for LeafPageA
             interactions.extend(SubAirBridge::sends(
                 &subairs.idx_start,
                 IsLessThanTupleCols {
-                    io: IsLessThanTupleIOCols {
+                    io: IsLessThanTupleIoCols {
                         x: col_indices.cache_cols.idx.clone(),
                         y: range_inclusion.start.clone(),
                         tuple_less_than: range_inclusion.less_than_start,
@@ -136,7 +136,7 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> SubAirBridge<F> for LeafPageA
             interactions.extend(SubAirBridge::sends(
                 &subairs.end_idx,
                 IsLessThanTupleCols {
-                    io: IsLessThanTupleIOCols {
+                    io: IsLessThanTupleIoCols {
                         x: range_inclusion.end.clone(),
                         y: col_indices.cache_cols.idx.clone(),
                         tuple_less_than: range_inclusion.greater_than_end,

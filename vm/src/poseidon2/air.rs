@@ -4,7 +4,7 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use afs_chips::is_zero::columns::IsZeroIOCols;
+use afs_chips::is_zero::columns::IsZeroIoCols;
 use afs_chips::is_zero::IsZeroAir;
 use afs_chips::sub_chip::AirConfig;
 use afs_chips::sub_chip::SubAir;
@@ -51,7 +51,7 @@ impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Chip<WIDTH, AB::F>
         SubAir::eval(
             &IsZeroAir {},
             builder,
-            IsZeroIOCols {
+            IsZeroIoCols {
                 x: cols.io.d,
                 is_zero: cols.aux.d_is_zero,
             },

@@ -8,17 +8,13 @@ pub mod trace;
 #[cfg(test)]
 mod tests;
 
-#[derive(Default)]
-pub struct RangeCheckerGateAir {
-    pub bus_index: usize,
-    pub range_max: u32,
-}
+pub use air::RangeCheckerGateAir;
 
 /// This chip gets requests to verify that a number is in the range
 /// [0, MAX). In the trace, there is a counter column and a multiplicity
 /// column. The counter column is generated using a gate, as opposed to
 /// the other RangeCheckerChip.
-#[derive(Default)]
+#[derive(Clone, Debug)]
 pub struct RangeCheckerGateChip {
     pub air: RangeCheckerGateAir,
     pub count: Vec<Arc<AtomicU32>>,

@@ -10,7 +10,7 @@ use super::{
 use crate::{
     common::page_cols::PageCols,
     is_less_than_tuple::{
-        columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
+        columns::{IsLessThanTupleCols, IsLessThanTupleIoCols},
         IsLessThanTupleAir,
     },
     sub_chip::{AirConfig, SubAir},
@@ -93,7 +93,7 @@ impl<AB: AirBuilder> SubAir<AB> for IndexedOutputPageAir {
 
         // Ensuring that rows are sorted by idx
         let lt_cols = IsLessThanTupleCols {
-            io: IsLessThanTupleIOCols {
+            io: IsLessThanTupleIoCols {
                 x: page_local.idx.clone(),
                 y: page_next.idx.clone(),
                 tuple_less_than: aux_next.lt_out,

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use afs_chips::is_equal::IsEqualAir;
-use afs_chips::is_less_than_tuple::columns::IsLessThanTupleIOCols;
+use afs_chips::is_less_than_tuple::columns::IsLessThanTupleIoCols;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -171,7 +171,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
                 ],
                 range_checker,
             ))
-            .flatten()[IsLessThanTupleIOCols::<F>::get_width(3)..]
+            .flatten()[IsLessThanTupleIoCols::<F>::get_width(3)..]
             .to_vec();
 
         row.push(is_equal_addr_space_aux);

@@ -1,5 +1,5 @@
 use crate::{
-    is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
+    is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIoCols},
     sub_chip::SubAirBridge,
 };
 
@@ -27,7 +27,7 @@ impl<F: PrimeField64> AirBridge<F> for AssertSortedAir {
 
         // range check the decompositions of x within aux columns; here the io doesn't matter
         let is_less_than_tuple_cols = IsLessThanTupleCols {
-            io: IsLessThanTupleIOCols {
+            io: IsLessThanTupleIoCols {
                 x: cols_numbered.key.clone(),
                 y: cols_numbered.key.clone(),
                 tuple_less_than: cols_numbered.less_than_next_key,

@@ -4,7 +4,7 @@ use p3_field::PrimeField;
 
 use super::{columns::IntersectorCols, IntersectorAir};
 use crate::{
-    is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
+    is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIoCols},
     sub_chip::SubAirBridge,
     utils::to_vcols,
 };
@@ -16,7 +16,7 @@ impl<F: PrimeField> SubAirBridge<F> for IntersectorAir {
         let mut interactions = SubAirBridge::<F>::sends(
             &self.lt_chip,
             IsLessThanTupleCols {
-                io: IsLessThanTupleIOCols {
+                io: IsLessThanTupleIoCols {
                     x: vec![usize::MAX; 1 + self.idx_len],
                     y: vec![usize::MAX; 1 + self.idx_len],
                     tuple_less_than: usize::MAX,

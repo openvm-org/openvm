@@ -18,7 +18,8 @@ pub trait SubAir<AB: AirBuilder> {
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView);
 }
 
-// This is a helper for simple trace row generation. Not every AIR will need this.
+/// This is a helper for simple trace row generation.
+/// Not every AIR will need this.
 pub trait LocalTraceInstructions<F>: AirConfig {
     /// Logical inputs needed to generate a single row of the trace.
     type LocalInput;

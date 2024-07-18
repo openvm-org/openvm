@@ -6,7 +6,7 @@ use p3_field::PrimeField64;
 
 use super::columns::InternalPageCols;
 use super::InternalPageAir;
-use crate::is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols};
+use crate::is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIoCols};
 use crate::sub_chip::SubAirBridge;
 
 impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
@@ -127,7 +127,7 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> SubAirBridge<F>
             interactions.extend(SubAirBridge::sends(
                 &subairs.idx1_start,
                 IsLessThanTupleCols {
-                    io: IsLessThanTupleIOCols {
+                    io: IsLessThanTupleIoCols {
                         x: col_indices.cache_cols.child_start.clone(),
                         y: range_inclusion.start.clone(),
                         tuple_less_than: range_inclusion.less_than_start,
@@ -138,7 +138,7 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> SubAirBridge<F>
             interactions.extend(SubAirBridge::sends(
                 &subairs.end_idx2,
                 IsLessThanTupleCols {
-                    io: IsLessThanTupleIOCols {
+                    io: IsLessThanTupleIoCols {
                         x: range_inclusion.end.clone(),
                         y: col_indices.cache_cols.child_end.clone(),
                         tuple_less_than: range_inclusion.greater_than_end,
@@ -149,7 +149,7 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> SubAirBridge<F>
             interactions.extend(SubAirBridge::sends(
                 &subairs.idx2_next,
                 IsLessThanTupleCols {
-                    io: IsLessThanTupleIOCols {
+                    io: IsLessThanTupleIoCols {
                         x: col_indices.cache_cols.child_end.clone(),
                         y: col_indices.cache_cols.child_start.clone(),
                         tuple_less_than: prove_sort.end_less_than_next,
@@ -160,7 +160,7 @@ impl<F: PrimeField64, const COMMITMENT_LEN: usize> SubAirBridge<F>
             interactions.extend(SubAirBridge::sends(
                 &subairs.idx2_idx1,
                 IsLessThanTupleCols {
-                    io: IsLessThanTupleIOCols {
+                    io: IsLessThanTupleIoCols {
                         x: col_indices.cache_cols.child_end.clone(),
                         y: col_indices.cache_cols.child_start.clone(),
                         tuple_less_than: prove_sort.end_less_than_start,

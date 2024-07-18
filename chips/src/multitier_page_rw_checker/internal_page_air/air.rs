@@ -8,8 +8,8 @@ use super::{
     InternalPageAir,
 };
 use crate::{
-    is_less_than_tuple::columns::IsLessThanTupleIOCols,
-    is_zero::columns::IsZeroIOCols,
+    is_less_than_tuple::columns::IsLessThanTupleIoCols,
+    is_zero::columns::IsZeroIoCols,
     sub_chip::{AirConfig, SubAir},
     utils::implies,
 };
@@ -90,7 +90,7 @@ where
             let subair_aux_cols = metadata.subair_aux_cols.unwrap();
             let subairs = self.is_less_than_tuple_air.clone().unwrap();
             {
-                let io = IsLessThanTupleIOCols {
+                let io = IsLessThanTupleIoCols {
                     x: cached_data.child_start.clone(),
                     y: range_inclusion_cols.start.clone(),
                     tuple_less_than: range_inclusion_cols.less_than_start,
@@ -99,7 +99,7 @@ where
                 SubAir::eval(&subairs.idx1_start, builder, io, aux);
             }
             {
-                let io = IsLessThanTupleIOCols {
+                let io = IsLessThanTupleIoCols {
                     x: range_inclusion_cols.end.clone(),
                     y: cached_data.child_end.clone(),
                     tuple_less_than: range_inclusion_cols.greater_than_end,
@@ -108,7 +108,7 @@ where
                 SubAir::eval(&subairs.end_idx2, builder, io, aux);
             }
             {
-                let io = IsLessThanTupleIOCols {
+                let io = IsLessThanTupleIoCols {
                     x: cached_data.child_end.clone(),
                     y: next_data.child_start.clone(),
                     tuple_less_than: prove_sort_cols.end_less_than_next,
@@ -117,7 +117,7 @@ where
                 SubAir::eval(&subairs.idx2_next, builder, io, aux);
             }
             {
-                let io = IsLessThanTupleIOCols {
+                let io = IsLessThanTupleIoCols {
                     x: cached_data.child_end.clone(),
                     y: cached_data.child_start.clone(),
                     tuple_less_than: prove_sort_cols.end_less_than_start,
@@ -126,7 +126,7 @@ where
                 SubAir::eval(&subairs.idx2_idx1, builder, io, aux);
             }
             {
-                let io = IsZeroIOCols {
+                let io = IsZeroIoCols {
                     x: metadata.mult_alloc_minus_one,
                     is_zero: metadata.mult_alloc_is_1,
                 };

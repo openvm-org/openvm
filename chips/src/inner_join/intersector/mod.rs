@@ -1,6 +1,6 @@
 use crate::is_less_than_tuple::IsLessThanTupleAir;
 
-use self::columns::{IntersectorAuxCols, IntersectorCols, IntersectorIOCols};
+use self::columns::{IntersectorAuxCols, IntersectorCols, IntersectorIoCols};
 
 pub mod air;
 pub mod bridge;
@@ -38,7 +38,7 @@ impl IntersectorAir {
     }
 
     pub fn io_width(&self) -> usize {
-        IntersectorIOCols::<usize>::width(self)
+        IntersectorIoCols::<usize>::width(self)
     }
 
     pub fn aux_width(&self) -> usize {

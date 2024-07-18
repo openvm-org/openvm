@@ -4,7 +4,7 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use crate::is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols};
+use crate::is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIoCols};
 use crate::sub_chip::SubAir;
 
 use super::columns::AssertSortedCols;
@@ -49,7 +49,7 @@ impl<AB: AirBuilder> Air<AB> for AssertSortedAir {
             .assert_one(local_cols.less_than_next_key);
 
         let is_less_than_tuple_cols = IsLessThanTupleCols {
-            io: IsLessThanTupleIOCols {
+            io: IsLessThanTupleIoCols {
                 x: local_cols.key,
                 y: next_cols.key,
                 tuple_less_than: local_cols.less_than_next_key,

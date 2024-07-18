@@ -8,7 +8,7 @@ use crate::cpu::{MEMORY_BUS, RANGE_CHECKER_BUS};
 
 use super::columns::OfflineCheckerCols;
 use super::OfflineChecker;
-use afs_chips::is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols};
+use afs_chips::is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIoCols};
 use afs_chips::is_less_than_tuple::IsLessThanTupleAir;
 use afs_chips::sub_chip::SubAirBridge;
 
@@ -39,7 +39,7 @@ impl<const WORD_SIZE: usize, F: PrimeField64> SubAirBridge<F> for OfflineChecker
         SubAirBridge::sends(
             &lt_air,
             IsLessThanTupleCols {
-                io: IsLessThanTupleIOCols {
+                io: IsLessThanTupleIoCols {
                     x: vec![usize::MAX; 3],
                     y: vec![usize::MAX; 3],
                     tuple_less_than: usize::MAX,

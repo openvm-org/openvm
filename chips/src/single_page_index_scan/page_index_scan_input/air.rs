@@ -5,7 +5,7 @@ use p3_matrix::Matrix;
 
 use crate::{
     is_equal_vec::columns::{IsEqualVecCols, IsEqualVecIoCols},
-    is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
+    is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIoCols},
     sub_chip::{AirConfig, SubAir},
 };
 
@@ -171,7 +171,7 @@ where
                     is_less_than_tuple_aux,
                     ..
                 }) => Some(IsLessThanTupleCols {
-                    io: IsLessThanTupleIOCols {
+                    io: IsLessThanTupleIoCols {
                         // idx < x
                         x: page_cols.idx.clone(),
                         y: local_cols.x.clone(),
@@ -188,7 +188,7 @@ where
                     is_less_than_tuple_aux,
                     ..
                 }) => Some(IsLessThanTupleCols {
-                    io: IsLessThanTupleIOCols {
+                    io: IsLessThanTupleIoCols {
                         // idx > x
                         x: local_cols.x.clone(),
                         y: page_cols.idx.clone(),

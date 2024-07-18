@@ -10,11 +10,7 @@ pub mod trace;
 #[cfg(test)]
 pub mod tests;
 
-#[derive(Clone, Copy, Default, Debug)]
-pub struct RangeCheckerAir {
-    bus_index: usize,
-    range_max: u32,
-}
+pub use air::RangeCheckerAir;
 
 #[derive(Clone, Default, Debug)]
 pub struct RangeCheckerChip {

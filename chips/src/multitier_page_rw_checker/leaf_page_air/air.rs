@@ -9,7 +9,7 @@ use super::{
 };
 use crate::{
     common::page_cols::PageCols,
-    is_less_than_tuple::columns::IsLessThanTupleIOCols,
+    is_less_than_tuple::columns::IsLessThanTupleIoCols,
     sub_chip::{AirConfig, SubAir},
 };
 
@@ -76,7 +76,7 @@ where
                 let subair_aux_cols = metadata.subair_aux_cols.unwrap();
                 let subairs = self.is_less_than_tuple_air.clone().unwrap();
                 {
-                    let io = IsLessThanTupleIOCols {
+                    let io = IsLessThanTupleIoCols {
                         x: cached_data.idx.clone(),
                         y: range_inclusion_cols.start.clone(),
                         tuple_less_than: range_inclusion_cols.less_than_start,
@@ -85,7 +85,7 @@ where
                     SubAir::eval(&subairs.idx_start, builder, io, aux);
                 }
                 {
-                    let io = IsLessThanTupleIOCols {
+                    let io = IsLessThanTupleIoCols {
                         x: range_inclusion_cols.end.clone(),
                         y: cached_data.idx.clone(),
                         tuple_less_than: range_inclusion_cols.greater_than_end,

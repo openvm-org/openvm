@@ -7,7 +7,12 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 
 use super::columns::{RangeCols, RangePreprocessedCols, NUM_RANGE_COLS};
-use super::RangeCheckerAir;
+
+#[derive(Clone, Copy, Default, Debug)]
+pub struct RangeCheckerAir {
+    pub bus_index: usize,
+    pub range_max: u32,
+}
 
 impl<F: Field> BaseAir<F> for RangeCheckerAir {
     fn width(&self) -> usize {

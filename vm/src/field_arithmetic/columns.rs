@@ -8,13 +8,13 @@ use p3_field::Field;
 #[derive(AlignedBorrow)]
 #[repr(C)]
 pub struct FieldArithmeticCols<T> {
-    pub io: FieldArithmeticIOCols<T>,
+    pub io: FieldArithmeticIoCols<T>,
     pub aux: FieldArithmeticAuxCols<T>,
 }
 
 #[derive(AlignedBorrow)]
 #[repr(C)]
-pub struct FieldArithmeticIOCols<T> {
+pub struct FieldArithmeticIoCols<T> {
     /// Number of times to receive
     pub rcv_count: T,
     pub opcode: T,
@@ -45,7 +45,7 @@ where
     pub const NUM_AUX_COLS: usize = 8;
 
     pub fn get_width() -> usize {
-        FieldArithmeticIOCols::<T>::get_width() + FieldArithmeticAuxCols::<T>::get_width()
+        FieldArithmeticIoCols::<T>::get_width() + FieldArithmeticAuxCols::<T>::get_width()
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -56,7 +56,7 @@ where
 
     pub fn blank_row() -> Self {
         Self {
-            io: FieldArithmeticIOCols::<T> {
+            io: FieldArithmeticIoCols::<T> {
                 rcv_count: T::zero(),
                 opcode: T::from_canonical_u8(FieldArithmeticAir::BASE_OP),
                 x: T::zero(),
@@ -77,7 +77,7 @@ where
     }
 }
 
-impl<T: Field> FieldArithmeticIOCols<T> {
+impl<T: Field> FieldArithmeticIoCols<T> {
     pub fn get_width() -> usize {
         5
     }

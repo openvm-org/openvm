@@ -4,7 +4,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use crate::sub_chip::LocalTraceInstructions;
 
 use super::{
-    columns::{DummyHashAuxCols, DummyHashCols, DummyHashIOCols},
+    columns::{DummyHashAuxCols, DummyHashCols, DummyHashIoCols},
     DummyHashAir, DummyHashChip,
 };
 
@@ -57,7 +57,7 @@ impl<F: Field> LocalTraceInstructions<F> for DummyHashAir {
         let new_state = DummyHashAir::hash(curr_state.clone(), to_absorb.clone());
 
         DummyHashCols {
-            io: DummyHashIOCols {
+            io: DummyHashIoCols {
                 is_alloc: F::one(),
                 curr_state: curr_state.clone(),
                 to_absorb: to_absorb.clone(),

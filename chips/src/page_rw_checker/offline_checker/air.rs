@@ -9,7 +9,7 @@ use p3_matrix::Matrix;
 use super::{columns::OfflineCheckerCols, OfflineChecker};
 use crate::{
     is_equal_vec::columns::IsEqualVecCols,
-    is_less_than_tuple::columns::IsLessThanTupleIOCols,
+    is_less_than_tuple::columns::IsLessThanTupleIoCols,
     sub_chip::{AirConfig, SubAir},
     utils::{and, implies, or},
 };
@@ -110,7 +110,7 @@ where
         );
 
         // Ensuring all rows are sorted by (key, clk)
-        let lt_io_cols = IsLessThanTupleIOCols::<AB::Var> {
+        let lt_io_cols = IsLessThanTupleIoCols::<AB::Var> {
             x: local_cols
                 .idx
                 .iter()

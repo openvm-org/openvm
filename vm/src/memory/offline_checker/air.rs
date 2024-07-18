@@ -12,7 +12,7 @@ use super::{columns::OfflineCheckerCols, OfflineChecker};
 use afs_chips::{
     is_equal::{columns::IsEqualCols, IsEqualAir},
     is_equal_vec::{columns::IsEqualVecCols, IsEqualVecAir},
-    is_less_than_tuple::{columns::IsLessThanTupleIOCols, IsLessThanTupleAir},
+    is_less_than_tuple::{columns::IsLessThanTupleIoCols, IsLessThanTupleAir},
     sub_chip::{AirConfig, SubAir},
 };
 
@@ -116,7 +116,7 @@ where
         );
 
         // Ensuring all rows are sorted by (addr_space, addr, clk)
-        let lt_io_cols = IsLessThanTupleIOCols::<AB::Var> {
+        let lt_io_cols = IsLessThanTupleIoCols::<AB::Var> {
             x: local_cols.mem_row[0..2]
                 .iter()
                 .copied()

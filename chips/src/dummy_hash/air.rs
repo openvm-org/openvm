@@ -5,7 +5,7 @@ use p3_matrix::Matrix;
 use crate::sub_chip::{AirConfig, SubAir};
 
 use super::{
-    columns::{DummyHashAuxCols, DummyHashCols, DummyHashIOCols},
+    columns::{DummyHashAuxCols, DummyHashCols, DummyHashIoCols},
     DummyHashAir,
 };
 
@@ -37,7 +37,7 @@ impl<AB: AirBuilder> Air<AB> for DummyHashAir {
 }
 
 impl<AB: AirBuilder> SubAir<AB> for DummyHashAir {
-    type IoView = DummyHashIOCols<AB::Var>;
+    type IoView = DummyHashIoCols<AB::Var>;
     type AuxView = DummyHashAuxCols;
 
     fn eval(&self, builder: &mut AB, io: Self::IoView, _aux: Self::AuxView) {

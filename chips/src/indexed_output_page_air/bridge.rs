@@ -4,7 +4,7 @@ use p3_field::PrimeField;
 use super::{columns::IndexedOutputPageCols, IndexedOutputPageAir};
 use crate::{
     is_less_than_tuple::{
-        columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
+        columns::{IsLessThanTupleCols, IsLessThanTupleIoCols},
         IsLessThanTupleAir,
     },
     sub_chip::SubAirBridge,
@@ -22,7 +22,7 @@ impl<F: PrimeField> SubAirBridge<F> for IndexedOutputPageAir {
         SubAirBridge::sends(
             &lt_air,
             IsLessThanTupleCols {
-                io: IsLessThanTupleIOCols {
+                io: IsLessThanTupleIoCols {
                     x: vec![usize::MAX; 1 + self.idx_len],
                     y: vec![usize::MAX; 1 + self.idx_len],
                     tuple_less_than: usize::MAX,

@@ -1,18 +1,55 @@
 use std::borrow::Borrow;
 
-use p3_air::{Air, AirBuilder, BaseAir};
+use afs_stark_backend::interaction::InteractionBuilder;
+use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use crate::{
-    is_less_than::columns::{IsLessThanAuxCols, IsLessThanCols, IsLessThanIOCols},
+    is_less_than::{
+        columns::{IsLessThanAuxCols, IsLessThanCols, IsLessThanIoCols},
+        IsLessThanAir,
+    },
     sub_chip::{AirConfig, SubAir},
 };
 
-use super::{
-    columns::{IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupleIOCols},
-    IsLessThanTupleAir,
-};
+use super::columns::{IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupleIoCols};
+
+#[derive(Clone, Debug)]
+pub struct IsLessThanTupleAir {
+    /// The bus index for sends to range chip
+    pub bus_index: usize,
+    /// The number of bits to decompose each number into, for less than checking
+    pub decomp: usize,
+    /// IsLessThanAirs for each tuple element
+    pub is_less_than_airs: Vec<IsLessThanAir>,
+}
+
+impl IsLessThanTupleAir {
+    pub fn new(bus_index: usize, limb_bits: Vec<usize>, decomp: usize) -> Self {
+        let is_less_than_airs = limb_bits
+            .iter()
+            .map(|&limb_bit| IsLessThanAir::new(bus_index, limb_bit, decomp))
+            .collect::<Vec<_>>();
+
+        Self {
+            bus_index,
+            decomp,
+            is_less_than_airs,
+        }
+    }
+
+    pub fn tuple_len(&self) -> usize {
+        self.is_less_than_airs.len()
+    }
+
+    pub fn limb_bits(&self) -> Vec<usize> {
+        self.is_less_than_airs
+            .iter()
+            .map(|air| air.limb_bits)
+            .collect()
+    }
+}
 
 impl AirConfig for IsLessThanTupleAir {
     type Cols<T> = IsLessThanTupleCols<T>;
@@ -20,15 +57,11 @@ impl AirConfig for IsLessThanTupleAir {
 
 impl<F: Field> BaseAir<F> for IsLessThanTupleAir {
     fn width(&self) -> usize {
-        IsLessThanTupleCols::<F>::get_width(
-            self.limb_bits().clone(),
-            self.decomp(),
-            self.tuple_len(),
-        )
+        IsLessThanTupleCols::<F>::get_width(self.limb_bits(), self.decomp, self.tuple_len())
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for IsLessThanTupleAir {
+impl<AB: InteractionBuilder> Air<AB> for IsLessThanTupleAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -38,7 +71,7 @@ impl<AB: AirBuilder> Air<AB> for IsLessThanTupleAir {
         let local_cols = IsLessThanTupleCols::<AB::Var>::from_slice(
             local,
             self.limb_bits().clone(),
-            self.decomp(),
+            self.decomp,
             self.tuple_len(),
         );
 
@@ -47,8 +80,8 @@ impl<AB: AirBuilder> Air<AB> for IsLessThanTupleAir {
 }
 
 // sub-chip with constraints to check whether one tuple is less than the another
-impl<AB: AirBuilder> SubAir<AB> for IsLessThanTupleAir {
-    type IoView = IsLessThanTupleIOCols<AB::Var>;
+impl<AB: InteractionBuilder> SubAir<AB> for IsLessThanTupleAir {
+    type IoView = IsLessThanTupleIoCols<AB::Var>;
     type AuxView = IsLessThanTupleAuxCols<AB::Var>;
 
     // constrain that x < y lexicographically
@@ -62,7 +95,7 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanTupleAir {
             let y_val = y[i];
 
             let is_less_than_cols = IsLessThanCols {
-                io: IsLessThanIOCols {
+                io: IsLessThanIoCols {
                     x: x_val,
                     y: y_val,
                     less_than: aux.less_than[i],
@@ -73,8 +106,9 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanTupleAir {
                 },
             };
 
+            // This includes the sub-air interactions
             SubAir::eval(
-                &self.is_less_than_airs[i].clone(),
+                &self.is_less_than_airs[i],
                 builder,
                 is_less_than_cols.io,
                 is_less_than_cols.aux,

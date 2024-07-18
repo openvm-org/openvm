@@ -3,7 +3,7 @@ use p3_air::VirtualPairCol;
 use p3_field::PrimeField64;
 
 use crate::{
-    is_less_than::columns::{IsLessThanCols, IsLessThanIOCols},
+    is_less_than::columns::{IsLessThanCols, IsLessThanIoCols},
     sub_chip::SubAirBridge,
 };
 
@@ -15,7 +15,7 @@ impl<F: PrimeField64> AirBridge<F> for SumAir {
 
         let is_lt_cols = IsLessThanCols {
             // io is unused in the IsLessThan bridge
-            io: IsLessThanIOCols {
+            io: IsLessThanIoCols {
                 x: usize::MAX,
                 y: usize::MAX,
                 less_than: usize::MAX,

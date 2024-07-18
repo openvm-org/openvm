@@ -1,12 +1,12 @@
 pub struct DummyHashCols<T> {
-    pub io: DummyHashIOCols<T>,
+    pub io: DummyHashIoCols<T>,
     pub aux: DummyHashAuxCols,
     pub width: usize,
     pub rate: usize,
 }
 
 #[derive(Clone)]
-pub struct DummyHashIOCols<F> {
+pub struct DummyHashIoCols<F> {
     pub is_alloc: F,
     pub curr_state: Vec<F>,
     pub to_absorb: Vec<F>,
@@ -26,7 +26,7 @@ impl<F: Copy> DummyHashCols<F> {
         rate: usize,
     ) -> DummyHashCols<F> {
         DummyHashCols {
-            io: DummyHashIOCols {
+            io: DummyHashIoCols {
                 is_alloc,
                 curr_state,
                 to_absorb,
@@ -58,7 +58,7 @@ impl<F: Copy> DummyHashCols<F> {
         let new_state = slc[width + rate + 1..2 * width + rate + 1].to_vec();
 
         Self {
-            io: DummyHashIOCols {
+            io: DummyHashIoCols {
                 is_alloc,
                 curr_state,
                 to_absorb,

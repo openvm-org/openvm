@@ -4,11 +4,11 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use crate::is_less_than_tuple::columns::IsLessThanTupleIOCols;
+use crate::is_less_than_tuple::columns::IsLessThanTupleIoCols;
 use crate::sub_chip::{AirConfig, SubAir};
 use crate::utils::or;
 
-use super::columns::{IntersectorAuxCols, IntersectorCols, IntersectorIOCols};
+use super::columns::{IntersectorAuxCols, IntersectorCols, IntersectorIoCols};
 use super::IntersectorAir;
 
 impl<F: Field> BaseAir<F> for IntersectorAir {
@@ -41,7 +41,7 @@ impl<AB: AirBuilder> Air<AB> for IntersectorAir {
 }
 
 impl<AB: AirBuilder> SubAir<AB> for IntersectorAir {
-    type IoView = [IntersectorIOCols<AB::Var>; 2];
+    type IoView = [IntersectorIoCols<AB::Var>; 2];
     type AuxView = [IntersectorAuxCols<AB::Var>; 2];
 
     /// Ensures indices in non-extra rows are sorted and distinct,
@@ -52,7 +52,7 @@ impl<AB: AirBuilder> SubAir<AB> for IntersectorAir {
         let next_aux_cols = &aux[1];
 
         // Ensuring that rows are sorted by idx
-        let lt_io_cols = IsLessThanTupleIOCols {
+        let lt_io_cols = IsLessThanTupleIoCols {
             x: local_io_cols.idx.clone(),
             y: next_io_cols.idx.clone(),
             tuple_less_than: next_aux_cols.lt_out,

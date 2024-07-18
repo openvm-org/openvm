@@ -1,5 +1,5 @@
 use super::columns::FieldArithmeticCols;
-use super::columns::FieldArithmeticIOCols;
+use super::columns::FieldArithmeticIoCols;
 use super::FieldArithmeticAir;
 use super::FieldArithmeticChip;
 use crate::cpu::OpCode;
@@ -51,13 +51,13 @@ fn au_air_test() {
             })
             .chain((0..(correct_height - len_ops)).flat_map(|_| empty_dummy_row.clone()))
             .collect(),
-        FieldArithmeticIOCols::<BabyBear>::get_width(),
+        FieldArithmeticIoCols::<BabyBear>::get_width(),
     );
 
     let mut au_trace = chip.generate_trace();
 
     let page_requester = DummyInteractionAir::new(
-        FieldArithmeticIOCols::<BabyBear>::get_width() - 1,
+        FieldArithmeticIoCols::<BabyBear>::get_width() - 1,
         true,
         FieldArithmeticAir::BUS_INDEX,
     );
@@ -71,7 +71,7 @@ fn au_air_test() {
 
     // negative test pranking each IO value
     for height in 0..(chip.operations.len()) {
-        for width in 0..FieldArithmeticIOCols::<BabyBear>::get_width() {
+        for width in 0..FieldArithmeticIoCols::<BabyBear>::get_width() {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
             au_trace.row_mut(height)[width] = prank_value;
         }
@@ -99,7 +99,7 @@ fn au_air_zero_div_zero() {
     let mut au_trace = chip.generate_trace();
     au_trace.row_mut(0)[3] = BabyBear::zero();
     let page_requester = DummyInteractionAir::new(
-        FieldArithmeticIOCols::<BabyBear>::get_width() - 1,
+        FieldArithmeticIoCols::<BabyBear>::get_width() - 1,
         true,
         FieldArithmeticAir::BUS_INDEX,
     );
@@ -111,7 +111,7 @@ fn au_air_zero_div_zero() {
             BabyBear::zero(),
             BabyBear::zero(),
         ],
-        FieldArithmeticIOCols::<BabyBear>::get_width(),
+        FieldArithmeticIoCols::<BabyBear>::get_width(),
     );
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;

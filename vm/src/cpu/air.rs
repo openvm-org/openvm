@@ -6,7 +6,7 @@ use p3_matrix::Matrix;
 
 use afs_chips::{
     is_equal_vec::{columns::IsEqualVecIoCols, IsEqualVecAir},
-    is_zero::{columns::IsZeroIOCols, IsZeroAir},
+    is_zero::{columns::IsZeroIoCols, IsZeroAir},
     sub_chip::SubAir,
 };
 
@@ -253,7 +253,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
         // immediate calculation
 
         for access in [&read1, &read2, &write] {
-            let is_zero_io = IsZeroIOCols {
+            let is_zero_io = IsZeroIoCols {
                 x: access.address_space,
                 is_zero: access.is_immediate,
             };

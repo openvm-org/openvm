@@ -1,6 +1,6 @@
 use crate::{
     is_less_than_tuple::columns::{
-        IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupleIOCols,
+        IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupleIoCols,
     },
     sub_chip::SubAirBridge,
 };
@@ -133,7 +133,7 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                 ..
             }) => {
                 let is_less_than_tuple_cols = IsLessThanTupleCols {
-                    io: IsLessThanTupleIOCols {
+                    io: IsLessThanTupleIoCols {
                         x: cols_numbered.page_cols.idx.clone(),
                         y: cols_numbered.local_cols.x.clone(),
                         tuple_less_than: strict_comp_ind.unwrap(),
@@ -157,7 +157,7 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                 ..
             }) => {
                 let is_less_than_tuple_cols = IsLessThanTupleCols {
-                    io: IsLessThanTupleIOCols {
+                    io: IsLessThanTupleIoCols {
                         x: cols_numbered.local_cols.x.clone(),
                         y: cols_numbered.page_cols.idx.clone(),
                         tuple_less_than: strict_comp_ind.unwrap(),

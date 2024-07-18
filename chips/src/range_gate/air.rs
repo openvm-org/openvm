@@ -7,7 +7,12 @@ use p3_matrix::Matrix;
 
 use super::columns::RangeGateCols;
 use super::columns::NUM_RANGE_GATE_COLS;
-use super::RangeCheckerGateAir;
+
+#[derive(Clone, Copy, Debug)]
+pub struct RangeCheckerGateAir {
+    pub bus_index: usize,
+    pub range_max: u32,
+}
 
 impl<F: Field> BaseAir<F> for RangeCheckerGateAir {
     fn width(&self) -> usize {
