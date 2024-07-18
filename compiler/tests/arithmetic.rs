@@ -6,7 +6,7 @@ use rand::{thread_rng, Rng};
 use afs_compiler::asm::AsmBuilder;
 use afs_compiler::ir::{Ext, Felt, SymbolicExt};
 use afs_compiler::ir::{ExtConst, Var};
-use afs_compiler::util::end_to_end_test;
+use afs_compiler::util::execute_program;
 
 #[allow(dead_code)]
 const WORD_SIZE: usize = 1;
@@ -29,6 +29,14 @@ fn test_compiler_arithmetic() {
     let zero_ext: Ext<_, _> = builder.eval(EF::zero().cons());
     let one_ext: Ext<_, _> = builder.eval(EF::one().cons());
     let two_ext: Ext<_, _> = builder.eval(EF::two().cons());
+
+    // Check Val() vs Const() equality
+    builder.assert_ext_eq(zero_ext, EF::zero().cons());
+    builder.assert_ext_eq(one_ext, EF::one().cons());
+    builder.assert_ext_eq(two_ext, EF::two().cons());
+
+    // Check Val() vs Const() inequality
+    builder.assert_ext_ne(one_ext, EF::two().cons());
 
     builder.assert_ext_eq(zero_ext * one_ext, EF::zero().cons());
     builder.assert_ext_eq(one_ext * one_ext, EF::one().cons());
@@ -83,12 +91,9 @@ fn test_compiler_arithmetic() {
 
     builder.halt();
 
-    end_to_end_test::<WORD_SIZE, EF>(builder, vec![]);
-
-    // // generate program with only base field operations
-    // let program = builder.clone().compile_isa::<WORD_SIZE>();
-    // display_program(&program);
-    // execute_program::<WORD_SIZE, _>(program, vec![]);
+    // generate program with only base field operations
+    let program = builder.clone().compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE, _>(program, vec![]);
 
     // let options = CompilerOptions {
     //     compile_prints: true,
