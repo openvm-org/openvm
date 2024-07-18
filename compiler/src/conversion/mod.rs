@@ -728,6 +728,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         }
         AsmInstruction::AddE(..)
         | AsmInstruction::AddEI(..)
+        | AsmInstruction::AddEFFI(..)
         | AsmInstruction::SubE(..)
         | AsmInstruction::SubEI(..)
         | AsmInstruction::SubEIN(..)
