@@ -43,6 +43,7 @@ fn make_io_cols<F: Field>(
         op_c,
         d,
         e,
+        debug: _debug,
     } = instruction;
     Poseidon2ChipIoCols::<F> {
         is_alloc: F::one(),
@@ -91,7 +92,8 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
             op_c,
             d,
             e,
-        } = instruction;
+            debug: _debug,
+        } = instruction.clone();
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
 
         let mut timestamp = start_timestamp;

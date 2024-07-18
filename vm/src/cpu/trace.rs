@@ -1,3 +1,4 @@
+use p3_air::BaseAir;
 use p3_field::{Field, PrimeField32, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 use std::collections::VecDeque;
@@ -11,6 +12,7 @@ use crate::memory::{compose, decompose};
 use crate::poseidon2::Poseidon2Chip;
 use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
 
+use super::CycleTracker;
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
     max_accesses_per_instruction, CpuAir,
@@ -18,7 +20,7 @@ use super::{
     CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
 };
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, derive_new::new)]
+#[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
 pub struct Instruction<F> {
     pub opcode: OpCode,
     pub op_a: F,
@@ -26,6 +28,7 @@ pub struct Instruction<F> {
     pub op_c: F,
     pub d: F,
     pub e: F,
+    pub debug: String,
 }
 
 pub fn isize_to_field<F: Field>(value: isize) -> F {
@@ -51,6 +54,19 @@ impl<F: Field> Instruction<F> {
             op_c: isize_to_field::<F>(op_c),
             d: isize_to_field::<F>(d),
             e: isize_to_field::<F>(e),
+            debug: String::new(),
+        }
+    }
+
+    pub fn debug(opcode: OpCode, debug: &str) -> Self {
+        Self {
+            opcode,
+            op_a: F::zero(),
+            op_b: F::zero(),
+            op_c: F::zero(),
+            d: F::zero(),
+            e: F::zero(),
+            debug: String::from(debug),
         }
     }
 }
@@ -119,6 +135,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
         let mut pc = F::zero();
 
         let mut hint_stream = VecDeque::new();
+        let mut cycle_tracker = CycleTracker::new();
 
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
@@ -131,6 +148,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             let c = instruction.op_c;
             let d = instruction.d;
             let e = instruction.e;
+            let debug = instruction.debug.clone();
 
             let io = CpuIoCols {
                 timestamp: F::from_canonical_usize(timestamp),
@@ -273,6 +291,8 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     let base_pointer = read!(d, a);
                     write!(e, base_pointer + b, hint);
                 }
+                CT_START => cycle_tracker.start(debug, rows.len()),
+                CT_END => cycle_tracker.end(debug, rows.len()),
             };
 
             let mut operation_flags = BTreeMap::new();
@@ -306,6 +326,8 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 break;
             }
         }
+
+        println!("{}", cycle_tracker);
 
         Ok(RowMajorMatrix::new(
             rows,

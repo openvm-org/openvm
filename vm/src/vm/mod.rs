@@ -9,6 +9,8 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
+pub mod cycle_tracker;
+
 pub enum Void {}
 
 use crate::{

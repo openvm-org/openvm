@@ -33,6 +33,7 @@ fn inst<F: PrimeField64>(
         op_c,
         d: d.to_field(),
         e: e.to_field(),
+        debug: String::new(),
     }
 }
 
