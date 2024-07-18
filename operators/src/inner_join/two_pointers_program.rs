@@ -37,8 +37,8 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>>
         let mut pis = self.pis.borrow_mut();
         let mut pairs = self.pairs.borrow_mut();
 
-        pis.parent_table_commit = hash_struct(&parent_df.page_commits);
-        pis.child_table_commit = hash_struct(&child_df.page_commits);
+        pis.parent_table_commit = hash_struct(&parent_df);
+        pis.child_table_commit = hash_struct(&child_df);
         *pairs = Self::run(parent_df, child_df);
         pis.pairs_commit = hash_struct(&*pairs);
     }
@@ -53,17 +53,14 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: StarkEngine<SC>>
     ) {
         let pis = self.pis.borrow();
 
-        assert_eq!(
-            hash_struct(&parent_df.page_commits),
-            pis.parent_table_commit
-        );
-        assert_eq!(hash_struct(&child_df.page_commits), pis.child_table_commit);
+        assert_eq!(hash_struct(&parent_df), pis.parent_table_commit);
+        assert_eq!(hash_struct(&child_df), pis.child_table_commit);
 
         let pairs = Self::run(parent_df, child_df);
         assert_eq!(hash_struct(&pairs), pis.pairs_commit);
     }
 
-    fn run(
+    pub fn run(
         parent_df: &DataFrame<COMMIT_LEN>,
         child_df: &DataFrame<COMMIT_LEN>,
     ) -> Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)> {

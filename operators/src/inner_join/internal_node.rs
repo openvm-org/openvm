@@ -28,7 +28,8 @@ pub struct InternalNode<const COMMIT_LEN: usize, SC: StarkGenericConfig, E: Star
 pub struct InternalNodePis<const COMMIT_LEN: usize> {
     init_running_df_commit: Commitment<COMMIT_LEN>,
     pairs_commit: Commitment<COMMIT_LEN>,
-    pairs_list_index: u32,
+    smallest_pairs_list_index: u32,
+    largest_pairs_list_index: u32,
     final_rannung_df_commit: Commitment<COMMIT_LEN>,
     parent_table_commit: Commitment<COMMIT_LEN>,
     child_table_commit: Commitment<COMMIT_LEN>,
@@ -63,7 +64,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
 
     pub fn generate_trace_for_tree(
         &self,
-        page_provider: Arc<BTreeMapPageLoader<SC, COMMIT_LEN>>,
+        page_loader: &mut BTreeMapPageLoader<SC, COMMIT_LEN>,
         output_df: &mut DataFrame<COMMIT_LEN>,
         pairs_commit: &Commitment<COMMIT_LEN>,
         pairs_list_index: &mut u32,
@@ -75,27 +76,22 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
     {
         let mut pis = self.pis.borrow_mut();
 
-        pis.init_running_df_commit = hash_struct(&output_df.page_commits);
+        pis.init_running_df_commit = hash_struct(&output_df);
         pis.pairs_commit = pairs_commit.clone();
-        pis.pairs_list_index = *pairs_list_index;
-        pis.parent_table_commit = hash_struct(&parent_df.page_commits);
-        pis.child_table_commit = hash_struct(&child_df.page_commits);
+        pis.smallest_pairs_list_index = *pairs_list_index;
+        pis.parent_table_commit = hash_struct(&parent_df);
+        pis.child_table_commit = hash_struct(&child_df);
 
         for child in self.children.iter() {
             match child.as_ref() {
                 JoinCircuit::PageLevelJoin(circuit) => {
-                    circuit.generate_trace(
-                        page_provider.clone(),
-                        output_df,
-                        pairs_list_index,
-                        engine,
-                    );
+                    circuit.generate_trace(page_loader, output_df, pairs_list_index, engine);
                 }
                 JoinCircuit::TwoPointersProgram(circuit) => {
                     circuit.generate_trace(parent_df, child_df)
                 }
                 JoinCircuit::InternalNode(circuit) => circuit.generate_trace_for_tree(
-                    page_provider.clone(),
+                    page_loader,
                     output_df,
                     pairs_commit,
                     pairs_list_index,
@@ -106,7 +102,28 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
             }
         }
 
-        pis.final_rannung_df_commit = hash_struct(&output_df.page_commits);
+        pis.largest_pairs_list_index = *pairs_list_index - 1;
+        pis.final_rannung_df_commit = hash_struct(&output_df);
+
+        println!(
+            "range for pairs {:?}",
+            pis.smallest_pairs_list_index..pis.largest_pairs_list_index
+        );
+    }
+
+    pub fn set_up_keygen_builder_for_tree(&self, engine: &E)
+    where
+        Val<SC>: PrimeField,
+    {
+        for child in self.children.iter() {
+            match child.as_ref() {
+                JoinCircuit::PageLevelJoin(circuit) => circuit.set_up_keygen_builder(engine),
+                JoinCircuit::InternalNode(circuit) => {
+                    circuit.set_up_keygen_builder_for_tree(engine)
+                }
+                _ => {}
+            }
+        }
     }
 
     pub fn prove_tree(&self, engine: &E)
@@ -168,7 +185,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         state.running_df_commit = Some(pis.init_running_df_commit.clone());
 
         for child in self.children.iter() {
-            self.verify_child(child.clone(), pairs);
+            self.verify_child(child.clone(), &mut state, pairs);
         }
 
         assert_eq!(
@@ -180,6 +197,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
     fn verify_child(
         &self,
         circuit: Arc<JoinCircuit<COMMIT_LEN, SC, E>>,
+        state: &mut InternalNodeState<COMMIT_LEN>,
         pairs: &Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)>,
     ) {
         let pis = self.pis.borrow();
@@ -193,7 +211,6 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
                 assert_eq!(tp_pis.pairs_commit, pis.pairs_commit);
             }
             JoinCircuit::PageLevelJoin(page_level_circuit) => {
-                let mut state = self.state.borrow_mut();
                 let child_pis = page_level_circuit.pis.borrow();
 
                 assert_eq!(
@@ -203,24 +220,22 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
 
                 assert_eq!(
                     child_pis.pairs_list_index,
-                    pis.pairs_list_index + state.page_level_cnt
+                    pis.smallest_pairs_list_index + state.page_level_cnt
                 );
+
+                assert_eq!(hash_struct(pairs), pis.pairs_commit);
 
                 // Ensuring that the page-level circuit has the right parent_page_commit
                 assert_eq!(
                     child_pis.parent_page_commit,
-                    pairs[(pis.pairs_list_index + state.page_level_cnt) as usize].0
+                    pairs[(pis.smallest_pairs_list_index + state.page_level_cnt) as usize].0
                 );
 
                 // Ensuring that the page-level circuit has the right child_page_commit
                 assert_eq!(
                     child_pis.child_page_commit,
-                    pairs[(pis.pairs_list_index + state.page_level_cnt) as usize].1
+                    pairs[(pis.smallest_pairs_list_index + state.page_level_cnt) as usize].1
                 );
-
-                assert_eq!(hash_struct(pairs), pis.pairs_commit);
-
-                assert_eq!(child_pis.pairs_commit, pis.pairs_commit);
 
                 // Updating state
                 state.running_df_commit = Some(child_pis.final_running_df_commit.clone());
@@ -228,7 +243,6 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
             }
             JoinCircuit::InternalNode(internal_node_circuit) => {
                 let child_pis = internal_node_circuit.pis.borrow();
-                let mut state = self.state.borrow_mut();
 
                 assert_eq!(
                     *state.running_df_commit.as_ref().unwrap(),
@@ -236,8 +250,12 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
                 );
 
                 assert_eq!(
-                    child_pis.pairs_list_index,
-                    pis.pairs_list_index + state.page_level_cnt
+                    child_pis.smallest_pairs_list_index,
+                    pis.smallest_pairs_list_index + state.page_level_cnt,
+                    "{} {} {}",
+                    child_pis.smallest_pairs_list_index,
+                    pis.smallest_pairs_list_index,
+                    state.page_level_cnt
                 );
 
                 assert_eq!(pis.pairs_commit, child_pis.pairs_commit);
@@ -247,9 +265,8 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
                 assert_eq!(pis.child_table_commit, child_pis.child_table_commit);
 
                 state.running_df_commit = Some(child_pis.final_rannung_df_commit.clone());
-
-                let child_state = internal_node_circuit.state.borrow();
-                state.page_level_cnt += child_state.page_level_cnt;
+                state.page_level_cnt +=
+                    child_pis.largest_pairs_list_index - child_pis.smallest_pairs_list_index + 1;
             }
         }
     }
