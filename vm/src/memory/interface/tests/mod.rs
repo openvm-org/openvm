@@ -10,8 +10,8 @@ use afs_test_utils::config::baby_bear_blake3::run_simple_test_no_pis;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::create_seeded_rng;
 
-use crate::memory::interface::{EXPAND_BUS, MEMORY_INTERFACE_BUS, MemoryInterfaceChip};
 use crate::memory::interface::columns::MemoryInterfaceCols;
+use crate::memory::interface::{MemoryInterfaceChip, EXPAND_BUS, MEMORY_INTERFACE_BUS};
 use crate::memory::OpType::{Read, Write};
 
 const DEFAULT_CHUNK: usize = 8;
