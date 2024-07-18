@@ -19,6 +19,7 @@ use serde::de::DeserializeOwned;
 use crate::{
     commands::CommonCommands,
     operations::filter::{filter_setup, PAGE_BUS_INDEX, RANGE_BUS_INDEX},
+    CACHE_FOLDER,
 };
 
 #[derive(Debug, Parser)]
@@ -38,6 +39,7 @@ where
         common: &CommonCommands,
         op: AfsOperation,
         keys_folder: String,
+        cache_folder: Option<String>,
         proof_path: Option<String>,
     ) -> Result<()> {
         let (
@@ -79,8 +81,8 @@ where
             filter_op.predicate,
             u16_vec_to_hex_string(value.clone())
         );
-        let default_proof_path =
-            format!("bin/olap/tmp/cache/{}-{}.proof.bin", table_id, filter_info);
+        let cache_folder = cache_folder.unwrap_or(CACHE_FOLDER.to_string());
+        let default_proof_path = format!("{}/{}-{}.proof.bin", cache_folder, table_id, filter_info);
         let proof_path = proof_path.unwrap_or(default_proof_path);
         let encoded_proof = read_from_path(proof_path).unwrap();
         let proof: Proof<SC> = bincode::deserialize(&encoded_proof).unwrap();

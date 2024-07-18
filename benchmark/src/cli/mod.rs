@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use olap::commands::parse_afo_file;
 
 use crate::{
     commands::{
@@ -49,9 +50,11 @@ impl Cli {
             }
             Commands::Predicate(predicate) => {
                 let benchmark_name = "Predicate".to_string();
-                let scenario = format!("{} {}", predicate.predicate, predicate.value);
+                let afo = parse_afo_file(predicate.afo_file);
+                let args = afo.operations[0].args.clone();
+                let scenario = format!("{} {}", args[2], args[3]);
                 let common = predicate.common;
-                let extra_data = format!("0 100 {} {}", predicate.predicate, predicate.value);
+                let extra_data = format!("0 100 {} {}", args[2], args[3]);
                 benchmark_execute(
                     benchmark_name,
                     scenario,

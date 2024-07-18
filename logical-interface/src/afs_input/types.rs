@@ -6,7 +6,7 @@ use std::{
 };
 
 /// Represents a single operation in an AFS input file
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AfsOperation {
     pub operation: InputFileOp,
     pub args: Vec<String>,
@@ -33,7 +33,7 @@ impl FromStr for InputFileHeader {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum InputFileOp {
     Read,

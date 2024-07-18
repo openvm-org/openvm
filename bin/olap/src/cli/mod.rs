@@ -94,6 +94,7 @@ where
                     engine,
                     &verify.common,
                     verify.keys_folder.clone(),
+                    verify.cache_folder.clone(),
                     verify.proof_path.clone(),
                 )
                 .unwrap();

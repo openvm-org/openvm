@@ -28,6 +28,14 @@ pub struct VerifyCommand<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     pub keys_folder: String,
 
     #[arg(
+        long = "cache_folder",
+        short = 'c',
+        help = "Folder containing the cache files",
+        required = false
+    )]
+    pub cache_folder: Option<String>,
+
+    #[arg(
         long = "proof_path",
         short = 'p',
         help = "Path to the proof file",
@@ -52,6 +60,7 @@ where
         engine: &E,
         common: &CommonCommands,
         keys_folder: String,
+        cache_folder: Option<String>,
         proof_path: Option<String>,
     ) -> Result<()> {
         let afo = parse_afo_file(common.afo_path.clone());
@@ -64,6 +73,7 @@ where
                         common,
                         op,
                         keys_folder.clone(),
+                        cache_folder.clone(),
                         proof_path.clone(),
                     )
                     .unwrap();
