@@ -134,7 +134,8 @@ impl<'pcs, SC: StarkGenericConfig> TraceCommitter<'pcs, SC> {
 
 /// Prover data for multi-matrix trace commitments.
 /// The data is for the traces committed into a single commitment.
-#[derive(Serialize, Deserialize)]
+#[derive(Derivative, Serialize, Deserialize)]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
 #[serde(bound(
     serialize = "Com<SC>: Serialize, PcsProverData<SC>: Serialize",
     deserialize = "Com<SC>: Deserialize<'de>, PcsProverData<SC>: Deserialize<'de>"
@@ -147,15 +148,6 @@ pub struct ProverTraceData<SC: StarkGenericConfig> {
     /// not implement clone and should not be cloned. The prover only needs a reference to
     /// this data, so we use a smart pointer to elide lifetime concerns.
     pub data: Arc<PcsProverData<SC>>,
-}
-
-impl<SC: StarkGenericConfig> Clone for ProverTraceData<SC> {
-    fn clone(&self) -> Self {
-        ProverTraceData {
-            commit: self.commit.clone(),
-            data: Arc::clone(&self.data),
-        }
-    }
 }
 
 /// The full RAP trace consists of horizontal concatenation of multiple matrices of the same height:
