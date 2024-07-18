@@ -73,49 +73,30 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
                     ))
                     .unwrap_or(&F::zero())
             }))
-        } else if let NonLeaf(_, initial_left_node, initial_right_node) = initial_node.clone() {
-            hash_provider.hash(initial_left_node.hash(), initial_right_node.hash());
+        } else if let NonLeaf(_, initial_children) = initial_node.clone() {
+            hash_provider.hash(initial_children[0].hash(), initial_children[1].hash());
 
-            let left_label = 2 * label;
-            let left_is_final =
+            let labels = from_fn(|i| (2 * label) + i);
+            let are_final = labels.map(|label| {
                 !self
                     .touched_nodes
-                    .contains(&(self.address_space, height - 1, left_label));
-            let final_left_node = if left_is_final {
-                initial_left_node
-            } else {
-                Arc::new(self.recur(
-                    height - 1,
-                    (*initial_left_node).clone(),
-                    left_label,
-                    hash_provider,
-                ))
-            };
+                    .contains(&(self.address_space, height - 1, label))
+            });
+            let final_children = from_fn(|i| {
+                if are_final[i] {
+                    initial_children[i].clone()
+                } else {
+                    Arc::new(self.recur(
+                        height - 1,
+                        (*initial_children[i]).clone(),
+                        labels[i],
+                        hash_provider,
+                    ))
+                }
+            });
 
-            let right_label = (2 * label) + 1;
-            let right_is_final =
-                !self
-                    .touched_nodes
-                    .contains(&(self.address_space, height - 1, right_label));
-            let final_right_node = if right_is_final {
-                initial_right_node
-            } else {
-                Arc::new(self.recur(
-                    height - 1,
-                    (*initial_right_node).clone(),
-                    right_label,
-                    hash_provider,
-                ))
-            };
-
-            let final_node =
-                MemoryNode::new_nonleaf(final_left_node, final_right_node, hash_provider);
-            self.add_trace_row(
-                height,
-                label,
-                initial_node,
-                Some([left_is_final, right_is_final]),
-            );
+            let final_node = MemoryNode::new_nonleaf(final_children, hash_provider);
+            self.add_trace_row(height, label, initial_node, Some(are_final));
             self.add_trace_row(height, label, final_node.clone(), None);
             final_node
         } else {
@@ -131,8 +112,7 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
         node: MemoryNode<CHUNK, F>,
         are_final: Option<[bool; 2]>,
     ) {
-        let [left_is_final, right_is_final] = are_final.unwrap_or([false; 2]);
-        let cols = if let NonLeaf(hash, left, right) = node {
+        let cols = if let NonLeaf(hash, children) = node {
             ExpandCols {
                 direction: if are_final.is_some() {
                     F::one()
@@ -143,10 +123,8 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
                 parent_height: F::from_canonical_usize(height),
                 parent_label: F::from_canonical_usize(label),
                 parent_hash: hash,
-                left_child_hash: left.hash(),
-                right_child_hash: right.hash(),
-                left_is_final: F::from_bool(left_is_final),
-                right_is_final: F::from_bool(right_is_final),
+                child_hashes: children.map(|child| child.hash()),
+                are_final: are_final.unwrap_or([false; 2]).map(F::from_bool),
             }
         } else {
             panic!("trace_rows expects node = {:?} to be NonLeaf", node);

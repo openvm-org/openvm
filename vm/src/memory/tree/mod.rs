@@ -12,11 +12,7 @@ pub trait HashProvider<const CHUNK: usize, F> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum MemoryNode<const CHUNK: usize, F: PrimeField32> {
     Leaf([F; CHUNK]),
-    NonLeaf(
-        [F; CHUNK],
-        Arc<MemoryNode<CHUNK, F>>,
-        Arc<MemoryNode<CHUNK, F>>,
-    ),
+    NonLeaf([F; CHUNK], [Arc<MemoryNode<CHUNK, F>>; 2]),
 }
 
 impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
@@ -28,11 +24,13 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     }
 
     pub fn new_nonleaf(
-        left: Arc<MemoryNode<CHUNK, F>>,
-        right: Arc<MemoryNode<CHUNK, F>>,
+        children: [Arc<MemoryNode<CHUNK, F>>; 2],
         hash_provider: &mut impl HashProvider<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
-        NonLeaf(hash_provider.hash(left.hash(), right.hash()), left, right)
+        NonLeaf(
+            hash_provider.hash(children[0].hash(), children[1].hash()),
+            children,
+        )
     }
 
     pub fn construct_all_zeros(
@@ -43,7 +41,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
             Leaf([F::zero(); CHUNK])
         } else {
             let child = Arc::new(Self::construct_all_zeros(height - 1, hash_provider));
-            Self::new_nonleaf(child.clone(), child, hash_provider)
+            Self::new_nonleaf([child.clone(), child.clone()], hash_provider)
         }
     }
 
@@ -73,7 +71,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
             }
             let left = Self::from_memory(height - 1, left_memory, hash_provider);
             let right = Self::from_memory(height - 1, right_memory, hash_provider);
-            Self::new_nonleaf(Arc::new(left), Arc::new(right), hash_provider)
+            Self::new_nonleaf([Arc::new(left), Arc::new(right)], hash_provider)
         }
     }
 }

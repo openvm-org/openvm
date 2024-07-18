@@ -6,10 +6,8 @@ pub struct ExpandCols<const CHUNK: usize, T> {
     pub parent_height: T,
     pub parent_label: T,
     pub parent_hash: [T; CHUNK],
-    pub left_child_hash: [T; CHUNK],
-    pub right_child_hash: [T; CHUNK],
-    pub left_is_final: T,
-    pub right_is_final: T,
+    pub child_hashes: [[T; CHUNK]; 2],
+    pub are_final: [T; 2],
 }
 
 impl<const CHUNK: usize, T: Clone> ExpandCols<CHUNK, T> {
@@ -25,10 +23,8 @@ impl<const CHUNK: usize, T: Clone> ExpandCols<CHUNK, T> {
         let height = take();
         let parent_label = take();
         let parent_hash = from_fn(|_| take());
-        let left_child_hash = from_fn(|_| take());
-        let right_child_hash = from_fn(|_| take());
-        let left_is_final = take();
-        let right_is_final = take();
+        let child_hashes = from_fn(|_| from_fn(|_| take()));
+        let are_final = from_fn(|_| take());
 
         Self {
             direction,
@@ -36,10 +32,8 @@ impl<const CHUNK: usize, T: Clone> ExpandCols<CHUNK, T> {
             parent_height: height,
             parent_label,
             parent_hash,
-            left_child_hash,
-            right_child_hash,
-            left_is_final,
-            right_is_final,
+            child_hashes,
+            are_final,
         }
     }
 
@@ -51,10 +45,8 @@ impl<const CHUNK: usize, T: Clone> ExpandCols<CHUNK, T> {
             self.parent_label.clone(),
         ];
         result.extend(self.parent_hash.clone());
-        result.extend(self.left_child_hash.clone());
-        result.extend(self.right_child_hash.clone());
-        result.push(self.left_is_final.clone());
-        result.push(self.right_is_final.clone());
+        result.extend(self.child_hashes.concat());
+        result.extend(self.are_final.clone());
         result
     }
 

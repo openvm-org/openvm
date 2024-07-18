@@ -33,73 +33,56 @@ impl<const CHUNK: usize, F: Field> AirBridge<F> for ExpandAir<CHUNK> {
         let all_cols = (0..ExpandCols::<CHUNK, F>::get_width()).collect::<Vec<usize>>();
         let cols_numbered = ExpandCols::<CHUNK, usize>::from_slice(&all_cols);
 
-        let child_height =
-            VirtualPairCol::new_main(vec![(cols_numbered.parent_height, F::one())], F::neg_one());
-
         let mut poseidon2_fields = vec![];
         poseidon2_fields.extend(
             cols_numbered
-                .left_child_hash
-                .map(VirtualPairCol::single_main),
-        );
-        poseidon2_fields.extend(
-            cols_numbered
-                .right_child_hash
+                .child_hashes
+                .concat()
+                .into_iter()
                 .map(VirtualPairCol::single_main),
         );
         poseidon2_fields.extend(cols_numbered.parent_hash.map(VirtualPairCol::single_main));
 
-        vec![
-            interaction(
-                VirtualPairCol::new_main(vec![(cols_numbered.direction, F::neg_one())], F::zero()),
-                VirtualPairCol::new_main(
-                    vec![(cols_numbered.direction, F::neg(F::two().inverse()))],
-                    F::two().inverse(),
-                ),
-                VirtualPairCol::single_main(cols_numbered.parent_height),
-                VirtualPairCol::single_main(cols_numbered.parent_label),
-                cols_numbered.address_space,
-                cols_numbered.parent_hash,
+        let mut interactions = vec![Interaction {
+            fields: poseidon2_fields,
+            count: VirtualPairCol::constant(F::one()),
+            argument_index: POSEIDON2_DIRECT_REQUEST_BUS,
+        }];
+
+        interactions.push(interaction(
+            VirtualPairCol::new_main(vec![(cols_numbered.direction, F::neg_one())], F::zero()),
+            VirtualPairCol::new_main(
+                vec![(cols_numbered.direction, F::neg(F::two().inverse()))],
+                F::two().inverse(),
             ),
-            interaction(
+            VirtualPairCol::single_main(cols_numbered.parent_height),
+            VirtualPairCol::single_main(cols_numbered.parent_label),
+            cols_numbered.address_space,
+            cols_numbered.parent_hash,
+        ));
+
+        let child_height =
+            VirtualPairCol::new_main(vec![(cols_numbered.parent_height, F::one())], F::neg_one());
+        for i in 0..2 {
+            interactions.push(interaction(
                 VirtualPairCol::single_main(cols_numbered.direction),
                 VirtualPairCol::new_main(
                     vec![
                         (cols_numbered.direction, F::neg(F::two().inverse())),
-                        (cols_numbered.left_is_final, F::one()),
+                        (cols_numbered.are_final[i], F::one()),
                     ],
                     F::two().inverse(),
                 ),
                 child_height.clone(),
+                // label = (2 * parent_label) + i
                 VirtualPairCol::new(
                     vec![(PairCol::Main(cols_numbered.parent_label), F::two())],
-                    F::zero(),
+                    F::from_canonical_usize(i),
                 ),
                 cols_numbered.address_space,
-                cols_numbered.left_child_hash,
-            ),
-            interaction(
-                VirtualPairCol::single_main(cols_numbered.direction),
-                VirtualPairCol::new_main(
-                    vec![
-                        (cols_numbered.direction, F::neg(F::two().inverse())),
-                        (cols_numbered.right_is_final, F::one()),
-                    ],
-                    F::two().inverse(),
-                ),
-                child_height,
-                VirtualPairCol::new(
-                    vec![(PairCol::Main(cols_numbered.parent_label), F::two())],
-                    F::one(),
-                ),
-                cols_numbered.address_space,
-                cols_numbered.right_child_hash,
-            ),
-            Interaction {
-                fields: poseidon2_fields,
-                count: VirtualPairCol::constant(F::one()),
-                argument_index: POSEIDON2_DIRECT_REQUEST_BUS,
-            },
-        ]
+                cols_numbered.child_hashes[i],
+            ));
+        }
+        interactions
     }
 }
