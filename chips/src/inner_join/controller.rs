@@ -313,33 +313,6 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
         prover_data
     }
 
-    pub fn generate_prover_traces(&mut self, t1: &Page, t2: &Page, intersector_trace_degree: usize)
-    where
-        Val<SC>: PrimeField,
-    {
-        let (fkey_start, fkey_end) = match self.t2_chip.table_type {
-            TableType::T2 {
-                fkey_start,
-                fkey_end,
-                ..
-            } => (fkey_start, fkey_end),
-            _ => panic!("t2 must be of TableType T2"),
-        };
-
-        let output_table = self.inner_join(t1, t2, fkey_start, fkey_end);
-        self.intersector_chip.generate_trace::<Val<SC>>(
-            t1,
-            t2,
-            fkey_start,
-            fkey_end,
-            self.range_checker.clone(),
-            intersector_trace_degree,
-        );
-        self.gen_table_trace(&output_table);
-        self.output_chip
-            .gen_aux_trace::<SC>(&output_table, self.range_checker.clone());
-    }
-
     /// Sets up keygen with the different trace partitions for all the
     /// chips the struct owns (t1_chip, t2_chip, output_chip, intersector_chip)
     pub fn set_up_keygen_builder(&self, keygen_builder: &mut MultiStarkKeygenBuilder<SC>)
@@ -372,7 +345,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
     /// cached_traces_prover_data is a vector of ProverTraceData object for the cached tables
     /// (T1, T2, output_table in that order)
     pub fn prove(
-        &self,
+        &mut self,
         engine: &impl StarkEngine<SC>,
         partial_pk: &MultiStarkPartialProvingKey<SC>,
         trace_builder: &mut TraceCommitmentBuilder<SC>,
@@ -391,7 +364,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
     {
         assert!(cached_traces_prover_data.len() == 3);
 
-        // let traces = self.traces.as_ref().unwrap();
+        self.traces = Some(traces.to_owned());
 
         trace_builder.clear();
 

@@ -51,6 +51,8 @@ where
 
         let prover = engine.prover();
         let mut trace_builder = TraceCommitmentBuilder::<SC>::new(prover.pcs());
+
+        // Generate and encode the trace data
         let prover_trace_data = inner_join_controller.load_tables(
             &page_left,
             &page_right,
@@ -59,11 +61,9 @@ where
         );
         let inner_join_traces = inner_join_controller.traces().unwrap();
         let all_trace_data = (prover_trace_data, inner_join_traces);
-        // let prover_trace_data = trace_builder
-        //     .committer
-        //     .commit(vec![trace_left, trace_right]);
         let encoded_data = bincode::serialize(&all_trace_data).unwrap();
 
+        // Save the traces data
         let table_id_full = inner_join_op.table_id_left.to_string();
         let path = cache_folder.clone() + "/" + &table_id_full + ".cache.bin";
         let _ = fs::create_dir_all(&cache_folder);

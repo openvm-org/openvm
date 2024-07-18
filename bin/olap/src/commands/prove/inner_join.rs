@@ -46,9 +46,9 @@ where
             t2_format,
             inner_join_buses,
             inner_join_op,
-            page_left,
-            page_right,
-            height,
+            _page_left,
+            _page_right,
+            _height,
             range_chip_idx_decomp,
         ) = inner_join_setup(config, common, op);
 
@@ -62,20 +62,21 @@ where
         let prover = engine.prover();
         let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
+        // Deserialize the proving key
         let prefix = config.generate_filename();
         let encoded_pk =
             read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
         let partial_pk: MultiStarkPartialProvingKey<SC> =
             bincode::deserialize(&encoded_pk).unwrap();
 
+        // Get the trace data from file
         let table_id_full = inner_join_op.table_id_left.to_string();
         let prover_trace_data_encoded =
             read_from_path(cache_folder.clone() + "/" + &table_id_full + ".cache.bin").unwrap();
         let (prover_trace_data, inner_join_traces): (Vec<ProverTraceData<SC>>, IJTraces<Val<SC>>) =
             bincode::deserialize(&prover_trace_data_encoded).unwrap();
 
-        inner_join_controller.generate_prover_traces(&page_left, &page_right, 2 * height);
-
+        // Generate a proof and write to file
         let proof = inner_join_controller.prove(
             engine,
             &partial_pk,
