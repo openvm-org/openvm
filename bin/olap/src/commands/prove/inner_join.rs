@@ -78,10 +78,6 @@ where
             ProverTraceData<SC>,
             ProverTraceData<SC>,
         ) = bincode::deserialize(&prover_trace_data_encoded).unwrap();
-        // let prover_trace_data_encoded =
-        //     read_from_path(cache_folder.clone() + "/" + &table_id_full + ".cache.bin").unwrap();
-        // let (prover_trace_data, inner_join_traces): (Vec<ProverTraceData<SC>>, IJTraces<Val<SC>>) =
-        //     bincode::deserialize(&prover_trace_data_encoded).unwrap();
 
         // Generate and encode the trace data
         let prover_trace_data = inner_join_controller.load_tables(
@@ -89,7 +85,7 @@ where
             &page_right,
             Some(page1_input_pdata),
             Some(page2_input_pdata),
-            Some(page_output_pdata),
+            None,
             2 * height,
             &mut trace_builder.committer,
         );
