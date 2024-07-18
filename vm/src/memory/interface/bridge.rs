@@ -3,9 +3,9 @@ use p3_field::Field;
 
 use afs_stark_backend::interaction::{AirBridge, Interaction};
 
-use crate::memory::interface::{EXPAND_BUS, MEMORY_INTERFACE_BUS};
 use crate::memory::interface::air::MemoryInterfaceAir;
 use crate::memory::interface::columns::MemoryInterfaceCols;
+use crate::memory::interface::{EXPAND_BUS, MEMORY_INTERFACE_BUS};
 
 impl<const CHUNK: usize, F: Field> AirBridge<F> for MemoryInterfaceAir<CHUNK> {
     fn receives(&self) -> Vec<Interaction<F>> {
