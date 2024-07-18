@@ -315,7 +315,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
 
     /// Sets up keygen with the different trace partitions for all the
     /// chips the struct owns (t1_chip, t2_chip, output_chip, intersector_chip)
-    pub fn set_up_keygen_builder(&self, keygen_builder: &mut MultiStarkKeygenBuilder<SC>)
+    pub fn set_up_keygen_builder(&mut self, keygen_builder: &mut MultiStarkKeygenBuilder<SC>)
     where
         Val<SC>: PrimeField,
     {
@@ -411,7 +411,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
 
     /// This function takes a proof (returned by the prove function) and verifies it
     pub fn verify(
-        &self,
+        &mut self,
         engine: &impl StarkEngine<SC>,
         partial_vk: MultiStarkPartialVerifyingKey<SC>,
         proof: Proof<SC>,
