@@ -8,26 +8,34 @@ use crate::memory::interface::air::MemoryInterfaceAir;
 use crate::memory::interface::columns::MemoryInterfaceCols;
 
 impl<const CHUNK: usize, F: Field> AirBridge<F> for MemoryInterfaceAir<CHUNK> {
-    fn sends(&self) -> Vec<Interaction<F>> {
+    fn receives(&self) -> Vec<Interaction<F>> {
         let all_cols = (0..MemoryInterfaceCols::<CHUNK, F>::get_width()).collect::<Vec<usize>>();
         let cols_numbered = MemoryInterfaceCols::<CHUNK, usize>::from_slice(&all_cols);
 
         let mut expand_fields = vec![
-            VirtualPairCol::constant(F::zero()),
+            VirtualPairCol::new_main(
+                vec![(cols_numbered.direction, F::neg(F::two().inverse()))],
+                F::two().inverse(),
+            ),
             VirtualPairCol::single_main(cols_numbered.address_space),
             VirtualPairCol::constant(F::zero()),
             VirtualPairCol::single_main(cols_numbered.leaf_label),
         ];
         expand_fields.extend(cols_numbered.values.map(VirtualPairCol::single_main));
 
-        let mut interactions = vec![Interaction {
+        vec![Interaction {
             fields: expand_fields,
             count: VirtualPairCol::single_main(cols_numbered.direction),
             argument_index: EXPAND_BUS,
-        }];
+        }]
+    }
 
-        for i in 0..CHUNK {
-            interactions.push(Interaction {
+    fn sends(&self) -> Vec<Interaction<F>> {
+        let all_cols = (0..MemoryInterfaceCols::<CHUNK, F>::get_width()).collect::<Vec<usize>>();
+        let cols_numbered = MemoryInterfaceCols::<CHUNK, usize>::from_slice(&all_cols);
+
+        (0..CHUNK)
+            .map(|i| Interaction {
                 fields: vec![
                     VirtualPairCol::single_main(cols_numbered.temp_is_final[i]),
                     VirtualPairCol::single_main(cols_numbered.address_space),
@@ -42,9 +50,7 @@ impl<const CHUNK: usize, F: Field> AirBridge<F> for MemoryInterfaceAir<CHUNK> {
                 ],
                 count: VirtualPairCol::single_main(cols_numbered.temp_multiplicity[i]),
                 argument_index: MEMORY_INTERFACE_BUS,
-            });
-        }
-
-        interactions
+            })
+            .collect()
     }
 }

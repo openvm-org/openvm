@@ -26,19 +26,22 @@ impl<const CHUNK: usize, AB: AirBuilder> Air<AB> for MemoryInterfaceAir<CHUNK> {
             local_cols.direction,
             local_cols.direction * local_cols.direction * local_cols.direction,
         );
-        // -1 -> 0, 1 -> 1
-        let direction_bool = (local_cols.direction + AB::F::one()) * AB::F::two().inverse();
 
         for i in 0..CHUNK {
             builder.assert_bool(local_cols.auxes[i]);
             builder.assert_eq(
                 local_cols.temp_multiplicity[i],
-                AB::Expr::one()
-                    - (direction_bool.clone() * (AB::Expr::one() - local_cols.auxes[i])),
+                local_cols.direction
+                    * (AB::Expr::one()
+                        - ((local_cols.direction + AB::F::one())
+                            * AB::F::two().inverse()
+                            * (AB::Expr::one() - local_cols.auxes[i]))),
             );
             builder.assert_eq(
                 local_cols.temp_is_final[i],
-                (AB::Expr::one() - direction_bool.clone()) * local_cols.auxes[i],
+                (AB::Expr::one() - local_cols.direction)
+                    * AB::F::two().inverse()
+                    * local_cols.auxes[i],
             );
         }
     }

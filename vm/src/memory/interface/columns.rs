@@ -51,6 +51,6 @@ impl<const CHUNK: usize, T: Clone> MemoryInterfaceCols<CHUNK, T> {
     }
 
     pub fn get_width() -> usize {
-        3 + (2 * CHUNK)
+        3 + (4 * CHUNK)
     }
 }

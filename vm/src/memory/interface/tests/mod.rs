@@ -170,11 +170,21 @@ fn random_test<const CHUNK: usize>(
     }
 
     let dummy_offline_checker_air = DummyInteractionAir::new(4, true, MEMORY_INTERFACE_BUS);
+    while !(dummy_offline_checker_trace_rows.len() / (dummy_offline_checker_air.field_width() + 1))
+        .is_power_of_two()
+    {
+        dummy_offline_checker_trace_rows.push(BabyBear::zero());
+    }
     let dummy_offline_checker_trace = RowMajorMatrix::new(
         dummy_offline_checker_trace_rows,
         dummy_offline_checker_air.field_width() + 1,
     );
     let dummy_expand_air = DummyInteractionAir::new(4 + CHUNK, true, EXPAND_BUS);
+
+    while !(dummy_expand_trace_rows.len() / (dummy_expand_air.field_width() + 1)).is_power_of_two()
+    {
+        dummy_expand_trace_rows.push(BabyBear::zero());
+    }
     let dummy_expand_trace =
         RowMajorMatrix::new(dummy_expand_trace_rows, dummy_expand_air.field_width() + 1);
 
