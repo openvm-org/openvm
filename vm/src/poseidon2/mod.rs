@@ -133,6 +133,7 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
                 addresses,
                 d_is_zero: is_zero_row.io.is_zero,
                 is_zero_inv: is_zero_row.inv,
+                is_opcode: F::from_bool(true),
                 internal,
             },
         });
@@ -152,5 +153,41 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
             );
             timestamp += 1;
         }
+    }
+}
+
+pub trait HashProvider<const CHUNK: usize, F> {
+    fn hash(&mut self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK];
+}
+
+impl<F: PrimeField32> HashProvider<8, F> for Poseidon2Chip<16, F> {
+    fn hash(&mut self, left: [F; 8], right: [F; 8]) -> [F; 8] {
+        let mut input_state = [F::zero(); 16];
+        input_state[..8].copy_from_slice(&left);
+        input_state[8..16].copy_from_slice(&right);
+        let internal = self.air.generate_trace_row(input_state);
+        let output = internal.io.output;
+        let is_zero_row = IsZeroAir {}.generate_trace_row(F::zero());
+        self.rows.push(Poseidon2ChipCols {
+            io: make_io_cols(
+                0,
+                Instruction {
+                    opcode: LOADW,
+                    op_a: F::zero(),
+                    op_b: F::zero(),
+                    op_c: F::zero(),
+                    d: F::zero(),
+                    e: F::zero(),
+                },
+            ),
+            aux: Poseidon2ChipAuxCols {
+                addresses: [F::zero(); 3],
+                d_is_zero: is_zero_row.io.is_zero,
+                is_zero_inv: is_zero_row.inv,
+                is_opcode: F::from_bool(false),
+                internal,
+            },
+        });
+        output[..8].try_into().unwrap()
     }
 }

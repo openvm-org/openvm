@@ -39,8 +39,11 @@ impl<AB: AirBuilder, const WIDTH: usize> Air<AB> for Poseidon2Chip<WIDTH, AB::F>
         // boolean constraints for alloc/cmp markers
         builder.assert_bool(cols.io.is_alloc);
         builder.assert_bool(cols.io.cmp);
-        // can only be comparing if row is allocated
+        builder.assert_bool(cols.aux.is_opcode);
+        // can only be compressing if row is allocated
         builder.assert_eq(cols.io.is_alloc * cols.io.cmp, cols.io.cmp);
+        // can only be opcode if row is allocated
+        builder.assert_eq(cols.io.is_alloc * cols.aux.is_opcode, cols.aux.is_opcode);
         // immediates
         for (i, operand) in [cols.io.a, cols.io.b, cols.io.c].into_iter().enumerate() {
             builder

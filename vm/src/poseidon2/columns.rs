@@ -37,6 +37,7 @@ pub struct Poseidon2ChipAuxCols<const WIDTH: usize, T> {
     pub addresses: [T; 3],
     pub d_is_zero: T,
     pub is_zero_inv: T,
+    pub is_opcode: T,
     pub internal: Poseidon2Cols<WIDTH, T>,
 }
 
@@ -123,13 +124,14 @@ impl<T: Field> Poseidon2ChipIoCols<T> {
 
 impl<const WIDTH: usize, T: Clone> Poseidon2ChipAuxCols<WIDTH, T> {
     pub fn get_width(air: &Poseidon2Air<WIDTH, T>) -> usize {
-        3 + 2 + Poseidon2Cols::<WIDTH, T>::get_width(air)
+        4 + 2 + Poseidon2Cols::<WIDTH, T>::get_width(air)
     }
 
     pub fn flatten(&self) -> Vec<T> {
         let mut result = self.addresses.to_vec();
         result.push(self.d_is_zero.clone());
         result.push(self.is_zero_inv.clone());
+        result.push(self.is_opcode.clone());
         result.extend(self.internal.flatten());
         result
     }
@@ -139,6 +141,7 @@ impl<const WIDTH: usize, T: Clone> Poseidon2ChipAuxCols<WIDTH, T> {
             addresses: from_fn(|i| slice[i].clone()),
             d_is_zero: slice[3].clone(),
             is_zero_inv: slice[4].clone(),
+            is_opcode: slice[5].clone(),
             internal: Poseidon2Cols::from_slice(&slice[5..], index_map),
         }
     }
@@ -149,6 +152,7 @@ impl<const WIDTH: usize, T: Field> Poseidon2ChipAuxCols<WIDTH, T> {
             addresses: [T::zero(); 3],
             d_is_zero: T::zero(),
             is_zero_inv: T::one(),
+            is_opcode: T::zero(),
             internal: Poseidon2Cols::blank_row(air),
         }
     }

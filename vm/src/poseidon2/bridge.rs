@@ -16,7 +16,7 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
         let indices: Vec<usize> = (0..self.width()).collect();
         let index_map = Poseidon2Cols::index_map(&self.air);
         let col_indices = Poseidon2ChipCols::from_slice(&indices, &index_map);
-        let fields = col_indices
+        let opcode_fields = col_indices
             .io
             .flatten()
             .into_iter()
@@ -24,11 +24,32 @@ impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
             .map(VirtualPairCol::single_main)
             .collect();
 
-        vec![Interaction {
-            fields,
-            count: VirtualPairCol::single_main(col_indices.io.is_alloc),
-            argument_index: POSEIDON2_BUS,
-        }]
+        let expand_fields = col_indices
+            .aux
+            .internal
+            .io
+            .flatten()
+            .into_iter()
+            .take(WIDTH + WIDTH / 2)
+            .map(VirtualPairCol::single_main)
+            .collect();
+
+        vec![
+            Interaction {
+                fields: opcode_fields,
+                count: VirtualPairCol::single_main(col_indices.aux.is_opcode),
+                argument_index: POSEIDON2_BUS,
+            },
+            Interaction {
+                fields: expand_fields,
+                count: VirtualPairCol::diff_main(
+                    col_indices.io.is_alloc,
+                    col_indices.aux.is_opcode,
+                ),
+                // TODO: replace with constant from CPU
+                argument_index: 6,
+            },
+        ]
     }
 
     fn sends(&self) -> Vec<Interaction<T>> {
