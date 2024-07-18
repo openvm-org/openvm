@@ -1,6 +1,6 @@
 use std::{fs, marker::PhantomData};
 
-use afs_chips::inner_join::controller::{FKInnerJoinController, IJTraces};
+use afs_chips::inner_join::controller::FKInnerJoinController;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkPartialProvingKey,
@@ -46,9 +46,9 @@ where
             t2_format,
             inner_join_buses,
             inner_join_op,
-            _page_left,
-            _page_right,
-            _height,
+            page_left,
+            page_right,
+            height,
             range_chip_idx_decomp,
         ) = inner_join_setup(config, common, op);
 
@@ -73,17 +73,30 @@ where
         let table_id_full = inner_join_op.table_id_left.to_string();
         let prover_trace_data_encoded =
             read_from_path(cache_folder.clone() + "/" + &table_id_full + ".cache.bin").unwrap();
-        let (prover_trace_data, inner_join_traces): (Vec<ProverTraceData<SC>>, IJTraces<Val<SC>>) =
-            bincode::deserialize(&prover_trace_data_encoded).unwrap();
+        let (page1_input_pdata, page2_input_pdata, page_output_pdata): (
+            ProverTraceData<SC>,
+            ProverTraceData<SC>,
+            ProverTraceData<SC>,
+        ) = bincode::deserialize(&prover_trace_data_encoded).unwrap();
+        // let prover_trace_data_encoded =
+        //     read_from_path(cache_folder.clone() + "/" + &table_id_full + ".cache.bin").unwrap();
+        // let (prover_trace_data, inner_join_traces): (Vec<ProverTraceData<SC>>, IJTraces<Val<SC>>) =
+        //     bincode::deserialize(&prover_trace_data_encoded).unwrap();
+
+        // Generate and encode the trace data
+        let prover_trace_data = inner_join_controller.load_tables(
+            &page_left,
+            &page_right,
+            Some(page1_input_pdata),
+            Some(page2_input_pdata),
+            Some(page_output_pdata),
+            2 * height,
+            &mut trace_builder.committer,
+        );
 
         // Generate a proof and write to file
-        let proof = inner_join_controller.prove(
-            engine,
-            &partial_pk,
-            &mut trace_builder,
-            prover_trace_data,
-            &inner_join_traces,
-        );
+        let proof =
+            inner_join_controller.prove(engine, &partial_pk, &mut trace_builder, prover_trace_data);
         let encoded_proof = bincode::serialize(&proof).unwrap();
         let proof_path = cache_folder.clone() + "/" + &table_id_full + ".proof.bin";
         let _ = fs::create_dir_all(&cache_folder);

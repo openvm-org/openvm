@@ -38,30 +38,30 @@ where
             inner_join_op,
             page_left,
             page_right,
-            height,
+            _height,
             range_chip_idx_decomp,
         ) = inner_join_setup(config, common, op);
 
-        let mut inner_join_controller = FKInnerJoinController::new(
+        let mut inner_join_controller = FKInnerJoinController::<SC>::new(
             inner_join_buses,
             t1_format,
             t2_format,
             range_chip_idx_decomp,
         );
 
-        let prover = engine.prover();
-        let mut trace_builder = TraceCommitmentBuilder::<SC>::new(prover.pcs());
+        let (t1_main_trace, t2_main_trace, output_main_trace) =
+            inner_join_controller.io_main_traces(&page_left, &page_right);
 
-        // Generate and encode the trace data
-        let prover_trace_data = inner_join_controller.load_tables(
-            &page_left,
-            &page_right,
-            2 * height,
-            &mut trace_builder.committer,
-        );
-        let inner_join_traces = inner_join_controller.traces().unwrap();
-        let all_trace_data = (prover_trace_data, inner_join_traces);
-        let encoded_data = bincode::serialize(&all_trace_data).unwrap();
+        let prover = engine.prover();
+        let trace_builder = TraceCommitmentBuilder::<SC>::new(prover.pcs());
+
+        let trace_committer = trace_builder.committer;
+        let t1_commit = trace_committer.commit(vec![t1_main_trace.clone()]);
+        let t2_commit = trace_committer.commit(vec![t2_main_trace.clone()]);
+        let output_commit = trace_committer.commit(vec![output_main_trace.clone()]);
+
+        let all_commits = (t1_commit, t2_commit, output_commit);
+        let encoded_data = bincode::serialize(&all_commits).unwrap();
 
         // Save the traces data
         let table_id_full = inner_join_op.table_id_left.to_string();
