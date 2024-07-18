@@ -32,8 +32,11 @@ fn test_offline_checker() {
         CLK_LIMB_BITS,
         DECOMP,
     );
-    let requester =
-        DummyInteractionAir::new(2 + memory_chip.chip.air.idx_data_width(), true, MEMORY_BUS);
+    let requester = DummyInteractionAir::new(
+        2 + memory_chip.air.general_offline_checker.idx_data_width(),
+        true,
+        MEMORY_BUS,
+    );
 
     let ops: Vec<MemoryAccess<WORD_SIZE, BabyBear>> = vec![
         MemoryAccess {
@@ -158,7 +161,7 @@ fn test_offline_checker() {
     );
 
     run_simple_test_no_pis(
-        vec![&memory_chip.chip.air, &range_checker.air, &requester],
+        vec![&memory_chip.air, &range_checker.air, &requester],
         vec![trace, range_checker_trace, requester_trace],
     )
     .expect("Verification failed");
@@ -173,8 +176,11 @@ fn test_offline_checker_valid_first_read() {
         CLK_LIMB_BITS,
         DECOMP,
     );
-    let requester =
-        DummyInteractionAir::new(2 + memory_chip.chip.air.idx_data_width(), true, MEMORY_BUS);
+    let requester = DummyInteractionAir::new(
+        2 + memory_chip.air.general_offline_checker.idx_data_width(),
+        true,
+        MEMORY_BUS,
+    );
 
     memory_chip.write_word(
         0,
@@ -211,7 +217,7 @@ fn test_offline_checker_valid_first_read() {
     );
 
     run_simple_test_no_pis(
-        vec![&memory_chip.chip.air, &range_checker.air, &requester],
+        vec![&memory_chip.air, &range_checker.air, &requester],
         vec![memory_trace, range_checker_trace, requester_trace],
     )
     .expect("Verification failed");
@@ -226,8 +232,11 @@ fn test_offline_checker_negative_data_mismatch() {
         CLK_LIMB_BITS,
         DECOMP,
     );
-    let requester =
-        DummyInteractionAir::new(2 + memory_chip.chip.air.idx_data_width(), true, MEMORY_BUS);
+    let requester = DummyInteractionAir::new(
+        2 + memory_chip.air.general_offline_checker.idx_data_width(),
+        true,
+        MEMORY_BUS,
+    );
 
     let ops: Vec<MemoryAccess<WORD_SIZE, BabyBear>> = vec![
         MemoryAccess {
@@ -297,7 +306,7 @@ fn test_offline_checker_negative_data_mismatch() {
     });
     assert_eq!(
         run_simple_test_no_pis(
-            vec![&memory_chip.chip.air, &range_checker.air, &requester],
+            vec![&memory_chip.air, &range_checker.air, &requester,],
             vec![trace, range_checker_trace, requester_trace],
         ),
         Err(VerificationError::OodEvaluationMismatch),

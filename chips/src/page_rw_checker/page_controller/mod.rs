@@ -15,7 +15,7 @@ use afs_stark_backend::{
     verifier::VerificationError,
 };
 use afs_test_utils::engine::StarkEngine;
-use p3_field::{AbstractField, Field, PrimeField};
+use p3_field::{AbstractField, Field, PrimeField, PrimeField64};
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::info_span;
@@ -23,8 +23,8 @@ use tracing::info_span;
 use super::{
     final_page::IndexedPageWriteAir, initial_page::PageReadAir, offline_checker::OfflineChecker,
 };
-use crate::common::page::Page;
 use crate::range_gate::RangeCheckerGateChip;
+use crate::{common::page::Page, offline_checker::GeneralOfflineCheckerOperation};
 
 #[derive(PartialEq, Clone, Debug, Copy)]
 pub enum OpType {
@@ -39,6 +39,31 @@ pub struct Operation {
     pub idx: Vec<u32>,
     pub data: Vec<u32>,
     pub op_type: OpType,
+}
+
+impl<F: PrimeField64> GeneralOfflineCheckerOperation<F> for Operation {
+    fn get_timestamp(&self) -> usize {
+        self.clk
+    }
+
+    fn get_idx(&self) -> Vec<F> {
+        self.idx
+            .clone()
+            .into_iter()
+            .map(|x| F::from_canonical_u32(x))
+            .collect()
+    }
+    fn get_data(&self) -> Vec<F> {
+        self.data
+            .clone()
+            .into_iter()
+            .map(|x| F::from_canonical_u32(x))
+            .collect()
+    }
+
+    fn get_op_type(&self) -> u8 {
+        self.op_type as u8
+    }
 }
 
 struct PageRWTraces<F> {
@@ -206,7 +231,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         trace_committer: &mut TraceCommitter<SC>,
     ) -> (Arc<ProverTraceData<SC>>, Arc<ProverTraceData<SC>>)
     where
-        Val<SC>: PrimeField,
+        Val<SC>: PrimeField64,
     {
         let trace_span = info_span!("Load page trace generation").entered();
         let mut page = page.clone();
@@ -414,7 +439,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         trace_degree: usize,
     ) -> RowMajorMatrix<Val<SC>>
     where
-        Val<SC>: PrimeField,
+        Val<SC>: PrimeField64,
     {
         self.offline_checker
             .generate_trace::<SC>(page, ops.to_owned(), range_checker, trace_degree)

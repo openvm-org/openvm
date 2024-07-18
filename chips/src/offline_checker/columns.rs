@@ -2,17 +2,17 @@ use crate::{
     is_equal_vec::columns::IsEqualVecAuxCols, is_less_than_tuple::columns::IsLessThanTupleAuxCols,
 };
 
-use super::OfflineChecker;
+use super::GeneralOfflineChecker;
 
-#[derive(Debug)]
-pub struct OfflineCheckerCols<T> {
+#[derive(Debug, Clone)]
+pub struct GeneralOfflineCheckerCols<T> {
     /// timestamp for the operation
     pub clk: T,
     /// idx
     pub idx: Vec<T>,
     /// data
     pub data: Vec<T>,
-    /// 0 for read, 1 for write
+    /// default: 0 (read) and 1 (write), can have more e.g. delete
     pub op_type: T,
 
     /// this bit indicates if the idx matches the one in the previous row
@@ -37,7 +37,7 @@ pub struct OfflineCheckerCols<T> {
     pub lt_aux: IsLessThanTupleAuxCols<T>,
 }
 
-impl<T> OfflineCheckerCols<T>
+impl<T> GeneralOfflineCheckerCols<T>
 where
     T: Clone,
 {
@@ -92,7 +92,7 @@ where
         flattened
     }
 
-    pub fn from_slice<const WORD_SIZE: usize>(slc: &[T], oc: &OfflineChecker<WORD_SIZE>) -> Self {
+    pub fn from_slice(slc: &[T], oc: &GeneralOfflineChecker) -> Self {
         assert!(slc.len() == oc.air_width());
         let idx_len = oc.idx_len;
         let data_len = oc.data_len;

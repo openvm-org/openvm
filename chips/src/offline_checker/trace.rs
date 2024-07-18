@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use p3_field::PrimeField32;
+use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::is_equal_vec::IsEqualVecAir;
@@ -8,12 +8,14 @@ use crate::is_less_than_tuple::IsLessThanTupleAir;
 use crate::range_gate::RangeCheckerGateChip;
 use crate::sub_chip::LocalTraceInstructions;
 
-use super::{columns::OfflineCheckerCols, OfflineCheckerChip, OfflineCheckerOperation};
+use super::{
+    columns::GeneralOfflineCheckerCols, GeneralOfflineCheckerChip, GeneralOfflineCheckerOperation,
+};
 
-impl<const WORD_SIZE: usize, F: PrimeField32, Operation: OfflineCheckerOperation<F> + Clone>
-    OfflineCheckerChip<WORD_SIZE, F, Operation>
+impl<F: PrimeField64, Operation: GeneralOfflineCheckerOperation<F> + Clone>
+    GeneralOfflineCheckerChip<F, Operation>
 {
-    /// Each row in the trace follow the same order as the Cols struct:
+    /// Each row in the trace follows the same order as the Cols struct:
     /// [clk, mem_row, op_type, same_addr_space, same_pointer, same_addr, same_data, lt_bit, is_valid, is_equal_addr_space_aux, is_equal_pointer_aux, is_equal_data_aux, lt_aux]
     ///
     /// The trace consists of a row for every read/write operation plus some extra rows
@@ -88,12 +90,13 @@ impl<const WORD_SIZE: usize, F: PrimeField32, Operation: OfflineCheckerOperation
     }
 }
 
-impl<const WORD_SIZE: usize, F: PrimeField32, Operation: OfflineCheckerOperation<F>>
-    LocalTraceInstructions<F> for OfflineCheckerChip<WORD_SIZE, F, Operation>
+impl<F: PrimeField64, Operation: GeneralOfflineCheckerOperation<F>> LocalTraceInstructions<F>
+    for GeneralOfflineCheckerChip<F, Operation>
 {
+    // is_first_row, is_valid, curr_op, prev_op, range_checker
     type LocalInput = (bool, u8, Operation, Operation, Arc<RangeCheckerGateChip>);
 
-    fn generate_trace_row(&self, input: Self::LocalInput) -> OfflineCheckerCols<F> {
+    fn generate_trace_row(&self, input: Self::LocalInput) -> GeneralOfflineCheckerCols<F> {
         let (is_first_row, is_valid, curr_op, prev_op, range_checker) = input;
         let op_type = curr_op.get_op_type();
 
@@ -144,14 +147,14 @@ impl<const WORD_SIZE: usize, F: PrimeField32, Operation: OfflineCheckerOperation
         let mut prev_idx_timestamp = prev_idx
             .clone()
             .into_iter()
-            .map(|x| x.as_canonical_u32())
+            .map(|x| x.as_canonical_u64() as u32)
             .collect::<Vec<_>>();
         prev_idx_timestamp.push(prev_timestamp as u32);
 
         let mut curr_idx_timestamp = curr_idx
             .clone()
             .into_iter()
-            .map(|x| x.as_canonical_u32())
+            .map(|x| x.as_canonical_u64() as u32)
             .collect::<Vec<_>>();
         curr_idx_timestamp.push(curr_timestamp as u32);
 
@@ -166,7 +169,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32, Operation: OfflineCheckerOperation
             lt_bit = 1;
         }
 
-        OfflineCheckerCols {
+        GeneralOfflineCheckerCols {
             clk: F::from_canonical_usize(curr_timestamp),
             idx: curr_idx,
             data: curr_data,

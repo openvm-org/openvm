@@ -1,6 +1,6 @@
 use columns::OfflineCheckerCols;
 
-use crate::{is_equal_vec::IsEqualVecAir, is_less_than_tuple::IsLessThanTupleAir};
+use crate::offline_checker::GeneralOfflineChecker;
 
 mod air;
 mod bridge;
@@ -11,15 +11,8 @@ mod trace;
 mod tests;
 
 pub struct OfflineChecker {
+    general_offline_checker: GeneralOfflineChecker,
     page_bus_index: usize,
-    ops_bus_index: usize,
-
-    idx_len: usize,
-    data_len: usize,
-    idx_decomp: usize,
-
-    is_equal_idx_air: IsEqualVecAir,
-    lt_idx_clk_air: IsLessThanTupleAir,
 }
 
 impl OfflineChecker {
@@ -34,18 +27,17 @@ impl OfflineChecker {
         clk_bits: usize,
         idx_decomp: usize,
     ) -> Self {
-        Self {
-            page_bus_index,
-            ops_bus_index,
+        let general_offline_checker = GeneralOfflineChecker::new(
+            [vec![idx_limb_bits; idx_len], vec![clk_bits]].concat(),
+            idx_decomp,
             idx_len,
             data_len,
-            idx_decomp,
-            is_equal_idx_air: IsEqualVecAir::new(idx_len),
-            lt_idx_clk_air: IsLessThanTupleAir::new(
-                range_bus_index,
-                [vec![idx_limb_bits; idx_len], vec![clk_bits]].concat(),
-                idx_decomp,
-            ),
+            range_bus_index,
+            ops_bus_index,
+        );
+        Self {
+            general_offline_checker,
+            page_bus_index,
         }
     }
 

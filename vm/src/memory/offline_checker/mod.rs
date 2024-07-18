@@ -1,6 +1,6 @@
 use std::{array::from_fn, collections::HashMap};
 
-use afs_chips::offline_checker::{OfflineChecker, OfflineCheckerChip};
+use afs_chips::offline_checker::GeneralOfflineChecker;
 use p3_field::PrimeField32;
 
 use crate::cpu::{MEMORY_BUS, RANGE_CHECKER_BUS};
@@ -8,10 +8,16 @@ use crate::memory::{compose, decompose, OpType};
 
 use super::MemoryAccess;
 
+mod air;
+mod bridge;
 mod trace;
 
+pub struct OfflineChecker {
+    pub general_offline_checker: GeneralOfflineChecker,
+}
+
 pub struct MemoryChip<const WORD_SIZE: usize, F: PrimeField32> {
-    pub chip: OfflineCheckerChip<WORD_SIZE, F, MemoryAccess<WORD_SIZE, F>>,
+    pub air: OfflineChecker,
     pub accesses: Vec<MemoryAccess<WORD_SIZE, F>>,
     memory: HashMap<(F, F), F>,
     last_timestamp: Option<usize>,
@@ -26,7 +32,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
     ) -> Self {
         let idx_clk_limb_bits = vec![addr_space_limb_bits, pointer_limb_bits, clk_limb_bits];
 
-        let offline_checker_air = OfflineChecker::<WORD_SIZE>::new(
+        let offline_checker_air = GeneralOfflineChecker::new(
             idx_clk_limb_bits,
             decomp,
             2,
@@ -35,13 +41,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             MEMORY_BUS,
         );
 
-        let offline_checker_chip =
-            OfflineCheckerChip::<WORD_SIZE, F, MemoryAccess<WORD_SIZE, F>>::new(
-                offline_checker_air,
-            );
-
         Self {
-            chip: offline_checker_chip,
+            air: OfflineChecker {
+                general_offline_checker: offline_checker_air,
+            },
             accesses: vec![],
             memory: HashMap::new(),
             last_timestamp: None,

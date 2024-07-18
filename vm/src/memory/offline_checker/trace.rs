@@ -6,7 +6,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use crate::memory::{MemoryAccess, OpType};
 
 use super::MemoryChip;
-use afs_chips::range_gate::RangeCheckerGateChip;
+use afs_chips::{offline_checker::GeneralOfflineCheckerChip, range_gate::RangeCheckerGateChip};
 use rayon::prelude::*;
 
 impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
@@ -32,7 +32,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             data: [F::zero(); WORD_SIZE],
         };
 
-        self.chip
-            .generate_trace(range_checker, self.accesses.clone(), dummy_op)
+        let mut general_oc_chip = GeneralOfflineCheckerChip::<F, MemoryAccess<WORD_SIZE, F>>::new(
+            self.air.general_offline_checker.clone(),
+        );
+
+        general_oc_chip.generate_trace(range_checker, self.accesses.clone(), dummy_op)
     }
 }

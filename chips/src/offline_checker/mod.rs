@@ -3,28 +3,29 @@ use std::marker::PhantomData;
 use crate::is_equal_vec::columns::IsEqualVecAuxCols;
 use crate::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 
-mod air;
-mod bridge;
-mod columns;
-mod trace;
+pub mod air;
+pub mod bridge;
+pub mod columns;
+pub mod trace;
 
-pub trait OfflineCheckerOperation<F> {
+pub trait GeneralOfflineCheckerOperation<F> {
     fn get_timestamp(&self) -> usize;
     fn get_idx(&self) -> Vec<F>;
     fn get_data(&self) -> Vec<F>;
     fn get_op_type(&self) -> u8;
 }
 
-pub struct OfflineChecker<const WORD_SIZE: usize> {
-    idx_clk_limb_bits: Vec<usize>,
-    decomp: usize,
-    idx_len: usize,
-    data_len: usize,
-    range_bus: usize,
-    ops_bus: usize,
+#[derive(Clone)]
+pub struct GeneralOfflineChecker {
+    pub idx_clk_limb_bits: Vec<usize>,
+    pub decomp: usize,
+    pub idx_len: usize,
+    pub data_len: usize,
+    pub range_bus: usize,
+    pub ops_bus: usize,
 }
 
-impl<const WORD_SIZE: usize> OfflineChecker<WORD_SIZE> {
+impl GeneralOfflineChecker {
     pub fn new(
         idx_clk_limb_bits: Vec<usize>,
         decomp: usize,
@@ -60,15 +61,13 @@ impl<const WORD_SIZE: usize> OfflineChecker<WORD_SIZE> {
     }
 }
 
-pub struct OfflineCheckerChip<const WORD_SIZE: usize, F, Operation: OfflineCheckerOperation<F>> {
+pub struct GeneralOfflineCheckerChip<F, Operation: GeneralOfflineCheckerOperation<F>> {
     _marker: PhantomData<(F, Operation)>,
-    pub air: OfflineChecker<WORD_SIZE>,
+    pub air: GeneralOfflineChecker,
 }
 
-impl<const WORD_SIZE: usize, F, Operation: OfflineCheckerOperation<F>>
-    OfflineCheckerChip<WORD_SIZE, F, Operation>
-{
-    pub fn new(air: OfflineChecker<WORD_SIZE>) -> Self {
+impl<F, Operation: GeneralOfflineCheckerOperation<F>> GeneralOfflineCheckerChip<F, Operation> {
+    pub fn new(air: GeneralOfflineChecker) -> Self {
         Self {
             _marker: Default::default(),
             air,

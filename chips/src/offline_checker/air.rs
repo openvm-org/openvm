@@ -3,11 +3,12 @@ use std::iter;
 
 use afs_stark_backend::air_builders::PartitionedAirBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{AbstractField, Field, PrimeField32};
+use p3_field::{AbstractField, Field, PrimeField64};
 use p3_matrix::Matrix;
 
 use super::{
-    columns::OfflineCheckerCols, OfflineChecker, OfflineCheckerChip, OfflineCheckerOperation,
+    columns::GeneralOfflineCheckerCols, GeneralOfflineChecker, GeneralOfflineCheckerChip,
+    GeneralOfflineCheckerOperation,
 };
 use crate::{
     is_equal_vec::{columns::IsEqualVecCols, IsEqualVecAir},
@@ -15,23 +16,23 @@ use crate::{
     sub_chip::{AirConfig, SubAir},
 };
 
-impl<const WORD_SIZE: usize> AirConfig for OfflineChecker<WORD_SIZE> {
-    type Cols<T> = OfflineCheckerCols<T>;
+impl AirConfig for GeneralOfflineChecker {
+    type Cols<T> = GeneralOfflineCheckerCols<T>;
 }
 
-impl<const WORD_SIZE: usize, F: PrimeField32, Operation: OfflineCheckerOperation<F>> AirConfig
-    for OfflineCheckerChip<WORD_SIZE, F, Operation>
+impl<F: PrimeField64, Operation: GeneralOfflineCheckerOperation<F>> AirConfig
+    for GeneralOfflineCheckerChip<F, Operation>
 {
-    type Cols<T> = OfflineCheckerCols<T>;
+    type Cols<T> = GeneralOfflineCheckerCols<T>;
 }
 
-impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for OfflineChecker<WORD_SIZE> {
+impl<F: Field> BaseAir<F> for GeneralOfflineChecker {
     fn width(&self) -> usize {
         self.air_width()
     }
 }
 
-impl<const WORD_SIZE: usize, AB: PartitionedAirBuilder> Air<AB> for OfflineChecker<WORD_SIZE>
+impl<AB: PartitionedAirBuilder> Air<AB> for GeneralOfflineChecker
 where
     AB::M: Clone,
 {
@@ -45,18 +46,21 @@ where
         let local: &[AB::Var] = (*local).borrow();
         let next: &[AB::Var] = (*next).borrow();
 
-        let local_cols = OfflineCheckerCols::from_slice(local, self);
-        let next_cols = OfflineCheckerCols::from_slice(next, self);
+        let local_cols = GeneralOfflineCheckerCols::from_slice(local, self);
+        let next_cols = GeneralOfflineCheckerCols::from_slice(next, self);
 
         SubAir::eval(self, builder, (local_cols, next_cols), ());
     }
 }
 
-impl<const WORD_SIZE: usize, AB: PartitionedAirBuilder> SubAir<AB> for OfflineChecker<WORD_SIZE>
+impl<AB: PartitionedAirBuilder> SubAir<AB> for GeneralOfflineChecker
 where
     AB::M: Clone,
 {
-    type IoView = (OfflineCheckerCols<AB::Var>, OfflineCheckerCols<AB::Var>);
+    type IoView = (
+        GeneralOfflineCheckerCols<AB::Var>,
+        GeneralOfflineCheckerCols<AB::Var>,
+    );
     type AuxView = ();
 
     fn eval(&self, builder: &mut AB, io: Self::IoView, _: Self::AuxView) {
@@ -69,7 +73,6 @@ where
         let implies = |a: AB::Expr, b: AB::Expr| not(and(a, not(b)));
 
         // Making sure bits are bools
-        builder.assert_bool(local_cols.op_type);
         builder.assert_bool(local_cols.same_idx);
         builder.assert_bool(local_cols.same_data);
         builder.assert_bool(local_cols.is_valid);
@@ -149,19 +152,6 @@ where
         builder.when_transition().assert_one(or(
             AB::Expr::one() - next_cols.is_valid.into(),
             next_cols.lt_bit.into(),
-        ));
-
-        // Making sure that every read uses the same data as the last operation if it is not the first
-        // operation in the block
-        // NOTE: constraint degree is 4
-        builder.assert_one(or(
-            AB::Expr::one() - local_cols.is_valid.into(),
-            or(
-                local_cols.op_type.into(),
-                // if same_idx = 0 and read, then same_data can be anything
-                // if same_idx = 1 and read, then same_data must be 1
-                AB::Expr::one() - local_cols.same_idx.into() + local_cols.same_idx_and_data,
-            ),
         ));
 
         // Making sure is_extra rows are at the bottom
