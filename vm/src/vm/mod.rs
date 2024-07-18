@@ -141,7 +141,7 @@ where
     let mut result: Vec<&dyn AnyRap<SC>> = vec![
         &vm.cpu_air,
         &vm.program_chip.air,
-        &vm.memory_chip.air,
+        &vm.memory_chip.chip.air,
         &vm.range_checker.air,
     ];
     if vm.options().field_arithmetic_enabled {

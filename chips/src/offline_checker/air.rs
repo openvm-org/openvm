@@ -101,12 +101,6 @@ where
             is_equal_idx_cols.aux,
         );
 
-        // Make sure that same_idx comes from is_equal_idx_aux (last element of prods indicates whether equal)
-        builder.assert_eq(
-            next_cols.same_idx,
-            next_cols.is_equal_idx_aux.prods[self.idx_len - 1],
-        );
-
         // Making sure same_data is correct across rows
         let is_equal_data = IsEqualVecCols::new(
             local_cols.data.to_vec(),

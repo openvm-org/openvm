@@ -80,6 +80,7 @@ where
             self.op_type.clone(),
             self.same_idx.clone(),
             self.same_data.clone(),
+            self.same_idx_and_data.clone(),
             self.lt_bit.clone(),
             self.is_valid.clone(),
         ]);
@@ -107,15 +108,15 @@ where
             lt_bit: slc[5 + idx_len + data_len].clone(),
             is_valid: slc[6 + idx_len + data_len].clone(),
             is_equal_idx_aux: IsEqualVecAuxCols::from_slice(
-                &slc[7 + idx_len + data_len..7 + 3 * idx_len + data_len],
+                &slc[7 + idx_len + data_len..6 + 3 * idx_len + data_len],
                 idx_len,
             ),
             is_equal_data_aux: IsEqualVecAuxCols::from_slice(
-                &slc[7 + 3 * idx_len + data_len..7 + 3 * idx_len + 2 * data_len],
+                &slc[6 + 3 * idx_len + data_len..5 + 3 * idx_len + 3 * data_len],
                 data_len,
             ),
             lt_aux: IsLessThanTupleAuxCols::from_slice(
-                &slc[7 + 3 * idx_len + 2 * data_len..],
+                &slc[5 + 3 * idx_len + 3 * data_len..],
                 oc.idx_clk_limb_bits.clone(),
                 oc.decomp,
                 // extra 1 for clk

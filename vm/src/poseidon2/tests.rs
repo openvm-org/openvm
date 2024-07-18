@@ -205,7 +205,7 @@ fn poseidon2_chip_random_50_test() {
         .run_simple_test(
             vec![
                 &vm.range_checker.air,
-                &vm.memory_chip.air,
+                &vm.memory_chip.chip.air,
                 &vm.poseidon2_chip,
                 &dummy_cpu_memory,
                 &dummy_cpu_poseidon2,
@@ -242,7 +242,7 @@ fn poseidon2_negative_test() {
             engine.run_simple_test(
                 vec![
                     &vm.range_checker.air,
-                    &vm.memory_chip.air,
+                    &vm.memory_chip.chip.air,
                     &vm.poseidon2_chip,
                     &dummy_cpu_memory,
                     &dummy_cpu_poseidon2,

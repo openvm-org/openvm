@@ -125,8 +125,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32, Operation: OfflineCheckerOperation
             }
         }
 
-        let is_equal_idx_air = IsEqualVecAir::new(WORD_SIZE);
-        let is_equal_data_air = IsEqualVecAir::new(WORD_SIZE);
+        let is_equal_idx_air = IsEqualVecAir::new(self.air.idx_len);
+        let is_equal_data_air = IsEqualVecAir::new(self.air.data_len);
         let lt_air = IsLessThanTupleAir::new(
             range_checker.bus_index(),
             self.air.idx_clk_limb_bits.clone(),
