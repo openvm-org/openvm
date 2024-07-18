@@ -588,7 +588,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 rhs.as_base_slice()[i],
                 labels(label) - (pc + F::from_canonical_usize(i)),
                 AS::Register,
-                AS::Register,
+                AS::Immediate,
             ))
             .collect(),
         AsmInstruction::BeqE(label, lhs, rhs) => (0..EF::D)
@@ -622,7 +622,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                     F::from_canonical_usize(i + 1)
                 },
                 AS::Register,
-                AS::Register,
+                AS::Immediate,
             ))
             .collect(),
         AsmInstruction::Trap => vec![
