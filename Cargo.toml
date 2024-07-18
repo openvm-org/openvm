@@ -7,7 +7,6 @@ members = [
     "derive",
     "bin/afs",
     "bin/olap",
-    "bin/predicate",
     "benchmark",
     "logical-interface",
     "vm",

@@ -12,7 +12,6 @@ use afs_test_utils::{
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
-use logical_interface::afs_interface::utils::string_to_table_id;
 use olap::{
     commands::{
         cache::filter::CacheFilterCommand, keygen::filter::KeygenFilterCommand, parse_afo_file,
@@ -28,7 +27,7 @@ use p3_util::log2_strict_usize;
 use serde::{de::DeserializeOwned, Serialize};
 use tracing::info_span;
 
-use crate::{DB_FILE_PATH, FILTER_FILE_PATH, TABLE_ID, TMP_FOLDER};
+use crate::{DB_FILE_PATH, FILTER_FILE_PATH, TMP_FOLDER};
 
 use super::CommonCommands;
 
@@ -50,7 +49,7 @@ impl PredicateCommand {
     pub fn bench_all<SC: StarkGenericConfig, E: StarkEngine<SC>>(
         config: &PageConfig,
         engine: &E,
-        extra_data: String,
+        _extra_data: String,
     ) -> Result<()>
     where
         Val<SC>: PrimeField64,
@@ -63,22 +62,15 @@ impl PredicateCommand {
     {
         let afo = parse_afo_file(FILTER_FILE_PATH.to_string());
         let op = afo.operations[0].clone();
-        // let filter_op = FilterOp::parse(afo.operations[0].args).unwrap();
         let common = olap::commands::CommonCommands {
             db_path: DB_FILE_PATH.to_string(),
             afo_path: FILTER_FILE_PATH.to_string(),
             output_path: Some(TMP_FOLDER.to_string()),
             silent: true,
         };
-        let input_trace_file = format!(
-            "{}/{}.cache.bin",
-            TMP_FOLDER,
-            string_to_table_id(TABLE_ID.to_string())
-        );
 
         // Run keygen
         let keygen_span = info_span!("Benchmark keygen").entered();
-        // KeygenCommand::execute(config, engine, &common).unwrap();
         KeygenFilterCommand::execute(config, engine, &common, op.clone(), KEYS_FOLDER.to_string())
             .unwrap();
         keygen_span.exit();
@@ -87,14 +79,6 @@ impl PredicateCommand {
         let cache_span = info_span!("Benchmark cache").entered();
         CacheFilterCommand::execute(config, engine, &common, op.clone(), TMP_FOLDER.to_string())
             .unwrap();
-        // CacheCommand::execute(
-        //     config,
-        //     engine,
-        //     TABLE_ID.to_string(),
-        //     DB_FILE_PATH.to_string(),
-        //     TMP_FOLDER.to_string(),
-        // )
-        // .unwrap();
         cache_span.exit();
 
         // Run prove
@@ -108,18 +92,6 @@ impl PredicateCommand {
             TMP_FOLDER.to_string(),
         )
         .unwrap();
-        // ProveCommand::execute(
-        //     config,
-        //     engine,
-        //     &common,
-        //     value.clone(),
-        //     TABLE_ID.to_string(),
-        //     DB_FILE_PATH.to_string(),
-        //     TMP_FOLDER.to_string(),
-        //     input_trace_file,
-        //     TMP_FOLDER.to_string(),
-        // )
-        // .unwrap();
         prove_span.exit();
 
         // Run verify
@@ -134,15 +106,6 @@ impl PredicateCommand {
             None,
         )
         .unwrap();
-        // VerifyCommand::execute(
-        //     config,
-        //     engine,
-        //     &common,
-        //     value.clone(),
-        //     TABLE_ID.to_string(),
-        //     TMP_FOLDER.to_string(),
-        // )
-        // .unwrap();
         verify_span.exit();
 
         Ok(())
