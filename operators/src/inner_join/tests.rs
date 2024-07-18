@@ -1,5 +1,5 @@
 use afs_chips::{
-    common::page::Page,
+    common::{page::Page, page_cols::PageCols},
     inner_join::controller::{T2Format, TableFormat},
 };
 use afs_test_utils::{
@@ -24,7 +24,7 @@ const COMMIT_LEN: usize = 8;
 pub fn one_page_table_inner_join_test() {
     let decomp = 4;
     let log_page_height = 3;
-    let num_parent_pages = 4;
+    let num_parent_pages = 3;
     let num_child_pages = 4;
 
     let engine = config::baby_bear_poseidon2::default_engine(decomp.max(log_page_height + 1));
@@ -73,7 +73,7 @@ fn generate_two_tables(
 
     let page_height = 1 << log_page_height;
 
-    let fkey_start = rng.gen::<usize>() % (child_data_len - parent_idx_len);
+    let fkey_start = rng.gen::<usize>() % (child_data_len - parent_idx_len + 1);
     let fkey_end = fkey_start + parent_idx_len;
 
     let idx_limb_bits = 10;
@@ -112,6 +112,11 @@ fn generate_two_tables(
             .clone_from_slice(&parent_table_as_page.get_random_idx(&mut rng));
     }
 
+    // Now, sort the rows in child table by the foreign key
+    let mut child_rows = child_table_as_page.iter().collect::<Vec<&PageCols<u32>>>();
+    child_rows.sort_by(|a, b| a.data[fkey_start..fkey_end].cmp(&b.data[fkey_start..fkey_end]));
+    let child_table_as_page = Page::from_page_cols(child_rows.into_iter().cloned().collect());
+
     let mut page_loader = PageDataLoader::empty();
 
     // Building the parent table Indexed DataFrame with ranges coming from idx
@@ -139,16 +144,17 @@ fn generate_two_tables(
     // Building the child table Indexed DataFrame with ranges coming from the foreign key
     let mut child_df = DataFrame::empty_indexed();
     for page_idx in 0..num_child_pages {
-        let cur_page = Page::from_2d_vec(
-            &child_table_as_page
-                .iter()
-                .skip(page_idx * page_height)
-                .take(page_height)
-                .map(|row| row.to_vec())
-                .collect::<Vec<Vec<u32>>>(),
-            child_idx_len,
-            child_data_len,
-        );
+        let mut cur_page_cols = child_table_as_page
+            .iter()
+            .skip(page_idx * page_height)
+            .take(page_height)
+            .map(|row| row.clone())
+            .collect::<Vec<PageCols<u32>>>();
+
+        // Every individual child page should be sorted by index
+        cur_page_cols.sort_by(|a, b| a.idx.cmp(&b.idx));
+
+        let cur_page = Page::from_page_cols(cur_page_cols);
 
         let cur_page_commit = page_loader.add_page(&cur_page, engine);
         let page_index_range = fkey_page_range(&cur_page, fkey_start, fkey_end);

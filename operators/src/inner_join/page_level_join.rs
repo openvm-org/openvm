@@ -44,7 +44,6 @@ pub struct PageLevelJoinPis<const COMMIT_LEN: usize> {
     pub pairs_list_index: u32,
     pub parent_page_commit: Commitment<COMMIT_LEN>,
     pub child_page_commit: Commitment<COMMIT_LEN>,
-    // pub pairs_commit: Commitment<COMMIT_LEN>,
     pub final_running_df_commit: Commitment<COMMIT_LEN>,
 }
 
@@ -82,10 +81,10 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         }
     }
 
-    /// Note that, currently, this function does not only trace generation
-    /// This function does part of the proof (specifically, caching input and output pages)
-    /// TODO: provide functionality to allow it to be purely trace generation
-    /// Note: for this function to do purely trace generation,
+    /// Note: for this function to do purely trace generation, the commitments and PoverTraceData
+    /// for the input and output pages have to be stored in page_loader. Otherwise, if the commitment
+    /// or the ProverTraceData is not present for a page, they will be generated in this function and
+    /// stored in the page_loader.
     pub fn generate_trace(
         &self,
         page_loader: &mut PageDataLoader<SC, COMMIT_LEN>,
@@ -131,9 +130,9 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         let prover_data = ij_controller.load_tables(
             &parent_page,
             &child_page,
-            None,
-            None,
-            None,
+            page_loader.get_pdata_by_commitment(&pis.parent_page_commit),
+            page_loader.get_pdata_by_commitment(&pis.child_page_commit),
+            page_loader.get_pdata_by_commitment(&pis.final_running_df_commit),
             intersector_trace_degree,
             &mut trace_builder.committer,
         );

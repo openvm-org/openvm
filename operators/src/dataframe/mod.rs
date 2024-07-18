@@ -3,7 +3,7 @@ use serde::Serialize;
 
 use crate::common::{hash_struct, Commitment};
 
-#[derive(Clone, Serialize, derive_new::new)]
+#[derive(Debug, Clone, Serialize, derive_new::new)]
 pub struct IndexRange {
     pub start: Vec<u32>,
     pub end: Vec<u32>,

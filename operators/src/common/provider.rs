@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    sync::Arc,
-};
+use std::collections::HashMap;
 
 use afs_chips::common::page::Page;
 use afs_stark_backend::{
@@ -27,7 +24,7 @@ pub trait DataProvider<SC: StarkGenericConfig, const COMMIT_LEN: usize> {
     fn get_pdata_by_commitment(
         &self,
         commitment: &Commitment<COMMIT_LEN>,
-    ) -> Option<Arc<ProverTraceData<SC>>>;
+    ) -> Option<ProverTraceData<SC>>;
 
     fn remove_page_and_pdata_by_commitment(&mut self, commitment: &Commitment<COMMIT_LEN>);
 
@@ -35,8 +32,8 @@ pub trait DataProvider<SC: StarkGenericConfig, const COMMIT_LEN: usize> {
         &mut self,
         commitment: &Commitment<COMMIT_LEN>,
         page: &Page,
-        pdata: Arc<ProverTraceData<SC>>,
-    ) -> Arc<ProverTraceData<SC>>;
+        pdata: ProverTraceData<SC>,
+    );
 
     fn add_page(&mut self, page: &Page, engine: &impl StarkEngine<SC>) -> Commitment<COMMIT_LEN>
     where
@@ -45,7 +42,7 @@ pub trait DataProvider<SC: StarkGenericConfig, const COMMIT_LEN: usize> {
 }
 pub struct PageDataLoader<SC: StarkGenericConfig, const COMMIT_LEN: usize> {
     pub page_map: BiMap<Commitment<COMMIT_LEN>, Page>,
-    pub pdata_map: HashMap<Commitment<COMMIT_LEN>, Arc<ProverTraceData<SC>>>,
+    pub pdata_map: HashMap<Commitment<COMMIT_LEN>, ProverTraceData<SC>>,
 }
 
 impl<SC: StarkGenericConfig, const COMMIT_LEN: usize> PageDataLoader<SC, COMMIT_LEN> {
@@ -88,7 +85,7 @@ impl<SC: StarkGenericConfig, const COMMIT_LEN: usize> DataProvider<SC, COMMIT_LE
     fn get_pdata_by_commitment(
         &self,
         commitment: &Commitment<COMMIT_LEN>,
-    ) -> Option<Arc<ProverTraceData<SC>>> {
+    ) -> Option<ProverTraceData<SC>> {
         self.pdata_map.get(commitment).cloned()
     }
 
@@ -101,11 +98,10 @@ impl<SC: StarkGenericConfig, const COMMIT_LEN: usize> DataProvider<SC, COMMIT_LE
         &mut self,
         commitment: &Commitment<COMMIT_LEN>,
         page: &Page,
-        pdata: Arc<ProverTraceData<SC>>,
-    ) -> Arc<ProverTraceData<SC>> {
+        pdata: ProverTraceData<SC>,
+    ) {
         self.page_map.insert(commitment.clone(), page.clone());
         self.pdata_map.insert(commitment.clone(), pdata.clone());
-        pdata
     }
 
     fn add_page(&mut self, page: &Page, engine: &impl StarkEngine<SC>) -> Commitment<COMMIT_LEN>
@@ -119,7 +115,7 @@ impl<SC: StarkGenericConfig, const COMMIT_LEN: usize> DataProvider<SC, COMMIT_LE
         }
 
         let (pdata, commitment) = self.gen_pdata_and_commitment(page, engine);
-        self.add_page_and_pdata_with_commitment(&commitment, page, Arc::new(pdata));
+        self.add_page_and_pdata_with_commitment(&commitment, page, pdata);
 
         commitment
     }

@@ -77,8 +77,6 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
             leaves.push(Some(Box::new(JoinCircuit::PageLevelJoin(page_level_join))));
         }
 
-        println!("leaves.len(): {:?}", leaves.len());
-
         let root = match leaves.len() {
             1 => Box::new(JoinCircuit::InternalNode(
                 InternalNode::<COMMIT_LEN, SC, E>::new(vec![Arc::from(leaves[0].take().unwrap())]),
