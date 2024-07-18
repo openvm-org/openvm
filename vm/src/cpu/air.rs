@@ -5,7 +5,7 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use afs_chips::{
-    is_equal_vec::{columns::IsEqualVecIOCols, IsEqualVecAir},
+    is_equal_vec::{columns::IsEqualVecIoCols, IsEqualVecAir},
     is_zero::{columns::IsZeroIOCols, IsZeroAir},
     sub_chip::SubAir,
 };
@@ -146,6 +146,22 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
             .when_transition()
             .assert_eq(next_pc, pc + inst_width);
 
+        // SHINTW: e[d[a] + b] <- ?
+        let shintw_flag = operation_flags[&SHINTW];
+        read1_enabled_check = read1_enabled_check + shintw_flag;
+        write_enabled_check = write_enabled_check + shintw_flag;
+
+        let mut when_shintw = builder.when(shintw_flag);
+        when_shintw.assert_eq(read1.address_space, d);
+        when_shintw.assert_eq(read1.address, a);
+
+        when_shintw.assert_eq(write.address_space, e);
+        self.assert_compose(&mut when_shintw, read1.data, write.address - b);
+
+        when_shintw
+            .when_transition()
+            .assert_eq(next_pc, pc + inst_width);
+
         // JAL: d[a] <- pc + INST_WIDTH, pc <- pc + b
         let jal_flag = operation_flags[&JAL];
         write_enabled_check = write_enabled_check + jal_flag;
@@ -256,10 +272,10 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
 
         // evaluate equality between read1 and read2
 
-        let is_equal_vec_io_cols = IsEqualVecIOCols {
+        let is_equal_vec_io_cols = IsEqualVecIoCols {
             x: read1.data.to_vec(),
             y: read2.data.to_vec(),
-            prod: read0_equals_read1,
+            is_equal: read0_equals_read1,
         };
         SubAir::eval(
             &IsEqualVecAir::new(WORD_SIZE),

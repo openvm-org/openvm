@@ -43,6 +43,8 @@ impl<F: Field> LocalTraceInstructions<F> for IsEqualVecAir {
             .chain(std::iter::repeat(F::zero()).take(vec_len - transition_index))
             .collect::<Vec<F>>();
 
+        let is_equal = prods[vec_len - 1];
+
         let mut invs = std::iter::repeat(F::zero())
             .take(vec_len)
             .collect::<Vec<F>>();
@@ -51,6 +53,6 @@ impl<F: Field> LocalTraceInstructions<F> for IsEqualVecAir {
             invs[transition_index] = (x_row[transition_index] - y_row[transition_index]).inverse();
         }
 
-        IsEqualVecCols::new(x_row, y_row, prods, invs)
+        IsEqualVecCols::new(x_row, y_row, is_equal, prods[..vec_len - 1].to_vec(), invs)
     }
 }

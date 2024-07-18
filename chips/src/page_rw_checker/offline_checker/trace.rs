@@ -117,7 +117,7 @@ impl OfflineChecker {
                 Val::<SC>::from_bool(is_read),
                 Val::<SC>::from_bool(is_write),
                 Val::<SC>::from_bool(is_delete),
-                is_equal_idx_cols.io.prod,
+                is_equal_idx_cols.io.is_equal,
                 lt_cols.io.tuple_less_than,
                 Val::<SC>::from_bool(is_extra),
                 is_equal_idx_cols.aux,
