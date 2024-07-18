@@ -73,7 +73,7 @@ where
         let table_id_full = inner_join_op.table_id_left.to_string();
         let prover_trace_data_encoded =
             read_from_path(cache_folder.clone() + "/" + &table_id_full + ".cache.bin").unwrap();
-        let (page1_input_pdata, page2_input_pdata, page_output_pdata): (
+        let (page1_input_pdata, page2_input_pdata, _page_output_pdata): (
             ProverTraceData<SC>,
             ProverTraceData<SC>,
             ProverTraceData<SC>,
