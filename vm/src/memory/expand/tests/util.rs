@@ -1,12 +1,10 @@
 use std::array::from_fn;
 
 use p3_air::BaseAir;
-use p3_field::{Field, PrimeField32};
+use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
-use afs_chips::sub_chip::LocalTraceInstructions;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
-use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
 
 use crate::memory::expand::POSEIDON2_DIRECT_REQUEST_BUS;
 use crate::memory::tree::HashProvider;
@@ -16,15 +14,6 @@ pub fn test_hash_sum<const CHUNK: usize, F: Field>(
     right: [F; CHUNK],
 ) -> [F; CHUNK] {
     from_fn(|i| left[i] + right[i])
-}
-
-pub fn test_hash_poseidon2<F: PrimeField32>(left: [F; 8], right: [F; 8]) -> [F; 8] {
-    let air =
-        Poseidon2Air::<16, F>::from_config(Poseidon2Config::<16, F>::new_p3_baby_bear_16(), 0);
-    let input_state = [left, right].concat().try_into().unwrap();
-    let internal = air.generate_trace_row(input_state);
-    let output = internal.io.output.to_vec();
-    output[0..8].try_into().unwrap()
 }
 
 pub struct HashTestChip<const CHUNK: usize, F> {

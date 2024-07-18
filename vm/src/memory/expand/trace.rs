@@ -7,9 +7,9 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::memory::expand::columns::ExpandCols;
 use crate::memory::expand::ExpandChip;
-use crate::memory::tree::{HashProvider, MemoryNode};
 use crate::memory::tree::MemoryNode::Leaf;
 use crate::memory::tree::MemoryNode::NonLeaf;
+use crate::memory::tree::{HashProvider, MemoryNode};
 
 impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {
     pub fn generate_trace_and_final_tree(
@@ -21,18 +21,15 @@ impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {
         let mut rows = vec![];
         let mut final_trees = HashMap::new();
         for (address_space, initial_tree) in self.initial_trees.clone() {
+            let mut tree_helper = TreeHelper {
+                address_space,
+                final_memory,
+                touched_nodes: &self.touched_nodes,
+                trace_rows: &mut rows,
+            };
             final_trees.insert(
                 address_space,
-                recur(
-                    self.height,
-                    initial_tree,
-                    0,
-                    address_space,
-                    final_memory,
-                    &self.touched_nodes,
-                    &mut rows,
-                    hash_provider,
-                ),
+                tree_helper.recur(self.height, initial_tree, 0, hash_provider),
             );
         }
         while rows.len() != trace_degree * ExpandCols::<CHUNK, F>::get_width() {
@@ -51,126 +48,109 @@ fn unused_row<const CHUNK: usize, F: PrimeField32>(
     result
 }
 
-/// Expects `initial_node`, `final_node` to be NonLeaf
-fn add_trace_rows<const CHUNK: usize, F: PrimeField32>(
-    height: usize,
-    label: usize,
-    initial_node: MemoryNode<CHUNK, F>,
-    final_node: MemoryNode<CHUNK, F>,
-    left_is_final: bool,
-    right_is_final: bool,
+struct TreeHelper<'a, const CHUNK: usize, F: PrimeField32> {
     address_space: F,
-    trace_rows: &mut Vec<F>,
-) {
-    let initial_cols = if let NonLeaf(hash, left, right) = initial_node {
-        ExpandCols {
-            direction: F::one(),
-            address_space,
-            parent_height: F::from_canonical_usize(height),
-            parent_label: F::from_canonical_usize(label),
-            parent_hash: hash,
-            left_child_hash: left.hash(),
-            right_child_hash: right.hash(),
-            left_is_final: F::from_bool(left_is_final),
-            right_is_final: F::from_bool(right_is_final),
-        }
-    } else {
-        panic!(
-            "trace_rows expects initial_node = {:?} to be NonLeaf",
-            initial_node
-        );
-    };
-    let final_cols = if let NonLeaf(hash, left, right) = final_node {
-        ExpandCols {
-            direction: F::neg_one(),
-            address_space,
-            parent_height: F::from_canonical_usize(height),
-            parent_label: F::from_canonical_usize(label),
-            parent_hash: hash,
-            left_child_hash: left.hash(),
-            right_child_hash: right.hash(),
-            left_is_final: F::zero(),
-            right_is_final: F::zero(),
-        }
-    } else {
-        panic!(
-            "trace_rows expects final_node = {:?} to be NonLeaf",
-            final_node
-        );
-    };
-    trace_rows.extend(initial_cols.flatten());
-    trace_rows.extend(final_cols.flatten());
+    final_memory: &'a HashMap<(F, F), F>,
+    touched_nodes: &'a HashSet<(F, usize, usize)>,
+    trace_rows: &'a mut Vec<F>,
 }
 
-fn recur<const CHUNK: usize, F: PrimeField32>(
-    height: usize,
-    initial_node: MemoryNode<CHUNK, F>,
-    label: usize,
-    address_space: F,
-    final_memory: &HashMap<(F, F), F>,
-    touched_nodes: &HashSet<(F, usize, usize)>,
-    trace_rows: &mut Vec<F>,
-    hash_provider: &mut impl HashProvider<CHUNK, F>,
-) -> MemoryNode<CHUNK, F> {
-    if height == 0 {
-        Leaf(from_fn(|i| {
-            *final_memory
-                .get(&(
-                    address_space,
-                    F::from_canonical_usize(CHUNK * label) + F::from_canonical_usize(i),
+impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
+    fn recur(
+        &mut self,
+        height: usize,
+        initial_node: MemoryNode<CHUNK, F>,
+        label: usize,
+        hash_provider: &mut impl HashProvider<CHUNK, F>,
+    ) -> MemoryNode<CHUNK, F> {
+        if height == 0 {
+            Leaf(from_fn(|i| {
+                *self
+                    .final_memory
+                    .get(&(
+                        self.address_space,
+                        F::from_canonical_usize(CHUNK * label) + F::from_canonical_usize(i),
+                    ))
+                    .unwrap_or(&F::zero())
+            }))
+        } else if let NonLeaf(_, initial_left_node, initial_right_node) = initial_node.clone() {
+            hash_provider.hash(initial_left_node.hash(), initial_right_node.hash());
+
+            let left_label = 2 * label;
+            let left_is_final =
+                !self
+                    .touched_nodes
+                    .contains(&(self.address_space, height - 1, left_label));
+            let final_left_node = if left_is_final {
+                initial_left_node
+            } else {
+                Arc::new(self.recur(
+                    height - 1,
+                    (*initial_left_node).clone(),
+                    left_label,
+                    hash_provider,
                 ))
-                .unwrap_or(&F::zero())
-        }))
-    } else if let NonLeaf(_, initial_left_node, initial_right_node) = initial_node.clone() {
-        hash_provider.hash(initial_left_node.hash(), initial_right_node.hash());
+            };
 
-        let left_label = 2 * label;
-        let left_is_final = !touched_nodes.contains(&(address_space, height - 1, left_label));
-        let final_left_node = if left_is_final {
-            initial_left_node
+            let right_label = (2 * label) + 1;
+            let right_is_final =
+                !self
+                    .touched_nodes
+                    .contains(&(self.address_space, height - 1, right_label));
+            let final_right_node = if right_is_final {
+                initial_right_node
+            } else {
+                Arc::new(self.recur(
+                    height - 1,
+                    (*initial_right_node).clone(),
+                    right_label,
+                    hash_provider,
+                ))
+            };
+
+            let final_node =
+                MemoryNode::new_nonleaf(final_left_node, final_right_node, hash_provider);
+            self.add_trace_row(
+                height,
+                label,
+                initial_node,
+                Some([left_is_final, right_is_final]),
+            );
+            self.add_trace_row(height, label, final_node.clone(), None);
+            final_node
         } else {
-            Arc::new(recur(
-                height - 1,
-                (*initial_left_node).clone(),
-                left_label,
-                address_space,
-                final_memory,
-                touched_nodes,
-                trace_rows,
-                hash_provider,
-            ))
-        };
+            panic!("Leaf {:?} found at nonzero height {}", initial_node, height);
+        }
+    }
 
-        let right_label = (2 * label) + 1;
-        let right_is_final = !touched_nodes.contains(&(address_space, height - 1, right_label));
-        let final_right_node = if right_is_final {
-            initial_right_node
+    /// Expects `node` to be NonLeaf
+    fn add_trace_row(
+        &mut self,
+        height: usize,
+        label: usize,
+        node: MemoryNode<CHUNK, F>,
+        are_final: Option<[bool; 2]>,
+    ) {
+        let [left_is_final, right_is_final] = are_final.unwrap_or([false; 2]);
+        let cols = if let NonLeaf(hash, left, right) = node {
+            ExpandCols {
+                direction: if are_final.is_some() {
+                    F::one()
+                } else {
+                    F::neg_one()
+                },
+                address_space: self.address_space,
+                parent_height: F::from_canonical_usize(height),
+                parent_label: F::from_canonical_usize(label),
+                parent_hash: hash,
+                left_child_hash: left.hash(),
+                right_child_hash: right.hash(),
+                left_is_final: F::from_bool(left_is_final),
+                right_is_final: F::from_bool(right_is_final),
+            }
         } else {
-            Arc::new(recur(
-                height - 1,
-                (*initial_right_node).clone(),
-                right_label,
-                address_space,
-                final_memory,
-                touched_nodes,
-                trace_rows,
-                hash_provider,
-            ))
+            panic!("trace_rows expects node = {:?} to be NonLeaf", node);
         };
-
-        let final_node = MemoryNode::new_nonleaf(final_left_node, final_right_node, hash_provider);
-        add_trace_rows(
-            height,
-            label,
-            initial_node,
-            final_node.clone(),
-            left_is_final,
-            right_is_final,
-            address_space,
-            trace_rows,
-        );
-        final_node
-    } else {
-        panic!("Leaf {:?} found at nonzero height {}", initial_node, height);
+        self.trace_rows.extend(cols.flatten());
     }
 }
