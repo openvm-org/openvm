@@ -1,9 +1,9 @@
 use afs_primitives::offline_checker::OfflineCheckerOperation;
 use p3_field::PrimeField64;
-use std::array::from_fn;
-
-pub mod expand;
 pub mod offline_checker;
+pub mod expand;
+
+pub mod interface;
 #[cfg(test)]
 pub mod tests;
 pub mod tree;
