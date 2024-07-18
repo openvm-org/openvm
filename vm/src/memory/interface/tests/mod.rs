@@ -10,8 +10,8 @@ use afs_test_utils::config::baby_bear_blake3::run_simple_test_no_pis;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::create_seeded_rng;
 
+use crate::memory::interface::{EXPAND_BUS, MEMORY_INTERFACE_BUS, MemoryInterfaceChip};
 use crate::memory::interface::columns::MemoryInterfaceCols;
-use crate::memory::interface::{MemoryInterfaceChip, EXPAND_BUS, MEMORY_INTERFACE_BUS};
 use crate::memory::OpType::{Read, Write};
 
 const DEFAULT_CHUNK: usize = 8;
@@ -55,7 +55,7 @@ fn random_test<const CHUNK: usize>(
 
     let mut initial_memory = HashMap::new();
     let mut final_memory = HashMap::new();
-    let mut chip = MemoryInterfaceChip::<CHUNK, _>::new();
+    let mut chip = MemoryInterfaceChip::<CHUNK, _>::default();
 
     let mut touched_leaves = HashSet::new();
 
@@ -210,7 +210,7 @@ fn memory_interface_test_2() {
 #[test]
 #[should_panic]
 fn expand_negative_test() {
-    let mut chip = MemoryInterfaceChip::<DEFAULT_CHUNK, _>::new();
+    let mut chip = MemoryInterfaceChip::<DEFAULT_CHUNK, _>::default();
     chip.touched_leaves.insert((BabyBear::one(), 0));
     let trace = chip.generate_trace(&HashMap::new(), chip.get_trace_height().next_power_of_two());
     run_simple_test_no_pis(vec![&chip.air()], vec![trace]).expect("This should occur");

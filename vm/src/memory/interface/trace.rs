@@ -58,8 +58,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryInterfaceChip<CHUNK, F> {
         while rows.len() != trace_degree * MemoryInterfaceCols::<CHUNK, F>::get_width() {
             rows.extend(Self::unused_row().flatten());
         }
-        let trace = RowMajorMatrix::new(rows, MemoryInterfaceCols::<CHUNK, F>::get_width());
-        trace
+        RowMajorMatrix::new(rows, MemoryInterfaceCols::<CHUNK, F>::get_width())
     }
 
     fn unused_row() -> MemoryInterfaceCols<CHUNK, F> {

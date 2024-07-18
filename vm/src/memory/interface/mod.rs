@@ -22,19 +22,13 @@ struct Cell<F: Field> {
     initial_value: F,
 }
 
+#[derive(Default)]
 pub struct MemoryInterfaceChip<const CHUNK: usize, F: PrimeField32> {
     touched_leaves: HashSet<(F, usize)>,
     touched_addresses: HashMap<(F, F), Cell<F>>,
 }
 
 impl<const CHUNK: usize, F: PrimeField32> MemoryInterfaceChip<CHUNK, F> {
-    pub fn new() -> Self {
-        Self {
-            touched_leaves: HashSet::new(),
-            touched_addresses: HashMap::new(),
-        }
-    }
-
     pub fn air(&self) -> MemoryInterfaceAir<CHUNK> {
         MemoryInterfaceAir {}
     }
