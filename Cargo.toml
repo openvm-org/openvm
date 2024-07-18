@@ -6,7 +6,7 @@ members = [
     "test-utils",
     "derive",
     "bin/afs",
-    "bin/predicate",
+    "bin/olap",
     "benchmark",
     "logical-interface",
     "vm",

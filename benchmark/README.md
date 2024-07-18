@@ -29,7 +29,7 @@ Percentage (where 100 = 100%) of config file's `max_rw_ops` that are `READ`s. No
 Run these commands from the root of the repository
 
 ```bash
-cargo run --release --bin benchmark -- predicate --p lt 20000
+cargo run --release --bin benchmark -- predicate -p lt 20000
 ```
 
 ### `--predicate` (`-p`)

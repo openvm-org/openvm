@@ -1,8 +1,6 @@
 use afs_stark_backend::config::Com;
 use afs_stark_backend::config::PcsProof;
 use afs_stark_backend::config::PcsProverData;
-use afs_stark_backend::config::StarkGenericConfig;
-use afs_stark_backend::config::Val;
 use afs_test_utils::config::baby_bear_blake3::BabyBearBlake3Engine;
 use afs_test_utils::config::baby_bear_bytehash::engine_from_byte_hash;
 use afs_test_utils::config::baby_bear_keccak::BabyBearKeccakEngine;
@@ -18,16 +16,19 @@ use p3_blake3::Blake3;
 use p3_field::PrimeField64;
 use p3_keccak::Keccak256Hash;
 use p3_uni_stark::Domain;
+use p3_uni_stark::StarkGenericConfig;
+use p3_uni_stark::Val;
 use p3_util::log2_strict_usize;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::commands::{
-    keygen::KeygenCommand, prove::ProveCommand, verify::VerifyCommand, CommonCommands,
-};
+use crate::commands::cache::CacheCommand;
+use crate::commands::keygen::KeygenCommand;
+use crate::commands::prove::ProveCommand;
+use crate::commands::verify::VerifyCommand;
 
 #[derive(Debug, Parser)]
-#[command(author, version, about = "AFS Predicate CLI")]
+#[command(author, version, about = "OLAP CLI")]
 #[command(propagate_version = true)]
 pub struct Cli<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     #[command(subcommand)]
@@ -36,13 +37,20 @@ pub struct Cli<SC: StarkGenericConfig, E: StarkEngine<SC>> {
 
 #[derive(Debug, Subcommand)]
 pub enum CliCommand<SC: StarkGenericConfig, E: StarkEngine<SC>> {
-    #[command(name = "keygen", about = "Generate keys")]
+    #[command(name = "keygen", about = "Generate proving and verifying keys")]
+    /// Run key generation
     Keygen(KeygenCommand<SC, E>),
 
-    #[command(name = "prove", about = "Prove the predicate operation")]
+    #[command(name = "cache", about = "Cache trace data")]
+    /// Run cache command
+    Cache(CacheCommand<SC, E>),
+
+    #[command(name = "prove", about = "Run proof generation")]
+    /// Run proof generation
     Prove(ProveCommand<SC, E>),
 
-    #[command(name = "verify", about = "Verify the predicate operation")]
+    #[command(name = "verify", about = "Verify the proof")]
+    /// Run proof verification
     Verify(VerifyCommand<SC, E>),
 }
 
@@ -63,48 +71,31 @@ where
         let cli = Self::parse();
         match &cli.command {
             CliCommand::Keygen(keygen) => {
-                let common = CommonCommands {
-                    predicate: keygen.common.predicate.clone(),
-                    cache_folder: keygen.common.cache_folder.clone(),
-                    output_folder: keygen.common.output_folder.clone(),
-                    silent: keygen.common.silent,
-                };
-                KeygenCommand::execute(config, engine, &common).unwrap();
+                KeygenCommand::execute(config, engine, &keygen.common, keygen.keys_folder.clone())
+                    .unwrap();
+            }
+            CliCommand::Cache(cache) => {
+                CacheCommand::execute(config, engine, &cache.common, cache.cache_folder.clone())
+                    .unwrap();
             }
             CliCommand::Prove(prove) => {
-                let common = CommonCommands {
-                    predicate: prove.common.predicate.clone(),
-                    cache_folder: prove.common.cache_folder.clone(),
-                    output_folder: prove.common.output_folder.clone(),
-                    silent: prove.common.silent,
-                };
                 ProveCommand::execute(
                     config,
                     engine,
-                    &common,
-                    prove.value.clone(),
-                    prove.table_id.clone(),
-                    prove.db_file_path.clone(),
+                    &prove.common,
                     prove.keys_folder.clone(),
-                    prove.input_trace_file.clone(),
-                    prove.output_trace_folder.clone(),
+                    prove.cache_folder.clone(),
                 )
                 .unwrap();
             }
             CliCommand::Verify(verify) => {
-                let common = CommonCommands {
-                    predicate: verify.common.predicate.clone(),
-                    cache_folder: verify.common.cache_folder.clone(),
-                    output_folder: verify.common.output_folder.clone(),
-                    silent: verify.common.silent,
-                };
                 VerifyCommand::execute(
                     config,
                     engine,
-                    &common,
-                    verify.value.clone(),
-                    verify.table_id.clone(),
+                    &verify.common,
                     verify.keys_folder.clone(),
+                    verify.cache_folder.clone(),
+                    verify.proof_path.clone(),
                 )
                 .unwrap();
             }
