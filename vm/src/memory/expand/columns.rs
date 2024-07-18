@@ -1,8 +1,7 @@
 use std::array::from_fn;
 
 pub struct ExpandCols<const CHUNK: usize, T> {
-    pub multiplicity: T,
-    pub is_compress: T,
+    pub direction: T,
     pub address_space: T,
     pub parent_height: T,
     pub parent_label: T,
@@ -21,8 +20,7 @@ impl<const CHUNK: usize, T: Clone> ExpandCols<CHUNK, T> {
             slc[slc_index - 1].clone()
         };
 
-        let multiplicity = take();
-        let is_compress = take();
+        let direction = take();
         let address_space = take();
         let height = take();
         let parent_label = take();
@@ -33,8 +31,7 @@ impl<const CHUNK: usize, T: Clone> ExpandCols<CHUNK, T> {
         let right_is_final = take();
 
         Self {
-            multiplicity,
-            is_compress,
+            direction,
             address_space,
             parent_height: height,
             parent_label,
@@ -48,8 +45,7 @@ impl<const CHUNK: usize, T: Clone> ExpandCols<CHUNK, T> {
 
     pub fn flatten(&self) -> Vec<T> {
         let mut result = vec![
-            self.multiplicity.clone(),
-            self.is_compress.clone(),
+            self.direction.clone(),
             self.address_space.clone(),
             self.parent_height.clone(),
             self.parent_label.clone(),
@@ -63,6 +59,6 @@ impl<const CHUNK: usize, T: Clone> ExpandCols<CHUNK, T> {
     }
 
     pub fn get_width() -> usize {
-        5 + (3 * CHUNK) + 2
+        4 + (3 * CHUNK) + 2
     }
 }

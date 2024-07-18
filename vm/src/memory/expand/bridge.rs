@@ -3,9 +3,9 @@ use p3_field::Field;
 
 use afs_stark_backend::interaction::{AirBridge, Interaction};
 
+use crate::memory::expand::{EXPAND_BUS, POSEIDON2_DIRECT_REQUEST_BUS};
 use crate::memory::expand::air::ExpandAir;
 use crate::memory::expand::columns::ExpandCols;
-use crate::memory::expand::{EXPAND_BUS, POSEIDON2_DIRECT_REQUEST_BUS};
 
 fn interaction<const CHUNK: usize, F: Field>(
     sends: VirtualPairCol<F>,
@@ -51,22 +51,25 @@ impl<const CHUNK: usize, F: Field> AirBridge<F> for ExpandAir<CHUNK> {
 
         vec![
             interaction(
+                VirtualPairCol::new_main(vec![(cols_numbered.direction, F::neg_one())], F::zero()),
                 VirtualPairCol::new_main(
-                    vec![(cols_numbered.multiplicity, F::neg_one())],
-                    F::zero(),
+                    vec![(cols_numbered.direction, F::neg(F::two().inverse()))],
+                    F::two().inverse(),
                 ),
-                VirtualPairCol::single_main(cols_numbered.is_compress),
                 VirtualPairCol::single_main(cols_numbered.parent_height),
                 VirtualPairCol::single_main(cols_numbered.parent_label),
                 cols_numbered.address_space,
                 cols_numbered.parent_hash,
             ),
             interaction(
-                VirtualPairCol::single_main(cols_numbered.multiplicity),
-                VirtualPairCol::sum_main(vec![
-                    cols_numbered.is_compress,
-                    cols_numbered.left_is_final,
-                ]),
+                VirtualPairCol::single_main(cols_numbered.direction),
+                VirtualPairCol::new_main(
+                    vec![
+                        (cols_numbered.direction, F::neg(F::two().inverse())),
+                        (cols_numbered.left_is_final, F::one()),
+                    ],
+                    F::two().inverse(),
+                ),
                 child_height.clone(),
                 VirtualPairCol::new(
                     vec![(PairCol::Main(cols_numbered.parent_label), F::two())],
@@ -76,11 +79,14 @@ impl<const CHUNK: usize, F: Field> AirBridge<F> for ExpandAir<CHUNK> {
                 cols_numbered.left_child_hash,
             ),
             interaction(
-                VirtualPairCol::single_main(cols_numbered.multiplicity),
-                VirtualPairCol::sum_main(vec![
-                    cols_numbered.is_compress,
-                    cols_numbered.right_is_final,
-                ]),
+                VirtualPairCol::single_main(cols_numbered.direction),
+                VirtualPairCol::new_main(
+                    vec![
+                        (cols_numbered.direction, F::neg(F::two().inverse())),
+                        (cols_numbered.right_is_final, F::one()),
+                    ],
+                    F::two().inverse(),
+                ),
                 child_height,
                 VirtualPairCol::new(
                     vec![(PairCol::Main(cols_numbered.parent_label), F::two())],
