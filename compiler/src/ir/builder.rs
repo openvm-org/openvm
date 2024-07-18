@@ -4,7 +4,7 @@ use backtrace::Backtrace;
 use p3_field::AbstractField;
 
 use super::{
-    Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, Ptr, SymbolicExt,
+    Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, SymbolicExt,
     SymbolicFelt, SymbolicUsize, SymbolicVar, Usize, Var, Variable,
 };
 
@@ -367,25 +367,35 @@ impl<C: Config> Builder<C> {
         // Allocate space for the length variable. We assume that mem[ptr..] is empty.
         let ptr = self.alloc(Usize::Const(1), 1);
 
-        // Write length + data to memory starting at mem[ptr].
-        self.operations.push(DslIr::Hint(ptr));
+        // Prepare length + data for hinting.
+        self.operations.push(DslIr::HintInputVec());
 
-        // Copy length into local variable.
+        // Write and retrieve length hint.
         let index = MemIndex {
             index: Usize::Const(0),
             offset: 0,
             size: 1,
         };
+        self.operations.push(DslIr::StoreHintWord(ptr, index));
+
         let vlen: Var<C::N> = self.uninit();
         self.load(vlen, ptr, index);
 
-        // Create array of length vlen starting at mem[ptr + 1].
-        let arr_addr: Var<C::N> = self.eval(ptr.address + C::N::one());
-        let arr_ptr = Ptr::<C::N> { address: arr_addr };
-        let arr = Array::Dyn(arr_ptr, Usize::Var(vlen));
+        let arr = self.dyn_array(vlen);
+        let ptr = match arr {
+            Array::Dyn(ptr, _) => ptr,
+            Array::Fixed(_) => unreachable!(),
+        };
 
-        // Now allocate post hoc to advance the free memory pointer.
-        self.push(DslIr::Alloc(ptr, vlen.into(), 1));
+        // Write the content hints directly into the array memory.
+        self.range(0, vlen).for_each(|i, builder| {
+            let index = MemIndex {
+                index: Usize::Var(i),
+                offset: 0,
+                size: 1,
+            };
+            builder.operations.push(DslIr::StoreHintWord(ptr, index));
+        });
 
         arr
     }

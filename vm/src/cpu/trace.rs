@@ -1,7 +1,7 @@
-use std::{collections::BTreeMap, error::Error, fmt::Display};
-
 use p3_field::{Field, PrimeField32, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
+use std::collections::VecDeque;
+use std::{collections::BTreeMap, error::Error, fmt::Display};
 
 use afs_chips::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
@@ -27,6 +27,7 @@ pub struct Instruction<F> {
     pub d: F,
     pub e: F,
 }
+
 pub fn isize_to_field<F: Field>(value: isize) -> F {
     if value < 0 {
         return F::neg_one() * F::from_canonical_usize(value.unsigned_abs());
@@ -83,7 +84,8 @@ pub enum ExecutionError {
     Fail(usize),
     PcOutOfBounds(usize, usize),
     DisabledOperation(usize, OpCode),
-    HintOutOfBounds(usize, usize, usize),
+    HintOutOfBounds(usize),
+    EndOfInputStream(usize),
 }
 
 impl Display for ExecutionError {
@@ -98,11 +100,8 @@ impl Display for ExecutionError {
             ExecutionError::DisabledOperation(pc, op) => {
                 write!(f, "at pc = {}, opcode {:?} was not enabled", pc, op)
             }
-            ExecutionError::HintOutOfBounds(pc, witness_idx, witness_len) => write!(
-                f,
-                "at pc = {}, witness index = {} out of bounds for witness_stream of length {}",
-                pc, witness_idx, witness_len
-            ),
+            ExecutionError::HintOutOfBounds(pc) => write!(f, "at pc = {}", pc),
+            ExecutionError::EndOfInputStream(pc) => write!(f, "at pc = {}", pc),
         }
     }
 }
@@ -119,7 +118,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
         let mut timestamp: usize = 0;
         let mut pc = F::zero();
 
-        let mut witness_idx = 0;
+        let mut hint_stream = VecDeque::new();
 
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
@@ -246,17 +245,33 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 PERM_POS2 | COMP_POS2 => {
                     Poseidon2Chip::<16, _>::poseidon2_perm(vm, timestamp, instruction);
                 }
-                HINT => {
-                    if witness_idx >= vm.witness_stream.len() {
-                        return Err(ExecutionError::HintOutOfBounds(
-                            pc_usize,
-                            witness_idx,
-                            vm.witness_stream.len(),
-                        ));
+                HINT_INPUT => {
+                    let hint = match vm.input_stream.pop_front() {
+                        Some(hint) => hint,
+                        None => return Err(ExecutionError::EndOfInputStream(pc_usize)),
+                    };
+                    hint_stream = VecDeque::new();
+                    hint_stream.push_back(F::from_canonical_usize(hint.len()));
+                    hint_stream.extend(hint);
+                }
+                HINT_BITS => {
+                    let val = vm.memory_chip.unsafe_read_elem(d, a);
+                    let mut val = val.as_canonical_u32();
+
+                    hint_stream = VecDeque::new();
+                    for _ in 0..32 {
+                        hint_stream.push_back(F::from_canonical_u32(val & 1));
+                        val >>= 1;
                     }
-                    let next_input = &vm.witness_stream[witness_idx];
-                    witness_idx += 1;
-                    vm.memory_chip.write_hint(a, d, e, next_input);
+                }
+                // e[d[a] + b] <- hint_stream.next()
+                SHINTW => {
+                    let hint = match hint_stream.pop_front() {
+                        Some(hint) => hint,
+                        None => return Err(ExecutionError::HintOutOfBounds(pc_usize)),
+                    };
+                    let base_pointer = read!(d, a);
+                    write!(e, base_pointer + b, hint);
                 }
             };
 
