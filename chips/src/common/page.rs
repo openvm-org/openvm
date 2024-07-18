@@ -20,7 +20,7 @@ use super::page_cols::PageCols;
 /// - Allocated rows come first
 /// - Allocated rows are sorted by idx and indices are distinct
 /// - Unallocated rows are all zeros
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Hash, Eq, Serialize, Deserialize)]
 pub struct Page {
     rows: Vec<PageCols<u32>>,
 }
@@ -202,6 +202,30 @@ impl Page {
                 .collect(),
             self.width(),
         )
+    }
+
+    /// Returns the smallest and largest indices from all allocated rows
+    /// in the page. Assumes that the page is sorted.
+    /// If the page is empty, returns vectors of zeros.
+    pub fn get_index_range(&self) -> (Vec<u32>, Vec<u32>) {
+        if self.rows[0].is_alloc == 0 {
+            return (vec![0; self.idx_len()], vec![0; self.idx_len()]);
+        }
+
+        let smallest_idx = self.rows[0].idx.clone();
+        // Doing binary search to find the largest index
+        let mut l = 0;
+        let mut r = self.height() - 1;
+        while l <= r {
+            let mid = (l + r) / 2;
+            if self[mid].is_alloc == 1 {
+                l = mid + 1;
+            } else {
+                r = mid - 1;
+            }
+        }
+        let largest_idx = self.rows[r].idx.clone();
+        (smallest_idx, largest_idx)
     }
 
     pub fn resize(&mut self, new_len: usize, value: PageCols<u32>) {

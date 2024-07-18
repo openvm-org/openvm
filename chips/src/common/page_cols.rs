@@ -2,7 +2,7 @@ use std::iter;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, derive_new::new)]
+#[derive(Clone, Debug, Hash, Eq, Serialize, Deserialize, PartialEq, derive_new::new)]
 pub struct PageCols<T> {
     pub is_alloc: T, // indicates if row is allocated
     pub idx: Vec<T>,

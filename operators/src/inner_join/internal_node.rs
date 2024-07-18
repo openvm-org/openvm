@@ -1,14 +1,18 @@
 use std::{cell::RefCell, sync::Arc};
 
-use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
+use afs_stark_backend::{
+    config::{Com, PcsProof, PcsProverData},
+    prover::trace::ProverTraceData,
+};
 use afs_test_utils::engine::StarkEngine;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use serde::{de::DeserializeOwned, Serialize};
 
 use super::{page_level_join::PageLevelJoin, two_pointers_program::TwoPointersProgram};
 use crate::{
-    common::{hash_struct, provider::BTreeMapPageLoader, Commitment},
+    common::{hash_struct, provider::PageDataLoader, Commitment},
     dataframe::DataFrame,
 };
 
@@ -64,8 +68,9 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
 
     pub fn generate_trace_for_tree(
         &self,
-        page_loader: &mut BTreeMapPageLoader<SC, COMMIT_LEN>,
+        page_loader: &mut PageDataLoader<SC, COMMIT_LEN>,
         output_df: &mut DataFrame<COMMIT_LEN>,
+        pairs: &Vec<(Commitment<COMMIT_LEN>, Commitment<COMMIT_LEN>)>,
         pairs_commit: &Commitment<COMMIT_LEN>,
         pairs_list_index: &mut u32,
         parent_df: &DataFrame<COMMIT_LEN>,
@@ -73,6 +78,8 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         engine: &E,
     ) where
         Val<SC>: PrimeField,
+        Com<SC>: Into<[BabyBear; COMMIT_LEN]>,
+        ProverTraceData<SC>: DeserializeOwned + Serialize,
     {
         let mut pis = self.pis.borrow_mut();
 
@@ -85,7 +92,16 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         for child in self.children.iter() {
             match child.as_ref() {
                 JoinCircuit::PageLevelJoin(circuit) => {
-                    circuit.generate_trace(page_loader, output_df, pairs_list_index, engine);
+                    let parent_page_commit = pairs[*pairs_list_index as usize].0.clone();
+                    let child_page_commit = pairs[*pairs_list_index as usize].1.clone();
+                    circuit.generate_trace(
+                        page_loader,
+                        parent_page_commit,
+                        child_page_commit,
+                        output_df,
+                        pairs_list_index,
+                        engine,
+                    );
                 }
                 JoinCircuit::TwoPointersProgram(circuit) => {
                     circuit.generate_trace(parent_df, child_df)
@@ -93,6 +109,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
                 JoinCircuit::InternalNode(circuit) => circuit.generate_trace_for_tree(
                     page_loader,
                     output_df,
+                    pairs,
                     pairs_commit,
                     pairs_list_index,
                     parent_df,
@@ -104,11 +121,6 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
 
         pis.largest_pairs_list_index = *pairs_list_index - 1;
         pis.final_rannung_df_commit = hash_struct(&output_df);
-
-        println!(
-            "range for pairs {:?}",
-            pis.smallest_pairs_list_index..pis.largest_pairs_list_index
-        );
     }
 
     pub fn set_up_keygen_builder_for_tree(&self, engine: &E)

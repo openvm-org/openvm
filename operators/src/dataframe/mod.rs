@@ -1,5 +1,4 @@
 use afs_chips::common::page::Page;
-use afs_stark_backend::commit;
 use serde::Serialize;
 
 use crate::common::{hash_struct, Commitment};

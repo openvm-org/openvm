@@ -17,11 +17,12 @@ use afs_test_utils::engine::StarkEngine;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
     common::{
         hash_struct,
-        provider::{BTreeMapPageLoader, PageProvider},
+        provider::{DataProvider, PageDataLoader},
         Commitment,
     },
     dataframe::DataFrame,
@@ -84,22 +85,30 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
     /// Note that, currently, this function does not only trace generation
     /// This function does part of the proof (specifically, caching input and output pages)
     /// TODO: provide functionality to allow it to be purely trace generation
+    /// Note: for this function to do purely trace generation,
     pub fn generate_trace(
         &self,
-        page_loader: &mut BTreeMapPageLoader<SC, COMMIT_LEN>,
+        page_loader: &mut PageDataLoader<SC, COMMIT_LEN>,
+        parent_page_commit: Commitment<COMMIT_LEN>,
+        child_page_commit: Commitment<COMMIT_LEN>,
         output_df: &mut DataFrame<COMMIT_LEN>,
         pairs_list_index: &mut u32,
         engine: &E,
     ) where
         Val<SC>: PrimeField,
+        Com<SC>: Into<[BabyBear; COMMIT_LEN]>,
+        ProverTraceData<SC>: DeserializeOwned + Serialize,
     {
         let mut pis = self.pis.borrow_mut();
 
+        pis.parent_page_commit = parent_page_commit;
+        pis.child_page_commit = child_page_commit;
+
         let parent_page = page_loader
-            .load_page_by_commitment(&pis.parent_page_commit)
+            .get_page_by_commitment(&pis.parent_page_commit)
             .unwrap();
         let child_page = page_loader
-            .load_page_by_commitment(&pis.child_page_commit)
+            .get_page_by_commitment(&pis.child_page_commit)
             .unwrap();
 
         pis.init_running_df_commit = hash_struct(&output_df);
@@ -109,8 +118,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
 
         let output_page = ij_controller.inner_join(&parent_page, &child_page);
 
-        let output_page_commit = hash_struct(&output_page); // TODO: update this to be the correct commitment
-        page_loader.add_page_with_commitment(&output_page_commit, &output_page);
+        let output_page_commit = page_loader.add_page(&output_page, engine);
         output_df.push_unindexed_page(output_page_commit.clone());
         *pairs_list_index += 1;
 
@@ -193,13 +201,12 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         let (parent_page_commit, child_page_commit, output_page_commit) =
             Self::get_page_commits_from_proof(&proof, &partial_vk);
 
-        // TODO: this should be uncommented when computing the page commitment in a consistent way throughout
-        // assert_eq!(pis.parent_page_commit, parent_page_commit);
-        // assert_eq!(pis.child_page_commit, child_page_commit);
+        assert_eq!(pis.parent_page_commit, parent_page_commit);
+        assert_eq!(pis.child_page_commit, child_page_commit);
 
-        // assert_eq!(hash_struct(&output_df), pis.init_running_df_commit);
+        assert_eq!(hash_struct(&output_df), pis.init_running_df_commit);
         output_df.push_unindexed_page(output_page_commit.clone());
-        // assert_eq!(hash_struct(&output_df), pis.final_running_df_commit);
+        assert_eq!(hash_struct(&output_df), pis.final_running_df_commit);
 
         let ij_controller = self.ij_controller.borrow();
         ij_controller

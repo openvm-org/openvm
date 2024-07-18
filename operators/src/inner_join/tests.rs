@@ -2,20 +2,23 @@ use afs_chips::{
     common::page::Page,
     inner_join::controller::{T2Format, TableFormat},
 };
-use afs_test_utils::{config, utils::create_seeded_rng};
-use p3_uni_stark::StarkGenericConfig;
+use afs_test_utils::{
+    config::{
+        self,
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+    },
+    utils::create_seeded_rng,
+};
 use rand::Rng;
 
 use crate::{
-    common::{
-        hash_struct,
-        provider::{BTreeMapPageLoader, PageProvider},
-        Commitment,
-    },
+    common::provider::{DataProvider, PageDataLoader},
     dataframe::{DataFrame, DataFrameType, IndexRange},
 };
 
 use super::TableJoinController;
+
+const COMMIT_LEN: usize = 8;
 
 #[test]
 pub fn one_page_table_inner_join_test() {
@@ -24,12 +27,12 @@ pub fn one_page_table_inner_join_test() {
     let num_parent_pages = 4;
     let num_child_pages = 4;
 
+    let engine = config::baby_bear_poseidon2::default_engine(decomp.max(log_page_height + 1));
+
     let (parent_page_format, child_page_format, parent_df, child_df, mut page_loader) =
-        generate_two_tables(log_page_height, num_parent_pages, num_child_pages);
+        generate_two_tables(log_page_height, num_parent_pages, num_child_pages, &engine);
 
     let mut output_df = DataFrame::new(vec![], DataFrameType::Unindexed);
-
-    let engine = config::baby_bear_poseidon2::default_engine(decomp.max(log_page_height + 1));
 
     let mut ij_table_controller = TableJoinController::new(
         parent_df,
@@ -46,20 +49,20 @@ pub fn one_page_table_inner_join_test() {
     ij_table_controller.verify(&engine, &mut output_df);
 }
 
-fn generate_two_tables<SC: StarkGenericConfig>(
+fn generate_two_tables(
     log_page_height: usize,
     num_parent_pages: usize,
     num_child_pages: usize,
+    engine: &BabyBearPoseidon2Engine,
 ) -> (
     TableFormat,
     T2Format,
-    DataFrame<8>,
-    DataFrame<8>,
-    BTreeMapPageLoader<SC, 8>,
+    DataFrame<COMMIT_LEN>,
+    DataFrame<COMMIT_LEN>,
+    PageDataLoader<BabyBearPoseidon2Config, COMMIT_LEN>,
 ) {
     let mut rng = create_seeded_rng();
 
-    const COMMIT_LEN: usize = 8;
     const MAX_VAL: u32 = 0x78000001 / 2; // The prime used by BabyBear / 2
 
     let parent_idx_len = rng.gen::<usize>() % 2 + 2;
@@ -109,7 +112,7 @@ fn generate_two_tables<SC: StarkGenericConfig>(
             .clone_from_slice(&parent_table_as_page.get_random_idx(&mut rng));
     }
 
-    let mut page_loader = BTreeMapPageLoader::new(Commitment::<COMMIT_LEN>::default());
+    let mut page_loader = PageDataLoader::empty();
 
     // Building the parent table Indexed DataFrame with ranges coming from idx
     let mut parent_df = DataFrame::empty_indexed();
@@ -125,13 +128,12 @@ fn generate_two_tables<SC: StarkGenericConfig>(
             parent_data_len,
         );
 
-        let cur_page_commit = hash_struct(&cur_page); // TODO: replace this
+        let cur_page_commit = page_loader.add_page(&cur_page, engine);
         let page_index_range = cur_page.get_index_range();
         parent_df.push_indexed_page(
             cur_page_commit.clone(),
             IndexRange::new(page_index_range.0, page_index_range.1),
         );
-        page_loader.add_page_with_commitment(&cur_page_commit, &cur_page);
     }
 
     // Building the child table Indexed DataFrame with ranges coming from the foreign key
@@ -148,10 +150,9 @@ fn generate_two_tables<SC: StarkGenericConfig>(
             child_data_len,
         );
 
-        let cur_page_commit = hash_struct(&cur_page); // TODO: replace this
+        let cur_page_commit = page_loader.add_page(&cur_page, engine);
         let page_index_range = fkey_page_range(&cur_page, fkey_start, fkey_end);
         child_df.push_indexed_page(cur_page_commit.clone(), page_index_range);
-        page_loader.add_page_with_commitment(&cur_page_commit, &cur_page);
     }
 
     (

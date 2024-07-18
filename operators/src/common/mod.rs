@@ -1,7 +1,10 @@
+use afs_stark_backend::config::Com;
+use afs_stark_backend::prover::trace::ProverTraceData;
 use afs_test_utils::config::baby_bear_poseidon2::random_perm;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 use p3_symmetric::{CryptographicHasher, PaddingFreeSponge};
+use p3_uni_stark::StarkGenericConfig;
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
@@ -35,6 +38,17 @@ impl<const LEN: usize> From<[BabyBear; LEN]> for Commitment<LEN> {
             commit: commit.map(|b| b.as_canonical_u32()),
         }
     }
+}
+
+pub fn get_commit_from_pdata<SC: StarkGenericConfig, const COMMIT_LEN: usize>(
+    pdata: &ProverTraceData<SC>,
+) -> Commitment<COMMIT_LEN>
+where
+    Com<SC>: Into<[BabyBear; COMMIT_LEN]>,
+{
+    let commitment = pdata.commit.clone();
+    let commit: [BabyBear; COMMIT_LEN] = commitment.into();
+    commit.into()
 }
 
 pub fn hash_struct<T: Serialize, const COMMIT_LEN: usize>(input: &T) -> Commitment<COMMIT_LEN> {

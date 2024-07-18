@@ -9,13 +9,16 @@ use std::sync::Arc;
 
 use afs_chips::inner_join::controller::{T2Format, TableFormat};
 use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
+use afs_stark_backend::prover::trace::ProverTraceData;
 use afs_test_utils::engine::StarkEngine;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 use crate::common::Commitment;
-use crate::common::{hash_struct, provider::BTreeMapPageLoader};
+use crate::common::{hash_struct, provider::PageDataLoader};
 use crate::inner_join::page_level_join::PageLevelJoin;
 use crate::inner_join::two_pointers_program::TwoPointersProgram;
 
@@ -109,12 +112,11 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         }
     }
 
-    pub fn generate_trace(
-        &mut self,
-        engine: &E,
-        page_loader: &mut BTreeMapPageLoader<SC, COMMIT_LEN>,
-    ) where
+    pub fn generate_trace(&mut self, engine: &E, page_loader: &mut PageDataLoader<SC, COMMIT_LEN>)
+    where
         Val<SC>: PrimeField,
+        Com<SC>: Into<[BabyBear; COMMIT_LEN]>,
+        ProverTraceData<SC>: DeserializeOwned + Serialize,
     {
         let mut output_df: DataFrame<COMMIT_LEN> = DataFrame::empty_unindexed();
         let mut pairs_list_index = 0;
@@ -122,6 +124,7 @@ impl<const COMMIT_LEN: usize, SC: StarkGenericConfig + 'static, E: StarkEngine<S
         self.root.generate_trace_for_tree(
             page_loader,
             &mut output_df,
+            &self.pairs,
             &self.pairs_commit,
             &mut pairs_list_index,
             &self.parent_table_df,
