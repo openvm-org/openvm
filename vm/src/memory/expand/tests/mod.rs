@@ -9,9 +9,9 @@ use afs_test_utils::config::baby_bear_blake3::run_simple_test_no_pis;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::create_seeded_rng;
 
-use crate::memory::expand::{EXPAND_BUS, ExpandChip};
 use crate::memory::expand::columns::ExpandCols;
 use crate::memory::expand::tests::util::HashTestChip;
+use crate::memory::expand::{ExpandChip, EXPAND_BUS};
 use crate::memory::tree::trees_from_full_memory;
 
 mod util;
