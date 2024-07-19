@@ -1,4 +1,3 @@
-use std::array::from_fn;
 use std::collections::{HashMap, HashSet};
 
 use p3_baby_bear::BabyBear;
@@ -157,7 +156,7 @@ fn random_test<const CHUNK: usize>(
 
     for (address_space, label) in touched_leaves {
         for (is_final, memory) in [(false, &initial_memory), (true, &final_memory)] {
-            let values = from_fn(|i| {
+            let values = std::array::from_fn(|i| {
                 *memory
                     .get(&(
                         address_space,

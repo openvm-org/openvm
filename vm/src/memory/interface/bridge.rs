@@ -14,7 +14,7 @@ impl<const CHUNK: usize, F: Field> AirBridge<F> for MemoryInterfaceAir<CHUNK> {
 
         let mut expand_fields = vec![
             VirtualPairCol::new_main(
-                vec![(cols_numbered.direction, F::neg(F::two().inverse()))],
+                vec![(cols_numbered.direction, F::two().inverse().neg())],
                 F::two().inverse(),
             ),
             VirtualPairCol::single_main(cols_numbered.address_space),
