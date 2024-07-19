@@ -1,3 +1,4 @@
+use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use tracing_forest::util::LevelFilter;
 use tracing_forest::ForestLayer;
@@ -30,7 +31,7 @@ pub struct FriParameters {
     pub proof_of_work_bits: usize,
 }
 
-#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Default, Display, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub enum EngineType {
     #[default]

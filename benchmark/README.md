@@ -2,6 +2,8 @@
 
 ## Configuration
 
+Configurations are generated at runtime from the `generate_configs` function in `src/config/config_gen.rs`. Some items are commented out in order to speed up benchmarking. Uncomment as necessary.
+
 ### `--config-folder` folder setting
 
 Setting a `--config-folder` will get benchmark utility to read all .toml files from that folder and parse each as a `PageConfig`. For each `PageConfig` parsed, it will run the benchmark with the configuration and output it to a csv file in `benchmark/output`.

@@ -56,13 +56,13 @@ pub fn clear_tracing_log(file_path: &str) -> Result<()> {
 
 pub fn extract_timing_data_from_log(
     file_path: &str,
-    filter_values: &[&str],
+    filter_values: Vec<String>,
 ) -> Result<HashMap<String, String>> {
     let mut results: HashMap<String, String> = HashMap::new();
     if let Ok(file) = File::open(file_path) {
         for line in io::BufReader::new(file).lines() {
             let line = line.unwrap();
-            for &val in filter_values {
+            for val in filter_values.iter() {
                 if line.contains(val) {
                     if let Some(start) = line.find(TIME_PREFIX) {
                         let time_busy_start = start + TIME_PREFIX.len();
@@ -82,13 +82,13 @@ pub fn extract_timing_data_from_log(
 
 pub fn extract_event_data_from_log(
     file_path: &str,
-    filter_values: &[&str],
+    filter_values: Vec<String>,
 ) -> Result<HashMap<String, String>> {
     let mut results: HashMap<String, String> = HashMap::new();
     if let Ok(file) = File::open(file_path) {
         for line in io::BufReader::new(file).lines() {
             let line = line.unwrap();
-            for &val in filter_values {
+            for val in filter_values.iter() {
                 if line.contains(val) {
                     if let Some(start) = line.find(val) {
                         let event_data_start = start + val.len();

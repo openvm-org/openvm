@@ -3,15 +3,16 @@ use std::fs::create_dir_all;
 
 use itertools::iproduct;
 
+#[allow(unused_imports)]
 use afs_test_utils::{
     config::{
         fri_params::{fri_params_with_100_bits_of_security, fri_params_with_80_bits_of_security},
-        EngineType, FriParameters,
+        EngineType,
     },
     page_config::{PageConfig, PageMode, PageParamsConfig, StarkEngineConfig},
 };
 
-use crate::commands::parse_config_folder;
+use crate::{commands::parse_config_folder, utils::nearest_power_of_two_floor};
 
 pub fn get_configs(config_folder: Option<String>) -> Vec<PageConfig> {
     if let Some(config_folder) = config_folder.clone() {
@@ -23,13 +24,12 @@ pub fn get_configs(config_folder: Option<String>) -> Vec<PageConfig> {
 
 pub fn generate_configs() -> Vec<PageConfig> {
     let fri_params_vec = vec![
-        fri_params_with_80_bits_of_security(),
-        fri_params_with_100_bits_of_security(),
+        // fri_params_with_80_bits_of_security()[0],
+        // fri_params_with_80_bits_of_security()[1],
+        fri_params_with_80_bits_of_security()[2],
+        // fri_params_with_100_bits_of_security()[0],
+        // fri_params_with_100_bits_of_security()[1],
     ];
-    let fri_params_vec = fri_params_vec
-        .into_iter()
-        .flatten()
-        .collect::<Vec<FriParameters>>();
     let idx_bytes_vec = vec![32];
     let data_bytes_vec = vec![32, 256, 1024];
 
@@ -37,12 +37,12 @@ pub fn generate_configs() -> Vec<PageConfig> {
     // let height_vec = vec![256, 1024]; // Run a mini-benchmark for testing
 
     // max_rw_ops as a percentage of height, where 100 = 100%
-    let max_rw_ops_pct_vec = vec![25, 50, 75];
+    let max_rw_ops_pct_vec = vec![25, 50, 75, 100];
 
     let engine_vec = vec![
         EngineType::BabyBearPoseidon2,
-        EngineType::BabyBearBlake3,
-        EngineType::BabyBearKeccak,
+        // EngineType::BabyBearBlake3,
+        // EngineType::BabyBearKeccak,
     ];
 
     let mut configs = Vec::new();
@@ -76,15 +76,6 @@ pub fn generate_configs() -> Vec<PageConfig> {
     }
 
     configs
-}
-
-/// Gets the largest power of two less than n
-pub fn nearest_power_of_two_floor(n: usize) -> usize {
-    let mut i = 1;
-    while i < n {
-        i *= 2;
-    }
-    i / 2
 }
 
 #[test]
