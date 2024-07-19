@@ -3,6 +3,7 @@ use std::{marker::PhantomData, time::Instant};
 use afs_chips::common::page::Page;
 use afs_stark_backend::{config::PcsProverData, prover::trace::TraceCommitmentBuilder};
 use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
+use bin_common::utils::io::write_bytes;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{
@@ -12,8 +13,6 @@ use logical_interface::{
 use p3_field::PrimeField;
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::Serialize;
-
-use crate::commands::write_bytes;
 
 #[cfg(test)]
 pub mod tests;

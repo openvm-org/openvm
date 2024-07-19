@@ -1,8 +1,10 @@
 use p3_field::Field;
+use tracing::instrument;
 
 // Copied from valida-util
 /// Calculates and returns the multiplicative inverses of each field element, with zero
 /// values remaining unchanged.
+#[instrument(name = "batch_multiplicative_inverse", level = "info", skip_all)]
 pub fn batch_multiplicative_inverse_allowing_zero<F: Field>(values: Vec<F>) -> Vec<F> {
     // Check if values are zero, and construct a new vector with only nonzero values
     let mut nonzero_values = Vec::with_capacity(values.len());

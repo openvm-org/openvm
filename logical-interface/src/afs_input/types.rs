@@ -6,7 +6,7 @@ use std::{
 };
 
 /// Represents a single operation in an AFS input file
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AfsOperation {
     pub operation: InputFileOp,
     pub args: Vec<String>,
@@ -33,13 +33,13 @@ impl FromStr for InputFileHeader {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum InputFileOp {
     Read,
     Insert,
     Write,
-    Where,
+    Filter,
     InnerJoin,
     GroupBy,
 }
@@ -52,7 +52,7 @@ impl FromStr for InputFileOp {
             "READ" => Ok(Self::Read),
             "INSERT" => Ok(Self::Insert),
             "WRITE" => Ok(Self::Write),
-            "WHERE" => Ok(Self::Where),
+            "FILTER" => Ok(Self::Filter),
             "INNER_JOIN" => Ok(Self::InnerJoin),
             "GROUP_BY" => Ok(Self::GroupBy),
             _ => Err(eyre!("Invalid operation: {}", s)),
@@ -66,7 +66,7 @@ impl Display for InputFileOp {
             InputFileOp::Read => "READ",
             InputFileOp::Insert => "INSERT",
             InputFileOp::Write => "WRITE",
-            InputFileOp::Where => "WHERE",
+            InputFileOp::Filter => "FILTER",
             InputFileOp::InnerJoin => "INNER_JOIN",
             InputFileOp::GroupBy => "GROUP_BY",
         };

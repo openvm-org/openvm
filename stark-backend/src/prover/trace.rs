@@ -54,7 +54,7 @@ impl<'a, SC: StarkGenericConfig> TraceCommitmentBuilder<'a, SC> {
     }
 
     /// Loads `trace` assumed to have already been committed as single matrix commitment in `data`.
-    /// We load the `ProverTraceData` as a smart pointer because the prover only needs a reference.
+    /// We load the underlying `PcsProverData` as a smart pointer because the prover only needs a reference.
     pub fn load_cached_trace(&mut self, trace: RowMajorMatrix<Val<SC>>, data: ProverTraceData<SC>) {
         self.committed_traces.push(vec![trace]);
         self.data.push(data);
