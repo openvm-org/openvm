@@ -7,32 +7,32 @@ use p3_field::{AbstractField, Field, PrimeField64};
 use p3_matrix::Matrix;
 
 use super::{
-    columns::GeneralOfflineCheckerCols, GeneralOfflineChecker, GeneralOfflineCheckerChip,
-    GeneralOfflineCheckerOperation,
+    columns::OfflineCheckerCols, OfflineChecker, OfflineCheckerChip, OfflineCheckerOperation,
 };
 use crate::{
     is_equal_vec::{columns::IsEqualVecCols, IsEqualVecAir},
     is_less_than_tuple::{columns::IsLessThanTupleIOCols, IsLessThanTupleAir},
     sub_chip::{AirConfig, SubAir},
+    utils::{implies, or},
 };
 
-impl AirConfig for GeneralOfflineChecker {
-    type Cols<T> = GeneralOfflineCheckerCols<T>;
+impl AirConfig for OfflineChecker {
+    type Cols<T> = OfflineCheckerCols<T>;
 }
 
-impl<F: PrimeField64, Operation: GeneralOfflineCheckerOperation<F>> AirConfig
-    for GeneralOfflineCheckerChip<F, Operation>
+impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> AirConfig
+    for OfflineCheckerChip<F, Operation>
 {
-    type Cols<T> = GeneralOfflineCheckerCols<T>;
+    type Cols<T> = OfflineCheckerCols<T>;
 }
 
-impl<F: Field> BaseAir<F> for GeneralOfflineChecker {
+impl<F: Field> BaseAir<F> for OfflineChecker {
     fn width(&self) -> usize {
         self.air_width()
     }
 }
 
-impl<AB: PartitionedAirBuilder> Air<AB> for GeneralOfflineChecker
+impl<AB: PartitionedAirBuilder> Air<AB> for OfflineChecker
 where
     AB::M: Clone,
 {
@@ -46,31 +46,22 @@ where
         let local: &[AB::Var] = (*local).borrow();
         let next: &[AB::Var] = (*next).borrow();
 
-        let local_cols = GeneralOfflineCheckerCols::from_slice(local, self);
-        let next_cols = GeneralOfflineCheckerCols::from_slice(next, self);
+        let local_cols = OfflineCheckerCols::from_slice(local, self);
+        let next_cols = OfflineCheckerCols::from_slice(next, self);
 
         SubAir::eval(self, builder, (local_cols, next_cols), ());
     }
 }
 
-impl<AB: PartitionedAirBuilder> SubAir<AB> for GeneralOfflineChecker
+impl<AB: PartitionedAirBuilder> SubAir<AB> for OfflineChecker
 where
     AB::M: Clone,
 {
-    type IoView = (
-        GeneralOfflineCheckerCols<AB::Var>,
-        GeneralOfflineCheckerCols<AB::Var>,
-    );
+    type IoView = (OfflineCheckerCols<AB::Var>, OfflineCheckerCols<AB::Var>);
     type AuxView = ();
 
     fn eval(&self, builder: &mut AB, io: Self::IoView, _: Self::AuxView) {
         let (local_cols, next_cols) = io;
-
-        // Some helpers
-        let not = |a: AB::Expr| AB::Expr::one() - a;
-        let and = |a: AB::Expr, b: AB::Expr| a * b;
-        let or = |a: AB::Expr, b: AB::Expr| a.clone() + b.clone() - a * b;
-        let implies = |a: AB::Expr, b: AB::Expr| not(and(a, not(b)));
 
         // Making sure bits are bools
         builder.assert_bool(local_cols.same_idx);
@@ -149,13 +140,13 @@ where
         );
 
         // Ensuring lt_bit is on
-        builder.when_transition().assert_one(or(
+        builder.when_transition().assert_one(or::<AB>(
             AB::Expr::one() - next_cols.is_valid.into(),
             next_cols.lt_bit.into(),
         ));
 
         // Making sure is_extra rows are at the bottom
-        builder.when_transition().assert_one(implies(
+        builder.when_transition().assert_one(implies::<AB>(
             next_cols.is_valid.into(),
             local_cols.is_valid.into(),
         ));

@@ -20,11 +20,8 @@ impl IsLessThanTupleChip {
         &self,
         tuple_pairs: Vec<(Vec<u32>, Vec<u32>)>,
     ) -> RowMajorMatrix<F> {
-        let num_cols: usize = IsLessThanTupleCols::<F>::get_width(
-            self.air.limb_bits().clone(),
-            self.air.decomp(),
-            self.air.tuple_len(),
-        );
+        let num_cols: usize =
+            IsLessThanTupleCols::<F>::get_width(self.air.limb_bits().clone(), self.air.decomp());
 
         let mut rows: Vec<F> = vec![];
 

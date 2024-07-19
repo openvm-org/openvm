@@ -1,11 +1,11 @@
-use crate::offline_checker::columns::GeneralOfflineCheckerCols;
+use crate::offline_checker::columns::OfflineCheckerCols;
 
-use super::OfflineChecker;
+use super::PageOfflineChecker;
 
 #[allow(clippy::too_many_arguments)]
 #[derive(Debug, derive_new::new)]
-pub struct OfflineCheckerCols<T> {
-    pub general_cols: GeneralOfflineCheckerCols<T>,
+pub struct PageOfflineCheckerCols<T> {
+    pub offline_checker_cols: OfflineCheckerCols<T>,
     /// this bit indicates if this row comes from the initial page
     pub is_initial: T,
     /// this bit indicates if this is the final row of an idx and that it should be sent to the final chip
@@ -26,12 +26,12 @@ pub struct OfflineCheckerCols<T> {
     pub is_delete: T,
 }
 
-impl<T> OfflineCheckerCols<T>
+impl<T> PageOfflineCheckerCols<T>
 where
     T: Clone,
 {
     pub fn flatten(&self) -> Vec<T> {
-        let mut flattened = self.general_cols.flatten();
+        let mut flattened = self.offline_checker_cols.flatten();
 
         flattened.extend(vec![
             self.is_initial.clone(),
@@ -49,29 +49,27 @@ where
         flattened
     }
 
-    pub fn from_slice(slc: &[T], oc: &OfflineChecker) -> Self {
+    pub fn from_slice(slc: &[T], oc: &PageOfflineChecker) -> Self {
         assert!(slc.len() == oc.air_width());
 
-        let general_cols_width = oc.general_offline_checker.air_width();
-        let general_cols = GeneralOfflineCheckerCols::from_slice(
-            &slc[..general_cols_width],
-            &oc.general_offline_checker,
-        );
+        let offline_checker_cols_width = oc.offline_checker.air_width();
+        let offline_checker_cols =
+            OfflineCheckerCols::from_slice(&slc[..offline_checker_cols_width], &oc.offline_checker);
 
         Self {
-            general_cols,
-            is_initial: slc[general_cols_width].clone(),
-            is_final_write: slc[general_cols_width + 1].clone(),
-            is_final_delete: slc[general_cols_width + 2].clone(),
-            is_internal: slc[general_cols_width + 3].clone(),
-            is_final_write_x3: slc[general_cols_width + 4].clone(),
-            is_read: slc[general_cols_width + 5].clone(),
-            is_write: slc[general_cols_width + 6].clone(),
-            is_delete: slc[general_cols_width + 7].clone(),
+            offline_checker_cols,
+            is_initial: slc[offline_checker_cols_width].clone(),
+            is_final_write: slc[offline_checker_cols_width + 1].clone(),
+            is_final_delete: slc[offline_checker_cols_width + 2].clone(),
+            is_internal: slc[offline_checker_cols_width + 3].clone(),
+            is_final_write_x3: slc[offline_checker_cols_width + 4].clone(),
+            is_read: slc[offline_checker_cols_width + 5].clone(),
+            is_write: slc[offline_checker_cols_width + 6].clone(),
+            is_delete: slc[offline_checker_cols_width + 7].clone(),
         }
     }
 
-    pub fn width(oc: &OfflineChecker) -> usize {
-        oc.general_offline_checker.air_width() + 8
+    pub fn width(oc: &PageOfflineChecker) -> usize {
+        oc.offline_checker.air_width() + 8
     }
 }

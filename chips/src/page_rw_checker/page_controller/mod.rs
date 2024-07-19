@@ -21,10 +21,10 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::info_span;
 
 use super::{
-    final_page::IndexedPageWriteAir, initial_page::PageReadAir, offline_checker::OfflineChecker,
+    final_page::IndexedPageWriteAir, initial_page::PageReadAir, offline_checker::PageOfflineChecker,
 };
 use crate::range_gate::RangeCheckerGateChip;
-use crate::{common::page::Page, offline_checker::GeneralOfflineCheckerOperation};
+use crate::{common::page::Page, offline_checker::OfflineCheckerOperation};
 
 #[derive(PartialEq, Clone, Debug, Copy)]
 pub enum OpType {
@@ -41,7 +41,7 @@ pub struct Operation {
     pub op_type: OpType,
 }
 
-impl<F: PrimeField64> GeneralOfflineCheckerOperation<F> for Operation {
+impl<F: PrimeField64> OfflineCheckerOperation<F> for Operation {
     fn get_timestamp(&self) -> usize {
         self.clk
     }
@@ -157,7 +157,7 @@ where
     Val<SC>: AbstractField,
 {
     init_chip: PageReadAir,
-    offline_checker: OfflineChecker,
+    offline_checker: PageOfflineChecker,
     final_chip: IndexedPageWriteAir,
 
     traces: Option<PageRWTraces<Val<SC>>>,
@@ -181,7 +181,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     {
         Self {
             init_chip: PageReadAir::new(page_bus_index, idx_len, data_len),
-            offline_checker: OfflineChecker::new(
+            offline_checker: PageOfflineChecker::new(
                 page_bus_index,
                 range_bus_index,
                 ops_bus_index,

@@ -5,20 +5,23 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::{columns::OfflineCheckerCols, OfflineChecker};
-use crate::sub_chip::{AirConfig, SubAir};
+use super::{columns::PageOfflineCheckerCols, PageOfflineChecker};
+use crate::{
+    sub_chip::{AirConfig, SubAir},
+    utils::{and, implies, or},
+};
 
-impl AirConfig for OfflineChecker {
-    type Cols<T> = OfflineCheckerCols<T>;
+impl AirConfig for PageOfflineChecker {
+    type Cols<T> = PageOfflineCheckerCols<T>;
 }
 
-impl<F: Field> BaseAir<F> for OfflineChecker {
+impl<F: Field> BaseAir<F> for PageOfflineChecker {
     fn width(&self) -> usize {
         self.air_width()
     }
 }
 
-impl<AB: PartitionedAirBuilder> Air<AB> for OfflineChecker
+impl<AB: PartitionedAirBuilder> Air<AB> for PageOfflineChecker
 where
     AB::M: Clone,
 {
@@ -35,23 +38,20 @@ where
         let local: &[AB::Var] = (*local).borrow();
         let next: &[AB::Var] = (*next).borrow();
 
-        let local_cols = OfflineCheckerCols::from_slice(local, self);
-        let next_cols = OfflineCheckerCols::from_slice(next, self);
+        let local_cols = PageOfflineCheckerCols::from_slice(local, self);
+        let next_cols = PageOfflineCheckerCols::from_slice(next, self);
 
-        let local_general_cols = local_cols.general_cols;
-        let next_general_cols = next_cols.general_cols;
+        let local_offline_checker_cols = local_cols.offline_checker_cols;
+        let next_offline_checker_cols = next_cols.offline_checker_cols;
         SubAir::eval(
-            &self.general_offline_checker,
+            &self.offline_checker,
             builder,
-            (local_general_cols.clone(), next_general_cols.clone()),
+            (
+                local_offline_checker_cols.clone(),
+                next_offline_checker_cols.clone(),
+            ),
             (),
         );
-
-        // Some helpers
-        let not = |a: AB::Expr| AB::Expr::one() - a;
-        let and = |a: AB::Expr, b: AB::Expr| a * b;
-        let or = |a: AB::Expr, b: AB::Expr| a.clone() + b.clone() - a * b;
-        let implies = |a: AB::Expr, b: AB::Expr| not(and(a, not(b)));
 
         // Making sure bits are bools
         builder.assert_bool(local_cols.is_initial);
@@ -64,21 +64,21 @@ where
 
         // Making sure op_type is one of 0, 1, 2 (R, W, D)
         builder.assert_zero(
-            local_general_cols.op_type
-                * (local_general_cols.op_type - AB::Expr::one())
-                * (local_general_cols.op_type - AB::Expr::two()),
+            local_offline_checker_cols.op_type
+                * (local_offline_checker_cols.op_type - AB::Expr::one())
+                * (local_offline_checker_cols.op_type - AB::Expr::two()),
         );
 
         // Ensuring that op_type is decomposed into is_read, is_write, is_delete correctly
         builder.assert_eq(
-            local_general_cols.op_type,
+            local_offline_checker_cols.op_type,
             local_cols.is_write + local_cols.is_delete * AB::Expr::from_canonical_u8(2),
         );
 
         // Ensuring the sum of is_initial, is_internal, is_final_write, is_final_delete is 1
         // This ensures exactly one of them is on because they're all bool
         builder.assert_zero(
-            local_general_cols.is_valid
+            local_offline_checker_cols.is_valid
                 * (local_cols.is_initial
                     + local_cols.is_internal
                     + local_cols.is_final_write
@@ -95,10 +95,10 @@ where
         // Making sure every idx block starts with a write
         // not same_idx => write
         // NOTE: constraint degree is 3
-        builder.assert_one(or(
-            AB::Expr::one() - local_general_cols.is_valid.into(),
-            or(
-                local_general_cols.same_idx.into(),
+        builder.assert_one(or::<AB>(
+            AB::Expr::one() - local_offline_checker_cols.is_valid.into(),
+            or::<AB>(
+                local_offline_checker_cols.same_idx.into(),
                 local_cols.is_write.into(),
             ),
         ));
@@ -106,81 +106,81 @@ where
         // Making sure every idx block ends with a is_final_write or is_final_delete (in the three constraints below)
         // First, when local and next are not extra
         // NOTE: constraint degree is 3
-        builder.when_transition().assert_one(or(
-            AB::Expr::one() - next_general_cols.is_valid.into(),
-            or(
-                next_general_cols.same_idx.into(),
+        builder.when_transition().assert_one(or::<AB>(
+            AB::Expr::one() - next_offline_checker_cols.is_valid.into(),
+            or::<AB>(
+                next_offline_checker_cols.same_idx.into(),
                 local_cols.is_final_write.into() + local_cols.is_final_delete.into(),
             ),
         ));
         // NOTE: constraint degree is 3
         // Second, when local is not extra but next is extra
-        builder.when_transition().assert_one(implies(
-            and(
-                local_general_cols.is_valid.into(),
-                AB::Expr::one() - next_general_cols.is_valid.into(),
+        builder.when_transition().assert_one(implies::<AB>(
+            and::<AB>(
+                local_offline_checker_cols.is_valid.into(),
+                AB::Expr::one() - next_offline_checker_cols.is_valid.into(),
             ),
             local_cols.is_final_write.into() + local_cols.is_final_delete.into(),
         ));
         // Third, when it's the last row
-        builder.when_last_row().assert_one(implies(
-            local_general_cols.is_valid.into(),
+        builder.when_last_row().assert_one(implies::<AB>(
+            local_offline_checker_cols.is_valid.into(),
             local_cols.is_final_write.into() + local_cols.is_final_delete.into(),
         ));
 
         // Making sure that is_initial rows only appear at the start of blocks
         // is_initial => not same_idx
-        builder.assert_one(implies(
+        builder.assert_one(implies::<AB>(
             local_cols.is_initial.into(),
-            AB::Expr::one() - local_general_cols.same_idx,
+            AB::Expr::one() - local_offline_checker_cols.same_idx,
         ));
 
-        let local_data = &local_general_cols.data;
-        let next_data = &next_general_cols.data;
+        let local_data = &local_offline_checker_cols.data;
+        let next_data = &next_offline_checker_cols.data;
 
         // Making sure that every read uses the same data as the last operation
         // We do this by looping over the data part of next row and ensuring that
         // every entry matches the one in local in case next is_read (and not is_extra)
         // read => same_data (data in next matches data in local)
-        for i in 0..self.general_offline_checker.data_len {
+        for i in 0..self.offline_checker.data_len {
             // NOTE: constraint degree is 3
             builder.when_transition().assert_zero(
-                (next_cols.is_read * next_general_cols.is_valid.into())
+                (next_cols.is_read * next_offline_checker_cols.is_valid.into())
                     * (local_data[i] - next_data[i]),
             );
         }
 
         // is_final => read
         // NOTE: constraint degree is 3
-        builder.assert_one(or(
-            AB::Expr::one() - local_general_cols.is_valid.into(),
-            implies(local_cols.is_final_write.into(), local_cols.is_read.into()),
+        builder.assert_one(or::<AB>(
+            AB::Expr::one() - local_offline_checker_cols.is_valid.into(),
+            implies::<AB>(local_cols.is_final_write.into(), local_cols.is_read.into()),
         ));
 
         // is_internal => not is_initial
-        builder.assert_one(implies(
+        builder.assert_one(implies::<AB>(
             local_cols.is_internal.into(),
             AB::Expr::one() - local_cols.is_initial,
         ));
 
         // is_internal => not is_final
-        builder.assert_one(implies(
+        builder.assert_one(implies::<AB>(
             local_cols.is_internal.into(),
             AB::Expr::one()
                 - (local_cols.is_final_write.into() + local_cols.is_final_delete.into()),
         ));
 
         // next is_final_write or next is_final_delete => local is_internal
-        builder.when_transition().assert_one(implies(
+        builder.when_transition().assert_one(implies::<AB>(
             next_cols.is_final_write.into() + next_cols.is_final_delete.into(),
             local_cols.is_internal.into(),
         ));
 
         // Ensuring that next read => not local delete
         // NOTE: constraint degree is 3
-        builder.when_transition().assert_one(or(
-            AB::Expr::one() - next_general_cols.is_valid.into(),
-            implies(
+        builder.when_transition().assert_one(or::<AB>(
+            AB::Expr::one() - next_offline_checker_cols.is_valid.into(),
+            implies::<AB>(
                 next_cols.is_read.into(),
                 AB::Expr::one() - local_cols.is_delete,
             ),
@@ -188,19 +188,19 @@ where
 
         // Ensuring local is_final_delete => next not same_idx
         // NOTE: constraint degree is 3
-        builder.when_transition().assert_one(or(
-            AB::Expr::one() - next_general_cols.is_valid.into(),
-            implies(
+        builder.when_transition().assert_one(or::<AB>(
+            AB::Expr::one() - next_offline_checker_cols.is_valid.into(),
+            implies::<AB>(
                 local_cols.is_final_delete.into(),
-                AB::Expr::one() - next_general_cols.same_idx,
+                AB::Expr::one() - next_offline_checker_cols.same_idx,
             ),
         ));
 
         // Ensuring that next is_final_delete => local is_delete
         // NOTE: constraint degree is 3
-        builder.when_transition().assert_one(or(
-            AB::Expr::one() - next_general_cols.is_valid.into(),
-            implies(
+        builder.when_transition().assert_one(or::<AB>(
+            AB::Expr::one() - next_offline_checker_cols.is_valid.into(),
+            implies::<AB>(
                 next_cols.is_final_delete.into(),
                 local_cols.is_delete.into(),
             ),

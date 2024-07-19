@@ -123,7 +123,6 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                     + 2 * IsLessThanTupleAuxCols::<usize>::get_width(
                         vec![self.is_less_than_tuple_param.limb_bits; self.idx_len],
                         self.is_less_than_tuple_param.decomp,
-                        self.idx_len,
                     ))
     }
 }

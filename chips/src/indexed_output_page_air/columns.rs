@@ -60,7 +60,6 @@ impl<T: Clone> IndexedOutputPageAuxCols<T> {
                 &slc[..slc.len() - 1],
                 vec![idx_limb_bits; idx_len],
                 decomp,
-                idx_len,
             ),
             lt_out: slc[slc.len() - 1].clone(),
         }

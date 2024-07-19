@@ -142,7 +142,6 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                         &is_less_than_tuple_aux_flattened.unwrap(),
                         idx_limb_bits,
                         decomp,
-                        self.idx_len,
                     ),
                 };
 
@@ -166,7 +165,6 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                         &is_less_than_tuple_aux_flattened.unwrap(),
                         idx_limb_bits,
                         decomp,
-                        self.idx_len,
                     ),
                 };
 

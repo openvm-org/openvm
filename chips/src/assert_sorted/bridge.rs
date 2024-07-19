@@ -14,7 +14,6 @@ impl<F: PrimeField64> AirBridge<F> for AssertSortedAir {
         let num_cols = AssertSortedCols::<F>::get_width(
             self.is_less_than_tuple_air().limb_bits().clone(),
             self.is_less_than_tuple_air().decomp(),
-            self.is_less_than_tuple_air().tuple_len(),
         );
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
@@ -22,7 +21,6 @@ impl<F: PrimeField64> AirBridge<F> for AssertSortedAir {
             &all_cols,
             self.is_less_than_tuple_air().limb_bits().clone(),
             self.is_less_than_tuple_air().decomp(),
-            self.is_less_than_tuple_air().tuple_len(),
         );
 
         // range check the decompositions of x within aux columns; here the io doesn't matter

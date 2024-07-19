@@ -44,7 +44,6 @@ impl IndexedOutputPageAir {
         IsLessThanTupleAuxCols::<usize>::get_width(
             vec![self.idx_limb_bits; self.idx_len],
             self.idx_decomp,
-            self.idx_len,
         ) + 1
     }
 

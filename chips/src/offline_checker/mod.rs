@@ -1,5 +1,7 @@
 use std::marker::PhantomData;
 
+use derive_new::new;
+
 use crate::is_equal_vec::columns::IsEqualVecAuxCols;
 use crate::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 
@@ -8,15 +10,15 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-pub trait GeneralOfflineCheckerOperation<F> {
+pub trait OfflineCheckerOperation<F> {
     fn get_timestamp(&self) -> usize;
     fn get_idx(&self) -> Vec<F>;
     fn get_data(&self) -> Vec<F>;
     fn get_op_type(&self) -> u8;
 }
 
-#[derive(Clone)]
-pub struct GeneralOfflineChecker {
+#[derive(Clone, new)]
+pub struct OfflineChecker {
     pub idx_clk_limb_bits: Vec<usize>,
     pub decomp: usize,
     pub idx_len: usize,
@@ -25,25 +27,7 @@ pub struct GeneralOfflineChecker {
     pub ops_bus: usize,
 }
 
-impl GeneralOfflineChecker {
-    pub fn new(
-        idx_clk_limb_bits: Vec<usize>,
-        decomp: usize,
-        idx_len: usize,
-        data_len: usize,
-        range_bus: usize,
-        ops_bus: usize,
-    ) -> Self {
-        Self {
-            idx_clk_limb_bits,
-            decomp,
-            idx_len,
-            data_len,
-            range_bus,
-            ops_bus,
-        }
-    }
-
+impl OfflineChecker {
     pub fn idx_data_width(&self) -> usize {
         self.idx_len + self.data_len
     }
@@ -56,18 +40,17 @@ impl GeneralOfflineChecker {
             + IsLessThanTupleAuxCols::<usize>::get_width(
                 self.idx_clk_limb_bits.clone(),
                 self.decomp,
-                self.idx_len + 1,
             )
     }
 }
 
-pub struct GeneralOfflineCheckerChip<F, Operation: GeneralOfflineCheckerOperation<F>> {
+pub struct OfflineCheckerChip<F, Operation: OfflineCheckerOperation<F>> {
     _marker: PhantomData<(F, Operation)>,
-    pub air: GeneralOfflineChecker,
+    pub air: OfflineChecker,
 }
 
-impl<F, Operation: GeneralOfflineCheckerOperation<F>> GeneralOfflineCheckerChip<F, Operation> {
-    pub fn new(air: GeneralOfflineChecker) -> Self {
+impl<F, Operation: OfflineCheckerOperation<F>> OfflineCheckerChip<F, Operation> {
+    pub fn new(air: OfflineChecker) -> Self {
         Self {
             _marker: Default::default(),
             air,

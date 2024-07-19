@@ -9,18 +9,13 @@ use super::{columns::IsLessThanTupleCols, IsLessThanTupleAir};
 
 impl<F: PrimeField> AirBridge<F> for IsLessThanTupleAir {
     fn sends(&self) -> Vec<Interaction<F>> {
-        let num_cols = IsLessThanTupleCols::<F>::get_width(
-            self.limb_bits().clone(),
-            self.decomp(),
-            self.tuple_len(),
-        );
+        let num_cols = IsLessThanTupleCols::<F>::get_width(self.limb_bits().clone(), self.decomp());
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
         let cols_numbered = IsLessThanTupleCols::<usize>::from_slice(
             &all_cols,
             self.limb_bits().clone(),
             self.decomp(),
-            self.tuple_len(),
         );
 
         SubAirBridge::sends(self, cols_numbered)

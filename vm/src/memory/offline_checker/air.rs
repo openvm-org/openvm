@@ -1,6 +1,7 @@
 use afs_chips::{
-    offline_checker::columns::GeneralOfflineCheckerCols,
+    offline_checker::columns::OfflineCheckerCols,
     sub_chip::{AirConfig, SubAir},
+    utils::or,
 };
 use afs_stark_backend::air_builders::PartitionedAirBuilder;
 use p3_air::{Air, BaseAir};
@@ -8,19 +9,19 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 use std::borrow::Borrow;
 
-use super::OfflineChecker;
+use super::MemoryOfflineChecker;
 
-impl AirConfig for OfflineChecker {
-    type Cols<T> = GeneralOfflineCheckerCols<T>;
+impl AirConfig for MemoryOfflineChecker {
+    type Cols<T> = OfflineCheckerCols<T>;
 }
 
-impl<F: Field> BaseAir<F> for OfflineChecker {
+impl<F: Field> BaseAir<F> for MemoryOfflineChecker {
     fn width(&self) -> usize {
-        self.general_offline_checker.air_width()
+        self.offline_checker.air_width()
     }
 }
 
-impl<AB: PartitionedAirBuilder> Air<AB> for OfflineChecker
+impl<AB: PartitionedAirBuilder> Air<AB> for MemoryOfflineChecker
 where
     AB::M: Clone,
 {
@@ -34,15 +35,13 @@ where
         let local: &[AB::Var] = (*local).borrow();
         let next: &[AB::Var] = (*next).borrow();
 
-        let general_offline_checker = self.general_offline_checker.clone();
+        let offline_checker = self.offline_checker.clone();
 
-        let local_cols = GeneralOfflineCheckerCols::from_slice(local, &general_offline_checker);
-        let next_cols = GeneralOfflineCheckerCols::from_slice(next, &general_offline_checker);
-
-        let or = |a: AB::Expr, b: AB::Expr| a.clone() + b.clone() - a * b;
+        let local_cols = OfflineCheckerCols::from_slice(local, &offline_checker);
+        let next_cols = OfflineCheckerCols::from_slice(next, &offline_checker);
 
         SubAir::eval(
-            &general_offline_checker,
+            &offline_checker,
             builder,
             (local_cols.clone(), next_cols.clone()),
             (),
@@ -53,9 +52,9 @@ where
         // Making sure that every read uses the same data as the last operation if it is not the first
         // operation in the block
         // NOTE: constraint degree is 4
-        builder.assert_one(or(
+        builder.assert_one(or::<AB>(
             AB::Expr::one() - local_cols.is_valid.into(),
-            or(
+            or::<AB>(
                 local_cols.op_type.into(),
                 // if same_idx = 0 and read, then same_data can be anything
                 // if same_idx = 1 and read, then same_data must be 1

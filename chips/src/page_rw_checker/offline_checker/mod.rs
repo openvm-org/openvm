@@ -1,6 +1,6 @@
-use columns::OfflineCheckerCols;
+use columns::PageOfflineCheckerCols;
 
-use crate::offline_checker::GeneralOfflineChecker;
+use crate::offline_checker::OfflineChecker;
 
 mod air;
 mod bridge;
@@ -10,12 +10,12 @@ mod trace;
 #[cfg(test)]
 mod tests;
 
-pub struct OfflineChecker {
-    general_offline_checker: GeneralOfflineChecker,
+pub struct PageOfflineChecker {
+    offline_checker: OfflineChecker,
     page_bus_index: usize,
 }
 
-impl OfflineChecker {
+impl PageOfflineChecker {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         page_bus_index: usize,
@@ -27,7 +27,7 @@ impl OfflineChecker {
         clk_bits: usize,
         idx_decomp: usize,
     ) -> Self {
-        let general_offline_checker = GeneralOfflineChecker::new(
+        let offline_checker = OfflineChecker::new(
             [vec![idx_limb_bits; idx_len], vec![clk_bits]].concat(),
             idx_decomp,
             idx_len,
@@ -36,12 +36,12 @@ impl OfflineChecker {
             ops_bus_index,
         );
         Self {
-            general_offline_checker,
+            offline_checker,
             page_bus_index,
         }
     }
 
     pub fn air_width(&self) -> usize {
-        OfflineCheckerCols::<usize>::width(self)
+        PageOfflineCheckerCols::<usize>::width(self)
     }
 }

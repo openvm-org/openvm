@@ -8,12 +8,10 @@ use crate::is_less_than_tuple::IsLessThanTupleAir;
 use crate::range_gate::RangeCheckerGateChip;
 use crate::sub_chip::LocalTraceInstructions;
 
-use super::{
-    columns::GeneralOfflineCheckerCols, GeneralOfflineCheckerChip, GeneralOfflineCheckerOperation,
-};
+use super::{columns::OfflineCheckerCols, OfflineCheckerChip, OfflineCheckerOperation};
 
-impl<F: PrimeField64, Operation: GeneralOfflineCheckerOperation<F> + Clone>
-    GeneralOfflineCheckerChip<F, Operation>
+impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
+    OfflineCheckerChip<F, Operation>
 {
     /// Each row in the trace follows the same order as the Cols struct:
     /// [clk, mem_row, op_type, same_addr_space, same_pointer, same_addr, same_data, lt_bit, is_valid, is_equal_addr_space_aux, is_equal_pointer_aux, is_equal_data_aux, lt_aux]
@@ -90,13 +88,13 @@ impl<F: PrimeField64, Operation: GeneralOfflineCheckerOperation<F> + Clone>
     }
 }
 
-impl<F: PrimeField64, Operation: GeneralOfflineCheckerOperation<F>> LocalTraceInstructions<F>
-    for GeneralOfflineCheckerChip<F, Operation>
+impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> LocalTraceInstructions<F>
+    for OfflineCheckerChip<F, Operation>
 {
     // is_first_row, is_valid, curr_op, prev_op, range_checker
     type LocalInput = (bool, u8, Operation, Operation, Arc<RangeCheckerGateChip>);
 
-    fn generate_trace_row(&self, input: Self::LocalInput) -> GeneralOfflineCheckerCols<F> {
+    fn generate_trace_row(&self, input: Self::LocalInput) -> OfflineCheckerCols<F> {
         let (is_first_row, is_valid, curr_op, prev_op, range_checker) = input;
         let op_type = curr_op.get_op_type();
 
@@ -115,16 +113,18 @@ impl<F: PrimeField64, Operation: GeneralOfflineCheckerOperation<F>> LocalTraceIn
 
         let mut lt_bit = 1;
         for i in 0..curr_idx.len() {
-            #[allow(clippy::comparison_chain)]
-            if curr_idx[i] > prev_idx[i] {
-                break;
-            } else if curr_idx[i] < prev_idx[i] {
-                lt_bit = 0;
-                break;
-            }
-
-            if i == curr_idx.len() - 1 && curr_op.get_timestamp() <= prev_op.get_timestamp() {
-                lt_bit = 0;
+            match curr_idx[i].cmp(&prev_idx[i]) {
+                std::cmp::Ordering::Greater => break,
+                std::cmp::Ordering::Less => {
+                    lt_bit = 0;
+                    break;
+                }
+                std::cmp::Ordering::Equal => {
+                    if i == curr_idx.len() - 1 && curr_op.get_timestamp() <= prev_op.get_timestamp()
+                    {
+                        lt_bit = 0;
+                    }
+                }
             }
         }
 
@@ -169,7 +169,7 @@ impl<F: PrimeField64, Operation: GeneralOfflineCheckerOperation<F>> LocalTraceIn
             lt_bit = 1;
         }
 
-        GeneralOfflineCheckerCols {
+        OfflineCheckerCols {
             clk: F::from_canonical_usize(curr_timestamp),
             idx: curr_idx,
             data: curr_data,

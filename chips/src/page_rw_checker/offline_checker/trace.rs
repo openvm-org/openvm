@@ -4,16 +4,16 @@ use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use super::OfflineChecker;
+use super::PageOfflineChecker;
 use crate::common::indexed_page_editor::IndexedPageEditor;
 use crate::common::page::Page;
-use crate::offline_checker::GeneralOfflineCheckerChip;
-use crate::page_rw_checker::offline_checker::columns::OfflineCheckerCols;
+use crate::offline_checker::OfflineCheckerChip;
+use crate::page_rw_checker::offline_checker::columns::PageOfflineCheckerCols;
 use crate::page_rw_checker::page_controller::{OpType, Operation};
 use crate::range_gate::RangeCheckerGateChip;
 use crate::sub_chip::LocalTraceInstructions;
 
-impl OfflineChecker {
+impl PageOfflineChecker {
     /// Each row in the trace follow the same order as the Cols struct:
     /// [is_initial, is_final_write, is_final_delete, is_internal, is_final_write_x3, clk, idx, data, op_type, same_idx, lt_bit, is_extra, is_equal_idx_aux, lt_aux]
     ///
@@ -41,8 +41,8 @@ impl OfflineChecker {
         ops.sort_by_key(|op| (op.idx.clone(), op.clk));
 
         let dummy_op = Operation {
-            idx: vec![0; self.general_offline_checker.idx_len],
-            data: vec![0; self.general_offline_checker.data_len],
+            idx: vec![0; self.offline_checker.idx_len],
+            data: vec![0; self.offline_checker.data_len],
             op_type: OpType::Read,
             clk: 0,
         };
@@ -65,19 +65,18 @@ impl OfflineChecker {
                 range_checker.clone(),
             );
 
-            let general_oc_chip = GeneralOfflineCheckerChip::<Val<SC>, Operation>::new(
-                self.general_offline_checker.clone(),
-            );
+            let offline_checker_chip =
+                OfflineCheckerChip::<Val<SC>, Operation>::new(self.offline_checker.clone());
 
-            let mut general_oc_cols = LocalTraceInstructions::<Val<SC>>::generate_trace_row(
-                &general_oc_chip,
+            let mut offline_checker_cols = LocalTraceInstructions::<Val<SC>>::generate_trace_row(
+                &offline_checker_chip,
                 local_input,
             );
 
             if *is_first_row {
                 *is_first_row = false;
-                general_oc_cols.same_idx = Val::<SC>::zero();
-                general_oc_cols.same_data = Val::<SC>::zero();
+                offline_checker_cols.same_idx = Val::<SC>::zero();
+                offline_checker_cols.same_data = Val::<SC>::zero();
             }
 
             let op_type = curr_op.op_type as u8;
@@ -88,8 +87,8 @@ impl OfflineChecker {
             let is_write = op_type == 1;
             let is_delete = op_type == 2;
 
-            let cols = OfflineCheckerCols {
-                general_cols: general_oc_cols,
+            let cols = PageOfflineCheckerCols {
+                offline_checker_cols,
                 is_initial: Val::<SC>::from_bool(is_initial),
                 is_final_write: Val::<SC>::from_bool(is_final_write),
                 is_final_delete: Val::<SC>::from_bool(is_final_delete),
@@ -162,10 +161,11 @@ impl OfflineChecker {
                 ));
             }
 
-            let final_data = page_editor
-                .get(&cur_idx)
-                .cloned()
-                .unwrap_or(vec![0; self.general_offline_checker.data_len]);
+            let final_data =
+                page_editor
+                    .get(&cur_idx)
+                    .cloned()
+                    .unwrap_or(vec![0; self.offline_checker.data_len]);
 
             prev_op = curr_op.clone();
             curr_op = Operation {
@@ -230,7 +230,7 @@ impl OfflineChecker {
 
         tracing::debug_span!("Offline Checker trace by row: ").in_scope(|| {
             for row in &rows {
-                let cols = OfflineCheckerCols::from_slice(row, self);
+                let cols = PageOfflineCheckerCols::from_slice(row, self);
                 tracing::debug!("{:?}", cols);
             }
         });

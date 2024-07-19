@@ -1,4 +1,4 @@
-use afs_chips::offline_checker::GeneralOfflineCheckerOperation;
+use afs_chips::offline_checker::OfflineCheckerOperation;
 use p3_field::PrimeField64;
 use std::array::from_fn;
 
@@ -21,7 +21,7 @@ pub struct MemoryAccess<const WORD_SIZE: usize, F> {
     pub data: [F; WORD_SIZE],
 }
 
-impl<const WORD_SIZE: usize, F: PrimeField64> GeneralOfflineCheckerOperation<F>
+impl<const WORD_SIZE: usize, F: PrimeField64> OfflineCheckerOperation<F>
     for MemoryAccess<WORD_SIZE, F>
 {
     fn get_timestamp(&self) -> usize {

@@ -1,11 +1,14 @@
+use derive_new::new;
+
 use crate::{
     is_equal_vec::columns::IsEqualVecAuxCols, is_less_than_tuple::columns::IsLessThanTupleAuxCols,
 };
 
-use super::GeneralOfflineChecker;
+use super::OfflineChecker;
 
-#[derive(Debug, Clone)]
-pub struct GeneralOfflineCheckerCols<T> {
+#[allow(clippy::too_many_arguments)]
+#[derive(Debug, Clone, new)]
+pub struct OfflineCheckerCols<T> {
     /// timestamp for the operation
     pub clk: T,
     /// idx
@@ -37,41 +40,10 @@ pub struct GeneralOfflineCheckerCols<T> {
     pub lt_aux: IsLessThanTupleAuxCols<T>,
 }
 
-impl<T> GeneralOfflineCheckerCols<T>
+impl<T> OfflineCheckerCols<T>
 where
     T: Clone,
 {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        clk: T,
-        idx: Vec<T>,
-        data: Vec<T>,
-        op_type: T,
-        same_idx: T,
-        same_data: T,
-        same_idx_and_data: T,
-        lt_bit: T,
-        is_valid: T,
-        is_equal_idx_aux: IsEqualVecAuxCols<T>,
-        is_equal_data_aux: IsEqualVecAuxCols<T>,
-        lt_aux: IsLessThanTupleAuxCols<T>,
-    ) -> Self {
-        Self {
-            clk,
-            idx,
-            data,
-            op_type,
-            same_idx,
-            same_data,
-            same_idx_and_data,
-            lt_bit,
-            is_valid,
-            is_equal_idx_aux,
-            is_equal_data_aux,
-            lt_aux,
-        }
-    }
-
     pub fn flatten(&self) -> Vec<T> {
         let mut flattened = vec![self.clk.clone()];
         flattened.extend(self.idx.clone());
@@ -92,7 +64,7 @@ where
         flattened
     }
 
-    pub fn from_slice(slc: &[T], oc: &GeneralOfflineChecker) -> Self {
+    pub fn from_slice(slc: &[T], oc: &OfflineChecker) -> Self {
         assert!(slc.len() == oc.air_width());
         let idx_len = oc.idx_len;
         let data_len = oc.data_len;
@@ -119,8 +91,6 @@ where
                 &slc[5 + 3 * idx_len + 3 * data_len..],
                 oc.idx_clk_limb_bits.clone(),
                 oc.decomp,
-                // extra 1 for clk
-                idx_len + 1,
             ),
         }
     }

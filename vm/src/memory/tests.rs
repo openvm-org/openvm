@@ -33,7 +33,7 @@ fn test_offline_checker() {
         DECOMP,
     );
     let requester = DummyInteractionAir::new(
-        2 + memory_chip.air.general_offline_checker.idx_data_width(),
+        2 + memory_chip.air.offline_checker.idx_data_width(),
         true,
         MEMORY_BUS,
     );
@@ -177,7 +177,7 @@ fn test_offline_checker_valid_first_read() {
         DECOMP,
     );
     let requester = DummyInteractionAir::new(
-        2 + memory_chip.air.general_offline_checker.idx_data_width(),
+        2 + memory_chip.air.offline_checker.idx_data_width(),
         true,
         MEMORY_BUS,
     );
@@ -233,7 +233,7 @@ fn test_offline_checker_negative_data_mismatch() {
         DECOMP,
     );
     let requester = DummyInteractionAir::new(
-        2 + memory_chip.air.general_offline_checker.idx_data_width(),
+        2 + memory_chip.air.offline_checker.idx_data_width(),
         true,
         MEMORY_BUS,
     );
