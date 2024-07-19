@@ -16,9 +16,8 @@ use p3_uni_stark::StarkConfig;
 use p3_util::log2_strict_usize;
 use rand::{rngs::StdRng, SeedableRng};
 use zkhash::{
-    ark_ff::PrimeField as _,
-    fields::babybear::FpBabyBear as HorizenBabyBear,
-    poseidon2::poseidon2_instance_babybear::{MAT_DIAG16_M_1, RC16},
+    ark_ff::PrimeField as _, fields::babybear::FpBabyBear as HorizenBabyBear,
+    poseidon2::poseidon2_instance_babybear::RC16,
 };
 
 use crate::engine::{StarkEngine, StarkEngineWithHashInstrumentation};
