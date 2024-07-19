@@ -69,17 +69,8 @@ pub fn extract_timing_data_from_log(
                         if let Some(end) = line[time_busy_start..].find(' ') {
                             let time_busy =
                                 line[time_busy_start..time_busy_start + end].to_string();
-                            println!("time_busy: {}", time_busy);
                             let time_busy_string = convert_to_ms_string(&time_busy).unwrap();
-                            println!("time_busy_string: {}", time_busy_string);
-
-                            // let time_busy_string: Duration = parse_duration(&time_busy).unwrap();
-                            // let time_busy_string = time_busy_string.as_millis().to_string();
-                            // println!("time_busy_string: {}", time_busy_string);
                             results.insert(val.to_string(), time_busy_string);
-                            // let time_busy_ms: Duration =
-                            //     time_busy.parse::<DurationString>().unwrap().into();
-                            // results.insert(val.to_string(), time_busy_ms.as_millis().to_string());
                         }
                     }
                 }
