@@ -1,5 +1,3 @@
-use std::array::from_fn;
-
 pub struct ExpandCols<const CHUNK: usize, T> {
     pub direction: T,
     pub address_space: T,
@@ -14,19 +12,16 @@ pub struct ExpandCols<const CHUNK: usize, T> {
 
 impl<const CHUNK: usize, T: Clone> ExpandCols<CHUNK, T> {
     pub fn from_slice(slc: &[T]) -> Self {
-        let mut slc_index = 0;
-        let mut take = || {
-            slc_index += 1;
-            slc[slc_index - 1].clone()
-        };
+        let mut iter = slc.iter();
+        let mut take = || iter.next().unwrap().clone();
 
         let direction = take();
         let address_space = take();
         let height = take();
         let parent_label = take();
-        let parent_hash = from_fn(|_| take());
-        let left_child_hash = from_fn(|_| take());
-        let right_child_hash = from_fn(|_| take());
+        let parent_hash = std::array::from_fn(|_| take());
+        let left_child_hash = std::array::from_fn(|_| take());
+        let right_child_hash = std::array::from_fn(|_| take());
         let left_is_final = take();
         let right_is_final = take();
 

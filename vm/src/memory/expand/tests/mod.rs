@@ -1,4 +1,3 @@
-use std::array::from_fn;
 use std::collections::{HashMap, HashSet};
 
 use p3_baby_bear::BabyBear;
@@ -10,9 +9,9 @@ use afs_test_utils::config::baby_bear_blake3::run_simple_test_no_pis;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::create_seeded_rng;
 
+use crate::memory::expand::{EXPAND_BUS, ExpandChip};
 use crate::memory::expand::columns::ExpandCols;
 use crate::memory::expand::tests::util::HashTestChip;
-use crate::memory::expand::{ExpandChip, EXPAND_BUS};
 use crate::memory::tree::trees_from_full_memory;
 
 mod util;
@@ -112,7 +111,7 @@ fn test<const CHUNK: usize>(
         })
         .collect();
     for (&address_space, label) in touched_leaves {
-        let initial_values = from_fn(|i| {
+        let initial_values = std::array::from_fn(|i| {
             *initial_memory
                 .get(&(
                     address_space,
@@ -121,7 +120,7 @@ fn test<const CHUNK: usize>(
                 .unwrap_or(&BabyBear::zero())
         });
         interaction(true, false, address_space, 0, label, initial_values);
-        let final_values = from_fn(|i| {
+        let final_values = std::array::from_fn(|i| {
             *final_memory
                 .get(&(
                     address_space,
