@@ -2,11 +2,19 @@
 
 ## Configuration
 
-Configurations are generated at runtime from the `generate_configs` function in `src/config/config_gen.rs`. Some items are commented out in order to speed up benchmarking. Uncomment as necessary.
+### Benchmark data
+
+Each benchmark has a `BenchmarkData` struct that is defined in `src/config/benchmark_data.rs`. For example, the ReadWrite benchmark data is defined in `benchmark_data_rw()` in that file. This is passed into the `benchmark_execute` call in `src/cli/mod.rs`. If you wish to set up different filters for events or timing, you can add your tracing via the `info!`, or `info_span!` macros from the `tracing` crate.
+
+You'll need to add any desired events/timings to the event filters (for `info!`) or timing filters (for `info_span!`). You can add the appropriate header and the log filter string to isolate the timing value. For the log filter string, please be sure it is specific enough to capture only the desired timing value.
+
+### Runtime `PageConfig` generation
+
+Configurations are generated at runtime from the `generate_configs` function in `src/config/config_gen.rs`. Some items are commented out in order to speed up benchmarking since the generator creates all permutations of each vec. Uncomment items as necessary for your benchmark use case.
 
 ### `--config-folder` folder setting
 
-Setting a `--config-folder` will get benchmark utility to read all .toml files from that folder and parse each as a `PageConfig`. For each `PageConfig` parsed, it will run the benchmark with the configuration and output it to a csv file in `benchmark/output`.
+Setting a `--config-folder` will skip `generate_configs` and will instead read all .toml files from that folder and parse each as a `PageConfig`. For each `PageConfig` parsed, it will run the benchmark with the configuration and output it to a csv file in `benchmark/output`.
 
 ## ReadWrite
 
@@ -31,7 +39,7 @@ Percentage (where 100 = 100%) of config file's `max_rw_ops` that are `READ`s. No
 Run these commands from the root of the repository
 
 ```bash
-RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark -- predicate --p lt 20000
+RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark -- predicate -f benchmark/config/olap/filter_0xfade.afo
 ```
 
 ### `--predicate` (`-p`)

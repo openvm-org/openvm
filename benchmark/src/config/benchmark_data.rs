@@ -43,20 +43,27 @@ lazy_static! {
 pub struct BenchmarkData {
     pub sections: Vec<String>,
     pub headers: Vec<String>,
-    pub event_tags: Vec<String>,
-    pub timing_tags: Vec<String>,
+    pub event_filters: Vec<String>,
+    pub timing_filters: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
 struct BenchmarkSetup {
+    /// Section name for events
     event_section: String,
+    /// Headers for each event column
     event_headers: Vec<String>,
-    event_tags: Vec<String>,
+    /// Filter queries for the tracing logs for events
+    event_filters: Vec<String>,
+    /// Section name for timing
     timing_section: String,
+    /// Headers for each timing column
     timing_headers: Vec<String>,
-    timing_tags: Vec<String>,
+    /// Filter queries for the tracing logs for timing
+    timing_filters: Vec<String>,
 }
 
+/// Format for Predicate benchmark
 pub fn benchmark_data_predicate() -> BenchmarkData {
     let setup = BenchmarkSetup {
         event_section: "air width".to_string(),
@@ -64,7 +71,7 @@ pub fn benchmark_data_predicate() -> BenchmarkData {
             .iter()
             .map(|s| s.to_string())
             .collect(),
-        event_tags: [
+        event_filters: [
             "Total air width: preprocessed=",
             "Total air width: partitioned_main=",
             "Total air width: after_challenge=",
@@ -74,18 +81,18 @@ pub fn benchmark_data_predicate() -> BenchmarkData {
         .collect(),
         timing_section: "timing (ms)".to_string(),
         timing_headers: [
-            "keygen_time",
-            "cache_time",
-            "prove_load_trace_gen",
-            "prove_load_trace_commit",
-            "prove_commit",
-            "prove_time_total",
-            "verify_time",
+            "Keygen time",
+            "Cache time",
+            "Prove: Load trace gen",
+            "Prove: Load trace commit",
+            "Prove: Main commit",
+            "Prove time (total)",
+            "Verify time",
         ]
         .iter()
         .map(|s| s.to_string())
         .collect(),
-        timing_tags: [
+        timing_filters: [
             "Benchmark keygen: benchmark",
             "Benchmark cache: benchmark",
             "prove:Load page trace generation",
@@ -101,6 +108,7 @@ pub fn benchmark_data_predicate() -> BenchmarkData {
     build_benchmark_data(setup)
 }
 
+/// Format for ReadWrite benchmark
 pub fn benchmark_data_rw() -> BenchmarkData {
     let setup = BenchmarkSetup {
         event_section: "air width".to_string(),
@@ -108,7 +116,7 @@ pub fn benchmark_data_rw() -> BenchmarkData {
             .iter()
             .map(|s| s.to_string())
             .collect(),
-        event_tags: [
+        event_filters: [
             "Total air width: preprocessed=",
             "Total air width: partitioned_main=",
             "Total air width: after_challenge=",
@@ -118,25 +126,33 @@ pub fn benchmark_data_rw() -> BenchmarkData {
         .collect(),
         timing_section: "timing (ms)".to_string(),
         timing_headers: [
-            "keygen_time",
-            "cache_time",
-            "prove_load_trace_gen",
-            "prove_load_trace_commit",
-            "prove_ops_sender_gen",
-            "prove_commit",
-            "prove_time_total",
-            "verify_time",
+            "Keygen time",
+            "Cache time",
+            "Prove: Load trace gen",
+            "Prove: Load trace commit",
+            "Prove: Main commit",
+            "Prove: Gen permutation traces",
+            "Prove: Commit permutation traces",
+            "Prove: Compute quotient values",
+            "Prove: Commit to quotient poly",
+            "Prove: FRI opening proofs",
+            "Prove time (total)",
+            "Verify time",
         ]
         .iter()
         .map(|s| s.to_string())
         .collect(),
-        timing_tags: [
+        timing_filters: [
             "Benchmark keygen: benchmark",
             "Benchmark cache: benchmark",
             "prove:Load page trace generation",
             "prove:Load page trace commitment",
-            "Generate ops_sender trace",
             "prove:Prove trace commitment",
+            "prove:MultiTraceStarkProver::prove:generate permutation traces",
+            "prove:MultiTraceStarkProver::prove:commit to permutation traces",
+            "prove:prove_raps_with_committed_traces:compute quotient values",
+            "prove:prove_raps_with_committed_traces:commit to quotient poly",
+            "prove:prove_raps_with_committed_traces:FRI opening proofs",
             "Benchmark prove: benchmark",
             "Benchmark verify: benchmark",
         ]
@@ -149,12 +165,12 @@ pub fn benchmark_data_rw() -> BenchmarkData {
 
 fn build_benchmark_data(setup: BenchmarkSetup) -> BenchmarkData {
     assert!(
-        setup.event_headers.len() == setup.event_tags.len(),
-        "event_headers and event_tags must have the same length"
+        setup.event_headers.len() == setup.event_filters.len(),
+        "event_headers and event_filters must have the same length"
     );
     assert!(
-        setup.timing_headers.len() == setup.timing_tags.len(),
-        "timing_headers and timing_tags must have the same length"
+        setup.timing_headers.len() == setup.timing_filters.len(),
+        "timing_headers and timing_filters must have the same length"
     );
 
     // Extend `section_events` and `section_timings` to the same length as `headers_events` and `headers_timings`, respectively
@@ -183,13 +199,13 @@ fn build_benchmark_data(setup: BenchmarkSetup) -> BenchmarkData {
         .cloned()
         .collect();
 
-    let event_tags = setup.event_tags;
-    let timing_tags = setup.timing_tags;
+    let event_filters = setup.event_filters;
+    let timing_filters = setup.timing_filters;
 
     BenchmarkData {
         sections,
         headers,
-        event_tags,
-        timing_tags,
+        event_filters,
+        timing_filters,
     }
 }

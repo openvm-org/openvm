@@ -112,11 +112,11 @@ pub fn benchmark_execute(
 
         let event_data = extract_event_data_from_log(
             TMP_TRACING_LOG.as_str(),
-            benchmark_data.event_tags.clone(),
+            benchmark_data.event_filters.clone(),
         )?;
         let timing_data = extract_timing_data_from_log(
             TMP_TRACING_LOG.as_str(),
-            benchmark_data.timing_tags.clone(),
+            benchmark_data.timing_filters.clone(),
         )?;
 
         println!("Config: {:?}", config);
