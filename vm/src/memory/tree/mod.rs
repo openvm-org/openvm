@@ -11,28 +11,38 @@ pub trait HashProvider<const CHUNK: usize, F> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum MemoryNode<const CHUNK: usize, F: PrimeField32> {
-    Leaf([F; CHUNK]),
-    NonLeaf(
-        [F; CHUNK],
-        Arc<MemoryNode<CHUNK, F>>,
-        Arc<MemoryNode<CHUNK, F>>,
-    ),
+    Leaf {
+        values: [F; CHUNK],
+    },
+    NonLeaf {
+        hash: [F; CHUNK],
+        left: Arc<MemoryNode<CHUNK, F>>,
+        right: Arc<MemoryNode<CHUNK, F>>,
+    },
 }
 
 impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     pub fn hash(&self) -> [F; CHUNK] {
         match self {
-            Leaf(hash) => *hash,
-            NonLeaf(hash, ..) => *hash,
+            Leaf { values: hash } => *hash,
+            NonLeaf { hash, .. } => *hash,
         }
+    }
+
+    pub fn new_leaf(values: [F; CHUNK]) -> Self {
+        Leaf { values }
     }
 
     pub fn new_nonleaf(
         left: Arc<MemoryNode<CHUNK, F>>,
         right: Arc<MemoryNode<CHUNK, F>>,
         hash_provider: &mut impl HashProvider<CHUNK, F>,
-    ) -> MemoryNode<CHUNK, F> {
-        NonLeaf(hash_provider.hash(left.hash(), right.hash()), left, right)
+    ) -> Self {
+        NonLeaf {
+            hash: hash_provider.hash(left.hash(), right.hash()),
+            left,
+            right,
+        }
     }
 
     pub fn construct_all_zeros(
@@ -40,7 +50,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         hash_provider: &mut impl HashProvider<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         if height == 0 {
-            Leaf([F::zero(); CHUNK])
+            Self::new_leaf([F::zero(); CHUNK])
         } else {
             let child = Arc::new(Self::construct_all_zeros(height - 1, hash_provider));
             Self::new_nonleaf(child.clone(), child, hash_provider)
@@ -59,7 +69,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
             for (address, value) in memory {
                 values[address] = value;
             }
-            Leaf(values)
+            Self::new_leaf(values)
         } else {
             let midpoint: usize = CHUNK << (height - 1);
             let mut left_memory = HashMap::new();

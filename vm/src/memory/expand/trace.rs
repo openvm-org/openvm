@@ -6,9 +6,8 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::memory::expand::columns::ExpandCols;
 use crate::memory::expand::ExpandChip;
-use crate::memory::tree::MemoryNode::Leaf;
-use crate::memory::tree::MemoryNode::NonLeaf;
 use crate::memory::tree::{HashProvider, MemoryNode};
+use crate::memory::tree::MemoryNode::NonLeaf;
 
 impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {
     pub fn generate_trace_and_final_tree(
@@ -63,7 +62,7 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
         hash_provider: &mut impl HashProvider<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         if height == 0 {
-            Leaf(std::array::from_fn(|i| {
+            MemoryNode::new_leaf(std::array::from_fn(|i| {
                 *self
                     .final_memory
                     .get(&(
@@ -72,7 +71,12 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
                     ))
                     .unwrap_or(&F::zero())
             }))
-        } else if let NonLeaf(_, initial_left_node, initial_right_node) = initial_node.clone() {
+        } else if let NonLeaf {
+            left: initial_left_node,
+            right: initial_right_node,
+            ..
+        } = initial_node.clone()
+        {
             hash_provider.hash(initial_left_node.hash(), initial_right_node.hash());
 
             let left_label = 2 * label;
@@ -131,7 +135,7 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
         are_final: Option<[bool; 2]>,
     ) {
         let [left_is_final, right_is_final] = are_final.unwrap_or([false; 2]);
-        let cols = if let NonLeaf(hash, left, right) = node {
+        let cols = if let NonLeaf { hash, left, right } = node {
             ExpandCols {
                 direction: if are_final.is_some() {
                     F::one()
