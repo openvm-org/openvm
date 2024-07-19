@@ -37,6 +37,7 @@ pub fn generate_configs() -> Vec<PageConfig> {
     // let height_vec = vec![256, 1024]; // Run a mini-benchmark for testing
 
     // max_rw_ops as a percentage of height, where 100 = 100%
+    // note that max_rw_ops needs to be a power of 2, so the actual values are more like 7.25%, 12.5%, 25%, 50% of height
     let max_rw_ops_pct_vec = vec![10, 25, 50, 75, 100];
 
     let engine_vec = vec![
