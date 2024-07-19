@@ -92,7 +92,7 @@ pub fn write_csv_header(path: String) -> Result<()> {
         "air width",
         "",
         "",
-        "timing",
+        "timing ms",
         "",
         "",
         "",

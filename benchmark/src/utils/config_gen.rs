@@ -33,9 +33,11 @@ pub fn generate_configs() -> Vec<PageConfig> {
     let idx_bytes_vec = vec![32];
     let data_bytes_vec = vec![32, 256, 1024];
 
-    // Currently we have the max_rw_ops use the height vec to reduce the number of permutations
-    let height_vec = vec![65536, 262_144, 1_048_576];
-    // let height_vec = vec![16, 64]; // Run a mini-benchmark for testing
+    // let height_vec = vec![65536, 262_144, 1_048_576];
+    let height_vec = vec![256, 1024]; // Run a mini-benchmark for testing
+
+    // max_rw_ops as a percentage of height, where 100 = 100%
+    let max_rw_ops_pct_vec = vec![25, 50, 75];
 
     let engine_vec = vec![
         EngineType::BabyBearPoseidon2,
@@ -45,12 +47,13 @@ pub fn generate_configs() -> Vec<PageConfig> {
 
     let mut configs = Vec::new();
 
-    for (engine, fri_params, idx_bytes, data_bytes, height) in iproduct!(
+    for (engine, fri_params, idx_bytes, data_bytes, height, max_rw_ops_pct) in iproduct!(
         &engine_vec,
         &fri_params_vec,
         &idx_bytes_vec,
         &data_bytes_vec,
-        &height_vec
+        &height_vec,
+        &max_rw_ops_pct_vec,
     ) {
         if (*height > 1000000 && (fri_params.log_blowup > 2 || *data_bytes > 512))
             || (*height > 500000 && fri_params.log_blowup >= 3)
@@ -63,7 +66,7 @@ pub fn generate_configs() -> Vec<PageConfig> {
                 data_bytes: *data_bytes,
                 height: *height,
                 mode: PageMode::ReadWrite,
-                max_rw_ops: *height,
+                max_rw_ops: nearest_power_of_two_floor(*height * *max_rw_ops_pct / 100),
                 bits_per_fe: 16,
             },
             fri_params: fri_params.to_owned(),
@@ -73,6 +76,15 @@ pub fn generate_configs() -> Vec<PageConfig> {
     }
 
     configs
+}
+
+/// Gets the largest power of two less than n
+pub fn nearest_power_of_two_floor(n: usize) -> usize {
+    let mut i = 1;
+    while i < n {
+        i *= 2;
+    }
+    i / 2
 }
 
 #[test]

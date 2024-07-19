@@ -11,7 +11,7 @@ Setting a `--config-folder` will get benchmark utility to read all .toml files f
 Run from the root of the repository
 
 ```bash
-cargo run --release --bin benchmark -- rw -r 90 -w 10
+RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark -- rw -r 90 -w 10
 ```
 
 ### `--percent-writes` (`-w`)
@@ -29,7 +29,7 @@ Percentage (where 100 = 100%) of config file's `max_rw_ops` that are `READ`s. No
 Run these commands from the root of the repository
 
 ```bash
-cargo run --release --bin benchmark -- predicate --p lt 20000
+RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark -- predicate --p lt 20000
 ```
 
 ### `--predicate` (`-p`)
@@ -71,11 +71,11 @@ We generate the following benchmark data for each run:
 To run only small configs for testing
 
 ```bash
-cargo run --release --bin benchmark -- rw -r 90 -w 10 --config-folder benchmark/config/mini
+RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark -- rw -r 90 -w 10 --config-folder benchmark/config/mini
 ```
 
 For running tests with only the large configs
 
 ```bash
-cargo run --release --bin benchmark -- rw -r 90 -w 10 --config-folder benchmark/config/large
+RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark -- rw -r 90 -w 10 --config-folder benchmark/config/large
 ```
