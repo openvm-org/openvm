@@ -7,7 +7,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 
 use crate::memory::expand::POSEIDON2_DIRECT_REQUEST_BUS;
-use crate::memory::tree::HashProvider;
+use crate::memory::tree::Hasher;
 
 pub fn test_hash_sum<const CHUNK: usize, F: Field>(
     left: [F; CHUNK],
@@ -43,7 +43,7 @@ impl<const CHUNK: usize, F: Field> HashTestChip<CHUNK, F> {
     }
 }
 
-impl<const CHUNK: usize, F: Field> HashProvider<CHUNK, F> for HashTestChip<CHUNK, F> {
+impl<const CHUNK: usize, F: Field> Hasher<CHUNK, F> for HashTestChip<CHUNK, F> {
     fn hash(&mut self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK] {
         let result = test_hash_sum(left, right);
         self.requests.push([left, right, result]);

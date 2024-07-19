@@ -3,9 +3,9 @@ use p3_field::Field;
 
 use afs_stark_backend::interaction::{AirBridge, Interaction};
 
+use crate::memory::expand::{EXPAND_BUS, POSEIDON2_DIRECT_REQUEST_BUS};
 use crate::memory::expand::air::ExpandAir;
 use crate::memory::expand::columns::ExpandCols;
-use crate::memory::expand::{EXPAND_BUS, POSEIDON2_DIRECT_REQUEST_BUS};
 
 fn interaction<const CHUNK: usize, F: Field>(
     sends: VirtualPairCol<F>,
@@ -53,7 +53,7 @@ impl<const CHUNK: usize, F: Field> AirBridge<F> for ExpandAir<CHUNK> {
             interaction(
                 VirtualPairCol::new_main(vec![(cols_numbered.direction, F::neg_one())], F::zero()),
                 VirtualPairCol::new_main(
-                    vec![(cols_numbered.direction, F::neg(F::two().inverse()))],
+                    vec![(cols_numbered.direction, F::two().inverse().neg())],
                     F::two().inverse(),
                 ),
                 VirtualPairCol::single_main(cols_numbered.parent_height),
@@ -65,7 +65,7 @@ impl<const CHUNK: usize, F: Field> AirBridge<F> for ExpandAir<CHUNK> {
                 VirtualPairCol::single_main(cols_numbered.direction),
                 VirtualPairCol::new_main(
                     vec![
-                        (cols_numbered.direction, F::neg(F::two().inverse())),
+                        (cols_numbered.direction, F::two().inverse().neg()),
                         (cols_numbered.left_is_final, F::one()),
                     ],
                     F::two().inverse(),
@@ -82,7 +82,7 @@ impl<const CHUNK: usize, F: Field> AirBridge<F> for ExpandAir<CHUNK> {
                 VirtualPairCol::single_main(cols_numbered.direction),
                 VirtualPairCol::new_main(
                     vec![
-                        (cols_numbered.direction, F::neg(F::two().inverse())),
+                        (cols_numbered.direction, F::two().inverse().neg()),
                         (cols_numbered.right_is_final, F::one()),
                     ],
                     F::two().inverse(),
