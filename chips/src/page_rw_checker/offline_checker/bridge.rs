@@ -15,18 +15,30 @@ impl<F: PrimeField> AirBridge<F> for OfflineChecker {
         let cols_to_receive = OfflineCheckerCols::<usize>::from_slice(&all_cols, self);
         let general_cols = cols_to_receive.general_cols;
 
-        let mut interactions =
-            SubAirBridge::receives(&self.general_offline_checker, general_cols.clone());
+        let op_cols: Vec<VirtualPairCol<F>> = to_vcols(
+            &[
+                vec![general_cols.clk],
+                vec![general_cols.op_type],
+                general_cols.idx.clone(),
+                general_cols.data.clone(),
+            ]
+            .concat(),
+        );
 
         let page_cols = to_vcols(&[general_cols.idx.clone(), general_cols.data.clone()].concat());
 
-        interactions.push(Interaction {
-            fields: page_cols,
-            count: VirtualPairCol::single_main(cols_to_receive.is_initial),
-            argument_index: self.page_bus_index,
-        });
-
-        interactions
+        vec![
+            Interaction {
+                fields: page_cols,
+                count: VirtualPairCol::single_main(cols_to_receive.is_initial),
+                argument_index: self.page_bus_index,
+            },
+            Interaction {
+                fields: op_cols,
+                count: VirtualPairCol::single_main(cols_to_receive.is_internal),
+                argument_index: self.general_offline_checker.ops_bus,
+            },
+        ]
     }
 
     fn sends(&self) -> Vec<Interaction<F>> {

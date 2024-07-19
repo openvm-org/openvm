@@ -57,10 +57,6 @@ impl OfflineChecker {
                        curr_op: Operation,
                        prev_op: Operation,
                        is_valid: bool| {
-            if *is_first_row {
-                *is_first_row = false;
-            }
-
             let local_input = (
                 *is_first_row,
                 is_valid as u8,
@@ -73,10 +69,16 @@ impl OfflineChecker {
                 self.general_offline_checker.clone(),
             );
 
-            let general_oc_cols = LocalTraceInstructions::<Val<SC>>::generate_trace_row(
+            let mut general_oc_cols = LocalTraceInstructions::<Val<SC>>::generate_trace_row(
                 &general_oc_chip,
                 local_input,
             );
+
+            if *is_first_row {
+                *is_first_row = false;
+                general_oc_cols.same_idx = Val::<SC>::zero();
+                general_oc_cols.same_data = Val::<SC>::zero();
+            }
 
             let op_type = curr_op.op_type as u8;
 
@@ -120,7 +122,12 @@ impl OfflineChecker {
 
             if page_editor.contains(&cur_idx) {
                 prev_op = curr_op.clone();
-                curr_op = ops[i].clone();
+                curr_op = Operation {
+                    idx: cur_idx.clone(),
+                    data: page_editor.get(&cur_idx).unwrap().clone(),
+                    op_type: OpType::Write,
+                    clk: 0,
+                };
 
                 // Adding the is_initial row to the trace
                 rows.push(gen_row(
@@ -160,8 +167,8 @@ impl OfflineChecker {
                 .cloned()
                 .unwrap_or(vec![0; self.general_offline_checker.data_len]);
 
-            let prev_op = curr_op.clone();
-            let curr_op = Operation {
+            prev_op = curr_op.clone();
+            curr_op = Operation {
                 idx: cur_idx.clone(),
                 data: final_data,
                 op_type: if page_editor.contains(&cur_idx) {
@@ -191,14 +198,25 @@ impl OfflineChecker {
 
         *page = page_editor.into_page();
 
-        prev_op = curr_op.clone();
-        curr_op = dummy_op.clone();
-
-        // Adding rows to the trace to make the height trace_degree
-        rows.resize_with(trace_degree, || {
+        if rows.len() < trace_degree {
             prev_op = curr_op.clone();
             curr_op = dummy_op.clone();
 
+            rows.push(gen_row(
+                &mut is_first_row,
+                false,
+                false,
+                false,
+                curr_op.clone(),
+                prev_op.clone(),
+                false,
+            ));
+        }
+
+        prev_op = dummy_op.clone();
+
+        // Adding rows to the trace to make the height trace_degree
+        rows.resize_with(trace_degree, || {
             gen_row(
                 &mut is_first_row,
                 false,

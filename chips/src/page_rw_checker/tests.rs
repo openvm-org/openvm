@@ -58,9 +58,9 @@ fn load_page_test(
             .flat_map(|op| {
                 iter::once(Val::one())
                     .chain(iter::once(Val::from_canonical_usize(op.clk)))
+                    .chain(iter::once(Val::from_canonical_u8(op.op_type as u8)))
                     .chain(op.idx.iter().map(|x| Val::from_canonical_u32(*x)))
                     .chain(op.data.iter().map(|x| Val::from_canonical_u32(*x)))
-                    .chain(iter::once(Val::from_canonical_u8(op.op_type as u8)))
             })
             .chain(
                 iter::repeat_with(|| iter::repeat(Val::zero()).take(1 + ops_sender.field_width()))
@@ -94,16 +94,16 @@ fn page_offline_checker_small() {
 
     const MAX_VAL: u32 = 0x78000001 / 2; // The prime used by BabyBear / 2
 
-    let log_page_height = 3;
-    let log_num_ops = 2;
+    let log_page_height = 4;
+    let log_num_ops = 0;
 
     let page_height = 1 << log_page_height;
     let num_ops: usize = 1 << log_num_ops;
 
-    let trace_degree = num_ops * 2;
+    let trace_degree = num_ops * 4;
 
-    let idx_len = 2;
-    let data_len = 2;
+    let idx_len = 1;
+    let data_len = 1;
     let idx_limb_bits = 8;
     let idx_decomp = 4;
     let max_idx = 1 << idx_limb_bits;
@@ -116,10 +116,9 @@ fn page_offline_checker_small() {
         max_idx,
         MAX_VAL,
         page_height,
-        page_height,
+        // TODO: add function to check if page is fully allocated
+        page_height / 2,
     );
-
-    println!("{:?}", initial_page);
 
     // We will generate the final page from the initial page below
     // while generating the operations

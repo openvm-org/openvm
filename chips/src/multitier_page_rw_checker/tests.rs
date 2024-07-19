@@ -342,9 +342,9 @@ fn load_page_test(
             .flat_map(|op| {
                 iter::once(Val::one())
                     .chain(iter::once(Val::from_canonical_usize(op.clk)))
+                    .chain(iter::once(Val::from_canonical_u8(op.op_type as u8)))
                     .chain(op.idx.iter().map(|x| Val::from_canonical_u32(*x)))
                     .chain(op.data.iter().map(|x| Val::from_canonical_u32(*x)))
-                    .chain(iter::once(Val::from_canonical_u8(op.op_type as u8)))
             })
             .chain(
                 iter::repeat_with(|| iter::repeat(Val::zero()).take(1 + ops_sender.field_width()))

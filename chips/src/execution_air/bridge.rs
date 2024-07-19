@@ -12,9 +12,9 @@ use super::ExecutionAir;
 impl<F: PrimeField64> SubAirBridge<F> for ExecutionAir {
     fn sends(&self, col_indices: Self::Cols<usize>) -> Vec<Interaction<F>> {
         let virtual_cols = iter::once(col_indices.clk)
+            .chain(iter::once(col_indices.op_type))
             .chain(col_indices.idx)
             .chain(col_indices.data)
-            .chain(iter::once(col_indices.op_type))
             .map(VirtualPairCol::single_main)
             .collect();
         vec![Interaction {
