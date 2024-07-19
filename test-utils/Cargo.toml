@@ -13,6 +13,16 @@ p3-matrix = { workspace = true }
 p3-maybe-rayon = { workspace = true }
 p3-uni-stark = { workspace = true }
 p3-util = { workspace = true }
+p3-dft = { workspace = true }
+p3-merkle-tree = { workspace = true }
+p3-fri = { workspace = true }
+p3-baby-bear = { workspace = true }
+p3-poseidon2 = { workspace = true }
+p3-symmetric = { workspace = true }
+p3-mds = { workspace = true }
+p3-blake3 = { workspace = true }
+p3-keccak = { workspace = true }
+zkhash = { workspace = true }
 
 itertools = "0.12.1"
 serde = { version = "1.0", default-features = false, features = [
@@ -21,22 +31,12 @@ serde = { version = "1.0", default-features = false, features = [
 ] }
 tracing = "0.1.37"
 derivative = "2.2.0"
-
 rand = "0.8.5"
+toml = "0.8.14"
 tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }
 tracing-forest = { version = "0.1.6", features = ["ansi", "smallvec"] }
-afs-stark-backend = { path = "../stark-backend" }
 
-p3-dft = { workspace = true }
-p3-merkle-tree = { workspace = true }
-p3-fri = { workspace = true }
-p3-baby-bear = { workspace = true }
-p3-poseidon2 = { workspace = true }
-p3-symmetric = { workspace = true }
-p3-mds = { workspace = true }
-toml = "0.8.14"
-p3-blake3 = { workspace = true }
-p3-keccak = { workspace = true }
+afs-stark-backend = { path = "../stark-backend" }
 
 [features]
 default = []
