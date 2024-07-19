@@ -42,7 +42,7 @@ impl IsLessThanTupleAir {
     /// FOR INTERNAL USE ONLY when this AIR is used as a sub-AIR but the comparators `x, y` are on different rows. See [IsLessThanAir::eval_without_interactions].
     ///
     /// Constrains that `x < y` lexicographically.
-    pub fn eval_without_interactions<AB: AirBuilder>(
+    pub(crate) fn eval_without_interactions<AB: AirBuilder>(
         &self,
         builder: &mut AB,
         io: IsLessThanTupleIoCols<AB::Var>,
@@ -166,5 +166,25 @@ impl<AB: InteractionBuilder> SubAir<AB> for IsLessThanTupleAir {
         // we need the `eval_without_interactions` version in AssertSortedAir where the comparators
         // `x, y` are on different rows. The rust trait bounds of AB: AirBuilder vs
         // AB: InteractionBuilder make this complicated to do otherwise.
+    }
+}
+
+impl IsLessThanTupleAir {
+    /// Imposes the non-interaction constraints on all except the last row. This is
+    /// intended for use when the comparators `x, y` are on adjacent rows.
+    ///
+    /// This function does also enable the interaction constraints _on every row_.
+    /// The `eval_interactions` performs range checks on `lower_decomp` on every row, even
+    /// though in this AIR the lower_decomp is not used on the last row.
+    /// This simply means the trace generation must fill in the last row with numbers in
+    /// range (e.g., with zeros)
+    pub fn eval_when_transition<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        io: IsLessThanTupleIoCols<AB::Var>,
+        aux: IsLessThanTupleAuxCols<AB::Var>,
+    ) {
+        self.eval_interactions(builder, &aux.less_than_aux);
+        self.eval_without_interactions(&mut builder.when_transition(), io, aux);
     }
 }

@@ -33,7 +33,7 @@ impl IsLessThanAir {
 
     /// FOR INTERNAL USE ONLY.
     /// This AIR is only sound if interactions are enabled
-    pub fn eval_without_interactions<AB: AirBuilder>(
+    pub(crate) fn eval_without_interactions<AB: AirBuilder>(
         &self,
         builder: &mut AB,
         io: IsLessThanIoCols<AB::Var>,
@@ -121,5 +121,25 @@ impl<AB: InteractionBuilder> SubAir<AB> for IsLessThanAir {
         // Note: every AIR that uses this sub-AIR must include these interactions for soundness
         self.eval_interactions(builder, aux.lower_decomp.clone());
         self.eval_without_interactions(builder, io, aux);
+    }
+}
+
+impl IsLessThanAir {
+    /// Imposes the non-interaction constraints on all except the last row. This is
+    /// intended for use when the comparators `x, y` are on adjacent rows.
+    ///
+    /// This function does also enable the interaction constraints _on every row_.
+    /// The `eval_interactions` performs range checks on `lower_decomp` on every row, even
+    /// though in this AIR the lower_decomp is not used on the last row.
+    /// This simply means the trace generation must fill in the last row with numbers in
+    /// range (e.g., with zeros)
+    pub fn eval_when_transition<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        io: IsLessThanIoCols<AB::Var>,
+        aux: IsLessThanAuxCols<AB::Var>,
+    ) {
+        self.eval_interactions(builder, aux.lower_decomp.clone());
+        self.eval_without_interactions(&mut builder.when_transition(), io, aux);
     }
 }

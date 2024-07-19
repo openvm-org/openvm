@@ -5,7 +5,7 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use crate::is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIoCols};
+use crate::is_less_than_tuple::columns::IsLessThanTupleIoCols;
 use crate::is_less_than_tuple::IsLessThanTupleAir;
 
 use super::columns::AssertSortedCols;
@@ -63,26 +63,14 @@ impl<AB: InteractionBuilder> Air<AB> for AssertSortedAir {
             .when_transition()
             .assert_one(local_cols.less_than_next_key);
 
-        let is_less_than_tuple_cols = IsLessThanTupleCols {
-            io: IsLessThanTupleIoCols {
-                x: local_cols.key,
-                y: next_cols.key,
-                tuple_less_than: local_cols.less_than_next_key,
-            },
-            aux: local_cols.is_less_than_tuple_aux,
+        let io = IsLessThanTupleIoCols {
+            x: local_cols.key,
+            y: next_cols.key,
+            tuple_less_than: local_cols.less_than_next_key,
         };
+        let aux = local_cols.is_less_than_tuple_aux;
 
-        // The `eval_interactions` below performs range checks on lower_decomp on every row, even
-        // though in this AIR the lower_decomp is not used on the last row.
-        // This simply means the trace generation must fill in the last row with numbers in range (e.g., with zeros)
         self.is_less_than_tuple_air
-            .eval_interactions(builder, &is_less_than_tuple_cols.aux.less_than_aux);
-
-        // constrain the indicator that we used to check whether the current key < next key is correct
-        self.is_less_than_tuple_air.eval_without_interactions(
-            &mut builder.when_transition(),
-            is_less_than_tuple_cols.io,
-            is_less_than_tuple_cols.aux,
-        );
+            .eval_when_transition(builder, io, aux);
     }
 }
