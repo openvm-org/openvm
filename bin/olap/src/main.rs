@@ -1,5 +1,5 @@
 use afs_test_utils::{config::setup_tracing, page_config::PageConfig};
-use predicate::cli::run;
+use olap::cli::run;
 
 fn main() {
     if std::env::var_os("RUST_BACKTRACE").is_none() {

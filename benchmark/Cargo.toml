@@ -8,7 +8,7 @@ edition.workspace = true
 cli-table = "0.4.9"
 csv = "1.3.0"
 afs = { path = "../bin/afs" }
-predicate = { path = "../bin/predicate" }
+olap = { path = "../bin/olap" }
 afs-stark-backend = { path = "../stark-backend" }
 logical-interface = { path = "../logical-interface" }
 afs-derive = { path = "../derive" }

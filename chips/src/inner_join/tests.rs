@@ -35,10 +35,12 @@ fn load_tables_test(
     let prover_data = ij_controller.load_tables(
         t1,
         t2,
+        None,
+        None,
+        None,
         intersector_trace_degree,
         &mut trace_builder.committer,
     );
-
     let proof = ij_controller.prove(engine, partial_pk, trace_builder, prover_data);
     ij_controller.verify(engine, partial_pk.partial_vk(), proof)
 }
