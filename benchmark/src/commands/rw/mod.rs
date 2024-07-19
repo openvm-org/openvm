@@ -114,7 +114,7 @@ impl RwCommand {
     }
 }
 
-pub fn run_rw_bench(config: &PageConfig, extra_data: String) -> Result<()> {
+pub fn run_bench_rw(config: &PageConfig, extra_data: String) -> Result<()> {
     let checker_trace_degree = config.page.max_rw_ops * 4;
     let pcs_log_degree = log2_strict_usize(checker_trace_degree)
         .max(log2_strict_usize(config.page.height))
