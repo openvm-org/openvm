@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use p3_field::PrimeField32;
@@ -56,35 +56,28 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
             Self::new_nonleaf(child.clone(), child, hash_provider)
         }
     }
+}
 
-    pub fn from_memory(
-        height: usize,
-        memory: HashMap<usize, F>,
-        hash_provider: &mut impl HashProvider<CHUNK, F>,
-    ) -> MemoryNode<CHUNK, F> {
-        if memory.is_empty() {
-            Self::construct_all_zeros(height, hash_provider)
-        } else if height == 0 {
-            let mut values = [F::zero(); CHUNK];
-            for (address, value) in memory {
-                values[address] = value;
-            }
-            Self::new_leaf(values)
-        } else {
-            let midpoint: usize = CHUNK << (height - 1);
-            let mut left_memory = HashMap::new();
-            let mut right_memory = HashMap::new();
-            for (address, value) in memory {
-                if address < midpoint {
-                    left_memory.insert(address, value);
-                } else {
-                    right_memory.insert(address - midpoint, value);
-                }
-            }
-            let left = Self::from_memory(height - 1, left_memory, hash_provider);
-            let right = Self::from_memory(height - 1, right_memory, hash_provider);
-            Self::new_nonleaf(Arc::new(left), Arc::new(right), hash_provider)
+fn from_memory<const CHUNK: usize, F: PrimeField32>(
+    memory: &BTreeMap<usize, F>,
+    height: usize,
+    from: usize,
+    hash_provider: &mut impl HashProvider<CHUNK, F>,
+) -> MemoryNode<CHUNK, F> {
+    let mut range = memory.range(from..from + (CHUNK << height));
+    if height == 0 {
+        let mut values = [F::zero(); CHUNK];
+        for (&address, &value) in range {
+            values[address - from] = value;
         }
+        MemoryNode::new_leaf(values)
+    } else if range.next().is_none() {
+        MemoryNode::construct_all_zeros(height, hash_provider)
+    } else {
+        let midpoint = from + (CHUNK << (height - 1));
+        let left = from_memory(memory, height - 1, from, hash_provider);
+        let right = from_memory(memory, height - 1, midpoint, hash_provider);
+        MemoryNode::new_nonleaf(Arc::new(left), Arc::new(right), hash_provider)
     }
 }
 
@@ -104,7 +97,7 @@ pub fn trees_from_full_memory<const CHUNK: usize, F: PrimeField32>(
         }
         trees.insert(
             address_space,
-            MemoryNode::from_memory(height, memory_here, hash_provider),
+            from_memory(&memory_here.into_iter().collect(), height, 0, hash_provider),
         );
     }
     trees
