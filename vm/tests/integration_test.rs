@@ -158,7 +158,7 @@ fn test_vm_fibonacci_old() {
 #[test]
 fn test_vm_fibonacci_old_cycle_tracker() {
     let program = vec![
-        Instruction::debug(CT_START, "full"),
+        Instruction::debug(CT_START, "total"),
         Instruction::debug(CT_START, "store"),
         Instruction::from_isize(STOREW, 9, 0, 0, 0, 1),
         Instruction::from_isize(STOREW, 1, 0, 2, 0, 1),
@@ -175,7 +175,7 @@ fn test_vm_fibonacci_old_cycle_tracker() {
         Instruction::from_isize(STOREW, 6, 0, 2, 1, 2),
         Instruction::from_isize(JAL, 7, -6, 0, 1, 0),
         Instruction::debug(CT_END, "loop"),
-        Instruction::debug(CT_END, "full"),
+        Instruction::debug(CT_END, "total"),
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 

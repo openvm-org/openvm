@@ -1,4 +1,3 @@
-use p3_air::BaseAir;
 use p3_field::{Field, PrimeField32, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 use std::collections::VecDeque;
@@ -291,8 +290,8 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     let base_pointer = read!(d, a);
                     write!(e, base_pointer + b, hint);
                 }
-                CT_START => cycle_tracker.start(debug, vm, &rows),
-                CT_END => cycle_tracker.end(debug, vm, &rows),
+                CT_START => cycle_tracker.start(debug, vm, &rows, clock_cycle, timestamp),
+                CT_END => cycle_tracker.end(debug, vm, &rows, clock_cycle, timestamp),
             };
 
             let mut operation_flags = BTreeMap::new();
@@ -327,7 +326,8 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             }
         }
 
-        println!("{}", cycle_tracker);
+        cycle_tracker.end_all_active(vm, &rows, clock_cycle, timestamp);
+        cycle_tracker.print();
 
         Ok(RowMajorMatrix::new(
             rows,
