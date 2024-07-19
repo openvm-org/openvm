@@ -10,6 +10,7 @@ use afs_chips::{
     range_gate::RangeCheckerGateChip,
 };
 use afs_stark_backend::{
+    config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkPartialProvingKey,
     prover::{
         trace::{ProverTraceData, TraceCommitmentBuilder},
@@ -19,7 +20,7 @@ use afs_stark_backend::{
 };
 
 use afs_test_utils::{
-    config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     engine::StarkEngine,
     page_config::{MultitierPageConfig, PageMode},
 };
@@ -33,13 +34,16 @@ use logical_interface::{
     },
     utils::string_to_u16_vec,
 };
-use p3_baby_bear::BabyBear;
-use p3_util::log2_strict_usize;
+use p3_field::{PrimeField, PrimeField32, PrimeField64};
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use serde::{de::DeserializeOwned, Serialize};
 
 use crate::commands::{
     commit_to_string, get_prover_data_from_file, read_from_path, write_bytes,
     BABYBEAR_COMMITMENT_LEN, DECOMP_BITS, LIMB_BITS,
 };
+
+use tracing::info_span;
 
 use super::create_prefix;
 
@@ -75,15 +79,6 @@ pub struct ProveCommand {
     pub keys_folder: String,
 
     #[arg(
-        long = "cache-folder",
-        short = 'c',
-        help = "The folder that contains cached traces",
-        required = false,
-        default_value = "cache"
-    )]
-    pub cache_folder: String,
-
-    #[arg(
         long = "silent",
         short = 's',
         help = "Don't print the output to stdout",
@@ -94,11 +89,37 @@ pub struct ProveCommand {
 
 impl ProveCommand {
     /// Execute the `prove` command
-    pub fn execute(&self, config: &MultitierPageConfig) -> Result<()> {
+    pub fn execute<SC: StarkGenericConfig, E>(
+        config: &MultitierPageConfig,
+        engine: &E,
+        afi_file_path: String,
+        db_folder: String,
+        keys_folder: String,
+        silent: bool,
+    ) -> Result<()>
+    where
+        E: StarkEngine<SC>,
+        Val<SC>: PrimeField + PrimeField64 + PrimeField32,
+        Com<SC>: Into<[Val<SC>; BABYBEAR_COMMITMENT_LEN]>,
+        PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
+        PcsProof<SC>: Send + Sync,
+        Domain<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Pcs: Sync,
+        SC::Challenge: Send + Sync,
+    {
         let start = Instant::now();
         let prefix = create_prefix(config);
         match config.page.mode {
-            PageMode::ReadWrite => self.execute_rw(config, prefix)?,
+            PageMode::ReadWrite => Self::execute_rw(
+                config,
+                engine,
+                afi_file_path,
+                db_folder,
+                keys_folder,
+                silent,
+                prefix,
+            )?,
             PageMode::ReadOnly => panic!(),
         }
 
@@ -108,20 +129,42 @@ impl ProveCommand {
         Ok(())
     }
 
-    pub fn execute_rw(&self, config: &MultitierPageConfig, prefix: String) -> Result<()> {
-        println!("Proving ops file: {}", self.afi_file_path);
+    pub fn execute_rw<SC: StarkGenericConfig, E>(
+        config: &MultitierPageConfig,
+        engine: &E,
 
-        println!("afi_file_path: {}", self.afi_file_path);
-        let instructions = AfsInputFile::open(&self.afi_file_path)?;
+        afi_file_path: String,
+        db_folder: String,
+        keys_folder: String,
+        _silent: bool,
+        prefix: String,
+    ) -> Result<()>
+    where
+        E: StarkEngine<SC>,
+        Val<SC>: PrimeField + PrimeField64 + PrimeField32,
+        Com<SC>: Into<[Val<SC>; BABYBEAR_COMMITMENT_LEN]>,
+        PcsProverData<SC>: Serialize + DeserializeOwned,
+        PcsProverData<SC>: DeserializeOwned + Send + Sync,
+        PcsProof<SC>: Send + Sync,
+        Domain<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Pcs: Sync,
+        SC::Challenge: Send + Sync,
+    {
+        println!("Proving ops file: {}", afi_file_path);
+
+        println!("afi_file_path: {}", afi_file_path);
+        let instructions = AfsInputFile::open(&afi_file_path)?;
         let table_id = instructions.header.table_id.clone();
         let dst_id = table_id.clone() + ".0";
         let mut db = PageBTree::<BABYBEAR_COMMITMENT_LEN>::load(
-            self.db_folder.clone(),
+            db_folder.clone(),
             table_id.to_owned(),
             dst_id,
         )
         .unwrap();
 
+        let page_btree_update_span = info_span!("Page BTree Updates").entered();
         let zk_ops = instructions
             .operations
             .iter()
@@ -136,19 +179,15 @@ impl ProveCommand {
                 )
             })
             .collect::<Vec<_>>();
-        let db_folder = self.db_folder.clone();
-        let idx_len = (config.page.index_bytes + 1) / 2 as usize;
-        let data_len = (config.page.data_bytes + 1) / 2 as usize;
+        page_btree_update_span.exit();
+        let db_folder = db_folder.clone();
+        let idx_len = (config.page.index_bytes + 1) / 2;
+        let data_len = (config.page.data_bytes + 1) / 2;
         let data_bus_index = 0;
         let internal_data_bus_index = 1;
         let lt_bus_index = 2;
 
-        let page_height = config.page.height;
-
         let trace_degree = config.page.max_rw_ops * 4;
-
-        let log_page_height = log2_strict_usize(page_height);
-        let log_trace_degree = log2_strict_usize(trace_degree);
 
         let init_path_bus = 3;
         let final_path_bus = 4;
@@ -173,44 +212,31 @@ impl ProveCommand {
                     path_bus_index: init_path_bus,
                     leaf_cap: config.tree.init_leaf_cap,
                     internal_cap: config.tree.init_internal_cap,
-                    leaf_page_height: page_height,
-                    internal_page_height: page_height,
+                    leaf_page_height: config.page.leaf_height,
+                    internal_page_height: config.page.internal_height,
                 },
                 PageTreeParams {
                     path_bus_index: final_path_bus,
                     leaf_cap: config.tree.final_leaf_cap,
                     internal_cap: config.tree.final_internal_cap,
-                    leaf_page_height: page_height,
-                    internal_page_height: page_height,
+                    leaf_page_height: config.page.leaf_height,
+                    internal_page_height: config.page.internal_height,
                 },
                 less_than_tuple_param,
                 range_checker,
             );
         let ops_sender = ExecutionAir::new(ops_bus_index, idx_len, data_len);
-        let engine = config::baby_bear_poseidon2::default_engine(
-            log_page_height.max(DECOMP_BITS).max(log_trace_degree),
-        );
-        let prover = MultiTraceStarkProver::new(&engine.config);
-        let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-        db.commit(&mut trace_builder.committer, db_folder.clone());
+        let prover = MultiTraceStarkProver::new(engine.config());
+        let mut trace_builder = TraceCommitmentBuilder::<SC>::new(prover.pcs());
 
+        info_span!("Page BTree Commit to Disk")
+            .in_scope(|| db.commit(&trace_builder.committer, db_folder.clone()));
+        let page_btree_load_span = info_span!("Page BTree Load Traces and Prover Data").entered();
         let init_pages = db.gen_loaded_trace();
-        let final_pages = db.gen_all_trace(&mut trace_builder.committer, None);
+        let final_pages = db.gen_all_trace(&trace_builder.committer, None);
         let init_root_is_leaf = init_pages.internal_pages.is_empty();
         let final_root_is_leaf = final_pages.internal_pages.is_empty();
-
-        let encoded_blank_prover_data =
-            read_from_path(self.keys_folder.clone() + "/" + &prefix + ".blank_leaf.cache.bin")
-                .unwrap();
-        let blank_leaf_prover_data: ProverTraceData<BabyBearPoseidon2Config> =
-            bincode::deserialize(&encoded_blank_prover_data).unwrap();
-
-        let encoded_blank_prover_data =
-            read_from_path(self.keys_folder.clone() + "/" + &prefix + ".blank_internal.cache.bin")
-                .unwrap();
-        let blank_internal_prover_data: ProverTraceData<BabyBearPoseidon2Config> =
-            bincode::deserialize(&encoded_blank_prover_data).unwrap();
 
         let mut init_leaf_prover_data = init_pages
             .leaf_commits
@@ -244,16 +270,54 @@ impl ProveCommand {
                 get_prover_data_from_file(db_folder.clone() + "/internal/" + &s + ".cache.bin")
             })
             .collect_vec();
-        init_leaf_prover_data.resize(config.tree.init_leaf_cap, blank_leaf_prover_data.clone());
-        init_internal_prover_data.resize(
-            config.tree.init_internal_cap,
-            blank_internal_prover_data.clone(),
-        );
-        final_leaf_prover_data.resize(config.tree.final_leaf_cap, blank_leaf_prover_data.clone());
-        final_internal_prover_data.resize(
-            config.tree.final_internal_cap,
-            blank_internal_prover_data.clone(),
-        );
+        // init_leaf_prover_data.resize(config.tree.init_leaf_cap, blank_leaf_prover_data.clone());
+        // init_internal_prover_data.resize(
+        //     config.tree.init_internal_cap,
+        //     blank_internal_prover_data.clone(),
+        // );
+        while init_leaf_prover_data.len() < config.tree.init_leaf_cap {
+            let encoded_blank_prover_data =
+                read_from_path(keys_folder.clone() + "/" + &prefix + ".blank_leaf.cache.bin")
+                    .unwrap();
+            let blank_leaf_prover_data: ProverTraceData<SC> =
+                bincode::deserialize(&encoded_blank_prover_data).unwrap();
+            init_leaf_prover_data.push(blank_leaf_prover_data);
+        }
+        while init_internal_prover_data.len() < config.tree.init_internal_cap {
+            let encoded_blank_prover_data =
+                read_from_path(keys_folder.clone() + "/" + &prefix + ".blank_internal.cache.bin")
+                    .unwrap();
+            let blank_internal_prover_data: ProverTraceData<SC> =
+                bincode::deserialize(&encoded_blank_prover_data).unwrap();
+            init_internal_prover_data.push(blank_internal_prover_data);
+        }
+        while final_leaf_prover_data.len() < config.tree.final_leaf_cap {
+            let encoded_blank_prover_data =
+                read_from_path(keys_folder.clone() + "/" + &prefix + ".blank_leaf.cache.bin")
+                    .unwrap();
+            let blank_leaf_prover_data: ProverTraceData<SC> =
+                bincode::deserialize(&encoded_blank_prover_data).unwrap();
+            final_leaf_prover_data.push(blank_leaf_prover_data);
+        }
+        while final_internal_prover_data.len() < config.tree.final_internal_cap {
+            let encoded_blank_prover_data =
+                read_from_path(keys_folder.clone() + "/" + &prefix + ".blank_internal.cache.bin")
+                    .unwrap();
+            let blank_internal_prover_data: ProverTraceData<SC> =
+                bincode::deserialize(&encoded_blank_prover_data).unwrap();
+            final_internal_prover_data.push(blank_internal_prover_data);
+        }
+        page_btree_load_span.exit();
+        // let encoded_blank_prover_data =
+        //     read_from_path(keys_folder.clone() + "/" + &prefix + ".blank_internal.cache.bin")
+        //         .unwrap();
+        // let blank_internal_prover_data: ProverTraceData<BabyBearPoseidon2Config> =
+        //     bincode::deserialize(&encoded_blank_prover_data).unwrap();
+        // final_leaf_prover_data.resize(config.tree.final_leaf_cap, blank_leaf_prover_data.clone());
+        // final_internal_prover_data.resize(
+        //     config.tree.final_internal_cap,
+        //     blank_internal_prover_data.clone(),
+        // );
         let (data_trace, main_trace, commits, mut prover_data) = page_controller.load_page_and_ops(
             init_pages.leaf_pages,
             init_pages.internal_pages,
@@ -279,7 +343,9 @@ impl ProveCommand {
         let init_root = main_trace.init_root_signal_trace.clone();
         let final_root = main_trace.final_root_signal_trace.clone();
         let range_trace = page_controller.range_checker.generate_trace();
+        let trace_span = info_span!("Prove.generate_trace").entered();
         let ops_sender_trace = ops_sender.generate_trace(&zk_ops, config.page.max_rw_ops);
+        trace_span.exit();
         trace_builder.clear();
 
         for trace in data_trace.init_leaf_chip_traces.iter() {
@@ -321,9 +387,9 @@ impl ProveCommand {
         trace_builder.load_trace(final_root);
         trace_builder.load_trace(range_trace);
         trace_builder.load_trace(ops_sender_trace);
-        trace_builder.commit_current();
+        tracing::info_span!("Prove trace commitment").in_scope(|| trace_builder.commit_current());
 
-        let mut airs: Vec<&dyn AnyRap<BabyBearPoseidon2Config>> = vec![];
+        let mut airs: Vec<&dyn AnyRap<SC>> = vec![];
         for chip in &page_controller.init_leaf_chips {
             airs.push(chip);
         }
@@ -342,36 +408,36 @@ impl ProveCommand {
         airs.push(&page_controller.range_checker.air);
         airs.push(&ops_sender);
         let encoded_pk =
-            read_from_path(self.keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
-        let partial_pk: MultiStarkPartialProvingKey<BabyBearPoseidon2Config> =
+            read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
+        let partial_pk: MultiStarkPartialProvingKey<SC> =
             bincode::deserialize(&encoded_pk).unwrap();
         let partial_vk = partial_pk.partial_vk();
         let main_trace_data = trace_builder.view(&partial_vk, airs.clone());
 
         let mut pis = vec![];
         for c in commits.init_leaf_page_commitments {
-            let c: [BabyBear; BABYBEAR_COMMITMENT_LEN] = c.into();
+            let c: [Val<SC>; BABYBEAR_COMMITMENT_LEN] = c.into();
             pis.push(c.to_vec());
         }
         for c in commits.init_internal_page_commitments {
-            let c: [BabyBear; BABYBEAR_COMMITMENT_LEN] = c.into();
+            let c: [Val<SC>; BABYBEAR_COMMITMENT_LEN] = c.into();
             pis.push(c.to_vec());
         }
         for c in commits.final_leaf_page_commitments {
-            let c: [BabyBear; BABYBEAR_COMMITMENT_LEN] = c.into();
+            let c: [Val<SC>; BABYBEAR_COMMITMENT_LEN] = c.into();
             pis.push(c.to_vec());
         }
         for c in commits.final_internal_page_commitments {
-            let c: [BabyBear; BABYBEAR_COMMITMENT_LEN] = c.into();
+            let c: [Val<SC>; BABYBEAR_COMMITMENT_LEN] = c.into();
             pis.push(c.to_vec());
         }
         pis.push(vec![]);
         {
-            let c: [BabyBear; BABYBEAR_COMMITMENT_LEN] = commits.init_root_commitment.into();
+            let c: [Val<SC>; BABYBEAR_COMMITMENT_LEN] = commits.init_root_commitment.into();
             pis.push(c.to_vec());
         }
         {
-            let c: [BabyBear; BABYBEAR_COMMITMENT_LEN] = commits.final_root_commitment.into();
+            let c: [Val<SC>; BABYBEAR_COMMITMENT_LEN] = commits.final_root_commitment.into();
             pis.push(c.to_vec());
         }
         pis.push(vec![]);
@@ -381,9 +447,9 @@ impl ProveCommand {
         let mut challenger = engine.new_challenger();
         let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
         let encoded_proof: Vec<u8> = bincode::serialize(&proof).unwrap();
-        let proof_path = self.db_folder.clone() + "/" + &table_id + ".prove.bin";
+        let proof_path = db_folder.clone() + "/" + &table_id + ".prove.bin";
         let encoded_pis: Vec<u8> = bincode::serialize(&pis).unwrap();
-        let pis_path = self.db_folder.clone() + "/" + &table_id + ".pi.bin";
+        let pis_path = db_folder.clone() + "/" + &table_id + ".pi.bin";
         write_bytes(&encoded_proof, proof_path).unwrap();
         write_bytes(&encoded_pis, pis_path).unwrap();
         Ok(())

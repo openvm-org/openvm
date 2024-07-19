@@ -17,6 +17,8 @@ serde_json = "1.0.117"
 tokio = { version = "1.38.0", features = ["rt", "macros"] }
 toml = "0.8.14"
 p3-baby-bear = { workspace = true }
+p3-blake3 = { workspace = true }
+p3-keccak = { workspace = true }
 p3-util = { workspace = true }
 afs-stark-backend = { path = "../../stark-backend" }
 afs-derive = { path = "../../derive" }
@@ -25,3 +27,5 @@ afs-chips = { path = "../../chips" }
 p3-uni-stark = { workspace = true }
 p3-field = { workspace = true }
 itertools = "0.13.0"
+
+tracing = "0.1.37"

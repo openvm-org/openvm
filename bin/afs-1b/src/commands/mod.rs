@@ -32,7 +32,7 @@ fn read_from_path(path: String) -> Option<Vec<u8>> {
     Some(buf)
 }
 
-fn write_bytes(bytes: &Vec<u8>, path: String) -> Result<()> {
+fn write_bytes(bytes: &[u8], path: String) -> Result<()> {
     let file = File::create(path)?;
     let mut writer = BufWriter::new(file);
     writer.write_all(bytes)?;
@@ -41,11 +41,12 @@ fn write_bytes(bytes: &Vec<u8>, path: String) -> Result<()> {
 
 fn create_prefix(config: &MultitierPageConfig) -> String {
     format!(
-        "{:?}_{}_{}_{}_{}_{}_cap_{}_{}_{}_{}",
+        "{:?}_{}_{}_{}_{}_{}_{}_cap_{}_{}_{}_{}",
         config.page.mode,
         config.page.index_bytes,
         config.page.data_bytes,
-        config.page.height,
+        config.page.leaf_height,
+        config.page.internal_height,
         config.page.bits_per_fe,
         config.page.max_rw_ops,
         config.tree.init_leaf_cap,
@@ -55,7 +56,7 @@ fn create_prefix(config: &MultitierPageConfig) -> String {
     )
 }
 
-pub fn commit_to_string(commit: &Vec<u32>) -> String {
+pub fn commit_to_string(commit: &[u32]) -> String {
     commit.iter().fold("".to_owned(), |acc, x| {
         acc.to_owned() + &format!("{:08x}", x)
     })

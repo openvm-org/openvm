@@ -13,17 +13,20 @@ use afs_chips::{
     range_gate::RangeCheckerGateChip,
 };
 use afs_stark_backend::{
-    keygen::types::MultiStarkPartialVerifyingKey, prover::types::Proof, rap::AnyRap,
+    config::{Com, PcsProof, PcsProverData},
+    keygen::types::MultiStarkPartialVerifyingKey,
+    prover::types::Proof,
+    rap::AnyRap,
 };
 use afs_test_utils::{
-    config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
     engine::StarkEngine,
     page_config::{MultitierPageConfig, PageMode},
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
-use p3_baby_bear::BabyBear;
-use p3_util::log2_strict_usize;
+use p3_field::{PrimeField, PrimeField32, PrimeField64};
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use serde::{de::DeserializeOwned, Serialize};
 
 use crate::commands::{read_from_path, BABYBEAR_COMMITMENT_LEN, DECOMP_BITS, LIMB_BITS};
 
@@ -58,11 +61,30 @@ pub struct VerifyCommand {
 
 impl VerifyCommand {
     /// Execute the `verify` command
-    pub fn execute(&self, config: &MultitierPageConfig) -> Result<()> {
+    pub fn execute<SC: StarkGenericConfig, E>(
+        config: &MultitierPageConfig,
+        engine: &E,
+        table_id: String,
+        db_folder: String,
+        keys_folder: String,
+    ) -> Result<()>
+    where
+        E: StarkEngine<SC>,
+        Val<SC>: PrimeField + PrimeField64 + PrimeField32,
+        Com<SC>: Into<[Val<SC>; BABYBEAR_COMMITMENT_LEN]>,
+        PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
+        PcsProof<SC>: Send + Sync,
+        Domain<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Pcs: Sync,
+        SC::Challenge: Send + Sync,
+    {
         let start = Instant::now();
         let prefix = create_prefix(config);
         match config.page.mode {
-            PageMode::ReadWrite => self.execute_rw(config, prefix)?,
+            PageMode::ReadWrite => {
+                Self::execute_rw(config, engine, table_id, db_folder, keys_folder, prefix)?
+            }
             PageMode::ReadOnly => panic!(),
         }
 
@@ -72,19 +94,30 @@ impl VerifyCommand {
         Ok(())
     }
 
-    pub fn execute_rw(&self, config: &MultitierPageConfig, prefix: String) -> Result<()> {
-        let idx_len = (config.page.index_bytes + 1) / 2 as usize;
-        let data_len = (config.page.data_bytes + 1) / 2 as usize;
+    pub fn execute_rw<SC: StarkGenericConfig, E>(
+        config: &MultitierPageConfig,
+        engine: &E,
+        table_id: String,
+        db_folder: String,
+        keys_folder: String,
+        prefix: String,
+    ) -> Result<()>
+    where
+        E: StarkEngine<SC>,
+        Val<SC>: PrimeField + PrimeField64 + PrimeField32,
+        Com<SC>: Into<[Val<SC>; BABYBEAR_COMMITMENT_LEN]>,
+        PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
+        PcsProof<SC>: Send + Sync,
+        Domain<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Pcs: Sync,
+        SC::Challenge: Send + Sync,
+    {
+        let idx_len = (config.page.index_bytes + 1) / 2;
+        let data_len = (config.page.data_bytes + 1) / 2;
         let data_bus_index = 0;
         let internal_data_bus_index = 1;
         let lt_bus_index = 2;
-
-        let page_height = config.page.height;
-
-        let trace_degree = config.page.max_rw_ops * 4;
-
-        let log_page_height = log2_strict_usize(page_height);
-        let log_trace_degree = log2_strict_usize(trace_degree);
 
         let init_path_bus = 3;
         let final_path_bus = 4;
@@ -94,55 +127,51 @@ impl VerifyCommand {
             limb_bits: LIMB_BITS,
             decomp: DECOMP_BITS,
         };
-        let proof_path = self.db_folder.clone() + "/" + &self.table_id + ".prove.bin";
-        let original_root = self.db_folder.clone() + "/root/" + &self.table_id;
+        let proof_path = db_folder.clone() + "/" + &table_id + ".prove.bin";
+        let original_root = db_folder.clone() + "/root/" + &table_id;
         println!("Verifying proof file: {}", proof_path);
-        // verify::verify_ops(&self.proof_file).await?;
+        // verify::verify_ops(&proof_file).await?;
         let encoded_vk =
-            read_from_path(self.keys_folder.clone() + "/" + &prefix + ".partial.vk").unwrap();
-        let partial_vk: MultiStarkPartialVerifyingKey<BabyBearPoseidon2Config> =
+            read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.vk").unwrap();
+        let partial_vk: MultiStarkPartialVerifyingKey<SC> =
             bincode::deserialize(&encoded_vk).unwrap();
 
         let encoded_proof = read_from_path(proof_path).unwrap();
-        let proof: Proof<BabyBearPoseidon2Config> = bincode::deserialize(&encoded_proof).unwrap();
+        let proof: Proof<SC> = bincode::deserialize(&encoded_proof).unwrap();
         let range_checker = Arc::new(RangeCheckerGateChip::new(lt_bus_index, 1 << DECOMP_BITS));
 
-        let page_controller: PageController<BABYBEAR_COMMITMENT_LEN> =
-            PageController::new::<BabyBearPoseidon2Config>(
-                data_bus_index,
-                internal_data_bus_index,
-                ops_bus_index,
-                lt_bus_index,
-                idx_len,
-                data_len,
-                PageTreeParams {
-                    path_bus_index: init_path_bus,
-                    leaf_cap: config.tree.init_leaf_cap,
-                    internal_cap: config.tree.init_internal_cap,
-                    leaf_page_height: page_height,
-                    internal_page_height: page_height,
-                },
-                PageTreeParams {
-                    path_bus_index: final_path_bus,
-                    leaf_cap: config.tree.final_leaf_cap,
-                    internal_cap: config.tree.final_internal_cap,
-                    leaf_page_height: page_height,
-                    internal_page_height: page_height,
-                },
-                less_than_tuple_param,
-                range_checker,
-            );
-        let ops_sender = ExecutionAir::new(ops_bus_index, idx_len, data_len);
-        let engine = config::baby_bear_poseidon2::default_engine(
-            log_page_height.max(DECOMP_BITS).max(log_trace_degree),
+        let page_controller: PageController<BABYBEAR_COMMITMENT_LEN> = PageController::new::<SC>(
+            data_bus_index,
+            internal_data_bus_index,
+            ops_bus_index,
+            lt_bus_index,
+            idx_len,
+            data_len,
+            PageTreeParams {
+                path_bus_index: init_path_bus,
+                leaf_cap: config.tree.init_leaf_cap,
+                internal_cap: config.tree.init_internal_cap,
+                leaf_page_height: config.page.leaf_height,
+                internal_page_height: config.page.internal_height,
+            },
+            PageTreeParams {
+                path_bus_index: final_path_bus,
+                leaf_cap: config.tree.final_leaf_cap,
+                internal_cap: config.tree.final_internal_cap,
+                leaf_page_height: config.page.leaf_height,
+                internal_page_height: config.page.internal_height,
+            },
+            less_than_tuple_param,
+            range_checker,
         );
+        let ops_sender = ExecutionAir::new(ops_bus_index, idx_len, data_len);
         let verifier = engine.verifier();
-        let pis_path = self.db_folder.clone() + "/" + &self.table_id + ".pi.bin";
+        let pis_path = db_folder.clone() + "/" + &table_id + ".pi.bin";
         let encoded_pis = read_from_path(pis_path).unwrap();
-        let pis: Vec<Vec<BabyBear>> = bincode::deserialize(&encoded_pis).unwrap();
+        let pis: Vec<Vec<Val<SC>>> = bincode::deserialize(&encoded_pis).unwrap();
 
         let mut challenger = engine.new_challenger();
-        let mut airs: Vec<&dyn AnyRap<BabyBearPoseidon2Config>> = vec![];
+        let mut airs: Vec<&dyn AnyRap<SC>> = vec![];
         for chip in &page_controller.init_leaf_chips {
             airs.push(chip);
         }

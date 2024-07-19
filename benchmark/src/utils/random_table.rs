@@ -1,7 +1,7 @@
 use std::{collections::HashSet, fs::File, io::Write};
 
 use afs_chips::common::page::Page;
-use afs_test_utils::page_config::PageConfig;
+use afs_test_utils::page_config::{MultitierPageConfig, PageConfig};
 use color_eyre::eyre::Result;
 use core::cmp::min;
 use logical_interface::{
@@ -106,6 +106,41 @@ pub fn generate_random_afi_rw(
         if let Some(random_index) = inserted_indexes.iter().choose(&mut thread_rng()) {
             writeln!(file, "READ {}", random_index)?;
         }
+    }
+
+    Ok(())
+}
+
+pub fn generate_random_multitier_afi_rw(
+    config: &MultitierPageConfig,
+    table_id: String,
+    afi_path: String,
+) -> Result<()> {
+    let index_bytes = config.page.index_bytes;
+    let data_bytes = config.page.data_bytes;
+    let num_ops = config.tree.init_leaf_cap;
+
+    let mut file = File::create(afi_path.as_str())?;
+
+    // Write AFI header
+    let header = AfsHeader::new(table_id, index_bytes, data_bytes);
+    writeln!(file, "TABLE_ID {}", header.table_id)?;
+    writeln!(file, "INDEX_BYTES {}", header.index_bytes)?;
+    writeln!(file, "DATA_BYTES {}", header.data_bytes)?;
+
+    // Keep track of inserted indexes
+    let mut inserted_indexes: HashSet<String> = HashSet::new();
+
+    // Generate `INSERT` instructions
+    for _ in 0..num_ops {
+        let mut idx = generate_random_hex_string(index_bytes);
+        while inserted_indexes.contains(&idx) {
+            idx = generate_random_hex_string(index_bytes);
+        }
+        let data = generate_random_hex_string(data_bytes);
+
+        inserted_indexes.insert(idx.clone());
+        writeln!(file, "INSERT {} {}", idx, data)?;
     }
 
     Ok(())

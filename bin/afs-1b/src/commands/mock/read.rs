@@ -38,8 +38,8 @@ pub struct ReadCommand {
 impl ReadCommand {
     /// Execute the `mock read` command
     pub fn execute(&self, config: &MultitierPageConfig) -> Result<()> {
-        let idx_len = (config.page.index_bytes + 1) / 2 as usize;
-        let data_len = (config.page.data_bytes + 1) / 2 as usize;
+        let idx_len = (config.page.index_bytes + 1) / 2;
+        let data_len = (config.page.data_bytes + 1) / 2;
         let mut db = if let Some(table_id) = &self.table_id {
             println!("db_file_path: {}/root/{}", self.db_folder, table_id);
 
@@ -54,8 +54,8 @@ impl ReadCommand {
                 LIMB_BITS,
                 idx_len,
                 data_len,
-                config.page.height,
-                config.page.height,
+                config.page.leaf_height,
+                config.page.internal_height,
                 "".to_owned(),
             )
         };

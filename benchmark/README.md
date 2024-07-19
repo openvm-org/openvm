@@ -43,3 +43,9 @@ Run these commands from the root of the repository
 ```bash
 cargo run --release --bin benchmark -- rw -r 90 -w 10
 ```
+
+Run this command for multitier read/write
+
+```bash
+cargo run --release --bin benchmark -- mtrw -n
+```

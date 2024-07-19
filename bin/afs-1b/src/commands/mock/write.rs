@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::{collections::HashSet, fs::remove_file, time::Instant};
 
 use afs_chips::page_btree::PageBTree;
 use afs_stark_backend::prover::{trace::TraceCommitter, MultiTraceStarkProver};
@@ -11,7 +11,9 @@ use color_eyre::eyre::Result;
 use logical_interface::afs_input::AfsInputFile;
 use p3_util::log2_strict_usize;
 
-use crate::commands::{load_input_file, BABYBEAR_COMMITMENT_LEN, DECOMP_BITS, LIMB_BITS};
+use crate::commands::{
+    commit_to_string, load_input_file, BABYBEAR_COMMITMENT_LEN, DECOMP_BITS, LIMB_BITS,
+};
 
 #[derive(Debug, Parser)]
 pub struct WriteCommand {
@@ -47,6 +49,14 @@ pub struct WriteCommand {
         required = false
     )]
     pub silent: bool,
+
+    #[arg(
+        long = "clean",
+        short = 'c',
+        help = "Delete old files if output-table-id is set",
+        required = false
+    )]
+    pub clean: bool,
 }
 
 /// `mock read` subcommand
@@ -54,10 +64,9 @@ impl WriteCommand {
     /// Execute the `mock read` command
     pub fn execute(&self, config: &MultitierPageConfig) -> Result<()> {
         let start1 = Instant::now();
-        let idx_len = (config.page.index_bytes + 1) / 2 as usize;
-        let data_len = (config.page.data_bytes + 1) / 2 as usize;
+        let idx_len = (config.page.index_bytes + 1) / 2;
+        let data_len = (config.page.data_bytes + 1) / 2;
 
-        let page_height = config.page.height;
         let dst_id = match &self.output_table_id {
             Some(output_table_id) => output_table_id.to_owned(),
             None => "".to_owned(),
@@ -75,8 +84,8 @@ impl WriteCommand {
                 LIMB_BITS,
                 idx_len,
                 data_len,
-                page_height,
-                page_height,
+                config.page.leaf_height,
+                config.page.internal_height,
                 dst_id.clone(),
             ),
         };
@@ -85,19 +94,51 @@ impl WriteCommand {
         println!("Wrote in memory table operations {:?}", duration);
         let start2 = Instant::now();
         if self.output_table_id.is_some() {
-            let page_height = config.page.height;
-
             let trace_degree = config.page.max_rw_ops * 4;
 
-            let log_page_height = log2_strict_usize(page_height);
+            let log_page_height = log2_strict_usize(config.page.leaf_height);
             let log_trace_degree = log2_strict_usize(trace_degree);
 
             let engine = config::baby_bear_poseidon2::default_engine(
                 log_page_height.max(DECOMP_BITS).max(log_trace_degree),
             );
             let prover = MultiTraceStarkProver::new(&engine.config);
-            let mut trace_committer = TraceCommitter::new(prover.pcs());
-            db.commit::<BabyBearPoseidon2Config>(&mut trace_committer, self.db_folder.clone());
+            let trace_committer = TraceCommitter::new(prover.pcs());
+            if self.clean {
+                let final_pages = db.gen_all_trace(&trace_committer, Some(self.db_folder.clone()));
+                let init_pages = db.gen_loaded_trace();
+                let mut init_leaf_set = HashSet::<Vec<u32>>::new();
+                let mut init_internal_set = HashSet::<Vec<u32>>::new();
+                for c in init_pages.leaf_commits {
+                    init_leaf_set.insert(c.clone());
+                }
+                for c in init_pages.internal_commits {
+                    init_internal_set.insert(c.clone());
+                }
+                for c in final_pages.leaf_commits {
+                    if init_leaf_set.contains(&c) {
+                        init_leaf_set.remove(&c);
+                    }
+                }
+                for c in final_pages.internal_commits {
+                    if init_internal_set.contains(&c) {
+                        init_internal_set.remove(&c);
+                    }
+                }
+                for c in init_leaf_set.iter() {
+                    let c_str = commit_to_string(c);
+                    let path = self.db_folder.clone() + "/leaf/" + &c_str;
+                    remove_file(path.clone() + ".cache.bin").unwrap();
+                    remove_file(path + ".trace").unwrap();
+                }
+                for c in init_internal_set.iter() {
+                    let c_str = commit_to_string(c);
+                    let path = self.db_folder.clone() + "/internal/" + &c_str;
+                    remove_file(path.clone() + ".cache.bin").unwrap();
+                    remove_file(path + ".trace").unwrap();
+                }
+            }
+            db.commit::<BabyBearPoseidon2Config>(&trace_committer, self.db_folder.clone());
         }
         let duration = start2.elapsed();
         println!("Committed table operations in {:?}", duration);

@@ -22,6 +22,17 @@ pub struct PageParamsConfig {
     pub max_rw_ops: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MultitierPageParamsConfig {
+    pub index_bytes: usize,
+    pub data_bytes: usize,
+    pub bits_per_fe: usize,
+    pub leaf_height: usize,
+    pub internal_height: usize,
+    pub mode: PageMode,
+    pub max_rw_ops: usize,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TreeParamsConfig {
     pub init_leaf_cap: usize,
@@ -51,9 +62,10 @@ pub struct PageConfig {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MultitierPageConfig {
-    pub page: PageParamsConfig,
+    pub page: MultitierPageParamsConfig,
     pub tree: TreeParamsConfig,
-    pub schema: SchemaConfig,
+    pub fri_params: FriParameters,
+    pub stark_engine: StarkEngineConfig,
 }
 
 impl PageConfig {
@@ -97,5 +109,30 @@ impl MultitierPageConfig {
             panic!("Failed to parse config file {}:\n{}", file, e);
         });
         config
+    }
+
+    pub fn generate_filename(&self) -> String {
+        format!(
+            "{:?}_{}x{}x{}x{}-{}-{}_{}-{}-{}_{}-{}-{}-{}.toml",
+            self.stark_engine.engine,
+            self.page.index_bytes,
+            self.page.data_bytes,
+            self.page.leaf_height,
+            self.page.internal_height,
+            self.page.max_rw_ops,
+            self.page.bits_per_fe,
+            self.fri_params.log_blowup,
+            self.fri_params.num_queries,
+            self.fri_params.proof_of_work_bits,
+            self.tree.init_leaf_cap,
+            self.tree.init_internal_cap,
+            self.tree.final_leaf_cap,
+            self.tree.final_internal_cap
+        )
+    }
+
+    pub fn save_to_file(&self, file: &str) {
+        let file_str = toml::to_string(&self).unwrap();
+        fs::write(file, file_str).unwrap();
     }
 }

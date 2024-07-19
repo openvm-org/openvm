@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand};
 
-use crate::commands::{predicate::PredicateCommand, rw::RwCommand};
+use crate::commands::{
+    multitier_rw::MultitierRwCommand, predicate::PredicateCommand, rw::RwCommand,
+};
 
 #[derive(Debug, Parser)]
 #[command(author, version, about = "AFS Benchmark")]
@@ -12,6 +14,10 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
+    #[command(name = "mtrw", about = "Benchmark Multitier Read/Write")]
+    /// Read/Write functions
+    MtRw(MultitierRwCommand),
+
     #[command(name = "rw", about = "Benchmark Read/Write")]
     /// Read/Write functions
     Rw(RwCommand),
@@ -25,6 +31,7 @@ impl Cli {
     pub fn run() {
         let cli = Self::parse();
         match cli.command {
+            Commands::MtRw(mtrw) => mtrw.execute().unwrap(),
             Commands::Rw(rw) => rw.execute().unwrap(),
             Commands::Predicate(predicate) => predicate.execute().unwrap(),
         }

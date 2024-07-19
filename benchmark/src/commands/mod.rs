@@ -1,8 +1,9 @@
 use std::fs;
 
-use afs_test_utils::page_config::PageConfig;
+use afs_test_utils::page_config::{MultitierPageConfig, PageConfig};
 use clap::Parser;
 
+pub mod multitier_rw;
 pub mod predicate;
 pub mod rw;
 
@@ -40,6 +41,20 @@ pub fn parse_config_folder(config_folder: String) -> Vec<PageConfig> {
             let path = entry.path();
             if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("toml") {
                 let config = PageConfig::read_config_file(path.to_str().unwrap());
+                configs.push(config);
+            }
+        }
+    }
+    configs
+}
+
+pub fn parse_multitier_config_folder(config_folder: String) -> Vec<MultitierPageConfig> {
+    let mut configs = Vec::new();
+    if let Ok(entries) = fs::read_dir(config_folder) {
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("toml") {
+                let config = MultitierPageConfig::read_config_file(path.to_str().unwrap());
                 configs.push(config);
             }
         }

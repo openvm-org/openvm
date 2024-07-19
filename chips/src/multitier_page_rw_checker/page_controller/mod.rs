@@ -8,6 +8,7 @@ use p3_field::{AbstractField, Field, PrimeField64};
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 
 use p3_uni_stark::{StarkGenericConfig, Val};
+use tracing::info_span;
 
 use crate::common::page::Page;
 use crate::page_rw_checker::offline_checker::OfflineChecker;
@@ -280,6 +281,7 @@ impl<const COMMITMENT_LEN: usize> PageController<COMMITMENT_LEN> {
         Val<SC>: AbstractField + PrimeField64,
         Com<SC>: Into<[Val<SC>; COMMITMENT_LEN]>,
     {
+        let trace_span = info_span!("Load page trace generation").entered();
         let init_leaf_height = self.params.init_tree_params.leaf_page_height;
         let init_internal_height = self.params.init_tree_params.internal_page_height;
         let final_leaf_height = self.params.final_tree_params.leaf_page_height;
@@ -381,6 +383,7 @@ impl<const COMMITMENT_LEN: usize> PageController<COMMITMENT_LEN> {
             final_leaf_page: final_tree_products.leaf.prover_data,
             final_internal_page: final_tree_products.internal.prover_data,
         };
+        trace_span.exit();
         (data_trace, main_trace, commitments, prover_data)
     }
 }

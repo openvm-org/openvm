@@ -303,7 +303,7 @@ impl PageBTreeLeafNode {
 
     fn gen_all_trace<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>(
         &mut self,
-        committer: &mut TraceCommitter<SC>,
+        committer: &TraceCommitter<SC>,
         db_path: Option<String>,
         key_len: usize,
         val_len: usize,
@@ -374,9 +374,7 @@ impl PageBTreeLeafNode {
             self.gen_trace(key_len, val_len);
         }
         let commit = self.gen_commitment(committer, Some(db_path.clone()), key_len, val_len);
-        let s = commit.iter().fold("".to_owned(), |acc, x| {
-            acc.to_owned() + &format!("{:08x}", x)
-        });
+        let s = commit_u32_to_str(&commit);
         create_dir_all(db_path.clone() + "/leaf").unwrap();
         if !Path::new(&(db_path.clone() + "/leaf/" + &s + ".trace")).is_file() {
             let file = File::create(db_path.clone() + "/leaf/" + &s + ".trace").unwrap();
@@ -474,7 +472,7 @@ impl<const COMMITMENT_LEN: usize> PageBTreeNode<COMMITMENT_LEN> {
 
     fn gen_all_trace<SC: StarkGenericConfig>(
         &mut self,
-        committer: &mut TraceCommitter<SC>,
+        committer: &TraceCommitter<SC>,
         db_path: Option<String>,
         key_len: usize,
         val_len: usize,
@@ -556,6 +554,7 @@ impl<const COMMITMENT_LEN: usize> PageBTreeInternalNode<COMMITMENT_LEN> {
         loaded_pages: &mut PageBTreePages,
     ) -> Option<(Vec<u32>, PageBTreeNode<COMMITMENT_LEN>)> {
         self.trace = None;
+        self.commit = None;
         let mut ret = None;
         let i = binsearch(&self.keys, key);
         if let PageBTreeNode::Unloaded(u) = &self.children[i] {
@@ -659,7 +658,7 @@ impl<const COMMITMENT_LEN: usize> PageBTreeInternalNode<COMMITMENT_LEN> {
 
     fn gen_all_trace<SC: StarkGenericConfig>(
         &mut self,
-        committer: &mut TraceCommitter<SC>,
+        committer: &TraceCommitter<SC>,
         db_path: Option<String>,
         key_len: usize,
         val_len: usize,
@@ -705,9 +704,7 @@ impl<const COMMITMENT_LEN: usize> PageBTreeInternalNode<COMMITMENT_LEN> {
         )]);
         let commit: [Val<SC>; COMMITMENT_LEN] = commitment.commit.clone().into();
         let commit = commit.iter().map(|x| x.as_canonical_u32()).collect_vec();
-        let s = commit.iter().fold("".to_owned(), |acc, x| {
-            acc.to_owned() + &format!("{:08x}", x)
-        });
+        let s = commit_u32_to_str(&commit);
         self.commit = Some(commit.clone());
         if let Some(db_path) = db_path {
             create_dir_all(db_path.clone() + "/internal").unwrap();
@@ -852,7 +849,7 @@ impl<const COMMITMENT_LEN: usize> PageBTree<COMMITMENT_LEN> {
             key_len: info.key_len,
             val_len: info.val_len,
             leaf_page_height: info.leaf_page_height,
-            internal_page_height: info.leaf_page_height,
+            internal_page_height: info.internal_page_height,
             root: RefCell::new(root),
             loaded_pages: PageBTreePages::new(),
             depth: info.depth,
@@ -955,7 +952,7 @@ impl<const COMMITMENT_LEN: usize> PageBTree<COMMITMENT_LEN> {
 
     pub fn gen_all_trace<SC: StarkGenericConfig>(
         &mut self,
-        committer: &mut TraceCommitter<SC>,
+        committer: &TraceCommitter<SC>,
         db_path: Option<String>,
     ) -> PageBTreePages
     where
