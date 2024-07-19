@@ -27,8 +27,7 @@ impl<const CHUNK: usize, AB: AirBuilder> Air<AB> for ExpandAir<CHUNK> {
             local_cols.direction * local_cols.direction * local_cols.direction,
         );
 
-        for i in 0..2 {
-            builder.assert_bool(local_cols.are_final[i]);
-        }
+        builder.assert_bool(local_cols.left_is_final);
+        builder.assert_bool(local_cols.right_is_final);
     }
 }
