@@ -1,4 +1,4 @@
-// pub mod assert_sorted;
+pub mod assert_sorted;
 // pub mod common;
 // pub mod execution_air;
 // pub mod group_by;

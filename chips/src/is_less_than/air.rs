@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{Air, BaseAir};
+use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
@@ -17,7 +17,7 @@ pub struct IsLessThanAir {
     pub limb_bits: usize,
     /// The number of bits to decompose each number into, for less than checking
     pub decomp: usize,
-    // num_limbs is the number of limbs we decompose each input into, not including the last shifted limb
+    /// num_limbs is the number of limbs we decompose each input into, not including the last shifted limb
     pub num_limbs: usize,
 }
 
@@ -30,39 +30,15 @@ impl IsLessThanAir {
             num_limbs: (limb_bits + decomp - 1) / decomp,
         }
     }
-}
 
-impl AirConfig for IsLessThanAir {
-    type Cols<T> = IsLessThanCols<T>;
-}
-
-impl<F: Field> BaseAir<F> for IsLessThanAir {
-    fn width(&self) -> usize {
-        IsLessThanCols::<F>::get_width(self.limb_bits, self.decomp)
-    }
-}
-
-impl<AB: InteractionBuilder> Air<AB> for IsLessThanAir {
-    fn eval(&self, builder: &mut AB) {
-        let main = builder.main();
-
-        let local = main.row_slice(0);
-        let local: &[AB::Var] = (*local).borrow();
-
-        let local_cols = IsLessThanCols::<AB::Var>::from_slice(local);
-
-        SubAir::eval(self, builder, local_cols.io, local_cols.aux);
-    }
-}
-
-// sub-air with constraints to check whether one number is less than another
-impl<AB: InteractionBuilder> SubAir<AB> for IsLessThanAir {
-    type IoView = IsLessThanIoCols<AB::Var>;
-    type AuxView = IsLessThanAuxCols<AB::Var>;
-
-    // constrain that the result of x < y is given by less_than
-    // warning: send for range check must be included for the constraints to be sound
-    fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
+    /// FOR INTERNAL USE ONLY.
+    /// This AIR is only sound if interactions are enabled
+    pub fn eval_without_interactions<AB: AirBuilder>(
+        &self,
+        builder: &mut AB,
+        io: IsLessThanIoCols<AB::Var>,
+        aux: IsLessThanAuxCols<AB::Var>,
+    ) {
         let x = io.x;
         let y = io.y;
         let less_than = io.less_than;
@@ -108,8 +84,42 @@ impl<AB: InteractionBuilder> SubAir<AB> for IsLessThanAir {
 
         // constrain that less_than is a boolean
         builder.assert_bool(less_than);
+    }
+}
 
+impl AirConfig for IsLessThanAir {
+    type Cols<T> = IsLessThanCols<T>;
+}
+
+impl<F: Field> BaseAir<F> for IsLessThanAir {
+    fn width(&self) -> usize {
+        IsLessThanCols::<F>::get_width(self.limb_bits, self.decomp)
+    }
+}
+
+impl<AB: InteractionBuilder> Air<AB> for IsLessThanAir {
+    fn eval(&self, builder: &mut AB) {
+        let main = builder.main();
+
+        let local = main.row_slice(0);
+        let local: &[AB::Var] = (*local).borrow();
+
+        let local_cols = IsLessThanCols::<AB::Var>::from_slice(local);
+
+        SubAir::eval(self, builder, local_cols.io, local_cols.aux);
+    }
+}
+
+// sub-air with constraints to check whether one number is less than another
+impl<AB: InteractionBuilder> SubAir<AB> for IsLessThanAir {
+    type IoView = IsLessThanIoCols<AB::Var>;
+    type AuxView = IsLessThanAuxCols<AB::Var>;
+
+    // constrain that the result of x < y is given by less_than
+    // warning: send for range check must be included for the constraints to be sound
+    fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
         // Note: every AIR that uses this sub-AIR must include these interactions for soundness
-        self.eval_interactions(builder, lower_decomp);
+        self.eval_interactions(builder, aux.lower_decomp.clone());
+        self.eval_without_interactions(builder, io, aux);
     }
 }

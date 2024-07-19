@@ -19,7 +19,6 @@ pub use air::IsLessThanAir;
 #[derive(Clone, Debug)]
 pub struct IsLessThanChip {
     pub air: IsLessThanAir,
-
     pub range_checker: Arc<RangeCheckerGateChip>,
 }
 
@@ -30,12 +29,7 @@ impl IsLessThanChip {
         decomp: usize,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
-        let air = IsLessThanAir {
-            bus_index,
-            limb_bits,
-            decomp,
-            num_limbs: (limb_bits + decomp - 1) / decomp,
-        };
+        let air = IsLessThanAir::new(bus_index, limb_bits, decomp);
 
         Self { air, range_checker }
     }
