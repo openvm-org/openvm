@@ -10,9 +10,9 @@ use afs_chips::{
 
 use crate::memory::{compose, decompose};
 use crate::poseidon2::Poseidon2Chip;
+use crate::vm::cycle_tracker::CycleTracker;
 use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
 
-use super::CycleTracker;
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
     max_accesses_per_instruction, CpuAir,
@@ -291,8 +291,8 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     let base_pointer = read!(d, a);
                     write!(e, base_pointer + b, hint);
                 }
-                CT_START => cycle_tracker.start(debug, rows.len()),
-                CT_END => cycle_tracker.end(debug, rows.len()),
+                CT_START => cycle_tracker.start(debug, vm, &rows),
+                CT_END => cycle_tracker.end(debug, vm, &rows),
             };
 
             let mut operation_flags = BTreeMap::new();
