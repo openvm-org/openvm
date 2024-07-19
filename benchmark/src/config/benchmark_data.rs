@@ -86,6 +86,11 @@ pub fn benchmark_data_predicate() -> BenchmarkData {
             "Prove: Load trace gen",
             "Prove: Load trace commit",
             "Prove: Main commit",
+            "Prove: Gen permutation traces",
+            "Prove: Commit permutation traces",
+            "Prove: Compute quotient values",
+            "Prove: Commit to quotient poly",
+            "Prove: FRI opening proofs",
             "Prove time (total)",
             "Verify time",
         ]
@@ -98,6 +103,11 @@ pub fn benchmark_data_predicate() -> BenchmarkData {
             "prove:Load page trace generation",
             "prove:Load page trace commitment",
             "prove:Prove trace commitment",
+            "prove:MultiTraceStarkProver::prove:generate permutation traces",
+            "prove:MultiTraceStarkProver::prove:commit to permutation traces",
+            "prove:prove_raps_with_committed_traces:compute quotient values",
+            "prove:prove_raps_with_committed_traces:commit to quotient poly",
+            "prove:prove_raps_with_committed_traces:FRI opening proofs",
             "Benchmark prove: benchmark",
             "Benchmark verify: benchmark",
         ]

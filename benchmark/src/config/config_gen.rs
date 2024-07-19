@@ -33,11 +33,11 @@ pub fn generate_configs() -> Vec<PageConfig> {
     let idx_bytes_vec = vec![32];
     let data_bytes_vec = vec![32, 256, 1024];
 
-    // let height_vec = vec![65536, 262_144, 1_048_576];
-    let height_vec = vec![256, 1024]; // Run a mini-benchmark for testing
+    let height_vec = vec![65536, 262_144, 1_048_576];
+    // let height_vec = vec![256, 1024]; // Run a mini-benchmark for testing
 
     // max_rw_ops as a percentage of height, where 100 = 100%
-    let max_rw_ops_pct_vec = vec![25, 50, 75, 100];
+    let max_rw_ops_pct_vec = vec![10, 25, 50, 75, 100];
 
     let engine_vec = vec![
         EngineType::BabyBearPoseidon2,
