@@ -1,5 +1,5 @@
 use crate::common::page::Page;
-use crate::group_by::group_by_input::{GroupByAir, GroupByOperation};
+use crate::group_by::group_by_input::{air::GroupByAir, GroupByOperation};
 use crate::group_by::receiving_indexed_output_page_air::ReceivingIndexedOutputPageAir;
 use crate::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{

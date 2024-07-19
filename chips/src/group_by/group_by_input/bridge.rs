@@ -1,93 +1,60 @@
 use std::iter;
 
-use crate::sub_chip::SubAirBridge;
-use afs_stark_backend::interaction::{AirBridge, Interaction};
-use p3_air::VirtualPairCol;
-use p3_field::PrimeField64;
+use afs_stark_backend::interaction::InteractionBuilder;
 
 use super::columns::GroupByCols;
 use super::GroupByAir;
 
-impl<F: PrimeField64> AirBridge<F> for GroupByAir {
-    fn sends(&self) -> Vec<Interaction<F>> {
-        let col_indices_vec: Vec<usize> = (0..self.get_width()).collect();
-        let col_indices = GroupByCols::from_slice(&col_indices_vec, self);
-        SubAirBridge::sends(self, col_indices)
-    }
+// impl<F: PrimeField64> AirBridge<F> for GroupByAir {
+impl GroupByAir {
+    pub fn eval_interactions<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        local: GroupByCols<AB::Var>,
+    ) {
+        // Sends desired columns (group_by and to_aggregate) from input page internally with count
+        // `is_alloc`, and sends answer columns with count `is_final`.
+        assert_eq!(local.aux.grouped.is_some(), !self.sorted);
 
-    fn receives(&self) -> Vec<Interaction<F>> {
-        let col_indices_vec: Vec<usize> = (0..self.get_width()).collect();
-        let col_indices = GroupByCols::from_slice(&col_indices_vec, self);
-        SubAirBridge::receives(self, col_indices)
-    }
-}
-
-impl<F: PrimeField64> SubAirBridge<F> for GroupByAir {
-    /// Sends desired columns (group_by and to_aggregate) from input page internally with count
-    /// `is_alloc`, and sends answer columns with count `is_final`.
-    fn sends(&self, col_indices: GroupByCols<usize>) -> Vec<Interaction<F>> {
-        assert_eq!(col_indices.aux.grouped.is_some(), !self.sorted);
-        let group_by_col_indices = if let Some(grouped) = col_indices.aux.grouped {
+        let group_by_col_indices = if let Some(grouped) = local.aux.grouped.clone() {
             grouped.group_by
         } else {
             self.group_by_cols
                 .iter()
-                .map(|&i| col_indices.page.data[i])
+                .map(|&i| local.page.data[i])
                 .collect()
         };
-        // fields = group_by cols, partial_aggregated
-        // count = is_final
         let output_sent_fields = group_by_col_indices
             .into_iter()
-            .chain(iter::once(col_indices.aux.partial_aggregated))
-            .map(VirtualPairCol::single_main)
-            .collect();
-        let output_count = VirtualPairCol::single_main(col_indices.aux.is_final);
-        let mut interactions = vec![Interaction {
-            fields: output_sent_fields,
-            count: output_count,
-            argument_index: self.output_bus,
-        }];
+            .chain(iter::once(local.aux.partial_aggregated))
+            .collect::<Vec<_>>();
+        let output_count = local.aux.is_final;
+        builder.push_send(self.output_bus, output_sent_fields, output_count);
+
         if !self.sorted {
             // Must do internal grouping of page based on group_by columns
-            // Sends from columns in input page to internal bus
+            // Sends from columns in input page on internal bus to grouped page
+            let page = local.page;
             let internal_sent_fields = self
                 .group_by_cols
                 .iter()
                 .chain(iter::once(&self.aggregated_col))
-                .map(|&i| VirtualPairCol::single_main(col_indices.page.data[i]))
-                .collect();
-            let internal_count = VirtualPairCol::single_main(col_indices.page.is_alloc);
+                .map(|&i| page.data[i])
+                .collect::<Vec<_>>();
+            let internal_count = page.is_alloc;
 
-            interactions.push(Interaction {
-                fields: internal_sent_fields,
-                count: internal_count,
-                argument_index: self.internal_bus,
-            });
+            builder.push_send(self.internal_bus, internal_sent_fields, internal_count);
+
+            // Receives from columns in internal bus to grouped page
+            let grouped = local.aux.grouped.clone().unwrap();
+            let internal_received_fields = grouped
+                .group_by
+                .into_iter()
+                .chain(iter::once(grouped.to_aggregate))
+                .collect::<Vec<_>>();
+            let internal_count = grouped.is_alloc;
+
+            builder.push_receive(self.internal_bus, internal_received_fields, internal_count);
         }
-        interactions
-    }
-
-    /// Receives desired columns (`sorted_group_by` and `aggregated`) internally with count
-    /// `is_alloc`.
-    fn receives(&self, col_indices: GroupByCols<usize>) -> Vec<Interaction<F>> {
-        if self.sorted {
-            return vec![];
-        }
-
-        let grouped = col_indices.aux.grouped.unwrap();
-        let internal_received_fields: Vec<VirtualPairCol<F>> = grouped
-            .group_by
-            .into_iter()
-            .chain(iter::once(grouped.to_aggregate))
-            .map(VirtualPairCol::single_main)
-            .collect();
-        let internal_count = VirtualPairCol::single_main(grouped.is_alloc);
-
-        vec![Interaction {
-            fields: internal_received_fields,
-            count: internal_count,
-            argument_index: self.internal_bus,
-        }]
     }
 }
