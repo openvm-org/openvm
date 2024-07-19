@@ -1,24 +1,25 @@
 [package]
-name = "predicate"
+name = "olap"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-afs-chips = { path = "../../chips" }
-afs-test-utils = { path = "../../test-utils" }
-afs-stark-backend = { path = "../../stark-backend" }
 alloy-primitives = "0.7.6"
 bincode = "1.3.3"
 clap = { version = "4.5.4", features = ["derive"] }
 color-eyre = "0.6.3"
-logical-interface = { path = "../../logical-interface" }
 serde = { version = "1.0.203", features = ["derive"] }
+afs-chips = { path = "../../chips" }
+afs-test-utils = { path = "../../test-utils" }
+afs-stark-backend = { path = "../../stark-backend" }
+afs-derive = { path = "../../derive" }
+bin-common = { path = "../common" }
+logical-interface = { path = "../../logical-interface" }
 p3-util = { workspace = true }
 p3-uni-stark = { workspace = true }
+p3-baby-bear = { workspace = true }
 p3-field = { workspace = true }
 p3-blake3 = { workspace = true }
 p3-keccak = { workspace = true }
-bin-common = { path = "../common" }
-hex = "0.4.3"
 tracing = "0.1.40"

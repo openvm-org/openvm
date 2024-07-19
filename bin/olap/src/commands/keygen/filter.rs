@@ -3,36 +3,41 @@ use std::{fs, marker::PhantomData};
 use afs_chips::single_page_index_scan::page_controller::PageController;
 use afs_stark_backend::config::PcsProverData;
 use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
-use bin_common::utils::io::{create_prefix, write_bytes};
+use bin_common::utils::io::write_bytes;
 use clap::Parser;
 use color_eyre::eyre::Result;
+use logical_interface::afs_input::types::AfsOperation;
 use p3_field::PrimeField64;
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::Serialize;
 use tracing::info;
 
-use super::{common_setup, CommonCommands, PAGE_BUS_INDEX, RANGE_BUS_INDEX};
+use crate::{
+    commands::CommonCommands,
+    operations::filter::{filter_setup, PAGE_BUS_INDEX, RANGE_BUS_INDEX},
+};
 
 #[derive(Debug, Parser)]
-pub struct KeygenCommand<SC: StarkGenericConfig, E: StarkEngine<SC>> {
-    #[command(flatten)]
-    pub common: CommonCommands,
-
+pub struct KeygenFilterCommand<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     #[clap(skip)]
-    pub _marker: PhantomData<(SC, E)>,
+    _marker: PhantomData<(SC, E)>,
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC>> KeygenCommand<SC, E>
+impl<SC: StarkGenericConfig, E: StarkEngine<SC>> KeygenFilterCommand<SC, E>
 where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize,
 {
-    pub fn execute(config: &PageConfig, engine: &E, common: &CommonCommands) -> Result<()> {
-        let output_folder = common.output_folder.clone();
-
+    pub fn execute(
+        config: &PageConfig,
+        engine: &E,
+        common: &CommonCommands,
+        op: AfsOperation,
+        keys_folder: String,
+    ) -> Result<()> {
         let (
             start,
-            comp,
+            filter_op,
             idx_len,
             data_len,
             page_width,
@@ -40,7 +45,7 @@ where
             idx_limb_bits,
             idx_decomp,
             range_max,
-        ) = common_setup(config, common.predicate.clone());
+        ) = filter_setup(config, op);
 
         let page_controller: PageController<SC> = PageController::new(
             PAGE_BUS_INDEX,
@@ -50,9 +55,8 @@ where
             range_max as u32,
             idx_limb_bits,
             idx_decomp,
-            comp,
+            filter_op.predicate,
         );
-
         let mut keygen_builder = engine.keygen_builder();
         page_controller.set_up_keygen_builder(&mut keygen_builder, page_width, idx_len);
 
@@ -67,10 +71,10 @@ where
 
         let encoded_pk: Vec<u8> = bincode::serialize(&partial_pk)?;
         let encoded_vk: Vec<u8> = bincode::serialize(&partial_vk)?;
-        let prefix = create_prefix(config);
-        let pk_path = output_folder.clone() + "/" + &prefix.clone() + ".partial.pk";
-        let vk_path = output_folder.clone() + "/" + &prefix.clone() + ".partial.vk";
-        fs::create_dir_all(output_folder).unwrap();
+        let prefix = config.generate_filename();
+        let pk_path = keys_folder.clone() + "/" + &prefix.clone() + ".partial.pk";
+        let vk_path = keys_folder.clone() + "/" + &prefix.clone() + ".partial.vk";
+        let _ = fs::create_dir_all(keys_folder);
         write_bytes(&encoded_pk, pk_path.clone()).unwrap();
         write_bytes(&encoded_vk, vk_path.clone()).unwrap();
 

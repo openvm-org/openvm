@@ -21,6 +21,7 @@ afs-stark-backend = { path = "../../stark-backend" }
 afs-derive = { path = "../../derive" }
 afs-test-utils = { path = "../../test-utils" }
 afs-chips = { path = "../../chips" }
+bin-common = { path = "../common" }
 p3-uni-stark = { workspace = true }
 p3-field = { workspace = true }
 p3-blake3 = { workspace = true }
