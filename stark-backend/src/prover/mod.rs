@@ -9,8 +9,9 @@ use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::instrument;
 
+#[cfg(debug_assertions)]
+use crate::air_builders::debug::check_constraints::{check_constraints, check_logup};
 use crate::{
-    air_builders::debug::check_constraints::{check_constraints, check_logup},
     commit::CommittedSingleMatrixView,
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkPartialProvingKey,
@@ -283,7 +284,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
     /// - per challenge round, shared commitment for
     /// all trace matrices, with matrices in increasing order of air index
     #[allow(clippy::too_many_arguments)]
-    #[instrument(level = "debug", skip_all)]
+    #[instrument(level = "info", skip_all)]
     pub fn prove_raps_with_committed_traces<'a>(
         &self,
         challenger: &mut SC::Challenger,
