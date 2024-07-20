@@ -12,7 +12,7 @@ use afs_test_utils::{
     page_config::{PageConfig, PageMode, PageParamsConfig, StarkEngineConfig},
 };
 
-use crate::{commands::parse_config_folder, utils::nearest_power_of_two_floor};
+use crate::commands::parse_config_folder;
 
 pub fn get_configs(config_folder: Option<String>) -> Vec<PageConfig> {
     if let Some(config_folder) = config_folder.clone() {
@@ -36,9 +36,8 @@ pub fn generate_configs() -> Vec<PageConfig> {
     let height_vec = vec![65536, 262_144, 1_048_576];
     // let height_vec = vec![256, 1024]; // Run a mini-benchmark for testing
 
-    // max_rw_ops as a percentage of height, where 100 = 100%
-    // note that max_rw_ops needs to be a power of 2, so the actual values are more like 7.25%, 12.5%, 25%, 50% of height
-    let max_rw_ops_pct_vec = vec![10, 25, 50, 75, 100];
+    // max_rw_ops as the number of log_2 of height
+    let max_rw_ops_shift_vec = vec![0, 1, 2, 3, 4];
 
     let engine_vec = vec![
         EngineType::BabyBearPoseidon2,
@@ -48,13 +47,13 @@ pub fn generate_configs() -> Vec<PageConfig> {
 
     let mut configs = Vec::new();
 
-    for (engine, fri_params, idx_bytes, data_bytes, height, max_rw_ops_pct) in iproduct!(
+    for (engine, fri_params, idx_bytes, data_bytes, height, max_rw_ops_shift) in iproduct!(
         &engine_vec,
         &fri_params_vec,
         &idx_bytes_vec,
         &data_bytes_vec,
         &height_vec,
-        &max_rw_ops_pct_vec,
+        &max_rw_ops_shift_vec,
     ) {
         if (*height > 1000000 && (fri_params.log_blowup > 2 || *data_bytes > 512))
             || (*height > 500000 && fri_params.log_blowup >= 3)
@@ -67,7 +66,7 @@ pub fn generate_configs() -> Vec<PageConfig> {
                 data_bytes: *data_bytes,
                 height: *height,
                 mode: PageMode::ReadWrite,
-                max_rw_ops: nearest_power_of_two_floor(*height * *max_rw_ops_pct / 100),
+                max_rw_ops: *height >> *max_rw_ops_shift,
                 bits_per_fe: 16,
             },
             fri_params: fri_params.to_owned(),
