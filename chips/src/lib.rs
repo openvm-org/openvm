@@ -16,7 +16,7 @@ pub mod is_zero;
 // pub mod multitier_page_rw_checker;
 // pub mod page_btree;
 // pub mod page_read;
-// pub mod page_rw_checker;
+pub mod page_rw_checker;
 pub mod range;
 pub mod range_gate;
 // pub mod single_page_index_scan;

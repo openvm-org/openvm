@@ -1,4 +1,4 @@
-use afs_stark_backend::air_builders::PartitionedAirBuilder;
+use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -24,7 +24,7 @@ impl<const COMMITMENT_LEN: usize> AirConfig for LeafPageAir<COMMITMENT_LEN> {
 }
 
 impl<
-        AB: AirBuilder + AirBuilderWithPublicValues + PartitionedAirBuilder,
+        AB: AirBuilder + AirBuilderWithPublicValues + PartitionedAirBuilder + InteractionBuilder,
         const COMMITMENT_LEN: usize,
     > Air<AB> for LeafPageAir<COMMITMENT_LEN>
 where

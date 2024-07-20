@@ -51,8 +51,6 @@ pub struct ProveSortCols<T> {
 
 #[derive(Clone)]
 pub struct InternalPageMetadataCols<T> {
-    pub own_commitment: Vec<T>,
-    pub air_id: T,
     pub child_air_id: T,
     pub mult: T,
     pub mult_alloc: T,
@@ -120,20 +118,18 @@ impl<T> InternalPageMetadataCols<T> {
     {
         if is_init {
             InternalPageMetadataCols {
-                own_commitment: cols[0..commitment_len].to_vec(),
-                air_id: cols[commitment_len].clone(),
-                child_air_id: cols[commitment_len + 1].clone(),
-                mult: cols[commitment_len + 2].clone(),
-                mult_alloc: cols[commitment_len + 3].clone(),
-                mult_alloc_is_1: cols[commitment_len + 4].clone(),
-                mult_alloc_minus_one: cols[commitment_len + 5].clone(),
-                mult_minus_one_alloc: cols[commitment_len + 6].clone(),
+                child_air_id: cols[0].clone(),
+                mult: cols[1].clone(),
+                mult_alloc: cols[2].clone(),
+                mult_alloc_is_1: cols[3].clone(),
+                mult_alloc_minus_one: cols[4].clone(),
+                mult_minus_one_alloc: cols[5].clone(),
                 prove_sort_cols: None,
                 range_inclusion_cols: None,
                 subair_aux_cols: None,
             }
         } else {
-            let mut new_start = commitment_len + 7;
+            let mut new_start = 6;
             let prove_sort_cols = ProveSortCols {
                 end_less_than_next: cols[new_start].clone(),
                 end_less_than_start: cols[new_start + 1].clone(),
@@ -168,14 +164,12 @@ impl<T> InternalPageMetadataCols<T> {
                 mult_inv: cols[new_start + 4 * aux_size].clone(),
             };
             InternalPageMetadataCols {
-                own_commitment: cols[0..commitment_len].to_vec(),
-                air_id: cols[commitment_len].clone(),
-                child_air_id: cols[commitment_len + 1].clone(),
-                mult: cols[commitment_len + 2].clone(),
-                mult_alloc: cols[commitment_len + 3].clone(),
-                mult_alloc_is_1: cols[commitment_len + 4].clone(),
-                mult_alloc_minus_one: cols[commitment_len + 5].clone(),
-                mult_minus_one_alloc: cols[commitment_len + 6].clone(),
+                child_air_id: cols[0].clone(),
+                mult: cols[1].clone(),
+                mult_alloc: cols[2].clone(),
+                mult_alloc_is_1: cols[3].clone(),
+                mult_alloc_minus_one: cols[4].clone(),
+                mult_minus_one_alloc: cols[5].clone(),
                 prove_sort_cols: Some(prove_sort_cols),
                 range_inclusion_cols: Some(range_inclusion_cols),
                 subair_aux_cols: Some(subair_cols),
