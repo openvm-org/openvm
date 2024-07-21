@@ -3,9 +3,9 @@ name: Sample workflow to use EC2 instances on demand
 on:
   workflow_dispatch:
 
-  push:
-    branches:
-      - jpw/sample-workflow-ec2-on-demand
+  # push:
+  #   branches:
+  #     - jpw/sample-workflow-ec2-on-demand
 
 jobs:
   start-runner:
