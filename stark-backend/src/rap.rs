@@ -1,6 +1,8 @@
 //! # RAP (Randomized Air with Preprocessing)
 //! See <https://hackmd.io/@aztec-network/plonk-arithmetiization-air> for formal definition.
 
+use std::any::{type_name, Any};
+
 use p3_air::{BaseAir, PermutationAirBuilder};
 use p3_uni_stark::{StarkGenericConfig, Val};
 
@@ -46,6 +48,9 @@ pub trait AnyRap<SC: StarkGenericConfig>:
     + for<'a> Rap<DebugConstraintBuilder<'a, SC>> // for debugging
     + BaseAir<Val<SC>>
 {
+    fn as_any(&self) -> &dyn Any;
+    /// Name for display purposes
+    fn name(&self) -> String;
 }
 
 impl<SC, T> AnyRap<SC> for T
@@ -55,6 +60,14 @@ where
         + for<'a> Rap<ProverConstraintFolder<'a, SC>>
         + for<'a> Rap<VerifierConstraintFolder<'a, SC>>
         + for<'a> Rap<DebugConstraintBuilder<'a, SC>>
-        + BaseAir<Val<SC>>,
+        + BaseAir<Val<SC>>
+        + 'static,
 {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn name(&self) -> String {
+        type_name::<Self>().to_string()
+    }
 }

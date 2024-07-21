@@ -85,6 +85,25 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
         // reset state
         self.placeholder_main_matrix_in_commit = vec![vec![]];
 
+        for (i, pk) in pk.per_air.iter().enumerate() {
+            println!("AIR {i} [{}]:", &pk.air_name);
+            println!("  quotient degree: {}", pk.vk.quotient_degree);
+            println!(
+                "  num symbolic constraints: {}",
+                pk.vk.symbolic_constraints.constraints.len()
+            );
+            println!(
+                "  num interactions: {} on buses {:?}",
+                pk.vk.symbolic_constraints.interactions.len(),
+                pk.vk
+                    .symbolic_constraints
+                    .interactions
+                    .iter()
+                    .map(|i| i.bus_index)
+                    .collect_vec()
+            );
+        }
+
         pk
     }
 
@@ -166,6 +185,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             quotient_degree,
         };
         let pk = StarkProvingKey {
+            air_name: air.name(),
             vk,
             preprocessed_data: prep_prover_data,
         };

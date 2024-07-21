@@ -40,6 +40,8 @@ pub struct StarkVerifyingParams {
     deserialize = "PcsProverData<SC>: Deserialize<'de>"
 ))]
 pub struct StarkProvingKey<SC: StarkGenericConfig> {
+    /// Type name of the AIR, for display purposes only
+    pub air_name: String,
     /// Verifying key
     pub vk: StarkVerifyingKey<SC>,
     /// Prover only data for preprocessed trace
