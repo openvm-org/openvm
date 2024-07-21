@@ -29,7 +29,8 @@ jobs:
           subnet-id: subnet-08094bf4edad62d10 # staging tooling private subnet
           security-group-id: sg-09543a06c701894f8 # allow all outbound
           iam-role-name: github-temp-runner # IAM role name to attach to the created EC2 runner
-  benchmark:
+
+  do-the-job:
     name: Run benchmark
     needs: start-runner # required to start the main job when the runner is ready
     runs-on: ${{ needs.start-runner.outputs.label }} # run the job on the newly created runner
