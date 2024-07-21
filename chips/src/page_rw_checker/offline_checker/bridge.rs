@@ -14,12 +14,7 @@ impl OfflineChecker {
         builder: &mut AB,
         cols: &OfflineCheckerCols<AB::Var>,
     ) {
-        let page_cols = cols
-            .idx
-            .clone()
-            .into_iter()
-            .chain(cols.data.clone())
-            .collect_vec();
+        let page_cols = cols.idx.iter().chain(&cols.data).cloned().collect_vec();
 
         let op_cols = iter::once(cols.clk)
             .chain(cols.idx.clone())
