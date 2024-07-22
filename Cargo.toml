@@ -63,6 +63,7 @@ p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa
 p3-blake3 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-mds = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
+p3-poseidon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }

@@ -11,6 +11,7 @@ pub mod baby_bear_bytehash;
 pub mod baby_bear_keccak;
 pub mod baby_bear_poseidon2;
 pub mod fri_params;
+pub mod goldilocks_poseidon;
 pub mod instrument;
 
 pub fn setup_tracing() {
@@ -38,4 +39,5 @@ pub enum EngineType {
     BabyBearPoseidon2,
     BabyBearBlake3,
     BabyBearKeccak,
+    GoldilocksPoseidon,
 }
