@@ -205,14 +205,14 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
 
         let mut result = [F::zero(); EXTENSION_DEGREE];
 
-        for (i, result_row) in result.iter_mut().enumerate() {
+        for (i, result_elem) in result.iter_mut().enumerate() {
             let data = vm.memory_chip.read_elem(
                 timestamp + i,
                 address_space,
                 address + F::from_canonical_usize(i * WORD_SIZE),
             );
 
-            *result_row = data;
+            *result_elem = data;
         }
 
         result

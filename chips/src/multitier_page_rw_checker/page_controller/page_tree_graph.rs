@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::page_btree::cmp;
+use crate::{common::page::Page, page_btree::cmp};
 
 #[derive(Clone)]
 /// A pointer to a page within the given set of pages - (is_leaf, idx)
@@ -22,7 +22,7 @@ where
     pub root_range: (Vec<u32>, Vec<u32>),
     pub root_mult: u32,
     pub _commitment_to_node: BTreeMap<Vec<Val<SC>>, Node>,
-    pub mega_page: Vec<Vec<u32>>,
+    pub mega_page: Page,
 }
 
 impl<SC: StarkGenericConfig, const COMMITMENT_LEN: usize> PageTreeGraph<SC, COMMITMENT_LEN>
@@ -32,12 +32,12 @@ where
 {
     #[allow(clippy::too_many_arguments)]
     pub fn dfs(
-        leaf_pages: &[Vec<Vec<u32>>],
+        leaf_pages: &[Page],
         internal_pages: &[Vec<Vec<u32>>],
         leaf_ranges: &mut Vec<(Vec<u32>, Vec<u32>)>,
         internal_ranges: &mut Vec<(Vec<u32>, Vec<u32>)>,
         commitment_to_node: &BTreeMap<Vec<Val<SC>>, Node>,
-        mega_page: &mut Vec<Vec<u32>>,
+        mega_page: &mut Page,
         mults: &mut Vec<Vec<u32>>,
         child_ids: &mut Vec<Vec<u32>>,
         idx_len: usize,
@@ -96,9 +96,9 @@ where
             ans + 1
         } else {
             let mut ans = 0;
-            for row in &leaf_pages[cur_node.1] {
-                if row[0] == 1 {
-                    mega_page.push(row.clone());
+            for row in &leaf_pages[cur_node.1].rows {
+                if row.is_alloc == 1 {
+                    mega_page.rows.push(row.clone());
                     ans += 1;
                 }
             }
@@ -107,12 +107,13 @@ where
     }
 
     pub fn new(
-        leaf_pages: &[Vec<Vec<u32>>],
+        leaf_pages: &[Page],
         internal_pages: &[Vec<Vec<u32>>],
         leaf_commits: &[Com<SC>],
         internal_commits: &[Com<SC>],
         root: (bool, usize),
         idx_len: usize,
+        data_len: usize,
     ) -> Self {
         let root = Node(root.0, root.1);
         let leaf_commits: Vec<[Val<SC>; COMMITMENT_LEN]> = leaf_commits
@@ -138,13 +139,12 @@ where
         let mut leaf_ranges = vec![(vec![], vec![]); leaf_pages.len()];
         let mut internal_ranges = vec![(vec![], vec![]); internal_pages.len()];
         if root.0 {
-            for row in &leaf_pages[root.1] {
-                if row[0] == 1 {
+            for row in &leaf_pages[root.1].rows {
+                if row.is_alloc == 1 {
                     if leaf_ranges[root.1].0.is_empty() {
-                        leaf_ranges[root.1] =
-                            (row[1..1 + idx_len].to_vec(), row[1..1 + idx_len].to_vec());
+                        leaf_ranges[root.1] = (row.idx.clone(), row.idx.to_vec());
                     } else {
-                        let idx = row[1..1 + idx_len].to_vec();
+                        let idx = row.idx.to_vec();
                         if cmp(&leaf_ranges[root.1].0, &idx) > 0 {
                             leaf_ranges[root.1].0.clone_from(&idx);
                         }
@@ -181,7 +181,7 @@ where
         let mut mults = vec![vec![0; internal_pages[0].len()]; internal_pages.len()];
         let mut child_ids = vec![vec![0; internal_pages[0].len()]; internal_pages.len()];
         commitment_to_node.insert(root_commitment.clone().to_vec(), root.clone());
-        let mut mega_page = vec![];
+        let mut mega_page = Page::from_2d_vec(&[], idx_len, data_len);
         let root_mult = PageTreeGraph::<SC, COMMITMENT_LEN>::dfs(
             leaf_pages,
             internal_pages,

@@ -102,6 +102,7 @@ where
         let is_equal_data = IsEqualVecCols::new(
             local_cols.mem_row[2..].to_vec(),
             next_cols.mem_row[2..].to_vec(),
+            next_cols.same_data,
             next_cols.is_equal_data_aux.prods,
             next_cols.is_equal_data_aux.invs,
         );

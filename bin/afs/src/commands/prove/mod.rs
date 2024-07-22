@@ -13,6 +13,7 @@ use afs_test_utils::{
     engine::StarkEngine,
     page_config::{PageConfig, PageMode},
 };
+use bin_common::utils::io::{read_from_path, write_bytes};
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{
@@ -20,7 +21,7 @@ use logical_interface::{
         types::{AfsOperation, InputFileOp},
         AfsInputFile,
     },
-    afs_interface::AfsInterface,
+    afs_interface::{utils::string_to_table_id, AfsInterface},
     mock_db::MockDb,
     table::codec::fixed_bytes::FixedBytesCodec,
     utils::{fixed_bytes_to_u16_vec, string_to_u8_vec},
@@ -29,10 +30,6 @@ use p3_field::PrimeField64;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::de::DeserializeOwned;
 use tracing::info_span;
-
-use crate::commands::{read_from_path, write_bytes};
-
-use super::create_prefix;
 
 /// `afs prove` command
 /// Uses information from config.toml to generate a proof of the changes made by a .afi file to a table
@@ -104,10 +101,9 @@ where
         keys_folder: String,
         cache_folder: String,
         silent: bool,
-        // durations: Option<&mut (Duration, Duration)>,
     ) -> Result<()> {
         let start = Instant::now();
-        let prefix = create_prefix(config);
+        let prefix = config.generate_filename();
         match config.page.mode {
             PageMode::ReadWrite => Self::execute_rw(
                 config,
@@ -118,7 +114,6 @@ where
                 keys_folder,
                 cache_folder,
                 silent,
-                // durations,
             )?,
             PageMode::ReadOnly => panic!(),
         }
@@ -190,8 +185,9 @@ where
         let prover = engine.prover();
         let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
+        let table_id_full = string_to_table_id(table_id.clone()).to_string();
         let init_prover_data_encoded =
-            read_from_path(cache_folder.clone() + "/" + &table_id + ".cache.bin").unwrap();
+            read_from_path(cache_folder.clone() + "/" + &table_id_full + ".cache.bin").unwrap();
         let init_prover_data: ProverTraceData<SC> =
             bincode::deserialize(&init_prover_data_encoded).unwrap();
 
@@ -205,7 +201,7 @@ where
         );
 
         // Generating trace for ops_sender and making sure it has height num_ops
-        let trace_span = info_span!("Prove.generate_trace").entered();
+        let trace_span = info_span!("Generate ops_sender trace").entered();
         let ops_sender_trace = ops_sender.generate_trace(&zk_ops, config.page.max_rw_ops);
         trace_span.exit();
 
@@ -296,8 +292,8 @@ fn afi_op_conv(
         InputFileOp::InnerJoin => {
             panic!("InnerJoin not supported yet")
         }
-        InputFileOp::Where => {
-            panic!("Where not supported yet")
+        InputFileOp::Filter => {
+            panic!("Filter not supported yet")
         }
     }
 }

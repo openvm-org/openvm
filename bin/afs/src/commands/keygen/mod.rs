@@ -1,22 +1,17 @@
-use std::{
-    fs::{self, File},
-    io::{BufWriter, Write},
-    marker::PhantomData,
-    time::Instant,
-};
+use std::fs;
+use std::{marker::PhantomData, time::Instant};
 
 use afs_chips::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
 use afs_stark_backend::{config::PcsProverData, keygen::MultiStarkKeygenBuilder};
 use afs_test_utils::page_config::PageMode;
 use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
+use bin_common::utils::io::write_bytes;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use p3_field::PrimeField64;
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::Serialize;
 use tracing::info;
-
-use super::create_prefix;
 
 /// `afs keygen` command
 /// Uses information from config.toml to generate partial proving and verifying keys and
@@ -44,14 +39,12 @@ where
     /// Execute the `keygen` command
     pub fn execute(config: &PageConfig, engine: &E, output_folder: String) -> Result<()> {
         let start = Instant::now();
-        let prefix = create_prefix(config);
+        let prefix = config.generate_filename();
         match config.page.mode {
             PageMode::ReadWrite => KeygenCommand::execute_rw(
                 engine,
                 (config.page.index_bytes + 1) / 2,
                 (config.page.data_bytes + 1) / 2,
-                config.page.max_rw_ops,
-                config.page.height,
                 config.page.bits_per_fe,
                 prefix,
                 output_folder,
@@ -69,8 +62,6 @@ where
         engine: &E,
         idx_len: usize,
         data_len: usize,
-        max_ops: usize,
-        height: usize,
         limb_bits: usize,
         prefix: String,
         output_folder: String,
@@ -79,8 +70,6 @@ where
         let range_bus_index = 1;
         let ops_bus_index = 2;
 
-        let page_height = height;
-        let checker_trace_degree = max_ops * 4;
         let idx_limb_bits = limb_bits;
 
         let idx_decomp = 8;
@@ -98,13 +87,7 @@ where
 
         let mut keygen_builder: MultiStarkKeygenBuilder<SC> = engine.keygen_builder();
 
-        page_controller.set_up_keygen_builder(
-            &mut keygen_builder,
-            page_height,
-            checker_trace_degree,
-            &ops_sender,
-            max_ops,
-        );
+        page_controller.set_up_keygen_builder(&mut keygen_builder, &ops_sender);
 
         let partial_pk = keygen_builder.generate_partial_pk();
         let partial_vk = partial_pk.partial_vk();
@@ -123,11 +106,4 @@ where
         write_bytes(&encoded_vk, vk_path).unwrap();
         Ok(())
     }
-}
-
-fn write_bytes(bytes: &[u8], path: String) -> Result<()> {
-    let file = File::create(path).unwrap();
-    let mut writer = BufWriter::new(file);
-    writer.write_all(bytes)?;
-    Ok(())
 }

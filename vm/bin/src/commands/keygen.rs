@@ -10,8 +10,6 @@ use afs_test_utils::{
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
-use itertools::Itertools;
-use p3_matrix::Matrix;
 use stark_vm::vm::{config::VmConfig, get_chips, VirtualMachine};
 
 use crate::asm::parse_asm_file;
@@ -56,11 +54,10 @@ impl KeygenCommand {
         let engine = config::baby_bear_poseidon2::default_engine(vm.max_log_degree()?);
         let mut keygen_builder = engine.keygen_builder();
 
-        let traces = vm.traces()?;
         let chips = get_chips(&vm);
 
-        for (chip, trace) in chips.into_iter().zip_eq(traces) {
-            keygen_builder.add_air(chip, trace.height(), 0);
+        for chip in chips {
+            keygen_builder.add_air(chip, 0);
         }
 
         let partial_pk = keygen_builder.generate_partial_pk();

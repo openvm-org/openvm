@@ -4,6 +4,8 @@ use p3_air::{Air, AirBuilder, PermutationAirBuilder, VirtualPairCol};
 use p3_field::Field;
 use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
 
+/// Interaction debugging tools
+pub mod debug;
 pub mod rap;
 pub mod trace;
 mod utils;

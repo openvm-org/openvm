@@ -189,7 +189,7 @@ impl VerifyCommand {
         airs.push(&page_controller.final_root_signal);
         airs.push(&page_controller.range_checker.air);
         airs.push(&ops_sender);
-        let result = verifier.verify(&mut challenger, partial_vk, airs, proof, &pis);
+        let result = verifier.verify(&mut challenger, &partial_vk, airs, &proof, &pis);
         if result.is_err() {
             println!("Verification Unsuccessful");
         } else {

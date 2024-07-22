@@ -35,10 +35,12 @@ fn load_tables_test(
     let prover_data = ij_controller.load_tables(
         t1,
         t2,
+        None,
+        None,
+        None,
         intersector_trace_degree,
         &mut trace_builder.committer,
     );
-
     let proof = ij_controller.prove(engine, partial_pk, trace_builder, prover_data);
     ij_controller.verify(engine, partial_pk.partial_vk(), proof)
 }
@@ -104,7 +106,7 @@ fn inner_join_test() {
     );
 
     // Assigning foreign key in t2 rows
-    for row in t2.rows.iter_mut() {
+    for row in t2.iter_mut() {
         row.data[fkey_start..fkey_end].clone_from_slice(&t1.get_random_idx(&mut rng));
     }
 
@@ -125,12 +127,7 @@ fn inner_join_test() {
     );
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-    ij_controller.set_up_keygen_builder(
-        &mut keygen_builder,
-        t1_height,
-        t2_height,
-        intersector_trace_degree,
-    );
+    ij_controller.set_up_keygen_builder(&mut keygen_builder);
 
     let partial_pk = keygen_builder.generate_partial_pk();
 
@@ -151,7 +148,7 @@ fn inner_join_test() {
     .expect("Verification failed");
 
     // Making a test where foreign key sometimes doesn't exist in t1
-    for row in t2.rows.iter_mut() {
+    for row in t2.iter_mut() {
         if rng.gen::<bool>() {
             row.data[fkey_start..fkey_end].clone_from_slice(
                 (fkey_start..fkey_end)
@@ -176,7 +173,7 @@ fn inner_join_test() {
 
     // Making a test where foreign key always doens't exist in t1
     // This should produce a fully-unallocated output page
-    for row in t2.rows.iter_mut() {
+    for row in t2.iter_mut() {
         row.data[fkey_start..fkey_end].clone_from_slice(
             (fkey_start..fkey_end)
                 .map(|_| rng.gen::<u32>() % MAX_VAL)
@@ -219,7 +216,7 @@ fn inner_join_test() {
         t2_height / 2,
     );
 
-    for row in t2.rows.iter_mut() {
+    for row in t2.iter_mut() {
         if rng.gen::<bool>() {
             row.data[fkey_start..fkey_end].clone_from_slice(&t1.get_random_idx(&mut rng));
         }

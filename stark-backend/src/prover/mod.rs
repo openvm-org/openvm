@@ -2,15 +2,16 @@ use std::sync::{Arc, Mutex};
 
 use itertools::Itertools;
 use p3_challenger::{CanObserve, FieldChallenger};
-use p3_commit::Pcs;
+use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::AbstractExtensionField;
 use p3_matrix::Matrix;
 use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::instrument;
 
+#[cfg(debug_assertions)]
+use crate::air_builders::debug::check_constraints::{check_constraints, check_logup};
 use crate::{
-    air_builders::debug::check_constraints::{check_constraints, check_cumulative_sums},
     commit::CommittedSingleMatrixView,
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkPartialProvingKey,
@@ -183,7 +184,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
                     partitioned_main.push(partitioned_main_trace.as_slice());
                     permutation.push(perm_trace);
                 }
-                check_cumulative_sums(&raps, &preprocessed, &partitioned_main, &permutation);
+                check_logup(&raps, &preprocessed, &partitioned_main);
             }
         });
 
@@ -224,7 +225,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
                 let domain = main.domain;
                 let preprocessed = pk.preprocessed_data.as_ref().map(|p| {
                     // TODO: currently assuming each chip has it's own preprocessed commitment
-                    CommittedSingleMatrixView::new(&p.data, 0)
+                    CommittedSingleMatrixView::new(p.data.as_ref(), 0)
                 });
                 let matrix_ptrs = &pk.vk.main_graph.matrix_ptrs;
                 assert_eq!(main.partitioned_main_trace.len(), matrix_ptrs.len());
@@ -283,7 +284,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
     /// - per challenge round, shared commitment for
     /// all trace matrices, with matrices in increasing order of air index
     #[allow(clippy::too_many_arguments)]
-    #[instrument(level = "debug", skip_all)]
+    #[instrument(level = "info", skip_all)]
     pub fn prove_raps_with_committed_traces<'a>(
         &self,
         challenger: &mut SC::Challenger,
@@ -313,6 +314,10 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         let alpha: SC::Challenge = challenger.sample_ext_element();
         tracing::debug!("alpha: {alpha:?}");
 
+        let degrees = trace_views
+            .iter()
+            .map(|view| view.domain.size())
+            .collect_vec();
         let quotient_degrees = partial_pk
             .per_air
             .iter()
@@ -401,6 +406,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             .collect_vec();
 
         Proof {
+            degrees,
             commitments,
             opening,
             exposed_values_after_challenge,

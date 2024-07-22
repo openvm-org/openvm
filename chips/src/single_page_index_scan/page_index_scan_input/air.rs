@@ -4,7 +4,7 @@ use p3_field::Field;
 use p3_matrix::Matrix;
 
 use crate::{
-    is_equal_vec::columns::{IsEqualVecCols, IsEqualVecIOCols},
+    is_equal_vec::columns::{IsEqualVecCols, IsEqualVecIoCols},
     is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
     sub_chip::{AirConfig, SubAir},
 };
@@ -212,11 +212,11 @@ where
                 is_equal_vec_aux, ..
             }) => {
                 let is_equal_vec_cols = IsEqualVecCols {
-                    io: IsEqualVecIOCols {
+                    io: IsEqualVecIoCols {
                         x: page_cols.idx.clone(),
                         y: local_cols.x.clone(),
                         // use the equal_comp_ind
-                        prod: equal_comp_ind.unwrap(),
+                        is_equal: equal_comp_ind.unwrap(),
                     },
                     aux: is_equal_vec_aux.clone(),
                 };

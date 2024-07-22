@@ -1,10 +1,10 @@
-use afs_compiler::util::{display_program, execute_program};
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
 
 use afs_compiler::asm::AsmBuilder;
 use afs_compiler::ir::Var;
+use afs_compiler::util::end_to_end_test;
 use stark_vm::cpu::WORD_SIZE;
 
 type F = BabyBear;
@@ -53,9 +53,10 @@ fn test_compiler_conditionals() {
 
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
-    display_program(&program);
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    //let program = builder.compile_isa::<WORD_SIZE>();
+    //display_program(&program);
+    //execute_program::<WORD_SIZE, _>(program, vec![]);
+    end_to_end_test::<WORD_SIZE, _>(builder, vec![]);
 
     // let code = builder.compile_asm();
     // println!("{}", code);
@@ -93,9 +94,10 @@ fn test_compiler_conditionals_v2() {
 
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
-    display_program(&program);
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    // let program = builder.compile_isa::<WORD_SIZE>();
+    // display_program(&program);
+    // execute_program::<WORD_SIZE, _>(program, vec![]);
+    end_to_end_test::<WORD_SIZE, _>(builder, vec![]);
 
     // let code = builder.compile_asm();
     // println!("{}", code);

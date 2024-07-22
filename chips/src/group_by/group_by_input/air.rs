@@ -6,7 +6,7 @@ use p3_field::Field;
 use p3_matrix::Matrix;
 
 use crate::common::page_cols::PageCols;
-use crate::is_equal_vec::columns::IsEqualVecIOCols;
+use crate::is_equal_vec::columns::IsEqualVecIoCols;
 use crate::sub_chip::{AirConfig, SubAir};
 
 use super::columns::{GroupByAuxCols, GroupByCols, GroupedPageCols};
@@ -84,14 +84,14 @@ impl<AB: PartitionedAirBuilder> SubAir<AB> for GroupByAir {
         let local_grouped = get_grouped(local_page, local_aux.grouped);
         let next_grouped = get_grouped(next_page, next_aux.grouped);
 
-        let is_equal_io = IsEqualVecIOCols {
+        let is_equal_io = IsEqualVecIoCols {
             x: iter::once(local_grouped.is_alloc)
                 .chain(local_grouped.group_by)
                 .collect(),
             y: iter::once(next_grouped.is_alloc)
                 .chain(next_grouped.group_by)
                 .collect(),
-            prod: local_aux.eq_next,
+            is_equal: local_aux.eq_next,
         };
 
         // constrain eq_next to hold the correct value

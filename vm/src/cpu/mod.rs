@@ -50,7 +50,14 @@ pub enum OpCode {
 
     PERM_POS2 = 16,
     COMP_POS2 = 17,
-    HINT = 18,
+
+    /// Instruction to write the next hint word into memory.
+    SHINTW = 18,
+
+    /// Phantom instruction to prepare the next input vector for hinting.
+    HINT_INPUT = 19,
+    /// Phantom instruction to prepare the little-endian bit decomposition of a variable for hinting.
+    HINT_BITS = 20,
 }
 
 impl OpCode {
@@ -79,7 +86,9 @@ impl OpCode {
             16 => Some(PERM_POS2),
             17 => Some(COMP_POS2),
 
-            18 => Some(HINT),
+            18 => Some(SHINTW),
+            19 => Some(HINT_INPUT),
+            20 => Some(HINT_BITS),
 
             _ => None,
         }
@@ -90,7 +99,9 @@ use crate::field_extension::FieldExtensionArithmeticAir;
 use crate::poseidon2::Poseidon2Chip;
 use OpCode::*;
 
-pub const CORE_INSTRUCTIONS: [OpCode; 7] = [LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, HINT];
+pub const CORE_INSTRUCTIONS: [OpCode; 9] = [
+    LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, SHINTW, HINT_INPUT, HINT_BITS,
+];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
 
@@ -110,7 +121,8 @@ fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         COMP_POS2 | PERM_POS2 => {
             Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(opcode)
         }
-        HINT => 0,
+        SHINTW => 3,
+        HINT_INPUT | HINT_BITS => 0,
         _ => panic!(),
     }
 }

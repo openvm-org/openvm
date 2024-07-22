@@ -8,6 +8,9 @@ use super::A0;
 
 #[derive(Debug, Clone)]
 pub enum AsmInstruction<F, EF> {
+    /// Load extension immediate (address, value)
+    ImmE(i32, EF),
+
     /// Load word (dst, src, index, offset, size).
     ///
     /// Load a value from the address stored at src(fp) into dstfp).
@@ -137,12 +140,6 @@ pub enum AsmInstruction<F, EF> {
     /// Break(label)
     Break(F),
 
-    /// HintBits(dst, src).
-    ///
-    /// Decompose the field element `src` into bits and write them to the array
-    /// starting at the address stored at `dst`.
-    HintBits(i32, i32),
-
     /// Perform a permutation of the Poseidon2 hash function on the array specified by the ptr.
     Poseidon2Permute(i32, i32),
     Poseidon2Compress(i32, i32, i32),
@@ -156,19 +153,25 @@ pub enum AsmInstruction<F, EF> {
     /// Print an extension element.
     PrintE(i32),
 
-    /// Convert an extension element to field elements.
-    Ext2Felt(i32, i32),
+    /// Add next input vector to hint stream.
+    HintInputVec(),
 
-    /// Hint a vector of blocks along with the length.
-    Hint(i32),
+    /// HintBits(dst, src).
+    ///
+    /// Bit decompose the field element `src` and add in little endian to hint stream.
+    HintBits(i32),
 
-    // FRIFold(m, input).
+    /// Stores the next hint stream word at `dst`.
+    StoreHintWord(i32, i32, F, F),
+    StoreHintWordI(i32, F, F, F),
+
+    /// FRIFold(m, input).
     FriFold(i32, i32),
 
-    // Commit(val, index).
+    /// Commit(val, index).
     Commit(i32, i32),
 
-    // RegisterPublicValue(val).
+    /// RegisterPublicValue(val).
     RegisterPublicValue(i32),
 
     LessThan(i32, i32, i32),
@@ -780,8 +783,8 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
     //             false,
     //             name,
     //         ),
-    //         AsmInstruction::Ext2Felt(dst, src) => Instruction::new(
-    //             Opcode::Ext2Felt,
+    //         AsmInstruction::HintExt2Felt(dst, src) => Instruction::new(
+    //             Opcode::HintExt2Felt,
     //             i32_f(dst),
     //             i32_f_arr(src),
     //             f_u32(F::zero()),
@@ -865,6 +868,9 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
             AsmInstruction::LessThan(dst, left, right) => {
                 write!(f, "lt  ({})fp, {}, {}", dst, left, right,)
+            }
+            AsmInstruction::ImmE(dst, val) => {
+                write!(f, "imme   ({})fp, {}", dst, val)
             }
             AsmInstruction::LoadF(dst, src, index, offset, size) => {
                 write!(
@@ -1094,7 +1100,7 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::Trap => write!(f, "trap"),
             AsmInstruction::Halt => write!(f, "halt"),
-            AsmInstruction::HintBits(dst, src) => write!(f, "hint_bits ({})fp, ({})fp", dst, src),
+            AsmInstruction::HintBits(dst) => write!(f, "hint_bits ({})fp", dst),
             AsmInstruction::Poseidon2Permute(dst, src) => {
                 write!(f, "poseidon2_permute ({})fp, ({})fp", dst, src)
             }
@@ -1107,8 +1113,13 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::PrintE(dst) => {
                 write!(f, "print_e ({})fp", dst)
             }
-            AsmInstruction::Ext2Felt(dst, src) => write!(f, "ext2felt ({})fp, {})fp", dst, src),
-            AsmInstruction::Hint(dst) => write!(f, "hint ({})fp", dst),
+            AsmInstruction::HintInputVec() => write!(f, "hint_vec"),
+            AsmInstruction::StoreHintWord(dst, index, offset, size) => {
+                write!(f, "shintw ({})fp ({})fp {} {}", dst, index, offset, size)
+            }
+            AsmInstruction::StoreHintWordI(dst, index, offset, size) => {
+                write!(f, "shintw ({})fp {} {} {}", dst, index, offset, size)
+            }
             AsmInstruction::FriFold(m, input_ptr) => {
                 write!(f, "fri_fold ({})fp, ({})fp", m, input_ptr)
             }

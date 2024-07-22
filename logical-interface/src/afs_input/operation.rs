@@ -7,7 +7,7 @@ use std::str::FromStr;
 
 use crate::{afs_interface::utils::string_to_table_id, table::types::TableId};
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Operand {
     Index,
@@ -74,18 +74,18 @@ impl InsertOp {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct WhereOp {
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct FilterOp {
     pub table_id: TableId,
     pub operand: Operand,
     pub predicate: Comp,
     pub value: String,
 }
 
-impl WhereOp {
+impl FilterOp {
     pub fn parse(args: Vec<String>) -> Result<Self> {
         if args.len() != 4 {
-            return Err(eyre!("Invalid number of arguments for WHERE op"));
+            return Err(eyre!("Invalid number of arguments for predicate filter op"));
         }
         let table_id = string_to_table_id(args[0].clone());
         let operand = Operand::from_str(&args[1])?;
@@ -137,7 +137,7 @@ impl GroupByOp {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct InnerJoinOp {
     pub table_id_left: TableId,
     pub table_id_right: TableId,

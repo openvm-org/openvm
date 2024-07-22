@@ -13,10 +13,14 @@ use super::InternalPageAir;
 
 impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
     // The cached trace is the whole page (including the is_leaf and is_alloc column)
-    pub fn generate_cached_trace<F: PrimeField64>(&self, page: Vec<Vec<u32>>) -> RowMajorMatrix<F> {
+    pub fn generate_cached_trace<F: PrimeField64>(&self, page: &[Vec<u32>]) -> RowMajorMatrix<F> {
         RowMajorMatrix::new(
-            page.into_iter()
-                .flat_map(|row| row.into_iter().map(F::from_wrapped_u32).collect::<Vec<F>>())
+            page.iter()
+                .flat_map(|row| {
+                    row.iter()
+                        .map(|n: &u32| F::from_wrapped_u32(*n))
+                        .collect::<Vec<F>>()
+                })
                 .collect(),
             2 + 2 * self.idx_len + COMMITMENT_LEN,
         )
@@ -24,10 +28,10 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
 
     pub fn generate_main_trace<F: PrimeField64>(
         &self,
-        page: Vec<Vec<u32>>,
+        page: &[Vec<u32>],
         commit: Vec<u32>,
-        child_ids: Vec<u32>,
-        mults: Vec<u32>,
+        child_ids: &[u32],
+        mults: &[u32],
         range: (Vec<u32>, Vec<u32>),
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> RowMajorMatrix<F> {
@@ -41,12 +45,12 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
                     trace_row.extend(commit.clone());
                     trace_row.push(self.air_id);
                     trace_row.push(child_ids[i]);
-                    trace_row.push(mult);
-                    trace_row.push(mult * row[1]);
-                    trace_row.push((mult * row[1] == 1) as u32);
+                    trace_row.push(*mult);
+                    trace_row.push(*mult * row[1]);
+                    trace_row.push((*mult * row[1] == 1) as u32);
                     // dummy value
                     trace_row.push(0);
-                    trace_row.push(row[1] * mult - row[1]);
+                    trace_row.push(row[1] * *mult - row[1]);
                     let next = if i < page.len() - 1 {
                         page[i + 1][2..2 + self.idx_len].to_vec()
                     } else {

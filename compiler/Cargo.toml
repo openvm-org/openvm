@@ -21,6 +21,7 @@ quote = "1.0"
 syn = { version = "1.0", features = ["full"] }
 poseidon2-air = { path = "../poseidon2-air" }
 
+afs-test-utils = { path = "../test-utils" }
 stark-vm = { path = "../vm" }
 
 [dev-dependencies]

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use derivative::Derivative;
 use itertools::Itertools;
 use p3_commit::Pcs;
@@ -20,7 +22,7 @@ pub struct TraceCommitmentBuilder<'a, SC: StarkGenericConfig> {
     pub committer: TraceCommitter<'a, SC>,
     traces_to_commit: Vec<RowMajorMatrix<Val<SC>>>,
     committed_traces: Vec<Vec<RowMajorMatrix<Val<SC>>>>,
-    data: Vec<(Com<SC>, PcsProverData<SC>)>,
+    data: Vec<ProverTraceData<SC>>,
 }
 
 impl<'a, SC: StarkGenericConfig> TraceCommitmentBuilder<'a, SC> {
@@ -47,14 +49,15 @@ impl<'a, SC: StarkGenericConfig> TraceCommitmentBuilder<'a, SC> {
     pub fn commit_current(&mut self) {
         let traces = std::mem::take(&mut self.traces_to_commit);
         let data = self.committer.commit(traces.clone());
-        self.data.push((data.commit, data.data));
+        self.data.push(data);
         self.committed_traces.push(traces);
     }
 
     /// Loads `trace` assumed to have already been committed as single matrix commitment in `data`.
+    /// We load the underlying `PcsProverData` as a smart pointer because the prover only needs a reference.
     pub fn load_cached_trace(&mut self, trace: RowMajorMatrix<Val<SC>>, data: ProverTraceData<SC>) {
         self.committed_traces.push(vec![trace]);
-        self.data.push((data.commit, data.data));
+        self.data.push(data);
     }
 
     pub fn view<'b>(
@@ -68,7 +71,7 @@ impl<'a, SC: StarkGenericConfig> TraceCommitmentBuilder<'a, SC> {
         let pcs_data = self
             .data
             .iter()
-            .map(|(commit, data)| (commit.clone(), data))
+            .map(|td| (td.commit.clone(), td.data.as_ref()))
             .collect_vec();
         let air_traces = airs
             .into_iter()
@@ -80,9 +83,11 @@ impl<'a, SC: StarkGenericConfig> TraceCommitmentBuilder<'a, SC> {
                     .iter()
                     .map(|ptr| self.committed_traces[ptr.commit_index][ptr.matrix_index].as_view())
                     .collect_vec();
+                // There must be at least one main trace matrix
+                let degree = partitioned_main_trace[0].height();
                 SingleAirCommittedTrace {
                     air,
-                    domain: self.committer.pcs.natural_domain_for_degree(vk.degree),
+                    domain: self.committer.pcs.natural_domain_for_degree(degree),
                     partitioned_main_trace,
                 }
             })
@@ -119,7 +124,10 @@ impl<'pcs, SC: StarkGenericConfig> TraceCommitter<'pcs, SC> {
                 })
                 .collect();
             let (commit, data) = self.pcs.commit(traces_with_domains);
-            ProverTraceData { commit, data }
+            ProverTraceData {
+                commit,
+                data: Arc::new(data),
+            }
         })
     }
 }
@@ -127,7 +135,7 @@ impl<'pcs, SC: StarkGenericConfig> TraceCommitter<'pcs, SC> {
 /// Prover data for multi-matrix trace commitments.
 /// The data is for the traces committed into a single commitment.
 #[derive(Derivative, Serialize, Deserialize)]
-#[derivative(Clone(bound = "PcsProverData<SC>: Clone"))]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
 #[serde(bound(
     serialize = "Com<SC>: Serialize, PcsProverData<SC>: Serialize",
     deserialize = "Com<SC>: Deserialize<'de>, PcsProverData<SC>: Deserialize<'de>"
@@ -136,7 +144,10 @@ pub struct ProverTraceData<SC: StarkGenericConfig> {
     /// Commitment to the trace matrices.
     pub commit: Com<SC>,
     /// Prover data, such as a Merkle tree, for the trace commitment.
-    pub data: PcsProverData<SC>,
+    /// The data is stored as a thread-safe smart [Arc] pointer because [PcsProverData] does
+    /// not implement clone and should not be cloned. The prover only needs a reference to
+    /// this data, so we use a smart pointer to elide lifetime concerns.
+    pub data: Arc<PcsProverData<SC>>,
 }
 
 /// The full RAP trace consists of horizontal concatenation of multiple matrices of the same height:

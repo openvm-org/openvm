@@ -11,6 +11,7 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use tracing::info_span;
 
 use crate::common::page::Page;
+use crate::common::page_cols::PageCols;
 use crate::page_rw_checker::offline_checker::OfflineChecker;
 use crate::page_rw_checker::page_controller::Operation;
 use crate::range_gate::RangeCheckerGateChip;
@@ -252,11 +253,11 @@ impl<const COMMITMENT_LEN: usize> PageController<COMMITMENT_LEN> {
 
     pub fn load_page_and_ops<SC: StarkGenericConfig>(
         &mut self,
-        init_leaf_pages: Vec<Vec<Vec<u32>>>,
+        init_leaf_pages: &mut [Vec<Vec<u32>>],
         init_internal_pages: Vec<Vec<Vec<u32>>>,
         init_root_is_leaf: bool,
         init_root_idx: usize,
-        final_leaf_pages: Vec<Vec<Vec<u32>>>,
+        final_leaf_pages: &mut [Vec<Vec<u32>>],
         final_internal_pages: Vec<Vec<Vec<u32>>>,
         final_root_is_leaf: bool,
         final_root_idx: usize,
@@ -288,20 +289,38 @@ impl<const COMMITMENT_LEN: usize> PageController<COMMITMENT_LEN> {
         let final_internal_height = self.params.final_tree_params.internal_page_height;
 
         let blank_init_leaf_row = vec![0; 1 + self.params.idx_len + self.params.data_len];
-        let blank_init_leaf = vec![blank_init_leaf_row.clone(); init_leaf_height];
+        let mut blank_init_leaf = vec![blank_init_leaf_row.clone(); init_leaf_height];
 
         let mut blank_init_internal_row = vec![2];
         blank_init_internal_row.resize(2 + 2 * self.params.idx_len + self.params.commitment_len, 0);
         let blank_init_internal = vec![blank_init_internal_row; init_internal_height];
 
         let blank_final_leaf_row = vec![0; 1 + self.params.idx_len + self.params.data_len];
-        let blank_final_leaf = vec![blank_final_leaf_row.clone(); final_leaf_height];
+        let mut blank_final_leaf = vec![blank_final_leaf_row.clone(); final_leaf_height];
 
         let mut blank_final_internal_row = vec![2];
         blank_final_internal_row
             .resize(2 + 2 * self.params.idx_len + self.params.commitment_len, 0);
         let blank_final_internal = vec![blank_final_internal_row; final_internal_height];
         let internal_indices = ops.iter().map(|op| op.idx.clone()).collect();
+        let init_leaf_pages = init_leaf_pages
+            .iter_mut()
+            .map(|p| Page::from_2d_vec_consume(p, self.params.idx_len, self.params.data_len))
+            .collect_vec();
+        let final_leaf_pages = final_leaf_pages
+            .iter_mut()
+            .map(|p| Page::from_2d_vec_consume(p, self.params.idx_len, self.params.data_len))
+            .collect_vec();
+        let blank_init_leaf = Page::from_2d_vec_consume(
+            &mut blank_init_leaf,
+            self.params.idx_len,
+            self.params.data_len,
+        );
+        let blank_final_leaf = Page::from_2d_vec_consume(
+            &mut blank_final_leaf,
+            self.params.idx_len,
+            self.params.data_len,
+        );
         let (init_tree_products, mega_page) = make_tree_products(
             trace_committer,
             &init_leaf_pages,
@@ -322,9 +341,13 @@ impl<const COMMITMENT_LEN: usize> PageController<COMMITMENT_LEN> {
             init_cached_data,
         );
         let mut mega_page = mega_page.unwrap();
-        mega_page.resize(
-            mega_page.len() + 3 * ops.len(),
-            vec![0; 1 + self.params.idx_len + self.params.data_len],
+        mega_page.rows.resize(
+            mega_page.rows.len() + 3 * ops.len(),
+            PageCols::new(
+                0,
+                vec![0; self.params.idx_len],
+                vec![0; self.params.data_len],
+            ),
         );
         let (final_tree_products, _) = make_tree_products(
             trace_committer,
@@ -345,8 +368,6 @@ impl<const COMMITMENT_LEN: usize> PageController<COMMITMENT_LEN> {
             false,
             final_cached_data,
         );
-        let mut mega_page =
-            Page::from_2d_vec(&mega_page, self.params.idx_len, self.params.data_len);
         let offline_checker_trace = self.gen_ops_trace::<SC>(
             &mut mega_page,
             ops,
@@ -392,9 +413,9 @@ impl<const COMMITMENT_LEN: usize> PageController<COMMITMENT_LEN> {
 /// internal_indices are relevant for final page generation only
 fn make_tree_products<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>(
     committer: &mut TraceCommitter<SC>,
-    leaf_pages: &[Vec<Vec<u32>>],
+    leaf_pages: &[Page],
     leaf_chips: &[LeafPageAir<COMMITMENT_LEN>],
-    blank_leaf_page: &[Vec<u32>],
+    blank_leaf_page: &Page,
     internal_pages: &[Vec<Vec<u32>>],
     internal_chips: &[InternalPageAir<COMMITMENT_LEN>],
     blank_internal_page: &[Vec<u32>],
@@ -411,27 +432,25 @@ fn make_tree_products<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>(
         NodeProducts<SC, COMMITMENT_LEN>,
         NodeProducts<SC, COMMITMENT_LEN>,
     )>,
-) -> (TreeProducts<SC, COMMITMENT_LEN>, Option<Vec<Vec<u32>>>)
+) -> (TreeProducts<SC, COMMITMENT_LEN>, Option<Page>)
 where
     Val<SC>: AbstractField + PrimeField64,
     Com<SC>: Into<[Val<SC>; COMMITMENT_LEN]>,
 {
     let mut leaf_pages = leaf_pages.to_vec();
     let mut internal_pages = internal_pages.to_vec();
-    leaf_pages.resize(params.leaf_cap, blank_leaf_page.to_vec());
+    leaf_pages.resize(params.leaf_cap, blank_leaf_page.clone());
     internal_pages.resize(params.internal_cap, blank_internal_page.to_vec());
     let leaf_trace = leaf_pages
         .iter()
         .zip(leaf_chips.iter())
-        .map(|(page, chip)| {
-            chip.generate_cached_trace::<Val<SC>>(Page::from_2d_vec(page, idx_len, data_len))
-        })
+        .map(|(page, chip)| chip.generate_cached_trace_from_page::<Val<SC>>(page))
         .collect::<Vec<_>>();
 
     let internal_trace = internal_pages
         .iter()
         .zip(internal_chips.iter())
-        .map(|(page, chip)| chip.generate_cached_trace::<Val<SC>>(page.clone()))
+        .map(|(page, chip)| chip.generate_cached_trace::<Val<SC>>(page))
         .collect::<Vec<_>>();
     let (mut leaf_prods, mut internal_prods) = if cached_data.is_some() {
         let mut data = cached_data.unwrap();
@@ -451,17 +470,16 @@ where
         &internal_prods.commitments,
         (root_is_leaf, root_idx),
         idx_len,
+        data_len,
     );
     for i in 0..leaf_prods.commitments.len() {
         let commit = leaf_prods.commitments_as_arr[i]
             .into_iter()
             .map(|c| c.as_canonical_u64() as u32)
             .collect();
-        let page = leaf_pages[i].clone();
         let range = tree.leaf_ranges[i].clone();
-        let page = Page::from_2d_vec(&page, idx_len, data_len);
         let tmp = leaf_chips[i].generate_main_trace::<SC>(
-            &page,
+            &leaf_pages[i],
             commit,
             range,
             range_checker.clone(),
@@ -475,15 +493,12 @@ where
             .into_iter()
             .map(|c| c.as_canonical_u64() as u32)
             .collect();
-        let page = internal_pages[i].clone();
         let range = tree.internal_ranges[i].clone();
-        let mults = tree.mults[i].clone();
-        let child_ids = tree.child_ids[i].clone();
         let tmp = internal_chips[i].generate_main_trace::<Val<SC>>(
-            page,
+            &internal_pages[i],
             commit,
-            child_ids,
-            mults,
+            &tree.child_ids[i],
+            &tree.mults[i],
             range,
             range_checker.clone(),
         );

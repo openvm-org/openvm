@@ -1,7 +1,16 @@
 use clap::{Parser, Subcommand};
+use olap::commands::parse_afo_file;
 
-use crate::commands::{
-    multitier_rw::MultitierRwCommand, predicate::PredicateCommand, rw::RwCommand,
+use crate::{
+    commands::{
+        benchmark_execute,
+        multitier_rw::MultitierRwCommand,
+        predicate::PredicateCommand,
+        predicate::{run_predicate_bench, PredicateCommand},
+        rw::RwCommand,
+        rw::{run_rw_bench, RwCommand},
+    },
+    utils::table_gen::{generate_incremental_afi_rw, generate_random_afi_rw},
 };
 
 #[derive(Debug, Parser)]
@@ -32,8 +41,38 @@ impl Cli {
         let cli = Self::parse();
         match cli.command {
             Commands::MtRw(mtrw) => mtrw.execute().unwrap(),
-            Commands::Rw(rw) => rw.execute().unwrap(),
-            Commands::Predicate(predicate) => predicate.execute().unwrap(),
+            Commands::Rw(rw) => {
+                let benchmark_name = "ReadWrite".to_string();
+                let scenario = format!("r{}%, w{}%", rw.percent_reads, rw.percent_writes);
+                let common = rw.common;
+                let extra_data = format!("{} {}", rw.percent_reads, rw.percent_writes);
+                benchmark_execute(
+                    benchmark_name,
+                    scenario,
+                    common,
+                    extra_data,
+                    run_rw_bench,
+                    generate_random_afi_rw,
+                )
+                .unwrap();
+            }
+            Commands::Predicate(predicate) => {
+                let benchmark_name = "Predicate".to_string();
+                let afo = parse_afo_file(predicate.afo_file);
+                let args = afo.operations[0].args.clone();
+                let scenario = format!("{} {}", args[2], args[3]);
+                let common = predicate.common;
+                let extra_data = format!("0 100 {} {}", args[2], args[3]);
+                benchmark_execute(
+                    benchmark_name,
+                    scenario,
+                    common,
+                    extra_data,
+                    run_predicate_bench,
+                    generate_incremental_afi_rw,
+                )
+                .unwrap();
+            }
         }
     }
 }

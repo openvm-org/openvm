@@ -5,8 +5,8 @@ use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_challenger::DuplexChallenger;
 use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
-use p3_field::extension::BinomialExtensionField;
 use p3_field::Field;
+use p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_merkle_tree::FieldMerkleTreeMmcs;
@@ -15,6 +15,10 @@ use p3_symmetric::{CryptographicPermutation, PaddingFreeSponge, TruncatedPermuta
 use p3_uni_stark::StarkConfig;
 use p3_util::log2_strict_usize;
 use rand::{rngs::StdRng, SeedableRng};
+use zkhash::{
+    ark_ff::PrimeField as _, fields::babybear::FpBabyBear as HorizenBabyBear,
+    poseidon2::poseidon2_instance_babybear::RC16,
+};
 
 use crate::engine::{StarkEngine, StarkEngineWithHashInstrumentation};
 
@@ -108,7 +112,7 @@ where
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
 pub fn default_engine(pcs_log_degree: usize) -> BabyBearPoseidon2Engine {
-    let perm = random_perm();
+    let perm = default_perm();
     let fri_params = default_fri_params();
     engine_from_perm(perm, pcs_log_degree, fri_params)
 }
@@ -163,6 +167,22 @@ where
     BabyBearPermutationConfig::new(pcs)
 }
 
+/// Uses HorizenLabs Poseidon2 round constants, but plonky3 Mat4 and also
+/// with a p3 Monty reduction factor.
+pub fn default_perm() -> Perm {
+    let (external_constants, internal_constants) = horizen_round_consts_16();
+    let rounds_f = 8;
+    let rounds_p = 13;
+    Perm::new(
+        rounds_f,
+        external_constants,
+        Poseidon2ExternalMatrixGeneral,
+        rounds_p,
+        internal_constants,
+        DiffusionMatrixBabyBear,
+    )
+}
+
 pub fn random_perm() -> Perm {
     let seed = [42; 32];
     let mut rng = StdRng::from_seed(seed);
@@ -176,6 +196,38 @@ pub fn random_perm() -> Perm {
 pub fn random_instrumented_perm() -> InstrPerm {
     let perm = random_perm();
     Instrumented::new(perm)
+}
+
+fn horizen_to_p3(horizen_babybear: HorizenBabyBear) -> BabyBear {
+    BabyBear::from_canonical_u64(horizen_babybear.into_bigint().0[0])
+}
+
+fn horizen_round_consts_16() -> (Vec<[BabyBear; 16]>, Vec<BabyBear>) {
+    let p3_rc16: Vec<Vec<BabyBear>> = RC16
+        .iter()
+        .map(|round| {
+            round
+                .iter()
+                .map(|babybear| horizen_to_p3(*babybear))
+                .collect()
+        })
+        .collect();
+
+    let rounds_f = 8;
+    let rounds_p = 13;
+    let rounds_f_beginning = rounds_f / 2;
+    let p_end = rounds_f_beginning + rounds_p;
+    let external_round_constants: Vec<[BabyBear; 16]> = p3_rc16[..rounds_f_beginning]
+        .iter()
+        .chain(p3_rc16[p_end..].iter())
+        .cloned()
+        .map(|round| round.try_into().unwrap())
+        .collect();
+    let internal_round_constants: Vec<BabyBear> = p3_rc16[rounds_f_beginning..p_end]
+        .iter()
+        .map(|round| round[0])
+        .collect();
+    (external_round_constants, internal_round_constants)
 }
 
 /// Runs a single end-to-end test for a given set of chips and traces.

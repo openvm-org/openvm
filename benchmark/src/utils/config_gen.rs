@@ -1,3 +1,6 @@
+#[cfg(test)]
+use std::fs::create_dir_all;
+
 use itertools::iproduct;
 
 use afs_test_utils::{
@@ -10,6 +13,16 @@ use afs_test_utils::{
         StarkEngineConfig, TreeParamsConfig,
     },
 };
+
+use crate::commands::parse_config_folder;
+
+pub fn get_configs(config_folder: Option<String>) -> Vec<PageConfig> {
+    if let Some(config_folder) = config_folder.clone() {
+        parse_config_folder(config_folder)
+    } else {
+        generate_configs()
+    }
+}
 
 pub fn generate_configs() -> Vec<PageConfig> {
     let fri_params_vec = vec![
@@ -137,11 +150,13 @@ pub fn generate_multitier_configs() -> Vec<MultitierPageConfig> {
 #[test]
 #[ignore]
 fn run_generate_configs() {
+    let folder = "config/rw";
     let configs = generate_configs();
     let configs_len = configs.len();
     for config in configs {
         let filename = config.generate_filename();
-        let filepath = format!("config/rw/{}", filename);
+        let _ = create_dir_all(folder);
+        let filepath = format!("{}/{}", folder, filename);
         println!("Saving to {}", filepath);
         config.save_to_file(&filepath);
     }

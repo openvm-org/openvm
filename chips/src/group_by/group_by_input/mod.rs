@@ -66,32 +66,29 @@ impl GroupByAir {
     /// Width of entire trace
     pub fn get_width(&self) -> usize {
         if !self.sorted {
-            self.page_width + 3 * self.group_by_cols.len() + 7
+            self.page_width + 3 * self.group_by_cols.len() + 6
         } else {
-            3 * self.group_by_cols.len() + 7
+            3 * self.group_by_cols.len() + 6
         }
     }
 
     /// Width of auxilliary trace, i.e. all non-input-page columns
     pub fn aux_width(&self) -> usize {
         if !self.sorted {
-            3 * self.group_by_cols.len() + 7
+            3 * self.group_by_cols.len() + 6
         } else {
-            2 * self.group_by_cols.len() + 5
+            2 * self.group_by_cols.len() + 4
         }
     }
 
     pub fn select_and_sort(&self, page: &Page) -> Vec<Vec<u32>> {
         if self.sorted {
-            page.rows
-                .clone()
-                .iter()
+            page.iter()
                 .filter(|row| row.is_alloc == 1)
                 .map(|row| row.data.clone())
                 .collect()
         } else {
             let mut grouped_page: Vec<Vec<u32>> = page
-                .rows
                 .iter()
                 .filter(|row| row.is_alloc == 1)
                 .map(|row| {

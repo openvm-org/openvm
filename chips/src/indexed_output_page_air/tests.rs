@@ -57,9 +57,9 @@ fn test_single_page(
     let mut challenger = engine.new_challenger();
     verifier.verify(
         &mut challenger,
-        partial_vk,
+        &partial_vk,
         vec![final_page_chip, &range_checker.air],
-        proof,
+        &proof,
         &pis,
     )
 }
@@ -111,7 +111,7 @@ fn final_page_chip_test() {
         })
         .collect();
 
-    let mut page = Page::from_2d_vec(&page, idx_len, data_len);
+    let page = Page::from_2d_vec(&page, idx_len, data_len);
 
     let final_page_chip = IndexedOutputPageAir::new(
         range_bus_index,
@@ -128,14 +128,9 @@ fn final_page_chip_test() {
 
     let page_data_ptr = keygen_builder.add_cached_main_matrix(final_page_chip.page_width());
     let page_aux_ptr = keygen_builder.add_main_matrix(final_page_chip.aux_width());
-    keygen_builder.add_partitioned_air(
-        &final_page_chip,
-        page_height,
-        0,
-        vec![page_data_ptr, page_aux_ptr],
-    );
+    keygen_builder.add_partitioned_air(&final_page_chip, 0, vec![page_data_ptr, page_aux_ptr]);
 
-    keygen_builder.add_air(&range_checker.air, 1 << idx_decomp, 0);
+    keygen_builder.add_air(&range_checker.air, 0);
 
     let partial_pk = keygen_builder.generate_partial_pk();
 
@@ -152,8 +147,10 @@ fn final_page_chip_test() {
     )
     .expect("Verification Failed");
 
-    // Swap the first two rows of the page so it's no longer sorted
-    page.rows.swap(0, 1);
+    // Creating a new page with the first two rows swapped
+    let mut page_rows = page.to_2d_vec();
+    page_rows.swap(0, 1);
+    let page = Page::from_2d_vec(&page_rows, idx_len, data_len);
 
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;

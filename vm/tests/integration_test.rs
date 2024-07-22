@@ -1,21 +1,20 @@
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
+
 use afs_test_utils::config::baby_bear_poseidon2::{
     engine_from_perm, random_perm, run_simple_test_no_pis,
 };
 use afs_test_utils::config::fri_params::fri_params_with_80_bits_of_security;
 use afs_test_utils::engine::StarkEngine;
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
 use stark_vm::vm::config::VmConfig;
-use stark_vm::vm::config::VmParamsConfig;
 use stark_vm::vm::get_chips;
 use stark_vm::vm::VirtualMachine;
 
 const WORD_SIZE: usize = 1;
-const LIMB_BITS: usize = 16;
-const DECOMP: usize = 8;
+const LIMB_BITS: usize = 30;
+const DECOMP: usize = 15;
 
 fn air_test(
     field_arithmetic_enabled: bool,
@@ -25,14 +24,12 @@ fn air_test(
 ) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
-            vm: VmParamsConfig {
-                field_arithmetic_enabled,
-                field_extension_enabled,
-                compress_poseidon2_enabled: false,
-                perm_poseidon2_enabled: false,
-                limb_bits: LIMB_BITS,
-                decomp: DECOMP,
-            },
+            field_arithmetic_enabled,
+            field_extension_enabled,
+            compress_poseidon2_enabled: false,
+            perm_poseidon2_enabled: false,
+            limb_bits: LIMB_BITS,
+            decomp: DECOMP,
         },
         program,
         witness_stream,
@@ -51,14 +48,12 @@ fn air_test_with_poseidon2(
 ) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
-            vm: VmParamsConfig {
-                field_arithmetic_enabled,
-                field_extension_enabled,
-                compress_poseidon2_enabled,
-                perm_poseidon2_enabled: false,
-                limb_bits: LIMB_BITS,
-                decomp: DECOMP,
-            },
+            field_arithmetic_enabled,
+            field_extension_enabled,
+            compress_poseidon2_enabled,
+            perm_poseidon2_enabled: false,
+            limb_bits: LIMB_BITS,
+            decomp: DECOMP,
         },
         program,
         vec![],
@@ -193,30 +188,30 @@ fn test_vm_hint() {
     let field_extension_enabled = false;
 
     let program = vec![
-        Instruction::from_isize(STOREW, 0, 0, 1, 0, 1),
-        Instruction::from_isize(FADD, 5, 1, 100, 1, 0),
-        Instruction::from_isize(FADD, 18, 5, 0, 1, 0),
-        Instruction::from_isize(FADD, 5, 5, 1, 1, 0),
-        Instruction::from_isize(HINT, 18, 0, 0, 1, 2),
-        Instruction::from_isize(LOADW, 21, 0, 18, 1, 2),
-        Instruction::from_isize(FADD, 24, 18, 1, 1, 0),
-        Instruction::from_isize(FADD, 18, 5, 0, 1, 0),
-        Instruction::from_isize(FMUL, 9, 21, 1, 1, 0),
-        Instruction::from_isize(FADD, 5, 5, 9, 1, 1),
-        Instruction::from_isize(FADD, 27, 1, 0, 1, 0),
-        Instruction::from_isize(JAL, 9, 7, 0, 1, 0),
-        Instruction::from_isize(FMUL, 0, 27, 1, 1, 0),
-        Instruction::from_isize(FADD, 0, 24, 0, 1, 1),
-        Instruction::from_isize(LOADW, 30, 0, 0, 1, 2),
-        Instruction::from_isize(FADD, 27, 27, 1, 1, 0),
-        Instruction::from_isize(BNE, 27, 21, 2013265916, 1, 1),
-        Instruction::from_isize(BNE, 27, 21, 2013265915, 1, 1),
+        Instruction::from_isize(STOREW, 0, 0, 16, 0, 1),
+        Instruction::from_isize(FADD, 20, 16, 16777220, 1, 0),
+        Instruction::from_isize(FADD, 32, 20, 0, 1, 0),
+        Instruction::from_isize(FADD, 20, 20, 1, 1, 0),
+        Instruction::from_isize(HINT_INPUT, 0, 0, 0, 1, 2),
+        Instruction::from_isize(SHINTW, 32, 0, 0, 1, 2),
+        Instruction::from_isize(LOADW, 38, 0, 32, 1, 2),
+        Instruction::from_isize(FADD, 44, 20, 0, 1, 0),
+        Instruction::from_isize(FMUL, 24, 38, 1, 1, 0),
+        Instruction::from_isize(FADD, 20, 20, 24, 1, 1),
+        Instruction::from_isize(FADD, 50, 16, 0, 1, 0),
+        Instruction::from_isize(JAL, 24, 6, 0, 1, 0),
+        Instruction::from_isize(FMUL, 0, 50, 1, 1, 0),
+        Instruction::from_isize(FADD, 0, 44, 0, 1, 1),
+        Instruction::from_isize(SHINTW, 0, 0, 0, 1, 2),
+        Instruction::from_isize(FADD, 50, 50, 1, 1, 0),
+        Instruction::from_isize(BNE, 50, 38, 2013265917, 1, 1),
+        Instruction::from_isize(BNE, 50, 38, 2013265916, 1, 1),
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
     type F = BabyBear;
 
-    let witness_stream: Vec<Vec<F>> = vec![vec![F::zero(), F::zero(), F::one()]];
+    let witness_stream: Vec<Vec<F>> = vec![vec![F::two()]];
 
     air_test(
         field_arithmetic_enabled,
@@ -253,8 +248,44 @@ fn test_vm_compress_poseidon2() {
     }
     let output = 4;
     program.push(Instruction::from_isize(
-        COMP_POS2, input_a, input_b, output, 1, 1,
+        COMP_POS2, input_a, input_b, output, 0, 1,
     ));
+    program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
+
+    air_test_with_poseidon2(false, false, true, program);
+}
+
+#[test]
+fn test_vm_compress_poseidon2_as2() {
+    let mut program = vec![];
+    let input_a = 37;
+    for i in 0..8 {
+        program.push(Instruction::from_isize(
+            STOREW,
+            43 - (7 * i),
+            input_a + i,
+            0,
+            0,
+            2,
+        ));
+    }
+    let input_b = 108;
+    for i in 0..8 {
+        program.push(Instruction::from_isize(
+            STOREW,
+            2 + (18 * i),
+            input_b + i,
+            0,
+            0,
+            2,
+        ));
+    }
+    let output = 4;
+    program.push(Instruction::from_isize(STOREW, input_a, 0, 0, 0, 1));
+    program.push(Instruction::from_isize(STOREW, input_b, 1, 0, 0, 1));
+    program.push(Instruction::from_isize(STOREW, output, 2, 0, 0, 1));
+
+    program.push(Instruction::from_isize(COMP_POS2, 0, 1, 2, 1, 2));
     program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
 
     air_test_with_poseidon2(false, false, true, program);

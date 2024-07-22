@@ -1,4 +1,3 @@
-[vm]
 field_arithmetic_enabled = true
 limb_bits = 8
 decomp = 4

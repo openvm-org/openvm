@@ -1,8 +1,6 @@
-use std::collections::BTreeMap;
-
-use itertools::Itertools;
+use itertools::izip;
 use p3_air::BaseAir;
-use p3_field::AbstractField;
+use p3_field::{AbstractField, Field};
 use p3_matrix::dense::RowMajorMatrixView;
 use p3_matrix::stack::VerticalPair;
 use p3_matrix::Matrix;
@@ -10,7 +8,8 @@ use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::air_builders::debug::DebugConstraintBuilder;
-use crate::interaction::{AirBridge, InteractionType};
+use crate::interaction::debug::{generate_logical_interactions, LogicalInteractions};
+use crate::interaction::InteractionType;
 use crate::rap::{AnyRap, Rap};
 
 /// Check that all constraints vanish on the subgroup.
@@ -99,61 +98,55 @@ pub fn check_constraints<R, SC>(
     });
 }
 
-// TODO: Check number of virtual columns in bus are same
-pub fn check_cumulative_sums<SC: StarkGenericConfig>(
+pub fn check_logup<SC: StarkGenericConfig>(
     raps: &[&dyn AnyRap<SC>],
     preprocessed: &[Option<RowMajorMatrixView<Val<SC>>>],
     partitioned_main: &[&[RowMajorMatrixView<Val<SC>>]],
-    permutation: &[Option<RowMajorMatrixView<SC::Challenge>>],
 ) {
-    let mut sums = BTreeMap::new();
-    for (i, rap) in raps.iter().enumerate() {
-        for (j, (interaction, interaction_type)) in AirBridge::<Val<SC>>::all_interactions(*rap)
-            .into_iter()
-            .enumerate()
-        {
-            if let Some(permutation) = permutation[i].as_ref() {
-                for (n, perm_row) in permutation.rows().enumerate() {
-                    let preprocessed_row = preprocessed[i]
-                        .as_ref()
-                        .map(|preprocessed| preprocessed.row_slice(n).to_vec())
-                        .unwrap_or_default();
-                    let main_row = partitioned_main[i]
-                        .iter()
-                        .flat_map(|main_part| main_part.row_slice(n).to_vec())
-                        .collect_vec();
-                    let perm_row: Vec<_> = perm_row.collect();
-                    let mult: SC::Challenge = interaction
-                        .count
-                        .apply::<_, _>(&preprocessed_row, &main_row);
-                    let val = match interaction_type {
-                        InteractionType::Send => perm_row[j] * mult,
-                        InteractionType::Receive => -perm_row[j] * mult,
-                    };
-                    sums.entry(interaction.argument_index)
-                        .and_modify(|c| *c += val)
-                        .or_insert(val);
+    let mut logical_interactions = LogicalInteractions::<Val<SC>>::default();
+    for (air_idx, (rap, preprocessed, partitioned_main)) in
+        izip!(raps, preprocessed, partitioned_main).enumerate()
+    {
+        generate_logical_interactions(
+            air_idx,
+            *rap,
+            preprocessed,
+            partitioned_main,
+            &mut logical_interactions,
+        );
+    }
+
+    let mut logup_failed = false;
+    // For each bus, check each `fields` key by summing up multiplicities.
+    for (bus_idx, bus_interactions) in logical_interactions.at_bus.into_iter() {
+        for (fields, connections) in bus_interactions.into_iter() {
+            let mut sum = Val::<SC>::zero();
+            for (_, itype, count) in &connections {
+                match *itype {
+                    InteractionType::Send => {
+                        sum += *count;
+                    }
+                    InteractionType::Receive => {
+                        sum -= *count;
+                    }
+                }
+            }
+            if !sum.is_zero() {
+                logup_failed = true;
+                println!(
+                    "Bus {} failed to balance the multiplicities for fields={:?}. The bus connections for this were:",
+                    bus_idx, fields
+                );
+                for (air_idx, itype, count) in connections {
+                    println!(
+                        "   Air idx: {}, interaction type: {:?}, count: {:?}",
+                        air_idx, itype, count
+                    );
                 }
             }
         }
     }
-    for (i, sum) in sums {
-        assert_eq!(
-            sum,
-            SC::Challenge::zero(),
-            "bus {i} cumulative sum is not zero",
-        );
+    if logup_failed {
+        panic!("LogUp multiset equality check failed.");
     }
-
-    // Check cumulative sums
-    let sum: SC::Challenge = permutation
-        .iter()
-        .flatten()
-        .map(|perm| *perm.row_slice(perm.height() - 1).last().unwrap())
-        .sum();
-    assert_eq!(
-        sum,
-        SC::Challenge::zero(),
-        "Interaction cumulative sum is not zero"
-    );
 }

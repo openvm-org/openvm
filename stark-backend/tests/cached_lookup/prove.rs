@@ -46,7 +46,6 @@ where
     PcsProof<SC>: Send + Sync,
 {
     // tracing_setup();
-    let degree = trace.len();
 
     let air = DummyInteractionAir::new(trace[0].1.len(), false, 0);
 
@@ -84,9 +83,9 @@ where
     if partition {
         let fields_ptr = keygen_builder.add_cached_main_matrix(air.field_width());
         let count_ptr = keygen_builder.add_main_matrix(1);
-        keygen_builder.add_partitioned_air(&air, degree, 0, vec![count_ptr, fields_ptr]);
+        keygen_builder.add_partitioned_air(&air, 0, vec![count_ptr, fields_ptr]);
     } else {
-        keygen_builder.add_air(&air, degree, 0);
+        keygen_builder.add_air(&air, 0);
     }
     let partial_pk = keygen_builder.generate_partial_pk();
     let partial_vk = partial_pk.partial_vk();

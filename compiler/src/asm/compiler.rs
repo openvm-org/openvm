@@ -27,8 +27,13 @@ pub(crate) const STACK_START_OFFSET: i32 = 16;
 /// The heap pointer address.
 pub(crate) const HEAP_PTR: i32 = -4;
 
+pub(crate) const HEAP_START_ADDRESS: usize = STACK_SIZE + 4;
+
 /// The address of A0.
 pub(crate) const A0: i32 = -8;
+
+// sizeof(var) = sizeof(felt) = 1 and sizeof(ext) == 4
+pub const FP_INCREMENT: i32 = 6;
 
 pub const STACK_SIZE: usize = 1 << 24;
 
@@ -45,28 +50,28 @@ pub struct AsmCompiler<F, EF> {
 
 impl<F> Var<F> {
     /// Gets the frame pointer for a var.
-    pub fn fp(&self) -> i32 {
-        -((self.0 as i32) * 3 + 1 + STACK_START_OFFSET)
+    pub const fn fp(&self) -> i32 {
+        -((self.0 as i32) * FP_INCREMENT + STACK_START_OFFSET)
     }
 }
 
 impl<F> Felt<F> {
     /// Gets the frame pointer for a felt.
-    pub fn fp(&self) -> i32 {
-        -((self.0 as i32) * 3 + 2 + STACK_START_OFFSET)
+    pub const fn fp(&self) -> i32 {
+        -((self.0 as i32) * FP_INCREMENT + 1 + STACK_START_OFFSET)
     }
 }
 
 impl<F, EF> Ext<F, EF> {
     /// Gets the frame pointer for an extension element
-    pub fn fp(&self) -> i32 {
-        -((self.0 as i32) * 3 + STACK_START_OFFSET)
+    pub const fn fp(&self) -> i32 {
+        -((self.0 as i32) * FP_INCREMENT + 2 + STACK_START_OFFSET)
     }
 }
 
 impl<F> Ptr<F> {
     /// Gets the frame pointer for a pointer.
-    pub fn fp(&self) -> i32 {
+    pub const fn fp(&self) -> i32 {
         self.address.fp()
     }
 }
@@ -97,7 +102,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
     pub fn build(&mut self, operations: TracedVec<DslIr<AsmConfig<F, EF>>>) {
         // Set the heap pointer value according to stack size.
         if self.block_label().is_zero() {
-            let stack_size = F::from_canonical_usize(STACK_SIZE + 4);
+            let stack_size = F::from_canonical_usize(HEAP_START_ADDRESS);
             self.push(AsmInstruction::AddFI(HEAP_PTR, ZERO, stack_size), None);
         }
 
@@ -111,7 +116,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::AddFI(dst.fp(), ZERO, src), trace);
                 }
                 DslIr::ImmE(dst, src) => {
-                    self.push(AsmInstruction::AddEI(dst.fp(), ZERO, src), trace);
+                    self.push(AsmInstruction::ImmE(dst.fp(), src), trace);
                 }
                 DslIr::AddV(dst, lhs, rhs) => {
                     self.push(AsmInstruction::AddF(dst.fp(), lhs.fp(), rhs.fp()), trace);
@@ -451,48 +456,38 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         trace,
                     ),
                 },
-
-                DslIr::HintBitsU(dst, src) => match (dst, src) {
-                    (Array::Dyn(dst, _), Usize::Var(src)) => {
-                        self.push(AsmInstruction::HintBits(dst.fp(), src.fp()), trace);
-                    }
-                    _ => unimplemented!(),
-                },
-                DslIr::HintBitsF(dst, src) => match dst {
-                    Array::Dyn(dst, _) => {
-                        self.push(AsmInstruction::HintBits(dst.fp(), src.fp()), trace);
-                    }
-                    _ => unimplemented!(),
-                },
-                DslIr::HintBitsV(dst, src) => match dst {
-                    Array::Dyn(dst, _) => {
-                        self.push(AsmInstruction::HintBits(dst.fp(), src.fp()), trace);
-                    }
-                    _ => unimplemented!(),
-                },
-                DslIr::Num2BitsF(_, _) => unimplemented!(),
-                DslIr::Num2BitsV(_, _) => unimplemented!(),
+                DslIr::HintBitsF(var) => {
+                    self.push(AsmInstruction::HintBits(var.fp()), trace);
+                }
+                DslIr::HintBitsV(var) => {
+                    self.push(AsmInstruction::HintBits(var.fp()), trace);
+                }
+                DslIr::HintBitsU(_) => {
+                    todo!()
+                }
                 DslIr::Poseidon2PermuteBabyBear(dst, src) => match (dst, src) {
                     (Array::Dyn(dst, _), Array::Dyn(src, _)) => {
                         self.push(AsmInstruction::Poseidon2Permute(dst.fp(), src.fp()), trace)
                     }
                     _ => unimplemented!(),
                 },
-                DslIr::ReverseBitsLen(_, _, _) => unimplemented!(),
-                DslIr::TwoAdicGenerator(_, _) => unimplemented!(),
-                DslIr::ExpUsizeV(_, _, _) => unimplemented!(),
-                DslIr::ExpUsizeF(_, _, _) => unimplemented!(),
                 DslIr::Error() => self.push(AsmInstruction::Trap, trace),
                 DslIr::PrintF(dst) => self.push(AsmInstruction::PrintF(dst.fp()), trace),
                 DslIr::PrintV(dst) => self.push(AsmInstruction::PrintV(dst.fp()), trace),
                 DslIr::PrintE(dst) => self.push(AsmInstruction::PrintE(dst.fp()), trace),
-                DslIr::Ext2Felt(dst, src) => match (dst, src) {
-                    (Array::Dyn(dst, _), src) => {
-                        self.push(AsmInstruction::Ext2Felt(dst.fp(), src.fp()), trace)
-                    }
-                    _ => unimplemented!(),
+                DslIr::HintInputVec() => {
+                    self.push(AsmInstruction::HintInputVec(), trace);
+                }
+                DslIr::StoreHintWord(ptr, index) => match index.fp() {
+                    IndexTriple::Const(index, offset, size) => self.push(
+                        AsmInstruction::StoreHintWordI(ptr.fp(), index, offset, size),
+                        trace,
+                    ),
+                    IndexTriple::Var(index, offset, size) => self.push(
+                        AsmInstruction::StoreHintWord(ptr.fp(), index, offset, size),
+                        trace,
+                    ),
                 },
-                DslIr::Hint(dst) => self.push(AsmInstruction::Hint(dst.fp()), trace),
                 DslIr::FriFold(m, input_ptr) => {
                     if let Array::Dyn(ptr, _) = input_ptr {
                         self.push(AsmInstruction::FriFold(m.fp(), ptr.fp()), trace);
@@ -514,7 +509,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         _ => unimplemented!(),
                     }
                 }
-
                 DslIr::Commit(val, index) => {
                     self.push(AsmInstruction::Commit(val.fp(), index.fp()), trace);
                 }
@@ -691,7 +685,12 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         compiler.push_to_block(last_if_block, instr, None);
     }
 
-    fn branch(lhs: i32, rhs: ValueOrConst<F, EF>, is_eq: bool, block: F) -> AsmInstruction<F, EF> {
+    const fn branch(
+        lhs: i32,
+        rhs: ValueOrConst<F, EF>,
+        is_eq: bool,
+        block: F,
+    ) -> AsmInstruction<F, EF> {
         match (rhs, is_eq) {
             (ValueOrConst::Const(rhs), true) => AsmInstruction::BneI(block, lhs, rhs),
             (ValueOrConst::Const(rhs), false) => AsmInstruction::BeqI(block, lhs, rhs),

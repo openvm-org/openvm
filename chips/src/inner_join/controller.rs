@@ -1,4 +1,4 @@
-use std::{iter, sync::Arc};
+use std::{collections::HashMap, iter, sync::Arc};
 
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
@@ -14,8 +14,9 @@ use afs_stark_backend::{
 };
 use afs_test_utils::engine::StarkEngine;
 use p3_field::{AbstractField, Field, PrimeField};
-use p3_matrix::dense::DenseMatrix;
+use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use serde::{Deserialize, Serialize};
 
 use super::{
     final_table::FinalTableAir,
@@ -30,7 +31,7 @@ use crate::{
 
 /// A struct to keep track of the traces of the chips
 /// owned by the inner join controller
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct IJTraces<F: AbstractField> {
     pub t1_main_trace: DenseMatrix<F>,
     pub t1_aux_trace: DenseMatrix<F>,
@@ -205,6 +206,31 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
         ));
     }
 
+    /// This function generates the main traces for the input and output tables.
+    /// It returns a tuple of three RowMajorMatrix objects, representing the main
+    /// traces for T1, T2, and the output table, respectively.
+    #[allow(clippy::type_complexity)]
+    pub fn io_main_traces(
+        &mut self,
+        t1: &Page,
+        t2: &Page,
+    ) -> (
+        RowMajorMatrix<Val<SC>>,
+        RowMajorMatrix<Val<SC>>,
+        RowMajorMatrix<Val<SC>>,
+    )
+    where
+        Val<SC>: PrimeField,
+    {
+        let (output_table, _fkey_start, _fkey_end) = self.calc_output_table(t1, t2);
+
+        let t1_main_trace = self.gen_table_trace(t1);
+        let t2_main_trace = self.gen_table_trace(t2);
+        let output_main_trace = self.gen_table_trace(&output_table);
+
+        (t1_main_trace, t2_main_trace, output_main_trace)
+    }
+
     /// This function manages the trace generation of the different chips to necessary
     /// for the inner join operation on T1 and T2. It creates the output_table, which
     /// is the result of the inner join operation, calls the trace generation for the
@@ -214,64 +240,59 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
     ///
     /// Returns ProverTraceData for the actual tables (T1, T2, output_tables). Moreover,
     /// a copy of the traces and the commitments for the tables is stored in the struct.
+    #[allow(clippy::too_many_arguments)]
     pub fn load_tables(
         &mut self,
         t1: &Page,
         t2: &Page,
+        page1_input_pdata: Option<ProverTraceData<SC>>,
+        page2_input_pdata: Option<ProverTraceData<SC>>,
+        page_output_pdata: Option<ProverTraceData<SC>>,
         intersector_trace_degree: usize,
         trace_committer: &mut TraceCommitter<SC>,
     ) -> Vec<ProverTraceData<SC>>
     where
         Val<SC>: PrimeField,
     {
-        let (fkey_start, fkey_end) = match self.t2_chip.table_type {
-            TableType::T2 {
-                fkey_start,
-                fkey_end,
-                ..
-            } => (fkey_start, fkey_end),
-            _ => panic!("t2 must be of TableType T2"),
-        };
+        let (output_table, fkey_start, fkey_end) = self.calc_output_table(t1, t2);
+        let (t1_main_trace, t2_main_trace, output_main_trace) = self.io_main_traces(t1, t2);
 
-        let output_table = self.inner_join(t1, t2, fkey_start, fkey_end);
-
-        // Calculating the multiplicity with which T1 indices appear in the output_table
-        let mut t1_out_mult = vec![];
-        for row in t1.rows.iter() {
+        // Calculating the multiplicity with which T1 and T2 indices appear in the output_table
+        let mut t1_idx_out_mult = HashMap::new();
+        let mut t2_idx_out_mult = HashMap::new();
+        for row in output_table.iter() {
             if row.is_alloc == 1 {
-                t1_out_mult.push(
-                    output_table
-                        .rows
-                        .iter()
-                        .filter(|out_row| {
-                            out_row.is_alloc == 1 && out_row.data[fkey_start..fkey_end] == row.idx
-                        })
-                        .count() as u32,
-                );
+                t1_idx_out_mult
+                    .entry(row.data[fkey_start..fkey_end].to_vec())
+                    .and_modify(|e| *e += 1)
+                    .or_insert(1);
+
+                t2_idx_out_mult
+                    .entry(row.idx.clone())
+                    .and_modify(|e| *e += 1)
+                    .or_insert(1);
+            }
+        }
+
+        let mut t1_out_mult = vec![];
+        for row in t1.iter() {
+            if row.is_alloc == 1 {
+                t1_out_mult.push(*t1_idx_out_mult.get(&row.idx).unwrap_or(&0));
             } else {
                 t1_out_mult.push(0);
             }
         }
 
-        // Figuring out whether each row of T2 appears in the output_table
         let mut t2_fkey_present = vec![];
-        for row in t2.rows.iter() {
+        for row in t2.iter() {
             if row.is_alloc == 1 {
-                t2_fkey_present.push(
-                    output_table
-                        .rows
-                        .iter()
-                        .filter(|out_row| out_row.is_alloc == 1 && out_row.idx == row.idx)
-                        .count() as u32,
-                );
+                t2_fkey_present.push(*t2_idx_out_mult.get(&row.idx).unwrap_or(&0));
             } else {
                 t2_fkey_present.push(0);
             }
         }
 
-        let t1_main_trace = self.gen_table_trace(t1);
         let t1_aux_trace = self.t1_chip.gen_aux_trace(&t1_out_mult);
-        let t2_main_trace = self.gen_table_trace(t2);
         let t2_aux_trace = self.t2_chip.gen_aux_trace(&t2_fkey_present);
         let intersector_trace = self.intersector_chip.generate_trace(
             t1,
@@ -281,16 +302,18 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
             self.range_checker.clone(),
             intersector_trace_degree,
         );
-        let output_main_trace = self.gen_table_trace(&output_table);
         let output_aux_trace = self
             .output_chip
             .gen_aux_trace::<SC>(&output_table, self.range_checker.clone());
 
-        let prover_data = vec![
-            trace_committer.commit(vec![t1_main_trace.clone()]),
-            trace_committer.commit(vec![t2_main_trace.clone()]),
-            trace_committer.commit(vec![output_main_trace.clone()]),
-        ];
+        // Commit the traces if they are not provided
+        let t1_commit = page1_input_pdata
+            .unwrap_or_else(|| trace_committer.commit(vec![t1_main_trace.clone()]));
+        let t2_commit = page2_input_pdata
+            .unwrap_or_else(|| trace_committer.commit(vec![t2_main_trace.clone()]));
+        let output_commit = page_output_pdata
+            .unwrap_or_else(|| trace_committer.commit(vec![output_main_trace.clone()]));
+        let prover_data = vec![t1_commit, t2_commit, output_commit];
 
         self.table_commitments = Some(TableCommitments {
             t1_commitment: prover_data[0].commit.clone(),
@@ -313,13 +336,8 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
 
     /// Sets up keygen with the different trace partitions for all the
     /// chips the struct owns (t1_chip, t2_chip, output_chip, intersector_chip)
-    pub fn set_up_keygen_builder(
-        &self,
-        keygen_builder: &mut MultiStarkKeygenBuilder<SC>,
-        t1_height: usize,
-        t2_height: usize,
-        intersector_trace_degree: usize,
-    ) where
+    pub fn set_up_keygen_builder(&self, keygen_builder: &mut MultiStarkKeygenBuilder<SC>)
+    where
         Val<SC>: PrimeField,
     {
         let t1_main_ptr = keygen_builder.add_cached_main_matrix(self.t1_chip.table_width());
@@ -329,33 +347,18 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
         let t2_aux_ptr = keygen_builder.add_main_matrix(self.t2_chip.aux_width());
         let output_aux_ptr = keygen_builder.add_main_matrix(self.output_chip.aux_width());
 
-        keygen_builder.add_partitioned_air(
-            &self.t1_chip,
-            t1_height,
-            0,
-            vec![t1_main_ptr, t1_aux_ptr],
-        );
+        keygen_builder.add_partitioned_air(&self.t1_chip, 0, vec![t1_main_ptr, t1_aux_ptr]);
 
-        keygen_builder.add_partitioned_air(
-            &self.t2_chip,
-            t2_height,
-            0,
-            vec![t2_main_ptr, t2_aux_ptr],
-        );
+        keygen_builder.add_partitioned_air(&self.t2_chip, 0, vec![t2_main_ptr, t2_aux_ptr]);
 
         keygen_builder.add_partitioned_air(
             &self.output_chip,
-            t2_height,
             0,
             vec![output_main_ptr, output_aux_ptr],
         );
 
-        keygen_builder.add_air(&self.intersector_chip, intersector_trace_degree, 0);
-        keygen_builder.add_air(
-            &self.range_checker.air,
-            self.range_checker.range_max() as usize,
-            0,
-        );
+        keygen_builder.add_air(&self.intersector_chip, 0);
+        keygen_builder.add_air(&self.range_checker.air, 0);
     }
 
     /// This function clears the trace_builder, loads in the traces for all involved chips
@@ -443,7 +446,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
         let mut challenger = engine.new_challenger();
         verifier.verify(
             &mut challenger,
-            partial_vk,
+            &partial_vk,
             vec![
                 &self.t1_chip,
                 &self.t2_chip,
@@ -451,9 +454,13 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
                 &self.intersector_chip,
                 &self.range_checker.air,
             ],
-            proof,
+            &proof,
             &pis,
         )
+    }
+
+    pub fn traces(&self) -> Option<&IJTraces<Val<SC>>> {
+        self.traces.as_ref()
     }
 
     /// This function takes two tables T1 and T2 and the range of the foreign key in T2
@@ -461,7 +468,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
     fn inner_join(&self, t1: &Page, t2: &Page, fkey_start: usize, fkey_end: usize) -> Page {
         let mut output_table = vec![];
 
-        for row in t2.rows.iter() {
+        for row in t2.iter() {
             if row.is_alloc == 0 {
                 continue;
             }
@@ -494,5 +501,20 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
         Val<SC>: PrimeField,
     {
         page.gen_trace::<Val<SC>>()
+    }
+
+    fn calc_output_table(&self, t1: &Page, t2: &Page) -> (Page, usize, usize) {
+        let (fkey_start, fkey_end) = match self.t2_chip.table_type {
+            TableType::T2 {
+                fkey_start,
+                fkey_end,
+                ..
+            } => (fkey_start, fkey_end),
+            _ => panic!("t2 must be of TableType T2"),
+        };
+
+        let output_table = self.inner_join(t1, t2, fkey_start, fkey_end);
+
+        (output_table, fkey_start, fkey_end)
     }
 }

@@ -37,6 +37,47 @@ impl Page {
         }
     }
 
+    pub fn from_2d_vec_consume(page: &mut Vec<Vec<u32>>, idx_len: usize, data_len: usize) -> Self {
+        let mut rows = vec![];
+        let height = page.len();
+        for _ in 0..height {
+            let row = PageCols::from_slice(&page.pop().unwrap(), idx_len, data_len);
+            rows.push(row);
+        }
+        rows.reverse();
+        Self { rows }
+    }
+
+    pub fn from_trace<F: PrimeField>(
+        matrix: &RowMajorMatrix<F>,
+        idx_len: usize,
+        data_len: usize,
+    ) -> Self {
+        let page_width = 1 + idx_len + data_len;
+        let rows = matrix
+            .values
+            .chunks(page_width)
+            .map(|chunk| {
+                let chunk = chunk
+                    .iter()
+                    .map(|f| {
+                        (*f).as_canonical_biguint()
+                            .to_u32_digits()
+                            .last()
+                            .unwrap_or(&0u32)
+                            .to_owned()
+                    })
+                    .collect::<Vec<u32>>();
+                PageCols::from_slice(&chunk, idx_len, data_len)
+            })
+            .collect();
+        Self { rows }
+    }
+
+    pub fn from_page_cols(rows: Vec<PageCols<u32>>) -> Self {
+        Self { rows }
+    }
+
     pub fn from_2d_vec_non_leaf(page: &[Vec<u32>], idx_len: usize, data_len: usize) -> Self {
         Self {
             rows: page
@@ -51,6 +92,10 @@ impl Page {
 
     pub fn to_2d_vec(&self) -> Vec<Vec<u32>> {
         self.rows.iter().map(|row| row.to_vec()).collect()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.rows.is_empty()
     }
 
     /// Returns a random page with the given parameters in the proper format
@@ -193,6 +238,41 @@ impl Page {
                 .collect(),
             self.width(),
         )
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &PageCols<u32>> {
+        self.rows.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut PageCols<u32>> {
+        self.rows.iter_mut()
+    }
+
+    pub fn pretty_print(&self, bits_per_fe: usize) {
+        assert!(bits_per_fe < 32);
+        let mut chars_per_fe = bits_per_fe / 8;
+        chars_per_fe += if bits_per_fe % 8 == 0 { 0 } else { 1 };
+        let write_hex = |val: Vec<u32>| -> String {
+            let bytes = val
+                .iter()
+                .flat_map(|x| {
+                    x.to_be_bytes()
+                        .iter()
+                        .skip(4 - chars_per_fe)
+                        .cloned()
+                        .collect::<Vec<u8>>()
+                })
+                .collect::<Vec<u8>>();
+            format!("0x{}", hex::encode(bytes))
+        };
+        for row in &self.rows {
+            println!(
+                "{}|{}|{}",
+                row.is_alloc,
+                write_hex(row.idx.clone()),
+                write_hex(row.data.clone())
+            );
+        }
     }
 }
 

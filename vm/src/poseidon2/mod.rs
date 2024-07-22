@@ -1,13 +1,17 @@
+use p3_field::Field;
+use p3_field::PrimeField32;
+
+use afs_chips::is_zero::IsZeroAir;
+use afs_chips::sub_chip::LocalTraceInstructions;
+use columns::{Poseidon2ChipCols, Poseidon2ChipIoCols};
+use poseidon2_air::poseidon2::Poseidon2Air;
+use poseidon2_air::poseidon2::Poseidon2Config;
+
 use crate::cpu::trace::Instruction;
 use crate::cpu::OpCode;
 use crate::cpu::OpCode::*;
+use crate::poseidon2::columns::Poseidon2ChipAuxCols;
 use crate::vm::VirtualMachine;
-use afs_chips::sub_chip::LocalTraceInstructions;
-use columns::{Poseidon2ChipCols, Poseidon2ChipIoCols};
-use p3_field::Field;
-use p3_field::PrimeField32;
-use poseidon2_air::poseidon2::Poseidon2Air;
-use poseidon2_air::poseidon2::Poseidon2Config;
 
 #[cfg(test)]
 pub mod tests;
@@ -64,7 +68,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
 
     pub fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
-        WIDTH * 2
+        3 + (2 * WIDTH)
     }
 }
 
@@ -90,29 +94,47 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
         } = instruction;
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
 
+        let mut timestamp = start_timestamp;
+
+        let addresses = [op_a, op_b, op_c].map(|operand| {
+            timestamp += 1;
+            vm.memory_chip.read_elem(timestamp - 1, d, operand)
+        });
+
         let data_1: Vec<F> = (0..WIDTH / 2)
             .map(|i| {
-                vm.memory_chip
-                    .read_elem(start_timestamp + i, d, op_a + F::from_canonical_usize(i))
+                timestamp += 1;
+                vm.memory_chip.read_elem(
+                    timestamp - 1,
+                    e,
+                    addresses[0] + F::from_canonical_usize(i),
+                )
             })
             .collect();
         let data_2: Vec<F> = (0..WIDTH / 2)
             .map(|i| {
+                timestamp += 1;
                 vm.memory_chip.read_elem(
-                    start_timestamp + WIDTH / 2 + i,
-                    d,
-                    op_b + F::from_canonical_usize(i),
+                    timestamp - 1,
+                    e,
+                    addresses[1] + F::from_canonical_usize(i),
                 )
             })
             .collect();
 
         // SAFETY: only allowed because WIDTH constrained to 16 above
-        let input_state: [F; 16] = [data_1, data_2].concat().try_into().unwrap();
+        let input_state: [F; WIDTH] = [data_1, data_2].concat().try_into().unwrap();
         let internal = vm.poseidon2_chip.air.generate_trace_row(input_state);
         let output = internal.io.output;
+        let is_zero_row = IsZeroAir {}.generate_trace_row(d);
         vm.poseidon2_chip.rows.push(Poseidon2ChipCols {
             io: make_io_cols(start_timestamp, instruction),
-            internal,
+            aux: Poseidon2ChipAuxCols {
+                addresses,
+                d_is_zero: is_zero_row.io.is_zero,
+                is_zero_inv: is_zero_row.inv,
+                internal,
+            },
         });
 
         let iter_range = if opcode == PERM_POS2 {
@@ -123,11 +145,12 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
 
         for (i, &output_elem) in iter_range {
             vm.memory_chip.write_elem(
-                start_timestamp + WIDTH + i,
+                timestamp,
                 e,
-                op_c + F::from_canonical_usize(i),
+                addresses[2] + F::from_canonical_usize(i),
                 output_elem,
             );
+            timestamp += 1;
         }
     }
 }
