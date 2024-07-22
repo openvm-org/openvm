@@ -63,13 +63,7 @@ pub fn run_recursive_test(
         )
         .expect("afs proof should verify");
 
-    run_verification_program(
-        rec_raps,
-        pvs,
-        &engine,
-        &partial_vk,
-        proof,
-    );
+    run_verification_program(rec_raps, pvs, &engine, &partial_vk, proof);
 }
 
 pub fn run_verification_program(

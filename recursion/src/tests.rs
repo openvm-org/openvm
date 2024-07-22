@@ -10,7 +10,7 @@ use p3_util::log2_strict_usize;
 
 use afs_chips::range_gate::RangeCheckerGateChip;
 use afs_chips::sum::SumChip;
-use afs_compiler::util::{execute_and_prove_program, execute_program};
+use afs_compiler::util::execute_program;
 use afs_stark_backend::interaction::AirBridge;
 use afs_stark_backend::prover::trace::TraceCommitmentBuilder;
 use afs_stark_backend::rap::AnyRap;

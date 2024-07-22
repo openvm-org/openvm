@@ -12,10 +12,8 @@ use afs_recursion::hints::Hintable;
 use afs_recursion::stark::DynRapForRecursion;
 use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::AirBridge};
 use afs_stark_backend::{prover::trace::TraceCommitmentBuilder, verifier::VerificationError};
+use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
 use afs_test_utils::{engine::StarkEngine, utils::generate_random_matrix};
-use afs_test_utils::config::baby_bear_poseidon2::{
-    BabyBearPoseidon2Config, default_engine,
-};
 
 mod common;
 
@@ -88,13 +86,7 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     let mut challenger = engine.new_challenger();
     let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pvs);
 
-    common::run_verification_program(
-        vec![&air],
-        pvs,
-        &engine,
-        &partial_vk,
-        proof,
-    );
+    common::run_verification_program(vec![&air], pvs, &engine, &partial_vk, proof);
     Ok(())
 }
 

@@ -1,16 +1,16 @@
-use afs_stark_backend::commit::MatrixCommitmentPointers;
-use afs_stark_backend::config::Com;
 use p3_field::{AbstractField, PrimeField32, TwoAdicField};
 use p3_uni_stark::{StarkGenericConfig, Val};
+use p3_util::log2_strict_usize;
 
 use afs_compiler::asm::AsmConfig;
 use afs_compiler::ir::{Array, Builder, Config, Ext, ExtConst, Felt, Var};
 use afs_compiler::prelude::*;
+use afs_stark_backend::commit::MatrixCommitmentPointers;
+use afs_stark_backend::config::Com;
 use afs_stark_backend::keygen::types::{
     CommitmentToAirGraph, MultiStarkPartialVerifyingKey, StarkPartialVerifyingKey, TraceWidth,
 };
 use afs_stark_backend::prover::types::Proof;
-use p3_util::log2_strict_usize;
 
 use crate::challenger::DuplexChallengerVariable;
 use crate::fri::types::{DigestVariable, TwoAdicPcsProofVariable};

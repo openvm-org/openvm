@@ -287,17 +287,19 @@ impl<C: Config> FeltChallenger<C> for DuplexChallengerVariable<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::challenger::DuplexChallengerVariable;
+    use p3_challenger::CanObserve;
+    use p3_challenger::CanSample;
+    use p3_field::AbstractField;
+    use p3_uni_stark::{StarkGenericConfig, Val};
+
     use afs_compiler::asm::{AsmBuilder, AsmConfig};
     use afs_compiler::ir::{Felt, Usize, Var, PERMUTATION_WIDTH};
     use afs_compiler::util::execute_program;
     use afs_test_utils::config::baby_bear_blake3::default_engine;
     use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
     use afs_test_utils::engine::StarkEngine;
-    use p3_challenger::CanObserve;
-    use p3_challenger::CanSample;
-    use p3_field::AbstractField;
-    use p3_uni_stark::{StarkGenericConfig, Val};
+
+    use crate::challenger::DuplexChallengerVariable;
 
     #[test]
     fn test_compiler_challenger() {
