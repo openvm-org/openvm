@@ -9,10 +9,7 @@ use super::{
 };
 use crate::{
     common::page_cols::PageCols,
-    is_less_than_tuple::{
-        columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
-        IsLessThanTupleAir,
-    },
+    is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
     sub_chip::{AirConfig, SubAir},
     utils::{implies, or},
 };
@@ -52,12 +49,8 @@ where
         // The auxiliary columns to compare local index and next index are stored in the next row
         let aux_next = aux_trace.row_slice(1);
 
-        let aux_next_cols = IndexedOutputPageAuxCols::from_slice(
-            &aux_next[0..self.aux_width()],
-            self.idx_limb_bits,
-            self.idx_decomp,
-            self.idx_len,
-        );
+        let aux_next_cols =
+            IndexedOutputPageAuxCols::from_slice(&aux_next[0..self.aux_width()], self);
 
         SubAir::eval(
             self,
@@ -101,14 +94,8 @@ impl<AB: AirBuilder> SubAir<AB> for IndexedOutputPageAir {
             aux: aux_next.lt_cols.clone(),
         };
 
-        let lt_air = IsLessThanTupleAir::new(
-            self.range_bus_index,
-            vec![self.idx_limb_bits; self.idx_len],
-            self.idx_decomp,
-        );
-
         SubAir::eval(
-            &lt_air,
+            &self.lt_air,
             &mut builder.when_transition(),
             lt_cols.io,
             lt_cols.aux,

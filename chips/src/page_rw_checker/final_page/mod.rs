@@ -5,7 +5,7 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct IndexedPageWriteAir {
     page_bus_index: usize,
 

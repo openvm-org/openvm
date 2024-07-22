@@ -20,11 +20,7 @@ impl AirConfig for IsLessThanTupleAir {
 
 impl<F: Field> BaseAir<F> for IsLessThanTupleAir {
     fn width(&self) -> usize {
-        IsLessThanTupleCols::<F>::get_width(
-            self.limb_bits().clone(),
-            self.decomp(),
-            self.tuple_len(),
-        )
+        IsLessThanTupleCols::<F>::width(self)
     }
 }
 
@@ -35,12 +31,7 @@ impl<AB: AirBuilder> Air<AB> for IsLessThanTupleAir {
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
 
-        let local_cols = IsLessThanTupleCols::<AB::Var>::from_slice(
-            local,
-            self.limb_bits().clone(),
-            self.decomp(),
-            self.tuple_len(),
-        );
+        let local_cols = IsLessThanTupleCols::<AB::Var>::from_slice(local, self);
 
         SubAir::eval(self, builder, local_cols.io, local_cols.aux);
     }

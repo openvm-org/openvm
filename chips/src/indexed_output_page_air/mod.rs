@@ -1,4 +1,4 @@
-use crate::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
+use crate::is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir};
 
 pub mod air;
 pub mod bridge;
@@ -8,9 +8,9 @@ pub mod trace;
 #[cfg(test)]
 pub mod tests;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct IndexedOutputPageAir {
-    range_bus_index: usize,
+    pub lt_air: IsLessThanTupleAir,
 
     pub idx_len: usize,
     pub data_len: usize,
@@ -28,7 +28,11 @@ impl IndexedOutputPageAir {
         idx_decomp: usize,
     ) -> Self {
         Self {
-            range_bus_index,
+            lt_air: IsLessThanTupleAir::new(
+                range_bus_index,
+                vec![idx_limb_bits; idx_len],
+                idx_decomp,
+            ),
             idx_len,
             data_len,
             idx_limb_bits,
@@ -41,11 +45,7 @@ impl IndexedOutputPageAir {
     }
 
     pub fn aux_width(&self) -> usize {
-        IsLessThanTupleAuxCols::<usize>::get_width(
-            vec![self.idx_limb_bits; self.idx_len],
-            self.idx_decomp,
-            self.idx_len,
-        ) + 1
+        IsLessThanTupleAuxCols::<usize>::width(&self.lt_air) + 1
     }
 
     pub fn air_width(&self) -> usize {

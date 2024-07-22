@@ -3,24 +3,15 @@ use p3_field::PrimeField;
 
 use super::{columns::IndexedOutputPageCols, IndexedOutputPageAir};
 use crate::{
-    is_less_than_tuple::{
-        columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
-        IsLessThanTupleAir,
-    },
+    is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
     sub_chip::SubAirBridge,
 };
 
 impl<F: PrimeField> SubAirBridge<F> for IndexedOutputPageAir {
     /// Sends interactions required by IsLessThanTuple SubAir
     fn sends(&self, col_indices: IndexedOutputPageCols<usize>) -> Vec<Interaction<F>> {
-        let lt_air = IsLessThanTupleAir::new(
-            self.range_bus_index,
-            vec![self.idx_limb_bits; self.idx_len],
-            self.idx_decomp,
-        );
-
         SubAirBridge::sends(
-            &lt_air,
+            &self.lt_air,
             IsLessThanTupleCols {
                 io: IsLessThanTupleIOCols {
                     x: vec![usize::MAX; 1 + self.idx_len],
@@ -42,8 +33,7 @@ impl<F: PrimeField> AirBridge<F> for IndexedOutputPageAir {
             &all_cols,
             self.idx_len,
             self.data_len,
-            self.idx_limb_bits,
-            self.idx_decomp,
+            self,
         );
 
         SubAirBridge::sends(self, cols_to_send)
