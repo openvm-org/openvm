@@ -7,13 +7,13 @@ edition.workspace = true
 [dependencies]
 cli-table = "0.4.9"
 csv = "1.3.0"
-afs = { path = "../bin/afs" }
-olap = { path = "../bin/olap" }
-afs-stark-backend = { path = "../stark-backend" }
+afs = { path = "../bin/afs", default-features = false }
+olap = { path = "../bin/olap", default-features = false }
+afs-stark-backend = { path = "../stark-backend", default-features = false }
 logical-interface = { path = "../logical-interface" }
 afs-derive = { path = "../derive" }
 afs-test-utils = { path = "../test-utils" }
-afs-chips = { path = "../chips" }
+afs-chips = { path = "../chips", default-features = false }
 serde = { version = "1.0.203", features = ["derive"] }
 clap = { version = "4.5.4", features = ["derive"] }
 color-eyre = "0.6.3"
@@ -32,3 +32,7 @@ chrono = "0.4.38"
 itertools = "0.13.0"
 tracing-appender = "0.2.3"
 regex = "1.10.5"
+
+[features]
+default = ["parallel"]
+parallel = ["afs/parallel", "olap/parallel"]

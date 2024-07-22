@@ -17,10 +17,10 @@ tokio = { version = "1.38.0", features = ["rt", "macros"] }
 toml = "0.8.14"
 p3-baby-bear = { workspace = true }
 p3-util = { workspace = true }
-afs-stark-backend = { path = "../../stark-backend" }
+afs-stark-backend = { path = "../../stark-backend", default-features = false }
 afs-derive = { path = "../../derive" }
 afs-test-utils = { path = "../../test-utils" }
-afs-chips = { path = "../../chips" }
+afs-chips = { path = "../../chips", default-features = false }
 bin-common = { path = "../common" }
 p3-uni-stark = { workspace = true }
 p3-field = { workspace = true }
@@ -30,3 +30,7 @@ p3-keccak = { workspace = true }
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }
 tracing-forest = { version = "0.1.6", features = ["ansi", "smallvec"] }
+
+[features]
+default = ["parallel"]
+parallel = ["afs-chips/parallel"]

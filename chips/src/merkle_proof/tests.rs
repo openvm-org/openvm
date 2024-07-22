@@ -3,7 +3,7 @@ use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use p3_keccak::KeccakF;
 use p3_symmetric::{PseudoCompressionFunction, TruncatedPermutation};
 
-use afs_chips::{
+use crate::{
     keccak_permute::KeccakPermuteAir,
     merkle_proof::{MerkleProofAir, MerkleProofOp},
 };
@@ -29,7 +29,7 @@ fn generate_digests(leaf_hashes: Vec<[u8; 32]>) -> Vec<Vec<[u8; 32]>> {
 }
 
 #[test]
-#[ignore = "integration test takes too long"]
+#[ignore = "proving takes too long"]
 fn test_merkle_proof_prove() {
     const DEPTH: usize = 8;
 
