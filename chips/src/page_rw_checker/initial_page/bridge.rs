@@ -1,8 +1,8 @@
 use afs_stark_backend::interaction::InteractionBuilder;
-use itertools::Itertools;
+
+use crate::common::page_cols::PageCols;
 
 use super::PageReadAir;
-use crate::common::page_cols::PageCols;
 
 impl PageReadAir {
     /// Sends page rows (idx, data) for every allocated row on page_bus
@@ -10,15 +10,10 @@ impl PageReadAir {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        cols: &PageCols<AB::Var>,
+        page: PageCols<AB::Var>,
     ) {
-        let page_cols = cols
-            .idx
-            .clone()
-            .into_iter()
-            .chain(cols.data.clone())
-            .collect_vec();
+        let page_blob = page.idx.into_iter().chain(page.data);
 
-        builder.push_send(self.page_bus, page_cols, cols.is_alloc);
+        builder.push_send(self.page_bus, page_blob, page.is_alloc);
     }
 }

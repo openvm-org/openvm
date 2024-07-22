@@ -1,11 +1,9 @@
 use std::iter;
 
-use crate::page_read::page_controller;
 use afs_stark_backend::prover::USE_DEBUG_BUILDER;
 use afs_stark_backend::verifier::VerificationError;
 use afs_stark_backend::{
-    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+    keygen::types::MultiStarkProvingKey, prover::trace::TraceCommitmentBuilder,
 };
 use afs_test_utils::config::{
     self,
@@ -20,6 +18,8 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 
+use super::PageController;
+
 type Val = BabyBear;
 
 #[allow(clippy::too_many_arguments)]
@@ -27,7 +27,7 @@ fn load_page_test(
     engine: &BabyBearPoseidon2Engine,
     page_to_receive: &[Vec<u32>],
     page_to_send: &[Vec<u32>],
-    page_controller: &mut page_controller::PageController<BabyBearPoseidon2Config>,
+    page_controller: &mut PageController<BabyBearPoseidon2Config>,
     page_requester: &DummyInteractionAir,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
     pk: &MultiStarkProvingKey<BabyBearPoseidon2Config>,
@@ -73,7 +73,7 @@ fn load_page_test(
     let vk = pk.vk();
 
     let main_trace_data =
-        trace_builder.view(&vk, vec![&page_controller.page_read_air, page_requester]);
+        trace_builder.view(&vk, vec![&page_controller.page_access_air, page_requester]);
 
     let pis = vec![vec![]; vk.per_air.len()];
 
@@ -87,14 +87,14 @@ fn load_page_test(
     verifier.verify(
         &mut challenger,
         &vk,
-        vec![&page_controller.page_read_air, page_requester],
+        vec![&page_controller.page_access_air, page_requester],
         &proof,
         &pis,
     )
 }
 
 #[test]
-fn page_read_chip_test() {
+fn page_access_chip_test() {
     let mut rng = create_seeded_rng();
     let bus_index = 0;
 
@@ -124,12 +124,12 @@ fn page_read_chip_test() {
 
     let engine = config::baby_bear_poseidon2::default_engine(log_page_height.max(log_num_requests));
 
-    let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
+    let mut keygen_builder = engine.keygen_builder();
 
     let page_data_ptr = keygen_builder.add_cached_main_matrix(page_width);
     let page_metadata_ptr = keygen_builder.add_main_matrix(2);
     keygen_builder.add_partitioned_air(
-        &page_controller.page_read_air,
+        &page_controller.page_access_air,
         0,
         vec![page_data_ptr, page_metadata_ptr],
     );
@@ -138,7 +138,7 @@ fn page_read_chip_test() {
 
     let pk = keygen_builder.generate_pk();
 
-    let prover = MultiTraceStarkProver::new(&engine.config);
+    let prover = engine.prover();
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
     load_page_test(

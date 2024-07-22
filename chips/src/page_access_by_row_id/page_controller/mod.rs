@@ -5,7 +5,7 @@ use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use std::sync::{atomic::AtomicU32, Arc};
 
-use super::PageReadAir;
+use super::PageAccessByRowIdAir;
 
 #[cfg(test)]
 pub mod tests;
@@ -13,7 +13,7 @@ pub mod tests;
 pub mod trace;
 
 pub struct PageController<SC: StarkGenericConfig> {
-    pub page_read_air: PageReadAir,
+    pub page_access_air: PageAccessByRowIdAir,
     request_count: Vec<Arc<AtomicU32>>,
     page_trace: Option<DenseMatrix<Val<SC>>>,
     page_commitment: Option<Com<SC>>,
@@ -25,7 +25,7 @@ where
 {
     pub fn new(bus_index: usize) -> Self {
         PageController {
-            page_read_air: PageReadAir::new(bus_index, 0, 0),
+            page_access_air: PageAccessByRowIdAir::new(bus_index, 0),
             request_count: vec![],
             page_trace: None,
             page_commitment: None,
@@ -41,11 +41,10 @@ where
         assert!(page_height > 0);
         let page_width = page[0].len();
 
-        self.page_read_air =
-            PageReadAir::new(self.page_read_air.bus_index(), page_width, page_height);
+        self.page_access_air =
+            PageAccessByRowIdAir::new(self.page_access_air.bus_index(), page_width);
 
-        let page_height = self.page_read_air.page_height();
-        let page_width = self.page_read_air.page_width();
+        let page_width = self.page_access_air.page_width();
         self.request_count = (0..page_height)
             .map(|_| Arc::new(AtomicU32::new(0)))
             .collect();

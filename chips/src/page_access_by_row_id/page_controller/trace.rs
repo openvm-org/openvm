@@ -6,7 +6,7 @@ use p3_uni_stark::StarkGenericConfig;
 use super::PageController;
 
 impl<SC: StarkGenericConfig> PageController<SC> {
-    /// Every row in the trace is [index] | [mult]
+    /// Every row in the trace is [index] | [mult], see [super::super::columns::PageAccessByRowIdAuxCols]
     pub fn generate_trace<F: PrimeField64>(&self) -> RowMajorMatrix<F> {
         RowMajorMatrix::new(
             self.request_count
