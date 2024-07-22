@@ -1,0 +1,13 @@
+[package]
+name = "sha256-air"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+p3-air = { workspace = true }
+p3-field = { workspace = true }
+p3-matrix = { workspace = true }
+
+afs-chips = { path = "../chips" }
+afs-derive = { path = "../derive" }

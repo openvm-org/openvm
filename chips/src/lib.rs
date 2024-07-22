@@ -1,4 +1,7 @@
 pub mod assert_sorted;
+pub mod bits {
+    pub mod bit_decompose;
+}
 pub mod common;
 pub mod execution_air;
 pub mod group_by;

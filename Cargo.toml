@@ -12,6 +12,7 @@ members = [
     "vm",
     "vm/bin",
     "poseidon2-air",
+    "sha256-air",
 ]
 resolver = "2"
 
