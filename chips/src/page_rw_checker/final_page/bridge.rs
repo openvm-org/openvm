@@ -4,7 +4,7 @@ use itertools::Itertools;
 use super::{columns::IndexedPageWriteCols, IndexedPageWriteAir};
 
 impl IndexedPageWriteAir {
-    /// Sends interactions required by IsLessThanTuple SubAir
+    /// Receives the page row with multiplicity `rcv_mult` on the page bus.
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
@@ -14,9 +14,8 @@ impl IndexedPageWriteAir {
         let rcv_mult = cols.rcv_mult;
         let page_cols = page_cols
             .idx
-            .clone()
             .into_iter()
-            .chain(page_cols.data.clone())
+            .chain(page_cols.data)
             .collect_vec();
         builder.push_receive(self.page_bus_index, page_cols, rcv_mult);
     }

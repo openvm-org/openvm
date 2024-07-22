@@ -1,6 +1,6 @@
 use afs_stark_backend::air_builders::PartitionedAirBuilder;
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{Air, AirBuilder, BaseAir};
+use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
@@ -25,34 +25,27 @@ where
     AB::M: Clone,
 {
     fn eval(&self, builder: &mut AB) {
-        let io_trace = [0, 1].map(|i| {
+        let io = [0, 1].map(|i| {
             PageCols::from_slice(
                 &builder.partitioned_main()[0].row_slice(i),
                 self.final_air.idx_len,
                 self.final_air.data_len,
             )
         });
-        let local_aux_trace = IndexedPageWriteAuxCols::from_slice(
-            &builder.partitioned_main()[1].row_slice(0),
-            self.final_air.idx_limb_bits,
-            self.final_air.idx_decomp,
-            self.final_air.idx_len,
-        );
-        let aux_trace = IndexedPageWriteAuxCols::from_slice(
-            &builder.partitioned_main()[1].row_slice(1),
-            self.final_air.idx_limb_bits,
-            self.final_air.idx_decomp,
-            self.final_air.idx_len,
-        );
+        let aux = [0, 1].map(|i| {
+            IndexedPageWriteAuxCols::from_slice(
+                &builder.partitioned_main()[1].row_slice(i),
+                self.final_air.idx_limb_bits,
+                self.final_air.idx_decomp,
+                self.final_air.idx_len,
+            )
+        });
         // Making sure the page is in the proper format
-        SubAir::eval(self, builder, io_trace, [local_aux_trace, aux_trace]);
+        SubAir::eval(self, builder, io, aux);
     }
 }
 
-impl<AB: AirBuilder + PartitionedAirBuilder + InteractionBuilder> SubAir<AB> for IndexedPageWriteAir
-where
-    AB::M: Clone,
-{
+impl<AB: PartitionedAirBuilder + InteractionBuilder> SubAir<AB> for IndexedPageWriteAir {
     type IoView = [PageCols<AB::Var>; 2];
     type AuxView = [IndexedPageWriteAuxCols<AB::Var>; 2];
 
