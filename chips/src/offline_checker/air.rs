@@ -65,18 +65,10 @@ where
 
         // Making sure bits are bools
         builder.assert_bool(local_cols.same_idx);
-        builder.assert_bool(local_cols.same_data);
         builder.assert_bool(local_cols.is_valid);
-
-        // Constrain that same_idx_and_data is same_idx * same_data
-        builder.assert_eq(
-            local_cols.same_idx_and_data,
-            local_cols.same_idx * local_cols.same_data,
-        );
 
         // Making sure first row starts with same_idx, same_data being false
         builder.when_first_row().assert_zero(local_cols.same_idx);
-        builder.when_first_row().assert_zero(local_cols.same_data);
 
         // Making sure same_idx is correct across rows
         let is_equal_idx_cols = IsEqualVecCols::new(
@@ -93,23 +85,6 @@ where
             &mut builder.when_transition(),
             is_equal_idx_cols.io,
             is_equal_idx_cols.aux,
-        );
-
-        // Making sure same_data is correct across rows
-        let is_equal_data = IsEqualVecCols::new(
-            local_cols.data.to_vec(),
-            next_cols.data.to_vec(),
-            next_cols.same_data,
-            next_cols.is_equal_data_aux.prods.clone(),
-            next_cols.is_equal_data_aux.invs,
-        );
-        let is_equal_data_air = IsEqualVecAir::new(self.data_len);
-
-        SubAir::eval(
-            &is_equal_data_air,
-            &mut builder.when_transition(),
-            is_equal_data.io,
-            is_equal_data.aux,
         );
 
         // Ensuring all rows are sorted by (idx, clk)

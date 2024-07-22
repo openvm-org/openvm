@@ -106,10 +106,6 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> LocalTraceInstructi
         let mut same_idx = if curr_idx == prev_idx { 1 } else { 0 };
 
         let curr_data = curr_op.get_data();
-        let prev_data = prev_op.get_data();
-        let mut same_data = if curr_data == prev_data { 1 } else { 0 };
-
-        let mut same_idx_and_data = same_idx * same_data;
 
         let mut lt_bit = 1;
         for i in 0..curr_idx.len() {
@@ -129,7 +125,6 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> LocalTraceInstructi
         }
 
         let is_equal_idx_air = IsEqualVecAir::new(self.air.idx_len);
-        let is_equal_data_air = IsEqualVecAir::new(self.air.data_len);
         let lt_air = IsLessThanTupleAir::new(
             range_checker.bus_index(),
             self.air.idx_clk_limb_bits.clone(),
@@ -138,10 +133,6 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> LocalTraceInstructi
 
         let is_equal_idx_aux = is_equal_idx_air
             .generate_trace_row((prev_idx.clone(), curr_idx.clone()))
-            .aux;
-
-        let is_equal_data_aux = is_equal_data_air
-            .generate_trace_row((prev_data.clone(), curr_data.clone()))
             .aux;
 
         let mut prev_idx_timestamp = prev_idx
@@ -164,8 +155,6 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> LocalTraceInstructi
 
         if is_first_row {
             same_idx = 0;
-            same_data = 0;
-            same_idx_and_data = 0;
             lt_bit = 1;
         }
 
@@ -175,12 +164,9 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> LocalTraceInstructi
             data: curr_data,
             op_type: F::from_canonical_u8(op_type),
             same_idx: F::from_canonical_u8(same_idx),
-            same_data: F::from_canonical_u8(same_data),
-            same_idx_and_data: F::from_canonical_u8(same_idx_and_data),
             is_valid: F::from_canonical_u8(is_valid),
             lt_bit: F::from_canonical_u8(lt_bit),
             is_equal_idx_aux,
-            is_equal_data_aux,
             lt_aux,
         }
     }

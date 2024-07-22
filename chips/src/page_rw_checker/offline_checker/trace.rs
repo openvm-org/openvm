@@ -76,7 +76,6 @@ impl PageOfflineChecker {
             if *is_first_row {
                 *is_first_row = false;
                 offline_checker_cols.same_idx = Val::<SC>::zero();
-                offline_checker_cols.same_data = Val::<SC>::zero();
             }
 
             let op_type = curr_op.op_type as u8;

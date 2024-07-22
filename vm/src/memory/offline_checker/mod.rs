@@ -1,6 +1,7 @@
 use std::{array::from_fn, collections::HashMap};
 
 use afs_chips::offline_checker::OfflineChecker;
+use columns::MemoryOfflineCheckerCols;
 use p3_field::PrimeField32;
 
 use crate::cpu::{MEMORY_BUS, RANGE_CHECKER_BUS};
@@ -10,10 +11,17 @@ use super::MemoryAccess;
 
 mod air;
 mod bridge;
+mod columns;
 mod trace;
 
 pub struct MemoryOfflineChecker {
     pub offline_checker: OfflineChecker,
+}
+
+impl MemoryOfflineChecker {
+    pub fn air_width(&self) -> usize {
+        MemoryOfflineCheckerCols::<usize>::width(self)
+    }
 }
 
 pub struct MemoryChip<const WORD_SIZE: usize, F: PrimeField32> {

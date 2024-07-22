@@ -7,13 +7,9 @@ use p3_matrix::Matrix;
 
 use super::{columns::PageOfflineCheckerCols, PageOfflineChecker};
 use crate::{
-    sub_chip::{AirConfig, SubAir},
+    sub_chip::SubAir,
     utils::{and, implies, or},
 };
-
-impl AirConfig for PageOfflineChecker {
-    type Cols<T> = PageOfflineCheckerCols<T>;
-}
 
 impl<F: Field> BaseAir<F> for PageOfflineChecker {
     fn width(&self) -> usize {
@@ -74,6 +70,18 @@ where
             local_offline_checker_cols.op_type,
             local_cols.is_write + local_cols.is_delete * AB::Expr::from_canonical_u8(2),
         );
+
+        // Making sure that every read uses the same data as the last operation
+        // We do this by looping over the data part of next row and ensuring that
+        // every entry matches the one in local in case next is_read (and not is_extra)
+        // read => same_data (data in next matches data in local)
+        for i in 0..self.offline_checker.data_len {
+            // NOTE: constraint degree is 3
+            builder.when_transition().assert_zero(
+                (next_cols.is_read * next_offline_checker_cols.is_valid)
+                    * (local_offline_checker_cols.data[i] - next_offline_checker_cols.data[i]),
+            );
+        }
 
         // Ensuring the sum of is_initial, is_internal, is_final_write, is_final_delete is 1
         // This ensures exactly one of them is on because they're all bool
