@@ -70,6 +70,7 @@ pub struct TwoAdicPcsProofVariable<C: Config> {
 
 #[derive(DslVariable, Clone)]
 pub struct BatchOpeningVariable<C: Config> {
+    #[allow(clippy::type_complexity)]
     pub opened_values: Array<C, Array<C, Ext<C::F, C::EF>>>,
     pub opening_proof: Array<C, Array<C, Felt<C::F>>>,
 }
@@ -80,10 +81,10 @@ pub struct TwoAdicPcsRoundVariable<C: Config> {
     pub mats: Array<C, TwoAdicPcsMatsVariable<C>>,
 }
 
-#[allow(clippy::type_complexity)]
 #[derive(DslVariable, Clone)]
 pub struct TwoAdicPcsMatsVariable<C: Config> {
     pub domain: TwoAdicMultiplicativeCosetVariable<C>,
     pub points: Array<C, Ext<C::F, C::EF>>,
+    #[allow(clippy::type_complexity)]
     pub values: Array<C, Array<C, Ext<C::F, C::EF>>>,
 }

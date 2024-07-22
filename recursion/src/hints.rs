@@ -219,7 +219,7 @@ impl Hintable<InnerConfig> for Vec<Vec<InnerChallenge>> {
         let mut stream = Vec::new();
 
         let len = InnerVal::from_canonical_usize(self.len());
-        stream.push(vec![len.into()]);
+        stream.push(vec![len]);
 
         self.iter().for_each(|arr| {
             let comm = Vec::<InnerChallenge>::write(arr);

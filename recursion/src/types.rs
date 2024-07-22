@@ -133,6 +133,7 @@ pub struct AxiomCommitmentsVariable<C: Config> {
 pub struct AxiomProofVariable<C: Config> {
     pub commitments: AxiomCommitmentsVariable<C>,
     pub opening: OpeningProofVariable<C>,
+    #[allow(clippy::type_complexity)]
     pub exposed_values_after_challenge: Array<C, Array<C, Array<C, Ext<C::F, C::EF>>>>,
 }
 
@@ -142,6 +143,7 @@ pub struct OpeningProofVariable<C: Config> {
     pub values: OpenedValuesVariable<C>,
 }
 
+#[allow(clippy::type_complexity)]
 #[derive(DslVariable, Clone)]
 pub struct OpenedValuesVariable<C: Config> {
     pub preprocessed: Array<C, AdjacentOpenedValuesVariable<C>>,

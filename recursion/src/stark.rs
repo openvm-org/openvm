@@ -477,6 +477,8 @@ where
     }
 
     /// Reference: [afs_stark_backend::verifier::constraints::verify_single_rap_constraints]
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::type_complexity)]
     pub fn verify_single_rap_constraints<R>(
         builder: &mut Builder<C>,
         rap: &R,
@@ -592,6 +594,7 @@ where
         builder.assert_ext_eq(folded_constraints * sels.inv_zeroifier, quotient);
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn eval_constraints<R>(
         builder: &mut Builder<C>,
         rap: &R,

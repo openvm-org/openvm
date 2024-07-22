@@ -48,7 +48,7 @@ pub fn verify_two_adic_pcs<C: Config>(
         .materialize(builder);
     let log_global_max_height: Var<_> = builder.eval(commit_phase_commits_len + log_blowup);
 
-    let mut reduced_openings: Array<C, Array<C, Ext<C::F, C::EF>>> =
+    let mut reduced_openings: Array<_, Array<_, Ext<_, _>>> =
         builder.array(proof.query_openings.len());
 
     builder.cycle_tracker("stage-d-2-fri-fold");
@@ -330,7 +330,7 @@ pub mod tests {
         let mut challenger = Challenger::new(perm.clone());
         challenger.observe(commit);
         challenger.sample_ext_element::<EF>();
-        let os: Vec<(TwoAdicMultiplicativeCoset<F>, Vec<(EF, Vec<EF>)>)> = domains_and_polys
+        let os: Vec<(TwoAdicMultiplicativeCoset<F>, Vec<_>)> = domains_and_polys
             .iter()
             .zip(&opening[0])
             .map(|((domain, _), mat_openings)| (*domain, vec![(zeta, mat_openings[0].clone())]))
@@ -351,7 +351,7 @@ pub mod tests {
             let domain = pcs_var.natural_domain_for_log_degree(&mut builder, Usize::Var(log_d));
 
             let domain_val =
-                <ScPcs as Pcs<EF, Challenger>>::natural_domain_for_degree(&pcs, 1 << log_d_val);
+                <ScPcs as Pcs<EF, Challenger>>::natural_domain_for_degree(pcs, 1 << log_d_val);
 
             let expected_domain: TwoAdicMultiplicativeCosetVariable<_> =
                 builder.constant(domain_val);
