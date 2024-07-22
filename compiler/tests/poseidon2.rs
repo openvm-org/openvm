@@ -4,10 +4,11 @@ use p3_field::AbstractField;
 use rand::thread_rng;
 use rand::Rng;
 
-use afs_compiler::asm::AsmBuilder;
-use afs_compiler::ir::Var;
-use afs_compiler::ir::PERMUTATION_WIDTH;
-use afs_compiler::util::end_to_end_test;
+use afs_compiler::{
+    asm::AsmBuilder,
+    ir::{Var, PERMUTATION_WIDTH},
+    util::end_to_end_test,
+};
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;

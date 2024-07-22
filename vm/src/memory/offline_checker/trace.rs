@@ -5,6 +5,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::memory::{MemoryAccess, OpType};
 
+<<<<<<< HEAD
 use super::{columns::MemoryOfflineCheckerCols, MemoryChip};
 use afs_chips::{
     is_equal_vec::IsEqualVecAir,
@@ -12,6 +13,13 @@ use afs_chips::{
     range_gate::RangeCheckerGateChip,
     sub_chip::LocalTraceInstructions,
 };
+=======
+use super::MemoryChip;
+use afs_chips::is_equal_vec::IsEqualVecAir;
+use afs_chips::is_less_than_tuple::IsLessThanTupleAir;
+use afs_chips::range_gate::RangeCheckerGateChip;
+use afs_chips::sub_chip::LocalTraceInstructions;
+>>>>>>> main
 use p3_maybe_rayon::prelude::*;
 
 impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {

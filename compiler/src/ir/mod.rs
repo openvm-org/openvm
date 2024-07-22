@@ -4,7 +4,7 @@ pub use builder::*;
 pub use collections::*;
 pub use fold::*;
 pub use instructions::*;
-pub use poseidon::PERMUTATION_WIDTH;
+pub use poseidon::{DIGEST_SIZE, PERMUTATION_WIDTH};
 pub use ptr::*;
 pub use symbolic::*;
 pub use types::*;
