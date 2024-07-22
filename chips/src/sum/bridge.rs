@@ -11,7 +11,7 @@ use super::{columns::SumCols, SumAir};
 
 impl<F: PrimeField64> AirBridge<F> for SumAir {
     fn sends(&self) -> Vec<Interaction<F>> {
-        let cols = SumCols::<F>::index_map(self.is_lt_air.limb_bits(), self.is_lt_air.decomp());
+        let cols = SumCols::<F>::index_map(&self.is_lt_air);
 
         let is_lt_cols = IsLessThanCols {
             // io is unused in the IsLessThan bridge
@@ -37,7 +37,7 @@ impl<F: PrimeField64> AirBridge<F> for SumAir {
     }
 
     fn receives(&self) -> Vec<Interaction<F>> {
-        let cols = SumCols::<F>::index_map(self.is_lt_air.limb_bits(), self.is_lt_air.decomp());
+        let cols = SumCols::<F>::index_map(&self.is_lt_air);
         vec![Interaction {
             fields: vec![
                 VirtualPairCol::single_main(cols.key),

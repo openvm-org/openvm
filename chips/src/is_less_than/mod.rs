@@ -27,19 +27,22 @@ pub struct IsLessThanAir {
 
 impl IsLessThanAir {
     pub fn new(bus_index: usize, limb_bits: usize, decomp: usize) -> Self {
+        let num_limbs = (limb_bits + decomp - 1) / decomp;
+        let limb_bits = num_limbs * decomp;
+
         Self {
             bus_index,
             limb_bits,
             decomp,
-            num_limbs: (limb_bits + decomp - 1) / decomp,
+            num_limbs,
         }
     }
 }
 
 /// This chip checks whether one number is less than another. The two numbers have a max number of bits,
-/// given by limb_bits. The chip assumes that the two numbers are within limb_bits bits. The chip compares
-/// the numbers by decomposing them into limbs of size decomp bits, and interacts with a RangeCheckerGateChip
-/// to range check the decompositions.
+/// given by limb_bits. The chip compares the numbers by decomposing them into limbs of size decomp bits,
+/// and interacts with a RangeCheckerGateChip to range check the decompositions.
+/// Warning: The chip *assumes* that the two numbers are within limb_bits bits
 #[derive(Default, Getters)]
 pub struct IsLessThanChip {
     pub air: IsLessThanAir,
@@ -54,13 +57,9 @@ impl IsLessThanChip {
         decomp: usize,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
-        let air = IsLessThanAir {
-            bus_index,
-            limb_bits,
-            decomp,
-            num_limbs: (limb_bits + decomp - 1) / decomp,
-        };
-
-        Self { air, range_checker }
+        Self {
+            air: IsLessThanAir::new(bus_index, limb_bits, decomp),
+            range_checker,
+        }
     }
 }

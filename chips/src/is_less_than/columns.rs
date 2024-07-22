@@ -1,5 +1,7 @@
 use afs_derive::AlignedBorrow;
 
+use super::IsLessThanAir;
+
 #[derive(Default, AlignedBorrow)]
 pub struct IsLessThanIOCols<T> {
     pub x: T,
@@ -20,7 +22,7 @@ impl<T: Clone> IsLessThanIOCols<T> {
         vec![self.x.clone(), self.y.clone(), self.less_than.clone()]
     }
 
-    pub fn get_width() -> usize {
+    pub fn width() -> usize {
         3
     }
 }
@@ -47,15 +49,8 @@ impl<T: Clone> IsLessThanAuxCols<T> {
         flattened
     }
 
-    pub fn get_width(limb_bits: usize, decomp: usize) -> usize {
-        let mut width = 0;
-        // for the lower
-        width += 1;
-        // for the decomposed lower
-        let num_limbs = (limb_bits + decomp - 1) / decomp;
-        width += num_limbs + 1;
-
-        width
+    pub fn width(lt_air: &IsLessThanAir) -> usize {
+        1 + lt_air.num_limbs()
     }
 }
 
@@ -78,7 +73,7 @@ impl<T: Clone> IsLessThanCols<T> {
         flattened
     }
 
-    pub fn get_width(limb_bits: usize, decomp: usize) -> usize {
-        IsLessThanIOCols::<T>::get_width() + IsLessThanAuxCols::<T>::get_width(limb_bits, decomp)
+    pub fn width(lt_air: &IsLessThanAir) -> usize {
+        IsLessThanIOCols::<T>::width() + IsLessThanAuxCols::<T>::width(lt_air)
     }
 }
