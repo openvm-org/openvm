@@ -1,17 +1,18 @@
 [workspace]
 members = [
-    "chips",
-    "compiler",
-    "stark-backend",
-    "test-utils",
-    "derive",
     "bin/afs",
     "bin/olap",
     "benchmark",
+    "chips",
+    "compiler",
+    "derive",
     "logical-interface",
+    "poseidon2-air",
+    "recursion",
+    "stark-backend",
+    "test-utils",
     "vm",
     "vm/bin",
-    "poseidon2-air",
 ]
 resolver = "2"
 
