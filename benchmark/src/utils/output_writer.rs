@@ -55,6 +55,7 @@ pub struct BenchmarkRow {
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct MultitierBenchmarkRow {
     pub test_type: String,
+    pub scenario: String,
     pub engine: EngineType,
     pub index_bytes: usize,
     pub data_bytes: usize,
@@ -258,11 +259,11 @@ pub fn write_csv_line(
     writer.flush()?;
     Ok(())
 }
-<<<<<<< HEAD
 
 pub fn write_multitier_csv_line(
     path: String,
     test_type: String,
+    scenario: String,
     config: &MultitierPageConfig,
     log_data: &HashMap<String, String>,
 ) -> Result<()> {
@@ -275,6 +276,7 @@ pub fn write_multitier_csv_line(
     let page_width = 1 + idx_len + data_len;
     let row = MultitierBenchmarkRow {
         test_type,
+        scenario,
         engine: config.stark_engine.engine,
         index_bytes: config.page.index_bytes,
         data_bytes: config.page.data_bytes,
@@ -335,6 +337,7 @@ pub fn write_multitier_csv_header(path: String) -> Result<()> {
     // sections
     writer.write_record(&vec![
         "benchmark",
+        "",
         "stark engine",
         "page config",
         "",
@@ -368,6 +371,7 @@ pub fn write_multitier_csv_header(path: String) -> Result<()> {
     // headers
     writer.write_record(&vec![
         "test_type",
+        "scenario",
         "engine",
         "index_bytes",
         "data_bytes",
@@ -401,5 +405,3 @@ pub fn write_multitier_csv_header(path: String) -> Result<()> {
     writer.flush()?;
     Ok(())
 }
-=======
->>>>>>> feat/multitier_rw_opt

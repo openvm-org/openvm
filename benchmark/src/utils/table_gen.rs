@@ -113,7 +113,6 @@ pub fn generate_random_afi_rw(
     Ok(())
 }
 
-<<<<<<< HEAD:benchmark/src/utils/random_table.rs
 pub fn generate_random_multitier_afi_rw(
     config: &MultitierPageConfig,
     table_id: String,
@@ -122,7 +121,32 @@ pub fn generate_random_multitier_afi_rw(
     let index_bytes = config.page.index_bytes;
     let data_bytes = config.page.data_bytes;
     let num_ops = config.tree.init_leaf_cap;
-=======
+
+    let mut file = File::create(afi_path.as_str())?;
+
+    // Write AFI header
+    let header = AfsHeader::new(table_id, index_bytes, data_bytes);
+    writeln!(file, "TABLE_ID {}", header.table_id)?;
+    writeln!(file, "INDEX_BYTES {}", header.index_bytes)?;
+    writeln!(file, "DATA_BYTES {}", header.data_bytes)?;
+
+    // Keep track of inserted indexes
+    let mut inserted_indexes: HashSet<String> = HashSet::new();
+
+    // Generate `INSERT` instructions
+    for _ in 0..num_ops {
+        let mut idx = generate_random_hex_string(index_bytes);
+        while inserted_indexes.contains(&idx) {
+            idx = generate_random_hex_string(index_bytes);
+        }
+        let data = generate_random_hex_string(data_bytes);
+
+        inserted_indexes.insert(idx.clone());
+        writeln!(file, "INSERT {} {}", idx, data)?;
+    }
+
+    Ok(())
+}
 /// Generates a .afi file with values incrementing from 1 in idx and data that includes some amount of INSERT,
 /// WRITE, and READ commands based on the height, max_rw_ops, and passed in percentage of reads/writes.
 pub fn generate_incremental_afi_rw(
@@ -138,7 +162,6 @@ pub fn generate_incremental_afi_rw(
     let max_rw_ops = config.page.max_rw_ops;
     let max_writes = max_rw_ops * percent_writes / 100;
     let max_reads = max_rw_ops * percent_reads / 100;
->>>>>>> feat/multitier_rw_opt:benchmark/src/utils/table_gen.rs
 
     let mut file = File::create(afi_path.as_str())?;
 
@@ -148,21 +171,6 @@ pub fn generate_incremental_afi_rw(
     writeln!(file, "INDEX_BYTES {}", header.index_bytes)?;
     writeln!(file, "DATA_BYTES {}", header.data_bytes)?;
 
-<<<<<<< HEAD:benchmark/src/utils/random_table.rs
-    // Keep track of inserted indexes
-    let mut inserted_indexes: HashSet<String> = HashSet::new();
-
-    // Generate `INSERT` instructions
-    for _ in 0..num_ops {
-        let mut idx = generate_random_hex_string(index_bytes);
-        while inserted_indexes.contains(&idx) {
-            idx = generate_random_hex_string(index_bytes);
-        }
-        let data = generate_random_hex_string(data_bytes);
-
-        inserted_indexes.insert(idx.clone());
-        writeln!(file, "INSERT {} {}", idx, data)?;
-=======
     let max_inserts = min(height, max_writes);
 
     // Generate `INSERT` instructions
@@ -191,7 +199,6 @@ pub fn generate_incremental_afi_rw(
         let hex_value = hex::encode(idx);
         let str_val = format!("0x{}", hex_value);
         writeln!(file, "READ {}", str_val)?;
->>>>>>> feat/multitier_rw_opt:benchmark/src/utils/table_gen.rs
     }
 
     Ok(())

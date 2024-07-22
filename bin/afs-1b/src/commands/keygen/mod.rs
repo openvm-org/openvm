@@ -70,7 +70,6 @@ impl KeygenCommand {
                 output_folder,
                 (config.page.index_bytes + 1) / 2,
                 (config.page.data_bytes + 1) / 2,
-                config.page.max_rw_ops,
                 config.page.leaf_height,
                 config.page.internal_height,
                 config.page.bits_per_fe,
@@ -91,7 +90,6 @@ impl KeygenCommand {
         output_folder: String,
         idx_len: usize,
         data_len: usize,
-        max_ops: usize,
         leaf_height: usize,
         internal_height: usize,
         _limb_bits: usize,
@@ -106,8 +104,6 @@ impl KeygenCommand {
         let data_bus_index = 0;
         let internal_data_bus_index = 1;
         let lt_bus_index = 2;
-
-        let trace_degree = max_ops * 4;
 
         let init_path_bus = 3;
         let final_path_bus = 4;
@@ -151,17 +147,19 @@ impl KeygenCommand {
         let prover = MultiTraceStarkProver::new(engine.config());
         let trace_builder = TraceCommitmentBuilder::<SC>::new(prover.pcs());
 
-        let blank_leaf = vec![vec![0; 1 + idx_len + data_len]; leaf_height];
+        let mut blank_leaf = vec![vec![0; 1 + idx_len + data_len]; leaf_height];
+
+        let blank_leaf = Page::from_2d_vec_consume(&mut blank_leaf, idx_len, data_len);
 
         let mut blank_internal_row = vec![2];
         blank_internal_row.resize(2 + 2 * idx_len + BABYBEAR_COMMITMENT_LEN, 0);
         let blank_internal = vec![blank_internal_row; internal_height];
 
         // literally use any leaf chip
-        let blank_leaf_trace = page_controller.init_leaf_chips[0]
-            .generate_cached_trace(Page::from_2d_vec(&blank_leaf, idx_len, data_len));
+        let blank_leaf_trace =
+            page_controller.init_leaf_chips[0].generate_cached_trace_from_page(&blank_leaf);
         let blank_internal_trace =
-            page_controller.init_internal_chips[0].generate_cached_trace(blank_internal);
+            page_controller.init_internal_chips[0].generate_cached_trace(&blank_internal);
         let blank_leaf_prover_data = trace_builder.committer.commit(vec![blank_leaf_trace]);
         let blank_internal_prover_data = trace_builder.committer.commit(vec![blank_internal_trace]);
 
@@ -254,7 +252,6 @@ impl KeygenCommand {
         for i in 0..tree_params.init_leaf_cap {
             keygen_builder.add_partitioned_air(
                 &page_controller.init_leaf_chips[i],
-                leaf_height,
                 BABYBEAR_COMMITMENT_LEN,
                 vec![init_leaf_data_ptrs[i], init_leaf_main_ptrs[i]],
             );
@@ -263,7 +260,6 @@ impl KeygenCommand {
         for i in 0..tree_params.init_internal_cap {
             keygen_builder.add_partitioned_air(
                 &page_controller.init_internal_chips[i],
-                internal_height,
                 BABYBEAR_COMMITMENT_LEN,
                 vec![init_internal_data_ptrs[i], init_internal_main_ptrs[i]],
             );
@@ -272,7 +268,6 @@ impl KeygenCommand {
         for i in 0..tree_params.final_leaf_cap {
             keygen_builder.add_partitioned_air(
                 &page_controller.final_leaf_chips[i],
-                leaf_height,
                 BABYBEAR_COMMITMENT_LEN,
                 vec![final_leaf_data_ptrs[i], final_leaf_main_ptrs[i]],
             );
@@ -281,36 +276,28 @@ impl KeygenCommand {
         for i in 0..tree_params.final_internal_cap {
             keygen_builder.add_partitioned_air(
                 &page_controller.final_internal_chips[i],
-                internal_height,
                 BABYBEAR_COMMITMENT_LEN,
                 vec![final_internal_data_ptrs[i], final_internal_main_ptrs[i]],
             );
         }
 
-        keygen_builder.add_partitioned_air(
-            &page_controller.offline_checker,
-            trace_degree,
-            0,
-            vec![ops_ptr],
-        );
+        keygen_builder.add_partitioned_air(&page_controller.offline_checker, 0, vec![ops_ptr]);
 
         keygen_builder.add_partitioned_air(
             &page_controller.init_root_signal,
-            1,
             BABYBEAR_COMMITMENT_LEN,
             vec![init_root_ptr],
         );
 
         keygen_builder.add_partitioned_air(
             &page_controller.final_root_signal,
-            1,
             BABYBEAR_COMMITMENT_LEN,
             vec![final_root_ptr],
         );
 
-        keygen_builder.add_air(&page_controller.range_checker.air, 1 << DECOMP_BITS, 0);
+        keygen_builder.add_air(&page_controller.range_checker.air, 0);
 
-        keygen_builder.add_air(&ops_sender, max_ops, 0);
+        keygen_builder.add_air(&ops_sender, 0);
 
         let partial_pk = keygen_builder.generate_partial_pk();
         let partial_vk = partial_pk.partial_vk();

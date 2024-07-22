@@ -26,6 +26,7 @@ dependencies = [
  "afs-stark-backend",
  "afs-test-utils",
  "alloy-primitives",
+ "bin-common",
  "bincode",
  "clap 4.5.8",
  "color-eyre",
@@ -86,6 +87,7 @@ dependencies = [
  "derive-new",
  "derive_more",
  "getset",
+ "hex",
  "itertools 0.13.0",
  "p3-air",
  "p3-baby-bear",
@@ -119,6 +121,7 @@ name = "afs-compiler"
 version = "0.1.0"
 dependencies = [
  "afs-derive",
+ "afs-test-utils",
  "backtrace",
  "itertools 0.12.1",
  "p3-baby-bear",
@@ -212,6 +215,7 @@ dependencies = [
  "tracing",
  "tracing-forest",
  "tracing-subscriber",
+ "zkhash",
 ]
 
 [[package]]
@@ -545,6 +549,7 @@ dependencies = [
  "itertools 0.13.0",
  "lazy_static",
  "logical-interface",
+ "olap",
  "p3-baby-bear",
  "p3-blake3",
  "p3-field",
@@ -1856,6 +1861,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "olap"
+version = "0.1.0"
+dependencies = [
+ "afs-chips",
+ "afs-derive",
+ "afs-stark-backend",
+ "afs-test-utils",
+ "alloy-primitives",
+ "bin-common",
+ "bincode",
+ "clap 4.5.8",
+ "color-eyre",
+ "logical-interface",
+ "p3-baby-bear",
+ "p3-blake3",
+ "p3-field",
+ "p3-keccak",
+ "p3-uni-stark",
+ "p3-util",
+ "serde",
+ "tracing",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2344,28 +2373,6 @@ name = "ppv-lite86"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
-
-[[package]]
-name = "predicate"
-version = "0.1.0"
-dependencies = [
- "afs-chips",
- "afs-stark-backend",
- "afs-test-utils",
- "alloy-primitives",
- "bin-common",
- "bincode",
- "clap 4.5.8",
- "color-eyre",
- "hex",
- "logical-interface",
- "p3-blake3",
- "p3-field",
- "p3-keccak",
- "p3-uni-stark",
- "p3-util",
- "serde",
-]
 
 [[package]]
 name = "primitive-types"

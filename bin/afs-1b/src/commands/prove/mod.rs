@@ -199,6 +199,7 @@ impl ProveCommand {
         };
 
         let range_checker = Arc::new(RangeCheckerGateChip::new(lt_bus_index, 1 << DECOMP_BITS));
+        println!("Obtain Leafs and Cached Data");
 
         let mut page_controller: PageController<BABYBEAR_COMMITMENT_LEN> =
             PageController::new::<BabyBearPoseidon2Config>(
@@ -233,8 +234,8 @@ impl ProveCommand {
         info_span!("Page BTree Commit to Disk")
             .in_scope(|| db.commit(&trace_builder.committer, db_folder.clone()));
         let page_btree_load_span = info_span!("Page BTree Load Traces and Prover Data").entered();
-        let init_pages = db.gen_loaded_trace();
-        let final_pages = db.gen_all_trace(&trace_builder.committer, None);
+        let mut init_pages = db.gen_loaded_trace();
+        let mut final_pages = db.gen_all_trace(&trace_builder.committer, None);
         let init_root_is_leaf = init_pages.internal_pages.is_empty();
         let final_root_is_leaf = final_pages.internal_pages.is_empty();
 
@@ -318,71 +319,83 @@ impl ProveCommand {
         //     config.tree.final_internal_cap,
         //     blank_internal_prover_data.clone(),
         // );
-        let (data_trace, main_trace, commits, mut prover_data) = page_controller.load_page_and_ops(
-            init_pages.leaf_pages,
-            init_pages.internal_pages,
-            init_root_is_leaf,
-            0,
-            final_pages.leaf_pages,
-            final_pages.internal_pages,
-            final_root_is_leaf,
-            0,
-            &zk_ops,
-            trace_degree,
-            &mut trace_builder.committer,
-            Some((
-                gen_some_products_from_prover_data(init_leaf_prover_data),
-                gen_some_products_from_prover_data(init_internal_prover_data),
-            )),
-            Some((
-                gen_some_products_from_prover_data(final_leaf_prover_data),
-                gen_some_products_from_prover_data(final_internal_prover_data),
-            )),
-        );
-        let offline_checker_trace = main_trace.offline_checker_trace.clone();
-        let init_root = main_trace.init_root_signal_trace.clone();
-        let final_root = main_trace.final_root_signal_trace.clone();
+        println!("Start Load Pages");
+        let (mut data_trace, mut main_trace, commits, mut prover_data) = page_controller
+            .load_page_and_ops(
+                &mut init_pages.leaf_pages,
+                init_pages.internal_pages,
+                init_root_is_leaf,
+                0,
+                &mut final_pages.leaf_pages,
+                final_pages.internal_pages,
+                final_root_is_leaf,
+                0,
+                &zk_ops,
+                trace_degree,
+                &mut trace_builder.committer,
+                Some((
+                    gen_some_products_from_prover_data(init_leaf_prover_data),
+                    gen_some_products_from_prover_data(init_internal_prover_data),
+                )),
+                Some((
+                    gen_some_products_from_prover_data(final_leaf_prover_data),
+                    gen_some_products_from_prover_data(final_internal_prover_data),
+                )),
+            );
+        let offline_checker_trace = main_trace.offline_checker_trace;
+        let init_root = main_trace.init_root_signal_trace;
+        let final_root = main_trace.final_root_signal_trace;
         let range_trace = page_controller.range_checker.generate_trace();
         let trace_span = info_span!("Prove.generate_trace").entered();
         let ops_sender_trace = ops_sender.generate_trace(&zk_ops, config.page.max_rw_ops);
         trace_span.exit();
         trace_builder.clear();
 
-        for trace in data_trace.init_leaf_chip_traces.iter() {
-            trace_builder.load_cached_trace(trace.clone(), prover_data.init_leaf_page.remove(0));
+        for _ in 0..page_controller.init_leaf_chips.len() {
+            trace_builder.load_cached_trace(
+                data_trace.init_leaf_chip_traces.remove(0),
+                prover_data.init_leaf_page.remove(0),
+            );
         }
 
-        for trace in data_trace.init_internal_chip_traces.iter() {
-            trace_builder
-                .load_cached_trace(trace.clone(), prover_data.init_internal_page.remove(0));
+        for _ in 0..page_controller.init_internal_chips.len() {
+            trace_builder.load_cached_trace(
+                data_trace.init_internal_chip_traces.remove(0),
+                prover_data.init_internal_page.remove(0),
+            );
         }
 
-        for trace in data_trace.final_leaf_chip_traces.iter() {
-            trace_builder.load_cached_trace(trace.clone(), prover_data.final_leaf_page.remove(0));
+        for _ in 0..page_controller.final_leaf_chips.len() {
+            trace_builder.load_cached_trace(
+                data_trace.final_leaf_chip_traces.remove(0),
+                prover_data.final_leaf_page.remove(0),
+            );
         }
 
-        for trace in data_trace.final_internal_chip_traces.iter() {
-            trace_builder
-                .load_cached_trace(trace.clone(), prover_data.final_internal_page.remove(0));
+        for _ in 0..page_controller.final_internal_chips.len() {
+            trace_builder.load_cached_trace(
+                data_trace.final_internal_chip_traces.remove(0),
+                prover_data.final_internal_page.remove(0),
+            );
         }
 
-        for trace in main_trace.init_leaf_chip_main_traces.iter() {
-            trace_builder.load_trace(trace.clone());
+        for _ in 0..page_controller.init_leaf_chips.len() {
+            trace_builder.load_trace(main_trace.init_leaf_chip_main_traces.remove(0));
         }
 
-        for trace in main_trace.init_internal_chip_main_traces.iter() {
-            trace_builder.load_trace(trace.clone());
+        for _ in 0..page_controller.init_internal_chips.len() {
+            trace_builder.load_trace(main_trace.init_internal_chip_main_traces.remove(0));
         }
 
-        for trace in main_trace.final_leaf_chip_main_traces.iter() {
-            trace_builder.load_trace(trace.clone());
+        for _ in 0..page_controller.final_leaf_chips.len() {
+            trace_builder.load_trace(main_trace.final_leaf_chip_main_traces.remove(0));
         }
 
-        for trace in main_trace.final_internal_chip_main_traces.iter() {
-            trace_builder.load_trace(trace.clone());
+        for _ in 0..page_controller.final_internal_chips.len() {
+            trace_builder.load_trace(main_trace.final_internal_chip_main_traces.remove(0));
         }
 
-        trace_builder.load_trace(offline_checker_trace.clone());
+        trace_builder.load_trace(offline_checker_trace);
         trace_builder.load_trace(init_root);
         trace_builder.load_trace(final_root);
         trace_builder.load_trace(range_trace);
@@ -445,6 +458,7 @@ impl ProveCommand {
         let prover = engine.prover();
 
         let mut challenger = engine.new_challenger();
+        println!("Start Proof");
         let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
         let encoded_proof: Vec<u8> = bincode::serialize(&proof).unwrap();
         let proof_path = db_folder.clone() + "/" + &table_id + ".prove.bin";

@@ -3,14 +3,14 @@ use olap::commands::parse_afo_file;
 
 use crate::{
     commands::{
-        benchmark_execute,
-        multitier_rw::MultitierRwCommand,
-        predicate::PredicateCommand,
+        benchmark_execute, benchmark_multitier_execute,
+        multitier_rw::{run_mtrw_bench, MultitierRwCommand},
         predicate::{run_predicate_bench, PredicateCommand},
-        rw::RwCommand,
         rw::{run_rw_bench, RwCommand},
     },
-    utils::table_gen::{generate_incremental_afi_rw, generate_random_afi_rw},
+    utils::table_gen::{
+        generate_incremental_afi_rw, generate_random_afi_rw, generate_random_multitier_afi_rw,
+    },
 };
 
 #[derive(Debug, Parser)]
@@ -40,7 +40,22 @@ impl Cli {
     pub fn run() {
         let cli = Self::parse();
         match cli.command {
-            Commands::MtRw(mtrw) => mtrw.execute().unwrap(),
+            Commands::MtRw(mtrw) => {
+                let benchmark_name = "MultitierReadWrite".to_string();
+                let scenario = format!("New Tree: {}", mtrw.new_tree);
+                let common = mtrw.common;
+                let extra_data = format!("{}", mtrw.new_tree);
+                benchmark_multitier_execute(
+                    benchmark_name,
+                    scenario,
+                    common,
+                    extra_data,
+                    mtrw.start_idx,
+                    run_mtrw_bench,
+                    generate_random_multitier_afi_rw,
+                )
+                .unwrap();
+            }
             Commands::Rw(rw) => {
                 let benchmark_name = "ReadWrite".to_string();
                 let scenario = format!("r{}%, w{}%", rw.percent_reads, rw.percent_writes);

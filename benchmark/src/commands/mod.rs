@@ -7,13 +7,14 @@ use color_eyre::eyre::Result;
 
 use crate::{
     utils::{
-        config_gen::get_configs,
+        config_gen::{get_configs, get_multitier_configs},
         output_writer::{
             default_output_filename, save_afi_to_new_db, write_csv_header, write_csv_line,
+            write_multitier_csv_header, write_multitier_csv_line,
         },
         tracing::{clear_tracing_log, extract_event_data_from_log, extract_timing_data_from_log},
     },
-    AFI_FILE_PATH, DB_FILE_PATH, TABLE_ID, TMP_FOLDER, TMP_TRACING_LOG,
+    AFI_FILE_PATH, DB_FILE_PATH, MULTITIER_TABLE_ID, TABLE_ID, TMP_FOLDER, TMP_TRACING_LOG,
 };
 
 pub mod multitier_rw;
@@ -45,6 +46,29 @@ pub struct CommonCommands {
         required = false
     )]
     pub silent: bool,
+}
+
+/// Function for setting up the benchmark
+pub fn benchmark_multitier_setup(
+    benchmark_name: String,
+    config_folder: Option<String>,
+    output_file: Option<String>,
+) -> (Vec<MultitierPageConfig>, String) {
+    // Generate/Parse config(s)
+    let configs = get_multitier_configs(config_folder);
+
+    // Create tmp folder
+    let _ = fs::create_dir_all(TMP_FOLDER);
+
+    // Write .csv file
+    let output_file = output_file
+        .clone()
+        .unwrap_or(default_output_filename(benchmark_name.clone()));
+
+    println!("Output file: {}", output_file.clone());
+    write_multitier_csv_header(output_file.clone()).unwrap();
+
+    (configs, output_file)
 }
 
 /// Function for setting up the benchmark
@@ -162,6 +186,99 @@ pub fn benchmark_execute(
         log_data.extend(timing_data);
 
         write_csv_line(
+            output_file.clone(),
+            benchmark_name.clone(),
+            scenario.clone(),
+            config,
+            &log_data,
+        )?;
+    }
+
+    println!("Benchmark [{}: {}] completed.", benchmark_name, scenario);
+
+    Ok(())
+}
+
+pub fn benchmark_multitier_execute(
+    benchmark_name: String,
+    scenario: String,
+    common: CommonCommands,
+    extra_data: String,
+    start_idx: usize,
+    benchmark_fn: fn(&MultitierPageConfig, String) -> Result<()>,
+    afi_gen_fn: fn(&MultitierPageConfig, String, String) -> Result<()>,
+) -> Result<()> {
+    println!("Executing [{}: {}] benchmark...", benchmark_name, scenario);
+
+    let (configs, output_file) = benchmark_multitier_setup(
+        benchmark_name.clone(),
+        common.config_folder.clone(),
+        common.output_file.clone(),
+    );
+    let configs_len = configs.len();
+    println!("Output file: {}", output_file.clone());
+
+    // Run benchmark for each config
+    for (idx, config) in configs.iter().rev().enumerate() {
+        if idx < start_idx || config.page.leaf_height != 1_048_576 {
+            continue;
+        }
+        let timestamp = Local::now().format("%H:%M:%S");
+        println!(
+            "[{}] Running config {:?}: {} of {}",
+            timestamp,
+            config.generate_filename(),
+            idx + 1,
+            configs_len
+        );
+
+        clear_tracing_log(TMP_TRACING_LOG.as_str())?;
+
+        // Generate AFI file
+        let generate_afi_instant = Instant::now();
+        afi_gen_fn(
+            config,
+            MULTITIER_TABLE_ID.to_string(),
+            AFI_FILE_PATH.to_string(),
+        )?;
+        let generate_afi_duration = generate_afi_instant.elapsed();
+        println!("Setup: generate AFI duration: {:?}", generate_afi_duration);
+
+        // Run the benchmark function
+        benchmark_fn(config, extra_data.clone()).unwrap();
+
+        let event_data = extract_event_data_from_log(
+            TMP_TRACING_LOG.as_str(),
+            &[
+                "Total air width: preprocessed=",
+                "Total air width: partitioned_main=",
+                "Total air width: after_challenge=",
+            ],
+        )?;
+        let timing_data = extract_timing_data_from_log(
+                        TMP_TRACING_LOG.as_str(),
+                        &[
+                            "ReadWrite keygen",
+                            "ReadWrite prove",
+                            "Page BTree Updates",
+                            "Page BTree Commit to Disk",
+                            "Page BTree Load Traces and Prover Data",
+                            "prove:Load page trace generation: afs_chips::multitier_page_rw_checker::page_controller",
+                            "Prove.generate_trace",
+                            "prove:Prove trace commitment",
+                            "ReadWrite verify",
+                        ],
+                    )?;
+
+        println!("Config: {:?}", config);
+        println!("Event data: {:?}", event_data);
+        println!("Timing data: {:?}", timing_data);
+        println!("Output file: {}", output_file.clone());
+
+        let mut log_data: HashMap<String, String> = event_data;
+        log_data.extend(timing_data);
+
+        write_multitier_csv_line(
             output_file.clone(),
             benchmark_name.clone(),
             scenario.clone(),
