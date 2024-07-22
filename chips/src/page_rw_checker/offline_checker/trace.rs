@@ -12,6 +12,7 @@ use crate::page_rw_checker::offline_checker::columns::PageOfflineCheckerCols;
 use crate::page_rw_checker::page_controller::{OpType, Operation};
 use crate::range_gate::RangeCheckerGateChip;
 use crate::sub_chip::LocalTraceInstructions;
+use p3_maybe_rayon::prelude::*;
 
 impl PageOfflineChecker {
     /// Each row in the trace follow the same order as the Cols struct:
@@ -38,7 +39,7 @@ impl PageOfflineChecker {
         // Creating a timestamp bigger than all others
         let max_clk = ops.iter().map(|op| op.clk).max().unwrap_or(0) + 1;
 
-        ops.sort_by_key(|op| (op.idx.clone(), op.clk));
+        ops.par_sort_by_key(|op| (op.idx.clone(), op.clk));
 
         let dummy_op = Operation {
             idx: vec![0; self.offline_checker.idx_len],
