@@ -29,6 +29,11 @@ pub fn fri_params_with_80_bits_of_security() -> Vec<FriParameters> {
             num_queries: 103,
             proof_of_work_bits: 0,
         },
+        FriParameters {
+            log_blowup: 1,
+            num_queries: 290,
+            proof_of_work_bits: 0,
+        },
     ]
 }
 
@@ -43,6 +48,16 @@ pub fn fri_params_with_100_bits_of_security() -> Vec<FriParameters> {
         FriParameters {
             log_blowup: 3,
             num_queries: 80,
+            proof_of_work_bits: 0,
+        },
+        FriParameters {
+            log_blowup: 2,
+            num_queries: 129,
+            proof_of_work_bits: 0,
+        },
+        FriParameters {
+            log_blowup: 1,
+            num_queries: 361,
             proof_of_work_bits: 0,
         },
     ]
