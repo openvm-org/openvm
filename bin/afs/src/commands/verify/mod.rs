@@ -17,6 +17,8 @@ use color_eyre::eyre::Result;
 use p3_field::PrimeField64;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
+use crate::RANGE_CHECK_BITS;
+
 /// `afs verify` command
 /// Uses information from config.toml to verify a proof using the verifying key in `output-folder`
 /// as */prove.bin.
@@ -101,7 +103,7 @@ where
         let ops_bus_index = 2;
 
         let idx_limb_bits = config.page.bits_per_fe;
-        let idx_decomp = 8;
+        let idx_decomp = RANGE_CHECK_BITS;
         println!("Verifying proof file: {}", proof_file);
 
         let encoded_vk =

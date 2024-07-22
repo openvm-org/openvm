@@ -9,7 +9,7 @@ use logical_interface::{
     mock_db::MockDb,
 };
 
-use crate::commands::CommonCommands;
+use crate::{commands::CommonCommands, RANGE_CHECK_BITS};
 
 const RANGE_BUS: usize = 0;
 const T1_INTERSECTOR_BUS: usize = 1;
@@ -49,7 +49,7 @@ pub fn inner_join_setup(
     let mut db = MockDb::from_file(&common.db_path);
     let height = config.page.height;
     let bits_per_fe = config.page.bits_per_fe;
-    let range_chip_idx_decomp = 4;
+    let range_chip_idx_decomp = RANGE_CHECK_BITS;
 
     let inner_join_op = InnerJoinOp::parse(op.args).unwrap();
 

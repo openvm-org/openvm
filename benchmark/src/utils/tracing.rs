@@ -5,13 +5,14 @@ use std::{
     sync::Mutex,
 };
 
+use regex::Regex;
 use tracing::Level;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt::format::FmtSpan, layer::SubscriberExt};
 use tracing_subscriber::{EnvFilter, Layer};
 
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{eyre, Result};
 
 use crate::TMP_TRACING_LOG;
 
@@ -55,20 +56,21 @@ pub fn clear_tracing_log(file_path: &str) -> Result<()> {
 
 pub fn extract_timing_data_from_log(
     file_path: &str,
-    filter_values: &[&str],
+    filter_values: Vec<String>,
 ) -> Result<HashMap<String, String>> {
     let mut results: HashMap<String, String> = HashMap::new();
     if let Ok(file) = File::open(file_path) {
         for line in io::BufReader::new(file).lines() {
             let line = line.unwrap();
-            for &val in filter_values {
+            for val in filter_values.iter() {
                 if line.contains(val) {
                     if let Some(start) = line.find(TIME_PREFIX) {
                         let time_busy_start = start + TIME_PREFIX.len();
                         if let Some(end) = line[time_busy_start..].find(' ') {
                             let time_busy =
                                 line[time_busy_start..time_busy_start + end].to_string();
-                            results.insert(val.to_string(), time_busy);
+                            let time_busy_string = convert_to_ms_string(&time_busy).unwrap();
+                            results.insert(val.to_string(), time_busy_string);
                         }
                     }
                 }
@@ -80,13 +82,13 @@ pub fn extract_timing_data_from_log(
 
 pub fn extract_event_data_from_log(
     file_path: &str,
-    filter_values: &[&str],
+    filter_values: Vec<String>,
 ) -> Result<HashMap<String, String>> {
     let mut results: HashMap<String, String> = HashMap::new();
     if let Ok(file) = File::open(file_path) {
         for line in io::BufReader::new(file).lines() {
             let line = line.unwrap();
-            for &val in filter_values {
+            for val in filter_values.iter() {
                 if line.contains(val) {
                     if let Some(start) = line.find(val) {
                         let event_data_start = start + val.len();
@@ -101,4 +103,20 @@ pub fn extract_event_data_from_log(
         }
     }
     Ok(results)
+}
+
+fn convert_to_ms_string(time_string: &str) -> Result<String> {
+    let time_unit_regex = Regex::new(r"(\d+\.?\d*)(ms|s|µs|ns)").unwrap();
+    let captures = time_unit_regex.captures(time_string).unwrap();
+    let time_value = captures.get(1).unwrap().as_str();
+    let time_unit = captures.get(2).unwrap().as_str();
+    let time_unit_float = match time_unit {
+        "ms" => 1.0,
+        "s" => 1000.0,
+        "µs" => 0.001,
+        "ns" => 0.000001,
+        _ => return Err(eyre!("Invalid time unit: {}", time_unit)),
+    };
+    let time_in_ms = time_value.parse::<f64>()? * time_unit_float;
+    Ok(format!("{:.2}", time_in_ms))
 }

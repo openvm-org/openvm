@@ -3,10 +3,11 @@ use olap::commands::parse_afo_file;
 
 use crate::{
     commands::{
-        benchmark_execute,
-        predicate::{run_predicate_bench, PredicateCommand},
-        rw::{run_rw_bench, RwCommand},
+        benchmark::benchmark_execute,
+        predicate::{run_bench_predicate, PredicateCommand},
+        rw::{run_bench_rw, RwCommand},
     },
+    config::benchmark_data::{benchmark_data_predicate, benchmark_data_rw},
     utils::table_gen::{generate_incremental_afi_rw, generate_random_afi_rw},
 };
 
@@ -43,7 +44,8 @@ impl Cli {
                     scenario,
                     common,
                     extra_data,
-                    run_rw_bench,
+                    run_bench_rw,
+                    benchmark_data_rw,
                     generate_random_afi_rw,
                 )
                 .unwrap();
@@ -60,7 +62,8 @@ impl Cli {
                     scenario,
                     common,
                     extra_data,
-                    run_predicate_bench,
+                    run_bench_predicate,
+                    benchmark_data_predicate,
                     generate_incremental_afi_rw,
                 )
                 .unwrap();

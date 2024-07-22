@@ -31,6 +31,8 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::de::DeserializeOwned;
 use tracing::info_span;
 
+use crate::RANGE_CHECK_BITS;
+
 /// `afs prove` command
 /// Uses information from config.toml to generate a proof of the changes made by a .afi file to a table
 /// saves the proof in `output-folder` as */prove.bin.
@@ -171,7 +173,7 @@ where
 
         let checker_trace_degree = config.page.max_rw_ops * 4;
         let idx_limb_bits = config.page.bits_per_fe;
-        let idx_decomp = 8;
+        let idx_decomp = RANGE_CHECK_BITS;
 
         let mut page_controller: PageController<SC> = PageController::new(
             page_bus_index,

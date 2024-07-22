@@ -31,4 +31,4 @@ jobs:
 
       - name: Run unit tests
         run: |
-          cargo test --workspace --exclude stark-backend --exclude vm --exclude compiler
+          cargo test --workspace --exclude afs_stark_backend --exclude stark_vm --exclude afs_compiler
