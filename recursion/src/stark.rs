@@ -15,20 +15,19 @@ use stark_vm::cpu::trace::Instruction;
 
 use crate::challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger};
 use crate::commit::{PcsVariable, PolynomialSpaceVariable};
-use crate::folder::AxiomRecursiveVerifierConstraintFolder;
+use crate::folder::RecursiveVerifierConstraintFolder;
 use crate::fri::types::{TwoAdicPcsMatsVariable, TwoAdicPcsRoundVariable};
 use crate::fri::{TwoAdicFriPcsVariable, TwoAdicMultiplicativeCosetVariable};
 use crate::hints::Hintable;
 use crate::types::{
-    AdjacentOpenedValuesVariable, AxiomCommitmentsVariable, AxiomMemoryLayout,
-    AxiomMemoryLayoutVariable, InnerConfig, MultiStarkVerificationAdvice, StarkVerificationAdvice,
-    PROOF_MAX_NUM_PVS,
+    AdjacentOpenedValuesVariable, CommitmentsVariable, InnerConfig, MultiStarkVerificationAdvice,
+    StarkVerificationAdvice, VerifierProgramInput, VerifierProgramInputVariable, PROOF_MAX_NUM_PVS,
 };
 use crate::utils::const_fri_config;
 
 pub trait DynRapForRecursion<C: Config>:
-    for<'a> InteractiveAir<AxiomRecursiveVerifierConstraintFolder<'a, C>>
-    + for<'a> Rap<AxiomRecursiveVerifierConstraintFolder<'a, C>>
+    for<'a> InteractiveAir<RecursiveVerifierConstraintFolder<'a, C>>
+    + for<'a> Rap<RecursiveVerifierConstraintFolder<'a, C>>
     + BaseAir<C::F>
     + AirBridge<C::F>
 {
@@ -37,19 +36,19 @@ pub trait DynRapForRecursion<C: Config>:
 impl<C, T> DynRapForRecursion<C> for T
 where
     C: Config,
-    T: for<'a> InteractiveAir<AxiomRecursiveVerifierConstraintFolder<'a, C>>
-        + for<'a> Air<AxiomRecursiveVerifierConstraintFolder<'a, C>>
+    T: for<'a> InteractiveAir<RecursiveVerifierConstraintFolder<'a, C>>
+        + for<'a> Air<RecursiveVerifierConstraintFolder<'a, C>>
         + BaseAir<C::F>
         + AirBridge<C::F>,
 {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct AxiomVerifier<C: Config> {
+pub struct VerifierProgram<C: Config> {
     _phantom: std::marker::PhantomData<C>,
 }
 
-impl AxiomVerifier<InnerConfig> {
+impl VerifierProgram<InnerConfig> {
     /// Create a new instance of the program for the [BabyBearPoseidon2] config.
     pub fn build(
         raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
@@ -58,8 +57,8 @@ impl AxiomVerifier<InnerConfig> {
     ) -> Vec<Instruction<BabyBear>> {
         let mut builder = Builder::<InnerConfig>::default();
 
-        let input: AxiomMemoryLayoutVariable<_> = builder.uninit();
-        AxiomMemoryLayout::<BabyBearPoseidon2Config>::witness(&input, &mut builder);
+        let input: VerifierProgramInputVariable<_> = builder.uninit();
+        VerifierProgramInput::<BabyBearPoseidon2Config>::witness(&input, &mut builder);
 
         let pcs = TwoAdicFriPcsVariable {
             config: const_fri_config(&mut builder, fri_params),
@@ -72,11 +71,11 @@ impl AxiomVerifier<InnerConfig> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct AxiomStarkVerifier<C: Config> {
+pub struct StarkVerifier<C: Config> {
     _phantom: std::marker::PhantomData<C>,
 }
 
-impl<C: Config> AxiomStarkVerifier<C>
+impl<C: Config> StarkVerifier<C>
 where
     C::F: TwoAdicField,
 {
@@ -87,14 +86,14 @@ where
         raps: Vec<&dyn DynRapForRecursion<C>>,
         partial_vk: MultiStarkVerificationAdvice<C>,
         challenger: &mut DuplexChallengerVariable<C>,
-        input: &AxiomMemoryLayoutVariable<C>,
+        input: &VerifierProgramInputVariable<C>,
     ) where
         C::F: TwoAdicField,
         C::EF: TwoAdicField,
     {
         Self::validate_inputs(builder, &raps, &partial_vk, input);
 
-        let AxiomMemoryLayoutVariable::<C> {
+        let VerifierProgramInputVariable::<C> {
             proof,
             log_degree_per_air,
             public_values,
@@ -122,7 +121,7 @@ where
             }
         }
 
-        let AxiomCommitmentsVariable {
+        let CommitmentsVariable {
             main_trace: main_trace_commits,
             after_challenge: after_challenge_commits,
             quotient: quotient_commit,
@@ -495,7 +494,7 @@ where
         challenges: &[Vec<Ext<C::F, C::EF>>],
         exposed_values_after_challenge: &[Vec<Ext<C::F, C::EF>>],
     ) where
-        R: for<'b> Rap<AxiomRecursiveVerifierConstraintFolder<'b, C>> + Sync + ?Sized,
+        R: for<'b> Rap<RecursiveVerifierConstraintFolder<'b, C>> + Sync + ?Sized,
     {
         let sels = trace_domain.selectors_at_point(builder, zeta);
 
@@ -608,7 +607,7 @@ where
         exposed_values_after_challenge: &[Vec<Ext<C::F, C::EF>>],
     ) -> Ext<C::F, C::EF>
     where
-        R: for<'b> Rap<AxiomRecursiveVerifierConstraintFolder<'b, C>> + Sync + ?Sized,
+        R: for<'b> Rap<RecursiveVerifierConstraintFolder<'b, C>> + Sync + ?Sized,
     {
         let mut unflatten = |v: &[Ext<C::F, C::EF>]| {
             v.chunks_exact(C::EF::D)
@@ -634,7 +633,7 @@ where
             folder_pv.push(builder.get(&public_values, i));
         }
 
-        let mut folder = AxiomRecursiveVerifierConstraintFolder::<C> {
+        let mut folder = RecursiveVerifierConstraintFolder::<C> {
             preprocessed: VerticalPair::new(
                 RowMajorMatrixView::new_row(&preprocessed_values.local),
                 RowMajorMatrixView::new_row(&preprocessed_values.next),
@@ -711,7 +710,7 @@ where
         builder: &mut Builder<C>,
         raps: &[&dyn DynRapForRecursion<C>],
         partial_vk: &MultiStarkVerificationAdvice<C>,
-        input: &AxiomMemoryLayoutVariable<C>,
+        input: &VerifierProgramInputVariable<C>,
     ) {
         assert_eq!(raps.len(), partial_vk.per_air.len());
         let num_airs = raps.len();
@@ -719,7 +718,7 @@ where
         // Currently only support 0 or 1 phase is supported.
         assert!(num_phases <= 1);
 
-        let AxiomMemoryLayoutVariable::<C> {
+        let VerifierProgramInputVariable::<C> {
             proof,
             log_degree_per_air,
             public_values,

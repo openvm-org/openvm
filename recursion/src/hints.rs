@@ -14,9 +14,9 @@ use afs_stark_backend::prover::types::{Commitments, Proof};
 use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::types::{
-    AdjacentOpenedValuesVariable, AxiomCommitmentsVariable, AxiomMemoryLayout,
-    AxiomMemoryLayoutVariable, AxiomProofVariable, InnerConfig, OpenedValuesVariable,
-    OpeningProofVariable, TraceWidthVariable,
+    AdjacentOpenedValuesVariable, CommitmentsVariable, InnerConfig, OpenedValuesVariable,
+    OpeningProofVariable, StarkProofVariable, TraceWidthVariable, VerifierProgramInput,
+    VerifierProgramInputVariable,
 };
 
 pub type InnerVal = BabyBear;
@@ -132,15 +132,15 @@ impl<I: VecAutoHintable<InnerConfig>> Hintable<InnerConfig> for Vec<I> {
     }
 }
 
-impl Hintable<InnerConfig> for AxiomMemoryLayout<BabyBearPoseidon2Config> {
-    type HintVariable = AxiomMemoryLayoutVariable<InnerConfig>;
+impl Hintable<InnerConfig> for VerifierProgramInput<BabyBearPoseidon2Config> {
+    type HintVariable = VerifierProgramInputVariable<InnerConfig>;
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
         let proof = Proof::<BabyBearPoseidon2Config>::read(builder);
         let log_degree_per_air = Vec::<usize>::read(builder);
         let public_values = Vec::<Vec<InnerVal>>::read(builder);
 
-        AxiomMemoryLayoutVariable {
+        VerifierProgramInputVariable {
             proof,
             log_degree_per_air,
             public_values,
@@ -257,14 +257,14 @@ impl Hintable<InnerConfig> for TraceWidth {
 }
 
 impl Hintable<InnerConfig> for Proof<BabyBearPoseidon2Config> {
-    type HintVariable = AxiomProofVariable<InnerConfig>;
+    type HintVariable = StarkProofVariable<InnerConfig>;
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
         let commitments = Commitments::<BabyBearPoseidon2Config>::read(builder);
         let opening = OpeningProof::<BabyBearPoseidon2Config>::read(builder);
         let exposed_values_after_challenge = Vec::<Vec<Vec<InnerChallenge>>>::read(builder);
 
-        AxiomProofVariable {
+        StarkProofVariable {
             commitments,
             opening,
             exposed_values_after_challenge,
@@ -351,14 +351,14 @@ impl Hintable<InnerConfig> for AdjacentOpenedValues<InnerChallenge> {
 }
 
 impl Hintable<InnerConfig> for Commitments<BabyBearPoseidon2Config> {
-    type HintVariable = AxiomCommitmentsVariable<InnerConfig>;
+    type HintVariable = CommitmentsVariable<InnerConfig>;
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
         let main_trace = Vec::<InnerDigest>::read(builder);
         let after_challenge = Vec::<InnerDigest>::read(builder);
         let quotient = InnerDigest::read(builder);
 
-        AxiomCommitmentsVariable {
+        CommitmentsVariable {
             main_trace,
             after_challenge,
             quotient,

@@ -16,7 +16,7 @@ use crate::challenger::DuplexChallengerVariable;
 use crate::fri::types::{DigestVariable, TwoAdicPcsProofVariable};
 use crate::fri::TwoAdicFriPcsVariable;
 use crate::hints::{InnerChallenge, InnerVal};
-use crate::stark::{AxiomStarkVerifier, AxiomVerifier, DynRapForRecursion};
+use crate::stark::{DynRapForRecursion, StarkVerifier, VerifierProgram};
 
 pub type InnerConfig = AsmConfig<InnerVal, InnerChallenge>;
 
@@ -25,7 +25,7 @@ pub type InnerConfig = AsmConfig<InnerVal, InnerChallenge>;
 /// verification program expects the public values vec to be fixed length.
 pub const PROOF_MAX_NUM_PVS: usize = 240;
 
-impl<C: Config> AxiomVerifier<C>
+impl<C: Config> VerifierProgram<C>
 where
     C::F: PrimeField32 + TwoAdicField,
 {
@@ -35,7 +35,7 @@ where
         pcs: &TwoAdicFriPcsVariable<C>,
         raps: Vec<&dyn DynRapForRecursion<C>>,
         constants: MultiStarkVerificationAdvice<C>,
-        input: &AxiomMemoryLayoutVariable<C>,
+        input: &VerifierProgramInputVariable<C>,
     ) {
         let proof = &input.proof;
 
@@ -66,7 +66,7 @@ where
 
         let mut challenger = DuplexChallengerVariable::new(builder);
 
-        AxiomStarkVerifier::<C>::verify_raps(builder, pcs, raps, constants, &mut challenger, input);
+        StarkVerifier::<C>::verify_raps(builder, pcs, raps, constants, &mut challenger, input);
 
         builder.halt();
 
@@ -102,15 +102,15 @@ where
     }
 }
 
-pub struct AxiomMemoryLayout<SC: StarkGenericConfig> {
+pub struct VerifierProgramInput<SC: StarkGenericConfig> {
     pub proof: Proof<SC>,
     pub log_degree_per_air: Vec<usize>,
     pub public_values: Vec<Vec<Val<SC>>>,
 }
 
 #[derive(DslVariable, Clone)]
-pub struct AxiomMemoryLayoutVariable<C: Config> {
-    pub proof: AxiomProofVariable<C>,
+pub struct VerifierProgramInputVariable<C: Config> {
+    pub proof: StarkProofVariable<C>,
     pub log_degree_per_air: Array<C, Var<C::N>>,
     pub public_values: Array<C, Array<C, Felt<C::F>>>,
 }
@@ -123,15 +123,15 @@ pub struct TraceWidthVariable<C: Config> {
 }
 
 #[derive(DslVariable, Clone)]
-pub struct AxiomCommitmentsVariable<C: Config> {
+pub struct CommitmentsVariable<C: Config> {
     pub main_trace: Array<C, DigestVariable<C>>,
     pub after_challenge: Array<C, DigestVariable<C>>,
     pub quotient: DigestVariable<C>,
 }
 
 #[derive(DslVariable, Clone)]
-pub struct AxiomProofVariable<C: Config> {
-    pub commitments: AxiomCommitmentsVariable<C>,
+pub struct StarkProofVariable<C: Config> {
+    pub commitments: CommitmentsVariable<C>,
     pub opening: OpeningProofVariable<C>,
     #[allow(clippy::type_complexity)]
     pub exposed_values_after_challenge: Array<C, Array<C, Array<C, Ext<C::F, C::EF>>>>,

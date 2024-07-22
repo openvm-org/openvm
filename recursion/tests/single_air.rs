@@ -4,13 +4,9 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 use p3_uni_stark::Val;
 
-use afs_recursion::hints::Hintable;
-use afs_recursion::stark::DynRapForRecursion;
 use afs_stark_backend::interaction::AirBridge;
-use afs_stark_backend::rap::AnyRap;
 use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use afs_test_utils::config::setup_tracing;
-use afs_test_utils::engine::StarkEngine;
 
 mod common;
 
