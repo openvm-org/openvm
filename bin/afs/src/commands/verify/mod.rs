@@ -11,14 +11,13 @@ use afs_test_utils::{
     engine::StarkEngine,
     page_config::{PageConfig, PageMode},
 };
+use bin_common::utils::io::read_from_path;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use p3_field::PrimeField64;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::commands::read_from_path;
-
-use super::create_prefix;
+use crate::RANGE_CHECK_BITS;
 
 /// `afs verify` command
 /// Uses information from config.toml to verify a proof using the verifying key in `output-folder`
@@ -67,7 +66,7 @@ where
         keys_folder: String,
     ) -> Result<()> {
         let start = Instant::now();
-        let prefix = create_prefix(config);
+        let prefix = config.generate_filename();
         match config.page.mode {
             PageMode::ReadWrite => Self::execute_rw(
                 config,
@@ -104,7 +103,7 @@ where
         let ops_bus_index = 2;
 
         let idx_limb_bits = config.page.bits_per_fe;
-        let idx_decomp = 8;
+        let idx_decomp = RANGE_CHECK_BITS;
         println!("Verifying proof file: {}", proof_file);
 
         let encoded_vk = read_from_path(keys_folder.clone() + "/" + &prefix + ".vk").unwrap();

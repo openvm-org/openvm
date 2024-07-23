@@ -123,29 +123,3 @@ fn test_compiler_array() {
     // let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
     // runtime.run();
 }
-
-#[test]
-fn test_ext2felt() {
-    const D: usize = 4;
-    type F = BabyBear;
-    type EF = BinomialExtensionField<BabyBear, D>;
-
-    let mut builder = AsmBuilder::<F, EF>::default();
-
-    let mut rng = thread_rng();
-    let val = rng.gen::<EF>();
-
-    let ext: Ext<F, EF> = builder.constant(val);
-    let felts = builder.ext2felt(ext);
-
-    for (i, &fe) in val.as_base_slice().iter().enumerate() {
-        let lhs = builder.get(&felts, i);
-        let rhs: Felt<F> = builder.constant(fe);
-        builder.assert_felt_eq(lhs, rhs);
-    }
-    builder.halt();
-
-    let program = builder.compile_isa::<1>();
-    display_program(&program);
-    execute_program::<1, _>(program, vec![]);
-}

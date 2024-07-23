@@ -1,14 +1,11 @@
-use std::{
-    fs::{self, File},
-    io::{BufWriter, Write},
-    marker::PhantomData,
-    time::Instant,
-};
+use std::fs;
+use std::{marker::PhantomData, time::Instant};
 
 use afs_chips::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
 use afs_stark_backend::{config::PcsProverData, keygen::MultiStarkKeygenBuilder};
 use afs_test_utils::page_config::PageMode;
 use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
+use bin_common::utils::io::write_bytes;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use p3_field::PrimeField64;
@@ -16,7 +13,7 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::Serialize;
 use tracing::info;
 
-use super::create_prefix;
+use crate::RANGE_CHECK_BITS;
 
 /// `afs keygen` command
 /// Uses information from config.toml to generate partial proving and verifying keys and
@@ -44,7 +41,7 @@ where
     /// Execute the `keygen` command
     pub fn execute(config: &PageConfig, engine: &E, output_folder: String) -> Result<()> {
         let start = Instant::now();
-        let prefix = create_prefix(config);
+        let prefix = config.generate_filename();
         match config.page.mode {
             PageMode::ReadWrite => KeygenCommand::execute_rw(
                 engine,
@@ -77,7 +74,7 @@ where
 
         let idx_limb_bits = limb_bits;
 
-        let idx_decomp = 8;
+        let idx_decomp = RANGE_CHECK_BITS;
 
         let page_controller: PageController<SC> = PageController::new(
             page_bus_index,
@@ -111,11 +108,4 @@ where
         write_bytes(&encoded_vk, vk_path).unwrap();
         Ok(())
     }
-}
-
-fn write_bytes(bytes: &[u8], path: String) -> Result<()> {
-    let file = File::create(path).unwrap();
-    let mut writer = BufWriter::new(file);
-    writer.write_all(bytes)?;
-    Ok(())
 }

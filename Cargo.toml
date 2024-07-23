@@ -1,17 +1,18 @@
 [workspace]
 members = [
+    "bin/afs",
+    "bin/olap",
+    "benchmark",
     "chips",
     "compiler",
+    "derive",
+    "logical-interface",
+    "poseidon2-air",
+    "recursion",
     "stark-backend",
     "test-utils",
-    "derive",
-    "bin/afs",
-    "bin/predicate",
-    "benchmark",
-    "logical-interface",
     "vm",
     "vm/bin",
-    "poseidon2-air",
 ]
 resolver = "2"
 
@@ -20,16 +21,29 @@ version = "0.1.0"
 authors = ["Intrinsic Technologies"]
 edition = "2021"
 
+# Fastest runtime configuration
 [profile.release]
 opt-level = 3
+debug = false
+debug-assertions = false
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+incremental = false
 
 [profile.bench]
-opt-level = 3
-
-[profile.fast]
 inherits = "release"
-debug = true
+
+# For O3 optimization but still fast(ish) compile times
+[profile.fast]
+inherits = "dev"
+opt-level = 3
+# Set this to 1 or 2 to get more useful backtraces
+debug = 1
 debug-assertions = true
+# better recompile times
+incremental = true
+lto = "thin"
 
 [workspace.dependencies]
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
@@ -49,12 +63,11 @@ p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa
 p3-blake3 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-mds = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
+p3-poseidon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa", features = [
-    "parallel",
-] }
+p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" } # the "parallel" feature is NOT on by default to allow single-threaded benchmarking
 p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
 

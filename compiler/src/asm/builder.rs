@@ -24,7 +24,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmBu
         self.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
             compile_prints: true,
             field_arithmetic_enabled: true,
-            field_extension_enabled: false,
+            field_extension_enabled: true,
         })
     }
 

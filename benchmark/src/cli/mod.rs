@@ -1,11 +1,13 @@
 use clap::{Parser, Subcommand};
+use olap::commands::parse_afo_file;
 
 use crate::{
     commands::{
-        benchmark_execute,
-        predicate::{run_predicate_bench, PredicateCommand},
-        rw::{run_rw_bench, RwCommand},
+        benchmark::benchmark_execute,
+        predicate::{run_bench_predicate, PredicateCommand},
+        rw::{run_bench_rw, RwCommand},
     },
+    config::benchmark_data::{benchmark_data_predicate, benchmark_data_rw},
     utils::table_gen::{generate_incremental_afi_rw, generate_random_afi_rw},
 };
 
@@ -42,22 +44,26 @@ impl Cli {
                     scenario,
                     common,
                     extra_data,
-                    run_rw_bench,
+                    run_bench_rw,
+                    benchmark_data_rw,
                     generate_random_afi_rw,
                 )
                 .unwrap();
             }
             Commands::Predicate(predicate) => {
                 let benchmark_name = "Predicate".to_string();
-                let scenario = format!("{} {}", predicate.predicate, predicate.value);
+                let afo = parse_afo_file(predicate.afo_file);
+                let args = afo.operations[0].args.clone();
+                let scenario = format!("{} {}", args[2], args[3]);
                 let common = predicate.common;
-                let extra_data = format!("0 100 {} {}", predicate.predicate, predicate.value);
+                let extra_data = format!("0 100 {} {}", args[2], args[3]);
                 benchmark_execute(
                     benchmark_name,
                     scenario,
                     common,
                     extra_data,
-                    run_predicate_bench,
+                    run_bench_predicate,
+                    benchmark_data_predicate,
                     generate_incremental_afi_rw,
                 )
                 .unwrap();

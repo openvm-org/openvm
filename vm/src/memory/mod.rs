@@ -1,9 +1,12 @@
-use p3_field::PrimeField64;
 use std::array::from_fn;
 
+use p3_field::PrimeField64;
+
+pub mod expand;
 pub mod offline_checker;
 #[cfg(test)]
 pub mod tests;
+pub mod tree;
 
 #[derive(PartialEq, Copy, Clone, Debug, Eq)]
 pub enum OpType {

@@ -13,6 +13,7 @@ use afs_test_utils::{
     engine::StarkEngine,
     page_config::{PageConfig, PageMode},
 };
+use bin_common::utils::io::{read_from_path, write_bytes};
 use clap::Parser;
 use color_eyre::eyre::Result;
 use logical_interface::{
@@ -30,9 +31,7 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::de::DeserializeOwned;
 use tracing::info_span;
 
-use crate::commands::{read_from_path, write_bytes};
-
-use super::create_prefix;
+use crate::RANGE_CHECK_BITS;
 
 /// `afs prove` command
 /// Uses information from config.toml to generate a proof of the changes made by a .afi file to a table
@@ -106,7 +105,7 @@ where
         silent: bool,
     ) -> Result<()> {
         let start = Instant::now();
-        let prefix = create_prefix(config);
+        let prefix = config.generate_filename();
         match config.page.mode {
             PageMode::ReadWrite => Self::execute_rw(
                 config,
@@ -174,7 +173,7 @@ where
 
         let checker_trace_degree = config.page.max_rw_ops * 4;
         let idx_limb_bits = config.page.bits_per_fe;
-        let idx_decomp = 8;
+        let idx_decomp = RANGE_CHECK_BITS;
 
         let mut page_controller: PageController<SC> = PageController::new(
             page_bus_index,
@@ -294,8 +293,8 @@ fn afi_op_conv(
         InputFileOp::InnerJoin => {
             panic!("InnerJoin not supported yet")
         }
-        InputFileOp::Where => {
-            panic!("Where not supported yet")
+        InputFileOp::Filter => {
+            panic!("Filter not supported yet")
         }
     }
 }

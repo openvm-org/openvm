@@ -34,6 +34,7 @@ fn test_io() {
     builder.halt();
 
     let witness_stream: Vec<Vec<F>> = vec![
+        vec![F::zero(), F::zero(), F::one()],
         vec![F::zero(), F::zero(), F::two()],
         vec![F::from_canonical_usize(3)],
         vec![
