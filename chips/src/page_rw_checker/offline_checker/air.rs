@@ -39,6 +39,11 @@ where
 
         let local_offline_checker_cols = local_cols.offline_checker_cols;
         let next_offline_checker_cols = next_cols.offline_checker_cols;
+
+        let or = or::<AB>;
+        let and = and::<AB>;
+        let implies = implies::<AB>;
+
         SubAir::eval(
             &self.offline_checker,
             builder,
@@ -71,18 +76,6 @@ where
             local_cols.is_write + local_cols.is_delete * AB::Expr::from_canonical_u8(2),
         );
 
-        // Making sure that every read uses the same data as the last operation
-        // We do this by looping over the data part of next row and ensuring that
-        // every entry matches the one in local in case next is_read (and not is_extra)
-        // read => same_data (data in next matches data in local)
-        for i in 0..self.offline_checker.data_len {
-            // NOTE: constraint degree is 3
-            builder.when_transition().assert_zero(
-                (next_cols.is_read * next_offline_checker_cols.is_valid)
-                    * (local_offline_checker_cols.data[i] - next_offline_checker_cols.data[i]),
-            );
-        }
-
         // Ensuring the sum of is_initial, is_internal, is_final_write, is_final_delete is 1
         // This ensures exactly one of them is on because they're all bool
         builder.assert_zero(
@@ -103,9 +96,9 @@ where
         // Making sure every idx block starts with a write
         // not same_idx => write
         // NOTE: constraint degree is 3
-        builder.assert_one(or::<AB>(
+        builder.assert_one(or(
             AB::Expr::one() - local_offline_checker_cols.is_valid.into(),
-            or::<AB>(
+            or(
                 local_offline_checker_cols.same_idx.into(),
                 local_cols.is_write.into(),
             ),
@@ -114,31 +107,31 @@ where
         // Making sure every idx block ends with a is_final_write or is_final_delete (in the three constraints below)
         // First, when local and next are not extra
         // NOTE: constraint degree is 3
-        builder.when_transition().assert_one(or::<AB>(
+        builder.when_transition().assert_one(or(
             AB::Expr::one() - next_offline_checker_cols.is_valid.into(),
-            or::<AB>(
+            or(
                 next_offline_checker_cols.same_idx.into(),
                 local_cols.is_final_write.into() + local_cols.is_final_delete.into(),
             ),
         ));
         // NOTE: constraint degree is 3
         // Second, when local is not extra but next is extra
-        builder.when_transition().assert_one(implies::<AB>(
-            and::<AB>(
+        builder.when_transition().assert_one(implies(
+            and(
                 local_offline_checker_cols.is_valid.into(),
                 AB::Expr::one() - next_offline_checker_cols.is_valid.into(),
             ),
             local_cols.is_final_write.into() + local_cols.is_final_delete.into(),
         ));
         // Third, when it's the last row
-        builder.when_last_row().assert_one(implies::<AB>(
+        builder.when_last_row().assert_one(implies(
             local_offline_checker_cols.is_valid.into(),
             local_cols.is_final_write.into() + local_cols.is_final_delete.into(),
         ));
 
         // Making sure that is_initial rows only appear at the start of blocks
         // is_initial => not same_idx
-        builder.assert_one(implies::<AB>(
+        builder.assert_one(implies(
             local_cols.is_initial.into(),
             AB::Expr::one() - local_offline_checker_cols.same_idx,
         ));
@@ -160,35 +153,35 @@ where
 
         // is_final => read
         // NOTE: constraint degree is 3
-        builder.assert_one(or::<AB>(
+        builder.assert_one(or(
             AB::Expr::one() - local_offline_checker_cols.is_valid.into(),
-            implies::<AB>(local_cols.is_final_write.into(), local_cols.is_read.into()),
+            implies(local_cols.is_final_write.into(), local_cols.is_read.into()),
         ));
 
         // is_internal => not is_initial
-        builder.assert_one(implies::<AB>(
+        builder.assert_one(implies(
             local_cols.is_internal.into(),
             AB::Expr::one() - local_cols.is_initial,
         ));
 
         // is_internal => not is_final
-        builder.assert_one(implies::<AB>(
+        builder.assert_one(implies(
             local_cols.is_internal.into(),
             AB::Expr::one()
                 - (local_cols.is_final_write.into() + local_cols.is_final_delete.into()),
         ));
 
         // next is_final_write or next is_final_delete => local is_internal
-        builder.when_transition().assert_one(implies::<AB>(
+        builder.when_transition().assert_one(implies(
             next_cols.is_final_write.into() + next_cols.is_final_delete.into(),
             local_cols.is_internal.into(),
         ));
 
         // Ensuring that next read => not local delete
         // NOTE: constraint degree is 3
-        builder.when_transition().assert_one(or::<AB>(
+        builder.when_transition().assert_one(or(
             AB::Expr::one() - next_offline_checker_cols.is_valid.into(),
-            implies::<AB>(
+            implies(
                 next_cols.is_read.into(),
                 AB::Expr::one() - local_cols.is_delete,
             ),
@@ -196,9 +189,9 @@ where
 
         // Ensuring local is_final_delete => next not same_idx
         // NOTE: constraint degree is 3
-        builder.when_transition().assert_one(or::<AB>(
+        builder.when_transition().assert_one(or(
             AB::Expr::one() - next_offline_checker_cols.is_valid.into(),
-            implies::<AB>(
+            implies(
                 local_cols.is_final_delete.into(),
                 AB::Expr::one() - next_offline_checker_cols.same_idx,
             ),
@@ -206,9 +199,9 @@ where
 
         // Ensuring that next is_final_delete => local is_delete
         // NOTE: constraint degree is 3
-        builder.when_transition().assert_one(or::<AB>(
+        builder.when_transition().assert_one(or(
             AB::Expr::one() - next_offline_checker_cols.is_valid.into(),
-            implies::<AB>(
+            implies(
                 next_cols.is_final_delete.into(),
                 local_cols.is_delete.into(),
             ),

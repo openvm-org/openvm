@@ -5,7 +5,7 @@ pub mod air;
 pub mod columns;
 pub mod trace;
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct IsEqualVecAir {
     vec_len: usize,
 }

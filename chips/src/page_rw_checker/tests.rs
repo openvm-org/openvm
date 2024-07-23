@@ -116,7 +116,6 @@ fn page_offline_checker_small() {
         max_idx,
         MAX_VAL,
         page_height,
-        // TODO: add function to check if page is fully allocated
         page_height / 2,
     );
 

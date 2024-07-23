@@ -10,8 +10,8 @@ use super::{
     columns::OfflineCheckerCols, OfflineChecker, OfflineCheckerChip, OfflineCheckerOperation,
 };
 use crate::{
-    is_equal_vec::{columns::IsEqualVecCols, IsEqualVecAir},
-    is_less_than_tuple::{columns::IsLessThanTupleIOCols, IsLessThanTupleAir},
+    is_equal_vec::columns::IsEqualVecCols,
+    is_less_than_tuple::columns::IsLessThanTupleIOCols,
     sub_chip::{AirConfig, SubAir},
     utils::{implies, or},
 };
@@ -79,9 +79,8 @@ where
             next_cols.is_equal_idx_aux.invs,
         );
 
-        let is_equal_idx_air = IsEqualVecAir::new(self.idx_len);
         SubAir::eval(
-            &is_equal_idx_air,
+            &self.is_equal_idx_air,
             &mut builder.when_transition(),
             is_equal_idx_cols.io,
             is_equal_idx_cols.aux,
@@ -104,11 +103,8 @@ where
             tuple_less_than: next_cols.lt_bit,
         };
 
-        let lt_chip =
-            IsLessThanTupleAir::new(self.range_bus, self.idx_clk_limb_bits.clone(), self.decomp);
-
         SubAir::eval(
-            &lt_chip,
+            &self.lt_tuple_air,
             &mut builder.when_transition(),
             lt_io_cols,
             next_cols.lt_aux,

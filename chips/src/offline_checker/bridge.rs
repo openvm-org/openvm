@@ -7,7 +7,6 @@ use p3_field::PrimeField;
 use super::columns::OfflineCheckerCols;
 use super::OfflineChecker;
 use crate::is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols};
-use crate::is_less_than_tuple::IsLessThanTupleAir;
 use crate::sub_chip::SubAirBridge;
 
 impl<F: PrimeField> SubAirBridge<F> for OfflineChecker {
@@ -29,11 +28,8 @@ impl<F: PrimeField> SubAirBridge<F> for OfflineChecker {
 
     /// Sends interactions required by IsLessThanTuple SubAir
     fn sends(&self, col_indices: OfflineCheckerCols<usize>) -> Vec<Interaction<F>> {
-        let lt_air =
-            IsLessThanTupleAir::new(self.range_bus, self.idx_clk_limb_bits.clone(), self.decomp);
-
         SubAirBridge::sends(
-            &lt_air,
+            &self.lt_tuple_air,
             IsLessThanTupleCols {
                 io: IsLessThanTupleIOCols {
                     x: vec![usize::MAX; self.idx_len + 1],

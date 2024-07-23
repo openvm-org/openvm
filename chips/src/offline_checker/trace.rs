@@ -3,8 +3,6 @@ use std::sync::Arc;
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::is_equal_vec::IsEqualVecAir;
-use crate::is_less_than_tuple::IsLessThanTupleAir;
 use crate::range_gate::RangeCheckerGateChip;
 use crate::sub_chip::LocalTraceInstructions;
 
@@ -14,7 +12,7 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
     OfflineCheckerChip<F, Operation>
 {
     /// Each row in the trace follows the same order as the Cols struct:
-    /// [clk, mem_row, op_type, same_addr_space, same_pointer, same_addr, same_data, lt_bit, is_valid, is_equal_addr_space_aux, is_equal_pointer_aux, is_equal_data_aux, lt_aux]
+    /// [clk, idx, data, op_type, same_idx, lt_bit, is_valid, is_equal_idx_aux, lt_aux]
     ///
     /// The trace consists of a row for every read/write operation plus some extra rows
     /// The trace is sorted by addr (addr_space and pointer) and then by clk, so every addr has a block of consective rows in the trace with the following structure
@@ -26,11 +24,12 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
         // should be already sorted by address_space, address, timestamp
         accesses: Vec<Operation>,
         dummy_op: Operation,
+        trace_degree: usize,
     ) -> RowMajorMatrix<F> {
-        let mut rows: Vec<F> = vec![];
+        let mut rows: Vec<Vec<F>> = vec![];
 
         if !accesses.is_empty() {
-            rows.extend(
+            rows.push(
                 self.generate_trace_row((
                     true,
                     1,
@@ -43,7 +42,7 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
         }
 
         for i in 1..accesses.len() {
-            rows.extend(
+            rows.push(
                 self.generate_trace_row((
                     false,
                     1,
@@ -55,11 +54,8 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
             );
         }
 
-        // Ensure that trace degree is a power of two
-        let trace_degree = accesses.len().next_power_of_two();
-
         if accesses.len() < trace_degree {
-            rows.extend(
+            rows.push(
                 self.generate_trace_row((
                     false,
                     0,
@@ -72,7 +68,7 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
         }
 
         for _i in 1..(trace_degree - accesses.len()) {
-            rows.extend(
+            rows.push(
                 self.generate_trace_row((
                     false,
                     0,
@@ -84,7 +80,7 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
             );
         }
 
-        RowMajorMatrix::new(rows, self.air.air_width())
+        RowMajorMatrix::new(rows.concat(), self.air.air_width())
     }
 }
 
@@ -124,14 +120,9 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> LocalTraceInstructi
             }
         }
 
-        let is_equal_idx_air = IsEqualVecAir::new(self.air.idx_len);
-        let lt_air = IsLessThanTupleAir::new(
-            range_checker.bus_index(),
-            self.air.idx_clk_limb_bits.clone(),
-            self.air.decomp,
-        );
-
-        let is_equal_idx_aux = is_equal_idx_air
+        let is_equal_idx_aux = self
+            .air
+            .is_equal_idx_air
             .generate_trace_row((prev_idx.clone(), curr_idx.clone()))
             .aux;
 
@@ -149,7 +140,9 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> LocalTraceInstructi
             .collect::<Vec<_>>();
         curr_idx_timestamp.push(curr_timestamp as u32);
 
-        let lt_aux = lt_air
+        let lt_aux = self
+            .air
+            .lt_tuple_air
             .generate_trace_row((prev_idx_timestamp, curr_idx_timestamp, range_checker))
             .aux;
 

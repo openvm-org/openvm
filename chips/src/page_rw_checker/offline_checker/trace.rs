@@ -55,8 +55,8 @@ impl PageOfflineChecker {
                        is_initial: bool,
                        is_final: bool,
                        is_internal: bool,
-                       curr_op: Operation,
-                       prev_op: Operation,
+                       curr_op: &Operation,
+                       prev_op: &Operation,
                        is_valid: bool| {
             let local_input = (
                 *is_first_row,
@@ -120,7 +120,7 @@ impl PageOfflineChecker {
             }
 
             if page_editor.contains(&cur_idx) {
-                prev_op = curr_op.clone();
+                prev_op = curr_op;
                 curr_op = Operation {
                     idx: cur_idx.clone(),
                     data: page_editor.get(&cur_idx).unwrap().clone(),
@@ -134,14 +134,14 @@ impl PageOfflineChecker {
                     true,
                     false,
                     false,
-                    curr_op.clone(),
-                    prev_op.clone(),
+                    &curr_op,
+                    &prev_op,
                     true,
                 ));
             }
 
             for op in ops.iter().take(j).skip(i) {
-                prev_op = curr_op.clone();
+                prev_op = curr_op;
                 curr_op = op.clone();
 
                 if op.op_type == OpType::Write {
@@ -155,8 +155,8 @@ impl PageOfflineChecker {
                     false,
                     false,
                     true,
-                    curr_op.clone(),
-                    prev_op.clone(),
+                    &curr_op,
+                    &prev_op,
                     true,
                 ));
             }
@@ -167,7 +167,7 @@ impl PageOfflineChecker {
                     .cloned()
                     .unwrap_or(vec![0; self.offline_checker.data_len]);
 
-            prev_op = curr_op.clone();
+            prev_op = curr_op;
             curr_op = Operation {
                 idx: cur_idx.clone(),
                 data: final_data,
@@ -185,8 +185,8 @@ impl PageOfflineChecker {
                 false,
                 true,
                 false,
-                curr_op.clone(),
-                prev_op.clone(),
+                &curr_op,
+                &prev_op,
                 true,
             ));
 
@@ -207,8 +207,8 @@ impl PageOfflineChecker {
                 false,
                 false,
                 false,
-                curr_op.clone(),
-                prev_op.clone(),
+                &curr_op,
+                &prev_op,
                 false,
             ));
         }
@@ -222,8 +222,8 @@ impl PageOfflineChecker {
                 false,
                 false,
                 false,
-                curr_op.clone(),
-                prev_op.clone(),
+                &curr_op,
+                &prev_op,
                 false,
             )
         });
