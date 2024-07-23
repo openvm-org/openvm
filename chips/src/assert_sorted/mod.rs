@@ -1,21 +1,15 @@
 use std::sync::Arc;
 
-use crate::{is_less_than_tuple::IsLessThanTupleAir, range_gate::RangeCheckerGateChip};
-use getset::Getters;
+use crate::range_gate::RangeCheckerGateChip;
 
 #[cfg(test)]
 pub mod tests;
 
 pub mod air;
-pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-#[derive(Default, Getters)]
-pub struct AssertSortedAir {
-    #[getset(get = "pub")]
-    is_less_than_tuple_air: IsLessThanTupleAir,
-}
+pub use air::AssertSortedAir;
 
 /// This chip constrains that consecutive rows are sorted lexicographically.
 ///
@@ -25,7 +19,7 @@ pub struct AssertSortedAir {
 ///
 /// The AssertSortedChip uses the IsLessThanTupleChip as a subchip to check that the rows
 /// are sorted lexicographically.
-#[derive(Default)]
+#[derive(Clone, Debug)]
 pub struct AssertSortedChip {
     air: AssertSortedAir,
     range_checker: Arc<RangeCheckerGateChip>,
@@ -39,9 +33,7 @@ impl AssertSortedChip {
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
         Self {
-            air: AssertSortedAir {
-                is_less_than_tuple_air: IsLessThanTupleAir::new(bus_index, limb_bits, decomp),
-            },
+            air: AssertSortedAir::new(bus_index, limb_bits, decomp),
             range_checker,
         }
     }

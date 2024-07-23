@@ -8,7 +8,7 @@ use p3_util::log2_strict_usize;
 use std::{cmp::max, sync::Arc};
 
 use afs_stark_backend::{
-    keygen::{types::MultiStarkPartialProvingKey, MultiStarkKeygenBuilder},
+    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver, USE_DEBUG_BUILDER},
     verifier::VerificationError,
 };
@@ -197,7 +197,7 @@ impl GroupByTest {
         page_init: &Page,
         page_controller: &mut PageController<BabyBearPoseidon2Config>,
         trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
-        partial_pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
+        pk: &MultiStarkProvingKey<BabyBearPoseidon2Config>,
         perturb: bool,
         rng: &mut impl Rng,
     ) -> Result<(), VerificationError> {
@@ -234,10 +234,10 @@ impl GroupByTest {
 
         trace_builder.commit_current();
 
-        let partial_vk = partial_pk.partial_vk();
+        let vk = pk.vk();
 
         let main_trace_data = trace_builder.view(
-            &partial_vk,
+            &vk,
             vec![
                 &page_controller.group_by,
                 &page_controller.final_chip,
@@ -245,19 +245,19 @@ impl GroupByTest {
             ],
         );
 
-        let pis = vec![vec![]; partial_vk.per_air.len()];
+        let pis = vec![vec![]; vk.per_air.len()];
 
         let prover = engine.prover();
         let verifier = engine.verifier();
 
         let mut challenger = engine.new_challenger();
-        let proof = prover.prove(&mut challenger, partial_pk, main_trace_data, &pis);
+        let proof = prover.prove(&mut challenger, pk, main_trace_data, &pis);
 
         let mut challenger = engine.new_challenger();
 
         verifier.verify(
             &mut challenger,
-            &partial_vk,
+            &vk,
             vec![
                 &page_controller.group_by,
                 &page_controller.final_chip,
@@ -363,17 +363,17 @@ fn test_static_values() {
             .collect_vec()
     );
 
-    let partial_pk = keygen_builder.generate_partial_pk();
-    let partial_vk = partial_pk.partial_vk();
+    let pk = keygen_builder.generate_pk();
+    let vk = pk.vk();
     let proof = page_controller.prove(
         &engine,
-        &partial_pk,
+        &pk,
         &mut trace_builder,
         group_by_traces,
         input_pdata,
         output_pdata,
     );
-    let verify = page_controller.verify(&engine, partial_vk, proof);
+    let verify = page_controller.verify(&engine, vk, proof);
     assert!(verify.is_ok());
 }
 
@@ -406,7 +406,7 @@ fn test_random_values() {
 
     test.set_up_keygen_builder(&mut keygen_builder, &page_controller);
 
-    let partial_pk = keygen_builder.generate_partial_pk();
+    let pk = keygen_builder.generate_pk();
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -427,7 +427,7 @@ fn test_random_values() {
             &page,
             &mut page_controller,
             &mut trace_builder,
-            &partial_pk,
+            &pk,
             false,
             &mut rng,
         )
@@ -449,7 +449,7 @@ fn test_random_values() {
                 &page,
                 &mut page_controller,
                 &mut trace_builder,
-                &partial_pk,
+                &pk,
                 true,
                 &mut rng,
             ),
@@ -489,7 +489,7 @@ fn group_by_sorted_test() {
 
     page_controller.set_up_keygen_builder(&mut keygen_builder);
 
-    let partial_pk = keygen_builder.generate_partial_pk();
+    let pk = keygen_builder.generate_pk();
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -511,7 +511,7 @@ fn group_by_sorted_test() {
             &page,
             &mut page_controller,
             &mut trace_builder,
-            &partial_pk,
+            &pk,
             false,
             &mut rng,
         )
@@ -533,7 +533,7 @@ fn group_by_sorted_test() {
                 &page,
                 &mut page_controller,
                 &mut trace_builder,
-                &partial_pk,
+                &pk,
                 true,
                 &mut rng,
             ),

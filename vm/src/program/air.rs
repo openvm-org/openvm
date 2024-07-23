@@ -1,3 +1,4 @@
+use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, BaseAir, PairBuilder};
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
@@ -30,6 +31,8 @@ impl<F: Field> BaseAir<F> for ProgramAir<F> {
     }
 }
 
-impl<AB: PairBuilder> Air<AB> for ProgramAir<AB::F> {
-    fn eval(&self, _: &mut AB) {}
+impl<AB: PairBuilder + InteractionBuilder> Air<AB> for ProgramAir<AB::F> {
+    fn eval(&self, builder: &mut AB) {
+        self.eval_interactions(builder);
+    }
 }

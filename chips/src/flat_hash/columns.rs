@@ -3,11 +3,11 @@ use crate::flat_hash::FlatHashAir;
 pub const NUM_COLS: usize = 3;
 
 pub struct FlatHashCols<T> {
-    pub io: FlatHashIOCols<T>,
+    pub io: FlatHashIoCols<T>,
     pub aux: FlatHashInternalCols<T>,
 }
 
-pub struct FlatHashIOCols<T> {
+pub struct FlatHashIoCols<T> {
     pub is_alloc: T,
     pub page: Vec<T>,
 }
@@ -80,7 +80,7 @@ impl<T: Clone> FlatHashCols<T> {
         let (page, hashes) = slice.split_at(chip.page_width + 1);
 
         Self {
-            io: FlatHashIOCols {
+            io: FlatHashIoCols {
                 is_alloc: slice[0].clone(),
                 page: page[1..].to_vec(),
             },

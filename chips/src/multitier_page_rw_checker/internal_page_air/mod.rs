@@ -81,8 +81,8 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
     // for both indices
     // we must also assert that the ranges are sorted
     pub fn air_width(&self) -> usize {
-        9 + 2 * self.idx_len                    // mult stuff and data
-            + 2 * COMMITMENT_LEN                // child commitment and own commitment
+        8 + 2 * self.idx_len                    // mult stuff and data
+            + COMMITMENT_LEN                // child commitment 
             + (1 - self.is_init as usize)
                 * (2 * self.idx_len             // prove sort + range inclusion columns
                     + 4

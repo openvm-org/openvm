@@ -1,8 +1,8 @@
 use afs_derive::AlignedBorrow;
 
-#[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct IsLessThanBitsIOCols<F> {
+#[repr(C)]
+pub struct IsLessThanBitsIoCols<F> {
     pub x: F,
     pub y: F,
     pub is_less_than: F,
@@ -14,12 +14,12 @@ pub struct IsLessThanBitsAuxCols<F> {
 }
 
 pub struct IsLessThanBitsCols<F> {
-    pub io: IsLessThanBitsIOCols<F>,
+    pub io: IsLessThanBitsIoCols<F>,
     pub aux: IsLessThanBitsAuxCols<F>,
 }
 
 // copied from is_less_than
-impl<T: Clone> IsLessThanBitsIOCols<T> {
+impl<T: Clone> IsLessThanBitsIoCols<T> {
     pub fn from_slice(slc: &[T]) -> Self {
         Self {
             x: slc[0].clone(),
@@ -57,7 +57,7 @@ impl<T: Clone> IsLessThanBitsAuxCols<T> {
 
 impl<T: Clone> IsLessThanBitsCols<T> {
     pub fn from_slice(slc: &[T]) -> Self {
-        let io = IsLessThanBitsIOCols::from_slice(&slc[..3]);
+        let io = IsLessThanBitsIoCols::from_slice(&slc[..3]);
         let aux = IsLessThanBitsAuxCols::from_slice(&slc[3..]);
 
         Self { io, aux }
@@ -70,6 +70,6 @@ impl<T: Clone> IsLessThanBitsCols<T> {
     }
 
     pub fn get_width(limb_bits: usize) -> usize {
-        IsLessThanBitsIOCols::<T>::get_width() + IsLessThanBitsAuxCols::<T>::get_width(limb_bits)
+        IsLessThanBitsIoCols::<T>::get_width() + IsLessThanBitsAuxCols::<T>::get_width(limb_bits)
     }
 }

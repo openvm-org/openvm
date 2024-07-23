@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::{
-    columns::{IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupleIOCols},
+    columns::{IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupleIoCols},
     IsLessThanTupleAir, IsLessThanTupleChip,
 };
 
@@ -51,11 +51,11 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanTupleAir {
         let mut tuple_less_than = F::zero();
 
         // use subchip to generate relevant columns
-        for i in 0..x.len() {
+        for (i, limb_bits) in self.limb_bits().into_iter().enumerate() {
             let is_less_than_chip = IsLessThanChip::new(
-                self.bus_index(),
-                self.limb_bits()[i],
-                self.decomp(),
+                self.bus_index,
+                limb_bits,
+                self.decomp,
                 range_checker.clone(),
             );
 
@@ -125,7 +125,7 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanTupleAir {
 
         let is_equal_vec_aux = IsEqualVecAuxCols { prods, invs };
 
-        let io = IsLessThanTupleIOCols {
+        let io = IsLessThanTupleIoCols {
             x: x.into_iter().map(F::from_canonical_u32).collect(),
             y: y.into_iter().map(F::from_canonical_u32).collect(),
             tuple_less_than,

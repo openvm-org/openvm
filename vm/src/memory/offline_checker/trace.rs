@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use afs_chips::is_equal::IsEqualAir;
-use afs_chips::is_less_than_tuple::columns::IsLessThanTupleIOCols;
+use afs_chips::is_less_than_tuple::columns::IsLessThanTupleIoCols;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 

@@ -5,13 +5,13 @@ use crate::{is_equal_vec::columns::IsEqualVecAuxCols, is_less_than::columns::IsL
 use super::IsLessThanTupleAir;
 
 #[derive(Default, Debug, AlignedBorrow)]
-pub struct IsLessThanTupleIOCols<T> {
+pub struct IsLessThanTupleIoCols<T> {
     pub x: Vec<T>,
     pub y: Vec<T>,
     pub tuple_less_than: T,
 }
 
-impl<T: Clone> IsLessThanTupleIOCols<T> {
+impl<T: Clone> IsLessThanTupleIoCols<T> {
     pub fn from_slice(slc: &[T], tuple_len: usize) -> Self {
         Self {
             x: slc[0..tuple_len].to_vec(),
@@ -117,7 +117,7 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
 
 #[derive(Debug)]
 pub struct IsLessThanTupleCols<T> {
-    pub io: IsLessThanTupleIOCols<T>,
+    pub io: IsLessThanTupleIoCols<T>,
     pub aux: IsLessThanTupleAuxCols<T>,
 }
 

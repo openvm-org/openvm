@@ -1,23 +1,18 @@
-use afs_stark_backend::interaction::{AirBridge, Interaction};
-use p3_air::VirtualPairCol;
+use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::Field;
 
-use crate::poseidon2::{columns::Poseidon2Cols, Poseidon2Air};
+use crate::poseidon2::Poseidon2Air;
+
+use super::columns::Poseidon2IoCols;
 
 // Receives input and output columns in one interaction
-impl<const WIDTH: usize, F: Field> AirBridge<F> for Poseidon2Air<WIDTH, F> {
-    fn receives(&self) -> Vec<Interaction<F>> {
-        let index_map = Poseidon2Cols::<WIDTH, F>::index_map(self);
-        let field_cols = index_map
-            .input
-            .collect::<Vec<_>>()
-            .into_iter()
-            .chain(index_map.output.collect::<Vec<_>>());
-
-        vec![Interaction {
-            fields: field_cols.map(VirtualPairCol::single_main).collect(),
-            count: VirtualPairCol::one(),
-            argument_index: self.bus_index,
-        }]
+impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
+    pub fn eval_interactions<AB: InteractionBuilder<F = F>>(
+        &self,
+        builder: &mut AB,
+        io: Poseidon2IoCols<WIDTH, AB::Var>,
+    ) {
+        let fields = io.input.into_iter().chain(io.output);
+        builder.push_receive(self.bus_index, fields, F::one());
     }
 }

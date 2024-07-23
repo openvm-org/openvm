@@ -3,14 +3,15 @@
 /// from FinalPageAir), but the new interactions are in bridge.rs
 use std::sync::Arc;
 
-use afs_stark_backend::air_builders::PartitionedAirBuilder;
+use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
 use p3_air::{Air, BaseAir};
 use p3_field::{Field, PrimeField};
-use p3_matrix::dense::RowMajorMatrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::{
-    common::page::Page, indexed_output_page_air::IndexedOutputPageAir,
+    common::{page::Page, page_cols::PageCols},
+    indexed_output_page_air::IndexedOutputPageAir,
     range_gate::RangeCheckerGateChip,
 };
 
@@ -89,12 +90,17 @@ impl<F: Field> BaseAir<F> for FinalTableAir {
     }
 }
 
-impl<AB: PartitionedAirBuilder> Air<AB> for FinalTableAir
-where
-    AB::M: Clone,
-{
+impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for FinalTableAir {
     fn eval(&self, builder: &mut AB) {
         // Making sure the page is in the proper format
-        Air::eval(&self.final_air, builder);
+        self.final_air.eval(builder);
+
+        let page = &builder.partitioned_main()[0];
+        let page = PageCols::from_slice(
+            &page.row_slice(0),
+            self.final_air.idx_len,
+            self.final_air.data_len,
+        );
+        self.eval_interactions(builder, page);
     }
 }

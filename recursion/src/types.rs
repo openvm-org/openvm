@@ -1,3 +1,4 @@
+use afs_stark_backend::air_builders::symbolic::SymbolicConstraints;
 use p3_field::{AbstractField, PrimeField32, TwoAdicField};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
@@ -8,7 +9,7 @@ use afs_compiler::prelude::*;
 use afs_stark_backend::commit::MatrixCommitmentPointers;
 use afs_stark_backend::config::Com;
 use afs_stark_backend::keygen::types::{
-    CommitmentToAirGraph, MultiStarkPartialVerifyingKey, StarkPartialVerifyingKey, TraceWidth,
+    CommitmentToAirGraph, MultiStarkVerifyingKey, StarkVerifyingKey, TraceWidth,
 };
 use afs_stark_backend::prover::types::Proof;
 
@@ -179,37 +180,43 @@ pub struct StarkVerificationAdvice<C: Config> {
     pub num_public_values: usize,
     /// Number of values to expose to verifier in each trace challenge phase
     pub num_exposed_values_after_challenge: Vec<usize>,
+    /// Symbolic representation of all AIR constraints, including logup constraints
+    pub symbolic_constraints: SymbolicConstraints<C::F>,
+}
+
+// TODO: the bound C::F = Val<SC> is very awkward
+pub(crate) fn new_from_vk<
+    SC: StarkGenericConfig,
+    C: Config<F = Val<SC>>,
+    const DIGEST_SIZE: usize,
+>(
+    vk: StarkVerifyingKey<SC>,
+) -> StarkVerificationAdvice<C>
+where
+    Com<SC>: Into<[C::F; DIGEST_SIZE]>,
+{
+    let StarkVerifyingKey::<SC> {
+        preprocessed_data,
+        params,
+        main_graph,
+        quotient_degree,
+        symbolic_constraints,
+        ..
+    } = vk;
+    StarkVerificationAdvice {
+        preprocessed_data: preprocessed_data.map(|data| VerifierSinglePreprocessedDataInProgram {
+            commit: data.commit.clone().into().to_vec(),
+        }),
+        width: params.width,
+        main_graph,
+        quotient_degree,
+        num_public_values: params.num_public_values,
+        num_exposed_values_after_challenge: params.num_exposed_values_after_challenge,
+        symbolic_constraints,
+    }
 }
 
 impl<C: Config> StarkVerificationAdvice<C> {
-    pub fn new_from_vk<SC: StarkGenericConfig, const DIGEST_SIZE: usize>(
-        vk: StarkPartialVerifyingKey<SC>,
-    ) -> Self
-    where
-        Com<SC>: Into<[C::F; DIGEST_SIZE]>,
-    {
-        let StarkPartialVerifyingKey::<SC> {
-            preprocessed_data,
-            width,
-            main_graph,
-            quotient_degree,
-            num_public_values,
-            num_exposed_values_after_challenge,
-            ..
-        } = vk;
-        Self {
-            preprocessed_data: preprocessed_data.map(|data| {
-                VerifierSinglePreprocessedDataInProgram {
-                    commit: data.commit.clone().into().to_vec(),
-                }
-            }),
-            width,
-            main_graph,
-            quotient_degree,
-            num_public_values,
-            num_exposed_values_after_challenge,
-        }
-    }
     pub fn log_quotient_degree(&self) -> usize {
         log2_strict_usize(self.quotient_degree)
     }
@@ -229,28 +236,23 @@ pub struct MultiStarkVerificationAdvice<C: Config> {
     pub num_challenges_to_sample: Vec<usize>,
 }
 
-impl<C: Config> MultiStarkVerificationAdvice<C> {
-    pub fn new_from_multi_vk<SC: StarkGenericConfig, const DIGEST_SIZE: usize>(
-        vk: &MultiStarkPartialVerifyingKey<SC>,
-    ) -> Self
-    where
-        Com<SC>: Into<[C::F; DIGEST_SIZE]>,
-    {
-        let MultiStarkPartialVerifyingKey::<SC> {
-            per_air,
-            num_main_trace_commitments,
-            main_commit_to_air_graph,
-            num_challenges_to_sample,
-        } = vk;
-        Self {
-            per_air: per_air
-                .clone()
-                .into_iter()
-                .map(StarkVerificationAdvice::new_from_vk)
-                .collect(),
-            num_main_trace_commitments: *num_main_trace_commitments,
-            main_commit_to_air_graph: main_commit_to_air_graph.clone(),
-            num_challenges_to_sample: num_challenges_to_sample.clone(),
-        }
+// TODO: the bound C::F = Val<SC> is very awkward
+pub fn new_from_multi_vk<SC: StarkGenericConfig, C: Config<F = Val<SC>>, const DIGEST_SIZE: usize>(
+    vk: &MultiStarkVerifyingKey<SC>,
+) -> MultiStarkVerificationAdvice<C>
+where
+    Com<SC>: Into<[C::F; DIGEST_SIZE]>,
+{
+    let MultiStarkVerifyingKey::<SC> {
+        per_air,
+        num_main_trace_commitments,
+        main_commit_to_air_graph,
+        num_challenges_to_sample,
+    } = vk;
+    MultiStarkVerificationAdvice {
+        per_air: per_air.clone().into_iter().map(new_from_vk).collect(),
+        num_main_trace_commitments: *num_main_trace_commitments,
+        main_commit_to_air_graph: main_commit_to_air_graph.clone(),
+        num_challenges_to_sample: num_challenges_to_sample.clone(),
     }
 }

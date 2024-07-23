@@ -3,13 +3,13 @@ use afs_derive::AlignedBorrow;
 use super::IsLessThanAir;
 
 #[derive(Default, AlignedBorrow)]
-pub struct IsLessThanIOCols<T> {
+pub struct IsLessThanIoCols<T> {
     pub x: T,
     pub y: T,
     pub less_than: T,
 }
 
-impl<T: Clone> IsLessThanIOCols<T> {
+impl<T: Clone> IsLessThanIoCols<T> {
     pub fn from_slice(slc: &[T]) -> Self {
         Self {
             x: slc[0].clone(),
@@ -55,13 +55,13 @@ impl<T: Clone> IsLessThanAuxCols<T> {
 }
 
 pub struct IsLessThanCols<T> {
-    pub io: IsLessThanIOCols<T>,
+    pub io: IsLessThanIoCols<T>,
     pub aux: IsLessThanAuxCols<T>,
 }
 
 impl<T: Clone> IsLessThanCols<T> {
     pub fn from_slice(slc: &[T]) -> Self {
-        let io = IsLessThanIOCols::from_slice(&slc[..3]);
+        let io = IsLessThanIoCols::from_slice(&slc[..3]);
         let aux = IsLessThanAuxCols::from_slice(&slc[3..]);
 
         Self { io, aux }

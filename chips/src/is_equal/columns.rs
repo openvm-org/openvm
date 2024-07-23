@@ -5,12 +5,12 @@ pub const NUM_COLS: usize = 4;
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct IsEqualCols<T> {
-    pub io: IsEqualIOCols<T>,
+    pub io: IsEqualIoCols<T>,
     pub aux: IsEqualAuxCols<T>,
 }
 
 #[derive(Clone, Copy)]
-pub struct IsEqualIOCols<T> {
+pub struct IsEqualIoCols<T> {
     pub x: T,
     pub y: T,
     pub is_equal: T,
@@ -35,7 +35,7 @@ impl<T: Clone> IsEqualAuxCols<T> {
 impl<T: Clone> IsEqualCols<T> {
     pub const fn new(x: T, y: T, is_equal: T, inv: T) -> IsEqualCols<T> {
         IsEqualCols {
-            io: IsEqualIOCols { x, y, is_equal },
+            io: IsEqualIoCols { x, y, is_equal },
             aux: IsEqualAuxCols { inv },
         }
     }

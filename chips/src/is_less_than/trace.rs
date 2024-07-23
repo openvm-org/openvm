@@ -6,7 +6,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use crate::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 
 use super::{
-    columns::{IsLessThanAuxCols, IsLessThanCols, IsLessThanIOCols},
+    columns::{IsLessThanAuxCols, IsLessThanCols, IsLessThanIoCols},
     IsLessThanAir, IsLessThanChip,
 };
 
@@ -43,7 +43,7 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanAir {
 
         // decompose lower_bits into limbs and range check
         let mut lower_decomp: Vec<F> = vec![];
-        for i in 0..self.num_limbs() {
+        for i in 0..self.num_limbs {
             let bits = (lower_u32 >> (i * self.decomp)) & ((1 << self.decomp) - 1);
 
             lower_decomp.push(F::from_canonical_u32(bits));
@@ -59,7 +59,7 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanAir {
             }
         }
 
-        let io = IsLessThanIOCols {
+        let io = IsLessThanIoCols {
             x: F::from_canonical_u32(x),
             y: F::from_canonical_u32(y),
             less_than: F::from_canonical_u32(less_than),

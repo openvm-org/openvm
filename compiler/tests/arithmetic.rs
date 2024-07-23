@@ -6,7 +6,7 @@ use rand::{thread_rng, Rng};
 use afs_compiler::asm::AsmBuilder;
 use afs_compiler::ir::{Ext, Felt, SymbolicExt};
 use afs_compiler::ir::{ExtConst, Var};
-use afs_compiler::util::{execute_and_prove_program, execute_program};
+use afs_compiler::util::execute_program;
 
 #[allow(dead_code)]
 const WORD_SIZE: usize = 1;

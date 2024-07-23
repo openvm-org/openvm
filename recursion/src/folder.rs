@@ -1,3 +1,8 @@
+use afs_stark_backend::air_builders::symbolic::symbolic_expression::SymbolicEvaluator;
+use afs_stark_backend::air_builders::symbolic::symbolic_variable::{Entry, SymbolicVariable};
+use afs_stark_backend::interaction::{
+    Interaction, InteractionBuilder, InteractionType, SymbolicInteraction,
+};
 use p3_air::{
     AirBuilder, AirBuilderWithPublicValues, ExtensionBuilder, PairBuilder, PermutationAirBuilder,
 };
@@ -7,10 +12,12 @@ use p3_matrix::stack::VerticalPair;
 use afs_compiler::ir::{Config, Ext, Felt, SymbolicExt};
 use afs_stark_backend::air_builders::PartitionedAirBuilder;
 use afs_stark_backend::rap::PermutationAirBuilderWithExposedValues;
+use p3_matrix::Matrix;
 
 type ViewPair<'a, T> = VerticalPair<RowMajorMatrixView<'a, T>, RowMajorMatrixView<'a, T>>;
 
 type Var<C> = Ext<<C as Config>::F, <C as Config>::EF>;
+type Expr<C> = SymbolicExt<<C as Config>::F, <C as Config>::EF>;
 
 pub struct RecursiveVerifierConstraintFolder<'a, C: Config> {
     pub preprocessed: ViewPair<'a, Var<C>>,
@@ -21,9 +28,13 @@ pub struct RecursiveVerifierConstraintFolder<'a, C: Config> {
     pub is_last_row: Var<C>,
     pub is_transition: Var<C>,
     pub alpha: Var<C>,
-    pub accumulator: SymbolicExt<C::F, C::EF>,
+    pub accumulator: Expr<C>,
     pub public_values: &'a [Felt<C::F>],
     pub exposed_values_after_challenge: &'a [Vec<Var<C>>],
+
+    /// Symbolic interactions, gotten from vkey. Needed for multiplicity in next row calculation.
+    pub symbolic_interactions: &'a [SymbolicInteraction<C::F>],
+    pub interactions: Vec<Interaction<Expr<C>>>,
 }
 
 impl<'a, C: Config> AirBuilder for RecursiveVerifierConstraintFolder<'a, C> {
@@ -140,5 +151,64 @@ where
 {
     fn partitioned_main(&self) -> &[Self::M] {
         &self.partitioned_main
+    }
+}
+
+// TODO: this should be a macro or an auto-trait
+impl<'a, C: Config> InteractionBuilder for RecursiveVerifierConstraintFolder<'a, C> {
+    fn push_interaction<E: Into<Self::Expr>>(
+        &mut self,
+        bus_index: usize,
+        fields: impl IntoIterator<Item = E>,
+        count: impl Into<Self::Expr>,
+        interaction_type: InteractionType,
+    ) {
+        let fields = fields.into_iter().map(|f| f.into()).collect();
+        let count = count.into();
+        self.interactions.push(Interaction {
+            bus_index,
+            fields,
+            count,
+            interaction_type,
+        });
+    }
+
+    fn num_interactions(&self) -> usize {
+        self.interactions.len()
+    }
+
+    fn all_interactions(&self) -> &[Interaction<Self::Expr>] {
+        &self.interactions
+    }
+
+    fn finalize_interactions(&mut self) {
+        assert_eq!(
+            self.symbolic_interactions.len(),
+            self.interactions.len(),
+            "Interaction count does not match vkey"
+        );
+    }
+
+    fn all_multiplicities_next(&self) -> Vec<Self::Expr> {
+        self.symbolic_interactions
+            .iter()
+            .map(|i| self.eval_expr(&i.count.next()))
+            .collect()
+    }
+}
+
+impl<'a, C: Config> SymbolicEvaluator<C::F, Expr<C>> for RecursiveVerifierConstraintFolder<'a, C> {
+    fn eval_var(&self, symbolic_var: SymbolicVariable<C::F>) -> Expr<C> {
+        let index = symbolic_var.index;
+        match symbolic_var.entry {
+            Entry::Preprocessed { offset } => self.preprocessed.get(offset, index).into(),
+            Entry::Main { part_index, offset } => {
+                self.partitioned_main[part_index].get(offset, index).into()
+            }
+            Entry::Public => self.public_values[index].into(),
+            Entry::Permutation { offset } => self.after_challenge[0].get(offset, index).into(),
+            Entry::Challenge => self.challenges[0][index].into(),
+            Entry::Exposed => self.exposed_values_after_challenge[0][index].into(),
+        }
     }
 }

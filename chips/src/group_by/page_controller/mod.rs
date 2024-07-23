@@ -1,11 +1,11 @@
 use crate::common::page::Page;
-use crate::group_by::group_by_input::{GroupByAir, GroupByOperation};
+use crate::group_by::group_by_input::{air::GroupByAir, GroupByOperation};
 use crate::group_by::receiving_indexed_output_page_air::ReceivingIndexedOutputPageAir;
 use crate::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     keygen::{
-        types::{MultiStarkPartialProvingKey, MultiStarkPartialVerifyingKey},
+        types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
         MultiStarkKeygenBuilder,
     },
     prover::{
@@ -191,7 +191,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     pub fn prove(
         &self,
         engine: &impl StarkEngine<SC>,
-        partial_pk: &MultiStarkPartialProvingKey<SC>,
+        pk: &MultiStarkProvingKey<SC>,
         trace_builder: &mut TraceCommitmentBuilder<SC>,
         group_by_traces: GroupByTraces<SC>,
         input_prover_data: Arc<ProverTraceData<SC>>,
@@ -231,25 +231,25 @@ impl<SC: StarkGenericConfig> PageController<SC> {
 
         trace_builder.commit_current();
 
-        let partial_vk = partial_pk.partial_vk();
+        let vk = pk.vk();
 
         let main_trace_data = trace_builder.view(
-            &partial_vk,
+            &vk,
             vec![&self.group_by, &self.final_chip, &self.range_checker.air],
         );
 
-        let pis = vec![vec![]; partial_vk.per_air.len()];
+        let pis = vec![vec![]; vk.per_air.len()];
 
         let prover = engine.prover();
         let mut challenger = engine.new_challenger();
-        prover.prove(&mut challenger, partial_pk, main_trace_data, &pis)
+        prover.prove(&mut challenger, pk, main_trace_data, &pis)
     }
 
     /// This function takes a proof (returned by the prove function) and verifies it
     pub fn verify(
         &self,
         engine: &impl StarkEngine<SC>,
-        partial_vk: MultiStarkPartialVerifyingKey<SC>,
+        vk: MultiStarkVerifyingKey<SC>,
         proof: Proof<SC>,
     ) -> Result<(), VerificationError>
     where
@@ -257,12 +257,12 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     {
         let verifier = engine.verifier();
 
-        let pis = vec![vec![]; partial_vk.per_air.len()];
+        let pis = vec![vec![]; vk.per_air.len()];
 
         let mut challenger = engine.new_challenger();
         verifier.verify(
             &mut challenger,
-            &partial_vk,
+            &vk,
             vec![&self.group_by, &self.final_chip, &self.range_checker.air],
             &proof,
             &pis,

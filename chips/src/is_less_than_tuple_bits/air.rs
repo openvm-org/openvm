@@ -1,26 +1,54 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::interaction::AirBridge;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
 use crate::{
     is_equal::{
-        columns::{IsEqualAuxCols, IsEqualCols, IsEqualIOCols},
+        columns::{IsEqualAuxCols, IsEqualCols, IsEqualIoCols},
         IsEqualAir,
     },
-    is_less_than_bits::columns::{IsLessThanBitsCols, IsLessThanBitsIOCols},
+    is_less_than_bits::{
+        columns::{IsLessThanBitsCols, IsLessThanBitsIoCols},
+        IsLessThanBitsAir,
+    },
     sub_chip::{AirConfig, SubAir},
 };
 
-use super::{
-    columns::{IsLessThanTupleBitsAuxCols, IsLessThanTupleBitsCols, IsLessThanTupleBitsIOCols},
-    IsLessThanTupleBitsAir,
+use super::columns::{
+    IsLessThanTupleBitsAuxCols, IsLessThanTupleBitsCols, IsLessThanTupleBitsIoCols,
 };
 
-// No interactions
-impl<F: Field> AirBridge<F> for IsLessThanTupleBitsAir {}
+#[derive(Clone, Debug)]
+pub struct IsLessThanTupleBitsAir {
+    // IsLessThanAirs for each tuple element
+    pub is_less_than_bits_airs: Vec<IsLessThanBitsAir>,
+}
+
+impl IsLessThanTupleBitsAir {
+    pub fn new(limb_bits: Vec<usize>) -> Self {
+        let is_less_than_bits_airs = limb_bits
+            .iter()
+            .map(|&limb_bit| IsLessThanBitsAir::new(limb_bit))
+            .collect::<Vec<_>>();
+
+        Self {
+            is_less_than_bits_airs,
+        }
+    }
+
+    pub fn tuple_len(&self) -> usize {
+        self.is_less_than_bits_airs.len()
+    }
+
+    pub fn limb_bits(&self) -> Vec<usize> {
+        self.is_less_than_bits_airs
+            .iter()
+            .map(|air| air.limb_bits)
+            .collect()
+    }
+}
 
 impl AirConfig for IsLessThanTupleBitsAir {
     type Cols<T> = IsLessThanTupleBitsCols<T>;
@@ -51,7 +79,7 @@ impl<AB: AirBuilder> Air<AB> for IsLessThanTupleBitsAir {
 
 // sub-chip with constraints to check whether one tuple is less than the another
 impl<AB: AirBuilder> SubAir<AB> for IsLessThanTupleBitsAir {
-    type IoView = IsLessThanTupleBitsIOCols<AB::Var>;
+    type IoView = IsLessThanTupleBitsIoCols<AB::Var>;
     type AuxView = IsLessThanTupleBitsAuxCols<AB::Var>;
 
     // constrain that x < y lexicographically
@@ -65,7 +93,7 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanTupleBitsAir {
             let y_val = y[i];
 
             let is_less_than_cols = IsLessThanBitsCols {
-                io: IsLessThanBitsIOCols {
+                io: IsLessThanBitsIoCols {
                     x: x_val,
                     y: y_val,
                     is_less_than: aux.less_than[i],
@@ -87,7 +115,7 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanTupleBitsAir {
             let inv = aux.is_equal_aux[i].inv;
 
             let is_equal_cols = IsEqualCols {
-                io: IsEqualIOCols {
+                io: IsEqualIoCols {
                     x: x[i],
                     y: y[i],
                     is_equal,

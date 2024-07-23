@@ -1,5 +1,8 @@
+use std::any::{type_name, Any};
+
+use afs_stark_backend::air_builders::symbolic::{SymbolicConstraints, SymbolicRapBuilder};
 use itertools::Itertools;
-use p3_air::{Air, BaseAir};
+use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
 use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
@@ -7,7 +10,6 @@ use p3_matrix::dense::RowMajorMatrixView;
 use p3_matrix::stack::VerticalPair;
 
 use afs_compiler::ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize, Var};
-use afs_stark_backend::interaction::{AirBridge, InteractiveAir};
 use afs_stark_backend::prover::opener::AdjacentOpenedValues;
 use afs_stark_backend::rap::Rap;
 use afs_test_utils::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
@@ -26,21 +28,30 @@ use crate::types::{
 use crate::utils::const_fri_config;
 
 pub trait DynRapForRecursion<C: Config>:
-    for<'a> InteractiveAir<RecursiveVerifierConstraintFolder<'a, C>>
+    Rap<SymbolicRapBuilder<C::F>>
     + for<'a> Rap<RecursiveVerifierConstraintFolder<'a, C>>
     + BaseAir<C::F>
-    + AirBridge<C::F>
 {
+    fn as_any(&self) -> &dyn Any;
+
+    fn name(&self) -> String;
 }
 
 impl<C, T> DynRapForRecursion<C> for T
 where
     C: Config,
-    T: for<'a> InteractiveAir<RecursiveVerifierConstraintFolder<'a, C>>
-        + for<'a> Air<RecursiveVerifierConstraintFolder<'a, C>>
+    T: Rap<SymbolicRapBuilder<C::F>>
+        + for<'a> Rap<RecursiveVerifierConstraintFolder<'a, C>>
         + BaseAir<C::F>
-        + AirBridge<C::F>,
+        + 'static,
 {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn name(&self) -> String {
+        type_name::<Self>().to_string()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -84,14 +95,14 @@ where
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
         raps: Vec<&dyn DynRapForRecursion<C>>,
-        partial_vk: MultiStarkVerificationAdvice<C>,
+        vk: MultiStarkVerificationAdvice<C>,
         challenger: &mut DuplexChallengerVariable<C>,
         input: &VerifierProgramInputVariable<C>,
     ) where
         C::F: TwoAdicField,
         C::EF: TwoAdicField,
     {
-        Self::validate_inputs(builder, &raps, &partial_vk, input);
+        Self::validate_inputs(builder, &raps, &vk, input);
 
         let VerifierProgramInputVariable::<C> {
             proof,
@@ -100,13 +111,13 @@ where
         } = input;
 
         let num_airs = raps.len();
-        let num_phases = partial_vk.num_challenges_to_sample.len();
+        let num_phases = vk.num_challenges_to_sample.len();
         // Currently only support 0 or 1 phase is supported.
         assert!(num_phases <= 1);
 
         for k in 0..num_airs {
             let pvs = builder.get(public_values, k);
-            for j in 0..(partial_vk.per_air[k].num_public_values) {
+            for j in 0..(vk.per_air[k].num_public_values) {
                 let element = builder.get(&pvs, j);
                 challenger.observe(builder, element);
             }
@@ -115,7 +126,7 @@ where
         builder.cycle_tracker("stage-c-build-rounds");
 
         for i in 0..num_airs {
-            if let Some(preprocessed_data) = partial_vk.per_air[i].preprocessed_data.as_ref() {
+            if let Some(preprocessed_data) = vk.per_air[i].preprocessed_data.as_ref() {
                 let commit: Array<C, Felt<_>> = builder.constant(preprocessed_data.commit.clone());
                 challenger.observe(builder, commit);
             }
@@ -128,7 +139,7 @@ where
         } = &proof.commitments;
 
         // Observe main trace commitments
-        for i in 0..partial_vk.num_main_trace_commitments {
+        for i in 0..vk.num_main_trace_commitments {
             let main_commit = builder.get(main_trace_commits, i);
             challenger.observe(builder, main_commit.clone());
         }
@@ -137,7 +148,7 @@ where
         for phase_idx in 0..num_phases {
             let num_to_sample: usize = 2;
 
-            let provided_num_to_sample = partial_vk.num_challenges_to_sample[phase_idx];
+            let provided_num_to_sample = vk.num_challenges_to_sample[phase_idx];
             builder.assert_usize_eq(provided_num_to_sample, num_to_sample);
 
             // Sample challenges needed in this phase.
@@ -151,8 +162,7 @@ where
             for j in 0..num_airs {
                 let exposed_values = builder.get(&proof.exposed_values_after_challenge, j);
                 let values = builder.get(&exposed_values, phase_idx);
-                let values_len =
-                    partial_vk.per_air[j].num_exposed_values_after_challenge[phase_idx];
+                let values_len = vk.per_air[j].num_exposed_values_after_challenge[phase_idx];
                 for k in 0..values_len {
                     let value = builder.get(&values, k);
                     let felts = builder.ext2felt(value);
@@ -195,11 +205,10 @@ where
             builder.set_value(&mut trace_points, 1, zeta_next);
 
             let log_quotient_degree: Var<_> = builder.constant(C::N::from_canonical_usize(
-                partial_vk.per_air[i].log_quotient_degree(),
+                vk.per_air[i].log_quotient_degree(),
             ));
-            let quotient_degree: Var<_> = builder.constant(C::N::from_canonical_usize(
-                partial_vk.per_air[i].quotient_degree,
-            ));
+            let quotient_degree: Var<_> =
+                builder.constant(C::N::from_canonical_usize(vk.per_air[i].quotient_degree));
             let log_quotient_size: Usize<_> = builder.eval(log_degree + log_quotient_degree);
             let quotient_domain =
                 domain.create_disjoint_domain(builder, log_quotient_size, Some(pcs.config.clone()));
@@ -212,15 +221,15 @@ where
             builder.set_value(&mut trace_points_per_domain, i, trace_points);
             builder.set_value(&mut quotient_chunk_domains, i, qc_domains);
 
-            if partial_vk.per_air[i].preprocessed_data.is_some() {
+            if vk.per_air[i].preprocessed_data.is_some() {
                 num_prep_rounds += 1;
             }
         }
 
         // Build the opening rounds
 
-        let num_main_rounds = partial_vk.num_main_trace_commitments;
-        let num_challenge_rounds = partial_vk.num_challenges_to_sample.len();
+        let num_main_rounds = vk.num_main_trace_commitments;
+        let num_challenge_rounds = vk.num_challenges_to_sample.len();
         let num_quotient_rounds = 1;
 
         let total_rounds =
@@ -232,7 +241,7 @@ where
         // 1. First the preprocessed trace openings: one round per AIR with preprocessing.
         let prep_idx: Var<_> = builder.constant(C::N::zero());
         for i in 0..num_airs {
-            if let Some(preprocessed_data) = partial_vk.per_air[i].preprocessed_data.as_ref() {
+            if let Some(preprocessed_data) = vk.per_air[i].preprocessed_data.as_ref() {
                 let prep = builder.get(&proof.opening.values.preprocessed, prep_idx);
                 builder.assign(prep_idx, prep_idx + C::N::one());
                 let batch_commit = builder.constant(preprocessed_data.commit.clone());
@@ -263,8 +272,7 @@ where
         }
 
         // 2. Then the main trace openings.
-        partial_vk
-            .main_commit_to_air_graph
+        vk.main_commit_to_air_graph
             .commit_to_air_index
             .iter()
             .enumerate()
@@ -302,7 +310,7 @@ where
             });
 
         // 3. After challenge: one per phase
-        for phase_idx in 0..partial_vk.num_challenges_to_sample.len() {
+        for phase_idx in 0..vk.num_challenges_to_sample.len() {
             let values_per_mat = builder.get(&proof.opening.values.after_challenge, phase_idx);
             let batch_commit = builder.get(after_challenge_commits, phase_idx);
 
@@ -335,7 +343,7 @@ where
         }
 
         // 4. Quotient domains and openings
-        let num_quotient_mats = partial_vk
+        let num_quotient_mats = vk
             .per_air
             .iter()
             .map(|air| air.quotient_degree)
@@ -391,8 +399,7 @@ where
 
         let mut preprocessed_idx = 0;
 
-        for (index, (&rap, air_const)) in raps.iter().zip_eq(partial_vk.per_air.iter()).enumerate()
-        {
+        for (index, (&rap, air_const)) in raps.iter().zip_eq(vk.per_air.iter()).enumerate() {
             let preprocessed_values =
                 if <dyn DynRapForRecursion<C> as BaseAir<C::F>>::preprocessed_trace(rap).is_some() {
                     let ret =
@@ -559,6 +566,7 @@ where
         let folded_constraints = Self::eval_constraints(
             builder,
             rap,
+            &constants.symbolic_constraints,
             preprocessed,
             &partitioned_main_values,
             public_values,
@@ -597,6 +605,7 @@ where
     fn eval_constraints<R>(
         builder: &mut Builder<C>,
         rap: &R,
+        symbolic_constraints: &SymbolicConstraints<C::F>,
         preprocessed_values: AdjacentOpenedValues<Ext<C::F, C::EF>>,
         partitioned_main_values: &[AdjacentOpenedValues<Ext<C::F, C::EF>>],
         public_values: Array<C, Felt<C::F>>,
@@ -659,6 +668,9 @@ where
             accumulator: SymbolicExt::zero(),
             public_values: &folder_pv,
             exposed_values_after_challenge, // FIXME
+
+            symbolic_interactions: &symbolic_constraints.interactions,
+            interactions: vec![],
         };
 
         rap.eval(&mut folder);
@@ -709,12 +721,12 @@ where
     fn validate_inputs(
         builder: &mut Builder<C>,
         raps: &[&dyn DynRapForRecursion<C>],
-        partial_vk: &MultiStarkVerificationAdvice<C>,
+        vk: &MultiStarkVerificationAdvice<C>,
         input: &VerifierProgramInputVariable<C>,
     ) {
-        assert_eq!(raps.len(), partial_vk.per_air.len());
+        assert_eq!(raps.len(), vk.per_air.len());
         let num_airs = raps.len();
-        let num_phases = partial_vk.num_challenges_to_sample.len();
+        let num_phases = vk.num_challenges_to_sample.len();
         // Currently only support 0 or 1 phase is supported.
         assert!(num_phases <= 1);
 
@@ -730,9 +742,9 @@ where
 
         builder.assert_usize_eq(
             proof.commitments.main_trace.len(),
-            partial_vk.num_main_trace_commitments,
+            vk.num_main_trace_commitments,
         );
-        for commit_idx in 0..partial_vk.num_main_trace_commitments {
+        for commit_idx in 0..vk.num_main_trace_commitments {
             let values_per_mat = builder.get(&proof.opening.values.main, commit_idx);
             builder.assert_usize_eq(values_per_mat.len(), num_airs);
         }
@@ -743,43 +755,39 @@ where
         builder.assert_usize_eq(proof.exposed_values_after_challenge.len(), num_airs);
         builder.assert_usize_eq(proof.opening.values.quotient.len(), num_airs);
         let mut num_preprocessed = 0;
-        partial_vk
-            .per_air
-            .iter()
-            .enumerate()
-            .for_each(|(i, air_const)| {
-                let pvs = builder.get(public_values, i);
-                builder.assert_usize_eq(pvs.len(), air_const.num_public_values);
+        vk.per_air.iter().enumerate().for_each(|(i, air_const)| {
+            let pvs = builder.get(public_values, i);
+            builder.assert_usize_eq(pvs.len(), air_const.num_public_values);
 
-                if air_const.preprocessed_data.is_some() {
-                    let preprocessed_width = air_const.width.preprocessed.unwrap();
-                    let preprocessed_value =
-                        builder.get(&proof.opening.values.preprocessed, num_preprocessed);
-                    builder.assert_usize_eq(preprocessed_value.local.len(), preprocessed_width);
-                    builder.assert_usize_eq(preprocessed_value.next.len(), preprocessed_width);
-                    num_preprocessed += 1;
-                }
+            if air_const.preprocessed_data.is_some() {
+                let preprocessed_width = air_const.width.preprocessed.unwrap();
+                let preprocessed_value =
+                    builder.get(&proof.opening.values.preprocessed, num_preprocessed);
+                builder.assert_usize_eq(preprocessed_value.local.len(), preprocessed_width);
+                builder.assert_usize_eq(preprocessed_value.next.len(), preprocessed_width);
+                num_preprocessed += 1;
+            }
 
-                let exposed_values = builder.get(&proof.exposed_values_after_challenge, i);
-                builder.assert_usize_eq(
-                    exposed_values.len(),
-                    air_const.num_exposed_values_after_challenge.len(),
-                );
-                air_const
-                    .num_exposed_values_after_challenge
-                    .iter()
-                    .enumerate()
-                    .for_each(|(phase_idx, &value_len)| {
-                        let values = builder.get(&exposed_values, phase_idx);
-                        builder.assert_usize_eq(values.len(), value_len);
-                    });
+            let exposed_values = builder.get(&proof.exposed_values_after_challenge, i);
+            builder.assert_usize_eq(
+                exposed_values.len(),
+                air_const.num_exposed_values_after_challenge.len(),
+            );
+            air_const
+                .num_exposed_values_after_challenge
+                .iter()
+                .enumerate()
+                .for_each(|(phase_idx, &value_len)| {
+                    let values = builder.get(&exposed_values, phase_idx);
+                    builder.assert_usize_eq(values.len(), value_len);
+                });
 
-                for i in 0..(air_const.num_exposed_values_after_challenge.len()) {
-                    let num_exposed_values = air_const.num_exposed_values_after_challenge[i];
-                    let values = builder.get(&exposed_values, i);
-                    builder.assert_usize_eq(values.len(), num_exposed_values);
-                }
-            });
+            for i in 0..(air_const.num_exposed_values_after_challenge.len()) {
+                let num_exposed_values = air_const.num_exposed_values_after_challenge[i];
+                let values = builder.get(&exposed_values, i);
+                builder.assert_usize_eq(values.len(), num_exposed_values);
+            }
+        });
 
         builder.assert_usize_eq(proof.opening.values.preprocessed.len(), num_preprocessed);
         // FIXME: check if all necessary validation is covered.

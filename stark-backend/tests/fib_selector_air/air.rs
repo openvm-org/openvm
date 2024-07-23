@@ -2,8 +2,8 @@ use std::borrow::Borrow;
 
 use super::columns::FibonacciSelectorCols;
 use crate::fib_air::columns::{FibonacciCols, NUM_FIBONACCI_COLS};
-use afs_stark_backend::interaction::{AirBridge, Interaction};
-use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder, VirtualPairCol};
+use afs_stark_backend::interaction::InteractionBuilder;
+use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder};
 use p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
@@ -25,20 +25,6 @@ impl FibonacciSelectorAir {
     }
 }
 
-impl<F: Field> AirBridge<F> for FibonacciSelectorAir {
-    fn receives(&self) -> Vec<Interaction<F>> {
-        if self.enable_interactions {
-            vec![Interaction::<F> {
-                fields: vec![VirtualPairCol::<F>::sum_main(vec![0, 1])],
-                count: VirtualPairCol::<F>::single_preprocessed(0),
-                argument_index: 0,
-            }]
-        } else {
-            vec![]
-        }
-    }
-}
-
 impl<F: Field> BaseAir<F> for FibonacciSelectorAir {
     fn width(&self) -> usize {
         NUM_FIBONACCI_COLS
@@ -50,7 +36,9 @@ impl<F: Field> BaseAir<F> for FibonacciSelectorAir {
     }
 }
 
-impl<AB: AirBuilderWithPublicValues + PairBuilder> Air<AB> for FibonacciSelectorAir {
+impl<AB: AirBuilderWithPublicValues + PairBuilder + InteractionBuilder> Air<AB>
+    for FibonacciSelectorAir
+{
     fn eval(&self, builder: &mut AB) {
         let pis = builder.public_values();
         let preprocessed = builder.preprocessed();
@@ -93,5 +81,9 @@ impl<AB: AirBuilderWithPublicValues + PairBuilder> Air<AB> for FibonacciSelector
             .assert_eq(local.right, next.right);
 
         builder.when_last_row().assert_eq(local.right, x);
+
+        if self.enable_interactions {
+            builder.push_receive(0, vec![local.left + local.right], preprocessed_local.sel);
+        }
     }
 }
