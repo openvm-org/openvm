@@ -1,105 +1,74 @@
-use p3_air::{PairCol, VirtualPairCol};
-use p3_field::Field;
+use std::iter;
 
-use afs_stark_backend::interaction::{AirBridge, Interaction};
+use afs_stark_backend::interaction::InteractionBuilder;
+use p3_field::{AbstractField, Field};
 
-use crate::memory::expand::air::ExpandAir;
-use crate::memory::expand::columns::ExpandCols;
-use crate::memory::expand::{EXPAND_BUS, POSEIDON2_DIRECT_REQUEST_BUS};
+use crate::memory::expand::{
+    air::ExpandAir, columns::ExpandCols, EXPAND_BUS, POSEIDON2_DIRECT_REQUEST_BUS,
+};
 
-fn interaction<const CHUNK: usize, F: Field>(
-    sends: VirtualPairCol<F>,
-    is_final: VirtualPairCol<F>,
-    height: VirtualPairCol<F>,
-    label: VirtualPairCol<F>,
-    address_space: usize,
-    hash: [usize; CHUNK],
-) -> Interaction<F> {
-    let mut fields = vec![
-        is_final,
-        VirtualPairCol::single_main(address_space),
-        height,
-        label,
-    ];
-    fields.extend(hash.map(VirtualPairCol::single_main));
-    Interaction {
-        fields,
-        count: sends,
-        argument_index: EXPAND_BUS,
-    }
+fn push_expand_send<const CHUNK: usize, AB: InteractionBuilder>(
+    builder: &mut AB,
+    sends: impl Into<AB::Expr>,
+    is_final: impl Into<AB::Expr>,
+    height: impl Into<AB::Expr>,
+    label: impl Into<AB::Expr>,
+    address_space: impl Into<AB::Expr>,
+    hash: [impl Into<AB::Expr>; CHUNK],
+) {
+    let fields = [
+        is_final.into(),
+        address_space.into(),
+        height.into(),
+        label.into(),
+    ]
+    .into_iter()
+    .chain(hash.into_iter().map(Into::into));
+    builder.push_send(EXPAND_BUS, fields, sends);
 }
-impl<const CHUNK: usize, F: Field> AirBridge<F> for ExpandAir<CHUNK> {
-    fn sends(&self) -> Vec<Interaction<F>> {
-        let all_cols = (0..ExpandCols::<CHUNK, F>::get_width()).collect::<Vec<usize>>();
-        let cols_numbered = ExpandCols::<CHUNK, usize>::from_slice(&all_cols);
 
-        let child_height =
-            VirtualPairCol::new_main(vec![(cols_numbered.parent_height, F::one())], F::neg_one());
+impl<const CHUNK: usize> ExpandAir<CHUNK> {
+    pub fn eval_interactions<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        local: ExpandCols<CHUNK, AB::Var>,
+    ) {
+        let child_height = local.parent_height - AB::F::one();
+        let two_inv = AB::F::two().inverse();
 
-        let mut poseidon2_fields = vec![];
-        poseidon2_fields.extend(
-            cols_numbered
-                .left_child_hash
-                .map(VirtualPairCol::single_main),
+        push_expand_send(
+            builder,
+            -local.direction.into(),
+            AB::Expr::from(two_inv) - local.direction * two_inv,
+            local.parent_height,
+            local.parent_label,
+            local.address_space,
+            local.parent_hash,
         );
-        poseidon2_fields.extend(
-            cols_numbered
-                .right_child_hash
-                .map(VirtualPairCol::single_main),
+        push_expand_send(
+            builder,
+            local.direction,
+            AB::Expr::from(two_inv) - local.direction * two_inv + local.left_is_final,
+            child_height.clone(),
+            local.parent_label * AB::F::two(),
+            local.address_space,
+            local.left_child_hash,
         );
-        poseidon2_fields.extend(cols_numbered.parent_hash.map(VirtualPairCol::single_main));
+        push_expand_send(
+            builder,
+            local.direction,
+            AB::Expr::from(two_inv) - local.direction * two_inv + local.right_is_final,
+            child_height,
+            local.parent_label * AB::F::two() + AB::F::one(),
+            local.address_space,
+            local.right_child_hash,
+        );
 
-        vec![
-            interaction(
-                VirtualPairCol::new_main(vec![(cols_numbered.direction, F::neg_one())], F::zero()),
-                VirtualPairCol::new_main(
-                    vec![(cols_numbered.direction, F::two().inverse().neg())],
-                    F::two().inverse(),
-                ),
-                VirtualPairCol::single_main(cols_numbered.parent_height),
-                VirtualPairCol::single_main(cols_numbered.parent_label),
-                cols_numbered.address_space,
-                cols_numbered.parent_hash,
-            ),
-            interaction(
-                VirtualPairCol::single_main(cols_numbered.direction),
-                VirtualPairCol::new_main(
-                    vec![
-                        (cols_numbered.direction, F::two().inverse().neg()),
-                        (cols_numbered.left_is_final, F::one()),
-                    ],
-                    F::two().inverse(),
-                ),
-                child_height.clone(),
-                VirtualPairCol::new(
-                    vec![(PairCol::Main(cols_numbered.parent_label), F::two())],
-                    F::zero(),
-                ),
-                cols_numbered.address_space,
-                cols_numbered.left_child_hash,
-            ),
-            interaction(
-                VirtualPairCol::single_main(cols_numbered.direction),
-                VirtualPairCol::new_main(
-                    vec![
-                        (cols_numbered.direction, F::two().inverse().neg()),
-                        (cols_numbered.right_is_final, F::one()),
-                    ],
-                    F::two().inverse(),
-                ),
-                child_height,
-                VirtualPairCol::new(
-                    vec![(PairCol::Main(cols_numbered.parent_label), F::two())],
-                    F::one(),
-                ),
-                cols_numbered.address_space,
-                cols_numbered.right_child_hash,
-            ),
-            Interaction {
-                fields: poseidon2_fields,
-                count: VirtualPairCol::constant(F::one()),
-                argument_index: POSEIDON2_DIRECT_REQUEST_BUS,
-            },
-        ]
+        let hash_fields = iter::empty()
+            .chain(local.left_child_hash)
+            .chain(local.right_child_hash)
+            .chain(local.parent_hash);
+        // TODO: do not hardcode the hash bus
+        builder.push_send(POSEIDON2_DIRECT_REQUEST_BUS, hash_fields, AB::F::one());
     }
 }

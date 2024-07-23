@@ -8,7 +8,7 @@ use afs_compiler::prelude::*;
 use afs_stark_backend::commit::MatrixCommitmentPointers;
 use afs_stark_backend::config::Com;
 use afs_stark_backend::keygen::types::{
-    CommitmentToAirGraph, MultiStarkPartialVerifyingKey, StarkPartialVerifyingKey, TraceWidth,
+    CommitmentToAirGraph, MultiStarkVerifyingKey, StarkVerifyingKey, TraceWidth,
 };
 use afs_stark_backend::prover::types::Proof;
 
@@ -183,18 +183,16 @@ pub struct StarkVerificationAdvice<C: Config> {
 
 impl<C: Config> StarkVerificationAdvice<C> {
     pub fn new_from_vk<SC: StarkGenericConfig, const DIGEST_SIZE: usize>(
-        vk: StarkPartialVerifyingKey<SC>,
+        vk: StarkVerifyingKey<SC>,
     ) -> Self
     where
         Com<SC>: Into<[C::F; DIGEST_SIZE]>,
     {
-        let StarkPartialVerifyingKey::<SC> {
+        let StarkVerifyingKey::<SC> {
             preprocessed_data,
-            width,
+            params,
             main_graph,
             quotient_degree,
-            num_public_values,
-            num_exposed_values_after_challenge,
             ..
         } = vk;
         Self {
@@ -203,11 +201,11 @@ impl<C: Config> StarkVerificationAdvice<C> {
                     commit: data.commit.clone().into().to_vec(),
                 }
             }),
-            width,
+            width: params.width,
             main_graph,
             quotient_degree,
-            num_public_values,
-            num_exposed_values_after_challenge,
+            num_public_values: params.num_public_values,
+            num_exposed_values_after_challenge: params.num_exposed_values_after_challenge,
         }
     }
     pub fn log_quotient_degree(&self) -> usize {
@@ -231,12 +229,12 @@ pub struct MultiStarkVerificationAdvice<C: Config> {
 
 impl<C: Config> MultiStarkVerificationAdvice<C> {
     pub fn new_from_multi_vk<SC: StarkGenericConfig, const DIGEST_SIZE: usize>(
-        vk: &MultiStarkPartialVerifyingKey<SC>,
+        vk: &MultiStarkVerifyingKey<SC>,
     ) -> Self
     where
         Com<SC>: Into<[C::F; DIGEST_SIZE]>,
     {
-        let MultiStarkPartialVerifyingKey::<SC> {
+        let MultiStarkVerifyingKey::<SC> {
             per_air,
             num_main_trace_commitments,
             main_commit_to_air_graph,

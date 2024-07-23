@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, Field, PrimeField32};
+use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 use p3_uni_stark::Val;
@@ -11,7 +11,6 @@ use p3_util::log2_strict_usize;
 use afs_chips::range_gate::RangeCheckerGateChip;
 use afs_chips::sum::SumChip;
 use afs_compiler::util::execute_program;
-use afs_stark_backend::interaction::AirBridge;
 use afs_stark_backend::prover::trace::TraceCommitmentBuilder;
 use afs_stark_backend::rap::AnyRap;
 use afs_stark_backend::verifier::MultiTraceStarkVerifier;
@@ -26,8 +25,6 @@ use crate::stark::{DynRapForRecursion, VerifierProgram};
 use crate::types::{InnerConfig, MultiStarkVerificationAdvice, VerifierProgramInput};
 
 pub struct FibonacciAir;
-
-impl<F: Field> AirBridge<F> for FibonacciAir {}
 
 impl<F> BaseAir<F> for FibonacciAir {
     fn width(&self) -> usize {
