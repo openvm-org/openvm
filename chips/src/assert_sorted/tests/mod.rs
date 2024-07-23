@@ -66,7 +66,7 @@ fn test_assert_sorted_chip_small_positive() {
 #[test]
 fn test_assert_sorted_chip_large_positive() {
     let bus_index: usize = 0;
-    let limb_bits: Vec<usize> = vec![24, 24, 24, 24];
+    let limb_bits: Vec<usize> = vec![30, 30, 30, 30];
     let decomp: usize = 8;
 
     let range_max: u32 = 1 << decomp;
