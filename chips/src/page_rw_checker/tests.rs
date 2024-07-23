@@ -97,7 +97,7 @@ fn page_offline_checker_test() {
 
     use page_rw_checker::page_controller::PageController;
 
-    const MAX_VAL: u32 = 0x78000001 / 2; // The prime used by BabyBear / 2
+    const MAX_VAL: u32 = 1 << 28;
 
     let log_page_height = 4;
     let log_num_ops = 3;
@@ -151,7 +151,7 @@ fn page_offline_checker_test() {
         let mut idx = final_page.get_random_idx(&mut rng);
 
         // if this is a write operation, make it an insert sometimes
-        if op_type == OpType::Write && rng.gen::<u32>() % 2 == 0 {
+        if op_type == OpType::Write && rng.gen::<u32>() % 2 == 0 && !final_page.is_full() {
             idx = (0..idx_len).map(|_| rng.gen::<u32>() % max_idx).collect();
         }
 

@@ -30,12 +30,8 @@ where
                 self.final_air.data_len,
             )
         });
-        let aux_trace = IndexedPageWriteAuxCols::from_slice(
-            &builder.partitioned_main()[1].row_slice(1),
-            self.final_air.idx_limb_bits,
-            self.final_air.idx_decomp,
-            self.final_air.idx_len,
-        );
+        let aux_trace =
+            IndexedPageWriteAuxCols::from_slice(&builder.partitioned_main()[1].row_slice(1), self);
         // Making sure the page is in the proper format
         SubAir::eval(self, builder, io_trace, aux_trace);
     }

@@ -27,14 +27,11 @@ pub struct IsLessThanAir {
 
 impl IsLessThanAir {
     pub fn new(bus_index: usize, limb_bits: usize, decomp: usize) -> Self {
-        let num_limbs = (limb_bits + decomp - 1) / decomp;
-        let limb_bits = num_limbs * decomp;
-
         Self {
             bus_index,
             limb_bits,
             decomp,
-            num_limbs,
+            num_limbs: (limb_bits + decomp - 1) / decomp,
         }
     }
 }

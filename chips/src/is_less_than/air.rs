@@ -76,6 +76,19 @@ impl<AB: AirBuilder> SubAir<AB> for IsLessThanAir {
 
         builder.assert_eq(lower_from_decomp, lower);
 
+        // Ensuring, in case limb_bits does not divide decomp, then the last lower_decomp is
+        // shifted correctly
+        if self.limb_bits % self.decomp != 0 {
+            let last_limb_shift =
+                (self.decomp() - (self.limb_bits() % self.decomp())) % self.decomp();
+
+            builder.assert_eq(
+                (*lower_decomp.last().unwrap()).into(),
+                lower_decomp[lower_decomp.len() - 2]
+                    * AB::Expr::from_canonical_u64(1 << last_limb_shift),
+            );
+        }
+
         // constrain that less_than is a boolean
         builder.assert_bool(less_than);
     }

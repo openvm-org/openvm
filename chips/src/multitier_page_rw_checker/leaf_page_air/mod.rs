@@ -12,7 +12,7 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) enum PageRwAir {
     Initial(PageReadAir),
     Final(IndexedPageWriteAir),
@@ -120,10 +120,12 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
             + (1 - self.is_init as usize)
                 * (2 * self.idx_len
                     + 2
-                    + 2 * IsLessThanTupleAuxCols::<usize>::get_width(
-                        vec![self.is_less_than_tuple_param.limb_bits; self.idx_len],
-                        self.is_less_than_tuple_param.decomp,
-                        self.idx_len,
+                    + 2 * IsLessThanTupleAuxCols::<usize>::width(
+                        &IsLessThanTupleAir::new(
+                            0,
+                            vec![self.is_less_than_tuple_param.limb_bits; self.idx_len],
+                            self.is_less_than_tuple_param.decomp,
+                        ),
                     ))
     }
 }

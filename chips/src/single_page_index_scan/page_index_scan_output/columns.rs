@@ -9,10 +9,13 @@ impl<T: Clone> PageIndexScanOutputCols<T> {
         Self {
             final_page_cols: IndexedOutputPageCols::from_slice(
                 slc,
-                final_page_air.idx_len,
-                final_page_air.data_len,
-                final_page_air.idx_limb_bits,
-                final_page_air.idx_decomp,
+                &IndexedOutputPageAir::new(
+                    0,
+                    final_page_air.idx_len,
+                    final_page_air.data_len,
+                    final_page_air.idx_limb_bits,
+                    final_page_air.idx_decomp,
+                ),
             ),
         }
     }

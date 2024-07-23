@@ -29,12 +29,7 @@ impl<F: PrimeField> AirBridge<F> for IndexedOutputPageAir {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-        let cols_to_send = IndexedOutputPageCols::<usize>::from_slice(
-            &all_cols,
-            self.idx_len,
-            self.data_len,
-            self,
-        );
+        let cols_to_send = IndexedOutputPageCols::<usize>::from_slice(&all_cols, self);
 
         SubAirBridge::sends(self, cols_to_send)
     }

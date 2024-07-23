@@ -1,6 +1,7 @@
 use afs_chips::{
-    is_equal::columns::IsEqualAuxCols, is_equal_vec::columns::IsEqualVecAuxCols,
-    is_less_than_tuple::columns::IsLessThanTupleAuxCols,
+    is_equal::columns::IsEqualAuxCols,
+    is_equal_vec::columns::IsEqualVecAuxCols,
+    is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
 };
 
 use super::OfflineChecker;
@@ -119,9 +120,7 @@ where
             ),
             lt_aux: IsLessThanTupleAuxCols::from_slice(
                 &slc[10 + mem_width + 2 * WORD_SIZE - 1..],
-                oc.addr_clk_limb_bits.clone(),
-                oc.decomp,
-                3,
+                &IsLessThanTupleAir::new(0, oc.addr_clk_limb_bits.clone(), oc.decomp),
             ),
         }
     }

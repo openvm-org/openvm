@@ -5,6 +5,8 @@ use crate::indexed_output_page_air::{
     IndexedOutputPageAir,
 };
 
+use super::IndexedPageWriteAir;
+
 #[derive(Clone)]
 pub struct IndexedPageWriteCols<T> {
     /// The columns for IndexedOutputPageAir, which include the page itself
@@ -40,10 +42,7 @@ impl<T: Clone> IndexedPageWriteCols<T> {
             final_page_cols: IndexedOutputPageCols::from_partitioned_slice(
                 page,
                 &other[..other.len() - 1],
-                final_air.idx_len,
-                final_air.data_len,
-                final_air.idx_limb_bits,
-                final_air.idx_decomp,
+                final_air,
             ),
             rcv_mult: other[other.len() - 1].clone(),
         }
@@ -51,13 +50,11 @@ impl<T: Clone> IndexedPageWriteCols<T> {
 }
 
 impl<T: Clone> IndexedPageWriteAuxCols<T> {
-    pub fn from_slice(slc: &[T], limb_bits: usize, decomp: usize, tuple_len: usize) -> Self {
+    pub fn from_slice(slc: &[T], indexed_page_write_air: &IndexedPageWriteAir) -> Self {
         Self {
             final_page_aux_cols: IndexedOutputPageAuxCols::from_slice(
                 &slc[0..slc.len() - 1],
-                limb_bits,
-                decomp,
-                tuple_len,
+                &indexed_page_write_air.final_air,
             ),
             rcv_mult: slc[slc.len() - 1].clone(),
         }

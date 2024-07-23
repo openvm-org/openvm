@@ -16,7 +16,6 @@ pub struct OfflineChecker {
 
     idx_len: usize,
     data_len: usize,
-    idx_decomp: usize,
 
     is_equal_idx_air: IsEqualVecAir,
     lt_idx_clk_air: IsLessThanTupleAir,
@@ -39,7 +38,6 @@ impl OfflineChecker {
             ops_bus_index,
             idx_len,
             data_len,
-            idx_decomp,
             is_equal_idx_air: IsEqualVecAir::new(idx_len),
             lt_idx_clk_air: IsLessThanTupleAir::new(
                 range_bus_index,

@@ -17,13 +17,7 @@ impl<F: PrimeField> AirBridge<F> for FinalTableAir {
         let num_cols = self.air_width();
         let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-        let table_cols = IndexedOutputPageCols::<usize>::from_slice(
-            &all_cols,
-            self.final_air.idx_len,
-            self.final_air.data_len,
-            self.final_air.idx_limb_bits,
-            self.final_air.idx_decomp,
-        );
+        let table_cols = IndexedOutputPageCols::<usize>::from_slice(&all_cols, &self.final_air);
 
         let t1_cols = table_cols.page_cols.data[self.fkey_start..self.fkey_end]
             .iter()

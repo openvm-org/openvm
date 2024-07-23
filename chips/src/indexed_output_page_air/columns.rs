@@ -15,15 +15,14 @@ pub struct IndexedOutputPageCols<T> {
 impl<T: Clone> IndexedOutputPageCols<T> {
     pub fn from_slice(
         slc: &[T],
-        idx_len: usize,
-        data_len: usize,
         indexed_page_air: &IndexedOutputPageAir,
     ) -> IndexedOutputPageCols<T> {
+        let idx_len = indexed_page_air.idx_len;
+        let data_len = indexed_page_air.data_len;
+
         Self::from_partitioned_slice(
             &slc[..1 + idx_len + data_len],
             &slc[1 + idx_len + data_len..],
-            idx_len,
-            data_len,
             indexed_page_air,
         )
     }
@@ -31,10 +30,11 @@ impl<T: Clone> IndexedOutputPageCols<T> {
     pub fn from_partitioned_slice(
         page: &[T],
         other: &[T],
-        idx_len: usize,
-        data_len: usize,
         indexed_page_air: &IndexedOutputPageAir,
     ) -> IndexedOutputPageCols<T> {
+        let idx_len = indexed_page_air.idx_len;
+        let data_len = indexed_page_air.data_len;
+
         IndexedOutputPageCols {
             page_cols: PageCols::from_slice(page, idx_len, data_len),
             aux_cols: IndexedOutputPageAuxCols::from_slice(other, indexed_page_air),

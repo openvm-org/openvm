@@ -19,7 +19,6 @@ fn test_flatten_fromslice_roundtrip() {
     let lt_air = IsLessThanTupleAir::new(0, limb_bits.clone(), decomp);
 
     let num_cols = IsLessThanTupleCols::<usize>::width(&lt_air);
-    println!("num cols: {}", num_cols);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
     let cols_numbered = IsLessThanTupleCols::<usize>::from_slice(&all_cols, &lt_air);

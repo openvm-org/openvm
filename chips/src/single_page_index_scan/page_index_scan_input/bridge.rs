@@ -1,6 +1,7 @@
 use crate::{
-    is_less_than_tuple::columns::{
-        IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupleIOCols,
+    is_less_than_tuple::{
+        columns::{IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupleIOCols},
+        IsLessThanTupleAir,
     },
     sub_chip::SubAirBridge,
 };
@@ -140,9 +141,7 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                     },
                     aux: IsLessThanTupleAuxCols::from_slice(
                         &is_less_than_tuple_aux_flattened.unwrap(),
-                        idx_limb_bits,
-                        decomp,
-                        self.idx_len,
+                        &IsLessThanTupleAir::new(0, idx_limb_bits, decomp),
                     ),
                 };
 
@@ -164,9 +163,7 @@ impl<F: PrimeField64> AirBridge<F> for PageIndexScanInputAir {
                     },
                     aux: IsLessThanTupleAuxCols::from_slice(
                         &is_less_than_tuple_aux_flattened.unwrap(),
-                        idx_limb_bits,
-                        decomp,
-                        self.idx_len,
+                        &IsLessThanTupleAir::new(0, idx_limb_bits, decomp),
                     ),
                 };
 

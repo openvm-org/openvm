@@ -47,7 +47,16 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanAir {
             let bits = (lower_u32 >> (i * self.decomp)) & ((1 << self.decomp) - 1);
 
             lower_decomp.push(F::from_canonical_u32(bits));
-            range_checker.add_count(bits);
+
+            if i == self.num_limbs() - 1 && self.limb_bits % self.decomp != 0 {
+                let last_limb_shift = (self.decomp - (self.limb_bits % self.decomp)) % self.decomp;
+                let last_limb_shifted = bits << last_limb_shift;
+
+                lower_decomp.push(F::from_canonical_u32(last_limb_shifted));
+                range_checker.add_count(last_limb_shifted);
+            } else {
+                range_checker.add_count(bits);
+            }
         }
 
         let io = IsLessThanIOCols {
