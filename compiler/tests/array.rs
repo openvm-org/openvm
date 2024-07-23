@@ -1,7 +1,6 @@
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
-use p3_field::AbstractField;
 use rand::{thread_rng, Rng};
 
 use afs_compiler::asm::AsmBuilder;
