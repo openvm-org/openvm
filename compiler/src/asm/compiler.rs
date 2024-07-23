@@ -155,7 +155,8 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::SubFI(dst.fp(), lhs.fp(), rhs), trace);
                 }
                 DslIr::SubVIN(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::SubFIN(dst.fp(), lhs, rhs.fp()), trace);
+                    self.push(AsmInstruction::SubFI(A0, rhs.fp(), lhs), trace.clone());
+                    self.push(AsmInstruction::MulFI(dst.fp(), A0, F::neg_one()), trace);
                 }
                 DslIr::SubF(dst, lhs, rhs) => {
                     self.push(AsmInstruction::SubF(dst.fp(), lhs.fp(), rhs.fp()), trace);
@@ -164,13 +165,14 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::SubFI(dst.fp(), lhs.fp(), rhs), trace);
                 }
                 DslIr::SubFIN(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::SubFIN(dst.fp(), lhs, rhs.fp()), trace);
+                    self.push(AsmInstruction::SubFI(A0, rhs.fp(), lhs), trace.clone());
+                    self.push(AsmInstruction::MulFI(dst.fp(), A0, F::neg_one()), trace);
                 }
                 DslIr::NegV(dst, src) => {
-                    self.push(AsmInstruction::SubFIN(dst.fp(), F::zero(), src.fp()), trace);
+                    self.push(AsmInstruction::MulFI(dst.fp(), src.fp(), F::neg_one()), trace);
                 }
                 DslIr::NegF(dst, src) => {
-                    self.push(AsmInstruction::SubFIN(dst.fp(), F::zero(), src.fp()), trace);
+                    self.push(AsmInstruction::MulFI(dst.fp(), src.fp(), F::neg_one()), trace);
                 }
                 DslIr::DivF(dst, lhs, rhs) => {
                     self.push(AsmInstruction::DivF(dst.fp(), lhs.fp(), rhs.fp()), trace);

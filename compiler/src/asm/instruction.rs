@@ -35,9 +35,6 @@ pub enum AsmInstruction<F, EF> {
     /// Subtract immediate, dst = lhs - rhs.
     SubFI(i32, i32, F),
 
-    /// Subtract value from immediate, dst = lhs - rhs.
-    SubFIN(i32, F, i32),
-
     /// Multiply, dst = lhs * rhs.
     MulF(i32, i32, i32),
 
@@ -908,9 +905,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::SubFI(dst, lhs, rhs) => {
                 write!(f, "subi  ({})fp, ({})fp, {}", dst, lhs, rhs)
-            }
-            AsmInstruction::SubFIN(dst, lhs, rhs) => {
-                write!(f, "subin ({})fp, {}, ({})fp", dst, lhs, rhs)
             }
             AsmInstruction::MulF(dst, lhs, rhs) => {
                 write!(f, "mul   ({})fp, ({})fp, ({})fp", dst, lhs, rhs)

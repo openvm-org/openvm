@@ -113,26 +113,6 @@ fn convert_base_arithmetic_instruction<F: PrimeField64, EF: ExtensionField<F>>(
                 AS::Immediate,
             ),
         ],
-        AsmInstruction::SubFIN(dst, lhs, rhs) => vec![
-            // register[dst] <- register[rhs] - lhs
-            inst(
-                FSUB,
-                register(dst),
-                register(rhs),
-                lhs,
-                AS::Register,
-                AS::Immediate,
-            ),
-            // register[dst] <- register[dst] * -1
-            inst(
-                FMUL,
-                register(dst),
-                register(dst),
-                F::neg_one(),
-                AS::Register,
-                AS::Immediate,
-            ),
-        ],
         AsmInstruction::MulF(dst, lhs, rhs) => vec![
             // register[dst] <- register[lhs] * register[rhs]
             inst(
@@ -675,7 +655,6 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         | AsmInstruction::SubFI(..)
         | AsmInstruction::MulFI(..)
         | AsmInstruction::DivFI(..)
-        | AsmInstruction::SubFIN(..)
         | AsmInstruction::DivFIN(..) => {
             if options.field_arithmetic_enabled {
                 convert_base_arithmetic_instruction(instruction, utility_register)
