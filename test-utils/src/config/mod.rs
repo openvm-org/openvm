@@ -1,3 +1,4 @@
+use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use tracing_forest::util::LevelFilter;
 use tracing_forest::ForestLayer;
@@ -10,6 +11,7 @@ pub mod baby_bear_bytehash;
 pub mod baby_bear_keccak;
 pub mod baby_bear_poseidon2;
 pub mod fri_params;
+pub mod goldilocks_poseidon;
 pub mod instrument;
 
 pub fn setup_tracing() {
@@ -30,11 +32,12 @@ pub struct FriParameters {
     pub proof_of_work_bits: usize,
 }
 
-#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Default, Display, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub enum EngineType {
     #[default]
     BabyBearPoseidon2,
     BabyBearBlake3,
     BabyBearKeccak,
+    GoldilocksPoseidon,
 }

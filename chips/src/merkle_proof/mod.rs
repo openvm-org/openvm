@@ -4,6 +4,9 @@ pub mod columns;
 mod round_flags;
 mod trace;
 
+#[cfg(test)]
+pub mod tests;
+
 #[derive(Clone)]
 pub struct MerkleProofOp<T, const DEPTH: usize, const DIGEST_WIDTH: usize>
 where

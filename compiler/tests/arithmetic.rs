@@ -1,12 +1,12 @@
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
-use p3_field::AbstractField;
+use p3_field::{AbstractExtensionField, AbstractField, Field};
 use rand::{thread_rng, Rng};
 
 use afs_compiler::asm::AsmBuilder;
 use afs_compiler::ir::{Ext, Felt, SymbolicExt};
 use afs_compiler::ir::{ExtConst, Var};
-use afs_compiler::util::execute_program;
+use afs_compiler::util::{execute_and_prove_program, execute_program};
 
 #[allow(dead_code)]
 const WORD_SIZE: usize = 1;
@@ -112,4 +112,27 @@ fn test_compiler_arithmetic() {
     // let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
     // runtime.run();
     // runtime.print_stats();
+}
+
+#[test]
+fn test_compiler_arithmetic_2() {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+    let mut builder = AsmBuilder::<F, EF>::default();
+
+    let ef = EF::from_base_slice(&[
+        F::from_canonical_u32(1163664312),
+        F::from_canonical_u32(1251518712),
+        F::from_canonical_u32(1133200680),
+        F::from_canonical_u32(1689596134),
+    ]);
+
+    let x: Ext<_, _> = builder.constant(ef);
+    let xinv: Ext<_, _> = builder.constant(ef.inverse());
+    builder.assert_ext_eq(x.inverse(), xinv);
+
+    builder.halt();
+
+    let program = builder.clone().compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE, _>(program, vec![]);
 }

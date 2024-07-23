@@ -1,0 +1,32 @@
+benchmark,,stark engine,page config,,,,,,,fri params,,,air width,,,timing (ms),,,,,,,,,,,
+test_type,scenario,engine,index_bytes,data_bytes,page_width,height,max_rw_ops,bits_per_fe,mode,log_blowup,num_queries,pow_bits,preprocessed,main,challenge,Keygen time,Cache time,Prove: Load trace gen,Prove: Load trace commit,Prove: Main commit,Prove: Gen permutation traces,Prove: Commit permutation traces,Prove: Compute quotient values,Prove: Commit to quotient poly,Prove: FRI opening proofs,Prove time (total),Verify time
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,1024,529,1024,512,16,ReadWrite,2,103,0,0,1368,102,1.78,42.70,19.20,23.40,15.20,11.30,19.00,30.40,3.53,13.80,151.00,141.00
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,1024,529,1024,512,16,ReadWrite,2,103,0,0,1368,102,1.65,31.50,18.00,24.00,14.80,11.90,18.80,32.50,3.32,15.70,154.00,145.00
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,1024,529,1024,256,16,ReadWrite,2,103,0,0,1368,102,1.63,41.10,18.10,25.70,19.20,12.40,20.50,33.10,3.40,13.80,163.00,142.00
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,1024,529,1024,128,16,ReadWrite,2,103,0,0,1368,102,1.52,32.00,18.80,31.20,16.50,12.20,19.40,33.60,4.65,15.40,166.00,142.00
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,1024,529,1024,64,16,ReadWrite,2,103,0,0,1368,102,1.52,30.00,18.10,25.50,15.10,11.60,19.90,32.40,3.58,14.80,153.00,142.00
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,1024,529,256,128,16,ReadWrite,2,103,0,0,1368,102,1.51,9.48,4.63,7.63,4.90,3.36,5.94,9.38,2.13,6.35,50.30,139.00
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,1024,529,256,128,16,ReadWrite,2,103,0,0,1368,102,1.47,8.74,4.68,6.44,4.92,3.26,5.98,8.60,2.04,6.60,47.50,140.00
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,1024,529,256,64,16,ReadWrite,2,103,0,0,1368,102,1.56,9.17,4.98,7.49,5.55,3.41,6.79,8.30,2.47,8.60,52.10,147.00
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,1024,529,256,32,16,ReadWrite,2,103,0,0,1368,102,1.64,10.80,4.91,7.96,5.12,3.79,6.27,8.85,1.93,6.86,50.50,142.00
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,1024,529,256,16,16,ReadWrite,2,103,0,0,1368,102,1.51,9.48,4.64,7.52,4.70,3.23,6.61,8.16,2.28,5.59,47.30,139.00
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,256,145,1024,512,16,ReadWrite,2,103,0,0,600,102,0.95,10.80,16.50,9.12,16.40,8.66,19.80,17.90,3.31,12.90,111.00,87.90
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,256,145,1024,512,16,ReadWrite,2,103,0,0,600,102,1.10,10.30,16.90,9.46,15.90,8.52,19.40,17.10,3.51,11.80,109.00,87.80
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,256,145,1024,256,16,ReadWrite,2,103,0,0,600,102,0.89,10.80,17.00,8.23,16.20,8.38,22.00,17.50,3.94,12.10,112.00,88.10
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,256,145,1024,128,16,ReadWrite,2,103,0,0,600,102,0.97,11.00,16.40,7.87,15.90,7.87,19.50,16.80,3.73,11.10,105.00,86.50
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,256,145,1024,64,16,ReadWrite,2,103,0,0,600,102,0.92,9.27,15.90,7.64,15.50,8.09,19.80,18.90,3.33,11.50,106.00,87.10
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,256,145,256,128,16,ReadWrite,2,103,0,0,600,102,0.88,2.92,4.10,2.60,4.87,2.56,5.98,5.66,2.15,5.01,35.30,83.90
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,256,145,256,128,16,ReadWrite,2,103,0,0,600,102,0.85,2.94,4.12,2.34,4.72,2.42,6.55,5.28,1.85,6.68,36.60,84.40
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,256,145,256,64,16,ReadWrite,2,103,0,0,600,102,0.90,3.20,4.24,2.55,4.36,2.18,5.92,5.17,2.94,5.08,34.60,83.40
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,256,145,256,32,16,ReadWrite,2,103,0,0,600,102,0.88,2.72,4.07,2.13,4.50,2.31,5.62,4.79,2.35,5.65,33.70,83.80
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,256,145,256,16,16,ReadWrite,2,103,0,0,600,102,0.88,2.70,4.27,2.23,6.54,2.14,5.58,5.20,2.12,5.26,35.40,83.70
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,32,33,1024,512,16,ReadWrite,2,103,0,0,376,102,0.94,3.87,16.30,2.71,15.20,6.19,19.50,12.30,3.94,10.70,90.20,70.60
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,32,33,1024,512,16,ReadWrite,2,103,0,0,376,102,0.87,3.66,16.20,3.20,15.10,6.48,19.10,12.80,3.32,11.10,90.80,71.10
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,32,33,1024,256,16,ReadWrite,2,103,0,0,376,102,0.72,3.59,16.10,3.28,15.50,6.21,19.50,12.70,3.26,10.60,90.80,70.40
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,32,33,1024,128,16,ReadWrite,2,103,0,0,376,102,0.74,3.44,16.10,2.96,15.40,6.72,19.30,12.50,3.73,10.60,90.20,70.20
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,32,33,1024,64,16,ReadWrite,2,103,0,0,376,102,0.72,3.57,16.40,2.72,15.00,6.46,19.80,12.80,3.54,10.40,90.40,70.80
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,32,33,256,128,16,ReadWrite,2,103,0,0,376,102,0.68,1.34,4.36,1.24,4.87,1.68,5.91,3.66,2.07,4.72,29.90,67.70
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,32,33,256,128,16,ReadWrite,2,103,0,0,376,102,0.69,1.82,4.15,1.23,4.86,1.98,5.66,3.37,2.06,5.09,30.00,67.50
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,32,33,256,64,16,ReadWrite,2,103,0,0,376,102,0.70,1.79,4.12,1.17,5.25,1.68,5.31,3.29,2.09,5.42,29.80,67.20
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,32,33,256,32,16,ReadWrite,2,103,0,0,376,102,0.67,1.27,3.99,1.10,5.09,1.80,5.33,3.29,1.92,5.05,29.10,67.30
+Predicate,<= 0xdac0,BabyBearPoseidon2,32,32,33,256,16,16,ReadWrite,2,103,0,0,376,102,0.69,1.66,3.94,1.06,5.22,1.76,5.64,3.26,1.78,5.37,29.80,67.40

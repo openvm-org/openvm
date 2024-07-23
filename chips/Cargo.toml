@@ -20,7 +20,7 @@ p3-uni-stark = { workspace = true }
 rand = "0.8"
 derive-new = "0.5"
 
-afs-stark-backend = { path = "../stark-backend" }
+afs-stark-backend = { path = "../stark-backend", default-features = false }
 afs-derive = { path = "../derive" }
 afs-test-utils = { path = "../test-utils" }
 parking_lot = "0.12.2"
@@ -49,5 +49,6 @@ tracing-forest = { version = "0.1.6", features = ["ansi", "smallvec"] }
 test-case = "3.3.1"
 
 [features]
-default = ["test-traits"]
-test-traits = ["p3-baby-bear"]
+default = ["parallel"]
+test-traits = ["p3-baby-bear"]            # traits for testing
+parallel = ["afs-stark-backend/parallel"]

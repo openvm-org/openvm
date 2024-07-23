@@ -68,12 +68,9 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
         SC::Pcs: Sync,
         PcsProverData<SC>: Sync,
     {
-        let inner = raps
+        let inner = (raps, traces, quotient_degrees, public_values)
             .into_par_iter()
-            .zip_eq(traces.into_par_iter())
-            .zip_eq(quotient_degrees.par_iter())
-            .zip_eq(public_values.par_iter())
-            .map(|(((rap, trace), &quotient_degree), pis)| {
+            .map(|(rap, trace, &quotient_degree, pis)| {
                 self.single_rap_quotient_values(rap, trace, quotient_degree, pis)
             })
             .collect();

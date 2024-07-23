@@ -59,7 +59,7 @@ where
         + CryptographicPermutation<[PackedVal; WIDTH]>
         + Clone,
 {
-    fri_params: FriParameters,
+    pub fri_params: FriParameters,
     pub config: BabyBearPermutationConfig<P>,
     pub perm: P,
 }
