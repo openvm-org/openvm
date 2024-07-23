@@ -17,7 +17,7 @@ pub struct IsLessThanAir {
     /// The bus index for sends to range chip
     bus_index: usize,
     /// The maximum number of bits for the numbers to compare
-    limb_bits: usize,
+    max_bits: usize,
     /// The number of bits to decompose each number into, for less than checking
     decomp: usize,
     // num_limbs is the number of limbs we decompose each input into, not including the last shifted limb
@@ -26,12 +26,12 @@ pub struct IsLessThanAir {
 }
 
 impl IsLessThanAir {
-    pub fn new(bus_index: usize, limb_bits: usize, decomp: usize) -> Self {
+    pub fn new(bus_index: usize, max_bits: usize, decomp: usize) -> Self {
         Self {
             bus_index,
-            limb_bits,
+            max_bits,
             decomp,
-            num_limbs: (limb_bits + decomp - 1) / decomp,
+            num_limbs: (max_bits + decomp - 1) / decomp,
         }
     }
 }

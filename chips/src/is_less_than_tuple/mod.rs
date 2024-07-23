@@ -45,7 +45,7 @@ impl IsLessThanTupleAir {
     pub fn limb_bits(&self) -> Vec<usize> {
         self.is_less_than_airs
             .iter()
-            .map(|air| air.limb_bits())
+            .map(|air| air.max_bits())
             .collect()
     }
 }
