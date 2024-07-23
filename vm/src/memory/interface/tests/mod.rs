@@ -23,9 +23,7 @@ fn test_flatten_fromslice_roundtrip() {
     let cols_numbered = MemoryInterfaceCols::<DEFAULT_CHUNK, _>::from_slice(&all_cols);
     let flattened = cols_numbered.flatten();
 
-    for (i, col) in flattened.iter().enumerate() {
-        assert_eq!(*col, all_cols[i]);
-    }
+    assert_eq!(flattened, all_cols);
 
     assert_eq!(num_cols, flattened.len());
 }

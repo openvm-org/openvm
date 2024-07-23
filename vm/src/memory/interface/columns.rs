@@ -1,8 +1,11 @@
 pub struct MemoryInterfaceCols<const CHUNK: usize, T> {
+    // direction = 1 corresponds to initial memory state
+    // direction = -1 corresponds to final memory state
     pub direction: T,
     pub address_space: T,
     pub leaf_label: T,
     pub values: [T; CHUNK],
+    // auxes represents: multiplicity when direction = 1, is_final when direction = -1
     pub auxes: [T; CHUNK],
     pub temp_multiplicity: [T; CHUNK],
     pub temp_is_final: [T; CHUNK],

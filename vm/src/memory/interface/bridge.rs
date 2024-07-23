@@ -12,6 +12,8 @@ impl<const CHUNK: usize, F: Field> AirBridge<F> for MemoryInterfaceAir<CHUNK> {
         let all_cols = (0..MemoryInterfaceCols::<CHUNK, F>::get_width()).collect::<Vec<usize>>();
         let cols_numbered = MemoryInterfaceCols::<CHUNK, usize>::from_slice(&all_cols);
 
+        // is_final = 1/2 - direction/2
+        // so that direction = 1 => is_final = 0, direction = -1 => is_final = 1
         let mut expand_fields = vec![
             VirtualPairCol::new_main(
                 vec![(cols_numbered.direction, F::two().inverse().neg())],

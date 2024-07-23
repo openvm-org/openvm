@@ -29,6 +29,8 @@ impl<const CHUNK: usize, AB: AirBuilder> Air<AB> for MemoryInterfaceAir<CHUNK> {
 
         for i in 0..CHUNK {
             builder.assert_bool(local_cols.auxes[i]);
+            // when `direction` is 1, multiplicity of interaction should be `!auxes[i]`
+            // otherwise, multiplicity should be `direction`
             builder.assert_eq(
                 local_cols.temp_multiplicity[i],
                 local_cols.direction
@@ -37,6 +39,8 @@ impl<const CHUNK: usize, AB: AirBuilder> Air<AB> for MemoryInterfaceAir<CHUNK> {
                             * AB::F::two().inverse()
                             * (AB::Expr::one() - local_cols.auxes[i]))),
             );
+            // when `direction` is -1, is_final field of interaction should be `auxes[i]`
+            // otherwise, is_final field should be 1
             builder.assert_eq(
                 local_cols.temp_is_final[i],
                 (AB::Expr::one() - local_cols.direction)
