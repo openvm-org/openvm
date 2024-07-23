@@ -1,14 +1,15 @@
-name: Default Unit Tests
+name: STARK Recursion Tests
 
 on:
   push:
     branches: ["main"]
   pull_request:
     branches: ["main"]
-    paths-ignore:
+    paths:
       - "stark-backend/**"
       - "vm/**"
       - "compiler/**"
+      - "recursion/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -29,6 +30,7 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Run unit tests
+      - name: Run recursion crate tests
+        working-directory: recursion
         run: |
-          cargo test --workspace --exclude afs-stark-backend --exclude stark-vm --exclude afs-compiler --exclude afs-recursion
+          cargo test --profile=fast

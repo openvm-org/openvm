@@ -82,15 +82,16 @@ Globally, the prover will sum this per-AIR cumulative sum over all AIRs and last
 The $f_j, m$ can be any multi-variate polynomial expression, which is expressed via the `AB::Expr` type within the `Air::eval` function.
 
 For each send/receive interaction, we must add one virtual column $q_\sigma$ with row $r$ equal to
-$$q_\sigma[r] = \frac {m_\sigma[r]}{\alpha^{i_\sigma} + \sum_j \beta^j \cdot f_{\sigma,j}(\mathbf T[r])}$$
+$$q_\sigma[r] = \frac {m_\sigma[r]}{\alpha^{i_\sigma} + \sum_j \beta^j \cdot f_{\sigma,j}(\mathbf T[r])}$$.
+
 The constraint is
-$$q_\sigma \cdot \left(\alpha^{i_\sigma} + \sum_j \beta^j \cdot f_{\sigma,j}(\mathbf T) \right) = m_\sigma(\mathbf T)$$
-has degree $max(1 + max_j deg(f_{\sigma,j}), deg(m_\sigma))$.
+$$q_\sigma \cdot \left(\alpha^{i_\sigma} + \sum_j \beta^j \cdot f_{\sigma,j}(\mathbf T) \right) = m_\sigma(\mathbf T)$$,
+which has degree $max(1 + max_j deg(f_{\sigma,j}), deg(m_\sigma))$.
 
 Note: we could save columns by combining $q$ columns together, at the cost of increasing the constraint degree.
 
 We need one more virtual column $\phi$ for the cumulative sum of all sends and receives. The row $r$ of $\phi$ contains the partial sum of all reciprocals up to row $r$.
-$$\phi[r] = \sum_{r' \leq r} \left(\sum_\sigma q_\sigma[r'] - \sum_\tau q_\tau[r'] \right)$$
+$$\phi[r] = \sum_{r' \leq r} \left(\sum_\sigma sign(\sigma) q_\sigma[r']\right)$$
 
 The constraints are:
 
