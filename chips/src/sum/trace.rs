@@ -34,8 +34,7 @@ impl SumChip {
                 (key, next_key, self.range_checker.clone()),
             );
 
-            row.push(is_less_than_row.aux.lower);
-            row.extend(is_less_than_row.aux.lower_decomp);
+            row.extend(is_less_than_row.aux.flatten());
 
             rows.push(row);
 

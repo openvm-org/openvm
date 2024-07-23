@@ -17,34 +17,18 @@ pub struct SumCols<T> {
 
 impl<T: Clone> SumCols<T> {
     pub fn from_slice(slc: &[T], lt_air: &IsLessThanAir) -> Self {
-        let cols = SumCols::<usize>::index_map(lt_air);
+        let key = slc[0].clone();
+        let value = slc[1].clone();
+        let partial_sum = slc[2].clone();
+        let is_final = slc[3].clone();
 
-        let key = slc[cols.key].clone();
-        let value = slc[cols.value].clone();
-        let partial_sum = slc[cols.partial_sum].clone();
-        let is_final = slc[cols.is_final].clone();
-
-        let is_lt_aux_cols = IsLessThanAuxCols::<T>::from_slice(&slc[cols.is_lt_aux_cols.lower..]);
+        let is_lt_aux_cols = IsLessThanAuxCols::<T>::from_slice(&slc[5..]);
         SumCols {
             key,
             value,
             partial_sum,
             is_final,
             is_lt_aux_cols,
-        }
-    }
-
-    pub fn index_map(lt_air: &IsLessThanAir) -> SumCols<usize> {
-        let num_aux_cols = IsLessThanAuxCols::<usize>::width(lt_air);
-        SumCols {
-            key: 0,
-            value: 1,
-            partial_sum: 2,
-            is_final: 3,
-            is_lt_aux_cols: IsLessThanAuxCols {
-                lower: 4,
-                lower_decomp: (5..5 + num_aux_cols).collect(),
-            },
         }
     }
 }
