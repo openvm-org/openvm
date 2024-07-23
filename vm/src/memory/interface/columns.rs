@@ -1,6 +1,7 @@
 pub struct MemoryInterfaceCols<const CHUNK: usize, T> {
     // direction = 1 corresponds to initial memory state
     // direction = -1 corresponds to final memory state
+    // direction = 0 corresponds to irrelevant row (all interactions multiplicity 0)
     pub direction: T,
     pub address_space: T,
     pub leaf_label: T,
