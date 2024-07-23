@@ -1,13 +1,13 @@
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
 use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
-use rand::{Rng, thread_rng};
+use p3_field::AbstractField;
+use rand::{thread_rng, Rng};
 
 use afs_compiler::asm::AsmBuilder;
-use afs_compiler::ir::{Config, Ext, Felt, Var};
 use afs_compiler::ir::Array;
 use afs_compiler::ir::ExtConst;
+use afs_compiler::ir::{Config, Ext, Felt, Var};
 use afs_compiler::prelude::Builder;
 use afs_compiler::prelude::MemIndex;
 use afs_compiler::prelude::MemVariable;
