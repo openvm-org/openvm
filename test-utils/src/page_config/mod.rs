@@ -1,10 +1,11 @@
 use std::fs;
 
+use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
 use crate::config::{EngineType, FriParameters};
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Display)]
 #[serde(rename_all = "PascalCase")]
 pub enum PageMode {
     #[default]

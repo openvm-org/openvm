@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use itertools::Itertools;
+use itertools::{izip, Itertools};
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::AbstractExtensionField;
@@ -154,15 +154,14 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
                 let mut preprocessed = vec![];
                 let mut partitioned_main = vec![];
                 let mut permutation = vec![];
-                for (
-                    (((preprocessed_trace, main_data), perm_trace), cumulative_sum_and_index),
-                    pis,
-                ) in pk
-                    .preprocessed_traces()
-                    .zip_eq(&main_trace_data.air_traces)
-                    .zip_eq(&perm_traces)
-                    .zip_eq(&cumulative_sums_and_indices)
-                    .zip_eq(public_values)
+                for (preprocessed_trace, main_data, perm_trace, cumulative_sum_and_index, pis) in
+                    izip!(
+                        pk.preprocessed_traces(),
+                        &main_trace_data.air_traces,
+                        &perm_traces,
+                        &cumulative_sums_and_indices,
+                        public_values
+                    )
                 {
                     let rap = main_data.air;
                     let partitioned_main_trace = &main_data.partitioned_main_trace;
@@ -214,50 +213,48 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
 
         // Prepare the proven RAP trace views
         // Abstraction boundary: after this, we consider InteractiveAIR as a RAP with virtual columns included in the trace.
-        let (raps, trace_views): (Vec<_>, Vec<_>) = main_trace_data
-            .air_traces
-            .into_iter()
-            .zip_eq(&pk.per_air)
-            .zip_eq(cumulative_sums_and_indices)
-            .map(|((main, pk), cumulative_sum_and_index)| {
-                // The AIR will be treated as the full RAP with virtual columns after this
-                let rap = main.air;
-                let domain = main.domain;
-                let preprocessed = pk.preprocessed_data.as_ref().map(|p| {
-                    // TODO: currently assuming each chip has it's own preprocessed commitment
-                    CommittedSingleMatrixView::new(p.data.as_ref(), 0)
-                });
-                let matrix_ptrs = &pk.vk.main_graph.matrix_ptrs;
-                assert_eq!(main.partitioned_main_trace.len(), matrix_ptrs.len());
-                let partitioned_main = matrix_ptrs
-                    .iter()
-                    .map(|ptr| {
-                        CommittedSingleMatrixView::new(
-                            main_pcs_data[ptr.commit_index].1,
-                            ptr.matrix_index,
-                        )
-                    })
-                    .collect_vec();
+        let (raps, trace_views): (Vec<_>, Vec<_>) = izip!(
+            main_trace_data.air_traces,
+            &pk.per_air,
+            cumulative_sums_and_indices
+        )
+        .map(|(main, pk, cumulative_sum_and_index)| {
+            // The AIR will be treated as the full RAP with virtual columns after this
+            let rap = main.air;
+            let domain = main.domain;
+            let preprocessed = pk.preprocessed_data.as_ref().map(|p| {
+                // TODO: currently assuming each chip has it's own preprocessed commitment
+                CommittedSingleMatrixView::new(p.data.as_ref(), 0)
+            });
+            let matrix_ptrs = &pk.vk.main_graph.matrix_ptrs;
+            assert_eq!(main.partitioned_main_trace.len(), matrix_ptrs.len());
+            let partitioned_main = matrix_ptrs
+                .iter()
+                .map(|ptr| {
+                    CommittedSingleMatrixView::new(
+                        main_pcs_data[ptr.commit_index].1,
+                        ptr.matrix_index,
+                    )
+                })
+                .collect_vec();
 
-                // There will be either 0 or 1 after_challenge traces
-                let after_challenge =
-                    if let Some((cumulative_sum, index)) = cumulative_sum_and_index {
-                        let matrix =
-                            CommittedSingleMatrixView::new(&after_challenge_pcs_data[0].1, index);
-                        let exposed_values = vec![cumulative_sum];
-                        vec![(matrix, exposed_values)]
-                    } else {
-                        Vec::new()
-                    };
-                let trace_view = SingleRapCommittedTraceView {
-                    domain,
-                    preprocessed,
-                    partitioned_main,
-                    after_challenge,
-                };
-                (rap, trace_view)
-            })
-            .unzip();
+            // There will be either 0 or 1 after_challenge traces
+            let after_challenge = if let Some((cumulative_sum, index)) = cumulative_sum_and_index {
+                let matrix = CommittedSingleMatrixView::new(&after_challenge_pcs_data[0].1, index);
+                let exposed_values = vec![cumulative_sum];
+                vec![(matrix, exposed_values)]
+            } else {
+                Vec::new()
+            };
+            let trace_view = SingleRapCommittedTraceView {
+                domain,
+                preprocessed,
+                partitioned_main,
+                after_challenge,
+            };
+            (rap, trace_view)
+        })
+        .unzip();
         // === END of logic specific to Interactions/permutations, we can now deal with general RAP ===
 
         self.prove_raps_with_committed_traces(

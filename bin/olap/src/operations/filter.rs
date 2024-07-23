@@ -3,7 +3,8 @@ use std::time::Instant;
 use afs_chips::single_page_index_scan::page_index_scan_input::Comp;
 use afs_test_utils::page_config::PageConfig;
 use logical_interface::afs_input::{operation::FilterOp, types::AfsOperation};
-use p3_util::log2_strict_usize;
+
+use crate::RANGE_CHECK_BITS;
 
 pub const PAGE_BUS_INDEX: usize = 0;
 pub const RANGE_BUS_INDEX: usize = 1;
@@ -29,7 +30,7 @@ pub fn filter_setup(
     let page_width = 1 + idx_len + data_len;
     let page_height = config.page.height;
     let idx_limb_bits = config.page.bits_per_fe;
-    let idx_decomp = log2_strict_usize(page_height);
+    let idx_decomp = RANGE_CHECK_BITS;
     let range_max = 1 << idx_decomp;
     (
         start,

@@ -2,6 +2,7 @@ use lazy_static::lazy_static;
 
 pub mod cli;
 pub mod commands;
+pub mod config;
 pub mod utils;
 
 pub const TABLE_ID: &str = "0xfade";

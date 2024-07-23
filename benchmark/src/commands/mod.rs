@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, time::Instant};
+use std::fs;
 
 use afs_test_utils::page_config::{MultitierPageConfig, PageConfig};
 use chrono::Local;
@@ -18,6 +18,8 @@ use crate::{
 };
 
 pub mod multitier_rw;
+
+pub mod benchmark;
 pub mod predicate;
 pub mod rw;
 

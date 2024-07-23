@@ -6,6 +6,7 @@ on:
   pull_request:
     branches: ["main"]
     paths:
+      - "stark-backend/**"
       - "vm/**"
       - "compiler/**"
 
@@ -31,9 +32,9 @@ jobs:
       - name: Run vm crate tests
         working-directory: vm
         run: |
-          cargo test
+          cargo test --profile=fast
 
       - name: Run compiler crate tests
         working-directory: vm
         run: |
-          cargo test
+          cargo test --profile=fast

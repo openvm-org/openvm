@@ -1,7 +1,8 @@
-use crate::common::page::Page;
+use itertools::izip;
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
+use crate::common::page::Page;
 use crate::sub_chip::LocalTraceInstructions;
 
 use super::{columns::GroupByCols, GroupByAir};
@@ -61,14 +62,9 @@ impl GroupByAir {
             }
         }
 
-        let trace: Vec<F> = page_f
-            .iter()
-            .zip(partial_sums.iter())
-            .zip(is_final.iter())
-            .zip(is_equal.iter())
-            .zip(eq_vec_aux_trace.iter())
+        let trace: Vec<F> = izip!(page_f, partial_sums, is_final, is_equal, eq_vec_aux_trace)
             .flat_map(
-                |((((grouped_row, partial_sum_row), is_final_row), is_eq_row), eq_vec_aux_row)| {
+                |(grouped_row, partial_sum_row, is_final_row, is_eq_row, eq_vec_aux_row)| {
                     let mut trace_row = if !self.sorted {
                         grouped_row.clone()
                     } else {

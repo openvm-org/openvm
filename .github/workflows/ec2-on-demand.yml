@@ -1,0 +1,72 @@
+name: Sample workflow to use EC2 instances on demand
+
+on:
+  workflow_dispatch:
+
+  # push:
+  #   branches:
+  #     - jpw/sample-workflow-ec2-on-demand
+
+jobs:
+  start-runner:
+    name: Start self-hosted EC2 runner
+    runs-on: [self-hosted, coordinator, staging]
+    outputs:
+      label: ${{ steps.start-ec2-runner.outputs.label }}
+      ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-1
+      - name: Start EC2 runner
+        id: start-ec2-runner
+        uses: machulav/ec2-github-runner@v2
+        with:
+          mode: start
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          ec2-image-id: ami-0a071ac3e1220fe60 # arm64-rust-dev-32gb
+          # ami-06dd8940c223fd887 # arm64-rust-dev-1024gb
+          ec2-instance-type: r7g.8xlarge
+          subnet-id: subnet-08094bf4edad62d10 # staging tooling private subnet
+          security-group-id: sg-09543a06c701894f8 # allow all outbound
+          iam-role-name: github-temp-runner # IAM role name to attach to the created EC2 runner
+
+  do-the-job:
+    name: Run benchmark
+    needs: start-runner # required to start the main job when the runner is ready
+    runs-on: ${{ needs.start-runner.outputs.label }} # run the job on the newly created runner
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Run benchmark
+        run: |
+          RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark -- rw -r 90 -w 10
+
+      - name: Copy output CSVs to S3
+        run: |
+          s5cmd cp 'benchmark/output/*.csv' s3://axiom-workflow-data-staging-us-east-1/benchmark/afs/
+
+  stop-runner:
+    name: Stop self-hosted EC2 runner
+    needs:
+      - start-runner # required to get output from the start-runner job
+      - do-the-job # required to wait when the main job is done
+    runs-on: [self-hosted, coordinator, staging]
+    if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: us-east-1
+      - name: Stop EC2 runner
+        uses: machulav/ec2-github-runner@v2
+        with:
+          mode: stop
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          label: ${{ needs.start-runner.outputs.label }}
+          ec2-instance-id: ${{ needs.start-runner.outputs.ec2-instance-id }}

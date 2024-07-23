@@ -274,5 +274,6 @@ pub fn run_mtrw_bench(config: &MultitierPageConfig, new_tree: String) -> Result<
                 engine_from_perm(perm, pcs_log_degree, fri_params);
             MultitierRwCommand::bench_all(config, &engine, new_tree)
         }
+        _ => panic!(),
     }
 }

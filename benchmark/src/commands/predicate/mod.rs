@@ -4,7 +4,8 @@ use afs_test_utils::{
         baby_bear_blake3::BabyBearBlake3Engine,
         baby_bear_bytehash::engine_from_byte_hash,
         baby_bear_keccak::BabyBearKeccakEngine,
-        baby_bear_poseidon2::{engine_from_perm, random_perm, BabyBearPoseidon2Engine},
+        baby_bear_poseidon2::{self, BabyBearPoseidon2Engine},
+        goldilocks_poseidon::{self, GoldilocksPoseidonEngine},
         EngineType,
     },
     engine::StarkEngine,
@@ -112,7 +113,7 @@ impl PredicateCommand {
     }
 }
 
-pub fn run_predicate_bench(config: &PageConfig, extra_data: String) -> Result<()> {
+pub fn run_bench_predicate(config: &PageConfig, extra_data: String) -> Result<()> {
     let checker_trace_degree = config.page.max_rw_ops * 4;
     let pcs_log_degree = log2_strict_usize(checker_trace_degree)
         .max(log2_strict_usize(config.page.height))
@@ -131,9 +132,15 @@ pub fn run_predicate_bench(config: &PageConfig, extra_data: String) -> Result<()
             PredicateCommand::bench_all(config, &engine, extra_data)
         }
         EngineType::BabyBearPoseidon2 => {
-            let perm = random_perm();
+            let perm = baby_bear_poseidon2::default_perm();
             let engine: BabyBearPoseidon2Engine =
-                engine_from_perm(perm, pcs_log_degree, fri_params);
+                baby_bear_poseidon2::engine_from_perm(perm, pcs_log_degree, fri_params);
+            PredicateCommand::bench_all(config, &engine, extra_data)
+        }
+        EngineType::GoldilocksPoseidon => {
+            let perm = goldilocks_poseidon::random_perm();
+            let engine: GoldilocksPoseidonEngine =
+                goldilocks_poseidon::engine_from_perm(perm, pcs_log_degree, fri_params);
             PredicateCommand::bench_all(config, &engine, extra_data)
         }
     }

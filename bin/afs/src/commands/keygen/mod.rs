@@ -13,6 +13,8 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::Serialize;
 use tracing::info;
 
+use crate::RANGE_CHECK_BITS;
+
 /// `afs keygen` command
 /// Uses information from config.toml to generate partial proving and verifying keys and
 /// saves them to the specified `output-folder` as *.partial.pk and *.partial.vk.
@@ -72,7 +74,7 @@ where
 
         let idx_limb_bits = limb_bits;
 
-        let idx_decomp = 8;
+        let idx_decomp = RANGE_CHECK_BITS;
 
         let page_controller: PageController<SC> = PageController::new(
             page_bus_index,
