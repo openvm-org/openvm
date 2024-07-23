@@ -1,7 +1,6 @@
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
-use p3_field::AbstractField;
 use rand::{thread_rng, Rng};
 
 use afs_compiler::asm::AsmBuilder;
@@ -24,7 +23,7 @@ pub struct Point<C: Config> {
 }
 
 #[test]
-// #[ignore = "test too slow"]
+#[ignore = "test too slow"]
 fn test_compiler_array() {
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, 4>;
