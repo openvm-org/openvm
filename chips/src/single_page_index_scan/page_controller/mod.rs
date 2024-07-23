@@ -283,8 +283,8 @@ where
     ) {
         let input_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
         let output_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
-        let input_page_aux_ptr = keygen_builder.add_main_matrix(self.input_chip.aux_width());
-        let output_page_aux_ptr = keygen_builder.add_main_matrix(self.output_chip.aux_width());
+        let input_page_aux_ptr = keygen_builder.add_main_matrix(self.input_chip.air.aux_width());
+        let output_page_aux_ptr = keygen_builder.add_main_matrix(self.output_chip.air.aux_width());
         let range_checker_ptr = keygen_builder.add_main_matrix(self.range_checker.air_width());
 
         keygen_builder.add_partitioned_air(

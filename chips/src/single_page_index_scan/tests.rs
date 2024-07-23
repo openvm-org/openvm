@@ -96,7 +96,16 @@ fn test_single_page_index_scan_lt() {
 
     let x: Vec<u32> = vec![2177, 5880];
 
+    let expected_page_output = Page::from_2d_vec(
+        &[
+            vec![1, 443, 376, 22278, 13998, 58327],
+            vec![0; 1 + IDX_LEN + DATA_LEN],
+        ],
+        IDX_LEN,
+        DATA_LEN,
+    );
     let page_output = page_controller.gen_output(page.clone(), x.clone(), PAGE_WIDTH, cmp);
+    assert_eq!(expected_page_output, page_output);
 
     let engine = config::baby_bear_poseidon2::default_engine(LOG_PAGE_HEIGHT.max(DECOMP));
 

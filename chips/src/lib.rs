@@ -19,7 +19,7 @@ pub mod page_btree;
 pub mod page_rw_checker;
 pub mod range;
 pub mod range_gate;
-// pub mod single_page_index_scan;
+pub mod single_page_index_scan;
 pub mod sub_chip;
 pub mod sum;
 pub mod utils;

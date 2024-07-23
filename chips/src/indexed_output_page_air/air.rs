@@ -27,15 +27,13 @@ impl AirConfig for IndexedOutputPageAir {
     type Cols<T> = IndexedOutputPageCols<T>;
 }
 
-impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for IndexedOutputPageAir
-where
-    AB::M: Clone,
-{
+impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for IndexedOutputPageAir {
     // This function assumes that there are (at least) two partitions for the trace.
     // The first partition is the page itself, and the first self.aux_width() columns of the
     // second partition correspond to the auxiliary columns necessary for sorting.
     // Under this assumption, this function can be called directly from a superair (without needing
     // to construct the columns manually before calling SubAir)
+    #[inline]
     fn eval(&self, builder: &mut AB) {
         assert!(builder.partitioned_main().len() >= 2);
 

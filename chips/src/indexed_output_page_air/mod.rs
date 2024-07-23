@@ -7,7 +7,9 @@ pub mod trace;
 #[cfg(test)]
 pub mod tests;
 
-#[derive(Clone, Debug)]
+/// Air that constraints that the index of the page is strictly ascending.
+/// This Air does not receive any data and its only interactions are for range check.
+#[derive(Copy, Clone, Debug)]
 pub struct IndexedOutputPageAir {
     range_bus_index: usize,
 
