@@ -59,7 +59,7 @@ impl<T: Clone> IntersectorAuxCols<T> {
             lt_aux: IsLessThanTupleAuxCols::from_slice(
                 &slc[..slc.len() - 1],
                 intersector_air.lt_chip.limb_bits(),
-                intersector_air.lt_chip.decomp(),
+                intersector_air.lt_chip.decomp,
                 intersector_air.lt_chip.tuple_len(),
             ),
             lt_out: slc[slc.len() - 1].clone(),
@@ -77,7 +77,7 @@ impl<T: Clone> IntersectorAuxCols<T> {
     pub fn width(intersector_air: &IntersectorAir) -> usize {
         IsLessThanTupleAuxCols::<usize>::get_width(
             intersector_air.lt_chip.limb_bits(),
-            intersector_air.lt_chip.decomp(),
+            intersector_air.lt_chip.decomp,
             intersector_air.idx_len,
         ) + 1
     }
