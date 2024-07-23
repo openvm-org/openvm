@@ -770,7 +770,8 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 AS::Memory,
             ),
         ],
-        AsmInstruction::CycleTracker(_) => vec![],
+        AsmInstruction::CycleTrackerStart(_) => vec![],
+        AsmInstruction::CycleTrackerEnd(_) => vec![],
         _ => panic!("Unsupported instruction {:?}", instruction),
     }
 }

@@ -509,8 +509,14 @@ impl<C: Config> Builder<C> {
             .push(DslIr::CircuitCommitCommitedValuesDigest(var));
     }
 
-    pub fn cycle_tracker(&mut self, name: &str) {
-        self.operations.push(DslIr::CycleTracker(name.to_string()));
+    pub fn cycle_tracker_start(&mut self, name: &str) {
+        self.operations
+            .push(DslIr::CycleTrackerStart(name.to_string()));
+    }
+
+    pub fn cycle_tracker_end(&mut self, name: &str) {
+        self.operations
+            .push(DslIr::CycleTrackerEnd(name.to_string()));
     }
 
     pub fn halt(&mut self) {
