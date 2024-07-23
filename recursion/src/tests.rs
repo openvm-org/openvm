@@ -22,7 +22,7 @@ use afs_test_utils::utils::to_field_vec;
 
 use crate::hints::Hintable;
 use crate::stark::{DynRapForRecursion, VerifierProgram};
-use crate::types::{InnerConfig, MultiStarkVerificationAdvice, VerifierProgramInput};
+use crate::types::{new_from_multi_vk, InnerConfig, VerifierProgramInput};
 
 pub struct FibonacciAir;
 
@@ -170,7 +170,7 @@ fn run_recursive_test(
         keygen_builder.add_air(rap, num_pv);
     }
 
-    let pk = keygen_builder.generate_partial_pk();
+    let pk = keygen_builder.generate_pk();
     let vk = pk.vk();
 
     let prover = engine.prover();
@@ -196,7 +196,7 @@ fn run_recursive_test(
         .expect("afs proof should verify");
 
     // Build verification program in eDSL.
-    let advice = MultiStarkVerificationAdvice::new_from_multi_vk(&vk);
+    let advice = new_from_multi_vk(&vk);
 
     let program = VerifierProgram::build(rec_raps, advice, &engine.fri_params);
 

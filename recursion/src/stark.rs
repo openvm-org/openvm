@@ -1,8 +1,8 @@
 use std::any::{type_name, Any};
 
-use afs_stark_backend::air_builders::symbolic::SymbolicRapBuilder;
+use afs_stark_backend::air_builders::symbolic::{SymbolicConstraints, SymbolicRapBuilder};
 use itertools::Itertools;
-use p3_air::{Air, BaseAir};
+use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
 use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
@@ -566,6 +566,7 @@ where
         let folded_constraints = Self::eval_constraints(
             builder,
             rap,
+            &constants.symbolic_constraints,
             preprocessed,
             &partitioned_main_values,
             public_values,
@@ -604,6 +605,7 @@ where
     fn eval_constraints<R>(
         builder: &mut Builder<C>,
         rap: &R,
+        symbolic_constraints: &SymbolicConstraints<C::F>,
         preprocessed_values: AdjacentOpenedValues<Ext<C::F, C::EF>>,
         partitioned_main_values: &[AdjacentOpenedValues<Ext<C::F, C::EF>>],
         public_values: Array<C, Felt<C::F>>,
@@ -666,6 +668,9 @@ where
             accumulator: SymbolicExt::zero(),
             public_values: &folder_pv,
             exposed_values_after_challenge, // FIXME
+
+            symbolic_interactions: &symbolic_constraints.interactions,
+            interactions: vec![],
         };
 
         rap.eval(&mut folder);
