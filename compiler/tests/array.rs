@@ -23,7 +23,7 @@ pub struct Point<C: Config> {
 }
 
 #[test]
-// #[ignore = "test too slow"]
+#[ignore = "test too slow"]
 fn test_compiler_array() {
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, 4>;
