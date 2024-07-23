@@ -2,9 +2,11 @@ use afs_chips::offline_checker::OfflineCheckerOperation;
 use p3_field::PrimeField64;
 use std::array::from_fn;
 
+pub mod expand;
 pub mod offline_checker;
 #[cfg(test)]
 pub mod tests;
+pub mod tree;
 
 #[derive(PartialEq, Copy, Clone, Debug, Eq)]
 pub enum OpType {

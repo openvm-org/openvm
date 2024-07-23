@@ -8,12 +8,11 @@ use afs_compiler::ir::{Config, Ext, Felt, SymbolicExt};
 use afs_stark_backend::air_builders::PartitionedAirBuilder;
 use afs_stark_backend::rap::PermutationAirBuilderWithExposedValues;
 
-// FIXME: duplicated from afs_stark_backend
 type ViewPair<'a, T> = VerticalPair<RowMajorMatrixView<'a, T>, RowMajorMatrixView<'a, T>>;
 
 type Var<C> = Ext<<C as Config>::F, <C as Config>::EF>;
 
-pub struct AxiomRecursiveVerifierConstraintFolder<'a, C: Config> {
+pub struct RecursiveVerifierConstraintFolder<'a, C: Config> {
     pub preprocessed: ViewPair<'a, Var<C>>,
     pub partitioned_main: Vec<ViewPair<'a, Var<C>>>,
     pub after_challenge: Vec<ViewPair<'a, Var<C>>>,
@@ -27,7 +26,7 @@ pub struct AxiomRecursiveVerifierConstraintFolder<'a, C: Config> {
     pub exposed_values_after_challenge: &'a [Vec<Var<C>>],
 }
 
-impl<'a, C: Config> AirBuilder for AxiomRecursiveVerifierConstraintFolder<'a, C> {
+impl<'a, C: Config> AirBuilder for RecursiveVerifierConstraintFolder<'a, C> {
     type F = C::F;
     type Var = Ext<C::F, C::EF>;
     type Expr = SymbolicExt<C::F, C::EF>;
@@ -65,7 +64,7 @@ impl<'a, C: Config> AirBuilder for AxiomRecursiveVerifierConstraintFolder<'a, C>
     }
 }
 
-impl<'a, C> PairBuilder for AxiomRecursiveVerifierConstraintFolder<'a, C>
+impl<'a, C> PairBuilder for RecursiveVerifierConstraintFolder<'a, C>
 where
     C: Config,
 {
@@ -74,7 +73,7 @@ where
     }
 }
 
-impl<'a, C> ExtensionBuilder for AxiomRecursiveVerifierConstraintFolder<'a, C>
+impl<'a, C> ExtensionBuilder for RecursiveVerifierConstraintFolder<'a, C>
 where
     C: Config,
 {
@@ -92,7 +91,7 @@ where
     }
 }
 
-impl<'a, C> PermutationAirBuilder for AxiomRecursiveVerifierConstraintFolder<'a, C>
+impl<'a, C> PermutationAirBuilder for RecursiveVerifierConstraintFolder<'a, C>
 where
     C: Config,
 {
@@ -115,7 +114,7 @@ where
     }
 }
 
-impl<'a, C: Config> AirBuilderWithPublicValues for AxiomRecursiveVerifierConstraintFolder<'a, C> {
+impl<'a, C: Config> AirBuilderWithPublicValues for RecursiveVerifierConstraintFolder<'a, C> {
     type PublicVar = Felt<C::F>;
 
     fn public_values(&self) -> &[Self::PublicVar] {
@@ -123,7 +122,7 @@ impl<'a, C: Config> AirBuilderWithPublicValues for AxiomRecursiveVerifierConstra
     }
 }
 
-impl<'a, C> PermutationAirBuilderWithExposedValues for AxiomRecursiveVerifierConstraintFolder<'a, C>
+impl<'a, C> PermutationAirBuilderWithExposedValues for RecursiveVerifierConstraintFolder<'a, C>
 where
     C: Config,
 {
@@ -135,7 +134,7 @@ where
     }
 }
 
-impl<'a, C> PartitionedAirBuilder for AxiomRecursiveVerifierConstraintFolder<'a, C>
+impl<'a, C> PartitionedAirBuilder for RecursiveVerifierConstraintFolder<'a, C>
 where
     C: Config,
 {

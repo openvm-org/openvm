@@ -5,8 +5,8 @@ use p3_util::log2_strict_usize;
 
 use afs_compiler::util::execute_program;
 use afs_recursion::hints::{Hintable, InnerVal};
-use afs_recursion::stark::{AxiomVerifier, DynRapForRecursion};
-use afs_recursion::types::{AxiomMemoryLayout, InnerConfig, MultiStarkVerificationAdvice};
+use afs_recursion::stark::{DynRapForRecursion, VerifierProgram};
+use afs_recursion::types::{InnerConfig, MultiStarkVerificationAdvice, VerifierProgramInput};
 use afs_stark_backend::keygen::types::MultiStarkPartialVerifyingKey;
 use afs_stark_backend::prover::trace::TraceCommitmentBuilder;
 use afs_stark_backend::prover::types::Proof;
@@ -81,9 +81,9 @@ pub fn run_verification_program(
 
     let advice = MultiStarkVerificationAdvice::new_from_multi_vk(&partial_vk);
 
-    let program = AxiomVerifier::build(rec_raps, advice, &engine.fri_params);
+    let program = VerifierProgram::build(rec_raps, advice, &engine.fri_params);
 
-    let input = AxiomMemoryLayout {
+    let input = VerifierProgramInput {
         proof,
         log_degree_per_air,
         public_values: pvs.clone(),

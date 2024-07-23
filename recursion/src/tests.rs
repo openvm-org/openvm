@@ -22,8 +22,8 @@ use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::to_field_vec;
 
 use crate::hints::Hintable;
-use crate::stark::{AxiomVerifier, DynRapForRecursion};
-use crate::types::{AxiomMemoryLayout, InnerConfig, MultiStarkVerificationAdvice};
+use crate::stark::{DynRapForRecursion, VerifierProgram};
+use crate::types::{InnerConfig, MultiStarkVerificationAdvice, VerifierProgramInput};
 
 pub struct FibonacciAir;
 
@@ -207,9 +207,9 @@ fn run_recursive_test(
     // Build verification program in eDSL.
     let advice = MultiStarkVerificationAdvice::new_from_multi_vk(&partial_vk);
 
-    let program = AxiomVerifier::build(rec_raps, advice, &engine.fri_params);
+    let program = VerifierProgram::build(rec_raps, advice, &engine.fri_params);
 
-    let input = AxiomMemoryLayout {
+    let input = VerifierProgramInput {
         proof,
         log_degree_per_air,
         public_values: pvs.clone(),
