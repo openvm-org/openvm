@@ -5,14 +5,14 @@ use p3_field::Field;
 ///
 /// Five IO columns for rcv_count, opcode, x, y, result.
 /// Eight aux columns for interpreting opcode, evaluating indicators, inverse, and explicit computations.
-#[derive(AlignedBorrow)]
+#[derive(Copy, Clone, Debug, AlignedBorrow)]
 #[repr(C)]
 pub struct FieldArithmeticCols<T> {
     pub io: FieldArithmeticIoCols<T>,
     pub aux: FieldArithmeticAuxCols<T>,
 }
 
-#[derive(AlignedBorrow)]
+#[derive(Copy, Clone, Debug, AlignedBorrow)]
 #[repr(C)]
 pub struct FieldArithmeticIoCols<T> {
     /// Number of times to receive
@@ -23,7 +23,7 @@ pub struct FieldArithmeticIoCols<T> {
     pub z: T,
 }
 
-#[derive(AlignedBorrow)]
+#[derive(Copy, Clone, Debug, AlignedBorrow)]
 #[repr(C)]
 pub struct FieldArithmeticAuxCols<T> {
     pub opcode_lo: T,

@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 
+use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -37,7 +38,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
     }
 }
 
-impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
+impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB> for CpuAir<WORD_SIZE> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -307,5 +308,8 @@ impl<const WORD_SIZE: usize, AB: AirBuilder> Air<AB> for CpuAir<WORD_SIZE> {
         builder.assert_eq(read1.enabled, read1_enabled_check);
         builder.assert_eq(read2.enabled, read2_enabled_check);
         builder.assert_eq(write.enabled, write_enabled_check);
+
+        // Turn on all interactions
+        self.eval_interactions(builder, io, accesses, &operation_flags);
     }
 }

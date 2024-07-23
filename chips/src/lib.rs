@@ -26,5 +26,6 @@ pub mod utils;
 pub mod xor_bits;
 pub mod xor_limbs;
 pub mod xor_lookup;
-// pub mod dummy_hash;
+
+// TODO: It will be easier to just re-write this
 // pub mod flat_hash;

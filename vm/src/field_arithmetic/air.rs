@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
 
-use p3_air::{Air, AirBuilder, BaseAir};
+use afs_stark_backend::interaction::InteractionBuilder;
+use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
@@ -17,7 +18,7 @@ impl<F: Field> BaseAir<F> for FieldArithmeticAir {
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for FieldArithmeticAir {
+impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -57,5 +58,7 @@ impl<AB: AirBuilder> Air<AB> for FieldArithmeticAir {
         );
 
         builder.assert_eq(aux.divisor_inv * io.y, aux.is_div);
+
+        self.eval_interactions(builder, *io);
     }
 }
