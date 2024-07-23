@@ -31,6 +31,20 @@ impl<T: Clone> SumCols<T> {
             is_lt_aux_cols,
         }
     }
+
+    pub fn index_map(lt_air: &IsLessThanAir) -> SumCols<usize> {
+        let num_aux_cols = IsLessThanAuxCols::<usize>::width(lt_air);
+        SumCols {
+            key: 0,
+            value: 1,
+            partial_sum: 2,
+            is_final: 3,
+            is_lt_aux_cols: IsLessThanAuxCols {
+                lower: 4,
+                lower_decomp: (5..5 + num_aux_cols - 1).collect(),
+            },
+        }
+    }
 }
 
 impl<T: Clone> BaseAir<T> for SumAir {
