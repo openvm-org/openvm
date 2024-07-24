@@ -37,10 +37,11 @@ impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2Chip<WIDTH
             .eval_without_interactions(builder, cols.aux.internal.io, cols.aux.internal.aux);
 
         // boolean constraints for alloc/cmp markers
-        builder.assert_bool(cols.io.is_alloc);
+        builder.assert_bool(cols.io.is_opcode);
+        builder.assert_bool(cols.io.is_direct);
         builder.assert_bool(cols.io.cmp);
         // can only be comparing if row is allocated
-        builder.assert_eq(cols.io.is_alloc * cols.io.cmp, cols.io.cmp);
+        builder.assert_eq(cols.io.is_opcode * cols.io.cmp, cols.io.cmp);
         // immediates
         for (i, operand) in [cols.io.a, cols.io.b, cols.io.c].into_iter().enumerate() {
             builder

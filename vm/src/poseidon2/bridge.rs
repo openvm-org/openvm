@@ -18,8 +18,8 @@ impl<const WIDTH: usize, F: Field> Poseidon2Chip<WIDTH, F> {
         let addresses = aux.addresses;
         let d_is_zero = aux.d_is_zero;
 
-        let fields = io.flatten().into_iter().skip(1);
-        builder.push_receive(POSEIDON2_BUS, fields, io.is_alloc);
+        let fields = io.flatten().into_iter().skip(2);
+        builder.push_receive(POSEIDON2_BUS, fields, io.is_opcode);
 
         let chunks: usize = WIDTH / 2;
 
@@ -36,7 +36,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2Chip<WIDTH, F> {
                 addr.into(),
                 addresses[i].into(),
             ];
-            builder.push_send(MEMORY_BUS, fields, io.is_alloc - d_is_zero);
+            builder.push_send(MEMORY_BUS, fields, io.is_opcode - d_is_zero);
         }
 
         // READ
@@ -58,7 +58,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2Chip<WIDTH, F> {
                 aux.internal.io.input[i].into(),
             ];
 
-            builder.push_send(MEMORY_BUS, fields, io.is_alloc);
+            builder.push_send(MEMORY_BUS, fields, io.is_opcode);
         }
 
         // WRITE
@@ -77,9 +77,9 @@ impl<const WIDTH: usize, F: Field> Poseidon2Chip<WIDTH, F> {
             ];
 
             let count = if i < chunks {
-                io.is_alloc.into()
+                io.is_opcode.into()
             } else {
-                io.is_alloc - io.cmp
+                io.is_opcode - io.cmp
             };
 
             builder.push_send(MEMORY_BUS, fields, count);

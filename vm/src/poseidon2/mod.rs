@@ -45,7 +45,8 @@ fn make_io_cols<F: Field>(
         e,
     } = instruction;
     Poseidon2ChipIoCols::<F> {
-        is_alloc: F::one(),
+        is_opcode: F::one(),
+        is_direct: F::zero(),
         clk: F::from_canonical_usize(start_timestamp),
         a: op_a,
         b: op_b,

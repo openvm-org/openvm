@@ -21,7 +21,8 @@ pub struct Poseidon2ChipCols<const WIDTH: usize, T> {
 /// * `cmp`: boolean for compression vs. permutation
 #[derive(Clone, Copy, Debug)]
 pub struct Poseidon2ChipIoCols<T> {
-    pub is_alloc: T,
+    pub is_opcode: T,
+    pub is_direct: T,
     pub clk: T,
     pub a: T,
     pub b: T,
@@ -79,12 +80,13 @@ impl<const WIDTH: usize, T: Field> Poseidon2ChipCols<WIDTH, T> {
 
 impl<T: Clone> Poseidon2ChipIoCols<T> {
     pub fn get_width() -> usize {
-        8
+        9
     }
 
     pub fn flatten(&self) -> Vec<T> {
         vec![
-            self.is_alloc.clone(),
+            self.is_opcode.clone(),
+            self.is_direct.clone(),
             self.clk.clone(),
             self.a.clone(),
             self.b.clone(),
@@ -97,21 +99,23 @@ impl<T: Clone> Poseidon2ChipIoCols<T> {
 
     pub fn from_slice(slice: &[T]) -> Self {
         Self {
-            is_alloc: slice[0].clone(),
-            clk: slice[1].clone(),
-            a: slice[2].clone(),
-            b: slice[3].clone(),
-            c: slice[4].clone(),
-            d: slice[5].clone(),
-            e: slice[6].clone(),
-            cmp: slice[7].clone(),
+            is_opcode: slice[0].clone(),
+            is_direct: slice[1].clone(),
+            clk: slice[2].clone(),
+            a: slice[3].clone(),
+            b: slice[4].clone(),
+            c: slice[5].clone(),
+            d: slice[6].clone(),
+            e: slice[7].clone(),
+            cmp: slice[8].clone(),
         }
     }
 }
 impl<T: Field> Poseidon2ChipIoCols<T> {
     pub fn blank_row() -> Self {
         Self {
-            is_alloc: T::zero(),
+            is_opcode: T::zero(),
+            is_direct: T::zero(),
             clk: T::zero(),
             a: T::zero(),
             b: T::zero(),

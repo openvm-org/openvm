@@ -109,9 +109,15 @@ macro_rules! run_perm_ops {
         );
         let dummy_cpu_poseidon2_trace = RowMajorMatrix::new(
             {
-                let mut vec: Vec<_> = (0..$num_ops)
+                let mut vec: Vec<BabyBear> = (0..$num_ops)
                     .flat_map(|i| {
-                        make_io_cols(16 * $num_ops + (time_per * i), $instructions[i]).flatten()
+                        make_io_cols(16 * $num_ops + (time_per * i), $instructions[i])
+                            .flatten()
+                            .iter()
+                            .enumerate()
+                            .filter(|&(index, _)| index != 1)
+                            .map(|(_, value)| *value)
+                            .collect::<Vec<BabyBear>>()
                     })
                     .collect();
                 for _ in 0..(tot_ops - $num_ops)
