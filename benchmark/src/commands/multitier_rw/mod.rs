@@ -39,7 +39,6 @@ use tracing::info_span;
 use crate::{
     commands::{parse_config_folder, parse_multitier_config_folder},
     utils::{
-        config_gen::{generate_configs, generate_multitier_configs},
         output_writer::{
             save_afi_to_new_db, write_csv_header, write_csv_line, write_multitier_csv_header,
             write_multitier_csv_line,

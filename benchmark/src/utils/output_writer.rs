@@ -9,6 +9,7 @@ use color_eyre::eyre::Result;
 use csv::{Writer, WriterBuilder};
 use logical_interface::{afs_interface::AfsInterface, mock_db::MockDb};
 use p3_util::ceil_div_usize;
+use serde::{Deserialize, Serialize};
 
 use crate::config::benchmark_data::BenchmarkData;
 

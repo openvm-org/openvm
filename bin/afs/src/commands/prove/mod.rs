@@ -28,6 +28,7 @@ use logical_interface::{
 };
 use p3_field::PrimeField64;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use rayon::ThreadPoolBuilder;
 use serde::de::DeserializeOwned;
 use tracing::info_span;
 

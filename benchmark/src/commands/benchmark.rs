@@ -1,11 +1,14 @@
 use std::{collections::HashMap, fs, time::Instant};
 
-use afs_test_utils::page_config::PageConfig;
+use afs_test_utils::page_config::{MultitierPageConfig, PageConfig};
 use chrono::Local;
 use color_eyre::eyre::Result;
 
 use crate::{
-    config::{benchmark_data::BenchmarkData, config_gen::get_configs},
+    config::{
+        benchmark_data::BenchmarkData,
+        config_gen::{get_configs, get_multitier_configs},
+    },
     utils::{
         output_writer::{
             default_output_filename, save_afi_to_new_db, write_csv_header, write_csv_line,
@@ -13,7 +16,7 @@ use crate::{
         },
         tracing::{clear_tracing_log, extract_event_data_from_log, extract_timing_data_from_log},
     },
-    AFI_FILE_PATH, DB_FILE_PATH, TABLE_ID, TMP_FOLDER, TMP_TRACING_LOG,
+    AFI_FILE_PATH, DB_FILE_PATH, MULTITIER_TABLE_ID, TABLE_ID, TMP_FOLDER, TMP_TRACING_LOG,
 };
 
 use super::CommonCommands;
@@ -168,6 +171,8 @@ pub fn benchmark_multitier_setup(
         benchmark_data.headers.clone(),
     )
     .unwrap();
+
+    (configs, output_file)
 }
 
 pub fn benchmark_multitier_execute(
@@ -193,7 +198,7 @@ pub fn benchmark_multitier_execute(
 
     // Run benchmark for each config
     for (idx, config) in configs.iter().rev().enumerate() {
-        if idx < start_idx || config.page.leaf_height != 1_048_576 {
+        if idx < start_idx {
             continue;
         }
         let timestamp = Local::now().format("%H:%M:%S");

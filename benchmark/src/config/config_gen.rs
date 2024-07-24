@@ -1,6 +1,7 @@
 #[cfg(test)]
 use std::fs::create_dir_all;
 
+use afs_test_utils::config::FriParameters;
 use itertools::iproduct;
 
 #[allow(unused_imports)]
@@ -174,7 +175,7 @@ pub fn generate_multitier_configs() -> Vec<MultitierPageConfig> {
                 final_internal_cap: if *leaf_height > 100 { 3 } else { num_ops * 7 },
             },
         };
-        // configs.push(opt_config);
+        configs.push(opt_config);
         configs.push(pess_config);
     }
 

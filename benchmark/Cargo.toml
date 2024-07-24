@@ -7,9 +7,9 @@ edition.workspace = true
 [dependencies]
 cli-table = "0.4.9"
 csv = "1.3.0"
-afs = { path = "../bin/afs" }
-afs-1b = { path = "../bin/afs-1b" }
-olap = { path = "../bin/olap" }
+afs = { path = "../bin/afs", default-features = false }
+afs-1b = { path = "../bin/afs-1b", default-features = false }
+olap = { path = "../bin/olap", default-features = false }
 afs-stark-backend = { path = "../stark-backend", default-features = false }
 logical-interface = { path = "../logical-interface" }
 afs-derive = { path = "../derive" }

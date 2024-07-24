@@ -3,6 +3,7 @@ use crate::commands::keygen::KeygenCommand;
 use crate::commands::prove::ProveCommand;
 use crate::commands::verify::VerifyCommand;
 use crate::commands::{cache, keygen, mock, prove, verify};
+use crate::RANGE_CHECK_BITS;
 use afs_stark_backend::config::Com;
 use afs_stark_backend::config::PcsProof;
 use afs_stark_backend::config::PcsProverData;
@@ -122,7 +123,8 @@ pub fn run(config: &PageConfig) {
     let checker_trace_degree = config.page.max_rw_ops * 4;
     let pcs_log_degree = log2_strict_usize(checker_trace_degree)
         .max(log2_strict_usize(config.page.height))
-        .max(8);
+        .max(RANGE_CHECK_BITS);
+    println!("{:?}", pcs_log_degree);
     let fri_params = config.fri_params;
     let engine_type = config.stark_engine.engine;
     match engine_type {

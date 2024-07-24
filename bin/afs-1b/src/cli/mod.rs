@@ -122,5 +122,6 @@ pub fn run(config: &MultitierPageConfig) {
                 engine_from_perm(perm, pcs_log_degree, fri_params);
             Cli::run_with_engine(config, &engine)
         }
+        _ => panic!(),
     }
 }
