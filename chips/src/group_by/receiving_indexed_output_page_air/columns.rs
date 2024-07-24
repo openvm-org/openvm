@@ -10,10 +10,13 @@ impl<T: Clone> ReceivingIndexedOutputPageCols<T> {
         Self {
             final_page_cols: IndexedOutputPageCols::from_slice(
                 &slc[..slc.len()],
-                final_air.idx_len,
-                final_air.data_len,
-                final_air.idx_limb_bits,
-                final_air.idx_decomp,
+                &IndexedOutputPageAir::new(
+                    0,
+                    final_air.idx_len,
+                    final_air.data_len,
+                    final_air.idx_limb_bits,
+                    final_air.idx_decomp,
+                ),
             ),
         }
     }

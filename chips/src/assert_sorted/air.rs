@@ -28,7 +28,7 @@ impl AssertSortedAir {
 impl<F: Field> BaseAir<F> for AssertSortedAir {
     fn width(&self) -> usize {
         AssertSortedCols::<F>::get_width(
-            self.is_less_than_tuple_air.limb_bits(),
+            &self.is_less_than_tuple_air.limb_bits,
             self.is_less_than_tuple_air.decomp,
         )
     }
@@ -45,13 +45,13 @@ impl<AB: InteractionBuilder> Air<AB> for AssertSortedAir {
 
         let local_cols = AssertSortedCols::from_slice(
             local,
-            self.is_less_than_tuple_air.limb_bits(),
+            &self.is_less_than_tuple_air.limb_bits,
             self.is_less_than_tuple_air.decomp,
         );
 
         let next_cols = AssertSortedCols::from_slice(
             next,
-            self.is_less_than_tuple_air.limb_bits(),
+            &self.is_less_than_tuple_air.limb_bits,
             self.is_less_than_tuple_air.decomp,
         );
 

@@ -24,7 +24,7 @@ pub struct IsLessThanTupleAir {
     /// IsLessThanAirs for each tuple element
     pub is_less_than_airs: Vec<IsLessThanAir>,
     // Better to store this separately to avoid re-allocating vectors each time
-    limb_bits: Vec<usize>,
+    pub limb_bits: Vec<usize>,
 }
 
 impl IsLessThanTupleAir {
@@ -44,10 +44,6 @@ impl IsLessThanTupleAir {
 
     pub fn tuple_len(&self) -> usize {
         self.is_less_than_airs.len()
-    }
-
-    pub fn limb_bits(&self) -> &[usize] {
-        &self.limb_bits
     }
 
     /// FOR INTERNAL USE ONLY when this AIR is used as a sub-AIR but the comparators `x, y` are on different rows. See [IsLessThanAir::eval_without_interactions].
@@ -129,7 +125,7 @@ impl AirConfig for IsLessThanTupleAir {
 
 impl<F: Field> BaseAir<F> for IsLessThanTupleAir {
     fn width(&self) -> usize {
-        IsLessThanTupleCols::<F>::get_width(self.limb_bits(), self.decomp)
+        IsLessThanTupleCols::<F>::width(self)
     }
 }
 
@@ -140,8 +136,7 @@ impl<AB: InteractionBuilder> Air<AB> for IsLessThanTupleAir {
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
 
-        let local_cols =
-            IsLessThanTupleCols::<AB::Var>::from_slice(local, self.limb_bits(), self.decomp);
+        let local_cols = IsLessThanTupleCols::<AB::Var>::from_slice(local, self);
 
         SubAir::eval(self, builder, local_cols.io, local_cols.aux);
     }

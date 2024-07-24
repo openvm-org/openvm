@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::is_less_than_tuple::columns::IsLessThanTupleCols;
+use crate::is_less_than_tuple::IsLessThanTupleAir;
 use crate::range_gate::RangeCheckerGateChip;
 
 use super::super::is_less_than_tuple::IsLessThanTupleChip;
@@ -15,10 +16,12 @@ fn test_flatten_fromslice_roundtrip() {
     let limb_bits = vec![16, 8, 20, 20];
     let decomp = 8;
 
-    let num_cols = IsLessThanTupleCols::<usize>::get_width(&limb_bits, decomp);
+    let lt_air = IsLessThanTupleAir::new(0, limb_bits.clone(), decomp);
+
+    let num_cols = IsLessThanTupleCols::<usize>::width(&lt_air);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-    let cols_numbered = IsLessThanTupleCols::<usize>::from_slice(&all_cols, &limb_bits, decomp);
+    let cols_numbered = IsLessThanTupleCols::<usize>::from_slice(&all_cols, &lt_air);
     let flattened = cols_numbered.flatten();
 
     for (i, col) in flattened.iter().enumerate() {

@@ -36,6 +36,11 @@ impl IndexedPageEditor {
     }
 
     pub fn into_page(self) -> Page {
+        assert!(
+            self.idx_data_map.len() <= self.height,
+            "Page is over capacity"
+        );
+
         let mut page_2d_vec = vec![];
         for (idx, data) in self.idx_data_map.into_iter() {
             page_2d_vec.push(
@@ -65,10 +70,6 @@ impl IndexedPageEditor {
     /// This function inserts (idx, data) into the page
     /// It assumes that the page is not full and that the idx is not already in the page
     pub fn insert(&mut self, idx: &[u32], data: &[u32]) {
-        assert!(
-            self.idx_data_map.len() < self.height,
-            "Can't insert into a full Page"
-        );
         assert!(idx.len() == self.idx_len);
         assert!(data.len() == self.data_len);
 
@@ -87,10 +88,6 @@ impl IndexedPageEditor {
         assert!(data.len() == self.data_len);
 
         self.idx_data_map.insert(idx.to_vec(), data.to_vec());
-        assert!(
-            self.idx_data_map.len() <= self.height,
-            "Page is over capacity after writing"
-        );
     }
 
     /// This function deletes the row with index idx

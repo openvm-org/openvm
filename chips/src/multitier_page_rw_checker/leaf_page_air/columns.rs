@@ -1,7 +1,8 @@
 use crate::{
-    common::page_cols::PageCols, is_less_than_tuple::columns::IsLessThanTupleAuxCols,
+    common::page_cols::PageCols,
+    is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
     multitier_page_rw_checker::page_controller::MyLessThanTupleParams,
-    page_rw_checker::final_page::columns::IndexedPageWriteAuxCols,
+    page_rw_checker::final_page::{columns::IndexedPageWriteAuxCols, IndexedPageWriteAir},
 };
 
 #[derive(Clone)]
@@ -90,15 +91,19 @@ impl<T> LeafPageMetadataCols<T> {
             };
             new_start += 2 * idx_len + 2;
             let mut aux_allocs = vec![];
-            let aux_size = IsLessThanTupleAuxCols::<T>::get_width(
+            let aux_size = IsLessThanTupleAuxCols::<T>::width(&IsLessThanTupleAir::new(
+                0,
                 vec![is_less_than_tuple_params.limb_bits; idx_len],
                 is_less_than_tuple_params.decomp,
-            );
+            ));
             for i in 0..2 {
                 aux_allocs.push(IsLessThanTupleAuxCols::from_slice(
                     &cols[new_start + i * aux_size..new_start + (i + 1) * aux_size],
-                    vec![is_less_than_tuple_params.limb_bits; idx_len],
-                    is_less_than_tuple_params.decomp,
+                    &IsLessThanTupleAir::new(
+                        0,
+                        vec![is_less_than_tuple_params.limb_bits; idx_len],
+                        is_less_than_tuple_params.decomp,
+                    ),
                 ))
             }
             let subair_cols = LeafPageSubAirCols {
@@ -106,9 +111,14 @@ impl<T> LeafPageMetadataCols<T> {
                 end_idx: aux_allocs[1].clone(),
                 final_page_aux: IndexedPageWriteAuxCols::from_slice(
                     &cols[new_start + 2 * aux_size..],
-                    is_less_than_tuple_params.limb_bits,
-                    is_less_than_tuple_params.decomp,
-                    idx_len,
+                    &IndexedPageWriteAir::new(
+                        0,
+                        0,
+                        idx_len,
+                        0,
+                        is_less_than_tuple_params.limb_bits,
+                        is_less_than_tuple_params.decomp,
+                    ),
                 ),
             };
             LeafPageMetadataCols {

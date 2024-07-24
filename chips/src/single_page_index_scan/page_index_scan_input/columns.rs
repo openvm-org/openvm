@@ -1,6 +1,7 @@
 use crate::{
-    common::page_cols::PageCols, is_equal_vec::columns::IsEqualVecAuxCols,
-    is_less_than_tuple::columns::IsLessThanTupleAuxCols,
+    common::page_cols::PageCols,
+    is_equal_vec::columns::IsEqualVecAuxCols,
+    is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
 };
 
 use super::Comp;
@@ -51,20 +52,19 @@ impl<T: Clone> PageIndexScanInputLocalCols<T> {
             Comp::Lt => PageIndexScanInputAuxCols::Lt(StrictCompAuxCols {
                 is_less_than_tuple_aux: IsLessThanTupleAuxCols::from_slice(
                     &slc[idx_len + 2..],
-                    idx_limb_bits,
-                    decomp,
+                    &IsLessThanTupleAir::new(0, idx_limb_bits.to_vec(), decomp),
                 ),
             }),
             Comp::Lte => {
-                let less_than_tuple_aux_width =
-                    IsLessThanTupleAuxCols::<T>::get_width(idx_limb_bits, decomp);
+                let less_than_tuple_aux_width = IsLessThanTupleAuxCols::<T>::width(
+                    &IsLessThanTupleAir::new(0, idx_limb_bits.to_vec(), decomp),
+                );
                 PageIndexScanInputAuxCols::Lte(NonStrictCompAuxCols {
                     satisfies_strict_comp: slc[idx_len + 2].clone(),
                     satisfies_eq_comp: slc[idx_len + 3].clone(),
                     is_less_than_tuple_aux: IsLessThanTupleAuxCols::from_slice(
                         &slc[idx_len + 4..idx_len + 4 + less_than_tuple_aux_width],
-                        idx_limb_bits,
-                        decomp,
+                        &IsLessThanTupleAir::new(0, idx_limb_bits.to_vec(), decomp),
                     ),
                     is_equal_vec_aux: IsEqualVecAuxCols::from_slice(
                         &slc[idx_len + 4 + less_than_tuple_aux_width..],
@@ -76,15 +76,15 @@ impl<T: Clone> PageIndexScanInputLocalCols<T> {
                 is_equal_vec_aux: IsEqualVecAuxCols::from_slice(&slc[idx_len + 2..], idx_len),
             }),
             Comp::Gte => {
-                let less_than_tuple_aux_width =
-                    IsLessThanTupleAuxCols::<T>::get_width(idx_limb_bits, decomp);
+                let less_than_tuple_aux_width = IsLessThanTupleAuxCols::<T>::width(
+                    &IsLessThanTupleAir::new(0, idx_limb_bits.to_vec(), decomp),
+                );
                 PageIndexScanInputAuxCols::Gte(NonStrictCompAuxCols {
                     satisfies_strict_comp: slc[idx_len + 2].clone(),
                     satisfies_eq_comp: slc[idx_len + 3].clone(),
                     is_less_than_tuple_aux: IsLessThanTupleAuxCols::from_slice(
                         &slc[idx_len + 4..idx_len + 4 + less_than_tuple_aux_width],
-                        idx_limb_bits,
-                        decomp,
+                        &IsLessThanTupleAir::new(0, idx_limb_bits.to_vec(), decomp),
                     ),
                     is_equal_vec_aux: IsEqualVecAuxCols::from_slice(
                         &slc[idx_len + 4 + less_than_tuple_aux_width..],
@@ -95,8 +95,7 @@ impl<T: Clone> PageIndexScanInputLocalCols<T> {
             Comp::Gt => PageIndexScanInputAuxCols::Gt(StrictCompAuxCols {
                 is_less_than_tuple_aux: IsLessThanTupleAuxCols::from_slice(
                     &slc[idx_len + 2..],
-                    idx_limb_bits,
-                    decomp,
+                    &IsLessThanTupleAir::new(0, idx_limb_bits.to_vec(), decomp),
                 ),
             }),
         };
@@ -168,7 +167,11 @@ impl<T: Clone> PageIndexScanInputCols<T> {
                     + idx_len
                     + 1
                     + 1
-                    + IsLessThanTupleAuxCols::<T>::get_width(idx_limb_bits, decomp)
+                    + IsLessThanTupleAuxCols::<T>::width(&IsLessThanTupleAir::new(
+                        0,
+                        idx_limb_bits.to_vec(),
+                        decomp,
+                    ))
             }
             Comp::Lte | Comp::Gte => {
                 1 + idx_len
@@ -178,16 +181,15 @@ impl<T: Clone> PageIndexScanInputCols<T> {
                     + 1
                     + 1
                     + 1
-                    + IsLessThanTupleAuxCols::<T>::get_width(idx_limb_bits, decomp)
-                    + IsEqualVecAuxCols::<T>::get_width(idx_len)
+                    + IsLessThanTupleAuxCols::<T>::width(&IsLessThanTupleAir::new(
+                        0,
+                        idx_limb_bits.to_vec(),
+                        decomp,
+                    ))
+                    + IsEqualVecAuxCols::<T>::width(idx_len)
             }
             Comp::Eq => {
-                1 + idx_len
-                    + data_len
-                    + idx_len
-                    + 1
-                    + 1
-                    + IsEqualVecAuxCols::<T>::get_width(idx_len)
+                1 + idx_len + data_len + idx_len + 1 + 1 + IsEqualVecAuxCols::<T>::width(idx_len)
             }
         }
     }

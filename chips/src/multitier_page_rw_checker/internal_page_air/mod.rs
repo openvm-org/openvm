@@ -86,9 +86,12 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
             + (1 - self.is_init as usize)
                 * (2 * self.idx_len             // prove sort + range inclusion columns
                     + 4
-                    + 4 * IsLessThanTupleAuxCols::<usize>::get_width(                  // aux columns
-                        vec![self.is_less_than_tuple_param.limb_bits; self.idx_len],
-                        self.is_less_than_tuple_param.decomp,
+                    + 4 * IsLessThanTupleAuxCols::<usize>::width(                  // aux columns
+                        &IsLessThanTupleAir::new(
+                            0,
+                            vec![self.is_less_than_tuple_param.limb_bits; self.idx_len],
+                            self.is_less_than_tuple_param.decomp,
+                        ),
                     )
                     + 1) // is_zero
     }

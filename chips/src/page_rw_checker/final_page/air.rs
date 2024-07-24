@@ -33,12 +33,7 @@ where
             )
         });
         let aux = [0, 1].map(|i| {
-            IndexedPageWriteAuxCols::from_slice(
-                &builder.partitioned_main()[1].row_slice(i),
-                self.final_air.idx_limb_bits,
-                self.final_air.idx_decomp,
-                self.final_air.idx_len,
-            )
+            IndexedPageWriteAuxCols::from_slice(&builder.partitioned_main()[1].row_slice(i), self)
         });
         // Making sure the page is in the proper format
         SubAir::eval(self, builder, io, aux);

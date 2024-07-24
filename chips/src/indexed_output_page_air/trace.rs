@@ -6,10 +6,8 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 
 use super::{columns::IndexedOutputPageAuxCols, IndexedOutputPageAir};
 use crate::{
-    common::page::Page,
-    is_less_than_tuple::{columns::IsLessThanTupleCols, IsLessThanTupleAir},
-    range_gate::RangeCheckerGateChip,
-    sub_chip::LocalTraceInstructions,
+    common::page::Page, is_less_than_tuple::columns::IsLessThanTupleCols,
+    range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions,
 };
 
 impl IndexedOutputPageAir {
@@ -31,12 +29,6 @@ impl IndexedOutputPageAir {
     where
         Val<SC>: PrimeField,
     {
-        let lt_chip = IsLessThanTupleAir::new(
-            self.range_bus_index,
-            vec![self.idx_limb_bits; self.idx_len],
-            self.idx_decomp,
-        );
-
         let mut rows: Vec<Vec<Val<SC>>> = vec![];
 
         for i in 0..page.height() {
@@ -49,7 +41,7 @@ impl IndexedOutputPageAir {
             let cur_idx = page[i].idx.clone();
 
             let lt_cols: IsLessThanTupleCols<Val<SC>> = LocalTraceInstructions::generate_trace_row(
-                &lt_chip,
+                &self.lt_air,
                 (prv_idx, cur_idx, range_checker.clone()),
             );
 
