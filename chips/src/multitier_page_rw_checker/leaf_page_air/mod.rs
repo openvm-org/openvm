@@ -115,13 +115,12 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
     // we then need extra columns that contain results of is_less_than comparisons
     // in particular, we need to constrain that is_alloc * ((1 - (idx < start)) * (1 - (end < idx)) - 1) = 0
     pub fn air_width(&self) -> usize {
-        1 + self.page_chip().air_width()
-            + COMMITMENT_LEN                // own_commitment
+        self.page_chip().air_width()
             + (1 - self.is_init as usize)
                 * (2 * self.idx_len
                     + 2
                     + 2 * IsLessThanTupleAuxCols::<usize>::get_width(
-                        vec![self.is_less_than_tuple_param.limb_bits; self.idx_len],
+                        &vec![self.is_less_than_tuple_param.limb_bits; self.idx_len],
                         self.is_less_than_tuple_param.decomp,
                     ))
     }

@@ -40,7 +40,6 @@ where
         let metadata = InternalPageMetadataCols::from_slice(
             &local,
             self.idx_len,
-            COMMITMENT_LEN,
             self.is_init,
             self.is_less_than_tuple_param.clone(),
         );
@@ -66,20 +65,18 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
         // partition is physical page data vs metadata
         let main: &<AB as AirBuilder>::M = &builder.partitioned_main()[1].clone();
         let local = main.row_slice(0);
-        let pi = builder.public_values().to_vec();
         let data: &<AB as AirBuilder>::M = &builder.partitioned_main()[0].clone();
         let metadata = InternalPageMetadataCols::from_slice(
             &local,
             self.idx_len,
-            COMMITMENT_LEN,
             self.is_init,
             self.is_less_than_tuple_param.clone(),
         );
         let [cached_data, next_data] = [0, 1]
             .map(|i| PtrPageCols::from_slice(&data.row_slice(i), self.idx_len, COMMITMENT_LEN));
-        for (i, p) in pi.iter().enumerate().take(COMMITMENT_LEN) {
-            builder.assert_eq(*p, metadata.own_commitment[i]);
-        }
+        // for (i, p) in pi.iter().enumerate().take(COMMITMENT_LEN) {
+        //     builder.assert_eq(*p, metadata.own_commitment[i]);
+        // }
         builder.assert_eq(cached_data.internal_marker, AB::Expr::from_canonical_u64(2));
         builder.assert_eq(metadata.mult_alloc, cached_data.is_alloc * metadata.mult);
         builder.assert_eq(

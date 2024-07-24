@@ -82,7 +82,6 @@ impl<T> InternalPageCols<T> {
             metadata: InternalPageMetadataCols::from_slice(
                 &cols[2 + 2 * idx_len + commitment_len..],
                 idx_len,
-                commitment_len,
                 is_init,
                 is_less_than_tuple_params,
             ),
@@ -109,7 +108,6 @@ impl<T> InternalPageMetadataCols<T> {
     pub fn from_slice(
         cols: &[T],
         idx_len: usize,
-        commitment_len: usize,
         is_init: bool,
         is_less_than_tuple_params: MyLessThanTupleParams,
     ) -> Self
@@ -144,13 +142,13 @@ impl<T> InternalPageMetadataCols<T> {
             new_start += 2 * idx_len + 2;
             let mut aux_allocs = vec![];
             let aux_size = IsLessThanTupleAuxCols::<T>::get_width(
-                vec![is_less_than_tuple_params.limb_bits; idx_len],
+                &vec![is_less_than_tuple_params.limb_bits; idx_len],
                 is_less_than_tuple_params.decomp,
             );
             for i in 0..4 {
                 aux_allocs.push(IsLessThanTupleAuxCols::from_slice(
                     &cols[new_start + i * aux_size..new_start + (i + 1) * aux_size],
-                    vec![is_less_than_tuple_params.limb_bits; idx_len],
+                    &vec![is_less_than_tuple_params.limb_bits; idx_len],
                     is_less_than_tuple_params.decomp,
                 ))
             }

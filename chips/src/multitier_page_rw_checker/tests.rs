@@ -151,7 +151,6 @@ where
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
     let mut init_leaf_data_ptrs = vec![];
-    let mut init_leaf_main_ptrs = vec![];
 
     let mut init_internal_data_ptrs = vec![];
     let mut init_internal_main_ptrs = vec![];
@@ -178,12 +177,6 @@ where
     for _ in 0..final_param.internal_cap {
         final_internal_data_ptrs
             .push(keygen_builder.add_cached_main_matrix(2 + 2 * idx_len + BABYBEAR_COMMITMENT_LEN));
-    }
-
-    for _ in 0..init_param.leaf_cap {
-        init_leaf_main_ptrs.push(keygen_builder.add_main_matrix(
-            page_controller.init_leaf_chips[0].air_width() - 1 - idx_len - data_len,
-        ));
     }
 
     for _ in 0..init_param.internal_cap {
@@ -217,12 +210,12 @@ where
     let final_root_ptr =
         keygen_builder.add_main_matrix(page_controller.final_root_signal.air_width());
 
-    for i in 0..init_param.leaf_cap {
-        keygen_builder.add_partitioned_air(
-            &page_controller.init_leaf_chips[i],
-            BABYBEAR_COMMITMENT_LEN,
-            vec![init_leaf_data_ptrs[i], init_leaf_main_ptrs[i]],
-        );
+    for (chip, ptr) in page_controller
+        .init_leaf_chips
+        .iter()
+        .zip(init_leaf_data_ptrs.into_iter())
+    {
+        keygen_builder.add_partitioned_air(chip, BABYBEAR_COMMITMENT_LEN, vec![ptr]);
     }
 
     for i in 0..init_param.internal_cap {
@@ -372,10 +365,6 @@ fn load_page_test(
         trace_builder.load_cached_trace(trace.clone(), prover_data.final_internal_page.remove(0));
     }
 
-    for trace in main_trace.init_leaf_chip_main_traces.iter() {
-        trace_builder.load_trace(trace.clone());
-    }
-
     for trace in main_trace.init_internal_chip_main_traces.iter() {
         trace_builder.load_trace(trace.clone());
     }
@@ -388,6 +377,8 @@ fn load_page_test(
         trace_builder.load_trace(trace.clone());
     }
 
+    println!("init_root: {:?}", init_root);
+    println!("final_root: {:?}", final_root);
     trace_builder.load_trace(offline_checker_trace.clone());
     trace_builder.load_trace(init_root);
     trace_builder.load_trace(final_root);

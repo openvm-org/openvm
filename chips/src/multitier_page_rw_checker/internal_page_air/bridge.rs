@@ -1,23 +1,25 @@
 use std::iter;
 
 use afs_stark_backend::interaction::{InteractionBuilder, InteractionType};
+use p3_air::AirBuilderWithPublicValues;
+use p3_field::AbstractField;
 
 use super::columns::InternalPageCols;
 use super::InternalPageAir;
 
 impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
-    fn custom_receives_path<AB: InteractionBuilder>(
+    fn custom_receives_path<AB: InteractionBuilder + AirBuilderWithPublicValues>(
         &self,
         builder: &mut AB,
         page_cols: &InternalPageCols<impl Into<AB::Expr> + Clone>,
-        own_commitment: &[AB::Var],
+        own_commitment: &[AB::PublicVar],
     ) {
         // Sending the path
         if self.is_init {
             let virtual_cols = own_commitment
-                .to_vec()
-                .into_iter()
-                .chain(AB::Var::from(self.air_id))
+                .iter()
+                .map(|x| (*x).into())
+                .chain(iter::once(AB::Expr::from_canonical_u32(self.air_id)))
                 .collect::<Vec<_>>();
             builder.push_receive(
                 *self.path_bus_index(),
@@ -28,11 +30,11 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
             let range_inclusion_cols = page_cols.metadata.range_inclusion_cols.as_ref().unwrap();
             let virtual_cols = range_inclusion_cols
                 .start
-                .clone()
-                .into_iter()
-                .chain(range_inclusion_cols.end.clone())
-                .chain(own_commitment.clone())
-                .chain(iter::once(page_cols.metadata.air_id.clone()))
+                .iter()
+                .map(|x| x.clone().into())
+                .chain(range_inclusion_cols.end.iter().map(|x| x.clone().into()))
+                .chain(own_commitment.iter().map(|x| (*x).into()))
+                .chain(iter::once(AB::Expr::from_canonical_u32(self.air_id)))
                 .collect::<Vec<_>>();
 
             builder.push_receive(
@@ -103,11 +105,11 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
 }
 
 impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
-    pub fn eval_interactions<AB: InteractionBuilder>(
+    pub fn eval_interactions<AB: InteractionBuilder + AirBuilderWithPublicValues>(
         &self,
         builder: &mut AB,
         page_cols: &InternalPageCols<AB::Var>,
-        own_commitment: &[AB::Var],
+        own_commitment: &[AB::PublicVar],
     ) {
         self.custom_receives_path(builder, page_cols, own_commitment);
         self.custom_sends_or_receives_data(builder, page_cols, self.is_init);
