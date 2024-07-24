@@ -66,7 +66,6 @@ fn register<F: PrimeField64>(value: i32) -> F {
 
 fn convert_base_arithmetic_instruction<F: PrimeField64, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
-    utility_register: F,
 ) -> Vec<Instruction<F>> {
     match instruction {
         AsmInstruction::AddF(dst, lhs, rhs) => vec![
@@ -155,26 +154,6 @@ fn convert_base_arithmetic_instruction<F: PrimeField64, EF: ExtensionField<F>>(
                 rhs,
                 AS::Register,
                 AS::Immediate,
-            ),
-        ],
-        AsmInstruction::DivFIN(dst, lhs, rhs) => vec![
-            // register[util] <- lhs
-            inst(
-                STOREW,
-                lhs,
-                F::zero(),
-                utility_register,
-                AS::Immediate,
-                AS::Register,
-            ),
-            // register[dst] <- register[util] / register[rhs]
-            inst(
-                FDIV,
-                register(dst),
-                utility_register,
-                register(rhs),
-                AS::Register,
-                AS::Register,
             ),
         ],
         _ => panic!(
@@ -654,10 +633,9 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         | AsmInstruction::AddFI(..)
         | AsmInstruction::SubFI(..)
         | AsmInstruction::MulFI(..)
-        | AsmInstruction::DivFI(..)
-        | AsmInstruction::DivFIN(..) => {
+        | AsmInstruction::DivFI(..) => {
             if options.field_arithmetic_enabled {
-                convert_base_arithmetic_instruction(instruction, utility_register)
+                convert_base_arithmetic_instruction(instruction)
             } else {
                 panic!(
                     "Unsupported instruction {:?}, field arithmetic is disabled",

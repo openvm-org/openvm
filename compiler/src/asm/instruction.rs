@@ -47,9 +47,6 @@ pub enum AsmInstruction<F, EF> {
     /// Divide immediate, dst = lhs / rhs.
     DivFI(i32, i32, F),
 
-    /// Divide value from immediate, dst = lhs / rhs.
-    DivFIN(i32, F, i32),
-
     /// Load an ext value (dst, src, index, offset, size).
     ///
     /// Load a value from the address stored at src(fp) into dst(fp).
@@ -917,9 +914,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::DivFI(dst, lhs, rhs) => {
                 write!(f, "divi  ({})fp, ({})fp, {}", dst, lhs, rhs)
-            }
-            AsmInstruction::DivFIN(dst, lhs, rhs) => {
-                write!(f, "divin ({})fp, {}, ({})fp", dst, lhs, rhs)
             }
             AsmInstruction::LoadE(dst, src, index, offset, size) => {
                 write!(

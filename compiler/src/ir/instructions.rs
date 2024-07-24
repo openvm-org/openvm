@@ -104,10 +104,6 @@ pub enum DslIr<C: Config> {
     NegF(Felt<C::F>, Felt<C::F>),
     /// Negates an extension field element (ext = -ext).
     NegE(Ext<C::F, C::EF>, Ext<C::F, C::EF>),
-    /// Inverts a variable (var = 1 / var).
-    InvV(Var<C::N>, Var<C::N>),
-    /// Inverts a field element (felt = 1 / felt).
-    InvF(Felt<C::F>, Felt<C::F>),
     /// Inverts an extension field element (ext = 1 / ext).
     InvE(Ext<C::F, C::EF>, Ext<C::F, C::EF>),
 
