@@ -7,8 +7,11 @@ use super::columns::{Poseidon2VmAuxCols, Poseidon2VmIoCols};
 use super::Poseidon2VmAir;
 
 impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
-    /// Receives instructions from the CPU on the designated `POSEIDON2_BUS`, and sends both read and write requests to the memory chip.
-    /// Receives (clk, a, b, c, d, e, cmp)
+    /// Receives instructions from the CPU on the designated `POSEIDON2_BUS` (opcodes) or `POSEIDON2_DIRECT_BUS` (direct), and sends both read and write requests to the memory chip.
+    ///
+    /// Receives (clk, a, b, c, d, e, cmp) for opcodes, width exposed in `opcode_interaction_width()`
+    ///
+    /// Receives (hash_in.0, hash_in.1, hash_out) for direct, width exposed in `direct_interaction_width()`
     pub fn eval_interactions<AB: InteractionBuilder<F = F>>(
         &self,
         builder: &mut AB,

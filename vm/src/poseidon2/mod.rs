@@ -19,35 +19,39 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-/// Poseidon2 chip.
+/// Poseidon2 Air, VM version.
 ///
-/// Carries the requested rows and the underlying subair for subtrace generation.
-/// Poseidon2Chip implements its own constraints and interactions.
-/// Cached rows are represented as `Poseidon2ChipCols` structs, not flat vectors.
+/// Carries the subair for subtrace generation. Sticking to the conventions, this struct carries no state.
 pub struct Poseidon2VmAir<const WIDTH: usize, F: Clone> {
     pub inner: Poseidon2Air<WIDTH, F>,
 }
 
+/// Poseidon2 Chip.
+///
+/// Carries the Poseidon2VmAir for constraints, and cached state for trace generation.
 pub struct Poseidon2Chip<const WIDTH: usize, F: PrimeField32> {
     pub air: Poseidon2VmAir<WIDTH, F>,
     pub rows: Vec<Poseidon2VmCols<WIDTH, F>>,
 }
 
 impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
+    /// Construct from Poseidon2 config and bus index.
     pub fn from_poseidon2_config(config: Poseidon2Config<WIDTH, F>, bus_index: usize) -> Self {
         let inner = Poseidon2Air::<WIDTH, F>::from_config(config, bus_index);
         Self { inner }
     }
 
+    /// Number of interactions through opcode bus.
     pub fn opcode_interaction_width() -> usize {
         7
     }
 
+    /// Number of interactions through direct bus.
     pub fn direct_interaction_width() -> usize {
         WIDTH + WIDTH / 2
     }
 
-    /// Map VM instructions to Poseidon2IO columns.
+    /// Map VM instructions to Poseidon2IO columns, for opcodes.
     fn make_io_cols(start_timestamp: usize, instruction: Instruction<F>) -> Poseidon2VmIoCols<F> {
         let Instruction {
             opcode,
@@ -73,6 +77,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
 
 const WIDTH: usize = 16;
 impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
+    /// Construct from Poseidon2 config and bus index.
     pub fn from_poseidon2_config(config: Poseidon2Config<WIDTH, F>, bus_index: usize) -> Self {
         let air = Poseidon2VmAir::<WIDTH, F>::from_poseidon2_config(config, bus_index);
         Self { air, rows: vec![] }
@@ -161,6 +166,11 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
 
 const CHUNK: usize = 8;
 impl<const WIDTH: usize, F: PrimeField32> Hasher<CHUNK, F> for Poseidon2Chip<WIDTH, F> {
+    /// Key method for Hasher trait.
+    ///
+    /// Takes two chunks, hashes them, and returns the result. Total with 3 * CHUNK, exposed in `direct_interaction_width()`.
+    ///
+    /// No interactions with other chips.
     fn hash(&mut self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK] {
         let mut input_state = [F::zero(); WIDTH];
         input_state[..8].copy_from_slice(&left);

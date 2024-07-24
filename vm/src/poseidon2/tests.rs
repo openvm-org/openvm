@@ -269,6 +269,7 @@ fn poseidon2_negative_test() {
     }
 }
 
+/// Test that the direct bus interactions work.
 #[test]
 fn poseidon2_direct_test() {
     let mut rng = create_seeded_rng();

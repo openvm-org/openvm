@@ -7,14 +7,15 @@ use poseidon2_air::poseidon2::Poseidon2Air;
 
 use super::Poseidon2VmAir;
 
-/// Columns for Poseidon2 chip.
+/// Columns for Poseidon2Vm AIR.
 pub struct Poseidon2VmCols<const WIDTH: usize, T> {
     pub io: Poseidon2VmIoCols<T>,
     pub aux: Poseidon2VmAuxCols<WIDTH, T>,
 }
 
 /// IO columns for Poseidon2Chip.
-/// * `is_alloc`: whether the row is allocated
+/// * `is_opcode`: whether the row is for an opcode (either COMPRESS or PERMUTE)
+/// * `is_direct`: whether the row is for a direct hash
 /// * `clk`: the clock cycle (NOT timestamp)
 /// * `a`, `b`, `c`: addresses
 /// * `d`, `e`: address spaces

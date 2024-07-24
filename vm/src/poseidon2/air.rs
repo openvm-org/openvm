@@ -24,6 +24,7 @@ impl<const WIDTH: usize, F: Field> BaseAir<F> for Poseidon2VmAir<WIDTH, F> {
 }
 
 impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2VmAir<WIDTH, AB::F> {
+    /// Checks and constrains multiplicity indicators, and does subair evaluation
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
@@ -37,6 +38,7 @@ impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2VmAir<WIDT
             .eval_without_interactions(builder, cols.aux.internal.io, cols.aux.internal.aux);
 
         // boolean constraints for alloc/cmp markers
+        // these constraints hold for current trace generation mechanism but are in actuality not necessary
         builder.assert_bool(cols.io.is_opcode);
         builder.assert_bool(cols.io.is_direct);
         builder.assert_bool(cols.io.cmp);
