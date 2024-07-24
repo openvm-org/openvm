@@ -22,12 +22,14 @@ fn test_cycle_tracker() {
 
     let total: Var<_> = builder.eval(F::zero());
 
-    for _ in 0..2 {
+    builder.cycle_tracker_start("loop");
+
+    for _ in 0..3 {
         let n_plus_m: Var<_> = builder.eval(n + m);
         builder.assign(total, total + n_plus_m);
     }
 
-    // builder.assert_var_eq(total, F::from_canonical_u32(32) * (n_val + m_val));
+    builder.cycle_tracker_end("loop");
 
     builder.halt();
 
