@@ -48,8 +48,8 @@ lto = "thin"
 
 [workspace.dependencies]
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-field = { git = "https://github.com/Plonky3/Plonky3.git",rev = "95e56fa" }
-p3-commit = { git = "https://github.com/Plonky3/Plonky3.git",rev = "95e56fa" }
+p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
+p3-commit = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-matrix = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-baby-bear = { git = "https://github.com/Plonky3/Plonky3.git", features = [
     "nightly-features",

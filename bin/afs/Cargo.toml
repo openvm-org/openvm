@@ -9,7 +9,7 @@ alloy-primitives = "0.7.6"
 bincode = "1.3.3"
 clap = { version = "4.5.4", features = ["derive"] }
 color-eyre = "0.6.3"
-logical-interface = { path = "../../logical-interface" }
+logical-interface = { path = "../../logical-interface", default-features = false }
 rand = "0.8.5"
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.117"
@@ -19,9 +19,9 @@ p3-baby-bear = { workspace = true }
 p3-util = { workspace = true }
 afs-stark-backend = { path = "../../stark-backend", default-features = false }
 afs-derive = { path = "../../derive" }
-afs-test-utils = { path = "../../test-utils" }
+afs-test-utils = { path = "../../test-utils", default-features = false }
 afs-chips = { path = "../../chips", default-features = false }
-bin-common = { path = "../common" }
+bin-common = { path = "../common", default-features = false }
 p3-uni-stark = { workspace = true }
 p3-field = { workspace = true }
 p3-blake3 = { workspace = true }

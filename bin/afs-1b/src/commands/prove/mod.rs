@@ -11,7 +11,7 @@ use afs_chips::{
 };
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
-    keygen::types::MultiStarkPartialProvingKey,
+    keygen::types::MultiStarkProvingKey,
     prover::{
         trace::{ProverTraceData, TraceCommitmentBuilder},
         MultiTraceStarkProver,
@@ -422,9 +422,8 @@ impl ProveCommand {
         airs.push(&ops_sender);
         let encoded_pk =
             read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
-        let partial_pk: MultiStarkPartialProvingKey<SC> =
-            bincode::deserialize(&encoded_pk).unwrap();
-        let partial_vk = partial_pk.partial_vk();
+        let partial_pk: MultiStarkProvingKey<SC> = bincode::deserialize(&encoded_pk).unwrap();
+        let partial_vk = partial_pk.vk();
         let main_trace_data = trace_builder.view(&partial_vk, airs.clone());
 
         let mut pis = vec![];

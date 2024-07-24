@@ -14,7 +14,7 @@ use afs_chips::{
 };
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
-    keygen::types::MultiStarkPartialVerifyingKey,
+    keygen::types::MultiStarkVerifyingKey,
     prover::types::Proof,
     rap::AnyRap,
 };
@@ -133,8 +133,7 @@ impl VerifyCommand {
         // verify::verify_ops(&proof_file).await?;
         let encoded_vk =
             read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.vk").unwrap();
-        let partial_vk: MultiStarkPartialVerifyingKey<SC> =
-            bincode::deserialize(&encoded_vk).unwrap();
+        let partial_vk: MultiStarkVerifyingKey<SC> = bincode::deserialize(&encoded_vk).unwrap();
 
         let encoded_proof = read_from_path(proof_path).unwrap();
         let proof: Proof<SC> = bincode::deserialize(&encoded_proof).unwrap();

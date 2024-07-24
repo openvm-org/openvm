@@ -299,8 +299,8 @@ impl KeygenCommand {
 
         keygen_builder.add_air(&ops_sender, 0);
 
-        let partial_pk = keygen_builder.generate_partial_pk();
-        let partial_vk = partial_pk.partial_vk();
+        let partial_pk = keygen_builder.generate_pk();
+        let partial_vk = partial_pk.vk();
         let (total_preprocessed, total_partitioned_main, total_after_challenge) =
             partial_vk.total_air_width();
         let air_width = total_preprocessed + total_partitioned_main + total_after_challenge;
