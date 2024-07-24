@@ -36,7 +36,7 @@ where
         let pi = builder.public_values().to_vec();
         match &self.page_chip {
             PageRwAir::Initial(i) => {
-                let data: &<AB as AirBuilder>::M = &builder.partitioned_main()[0].clone();
+                let data: &<AB as AirBuilder>::M = &builder.partitioned_main()[0];
                 let cached_data =
                     PageCols::from_slice(&data.row_slice(0), self.idx_len, self.data_len);
                 let page_cols = LeafPageCols {
@@ -50,9 +50,9 @@ where
                 SubAir::eval(i, builder, page_cols.cache_cols, ());
             }
             PageRwAir::Final(fin) => {
-                let main: &<AB as AirBuilder>::M = &builder.partitioned_main()[1].clone();
+                let main: &<AB as AirBuilder>::M = &builder.partitioned_main()[1];
                 let [local, next] = [0, 1].map(|i| main.row_slice(i));
-                let data: &<AB as AirBuilder>::M = &builder.partitioned_main()[0].clone();
+                let data: &<AB as AirBuilder>::M = &builder.partitioned_main()[0];
                 let cached_data =
                     PageCols::from_slice(&data.row_slice(0), self.idx_len, self.data_len);
                 let next_data =
@@ -66,7 +66,6 @@ where
                     ),
                     cache_cols: cached_data,
                 };
-                self.eval_interactions(builder, &page_cols, &pi);
                 let next_aux = LeafPageMetadataCols::from_slice(
                     &next,
                     self.idx_len,
@@ -76,6 +75,10 @@ where
                 .subair_aux_cols
                 .unwrap()
                 .final_page_aux;
+                drop(local);
+                drop(next);
+                self.eval_interactions(builder, &page_cols, &pi);
+
                 let range_inclusion_cols = page_cols.metadata.range_inclusion_cols.unwrap();
                 let less_than_start = range_inclusion_cols.less_than_start;
                 let greater_than_end = range_inclusion_cols.greater_than_end;
