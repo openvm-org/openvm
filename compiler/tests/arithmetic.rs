@@ -4,6 +4,7 @@ use p3_field::{AbstractExtensionField, AbstractField, Field};
 use rand::{thread_rng, Rng};
 
 use afs_compiler::asm::AsmBuilder;
+use afs_compiler::conversion::CompilerOptions;
 use afs_compiler::ir::{Ext, Felt, SymbolicExt};
 use afs_compiler::ir::{ExtConst, Var};
 use afs_compiler::util::execute_program;
@@ -134,5 +135,44 @@ fn test_compiler_arithmetic_2() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE, _>(program, vec![]);
+}
+
+#[test]
+fn test_in_place_arithmetic() {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+    let mut builder = AsmBuilder::<F, EF>::default();
+
+    let ef = EF::from_base_slice(&[
+        F::from_canonical_u32(1163664312),
+        F::from_canonical_u32(1251518712),
+        F::from_canonical_u32(1133200680),
+        F::from_canonical_u32(1689596134),
+    ]);
+
+    let x: Ext<_, _> = builder.constant(ef);
+    builder.assign(x, x + x);
+    builder.assert_ext_eq(x, (ef + ef).cons());
+
+    let x: Ext<_, _> = builder.constant(ef);
+    builder.assign(x, x - x);
+    builder.assert_ext_eq(x, EF::zero().cons());
+
+    let x: Ext<_, _> = builder.constant(ef);
+    builder.assign(x, x * x);
+    builder.assert_ext_eq(x, (ef * ef).cons());
+
+    let x: Ext<_, _> = builder.constant(ef);
+    builder.assign(x, x / x);
+    builder.assert_ext_eq(x, EF::one().cons());
+
+    builder.halt();
+
+    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+        compile_prints: false,
+        field_arithmetic_enabled: true,
+        field_extension_enabled: true,
+    });
     execute_program::<WORD_SIZE, _>(program, vec![]);
 }
