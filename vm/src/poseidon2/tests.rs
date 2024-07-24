@@ -5,6 +5,7 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 use p3_util::log2_strict_usize;
+use poseidon2_air::poseidon2::Poseidon2Config;
 use rand::Rng;
 use rand::RngCore;
 
@@ -19,7 +20,9 @@ use afs_test_utils::utils::create_seeded_rng;
 
 use crate::cpu::trace::Instruction;
 use crate::cpu::OpCode::{COMP_POS2, PERM_POS2};
+use crate::cpu::POSEIDON2_DIRECT_BUS;
 use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
+use crate::memory::tree::Hasher;
 use crate::vm::config::VmConfig;
 use crate::vm::VirtualMachine;
 
@@ -264,4 +267,60 @@ fn poseidon2_negative_test() {
         );
         traces[poseidon2_trace_index].row_mut(height)[width] -= rand;
     }
+}
+
+#[test]
+fn poseidon2_direct_test() {
+    let mut rng = create_seeded_rng();
+    const NUM_OPS: usize = 50;
+    let correct_height = NUM_OPS.next_power_of_two();
+    let hashes: [([BabyBear; 8], [BabyBear; 8]); NUM_OPS] = from_fn(|_| {
+        (
+            from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
+            from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
+        )
+    });
+    let mut chip = Poseidon2Chip::<16, BabyBear>::from_poseidon2_config(
+        Poseidon2Config::default(),
+        POSEIDON2_BUS,
+    );
+
+    let outs: [[BabyBear; 8]; NUM_OPS] = from_fn(|i| chip.hash(hashes[i].0, hashes[i].1));
+
+    let dummy_direct_cpu = DummyInteractionAir::new(24, true, POSEIDON2_DIRECT_BUS);
+
+    let mut dummy_direct_cpu_trace = RowMajorMatrix::new(
+        outs.iter()
+            .enumerate()
+            .flat_map(|(i, out)| {
+                vec![BabyBear::one()]
+                    .into_iter()
+                    .chain(hashes[i].0)
+                    .chain(hashes[i].1)
+                    .chain(out.iter().cloned())
+            })
+            .collect::<Vec<_>>(),
+        25,
+    );
+    dummy_direct_cpu_trace
+        .values
+        .extend(vec![BabyBear::zero(); 25 * (correct_height - NUM_OPS)]);
+
+    let chip_trace = chip.generate_trace();
+
+    // engine generation
+    let max_trace_height = chip_trace.height();
+    let max_log_degree = log2_strict_usize(max_trace_height);
+    let perm = random_perm();
+    let fri_params = fri_params_with_80_bits_of_security()[1];
+    let engine = engine_from_perm(perm, max_log_degree, fri_params);
+
+    // positive test
+    engine
+        .run_simple_test(
+            vec![&dummy_direct_cpu, &chip.air],
+            vec![dummy_direct_cpu_trace, chip_trace],
+            vec![vec![]; 2],
+        )
+        .expect("Verification failed");
 }
