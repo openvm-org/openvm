@@ -1,14 +1,15 @@
 use std::sync::Arc;
 
 use afs_chips::offline_checker::OfflineCheckerChip;
+use afs_chips::range_gate::RangeCheckerGateChip;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
+#[cfg(feature = "parallel")]
+use p3_maybe_rayon::prelude::*;
 
 use crate::memory::{MemoryAccess, OpType};
 
 use super::MemoryChip;
-use afs_chips::range_gate::RangeCheckerGateChip;
-use p3_maybe_rayon::prelude::*;
 
 impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
     /// Each row in the trace follow the same order as the Cols struct:
@@ -22,8 +23,12 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         &mut self,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> RowMajorMatrix<F> {
+        #[cfg(feature = "parallel")]
         self.accesses
             .par_sort_by_key(|op| (op.address_space, op.address, op.timestamp));
+        #[cfg(not(feature = "parallel"))]
+        self.accesses
+            .sort_by_key(|op| (op.address_space, op.address, op.timestamp));
 
         let dummy_op = MemoryAccess {
             timestamp: 0,

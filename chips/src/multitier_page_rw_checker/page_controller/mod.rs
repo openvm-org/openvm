@@ -62,7 +62,6 @@ where
     pub main_traces: Vec<DenseMatrix<Val<SC>>>,
     pub prover_data: Vec<ProverTraceData<SC>>,
     pub commitments: Vec<Com<SC>>,
-    pub commitments_as_arr: Vec<[Val<SC>; COMMITMENT_LEN]>,
 }
 
 #[derive(Clone)]
@@ -429,16 +428,11 @@ where
         idx_len,
     );
     for i in 0..leaf_prods.commitments.len() {
-        let commit = leaf_prods.commitments_as_arr[i]
-            .into_iter()
-            .map(|c| c.as_canonical_u64() as u32)
-            .collect();
         let page = leaf_pages[i].clone();
         let range = tree.leaf_ranges[i].clone();
         let page = Page::from_2d_vec(&page, idx_len, data_len);
         let tmp = leaf_chips[i].generate_main_trace::<SC>(
             &page,
-            commit,
             range,
             range_checker.clone(),
             internal_indices,
@@ -447,17 +441,12 @@ where
     }
 
     for i in 0..internal_prods.commitments.len() {
-        let commit = internal_prods.commitments_as_arr[i]
-            .into_iter()
-            .map(|c| c.as_canonical_u64() as u32)
-            .collect();
         let page = internal_pages[i].clone();
         let range = tree.internal_ranges[i].clone();
         let mults = tree.mults[i].clone();
         let child_ids = tree.child_ids[i].clone();
         let tmp = internal_chips[i].generate_main_trace::<Val<SC>>(
             page,
-            commit,
             child_ids,
             mults,
             range,
@@ -470,14 +459,7 @@ where
     } else {
         internal_prods.commitments[root_idx].clone()
     };
-    let root_commit: Vec<u32> = root_commitment
-        .clone()
-        .into()
-        .into_iter()
-        .map(|c| c.as_canonical_u64() as u32)
-        .collect();
     let root_signal_trace = root_signal.generate_trace::<Val<SC>>(
-        root_commit.clone(),
         root_idx as u32,
         tree.root_mult - 1,
         tree.root_range.clone(),
@@ -513,14 +495,11 @@ where
 
     let commitments = commitment_from_data(&prover_data);
 
-    let commitment_arr = arr_from_commitment::<SC, COMMITMENT_LEN>(&commitments);
-
     NodeProducts {
         data_traces: trace,
         main_traces: vec![],
         prover_data,
         commitments,
-        commitments_as_arr: commitment_arr,
     }
 }
 
@@ -538,17 +517,4 @@ fn commitment_from_data<SC: StarkGenericConfig>(data: &[ProverTraceData<SC>]) ->
     data.iter()
         .map(|data| data.commit.clone())
         .collect::<Vec<_>>()
-}
-
-fn arr_from_commitment<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>(
-    commitment: &[Com<SC>],
-) -> Vec<[Val<SC>; COMMITMENT_LEN]>
-where
-    Val<SC>: AbstractField + PrimeField64,
-    Com<SC>: Into<[Val<SC>; COMMITMENT_LEN]>,
-{
-    commitment
-        .iter()
-        .map(|data| data.clone().into())
-        .collect::<Vec<[Val<SC>; COMMITMENT_LEN]>>()
 }

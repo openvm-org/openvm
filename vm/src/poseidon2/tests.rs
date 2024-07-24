@@ -23,7 +23,7 @@ use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
 use crate::vm::config::VmConfig;
 use crate::vm::VirtualMachine;
 
-use super::{make_io_cols, Poseidon2Chip};
+use super::{Poseidon2Chip, Poseidon2VmAir};
 
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 16;
@@ -103,7 +103,7 @@ macro_rules! run_perm_ops {
         });
 
         let dummy_cpu_poseidon2 = DummyInteractionAir::new(
-            Poseidon2Chip::<16, BabyBear>::interaction_width(),
+            Poseidon2VmAir::<16, BabyBear>::interaction_width(),
             true,
             POSEIDON2_BUS,
         );
@@ -111,17 +111,21 @@ macro_rules! run_perm_ops {
             {
                 let mut vec: Vec<_> = (0..$num_ops)
                     .flat_map(|i| {
-                        make_io_cols(16 * $num_ops + (time_per * i), $instructions[i]).flatten()
+                        Poseidon2VmAir::<16, BabyBear>::make_io_cols(
+                            16 * $num_ops + (time_per * i),
+                            $instructions[i],
+                        )
+                        .flatten()
                     })
                     .collect();
                 for _ in 0..(tot_ops - $num_ops)
-                    * (Poseidon2Chip::<16, BabyBear>::interaction_width() + 1)
+                    * (Poseidon2VmAir::<16, BabyBear>::interaction_width() + 1)
                 {
                     vec.push(BabyBear::zero());
                 }
                 vec
             },
-            Poseidon2Chip::<16, BabyBear>::interaction_width() + 1,
+            Poseidon2VmAir::<16, BabyBear>::interaction_width() + 1,
         );
 
         let dummy_cpu_memory = DummyInteractionAir::new(5, true, MEMORY_BUS);
@@ -206,7 +210,7 @@ fn poseidon2_chip_random_50_test() {
             vec![
                 &vm.range_checker.air,
                 &vm.memory_chip.air,
-                &vm.poseidon2_chip,
+                &vm.poseidon2_chip.air,
                 &dummy_cpu_memory,
                 &dummy_cpu_poseidon2,
             ],
@@ -243,7 +247,7 @@ fn poseidon2_negative_test() {
                 vec![
                     &vm.range_checker.air,
                     &vm.memory_chip.air,
-                    &vm.poseidon2_chip,
+                    &vm.poseidon2_chip.air,
                     &dummy_cpu_memory,
                     &dummy_cpu_poseidon2,
                 ],

@@ -34,5 +34,5 @@ tracing-appender = "0.2.3"
 regex = "1.10.5"
 
 [features]
-default = ["parallel"]
+default = []
 parallel = ["afs/parallel", "olap/parallel"]
