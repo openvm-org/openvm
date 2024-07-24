@@ -62,9 +62,6 @@ pub enum AsmInstruction<F, EF> {
     /// Add extension, dst = lhs + rhs.
     AddE(i32, i32, i32),
 
-    /// Add field element with an immediate extension, dst = lhs + rhs.
-    AddEFFI(i32, i32, EF),
-
     /// Subtract extension, dst = lhs - rhs.
     SubE(i32, i32, i32),
 
@@ -936,9 +933,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::AddE(dst, lhs, rhs) => {
                 write!(f, "eadd ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
-            }
-            AsmInstruction::AddEFFI(dst, lhs, rhs) => {
-                write!(f, "eefaddi ({})fp, ({})fp, {}", dst, lhs, rhs)
             }
             AsmInstruction::SubE(dst, lhs, rhs) => {
                 write!(f, "esub  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
