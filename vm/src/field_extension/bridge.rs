@@ -1,118 +1,73 @@
-use afs_stark_backend::interaction::{AirBridge, Interaction};
-use p3_air::{PairCol, VirtualPairCol};
-use p3_field::Field;
+use afs_stark_backend::interaction::InteractionBuilder;
+use p3_field::AbstractField;
 
 use crate::cpu::{FIELD_EXTENSION_BUS, MEMORY_BUS, WORD_SIZE};
 
 use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
 
-fn get_rw_interactions<T: Field>(
+fn eval_rw_interactions<AB: InteractionBuilder>(
+    builder: &mut AB,
     is_write: bool,
-    cols_numbered: &FieldExtensionArithmeticCols<usize>,
-    addr_space: usize,
-    address: usize,
+    local: &FieldExtensionArithmeticCols<AB::Var>,
+    addr_space: AB::Var,
+    address: AB::Var,
     ext_element_ind: usize,
-) -> Vec<Interaction<T>> {
-    let mut interactions = vec![];
+) {
+    let io = &local.io;
+    let aux = &local.aux;
 
     let ext_element = if ext_element_ind == 0 {
-        cols_numbered.io.x
+        io.x
     } else if ext_element_ind == 1 {
-        cols_numbered.io.y
+        io.y
     } else {
-        cols_numbered.io.z
+        io.z
     };
 
-    for (i, &element) in ext_element.iter().enumerate() {
-        let timestamp = VirtualPairCol::new(
-            vec![(PairCol::Main(cols_numbered.aux.start_timestamp), T::one())],
-            T::from_canonical_usize(ext_element_ind * 4 + i),
-        );
+    for (i, element) in ext_element.into_iter().enumerate() {
+        let timestamp = aux.start_timestamp + AB::F::from_canonical_usize(ext_element_ind * 4 + i);
 
-        let pointer = VirtualPairCol::new(
-            vec![(PairCol::Main(address), T::one())],
-            T::from_canonical_usize(i * WORD_SIZE),
-        );
+        let pointer = address + AB::F::from_canonical_usize(i * WORD_SIZE);
 
-        let mut fields = vec![
+        let fields = [
             timestamp,
-            VirtualPairCol::constant(T::from_bool(is_write)),
-            VirtualPairCol::single_main(addr_space),
+            AB::Expr::from_bool(is_write),
+            addr_space.into(),
             pointer,
-        ];
-
-        // handle WORD_SIZE > 1 later
-        fields.push(VirtualPairCol::single_main(element));
+        ]
+        .into_iter() // TODO: Handle WORD_SIZE > 1 later
+        .chain([element.into()]);
 
         if ext_element_ind == 1 {
-            interactions.push(Interaction {
-                fields,
-                count: VirtualPairCol::single_main(cols_numbered.aux.valid_y_read),
-                argument_index: MEMORY_BUS,
-            });
+            builder.push_send(MEMORY_BUS, fields, aux.valid_y_read);
         } else {
-            interactions.push(Interaction {
-                fields,
-                count: VirtualPairCol::single_main(cols_numbered.aux.is_valid),
-                argument_index: MEMORY_BUS,
-            });
+            builder.push_send(MEMORY_BUS, fields, aux.is_valid);
         }
     }
-
-    interactions
 }
 
-impl<T: Field> AirBridge<T> for FieldExtensionArithmeticAir {
-    fn sends(&self) -> Vec<Interaction<T>> {
-        let all_cols = (0..FieldExtensionArithmeticCols::<T>::get_width()).collect::<Vec<usize>>();
-        let cols_numbered = FieldExtensionArithmeticCols::<usize>::from_slice(&all_cols);
-
-        let mut interactions = vec![];
-
+impl FieldExtensionArithmeticAir {
+    pub fn eval_interactions<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        local: &FieldExtensionArithmeticCols<AB::Var>,
+    ) {
         // reads for x
-        interactions.extend(get_rw_interactions(
-            false,
-            &cols_numbered,
-            cols_numbered.aux.d,
-            cols_numbered.aux.op_b,
-            0,
-        ));
+        eval_rw_interactions(builder, false, local, local.aux.d, local.aux.op_b, 0);
         // reads for y
-        interactions.extend(get_rw_interactions(
-            false,
-            &cols_numbered,
-            cols_numbered.aux.e,
-            cols_numbered.aux.op_c,
-            1,
-        ));
+        eval_rw_interactions(builder, false, local, local.aux.e, local.aux.op_c, 1);
         // writes for z
-        interactions.extend(get_rw_interactions(
-            true,
-            &cols_numbered,
-            cols_numbered.aux.d,
-            cols_numbered.aux.op_a,
-            2,
-        ));
+        eval_rw_interactions(builder, true, local, local.aux.d, local.aux.op_a, 2);
 
-        interactions
-    }
-
-    // Receives all IO columns from another chip on bus 3 (FIELD_EXTENSION_BUS)
-    fn receives(&self) -> Vec<Interaction<T>> {
-        let all_cols = (0..FieldExtensionArithmeticCols::<T>::get_width()).collect::<Vec<usize>>();
-        let cols_numbered = FieldExtensionArithmeticCols::<usize>::from_slice(&all_cols);
-
-        vec![Interaction {
-            fields: vec![
-                VirtualPairCol::single_main(cols_numbered.io.opcode),
-                VirtualPairCol::single_main(cols_numbered.aux.op_a),
-                VirtualPairCol::single_main(cols_numbered.aux.op_b),
-                VirtualPairCol::single_main(cols_numbered.aux.op_c),
-                VirtualPairCol::single_main(cols_numbered.aux.d),
-                VirtualPairCol::single_main(cols_numbered.aux.e),
-            ],
-            count: VirtualPairCol::single_main(cols_numbered.aux.is_valid),
-            argument_index: FIELD_EXTENSION_BUS,
-        }]
+        // Receives all IO columns from another chip on bus 3 (FIELD_EXTENSION_BUS)
+        let fields = [
+            local.io.opcode,
+            local.aux.op_a,
+            local.aux.op_b,
+            local.aux.op_c,
+            local.aux.d,
+            local.aux.e,
+        ];
+        builder.push_receive(FIELD_EXTENSION_BUS, fields, local.aux.is_valid);
     }
 }

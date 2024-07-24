@@ -1,141 +1,88 @@
-use p3_air::{BaseAir, PairCol, VirtualPairCol};
-use p3_field::Field;
-
-use afs_stark_backend::interaction::{AirBridge, Interaction};
-use poseidon2_air::poseidon2::columns::Poseidon2Cols;
+use afs_stark_backend::interaction::InteractionBuilder;
+use p3_field::{AbstractField, Field};
 
 use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
 
-use super::columns::Poseidon2ChipCols;
+use super::columns::{Poseidon2ChipAuxCols, Poseidon2ChipIoCols};
 use super::Poseidon2Chip;
 
-/// Receives instructions from the CPU on the designated `POSEIDON2_BUS`, and sends both read and write requests to the memory chip.
-/// Receives (clk, a, b, c, d, e, cmp)
-impl<const WIDTH: usize, T: Field> AirBridge<T> for Poseidon2Chip<WIDTH, T> {
-    fn receives(&self) -> Vec<Interaction<T>> {
-        let indices: Vec<usize> = (0..self.width()).collect();
-        let index_map = Poseidon2Cols::index_map(&self.air);
-        let col_indices = Poseidon2ChipCols::from_slice(&indices, &index_map);
-        let fields = col_indices
-            .io
-            .flatten()
-            .into_iter()
-            .skip(1)
-            .map(VirtualPairCol::single_main)
-            .collect();
+impl<const WIDTH: usize, F: Field> Poseidon2Chip<WIDTH, F> {
+    /// Receives instructions from the CPU on the designated `POSEIDON2_BUS`, and sends both read and write requests to the memory chip.
+    /// Receives (clk, a, b, c, d, e, cmp)
+    pub fn eval_interactions<AB: InteractionBuilder<F = F>>(
+        &self,
+        builder: &mut AB,
+        io: Poseidon2ChipIoCols<AB::Var>,
+        aux: &Poseidon2ChipAuxCols<WIDTH, AB::Var>,
+    ) {
+        let addresses = aux.addresses;
+        let d_is_zero = aux.d_is_zero;
 
-        vec![Interaction {
-            fields,
-            count: VirtualPairCol::single_main(col_indices.io.is_alloc),
-            argument_index: POSEIDON2_BUS,
-        }]
-    }
+        let fields = io.flatten().into_iter().skip(1);
+        builder.push_receive(POSEIDON2_BUS, fields, io.is_alloc);
 
-    fn sends(&self) -> Vec<Interaction<T>> {
         let chunks: usize = WIDTH / 2;
-        let indices: Vec<usize> = (0..self.width()).collect();
-        let index_map = Poseidon2Cols::index_map(&self.air);
-        let col_indices = Poseidon2ChipCols::from_slice(&indices, &index_map);
-        let mut interactions = vec![];
 
         let mut timestamp_offset = 0;
         // read addresses
-        for i in 0..3 {
-            let timestamp = VirtualPairCol::new(
-                vec![(PairCol::Main(col_indices.io.clk), T::one())],
-                T::from_canonical_usize(timestamp_offset),
-            );
+        for (i, addr) in [io.a, io.b, io.c].into_iter().enumerate() {
+            let timestamp = io.clk + AB::F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
 
-            let address_col = [col_indices.io.a, col_indices.io.b, col_indices.io.c][i];
-
-            let fields = vec![
+            let fields = [
                 timestamp,
-                VirtualPairCol::constant(T::from_bool(false)),
-                VirtualPairCol::single_main(col_indices.io.d),
-                VirtualPairCol::single_main(address_col),
-                VirtualPairCol::single_main(col_indices.aux.addresses[i]),
+                AB::Expr::from_bool(false),
+                io.d.into(),
+                addr.into(),
+                addresses[i].into(),
             ];
-
-            interactions.push(Interaction {
-                fields,
-                count: VirtualPairCol::diff_main(
-                    col_indices.io.is_alloc,
-                    col_indices.aux.d_is_zero,
-                ),
-                argument_index: MEMORY_BUS,
-            });
+            builder.push_send(MEMORY_BUS, fields, io.is_alloc - d_is_zero);
         }
+
         // READ
         for i in 0..WIDTH {
-            let timestamp = VirtualPairCol::new(
-                vec![(PairCol::Main(col_indices.io.clk), T::one())],
-                T::from_canonical_usize(timestamp_offset),
-            );
+            let timestamp = io.clk + AB::F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
-            let address = VirtualPairCol::new(
-                vec![(
-                    PairCol::Main(if i < chunks {
-                        col_indices.aux.addresses[0]
-                    } else {
-                        col_indices.aux.addresses[1]
-                    }),
-                    T::from_canonical_usize(1),
-                )],
-                T::from_canonical_usize(if i < chunks { i } else { i - chunks }),
-            );
 
-            let fields = vec![
+            let address = if i < chunks {
+                addresses[0]
+            } else {
+                addresses[1]
+            } + AB::F::from_canonical_usize(if i < chunks { i } else { i - chunks });
+
+            let fields = [
                 timestamp,
-                VirtualPairCol::constant(T::from_bool(false)),
-                VirtualPairCol::single_main(col_indices.io.e),
+                AB::Expr::from_bool(false),
+                io.e.into(),
                 address,
-                VirtualPairCol::single_main(col_indices.aux.internal.io.input[i]),
+                aux.internal.io.input[i].into(),
             ];
 
-            interactions.push(Interaction {
-                fields,
-                count: VirtualPairCol::single_main(col_indices.io.is_alloc),
-                argument_index: MEMORY_BUS,
-            });
+            builder.push_send(MEMORY_BUS, fields, io.is_alloc);
         }
 
         // WRITE
         for i in 0..WIDTH {
-            let timestamp = VirtualPairCol::new(
-                vec![(PairCol::Main(col_indices.io.clk), T::one())],
-                T::from_canonical_usize(timestamp_offset),
-            );
+            let timestamp = io.clk + AB::F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
-            let address = VirtualPairCol::new(
-                vec![(
-                    PairCol::Main(col_indices.aux.addresses[2]),
-                    T::from_canonical_usize(1),
-                )],
-                T::from_canonical_usize(i),
-            );
 
-            let fields = vec![
+            let address = aux.addresses[2] + AB::F::from_canonical_usize(i);
+
+            let fields = [
                 timestamp,
-                VirtualPairCol::constant(T::from_bool(true)),
-                VirtualPairCol::single_main(col_indices.io.e),
+                AB::Expr::from_bool(true),
+                io.e.into(),
                 address,
-                VirtualPairCol::single_main(col_indices.aux.internal.io.output[i]),
+                aux.internal.io.output[i].into(),
             ];
 
             let count = if i < chunks {
-                VirtualPairCol::single_main(col_indices.io.is_alloc)
+                io.is_alloc.into()
             } else {
-                VirtualPairCol::diff_main(col_indices.io.is_alloc, col_indices.io.cmp)
+                io.is_alloc - io.cmp
             };
 
-            interactions.push(Interaction {
-                fields,
-                count,
-                argument_index: MEMORY_BUS,
-            });
+            builder.push_send(MEMORY_BUS, fields, count);
         }
-
-        interactions
     }
 }

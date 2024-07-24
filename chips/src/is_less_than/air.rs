@@ -1,15 +1,91 @@
 use std::borrow::Borrow;
 
+use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use crate::sub_chip::{AirConfig, SubAir};
 
-use super::{
-    columns::{IsLessThanAuxCols, IsLessThanCols, IsLessThanIOCols},
-    IsLessThanAir,
-};
+use super::columns::{IsLessThanAuxCols, IsLessThanCols, IsLessThanIoCols};
+
+#[derive(Copy, Clone, Debug)]
+pub struct IsLessThanAir {
+    /// The bus index for sends to range chip
+    pub bus_index: usize,
+    /// The maximum number of bits for the numbers to compare
+    pub limb_bits: usize,
+    /// The number of bits to decompose each number into, for less than checking
+    pub decomp: usize,
+    /// num_limbs is the number of limbs we decompose each input into, not including the last shifted limb
+    pub num_limbs: usize,
+}
+
+impl IsLessThanAir {
+    pub fn new(bus_index: usize, limb_bits: usize, decomp: usize) -> Self {
+        Self {
+            bus_index,
+            limb_bits,
+            decomp,
+            num_limbs: (limb_bits + decomp - 1) / decomp,
+        }
+    }
+
+    /// FOR INTERNAL USE ONLY.
+    /// This AIR is only sound if interactions are enabled
+    pub(crate) fn eval_without_interactions<AB: AirBuilder>(
+        &self,
+        builder: &mut AB,
+        io: IsLessThanIoCols<AB::Var>,
+        aux: IsLessThanAuxCols<AB::Var>,
+    ) {
+        let x = io.x;
+        let y = io.y;
+        let less_than = io.less_than;
+
+        let local_aux = &aux;
+
+        let lower = local_aux.lower;
+        let lower_decomp = local_aux.lower_decomp.clone();
+
+        // to range check the last limb of the decomposed lower_bits, we need to shift it to make sure it is in
+        // the correct range
+        let last_limb_shift = (self.decomp - (self.limb_bits % self.decomp)) % self.decomp;
+
+        // this is the desired intermediate value (i.e. 2^limb_bits + y - x - 1)
+        let intermed_val =
+            y - x + AB::Expr::from_canonical_u64(1 << self.limb_bits) - AB::Expr::one();
+
+        // constrain that the lower_bits + less_than * 2^limb_bits is the correct intermediate sum
+        // note that the intermediate value will be >= 2^limb_bits if and only if x < y, and check_val will therefore be
+        // the correct value if and only if less_than is the indicator for whether x < y
+        let check_val = lower + less_than * AB::Expr::from_canonical_u64(1 << self.limb_bits);
+
+        builder.assert_eq(intermed_val, check_val);
+
+        // constrain that the decomposition of lower_bits is correct
+        // each limb will be range checked
+        let lower_from_decomp = lower_decomp
+            .iter()
+            .enumerate()
+            .take(self.num_limbs)
+            .fold(AB::Expr::zero(), |acc, (i, &val)| {
+                acc + val * AB::Expr::from_canonical_u64(1 << (i * self.decomp))
+            });
+
+        builder.assert_eq(lower_from_decomp, lower);
+
+        let shifted_val =
+            lower_decomp[self.num_limbs - 1] * AB::Expr::from_canonical_u64(1 << last_limb_shift);
+
+        // constrain that the shifted last limb is shifted correctly
+        // this shifted last limb will also be range checked
+        builder.assert_eq(lower_decomp[self.num_limbs], shifted_val);
+
+        // constrain that less_than is a boolean
+        builder.assert_bool(less_than);
+    }
+}
 
 impl AirConfig for IsLessThanAir {
     type Cols<T> = IsLessThanCols<T>;
@@ -17,11 +93,11 @@ impl AirConfig for IsLessThanAir {
 
 impl<F: Field> BaseAir<F> for IsLessThanAir {
     fn width(&self) -> usize {
-        IsLessThanCols::<F>::get_width(self.limb_bits(), self.decomp())
+        IsLessThanCols::<F>::get_width(self.limb_bits, self.decomp)
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for IsLessThanAir {
+impl<AB: InteractionBuilder> Air<AB> for IsLessThanAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -34,58 +110,36 @@ impl<AB: AirBuilder> Air<AB> for IsLessThanAir {
     }
 }
 
-// sub-chip with constraints to check whether one number is less than another
-impl<AB: AirBuilder> SubAir<AB> for IsLessThanAir {
-    type IoView = IsLessThanIOCols<AB::Var>;
+// sub-air with constraints to check whether one number is less than another
+impl<AB: InteractionBuilder> SubAir<AB> for IsLessThanAir {
+    type IoView = IsLessThanIoCols<AB::Var>;
     type AuxView = IsLessThanAuxCols<AB::Var>;
 
     // constrain that the result of x < y is given by less_than
     // warning: send for range check must be included for the constraints to be sound
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
-        let x = io.x;
-        let y = io.y;
-        let less_than = io.less_than;
+        // Note: every AIR that uses this sub-AIR must include these interactions for soundness
+        self.eval_interactions(builder, aux.lower_decomp.clone());
+        self.eval_without_interactions(builder, io, aux);
+    }
+}
 
-        let local_aux = &aux;
-
-        let lower = local_aux.lower;
-        let lower_decomp = local_aux.lower_decomp.clone();
-
-        // to range check the last limb of the decomposed lower_bits, we need to shift it to make sure it is in
-        // the correct range
-        let last_limb_shift = (self.decomp() - (self.limb_bits() % self.decomp())) % self.decomp();
-
-        // this is the desired intermediate value (i.e. 2^limb_bits + y - x - 1)
-        let intermed_val =
-            y - x + AB::Expr::from_canonical_u64(1 << self.limb_bits()) - AB::Expr::one();
-
-        // constrain that the lower_bits + less_than * 2^limb_bits is the correct intermediate sum
-        // note that the intermediate value will be >= 2^limb_bits if and only if x < y, and check_val will therefore be
-        // the correct value if and only if less_than is the indicator for whether x < y
-        let check_val = lower + less_than * AB::Expr::from_canonical_u64(1 << self.limb_bits());
-
-        builder.assert_eq(intermed_val, check_val);
-
-        // constrain that the decomposition of lower_bits is correct
-        // each limb will be range checked
-        let lower_from_decomp = lower_decomp
-            .iter()
-            .enumerate()
-            .take(self.num_limbs())
-            .fold(AB::Expr::zero(), |acc, (i, &val)| {
-                acc + val * AB::Expr::from_canonical_u64(1 << (i * self.decomp()))
-            });
-
-        builder.assert_eq(lower_from_decomp, lower);
-
-        let shifted_val =
-            lower_decomp[self.num_limbs() - 1] * AB::Expr::from_canonical_u64(1 << last_limb_shift);
-
-        // constrain that the shifted last limb is shifted correctly
-        // this shifted last limb will also be range checked
-        builder.assert_eq(lower_decomp[self.num_limbs()], shifted_val);
-
-        // constrain that less_than is a boolean
-        builder.assert_bool(less_than);
+impl IsLessThanAir {
+    /// Imposes the non-interaction constraints on all except the last row. This is
+    /// intended for use when the comparators `x, y` are on adjacent rows.
+    ///
+    /// This function does also enable the interaction constraints _on every row_.
+    /// The `eval_interactions` performs range checks on `lower_decomp` on every row, even
+    /// though in this AIR the lower_decomp is not used on the last row.
+    /// This simply means the trace generation must fill in the last row with numbers in
+    /// range (e.g., with zeros)
+    pub fn eval_when_transition<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        io: IsLessThanIoCols<AB::Var>,
+        aux: IsLessThanAuxCols<AB::Var>,
+    ) {
+        self.eval_interactions(builder, aux.lower_decomp.clone());
+        self.eval_without_interactions(&mut builder.when_transition(), io, aux);
     }
 }

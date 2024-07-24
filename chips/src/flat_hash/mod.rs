@@ -6,13 +6,13 @@ pub mod tests;
 pub mod air;
 pub mod bridge;
 pub mod columns;
+mod dummy_hash;
 pub mod trace;
 
-use crate::dummy_hash::DummyHashChip;
 use p3_field::Field;
 use parking_lot::Mutex;
 
-#[derive(Default)]
+#[derive(Copy, Clone, Debug)]
 /// The AIR for the flat hash chip
 ///
 /// Flat hashes an entire page at once, and outputs digest.

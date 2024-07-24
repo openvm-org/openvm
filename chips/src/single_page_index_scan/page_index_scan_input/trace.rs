@@ -5,8 +5,8 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use crate::{common::page::Page, sub_chip::LocalTraceInstructions};
 
 use super::{
-    EqCompAir, NonStrictCompAir, PageIndexScanInputAirVariants, PageIndexScanInputChip,
-    StrictCompAir,
+    air::{EqCompAir, NonStrictCompAir, PageIndexScanInputAirVariants, StrictCompAir},
+    PageIndexScanInputChip,
 };
 
 impl PageIndexScanInputChip {
@@ -179,6 +179,6 @@ impl PageIndexScanInputChip {
             rows.extend_from_slice(&row);
         }
 
-        RowMajorMatrix::new(rows, self.aux_width())
+        RowMajorMatrix::new(rows, self.air.aux_width())
     }
 }

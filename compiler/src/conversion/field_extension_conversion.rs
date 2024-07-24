@@ -9,7 +9,7 @@ use super::{inst, register, AS};
 
 fn convert_field_extension_mult<const WORD_SIZE: usize, F: PrimeField64>(
     dst: i32,
-    lhs: i32,
+    lhs_registers: [F; 4],
     rhs: [F; 4],
     as_type: AS,
     x0: F,
@@ -22,10 +22,10 @@ fn convert_field_extension_mult<const WORD_SIZE: usize, F: PrimeField64>(
     let a2 = dst - 2 * word_size_i32;
     let a3 = dst - 3 * word_size_i32;
 
-    let b0 = lhs;
-    let b1 = lhs - word_size_i32;
-    let b2 = lhs - 2 * word_size_i32;
-    let b3 = lhs - 3 * word_size_i32;
+    let b0 = lhs_registers[0];
+    let b1 = lhs_registers[1];
+    let b2 = lhs_registers[2];
+    let b3 = lhs_registers[3];
 
     let c0 = rhs[0];
     let c1 = rhs[1];
@@ -37,8 +37,8 @@ fn convert_field_extension_mult<const WORD_SIZE: usize, F: PrimeField64>(
     // This computes the constant term of the resulting polynomial:
     // a_0 = b_0 * c_0 + BETA * (b_1 * c_3 + b_2 * c_2 + b_3 * c_1)
     let a0_inst = vec![
-        inst(FMUL, register(a0), register(b1), c3, AS::Register, as_type),
-        inst(FMUL, x0, register(b2), c2, AS::Register, as_type),
+        inst(FMUL, register(a0), b1, c3, AS::Register, as_type),
+        inst(FMUL, x0, b2, c2, AS::Register, as_type),
         inst(
             FADD,
             register(a0),
@@ -47,7 +47,7 @@ fn convert_field_extension_mult<const WORD_SIZE: usize, F: PrimeField64>(
             AS::Register,
             AS::Register,
         ),
-        inst(FMUL, x0, register(b3), c1, AS::Register, as_type),
+        inst(FMUL, x0, b3, c1, AS::Register, as_type),
         inst(
             FADD,
             register(a0),
@@ -64,7 +64,7 @@ fn convert_field_extension_mult<const WORD_SIZE: usize, F: PrimeField64>(
             AS::Register,
             AS::Immediate,
         ),
-        inst(FMUL, x0, register(b0), c0, AS::Register, as_type),
+        inst(FMUL, x0, b0, c0, AS::Register, as_type),
         inst(
             FADD,
             register(a0),
@@ -78,8 +78,8 @@ fn convert_field_extension_mult<const WORD_SIZE: usize, F: PrimeField64>(
     // This computes the coefficient of x in the resulting polynomial:
     // b_0 * c_1 + b_1 * c_0 + BETA * (b_2 * c_3 + b_3 * c_2)
     let a1_inst = vec![
-        inst(FMUL, register(a1), register(b2), c3, AS::Register, as_type),
-        inst(FMUL, x0, register(b3), c2, AS::Register, as_type),
+        inst(FMUL, register(a1), b2, c3, AS::Register, as_type),
+        inst(FMUL, x0, b3, c2, AS::Register, as_type),
         inst(
             FADD,
             register(a1),
@@ -96,7 +96,7 @@ fn convert_field_extension_mult<const WORD_SIZE: usize, F: PrimeField64>(
             AS::Register,
             AS::Immediate,
         ),
-        inst(FMUL, x0, register(b0), c1, AS::Register, as_type),
+        inst(FMUL, x0, b0, c1, AS::Register, as_type),
         inst(
             FADD,
             register(a1),
@@ -105,7 +105,7 @@ fn convert_field_extension_mult<const WORD_SIZE: usize, F: PrimeField64>(
             AS::Register,
             AS::Register,
         ),
-        inst(FMUL, x0, register(b1), c0, AS::Register, as_type),
+        inst(FMUL, x0, b1, c0, AS::Register, as_type),
         inst(
             FADD,
             register(a1),
@@ -119,7 +119,7 @@ fn convert_field_extension_mult<const WORD_SIZE: usize, F: PrimeField64>(
     // This computes the coefficient of x^2 in the resulting polynomial:
     // b_0 * c_2 + b_1 * c_1 + b_2 * c_0 + BETA * b_3 * c_3
     let a2_inst = vec![
-        inst(FMUL, register(a2), register(b3), c3, AS::Register, as_type),
+        inst(FMUL, register(a2), b3, c3, AS::Register, as_type),
         inst(
             FMUL,
             register(a2),
@@ -128,7 +128,7 @@ fn convert_field_extension_mult<const WORD_SIZE: usize, F: PrimeField64>(
             AS::Register,
             AS::Immediate,
         ),
-        inst(FMUL, x0, register(b0), c2, AS::Register, as_type),
+        inst(FMUL, x0, b0, c2, AS::Register, as_type),
         inst(
             FADD,
             register(a2),
@@ -137,7 +137,7 @@ fn convert_field_extension_mult<const WORD_SIZE: usize, F: PrimeField64>(
             AS::Register,
             AS::Register,
         ),
-        inst(FMUL, x0, register(b1), c1, AS::Register, as_type),
+        inst(FMUL, x0, b1, c1, AS::Register, as_type),
         inst(
             FADD,
             register(a2),
@@ -146,7 +146,7 @@ fn convert_field_extension_mult<const WORD_SIZE: usize, F: PrimeField64>(
             AS::Register,
             AS::Register,
         ),
-        inst(FMUL, x0, register(b2), c0, AS::Register, as_type),
+        inst(FMUL, x0, b2, c0, AS::Register, as_type),
         inst(
             FADD,
             register(a2),
@@ -160,8 +160,8 @@ fn convert_field_extension_mult<const WORD_SIZE: usize, F: PrimeField64>(
     // This computes the coefficient of x^3 in the resulting polynomial:
     // b_0 * c_3 + b_1 * c_2 + b_2 * c_1 + b_3 * c_0
     let a3_inst = vec![
-        inst(FMUL, register(a3), register(b0), c3, AS::Register, as_type),
-        inst(FMUL, x0, register(b1), c2, AS::Register, as_type),
+        inst(FMUL, register(a3), b0, c3, AS::Register, as_type),
+        inst(FMUL, x0, b1, c2, AS::Register, as_type),
         inst(
             FADD,
             register(a3),
@@ -170,7 +170,7 @@ fn convert_field_extension_mult<const WORD_SIZE: usize, F: PrimeField64>(
             AS::Register,
             AS::Register,
         ),
-        inst(FMUL, x0, register(b2), c1, AS::Register, as_type),
+        inst(FMUL, x0, b2, c1, AS::Register, as_type),
         inst(
             FADD,
             register(a3),
@@ -179,7 +179,7 @@ fn convert_field_extension_mult<const WORD_SIZE: usize, F: PrimeField64>(
             AS::Register,
             AS::Register,
         ),
-        inst(FMUL, x0, register(b3), c0, AS::Register, as_type),
+        inst(FMUL, x0, b3, c0, AS::Register, as_type),
         inst(
             FADD,
             register(a3),
@@ -514,6 +514,53 @@ pub fn convert_field_extension_with_base<
 
             instructions
         }
+        AsmInstruction::AddEFFI(dst, lhs, rhs) => {
+            let a0 = dst;
+            let a1 = dst - word_size_i32;
+            let a2 = dst - 2 * word_size_i32;
+            let a3 = dst - 3 * word_size_i32;
+
+            let slc = rhs.as_base_slice();
+            let c0 = slc[0];
+            let c1 = slc[1];
+            let c2 = slc[2];
+            let c3 = slc[3];
+
+            vec![
+                inst(
+                    FADD,
+                    register(a0),
+                    register(lhs),
+                    c0,
+                    AS::Register,
+                    AS::Immediate,
+                ),
+                inst(
+                    STOREW,
+                    c1,
+                    F::zero(),
+                    register(a1),
+                    AS::Immediate,
+                    AS::Register,
+                ),
+                inst(
+                    STOREW,
+                    c2,
+                    F::zero(),
+                    register(a2),
+                    AS::Immediate,
+                    AS::Register,
+                ),
+                inst(
+                    STOREW,
+                    c3,
+                    F::zero(),
+                    register(a3),
+                    AS::Immediate,
+                    AS::Register,
+                ),
+            ]
+        }
         AsmInstruction::SubE(dst, lhs, rhs) => {
             let a0 = dst;
             let a1 = dst - word_size_i32;
@@ -686,19 +733,50 @@ pub fn convert_field_extension_with_base<
                 register(rhs - 2 * word_size_i32),
                 register(rhs - 3 * word_size_i32),
             ];
-            convert_field_extension_mult::<WORD_SIZE, F>(dst, lhs, rhs_register, AS::Register, x0)
+            let lhs_register = [
+                register(lhs),
+                register(lhs - word_size_i32),
+                register(lhs - 2 * word_size_i32),
+                register(lhs - 3 * word_size_i32),
+            ];
+            convert_field_extension_mult::<WORD_SIZE, F>(
+                dst,
+                lhs_register,
+                rhs_register,
+                AS::Register,
+                x0,
+            )
         }
         AsmInstruction::MulEI(dst, lhs, rhs) => {
+            let lhs_register = [
+                register(lhs),
+                register(lhs - word_size_i32),
+                register(lhs - 2 * word_size_i32),
+                register(lhs - 3 * word_size_i32),
+            ];
             let rhs_slc = rhs.as_base_slice().try_into().unwrap();
-            convert_field_extension_mult::<WORD_SIZE, F>(dst, lhs, rhs_slc, AS::Immediate, x0)
+            convert_field_extension_mult::<WORD_SIZE, F>(
+                dst,
+                lhs_register,
+                rhs_slc,
+                AS::Immediate,
+                x0,
+            )
         }
         AsmInstruction::DivE(dst, lhs, rhs) => {
             let inv_instr =
                 convert_field_extension_inv::<WORD_SIZE, F>(div_utility, rhs, main_utility);
 
+            let lhs_register = [
+                register(lhs),
+                register(lhs - word_size_i32),
+                register(lhs - 2 * word_size_i32),
+                register(lhs - 3 * word_size_i32),
+            ];
+
             let mul_instr = convert_field_extension_mult::<WORD_SIZE, F>(
                 dst,
-                lhs,
+                lhs_register,
                 div_utility,
                 AS::Register,
                 x0,
@@ -707,17 +785,34 @@ pub fn convert_field_extension_with_base<
             inv_instr.into_iter().chain(mul_instr).collect()
         }
         AsmInstruction::DivEI(dst, lhs, rhs) => {
+            let lhs_register = [
+                register(lhs),
+                register(lhs - word_size_i32),
+                register(lhs - 2 * word_size_i32),
+                register(lhs - 3 * word_size_i32),
+            ];
             let rhs_inv = field_extension_inv_immediate::<F, EF>(rhs);
 
-            convert_field_extension_mult::<WORD_SIZE, F>(dst, lhs, rhs_inv, AS::Immediate, x0)
+            convert_field_extension_mult::<WORD_SIZE, F>(
+                dst,
+                lhs_register,
+                rhs_inv,
+                AS::Immediate,
+                x0,
+            )
         }
         AsmInstruction::DivEIN(dst, lhs, rhs) => {
             let inv_instr =
                 convert_field_extension_inv::<WORD_SIZE, F>(div_utility, rhs, main_utility);
 
             let lhs_slc = lhs.as_base_slice().try_into().unwrap();
-            let mul_instr =
-                convert_field_extension_mult::<WORD_SIZE, F>(dst, rhs, lhs_slc, AS::Immediate, x0);
+            let mul_instr = convert_field_extension_mult::<WORD_SIZE, F>(
+                dst,
+                div_utility,
+                lhs_slc,
+                AS::Immediate,
+                x0,
+            );
             inv_instr.into_iter().chain(mul_instr).collect()
         }
         _ => panic!(
@@ -740,7 +835,13 @@ pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField64, EF: Exte
             AS::Register,
             AS::Register,
         )],
-        AsmInstruction::AddEI(_, _, _) => {
+        AsmInstruction::AddEI(_, _, _)
+        | AsmInstruction::SubEI(_, _, _)
+        | AsmInstruction::SubEIN(_, _, _)
+        | AsmInstruction::MulEI(_, _, _)
+        | AsmInstruction::DivEI(_, _, _)
+        | AsmInstruction::DivEIN(_, _, _)
+        | AsmInstruction::AddEFFI(_, _, _) => {
             convert_field_extension_with_base::<WORD_SIZE, F, EF>(instruction, utility_registers)
         }
         AsmInstruction::SubE(dst, lhs, rhs) => vec![inst(
@@ -751,12 +852,6 @@ pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField64, EF: Exte
             AS::Register,
             AS::Register,
         )],
-        AsmInstruction::SubEI(_, _, _) => {
-            convert_field_extension_with_base::<WORD_SIZE, F, EF>(instruction, utility_registers)
-        }
-        AsmInstruction::SubEIN(_, _, _) => {
-            convert_field_extension_with_base::<WORD_SIZE, F, EF>(instruction, utility_registers)
-        }
         AsmInstruction::MulE(dst, lhs, rhs) => vec![inst(
             BBE4MUL,
             register(dst),
@@ -765,9 +860,6 @@ pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField64, EF: Exte
             AS::Register,
             AS::Register,
         )],
-        AsmInstruction::MulEI(_, _, _) => {
-            convert_field_extension_with_base::<WORD_SIZE, F, EF>(instruction, utility_registers)
-        }
         AsmInstruction::DivE(dst, lhs, rhs) => vec![
             inst(
                 BBE4INV,
@@ -786,12 +878,6 @@ pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField64, EF: Exte
                 AS::Register,
             ),
         ],
-        AsmInstruction::DivEI(_, _, _) => {
-            convert_field_extension_with_base::<WORD_SIZE, F, EF>(instruction, utility_registers)
-        }
-        AsmInstruction::DivEIN(_, _, _) => {
-            convert_field_extension_with_base::<WORD_SIZE, F, EF>(instruction, utility_registers)
-        }
         _ => panic!(
             "Illegal argument to convert_field_extension: {:?}",
             instruction

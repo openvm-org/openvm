@@ -1,11 +1,17 @@
-use afs_stark_backend::air_builders::PartitionedAirBuilder;
+use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
 use p3_air::{Air, AirBuilderWithPublicValues, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
 use crate::{
-    is_equal_vec::columns::{IsEqualVecCols, IsEqualVecIoCols},
-    is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
+    is_equal_vec::{
+        columns::{IsEqualVecAuxCols, IsEqualVecCols, IsEqualVecIoCols},
+        IsEqualVecAir,
+    },
+    is_less_than_tuple::{
+        columns::{IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupleIoCols},
+        IsLessThanTupleAir,
+    },
     sub_chip::{AirConfig, SubAir},
 };
 
@@ -14,9 +20,136 @@ use super::{
         EqCompAuxCols, NonStrictCompAuxCols, PageIndexScanInputAuxCols, PageIndexScanInputCols,
         StrictCompAuxCols,
     },
-    Comp, EqCompAir, NonStrictCompAir, PageIndexScanInputAir, PageIndexScanInputAirVariants,
-    StrictCompAir,
+    Comp,
 };
+
+pub struct StrictCompAir {
+    pub is_less_than_tuple_air: IsLessThanTupleAir,
+}
+
+// TODO[optimization]: <= is same as not >
+pub struct NonStrictCompAir {
+    pub is_less_than_tuple_air: IsLessThanTupleAir,
+    pub is_equal_vec_air: IsEqualVecAir,
+}
+
+pub struct EqCompAir {
+    pub is_equal_vec_air: IsEqualVecAir,
+}
+
+pub enum PageIndexScanInputAirVariants {
+    Lt(StrictCompAir),
+    Lte(NonStrictCompAir),
+    Eq(EqCompAir),
+    Gte(NonStrictCompAir),
+    Gt(StrictCompAir),
+}
+
+pub struct PageIndexScanInputAir {
+    pub page_bus_index: usize,
+    pub idx_len: usize,
+    pub data_len: usize,
+
+    pub(super) variant_air: PageIndexScanInputAirVariants,
+}
+
+impl PageIndexScanInputAir {
+    pub fn new(
+        page_bus_index: usize,
+        range_bus_index: usize,
+        idx_len: usize,
+        data_len: usize,
+        idx_limb_bits: usize,
+        decomp: usize,
+        cmp: Comp,
+    ) -> Self {
+        let is_less_than_tuple_air =
+            IsLessThanTupleAir::new(range_bus_index, vec![idx_limb_bits; idx_len], decomp);
+        let is_equal_vec_air = IsEqualVecAir::new(idx_len);
+
+        let variant_air = match cmp {
+            Comp::Lt => PageIndexScanInputAirVariants::Lt(StrictCompAir {
+                is_less_than_tuple_air,
+            }),
+            Comp::Lte => PageIndexScanInputAirVariants::Lte(NonStrictCompAir {
+                is_less_than_tuple_air,
+                is_equal_vec_air,
+            }),
+            Comp::Eq => PageIndexScanInputAirVariants::Eq(EqCompAir { is_equal_vec_air }),
+            Comp::Gte => PageIndexScanInputAirVariants::Gte(NonStrictCompAir {
+                is_less_than_tuple_air,
+                is_equal_vec_air,
+            }),
+            Comp::Gt => PageIndexScanInputAirVariants::Gt(StrictCompAir {
+                is_less_than_tuple_air,
+            }),
+        };
+
+        Self {
+            page_bus_index,
+            idx_len,
+            data_len,
+            variant_air,
+        }
+    }
+
+    pub fn page_width(&self) -> usize {
+        1 + self.idx_len + self.data_len
+    }
+
+    pub fn aux_width(&self) -> usize {
+        match &self.variant_air {
+            PageIndexScanInputAirVariants::Lt(StrictCompAir {
+                is_less_than_tuple_air,
+                ..
+            })
+            | PageIndexScanInputAirVariants::Gt(StrictCompAir {
+                is_less_than_tuple_air,
+                ..
+            }) => {
+                // x, satisfies_pred, send_row, is_less_than_tuple_aux_cols
+                self.idx_len
+                    + 1
+                    + 1
+                    + IsLessThanTupleAuxCols::<usize>::get_width(
+                        is_less_than_tuple_air.limb_bits(),
+                        is_less_than_tuple_air.decomp,
+                        self.idx_len,
+                    )
+            }
+            PageIndexScanInputAirVariants::Lte(NonStrictCompAir {
+                is_less_than_tuple_air,
+                ..
+            })
+            | PageIndexScanInputAirVariants::Gte(NonStrictCompAir {
+                is_less_than_tuple_air,
+                ..
+            }) => {
+                // x, satisfies_pred, send_row, satisfies_strict_comp, satisfies_eq_comp,
+                // is_less_than_tuple_aux_cols, is_equal_vec_aux_cols
+                self.idx_len
+                    + 1
+                    + 1
+                    + 1
+                    + 1
+                    + IsLessThanTupleAuxCols::<usize>::get_width(
+                        is_less_than_tuple_air.limb_bits(),
+                        is_less_than_tuple_air.decomp,
+                        self.idx_len,
+                    )
+                    + IsEqualVecAuxCols::<usize>::get_width(self.idx_len)
+            }
+            PageIndexScanInputAirVariants::Eq(EqCompAir { .. }) => {
+                // x, satisfies_pred, send_row, is_equal_vec_aux_cols
+                self.idx_len + 1 + 1 + IsEqualVecAuxCols::<usize>::get_width(self.idx_len)
+            }
+        }
+    }
+
+    pub fn air_width(&self) -> usize {
+        self.page_width() + self.aux_width()
+    }
+}
 
 impl AirConfig for PageIndexScanInputAir {
     type Cols<T> = PageIndexScanInputCols<T>;
@@ -36,7 +169,7 @@ impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
                 self.idx_len,
                 self.data_len,
                 is_less_than_tuple_air.limb_bits().clone(),
-                is_less_than_tuple_air.decomp(),
+                is_less_than_tuple_air.decomp,
                 Comp::Lt,
             ),
             PageIndexScanInputAirVariants::Lte(NonStrictCompAir {
@@ -50,7 +183,7 @@ impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
                 self.idx_len,
                 self.data_len,
                 is_less_than_tuple_air.limb_bits().clone(),
-                is_less_than_tuple_air.decomp(),
+                is_less_than_tuple_air.decomp,
                 Comp::Lte,
             ),
             PageIndexScanInputAirVariants::Eq(EqCompAir { .. }) => {
@@ -67,13 +200,13 @@ impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
     }
 }
 
-impl<AB: PartitionedAirBuilder + AirBuilderWithPublicValues> Air<AB> for PageIndexScanInputAir
+impl<AB> Air<AB> for PageIndexScanInputAir
 where
-    AB::M: Clone,
+    AB: PartitionedAirBuilder + AirBuilderWithPublicValues + InteractionBuilder,
 {
     fn eval(&self, builder: &mut AB) {
-        let page_main = &builder.partitioned_main()[0].clone();
-        let aux_main = &builder.partitioned_main()[1].clone();
+        let page_main = &builder.partitioned_main()[0];
+        let aux_main = &builder.partitioned_main()[1];
 
         // get the public value x
         let pis = builder.public_values();
@@ -101,7 +234,7 @@ where
                 ..
             }) => (
                 is_less_than_tuple_air.limb_bits(),
-                is_less_than_tuple_air.decomp(),
+                is_less_than_tuple_air.decomp,
             ),
             PageIndexScanInputAirVariants::Eq(EqCompAir { .. }) => (vec![], 0),
         };
@@ -127,6 +260,8 @@ where
             decomp,
             cmp,
         );
+        drop(local_page);
+        drop(local_aux);
 
         // constrain that the public value x is the same as the column x
         for (&local_x, &pub_x) in local_cols.x.iter().zip(public_x.iter()) {
@@ -171,7 +306,7 @@ where
                     is_less_than_tuple_aux,
                     ..
                 }) => Some(IsLessThanTupleCols {
-                    io: IsLessThanTupleIOCols {
+                    io: IsLessThanTupleIoCols {
                         // idx < x
                         x: page_cols.idx.clone(),
                         y: local_cols.x.clone(),
@@ -188,7 +323,7 @@ where
                     is_less_than_tuple_aux,
                     ..
                 }) => Some(IsLessThanTupleCols {
-                    io: IsLessThanTupleIOCols {
+                    io: IsLessThanTupleIoCols {
                         // idx > x
                         x: local_cols.x.clone(),
                         y: page_cols.idx.clone(),
@@ -290,5 +425,6 @@ where
                 );
             }
         }
+        self.eval_interactions(builder, page_cols.idx, page_cols.data, local_cols.send_row);
     }
 }

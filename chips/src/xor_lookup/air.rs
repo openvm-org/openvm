@@ -1,9 +1,22 @@
-use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::Field;
-use p3_matrix::dense::RowMajorMatrix;
+use std::borrow::Borrow;
 
-use super::columns::NUM_XOR_LOOKUP_COLS;
-use super::XorLookupAir;
+use afs_stark_backend::interaction::InteractionBuilder;
+use p3_air::{Air, BaseAir, PairBuilder};
+use p3_field::Field;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
+
+use super::columns::{XorLookupCols, XorLookupPreprocessedCols, NUM_XOR_LOOKUP_COLS};
+
+#[derive(Clone, Copy, Debug)]
+pub struct XorLookupAir<const M: usize> {
+    pub bus_index: usize,
+}
+
+impl<const M: usize> XorLookupAir<M> {
+    pub fn new(bus_index: usize) -> Self {
+        Self { bus_index }
+    }
+}
 
 impl<F: Field, const M: usize> BaseAir<F> for XorLookupAir<M> {
     fn width(&self) -> usize {
@@ -30,7 +43,17 @@ impl<F: Field, const M: usize> BaseAir<F> for XorLookupAir<M> {
 
 impl<AB, const M: usize> Air<AB> for XorLookupAir<M>
 where
-    AB: AirBuilder,
+    AB: InteractionBuilder + PairBuilder,
 {
-    fn eval(&self, _builder: &mut AB) {}
+    fn eval(&self, builder: &mut AB) {
+        let main = builder.main();
+        let preprocessed = builder.preprocessed();
+
+        let prep_local = preprocessed.row_slice(0);
+        let prep_local: &XorLookupPreprocessedCols<AB::Var> = (*prep_local).borrow();
+        let local = main.row_slice(0);
+        let local: &XorLookupCols<AB::Var> = (*local).borrow();
+
+        self.eval_interactions(builder, *prep_local, *local);
+    }
 }

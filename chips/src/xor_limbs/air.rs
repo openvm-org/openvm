@@ -1,11 +1,24 @@
 use std::borrow::Borrow;
 
-use p3_air::{Air, AirBuilder, BaseAir};
+use afs_stark_backend::interaction::InteractionBuilder;
+use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::columns::XorLimbsCols;
-use super::XorLimbsAir;
+
+#[derive(Copy, Clone, Debug)]
+pub struct XorLimbsAir<const N: usize, const M: usize> {
+    /// The bus where messages are of the form `(x, y, x ^ y)` where `x, y` _may_ either
+    /// both have `M` bits or both have `N` bits.
+    pub bus_index: usize,
+}
+
+impl<const N: usize, const M: usize> XorLimbsAir<N, M> {
+    pub fn new(bus_index: usize) -> Self {
+        Self { bus_index }
+    }
+}
 
 impl<F: Field, const N: usize, const M: usize> BaseAir<F> for XorLimbsAir<N, M> {
     fn width(&self) -> usize {
@@ -13,7 +26,7 @@ impl<F: Field, const N: usize, const M: usize> BaseAir<F> for XorLimbsAir<N, M> 
     }
 }
 
-impl<AB: AirBuilder, const N: usize, const M: usize> Air<AB> for XorLimbsAir<N, M> {
+impl<AB: InteractionBuilder, const N: usize, const M: usize> Air<AB> for XorLimbsAir<N, M> {
     fn eval(&self, builder: &mut AB) {
         let num_limbs = (N + M - 1) / M;
 
@@ -41,5 +54,7 @@ impl<AB: AirBuilder, const N: usize, const M: usize> Air<AB> for XorLimbsAir<N, 
             z_from_limbs += xor_cols.z_limbs[i] * AB::Expr::from_canonical_u64(1 << (i * M));
         }
         builder.assert_eq(z_from_limbs, xor_cols.z);
+
+        self.eval_interactions(builder, xor_cols);
     }
 }

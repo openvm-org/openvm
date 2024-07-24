@@ -71,6 +71,9 @@ pub enum AsmInstruction<F, EF> {
     /// Add immediate extension, dst = lhs + rhs.
     AddEI(i32, i32, EF),
 
+    /// Add field element with an immediate extension, dst = lhs + rhs.
+    AddEFFI(i32, i32, EF),
+
     /// Subtract extension, dst = lhs - rhs.
     SubE(i32, i32, i32),
 
@@ -104,14 +107,8 @@ pub enum AsmInstruction<F, EF> {
     /// Branch not equal.
     Bne(F, i32, i32),
 
-    /// Branch not equal increment c by 1.
-    BneInc(F, i32, i32),
-
     /// Branch not equal immediate.
     BneI(F, i32, F),
-
-    /// Branch not equal immediate and increment c by 1.
-    BneIInc(F, i32, F),
 
     /// Branch equal.
     Beq(F, i32, i32),
@@ -965,6 +962,9 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::AddEI(dst, lhs, rhs) => {
                 write!(f, "eaddi ({})fp, ({})fp, {}", dst, lhs, rhs)
             }
+            AsmInstruction::AddEFFI(dst, lhs, rhs) => {
+                write!(f, "eefaddi ({})fp, ({})fp, {}", dst, lhs, rhs)
+            }
             AsmInstruction::SubE(dst, lhs, rhs) => {
                 write!(f, "esub  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
             }
@@ -1022,24 +1022,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                 write!(
                     f,
                     "bnei  {}, ({})fp, {}",
-                    labels.get(label).unwrap_or(&format!(".L{}", label)),
-                    lhs,
-                    rhs
-                )
-            }
-            AsmInstruction::BneInc(label, lhs, rhs) => {
-                write!(
-                    f,
-                    "bneinc {}, ({})fp, {}",
-                    labels.get(label).unwrap_or(&format!(".L{}", label)),
-                    lhs,
-                    rhs
-                )
-            }
-            AsmInstruction::BneIInc(label, lhs, rhs) => {
-                write!(
-                    f,
-                    "bneiinc {}, ({})fp, {}",
                     labels.get(label).unwrap_or(&format!(".L{}", label)),
                     lhs,
                     rhs

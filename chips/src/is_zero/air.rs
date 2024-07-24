@@ -1,6 +1,5 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::interaction::AirBridge;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
 use p3_field::Field;
@@ -8,10 +7,17 @@ use p3_matrix::Matrix;
 
 use crate::sub_chip::{AirConfig, SubAir};
 
-use super::{
-    columns::{IsZeroCols, IsZeroIOCols, NUM_COLS},
-    IsZeroAir,
-};
+use super::columns::{IsZeroCols, IsZeroIoCols, NUM_COLS};
+
+#[derive(Copy, Clone, Default)]
+/// A chip that checks if a number equals 0
+pub struct IsZeroAir;
+
+impl IsZeroAir {
+    pub fn request<F: Field>(x: F) -> bool {
+        x == F::zero()
+    }
+}
 
 impl<F: Field> BaseAir<F> for IsZeroAir {
     fn width(&self) -> usize {
@@ -22,9 +28,6 @@ impl<F: Field> BaseAir<F> for IsZeroAir {
 impl AirConfig for IsZeroAir {
     type Cols<T> = IsZeroCols<T>;
 }
-
-// No interactions
-impl<F: Field> AirBridge<F> for IsZeroAir {}
 
 impl<AB: AirBuilder> Air<AB> for IsZeroAir {
     fn eval(&self, builder: &mut AB) {
@@ -38,7 +41,7 @@ impl<AB: AirBuilder> Air<AB> for IsZeroAir {
 }
 
 impl<AB: AirBuilder> SubAir<AB> for IsZeroAir {
-    type IoView = IsZeroIOCols<AB::Var>;
+    type IoView = IsZeroIoCols<AB::Var>;
     type AuxView = AB::Var;
 
     fn eval(&self, builder: &mut AB, io: Self::IoView, inv: Self::AuxView) {

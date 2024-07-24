@@ -1,3 +1,4 @@
+use afs_test_utils::config::setup_tracing;
 use p3_baby_bear::BabyBear;
 use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
 
@@ -88,6 +89,13 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
     });
+    execute_and_prove_program::<WORD_SIZE>(program, input_stream)
+}
+
+pub fn execute_and_prove_program<const WORD_SIZE: usize>(
+    program: Vec<Instruction<BabyBear>>,
+    input_stream: Vec<Vec<BabyBear>>,
+) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
             field_arithmetic_enabled: true,
@@ -115,6 +123,7 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
 
     let num_chips = chips.len();
 
+    setup_tracing();
     engine
         .run_simple_test(chips, traces, vec![vec![]; num_chips])
         .expect("Verification failed");

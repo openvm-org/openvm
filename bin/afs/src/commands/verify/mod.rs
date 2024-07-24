@@ -6,19 +6,18 @@ use std::{
 };
 
 use afs_chips::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
-use afs_stark_backend::{keygen::types::MultiStarkPartialVerifyingKey, prover::types::Proof};
+use afs_stark_backend::{keygen::types::MultiStarkVerifyingKey, prover::types::Proof};
 use afs_test_utils::{
     engine::StarkEngine,
     page_config::{PageConfig, PageMode},
 };
+use bin_common::utils::io::read_from_path;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use p3_field::PrimeField64;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::commands::read_from_path;
-
-use super::create_prefix;
+use crate::RANGE_CHECK_BITS;
 
 /// `afs verify` command
 /// Uses information from config.toml to verify a proof using the verifying key in `output-folder`
@@ -67,7 +66,7 @@ where
         keys_folder: String,
     ) -> Result<()> {
         let start = Instant::now();
-        let prefix = create_prefix(config);
+        let prefix = config.generate_filename();
         match config.page.mode {
             PageMode::ReadWrite => Self::execute_rw(
                 config,
@@ -104,13 +103,11 @@ where
         let ops_bus_index = 2;
 
         let idx_limb_bits = config.page.bits_per_fe;
-        let idx_decomp = 8;
+        let idx_decomp = RANGE_CHECK_BITS;
         println!("Verifying proof file: {}", proof_file);
 
-        let encoded_vk =
-            read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.vk").unwrap();
-        let partial_vk: MultiStarkPartialVerifyingKey<SC> =
-            bincode::deserialize(&encoded_vk).unwrap();
+        let encoded_vk = read_from_path(keys_folder.clone() + "/" + &prefix + ".vk").unwrap();
+        let vk: MultiStarkVerifyingKey<SC> = bincode::deserialize(&encoded_vk).unwrap();
 
         let encoded_proof = read_from_path(proof_file.clone()).unwrap();
         let proof: Proof<SC> = bincode::deserialize(&encoded_proof).unwrap();
@@ -124,7 +121,7 @@ where
             idx_decomp,
         );
         let ops_sender = ExecutionAir::new(ops_bus_index, idx_len, data_len);
-        let result = page_controller.verify(engine, partial_vk, proof, &ops_sender);
+        let result = page_controller.verify(engine, vk, proof, &ops_sender);
         if result.is_err() {
             println!("Verification Unsuccessful");
         } else {

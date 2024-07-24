@@ -1,7 +1,7 @@
 use std::{path::Path, time::Instant};
 
 use afs_stark_backend::{
-    keygen::types::MultiStarkPartialProvingKey, prover::trace::TraceCommitmentBuilder,
+    keygen::types::MultiStarkProvingKey, prover::trace::TraceCommitmentBuilder,
 };
 use afs_test_utils::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
@@ -57,11 +57,10 @@ impl ProveCommand {
         let mut vm = VirtualMachine::<WORD_SIZE, _>::new(config, instructions, vec![]);
 
         let engine = config::baby_bear_poseidon2::default_engine(vm.max_log_degree()?);
-        let encoded_pk = read_from_path(&Path::new(&self.keys_folder.clone()).join("partial.pk"))?;
-        let partial_pk: MultiStarkPartialProvingKey<BabyBearPoseidon2Config> =
-            bincode::deserialize(&encoded_pk)?;
+        let encoded_pk = read_from_path(&Path::new(&self.keys_folder.clone()).join("pk"))?;
+        let pk: MultiStarkProvingKey<BabyBearPoseidon2Config> = bincode::deserialize(&encoded_pk)?;
 
-        let partial_vk = partial_pk.partial_vk();
+        let vk = pk.vk();
 
         let prover = engine.prover();
         let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -74,12 +73,12 @@ impl ProveCommand {
         let chips = get_chips(&vm);
         let num_chips = chips.len();
 
-        let main_trace_data = trace_builder.view(&partial_vk, chips);
+        let main_trace_data = trace_builder.view(&vk, chips);
 
         let mut challenger = engine.new_challenger();
         let proof = prover.prove(
             &mut challenger,
-            &partial_pk,
+            &pk,
             main_trace_data,
             &vec![vec![]; num_chips],
         );

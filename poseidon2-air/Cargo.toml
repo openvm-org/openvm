@@ -6,7 +6,7 @@ edition.workspace = true
 
 [dependencies]
 p3-air = { workspace = true }
-p3-baby-bear = { workspace = true, optional = true }
+p3-baby-bear = { workspace = true }
 p3-commit = { workspace = true }
 p3-field = { workspace = true }
 p3-keccak = { workspace = true }
@@ -21,7 +21,7 @@ zkhash = { workspace = true }
 rand = "0.8"
 
 afs-chips = { path = "../chips" }
-afs-stark-backend = { path = "../stark-backend" }
+afs-stark-backend = { path = "../stark-backend", default-features = false }
 afs-derive = { path = "../derive" }
 afs-test-utils = { path = "../test-utils" }
 parking_lot = "0.12.2"
@@ -54,5 +54,5 @@ rand_xoshiro = "0.6.0"
 ark-ff = { version = "^0.4.0", default-features = false }
 
 [features]
-default = ["test-traits"]
-test-traits = ["p3-baby-bear"]
+default = ["parallel"]
+parallel = ["afs-stark-backend/parallel"]

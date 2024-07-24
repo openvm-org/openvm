@@ -1,15 +1,10 @@
 use std::borrow::Borrow;
 
 use super::columns::{FibonacciCols, NUM_FIBONACCI_COLS};
-use afs_stark_backend::interaction::AirBridge;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use p3_field::Field;
 use p3_matrix::Matrix;
 
 pub struct FibonacciAir;
-
-// No interactions
-impl<F: Field> AirBridge<F> for FibonacciAir {}
 
 impl<F> BaseAir<F> for FibonacciAir {
     fn width(&self) -> usize {

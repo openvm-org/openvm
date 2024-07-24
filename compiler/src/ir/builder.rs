@@ -413,7 +413,7 @@ impl<C: Config> Builder<C> {
 
         // Simply recast memory as Array<Ext>.
         match flattened {
-            Array::Fixed(_) => panic!("hint array is not dynamic"),
+            Array::Fixed(_) => unreachable!(),
             Array::Dyn(ptr, _) => Array::Dyn(ptr, Usize::Var(len)),
         }
     }

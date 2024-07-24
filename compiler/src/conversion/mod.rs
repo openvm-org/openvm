@@ -507,26 +507,6 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 AS::Register,
             ),
         ],
-        AsmInstruction::BneInc(label, lhs, rhs) => vec![
-            // register[lhs] += 1
-            inst(
-                FADD,
-                register(lhs),
-                register(lhs),
-                F::one(),
-                AS::Register,
-                AS::Immediate,
-            ),
-            // if register[lhs] != register[rhs], pc <- labels[label]
-            inst(
-                BNE,
-                register(lhs),
-                register(rhs),
-                labels(label) - (pc + F::one()),
-                AS::Register,
-                AS::Register,
-            ),
-        ],
         AsmInstruction::BneI(label, lhs, rhs) => vec![
             // if register[lhs] != rhs, pc <- labels[label]
             inst(
@@ -534,26 +514,6 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 register(lhs),
                 rhs,
                 labels(label) - pc,
-                AS::Register,
-                AS::Immediate,
-            ),
-        ],
-        AsmInstruction::BneIInc(label, lhs, rhs) => vec![
-            // register[lhs] += 1
-            inst(
-                FADD,
-                register(lhs),
-                register(lhs),
-                F::one(),
-                AS::Register,
-                AS::Immediate,
-            ),
-            // if register[lhs] != rhs, pc <- labels[label]
-            inst(
-                BNE,
-                register(lhs),
-                rhs,
-                labels(label) - (pc + F::one()),
                 AS::Register,
                 AS::Immediate,
             ),
@@ -601,7 +561,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 rhs.as_base_slice()[i],
                 labels(label) - (pc + F::from_canonical_usize(i)),
                 AS::Register,
-                AS::Register,
+                AS::Immediate,
             ))
             .collect(),
         AsmInstruction::BeqE(label, lhs, rhs) => (0..EF::D)
@@ -635,7 +595,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                     F::from_canonical_usize(i + 1)
                 },
                 AS::Register,
-                AS::Register,
+                AS::Immediate,
             ))
             .collect(),
         AsmInstruction::Trap => vec![
@@ -741,6 +701,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         }
         AsmInstruction::AddE(..)
         | AsmInstruction::AddEI(..)
+        | AsmInstruction::AddEFFI(..)
         | AsmInstruction::SubE(..)
         | AsmInstruction::SubEI(..)
         | AsmInstruction::SubEIN(..)
@@ -764,6 +725,14 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 )
             }
         }
+        AsmInstruction::Poseidon2Compress(src1, src2, dst) => vec![inst(
+            COMP_POS2,
+            register(src1),
+            register(src2),
+            register(dst),
+            AS::Register,
+            AS::Memory,
+        )],
         AsmInstruction::Poseidon2Permute(src, dst) => vec![
             inst(
                 FADD,

@@ -4,7 +4,7 @@ use p3_field::AbstractField;
 
 use afs_compiler::asm::AsmBuilder;
 use afs_compiler::ir::{Felt, Var};
-use afs_compiler::util::{display_program, end_to_end_test, execute_program};
+use afs_compiler::util::{display_program, execute_program};
 use stark_vm::cpu::WORD_SIZE;
 
 type F = BabyBear;

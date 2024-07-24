@@ -113,7 +113,7 @@ impl<'a> AfsInterface<'a> {
                     }
                     self.db_ref.write_data(table_id_bytes, index, data);
                 }
-                InputFileOp::Where => {}
+                InputFileOp::Filter => {}
                 InputFileOp::InnerJoin => {}
                 InputFileOp::GroupBy => {}
             };

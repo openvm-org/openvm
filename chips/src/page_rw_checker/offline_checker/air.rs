@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 use std::iter;
 
-use afs_stark_backend::air_builders::PartitionedAirBuilder;
+use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -9,7 +9,7 @@ use p3_matrix::Matrix;
 use super::{columns::OfflineCheckerCols, OfflineChecker};
 use crate::{
     is_equal_vec::columns::IsEqualVecCols,
-    is_less_than_tuple::columns::IsLessThanTupleIOCols,
+    is_less_than_tuple::columns::IsLessThanTupleIoCols,
     sub_chip::{AirConfig, SubAir},
     utils::{and, implies, or},
 };
@@ -24,7 +24,7 @@ impl<F: Field> BaseAir<F> for OfflineChecker {
     }
 }
 
-impl<AB: PartitionedAirBuilder> Air<AB> for OfflineChecker
+impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for OfflineChecker
 where
     AB::M: Clone,
 {
@@ -35,6 +35,30 @@ where
     /// An internal read is preceded by a write (initial or internal) with the same index and data
     /// Every key block ends in an is_final_write or is_final_delete row preceded by an is_internal row
     fn eval(&self, builder: &mut AB) {
+        let main = &builder.partitioned_main()[0].clone();
+
+        let local = main.row_slice(0);
+        let local: &[AB::Var] = (*local).borrow();
+
+        let local_cols = OfflineCheckerCols::from_slice(local, self);
+        self.eval_without_interactions(builder);
+        self.eval_interactions(builder, &local_cols);
+    }
+}
+
+impl OfflineChecker {
+    /// This constrains extra rows to be at the bottom and the following on non-extra rows:
+    /// Every row is tagged with exactly one of is_initial, is_internal, is_final_write, is_final_delete
+    /// is_initial rows must be writes, is_final rows must be reads, and is_internal rows can be either
+    /// same_idx, lt_bit is correct (see definition in columns.rs)
+    /// An internal read is preceded by a write (initial or internal) with the same index and data
+    /// Every key block ends in an is_final_write or is_final_delete row preceded by an is_internal row
+    pub(crate) fn eval_without_interactions<AB: PartitionedAirBuilder + InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+    ) where
+        AB::M: Clone,
+    {
         let main = &builder.partitioned_main()[0].clone();
 
         let (local, next) = (main.row_slice(0), main.row_slice(1));
@@ -110,7 +134,7 @@ where
         );
 
         // Ensuring all rows are sorted by (key, clk)
-        let lt_io_cols = IsLessThanTupleIOCols::<AB::Var> {
+        let lt_io_cols = IsLessThanTupleIoCols::<AB::Var> {
             x: local_cols
                 .idx
                 .iter()
@@ -125,13 +149,8 @@ where
                 .collect(),
             tuple_less_than: next_cols.lt_bit,
         };
-
-        SubAir::eval(
-            &self.lt_idx_clk_air,
-            &mut builder.when_transition(),
-            lt_io_cols,
-            next_cols.lt_aux,
-        );
+        self.lt_idx_clk_air
+            .eval_when_transition(builder, lt_io_cols, next_cols.lt_aux);
 
         // Ensuring lt_bit is on
         builder

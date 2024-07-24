@@ -3,7 +3,7 @@ use std::sync::Arc;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     keygen::{
-        types::{MultiStarkPartialProvingKey, MultiStarkPartialVerifyingKey},
+        types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
         MultiStarkKeygenBuilder,
     },
     prover::{
@@ -283,8 +283,8 @@ where
     ) {
         let input_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
         let output_page_ptr = keygen_builder.add_cached_main_matrix(page_width);
-        let input_page_aux_ptr = keygen_builder.add_main_matrix(self.input_chip.aux_width());
-        let output_page_aux_ptr = keygen_builder.add_main_matrix(self.output_chip.aux_width());
+        let input_page_aux_ptr = keygen_builder.add_main_matrix(self.input_chip.air.aux_width());
+        let output_page_aux_ptr = keygen_builder.add_main_matrix(self.output_chip.air.aux_width());
         let range_checker_ptr = keygen_builder.add_main_matrix(self.range_checker.air_width());
 
         keygen_builder.add_partitioned_air(
@@ -306,7 +306,7 @@ where
     pub fn prove(
         &mut self,
         engine: &dyn StarkEngine<SC>,
-        partial_pk: &MultiStarkPartialProvingKey<SC>,
+        pk: &MultiStarkProvingKey<SC>,
         trace_builder: &mut TraceCommitmentBuilder<SC>,
         input_prover_data: Arc<ProverTraceData<SC>>,
         output_prover_data: Arc<ProverTraceData<SC>>,
@@ -354,10 +354,10 @@ where
 
         tracing::info_span!("Prove trace commitment").in_scope(|| trace_builder.commit_current());
 
-        let partial_vk = partial_pk.partial_vk();
+        let vk = pk.vk();
 
         let main_trace_data = trace_builder.view(
-            &partial_vk,
+            &vk,
             vec![
                 &self.input_chip.air,
                 &self.output_chip.air,
@@ -376,14 +376,14 @@ where
         let prover = engine.prover();
         let mut challenger = engine.new_challenger();
 
-        prover.prove(&mut challenger, partial_pk, main_trace_data, &pis)
+        prover.prove(&mut challenger, pk, main_trace_data, &pis)
     }
 
     /// This function takes a proof (returned by the prove function) and verifies it
     pub fn verify(
         &self,
         engine: &dyn StarkEngine<SC>,
-        partial_vk: MultiStarkPartialVerifyingKey<SC>,
+        vk: MultiStarkVerifyingKey<SC>,
         proof: Proof<SC>,
         x: Vec<u32>,
     ) -> Result<(), VerificationError>
@@ -403,7 +403,7 @@ where
         let mut challenger = engine.new_challenger();
         verifier.verify(
             &mut challenger,
-            &partial_vk,
+            &vk,
             vec![
                 &self.input_chip.air,
                 &self.output_chip.air,

@@ -5,7 +5,7 @@ use afs_chips::{
 
 use super::OfflineChecker;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct OfflineCheckerCols<T> {
     /// timestamp for the operation
     pub clk: T,

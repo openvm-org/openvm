@@ -1,7 +1,7 @@
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::columns::{IsLessThanBitsAuxCols, IsLessThanBitsCols, IsLessThanBitsIOCols};
+use super::columns::{IsLessThanBitsAuxCols, IsLessThanBitsCols, IsLessThanBitsIoCols};
 use super::IsLessThanBitsAir;
 use crate::sub_chip::LocalTraceInstructions;
 
@@ -34,7 +34,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for IsLessThanBitsAir {
             source_bits.push(F::from_canonical_u32(source_bit));
         }
 
-        let io = IsLessThanBitsIOCols {
+        let io = IsLessThanBitsIoCols {
             x: F::from_canonical_u32(x),
             y: F::from_canonical_u32(y),
             is_less_than: F::from_bool(x < y),

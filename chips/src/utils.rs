@@ -1,24 +1,21 @@
 use p3_air::{AirBuilder, VirtualPairCol};
-use p3_field::Field;
+#[cfg(any(feature = "test-traits", test))]
+use p3_baby_bear::BabyBear;
+use p3_field::{AbstractField, Field};
 
 // TODO: Ideally upstream PrimeField implements From<T>
 pub trait FieldFrom<T> {
     fn from_val(value: T) -> Self;
 }
 
-#[cfg(feature = "test-traits")]
-use p3_baby_bear::BabyBear;
-#[cfg(feature = "test-traits")]
-use p3_field::AbstractField;
-
-#[cfg(feature = "test-traits")]
+#[cfg(any(feature = "test-traits", test))]
 impl FieldFrom<u8> for BabyBear {
     fn from_val(value: u8) -> Self {
         BabyBear::from_canonical_u8(value)
     }
 }
 
-#[cfg(feature = "test-traits")]
+#[cfg(any(feature = "test-traits", test))]
 impl FieldFrom<BabyBear> for BabyBear {
     fn from_val(value: BabyBear) -> Self {
         value

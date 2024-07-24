@@ -10,7 +10,7 @@ use crate::{
 };
 
 use super::{
-    columns::{IsLessThanTupleBitsAuxCols, IsLessThanTupleBitsCols, IsLessThanTupleBitsIOCols},
+    columns::{IsLessThanTupleBitsAuxCols, IsLessThanTupleBitsCols, IsLessThanTupleBitsIoCols},
     IsLessThanTupleBitsAir,
 };
 
@@ -77,7 +77,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for IsLessThanTupleBitsAir {
 
         let tuple_less_than = less_than_cumulative[x.len() - 1];
 
-        let io = IsLessThanTupleBitsIOCols {
+        let io = IsLessThanTupleBitsIoCols {
             x: x.into_iter().map(F::from_canonical_u32).collect(),
             y: y.into_iter().map(F::from_canonical_u32).collect(),
             tuple_less_than,

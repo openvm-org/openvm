@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{
-    columns::{IntersectorAuxCols, IntersectorCols, IntersectorIOCols},
+    columns::{IntersectorAuxCols, IntersectorCols, IntersectorIoCols},
     IntersectorAir,
 };
 
@@ -66,7 +66,7 @@ impl IntersectorAir {
             prv_idx.clone_from(&idx);
 
             let inter_cols = IntersectorCols {
-                io: IntersectorIOCols {
+                io: IntersectorIoCols {
                     idx: to_field_vec::<F>(idx),
                     t1_mult: F::from_canonical_u32(t1_mult),
                     t2_mult: F::from_canonical_u32(t2_mult),
@@ -96,7 +96,7 @@ impl IntersectorAir {
             prv_idx = vec![0; self.idx_len];
 
             let inter_cols = IntersectorCols {
-                io: IntersectorIOCols {
+                io: IntersectorIoCols {
                     idx: vec![F::zero(); self.idx_len],
                     t1_mult: F::zero(),
                     t2_mult: F::zero(),

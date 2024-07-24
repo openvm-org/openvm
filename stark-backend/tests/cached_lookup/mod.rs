@@ -35,7 +35,7 @@ pub fn prove_and_verify_indexless_lookups(
     );
 
     let sender_air = DummyInteractionAir::new(sender[0].1.len(), true, 0);
-    let receiver_air = DummyInteractionAir::new(receiver[0].1.len(), false, 0);
+    let receiver_air = DummyInteractionAir::new(receiver[0].1.len(), false, 0).partition();
 
     // Single row major matrix for |count|fields[..]|
     let sender_trace = RowMajorMatrix::new(
@@ -74,8 +74,8 @@ pub fn prove_and_verify_indexless_lookups(
     keygen_builder.add_partitioned_air(&receiver_air, 0, vec![recv_count_ptr, recv_fields_ptr]);
     // Auto-adds sender matrix
     keygen_builder.add_air(&sender_air, 0);
-    let partial_pk = keygen_builder.generate_partial_pk();
-    let partial_vk = partial_pk.partial_vk();
+    let pk = keygen_builder.generate_pk();
+    let vk = pk.vk();
 
     let prover = MultiTraceStarkProver::new(&config);
     // Must add trace matrices in the same order as above
@@ -90,11 +90,11 @@ pub fn prove_and_verify_indexless_lookups(
     trace_builder.load_trace(sender_trace);
     trace_builder.commit_current();
 
-    let main_trace_data = trace_builder.view(&partial_vk, vec![&receiver_air, &sender_air]);
+    let main_trace_data = trace_builder.view(&vk, vec![&receiver_air, &sender_air]);
     let pis = vec![vec![]; 2];
 
     let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
-    let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
 
     // Verify the proof:
     // Start from clean challenger
@@ -102,7 +102,7 @@ pub fn prove_and_verify_indexless_lookups(
     let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier.verify(
         &mut challenger,
-        &partial_vk,
+        &vk,
         vec![&receiver_air, &sender_air],
         &proof,
         &pis,

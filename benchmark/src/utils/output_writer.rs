@@ -1,55 +1,13 @@
 use std::{collections::HashMap, fs::OpenOptions};
 
-use afs_test_utils::{
-    config::EngineType,
-    page_config::{PageConfig, PageMode},
-};
+use afs_test_utils::page_config::PageConfig;
 use chrono::Local;
 use color_eyre::eyre::Result;
 use csv::{Writer, WriterBuilder};
 use logical_interface::{afs_interface::AfsInterface, mock_db::MockDb};
 use p3_util::ceil_div_usize;
-use serde::{Deserialize, Serialize};
 
-/// Benchmark row for csv output
-#[derive(Debug, Default, Serialize, Deserialize)]
-pub struct BenchmarkRow {
-    pub test_type: String,
-    pub scenario: String,
-    pub engine: EngineType,
-    pub index_bytes: usize,
-    pub data_bytes: usize,
-    pub page_width: usize,
-    pub height: usize,
-    pub max_rw_ops: usize,
-    pub bits_per_fe: usize,
-    pub mode: PageMode,
-    pub log_blowup: usize,
-    pub num_queries: usize,
-    pub pow_bits: usize,
-    /// Total width of preprocessed AIR
-    pub preprocessed: String,
-    /// Total width of partitioned main AIR
-    pub main: String,
-    /// Total width of after challenge AIR
-    pub challenge: String,
-    /// Keygen time: Time to generate keys
-    pub keygen_time: String,
-    /// Cache time: Time to generate cached trace
-    pub cache_time: String,
-    /// Prove: Time to generate load_page_and_ops trace
-    pub prove_load_trace_gen: String,
-    /// Prove: Time to commit load_page_and_ops trace
-    pub prove_load_trace_commit: String,
-    /// Prove: Time to generate the ops_sender trace
-    pub prove_ops_sender_gen: String,
-    /// Prove: Time to commit trace
-    pub prove_commit: String,
-    /// Prove time: Total time to generate the proof (inclusive of all prove timing items above)
-    pub prove_time: String,
-    /// Verify time: Time to verify the proof
-    pub verify_time: String,
-}
+use crate::config::benchmark_data::BenchmarkData;
 
 pub fn save_afi_to_new_db(
     config: &PageConfig,
@@ -71,65 +29,10 @@ pub fn default_output_filename(benchmark_name: String) -> String {
     )
 }
 
-pub fn write_csv_header(path: String) -> Result<()> {
+pub fn write_csv_header(path: String, sections: Vec<String>, headers: Vec<String>) -> Result<()> {
     let mut writer = Writer::from_path(path)?;
-
-    // sections
-    writer.write_record(&vec![
-        "benchmark",
-        "",
-        "stark engine",
-        "page config",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "fri params",
-        "",
-        "",
-        "air width",
-        "",
-        "",
-        "timing",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-    ])?;
-
-    // headers
-    writer.write_record(&vec![
-        "test_type",
-        "scenario",
-        "engine",
-        "index_bytes",
-        "data_bytes",
-        "page_width",
-        "height",
-        "max_rw_ops",
-        "bits_per_fe",
-        "mode",
-        "log_blowup",
-        "num_queries",
-        "pow_bits",
-        "preprocessed",
-        "main",
-        "challenge",
-        "keygen_time",
-        "cache_time",
-        "prove_load_trace_gen",
-        "prove_load_trace_commit",
-        "prove_ops_sender_gen",
-        "prove_commit",
-        "prove_time",
-        "verify_time",
-    ])?;
-
+    writer.write_record(&sections)?;
+    writer.write_record(&headers)?;
     writer.flush()?;
     Ok(())
 }
@@ -139,6 +42,7 @@ pub fn write_csv_line(
     test_type: String,
     scenario: String,
     config: &PageConfig,
+    benchmark_data: &BenchmarkData,
     log_data: &HashMap<String, String>,
 ) -> Result<()> {
     let file = OpenOptions::new().append(true).open(path).unwrap();
@@ -148,65 +52,35 @@ pub fn write_csv_line(
     let idx_len = ceil_div_usize(config.page.index_bytes, bytes_divisor);
     let data_len = ceil_div_usize(config.page.data_bytes, bytes_divisor);
     let page_width = 1 + idx_len + data_len;
-    let row = BenchmarkRow {
+    let mut row = vec![
         test_type,
         scenario,
-        engine: config.stark_engine.engine,
-        index_bytes: config.page.index_bytes,
-        data_bytes: config.page.data_bytes,
-        page_width,
-        height: config.page.height,
-        max_rw_ops: config.page.max_rw_ops,
-        bits_per_fe: config.page.bits_per_fe,
-        mode: config.page.mode.clone(),
-        log_blowup: config.fri_params.log_blowup,
-        num_queries: config.fri_params.num_queries,
-        pow_bits: config.fri_params.proof_of_work_bits,
-        preprocessed: log_data
-            .get("Total air width: preprocessed=")
-            .unwrap_or(&"-".to_string())
-            .to_owned(),
-        main: log_data
-            .get("Total air width: partitioned_main=")
-            .unwrap_or(&"-".to_string())
-            .to_owned(),
-        challenge: log_data
-            .get("Total air width: after_challenge=")
-            .unwrap_or(&"-".to_string())
-            .to_owned(),
-        keygen_time: log_data
-            .get("Benchmark keygen: benchmark")
-            .unwrap_or(&"-".to_string())
-            .to_owned(),
-        cache_time: log_data
-            .get("Benchmark cache: benchmark")
-            .unwrap_or(&"-".to_string())
-            .to_owned(),
-        prove_load_trace_gen: log_data
-            .get("prove:Load page trace generation")
-            .unwrap_or(&"-".to_string())
-            .to_owned(),
-        prove_load_trace_commit: log_data
-            .get("prove:Load page trace commitment")
-            .unwrap_or(&"-".to_string())
-            .to_owned(),
-        prove_ops_sender_gen: log_data
-            .get("Generate ops_sender trace")
-            .unwrap_or(&"-".to_string())
-            .to_owned(),
-        prove_commit: log_data
-            .get("prove:Prove trace commitment")
-            .unwrap_or(&"-".to_string())
-            .to_owned(),
-        prove_time: log_data
-            .get("Benchmark prove: benchmark")
-            .unwrap_or(&"-".to_string())
-            .to_owned(),
-        verify_time: log_data
-            .get("Benchmark verify: benchmark")
-            .unwrap_or(&"-".to_string())
-            .to_owned(),
-    };
+        config.stark_engine.engine.to_string(),
+        config.page.index_bytes.to_string(),
+        config.page.data_bytes.to_string(),
+        page_width.to_string(),
+        config.page.height.to_string(),
+        config.page.max_rw_ops.to_string(),
+        config.page.bits_per_fe.to_string(),
+        config.page.mode.clone().to_string(),
+        config.fri_params.log_blowup.to_string(),
+        config.fri_params.num_queries.to_string(),
+        config.fri_params.proof_of_work_bits.to_string(),
+    ];
+    let mut event_data = benchmark_data
+        .event_filters
+        .clone()
+        .iter()
+        .map(|tag| log_data.get(tag).unwrap_or(&"-".to_string()).to_owned())
+        .collect::<Vec<String>>();
+    row.append(&mut event_data);
+    let mut timing_data = benchmark_data
+        .timing_filters
+        .clone()
+        .iter()
+        .map(|tag| log_data.get(tag).unwrap_or(&"-".to_string()).to_owned())
+        .collect::<Vec<String>>();
+    row.append(&mut timing_data);
 
     writer.serialize(&row)?;
     writer.flush()?;

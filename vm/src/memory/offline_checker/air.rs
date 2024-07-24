@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 use std::iter;
 
-use afs_stark_backend::air_builders::PartitionedAirBuilder;
+use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -12,7 +12,7 @@ use super::{columns::OfflineCheckerCols, OfflineChecker};
 use afs_chips::{
     is_equal::{columns::IsEqualCols, IsEqualAir},
     is_equal_vec::{columns::IsEqualVecCols, IsEqualVecAir},
-    is_less_than_tuple::{columns::IsLessThanTupleIOCols, IsLessThanTupleAir},
+    is_less_than_tuple::{columns::IsLessThanTupleIoCols, IsLessThanTupleAir},
     sub_chip::{AirConfig, SubAir},
 };
 
@@ -26,9 +26,10 @@ impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for OfflineChecker<WORD_SIZE> 
     }
 }
 
-impl<const WORD_SIZE: usize, AB: PartitionedAirBuilder> Air<AB> for OfflineChecker<WORD_SIZE>
+impl<const WORD_SIZE: usize, AB> Air<AB> for OfflineChecker<WORD_SIZE>
 where
     AB::M: Clone,
+    AB: PartitionedAirBuilder + InteractionBuilder,
 {
     /// This constrains extra rows to be at the bottom and the following on non-extra rows:
     /// same_addr_space, same_pointer, same_data, lt_bit is correct (see definition in columns.rs)
@@ -116,7 +117,7 @@ where
         );
 
         // Ensuring all rows are sorted by (addr_space, addr, clk)
-        let lt_io_cols = IsLessThanTupleIOCols::<AB::Var> {
+        let lt_io_cols = IsLessThanTupleIoCols::<AB::Var> {
             x: local_cols.mem_row[0..2]
                 .iter()
                 .copied()
@@ -136,12 +137,7 @@ where
             self.decomp,
         );
 
-        SubAir::eval(
-            &lt_chip,
-            &mut builder.when_transition(),
-            lt_io_cols,
-            next_cols.lt_aux,
-        );
+        lt_chip.eval_when_transition(builder, lt_io_cols, next_cols.lt_aux);
 
         // Ensuring lt_bit is on
         builder.when_transition().assert_one(or(
@@ -181,5 +177,13 @@ where
 
         // Note that the following is implied:
         // - for every row: read => same_addr because not same_addr => write
+
+        self.eval_interactions(
+            builder,
+            local_cols.clk,
+            local_cols.op_type,
+            local_cols.mem_row.into_iter().map(Into::into),
+            local_cols.is_valid,
+        );
     }
 }

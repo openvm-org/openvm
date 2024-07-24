@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use afs_chips::is_equal::IsEqualAir;
-use afs_chips::is_less_than_tuple::columns::IsLessThanTupleIOCols;
+use afs_chips::is_less_than_tuple::columns::IsLessThanTupleIoCols;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -12,7 +12,7 @@ use afs_chips::is_equal_vec::IsEqualVecAir;
 use afs_chips::is_less_than_tuple::IsLessThanTupleAir;
 use afs_chips::range_gate::RangeCheckerGateChip;
 use afs_chips::sub_chip::LocalTraceInstructions;
-use rayon::prelude::*;
+use p3_maybe_rayon::prelude::*;
 
 impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
     /// Each row in the trace follow the same order as the Cols struct:
@@ -171,7 +171,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
                 ],
                 range_checker,
             ))
-            .flatten()[IsLessThanTupleIOCols::<F>::get_width(3)..]
+            .flatten()[IsLessThanTupleIoCols::<F>::get_width(3)..]
             .to_vec();
 
         row.push(is_equal_addr_space_aux);

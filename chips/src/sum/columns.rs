@@ -51,6 +51,6 @@ impl<T: Clone> SumCols<T> {
 
 impl<T: Clone> BaseAir<T> for SumAir {
     fn width(&self) -> usize {
-        4 + IsLessThanAuxCols::<T>::get_width(self.is_lt_air.limb_bits(), self.is_lt_air.decomp())
+        4 + IsLessThanAuxCols::<T>::get_width(self.is_lt_air.limb_bits, self.is_lt_air.decomp)
     }
 }

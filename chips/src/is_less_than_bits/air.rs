@@ -1,21 +1,27 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::interaction::AirBridge;
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{AbstractField, Field};
+use p3_field::AbstractField;
 use p3_matrix::Matrix;
 
 use crate::sub_chip::{AirConfig, SubAir};
 
-use super::columns::{IsLessThanBitsAuxCols, IsLessThanBitsCols, IsLessThanBitsIOCols};
-use super::IsLessThanBitsAir;
+use super::columns::{IsLessThanBitsAuxCols, IsLessThanBitsCols, IsLessThanBitsIoCols};
+
+#[derive(Copy, Clone, Debug)]
+pub struct IsLessThanBitsAir {
+    pub limb_bits: usize,
+}
+
+impl IsLessThanBitsAir {
+    pub fn new(limb_bits: usize) -> Self {
+        Self { limb_bits }
+    }
+}
 
 impl AirConfig for IsLessThanBitsAir {
     type Cols<T> = IsLessThanBitsCols<T>;
 }
-
-// No interactions
-impl<F: Field> AirBridge<F> for IsLessThanBitsAir {}
 
 impl<F> BaseAir<F> for IsLessThanBitsAir {
     fn width(&self) -> usize {
@@ -37,7 +43,7 @@ impl<AB: AirBuilder> Air<AB> for IsLessThanBitsAir {
 }
 
 impl<AB: AirBuilder> SubAir<AB> for IsLessThanBitsAir {
-    type IoView = IsLessThanBitsIOCols<AB::Var>;
+    type IoView = IsLessThanBitsIoCols<AB::Var>;
     type AuxView = IsLessThanBitsAuxCols<AB::Var>;
 
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
