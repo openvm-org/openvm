@@ -45,7 +45,7 @@ pub struct Poseidon2VmAuxCols<const WIDTH: usize, T> {
 impl<const WIDTH: usize, T: Clone> Poseidon2VmCols<WIDTH, T> {
     pub fn get_width(poseidon2_chip: &Poseidon2VmAir<WIDTH, T>) -> usize {
         Poseidon2VmIoCols::<T>::get_width()
-            + Poseidon2VmAuxCols::<WIDTH, T>::get_width(&poseidon2_chip.subair)
+            + Poseidon2VmAuxCols::<WIDTH, T>::get_width(&poseidon2_chip.inner)
     }
 
     pub fn flatten(&self) -> Vec<T> {

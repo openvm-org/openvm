@@ -23,7 +23,7 @@ pub mod trace;
 /// Poseidon2Chip implements its own constraints and interactions.
 /// Cached rows are represented as `Poseidon2ChipCols` structs, not flat vectors.
 pub struct Poseidon2VmAir<const WIDTH: usize, F: Clone> {
-    pub subair: Poseidon2Air<WIDTH, F>,
+    pub inner: Poseidon2Air<WIDTH, F>,
 }
 
 pub struct Poseidon2Chip<const WIDTH: usize, F: PrimeField32> {
@@ -33,8 +33,8 @@ pub struct Poseidon2Chip<const WIDTH: usize, F: PrimeField32> {
 
 impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
     pub fn from_poseidon2_config(config: Poseidon2Config<WIDTH, F>, bus_index: usize) -> Self {
-        let subair = Poseidon2Air::<WIDTH, F>::from_config(config, bus_index);
-        Self { subair }
+        let inner = Poseidon2Air::<WIDTH, F>::from_config(config, bus_index);
+        Self { inner }
     }
 
     pub fn interaction_width() -> usize {
@@ -120,9 +120,6 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
 
         // SAFETY: only allowed because WIDTH constrained to 16 above
         let input_state: [F; WIDTH] = [data_1, data_2].concat().try_into().unwrap();
-        // let internal = vm.poseidon2_chip.air.subair.generate_trace_row(input_state);
-        // let output = internal.io.output;
-        // let is_zero_row = IsZeroAir {}.generate_trace_row(d);
         let new_row = vm.poseidon2_chip.air.generate_row(
             start_timestamp,
             instruction,
@@ -131,15 +128,6 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
         );
         let output = new_row.aux.internal.io.output;
         vm.poseidon2_chip.rows.push(new_row);
-        // vm.poseidon2_chip.rows.push(Poseidon2VmCols {
-        //     io: Poseidon2VmAir::<WIDTH, F>::make_io_cols(start_timestamp, instruction),
-        //     aux: Poseidon2VmAuxCols {
-        //         addresses,
-        //         d_is_zero: is_zero_row.io.is_zero,
-        //         is_zero_inv: is_zero_row.inv,
-        //         internal,
-        //     },
-        // });
 
         let iter_range = if opcode == PERM_POS2 {
             output.iter().enumerate().take(WIDTH)

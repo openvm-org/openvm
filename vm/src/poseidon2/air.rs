@@ -29,11 +29,11 @@ impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2VmAir<WIDT
         let local = main.row_slice(0);
         let local: &[<AB>::Var] = (*local).borrow();
 
-        let index_map = Poseidon2Cols::index_map(&self.subair);
+        let index_map = Poseidon2Cols::index_map(&self.inner);
         let cols = Poseidon2VmCols::<WIDTH, AB::Var>::from_slice(local, &index_map);
 
         self.eval_interactions(builder, cols.io, &cols.aux);
-        self.subair
+        self.inner
             .eval_without_interactions(builder, cols.aux.internal.io, cols.aux.internal.aux);
 
         // boolean constraints for alloc/cmp markers

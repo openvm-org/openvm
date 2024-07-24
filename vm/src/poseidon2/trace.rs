@@ -19,7 +19,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
         input_state: [F; WIDTH],
     ) -> Poseidon2VmCols<WIDTH, F> {
         // SAFETY: only allowed because WIDTH constrained to 16 above
-        let internal = self.subair.generate_trace_row(input_state);
+        let internal = self.inner.generate_trace_row(input_state);
         let is_zero_row = IsZeroAir {}.generate_trace_row(instruction.d);
         Poseidon2VmCols {
             io: Poseidon2VmAir::<WIDTH, F>::make_io_cols(start_timestamp, instruction),
@@ -37,7 +37,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     pub fn generate_trace(&self) -> RowMajorMatrix<F> {
         let row_len = self.rows.len();
         let correct_len = row_len.next_power_of_two();
-        let blank_row = Poseidon2VmCols::<WIDTH, F>::blank_row(&self.air.subair).flatten();
+        let blank_row = Poseidon2VmCols::<WIDTH, F>::blank_row(&self.air.inner).flatten();
         let diff = correct_len - row_len;
         RowMajorMatrix::new(
             self.rows
