@@ -12,8 +12,6 @@ pub struct PageOfflineCheckerCols<T> {
     pub is_final_write: T,
     /// this bit indicates if this is the final row of an idx and that it that it was deleted (shouldn't be sent to the final chip)
     pub is_final_delete: T,
-    /// this bit indicates if this row refers to an internal operation
-    pub is_internal: T,
 
     /// this is just is_final_write * 3 (used for interactions)
     pub is_final_write_x3: T,
@@ -37,7 +35,6 @@ where
             self.is_initial.clone(),
             self.is_final_write.clone(),
             self.is_final_delete.clone(),
-            self.is_internal.clone(),
             self.is_final_write_x3.clone(),
         ]);
         flattened.extend(vec![
@@ -61,15 +58,14 @@ where
             is_initial: slc[offline_checker_cols_width].clone(),
             is_final_write: slc[offline_checker_cols_width + 1].clone(),
             is_final_delete: slc[offline_checker_cols_width + 2].clone(),
-            is_internal: slc[offline_checker_cols_width + 3].clone(),
-            is_final_write_x3: slc[offline_checker_cols_width + 4].clone(),
-            is_read: slc[offline_checker_cols_width + 5].clone(),
-            is_write: slc[offline_checker_cols_width + 6].clone(),
-            is_delete: slc[offline_checker_cols_width + 7].clone(),
+            is_final_write_x3: slc[offline_checker_cols_width + 3].clone(),
+            is_read: slc[offline_checker_cols_width + 4].clone(),
+            is_write: slc[offline_checker_cols_width + 5].clone(),
+            is_delete: slc[offline_checker_cols_width + 6].clone(),
         }
     }
 
     pub fn width(oc: &PageOfflineChecker) -> usize {
-        oc.offline_checker.air_width() + 8
+        oc.offline_checker.air_width() + 7
     }
 }

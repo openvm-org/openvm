@@ -44,7 +44,6 @@ impl<AB: InteractionBuilder> Air<AB> for PageOfflineChecker {
         builder.assert_bool(local_cols.is_initial);
         builder.assert_bool(local_cols.is_final_write);
         builder.assert_bool(local_cols.is_final_delete);
-        builder.assert_bool(local_cols.is_internal);
         builder.assert_bool(local_cols.is_read);
         builder.assert_bool(local_cols.is_write);
         builder.assert_bool(local_cols.is_delete);
@@ -67,7 +66,7 @@ impl<AB: InteractionBuilder> Air<AB> for PageOfflineChecker {
         builder.assert_zero(
             local_offline_checker_cols.is_valid
                 * (local_cols.is_initial
-                    + local_cols.is_internal
+                    + local_offline_checker_cols.is_receive
                     + local_cols.is_final_write
                     + local_cols.is_final_delete
                     - AB::Expr::one()),
@@ -146,13 +145,13 @@ impl<AB: InteractionBuilder> Air<AB> for PageOfflineChecker {
 
         // is_internal => not is_initial
         builder.assert_one(implies(
-            local_cols.is_internal.into(),
+            local_offline_checker_cols.is_receive.into(),
             AB::Expr::one() - local_cols.is_initial,
         ));
 
         // is_internal => not is_final
         builder.assert_one(implies(
-            local_cols.is_internal.into(),
+            local_offline_checker_cols.is_receive.into(),
             AB::Expr::one()
                 - (local_cols.is_final_write.into() + local_cols.is_final_delete.into()),
         ));
@@ -160,7 +159,7 @@ impl<AB: InteractionBuilder> Air<AB> for PageOfflineChecker {
         // next is_final_write or next is_final_delete => local is_internal
         builder.when_transition().assert_one(implies(
             next_cols.is_final_write.into() + next_cols.is_final_delete.into(),
-            local_cols.is_internal.into(),
+            local_offline_checker_cols.is_receive.into(),
         ));
 
         // Ensuring that next read => not local delete

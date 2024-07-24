@@ -57,6 +57,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for OfflineChecker {
         // Making sure bits are bools
         builder.assert_bool(local_cols.same_idx);
         builder.assert_bool(local_cols.is_valid);
+        builder.assert_bool(local_cols.is_receive);
 
         // Making sure first row starts with same_idx, same_data being false
         builder.when_first_row().assert_zero(local_cols.same_idx);

@@ -93,7 +93,6 @@ impl PageOfflineChecker {
                 is_initial: Val::<SC>::from_bool(is_initial),
                 is_final_write: Val::<SC>::from_bool(is_final_write),
                 is_final_delete: Val::<SC>::from_bool(is_final_delete),
-                is_internal: Val::<SC>::from_bool(is_internal),
                 is_final_write_x3: Val::<SC>::from_canonical_u8(is_final_write as u8 * 3),
                 is_read: Val::<SC>::from_bool(is_read),
                 is_write: Val::<SC>::from_bool(is_write),
