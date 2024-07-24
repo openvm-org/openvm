@@ -29,7 +29,7 @@ pub struct OfflineCheckerCols<T> {
     /// a bit to indicate whether this operation row should be received
     pub is_receive: T,
 
-    /// auxiliary columns used for same_addr_space
+    /// auxiliary columns used for same_idx
     pub is_equal_idx_aux: IsEqualVecAuxCols<T>,
     /// auxiliary columns to check proper sorting
     pub lt_aux: IsLessThanTupleAuxCols<T>,

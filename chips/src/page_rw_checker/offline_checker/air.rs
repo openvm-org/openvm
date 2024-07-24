@@ -49,6 +49,7 @@ impl<AB: InteractionBuilder> Air<AB> for PageOfflineChecker {
         builder.assert_bool(local_cols.is_delete);
 
         // Making sure op_type is one of 0, 1, 2 (R, W, D)
+        // Note: constraint degree is 3
         builder.assert_zero(
             local_offline_checker_cols.op_type
                 * (local_offline_checker_cols.op_type - AB::Expr::one())
@@ -70,12 +71,6 @@ impl<AB: InteractionBuilder> Air<AB> for PageOfflineChecker {
                     + local_cols.is_final_write
                     + local_cols.is_final_delete
                     - AB::Expr::one()),
-        );
-
-        // Ensuring is_final_write_x3 is correct
-        builder.assert_eq(
-            local_cols.is_final_write_x3,
-            local_cols.is_final_write * AB::Expr::from_canonical_u8(3),
         );
 
         // Making sure every idx block starts with a write

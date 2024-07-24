@@ -4,8 +4,7 @@ use itertools::Itertools;
 use super::{columns::OfflineCheckerCols, OfflineChecker};
 
 impl OfflineChecker {
-    /// Receives page rows (idx, data) for rows tagged with is_initial on page_bus (sent from PageRWAir)
-    /// Receives operations (clk, idx, data, op_type) for rows tagged with is_internal on ops_bus
+    /// Receives operations (clk, op_type, idx, data) for rows tagged with is_internal on ops_bus
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
