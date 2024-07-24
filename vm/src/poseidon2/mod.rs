@@ -1,8 +1,5 @@
-use p3_field::Field;
 use p3_field::PrimeField32;
 
-use afs_chips::is_zero::IsZeroAir;
-use afs_chips::sub_chip::LocalTraceInstructions;
 use columns::{Poseidon2VmCols, Poseidon2VmIoCols};
 use poseidon2_air::poseidon2::Poseidon2Air;
 use poseidon2_air::poseidon2::Poseidon2Config;
@@ -10,7 +7,6 @@ use poseidon2_air::poseidon2::Poseidon2Config;
 use crate::cpu::trace::Instruction;
 use crate::cpu::OpCode;
 use crate::cpu::OpCode::*;
-use crate::poseidon2::columns::Poseidon2VmAuxCols;
 use crate::vm::VirtualMachine;
 
 #[cfg(test)]
