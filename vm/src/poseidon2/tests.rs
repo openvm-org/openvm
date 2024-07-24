@@ -106,7 +106,7 @@ macro_rules! run_perm_ops {
         });
 
         let dummy_cpu_poseidon2 = DummyInteractionAir::new(
-            Poseidon2VmAir::<16, BabyBear>::interaction_width(),
+            Poseidon2VmAir::<16, BabyBear>::opcode_interaction_width(),
             true,
             POSEIDON2_BUS,
         );
@@ -127,13 +127,13 @@ macro_rules! run_perm_ops {
                     })
                     .collect();
                 for _ in 0..(tot_ops - $num_ops)
-                    * (Poseidon2VmAir::<16, BabyBear>::interaction_width() + 1)
+                    * (Poseidon2VmAir::<16, BabyBear>::opcode_interaction_width() + 1)
                 {
                     vec.push(BabyBear::zero());
                 }
                 vec
             },
-            Poseidon2VmAir::<16, BabyBear>::interaction_width() + 1,
+            Poseidon2VmAir::<16, BabyBear>::opcode_interaction_width() + 1,
         );
 
         let dummy_cpu_memory = DummyInteractionAir::new(5, true, MEMORY_BUS);
@@ -273,8 +273,9 @@ fn poseidon2_negative_test() {
 fn poseidon2_direct_test() {
     let mut rng = create_seeded_rng();
     const NUM_OPS: usize = 50;
+    const CHUNKS: usize = 8;
     let correct_height = NUM_OPS.next_power_of_two();
-    let hashes: [([BabyBear; 8], [BabyBear; 8]); NUM_OPS] = from_fn(|_| {
+    let hashes: [([BabyBear; CHUNKS], [BabyBear; CHUNKS]); NUM_OPS] = from_fn(|_| {
         (
             from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
             from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
@@ -285,9 +286,11 @@ fn poseidon2_direct_test() {
         POSEIDON2_BUS,
     );
 
-    let outs: [[BabyBear; 8]; NUM_OPS] = from_fn(|i| chip.hash(hashes[i].0, hashes[i].1));
+    let outs: [[BabyBear; CHUNKS]; NUM_OPS] = from_fn(|i| chip.hash(hashes[i].0, hashes[i].1));
 
-    let dummy_direct_cpu = DummyInteractionAir::new(24, true, POSEIDON2_DIRECT_BUS);
+    let width = Poseidon2VmAir::<16, BabyBear>::direct_interaction_width();
+
+    let dummy_direct_cpu = DummyInteractionAir::new(width, true, POSEIDON2_DIRECT_BUS);
 
     let mut dummy_direct_cpu_trace = RowMajorMatrix::new(
         outs.iter()
@@ -300,11 +303,12 @@ fn poseidon2_direct_test() {
                     .chain(out.iter().cloned())
             })
             .collect::<Vec<_>>(),
-        25,
+        width + 1,
     );
-    dummy_direct_cpu_trace
-        .values
-        .extend(vec![BabyBear::zero(); 25 * (correct_height - NUM_OPS)]);
+    dummy_direct_cpu_trace.values.extend(vec![
+        BabyBear::zero();
+        (width + 1) * (correct_height - NUM_OPS)
+    ]);
 
     let chip_trace = chip.generate_trace();
 

@@ -39,8 +39,12 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
         Self { inner }
     }
 
-    pub fn interaction_width() -> usize {
+    pub fn opcode_interaction_width() -> usize {
         7
+    }
+
+    pub fn direct_interaction_width() -> usize {
+        WIDTH + WIDTH / 2
     }
 
     /// Map VM instructions to Poseidon2IO columns.
