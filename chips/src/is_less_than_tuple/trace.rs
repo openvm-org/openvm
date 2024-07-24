@@ -20,11 +20,8 @@ impl IsLessThanTupleChip {
         &self,
         tuple_pairs: Vec<(Vec<u32>, Vec<u32>)>,
     ) -> RowMajorMatrix<F> {
-        let num_cols: usize = IsLessThanTupleCols::<F>::get_width(
-            self.air.limb_bits().clone(),
-            self.air.decomp,
-            self.air.tuple_len(),
-        );
+        let num_cols: usize =
+            IsLessThanTupleCols::<F>::get_width(self.air.limb_bits(), self.air.decomp);
 
         let mut rows: Vec<F> = vec![];
 
@@ -55,7 +52,7 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanTupleAir {
         let mut tuple_less_than = F::zero();
 
         // use subchip to generate relevant columns
-        for (i, limb_bits) in self.limb_bits().into_iter().enumerate() {
+        for (i, &limb_bits) in self.limb_bits().iter().enumerate() {
             let is_less_than_chip = IsLessThanChip::new(
                 self.bus_index,
                 limb_bits,

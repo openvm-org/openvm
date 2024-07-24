@@ -11,8 +11,7 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use tracing::info_span;
 
 use crate::common::page::Page;
-use crate::common::page_cols::PageCols;
-use crate::page_rw_checker::offline_checker::OfflineChecker;
+use crate::page_rw_checker::offline_checker::PageOfflineChecker;
 use crate::page_rw_checker::page_controller::Operation;
 use crate::range_gate::RangeCheckerGateChip;
 
@@ -128,7 +127,7 @@ pub struct PageController<const COMMITMENT_LEN: usize> {
     pub init_root_signal: RootSignalAir<COMMITMENT_LEN>,
     pub init_leaf_chips: Vec<LeafPageAir<COMMITMENT_LEN>>,
     pub init_internal_chips: Vec<InternalPageAir<COMMITMENT_LEN>>,
-    pub offline_checker: OfflineChecker,
+    pub offline_checker: PageOfflineChecker,
     pub final_root_signal: RootSignalAir<COMMITMENT_LEN>,
     pub final_leaf_chips: Vec<LeafPageAir<COMMITMENT_LEN>>,
     pub final_internal_chips: Vec<InternalPageAir<COMMITMENT_LEN>>,
@@ -182,7 +181,7 @@ impl<const COMMITMENT_LEN: usize> PageController<COMMITMENT_LEN> {
                     )
                 })
                 .collect_vec(),
-            offline_checker: OfflineChecker::new(
+            offline_checker: PageOfflineChecker::new(
                 data_bus_index,
                 lt_bus_index,
                 ops_bus_index,

@@ -1,43 +1,28 @@
 use std::{array::from_fn, collections::HashMap};
 
-use afs_chips::is_equal_vec::columns::IsEqualVecAuxCols;
+use afs_chips::offline_checker::OfflineChecker;
 use p3_field::PrimeField32;
 
-use afs_chips::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
-
+use crate::cpu::{MEMORY_BUS, RANGE_CHECKER_BUS};
 use crate::memory::{compose, decompose, OpType};
 
 use super::MemoryAccess;
 
 mod air;
-mod bridge;
-mod columns;
 mod trace;
 
-pub struct OfflineChecker<const WORD_SIZE: usize> {
-    addr_clk_limb_bits: Vec<usize>,
-    decomp: usize,
+pub struct MemoryOfflineChecker {
+    pub offline_checker: OfflineChecker,
 }
 
-impl<const WORD_SIZE: usize> OfflineChecker<WORD_SIZE> {
-    pub fn mem_width(&self) -> usize {
-        // 1 for addr_space, 1 for pointer, data_len for data
-        2 + WORD_SIZE
-    }
-
+impl MemoryOfflineChecker {
     pub fn air_width(&self) -> usize {
-        10 + self.mem_width()
-            + IsEqualVecAuxCols::<usize>::get_width(WORD_SIZE)
-            + IsLessThanTupleAuxCols::<usize>::get_width(
-                self.addr_clk_limb_bits.clone(),
-                self.decomp,
-                3,
-            )
+        OfflineChecker::air_width(&self.offline_checker)
     }
 }
 
 pub struct MemoryChip<const WORD_SIZE: usize, F: PrimeField32> {
-    pub air: OfflineChecker<WORD_SIZE>,
+    pub air: MemoryOfflineChecker,
     pub accesses: Vec<MemoryAccess<WORD_SIZE, F>>,
     memory: HashMap<(F, F), F>,
     last_timestamp: Option<usize>,
@@ -50,11 +35,19 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         clk_limb_bits: usize,
         decomp: usize,
     ) -> Self {
+        let idx_clk_limb_bits = vec![addr_space_limb_bits, pointer_limb_bits, clk_limb_bits];
+
+        let offline_checker = OfflineChecker::new(
+            idx_clk_limb_bits,
+            decomp,
+            2,
+            WORD_SIZE,
+            RANGE_CHECKER_BUS,
+            MEMORY_BUS,
+        );
+
         Self {
-            air: OfflineChecker {
-                addr_clk_limb_bits: vec![addr_space_limb_bits, pointer_limb_bits, clk_limb_bits],
-                decomp,
-            },
+            air: MemoryOfflineChecker { offline_checker },
             accesses: vec![],
             memory: HashMap::new(),
             last_timestamp: None,

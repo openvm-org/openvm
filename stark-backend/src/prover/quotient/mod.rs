@@ -70,8 +70,13 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
         PcsProverData<SC>: Send + Sync,
         Com<SC>: Send + Sync,
     {
+        #[cfg(feature = "parallel")]
         let inner = (raps, &pk.per_air, traces, public_values)
             .into_par_iter() // uses rayon multizip
+            .map(|(rap, pk, trace, pis)| self.single_rap_quotient_values(rap, &pk.vk, trace, pis))
+            .collect();
+        #[cfg(not(feature = "parallel"))]
+        let inner = itertools::izip!(raps, &pk.per_air, traces, public_values)
             .map(|(rap, pk, trace, pis)| self.single_rap_quotient_values(rap, &pk.vk, trace, pis))
             .collect();
         QuotientData { inner }

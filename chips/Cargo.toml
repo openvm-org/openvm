@@ -49,6 +49,6 @@ tracing-forest = { version = "0.1.6", features = ["ansi", "smallvec"] }
 test-case = "3.3.1"
 
 [features]
-default = ["parallel"]
+default = []
 test-traits = ["p3-baby-bear"]            # traits for testing
 parallel = ["afs-stark-backend/parallel"]

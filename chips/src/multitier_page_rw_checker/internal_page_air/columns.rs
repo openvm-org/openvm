@@ -146,14 +146,12 @@ impl<T> InternalPageMetadataCols<T> {
             let aux_size = IsLessThanTupleAuxCols::<T>::get_width(
                 vec![is_less_than_tuple_params.limb_bits; idx_len],
                 is_less_than_tuple_params.decomp,
-                idx_len,
             );
             for i in 0..4 {
                 aux_allocs.push(IsLessThanTupleAuxCols::from_slice(
                     &cols[new_start + i * aux_size..new_start + (i + 1) * aux_size],
                     vec![is_less_than_tuple_params.limb_bits; idx_len],
                     is_less_than_tuple_params.decomp,
-                    idx_len,
                 ))
             }
             let subair_cols = InternalPageSubAirCols {

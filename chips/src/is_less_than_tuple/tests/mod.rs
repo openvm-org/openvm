@@ -14,13 +14,11 @@ use p3_field::AbstractField;
 fn test_flatten_fromslice_roundtrip() {
     let limb_bits = vec![16, 8, 20, 20];
     let decomp = 8;
-    let tuple_len = 4;
 
-    let num_cols = IsLessThanTupleCols::<usize>::get_width(limb_bits.clone(), decomp, tuple_len);
+    let num_cols = IsLessThanTupleCols::<usize>::get_width(&limb_bits, decomp);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-    let cols_numbered =
-        IsLessThanTupleCols::<usize>::from_slice(&all_cols, limb_bits.clone(), decomp, tuple_len);
+    let cols_numbered = IsLessThanTupleCols::<usize>::from_slice(&all_cols, &limb_bits, decomp);
     let flattened = cols_numbered.flatten();
 
     for (i, col) in flattened.iter().enumerate() {

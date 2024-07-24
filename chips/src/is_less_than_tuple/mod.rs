@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{is_less_than::IsLessThanAir, range_gate::RangeCheckerGateChip};
+use crate::range_gate::RangeCheckerGateChip;
 
 #[cfg(test)]
 pub mod tests;
@@ -32,16 +32,7 @@ impl IsLessThanTupleChip {
         decomp: usize,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
-        let is_less_than_airs = limb_bits
-            .iter()
-            .map(|&limb_bit| IsLessThanAir::new(bus_index, limb_bit, decomp))
-            .collect::<Vec<_>>();
-
-        let air = IsLessThanTupleAir {
-            bus_index,
-            decomp,
-            is_less_than_airs,
-        };
+        let air = IsLessThanTupleAir::new(bus_index, limb_bits, decomp);
 
         Self { air, range_checker }
     }

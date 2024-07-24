@@ -40,7 +40,9 @@ pub struct IsLessThanTupleAuxCols<T> {
 }
 
 impl<T: Clone> IsLessThanTupleAuxCols<T> {
-    pub fn from_slice(slc: &[T], limb_bits: Vec<usize>, decomp: usize, tuple_len: usize) -> Self {
+    pub fn from_slice(slc: &[T], limb_bits: &[usize], decomp: usize) -> Self {
+        let tuple_len = limb_bits.len();
+
         assert!(limb_bits.len() == tuple_len);
 
         let mut curr_start_idx = 0;
@@ -132,7 +134,9 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
 }
 
 impl<T> IsLessThanTupleAuxCols<T> {
-    pub fn get_width(limb_bits: Vec<usize>, decomp: usize, tuple_len: usize) -> usize {
+    pub fn get_width(limb_bits: &[usize], decomp: usize) -> usize {
+        let tuple_len = limb_bits.len();
+
         let mut width = 0;
         // for the less than indicator
         width += tuple_len;
@@ -161,14 +165,11 @@ pub struct IsLessThanTupleCols<T> {
 }
 
 impl<T: Clone> IsLessThanTupleCols<T> {
-    pub fn from_slice(slc: &[T], limb_bits: Vec<usize>, decomp: usize, tuple_len: usize) -> Self {
+    pub fn from_slice(slc: &[T], limb_bits: &[usize], decomp: usize) -> Self {
+        let tuple_len = limb_bits.len();
+
         let io = IsLessThanTupleIoCols::from_slice(&slc[..2 * tuple_len + 1], tuple_len);
-        let aux = IsLessThanTupleAuxCols::from_slice(
-            &slc[2 * tuple_len + 1..],
-            limb_bits,
-            decomp,
-            tuple_len,
-        );
+        let aux = IsLessThanTupleAuxCols::from_slice(&slc[2 * tuple_len + 1..], limb_bits, decomp);
 
         Self { io, aux }
     }
@@ -179,8 +180,10 @@ impl<T: Clone> IsLessThanTupleCols<T> {
         flattened
     }
 
-    pub fn get_width(limb_bits: Vec<usize>, decomp: usize, tuple_len: usize) -> usize {
+    pub fn get_width(limb_bits: &[usize], decomp: usize) -> usize {
+        let tuple_len = limb_bits.len();
+
         IsLessThanTupleIoCols::<T>::get_width(tuple_len)
-            + IsLessThanTupleAuxCols::<T>::get_width(limb_bits, decomp, tuple_len)
+            + IsLessThanTupleAuxCols::<T>::get_width(limb_bits, decomp)
     }
 }

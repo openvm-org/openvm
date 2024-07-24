@@ -23,6 +23,8 @@ pub struct IsLessThanTupleAir {
     pub decomp: usize,
     /// IsLessThanAirs for each tuple element
     pub is_less_than_airs: Vec<IsLessThanAir>,
+    // Better to store this separately to avoid re-allocating vectors each time
+    limb_bits: Vec<usize>,
 }
 
 impl IsLessThanTupleAir {
@@ -36,7 +38,16 @@ impl IsLessThanTupleAir {
             bus_index,
             decomp,
             is_less_than_airs,
+            limb_bits,
         }
+    }
+
+    pub fn tuple_len(&self) -> usize {
+        self.is_less_than_airs.len()
+    }
+
+    pub fn limb_bits(&self) -> &[usize] {
+        &self.limb_bits
     }
 
     /// FOR INTERNAL USE ONLY when this AIR is used as a sub-AIR but the comparators `x, y` are on different rows. See [IsLessThanAir::eval_without_interactions].
@@ -110,17 +121,6 @@ impl IsLessThanTupleAir {
         // constrain that the tuple_less_than does indicate whether x < y, lexicographically
         builder.assert_eq(io.tuple_less_than, less_than_cumulative[x.len() - 1]);
     }
-
-    pub fn tuple_len(&self) -> usize {
-        self.is_less_than_airs.len()
-    }
-
-    pub fn limb_bits(&self) -> Vec<usize> {
-        self.is_less_than_airs
-            .iter()
-            .map(|air| air.limb_bits)
-            .collect()
-    }
 }
 
 impl AirConfig for IsLessThanTupleAir {
@@ -129,7 +129,7 @@ impl AirConfig for IsLessThanTupleAir {
 
 impl<F: Field> BaseAir<F> for IsLessThanTupleAir {
     fn width(&self) -> usize {
-        IsLessThanTupleCols::<F>::get_width(self.limb_bits(), self.decomp, self.tuple_len())
+        IsLessThanTupleCols::<F>::get_width(self.limb_bits(), self.decomp)
     }
 }
 
@@ -140,12 +140,8 @@ impl<AB: InteractionBuilder> Air<AB> for IsLessThanTupleAir {
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
 
-        let local_cols = IsLessThanTupleCols::<AB::Var>::from_slice(
-            local,
-            self.limb_bits().clone(),
-            self.decomp,
-            self.tuple_len(),
-        );
+        let local_cols =
+            IsLessThanTupleCols::<AB::Var>::from_slice(local, self.limb_bits(), self.decomp);
 
         SubAir::eval(self, builder, local_cols.io, local_cols.aux);
     }

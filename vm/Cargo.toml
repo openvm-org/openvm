@@ -55,5 +55,5 @@ rand_xoshiro = "0.6.0"
 ark-ff = { version = "^0.4.0", default-features = false }
 
 [features]
-default = ["parallel"]
+default = []
 parallel = ["afs-stark-backend/parallel"]

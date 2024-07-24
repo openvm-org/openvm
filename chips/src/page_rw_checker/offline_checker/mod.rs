@@ -1,6 +1,6 @@
-use columns::OfflineCheckerCols;
+use columns::PageOfflineCheckerCols;
 
-use crate::{is_equal_vec::IsEqualVecAir, is_less_than_tuple::IsLessThanTupleAir};
+use crate::offline_checker::OfflineChecker;
 
 mod air;
 mod bridge;
@@ -10,19 +10,12 @@ mod trace;
 #[cfg(test)]
 mod tests;
 
-pub struct OfflineChecker {
+pub struct PageOfflineChecker {
+    offline_checker: OfflineChecker,
     page_bus_index: usize,
-    ops_bus_index: usize,
-
-    idx_len: usize,
-    data_len: usize,
-    idx_decomp: usize,
-
-    is_equal_idx_air: IsEqualVecAir,
-    lt_idx_clk_air: IsLessThanTupleAir,
 }
 
-impl OfflineChecker {
+impl PageOfflineChecker {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         page_bus_index: usize,
@@ -34,22 +27,21 @@ impl OfflineChecker {
         clk_bits: usize,
         idx_decomp: usize,
     ) -> Self {
-        Self {
-            page_bus_index,
-            ops_bus_index,
+        let offline_checker = OfflineChecker::new(
+            [vec![idx_limb_bits; idx_len], vec![clk_bits]].concat(),
+            idx_decomp,
             idx_len,
             data_len,
-            idx_decomp,
-            is_equal_idx_air: IsEqualVecAir::new(idx_len),
-            lt_idx_clk_air: IsLessThanTupleAir::new(
-                range_bus_index,
-                [vec![idx_limb_bits; idx_len], vec![clk_bits]].concat(),
-                idx_decomp,
-            ),
+            range_bus_index,
+            ops_bus_index,
+        );
+        Self {
+            offline_checker,
+            page_bus_index,
         }
     }
 
     pub fn air_width(&self) -> usize {
-        OfflineCheckerCols::<usize>::width(self)
+        PageOfflineCheckerCols::<usize>::width(self)
     }
 }

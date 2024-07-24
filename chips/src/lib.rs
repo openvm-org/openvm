@@ -14,6 +14,7 @@ pub mod is_zero;
 // pub mod keccak_permute;
 // pub mod merkle_proof;
 // pub mod multitier_page_rw_checker;
+pub mod offline_checker;
 pub mod page_access_by_row_id;
 pub mod page_btree;
 pub mod page_rw_checker;

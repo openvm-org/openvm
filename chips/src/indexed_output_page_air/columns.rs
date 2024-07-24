@@ -58,9 +58,8 @@ impl<T: Clone> IndexedOutputPageAuxCols<T> {
         IndexedOutputPageAuxCols {
             lt_cols: IsLessThanTupleAuxCols::from_slice(
                 &slc[..slc.len() - 1],
-                vec![idx_limb_bits; idx_len],
+                &vec![idx_limb_bits; idx_len],
                 decomp,
-                idx_len,
             ),
             lt_out: slc[slc.len() - 1].clone(),
         }
