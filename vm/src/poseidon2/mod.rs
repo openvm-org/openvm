@@ -52,7 +52,8 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
             e,
         } = instruction;
         Poseidon2VmIoCols::<F> {
-            is_alloc: F::one(),
+            is_opcode: F::one(),
+            is_direct: F::zero(),
             clk: F::from_canonical_usize(start_timestamp),
             a: op_a,
             b: op_b,
