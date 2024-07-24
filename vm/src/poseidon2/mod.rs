@@ -1,6 +1,7 @@
 use p3_field::PrimeField32;
 
-use columns::{Poseidon2VmCols, Poseidon2VmIoCols};
+use crate::memory::tree::Hasher;
+use columns::*;
 use poseidon2_air::poseidon2::Poseidon2Air;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
@@ -8,6 +9,7 @@ use crate::cpu::trace::Instruction;
 use crate::cpu::OpCode;
 use crate::cpu::OpCode::*;
 use crate::vm::VirtualMachine;
+use afs_chips::{is_zero::IsZeroAir, sub_chip::LocalTraceInstructions};
 
 #[cfg(test)]
 pub mod tests;
@@ -150,5 +152,28 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     pub fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
         3 + (2 * WIDTH)
+    }
+}
+
+const CHUNK: usize = 8;
+impl<const WIDTH: usize, F: PrimeField32> Hasher<CHUNK, F> for Poseidon2Chip<WIDTH, F> {
+    fn hash(&mut self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK] {
+        let mut input_state = [F::zero(); WIDTH];
+        input_state[..8].copy_from_slice(&left);
+        input_state[8..16].copy_from_slice(&right);
+        let internal = self.air.subair.generate_trace_row(input_state);
+        let output = internal.io.output;
+        let io_row = Poseidon2VmIoCols::direct_io_cols();
+        let is_zero_row = IsZeroAir {}.generate_trace_row(io_row.d);
+        self.rows.push(Poseidon2VmCols {
+            io: io_row,
+            aux: Poseidon2VmAuxCols {
+                addresses: [F::zero(); 3],
+                d_is_zero: is_zero_row.io.is_zero,
+                is_zero_inv: is_zero_row.inv,
+                internal,
+            },
+        });
+        output[..8].try_into().unwrap()
     }
 }

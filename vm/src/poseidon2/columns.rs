@@ -125,6 +125,20 @@ impl<T: Field> Poseidon2VmIoCols<T> {
             cmp: T::zero(),
         }
     }
+
+    pub fn direct_io_cols() -> Self {
+        Self {
+            is_opcode: T::zero(),
+            is_direct: T::one(),
+            clk: T::zero(),
+            a: T::zero(),
+            b: T::zero(),
+            c: T::zero(),
+            d: T::one(),
+            e: T::zero(),
+            cmp: T::zero(),
+        }
+    }
 }
 
 impl<const WIDTH: usize, T: Clone> Poseidon2VmAuxCols<WIDTH, T> {
