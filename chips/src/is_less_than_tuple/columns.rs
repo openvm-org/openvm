@@ -45,36 +45,23 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
     pub fn from_slice(slc: &[T], lt_chip: &IsLessThanTupleAir) -> Self {
         let tuple_len = lt_chip.tuple_len();
 
-        let mut cur_idx = 0;
+        let mut iter = slc.iter().cloned();
+        let mut take = |n: usize| iter.by_ref().take(n).collect::<Vec<T>>();
 
-        let less_than = slc[cur_idx..cur_idx + tuple_len].to_vec();
+        let less_than = take(tuple_len);
 
-        cur_idx += tuple_len;
-
-        // generate the less_than_aux columns
         let mut less_than_aux: Vec<IsLessThanAuxCols<T>> = vec![];
         for air in lt_chip.is_less_than_airs.iter() {
             let cur_width = IsLessThanAuxCols::<T>::width(air);
-
-            let less_than_col = IsLessThanAuxCols::from_slice(&slc[cur_idx..cur_idx + cur_width]);
-            cur_idx += cur_width;
-
+            let less_than_col = IsLessThanAuxCols::from_slice(&take(cur_width));
             less_than_aux.push(less_than_col);
         }
 
-        // prods[i] indicates whether x[i] == y[i] up to the i-th index
-        let prods = slc[cur_idx..cur_idx + tuple_len].to_vec();
-
-        cur_idx += tuple_len;
-
-        // get invs
-        let invs = slc[cur_idx..cur_idx + tuple_len].to_vec();
-
-        cur_idx += tuple_len;
-
+        let prods = take(tuple_len);
+        let invs = take(tuple_len);
         let is_equal_vec_aux = IsEqualVecAuxCols { prods, invs };
 
-        let less_than_cumulative = slc[cur_idx..cur_idx + tuple_len].to_vec();
+        let less_than_cumulative = take(tuple_len);
 
         Self {
             less_than,
