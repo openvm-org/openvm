@@ -167,16 +167,17 @@ fn test_vm_fibonacci_old_cycle_tracker() {
         Instruction::from_isize(STOREW, 1, 0, 1, 0, 2),
         Instruction::debug(CT_END, "store"),
         Instruction::debug(CT_START, "loop"),
-        Instruction::from_isize(BEQ, 2, 0, 7, 1, 1),
+        Instruction::from_isize(BEQ, 2, 0, 8, 1, 1), // Instruction::from_isize(BEQ, 2, 0, 7, 1, 1),
         Instruction::from_isize(FADD, 2, 2, 3, 1, 1),
+        Instruction::debug(CT_START, "inner loop"),
         Instruction::from_isize(LOADW, 4, -2, 2, 1, 2),
         Instruction::from_isize(LOADW, 5, -1, 2, 1, 2),
         Instruction::from_isize(FADD, 6, 4, 5, 1, 1),
         Instruction::from_isize(STOREW, 6, 0, 2, 1, 2),
-        Instruction::from_isize(JAL, 7, -6, 0, 1, 0),
+        Instruction::from_isize(JAL, 7, -7, 0, 1, 0), // Instruction::from_isize(JAL, 7, -6, 0, 1, 0),
         Instruction::debug(CT_END, "loop"),
-        Instruction::debug(CT_END, "total"),
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
+        Instruction::debug(CT_END, "total"),
     ];
 
     air_test(true, false, program.clone(), vec![]);
