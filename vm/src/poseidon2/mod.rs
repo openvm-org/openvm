@@ -161,7 +161,7 @@ impl<const WIDTH: usize, F: PrimeField32> Hasher<CHUNK, F> for Poseidon2Chip<WID
         let mut input_state = [F::zero(); WIDTH];
         input_state[..8].copy_from_slice(&left);
         input_state[8..16].copy_from_slice(&right);
-        let internal = self.air.subair.generate_trace_row(input_state);
+        let internal = self.air.inner.generate_trace_row(input_state);
         let output = internal.io.output;
         let io_row = Poseidon2VmIoCols::direct_io_cols();
         let is_zero_row = IsZeroAir {}.generate_trace_row(io_row.d);
