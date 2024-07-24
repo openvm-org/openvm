@@ -21,7 +21,6 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
     pub fn generate_main_trace<SC: StarkGenericConfig>(
         &self,
         page: &Page,
-        commit: Vec<u32>,
         range: (Vec<u32>, Vec<u32>),
         range_checker: Arc<RangeCheckerGateChip>,
         internal_indices: &HashSet<Vec<u32>>,
@@ -29,7 +28,6 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
     where
         Val<SC>: PrimeField64 + PrimeField,
     {
-        assert!(commit.len() == COMMITMENT_LEN);
         let mut final_page_aux_rows = match &self.page_chip {
             PageRwAir::Final(fin) => {
                 fin.gen_aux_trace::<SC>(page, range_checker.clone(), internal_indices)
@@ -41,8 +39,6 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                 .enumerate()
                 .flat_map(|(i, row)| {
                     let mut trace_row = vec![];
-                    trace_row.extend(commit.clone());
-                    trace_row.push(self.air_id);
                     if !self.is_init {
                         trace_row.extend(range.0.clone());
                         trace_row.extend(range.1.clone());
@@ -64,7 +60,7 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                                 ));
                             let aux = tuple.aux;
                             let io = tuple.io;
-                            trace_row[COMMITMENT_LEN + 2 * range.0.len() + 1] = io.tuple_less_than;
+                            trace_row[2 * range.0.len()] = io.tuple_less_than;
                             trace_row.extend(aux.flatten());
                         }
                         {
@@ -80,7 +76,7 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                                 ));
                             let aux = tuple.aux;
                             let io = tuple.io;
-                            trace_row[COMMITMENT_LEN + 2 * range.0.len() + 2] = io.tuple_less_than;
+                            trace_row[2 * range.0.len() + 1] = io.tuple_less_than;
                             trace_row.extend(aux.flatten());
                         }
                         {

@@ -1,26 +1,25 @@
 use std::iter;
 
-use afs_stark_backend::interaction::{Interaction, InteractionBuilder};
-use p3_air::VirtualPairCol;
-use p3_field::PrimeField64;
+use afs_stark_backend::interaction::InteractionBuilder;
+use p3_air::AirBuilderWithPublicValues;
+use p3_field::AbstractField;
 
 use super::columns::LeafPageCols;
-use super::{LeafPageAir, PageRwAir};
-use crate::indexed_output_page_air::columns::IndexedOutputPageCols;
-use crate::is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIoCols};
-use crate::page_rw_checker::final_page::columns::IndexedPageWriteCols;
+use super::LeafPageAir;
 
 impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
-    fn custom_receives_path<AB: InteractionBuilder>(
+    fn custom_receives_path<AB: InteractionBuilder + AirBuilderWithPublicValues>(
         &self,
         builder: &mut AB,
-        page_cols: LeafPageCols<AB::Var>,
+        page_cols: &LeafPageCols<AB::Var>,
+        own_commitment: &[AB::PublicVar],
     ) {
         // Sending the path
         if self.is_init {
-            let virtual_cols = (page_cols.metadata.own_commitment)
-                .into_iter()
-                .chain(iter::once(page_cols.metadata.air_id))
+            let virtual_cols = own_commitment
+                .iter()
+                .map(|x| (*x).into())
+                .chain(iter::once(AB::Expr::from_canonical_u32(self.air_id)))
                 .collect::<Vec<_>>();
             builder.push_receive(
                 *self.path_bus_index(),
@@ -28,13 +27,14 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                 page_cols.cache_cols.is_alloc,
             );
         } else {
-            let range_inclusion_cols = page_cols.metadata.range_inclusion_cols.unwrap();
+            let range_inclusion_cols = page_cols.metadata.range_inclusion_cols.as_ref().unwrap();
             let virtual_cols = range_inclusion_cols
                 .start
-                .into_iter()
-                .chain(range_inclusion_cols.end)
-                .chain(page_cols.metadata.own_commitment)
-                .chain(iter::once(page_cols.metadata.air_id))
+                .iter()
+                .map(|x| (*x).into())
+                .chain(range_inclusion_cols.end.iter().map(|x| (*x).into()))
+                .chain(own_commitment.iter().map(|x| (*x).into()))
+                .chain(iter::once(AB::Expr::from_canonical_u32(self.air_id)))
                 .collect::<Vec<_>>();
 
             builder.push_receive(
@@ -47,54 +47,12 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
 }
 
 impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
-    fn eval_interactions<AB: InteractionBuilder>(
+    pub fn eval_interactions<AB: InteractionBuilder + AirBuilderWithPublicValues>(
         &self,
         builder: &mut AB,
         page_cols: &LeafPageCols<AB::Var>,
+        own_commitment: &[AB::PublicVar],
     ) {
-        let mut interactions = vec![];
-        match &self.page_chip {
-            PageRwAir::Initial(i) => {
-                i.eval_interactions(builder, page_cols.cache_cols.clone());
-            }
-            PageRwAir::Final(fin) => {
-                fin.eval_interactions(
-                    builder,
-                    IndexedPageWriteCols {
-                        final_page_cols: IndexedOutputPageCols {
-                            page_cols: page_cols.cache_cols.clone(),
-                            aux_cols: page_cols
-                                .metadata
-                                .subair_aux_cols
-                                .clone()
-                                .unwrap()
-                                .final_page_aux
-                                .final_page_aux_cols
-                                .clone(),
-                        },
-                        rcv_mult: page_cols
-                            .metadata
-                            .subair_aux_cols
-                            .clone()
-                            .unwrap()
-                            .final_page_aux
-                            .rcv_mult,
-                    },
-                );
-            }
-        };
-
-        self.custom_receives_path(builder, page_cols);
-        if !self.is_init {
-            let subairs = self.is_less_than_tuple_air.clone().unwrap();
-            let range_inclusion = page_cols.metadata.range_inclusion_cols.clone().unwrap();
-            let subair_aux = page_cols.metadata.subair_aux_cols.clone().unwrap();
-            subairs
-                .idx_start
-                .eval_interactions(builder, subair_aux.idx_start.clone());
-            subairs
-                .end_idx
-                .eval_interactions(builder, subair_aux.end_idx.clone());
-        }
+        self.custom_receives_path(builder, page_cols, own_commitment);
     }
 }

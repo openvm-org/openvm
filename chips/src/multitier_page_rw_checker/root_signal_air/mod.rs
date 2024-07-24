@@ -25,6 +25,6 @@ impl<const COMMITMENT_LEN: usize> RootSignalAir<COMMITMENT_LEN> {
         }
     }
     pub fn air_width(&self) -> usize {
-        COMMITMENT_LEN + 2 + (1 - self.is_init as usize) * 2 * self.idx_len
+        2 + (1 - self.is_init as usize) * 2 * self.idx_len
     }
 }

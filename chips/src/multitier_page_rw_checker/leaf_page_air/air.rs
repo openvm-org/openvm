@@ -1,6 +1,6 @@
 use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use p3_field::{AbstractField, Field};
+use p3_field::Field;
 use p3_matrix::Matrix;
 
 use super::{
@@ -33,51 +33,63 @@ where
     fn eval(&self, builder: &mut AB) {
         // only constrain that own_commitment is accurate
         // partition is physical page data vs metadata
-        let main: &<AB as AirBuilder>::M = &builder.partitioned_main()[1].clone();
-        let [local, next] = [0, 1].map(|i| main.row_slice(i));
         let pi = builder.public_values().to_vec();
-        let data: &<AB as AirBuilder>::M = &builder.partitioned_main()[0].clone();
-        let cached_data = PageCols::from_slice(&data.row_slice(0), self.idx_len, self.data_len);
-        let next_data = PageCols::from_slice(&data.row_slice(1), self.idx_len, self.data_len);
-        for i in 0..COMMITMENT_LEN {
-            builder.assert_eq(pi[i], local[i]);
-        }
-        // assert that own id is correct
-        builder.assert_eq(
-            local[COMMITMENT_LEN],
-            AB::Expr::from_canonical_u64(self.air_id as u64),
-        );
         match &self.page_chip {
             PageRwAir::Initial(i) => {
-                SubAir::eval(i, builder, cached_data, ());
+                let data: &<AB as AirBuilder>::M = &builder.partitioned_main()[0];
+                let cached_data =
+                    PageCols::from_slice(&data.row_slice(0), self.idx_len, self.data_len);
+                let page_cols = LeafPageCols {
+                    metadata: LeafPageMetadataCols {
+                        range_inclusion_cols: None,
+                        subair_aux_cols: None,
+                    },
+                    cache_cols: cached_data,
+                };
+                self.eval_interactions(builder, &page_cols, &pi);
+                SubAir::eval(i, builder, page_cols.cache_cols, ());
             }
             PageRwAir::Final(fin) => {
-                let metadata = LeafPageMetadataCols::from_slice(
-                    &local,
-                    self.idx_len,
-                    COMMITMENT_LEN,
-                    false,
-                    self.is_less_than_tuple_param.clone(),
-                );
+                let main: &<AB as AirBuilder>::M = &builder.partitioned_main()[1];
+                let [local, next] = [0, 1].map(|i| main.row_slice(i));
+                let data: &<AB as AirBuilder>::M = &builder.partitioned_main()[0];
+                let cached_data =
+                    PageCols::from_slice(&data.row_slice(0), self.idx_len, self.data_len);
+                let next_data =
+                    PageCols::from_slice(&data.row_slice(1), self.idx_len, self.data_len);
+                let page_cols = LeafPageCols {
+                    metadata: LeafPageMetadataCols::from_slice(
+                        &local,
+                        self.idx_len,
+                        self.is_init,
+                        self.is_less_than_tuple_param.clone(),
+                    ),
+                    cache_cols: cached_data,
+                };
                 let next_aux = LeafPageMetadataCols::from_slice(
                     &next,
                     self.idx_len,
-                    COMMITMENT_LEN,
                     false,
                     self.is_less_than_tuple_param.clone(),
                 )
                 .subair_aux_cols
                 .unwrap()
                 .final_page_aux;
-                let range_inclusion_cols = metadata.range_inclusion_cols.unwrap();
+                drop(local);
+                drop(next);
+                self.eval_interactions(builder, &page_cols, &pi);
+
+                let range_inclusion_cols = page_cols.metadata.range_inclusion_cols.unwrap();
                 let less_than_start = range_inclusion_cols.less_than_start;
                 let greater_than_end = range_inclusion_cols.greater_than_end;
-                builder.assert_zero(cached_data.is_alloc * (less_than_start + greater_than_end));
-                let subair_aux_cols = metadata.subair_aux_cols.unwrap();
+                builder.assert_zero(
+                    page_cols.cache_cols.is_alloc * (less_than_start + greater_than_end),
+                );
+                let subair_aux_cols = page_cols.metadata.subair_aux_cols.unwrap();
                 let subairs = self.is_less_than_tuple_air.clone().unwrap();
                 {
                     let io = IsLessThanTupleIoCols {
-                        x: cached_data.idx.clone(),
+                        x: page_cols.cache_cols.idx.clone(),
                         y: range_inclusion_cols.start.clone(),
                         tuple_less_than: range_inclusion_cols.less_than_start,
                     };
@@ -87,13 +99,18 @@ where
                 {
                     let io = IsLessThanTupleIoCols {
                         x: range_inclusion_cols.end.clone(),
-                        y: cached_data.idx.clone(),
+                        y: page_cols.cache_cols.idx.clone(),
                         tuple_less_than: range_inclusion_cols.greater_than_end,
                     };
                     let aux = subair_aux_cols.end_idx.clone();
                     SubAir::eval(&subairs.end_idx, builder, io, aux);
                 }
-                SubAir::eval(fin, builder, [cached_data, next_data], next_aux);
+                SubAir::eval(
+                    fin,
+                    builder,
+                    [page_cols.cache_cols, next_data],
+                    [subair_aux_cols.final_page_aux, next_aux],
+                );
             }
         };
     }

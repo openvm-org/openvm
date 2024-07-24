@@ -82,7 +82,6 @@ impl<T> InternalPageCols<T> {
             metadata: InternalPageMetadataCols::from_slice(
                 &cols[2 + 2 * idx_len + commitment_len..],
                 idx_len,
-                commitment_len,
                 is_init,
                 is_less_than_tuple_params,
             ),
@@ -109,7 +108,6 @@ impl<T> InternalPageMetadataCols<T> {
     pub fn from_slice(
         cols: &[T],
         idx_len: usize,
-        commitment_len: usize,
         is_init: bool,
         is_less_than_tuple_params: MyLessThanTupleParams,
     ) -> Self
