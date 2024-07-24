@@ -25,5 +25,5 @@ p3-keccak = { workspace = true }
 tracing = "0.1.40"
 
 [features]
-default = ["parallel"]
+default = []
 parallel = ["afs-chips/parallel"]

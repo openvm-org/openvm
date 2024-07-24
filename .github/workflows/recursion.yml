@@ -33,4 +33,4 @@ jobs:
       - name: Run recursion crate tests
         working-directory: recursion
         run: |
-          cargo test --profile=fast
+          cargo test --profile=fast --features parallel

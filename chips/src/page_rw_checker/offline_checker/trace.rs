@@ -39,7 +39,10 @@ impl PageOfflineChecker {
         // Creating a timestamp bigger than all others
         let max_clk = ops.iter().map(|op| op.clk).max().unwrap_or(0) + 1;
 
+        #[cfg(feature = "parallel")]
         ops.par_sort_by_key(|op| (op.idx.clone(), op.clk));
+        #[cfg(not(feature = "parallel"))]
+        ops.sort_by_key(|op| (op.idx.clone(), op.clk));
 
         let dummy_op = Operation {
             idx: vec![0; self.offline_checker.idx_len],
