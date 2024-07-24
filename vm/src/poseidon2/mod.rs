@@ -1,6 +1,7 @@
 use p3_field::Field;
 use p3_field::PrimeField32;
 
+use crate::memory::tree::Hasher;
 use afs_chips::is_zero::IsZeroAir;
 use afs_chips::sub_chip::LocalTraceInstructions;
 use columns::{Poseidon2ChipCols, Poseidon2ChipIoCols};
@@ -153,5 +154,27 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
             );
             timestamp += 1;
         }
+    }
+}
+
+const CHUNK: usize = 8;
+impl<const WIDTH: usize, F: PrimeField32> Hasher<CHUNK, F> for Poseidon2Chip<WIDTH, F> {
+    fn hash(&mut self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK] {
+        let mut input_state = [F::zero(); WIDTH];
+        input_state[..8].copy_from_slice(&left);
+        input_state[8..16].copy_from_slice(&right);
+        let internal = self.air.generate_trace_row(input_state);
+        let output = internal.io.output;
+        let is_zero_row = IsZeroAir {}.generate_trace_row(F::zero());
+        self.rows.push(Poseidon2ChipCols {
+            io: Poseidon2ChipIoCols::direct_io_cols(),
+            aux: Poseidon2ChipAuxCols {
+                addresses: [F::zero(); 3],
+                d_is_zero: is_zero_row.io.is_zero,
+                is_zero_inv: is_zero_row.inv,
+                internal,
+            },
+        });
+        output[..8].try_into().unwrap()
     }
 }

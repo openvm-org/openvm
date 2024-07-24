@@ -1,7 +1,7 @@
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::{AbstractField, Field};
 
-use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
+use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS, POSEIDON2_DIRECT_BUS};
 
 use super::columns::{Poseidon2ChipAuxCols, Poseidon2ChipIoCols};
 use super::Poseidon2Chip;
@@ -84,5 +84,16 @@ impl<const WIDTH: usize, F: Field> Poseidon2Chip<WIDTH, F> {
 
             builder.push_send(MEMORY_BUS, fields, count);
         }
+
+        // DIRECT
+        let expand_fields = aux
+            .internal
+            .io
+            .flatten()
+            .into_iter()
+            .take(WIDTH + WIDTH / 2)
+            .collect::<Vec<AB::Var>>();
+
+        builder.push_receive(POSEIDON2_DIRECT_BUS, expand_fields, io.is_direct);
     }
 }
