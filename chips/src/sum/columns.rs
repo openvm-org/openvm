@@ -1,3 +1,5 @@
+use std::iter::Sum;
+
 use afs_derive::AlignedBorrow;
 use p3_air::BaseAir;
 
@@ -17,12 +19,13 @@ pub struct SumCols<T> {
 
 impl<T: Clone> SumCols<T> {
     pub fn from_slice(slc: &[T], lt_air: &IsLessThanAir) -> Self {
-        let key = slc[0].clone();
-        let value = slc[1].clone();
-        let partial_sum = slc[2].clone();
-        let is_final = slc[3].clone();
+        let cols = SumCols::<usize>::index_map(lt_air);
+        let key = slc[cols.key].clone();
+        let value = slc[cols.value].clone();
+        let partial_sum = slc[cols.partial_sum].clone();
+        let is_final = slc[cols.is_final].clone();
 
-        let is_lt_aux_cols = IsLessThanAuxCols::<T>::from_slice(&slc[5..]);
+        let is_lt_aux_cols = IsLessThanAuxCols::<T>::from_slice(&slc[cols.is_lt_aux_cols.lower..]);
         SumCols {
             key,
             value,

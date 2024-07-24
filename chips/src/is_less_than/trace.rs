@@ -59,13 +59,6 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanAir {
             }
         }
 
-        assert!(
-            3 + 1 + lower_decomp.len() == IsLessThanCols::<F>::width(self),
-            "4 + lower_decomp.len() = {} vs {}",
-            4 + lower_decomp.len(),
-            IsLessThanCols::<F>::width(self)
-        );
-
         let io = IsLessThanIoCols {
             x: F::from_canonical_u32(x),
             y: F::from_canonical_u32(y),
