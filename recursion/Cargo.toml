@@ -30,3 +30,7 @@ rand = "0.8.5"
 
 [dev-dependencies]
 afs-chips = { path = "../chips" }
+
+[features]
+default = []
+parallel = ["afs-stark-backend/parallel"]
