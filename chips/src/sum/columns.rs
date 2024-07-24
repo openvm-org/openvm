@@ -1,5 +1,3 @@
-use std::iter::Sum;
-
 use afs_derive::AlignedBorrow;
 use p3_air::BaseAir;
 

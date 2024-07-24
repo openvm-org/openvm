@@ -8,7 +8,7 @@ use super::{columns::AssertSortedCols, AssertSortedChip};
 impl AssertSortedChip {
     pub fn generate_trace<F: PrimeField64>(&self, keys: Vec<Vec<u32>>) -> RowMajorMatrix<F> {
         let num_cols: usize = AssertSortedCols::<F>::get_width(
-            self.air.is_less_than_tuple_air.limb_bits(),
+            &self.air.is_less_than_tuple_air.limb_bits,
             self.air.is_less_than_tuple_air.decomp,
         );
 

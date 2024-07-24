@@ -28,7 +28,7 @@ impl<T: Clone> AssertSortedCols<T> {
         let less_than_next_key = slc[curr_start_idx].clone();
         curr_start_idx = curr_end_idx;
 
-        let lt_chip = IsLessThanTupleAir::new(0, limb_bits, decomp);
+        let lt_chip = IsLessThanTupleAir::new(0, limb_bits.to_vec(), decomp);
         let is_less_than_tuple_aux =
             IsLessThanTupleAuxCols::from_slice(&slc[curr_start_idx..], &lt_chip);
 
@@ -49,7 +49,7 @@ impl<T: Clone> AssertSortedCols<T> {
         // for the less than next key indicator
         width += 1;
 
-        let lt_chip = IsLessThanTupleAir::new(0, limb_bits, decomp);
+        let lt_chip = IsLessThanTupleAir::new(0, limb_bits.to_vec(), decomp);
         width += IsLessThanTupleAuxCols::<T>::width(&lt_chip);
 
         width

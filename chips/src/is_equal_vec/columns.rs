@@ -46,7 +46,7 @@ impl<T: Clone> IsEqualVecAuxCols<T> {
         Self { prods, invs }
     }
 
-    pub fn get_width(vec_len: usize) -> usize {
+    pub fn width(vec_len: usize) -> usize {
         vec_len + vec_len - 1
     }
 }

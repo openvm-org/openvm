@@ -109,7 +109,7 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
         // TODO: the +1 here is a hack to account for the specific way IsEqualVec chip
         // is used in this chip. We should use IsEqualVec as a SubAir (instead of duplicating
         // the logic of trace generation, AIR constraints etc) and clean this up
-        width += IsEqualVecAuxCols::<T>::get_width(lt_air.tuple_len()) + 1;
+        width += IsEqualVecAuxCols::<T>::width(lt_air.tuple_len()) + 1;
 
         width
     }

@@ -51,7 +51,7 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanTupleAir {
         let mut tuple_less_than = F::zero();
 
         // use subchip to generate relevant columns
-        for (i, &limb_bits) in self.limb_bits().iter().enumerate() {
+        for (i, &limb_bits) in self.limb_bits.iter().enumerate() {
             let is_less_than_chip = IsLessThanChip::new(
                 self.bus_index,
                 limb_bits,

@@ -77,8 +77,7 @@ where
             ),
             lt_aux: IsLessThanTupleAuxCols::from_slice(
                 &slc[5 + 3 * idx_len + data_len..],
-                &oc.idx_clk_limb_bits,
-                oc.decomp,
+                &oc.lt_tuple_air,
             ),
         }
     }
