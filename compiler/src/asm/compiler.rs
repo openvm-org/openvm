@@ -27,15 +27,11 @@ pub(crate) const STACK_START_OFFSET: i32 = 16;
 /// The heap pointer address.
 pub(crate) const HEAP_PTR: i32 = -4;
 
-pub(crate) const HEAP_START_ADDRESS: usize = STACK_SIZE + 4;
-
 /// The address of A0.
 pub(crate) const A0: i32 = -8;
 
 // sizeof(var) = sizeof(felt) = 1 and sizeof(ext) == 4
 pub const FP_INCREMENT: i32 = 6;
-
-pub const STACK_SIZE: usize = 1 << 24;
 
 /// The assembly compiler.
 #[derive(Debug, Clone, Default)]
@@ -100,10 +96,9 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
 
     /// Builds the operations into assembly instructions.
     pub fn build(&mut self, operations: TracedVec<DslIr<AsmConfig<F, EF>>>) {
-        // Set the heap pointer value according to stack size.
+        // Initialize the heap pointer value.
         if self.block_label().is_zero() {
-            let stack_size = F::from_canonical_usize(HEAP_START_ADDRESS);
-            self.push(AsmInstruction::AddFI(HEAP_PTR, ZERO, stack_size), None);
+            self.push(AsmInstruction::AddFI(HEAP_PTR, ZERO, F::zero()), None);
         }
 
         // For each operation, generate assembly instructions.
