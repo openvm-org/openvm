@@ -4,7 +4,7 @@ use std::{iter, sync::Arc};
 use crate::common::page::Page;
 use crate::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{
-    keygen::{types::MultiStarkPartialProvingKey, MultiStarkKeygenBuilder},
+    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver, USE_DEBUG_BUILDER},
     verifier::VerificationError,
 };
@@ -24,7 +24,7 @@ fn test_single_page(
     final_page_chip: &super::IndexedOutputPageAir,
     range_checker: Arc<RangeCheckerGateChip>,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
-    partial_pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
+    pk: &MultiStarkProvingKey<BabyBearPoseidon2Config>,
 ) -> Result<(), VerificationError> {
     let page_trace = final_page_chip.gen_page_trace::<BabyBearPoseidon2Config>(page);
     let page_prover_data = trace_builder.committer.commit(vec![page_trace.clone()]);
@@ -41,23 +41,22 @@ fn test_single_page(
 
     trace_builder.commit_current();
 
-    let partial_vk = partial_pk.partial_vk();
+    let vk = pk.vk();
 
-    let main_trace_data =
-        trace_builder.view(&partial_vk, vec![final_page_chip, &range_checker.air]);
+    let main_trace_data = trace_builder.view(&vk, vec![final_page_chip, &range_checker.air]);
 
-    let pis = vec![vec![]; partial_vk.per_air.len()];
+    let pis = vec![vec![]; vk.per_air.len()];
 
     let prover = engine.prover();
     let verifier = engine.verifier();
 
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, partial_pk, main_trace_data, &pis);
+    let proof = prover.prove(&mut challenger, pk, main_trace_data, &pis);
 
     let mut challenger = engine.new_challenger();
     verifier.verify(
         &mut challenger,
-        &partial_vk,
+        &vk,
         vec![final_page_chip, &range_checker.air],
         &proof,
         &pis,
@@ -132,7 +131,7 @@ fn final_page_chip_test() {
 
     keygen_builder.add_air(&range_checker.air, 0);
 
-    let partial_pk = keygen_builder.generate_partial_pk();
+    let pk = keygen_builder.generate_pk();
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -143,7 +142,7 @@ fn final_page_chip_test() {
         &final_page_chip,
         range_checker.clone(),
         &mut trace_builder,
-        &partial_pk,
+        &pk,
     )
     .expect("Verification Failed");
 
@@ -162,7 +161,7 @@ fn final_page_chip_test() {
             &final_page_chip,
             range_checker.clone(),
             &mut trace_builder,
-            &partial_pk,
+            &pk,
         ),
         Err(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"

@@ -1,7 +1,7 @@
 use afs_derive::AlignedBorrow;
 
 #[derive(Default, AlignedBorrow)]
-pub struct XorIOCols<T> {
+pub struct XorIoCols<T> {
     pub x: T,
     pub y: T,
     pub z: T,
@@ -15,7 +15,7 @@ pub struct XorBitCols<T> {
 }
 
 pub struct XorCols<const N: usize, T> {
-    pub io: XorIOCols<T>,
+    pub io: XorIoCols<T>,
     pub bits: XorBitCols<T>,
 }
 
@@ -30,7 +30,7 @@ impl<const N: usize, T: Clone> XorCols<N, T> {
         let z_bits = slc[3 + 2 * N..3 + 3 * N].to_vec();
 
         Self {
-            io: XorIOCols { x, y, z },
+            io: XorIoCols { x, y, z },
             bits: XorBitCols {
                 x: x_bits,
                 y: y_bits,
@@ -55,8 +55,8 @@ impl<const N: usize, T: Clone> XorCols<N, T> {
         3 * N + 3
     }
 
-    pub fn cols_to_receive(cols: &[usize]) -> XorIOCols<usize> {
-        XorIOCols {
+    pub fn cols_to_receive(cols: &[usize]) -> XorIoCols<usize> {
+        XorIoCols {
             x: cols[0],
             y: cols[1],
             z: cols[2],

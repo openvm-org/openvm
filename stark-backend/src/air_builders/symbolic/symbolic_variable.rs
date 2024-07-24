@@ -4,21 +4,56 @@ use core::marker::PhantomData;
 use core::ops::{Add, Mul, Sub};
 
 use p3_field::Field;
+use serde::{Deserialize, Serialize};
 
 use super::symbolic_expression::SymbolicExpression;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Entry {
-    Preprocessed { offset: usize },
-    Main { offset: usize },
-    Permutation { offset: usize },
+    Preprocessed {
+        offset: usize,
+    },
+    /// Main may be partitioned
+    Main {
+        part_index: usize,
+        offset: usize,
+    },
+    Permutation {
+        offset: usize,
+    },
     Public,
     Challenge,
     Exposed,
 }
 
+impl Entry {
+    /// Advance the internal offset of the entry by the given `offset`.
+    pub fn rotate(self, offset: usize) -> Self {
+        match self {
+            Entry::Preprocessed { offset: old_offset } => Entry::Preprocessed {
+                offset: old_offset + offset,
+            },
+            Entry::Main {
+                part_index,
+                offset: old_offset,
+            } => Entry::Main {
+                part_index,
+                offset: old_offset + offset,
+            },
+            Entry::Permutation { offset: old_offset } => Entry::Permutation {
+                offset: old_offset + offset,
+            },
+            Entry::Public | Entry::Challenge | Entry::Exposed => self,
+        }
+    }
+
+    pub fn next(self) -> Self {
+        self.rotate(1)
+    }
+}
+
 /// A variable within the evaluation window, i.e. a column in either the local or next row.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct SymbolicVariable<F: Field> {
     pub entry: Entry,
     pub index: usize,
@@ -39,6 +74,18 @@ impl<F: Field> SymbolicVariable<F> {
             Entry::Preprocessed { .. } | Entry::Main { .. } | Entry::Permutation { .. } => 1,
             Entry::Public | Entry::Challenge | Entry::Exposed => 0,
         }
+    }
+
+    pub fn rotate(self, offset: usize) -> Self {
+        Self {
+            entry: self.entry.rotate(offset),
+            index: self.index,
+            _phantom: PhantomData,
+        }
+    }
+
+    pub fn next(self) -> Self {
+        self.rotate(1)
     }
 }
 

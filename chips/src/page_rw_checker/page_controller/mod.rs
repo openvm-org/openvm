@@ -4,7 +4,7 @@ use std::sync::Arc;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     keygen::{
-        types::{MultiStarkPartialProvingKey, MultiStarkPartialVerifyingKey},
+        types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
         MultiStarkKeygenBuilder,
     },
     prover::{
@@ -307,7 +307,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     pub fn prove(
         &self,
         engine: &impl StarkEngine<SC>,
-        partial_pk: &MultiStarkPartialProvingKey<SC>,
+        pk: &MultiStarkProvingKey<SC>,
         trace_builder: &mut TraceCommitmentBuilder<SC>,
         init_page_pdata: Arc<ProverTraceData<SC>>,
         final_page_pdata: Arc<ProverTraceData<SC>>,
@@ -349,10 +349,10 @@ impl<SC: StarkGenericConfig> PageController<SC> {
 
         tracing::info_span!("Prove trace commitment").in_scope(|| trace_builder.commit_current());
 
-        let partial_vk = partial_pk.partial_vk();
+        let vk = pk.vk();
 
         let main_trace_data = trace_builder.view(
-            &partial_vk,
+            &vk,
             vec![
                 &self.init_chip,
                 &self.final_chip,
@@ -362,17 +362,17 @@ impl<SC: StarkGenericConfig> PageController<SC> {
             ],
         );
 
-        let pis = vec![vec![]; partial_vk.per_air.len()];
+        let pis = vec![vec![]; vk.per_air.len()];
         let prover = engine.prover();
         let mut challenger = engine.new_challenger();
-        prover.prove(&mut challenger, partial_pk, main_trace_data, &pis)
+        prover.prove(&mut challenger, pk, main_trace_data, &pis)
     }
 
     /// This function takes a proof (returned by the prove function) and verifies it
     pub fn verify(
         &self,
         engine: &impl StarkEngine<SC>,
-        partial_vk: MultiStarkPartialVerifyingKey<SC>,
+        vk: MultiStarkVerifyingKey<SC>,
         proof: Proof<SC>,
         ops_sender: &dyn AnyRap<SC>,
     ) -> Result<(), VerificationError>
@@ -381,12 +381,12 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     {
         let verifier = engine.verifier();
 
-        let pis = vec![vec![]; partial_vk.per_air.len()];
+        let pis = vec![vec![]; vk.per_air.len()];
 
         let mut challenger = engine.new_challenger();
         verifier.verify(
             &mut challenger,
-            &partial_vk,
+            &vk,
             vec![
                 &self.init_chip,
                 &self.final_chip,

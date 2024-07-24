@@ -1,55 +1,27 @@
-use afs_stark_backend::interaction::{AirBridge, Interaction};
-use p3_air::VirtualPairCol;
-use p3_field::PrimeField;
+use afs_stark_backend::interaction::InteractionBuilder;
+use itertools::Itertools;
 
 use super::FinalTableAir;
-use crate::{indexed_output_page_air::columns::IndexedOutputPageCols, utils::to_vcols};
+use crate::common::page_cols::PageCols;
 
-impl<F: PrimeField> AirBridge<F> for FinalTableAir {
-    /// Sends the same thing as FinalPageAir
-    fn sends(&self) -> Vec<Interaction<F>> {
-        AirBridge::sends(&self.final_air)
-    }
-
+impl FinalTableAir {
     /// Receives (idx, data) of T1 for every allocated row on t1_output_bus (sent by t1_chip)
     /// Receives (idx, data) of T2 for every allocated row on t2_output_bus (sent by t2_chip)
-    fn receives(&self) -> Vec<Interaction<F>> {
-        let num_cols = self.air_width();
-        let all_cols = (0..num_cols).collect::<Vec<usize>>();
-
-        let table_cols = IndexedOutputPageCols::<usize>::from_slice(
-            &all_cols,
-            self.final_air.idx_len,
-            self.final_air.data_len,
-            self.final_air.idx_limb_bits,
-            self.final_air.idx_decomp,
-        );
-
-        let t1_cols = table_cols.page_cols.data[self.fkey_start..self.fkey_end]
+    pub fn eval_interactions<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        mut page: PageCols<AB::Var>,
+    ) {
+        let t1_data = page.data.split_off(self.t2_data_len);
+        let t1_idx_data = page.data[self.fkey_start..self.fkey_end]
             .iter()
-            .chain(table_cols.page_cols.data[self.t2_data_len..].iter())
             .copied()
-            .collect::<Vec<usize>>();
+            .chain(t1_data)
+            .collect_vec();
 
-        let t2_cols = table_cols
-            .page_cols
-            .idx
-            .iter()
-            .chain(table_cols.page_cols.data[..self.t2_data_len].iter())
-            .copied()
-            .collect::<Vec<usize>>();
+        let t2_idx_data = page.idx.into_iter().chain(page.data);
 
-        vec![
-            Interaction {
-                fields: to_vcols(&t1_cols),
-                count: VirtualPairCol::single_main(table_cols.page_cols.is_alloc),
-                argument_index: self.buses.t1_output_bus_index,
-            },
-            Interaction {
-                fields: to_vcols(&t2_cols),
-                count: VirtualPairCol::single_main(table_cols.page_cols.is_alloc),
-                argument_index: self.buses.t2_output_bus_index,
-            },
-        ]
+        builder.push_receive(self.buses.t1_output_bus_index, t1_idx_data, page.is_alloc);
+        builder.push_receive(self.buses.t2_output_bus_index, t2_idx_data, page.is_alloc);
     }
 }

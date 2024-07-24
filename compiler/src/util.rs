@@ -1,3 +1,4 @@
+use afs_test_utils::config::setup_tracing;
 use p3_baby_bear::BabyBear;
 use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
 
@@ -117,6 +118,7 @@ pub fn execute_and_prove_program<const WORD_SIZE: usize>(
 
     let num_chips = chips.len();
 
+    setup_tracing();
     engine
         .run_simple_test(chips, traces, vec![vec![]; num_chips])
         .expect("Verification failed");

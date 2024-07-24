@@ -11,11 +11,11 @@ pub mod is_less_than_bits;
 pub mod is_less_than_tuple;
 pub mod is_less_than_tuple_bits;
 pub mod is_zero;
-pub mod keccak_permute;
-pub mod merkle_proof;
-pub mod multitier_page_rw_checker;
+// pub mod keccak_permute;
+// pub mod merkle_proof;
+// pub mod multitier_page_rw_checker;
+pub mod page_access_by_row_id;
 pub mod page_btree;
-pub mod page_read;
 pub mod page_rw_checker;
 pub mod range;
 pub mod range_gate;
@@ -27,5 +27,5 @@ pub mod xor_bits;
 pub mod xor_limbs;
 pub mod xor_lookup;
 
-pub mod dummy_hash;
-pub mod flat_hash;
+// TODO: It will be easier to just re-write this
+// pub mod flat_hash;

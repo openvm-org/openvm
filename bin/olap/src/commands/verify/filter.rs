@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use afs_chips::single_page_index_scan::page_controller::PageController;
 use afs_stark_backend::{
-    config::PcsProverData, keygen::types::MultiStarkPartialVerifyingKey, prover::types::Proof,
+    config::PcsProverData, keygen::types::MultiStarkVerifyingKey, prover::types::Proof,
 };
 use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
 use bin_common::utils::io::read_from_path;
@@ -70,10 +70,8 @@ where
 
         // Load from disk and deserialize partial verifying key
         let prefix = config.generate_filename();
-        let encoded_vk =
-            read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.vk").unwrap();
-        let partial_vk: MultiStarkPartialVerifyingKey<SC> =
-            bincode::deserialize(&encoded_vk).unwrap();
+        let encoded_vk = read_from_path(keys_folder.clone() + "/" + &prefix + ".vk").unwrap();
+        let vk: MultiStarkVerifyingKey<SC> = bincode::deserialize(&encoded_vk).unwrap();
 
         // Get proof from disk
         let filter_info = format!(
@@ -88,9 +86,7 @@ where
         let proof: Proof<SC> = bincode::deserialize(&encoded_proof).unwrap();
 
         // Verify proof
-        page_controller
-            .verify(engine, partial_vk, proof, value)
-            .unwrap();
+        page_controller.verify(engine, vk, proof, value).unwrap();
 
         if !common.silent {
             println!("Proof verified in {:?}", start.elapsed());

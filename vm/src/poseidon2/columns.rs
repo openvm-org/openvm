@@ -19,6 +19,7 @@ pub struct Poseidon2ChipCols<const WIDTH: usize, T> {
 /// * `a`, `b`, `c`: addresses
 /// * `d`, `e`: address spaces
 /// * `cmp`: boolean for compression vs. permutation
+#[derive(Clone, Copy, Debug)]
 pub struct Poseidon2ChipIoCols<T> {
     pub is_alloc: T,
     pub clk: T,
@@ -33,6 +34,7 @@ pub struct Poseidon2ChipIoCols<T> {
 /// Auxiliary columns for Poseidon2Chip.
 /// * `addresses`: addresses where inputs/outputs for Poseidon2 are located
 /// * `internal`: auxiliary columns used by Poseidon2Air for interpreting opcode, evaluating indicators, inverse, and explicit computations.
+#[derive(Clone, Debug)]
 pub struct Poseidon2ChipAuxCols<const WIDTH: usize, T> {
     pub addresses: [T; 3],
     pub d_is_zero: T,

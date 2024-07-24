@@ -61,19 +61,19 @@ where
         page_controller.set_up_keygen_builder(&mut keygen_builder, page_width, idx_len);
 
         // Write the partial pk and vk to disk
-        let partial_pk = keygen_builder.generate_partial_pk();
-        let partial_vk = partial_pk.partial_vk();
+        let pk = keygen_builder.generate_pk();
+        let vk = pk.vk();
         let (total_preprocessed, total_partitioned_main, total_after_challenge) =
-            partial_vk.total_air_width();
+            vk.total_air_width();
         let air_width = total_preprocessed + total_partitioned_main + total_after_challenge;
         info!("Keygen: total air width: {}", air_width);
         println!("Keygen: total air width: {}", air_width);
 
-        let encoded_pk: Vec<u8> = bincode::serialize(&partial_pk)?;
-        let encoded_vk: Vec<u8> = bincode::serialize(&partial_vk)?;
+        let encoded_pk: Vec<u8> = bincode::serialize(&pk)?;
+        let encoded_vk: Vec<u8> = bincode::serialize(&vk)?;
         let prefix = config.generate_filename();
-        let pk_path = keys_folder.clone() + "/" + &prefix.clone() + ".partial.pk";
-        let vk_path = keys_folder.clone() + "/" + &prefix.clone() + ".partial.vk";
+        let pk_path = keys_folder.clone() + "/" + &prefix.clone() + ".pk";
+        let vk_path = keys_folder.clone() + "/" + &prefix.clone() + ".vk";
         let _ = fs::create_dir_all(keys_folder);
         write_bytes(&encoded_pk, pk_path.clone()).unwrap();
         write_bytes(&encoded_vk, vk_path.clone()).unwrap();

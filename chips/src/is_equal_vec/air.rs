@@ -1,6 +1,5 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::interaction::AirBridge;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
 use p3_field::Field;
@@ -8,13 +7,30 @@ use p3_matrix::Matrix;
 
 use crate::sub_chip::{AirConfig, SubAir};
 
-use super::{
-    columns::{IsEqualVecAuxCols, IsEqualVecCols, IsEqualVecIoCols},
-    IsEqualVecAir,
-};
+use super::columns::{IsEqualVecAuxCols, IsEqualVecCols, IsEqualVecIoCols};
 
-// No interactions
-impl<F: Field> AirBridge<F> for IsEqualVecAir {}
+#[derive(Default)]
+pub struct IsEqualVecAir {
+    pub vec_len: usize,
+}
+
+impl IsEqualVecAir {
+    pub fn new(vec_len: usize) -> Self {
+        Self { vec_len }
+    }
+
+    pub fn request<F: Clone + PartialEq>(&self, x: &[F], y: &[F]) -> bool {
+        x == y
+    }
+
+    pub fn get_width(&self) -> usize {
+        4 * self.vec_len
+    }
+
+    pub fn aux_width(&self) -> usize {
+        2 * self.vec_len - 1
+    }
+}
 
 impl AirConfig for IsEqualVecAir {
     type Cols<T> = IsEqualVecCols<T>;

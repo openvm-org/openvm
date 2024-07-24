@@ -1,15 +1,15 @@
-use afs_stark_backend::interaction::{AirBridge, Interaction};
-use p3_air::VirtualPairCol;
-use p3_field::PrimeField;
+use afs_stark_backend::interaction::InteractionBuilder;
 
-use super::{columns::RANGE_GATE_COL_MAP, RangeCheckerGateAir};
+use super::RangeCheckerGateAir;
 
-impl<F: PrimeField> AirBridge<F> for RangeCheckerGateAir {
-    fn receives(&self) -> Vec<Interaction<F>> {
-        vec![Interaction {
-            fields: vec![VirtualPairCol::single_main(RANGE_GATE_COL_MAP.counter)],
-            count: VirtualPairCol::single_main(RANGE_GATE_COL_MAP.mult),
-            argument_index: self.bus_index,
-        }]
+impl RangeCheckerGateAir {
+    /// `counter` is the value to lookup, `mult` is the multiplicity
+    pub fn eval_interactions<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        counter: impl Into<AB::Expr>,
+        mult: impl Into<AB::Expr>,
+    ) {
+        builder.push_receive(self.bus_index, vec![counter], mult);
     }
 }

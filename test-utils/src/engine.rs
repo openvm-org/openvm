@@ -81,8 +81,8 @@ where
         keygen_builder.add_air(chips[i] as &dyn AnyRap<SC>, public_values[i].len());
     }
 
-    let partial_pk = keygen_builder.generate_partial_pk();
-    let partial_vk = partial_pk.partial_vk();
+    let pk = keygen_builder.generate_pk();
+    let vk = pk.vk();
 
     let prover = engine.prover();
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -93,19 +93,14 @@ where
     trace_builder.commit_current();
 
     let main_trace_data = trace_builder.view(
-        &partial_vk,
+        &vk,
         chips.iter().map(|&chip| chip as &dyn AnyRap<SC>).collect(),
     );
 
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(
-        &mut challenger,
-        &partial_pk,
-        main_trace_data,
-        &public_values,
-    );
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &public_values);
 
     let mut challenger = engine.new_challenger();
     let verifier = engine.verifier();
-    verifier.verify(&mut challenger, &partial_vk, chips, &proof, &public_values)
+    verifier.verify(&mut challenger, &vk, chips, &proof, &public_values)
 }

@@ -1,5 +1,5 @@
 use afs_stark_backend::{
-    keygen::{types::MultiStarkPartialProvingKey, MultiStarkKeygenBuilder},
+    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
     verifier::VerificationError,
 };
@@ -26,7 +26,7 @@ fn load_tables_test(
     decomp: usize,
     ij_controller: &mut controller::FKInnerJoinController<BabyBearPoseidon2Config>,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
-    partial_pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
+    pk: &MultiStarkProvingKey<BabyBearPoseidon2Config>,
     intersector_trace_degree: usize,
 ) -> Result<(), VerificationError> {
     // Clearing the range_checker counts
@@ -41,8 +41,8 @@ fn load_tables_test(
         intersector_trace_degree,
         &mut trace_builder.committer,
     );
-    let proof = ij_controller.prove(engine, partial_pk, trace_builder, prover_data);
-    ij_controller.verify(engine, partial_pk.partial_vk(), proof)
+    let proof = ij_controller.prove(engine, pk, trace_builder, prover_data);
+    ij_controller.verify(engine, pk.vk(), proof)
 }
 
 #[test]
@@ -129,7 +129,7 @@ fn inner_join_test() {
 
     ij_controller.set_up_keygen_builder(&mut keygen_builder);
 
-    let partial_pk = keygen_builder.generate_partial_pk();
+    let pk = keygen_builder.generate_pk();
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -142,7 +142,7 @@ fn inner_join_test() {
         decomp,
         &mut ij_controller,
         &mut trace_builder,
-        &partial_pk,
+        &pk,
         intersector_trace_degree,
     )
     .expect("Verification failed");
@@ -166,7 +166,7 @@ fn inner_join_test() {
         decomp,
         &mut ij_controller,
         &mut trace_builder,
-        &partial_pk,
+        &pk,
         intersector_trace_degree,
     )
     .expect("Verification failed");
@@ -189,7 +189,7 @@ fn inner_join_test() {
         decomp,
         &mut ij_controller,
         &mut trace_builder,
-        &partial_pk,
+        &pk,
         intersector_trace_degree,
     )
     .expect("Verification failed");
@@ -229,7 +229,7 @@ fn inner_join_test() {
         decomp,
         &mut ij_controller,
         &mut trace_builder,
-        &partial_pk,
+        &pk,
         intersector_trace_degree,
     )
     .expect("Verification failed");

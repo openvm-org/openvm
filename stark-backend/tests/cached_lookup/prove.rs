@@ -6,8 +6,8 @@ use std::{
 
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
-    keygen::types::MultiStarkPartialVerifyingKey,
-    prover::{trace::TraceCommitmentBuilder, types::Proof},
+    keygen::types::MultiStarkVerifyingKey,
+    prover::{trace::TraceCommitmentBuilder, types::Proof, USE_DEBUG_BUILDER},
 };
 use afs_test_utils::{
     config::{
@@ -31,7 +31,7 @@ pub fn prove<SC: StarkGenericConfig, E: StarkEngine<SC>>(
     trace: Vec<(u32, Vec<u32>)>,
     partition: bool,
 ) -> (
-    MultiStarkPartialVerifyingKey<SC>,
+    MultiStarkVerifyingKey<SC>,
     DummyInteractionAir,
     Proof<SC>,
     Vec<Vec<Val<SC>>>,
@@ -47,7 +47,8 @@ where
 {
     // tracing_setup();
 
-    let air = DummyInteractionAir::new(trace[0].1.len(), false, 0);
+    let mut air = DummyInteractionAir::new(trace[0].1.len(), false, 0);
+    air.partition = partition;
 
     // Single row major matrix for |count|fields[..]|
     let nopart_trace = RowMajorMatrix::new(
@@ -87,8 +88,8 @@ where
     } else {
         keygen_builder.add_air(&air, 0);
     }
-    let partial_pk = keygen_builder.generate_partial_pk();
-    let partial_vk = partial_pk.partial_vk();
+    let pk = keygen_builder.generate_pk();
+    let vk = pk.vk();
 
     let mut benchmarks = ProverBenchmarks::default();
     let prover = engine.prover();
@@ -112,14 +113,18 @@ where
     benchmarks.main_commit_time = start.elapsed().as_micros();
 
     start = Instant::now();
-    let main_trace_data = trace_builder.view(&partial_vk, vec![&air]);
+    let main_trace_data = trace_builder.view(&vk, vec![&air]);
     let pis = vec![vec![]];
 
+    // Disable debug prover since we don't balance the buses
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pis);
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pis);
     benchmarks.prove_time = start.elapsed().as_micros();
 
-    (partial_vk, air, proof, pis, benchmarks)
+    (vk, air, proof, pis, benchmarks)
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]

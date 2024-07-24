@@ -2,11 +2,21 @@ use p3_air::{
     AirBuilder, AirBuilderWithPublicValues, ExtensionBuilder, PairBuilder, PermutationAirBuilder,
 };
 use p3_field::AbstractField;
+use p3_matrix::Matrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::rap::PermutationAirBuilderWithExposedValues;
+use crate::{
+    interaction::{Interaction, InteractionBuilder, InteractionType, SymbolicInteraction},
+    rap::PermutationAirBuilderWithExposedValues,
+};
 
-use super::{PartitionedAirBuilder, ViewPair};
+use super::{
+    symbolic::{
+        symbolic_expression::SymbolicEvaluator,
+        symbolic_variable::{Entry, SymbolicVariable},
+    },
+    PartitionedAirBuilder, ViewPair,
+};
 
 pub struct VerifierConstraintFolder<'a, SC: StarkGenericConfig> {
     pub preprocessed: ViewPair<'a, SC::Challenge>,
@@ -20,6 +30,10 @@ pub struct VerifierConstraintFolder<'a, SC: StarkGenericConfig> {
     pub accumulator: SC::Challenge,
     pub public_values: &'a [Val<SC>],
     pub exposed_values_after_challenge: &'a [Vec<SC::Challenge>],
+
+    /// Symbolic interactions, gotten from vkey. Needed for multiplicity in next row calculation.
+    pub symbolic_interactions: &'a [SymbolicInteraction<Val<SC>>],
+    pub interactions: Vec<Interaction<SC::Challenge>>,
 }
 
 impl<'a, SC: StarkGenericConfig> AirBuilder for VerifierConstraintFolder<'a, SC> {
@@ -136,5 +150,69 @@ where
 {
     fn partitioned_main(&self) -> &[Self::M] {
         &self.partitioned_main
+    }
+}
+
+impl<'a, SC> InteractionBuilder for VerifierConstraintFolder<'a, SC>
+where
+    SC: StarkGenericConfig,
+{
+    fn push_interaction<E: Into<Self::Expr>>(
+        &mut self,
+        bus_index: usize,
+        fields: impl IntoIterator<Item = E>,
+        count: impl Into<Self::Expr>,
+        interaction_type: InteractionType,
+    ) {
+        let fields = fields.into_iter().map(|f| f.into()).collect();
+        let count = count.into();
+        self.interactions.push(Interaction {
+            bus_index,
+            fields,
+            count,
+            interaction_type,
+        });
+    }
+
+    fn num_interactions(&self) -> usize {
+        self.interactions.len()
+    }
+
+    fn all_interactions(&self) -> &[Interaction<Self::Expr>] {
+        &self.interactions
+    }
+
+    fn finalize_interactions(&mut self) {
+        assert_eq!(
+            self.symbolic_interactions.len(),
+            self.interactions.len(),
+            "Interaction count does not match vkey"
+        );
+    }
+
+    fn all_multiplicities_next(&self) -> Vec<Self::Expr> {
+        self.symbolic_interactions
+            .iter()
+            .map(|i| self.eval_expr(&i.count.next()))
+            .collect()
+    }
+}
+
+impl<'a, SC> SymbolicEvaluator<Val<SC>, SC::Challenge> for VerifierConstraintFolder<'a, SC>
+where
+    SC: StarkGenericConfig,
+{
+    fn eval_var(&self, symbolic_var: SymbolicVariable<Val<SC>>) -> SC::Challenge {
+        let index = symbolic_var.index;
+        match symbolic_var.entry {
+            Entry::Preprocessed { offset } => self.preprocessed.get(offset, index),
+            Entry::Main { part_index, offset } => {
+                self.partitioned_main[part_index].get(offset, index)
+            }
+            Entry::Public => self.public_values[index].into(),
+            Entry::Permutation { offset } => self.after_challenge[0].get(offset, index),
+            Entry::Challenge => self.challenges[0][index],
+            Entry::Exposed => self.exposed_values_after_challenge[0][index],
+        }
     }
 }

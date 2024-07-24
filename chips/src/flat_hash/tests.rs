@@ -1,4 +1,3 @@
-use crate::dummy_hash::DummyHashAir;
 use afs_stark_backend::prover::USE_DEBUG_BUILDER;
 use afs_stark_backend::rap::AnyRap;
 use afs_stark_backend::verifier::VerificationError;
@@ -9,6 +8,7 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 
+use super::dummy_hash::DummyHashAir;
 use super::PageController;
 
 #[test]

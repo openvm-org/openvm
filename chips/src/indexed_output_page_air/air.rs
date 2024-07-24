@@ -1,4 +1,4 @@
-use afs_stark_backend::air_builders::PartitionedAirBuilder;
+use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -10,7 +10,7 @@ use super::{
 use crate::{
     common::page_cols::PageCols,
     is_less_than_tuple::{
-        columns::{IsLessThanTupleCols, IsLessThanTupleIOCols},
+        columns::{IsLessThanTupleCols, IsLessThanTupleIoCols},
         IsLessThanTupleAir,
     },
     sub_chip::{AirConfig, SubAir},
@@ -27,48 +27,36 @@ impl AirConfig for IndexedOutputPageAir {
     type Cols<T> = IndexedOutputPageCols<T>;
 }
 
-impl<AB: PartitionedAirBuilder> Air<AB> for IndexedOutputPageAir
-where
-    AB::M: Clone,
-{
+impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for IndexedOutputPageAir {
     // This function assumes that there are (at least) two partitions for the trace.
     // The first partition is the page itself, and the first self.aux_width() columns of the
     // second partition correspond to the auxiliary columns necessary for sorting.
     // Under this assumption, this function can be called directly from a superair (without needing
     // to construct the columns manually before calling SubAir)
+    #[inline]
     fn eval(&self, builder: &mut AB) {
         assert!(builder.partitioned_main().len() >= 2);
 
-        let page_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[0].clone();
-        let aux_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[1].clone();
+        let page_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[0];
+        let aux_trace: &<AB as AirBuilder>::M = &builder.partitioned_main()[1];
 
-        let (page_local, page_next) = (page_trace.row_slice(0), page_trace.row_slice(1));
-
-        let page_local_cols =
-            PageCols::<AB::Var>::from_slice(&page_local, self.idx_len, self.data_len);
-        let page_next_cols =
-            PageCols::<AB::Var>::from_slice(&page_next, self.idx_len, self.data_len);
+        let [page_local, page_next] = [0, 1].map(|i| {
+            PageCols::<AB::Var>::from_slice(&page_trace.row_slice(i), self.idx_len, self.data_len)
+        });
 
         // The auxiliary columns to compare local index and next index are stored in the next row
-        let aux_next = aux_trace.row_slice(1);
-
-        let aux_next_cols = IndexedOutputPageAuxCols::from_slice(
-            &aux_next[0..self.aux_width()],
+        let aux_next = IndexedOutputPageAuxCols::from_slice(
+            &aux_trace.row_slice(1),
             self.idx_limb_bits,
             self.idx_decomp,
             self.idx_len,
         );
 
-        SubAir::eval(
-            self,
-            builder,
-            [page_local_cols, page_next_cols],
-            aux_next_cols,
-        );
+        SubAir::eval(self, builder, [page_local, page_next], aux_next);
     }
 }
 
-impl<AB: AirBuilder> SubAir<AB> for IndexedOutputPageAir {
+impl<AB: InteractionBuilder> SubAir<AB> for IndexedOutputPageAir {
     type IoView = [PageCols<AB::Var>; 2];
     type AuxView = IndexedOutputPageAuxCols<AB::Var>;
 
@@ -93,7 +81,7 @@ impl<AB: AirBuilder> SubAir<AB> for IndexedOutputPageAir {
 
         // Ensuring that rows are sorted by idx
         let lt_cols = IsLessThanTupleCols {
-            io: IsLessThanTupleIOCols {
+            io: IsLessThanTupleIoCols {
                 x: page_local.idx.clone(),
                 y: page_next.idx.clone(),
                 tuple_less_than: aux_next.lt_out,
@@ -107,14 +95,11 @@ impl<AB: AirBuilder> SubAir<AB> for IndexedOutputPageAir {
             self.idx_decomp,
         );
 
-        SubAir::eval(
-            &lt_air,
-            &mut builder.when_transition(),
-            lt_cols.io,
-            lt_cols.aux,
-        );
+        // Note: we do not use AssertSortedAir because it constrains keys are strictly sorted on every row,
+        // whereas we only want it on allocated rows.
+        lt_air.eval_when_transition(builder, lt_cols.io, lt_cols.aux);
 
-        // Ensuring the keys are strictly sorted (for allocated rows)
+        // Ensuring the keys are strictly sorted for allocated rows
         builder.when_transition().assert_one(or(
             AB::Expr::one() - page_next.is_alloc,
             aux_next.lt_out.into(),

@@ -9,6 +9,7 @@ use tracing::instrument;
 use crate::{
     air_builders::prover::ProverConstraintFolder,
     config::{Com, PcsProverData},
+    keygen::types::{MultiStarkProvingKey, StarkVerifyingKey},
     rap::{AnyRap, Rap},
 };
 
@@ -59,20 +60,19 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
     pub fn quotient_values<'a>(
         &self,
         raps: Vec<&'a dyn AnyRap<SC>>,
+        pk: &'a MultiStarkProvingKey<SC>,
         traces: Vec<SingleRapCommittedTraceView<'a, SC>>,
-        quotient_degrees: &'a [usize],
         public_values: &'a [Vec<Val<SC>>],
     ) -> QuotientData<SC>
     where
-        Domain<SC>: Send + Sync,
         SC::Pcs: Sync,
-        PcsProverData<SC>: Sync,
+        Domain<SC>: Send + Sync,
+        PcsProverData<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
     {
-        let inner = (raps, traces, quotient_degrees, public_values)
-            .into_par_iter()
-            .map(|(rap, trace, &quotient_degree, pis)| {
-                self.single_rap_quotient_values(rap, trace, quotient_degree, pis)
-            })
+        let inner = (raps, &pk.per_air, traces, public_values)
+            .into_par_iter() // uses rayon multizip
+            .map(|(rap, pk, trace, pis)| self.single_rap_quotient_values(rap, &pk.vk, trace, pis))
             .collect();
         QuotientData { inner }
     }
@@ -80,13 +80,14 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
     pub fn single_rap_quotient_values<'a, R>(
         &self,
         rap: &'a R,
+        vk: &StarkVerifyingKey<SC>,
         trace: SingleRapCommittedTraceView<'a, SC>,
-        quotient_degree: usize,
         public_values: &'a [Val<SC>],
     ) -> SingleQuotientData<SC>
     where
         R: for<'b> Rap<ProverConstraintFolder<'b, SC>> + Sync + ?Sized,
     {
+        let quotient_degree = vk.quotient_degree;
         let trace_domain = trace.domain;
         let quotient_domain =
             trace_domain.create_disjoint_domain(trace_domain.size() * quotient_degree);
@@ -129,6 +130,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
 
         let quotient_values = compute_single_rap_quotient_values(
             rap,
+            &vk.symbolic_constraints,
             trace_domain,
             quotient_domain,
             preprocessed_lde_on_quotient_domain,

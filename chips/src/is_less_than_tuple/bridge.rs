@@ -1,55 +1,20 @@
-use crate::{
-    is_less_than::columns::{IsLessThanAuxCols, IsLessThanCols, IsLessThanIOCols},
-    sub_chip::SubAirBridge,
-};
-use afs_stark_backend::interaction::{AirBridge, Interaction};
-use p3_field::PrimeField;
+use afs_stark_backend::interaction::InteractionBuilder;
+use itertools::Itertools;
 
-use super::{columns::IsLessThanTupleCols, IsLessThanTupleAir};
+use crate::is_less_than::columns::IsLessThanAuxCols;
 
-impl<F: PrimeField> AirBridge<F> for IsLessThanTupleAir {
-    fn sends(&self) -> Vec<Interaction<F>> {
-        let num_cols = IsLessThanTupleCols::<F>::get_width(
-            self.limb_bits().clone(),
-            self.decomp(),
-            self.tuple_len(),
-        );
-        let all_cols = (0..num_cols).collect::<Vec<usize>>();
+use super::IsLessThanTupleAir;
 
-        let cols_numbered = IsLessThanTupleCols::<usize>::from_slice(
-            &all_cols,
-            self.limb_bits().clone(),
-            self.decomp(),
-            self.tuple_len(),
-        );
-
-        SubAirBridge::sends(self, cols_numbered)
-    }
-}
-
-impl<F: PrimeField> SubAirBridge<F> for IsLessThanTupleAir {
-    fn sends(&self, col_indices: IsLessThanTupleCols<usize>) -> Vec<Interaction<F>> {
-        let mut interactions = vec![];
-
-        // we need to get the interactions from the IsLessThan subchip
-        for i in 0..self.tuple_len() {
-            let is_less_than_cols = IsLessThanCols {
-                io: IsLessThanIOCols {
-                    x: col_indices.io.x[i],
-                    y: col_indices.io.y[i],
-                    less_than: col_indices.aux.less_than[i],
-                },
-                aux: IsLessThanAuxCols {
-                    lower: col_indices.aux.less_than_aux[i].lower,
-                    lower_decomp: col_indices.aux.less_than_aux[i].lower_decomp.clone(),
-                },
-            };
-
-            let curr_interactions =
-                SubAirBridge::<F>::sends(&self.is_less_than_airs[i], is_less_than_cols);
-            interactions.extend(curr_interactions);
+impl IsLessThanTupleAir {
+    pub fn eval_interactions<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        less_than_aux: &[IsLessThanAuxCols<AB::Var>],
+    ) {
+        // We range check the limbs of lower_decomp used for each IsLessThanAir in the tuple.
+        for (air, aux_cols) in self.is_less_than_airs.iter().zip_eq(less_than_aux) {
+            // This range checks the limbs of lower_decomp
+            air.eval_interactions(builder, aux_cols.lower_decomp.clone());
         }
-
-        interactions
     }
 }

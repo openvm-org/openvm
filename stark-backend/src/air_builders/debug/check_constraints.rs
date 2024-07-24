@@ -9,8 +9,8 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::air_builders::debug::DebugConstraintBuilder;
 use crate::interaction::debug::{generate_logical_interactions, LogicalInteractions};
-use crate::interaction::InteractionType;
-use crate::rap::{AnyRap, Rap};
+use crate::interaction::{InteractionType, SymbolicInteraction};
+use crate::rap::Rap;
 
 /// Check that all constraints vanish on the subgroup.
 pub fn check_constraints<R, SC>(
@@ -98,20 +98,22 @@ pub fn check_constraints<R, SC>(
     });
 }
 
-pub fn check_logup<SC: StarkGenericConfig>(
-    raps: &[&dyn AnyRap<SC>],
-    preprocessed: &[Option<RowMajorMatrixView<Val<SC>>>],
-    partitioned_main: &[&[RowMajorMatrixView<Val<SC>>]],
+pub fn check_logup<F: Field>(
+    interactions: &[&[SymbolicInteraction<F>]],
+    preprocessed: &[Option<RowMajorMatrixView<F>>],
+    partitioned_main: &[&[RowMajorMatrixView<F>]],
+    public_values: &[Vec<F>],
 ) {
-    let mut logical_interactions = LogicalInteractions::<Val<SC>>::default();
-    for (air_idx, (rap, preprocessed, partitioned_main)) in
-        izip!(raps, preprocessed, partitioned_main).enumerate()
+    let mut logical_interactions = LogicalInteractions::<F>::default();
+    for (air_idx, (interactions, preprocessed, partitioned_main, public_values)) in
+        izip!(interactions, preprocessed, partitioned_main, public_values).enumerate()
     {
         generate_logical_interactions(
             air_idx,
-            *rap,
+            interactions,
             preprocessed,
             partitioned_main,
+            public_values,
             &mut logical_interactions,
         );
     }
@@ -120,7 +122,7 @@ pub fn check_logup<SC: StarkGenericConfig>(
     // For each bus, check each `fields` key by summing up multiplicities.
     for (bus_idx, bus_interactions) in logical_interactions.at_bus.into_iter() {
         for (fields, connections) in bus_interactions.into_iter() {
-            let mut sum = Val::<SC>::zero();
+            let mut sum = F::zero();
             for (_, itype, count) in &connections {
                 match *itype {
                     InteractionType::Send => {
