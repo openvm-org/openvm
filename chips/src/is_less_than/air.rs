@@ -59,7 +59,7 @@ impl IsLessThanAir {
 
         builder.assert_eq(intermed_val, check_val);
 
-        // The following constraints that lower is of at most limb_bits bits
+        // The following constrains that lower is of at most limb_bits bits
 
         // constrain that the decomposition of lower_bits is correct
         // each limb will be range checked

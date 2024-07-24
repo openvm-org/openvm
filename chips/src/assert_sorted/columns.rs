@@ -40,18 +40,12 @@ impl<T: Clone> AssertSortedCols<T> {
     }
 
     pub fn get_width(limb_bits: &[usize], decomp: usize) -> usize {
-        let key_vec_len = limb_bits.len();
-
-        let mut width = 0;
-        // for the key itself
-        width += key_vec_len;
-
-        // for the less than next key indicator
-        width += 1;
-
-        let lt_chip = IsLessThanTupleAir::new(0, limb_bits.to_vec(), decomp);
-        width += IsLessThanTupleAuxCols::<T>::width(&lt_chip);
-
-        width
+        limb_bits.len()
+            + 1
+            + IsLessThanTupleAuxCols::<T>::width(&IsLessThanTupleAir::new(
+                0,
+                limb_bits.to_vec(),
+                decomp,
+            ))
     }
 }
