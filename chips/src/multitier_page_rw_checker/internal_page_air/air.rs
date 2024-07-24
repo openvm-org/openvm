@@ -74,9 +74,6 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
         );
         let [cached_data, next_data] = [0, 1]
             .map(|i| PtrPageCols::from_slice(&data.row_slice(i), self.idx_len, COMMITMENT_LEN));
-        // for (i, p) in pi.iter().enumerate().take(COMMITMENT_LEN) {
-        //     builder.assert_eq(*p, metadata.own_commitment[i]);
-        // }
         builder.assert_eq(cached_data.internal_marker, AB::Expr::from_canonical_u64(2));
         builder.assert_eq(metadata.mult_alloc, cached_data.is_alloc * metadata.mult);
         builder.assert_eq(
