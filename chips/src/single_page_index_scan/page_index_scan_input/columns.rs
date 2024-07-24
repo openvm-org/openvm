@@ -40,7 +40,7 @@ impl<T: Clone> PageIndexScanInputLocalCols<T> {
     pub fn from_slice(
         slc: &[T],
         idx_len: usize,
-        idx_limb_bits: Vec<usize>,
+        idx_limb_bits: &[usize],
         decomp: usize,
         cmp: Comp,
     ) -> Self {
@@ -120,7 +120,7 @@ impl<T: Clone> PageIndexScanInputCols<T> {
         aux_slc: &[T],
         idx_len: usize,
         data_len: usize,
-        idx_limb_bits: Vec<usize>,
+        idx_limb_bits: &[usize],
         decomp: usize,
         cmp: Comp,
     ) -> Self {
@@ -138,7 +138,7 @@ impl<T: Clone> PageIndexScanInputCols<T> {
         slc: &[T],
         idx_len: usize,
         data_len: usize,
-        idx_limb_bits: Vec<usize>,
+        idx_limb_bits: &[usize],
         decomp: usize,
         cmp: Comp,
     ) -> Self {
@@ -156,7 +156,7 @@ impl<T: Clone> PageIndexScanInputCols<T> {
     pub fn get_width(
         idx_len: usize,
         data_len: usize,
-        idx_limb_bits: Vec<usize>,
+        idx_limb_bits: &[usize],
         decomp: usize,
         cmp: Comp,
     ) -> usize {

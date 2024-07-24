@@ -12,9 +12,9 @@ impl ExecutionAir {
         local: ExecutionCols<AB::Var>,
     ) {
         let fields = iter::once(local.clk)
+            .chain(iter::once(local.op_type))
             .chain(local.idx)
-            .chain(local.data)
-            .chain(iter::once(local.op_type));
+            .chain(local.data);
         builder.push_send(self.bus_index, fields, local.mult);
     }
 }

@@ -9,7 +9,7 @@ use crate::sub_chip::{AirConfig, SubAir};
 
 use super::columns::{IsEqualVecAuxCols, IsEqualVecCols, IsEqualVecIoCols};
 
-#[derive(Default)]
+#[derive(Clone, Copy, Debug)]
 pub struct IsEqualVecAir {
     pub vec_len: usize,
 }

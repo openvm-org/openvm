@@ -28,9 +28,8 @@ impl AssertSortedAir {
 impl<F: Field> BaseAir<F> for AssertSortedAir {
     fn width(&self) -> usize {
         AssertSortedCols::<F>::get_width(
-            self.is_less_than_tuple_air.limb_bits().clone(),
+            self.is_less_than_tuple_air.limb_bits(),
             self.is_less_than_tuple_air.decomp,
-            self.is_less_than_tuple_air.tuple_len(),
         )
     }
 }
@@ -46,16 +45,14 @@ impl<AB: InteractionBuilder> Air<AB> for AssertSortedAir {
 
         let local_cols = AssertSortedCols::from_slice(
             local,
-            self.is_less_than_tuple_air.limb_bits().clone(),
+            self.is_less_than_tuple_air.limb_bits(),
             self.is_less_than_tuple_air.decomp,
-            self.is_less_than_tuple_air.tuple_len(),
         );
 
         let next_cols = AssertSortedCols::from_slice(
             next,
-            self.is_less_than_tuple_air.limb_bits().clone(),
+            self.is_less_than_tuple_air.limb_bits(),
             self.is_less_than_tuple_air.decomp,
-            self.is_less_than_tuple_air.tuple_len(),
         );
 
         // constrain that the current key is less than the next

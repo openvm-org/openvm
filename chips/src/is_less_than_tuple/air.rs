@@ -23,6 +23,8 @@ pub struct IsLessThanTupleAir {
     pub decomp: usize,
     /// IsLessThanAirs for each tuple element
     pub is_less_than_airs: Vec<IsLessThanAir>,
+    // Better to store this separately to avoid re-allocating vectors each time
+    limb_bits: Vec<usize>,
 }
 
 impl IsLessThanTupleAir {
@@ -36,7 +38,16 @@ impl IsLessThanTupleAir {
             bus_index,
             decomp,
             is_less_than_airs,
+            limb_bits,
         }
+    }
+
+    pub fn tuple_len(&self) -> usize {
+        self.is_less_than_airs.len()
+    }
+
+    pub fn limb_bits(&self) -> &[usize] {
+        &self.limb_bits
     }
 
     /// FOR INTERNAL USE ONLY when this AIR is used as a sub-AIR but the comparators `x, y` are on different rows. See [IsLessThanAir::eval_without_interactions].

@@ -39,7 +39,8 @@ derive_more = "0.99.18"
 tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }
 tracing-forest = { version = "0.1.6", features = ["ansi", "smallvec"] }
 
-afs-stark-backend = { path = "../stark-backend" }
+afs-stark-backend = { path = "../stark-backend", default-features = false }
 
 [features]
 default = []
+parallel = ["p3-maybe-rayon/parallel"]

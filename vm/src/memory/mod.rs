@@ -1,6 +1,6 @@
-use std::array::from_fn;
-
+use afs_chips::offline_checker::OfflineCheckerOperation;
 use p3_field::PrimeField64;
+use std::array::from_fn;
 
 pub mod expand;
 pub mod offline_checker;
@@ -21,6 +21,25 @@ pub struct MemoryAccess<const WORD_SIZE: usize, F> {
     pub address_space: F,
     pub address: F,
     pub data: [F; WORD_SIZE],
+}
+
+impl<const WORD_SIZE: usize, F: PrimeField64> OfflineCheckerOperation<F>
+    for MemoryAccess<WORD_SIZE, F>
+{
+    fn get_timestamp(&self) -> usize {
+        self.timestamp
+    }
+
+    fn get_idx(&self) -> Vec<F> {
+        vec![self.address_space, self.address]
+    }
+
+    fn get_data(&self) -> Vec<F> {
+        self.data.to_vec()
+    }
+    fn get_op_type(&self) -> u8 {
+        self.op_type as u8
+    }
 }
 
 // panics if the word is not equal to decompose(elem) for some elem: F
