@@ -1,4 +1,4 @@
-use afs_stark_backend::air_builders::PartitionedAirBuilder;
+use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
@@ -18,7 +18,7 @@ impl<const COMMITMENT_LEN: usize> AirConfig for RootSignalAir<COMMITMENT_LEN> {
 }
 
 impl<
-        AB: AirBuilder + AirBuilderWithPublicValues + PartitionedAirBuilder,
+        AB: AirBuilder + AirBuilderWithPublicValues + PartitionedAirBuilder + InteractionBuilder,
         const COMMITMENT_LEN: usize,
     > Air<AB> for RootSignalAir<COMMITMENT_LEN>
 where
@@ -29,8 +29,10 @@ where
         let main: &<AB as AirBuilder>::M = &builder.partitioned_main()[0].clone();
         let local = main.row_slice(0);
         let pi = builder.public_values().to_vec();
-        for i in 0..COMMITMENT_LEN {
-            builder.assert_eq(pi[i], local[i]);
-        }
+        self.eval_interactions(
+            builder,
+            &RootSignalCols::from_slice(&local, self.idx_len, self.is_init),
+            &pi,
+        );
     }
 }

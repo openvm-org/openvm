@@ -1,6 +1,6 @@
 use afs_derive::AlignedBorrow;
 
-use crate::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
+use crate::is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir};
 
 // Since AssertSortedChip contains a LessThanChip subchip, a subset of the columns are those of the
 // LessThanChip
@@ -12,7 +12,9 @@ pub struct AssertSortedCols<T> {
 }
 
 impl<T: Clone> AssertSortedCols<T> {
-    pub fn from_slice(slc: &[T], limb_bits: Vec<usize>, decomp: usize, key_vec_len: usize) -> Self {
+    pub fn from_slice(slc: &[T], limb_bits: &[usize], decomp: usize) -> Self {
+        let key_vec_len = limb_bits.len();
+
         let mut curr_start_idx = 0;
         let mut curr_end_idx = key_vec_len;
 
@@ -26,12 +28,9 @@ impl<T: Clone> AssertSortedCols<T> {
         let less_than_next_key = slc[curr_start_idx].clone();
         curr_start_idx = curr_end_idx;
 
-        let is_less_than_tuple_aux = IsLessThanTupleAuxCols::from_slice(
-            &slc[curr_start_idx..],
-            limb_bits,
-            decomp,
-            key_vec_len,
-        );
+        let lt_chip = IsLessThanTupleAir::new(0, limb_bits.to_vec(), decomp);
+        let is_less_than_tuple_aux =
+            IsLessThanTupleAuxCols::from_slice(&slc[curr_start_idx..], &lt_chip);
 
         Self {
             key,
@@ -40,35 +39,13 @@ impl<T: Clone> AssertSortedCols<T> {
         }
     }
 
-    pub fn get_width(limb_bits: Vec<usize>, decomp: usize, key_vec_len: usize) -> usize {
-        let mut width = 0;
-        // for the key itself
-        width += key_vec_len;
-
-        // for the less than next key indicator
-        width += 1;
-
-        // for the less_than indicators
-        width += key_vec_len;
-
-        // for the lowers
-        width += key_vec_len;
-
-        // for the decomposed lowers
-        for &limb_bit in limb_bits.iter() {
-            let num_limbs = (limb_bit + decomp - 1) / decomp;
-            width += num_limbs + 1;
-        }
-
-        // prods
-        width += key_vec_len;
-
-        // for the inverses
-        width += key_vec_len;
-
-        // for the cumulative less_than
-        width += key_vec_len;
-
-        width
+    pub fn get_width(limb_bits: &[usize], decomp: usize) -> usize {
+        limb_bits.len()
+            + 1
+            + IsLessThanTupleAuxCols::<T>::width(&IsLessThanTupleAir::new(
+                0,
+                limb_bits.to_vec(),
+                decomp,
+            ))
     }
 }

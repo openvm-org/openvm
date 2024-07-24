@@ -109,7 +109,7 @@ impl<T: Clone> GroupByCols<T> {
     /// order of segments in a slice. Indexes by the respective partition, not by the complete row.
     pub fn index_map(group_by_air: &GroupByAir) -> GroupByColsIndexMap {
         let num_group_by = group_by_air.group_by_cols.len();
-        let eq_vec_width = IsEqualVecAuxCols::<T>::get_width(num_group_by + 1);
+        let eq_vec_width = IsEqualVecAuxCols::<T>::width(num_group_by + 1);
 
         let allocated_idx = 0;
         let page_range = if !group_by_air.sorted {

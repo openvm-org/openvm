@@ -14,7 +14,7 @@ pub struct IsLessThanAir {
     /// The bus index for sends to range chip
     pub bus_index: usize,
     /// The maximum number of bits for the numbers to compare
-    pub limb_bits: usize,
+    pub max_bits: usize,
     /// The number of bits to decompose each number into, for less than checking
     pub decomp: usize,
     /// num_limbs is the number of limbs we decompose each input into, not including the last shifted limb
@@ -22,12 +22,12 @@ pub struct IsLessThanAir {
 }
 
 impl IsLessThanAir {
-    pub fn new(bus_index: usize, limb_bits: usize, decomp: usize) -> Self {
+    pub fn new(bus_index: usize, max_bits: usize, decomp: usize) -> Self {
         Self {
             bus_index,
-            limb_bits,
+            max_bits,
             decomp,
-            num_limbs: (limb_bits + decomp - 1) / decomp,
+            num_limbs: (max_bits + decomp - 1) / decomp,
         }
     }
 
@@ -48,20 +48,18 @@ impl IsLessThanAir {
         let lower = local_aux.lower;
         let lower_decomp = local_aux.lower_decomp.clone();
 
-        // to range check the last limb of the decomposed lower_bits, we need to shift it to make sure it is in
-        // the correct range
-        let last_limb_shift = (self.decomp - (self.limb_bits % self.decomp)) % self.decomp;
-
         // this is the desired intermediate value (i.e. 2^limb_bits + y - x - 1)
         let intermed_val =
-            y - x + AB::Expr::from_canonical_u64(1 << self.limb_bits) - AB::Expr::one();
+            y - x + AB::Expr::from_canonical_u64(1 << self.max_bits) - AB::Expr::one();
 
         // constrain that the lower_bits + less_than * 2^limb_bits is the correct intermediate sum
         // note that the intermediate value will be >= 2^limb_bits if and only if x < y, and check_val will therefore be
         // the correct value if and only if less_than is the indicator for whether x < y
-        let check_val = lower + less_than * AB::Expr::from_canonical_u64(1 << self.limb_bits);
+        let check_val = lower + less_than * AB::Expr::from_canonical_u64(1 << self.max_bits);
 
         builder.assert_eq(intermed_val, check_val);
+
+        // The following constrains that lower is of at most limb_bits bits
 
         // constrain that the decomposition of lower_bits is correct
         // each limb will be range checked
@@ -75,12 +73,17 @@ impl IsLessThanAir {
 
         builder.assert_eq(lower_from_decomp, lower);
 
-        let shifted_val =
-            lower_decomp[self.num_limbs - 1] * AB::Expr::from_canonical_u64(1 << last_limb_shift);
+        // Ensuring, in case decomp does not divide max_bits, then the last lower_decomp is
+        // shifted correctly
+        if self.max_bits % self.decomp != 0 {
+            let last_limb_shift = (self.decomp - (self.max_bits % self.decomp)) % self.decomp;
 
-        // constrain that the shifted last limb is shifted correctly
-        // this shifted last limb will also be range checked
-        builder.assert_eq(lower_decomp[self.num_limbs], shifted_val);
+            builder.assert_eq(
+                (*lower_decomp.last().unwrap()).into(),
+                lower_decomp[lower_decomp.len() - 2]
+                    * AB::Expr::from_canonical_u64(1 << last_limb_shift),
+            );
+        }
 
         // constrain that less_than is a boolean
         builder.assert_bool(less_than);
@@ -93,7 +96,7 @@ impl AirConfig for IsLessThanAir {
 
 impl<F: Field> BaseAir<F> for IsLessThanAir {
     fn width(&self) -> usize {
-        IsLessThanCols::<F>::get_width(self.limb_bits, self.decomp)
+        IsLessThanCols::<F>::width(self)
     }
 }
 

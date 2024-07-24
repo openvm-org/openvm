@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::is_less_than::IsLessThanAir;
 use crate::range_gate::RangeCheckerGateChip;
 
 use super::super::is_less_than::IsLessThanChip;
@@ -14,10 +15,9 @@ use p3_matrix::dense::DenseMatrix;
 
 #[test]
 fn test_flatten_fromslice_roundtrip() {
-    let limb_bits = 16;
-    let decomp = 8;
+    let lt_air = IsLessThanAir::new(0, 16, 8);
 
-    let num_cols = IsLessThanCols::<usize>::get_width(limb_bits, decomp);
+    let num_cols = IsLessThanCols::<usize>::width(&lt_air);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
     let cols_numbered = IsLessThanCols::<usize>::from_slice(&all_cols);

@@ -29,6 +29,10 @@ pub fn to_vcols<F: Field>(cols: &[usize]) -> Vec<VirtualPairCol<F>> {
         .collect()
 }
 
+pub fn not<AB: AirBuilder>(a: AB::Expr) -> AB::Expr {
+    AB::Expr::one() - a
+}
+
 pub fn and<AB: AirBuilder>(a: AB::Expr, b: AB::Expr) -> AB::Expr {
     a * b
 }

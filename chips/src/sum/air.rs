@@ -43,8 +43,8 @@ impl<AB: InteractionBuilder> Air<AB> for SumAir {
         let local: &[AB::Var] = (*local).borrow();
         let next: &[AB::Var] = (*next).borrow();
 
-        let local = SumCols::from_slice(local, self.is_lt_air.limb_bits, self.is_lt_air.decomp);
-        let next = SumCols::from_slice(next, self.is_lt_air.limb_bits, self.is_lt_air.decomp);
+        let local = SumCols::from_slice(local, &self.is_lt_air);
+        let next = SumCols::from_slice(next, &self.is_lt_air);
 
         builder.assert_bool(local.is_final);
         builder.when_last_row().assert_one(local.is_final);

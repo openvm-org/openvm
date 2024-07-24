@@ -1,7 +1,7 @@
 use afs_derive::AlignedBorrow;
 use p3_air::BaseAir;
 
-use crate::is_less_than::columns::IsLessThanAuxCols;
+use crate::is_less_than::{columns::IsLessThanAuxCols, IsLessThanAir};
 
 use super::SumAir;
 
@@ -16,9 +16,8 @@ pub struct SumCols<T> {
 }
 
 impl<T: Clone> SumCols<T> {
-    pub fn from_slice(slc: &[T], limb_bits: usize, decomp: usize) -> Self {
-        let cols = SumCols::<usize>::index_map(limb_bits, decomp);
-
+    pub fn from_slice(slc: &[T], lt_air: &IsLessThanAir) -> Self {
+        let cols = SumCols::<usize>::index_map(lt_air);
         let key = slc[cols.key].clone();
         let value = slc[cols.value].clone();
         let partial_sum = slc[cols.partial_sum].clone();
@@ -34,8 +33,8 @@ impl<T: Clone> SumCols<T> {
         }
     }
 
-    pub fn index_map(limb_bits: usize, decomp: usize) -> SumCols<usize> {
-        let num_aux_cols = IsLessThanAuxCols::<usize>::get_width(limb_bits, decomp);
+    pub fn index_map(lt_air: &IsLessThanAir) -> SumCols<usize> {
+        let num_aux_cols = IsLessThanAuxCols::<usize>::width(lt_air);
         SumCols {
             key: 0,
             value: 1,
@@ -43,7 +42,7 @@ impl<T: Clone> SumCols<T> {
             is_final: 3,
             is_lt_aux_cols: IsLessThanAuxCols {
                 lower: 4,
-                lower_decomp: (5..5 + num_aux_cols).collect(),
+                lower_decomp: (5..5 + num_aux_cols - 1).collect(),
             },
         }
     }
@@ -51,6 +50,6 @@ impl<T: Clone> SumCols<T> {
 
 impl<T: Clone> BaseAir<T> for SumAir {
     fn width(&self) -> usize {
-        4 + IsLessThanAuxCols::<T>::get_width(self.is_lt_air.limb_bits, self.is_lt_air.decomp)
+        4 + IsLessThanAuxCols::<T>::width(&self.is_lt_air)
     }
 }

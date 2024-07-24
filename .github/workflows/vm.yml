@@ -32,9 +32,9 @@ jobs:
       - name: Run vm crate tests
         working-directory: vm
         run: |
-          cargo test --profile=fast
+          cargo test --profile=fast --features parallel
 
       - name: Run compiler crate tests
         working-directory: vm
         run: |
-          cargo test --profile=fast
+          cargo test --profile=fast --features parallel

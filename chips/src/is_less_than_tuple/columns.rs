@@ -2,6 +2,8 @@ use afs_derive::AlignedBorrow;
 
 use crate::{is_equal_vec::columns::IsEqualVecAuxCols, is_less_than::columns::IsLessThanAuxCols};
 
+use super::IsLessThanTupleAir;
+
 #[derive(Default, Debug, AlignedBorrow)]
 pub struct IsLessThanTupleIoCols<T> {
     pub x: Vec<T>,
@@ -26,7 +28,7 @@ impl<T: Clone> IsLessThanTupleIoCols<T> {
         flattened
     }
 
-    pub fn get_width(tuple_len: usize) -> usize {
+    pub fn width(tuple_len: usize) -> usize {
         tuple_len + tuple_len + 1
     }
 }
@@ -40,66 +42,26 @@ pub struct IsLessThanTupleAuxCols<T> {
 }
 
 impl<T: Clone> IsLessThanTupleAuxCols<T> {
-    pub fn from_slice(slc: &[T], limb_bits: Vec<usize>, decomp: usize, tuple_len: usize) -> Self {
-        assert!(limb_bits.len() == tuple_len);
+    pub fn from_slice(slc: &[T], lt_chip: &IsLessThanTupleAir) -> Self {
+        let tuple_len = lt_chip.tuple_len();
 
-        let mut curr_start_idx = 0;
-        let mut curr_end_idx = tuple_len;
+        let mut iter = slc.iter().cloned();
+        let mut take = |n: usize| iter.by_ref().take(n).collect::<Vec<T>>();
 
-        let less_than = slc[curr_start_idx..curr_end_idx].to_vec();
+        let less_than = take(tuple_len);
 
-        curr_start_idx = curr_end_idx;
-        curr_end_idx += tuple_len;
-
-        // get the lower bits for each 2^limb_bits[i] + y[i] - x[i] - 1
-        let lower_vec = slc[curr_start_idx..curr_end_idx].to_vec();
-
-        // get the lower bits decompositions
-        let mut lower_decomp_vec: Vec<Vec<T>> = vec![];
-
-        for &limb_bit in limb_bits.iter() {
-            let num_limbs = (limb_bit + decomp - 1) / decomp;
-            curr_start_idx = curr_end_idx;
-            curr_end_idx += num_limbs + 1;
-
-            let mut lower_bits_curr: Vec<T> = vec![];
-
-            for j in 0..(num_limbs + 1) {
-                lower_bits_curr.push(slc[curr_start_idx + j].clone());
-            }
-
-            lower_decomp_vec.push(lower_bits_curr);
-        }
-
-        curr_start_idx = curr_end_idx;
-        curr_end_idx += tuple_len;
-
-        // generate the less_than_aux columns
         let mut less_than_aux: Vec<IsLessThanAuxCols<T>> = vec![];
-        for i in 0..tuple_len {
-            let less_than_col = IsLessThanAuxCols {
-                lower: lower_vec[i].clone(),
-                lower_decomp: lower_decomp_vec[i].clone(),
-            };
-
+        for air in lt_chip.is_less_than_airs.iter() {
+            let cur_width = IsLessThanAuxCols::<T>::width(air);
+            let less_than_col = IsLessThanAuxCols::from_slice(&take(cur_width));
             less_than_aux.push(less_than_col);
         }
 
-        // prods[i] indicates whether x[i] == y[i] up to the i-th index
-        let prods = slc[curr_start_idx..curr_end_idx].to_vec();
-
-        curr_start_idx = curr_end_idx;
-        curr_end_idx += tuple_len;
-
-        // get invs
-        let invs = slc[curr_start_idx..curr_end_idx].to_vec();
-
-        curr_start_idx = curr_end_idx;
-        curr_end_idx += tuple_len;
-
+        let prods = take(tuple_len);
+        let invs = take(tuple_len);
         let is_equal_vec_aux = IsEqualVecAuxCols { prods, invs };
 
-        let less_than_cumulative = slc[curr_start_idx..curr_end_idx].to_vec();
+        let less_than_cumulative = take(tuple_len);
 
         Self {
             less_than,
@@ -115,11 +77,7 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
         flattened.extend_from_slice(&self.less_than);
 
         for i in 0..self.less_than_aux.len() {
-            flattened.push(self.less_than_aux[i].lower.clone());
-        }
-
-        for i in 0..self.less_than_aux.len() {
-            flattened.extend_from_slice(&self.less_than_aux[i].lower_decomp);
+            flattened.extend_from_slice(&self.less_than_aux[i].flatten());
         }
 
         flattened.extend_from_slice(&self.is_equal_vec_aux.prods);
@@ -129,26 +87,16 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
 
         flattened
     }
-}
 
-impl<T> IsLessThanTupleAuxCols<T> {
-    pub fn get_width(limb_bits: Vec<usize>, decomp: usize, tuple_len: usize) -> usize {
-        let mut width = 0;
-        // for the less than indicator
-        width += tuple_len;
-        // for the lowers
-        width += tuple_len;
-        // for the decomposed lowers
-        for &limb_bit in limb_bits.iter() {
-            let num_limbs = (limb_bit + decomp - 1) / decomp;
-            width += num_limbs + 1;
+    pub fn width(lt_air: &IsLessThanTupleAir) -> usize {
+        let mut width = 2 * lt_air.tuple_len();
+        for air in lt_air.is_less_than_airs.iter() {
+            width += IsLessThanAuxCols::<T>::width(air);
         }
-        // for the prods
-        width += tuple_len;
-        // for the invs
-        width += tuple_len;
-        // for the cumulative less_than
-        width += tuple_len;
+        // TODO: the +1 here is a hack to account for the specific way IsEqualVec chip
+        // is used in this chip. We should use IsEqualVec as a SubAir (instead of duplicating
+        // the logic of trace generation, AIR constraints etc) and clean this up
+        width += IsEqualVecAuxCols::<T>::width(lt_air.tuple_len()) + 1;
 
         width
     }
@@ -161,14 +109,11 @@ pub struct IsLessThanTupleCols<T> {
 }
 
 impl<T: Clone> IsLessThanTupleCols<T> {
-    pub fn from_slice(slc: &[T], limb_bits: Vec<usize>, decomp: usize, tuple_len: usize) -> Self {
+    pub fn from_slice(slc: &[T], lt_air: &IsLessThanTupleAir) -> Self {
+        let tuple_len = lt_air.tuple_len();
+
         let io = IsLessThanTupleIoCols::from_slice(&slc[..2 * tuple_len + 1], tuple_len);
-        let aux = IsLessThanTupleAuxCols::from_slice(
-            &slc[2 * tuple_len + 1..],
-            limb_bits,
-            decomp,
-            tuple_len,
-        );
+        let aux = IsLessThanTupleAuxCols::from_slice(&slc[2 * tuple_len + 1..], lt_air);
 
         Self { io, aux }
     }
@@ -179,8 +124,8 @@ impl<T: Clone> IsLessThanTupleCols<T> {
         flattened
     }
 
-    pub fn get_width(limb_bits: Vec<usize>, decomp: usize, tuple_len: usize) -> usize {
-        IsLessThanTupleIoCols::<T>::get_width(tuple_len)
-            + IsLessThanTupleAuxCols::<T>::get_width(limb_bits, decomp, tuple_len)
+    pub fn width(lt_air: &IsLessThanTupleAir) -> usize {
+        IsLessThanTupleIoCols::<T>::width(lt_air.tuple_len())
+            + IsLessThanTupleAuxCols::<T>::width(lt_air)
     }
 }

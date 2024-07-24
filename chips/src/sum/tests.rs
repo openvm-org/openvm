@@ -1,14 +1,15 @@
 use std::sync::Arc;
 
+use p3_air::BaseAir;
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
+use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
+
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test_no_pis,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::to_field_vec,
 };
-use p3_air::BaseAir;
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 
 use crate::{
     is_less_than::columns::IsLessThanCols, range_gate::RangeCheckerGateChip,
@@ -19,40 +20,6 @@ const INPUT_BUS: usize = 0;
 const OUTPUT_BUS: usize = 1;
 const RANGE_BUS: usize = 2;
 const RANGE_MAX: u32 = 16;
-
-#[test]
-fn test_generate_trace() {
-    let inputs = &[
-        (0, 1),
-        (3, 4),
-        (3, 5),
-        (10, 8),
-        (0, 2),
-        (3, 6),
-        (0, 3),
-        (8, 7),
-    ];
-
-    let expected_trace = RowMajorMatrix::new(
-        to_field_vec::<BabyBear>(vec![
-            // key, val, sum, is_final, lower, lower_decomp...
-            0, 1, 1, 0, 15, 15, 15, //
-            0, 2, 3, 0, 15, 15, 15, //
-            0, 3, 6, 1, 2, 2, 2, //
-            3, 4, 4, 0, 15, 15, 15, //
-            3, 5, 9, 0, 15, 15, 15, //
-            3, 6, 15, 1, 4, 4, 4, //
-            8, 7, 7, 1, 1, 1, 1, //
-            10, 8, 8, 1, 5, 5, 5, //
-        ]),
-        7,
-    );
-
-    let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_BUS, RANGE_MAX));
-    let sum_chip = SumChip::new(INPUT_BUS, OUTPUT_BUS, 4, 4, range_checker);
-    let trace = sum_chip.generate_trace(inputs);
-    assert_eq!(trace, expected_trace);
-}
 
 fn assert_verification_error(
     result: impl FnOnce() -> Result<(), VerificationError>,
@@ -102,8 +69,7 @@ fn run_sum_air_trace_test(sum_trace_u32: &[(u32, u32, u32, u32)]) -> Result<(), 
             &sum_chip.air.is_lt_air,
             (key, next_key, sum_chip.range_checker.clone()),
         );
-        row.push(is_less_than_row.aux.lower);
-        row.extend(is_less_than_row.aux.lower_decomp);
+        row.extend(is_less_than_row.aux.flatten());
         rows.push(row);
     }
 

@@ -87,6 +87,10 @@ impl Page {
         self.rows.is_empty()
     }
 
+    pub fn is_full(&self) -> bool {
+        self.rows.last().unwrap().is_alloc == 1
+    }
+
     /// Returns a random page with the given parameters in the proper format
     /// Note that max_idx and max_data are not inclusive
     pub fn random(

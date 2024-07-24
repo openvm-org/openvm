@@ -29,8 +29,9 @@ impl IsLessThanChip {
         decomp: usize,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
-        let air = IsLessThanAir::new(bus_index, limb_bits, decomp);
-
-        Self { air, range_checker }
+        Self {
+            air: IsLessThanAir::new(bus_index, limb_bits, decomp),
+            range_checker,
+        }
     }
 }

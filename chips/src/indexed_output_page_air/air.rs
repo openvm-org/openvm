@@ -9,10 +9,7 @@ use super::{
 };
 use crate::{
     common::page_cols::PageCols,
-    is_less_than_tuple::{
-        columns::{IsLessThanTupleCols, IsLessThanTupleIoCols},
-        IsLessThanTupleAir,
-    },
+    is_less_than_tuple::columns::{IsLessThanTupleCols, IsLessThanTupleIoCols},
     sub_chip::{AirConfig, SubAir},
     utils::{implies, or},
 };
@@ -45,12 +42,7 @@ impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for IndexedOutputPa
         });
 
         // The auxiliary columns to compare local index and next index are stored in the next row
-        let aux_next = IndexedOutputPageAuxCols::from_slice(
-            &aux_trace.row_slice(1),
-            self.idx_limb_bits,
-            self.idx_decomp,
-            self.idx_len,
-        );
+        let aux_next = IndexedOutputPageAuxCols::from_slice(&aux_trace.row_slice(1), self);
 
         SubAir::eval(self, builder, [page_local, page_next], aux_next);
     }
@@ -89,15 +81,10 @@ impl<AB: InteractionBuilder> SubAir<AB> for IndexedOutputPageAir {
             aux: aux_next.lt_cols.clone(),
         };
 
-        let lt_air = IsLessThanTupleAir::new(
-            self.range_bus_index,
-            vec![self.idx_limb_bits; self.idx_len],
-            self.idx_decomp,
-        );
-
         // Note: we do not use AssertSortedAir because it constrains keys are strictly sorted on every row,
         // whereas we only want it on allocated rows.
-        lt_air.eval_when_transition(builder, lt_cols.io, lt_cols.aux);
+        self.lt_air
+            .eval_when_transition(builder, lt_cols.io, lt_cols.aux);
 
         // Ensuring the keys are strictly sorted for allocated rows
         builder.when_transition().assert_one(or(

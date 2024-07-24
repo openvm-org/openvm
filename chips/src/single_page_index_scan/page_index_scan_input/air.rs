@@ -111,11 +111,7 @@ impl PageIndexScanInputAir {
                 self.idx_len
                     + 1
                     + 1
-                    + IsLessThanTupleAuxCols::<usize>::get_width(
-                        is_less_than_tuple_air.limb_bits(),
-                        is_less_than_tuple_air.decomp,
-                        self.idx_len,
-                    )
+                    + IsLessThanTupleAuxCols::<usize>::width(is_less_than_tuple_air)
             }
             PageIndexScanInputAirVariants::Lte(NonStrictCompAir {
                 is_less_than_tuple_air,
@@ -132,16 +128,12 @@ impl PageIndexScanInputAir {
                     + 1
                     + 1
                     + 1
-                    + IsLessThanTupleAuxCols::<usize>::get_width(
-                        is_less_than_tuple_air.limb_bits(),
-                        is_less_than_tuple_air.decomp,
-                        self.idx_len,
-                    )
-                    + IsEqualVecAuxCols::<usize>::get_width(self.idx_len)
+                    + IsLessThanTupleAuxCols::<usize>::width(is_less_than_tuple_air)
+                    + IsEqualVecAuxCols::<usize>::width(self.idx_len)
             }
             PageIndexScanInputAirVariants::Eq(EqCompAir { .. }) => {
                 // x, satisfies_pred, send_row, is_equal_vec_aux_cols
-                self.idx_len + 1 + 1 + IsEqualVecAuxCols::<usize>::get_width(self.idx_len)
+                self.idx_len + 1 + 1 + IsEqualVecAuxCols::<usize>::width(self.idx_len)
             }
         }
     }
@@ -168,7 +160,7 @@ impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
             }) => PageIndexScanInputCols::<F>::get_width(
                 self.idx_len,
                 self.data_len,
-                is_less_than_tuple_air.limb_bits().clone(),
+                &is_less_than_tuple_air.limb_bits,
                 is_less_than_tuple_air.decomp,
                 Comp::Lt,
             ),
@@ -182,7 +174,7 @@ impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
             }) => PageIndexScanInputCols::<F>::get_width(
                 self.idx_len,
                 self.data_len,
-                is_less_than_tuple_air.limb_bits().clone(),
+                &is_less_than_tuple_air.limb_bits,
                 is_less_than_tuple_air.decomp,
                 Comp::Lte,
             ),
@@ -191,7 +183,7 @@ impl<F: Field> BaseAir<F> for PageIndexScanInputAir {
                 PageIndexScanInputCols::<F>::get_width(
                     self.idx_len,
                     self.data_len,
-                    vec![],
+                    &[],
                     0,
                     Comp::Eq,
                 )
@@ -233,10 +225,10 @@ where
                 is_less_than_tuple_air,
                 ..
             }) => (
-                is_less_than_tuple_air.limb_bits(),
+                &is_less_than_tuple_air.limb_bits,
                 is_less_than_tuple_air.decomp,
             ),
-            PageIndexScanInputAirVariants::Eq(EqCompAir { .. }) => (vec![], 0),
+            PageIndexScanInputAirVariants::Eq(EqCompAir { .. }) => (&vec![], 0),
         };
 
         // get the comparator
@@ -256,7 +248,7 @@ where
             &local_aux,
             self.idx_len,
             self.data_len,
-            idx_limb_bits.clone(),
+            idx_limb_bits,
             decomp,
             cmp,
         );

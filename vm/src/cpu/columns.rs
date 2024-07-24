@@ -145,7 +145,7 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
         options.num_enabled_instructions()
             + (CPU_MAX_ACCESSES_PER_CYCLE * MemoryAccessCols::<WORD_SIZE, T>::get_width())
             + 1
-            + IsEqualVecAuxCols::<T>::get_width(WORD_SIZE)
+            + IsEqualVecAuxCols::<T>::width(WORD_SIZE)
     }
 }
 

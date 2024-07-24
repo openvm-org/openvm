@@ -26,13 +26,17 @@ const TRACE_DEGREE: usize = 16;
 #[test]
 fn test_offline_checker() {
     let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
-    let mut chip = MemoryChip::new(
+    let mut memory_chip = MemoryChip::new(
         ADDR_SPACE_LIMB_BITS,
         POINTER_LIMB_BITS,
         CLK_LIMB_BITS,
         DECOMP,
     );
-    let requester = DummyInteractionAir::new(2 + chip.air.mem_width(), true, MEMORY_BUS);
+    let requester = DummyInteractionAir::new(
+        2 + memory_chip.air.offline_checker.idx_data_width(),
+        true,
+        MEMORY_BUS,
+    );
 
     let ops: Vec<MemoryAccess<WORD_SIZE, BabyBear>> = vec![
         MemoryAccess {
@@ -120,17 +124,17 @@ fn test_offline_checker() {
         match op.op_type {
             OpType::Read => {
                 assert_eq!(
-                    chip.read_word(op.timestamp, op.address_space, op.address),
+                    memory_chip.read_word(op.timestamp, op.address_space, op.address),
                     op.data
                 );
             }
             OpType::Write => {
-                chip.write_word(op.timestamp, op.address_space, op.address, op.data);
+                memory_chip.write_word(op.timestamp, op.address_space, op.address, op.data);
             }
         }
     }
 
-    let trace = chip.generate_trace(range_checker.clone());
+    let trace = memory_chip.generate_trace(range_checker.clone());
     let range_checker_trace = range_checker.generate_trace();
     let requester_trace = RowMajorMatrix::new(
         ops.iter()
@@ -157,7 +161,7 @@ fn test_offline_checker() {
     );
 
     run_simple_test_no_pis(
-        vec![&chip.air, &range_checker.air, &requester],
+        vec![&memory_chip.air, &range_checker.air, &requester],
         vec![trace, range_checker_trace, requester_trace],
     )
     .expect("Verification failed");
@@ -172,7 +176,11 @@ fn test_offline_checker_valid_first_read() {
         CLK_LIMB_BITS,
         DECOMP,
     );
-    let requester = DummyInteractionAir::new(2 + memory_chip.air.mem_width(), true, MEMORY_BUS);
+    let requester = DummyInteractionAir::new(
+        2 + memory_chip.air.offline_checker.idx_data_width(),
+        true,
+        MEMORY_BUS,
+    );
 
     memory_chip.write_word(
         0,
@@ -218,13 +226,17 @@ fn test_offline_checker_valid_first_read() {
 #[test]
 fn test_offline_checker_negative_data_mismatch() {
     let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
-    let mut chip = MemoryChip::new(
+    let mut memory_chip = MemoryChip::new(
         ADDR_SPACE_LIMB_BITS,
         POINTER_LIMB_BITS,
         CLK_LIMB_BITS,
         DECOMP,
     );
-    let requester = DummyInteractionAir::new(2 + chip.air.mem_width(), true, MEMORY_BUS);
+    let requester = DummyInteractionAir::new(
+        2 + memory_chip.air.offline_checker.idx_data_width(),
+        true,
+        MEMORY_BUS,
+    );
 
     let ops: Vec<MemoryAccess<WORD_SIZE, BabyBear>> = vec![
         MemoryAccess {
@@ -263,9 +275,9 @@ fn test_offline_checker_negative_data_mismatch() {
         },
     ];
 
-    chip.accesses.clone_from(&ops);
+    memory_chip.accesses.clone_from(&ops);
 
-    let trace = chip.generate_trace(range_checker.clone());
+    let trace = memory_chip.generate_trace(range_checker.clone());
 
     let range_checker_trace = range_checker.generate_trace();
     let requester_trace = RowMajorMatrix::new(
@@ -294,7 +306,7 @@ fn test_offline_checker_negative_data_mismatch() {
     });
     assert_eq!(
         run_simple_test_no_pis(
-            vec![&chip.air, &range_checker.air, &requester],
+            vec![&memory_chip.air, &range_checker.air, &requester,],
             vec![trace, range_checker_trace, requester_trace],
         ),
         Err(VerificationError::OodEvaluationMismatch),

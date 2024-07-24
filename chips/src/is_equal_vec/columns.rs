@@ -26,6 +26,7 @@ impl<T: Clone> IsEqualVecIoCols<T> {
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct IsEqualVecAuxCols<T> {
+    /// prods[i] indicates whether x[i] == y[i] up to the i-th index
     pub prods: Vec<T>,
     pub invs: Vec<T>,
 }
@@ -46,7 +47,7 @@ impl<T: Clone> IsEqualVecAuxCols<T> {
         Self { prods, invs }
     }
 
-    pub fn get_width(vec_len: usize) -> usize {
+    pub fn width(vec_len: usize) -> usize {
         vec_len + vec_len - 1
     }
 }
