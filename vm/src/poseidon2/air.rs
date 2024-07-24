@@ -11,29 +11,29 @@ use afs_chips::sub_chip::AirConfig;
 use afs_chips::sub_chip::SubAir;
 use poseidon2_air::poseidon2::columns::Poseidon2Cols;
 
-use super::{columns::Poseidon2ChipCols, Poseidon2Chip};
+use super::{columns::Poseidon2VmCols, Poseidon2VmAir};
 
-impl<const WIDTH: usize, F: Clone> AirConfig for Poseidon2Chip<WIDTH, F> {
-    type Cols<T> = Poseidon2ChipCols<WIDTH, T>;
+impl<const WIDTH: usize, F: Clone> AirConfig for Poseidon2VmAir<WIDTH, F> {
+    type Cols<T> = Poseidon2VmCols<WIDTH, T>;
 }
 
-impl<const WIDTH: usize, F: Field> BaseAir<F> for Poseidon2Chip<WIDTH, F> {
+impl<const WIDTH: usize, F: Field> BaseAir<F> for Poseidon2VmAir<WIDTH, F> {
     fn width(&self) -> usize {
-        Poseidon2ChipCols::<WIDTH, F>::get_width(self)
+        Poseidon2VmCols::<WIDTH, F>::get_width(self)
     }
 }
 
-impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2Chip<WIDTH, AB::F> {
+impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2VmAir<WIDTH, AB::F> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
         let local: &[<AB>::Var] = (*local).borrow();
 
-        let index_map = Poseidon2Cols::index_map(&self.air);
-        let cols = Poseidon2ChipCols::<WIDTH, AB::Var>::from_slice(local, &index_map);
+        let index_map = Poseidon2Cols::index_map(&self.inner);
+        let cols = Poseidon2VmCols::<WIDTH, AB::Var>::from_slice(local, &index_map);
 
         self.eval_interactions(builder, cols.io, &cols.aux);
-        self.air
+        self.inner
             .eval_without_interactions(builder, cols.aux.internal.io, cols.aux.internal.aux);
 
         // boolean constraints for alloc/cmp markers

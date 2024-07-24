@@ -148,7 +148,7 @@ where
         result.push(&vm.field_extension_chip.air as &dyn AnyRap<SC>);
     }
     if vm.options().poseidon2_enabled() {
-        result.push(&vm.poseidon2_chip as &dyn AnyRap<SC>);
+        result.push(&vm.poseidon2_chip.air as &dyn AnyRap<SC>);
     }
     result
 }
