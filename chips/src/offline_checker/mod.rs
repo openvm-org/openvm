@@ -56,7 +56,7 @@ impl OfflineChecker {
     }
 
     pub fn air_width(&self) -> usize {
-        5 + self.idx_len
+        6 + self.idx_len
             + self.data_len
             + IsEqualVecAuxCols::<usize>::get_width(self.idx_len)
             + IsLessThanTupleAuxCols::<usize>::get_width(&self.idx_clk_limb_bits, self.decomp)

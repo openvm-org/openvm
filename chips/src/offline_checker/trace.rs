@@ -32,7 +32,8 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
             rows.push(
                 self.generate_trace_row((
                     true,
-                    1,
+                    true,
+                    true,
                     accesses[0].clone(),
                     dummy_op.clone(),
                     range_checker.clone(),
@@ -45,7 +46,8 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
             rows.push(
                 self.generate_trace_row((
                     false,
-                    1,
+                    true,
+                    true,
                     accesses[i].clone(),
                     accesses[i - 1].clone(),
                     range_checker.clone(),
@@ -58,7 +60,8 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
             rows.push(
                 self.generate_trace_row((
                     false,
-                    0,
+                    false,
+                    false,
                     dummy_op.clone(),
                     accesses[accesses.len() - 1].clone(),
                     range_checker.clone(),
@@ -71,7 +74,8 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
             rows.push(
                 self.generate_trace_row((
                     false,
-                    0,
+                    false,
+                    false,
                     dummy_op.clone(),
                     dummy_op.clone(),
                     range_checker.clone(),
@@ -87,11 +91,18 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
 impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> LocalTraceInstructions<F>
     for OfflineCheckerChip<F, Operation>
 {
-    // is_first_row, is_valid, curr_op, prev_op, range_checker
-    type LocalInput = (bool, u8, Operation, Operation, Arc<RangeCheckerGateChip>);
+    // is_first_row, is_valid, is_receive, curr_op, prev_op, range_checker
+    type LocalInput = (
+        bool,
+        bool,
+        bool,
+        Operation,
+        Operation,
+        Arc<RangeCheckerGateChip>,
+    );
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> OfflineCheckerCols<F> {
-        let (is_first_row, is_valid, curr_op, prev_op, range_checker) = input;
+        let (is_first_row, is_valid, is_receive, curr_op, prev_op, range_checker) = input;
         let op_type = curr_op.get_op_type();
 
         let curr_timestamp = curr_op.get_timestamp();
@@ -157,7 +168,8 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> LocalTraceInstructi
             data: curr_data,
             op_type: F::from_canonical_u8(op_type),
             same_idx: F::from_canonical_u8(same_idx),
-            is_valid: F::from_canonical_u8(is_valid),
+            is_valid: F::from_bool(is_valid),
+            is_receive: F::from_bool(is_receive),
             lt_bit: F::from_canonical_u8(lt_bit),
             is_equal_idx_aux,
             lt_aux,

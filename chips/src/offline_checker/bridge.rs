@@ -16,6 +16,6 @@ impl OfflineChecker {
             .chain(cols.idx.clone())
             .chain(cols.data.clone())
             .collect_vec();
-        builder.push_receive(self.ops_bus, op_cols, cols.is_valid);
+        builder.push_receive(self.ops_bus, op_cols, cols.is_receive);
     }
 }

@@ -60,7 +60,8 @@ impl PageOfflineChecker {
                        is_valid: bool| {
             let local_input = (
                 *is_first_row,
-                is_valid as u8,
+                is_valid,
+                is_internal,
                 curr_op.clone(),
                 prev_op.clone(),
                 range_checker.clone(),

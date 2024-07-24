@@ -26,6 +26,8 @@ pub struct OfflineCheckerCols<T> {
     pub lt_bit: T,
     /// a bit to indicate if this is a valid operation row
     pub is_valid: T,
+    /// a bit to indicate whether this operation row should be received
+    pub is_receive: T,
 
     /// auxiliary columns used for same_addr_space
     pub is_equal_idx_aux: IsEqualVecAuxCols<T>,
@@ -46,6 +48,7 @@ where
             self.same_idx.clone(),
             self.lt_bit.clone(),
             self.is_valid.clone(),
+            self.is_receive.clone(),
         ]);
 
         flattened.extend(self.is_equal_idx_aux.flatten());
@@ -67,12 +70,13 @@ where
             same_idx: slc[2 + idx_len + data_len].clone(),
             lt_bit: slc[3 + idx_len + data_len].clone(),
             is_valid: slc[4 + idx_len + data_len].clone(),
+            is_receive: slc[5 + idx_len + data_len].clone(),
             is_equal_idx_aux: IsEqualVecAuxCols::from_slice(
-                &slc[5 + idx_len + data_len..4 + 3 * idx_len + data_len],
+                &slc[6 + idx_len + data_len..5 + 3 * idx_len + data_len],
                 idx_len,
             ),
             lt_aux: IsLessThanTupleAuxCols::from_slice(
-                &slc[4 + 3 * idx_len + data_len..],
+                &slc[5 + 3 * idx_len + data_len..],
                 &oc.idx_clk_limb_bits,
                 oc.decomp,
             ),
