@@ -3,7 +3,7 @@ use std::{fs, marker::PhantomData, sync::Arc};
 use afs_chips::single_page_index_scan::page_controller::PageController;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
-    keygen::types::MultiStarkPartialProvingKey,
+    keygen::types::MultiStarkProvingKey,
     prover::trace::{ProverTraceData, TraceCommitmentBuilder},
 };
 use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
@@ -139,13 +139,12 @@ where
         let prefix = config.generate_filename();
         let encoded_pk =
             read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
-        let partial_pk: MultiStarkPartialProvingKey<SC> =
-            bincode::deserialize(&encoded_pk).unwrap();
+        let pk: MultiStarkProvingKey<SC> = bincode::deserialize(&encoded_pk).unwrap();
 
         // Prove
         let proof = page_controller.prove(
             engine,
-            &partial_pk,
+            &pk,
             &mut trace_builder,
             input_prover_data,
             output_prover_data,

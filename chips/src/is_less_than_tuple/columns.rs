@@ -3,13 +3,13 @@ use afs_derive::AlignedBorrow;
 use crate::{is_equal_vec::columns::IsEqualVecAuxCols, is_less_than::columns::IsLessThanAuxCols};
 
 #[derive(Default, Debug, AlignedBorrow)]
-pub struct IsLessThanTupleIOCols<T> {
+pub struct IsLessThanTupleIoCols<T> {
     pub x: Vec<T>,
     pub y: Vec<T>,
     pub tuple_less_than: T,
 }
 
-impl<T: Clone> IsLessThanTupleIOCols<T> {
+impl<T: Clone> IsLessThanTupleIoCols<T> {
     pub fn from_slice(slc: &[T], tuple_len: usize) -> Self {
         Self {
             x: slc[0..tuple_len].to_vec(),
@@ -40,7 +40,7 @@ pub struct IsLessThanTupleAuxCols<T> {
 }
 
 impl<T: Clone> IsLessThanTupleAuxCols<T> {
-    pub fn from_slice(slc: &[T], limb_bits: Vec<usize>, decomp: usize) -> Self {
+    pub fn from_slice(slc: &[T], limb_bits: &[usize], decomp: usize) -> Self {
         let tuple_len = limb_bits.len();
 
         assert!(limb_bits.len() == tuple_len);
@@ -134,7 +134,7 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
 }
 
 impl<T> IsLessThanTupleAuxCols<T> {
-    pub fn get_width(limb_bits: Vec<usize>, decomp: usize) -> usize {
+    pub fn get_width(limb_bits: &[usize], decomp: usize) -> usize {
         let tuple_len = limb_bits.len();
 
         let mut width = 0;
@@ -160,15 +160,15 @@ impl<T> IsLessThanTupleAuxCols<T> {
 
 #[derive(Debug)]
 pub struct IsLessThanTupleCols<T> {
-    pub io: IsLessThanTupleIOCols<T>,
+    pub io: IsLessThanTupleIoCols<T>,
     pub aux: IsLessThanTupleAuxCols<T>,
 }
 
 impl<T: Clone> IsLessThanTupleCols<T> {
-    pub fn from_slice(slc: &[T], limb_bits: Vec<usize>, decomp: usize) -> Self {
+    pub fn from_slice(slc: &[T], limb_bits: &[usize], decomp: usize) -> Self {
         let tuple_len = limb_bits.len();
 
-        let io = IsLessThanTupleIOCols::from_slice(&slc[..2 * tuple_len + 1], tuple_len);
+        let io = IsLessThanTupleIoCols::from_slice(&slc[..2 * tuple_len + 1], tuple_len);
         let aux = IsLessThanTupleAuxCols::from_slice(&slc[2 * tuple_len + 1..], limb_bits, decomp);
 
         Self { io, aux }
@@ -180,10 +180,10 @@ impl<T: Clone> IsLessThanTupleCols<T> {
         flattened
     }
 
-    pub fn get_width(limb_bits: Vec<usize>, decomp: usize) -> usize {
+    pub fn get_width(limb_bits: &[usize], decomp: usize) -> usize {
         let tuple_len = limb_bits.len();
 
-        IsLessThanTupleIOCols::<T>::get_width(tuple_len)
+        IsLessThanTupleIoCols::<T>::get_width(tuple_len)
             + IsLessThanTupleAuxCols::<T>::get_width(limb_bits, decomp)
     }
 }

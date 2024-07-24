@@ -1,7 +1,6 @@
-use std::borrow::Borrow;
 use std::iter;
 
-use afs_stark_backend::air_builders::PartitionedAirBuilder;
+use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField64};
 use p3_matrix::Matrix;
@@ -11,7 +10,7 @@ use super::{
 };
 use crate::{
     is_equal_vec::columns::IsEqualVecCols,
-    is_less_than_tuple::columns::IsLessThanTupleIOCols,
+    is_less_than_tuple::columns::IsLessThanTupleIoCols,
     sub_chip::{AirConfig, SubAir},
     utils::{implies, or},
 };
@@ -32,36 +31,28 @@ impl<F: Field> BaseAir<F> for OfflineChecker {
     }
 }
 
-impl<AB: PartitionedAirBuilder> Air<AB> for OfflineChecker
-where
-    AB::M: Clone,
-{
+impl<AB: InteractionBuilder> Air<AB> for OfflineChecker {
     /// This constrains extra rows to be at the bottom and the following on non-extra rows:
     /// same_addr_space, same_pointer, same_data, lt_bit is correct (see definition in columns.rs)
     /// A read must be preceded by a write with the same address space, pointer, and data
     fn eval(&self, builder: &mut AB) {
-        let main = &builder.partitioned_main()[0].clone();
+        let main = &builder.main();
 
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
-        let local: &[AB::Var] = (*local).borrow();
-        let next: &[AB::Var] = (*next).borrow();
-
-        let local_cols = OfflineCheckerCols::from_slice(local, self);
-        let next_cols = OfflineCheckerCols::from_slice(next, self);
+        let local_cols = OfflineCheckerCols::from_slice(&main.row_slice(0), self);
+        let next_cols = OfflineCheckerCols::from_slice(&main.row_slice(1), self);
 
         SubAir::eval(self, builder, (local_cols, next_cols), ());
     }
 }
 
-impl<AB: PartitionedAirBuilder> SubAir<AB> for OfflineChecker
-where
-    AB::M: Clone,
-{
+impl<AB: InteractionBuilder> SubAir<AB> for OfflineChecker {
     type IoView = (OfflineCheckerCols<AB::Var>, OfflineCheckerCols<AB::Var>);
     type AuxView = ();
 
     fn eval(&self, builder: &mut AB, io: Self::IoView, _: Self::AuxView) {
         let (local_cols, next_cols) = io;
+
+        self.eval_interactions(builder, &local_cols);
 
         // Making sure bits are bools
         builder.assert_bool(local_cols.same_idx);
@@ -87,28 +78,22 @@ where
         );
 
         // Ensuring all rows are sorted by (idx, clk)
-        let lt_io_cols = IsLessThanTupleIOCols::<AB::Var> {
+        let lt_io_cols = IsLessThanTupleIoCols::<AB::Var> {
             x: local_cols
                 .idx
-                .iter()
-                .copied()
+                .into_iter()
                 .chain(iter::once(local_cols.clk))
                 .collect(),
             y: next_cols
                 .idx
-                .iter()
-                .copied()
+                .into_iter()
                 .chain(iter::once(next_cols.clk))
                 .collect(),
             tuple_less_than: next_cols.lt_bit,
         };
 
-        SubAir::eval(
-            &self.lt_tuple_air,
-            &mut builder.when_transition(),
-            lt_io_cols,
-            next_cols.lt_aux,
-        );
+        self.lt_tuple_air
+            .eval_when_transition(builder, lt_io_cols, next_cols.lt_aux);
 
         // Ensuring lt_bit is on
         builder.when_transition().assert_one(or::<AB>(

@@ -2,12 +2,14 @@ use afs_derive::AlignedBorrow;
 use core::mem::{size_of, transmute};
 use p3_util::indices_arr;
 
-#[derive(Default, AlignedBorrow)]
+#[derive(Default, AlignedBorrow, Copy, Clone)]
+#[repr(C)]
 pub struct RangeCols<T> {
     pub mult: T,
 }
 
-#[derive(Default, AlignedBorrow)]
+#[derive(Default, AlignedBorrow, Copy, Clone)]
+#[repr(C)]
 pub struct RangePreprocessedCols<T> {
     pub counter: T,
 }

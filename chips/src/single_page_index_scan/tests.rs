@@ -57,20 +57,20 @@ fn index_scan_test(
 
     page_controller.set_up_keygen_builder(&mut keygen_builder, page_width, idx_len);
 
-    let partial_pk = keygen_builder.generate_partial_pk();
+    let pk = keygen_builder.generate_pk();
 
     let proof = page_controller.prove(
         engine,
-        &partial_pk,
+        &pk,
         trace_builder,
         input_prover_data,
         output_prover_data,
         x.clone(),
         idx_decomp,
     );
-    let partial_vk = partial_pk.partial_vk();
+    let vk = pk.vk();
 
-    page_controller.verify(engine, partial_vk, proof, x.clone())
+    page_controller.verify(engine, vk, proof, x.clone())
 }
 
 #[test]
@@ -96,7 +96,16 @@ fn test_single_page_index_scan_lt() {
 
     let x: Vec<u32> = vec![2177, 5880];
 
+    let expected_page_output = Page::from_2d_vec(
+        &[
+            vec![1, 443, 376, 22278, 13998, 58327],
+            vec![0; 1 + IDX_LEN + DATA_LEN],
+        ],
+        IDX_LEN,
+        DATA_LEN,
+    );
     let page_output = page_controller.gen_output(page.clone(), x.clone(), PAGE_WIDTH, cmp);
+    assert_eq!(expected_page_output, page_output);
 
     let engine = config::baby_bear_poseidon2::default_engine(LOG_PAGE_HEIGHT.max(DECOMP));
 

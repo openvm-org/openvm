@@ -2,7 +2,7 @@ use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{
-    columns::{FieldArithmeticAuxCols, FieldArithmeticCols, FieldArithmeticIOCols},
+    columns::{FieldArithmeticAuxCols, FieldArithmeticCols, FieldArithmeticIoCols},
     FieldArithmeticChip,
 };
 use crate::cpu::OpCode;
@@ -34,7 +34,7 @@ fn generate_cols<T: Field>(op: OpCode, x: T, y: T) -> FieldArithmeticCols<T> {
     let z = is_mul * product + is_div * quotient + (T::one() - opcode_hi) * sum_or_diff;
 
     FieldArithmeticCols {
-        io: FieldArithmeticIOCols {
+        io: FieldArithmeticIoCols {
             rcv_count: T::one(),
             opcode: T::from_canonical_u32(opcode),
             x,

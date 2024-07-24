@@ -2,7 +2,7 @@ use afs_derive::AlignedBorrow;
 use core::mem::{size_of, transmute};
 use p3_util::indices_arr;
 
-#[derive(Default, AlignedBorrow)]
+#[derive(Copy, Clone, Default, AlignedBorrow)]
 pub struct RangeGateCols<T> {
     pub counter: T,
     pub mult: T,

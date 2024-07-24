@@ -6,7 +6,10 @@ use p3_matrix::dense::RowMajorMatrixView;
 use p3_matrix::stack::VerticalPair;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::rap::PermutationAirBuilderWithExposedValues;
+use crate::{
+    interaction::{Interaction, InteractionBuilder, InteractionType},
+    rap::PermutationAirBuilderWithExposedValues,
+};
 
 use super::{PartitionedAirBuilder, ViewPair};
 
@@ -175,5 +178,35 @@ where
 {
     fn partitioned_main(&self) -> &[Self::M] {
         &self.partitioned_main
+    }
+}
+
+// No-op implementation
+impl<'a, SC> InteractionBuilder for DebugConstraintBuilder<'a, SC>
+where
+    SC: StarkGenericConfig,
+{
+    fn push_interaction<E: Into<Self::Expr>>(
+        &mut self,
+        _bus_index: usize,
+        _fields: impl IntoIterator<Item = E>,
+        _count: impl Into<Self::Expr>,
+        _interaction_type: InteractionType,
+    ) {
+        // no-op, interactions are debugged elsewhere
+    }
+
+    fn finalize_interactions(&mut self) {}
+
+    fn num_interactions(&self) -> usize {
+        0
+    }
+
+    fn all_interactions(&self) -> &[Interaction<Self::Expr>] {
+        &[]
+    }
+
+    fn all_multiplicities_next(&self) -> Vec<Self::Expr> {
+        vec![]
     }
 }

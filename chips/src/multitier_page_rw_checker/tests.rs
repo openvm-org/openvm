@@ -7,7 +7,7 @@ use afs_stark_backend::prover::trace::TraceCommitter;
 use afs_stark_backend::rap::AnyRap;
 use afs_stark_backend::verifier::VerificationError;
 use afs_stark_backend::{
-    keygen::{types::MultiStarkPartialProvingKey, MultiStarkKeygenBuilder},
+    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
 };
 use afs_test_utils::config::{
@@ -267,7 +267,7 @@ where
 
     keygen_builder.add_air(&ops_sender, 0);
 
-    let partial_pk = keygen_builder.generate_partial_pk();
+    let pk = keygen_builder.generate_pk();
     let (init_pages, init_root_is_leaf, final_pages, final_root_is_leaf, ops) = generate_inputs(
         idx_len,
         data_len,
@@ -291,7 +291,7 @@ where
         &ops_sender,
         &mut page_controller,
         &mut trace_builder,
-        &partial_pk,
+        &pk,
         trace_degree,
     );
     assert!(should_fail == res.is_err());
@@ -316,7 +316,7 @@ fn load_page_test(
     ops_sender: &DummyInteractionAir,
     page_controller: &mut page_controller::PageController<BABYBEAR_COMMITMENT_LEN>,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
-    partial_pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
+    pk: &MultiStarkProvingKey<BabyBearPoseidon2Config>,
     trace_degree: usize,
 ) -> Result<(), VerificationError> {
     page_controller.range_checker.clear();
@@ -413,8 +413,8 @@ fn load_page_test(
     airs.push(&page_controller.final_root_signal);
     airs.push(&page_controller.range_checker.air);
     airs.push(ops_sender);
-    let partial_vk = partial_pk.partial_vk();
-    let main_trace_data = trace_builder.view(&partial_vk, airs.clone());
+    let vk = pk.vk();
+    let main_trace_data = trace_builder.view(&vk, airs.clone());
 
     let mut pis = vec![];
     for c in commits.init_leaf_page_commitments {
@@ -448,10 +448,10 @@ fn load_page_test(
     let verifier = engine.verifier();
 
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, partial_pk, main_trace_data, &pis);
+    let proof = prover.prove(&mut challenger, pk, main_trace_data, &pis);
 
     let mut challenger = engine.new_challenger();
-    verifier.verify(&mut challenger, &partial_vk, airs, &proof, &pis)
+    verifier.verify(&mut challenger, &vk, airs, &proof, &pis)
 }
 
 #[allow(clippy::type_complexity)]

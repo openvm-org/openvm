@@ -1,6 +1,4 @@
-use std::borrow::Borrow;
-
-use afs_stark_backend::air_builders::PartitionedAirBuilder;
+use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
@@ -17,10 +15,7 @@ impl<F: Field> BaseAir<F> for PageOfflineChecker {
     }
 }
 
-impl<AB: PartitionedAirBuilder> Air<AB> for PageOfflineChecker
-where
-    AB::M: Clone,
-{
+impl<AB: InteractionBuilder> Air<AB> for PageOfflineChecker {
     /// This constrains extra rows to be at the bottom and the following on non-extra rows:
     /// Every row is tagged with exactly one of is_initial, is_internal, is_final_write, is_final_delete
     /// is_initial rows must be writes, is_final rows must be reads, and is_internal rows can be either
@@ -28,14 +23,15 @@ where
     /// An internal read is preceded by a write (initial or internal) with the same index and data
     /// Every key block ends in an is_final_write or is_final_delete row preceded by an is_internal row
     fn eval(&self, builder: &mut AB) {
-        let main = &builder.partitioned_main()[0].clone();
+        let main = &builder.main();
 
         let (local, next) = (main.row_slice(0), main.row_slice(1));
-        let local: &[AB::Var] = (*local).borrow();
-        let next: &[AB::Var] = (*next).borrow();
+        let local_cols = PageOfflineCheckerCols::from_slice(&local, self);
+        let next_cols = PageOfflineCheckerCols::from_slice(&next, self);
+        drop(local);
+        drop(next);
 
-        let local_cols = PageOfflineCheckerCols::from_slice(local, self);
-        let next_cols = PageOfflineCheckerCols::from_slice(next, self);
+        self.eval_interactions(builder, &local_cols);
 
         let local_offline_checker_cols = local_cols.offline_checker_cols;
         let next_offline_checker_cols = next_cols.offline_checker_cols;
@@ -43,16 +39,6 @@ where
         let or = or::<AB>;
         let and = and::<AB>;
         let implies = implies::<AB>;
-
-        SubAir::eval(
-            &self.offline_checker,
-            builder,
-            (
-                local_offline_checker_cols.clone(),
-                next_offline_checker_cols.clone(),
-            ),
-            (),
-        );
 
         // Making sure bits are bools
         builder.assert_bool(local_cols.is_initial);
@@ -206,6 +192,13 @@ where
                 local_cols.is_delete.into(),
             ),
         ));
+
+        SubAir::eval(
+            &self.offline_checker,
+            builder,
+            (local_offline_checker_cols, next_offline_checker_cols),
+            (),
+        );
 
         // Note that the following is implied:
         // - for every row: (is_initial => write) because is_initial => not same_idx => write

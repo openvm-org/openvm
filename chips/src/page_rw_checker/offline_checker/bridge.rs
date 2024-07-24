@@ -1,70 +1,21 @@
-use afs_stark_backend::interaction::{AirBridge, Interaction};
-use p3_air::VirtualPairCol;
-use p3_field::PrimeField;
+use afs_stark_backend::interaction::InteractionBuilder;
+use itertools::Itertools;
 
-use super::columns::PageOfflineCheckerCols;
-use super::PageOfflineChecker;
-use crate::sub_chip::SubAirBridge;
-use crate::utils::to_vcols;
+use super::{columns::PageOfflineCheckerCols, PageOfflineChecker};
 
-impl<F: PrimeField> AirBridge<F> for PageOfflineChecker {
-    fn receives(&self) -> Vec<Interaction<F>> {
-        let num_cols = self.air_width();
-        let all_cols = (0..num_cols).collect::<Vec<usize>>();
+impl PageOfflineChecker {
+    /// Receives page rows (idx, data) for rows tagged with is_initial on page_bus (sent from PageRWAir)
+    /// Receives operations (clk, idx, data, op_type) for rows tagged with is_internal on ops_bus
+    pub fn eval_interactions<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        cols: &PageOfflineCheckerCols<AB::Var>,
+    ) {
+        let idx = &cols.offline_checker_cols.idx;
+        let data = &cols.offline_checker_cols.data;
+        let page_cols = idx.iter().chain(data).cloned().collect_vec();
 
-        let cols_to_receive = PageOfflineCheckerCols::<usize>::from_slice(&all_cols, self);
-        let offline_checker_cols = cols_to_receive.offline_checker_cols;
-
-        let op_cols: Vec<VirtualPairCol<F>> = to_vcols(
-            &[
-                vec![offline_checker_cols.clk],
-                vec![offline_checker_cols.op_type],
-                offline_checker_cols.idx.clone(),
-                offline_checker_cols.data.clone(),
-            ]
-            .concat(),
-        );
-
-        let page_cols = to_vcols(
-            &[
-                offline_checker_cols.idx.clone(),
-                offline_checker_cols.data.clone(),
-            ]
-            .concat(),
-        );
-
-        vec![
-            Interaction {
-                fields: page_cols,
-                count: VirtualPairCol::single_main(cols_to_receive.is_initial),
-                argument_index: self.page_bus_index,
-            },
-            Interaction {
-                fields: op_cols,
-                count: VirtualPairCol::single_main(cols_to_receive.is_internal),
-                argument_index: self.offline_checker.ops_bus,
-            },
-        ]
-    }
-
-    fn sends(&self) -> Vec<Interaction<F>> {
-        let num_cols = self.air_width();
-        let all_cols = (0..num_cols).collect::<Vec<usize>>();
-
-        let cols_to_send = PageOfflineCheckerCols::<usize>::from_slice(&all_cols, self);
-        let offline_checker_cols = cols_to_send.offline_checker_cols;
-
-        let mut interactions =
-            SubAirBridge::sends(&self.offline_checker, offline_checker_cols.clone());
-
-        let page_cols = to_vcols(&[offline_checker_cols.idx, offline_checker_cols.data].concat());
-
-        interactions.push(Interaction {
-            fields: page_cols,
-            count: VirtualPairCol::single_main(cols_to_send.is_final_write_x3),
-            argument_index: self.page_bus_index,
-        });
-
-        interactions
+        builder.push_receive(self.page_bus_index, page_cols.clone(), cols.is_initial);
+        builder.push_send(self.page_bus_index, page_cols, cols.is_final_write_x3);
     }
 }

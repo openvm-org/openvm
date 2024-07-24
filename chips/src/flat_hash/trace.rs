@@ -1,9 +1,7 @@
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::FlatHashAir;
-use super::PageController;
-use crate::dummy_hash::DummyHashChip;
+use super::{dummy_hash::DummyHashChip, FlatHashAir, PageController};
 
 impl FlatHashAir {
     pub fn generate_trace<F: Field>(

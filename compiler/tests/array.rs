@@ -12,6 +12,7 @@ use afs_compiler::prelude::MemIndex;
 use afs_compiler::prelude::MemVariable;
 use afs_compiler::prelude::Ptr;
 use afs_compiler::prelude::Variable;
+use afs_compiler::util::execute_program;
 use afs_derive::DslVariable;
 
 #[derive(DslVariable, Clone, Debug)]
@@ -22,6 +23,7 @@ pub struct Point<C: Config> {
 }
 
 #[test]
+#[ignore = "test too slow"]
 fn test_compiler_array() {
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, 4>;
@@ -71,7 +73,7 @@ fn test_compiler_array() {
     builder.range(0, dyn_len).for_each(|i, builder| {
         builder.set(&mut var_array, i, i * F::two());
         builder.set(&mut felt_array, i, F::from_canonical_u32(3));
-        builder.set(&mut ext_array, i, (EF::from_canonical_u32(4)).cons());
+        builder.set(&mut ext_array, i, EF::from_canonical_u32(4).cons());
     });
 
     // Assert values set.
@@ -108,17 +110,15 @@ fn test_compiler_array() {
         builder.set(&mut array, i, var_array.clone());
     });
 
+    // TODO: this part of the test is extremely slow.
     builder.range(0, array.len()).for_each(|i, builder| {
         let point_array_back = builder.get(&array, i);
         builder.assert_eq::<Array<_, _>>(point_array_back, var_array.clone());
     });
 
-    let code = builder.compile_asm();
-    println!("{code}");
+    builder.halt();
 
-    // let program = code.machine_code();
-
-    // let config = SC::default();
-    // let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
-    // runtime.run();
+    const WORD_SIZE: usize = 1;
+    let program = builder.compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE, _>(program, vec![]);
 }

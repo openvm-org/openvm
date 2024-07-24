@@ -73,7 +73,7 @@ where
             ),
             lt_aux: IsLessThanTupleAuxCols::from_slice(
                 &slc[4 + 3 * idx_len + data_len..],
-                oc.idx_clk_limb_bits.clone(),
+                &oc.idx_clk_limb_bits,
                 oc.decomp,
             ),
         }

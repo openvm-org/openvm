@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, Field, PrimeField32};
+use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 use p3_uni_stark::Val;
@@ -11,7 +11,6 @@ use p3_util::log2_strict_usize;
 use afs_chips::range_gate::RangeCheckerGateChip;
 use afs_chips::sum::SumChip;
 use afs_compiler::util::execute_program;
-use afs_stark_backend::interaction::AirBridge;
 use afs_stark_backend::prover::trace::TraceCommitmentBuilder;
 use afs_stark_backend::rap::AnyRap;
 use afs_stark_backend::verifier::MultiTraceStarkVerifier;
@@ -23,11 +22,9 @@ use afs_test_utils::utils::to_field_vec;
 
 use crate::hints::Hintable;
 use crate::stark::{DynRapForRecursion, VerifierProgram};
-use crate::types::{InnerConfig, MultiStarkVerificationAdvice, VerifierProgramInput};
+use crate::types::{new_from_multi_vk, InnerConfig, VerifierProgramInput};
 
 pub struct FibonacciAir;
-
-impl<F: Field> AirBridge<F> for FibonacciAir {}
 
 impl<F> BaseAir<F> for FibonacciAir {
     fn width(&self) -> usize {
@@ -173,8 +170,8 @@ fn run_recursive_test(
         keygen_builder.add_air(rap, num_pv);
     }
 
-    let partial_pk = keygen_builder.generate_partial_pk();
-    let partial_vk = partial_pk.partial_vk();
+    let pk = keygen_builder.generate_pk();
+    let vk = pk.vk();
 
     let prover = engine.prover();
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -183,10 +180,10 @@ fn run_recursive_test(
     }
     trace_builder.commit_current();
 
-    let main_trace_data = trace_builder.view(&partial_vk, any_raps.clone());
+    let main_trace_data = trace_builder.view(&vk, any_raps.clone());
 
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pvs);
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pvs);
     let log_degree_per_air = proof
         .degrees
         .iter()
@@ -195,17 +192,11 @@ fn run_recursive_test(
     // Make sure proof verifies outside eDSL...
     let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier
-        .verify(
-            &mut engine.new_challenger(),
-            &partial_vk,
-            any_raps,
-            &proof,
-            &pvs,
-        )
+        .verify(&mut engine.new_challenger(), &vk, any_raps, &proof, &pvs)
         .expect("afs proof should verify");
 
     // Build verification program in eDSL.
-    let advice = MultiStarkVerificationAdvice::new_from_multi_vk(&partial_vk);
+    let advice = new_from_multi_vk(&vk);
 
     let program = VerifierProgram::build(rec_raps, advice, &engine.fri_params);
 

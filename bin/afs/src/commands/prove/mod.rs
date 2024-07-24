@@ -6,7 +6,7 @@ use afs_chips::{
 };
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
-    keygen::types::MultiStarkPartialProvingKey,
+    keygen::types::MultiStarkProvingKey,
     prover::trace::{ProverTraceData, TraceCommitmentBuilder},
 };
 use afs_test_utils::{
@@ -208,14 +208,12 @@ where
         let ops_sender_trace = ops_sender.generate_trace(&zk_ops, config.page.max_rw_ops);
         trace_span.exit();
 
-        let encoded_pk =
-            read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
-        let partial_pk: MultiStarkPartialProvingKey<SC> =
-            bincode::deserialize(&encoded_pk).unwrap();
+        let encoded_pk = read_from_path(keys_folder.clone() + "/" + &prefix + ".pk").unwrap();
+        let pk: MultiStarkProvingKey<SC> = bincode::deserialize(&encoded_pk).unwrap();
 
         let proof = page_controller.prove(
             engine,
-            &partial_pk,
+            &pk,
             &mut trace_builder,
             init_page_pdata,
             final_page_pdata,

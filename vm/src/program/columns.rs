@@ -1,4 +1,7 @@
-#[derive(Clone, Debug, PartialEq, Eq)]
+use afs_derive::AlignedBorrow;
+
+#[derive(Copy, Clone, Debug, AlignedBorrow, PartialEq, Eq)]
+#[repr(C)]
 pub struct ProgramPreprocessedCols<T> {
     pub pc: T,
 

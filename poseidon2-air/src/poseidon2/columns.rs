@@ -4,16 +4,20 @@ use std::ops::Range;
 
 /// Composed of IO and Aux columns, which are disjoint
 /// Aux columns composed of Vec<Vec<T>>, one for each phase
+#[derive(Clone, Debug)]
 pub struct Poseidon2Cols<const WIDTH: usize, T> {
     pub io: Poseidon2IoCols<WIDTH, T>,
     pub aux: Poseidon2AuxCols<WIDTH, T>,
 }
 
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
 pub struct Poseidon2IoCols<const WIDTH: usize, T> {
     pub input: [T; WIDTH],
     pub output: [T; WIDTH],
 }
 
+#[derive(Clone, Debug)]
 pub struct Poseidon2AuxCols<const WIDTH: usize, T> {
     // contains one state (array of length WIDTH) for each round of phase1, of which there are `rounds_f/2`
     pub phase1: Vec<[T; WIDTH]>,

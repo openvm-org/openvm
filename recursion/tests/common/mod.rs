@@ -1,3 +1,4 @@
+use afs_stark_backend::keygen::types::MultiStarkVerifyingKey;
 use p3_baby_bear::BabyBear;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
@@ -6,8 +7,7 @@ use p3_util::log2_strict_usize;
 use afs_compiler::util::execute_program;
 use afs_recursion::hints::{Hintable, InnerVal};
 use afs_recursion::stark::{DynRapForRecursion, VerifierProgram};
-use afs_recursion::types::{InnerConfig, MultiStarkVerificationAdvice, VerifierProgramInput};
-use afs_stark_backend::keygen::types::MultiStarkPartialVerifyingKey;
+use afs_recursion::types::{new_from_multi_vk, InnerConfig, VerifierProgramInput};
 use afs_stark_backend::prover::trace::TraceCommitmentBuilder;
 use afs_stark_backend::prover::types::Proof;
 use afs_stark_backend::rap::AnyRap;
@@ -17,6 +17,7 @@ use afs_test_utils::config::baby_bear_poseidon2::{
 };
 use afs_test_utils::engine::StarkEngine;
 
+#[allow(dead_code)]
 pub fn run_recursive_test(
     // TODO: find way to de-duplicate parameters
     any_raps: Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
@@ -36,8 +37,8 @@ pub fn run_recursive_test(
         keygen_builder.add_air(rap, num_pv);
     }
 
-    let partial_pk = keygen_builder.generate_partial_pk();
-    let partial_vk = partial_pk.partial_vk();
+    let pk = keygen_builder.generate_pk();
+    let vk = pk.vk();
 
     let prover = engine.prover();
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -46,31 +47,25 @@ pub fn run_recursive_test(
     }
     trace_builder.commit_current();
 
-    let main_trace_data = trace_builder.view(&partial_vk, any_raps.clone());
+    let main_trace_data = trace_builder.view(&vk, any_raps.clone());
 
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pvs);
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pvs);
 
     // Make sure proof verifies outside eDSL...
     let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier
-        .verify(
-            &mut engine.new_challenger(),
-            &partial_vk,
-            any_raps,
-            &proof,
-            &pvs,
-        )
+        .verify(&mut engine.new_challenger(), &vk, any_raps, &proof, &pvs)
         .expect("afs proof should verify");
 
-    run_verification_program(rec_raps, pvs, &engine, &partial_vk, proof);
+    run_verification_program(rec_raps, pvs, &engine, &vk, proof);
 }
 
 pub fn run_verification_program(
     rec_raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
     pvs: Vec<Vec<InnerVal>>,
     engine: &BabyBearPoseidon2Engine,
-    partial_vk: &MultiStarkPartialVerifyingKey<BabyBearPoseidon2Config>,
+    vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     proof: Proof<BabyBearPoseidon2Config>,
 ) {
     let log_degree_per_air = proof
@@ -79,7 +74,7 @@ pub fn run_verification_program(
         .map(|degree| log2_strict_usize(*degree))
         .collect();
 
-    let advice = MultiStarkVerificationAdvice::new_from_multi_vk(&partial_vk);
+    let advice = new_from_multi_vk(vk);
 
     let program = VerifierProgram::build(rec_raps, advice, &engine.fri_params);
 
@@ -93,4 +88,5 @@ pub fn run_verification_program(
     witness_stream.extend(input.write());
 
     execute_program::<1, _>(program, witness_stream);
+    // execute_and_prove_program::<1>(program, witness_stream);
 }

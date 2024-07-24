@@ -5,7 +5,7 @@ use crate::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 use super::IntersectorAir;
 
 #[derive(Debug)]
-pub struct IntersectorIOCols<T> {
+pub struct IntersectorIoCols<T> {
     /// index for the row
     pub idx: Vec<T>,
     /// Multiplicity of idx in t2
@@ -18,7 +18,7 @@ pub struct IntersectorIOCols<T> {
     pub is_extra: T,
 }
 
-impl<T: Clone> IntersectorIOCols<T> {
+impl<T: Clone> IntersectorIoCols<T> {
     pub fn from_slice(slc: &[T], intersector_air: &IntersectorAir) -> Self {
         Self {
             idx: slc[..intersector_air.idx_len].to_vec(),
@@ -59,7 +59,7 @@ impl<T: Clone> IntersectorAuxCols<T> {
             lt_aux: IsLessThanTupleAuxCols::from_slice(
                 &slc[..slc.len() - 1],
                 intersector_air.lt_chip.limb_bits(),
-                intersector_air.lt_chip.decomp(),
+                intersector_air.lt_chip.decomp,
             ),
             lt_out: slc[slc.len() - 1].clone(),
         }
@@ -76,14 +76,14 @@ impl<T: Clone> IntersectorAuxCols<T> {
     pub fn width(intersector_air: &IntersectorAir) -> usize {
         IsLessThanTupleAuxCols::<usize>::get_width(
             intersector_air.lt_chip.limb_bits(),
-            intersector_air.lt_chip.decomp(),
+            intersector_air.lt_chip.decomp,
         ) + 1
     }
 }
 
 #[derive(Debug)]
 pub struct IntersectorCols<T> {
-    pub io: IntersectorIOCols<T>,
+    pub io: IntersectorIoCols<T>,
     pub aux: IntersectorAuxCols<T>,
 }
 
@@ -92,7 +92,7 @@ impl<T: Clone> IntersectorCols<T> {
         assert!(slc.len() == intersector_air.air_width());
 
         Self {
-            io: IntersectorIOCols::from_slice(&slc[..intersector_air.io_width()], intersector_air),
+            io: IntersectorIoCols::from_slice(&slc[..intersector_air.io_width()], intersector_air),
             aux: IntersectorAuxCols::from_slice(
                 &slc[intersector_air.io_width()..],
                 intersector_air,
@@ -109,7 +109,7 @@ impl<T: Clone> IntersectorCols<T> {
     }
 
     pub fn width(intersector_air: &IntersectorAir) -> usize {
-        IntersectorIOCols::<usize>::width(intersector_air)
+        IntersectorIoCols::<usize>::width(intersector_air)
             + IntersectorAuxCols::<usize>::width(intersector_air)
     }
 }

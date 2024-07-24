@@ -6,11 +6,13 @@ use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use std::sync::Arc;
 
 use p3_field::{AbstractField, Field};
+use serde::{Deserialize, Serialize};
 
 use super::symbolic_variable::SymbolicVariable;
 
 /// An expression over `SymbolicVariable`s.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
 pub enum SymbolicExpression<F: Field> {
     Variable(SymbolicVariable<F>),
     IsFirstRow,
@@ -60,6 +62,51 @@ impl<F: Field> SymbolicExpression<F> {
                 degree_multiple, ..
             } => *degree_multiple,
         }
+    }
+
+    pub fn rotate(&self, offset: usize) -> Self {
+        match self {
+            SymbolicExpression::Variable(v) => v.rotate(offset).into(),
+            SymbolicExpression::IsFirstRow => unreachable!("IsFirstRow should not be rotated"),
+            SymbolicExpression::IsLastRow => unreachable!("IsLastRow should not be rotated"),
+            SymbolicExpression::IsTransition => unreachable!("IsTransition should not be rotated"),
+            SymbolicExpression::Constant(c) => Self::Constant(*c),
+            SymbolicExpression::Add {
+                x,
+                y,
+                degree_multiple,
+            } => Self::Add {
+                x: Arc::new(x.rotate(offset)),
+                y: Arc::new(y.rotate(offset)),
+                degree_multiple: *degree_multiple,
+            },
+            SymbolicExpression::Sub {
+                x,
+                y,
+                degree_multiple,
+            } => Self::Sub {
+                x: Arc::new(x.rotate(offset)),
+                y: Arc::new(y.rotate(offset)),
+                degree_multiple: *degree_multiple,
+            },
+            SymbolicExpression::Neg { x, degree_multiple } => Self::Neg {
+                x: Arc::new(x.rotate(offset)),
+                degree_multiple: *degree_multiple,
+            },
+            SymbolicExpression::Mul {
+                x,
+                y,
+                degree_multiple,
+            } => Self::Mul {
+                x: Arc::new(x.rotate(offset)),
+                y: Arc::new(y.rotate(offset)),
+                degree_multiple: *degree_multiple,
+            },
+        }
+    }
+
+    pub fn next(&self) -> Self {
+        self.rotate(1)
     }
 }
 
@@ -266,5 +313,21 @@ impl<F: Field> Product for SymbolicExpression<F> {
 impl<F: Field> Product<F> for SymbolicExpression<F> {
     fn product<I: Iterator<Item = F>>(iter: I) -> Self {
         iter.map(|x| Self::from(x)).product()
+    }
+}
+
+pub trait SymbolicEvaluator<F: Field, E: AbstractField + From<F>> {
+    fn eval_var(&self, symbolic_var: SymbolicVariable<F>) -> E;
+
+    fn eval_expr(&self, symbolic_expr: &SymbolicExpression<F>) -> E {
+        match symbolic_expr {
+            SymbolicExpression::Variable(var) => self.eval_var(*var),
+            SymbolicExpression::Constant(c) => (*c).into(),
+            SymbolicExpression::Add { x, y, .. } => self.eval_expr(x) + self.eval_expr(y),
+            SymbolicExpression::Sub { x, y, .. } => self.eval_expr(x) - self.eval_expr(y),
+            SymbolicExpression::Neg { x, .. } => -self.eval_expr(x),
+            SymbolicExpression::Mul { x, y, .. } => self.eval_expr(x) * self.eval_expr(y),
+            _ => unreachable!("Expression cannot be evaluated"),
+        }
     }
 }

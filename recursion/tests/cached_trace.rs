@@ -1,26 +1,21 @@
 use itertools::Itertools;
 use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, Field};
+use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
-use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_ceil_usize;
 use rand::{rngs::StdRng, SeedableRng};
 
-use afs_recursion::hints::Hintable;
-use afs_recursion::stark::DynRapForRecursion;
-use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::AirBridge};
+use afs_stark_backend::air_builders::PartitionedAirBuilder;
 use afs_stark_backend::{prover::trace::TraceCommitmentBuilder, verifier::VerificationError};
-use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
+use afs_test_utils::config::baby_bear_poseidon2::default_engine;
 use afs_test_utils::{engine::StarkEngine, utils::generate_random_matrix};
 
 mod common;
 
 /// Inner value is width of y-submatrix
 pub struct SumAir(pub usize);
-
-impl<F: Field> AirBridge<F> for SumAir {}
 
 impl<F> BaseAir<F> for SumAir {
     fn width(&self) -> usize {
@@ -49,8 +44,6 @@ impl<AB: PartitionedAirBuilder> Air<AB> for SumAir {
 type Val = BabyBear;
 
 fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), VerificationError> {
-    type SC = BabyBearPoseidon2Config;
-
     assert_eq!(x.len(), ys.len());
     let degree = x.len();
     let log_degree = log2_ceil_usize(degree);
@@ -67,8 +60,8 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     let y_ptr = keygen_builder.add_cached_main_matrix(y_width);
     let x_ptr = keygen_builder.add_main_matrix(1);
     keygen_builder.add_partitioned_air(&air, 0, vec![x_ptr, y_ptr]);
-    let partial_pk = keygen_builder.generate_partial_pk();
-    let partial_vk = partial_pk.partial_vk();
+    let pk = keygen_builder.generate_pk();
+    let vk = pk.vk();
 
     let prover = engine.prover();
     // Must add trace matrices in the same order as above
@@ -80,13 +73,13 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
     trace_builder.load_trace(x_trace);
     trace_builder.commit_current();
 
-    let main_trace_data = trace_builder.view(&partial_vk, vec![&air]);
+    let main_trace_data = trace_builder.view(&vk, vec![&air]);
     let pvs = vec![vec![]];
 
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, &partial_pk, main_trace_data, &pvs);
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pvs);
 
-    common::run_verification_program(vec![&air], pvs, &engine, &partial_vk, proof);
+    common::run_verification_program(vec![&air], pvs, &engine, &vk, proof);
     Ok(())
 }
 

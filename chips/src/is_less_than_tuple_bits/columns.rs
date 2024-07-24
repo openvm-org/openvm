@@ -3,13 +3,13 @@ use afs_derive::AlignedBorrow;
 use crate::{is_equal::columns::IsEqualAuxCols, is_less_than_bits::columns::IsLessThanBitsAuxCols};
 
 #[derive(Default, AlignedBorrow)]
-pub struct IsLessThanTupleBitsIOCols<T> {
+pub struct IsLessThanTupleBitsIoCols<T> {
     pub x: Vec<T>,
     pub y: Vec<T>,
     pub tuple_less_than: T,
 }
 
-impl<T: Clone> IsLessThanTupleBitsIOCols<T> {
+impl<T: Clone> IsLessThanTupleBitsIoCols<T> {
     pub fn from_slice(slc: &[T], tuple_len: usize) -> Self {
         Self {
             x: slc[0..tuple_len].to_vec(),
@@ -121,13 +121,13 @@ impl<T: Clone> IsLessThanTupleBitsAuxCols<T> {
 }
 
 pub struct IsLessThanTupleBitsCols<T> {
-    pub io: IsLessThanTupleBitsIOCols<T>,
+    pub io: IsLessThanTupleBitsIoCols<T>,
     pub aux: IsLessThanTupleBitsAuxCols<T>,
 }
 
 impl<T: Clone> IsLessThanTupleBitsCols<T> {
     pub fn from_slice(slc: &[T], limb_bits: Vec<usize>, tuple_len: usize) -> Self {
-        let io = IsLessThanTupleBitsIOCols::from_slice(&slc[..2 * tuple_len + 1], tuple_len);
+        let io = IsLessThanTupleBitsIoCols::from_slice(&slc[..2 * tuple_len + 1], tuple_len);
         let aux =
             IsLessThanTupleBitsAuxCols::from_slice(&slc[2 * tuple_len + 1..], limb_bits, tuple_len);
 
@@ -141,7 +141,7 @@ impl<T: Clone> IsLessThanTupleBitsCols<T> {
     }
 
     pub fn get_width(limb_bits: Vec<usize>, tuple_len: usize) -> usize {
-        IsLessThanTupleBitsIOCols::<T>::get_width(tuple_len)
+        IsLessThanTupleBitsIoCols::<T>::get_width(tuple_len)
             + IsLessThanTupleBitsAuxCols::<T>::get_width(limb_bits)
     }
 }

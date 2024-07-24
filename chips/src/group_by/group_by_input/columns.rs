@@ -20,6 +20,7 @@ pub struct GroupByCols<T> {
 }
 
 /// The `aux` columns are all non-cached columns.
+#[derive(Clone)]
 pub struct GroupByAuxCols<T> {
     /// If page is not already grouped, extra columns are needed to do the grouping.
     pub grouped: Option<GroupedPageCols<T>>,
@@ -30,6 +31,7 @@ pub struct GroupByAuxCols<T> {
 }
 
 /// The columns that are relevant to the GroupBy operation.
+#[derive(Clone)]
 pub struct GroupedPageCols<T> {
     pub is_alloc: T,
     pub group_by: Vec<T>,

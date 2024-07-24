@@ -1,16 +1,31 @@
 use std::{borrow::Borrow, iter::zip};
 
+use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::Itertools;
-use p3_air::{Air, AirBuilder, BaseAir};
+use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use crate::sub_chip::{AirConfig, SubAir};
 
-use super::{
-    columns::{XorBitCols, XorCols, XorIOCols},
-    XorBitsAir,
-};
+use super::columns::{XorBitCols, XorCols, XorIoCols};
+
+/// AIR that computes the xor of two numbers of at most N bits each.
+/// This struct only implements SubAir.
+#[derive(Copy, Clone, Debug)]
+pub struct XorBitsAir<const N: usize> {
+    pub bus_index: usize,
+}
+
+impl<const N: usize> XorBitsAir<N> {
+    pub fn new(bus_index: usize) -> Self {
+        Self { bus_index }
+    }
+
+    pub fn calc_xor(&self, a: u32, b: u32) -> u32 {
+        a ^ b
+    }
+}
 
 impl<const N: usize> AirConfig for XorBitsAir<N> {
     type Cols<T> = XorCols<N, T>;
@@ -22,7 +37,7 @@ impl<F: Field, const N: usize> BaseAir<F> for XorBitsAir<N> {
     }
 }
 
-impl<AB: AirBuilder, const N: usize> Air<AB> for XorBitsAir<N> {
+impl<AB: InteractionBuilder, const N: usize> Air<AB> for XorBitsAir<N> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -40,8 +55,8 @@ impl<AB: AirBuilder, const N: usize> Air<AB> for XorBitsAir<N> {
 /// For each x_bit[i], y_bit[i], and z_bit[i], constraints x_bit[i] + y_bit[i] - 2 * x_bit[i] * y_bit[i] == z_bit[i],
 /// which is equivalent to ensuring that x_bit[i] ^ y_bit[i] == z_bit[i].
 /// Overall, this ensures that x^y == z.
-impl<const N: usize, AB: AirBuilder> SubAir<AB> for XorBitsAir<N> {
-    type IoView = XorIOCols<AB::Var>;
+impl<const N: usize, AB: InteractionBuilder> SubAir<AB> for XorBitsAir<N> {
+    type IoView = XorIoCols<AB::Var>;
     type AuxView = XorBitCols<AB::Var>;
 
     fn eval(&self, builder: &mut AB, io: Self::IoView, bits: Self::AuxView) {
@@ -56,5 +71,7 @@ impl<const N: usize, AB: AirBuilder> SubAir<AB> for XorBitsAir<N> {
         for ((x, y), z) in bits.x.into_iter().zip_eq(bits.y).zip_eq(bits.z) {
             builder.assert_eq(x + y - AB::Expr::two() * x * y, z);
         }
+
+        self.eval_interactions(builder, io);
     }
 }

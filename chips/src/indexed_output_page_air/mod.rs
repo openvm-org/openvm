@@ -1,14 +1,15 @@
 use crate::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 
 pub mod air;
-pub mod bridge;
 pub mod columns;
 pub mod trace;
 
 #[cfg(test)]
 pub mod tests;
 
-#[derive(Clone, Debug)]
+/// Air that constraints that the index of the page is strictly ascending.
+/// This Air does not receive any data and its only interactions are for range check.
+#[derive(Copy, Clone, Debug)]
 pub struct IndexedOutputPageAir {
     range_bus_index: usize,
 
@@ -42,7 +43,7 @@ impl IndexedOutputPageAir {
 
     pub fn aux_width(&self) -> usize {
         IsLessThanTupleAuxCols::<usize>::get_width(
-            vec![self.idx_limb_bits; self.idx_len],
+            &vec![self.idx_limb_bits; self.idx_len],
             self.idx_decomp,
         ) + 1
     }

@@ -17,7 +17,7 @@ pub trait OfflineCheckerOperation<F> {
     fn get_op_type(&self) -> u8;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct OfflineChecker {
     pub idx_clk_limb_bits: Vec<usize>,
     pub decomp: usize,
@@ -59,10 +59,7 @@ impl OfflineChecker {
         5 + self.idx_len
             + self.data_len
             + IsEqualVecAuxCols::<usize>::get_width(self.idx_len)
-            + IsLessThanTupleAuxCols::<usize>::get_width(
-                self.idx_clk_limb_bits.clone(),
-                self.decomp,
-            )
+            + IsLessThanTupleAuxCols::<usize>::get_width(&self.idx_clk_limb_bits, self.decomp)
     }
 }
 

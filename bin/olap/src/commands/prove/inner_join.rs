@@ -3,7 +3,7 @@ use std::{fs, marker::PhantomData};
 use afs_chips::inner_join::controller::FKInnerJoinController;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
-    keygen::types::MultiStarkPartialProvingKey,
+    keygen::types::MultiStarkProvingKey,
     prover::trace::{ProverTraceData, TraceCommitmentBuilder},
 };
 use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
@@ -66,8 +66,7 @@ where
         let prefix = config.generate_filename();
         let encoded_pk =
             read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
-        let partial_pk: MultiStarkPartialProvingKey<SC> =
-            bincode::deserialize(&encoded_pk).unwrap();
+        let pk: MultiStarkProvingKey<SC> = bincode::deserialize(&encoded_pk).unwrap();
 
         // Get the trace data from file
         let table_id_full = inner_join_op.table_id_left.to_string();
@@ -91,8 +90,7 @@ where
         );
 
         // Generate a proof and write to file
-        let proof =
-            inner_join_controller.prove(engine, &partial_pk, &mut trace_builder, prover_trace_data);
+        let proof = inner_join_controller.prove(engine, &pk, &mut trace_builder, prover_trace_data);
         let encoded_proof = bincode::serialize(&proof).unwrap();
         let proof_path = cache_folder.clone() + "/" + &table_id_full + ".proof.bin";
         let _ = fs::create_dir_all(&cache_folder);

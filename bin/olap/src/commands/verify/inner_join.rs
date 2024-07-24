@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use afs_chips::inner_join::controller::FKInnerJoinController;
 use afs_stark_backend::{
-    config::PcsProverData, keygen::types::MultiStarkPartialProvingKey, prover::types::Proof,
+    config::PcsProverData, keygen::types::MultiStarkProvingKey, prover::types::Proof,
 };
 use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
 use bin_common::utils::io::read_from_path;
@@ -53,11 +53,9 @@ where
         );
 
         let prefix = config.generate_filename();
-        let encoded_pk =
-            read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
-        let partial_pk: MultiStarkPartialProvingKey<SC> =
-            bincode::deserialize(&encoded_pk).unwrap();
-        let partial_vk = partial_pk.partial_vk();
+        let encoded_pk = read_from_path(keys_folder.clone() + "/" + &prefix + ".pk").unwrap();
+        let pk: MultiStarkProvingKey<SC> = bincode::deserialize(&encoded_pk).unwrap();
+        let vk = pk.vk();
 
         // Get proof from disk
         let table_id_full = inner_join_op.table_id_left.to_string();
@@ -67,9 +65,7 @@ where
         let proof: Proof<SC> = bincode::deserialize(&encoded_proof).unwrap();
 
         // Verify proof
-        inner_join_controller
-            .verify(engine, partial_vk, proof)
-            .unwrap();
+        inner_join_controller.verify(engine, vk, proof).unwrap();
 
         Ok(())
     }

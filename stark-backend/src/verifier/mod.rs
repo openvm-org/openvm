@@ -11,7 +11,7 @@ mod error;
 pub use error::*;
 
 use crate::{
-    keygen::types::MultiStarkPartialVerifyingKey,
+    keygen::types::MultiStarkVerifyingKey,
     prover::{opener::AdjacentOpenedValues, types::Proof},
     rap::AnyRap,
 };
@@ -34,7 +34,8 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
     pub fn verify(
         &self,
         challenger: &mut SC::Challenger,
-        vk: &MultiStarkPartialVerifyingKey<SC>,
+        vk: &MultiStarkVerifyingKey<SC>,
+
         raps: Vec<&dyn AnyRap<SC>>,
         proof: &Proof<SC>,
         public_values: &[Vec<Val<SC>>],
@@ -82,7 +83,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
     pub fn verify_raps(
         &self,
         challenger: &mut SC::Challenger,
-        vk: &MultiStarkPartialVerifyingKey<SC>,
+        vk: &MultiStarkVerifyingKey<SC>,
         raps: Vec<&dyn AnyRap<SC>>,
         proof: &Proof<SC>,
         public_values: &[Vec<Val<SC>>],
@@ -214,7 +215,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
             .for_each(|(phase_idx, (values_per_mat, commit))| {
                 // Filter RAPs by those that have non-empty trace matrix in this phase
                 let domains = vk.per_air.iter().enumerate().flat_map(|(air_idx, vk)| {
-                    (*vk.width.after_challenge.get(phase_idx).unwrap_or(&0) > 0)
+                    (*vk.width().after_challenge.get(phase_idx).unwrap_or(&0) > 0)
                         .then(|| domains[air_idx])
                 });
                 let domains_and_openings = domains
@@ -270,7 +271,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
                 .map(|ptr| &opened_values.main[ptr.commit_index][ptr.matrix_index])
                 .collect_vec();
             // loop through challenge phases of this single RAP
-            let after_challenge_values = (0..vk.width.after_challenge.len())
+            let after_challenge_values = (0..vk.width().after_challenge.len())
                 .map(|phase_idx| {
                     let matrix_idx = after_challenge_idx[phase_idx];
                     after_challenge_idx[phase_idx] += 1;
@@ -279,6 +280,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
                 .collect_vec();
             verify_single_rap_constraints(
                 rap,
+                vk,
                 preprocessed_values,
                 partitioned_main_values,
                 after_challenge_values,

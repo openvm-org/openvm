@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::{iter, panic};
 
 use afs_stark_backend::{
-    keygen::{types::MultiStarkPartialProvingKey, MultiStarkKeygenBuilder},
+    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver, USE_DEBUG_BUILDER},
     verifier::VerificationError,
 };
@@ -33,7 +33,7 @@ fn load_page_test(
     page_controller: &mut page_controller::PageController<BabyBearPoseidon2Config>,
     ops_sender: &DummyInteractionAir,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
-    partial_pk: &MultiStarkPartialProvingKey<BabyBearPoseidon2Config>,
+    pk: &MultiStarkProvingKey<BabyBearPoseidon2Config>,
     trace_degree: usize,
     num_ops: usize,
 ) -> Result<(), VerificationError> {
@@ -73,7 +73,7 @@ fn load_page_test(
 
     let proof = page_controller.prove(
         engine,
-        partial_pk,
+        pk,
         trace_builder,
         init_page_pdata,
         final_page_pdata,
@@ -81,7 +81,7 @@ fn load_page_test(
         ops_sender_trace,
     );
 
-    page_controller.verify(engine, partial_pk.partial_vk(), proof, ops_sender)
+    page_controller.verify(engine, pk.vk(), proof, ops_sender)
 }
 
 #[test]
@@ -190,7 +190,7 @@ fn page_offline_checker_small() {
 
     page_controller.set_up_keygen_builder(&mut keygen_builder, &ops_sender);
 
-    let partial_pk = keygen_builder.generate_partial_pk();
+    let partial_pk = keygen_builder.generate_pk();
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -318,7 +318,7 @@ fn page_offline_checker_test() {
 
     page_controller.set_up_keygen_builder(&mut keygen_builder, &ops_sender);
 
-    let partial_pk = keygen_builder.generate_partial_pk();
+    let pk = keygen_builder.generate_pk();
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -332,7 +332,7 @@ fn page_offline_checker_test() {
         &mut page_controller,
         &ops_sender,
         &mut trace_builder,
-        &partial_pk,
+        &pk,
         trace_degree,
         num_ops,
     )
@@ -366,7 +366,7 @@ fn page_offline_checker_test() {
         &mut page_controller,
         &ops_sender,
         &mut trace_builder,
-        &partial_pk,
+        &pk,
         trace_degree,
         num_ops,
     )
@@ -398,7 +398,7 @@ fn page_offline_checker_test() {
         &mut page_controller,
         &ops_sender,
         &mut trace_builder,
-        &partial_pk,
+        &pk,
         trace_degree,
         num_ops,
     )
@@ -420,7 +420,7 @@ fn page_offline_checker_test() {
         &mut page_controller,
         &ops_sender,
         &mut trace_builder,
-        &partial_pk,
+        &pk,
         trace_degree,
         num_ops,
     )
@@ -446,7 +446,7 @@ fn page_offline_checker_test() {
         &mut page_controller,
         &ops_sender,
         &mut trace_builder,
-        &partial_pk,
+        &pk,
         trace_degree,
         num_ops,
     )
@@ -478,7 +478,7 @@ fn page_offline_checker_test() {
             &mut page_controller,
             &ops_sender,
             &mut trace_builder,
-            &partial_pk,
+            &pk,
             trace_degree,
             num_ops,
         ),
@@ -520,7 +520,7 @@ fn page_offline_checker_test() {
             &mut page_controller,
             &ops_sender,
             &mut trace_builder,
-            &partial_pk,
+            &pk,
             trace_degree,
             num_ops,
         );

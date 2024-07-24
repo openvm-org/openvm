@@ -7,21 +7,16 @@ use tracing::instrument;
 pub mod types;
 
 use crate::{
-    air_builders::symbolic::get_log_quotient_degree,
+    air_builders::symbolic::get_symbolic_builder,
     commit::{MatrixCommitmentPointers, SingleMatrixCommitPtr},
-    interaction::AirBridge,
     prover::trace::TraceCommitter,
     rap::AnyRap,
 };
 
 use self::types::{
-    create_commit_to_air_graph, MultiStarkPartialProvingKey, ProverOnlySinglePreprocessedData,
-    StarkPartialProvingKey, StarkPartialVerifyingKey, TraceWidth, VerifierSinglePreprocessedData,
+    create_commit_to_air_graph, MultiStarkProvingKey, ProverOnlySinglePreprocessedData,
+    StarkProvingKey, StarkVerifyingKey, TraceWidth, VerifierSinglePreprocessedData,
 };
-
-/// Constants for interactive AIRs
-const NUM_PERM_CHALLENGES: usize = 2;
-const NUM_PERM_EXPOSED_VALUES: usize = 1;
 
 /// Stateful builder to create multi-stark proving and verifying keys
 /// for system of multiple RAPs with multiple multi-matrix commitments
@@ -30,31 +25,31 @@ pub struct MultiStarkKeygenBuilder<'a, SC: StarkGenericConfig> {
     /// `placeholder_main_matrix_in_commit[commit_idx][mat_idx] =` matrix width, it is used to store
     /// a placeholder of a main trace matrix that must be committed during proving
     placeholder_main_matrix_in_commit: Vec<Vec<usize>>,
-    partial_pk: MultiStarkPartialProvingKey<SC>,
+    pk: MultiStarkProvingKey<SC>,
 }
 
 impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     pub fn new(config: &'a SC) -> Self {
         Self {
             config,
-            partial_pk: MultiStarkPartialProvingKey::empty(),
+            pk: MultiStarkProvingKey::empty(),
             placeholder_main_matrix_in_commit: vec![vec![]],
         }
     }
 
     /// Generates proving key, resetting the state of the builder.
     /// The verifying key can be obtained from the proving key.
-    pub fn generate_partial_pk(&mut self) -> MultiStarkPartialProvingKey<SC> {
-        let mut pk = std::mem::take(&mut self.partial_pk);
+    pub fn generate_pk(&mut self) -> MultiStarkProvingKey<SC> {
+        let mut pk = std::mem::take(&mut self.pk);
         // Determine global num challenges to sample
         let num_phases = pk
             .per_air
             .iter()
             .map(|pk| {
                 // Consistency check
-                let num = pk.vk.width.after_challenge.len();
-                assert_eq!(num, pk.vk.num_challenges_to_sample.len());
-                assert_eq!(num, pk.vk.num_exposed_values_after_challenge.len());
+                let num = pk.vk.width().after_challenge.len();
+                assert_eq!(num, pk.vk.params.num_challenges_to_sample.len());
+                assert_eq!(num, pk.vk.params.num_exposed_values_after_challenge.len());
                 num
             })
             .max()
@@ -63,7 +58,13 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             .map(|phase_idx| {
                 pk.per_air
                     .iter()
-                    .map(|pk| *pk.vk.num_challenges_to_sample.get(phase_idx).unwrap_or(&0))
+                    .map(|pk| {
+                        *pk.vk
+                            .params
+                            .num_challenges_to_sample
+                            .get(phase_idx)
+                            .unwrap_or(&0)
+                    })
                     .max()
                     .unwrap_or_else(|| panic!("No challenges used in challenge phase {phase_idx}"))
             })
@@ -83,6 +84,25 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             create_commit_to_air_graph(&air_matrices, pk.num_main_trace_commitments);
         // reset state
         self.placeholder_main_matrix_in_commit = vec![vec![]];
+
+        for (i, pk) in pk.per_air.iter().enumerate() {
+            println!("AIR {i} [{}]:", &pk.air_name);
+            println!("  quotient degree: {}", pk.vk.quotient_degree);
+            println!(
+                "  num symbolic constraints: {}",
+                pk.vk.symbolic_constraints.constraints.len()
+            );
+            println!(
+                "  num interactions: {} on buses {:?}",
+                pk.vk.symbolic_constraints.interactions.len(),
+                pk.vk
+                    .symbolic_constraints
+                    .interactions
+                    .iter()
+                    .map(|i| i.bus_index)
+                    .collect_vec()
+            );
+        }
 
         pk
     }
@@ -139,7 +159,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
         let (prep_prover_data, prep_verifier_data): (Option<_>, Option<_>) =
             self.get_single_preprocessed_data(air).unzip();
         let preprocessed_width = prep_prover_data.as_ref().map(|d| d.trace.width());
-        let perm_width = <dyn AnyRap<SC> as AirBridge<Val<SC>>>::permutation_width(air);
+
         let main_widths = partitioned_main_ptrs
             .iter()
             .map(|ptr| self.placeholder_main_matrix_in_commit[ptr.commit_index][ptr.matrix_index])
@@ -147,41 +167,30 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
         let width = TraceWidth {
             preprocessed: preprocessed_width,
             partitioned_main: main_widths,
-            after_challenge: perm_width.into_iter().collect(),
+            after_challenge: vec![],
         };
-        let num_challenges_to_sample = if width.after_challenge.is_empty() {
-            vec![]
-        } else {
-            vec![NUM_PERM_CHALLENGES]
-        };
-        let num_exposed_values = if width.after_challenge.is_empty() {
-            vec![]
-        } else {
-            vec![NUM_PERM_EXPOSED_VALUES]
-        };
-        let log_quotient_degree = get_log_quotient_degree(
-            air,
-            &width,
-            &num_challenges_to_sample,
-            num_public_values,
-            &num_exposed_values,
-        );
+        let symbolic_builder = get_symbolic_builder(air, &width, num_public_values, &[], &[]);
+
+        let params = symbolic_builder.params();
+        let symbolic_constraints = symbolic_builder.constraints();
+
+        let log_quotient_degree = symbolic_constraints.get_log_quotient_degree();
         let quotient_degree = 1 << log_quotient_degree;
-        let vk = StarkPartialVerifyingKey {
+
+        let vk = StarkVerifyingKey {
             preprocessed_data: prep_verifier_data,
-            width,
+            params,
+            symbolic_constraints,
             main_graph: MatrixCommitmentPointers::new(partitioned_main_ptrs),
             quotient_degree,
-            num_public_values,
-            num_exposed_values_after_challenge: num_exposed_values,
-            num_challenges_to_sample,
         };
-        let pk = StarkPartialProvingKey {
+        let pk = StarkProvingKey {
+            air_name: air.name(),
             vk,
             preprocessed_data: prep_prover_data,
         };
 
-        self.partial_pk.per_air.push(pk);
+        self.pk.per_air.push(pk);
     }
 
     /// Default way to add a single Interactive AIR.

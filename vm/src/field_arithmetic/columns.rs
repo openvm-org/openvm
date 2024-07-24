@@ -5,16 +5,16 @@ use p3_field::Field;
 ///
 /// Five IO columns for rcv_count, opcode, x, y, result.
 /// Eight aux columns for interpreting opcode, evaluating indicators, inverse, and explicit computations.
-#[derive(AlignedBorrow)]
+#[derive(Copy, Clone, Debug, AlignedBorrow)]
 #[repr(C)]
 pub struct FieldArithmeticCols<T> {
-    pub io: FieldArithmeticIOCols<T>,
+    pub io: FieldArithmeticIoCols<T>,
     pub aux: FieldArithmeticAuxCols<T>,
 }
 
-#[derive(AlignedBorrow)]
+#[derive(Copy, Clone, Debug, AlignedBorrow)]
 #[repr(C)]
-pub struct FieldArithmeticIOCols<T> {
+pub struct FieldArithmeticIoCols<T> {
     /// Number of times to receive
     pub rcv_count: T,
     pub opcode: T,
@@ -23,7 +23,7 @@ pub struct FieldArithmeticIOCols<T> {
     pub z: T,
 }
 
-#[derive(AlignedBorrow)]
+#[derive(Copy, Clone, Debug, AlignedBorrow)]
 #[repr(C)]
 pub struct FieldArithmeticAuxCols<T> {
     pub opcode_lo: T,
@@ -45,7 +45,7 @@ where
     pub const NUM_AUX_COLS: usize = 8;
 
     pub fn get_width() -> usize {
-        FieldArithmeticIOCols::<T>::get_width() + FieldArithmeticAuxCols::<T>::get_width()
+        FieldArithmeticIoCols::<T>::get_width() + FieldArithmeticAuxCols::<T>::get_width()
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -56,7 +56,7 @@ where
 
     pub fn blank_row() -> Self {
         Self {
-            io: FieldArithmeticIOCols::<T> {
+            io: FieldArithmeticIoCols::<T> {
                 rcv_count: T::zero(),
                 opcode: T::from_canonical_u8(FieldArithmeticAir::BASE_OP),
                 x: T::zero(),
@@ -77,7 +77,7 @@ where
     }
 }
 
-impl<T: Field> FieldArithmeticIOCols<T> {
+impl<T: Field> FieldArithmeticIoCols<T> {
     pub fn get_width() -> usize {
         5
     }

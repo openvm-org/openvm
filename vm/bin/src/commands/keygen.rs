@@ -18,7 +18,7 @@ use super::{write_bytes, WORD_SIZE};
 
 /// `afs keygen` command
 /// Uses information from config.toml to generate partial proving and verifying keys and
-/// saves them to the specified `output-folder` as *.partial.pk and *.partial.vk.
+/// saves them to the specified `output-folder` as *.pk and *.vk.
 #[derive(Debug, Parser)]
 pub struct KeygenCommand {
     #[arg(
@@ -60,13 +60,13 @@ impl KeygenCommand {
             keygen_builder.add_air(chip, 0);
         }
 
-        let partial_pk = keygen_builder.generate_partial_pk();
-        let partial_vk = partial_pk.partial_vk();
-        let encoded_pk: Vec<u8> = bincode::serialize(&partial_pk)?;
-        let encoded_vk: Vec<u8> = bincode::serialize(&partial_vk)?;
+        let pk = keygen_builder.generate_pk();
+        let vk = pk.vk();
+        let encoded_pk: Vec<u8> = bincode::serialize(&pk)?;
+        let encoded_vk: Vec<u8> = bincode::serialize(&vk)?;
         fs::create_dir_all(Path::new(&self.output_folder))?;
-        let pk_path = Path::new(&self.output_folder).join("partial.pk");
-        let vk_path = Path::new(&self.output_folder).join("partial.vk");
+        let pk_path = Path::new(&self.output_folder).join("pk");
+        let vk_path = Path::new(&self.output_folder).join("vk");
         fs::create_dir_all(self.output_folder)?;
         write_bytes(&encoded_pk, &pk_path)?;
         write_bytes(&encoded_vk, &vk_path)?;

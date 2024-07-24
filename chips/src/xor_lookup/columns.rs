@@ -2,12 +2,12 @@ use afs_derive::AlignedBorrow;
 use core::mem::{size_of, transmute};
 use p3_util::indices_arr;
 
-#[derive(Default, AlignedBorrow)]
+#[derive(Copy, Clone, Debug, AlignedBorrow)]
 pub struct XorLookupCols<T> {
     pub mult: T,
 }
 
-#[derive(Default, AlignedBorrow)]
+#[derive(Copy, Clone, Debug, AlignedBorrow)]
 pub struct XorLookupPreprocessedCols<T> {
     pub x: T,
     pub y: T,

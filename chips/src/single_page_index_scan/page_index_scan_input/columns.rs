@@ -39,7 +39,7 @@ impl<T: Clone> PageIndexScanInputLocalCols<T> {
     pub fn from_slice(
         slc: &[T],
         idx_len: usize,
-        idx_limb_bits: Vec<usize>,
+        idx_limb_bits: &[usize],
         decomp: usize,
         cmp: Comp,
     ) -> Self {
@@ -57,7 +57,7 @@ impl<T: Clone> PageIndexScanInputLocalCols<T> {
             }),
             Comp::Lte => {
                 let less_than_tuple_aux_width =
-                    IsLessThanTupleAuxCols::<T>::get_width(idx_limb_bits.clone(), decomp);
+                    IsLessThanTupleAuxCols::<T>::get_width(idx_limb_bits, decomp);
                 PageIndexScanInputAuxCols::Lte(NonStrictCompAuxCols {
                     satisfies_strict_comp: slc[idx_len + 2].clone(),
                     satisfies_eq_comp: slc[idx_len + 3].clone(),
@@ -77,7 +77,7 @@ impl<T: Clone> PageIndexScanInputLocalCols<T> {
             }),
             Comp::Gte => {
                 let less_than_tuple_aux_width =
-                    IsLessThanTupleAuxCols::<T>::get_width(idx_limb_bits.clone(), decomp);
+                    IsLessThanTupleAuxCols::<T>::get_width(idx_limb_bits, decomp);
                 PageIndexScanInputAuxCols::Gte(NonStrictCompAuxCols {
                     satisfies_strict_comp: slc[idx_len + 2].clone(),
                     satisfies_eq_comp: slc[idx_len + 3].clone(),
@@ -121,7 +121,7 @@ impl<T: Clone> PageIndexScanInputCols<T> {
         aux_slc: &[T],
         idx_len: usize,
         data_len: usize,
-        idx_limb_bits: Vec<usize>,
+        idx_limb_bits: &[usize],
         decomp: usize,
         cmp: Comp,
     ) -> Self {
@@ -139,7 +139,7 @@ impl<T: Clone> PageIndexScanInputCols<T> {
         slc: &[T],
         idx_len: usize,
         data_len: usize,
-        idx_limb_bits: Vec<usize>,
+        idx_limb_bits: &[usize],
         decomp: usize,
         cmp: Comp,
     ) -> Self {
@@ -157,7 +157,7 @@ impl<T: Clone> PageIndexScanInputCols<T> {
     pub fn get_width(
         idx_len: usize,
         data_len: usize,
-        idx_limb_bits: Vec<usize>,
+        idx_limb_bits: &[usize],
         decomp: usize,
         cmp: Comp,
     ) -> usize {
