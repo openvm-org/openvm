@@ -73,7 +73,7 @@ impl IsLessThanAir {
 
         builder.assert_eq(lower_from_decomp, lower);
 
-        // Ensuring, in case limb_bits does not divide decomp, then the last lower_decomp is
+        // Ensuring, in case decomp does not divide max_bits, then the last lower_decomp is
         // shifted correctly
         if self.max_bits % self.decomp != 0 {
             let last_limb_shift = (self.decomp - (self.max_bits % self.decomp)) % self.decomp;
