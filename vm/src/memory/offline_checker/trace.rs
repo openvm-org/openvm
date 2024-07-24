@@ -171,7 +171,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
                 ],
                 range_checker,
             ))
-            .flatten()[IsLessThanTupleIOCols::<F>::width(3)..]
+            .flatten()[IsLessThanTupleIoCols::<F>::width(3)..]
             .to_vec();
 
         row.push(is_equal_addr_space_aux);

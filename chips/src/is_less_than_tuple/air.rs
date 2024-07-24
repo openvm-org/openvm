@@ -118,7 +118,7 @@ impl IsLessThanTupleAir {
     pub fn limb_bits(&self) -> Vec<usize> {
         self.is_less_than_airs
             .iter()
-            .map(|air| air.limb_bits)
+            .map(|air| air.max_bits)
             .collect()
     }
 }
@@ -129,7 +129,7 @@ impl AirConfig for IsLessThanTupleAir {
 
 impl<F: Field> BaseAir<F> for IsLessThanTupleAir {
     fn width(&self) -> usize {
-        IsLessThanTupleCols::<F>::get_width(self.limb_bits(), self.decomp, self.tuple_len())
+        IsLessThanTupleCols::<F>::width(self)
     }
 }
 

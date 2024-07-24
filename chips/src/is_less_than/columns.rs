@@ -50,7 +50,7 @@ impl<T: Clone> IsLessThanAuxCols<T> {
     }
 
     pub fn width(lt_air: &IsLessThanAir) -> usize {
-        1 + lt_air.num_limbs() + (lt_air.max_bits % lt_air.decomp != 0) as usize
+        1 + lt_air.num_limbs + (lt_air.max_bits % lt_air.decomp != 0) as usize
     }
 }
 
@@ -74,6 +74,6 @@ impl<T: Clone> IsLessThanCols<T> {
     }
 
     pub fn width(lt_air: &IsLessThanAir) -> usize {
-        IsLessThanIOCols::<T>::width() + IsLessThanAuxCols::<T>::width(lt_air)
+        IsLessThanIoCols::<T>::width() + IsLessThanAuxCols::<T>::width(lt_air)
     }
 }

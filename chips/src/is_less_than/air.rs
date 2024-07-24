@@ -14,7 +14,7 @@ pub struct IsLessThanAir {
     /// The bus index for sends to range chip
     pub bus_index: usize,
     /// The maximum number of bits for the numbers to compare
-    pub limb_bits: usize,
+    pub max_bits: usize,
     /// The number of bits to decompose each number into, for less than checking
     pub decomp: usize,
     /// num_limbs is the number of limbs we decompose each input into, not including the last shifted limb
@@ -22,12 +22,12 @@ pub struct IsLessThanAir {
 }
 
 impl IsLessThanAir {
-    pub fn new(bus_index: usize, limb_bits: usize, decomp: usize) -> Self {
+    pub fn new(bus_index: usize, max_bits: usize, decomp: usize) -> Self {
         Self {
             bus_index,
-            limb_bits,
+            max_bits,
             decomp,
-            num_limbs: (limb_bits + decomp - 1) / decomp,
+            num_limbs: (max_bits + decomp - 1) / decomp,
         }
     }
 
@@ -50,12 +50,12 @@ impl IsLessThanAir {
 
         // this is the desired intermediate value (i.e. 2^limb_bits + y - x - 1)
         let intermed_val =
-            y - x + AB::Expr::from_canonical_u64(1 << self.max_bits()) - AB::Expr::one();
+            y - x + AB::Expr::from_canonical_u64(1 << self.max_bits) - AB::Expr::one();
 
         // constrain that the lower_bits + less_than * 2^limb_bits is the correct intermediate sum
         // note that the intermediate value will be >= 2^limb_bits if and only if x < y, and check_val will therefore be
         // the correct value if and only if less_than is the indicator for whether x < y
-        let check_val = lower + less_than * AB::Expr::from_canonical_u64(1 << self.max_bits());
+        let check_val = lower + less_than * AB::Expr::from_canonical_u64(1 << self.max_bits);
 
         builder.assert_eq(intermed_val, check_val);
 
@@ -66,9 +66,9 @@ impl IsLessThanAir {
         let lower_from_decomp = lower_decomp
             .iter()
             .enumerate()
-            .take(self.num_limbs())
+            .take(self.num_limbs)
             .fold(AB::Expr::zero(), |acc, (i, &val)| {
-                acc + val * AB::Expr::from_canonical_u64(1 << (i * self.decomp()))
+                acc + val * AB::Expr::from_canonical_u64(1 << (i * self.decomp))
             });
 
         builder.assert_eq(lower_from_decomp, lower);
@@ -76,8 +76,7 @@ impl IsLessThanAir {
         // Ensuring, in case limb_bits does not divide decomp, then the last lower_decomp is
         // shifted correctly
         if self.max_bits % self.decomp != 0 {
-            let last_limb_shift =
-                (self.decomp() - (self.max_bits() % self.decomp())) % self.decomp();
+            let last_limb_shift = (self.decomp - (self.max_bits % self.decomp)) % self.decomp;
 
             builder.assert_eq(
                 (*lower_decomp.last().unwrap()).into(),

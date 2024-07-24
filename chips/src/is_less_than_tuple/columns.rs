@@ -125,7 +125,7 @@ impl<T: Clone> IsLessThanTupleCols<T> {
     pub fn from_slice(slc: &[T], lt_air: &IsLessThanTupleAir) -> Self {
         let tuple_len = lt_air.tuple_len();
 
-        let io = IsLessThanTupleIOCols::from_slice(&slc[..2 * tuple_len + 1], tuple_len);
+        let io = IsLessThanTupleIoCols::from_slice(&slc[..2 * tuple_len + 1], tuple_len);
         let aux = IsLessThanTupleAuxCols::from_slice(&slc[2 * tuple_len + 1..], lt_air);
 
         Self { io, aux }
@@ -138,7 +138,7 @@ impl<T: Clone> IsLessThanTupleCols<T> {
     }
 
     pub fn width(lt_air: &IsLessThanTupleAir) -> usize {
-        IsLessThanTupleIOCols::<T>::width(lt_air.tuple_len())
+        IsLessThanTupleIoCols::<T>::width(lt_air.tuple_len())
             + IsLessThanTupleAuxCols::<T>::width(lt_air)
     }
 }

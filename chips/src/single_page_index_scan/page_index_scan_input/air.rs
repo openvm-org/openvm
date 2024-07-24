@@ -111,11 +111,7 @@ impl PageIndexScanInputAir {
                 self.idx_len
                     + 1
                     + 1
-                    + IsLessThanTupleAuxCols::<usize>::get_width(
-                        is_less_than_tuple_air.limb_bits(),
-                        is_less_than_tuple_air.decomp,
-                        self.idx_len,
-                    )
+                    + IsLessThanTupleAuxCols::<usize>::width(is_less_than_tuple_air)
             }
             PageIndexScanInputAirVariants::Lte(NonStrictCompAir {
                 is_less_than_tuple_air,
@@ -132,11 +128,7 @@ impl PageIndexScanInputAir {
                     + 1
                     + 1
                     + 1
-                    + IsLessThanTupleAuxCols::<usize>::get_width(
-                        is_less_than_tuple_air.limb_bits(),
-                        is_less_than_tuple_air.decomp,
-                        self.idx_len,
-                    )
+                    + IsLessThanTupleAuxCols::<usize>::width(is_less_than_tuple_air)
                     + IsEqualVecAuxCols::<usize>::get_width(self.idx_len)
             }
             PageIndexScanInputAirVariants::Eq(EqCompAir { .. }) => {
