@@ -22,9 +22,10 @@ pub mod trace;
 /// Poseidon2 Air, VM version.
 ///
 /// Carries the subair for subtrace generation. Sticking to the conventions, this struct carries no state.
+/// `direct` determines whether direct interactions are enabled. By default they are on.
 pub struct Poseidon2VmAir<const WIDTH: usize, F: Clone> {
     pub inner: Poseidon2Air<WIDTH, F>,
-    direct: bool,
+    direct: bool, // Whether direct interactions are enabled.
 }
 
 /// Poseidon2 Chip.
