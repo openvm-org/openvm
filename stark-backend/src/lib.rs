@@ -15,16 +15,12 @@ pub mod rap;
 pub mod utils;
 pub mod verifier;
 
-// Use jemalloc as global allocator
-#[cfg(feature = "jemalloc")]
-use tikv_jemallocator::Jemalloc;
-#[cfg(feature = "jemalloc")]
+// Use jemalloc as global allocator for performance
+#[cfg(all(feature = "jemalloc", unix))]
 #[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 // Use mimalloc as global allocator
 #[cfg(feature = "mimalloc")]
-use mimalloc::MiMalloc;
-#[cfg(feature = "mimalloc")]
 #[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
