@@ -1,13 +1,17 @@
-use afs_stark_backend::air_builders::sub::SubAirBuilder;
 use core::borrow::Borrow;
-use p3_air::{Air, AirBuilder, BaseAir};
+
+use afs_stark_backend::{air_builders::sub::SubAirBuilder, interaction::InteractionBuilder};
+use p3_air::{Air, BaseAir};
 use p3_keccak_air::{KeccakAir, NUM_KECCAK_COLS, NUM_ROUNDS};
 use p3_matrix::Matrix;
 
-use super::{
-    columns::{KeccakPermuteCols, NUM_KECCAK_PERMUTE_COLS},
-    KeccakPermuteAir,
-};
+use super::columns::{KeccakPermuteCols, NUM_KECCAK_PERMUTE_COLS};
+
+#[derive(Clone, Copy, Debug)]
+pub struct KeccakPermuteAir {
+    pub bus_input: usize,
+    pub bus_output: usize,
+}
 
 impl<F> BaseAir<F> for KeccakPermuteAir {
     fn width(&self) -> usize {
@@ -15,7 +19,7 @@ impl<F> BaseAir<F> for KeccakPermuteAir {
     }
 }
 
-impl<AB: AirBuilder> Air<AB> for KeccakPermuteAir {
+impl<AB: InteractionBuilder> Air<AB> for KeccakPermuteAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
@@ -35,5 +39,7 @@ impl<AB: AirBuilder> Air<AB> for KeccakPermuteAir {
         let mut sub_builder =
             SubAirBuilder::<AB, KeccakAir, AB::Var>::new(builder, 0..NUM_KECCAK_COLS);
         keccak_air.eval(&mut sub_builder);
+
+        self.eval_interactions(builder, local);
     }
 }
