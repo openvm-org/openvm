@@ -498,9 +498,9 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         (Array::Dyn(result, _), Array::Dyn(left, _), Array::Dyn(right, _)) => self
                             .push(
                                 AsmInstruction::Poseidon2Compress(
+                                    result.fp(),
                                     left.fp(),
                                     right.fp(),
-                                    result.fp(),
                                 ),
                                 trace,
                             ),

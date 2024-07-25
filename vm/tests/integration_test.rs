@@ -248,7 +248,7 @@ fn test_vm_compress_poseidon2() {
     }
     let output = 4;
     program.push(Instruction::from_isize(
-        COMP_POS2, input_a, input_b, output, 0, 1,
+        COMP_POS2, output, input_a, input_b, 0, 1,
     ));
     program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
 

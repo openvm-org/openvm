@@ -669,15 +669,15 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 )
             }
         }
-        AsmInstruction::Poseidon2Compress(src1, src2, dst) => vec![inst(
+        AsmInstruction::Poseidon2Compress(dst, src1, src2) => vec![inst(
             COMP_POS2,
+            register(dst),
             register(src1),
             register(src2),
-            register(dst),
             AS::Register,
             AS::Memory,
         )],
-        AsmInstruction::Poseidon2Permute(src, dst) => vec![
+        AsmInstruction::Poseidon2Permute(dst, src) => vec![
             inst(
                 FADD,
                 utility_register,
@@ -688,9 +688,9 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
             inst(
                 PERM_POS2,
+                register(dst),
                 register(src),
                 utility_register,
-                register(dst),
                 AS::Register,
                 AS::Memory,
             ),

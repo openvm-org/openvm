@@ -130,7 +130,7 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
                 vm.memory_chip.read_elem(
                     timestamp - 1,
                     e,
-                    addresses[0] + F::from_canonical_usize(i),
+                    addresses[1] + F::from_canonical_usize(i),
                 )
             })
             .collect();
@@ -140,7 +140,7 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
                 vm.memory_chip.read_elem(
                     timestamp - 1,
                     e,
-                    addresses[1] + F::from_canonical_usize(i),
+                    addresses[2] + F::from_canonical_usize(i),
                 )
             })
             .collect();
@@ -166,7 +166,7 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
             vm.memory_chip.write_elem(
                 timestamp,
                 e,
-                addresses[2] + F::from_canonical_usize(i),
+                addresses[0] + F::from_canonical_usize(i),
                 output_elem,
             );
             timestamp += 1;
