@@ -1,5 +1,5 @@
-use std::array;
 use p3_field::PrimeField32;
+use std::array;
 
 use crate::memory::tree::Hasher;
 use columns::*;
@@ -154,12 +154,8 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
         };
 
         for (i, &output_elem) in output.iter().enumerate().take(len) {
-            vm.memory_chip.write_elem(
-                timestamp,
-                e,
-                dst + F::from_canonical_usize(i),
-                output_elem,
-            );
+            vm.memory_chip
+                .write_elem(timestamp, e, dst + F::from_canonical_usize(i), output_elem);
             timestamp += 1;
         }
 

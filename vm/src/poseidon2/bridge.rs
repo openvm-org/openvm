@@ -1,5 +1,5 @@
-use itertools::Itertools;
 use afs_stark_backend::interaction::InteractionBuilder;
+use itertools::Itertools;
 use p3_field::{AbstractField, Field};
 
 use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS, POSEIDON2_DIRECT_BUS};
@@ -28,7 +28,10 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
 
         let mut timestamp_offset = 0;
         // read addresses
-        for (io_addr, aux_addr) in [io.a, io.b, io.c].into_iter().zip_eq([aux.dst, aux.lhs, aux.rhs]) {
+        for (io_addr, aux_addr) in [io.a, io.b, io.c]
+            .into_iter()
+            .zip_eq([aux.dst, aux.lhs, aux.rhs])
+        {
             let timestamp = io.clk + AB::F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
 
@@ -47,11 +50,8 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
             let timestamp = io.clk + AB::F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
 
-            let address = if i < chunks {
-                aux.lhs
-            } else {
-                aux.rhs
-            } + F::from_canonical_usize(if i < chunks { i } else { i - chunks });
+            let address = if i < chunks { aux.lhs } else { aux.rhs }
+                + F::from_canonical_usize(if i < chunks { i } else { i - chunks });
 
             let fields = [
                 timestamp,

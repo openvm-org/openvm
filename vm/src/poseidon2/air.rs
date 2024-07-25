@@ -46,9 +46,15 @@ impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2VmAir<WIDT
         builder.assert_eq(cols.io.is_opcode * cols.io.cmp, cols.io.cmp);
         // immediates
 
-        builder.when(cols.aux.d_is_zero).assert_eq(cols.aux.dst, cols.io.a);
-        builder.when(cols.aux.d_is_zero).assert_eq(cols.aux.lhs, cols.io.b);
-        builder.when(cols.aux.d_is_zero).assert_eq(cols.aux.rhs, cols.io.c);
+        builder
+            .when(cols.aux.d_is_zero)
+            .assert_eq(cols.aux.dst, cols.io.a);
+        builder
+            .when(cols.aux.d_is_zero)
+            .assert_eq(cols.aux.lhs, cols.io.b);
+        builder
+            .when(cols.aux.d_is_zero)
+            .assert_eq(cols.aux.rhs, cols.io.c);
 
         // d is zero SubAir
         SubAir::eval(
