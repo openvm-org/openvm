@@ -31,5 +31,5 @@ itertools = "0.13.0"
 regex = "1.10.5"
 
 [features]
-default = []
+default = ["afs-stark-backend/mimalloc"]
 parallel = ["afs/parallel", "olap/parallel"]
