@@ -4,13 +4,17 @@ use p3_field::AbstractField;
 
 use afs_compiler::asm::AsmBuilder;
 use afs_compiler::prelude::*;
+use afs_compiler::util::execute_program;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
 
+const WORD_SIZE: usize = 1;
+
 #[test]
 fn test_compiler_public_values() {
     let mut builder = AsmBuilder::<F, EF>::default();
+    println!("{:?}", builder);
 
     let a: Felt<_> = builder.constant(F::from_canonical_u32(10));
     let b: Felt<_> = builder.constant(F::from_canonical_u32(20));
@@ -19,6 +23,15 @@ fn test_compiler_public_values() {
     let mut var_array = builder.dyn_array::<Felt<_>>(dyn_len);
     builder.set(&mut var_array, 0, a);
     builder.set(&mut var_array, 1, b);
+
+    println!("{:?}", builder);
+    builder.commit_public_values(&var_array);
+
+    builder.halt();
+
+    let program = builder.compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE, _>(program, vec![]);
+
     // builder.write_public_values(&var_array);
     // builder.write_public_values(&var_array);
     // builder.commit_public_values();

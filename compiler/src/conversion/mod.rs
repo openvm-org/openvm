@@ -3,9 +3,9 @@ use std::array::from_fn;
 use p3_field::{ExtensionField, PrimeField64};
 
 use field_extension_conversion::{convert_field_extension, convert_field_extension_with_base};
-use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode;
 use stark_vm::cpu::OpCode::*;
+use stark_vm::cpu::trace::Instruction;
 
 use crate::asm::{AsmInstruction, AssemblyCode};
 
@@ -698,6 +698,14 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         ],
         AsmInstruction::CycleTrackerStart(name) => vec![dbg(CT_START, name)],
         AsmInstruction::CycleTrackerEnd(name) => vec![dbg(CT_END, name)],
+        AsmInstruction::Commit(val, index) => vec![inst(
+            PUBLISH,
+            register(index),
+            register(val),
+            F::zero(),
+            AS::Register,
+            AS::Register,
+        )],
         _ => panic!("Unsupported instruction {:?}", instruction),
     }
 }
