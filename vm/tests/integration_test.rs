@@ -1,9 +1,7 @@
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
-use afs_test_utils::config::baby_bear_poseidon2::{
-    engine_from_perm, random_perm, run_simple_test_no_pis,
-};
+use afs_test_utils::config::baby_bear_poseidon2::{engine_from_perm, random_perm, run_simple_test};
 use afs_test_utils::config::fri_params::fri_params_with_80_bits_of_security;
 use afs_test_utils::engine::StarkEngine;
 use stark_vm::cpu::trace::Instruction;
@@ -30,14 +28,16 @@ fn air_test(
             perm_poseidon2_enabled: false,
             limb_bits: LIMB_BITS,
             decomp: DECOMP,
+            num_public_values: 4,
         },
         program,
         witness_stream,
     );
 
     let traces = vm.traces().unwrap();
+    let public_values = vm.get_public_values().unwrap();
     let chips = get_chips(&vm);
-    run_simple_test_no_pis(chips, traces).expect("Verification failed");
+    run_simple_test(chips, traces, public_values).expect("Verification failed");
 }
 
 fn air_test_with_poseidon2(
@@ -54,6 +54,7 @@ fn air_test_with_poseidon2(
             perm_poseidon2_enabled: false,
             limb_bits: LIMB_BITS,
             decomp: DECOMP,
+            num_public_values: 4,
         },
         program,
         vec![],
@@ -61,16 +62,15 @@ fn air_test_with_poseidon2(
 
     let max_log_degree = vm.max_log_degree().unwrap();
     let traces = vm.traces().unwrap();
+    let public_values = vm.get_public_values().unwrap();
     let chips = get_chips(&vm);
 
     let perm = random_perm();
     let fri_params = fri_params_with_80_bits_of_security()[1];
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
 
-    let num_chips = chips.len();
-
     engine
-        .run_simple_test(chips, traces, vec![vec![]; num_chips])
+        .run_simple_test(chips, traces, public_values)
         .expect("Verification failed");
 }
 

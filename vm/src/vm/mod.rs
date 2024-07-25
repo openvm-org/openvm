@@ -11,8 +11,6 @@ use poseidon2_air::poseidon2::Poseidon2Config;
 
 pub mod cycle_tracker;
 
-pub enum Void {}
-
 use crate::{
     cpu::{
         trace::{ExecutionError, Instruction},
@@ -40,7 +38,9 @@ pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub range_checker: Arc<RangeCheckerGateChip>,
     pub poseidon2_chip: Poseidon2Chip<16, F>,
     pub input_stream: VecDeque<Vec<F>>,
+    pub public_values: Vec<Option<F>>,
 
+    has_generation_happened: bool,
     traces: Vec<DenseMatrix<F>>,
 }
 
@@ -70,7 +70,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             field_extension_chip,
             range_checker,
             poseidon2_chip,
+            has_generation_happened: false,
             traces: vec![],
+            public_values: vec![None; config.num_public_values],
             input_stream: VecDeque::from(input_stream),
         }
     }
@@ -79,31 +81,55 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
         self.config.cpu_options()
     }
 
-    fn generate_traces(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
-        let cpu_trace = CpuAir::generate_trace(self)?;
-        let mut result = vec![
-            cpu_trace,
-            self.program_chip.generate_trace(),
-            self.memory_chip.generate_trace(self.range_checker.clone()),
-            self.range_checker.generate_trace(),
-        ];
-        if self.options().field_arithmetic_enabled {
-            result.push(self.field_arithmetic_chip.generate_trace());
+    fn generate_traces(&mut self) -> Result<(), ExecutionError> {
+        if !self.has_generation_happened {
+            self.has_generation_happened = true;
+
+            let cpu_trace = CpuAir::generate_trace(self)?;
+            self.traces = vec![
+                cpu_trace,
+                self.program_chip.generate_trace(),
+                self.memory_chip.generate_trace(self.range_checker.clone()),
+                self.range_checker.generate_trace(),
+            ];
+            if self.options().field_arithmetic_enabled {
+                self.traces
+                    .push(self.field_arithmetic_chip.generate_trace());
+            }
+            if self.options().field_extension_enabled {
+                self.traces.push(self.field_extension_chip.generate_trace());
+            }
+            if self.options().poseidon2_enabled() {
+                self.traces.push(self.poseidon2_chip.generate_trace());
+            }
         }
-        if self.options().field_extension_enabled {
-            result.push(self.field_extension_chip.generate_trace());
-        }
-        if self.options().poseidon2_enabled() {
-            result.push(self.poseidon2_chip.generate_trace());
-        }
-        Ok(result)
+        Ok(())
     }
 
     pub fn traces(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
-        if self.traces.is_empty() {
-            self.traces = self.generate_traces()?;
-        }
+        self.generate_traces()?;
         Ok(self.traces.clone())
+    }
+
+    pub fn get_public_values(&mut self) -> Result<Vec<Vec<F>>, ExecutionError> {
+        self.generate_traces()?;
+        let cpu_public_values = self
+            .public_values
+            .iter()
+            .map(|pi| pi.unwrap_or(F::zero()))
+            .collect();
+        let mut public_values = vec![vec![]; 4];
+        public_values[0] = cpu_public_values;
+        if self.options().field_arithmetic_enabled {
+            public_values.push(vec![]);
+        }
+        if self.options().field_extension_enabled {
+            public_values.push(vec![]);
+        }
+        if self.options().poseidon2_enabled() {
+            public_values.push(vec![]);
+        }
+        Ok(public_values)
     }
 
     /*fn max_trace_heights(&self) -> Vec<usize> {

@@ -94,6 +94,7 @@ impl<const WORD_SIZE: usize, T: Clone> MemoryAccessCols<WORD_SIZE, T> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuAuxCols<const WORD_SIZE: usize, T> {
     pub operation_flags: BTreeMap<OpCode, T>,
+    pub public_value_flags: Vec<T>,
     pub accesses: [MemoryAccessCols<WORD_SIZE, T>; CPU_MAX_ACCESSES_PER_CYCLE],
     pub read0_equals_read1: T,
     pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
@@ -113,6 +114,10 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
             operation_flags.insert(*opcode, operation_flag);
         }
 
+        start = end;
+        end += options.num_public_values;
+        let public_value_flags = slc[start..end].to_vec();
+
         let accesses = from_fn(|_| {
             start = end;
             end += MemoryAccessCols::<WORD_SIZE, T>::get_width();
@@ -124,6 +129,7 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
 
         Self {
             operation_flags,
+            public_value_flags,
             accesses,
             read0_equals_read1: beq_check,
             is_equal_vec_aux,
@@ -135,6 +141,7 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
         for opcode in options.enabled_instructions() {
             flattened.push(self.operation_flags.get(&opcode).unwrap().clone());
         }
+        flattened.extend(self.public_value_flags.clone());
         flattened.extend(self.accesses.iter().flat_map(MemoryAccessCols::flatten));
         flattened.push(self.read0_equals_read1.clone());
         flattened.extend(self.is_equal_vec_aux.flatten());
@@ -143,6 +150,7 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
 
     pub fn get_width(options: CpuOptions) -> usize {
         options.num_enabled_instructions()
+            + options.num_public_values
             + (CPU_MAX_ACCESSES_PER_CYCLE * MemoryAccessCols::<WORD_SIZE, T>::get_width())
             + 1
             + IsEqualVecAuxCols::<T>::width(WORD_SIZE)

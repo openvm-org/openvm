@@ -6,7 +6,7 @@ use crate::vm::config::VmConfig;
 use crate::vm::VirtualMachine;
 use afs_primitives::is_zero::IsZeroAir;
 use afs_stark_backend::verifier::VerificationError;
-use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use afs_test_utils::config::baby_bear_poseidon2::run_simple_test;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField64};
@@ -35,6 +35,7 @@ fn make_vm<const WORD_SIZE: usize>(
             perm_poseidon2_enabled: false,
             limb_bits: LIMB_BITS,
             decomp: DECOMP,
+            num_public_values: 4,
         },
         program,
         vec![],
@@ -66,6 +67,7 @@ fn test_flatten_fromslice_roundtrip() {
         field_extension_enabled: false,
         compress_poseidon2_enabled: false,
         perm_poseidon2_enabled: false,
+        num_public_values: 4,
     };
     let num_cols = CpuCols::<TEST_WORD_SIZE, usize>::get_width(options);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
@@ -282,15 +284,25 @@ fn air_test_change<
     }
     let arithmetic_trace = RowMajorMatrix::new(arithmetic_rows, 5);
 
+    let cpu_public_values = vm
+        .public_values
+        .iter()
+        .map(|pi| pi.unwrap_or(BabyBear::zero()))
+        .collect();
+    let mut all_public_values = vec![vec![]; if field_arithmetic_enabled { 4 } else { 3 }];
+    all_public_values[0] = cpu_public_values;
+
     let test_result = if field_arithmetic_enabled {
-        run_simple_test_no_pis(
+        run_simple_test(
             vec![&vm.cpu_air, &program_air, &memory_air, &arithmetic_air],
             vec![trace, program_trace, memory_trace, arithmetic_trace],
+            all_public_values,
         )
     } else {
-        run_simple_test_no_pis(
+        run_simple_test(
             vec![&vm.cpu_air, &program_air, &memory_air],
             vec![trace, program_trace, memory_trace],
+            all_public_values,
         )
     };
 
