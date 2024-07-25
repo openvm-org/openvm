@@ -638,16 +638,14 @@ pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField64, EF: Exte
             AS::Register,
             AS::Register,
         )],
-        AsmInstruction::InvE(dst, src) => vec![
-            inst(
-                BBE4INV,
-                register(dst),
-                register(src),
-                register(src),
-                AS::Register,
-                AS::Register,
-            ),
-        ],
+        AsmInstruction::InvE(dst, src) => vec![inst(
+            BBE4INV,
+            register(dst),
+            register(src),
+            register(src),
+            AS::Register,
+            AS::Register,
+        )],
         _ => panic!(
             "Illegal argument to convert_field_extension: {:?}",
             instruction

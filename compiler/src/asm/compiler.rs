@@ -194,7 +194,10 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::MulE(dst.fp(), lhs.fp(), A0), trace);
                 }
                 DslIr::DivEI(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::MulEI(dst.fp(), lhs.fp(), rhs.inverse()), trace);
+                    self.push(
+                        AsmInstruction::MulEI(dst.fp(), lhs.fp(), rhs.inverse()),
+                        trace,
+                    );
                 }
                 DslIr::InvE(dst, src) => {
                     self.push(AsmInstruction::InvE(dst.fp(), src.fp()), trace);
