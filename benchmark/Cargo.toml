@@ -29,6 +29,19 @@ tracing-forest = "0.1.6"
 chrono = "0.4.38"
 itertools = "0.13.0"
 regex = "1.10.5"
+p3-air = { workspace = true }
+p3-baby-bear = { workspace = true }
+p3-matrix = { workspace = true }
+p3-maybe-rayon = { workspace = true }
+
+[dev-dependencies]
+criterion = "0.5.1"
+pprof = { version = "0.13", features = ["criterion", "flamegraph"] }
+
+
+[[bench]]
+name = "single_rw_trace_gen"
+harness = false
 
 [features]
 default = ["afs-stark-backend/mimalloc"]

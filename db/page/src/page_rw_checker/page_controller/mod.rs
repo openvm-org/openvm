@@ -227,7 +227,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         page: &Page,
         init_page_pdata: Option<Arc<ProverTraceData<SC>>>,
         final_page_pdata: Option<Arc<ProverTraceData<SC>>>,
-        ops: Vec<Operation>,
+        ops: &[Operation],
         trace_degree: usize,
         trace_committer: &mut TraceCommitter<SC>,
     ) -> (Arc<ProverTraceData<SC>>, Arc<ProverTraceData<SC>>)
@@ -241,7 +241,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         let init_page_trace = self.gen_page_trace(&page);
 
         let offline_checker_trace =
-            self.gen_ops_trace(&mut page, &ops, self.range_checker.clone(), trace_degree);
+            self.gen_ops_trace(&mut page, ops, self.range_checker.clone(), trace_degree);
 
         // HashSet of all indices intercepted by Offline Checker to be written to the final page
         let mut final_write_indices = HashSet::new();
