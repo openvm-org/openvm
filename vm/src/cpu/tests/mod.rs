@@ -14,10 +14,10 @@ use crate::memory::{decompose, MemoryAccess, OpType};
 use crate::vm::config::VmConfig;
 use crate::vm::VirtualMachine;
 
-use super::{CpuAir, CpuOptions, max_accesses_per_instruction, OpCode::*, trace::Instruction};
-use super::{ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS};
 use super::columns::MemoryAccessCols;
 use super::trace::isize_to_field;
+use super::{max_accesses_per_instruction, trace::Instruction, CpuAir, CpuOptions, OpCode::*};
+use super::{ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS};
 
 const TEST_WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 16;
