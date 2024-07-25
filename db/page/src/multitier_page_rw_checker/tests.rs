@@ -257,7 +257,7 @@ where
 
     keygen_builder.add_air(&ops_sender, 0);
 
-    let partial_pk = keygen_builder.generate_partial_pk();
+    let pk = keygen_builder.generate_pk();
     let (mut init_pages, init_root_is_leaf, mut final_pages, final_root_is_leaf, ops) =
         generate_inputs(
             idx_len,

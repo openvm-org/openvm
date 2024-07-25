@@ -1,14 +1,14 @@
 use std::{sync::Arc, time::Instant};
 
-use afs_chips::{
+use afs_page::{
     execution_air::ExecutionAir,
     multitier_page_rw_checker::page_controller::{
         gen_some_products_from_prover_data, MyLessThanTupleParams, PageController, PageTreeParams,
     },
     page_btree::PageBTree,
     page_rw_checker::page_controller::{OpType, Operation},
-    range_gate::RangeCheckerGateChip,
 };
+use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkProvingKey,

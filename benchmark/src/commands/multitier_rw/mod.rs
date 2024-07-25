@@ -1,54 +1,31 @@
-use std::{
-    collections::HashMap,
-    fs::{self, remove_dir_all},
-    path::Path,
-    time::Instant,
-};
+use std::{fs::remove_dir_all, path::Path};
 
 use afs_1b::commands::{
     keygen::KeygenCommand, prove::ProveCommand, verify::VerifyCommand, BABYBEAR_COMMITMENT_LEN,
     DECOMP_BITS,
 };
-use afs_chips::page_btree::PageBTree;
+use afs_page::page_btree::PageBTree;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
 };
 use afs_test_utils::{
     config::{
-        baby_bear_blake3::BabyBearBlake3Engine,
-        baby_bear_bytehash::engine_from_byte_hash,
-        baby_bear_keccak::BabyBearKeccakEngine,
         baby_bear_poseidon2::{engine_from_perm, random_perm, BabyBearPoseidon2Engine},
         EngineType,
     },
     engine::StarkEngine,
     page_config::MultitierPageConfig,
 };
-use chrono::Local;
 use clap::Parser;
 use color_eyre::eyre::Result;
-use p3_blake3::Blake3;
 use p3_field::{PrimeField, PrimeField32, PrimeField64};
-use p3_keccak::Keccak256Hash;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 use serde::{de::DeserializeOwned, Serialize};
 use tracing::info_span;
 
-use crate::{
-    commands::{parse_config_folder, parse_multitier_config_folder},
-    utils::{
-        output_writer::{
-            save_afi_to_new_db, write_csv_header, write_csv_line, write_multitier_csv_header,
-            write_multitier_csv_line,
-        },
-        table_gen::{generate_random_afi_rw, generate_random_multitier_afi_rw},
-        tracing::{clear_tracing_log, extract_event_data_from_log, extract_timing_data_from_log},
-    },
-    AFI_FILE_PATH, DB_FILE_PATH, DB_FOLDER, KEY_FOLDER, MULTITIER_TABLE_ID, TABLE_ID, TMP_FOLDER,
-    TMP_TRACING_LOG,
-};
+use crate::{AFI_FILE_PATH, DB_FOLDER, KEY_FOLDER, MULTITIER_TABLE_ID};
 
 use super::CommonCommands;
 

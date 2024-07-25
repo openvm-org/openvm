@@ -10,6 +10,7 @@ use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use tracing::info_span;
 
+use crate::common::page_cols::PageCols;
 use crate::{
     common::page::Page, page_rw_checker::offline_checker::PageOfflineChecker,
     page_rw_checker::page_controller::Operation,
@@ -550,14 +551,11 @@ where
 {
     let commitments = commitment_from_data(&data);
 
-    let commitment_arr = arr_from_commitment::<SC, COMMITMENT_LEN>(&commitments);
-
     NodeProducts {
         data_traces: vec![],
         main_traces: vec![],
         prover_data: data,
         commitments,
-        commitments_as_arr: commitment_arr,
     }
 }
 
@@ -576,19 +574,3 @@ pub fn commitment_from_data<SC: StarkGenericConfig>(data: &[ProverTraceData<SC>]
         .map(|data| data.commit.clone())
         .collect::<Vec<_>>()
 }
-<<<<<<< HEAD:chips/src/multitier_page_rw_checker/page_controller/mod.rs
-
-pub fn arr_from_commitment<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>(
-    commitment: &[Com<SC>],
-) -> Vec<[Val<SC>; COMMITMENT_LEN]>
-where
-    Val<SC>: AbstractField + PrimeField64,
-    Com<SC>: Into<[Val<SC>; COMMITMENT_LEN]>,
-{
-    commitment
-        .iter()
-        .map(|data| data.clone().into())
-        .collect::<Vec<[Val<SC>; COMMITMENT_LEN]>>()
-}
-=======
->>>>>>> 9ab0171c35c4c626d2e43a5ba46cbed04e45eb7a:db/page/src/multitier_page_rw_checker/page_controller/mod.rs

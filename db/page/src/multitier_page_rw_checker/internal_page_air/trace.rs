@@ -27,9 +27,9 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
 
     pub fn generate_main_trace<F: PrimeField64>(
         &self,
-        page: Vec<Vec<u32>>,
-        child_ids: Vec<u32>,
-        mults: Vec<u32>,
+        page: &[Vec<u32>],
+        child_ids: &[u32],
+        mults: &[u32],
         range: (Vec<u32>, Vec<u32>),
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> RowMajorMatrix<F> {
@@ -40,11 +40,11 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
                 .flat_map(|(i, (row, mult))| {
                     let mut trace_row = vec![
                         child_ids[i],
-                        mult,
-                        mult * row[1],
-                        (mult * row[1] == 1) as u32,
+                        *mult,
+                        *mult * row[1],
+                        (*mult * row[1] == 1) as u32,
                         0,
-                        row[1] * mult - row[1],
+                        row[1] * *mult - row[1],
                     ];
                     let next = if i < page.len() - 1 {
                         page[i + 1][2..2 + self.idx_len].to_vec()

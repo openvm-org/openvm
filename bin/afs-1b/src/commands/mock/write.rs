@@ -1,6 +1,6 @@
 use std::{collections::HashSet, fs::remove_file, time::Instant};
 
-use afs_chips::page_btree::PageBTree;
+use afs_page::page_btree::PageBTree;
 use afs_stark_backend::prover::{trace::TraceCommitter, MultiTraceStarkProver};
 use afs_test_utils::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},

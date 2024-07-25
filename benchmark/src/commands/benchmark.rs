@@ -180,6 +180,7 @@ pub fn benchmark_multitier_setup(
     (configs, output_file)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn benchmark_multitier_execute(
     benchmark_name: String,
     scenario: String,

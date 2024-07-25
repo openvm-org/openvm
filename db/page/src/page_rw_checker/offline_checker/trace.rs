@@ -13,7 +13,6 @@ use crate::common::indexed_page_editor::IndexedPageEditor;
 use crate::common::page::Page;
 use crate::page_rw_checker::offline_checker::columns::PageOfflineCheckerCols;
 use crate::page_rw_checker::page_controller::{OpType, Operation};
-use p3_maybe_rayon::prelude::*;
 
 impl PageOfflineChecker {
     /// Each row in the trace follow the same order as the Cols struct:

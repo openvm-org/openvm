@@ -1,20 +1,8 @@
 use std::fs;
 
 use afs_test_utils::page_config::{MultitierPageConfig, PageConfig};
-use chrono::Local;
 use clap::Parser;
 use color_eyre::eyre::Result;
-
-use crate::{
-    utils::{
-        output_writer::{
-            default_output_filename, save_afi_to_new_db, write_csv_header, write_csv_line,
-            write_multitier_csv_header, write_multitier_csv_line,
-        },
-        tracing::{clear_tracing_log, extract_event_data_from_log, extract_timing_data_from_log},
-    },
-    AFI_FILE_PATH, DB_FILE_PATH, MULTITIER_TABLE_ID, TABLE_ID, TMP_FOLDER, TMP_TRACING_LOG,
-};
 
 pub mod multitier_rw;
 

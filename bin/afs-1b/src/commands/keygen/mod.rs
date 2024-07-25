@@ -5,14 +5,14 @@ use std::{
     time::Instant,
 };
 
-use afs_chips::{
+use afs_page::{
     common::page::Page,
     execution_air::ExecutionAir,
     multitier_page_rw_checker::page_controller::{
         MyLessThanTupleParams, PageController, PageTreeParams,
     },
-    range_gate::RangeCheckerGateChip,
 };
+use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{
     config::PcsProverData,
     keygen::MultiStarkKeygenBuilder,

@@ -20,4 +20,4 @@ serde_json = "1.0.117"
 
 [features]
 default = []
-parallel = ["afs-chips/parallel"]
+parallel = ["afs-page/parallel"]

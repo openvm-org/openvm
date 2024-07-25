@@ -13,4 +13,4 @@ itertools = "0.13.0"
 
 [features]
 default = []
-parallel = ["afs-chips/parallel"]
+parallel = ["afs-page/parallel"]
