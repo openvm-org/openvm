@@ -148,12 +148,13 @@ impl<const WIDTH: usize, T: Clone> Poseidon2VmAuxCols<WIDTH, T> {
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        let mut result = vec![];
-        result.push(self.dst.clone());
-        result.push(self.lhs.clone());
-        result.push(self.rhs.clone());
-        result.push(self.d_is_zero.clone());
-        result.push(self.is_zero_inv.clone());
+        let mut result = vec![
+            self.dst.clone(),
+            self.lhs.clone(),
+            self.rhs.clone(),
+            self.d_is_zero.clone(),
+            self.is_zero_inv.clone(),
+        ];
         result.extend(self.internal.flatten());
         result
     }
