@@ -6,8 +6,8 @@ use p3_field::AbstractField;
 use super::{columns::PageOfflineCheckerCols, PageOfflineChecker};
 
 impl PageOfflineChecker {
-    /// Receives page rows (idx, data) for rows tagged with is_initial on page_bus (sent from PageRWAir)
-    /// Sends page rows (idx, data) for rows tagged with is_final_write on page_bus with multiplicity is_final * 3 (received by MyFinalPageAir)
+    /// Receives page rows (idx, data) for rows tagged with is_initial on page_bus (sent from PageReadAir)
+    /// Sends page rows (idx, data) for rows tagged with is_final_write on page_bus with multiplicity is_final_write * 3 (received by IndexedPageWriteAir)
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
