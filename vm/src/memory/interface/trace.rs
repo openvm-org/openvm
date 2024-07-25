@@ -35,14 +35,14 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryInterfaceChip<CHUNK, F> {
                 }
             }
             let initial_cols = MemoryInterfaceCols {
-                direction: F::one(),
+                expand_direction: F::one(),
                 address_space,
                 leaf_label: F::from_canonical_usize(label),
                 values: initial_values,
                 auxes: initial_values_matter,
             };
             let final_cols = MemoryInterfaceCols {
-                direction: F::neg_one(),
+                expand_direction: F::neg_one(),
                 address_space,
                 leaf_label: F::from_canonical_usize(label),
                 values: final_values,

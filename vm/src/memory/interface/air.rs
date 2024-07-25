@@ -22,8 +22,8 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for MemoryInterfaceAir<
 
         // `direction` should be -1, 0, 1
         builder.assert_eq(
-            local.direction,
-            local.direction * local.direction * local.direction,
+            local.expand_direction,
+            local.expand_direction * local.expand_direction * local.expand_direction,
         );
 
         for i in 0..CHUNK {
