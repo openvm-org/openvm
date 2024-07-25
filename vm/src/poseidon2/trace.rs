@@ -1,8 +1,8 @@
 use super::columns::*;
 use crate::cpu::trace::Instruction;
 
-use afs_chips::is_zero::IsZeroAir;
-use afs_chips::sub_chip::LocalTraceInstructions;
+use afs_primitives::is_zero::IsZeroAir;
+use afs_primitives::sub_chip::LocalTraceInstructions;
 use p3_air::BaseAir;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
@@ -10,7 +10,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use super::{Poseidon2Chip, Poseidon2VmAir};
 
 impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
-    /// Generates trace for poseidon2chip from cached row structs.
+    /// Generates a single row from inputs.
     pub fn generate_row(
         &self,
         start_timestamp: usize,
@@ -34,6 +34,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
 }
 
 impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
+    /// Generates final Poseidon2VmAir trace from cached rows.
     pub fn generate_trace(&self) -> RowMajorMatrix<F> {
         let row_len = self.rows.len();
         let correct_len = row_len.next_power_of_two();

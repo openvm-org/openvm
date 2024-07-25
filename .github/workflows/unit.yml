@@ -7,6 +7,7 @@ on:
     branches: ["main"]
     paths-ignore:
       - "stark-backend/**"
+      - "db/**"
       - "vm/**"
       - "compiler/**"
 
@@ -31,4 +32,4 @@ jobs:
 
       - name: Run unit tests
         run: |
-          cargo test --workspace --exclude afs-stark-backend --exclude stark-vm --exclude afs-compiler --exclude afs-recursion
+          cargo test --workspace --exclude afs-stark-backend --exclude afs-page --exclude stark-vm --exclude afs-compiler --exclude afs-recursion

@@ -18,10 +18,16 @@ Setting a `--config-folder` will skip `generate_configs` and will instead read a
 
 ## ReadWrite
 
-Run from the root of the repository
+To run a single fast benchmark, with faster compile time, run from the root of the repository
 
 ```bash
-RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark -- rw -r 90 -w 10
+RUSTFLAGS="-Ctarget-cpu=native" cargo run --profile=fast --bin benchmark --features parallel -- rw -r 90 -w 10 --config-folder benchmark/config/single_rw
+```
+
+To generate a suite of configs and run benchmarks on all of them, run from the root of the repository
+
+```bash
+RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- rw -r 90 -w 10
 ```
 
 ### `--percent-writes` (`-w`)

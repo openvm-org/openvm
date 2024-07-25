@@ -13,14 +13,7 @@ itertools = "0.12.1"
 serde = { version = "1.0.201", features = ["derive"] }
 serde_json = "1.0.117"
 p3-baby-bear = { workspace = true }
-serial_test = "3.1.1"
-p3-poseidon2 = { workspace = true }
 backtrace = "0.3.71"
-tracing = "0.1.40"
-quote = "1.0"
-syn = { version = "1.0", features = ["full"] }
-poseidon2-air = { path = "../poseidon2-air" }
-
 afs-test-utils = { path = "../test-utils" }
 stark-vm = { path = "../vm" }
 

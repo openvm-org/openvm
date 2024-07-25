@@ -1,7 +1,7 @@
 use std::fs;
 use std::{marker::PhantomData, time::Instant};
 
-use afs_chips::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
+use afs_page::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
 use afs_stark_backend::{config::PcsProverData, keygen::MultiStarkKeygenBuilder};
 use afs_test_utils::page_config::PageMode;
 use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};

@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use afs_chips::inner_join::controller::FKInnerJoinController;
+use afs_page::inner_join::controller::FKInnerJoinController;
 use afs_stark_backend::{
     config::PcsProverData, keygen::types::MultiStarkProvingKey, prover::types::Proof,
 };

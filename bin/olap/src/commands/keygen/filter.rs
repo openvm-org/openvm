@@ -1,6 +1,6 @@
 use std::{fs, marker::PhantomData};
 
-use afs_chips::single_page_index_scan::page_controller::PageController;
+use afs_page::single_page_index_scan::page_controller::PageController;
 use afs_stark_backend::config::PcsProverData;
 use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
 use bin_common::utils::io::write_bytes;
