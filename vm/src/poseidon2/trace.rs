@@ -15,7 +15,9 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
         &self,
         start_timestamp: usize,
         instruction: Instruction<F>,
-        addresses: [F; 3],
+        dst: F,
+        lhs: F,
+        rhs: F,
         input_state: [F; WIDTH],
     ) -> Poseidon2VmCols<WIDTH, F> {
         // SAFETY: only allowed because WIDTH constrained to 16 above
@@ -24,7 +26,9 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
         Poseidon2VmCols {
             io: Poseidon2VmAir::<WIDTH, F>::make_io_cols(start_timestamp, instruction),
             aux: Poseidon2VmAuxCols {
-                addresses,
+                dst,
+                lhs,
+                rhs,
                 d_is_zero: is_zero_row.io.is_zero,
                 is_zero_inv: is_zero_row.inv,
                 internal,

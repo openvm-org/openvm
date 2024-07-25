@@ -90,20 +90,7 @@ fn test_compiler_poseidon2_hash() {
 
     builder.halt();
 
-    // let program = builder.compile_isa::<WORD_SIZE>();
-    // display_program(&program);
-    // execute_program::<WORD_SIZE, _>(program, vec![]);
-
     end_to_end_test::<WORD_SIZE, _>(builder, vec![]);
-
-    // let program = builder.compile_program();
-
-    // let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
-    // runtime.run();
-    // println!(
-    //     "The program executed successfully, number of cycles: {}",
-    //     runtime.clk.as_canonical_u32() / 4
-    // );
 }
 
 #[test]
@@ -127,13 +114,4 @@ fn test_compiler_poseidon2_hash_v2() {
 
     builder.halt();
     end_to_end_test::<WORD_SIZE, _>(builder, vec![]);
-
-    // let program = builder.compile_program();
-
-    // let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
-    // runtime.run();
-    // println!(
-    //     "The program executed successfully, number of cycles: {}",
-    //     runtime.clk.as_canonical_u32() / 4
-    // );
 }

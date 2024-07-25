@@ -1,3 +1,4 @@
+use std::array;
 use p3_field::PrimeField32;
 
 use crate::memory::tree::Hasher;
@@ -115,62 +116,54 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
             d,
             e,
         } = instruction;
+
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
 
         let mut timestamp = start_timestamp;
-
-        let addresses = [op_a, op_b, op_c].map(|operand| {
+        let mut read = |address_space, addr| {
             timestamp += 1;
-            vm.memory_chip.read_elem(timestamp - 1, d, operand)
+            vm.memory_chip.read_elem(timestamp - 1, address_space, addr)
+        };
+
+        let dst = read(d, op_a);
+        let lhs = read(d, op_b);
+        let rhs = read(d, op_c);
+
+        let input_state: [F; WIDTH] = array::from_fn(|i| {
+            if i < WIDTH / 2 {
+                read(e, lhs + F::from_canonical_usize(i))
+            } else {
+                read(e, rhs + F::from_canonical_usize(i - WIDTH / 2))
+            }
         });
 
-        let data_1: Vec<F> = (0..WIDTH / 2)
-            .map(|i| {
-                timestamp += 1;
-                vm.memory_chip.read_elem(
-                    timestamp - 1,
-                    e,
-                    addresses[1] + F::from_canonical_usize(i),
-                )
-            })
-            .collect();
-        let data_2: Vec<F> = (0..WIDTH / 2)
-            .map(|i| {
-                timestamp += 1;
-                vm.memory_chip.read_elem(
-                    timestamp - 1,
-                    e,
-                    addresses[2] + F::from_canonical_usize(i),
-                )
-            })
-            .collect();
-
-        // SAFETY: only allowed because WIDTH constrained to 16 above
-        let input_state: [F; WIDTH] = [data_1, data_2].concat().try_into().unwrap();
         let new_row = vm.poseidon2_chip.air.generate_row(
             start_timestamp,
             instruction,
-            addresses,
+            dst,
+            lhs,
+            rhs,
             input_state,
         );
-        let output = new_row.aux.internal.io.output;
-        vm.poseidon2_chip.rows.push(new_row);
 
-        let iter_range = if opcode == PERM_POS2 {
-            output.iter().enumerate().take(WIDTH)
+        let output = new_row.aux.internal.io.output;
+        let len = if opcode == PERM_POS2 {
+            WIDTH
         } else {
-            output.iter().enumerate().take(WIDTH / 2)
+            WIDTH / 2
         };
 
-        for (i, &output_elem) in iter_range {
+        for (i, &output_elem) in output.iter().enumerate().take(len) {
             vm.memory_chip.write_elem(
                 timestamp,
                 e,
-                addresses[0] + F::from_canonical_usize(i),
+                dst + F::from_canonical_usize(i),
                 output_elem,
             );
             timestamp += 1;
         }
+
+        vm.poseidon2_chip.rows.push(new_row);
     }
 
     pub fn max_accesses_per_instruction(opcode: OpCode) -> usize {
@@ -197,7 +190,9 @@ impl<const WIDTH: usize, F: PrimeField32> Hasher<CHUNK, F> for Poseidon2Chip<WID
         self.rows.push(Poseidon2VmCols {
             io: io_row,
             aux: Poseidon2VmAuxCols {
-                addresses: [F::zero(); 3],
+                dst: F::zero(),
+                lhs: F::zero(),
+                rhs: F::zero(),
                 d_is_zero: is_zero_row.io.is_zero,
                 is_zero_inv: is_zero_row.inv,
                 internal,
