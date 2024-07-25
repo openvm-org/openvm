@@ -1,7 +1,8 @@
 use std::iter;
 
-use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::{AbstractField, Field};
+
+use afs_stark_backend::interaction::InteractionBuilder;
 
 use crate::memory::expand::{
     air::ExpandAir, columns::ExpandCols, EXPAND_BUS, POSEIDON2_DIRECT_REQUEST_BUS,
@@ -11,9 +12,9 @@ fn push_expand_send<const CHUNK: usize, AB: InteractionBuilder>(
     builder: &mut AB,
     sends: impl Into<AB::Expr>,
     is_final: impl Into<AB::Expr>,
-    height: impl Into<AB::Expr>,
-    label: impl Into<AB::Expr>,
     address_space: impl Into<AB::Expr>,
+    label: impl Into<AB::Expr>,
+    height: impl Into<AB::Expr>,
     hash: [impl Into<AB::Expr>; CHUNK],
 ) {
     let fields = [
@@ -33,34 +34,35 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
         builder: &mut AB,
         local: ExpandCols<CHUNK, AB::Var>,
     ) {
-        let child_height = local.parent_height - AB::F::one();
-        let two_inv = AB::F::two().inverse();
+        // direction =  1   => parent_is_final = 0
+        // direction = -1   => parent_is_final = 1
+        let parent_is_final = (AB::Expr::one() - local.direction) * AB::F::two().inverse();
 
         push_expand_send(
             builder,
             -local.direction.into(),
-            AB::Expr::from(two_inv) - local.direction * two_inv,
-            local.parent_height,
-            local.parent_label,
+            parent_is_final.clone(),
             local.address_space,
+            local.parent_label,
+            local.parent_height,
             local.parent_hash,
         );
         push_expand_send(
             builder,
             local.direction,
-            AB::Expr::from(two_inv) - local.direction * two_inv + local.left_is_final,
-            child_height.clone(),
-            local.parent_label * AB::F::two(),
+            parent_is_final.clone() + local.left_is_final,
             local.address_space,
+            local.parent_label * AB::F::two(),
+            local.parent_height - AB::F::one(),
             local.left_child_hash,
         );
         push_expand_send(
             builder,
             local.direction,
-            AB::Expr::from(two_inv) - local.direction * two_inv + local.right_is_final,
-            child_height,
-            local.parent_label * AB::F::two() + AB::F::one(),
+            parent_is_final.clone() + local.right_is_final,
             local.address_space,
+            (local.parent_label * AB::F::two()) + AB::F::one(),
+            local.parent_height - AB::F::one(),
             local.right_child_hash,
         );
 
