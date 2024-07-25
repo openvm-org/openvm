@@ -1,4 +1,4 @@
-name: Sample workflow to use EC2 instances on demand
+name: Run single page r/w benchmark
 
 on:
   workflow_dispatch:
