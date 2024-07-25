@@ -7,6 +7,6 @@ fn main() {
         std::env::set_var("RUST_BACKTRACE", "1");
     }
     let _ = create_dir_all(TMP_FOLDER);
-    let _guard = setup_benchmark_tracing();
+    setup_benchmark_tracing();
     Cli::run();
 }

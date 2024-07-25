@@ -252,10 +252,6 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
                 "Air width [air_idx={}]: preprocessed={} partitioned_main={} after_challenge={}",
                 air_idx, preprocessed_width, partitioned_main_width, after_challenge_width
             );
-            println!(
-                "Air width [air_idx={}]: preprocessed={} partitioned_main={} after_challenge={}",
-                air_idx, preprocessed_width, partitioned_main_width, after_challenge_width
-            );
         }
         info!("Total air width: preprocessed={} ", total_preprocessed);
         info!(
@@ -265,10 +261,6 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
         info!(
             "Total air width: after_challenge={} ",
             total_after_challenge
-        );
-        println!(
-            "Total air width: preprocessed={} partitioned_main={} after_challenge={}",
-            total_preprocessed, total_partitioned_main, total_after_challenge
         );
         (
             total_preprocessed,
