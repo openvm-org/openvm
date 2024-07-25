@@ -114,22 +114,6 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
         self.custom_receives_path(builder, page_cols, own_commitment);
         self.custom_sends_or_receives_data(builder, page_cols, self.is_init);
         self.custom_sends_path(builder, page_cols);
-        if !self.is_init {
-            let subairs = self.is_less_than_tuple_air.clone().unwrap();
-            let subair_aux = page_cols.metadata.subair_aux_cols.clone().unwrap();
-            subairs
-                .idx1_start
-                .eval_interactions(builder, &subair_aux.idx1_start.less_than_aux);
-            subairs
-                .end_idx2
-                .eval_interactions(builder, &subair_aux.end_idx2.less_than_aux);
-            subairs
-                .idx2_next
-                .eval_interactions(builder, &subair_aux.idx2_next.less_than_aux);
-            subairs
-                .idx2_idx1
-                .eval_interactions(builder, &subair_aux.idx2_idx1.less_than_aux);
-        }
     }
 }
 

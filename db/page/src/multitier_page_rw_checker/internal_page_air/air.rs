@@ -117,9 +117,7 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
                     tuple_less_than: range_inclusion_cols.less_than_start,
                 };
                 let aux = subair_aux_cols.idx1_start.clone();
-                subairs
-                    .idx1_start
-                    .eval_without_interactions(builder, io, aux);
+                SubAir::eval(&subairs.idx1_start, builder, io, aux);
             }
             {
                 let io = IsLessThanTupleIoCols {
@@ -128,7 +126,7 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
                     tuple_less_than: range_inclusion_cols.greater_than_end,
                 };
                 let aux = subair_aux_cols.end_idx2.clone();
-                subairs.end_idx2.eval_without_interactions(builder, io, aux);
+                SubAir::eval(&subairs.end_idx2, builder, io, aux);
             }
             {
                 let io = IsLessThanTupleIoCols {
@@ -137,9 +135,7 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
                     tuple_less_than: prove_sort_cols.end_less_than_next,
                 };
                 let aux = subair_aux_cols.idx2_next.clone();
-                subairs
-                    .idx2_next
-                    .eval_without_interactions(builder, io, aux);
+                SubAir::eval(&subairs.idx2_next, builder, io, aux);
             }
             {
                 let io = IsLessThanTupleIoCols {
@@ -148,9 +144,7 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
                     tuple_less_than: prove_sort_cols.end_less_than_start,
                 };
                 let aux = subair_aux_cols.idx2_idx1.clone();
-                subairs
-                    .idx2_idx1
-                    .eval_without_interactions(builder, io, aux);
+                SubAir::eval(&subairs.idx2_idx1, builder, io, aux);
             }
             {
                 let io = IsZeroIoCols {
