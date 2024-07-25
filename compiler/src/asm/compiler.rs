@@ -812,9 +812,9 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
     ) {
         let rhs = rhs.as_base_slice();
         for i in 0..EF::D {
-            let j = -1 * (i * self.word_size) as i32;
+            let j = (i * self.word_size) as i32;
             self.push(
-                AsmInstruction::AddFI(dst.fp() + j, lhs.fp() + j, rhs[i]),
+                AsmInstruction::AddFI(dst.fp() - j, lhs.fp() - j, rhs[i]),
                 trace.clone(),
             );
         }
@@ -832,9 +832,9 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             trace.clone(),
         );
         for i in 1..EF::D {
-            let j = -1 * (i * self.word_size) as i32;
+            let j = (i * self.word_size) as i32;
             self.push(
-                AsmInstruction::AddFI(dst.fp() + j, lhs.fp() + j, F::zero()),
+                AsmInstruction::AddFI(dst.fp() - j, lhs.fp() - j, F::zero()),
                 trace.clone(),
             );
         }
@@ -862,9 +862,9 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         );
 
         for i in 1..EF::D {
-            let j = -1 * (i * self.word_size) as i32;
+            let j = (i * self.word_size) as i32;
             self.push(
-                AsmInstruction::AddFI(dst.fp() + j, ZERO, rhs[i]),
+                AsmInstruction::AddFI(dst.fp() - j, ZERO, rhs[i]),
                 trace.clone(),
             );
         }
@@ -878,9 +878,9 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         trace: Option<Backtrace>,
     ) {
         for i in 0..EF::D {
-            let j = -1 * (i * self.word_size) as i32;
+            let j = (i * self.word_size) as i32;
             self.push(
-                AsmInstruction::MulF(dst.fp() + j, lhs.fp() + j, rhs.fp()),
+                AsmInstruction::MulF(dst.fp() - j, lhs.fp() - j, rhs.fp()),
                 trace.clone(),
             );
         }
@@ -894,9 +894,9 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         trace: Option<Backtrace>,
     ) {
         for i in 0..EF::D {
-            let j = -1 * (i * self.word_size) as i32;
+            let j = (i * self.word_size) as i32;
             self.push(
-                AsmInstruction::MulFI(dst.fp() + j, lhs.fp() + j, rhs),
+                AsmInstruction::MulFI(dst.fp() - j, lhs.fp() - j, rhs),
                 trace.clone(),
             );
         }
