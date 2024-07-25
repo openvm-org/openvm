@@ -1,4 +1,4 @@
-use afs_chips::{
+use afs_primitives::{
     offline_checker::columns::OfflineCheckerCols,
     sub_chip::{AirConfig, SubAir},
 };

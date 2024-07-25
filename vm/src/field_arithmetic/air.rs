@@ -6,7 +6,7 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::{columns::FieldArithmeticCols, FieldArithmeticAir};
-use afs_chips::sub_chip::AirConfig;
+use afs_primitives::sub_chip::AirConfig;
 
 impl AirConfig for FieldArithmeticAir {
     type Cols<T> = FieldArithmeticCols<T>;

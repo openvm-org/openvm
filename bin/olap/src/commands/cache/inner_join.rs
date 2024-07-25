@@ -1,6 +1,6 @@
 use std::{fs, marker::PhantomData};
 
-use afs_chips::inner_join::controller::FKInnerJoinController;
+use afs_page::inner_join::controller::FKInnerJoinController;
 use afs_stark_backend::{config::PcsProverData, prover::trace::TraceCommitmentBuilder};
 use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
 use bin_common::utils::io::write_bytes;

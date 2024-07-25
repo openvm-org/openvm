@@ -5,7 +5,7 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use afs_chips::{
+use afs_primitives::{
     is_equal_vec::{columns::IsEqualVecIoCols, IsEqualVecAir},
     is_zero::{columns::IsZeroIoCols, IsZeroAir},
     sub_chip::SubAir,

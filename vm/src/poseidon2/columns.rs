@@ -7,21 +7,23 @@ use poseidon2_air::poseidon2::Poseidon2Air;
 
 use super::Poseidon2VmAir;
 
-/// Columns for Poseidon2 chip.
+/// Columns for Poseidon2Vm AIR.
 pub struct Poseidon2VmCols<const WIDTH: usize, T> {
     pub io: Poseidon2VmIoCols<T>,
     pub aux: Poseidon2VmAuxCols<WIDTH, T>,
 }
 
 /// IO columns for Poseidon2Chip.
-/// * `is_alloc`: whether the row is allocated
+/// * `is_opcode`: whether the row is for an opcode (either COMPRESS or PERMUTE)
+/// * `is_direct`: whether the row is for a direct hash
 /// * `clk`: the clock cycle (NOT timestamp)
 /// * `a`, `b`, `c`: addresses
 /// * `d`, `e`: address spaces
 /// * `cmp`: boolean for compression vs. permutation
 #[derive(Clone, Copy, Debug)]
 pub struct Poseidon2VmIoCols<T> {
-    pub is_alloc: T,
+    pub is_opcode: T,
+    pub is_direct: T,
     pub clk: T,
     pub a: T,
     pub b: T,
@@ -79,12 +81,13 @@ impl<const WIDTH: usize, T: Field> Poseidon2VmCols<WIDTH, T> {
 
 impl<T: Clone> Poseidon2VmIoCols<T> {
     pub fn get_width() -> usize {
-        8
+        9
     }
 
     pub fn flatten(&self) -> Vec<T> {
         vec![
-            self.is_alloc.clone(),
+            self.is_opcode.clone(),
+            self.is_direct.clone(),
             self.clk.clone(),
             self.a.clone(),
             self.b.clone(),
@@ -97,21 +100,37 @@ impl<T: Clone> Poseidon2VmIoCols<T> {
 
     pub fn from_slice(slice: &[T]) -> Self {
         Self {
-            is_alloc: slice[0].clone(),
-            clk: slice[1].clone(),
-            a: slice[2].clone(),
-            b: slice[3].clone(),
-            c: slice[4].clone(),
-            d: slice[5].clone(),
-            e: slice[6].clone(),
-            cmp: slice[7].clone(),
+            is_opcode: slice[0].clone(),
+            is_direct: slice[1].clone(),
+            clk: slice[2].clone(),
+            a: slice[3].clone(),
+            b: slice[4].clone(),
+            c: slice[5].clone(),
+            d: slice[6].clone(),
+            e: slice[7].clone(),
+            cmp: slice[8].clone(),
         }
     }
 }
 impl<T: Field> Poseidon2VmIoCols<T> {
     pub fn blank_row() -> Self {
         Self {
-            is_alloc: T::zero(),
+            is_opcode: T::zero(),
+            is_direct: T::zero(),
+            clk: T::zero(),
+            a: T::zero(),
+            b: T::zero(),
+            c: T::zero(),
+            d: T::one(),
+            e: T::zero(),
+            cmp: T::zero(),
+        }
+    }
+
+    pub fn direct_io_cols() -> Self {
+        Self {
+            is_opcode: T::zero(),
+            is_direct: T::one(),
             clk: T::zero(),
             a: T::zero(),
             b: T::zero(),

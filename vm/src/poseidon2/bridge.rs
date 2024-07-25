@@ -1,14 +1,17 @@
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::{AbstractField, Field};
 
-use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
+use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS, POSEIDON2_DIRECT_BUS};
 
 use super::columns::{Poseidon2VmAuxCols, Poseidon2VmIoCols};
 use super::Poseidon2VmAir;
 
 impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
-    /// Receives instructions from the CPU on the designated `POSEIDON2_BUS`, and sends both read and write requests to the memory chip.
-    /// Receives (clk, a, b, c, d, e, cmp)
+    /// Receives instructions from the CPU on the designated `POSEIDON2_BUS` (opcodes) or `POSEIDON2_DIRECT_BUS` (direct), and sends both read and write requests to the memory chip.
+    ///
+    /// Receives (clk, a, b, c, d, e, cmp) for opcodes, width exposed in `opcode_interaction_width()`
+    ///
+    /// Receives (hash_in.0, hash_in.1, hash_out) for direct, width exposed in `direct_interaction_width()`
     pub fn eval_interactions<AB: InteractionBuilder<F = F>>(
         &self,
         builder: &mut AB,
@@ -18,8 +21,8 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
         let addresses = aux.addresses;
         let d_is_zero = aux.d_is_zero;
 
-        let fields = io.flatten().into_iter().skip(1);
-        builder.push_receive(POSEIDON2_BUS, fields, io.is_alloc);
+        let fields = io.flatten().into_iter().skip(2);
+        builder.push_receive(POSEIDON2_BUS, fields, io.is_opcode);
 
         let chunks: usize = WIDTH / 2;
 
@@ -36,7 +39,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
                 addr.into(),
                 addresses[i].into(),
             ];
-            builder.push_send(MEMORY_BUS, fields, io.is_alloc - d_is_zero);
+            builder.push_send(MEMORY_BUS, fields, io.is_opcode - d_is_zero);
         }
 
         // READ
@@ -58,7 +61,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
                 aux.internal.io.input[i].into(),
             ];
 
-            builder.push_send(MEMORY_BUS, fields, io.is_alloc);
+            builder.push_send(MEMORY_BUS, fields, io.is_opcode);
         }
 
         // WRITE
@@ -77,12 +80,23 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
             ];
 
             let count = if i < chunks {
-                io.is_alloc.into()
+                io.is_opcode.into()
             } else {
-                io.is_alloc - io.cmp
+                io.is_opcode - io.cmp
             };
 
             builder.push_send(MEMORY_BUS, fields, count);
         }
+
+        // DIRECT
+        let expand_fields = aux
+            .internal
+            .io
+            .flatten()
+            .into_iter()
+            .take(WIDTH + WIDTH / 2)
+            .collect::<Vec<AB::Var>>();
+
+        builder.push_receive(POSEIDON2_DIRECT_BUS, expand_fields, io.is_direct);
     }
 }

@@ -1,6 +1,6 @@
 use std::{array::from_fn, collections::BTreeMap};
 
-use afs_chips::is_equal_vec::columns::IsEqualVecAuxCols;
+use afs_primitives::is_equal_vec::columns::IsEqualVecAuxCols;
 use itertools::Itertools;
 
 use super::{CpuOptions, OpCode, CPU_MAX_ACCESSES_PER_CYCLE};

@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_chips::sub_chip::{AirConfig, SubAir};
+use afs_primitives::sub_chip::{AirConfig, SubAir};
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_baby_bear::BabyBear;

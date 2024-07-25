@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-use afs_chips::range_gate::RangeCheckerGateChip;
+use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::rap::AnyRap;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::DenseMatrix, Matrix};

@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use afs_chips::single_page_index_scan::page_index_scan_input::Comp;
+use afs_page::single_page_index_scan::page_index_scan_input::Comp;
 use afs_test_utils::page_config::PageConfig;
 use logical_interface::afs_input::{operation::FilterOp, types::AfsOperation};
 

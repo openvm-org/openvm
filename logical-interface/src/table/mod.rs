@@ -6,7 +6,7 @@ pub mod types;
 use crate::{
     mock_db::MockDbTable, table::codec::fixed_bytes::FixedBytesCodec, utils::fixed_bytes_to_u16_vec,
 };
-use afs_chips::common::{page::Page, page_cols::PageCols};
+use afs_page::common::{page::Page, page_cols::PageCols};
 use serde_derive::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use types::{TableId, TableMetadata};

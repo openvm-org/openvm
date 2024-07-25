@@ -5,6 +5,7 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 use p3_util::log2_strict_usize;
+use poseidon2_air::poseidon2::Poseidon2Config;
 use rand::Rng;
 use rand::RngCore;
 
@@ -19,7 +20,9 @@ use afs_test_utils::utils::create_seeded_rng;
 
 use crate::cpu::trace::Instruction;
 use crate::cpu::OpCode::{COMP_POS2, PERM_POS2};
+use crate::cpu::POSEIDON2_DIRECT_BUS;
 use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
+use crate::memory::tree::Hasher;
 use crate::vm::config::VmConfig;
 use crate::vm::VirtualMachine;
 
@@ -103,29 +106,34 @@ macro_rules! run_perm_ops {
         });
 
         let dummy_cpu_poseidon2 = DummyInteractionAir::new(
-            Poseidon2VmAir::<16, BabyBear>::interaction_width(),
+            Poseidon2VmAir::<16, BabyBear>::opcode_interaction_width(),
             true,
             POSEIDON2_BUS,
         );
         let dummy_cpu_poseidon2_trace = RowMajorMatrix::new(
             {
-                let mut vec: Vec<_> = (0..$num_ops)
+                let mut vec: Vec<BabyBear> = (0..$num_ops)
                     .flat_map(|i| {
                         Poseidon2VmAir::<16, BabyBear>::make_io_cols(
                             16 * $num_ops + (time_per * i),
                             $instructions[i],
                         )
                         .flatten()
+                        .iter()
+                        .enumerate()
+                        .filter(|&(index, _)| index != 1)
+                        .map(|(_, value)| *value)
+                        .collect::<Vec<BabyBear>>()
                     })
                     .collect();
                 for _ in 0..(tot_ops - $num_ops)
-                    * (Poseidon2VmAir::<16, BabyBear>::interaction_width() + 1)
+                    * (Poseidon2VmAir::<16, BabyBear>::opcode_interaction_width() + 1)
                 {
                     vec.push(BabyBear::zero());
                 }
                 vec
             },
-            Poseidon2VmAir::<16, BabyBear>::interaction_width() + 1,
+            Poseidon2VmAir::<16, BabyBear>::opcode_interaction_width() + 1,
         );
 
         let dummy_cpu_memory = DummyInteractionAir::new(5, true, MEMORY_BUS);
@@ -259,4 +267,65 @@ fn poseidon2_negative_test() {
         );
         traces[poseidon2_trace_index].row_mut(height)[width] -= rand;
     }
+}
+
+/// Test that the direct bus interactions work.
+#[test]
+fn poseidon2_direct_test() {
+    let mut rng = create_seeded_rng();
+    const NUM_OPS: usize = 50;
+    const CHUNKS: usize = 8;
+    let correct_height = NUM_OPS.next_power_of_two();
+    let hashes: [([BabyBear; CHUNKS], [BabyBear; CHUNKS]); NUM_OPS] = from_fn(|_| {
+        (
+            from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
+            from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
+        )
+    });
+    let mut chip = Poseidon2Chip::<16, BabyBear>::from_poseidon2_config(
+        Poseidon2Config::default(),
+        POSEIDON2_BUS,
+    );
+
+    let outs: [[BabyBear; CHUNKS]; NUM_OPS] = from_fn(|i| chip.hash(hashes[i].0, hashes[i].1));
+
+    let width = Poseidon2VmAir::<16, BabyBear>::direct_interaction_width();
+
+    let dummy_direct_cpu = DummyInteractionAir::new(width, true, POSEIDON2_DIRECT_BUS);
+
+    let mut dummy_direct_cpu_trace = RowMajorMatrix::new(
+        outs.iter()
+            .enumerate()
+            .flat_map(|(i, out)| {
+                vec![BabyBear::one()]
+                    .into_iter()
+                    .chain(hashes[i].0)
+                    .chain(hashes[i].1)
+                    .chain(out.iter().cloned())
+            })
+            .collect::<Vec<_>>(),
+        width + 1,
+    );
+    dummy_direct_cpu_trace.values.extend(vec![
+        BabyBear::zero();
+        (width + 1) * (correct_height - NUM_OPS)
+    ]);
+
+    let chip_trace = chip.generate_trace();
+
+    // engine generation
+    let max_trace_height = chip_trace.height();
+    let max_log_degree = log2_strict_usize(max_trace_height);
+    let perm = random_perm();
+    let fri_params = fri_params_with_80_bits_of_security()[1];
+    let engine = engine_from_perm(perm, max_log_degree, fri_params);
+
+    // positive test
+    engine
+        .run_simple_test(
+            vec![&dummy_direct_cpu, &chip.air],
+            vec![dummy_direct_cpu_trace, chip_trace],
+            vec![vec![]; 2],
+        )
+        .expect("Verification failed");
 }

@@ -1,4 +1,4 @@
-use afs_chips::offline_checker::OfflineCheckerOperation;
+use afs_primitives::offline_checker::OfflineCheckerOperation;
 use p3_field::PrimeField64;
 use std::array::from_fn;
 

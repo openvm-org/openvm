@@ -863,7 +863,7 @@ pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField64, EF: Exte
         AsmInstruction::DivE(dst, lhs, rhs) => vec![
             inst(
                 BBE4INV,
-                register(dst),
+                utility_registers[0],
                 register(rhs),
                 register(rhs),
                 AS::Register,
@@ -873,7 +873,7 @@ pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField64, EF: Exte
                 BBE4MUL,
                 register(dst),
                 register(lhs),
-                register(dst),
+                utility_registers[0],
                 AS::Register,
                 AS::Register,
             ),
