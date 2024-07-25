@@ -18,6 +18,16 @@ pub struct CompilerOptions {
     pub field_extension_enabled: bool,
 }
 
+impl Default for CompilerOptions {
+    fn default() -> Self {
+        CompilerOptions {
+            compile_prints: true,
+            field_arithmetic_enabled: true,
+            field_extension_enabled: true,
+        }
+    }
+}
+
 fn inst<F: PrimeField64>(
     opcode: OpCode,
     op_a: F,
@@ -651,9 +661,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         | AsmInstruction::SubEIN(..)
         | AsmInstruction::MulE(..)
         | AsmInstruction::MulEI(..)
-        | AsmInstruction::DivE(..)
-        | AsmInstruction::DivEI(..)
-        | AsmInstruction::DivEIN(..) => {
+        | AsmInstruction::InvE(..) => {
             let fe_utility_registers = from_fn(|i| utility_registers[i]);
             if options.field_extension_enabled {
                 convert_field_extension::<WORD_SIZE, F, EF>(instruction, fe_utility_registers)

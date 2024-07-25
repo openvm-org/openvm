@@ -21,11 +21,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmBu
     }
 
     pub fn compile_isa<const WORD_SIZE: usize>(self) -> Vec<Instruction<F>> {
-        self.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
-            compile_prints: true,
-            field_arithmetic_enabled: true,
-            field_extension_enabled: true,
-        })
+        self.compile_isa_with_options::<WORD_SIZE>(CompilerOptions::default())
     }
 
     pub fn compile_isa_with_options<const WORD_SIZE: usize>(

@@ -185,32 +185,19 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::AddFI(A0, ZERO, lhs), trace.clone());
                     self.push(AsmInstruction::DivF(dst.fp(), A0, rhs.fp()), trace);
                 }
-                DslIr::DivEF(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::DivE(dst.fp(), lhs.fp(), rhs.fp()), trace);
-                }
-                DslIr::DivEFI(dst, lhs, rhs) => {
-                    self.push(
-                        AsmInstruction::DivEI(dst.fp(), lhs.fp(), EF::from_base(rhs)),
-                        trace,
-                    );
-                }
                 DslIr::DivEIN(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::DivEIN(dst.fp(), lhs, rhs.fp()), trace);
-                }
-                DslIr::DivEFIN(dst, lhs, rhs) => {
-                    self.push(
-                        AsmInstruction::DivEIN(dst.fp(), EF::from_base(lhs), rhs.fp()),
-                        trace,
-                    );
+                    self.push(AsmInstruction::InvE(A0, rhs.fp()), trace.clone());
+                    self.push(AsmInstruction::MulEI(dst.fp(), A0, lhs), trace);
                 }
                 DslIr::DivE(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::DivE(dst.fp(), lhs.fp(), rhs.fp()), trace);
+                    self.push(AsmInstruction::InvE(A0, rhs.fp()), trace.clone());
+                    self.push(AsmInstruction::MulE(dst.fp(), lhs.fp(), A0), trace);
                 }
                 DslIr::DivEI(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::DivEI(dst.fp(), lhs.fp(), rhs), trace);
+                    self.push(AsmInstruction::MulEI(dst.fp(), lhs.fp(), rhs.inverse()), trace);
                 }
                 DslIr::InvE(dst, src) => {
-                    self.push(AsmInstruction::DivEIN(dst.fp(), EF::one(), src.fp()), trace);
+                    self.push(AsmInstruction::InvE(dst.fp(), src.fp()), trace);
                 }
                 DslIr::SubEF(dst, lhs, rhs) => {
                     self.push(AsmInstruction::SubE(dst.fp(), lhs.fp(), rhs.fp()), trace);

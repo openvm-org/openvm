@@ -83,14 +83,8 @@ pub enum AsmInstruction<F, EF> {
     /// Multiply immediate extension.
     MulEI(i32, i32, EF),
 
-    /// Divide extension, dst = lhs / rhs.
-    DivE(i32, i32, i32),
-
-    /// Divide immediate extension, dst = lhs / rhs.
-    DivEI(i32, i32, EF),
-
-    /// Divide value from immediate extension, dst = lhs / rhs.
-    DivEIN(i32, EF, i32),
+    /// Extension inverse, dst = 1 / src.
+    InvE(i32, i32),
 
     /// Jump and link.
     Jal(i32, F, F),
@@ -967,14 +961,8 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::MulEI(dst, lhs, rhs) => {
                 write!(f, "emuli ({})fp, ({})fp, {}", dst, lhs, rhs)
             }
-            AsmInstruction::DivE(dst, lhs, rhs) => {
-                write!(f, "ediv  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
-            }
-            AsmInstruction::DivEI(dst, lhs, rhs) => {
-                write!(f, "edivi ({})fp, ({})fp, {}", dst, lhs, rhs)
-            }
-            AsmInstruction::DivEIN(dst, lhs, rhs) => {
-                write!(f, "edivin ({})fp, {}, ({})fp", dst, lhs, rhs)
+            AsmInstruction::InvE(dst, src) => {
+                write!(f, "einv ({})fp, ({})fp", dst, src)
             }
             AsmInstruction::Jal(dst, label, offset) => {
                 if *offset == F::zero() {
