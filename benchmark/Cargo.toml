@@ -13,7 +13,7 @@ afs-stark-backend = { path = "../stark-backend", default-features = false }
 logical-interface = { path = "../logical-interface" }
 afs-derive = { path = "../derive" }
 afs-test-utils = { path = "../test-utils" }
-afs-primitives = { path = "../primitives", default-features = false }
+afs-page = { path = "../db/page", default-features = false }
 serde = { version = "1.0.203", features = ["derive"] }
 clap = { version = "4.5.4", features = ["derive"] }
 color-eyre = "0.6.3"

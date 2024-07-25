@@ -3,6 +3,7 @@ members = [
     "bin/afs",
     "bin/olap",
     "benchmark",
+    "db/page",
     "primitives",
     "compiler",
     "derive",

@@ -49,7 +49,7 @@ impl IsLessThanTupleAir {
     /// FOR INTERNAL USE ONLY when this AIR is used as a sub-AIR but the comparators `x, y` are on different rows. See [IsLessThanAir::eval_without_interactions].
     ///
     /// Constrains that `x < y` lexicographically.
-    pub(crate) fn eval_without_interactions<AB: AirBuilder>(
+    pub fn eval_without_interactions<AB: AirBuilder>(
         &self,
         builder: &mut AB,
         io: IsLessThanTupleIoCols<AB::Var>,

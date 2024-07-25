@@ -20,7 +20,7 @@ p3-util = { workspace = true }
 afs-stark-backend = { path = "../../stark-backend", default-features = false }
 afs-derive = { path = "../../derive" }
 afs-test-utils = { path = "../../test-utils" }
-afs-primitives = { path = "../../primitives", default-features = false }
+afs-page = { path = "../../db/page", default-features = false }
 bin-common = { path = "../common" }
 p3-uni-stark = { workspace = true }
 p3-field = { workspace = true }
@@ -33,4 +33,4 @@ tracing-forest = { version = "0.1.6", features = ["ansi", "smallvec"] }
 
 [features]
 default = []
-parallel = ["afs-primitives/parallel"]
+parallel = ["afs-stark-backend/parallel"]

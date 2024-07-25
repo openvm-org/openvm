@@ -33,7 +33,7 @@ impl IsLessThanAir {
 
     /// FOR INTERNAL USE ONLY.
     /// This AIR is only sound if interactions are enabled
-    pub(crate) fn eval_without_interactions<AB: AirBuilder>(
+    pub fn eval_without_interactions<AB: AirBuilder>(
         &self,
         builder: &mut AB,
         io: IsLessThanIoCols<AB::Var>,
