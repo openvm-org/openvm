@@ -75,14 +75,14 @@ macro_rules! run_perm_ops {
                     WriteOps {
                         clk: 16 * i + j,
                         ad_s: $instructions[i].e,
-                        address: $instructions[i].op_a + BabyBear::from_canonical_usize(j),
+                        address: $instructions[i].op_b + BabyBear::from_canonical_usize(j),
                         data: [$data[i][j]],
                     }
                 } else {
                     WriteOps {
                         clk: 16 * i + j,
                         ad_s: $instructions[i].e,
-                        address: $instructions[i].op_b + BabyBear::from_canonical_usize(j - 8),
+                        address: $instructions[i].op_c + BabyBear::from_canonical_usize(j - 8),
                         data: [$data[i][j]],
                     }
                 }
