@@ -47,6 +47,11 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
     }
 
     /// By default direct bus is on. If `continuations = OFF`, this should be called.
+    pub fn set_direct(&mut self, direct: bool) {
+        self.direct = direct;
+    }
+
+    /// By default direct bus is on. If `continuations = OFF`, this should be called.
     pub fn disable_direct(&mut self) {
         self.direct = false;
     }
