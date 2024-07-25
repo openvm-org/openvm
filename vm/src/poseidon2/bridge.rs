@@ -89,14 +89,16 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
         }
 
         // DIRECT
-        let expand_fields = aux
-            .internal
-            .io
-            .flatten()
-            .into_iter()
-            .take(WIDTH + WIDTH / 2)
-            .collect::<Vec<AB::Var>>();
+        if self.direct {
+            let expand_fields = aux
+                .internal
+                .io
+                .flatten()
+                .into_iter()
+                .take(WIDTH + WIDTH / 2)
+                .collect::<Vec<AB::Var>>();
 
-        builder.push_receive(POSEIDON2_DIRECT_BUS, expand_fields, io.is_direct);
+            builder.push_receive(POSEIDON2_DIRECT_BUS, expand_fields, io.is_direct);
+        }
     }
 }
