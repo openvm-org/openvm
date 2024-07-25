@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 afs-stark-backend = { path = "../stark-backend" }
 afs-compiler = { path = "../compiler" }
-afs-derive = { path = "../derive" }
 afs-test-utils = { path = "../test-utils" }
 stark-vm = { path = "../vm" }
 p3-air = { workspace = true }
@@ -14,18 +13,14 @@ p3-field = { workspace = true }
 p3-commit = { workspace = true }
 p3-fri = { workspace = true }
 p3-matrix = { workspace = true }
-p3-maybe-rayon = { workspace = true }
 p3-util = { workspace = true }
 p3-symmetric = { workspace = true }
 p3-challenger = { workspace = true }
 p3-baby-bear = { workspace = true }
-p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }
 p3-poseidon2 = { workspace = true }
 p3-uni-stark = { workspace = true }
 itertools = "0.12.1"
-serde = { version = "1.0.203", features = ["derive"] }
-serde_derive = "1.0.203"
 rand = "0.8.5"
 
 [dev-dependencies]
