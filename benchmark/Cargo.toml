@@ -35,5 +35,5 @@ tracing-appender = "0.2.3"
 regex = "1.10.5"
 
 [features]
-default = []
+default = ["afs-stark-backend/mimalloc"]
 parallel = ["afs/parallel", "olap/parallel"]
