@@ -5,10 +5,10 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use afs_chips::is_zero::columns::IsZeroIoCols;
-use afs_chips::is_zero::IsZeroAir;
-use afs_chips::sub_chip::AirConfig;
-use afs_chips::sub_chip::SubAir;
+use afs_primitives::is_zero::columns::IsZeroIoCols;
+use afs_primitives::is_zero::IsZeroAir;
+use afs_primitives::sub_chip::AirConfig;
+use afs_primitives::sub_chip::SubAir;
 use poseidon2_air::poseidon2::columns::Poseidon2Cols;
 
 use super::{columns::Poseidon2VmCols, Poseidon2VmAir};

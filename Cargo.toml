@@ -3,7 +3,7 @@ members = [
     "bin/afs",
     "bin/olap",
     "benchmark",
-    "chips",
+    "primitives",
     "compiler",
     "derive",
     "logical-interface",

@@ -5,7 +5,9 @@ use std::{
     time::Instant,
 };
 
-use afs_chips::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
+use afs_primitives::{
+    execution_air::ExecutionAir, page_rw_checker::page_controller::PageController,
+};
 use afs_stark_backend::{keygen::types::MultiStarkVerifyingKey, prover::types::Proof};
 use afs_test_utils::{
     engine::StarkEngine,

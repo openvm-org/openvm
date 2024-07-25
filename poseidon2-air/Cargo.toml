@@ -20,7 +20,7 @@ p3-uni-stark = { workspace = true }
 zkhash = { workspace = true }
 rand = "0.8"
 
-afs-chips = { path = "../chips" }
+afs-primitives = { path = "../primitives" }
 afs-stark-backend = { path = "../stark-backend", default-features = false }
 afs-derive = { path = "../derive" }
 afs-test-utils = { path = "../test-utils" }

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use afs_chips::offline_checker::OfflineCheckerChip;
-use afs_chips::range_gate::RangeCheckerGateChip;
+use afs_primitives::offline_checker::OfflineCheckerChip;
+use afs_primitives::range_gate::RangeCheckerGateChip;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 #[cfg(feature = "parallel")]

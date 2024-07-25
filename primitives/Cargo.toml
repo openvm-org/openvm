@@ -1,9 +1,9 @@
 [package]
-name = "afs-chips"
+name = "afs-primitives"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "AFS chip library"
+description = "Library of plonky3 primitives for general purpose use in other ZK circuits."
 
 [dependencies]
 p3-air = { workspace = true }

@@ -1,6 +1,6 @@
 use std::{iter, sync::Arc};
 
-use afs_chips::range_gate::RangeCheckerGateChip;
+use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test_no_pis,

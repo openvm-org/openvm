@@ -20,7 +20,7 @@ p3-util = { workspace = true }
 p3-uni-stark = { workspace = true }
 
 poseidon2-air = { path = "../poseidon2-air", default-features = false }
-afs-chips = { path = "../chips", default-features = false }
+afs-primitives = { path = "../primitives", default-features = false }
 afs-stark-backend = { path = "../stark-backend", default-features = false }
 afs-derive = { path = "../derive" }
 afs-test-utils = { path = "../test-utils" }

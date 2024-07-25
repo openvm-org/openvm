@@ -1,6 +1,6 @@
 use super::columns::Poseidon2Cols;
 use super::Poseidon2Air;
-use afs_chips::sub_chip::LocalTraceInstructions;
+use afs_primitives::sub_chip::LocalTraceInstructions;
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 

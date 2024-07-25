@@ -1,6 +1,6 @@
 use std::{marker::PhantomData, sync::Arc, time::Instant};
 
-use afs_chips::{
+use afs_primitives::{
     execution_air::ExecutionAir,
     page_rw_checker::page_controller::{OpType, Operation, PageController},
 };

@@ -19,7 +19,7 @@ p3-util = { workspace = true }
 p3-uni-stark = { workspace = true }
 rand = "0.8"
 
-afs-chips = { path = "../../chips" }
+afs-primitives = { path = "../../primitives" }
 afs-stark-backend = { path = "../../stark-backend" }
 afs-derive = { path = "../../derive" }
 afs-test-utils = { path = "../../test-utils" }

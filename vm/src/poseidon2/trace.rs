@@ -1,8 +1,8 @@
 use super::columns::*;
 use crate::cpu::trace::Instruction;
 
-use afs_chips::is_zero::IsZeroAir;
-use afs_chips::sub_chip::LocalTraceInstructions;
+use afs_primitives::is_zero::IsZeroAir;
+use afs_primitives::sub_chip::LocalTraceInstructions;
 use p3_air::BaseAir;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;

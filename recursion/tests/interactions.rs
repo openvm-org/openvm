@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use p3_matrix::dense::RowMajorMatrix;
 
-use afs_chips::range_gate::RangeCheckerGateChip;
-use afs_chips::sum::SumChip;
+use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::sum::SumChip;
 use afs_recursion::stark::DynRapForRecursion;
 use afs_recursion::types::InnerConfig;
 use afs_stark_backend::rap::AnyRap;

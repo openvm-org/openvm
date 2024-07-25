@@ -9,7 +9,7 @@ use crate::cpu::trace::Instruction;
 use crate::cpu::OpCode;
 use crate::cpu::OpCode::*;
 use crate::vm::VirtualMachine;
-use afs_chips::{is_zero::IsZeroAir, sub_chip::LocalTraceInstructions};
+use afs_primitives::{is_zero::IsZeroAir, sub_chip::LocalTraceInstructions};
 
 #[cfg(test)]
 pub mod tests;
