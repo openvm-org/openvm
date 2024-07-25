@@ -6,8 +6,6 @@ use crate::common::page_cols::PageCols;
 
 use super::IndexedOutputPageAir;
 
-use super::IndexedOutputPageAir;
-
 #[derive(Clone)]
 pub struct IndexedOutputPageCols<T> {
     /// The columns for the page itself
