@@ -7,6 +7,7 @@ use color_eyre::eyre::Result;
 pub mod benchmark;
 pub mod predicate;
 pub mod rw;
+pub mod vm;
 
 #[derive(Debug, Parser)]
 pub struct CommonCommands {

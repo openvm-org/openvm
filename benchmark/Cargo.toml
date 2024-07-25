@@ -9,6 +9,8 @@ csv = "1.3.0"
 afs = { path = "../bin/afs", default-features = false }
 olap = { path = "../bin/olap", default-features = false }
 afs-stark-backend = { path = "../stark-backend", default-features = false }
+afs-recursion = { path = "../recursion", default-features = false }
+afs-compiler = { path = "../compiler", default-features = false }
 logical-interface = { path = "../logical-interface" }
 afs-test-utils = { path = "../test-utils" }
 afs-page = { path = "../db/page", default-features = false }
@@ -21,6 +23,9 @@ p3-uni-stark = { workspace = true }
 p3-field = { workspace = true }
 p3-blake3 = { workspace = true }
 p3-keccak = { workspace = true }
+p3-baby-bear = { workspace = true }
+p3-matrix = { workspace = true }
+p3-air = { workspace = true }
 lazy_static = "1.5.0"
 tracing = "0.1.40"
 hex = "0.4.3"

@@ -6,6 +6,7 @@ use crate::{
         benchmark::benchmark_execute,
         predicate::{run_bench_predicate, PredicateCommand},
         rw::{run_bench_rw, RwCommand},
+        vm::{benchmark_fibonacci_program, benchmark_verify_fibair, VmCommand},
     },
     config::benchmark_data::{benchmark_data_predicate, benchmark_data_rw},
     utils::table_gen::{generate_incremental_afi_rw, generate_random_afi_rw},
@@ -28,6 +29,9 @@ pub enum Commands {
     #[command(name = "predicate", about = "Benchmark Predicate")]
     /// Predicate functions
     Predicate(PredicateCommand),
+
+    #[command(name = "vm", about = "Benchmark VM")]
+    Vm(VmCommand),
 }
 
 impl Cli {
@@ -67,6 +71,10 @@ impl Cli {
                     generate_incremental_afi_rw,
                 )
                 .unwrap();
+            }
+            Commands::Vm(vm) => {
+                benchmark_verify_fibair(vm.n);
+                benchmark_fibonacci_program(vm.n);
             }
         }
     }
