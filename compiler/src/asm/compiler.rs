@@ -801,51 +801,104 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
     }
 }
 
-
 // Ext compiler logic.
 impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCompiler<F, EF> {
-    fn add_ext_exti(&mut self, dst: Ext<F, EF>, lhs: Ext<F, EF>, rhs: EF, trace: Option<Backtrace>) {
+    fn add_ext_exti(
+        &mut self,
+        dst: Ext<F, EF>,
+        lhs: Ext<F, EF>,
+        rhs: EF,
+        trace: Option<Backtrace>,
+    ) {
         let rhs = rhs.as_base_slice();
         for i in 0..EF::D {
             let j = -1 * (i * self.word_size) as i32;
-            self.push(AsmInstruction::AddFI(dst.fp() + j, lhs.fp() + j, rhs[i]), trace.clone());
+            self.push(
+                AsmInstruction::AddFI(dst.fp() + j, lhs.fp() + j, rhs[i]),
+                trace.clone(),
+            );
         }
     }
 
-    fn add_ext_felt(&mut self, dst: Ext<F, EF>, lhs: Ext<F, EF>, rhs: Felt<F>, trace: Option<Backtrace>) {
-        self.push(AsmInstruction::AddF(dst.fp(), lhs.fp(), rhs.fp()), trace.clone());
+    fn add_ext_felt(
+        &mut self,
+        dst: Ext<F, EF>,
+        lhs: Ext<F, EF>,
+        rhs: Felt<F>,
+        trace: Option<Backtrace>,
+    ) {
+        self.push(
+            AsmInstruction::AddF(dst.fp(), lhs.fp(), rhs.fp()),
+            trace.clone(),
+        );
         for i in 1..EF::D {
             let j = -1 * (i * self.word_size) as i32;
-            self.push(AsmInstruction::AddFI(dst.fp() + j, lhs.fp() + j, F::zero()), trace.clone());
+            self.push(
+                AsmInstruction::AddFI(dst.fp() + j, lhs.fp() + j, F::zero()),
+                trace.clone(),
+            );
         }
     }
 
-    fn add_ext_felti(&mut self, dst: Ext<F, EF>, lhs: Ext<F, EF>, rhs: F, trace: Option<Backtrace>) {
-        self.push(AsmInstruction::AddFI(dst.fp(), lhs.fp(), rhs), trace.clone());
+    fn add_ext_felti(
+        &mut self,
+        dst: Ext<F, EF>,
+        lhs: Ext<F, EF>,
+        rhs: F,
+        trace: Option<Backtrace>,
+    ) {
+        self.push(
+            AsmInstruction::AddFI(dst.fp(), lhs.fp(), rhs),
+            trace.clone(),
+        );
     }
 
     fn add_felt_exti(&mut self, dst: Ext<F, EF>, lhs: Felt<F>, rhs: EF, trace: Option<Backtrace>) {
         let rhs = rhs.as_base_slice();
 
-        self.push(AsmInstruction::AddFI(dst.fp(), lhs.fp(), rhs[0]), trace.clone());
+        self.push(
+            AsmInstruction::AddFI(dst.fp(), lhs.fp(), rhs[0]),
+            trace.clone(),
+        );
 
         for i in 1..EF::D {
             let j = -1 * (i * self.word_size) as i32;
-            self.push(AsmInstruction::AddFI(dst.fp() + j, ZERO, rhs[i]), trace.clone());
+            self.push(
+                AsmInstruction::AddFI(dst.fp() + j, ZERO, rhs[i]),
+                trace.clone(),
+            );
         }
     }
 
-    fn mul_ext_felt(&mut self, dst: Ext<F, EF>, lhs: Ext<F, EF>, rhs: Felt<F>, trace: Option<Backtrace>) {
+    fn mul_ext_felt(
+        &mut self,
+        dst: Ext<F, EF>,
+        lhs: Ext<F, EF>,
+        rhs: Felt<F>,
+        trace: Option<Backtrace>,
+    ) {
         for i in 0..EF::D {
             let j = -1 * (i * self.word_size) as i32;
-            self.push(AsmInstruction::MulF(dst.fp() + j, lhs.fp() + j, rhs.fp()), trace.clone());
+            self.push(
+                AsmInstruction::MulF(dst.fp() + j, lhs.fp() + j, rhs.fp()),
+                trace.clone(),
+            );
         }
     }
 
-    fn mul_ext_felti(&mut self, dst: Ext<F, EF>, lhs: Ext<F, EF>, rhs: F, trace: Option<Backtrace>) {
+    fn mul_ext_felti(
+        &mut self,
+        dst: Ext<F, EF>,
+        lhs: Ext<F, EF>,
+        rhs: F,
+        trace: Option<Backtrace>,
+    ) {
         for i in 0..EF::D {
             let j = -1 * (i * self.word_size) as i32;
-            self.push(AsmInstruction::MulFI(dst.fp() + j, lhs.fp() + j, rhs), trace.clone());
+            self.push(
+                AsmInstruction::MulFI(dst.fp() + j, lhs.fp() + j, rhs),
+                trace.clone(),
+            );
         }
     }
 }
