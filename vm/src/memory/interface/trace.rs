@@ -40,8 +40,6 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryInterfaceChip<CHUNK, F> {
                 leaf_label: F::from_canonical_usize(label),
                 values: initial_values,
                 auxes: initial_values_matter,
-                temp_multiplicity: initial_values_matter,
-                temp_is_final: [F::zero(); CHUNK],
             };
             let final_cols = MemoryInterfaceCols {
                 direction: F::neg_one(),
@@ -49,8 +47,6 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryInterfaceChip<CHUNK, F> {
                 leaf_label: F::from_canonical_usize(label),
                 values: final_values,
                 auxes: final_values_are_from_offline_checker,
-                temp_multiplicity: [F::neg_one(); CHUNK],
-                temp_is_final: final_values_are_from_offline_checker,
             };
             rows.extend(initial_cols.flatten());
             rows.extend(final_cols.flatten());
@@ -62,21 +58,9 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryInterfaceChip<CHUNK, F> {
     }
 
     fn unused_row() -> MemoryInterfaceCols<CHUNK, F> {
-        let mut cols = MemoryInterfaceCols::from_slice(&vec![
+        MemoryInterfaceCols::from_slice(&vec![
             F::zero();
             MemoryInterfaceCols::<CHUNK, F>::get_width()
-        ]);
-
-        for i in 0..CHUNK {
-            cols.temp_multiplicity[i] = cols.direction
-                * (F::one()
-                    - ((cols.direction + F::one())
-                        * F::two().inverse()
-                        * (F::one() - cols.auxes[i])));
-            cols.temp_is_final[i] =
-                (F::one() - cols.direction) * F::two().inverse() * cols.auxes[i];
-        }
-
-        cols
+        ])
     }
 }

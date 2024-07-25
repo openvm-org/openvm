@@ -8,8 +8,6 @@ pub struct MemoryInterfaceCols<const CHUNK: usize, T> {
     pub values: [T; CHUNK],
     // auxes represents: multiplicity when direction = 1, is_final when direction = -1
     pub auxes: [T; CHUNK],
-    pub temp_multiplicity: [T; CHUNK],
-    pub temp_is_final: [T; CHUNK],
 }
 
 impl<const CHUNK: usize, T: Clone> MemoryInterfaceCols<CHUNK, T> {
@@ -22,8 +20,6 @@ impl<const CHUNK: usize, T: Clone> MemoryInterfaceCols<CHUNK, T> {
         let leaf_label = take();
         let values = std::array::from_fn(|_| take());
         let auxes = std::array::from_fn(|_| take());
-        let temp_multiplicity = std::array::from_fn(|_| take());
-        let temp_is_final = std::array::from_fn(|_| take());
 
         Self {
             direction,
@@ -31,8 +27,6 @@ impl<const CHUNK: usize, T: Clone> MemoryInterfaceCols<CHUNK, T> {
             leaf_label,
             values,
             auxes,
-            temp_multiplicity,
-            temp_is_final,
         }
     }
 
@@ -44,12 +38,10 @@ impl<const CHUNK: usize, T: Clone> MemoryInterfaceCols<CHUNK, T> {
         ];
         result.extend(self.values.clone());
         result.extend(self.auxes.clone());
-        result.extend(self.temp_multiplicity.clone());
-        result.extend(self.temp_is_final.clone());
         result
     }
 
     pub fn get_width() -> usize {
-        3 + (4 * CHUNK)
+        3 + (2 * CHUNK)
     }
 }

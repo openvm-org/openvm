@@ -1,58 +1,53 @@
-use p3_air::{PairCol, VirtualPairCol};
-use p3_field::Field;
+use p3_field::{AbstractField, Field};
 
-use afs_stark_backend::interaction::{AirBridge, Interaction};
+use afs_stark_backend::interaction::InteractionBuilder;
 
 use crate::memory::interface::air::MemoryInterfaceAir;
 use crate::memory::interface::columns::MemoryInterfaceCols;
 use crate::memory::interface::{EXPAND_BUS, MEMORY_INTERFACE_BUS};
 
-impl<const CHUNK: usize, F: Field> AirBridge<F> for MemoryInterfaceAir<CHUNK> {
-    fn receives(&self) -> Vec<Interaction<F>> {
-        let all_cols = (0..MemoryInterfaceCols::<CHUNK, F>::get_width()).collect::<Vec<usize>>();
-        let cols_numbered = MemoryInterfaceCols::<CHUNK, usize>::from_slice(&all_cols);
-
-        // is_final = 1/2 - direction/2
-        // so that direction = 1 => is_final = 0, direction = -1 => is_final = 1
+impl<const CHUNK: usize> MemoryInterfaceAir<CHUNK> {
+    pub fn eval_interactions<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        local: MemoryInterfaceCols<CHUNK, AB::Var>,
+    ) {
         let mut expand_fields = vec![
-            VirtualPairCol::new_main(
-                vec![(cols_numbered.direction, F::two().inverse().neg())],
-                F::two().inverse(),
-            ),
-            VirtualPairCol::single_main(cols_numbered.address_space),
-            VirtualPairCol::constant(F::zero()),
-            VirtualPairCol::single_main(cols_numbered.leaf_label),
+            // direction =  1 => is_final = 0
+            // direction = -1 => is_final = 1
+            (AB::Expr::one() - local.direction) * AB::F::two().inverse(),
+            local.address_space.into(),
+            AB::Expr::zero(),
+            local.leaf_label.into(),
         ];
-        expand_fields.extend(cols_numbered.values.map(VirtualPairCol::single_main));
+        expand_fields.extend(local.values.map(AB::Var::into));
+        builder.push_receive(EXPAND_BUS, expand_fields, local.direction.into());
 
-        vec![Interaction {
-            fields: expand_fields,
-            count: VirtualPairCol::single_main(cols_numbered.direction),
-            argument_index: EXPAND_BUS,
-        }]
-    }
+        for i in 0..CHUNK {
+            // when `direction` is -1, `is_final` should be `auxes[i]`
+            // otherwise, `is_final` field should be 0
+            let is_final =
+                (AB::Expr::one() - local.direction) * AB::F::two().inverse() * local.auxes[i];
 
-    fn sends(&self) -> Vec<Interaction<F>> {
-        let all_cols = (0..MemoryInterfaceCols::<CHUNK, F>::get_width()).collect::<Vec<usize>>();
-        let cols_numbered = MemoryInterfaceCols::<CHUNK, usize>::from_slice(&all_cols);
+            // when `direction` is 1, `multiplicity` should be `auxes[i]`
+            // otherwise, `multiplicity` should be `direction`
+            let multiplicity = local.direction
+                * (AB::Expr::one()
+                    - ((local.direction + AB::F::one())
+                        * AB::F::two().inverse()
+                        * (AB::Expr::one() - local.auxes[i])));
 
-        (0..CHUNK)
-            .map(|i| Interaction {
-                fields: vec![
-                    VirtualPairCol::single_main(cols_numbered.temp_is_final[i]),
-                    VirtualPairCol::single_main(cols_numbered.address_space),
-                    VirtualPairCol::new(
-                        vec![(
-                            PairCol::Main(cols_numbered.leaf_label),
-                            F::from_canonical_usize(CHUNK),
-                        )],
-                        F::from_canonical_usize(i),
-                    ),
-                    VirtualPairCol::single_main(cols_numbered.values[i]),
+            builder.push_send(
+                MEMORY_INTERFACE_BUS,
+                [
+                    is_final,
+                    local.address_space.into(),
+                    (AB::Expr::from_canonical_usize(CHUNK) * local.leaf_label)
+                        + AB::F::from_canonical_usize(i),
+                    local.values[i].into(),
                 ],
-                count: VirtualPairCol::single_main(cols_numbered.temp_multiplicity[i]),
-                argument_index: MEMORY_INTERFACE_BUS,
-            })
-            .collect()
+                multiplicity,
+            );
+        }
     }
 }
