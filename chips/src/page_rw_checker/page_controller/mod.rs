@@ -221,6 +221,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         ));
     }
 
+    /// Used to load the initial page and the operations
     pub fn load_page_and_ops(
         &mut self,
         page: &Page,

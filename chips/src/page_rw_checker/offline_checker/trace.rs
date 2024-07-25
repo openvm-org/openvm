@@ -40,9 +40,9 @@ impl PageOfflineChecker {
         let max_clk = ops.iter().map(|op| op.clk).max().unwrap_or(0) + 1;
 
         #[cfg(feature = "parallel")]
-        ops.par_sort_by_key(|op| (op.idx.clone(), op.clk));
+        ops.par_sort_by(|a, b| a.idx.cmp(&b.idx).then_with(|| a.clk.cmp(&b.clk)));
         #[cfg(not(feature = "parallel"))]
-        ops.sort_by_key(|op| (op.idx.clone(), op.clk));
+        ops.sort_by(|a, b| a.idx.cmp(&b.idx).then_with(|| a.clk.cmp(&b.clk)));
 
         let dummy_op = Operation {
             idx: vec![0; self.offline_checker.idx_len],
