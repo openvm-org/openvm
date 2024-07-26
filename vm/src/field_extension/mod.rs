@@ -29,16 +29,6 @@ pub struct FieldExtensionArithmeticOperation<F> {
     pub result: [F; EXTENSION_DEGREE],
 }
 
-impl<F: Field> FieldExtensionArithmeticOperation<F> {
-    pub fn to_vec(&self) -> Vec<F> {
-        let mut result = vec![F::from_canonical_usize(self.opcode as usize)];
-        result.extend(self.operand1.iter());
-        result.extend(self.operand2.iter());
-        result.extend(self.result.iter());
-        result
-    }
-}
-
 /// Field extension arithmetic chip. The irreducible polynomial is x^4 - 11.
 #[derive(Default, Clone, Copy)]
 pub struct FieldExtensionArithmeticAir {}
@@ -108,25 +98,6 @@ impl FieldExtensionArithmeticAir {
             }
             _ => None,
         }
-    }
-
-    /// Vectorized solve<>
-    pub fn solve_all<T: Field>(
-        ops: Vec<OpCode>,
-        operands: Vec<([T; EXTENSION_DEGREE], [T; EXTENSION_DEGREE])>,
-    ) -> Vec<[T; EXTENSION_DEGREE]> {
-        let mut result = Vec::<[T; EXTENSION_DEGREE]>::new();
-
-        for i in 0..ops.len() {
-            match Self::solve::<T>(ops[i], operands[i].0, operands[i].1) {
-                Some(res) => result.push(res),
-                None => {
-                    panic!("FieldExtensionArithmeticAir::solve_all: non-field extension opcode")
-                }
-            }
-        }
-
-        result
     }
 }
 
@@ -235,13 +206,5 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
                 *row,
             );
         }
-    }
-}
-
-impl<const WORD_SIZE: usize, F: PrimeField32> Default
-    for FieldExtensionArithmeticChip<WORD_SIZE, F>
-{
-    fn default() -> Self {
-        Self::new()
     }
 }

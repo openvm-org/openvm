@@ -56,16 +56,6 @@ impl<T: Clone> FieldExtensionArithmeticCols<T> {
             + FieldExtensionArithmeticAuxCols::<T>::get_width()
     }
 
-    pub fn from_slice(slice: &[T]) -> Self {
-        let io = FieldExtensionArithmeticIoCols::<T>::from_slice(
-            &slice[..FieldExtensionArithmeticIoCols::<T>::get_width()],
-        );
-        let aux = FieldExtensionArithmeticAuxCols::<T>::from_slice(
-            &slice[FieldExtensionArithmeticIoCols::<T>::get_width()..],
-        );
-        Self { io, aux }
-    }
-
     pub fn flatten(&self) -> Vec<T> {
         self.io
             .flatten()
@@ -114,31 +104,6 @@ impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
         3 * EXTENSION_DEGREE + 1
     }
 
-    pub fn from_slice(slice: &[T]) -> Self {
-        let opcode = slice[0].clone();
-
-        let x = [
-            slice[1].clone(),
-            slice[2].clone(),
-            slice[3].clone(),
-            slice[4].clone(),
-        ];
-        let y = [
-            slice[5].clone(),
-            slice[6].clone(),
-            slice[7].clone(),
-            slice[8].clone(),
-        ];
-        let z = [
-            slice[9].clone(),
-            slice[10].clone(),
-            slice[11].clone(),
-            slice[12].clone(),
-        ];
-
-        FieldExtensionArithmeticIoCols { opcode, x, y, z }
-    }
-
     pub fn flatten(&self) -> Vec<T> {
         let mut result = vec![self.opcode.clone()];
 
@@ -152,58 +117,6 @@ impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
 impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
     pub fn get_width() -> usize {
         3 * EXTENSION_DEGREE + 12
-    }
-
-    pub fn from_slice(slice: &[T]) -> Self {
-        let is_valid = slice[0].clone();
-        let valid_y_read = slice[1].clone();
-        let start_timestamp = slice[2].clone();
-        let op_a = slice[3].clone();
-        let op_b = slice[4].clone();
-        let op_c = slice[5].clone();
-        let d = slice[6].clone();
-        let e = slice[7].clone();
-
-        let opcode_lo = slice[8].clone();
-        let opcode_hi = slice[9].clone();
-        let is_mul = slice[10].clone();
-        let is_inv = slice[11].clone();
-        let sum_or_diff = [
-            slice[12].clone(),
-            slice[13].clone(),
-            slice[14].clone(),
-            slice[15].clone(),
-        ];
-        let product = [
-            slice[16].clone(),
-            slice[17].clone(),
-            slice[18].clone(),
-            slice[19].clone(),
-        ];
-        let inv = [
-            slice[20].clone(),
-            slice[21].clone(),
-            slice[22].clone(),
-            slice[23].clone(),
-        ];
-
-        FieldExtensionArithmeticAuxCols {
-            is_valid,
-            valid_y_read,
-            start_timestamp,
-            op_a,
-            op_b,
-            op_c,
-            d,
-            e,
-            opcode_lo,
-            opcode_hi,
-            is_mul,
-            is_inv,
-            sum_or_diff,
-            product,
-            inv,
-        }
     }
 
     pub fn flatten(&self) -> Vec<T> {
