@@ -50,7 +50,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
         let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, 1 << decomp));
 
         let cpu_air = CpuAir::new(config.cpu_options());
-        let program_chip = ProgramChip::new(program.clone());
+        let program_chip = ProgramChip::new(program);
         let memory_chip = MemoryChip::new(limb_bits, limb_bits, limb_bits, decomp);
         let field_arithmetic_chip = FieldArithmeticChip::new();
         let field_extension_chip = FieldExtensionArithmeticChip::new();
