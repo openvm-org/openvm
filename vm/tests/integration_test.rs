@@ -157,6 +157,7 @@ fn test_vm_fibonacci_old() {
 
 #[test]
 fn test_vm_fibonacci_old_cycle_tracker() {
+    // NOTE: Instructions commented until cycle tracker instructions are not counted as additional assembly Instructions
     let program = vec![
         Instruction::debug(CT_START, "full program"),
         Instruction::debug(CT_START, "store"),
