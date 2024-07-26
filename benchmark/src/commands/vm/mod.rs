@@ -2,6 +2,7 @@ use afs_compiler::{
     asm::AsmBuilder,
     ir::{Felt, Var},
 };
+
 use afs_recursion::{
     hints::{Hintable, InnerVal},
     stark::{DynRapForRecursion, VerifierProgram},
@@ -12,9 +13,7 @@ use afs_stark_backend::{
 };
 use afs_test_utils::{
     config::{
-        baby_bear_poseidon2::{
-            default_engine, engine_from_perm, random_perm, BabyBearPoseidon2Config,
-        },
+        baby_bear_poseidon2::{default_perm, engine_from_perm, BabyBearPoseidon2Config},
         fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},
         setup_tracing,
     },
@@ -141,7 +140,7 @@ pub fn benchmark_fibonacci_program(n: usize) {
 
     let program = builder.compile_isa::<1>();
 
-    vm_benchmark_execute_and_prove::<1>(program.clone(), vec![]);
+    // vm_benchmark_execute_and_prove::<1>(program.clone(), vec![]);
 
     let mut vm = VirtualMachine::<1, _>::new(
         VmConfig {
@@ -165,6 +164,8 @@ pub fn benchmark_fibonacci_program(n: usize) {
     let len = chips.len();
 
     run_recursive_test_benchmark(chips, rec_raps, traces, vec![vec![]; len]);
+
+    // run_recursive_test(chips, rec_raps, traces, vec![vec![]; len]);
 }
 
 fn run_recursive_test_benchmark(
@@ -177,11 +178,12 @@ fn run_recursive_test_benchmark(
     let num_pvs: Vec<usize> = pvs.iter().map(|pv| pv.len()).collect();
 
     let trace_heights: Vec<usize> = traces.iter().map(|t| t.height()).collect();
-    // println!("trace_heights: {:?}", trace_heights);
 
     let log_degree = log2_strict_usize(trace_heights.clone().into_iter().max().unwrap());
 
-    let engine = default_engine(log_degree);
+    let fri_params = fri_params_fast_testing()[0];
+    let perm = default_perm();
+    let engine = engine_from_perm(perm, log_degree, fri_params);
 
     let mut keygen_builder = engine.keygen_builder();
     for (&rap, &num_pv) in any_raps.iter().zip(num_pvs.iter()) {
@@ -211,6 +213,7 @@ fn run_recursive_test_benchmark(
     let main_trace_data = trace_builder.view(&vk, any_raps.clone());
 
     let mut challenger = engine.new_challenger();
+
     let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pvs);
 
     // Make sure proof verifies outside eDSL...
@@ -267,7 +270,7 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     );
     let max_log_degree = vm.max_log_degree().unwrap();
 
-    let perm = random_perm();
+    let perm = default_perm();
     // blowup factor 8 for poseidon2 chip
     let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
         fri_params_fast_testing()[1]
@@ -278,11 +281,6 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
 
     let trace_span = info_span!("Benchmark trace generation").entered();
     let traces = vm.traces().unwrap();
-
-    // println!(
-    //     "trace heights: {:?}",
-    //     traces.iter().map(|t| t.height()).collect::<Vec<_>>()
-    // );
 
     let chips = get_chips(&vm);
 

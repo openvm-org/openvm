@@ -73,8 +73,8 @@ impl Cli {
                 .unwrap();
             }
             Commands::Vm(vm) => {
-                benchmark_verify_fibair(vm.n);
                 benchmark_fibonacci_program(vm.n);
+                benchmark_verify_fibair(vm.n);
             }
         }
     }
