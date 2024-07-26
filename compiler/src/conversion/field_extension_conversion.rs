@@ -460,8 +460,7 @@ pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField64, EF: Exte
             AS::Register,
             AS::Register,
         )],
-        AsmInstruction::SubEIN(_, _, _)
-        | AsmInstruction::MulEI(_, _, _) => {
+        AsmInstruction::SubEIN(_, _, _) | AsmInstruction::MulEI(_, _, _) => {
             convert_field_extension_with_base::<WORD_SIZE, F, EF>(instruction, utility_registers)
         }
         AsmInstruction::SubE(dst, lhs, rhs) => vec![inst(
