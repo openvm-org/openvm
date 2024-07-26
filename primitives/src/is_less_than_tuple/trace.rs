@@ -62,11 +62,10 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanTupleAir {
             let curr_less_than_row = LocalTraceInstructions::generate_trace_row(
                 &is_less_than_chip.air,
                 (x[i], y[i], range_checker.clone()),
-            )
-            .flatten();
-            less_than.push(curr_less_than_row[2]);
-            lower_vec.push(curr_less_than_row[3]);
-            lower_decomp_vec.push(curr_less_than_row[4..].to_vec());
+            );
+            less_than.push(curr_less_than_row.io.less_than);
+            lower_vec.push(curr_less_than_row.aux.lower);
+            lower_decomp_vec.push(curr_less_than_row.aux.lower_decomp);
         }
 
         // compute prods and invs
