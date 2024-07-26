@@ -1,8 +1,8 @@
 use super::columns::*;
 use crate::cpu::trace::Instruction;
 
-use afs_chips::is_zero::IsZeroAir;
-use afs_chips::sub_chip::LocalTraceInstructions;
+use afs_primitives::is_zero::IsZeroAir;
+use afs_primitives::sub_chip::LocalTraceInstructions;
 use p3_air::BaseAir;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
@@ -10,12 +10,14 @@ use p3_matrix::dense::RowMajorMatrix;
 use super::{Poseidon2Chip, Poseidon2VmAir};
 
 impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
-    /// Generates trace for poseidon2chip from cached row structs.
+    /// Generates a single row from inputs.
     pub fn generate_row(
         &self,
         start_timestamp: usize,
         instruction: Instruction<F>,
-        addresses: [F; 3],
+        dst: F,
+        lhs: F,
+        rhs: F,
         input_state: [F; WIDTH],
     ) -> Poseidon2VmCols<WIDTH, F> {
         // SAFETY: only allowed because WIDTH constrained to 16 above
@@ -24,7 +26,9 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
         Poseidon2VmCols {
             io: Poseidon2VmAir::<WIDTH, F>::make_io_cols(start_timestamp, instruction),
             aux: Poseidon2VmAuxCols {
-                addresses,
+                dst,
+                lhs,
+                rhs,
                 d_is_zero: is_zero_row.io.is_zero,
                 is_zero_inv: is_zero_row.inv,
                 internal,
@@ -34,6 +38,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
 }
 
 impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
+    /// Generates final Poseidon2VmAir trace from cached rows.
     pub fn generate_trace(&self) -> RowMajorMatrix<F> {
         let row_len = self.rows.len();
         let correct_len = row_len.next_power_of_two();

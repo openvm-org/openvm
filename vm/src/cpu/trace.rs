@@ -3,7 +3,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use std::collections::VecDeque;
 use std::{collections::BTreeMap, error::Error, fmt::Display};
 
-use afs_chips::{
+use afs_primitives::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
 

@@ -1,4 +1,4 @@
-use afs_chips::{
+use afs_page::{
     common::page::Page,
     inner_join::controller::{IJBuses, T2Format, TableFormat},
 };

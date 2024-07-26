@@ -24,6 +24,11 @@ serde = { version = "1.0", default-features = false, features = [
 tracing = "0.1.37"
 derivative = "2.2.0"
 
+[target.'cfg(unix)'.dependencies]
+tikv-jemallocator = { version = "0.6", optional = true }
+
+mimalloc = { version = "0.1.43", optional = true }
+
 [dev-dependencies]
 afs-derive = { path = "../derive" }
 afs-test-utils = { path = "../test-utils" }
@@ -48,3 +53,5 @@ eyre = "0.6.12"
 [features]
 default = []
 parallel = ["p3-maybe-rayon/parallel"]
+jemalloc = ["dep:tikv-jemallocator"]
+jemalloc-prof = ["jemalloc", "tikv-jemallocator?/profiling"]

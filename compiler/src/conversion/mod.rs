@@ -11,11 +11,21 @@ use crate::asm::{AsmInstruction, AssemblyCode};
 
 pub mod field_extension_conversion;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct CompilerOptions {
     pub compile_prints: bool,
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
+}
+
+impl Default for CompilerOptions {
+    fn default() -> Self {
+        CompilerOptions {
+            compile_prints: true,
+            field_arithmetic_enabled: true,
+            field_extension_enabled: true,
+        }
+    }
 }
 
 fn inst<F: PrimeField64>(
@@ -79,7 +89,6 @@ fn register<F: PrimeField64>(value: i32) -> F {
 
 fn convert_base_arithmetic_instruction<F: PrimeField64, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
-    utility_register: F,
 ) -> Vec<Instruction<F>> {
     match instruction {
         AsmInstruction::AddF(dst, lhs, rhs) => vec![
@@ -126,26 +135,6 @@ fn convert_base_arithmetic_instruction<F: PrimeField64, EF: ExtensionField<F>>(
                 AS::Immediate,
             ),
         ],
-        AsmInstruction::SubFIN(dst, lhs, rhs) => vec![
-            // register[dst] <- register[rhs] - lhs
-            inst(
-                FSUB,
-                register(dst),
-                register(rhs),
-                lhs,
-                AS::Register,
-                AS::Immediate,
-            ),
-            // register[dst] <- register[dst] * -1
-            inst(
-                FMUL,
-                register(dst),
-                register(dst),
-                F::neg_one(),
-                AS::Register,
-                AS::Immediate,
-            ),
-        ],
         AsmInstruction::MulF(dst, lhs, rhs) => vec![
             // register[dst] <- register[lhs] * register[rhs]
             inst(
@@ -188,26 +177,6 @@ fn convert_base_arithmetic_instruction<F: PrimeField64, EF: ExtensionField<F>>(
                 rhs,
                 AS::Register,
                 AS::Immediate,
-            ),
-        ],
-        AsmInstruction::DivFIN(dst, lhs, rhs) => vec![
-            // register[util] <- lhs
-            inst(
-                STOREW,
-                lhs,
-                F::zero(),
-                utility_register,
-                AS::Immediate,
-                AS::Register,
-            ),
-            // register[dst] <- register[util] / register[rhs]
-            inst(
-                FDIV,
-                register(dst),
-                utility_register,
-                register(rhs),
-                AS::Register,
-                AS::Register,
             ),
         ],
         _ => panic!(
@@ -687,11 +656,9 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         | AsmInstruction::AddFI(..)
         | AsmInstruction::SubFI(..)
         | AsmInstruction::MulFI(..)
-        | AsmInstruction::DivFI(..)
-        | AsmInstruction::SubFIN(..)
-        | AsmInstruction::DivFIN(..) => {
+        | AsmInstruction::DivFI(..) => {
             if options.field_arithmetic_enabled {
-                convert_base_arithmetic_instruction(instruction, utility_register)
+                convert_base_arithmetic_instruction(instruction)
             } else {
                 panic!(
                     "Unsupported instruction {:?}, field arithmetic is disabled",
@@ -700,16 +667,10 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             }
         }
         AsmInstruction::AddE(..)
-        | AsmInstruction::AddEI(..)
-        | AsmInstruction::AddEFFI(..)
         | AsmInstruction::SubE(..)
-        | AsmInstruction::SubEI(..)
-        | AsmInstruction::SubEIN(..)
         | AsmInstruction::MulE(..)
         | AsmInstruction::MulEI(..)
-        | AsmInstruction::DivE(..)
-        | AsmInstruction::DivEI(..)
-        | AsmInstruction::DivEIN(..) => {
+        | AsmInstruction::InvE(..) => {
             let fe_utility_registers = from_fn(|i| utility_registers[i]);
             if options.field_extension_enabled {
                 convert_field_extension::<WORD_SIZE, F, EF>(instruction, fe_utility_registers)
@@ -725,15 +686,15 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 )
             }
         }
-        AsmInstruction::Poseidon2Compress(src1, src2, dst) => vec![inst(
+        AsmInstruction::Poseidon2Compress(dst, src1, src2) => vec![inst(
             COMP_POS2,
+            register(dst),
             register(src1),
             register(src2),
-            register(dst),
             AS::Register,
             AS::Memory,
         )],
-        AsmInstruction::Poseidon2Permute(src, dst) => vec![
+        AsmInstruction::Poseidon2Permute(dst, src) => vec![
             inst(
                 FADD,
                 utility_register,
@@ -744,9 +705,9 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
             inst(
                 PERM_POS2,
+                register(dst),
                 register(src),
                 utility_register,
-                register(dst),
                 AS::Register,
                 AS::Memory,
             ),

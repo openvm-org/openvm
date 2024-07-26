@@ -1,5 +1,3 @@
-use std::array::from_fn;
-
 use p3_field::Field;
 
 use poseidon2_air::poseidon2::columns::{Poseidon2Cols, Poseidon2ColsIndexMap};
@@ -7,21 +5,23 @@ use poseidon2_air::poseidon2::Poseidon2Air;
 
 use super::Poseidon2VmAir;
 
-/// Columns for Poseidon2 chip.
+/// Columns for Poseidon2Vm AIR.
 pub struct Poseidon2VmCols<const WIDTH: usize, T> {
     pub io: Poseidon2VmIoCols<T>,
     pub aux: Poseidon2VmAuxCols<WIDTH, T>,
 }
 
 /// IO columns for Poseidon2Chip.
-/// * `is_alloc`: whether the row is allocated
+/// * `is_opcode`: whether the row is for an opcode (either COMPRESS or PERMUTE)
+/// * `is_direct`: whether the row is for a direct hash
 /// * `clk`: the clock cycle (NOT timestamp)
 /// * `a`, `b`, `c`: addresses
 /// * `d`, `e`: address spaces
 /// * `cmp`: boolean for compression vs. permutation
 #[derive(Clone, Copy, Debug)]
 pub struct Poseidon2VmIoCols<T> {
-    pub is_alloc: T,
+    pub is_opcode: T,
+    pub is_direct: T,
     pub clk: T,
     pub a: T,
     pub b: T,
@@ -36,7 +36,9 @@ pub struct Poseidon2VmIoCols<T> {
 /// * `internal`: auxiliary columns used by Poseidon2Air for interpreting opcode, evaluating indicators, inverse, and explicit computations.
 #[derive(Clone, Debug)]
 pub struct Poseidon2VmAuxCols<const WIDTH: usize, T> {
-    pub addresses: [T; 3],
+    pub dst: T,
+    pub lhs: T,
+    pub rhs: T,
     pub d_is_zero: T,
     pub is_zero_inv: T,
     pub internal: Poseidon2Cols<WIDTH, T>,
@@ -79,12 +81,13 @@ impl<const WIDTH: usize, T: Field> Poseidon2VmCols<WIDTH, T> {
 
 impl<T: Clone> Poseidon2VmIoCols<T> {
     pub fn get_width() -> usize {
-        8
+        9
     }
 
     pub fn flatten(&self) -> Vec<T> {
         vec![
-            self.is_alloc.clone(),
+            self.is_opcode.clone(),
+            self.is_direct.clone(),
             self.clk.clone(),
             self.a.clone(),
             self.b.clone(),
@@ -97,21 +100,37 @@ impl<T: Clone> Poseidon2VmIoCols<T> {
 
     pub fn from_slice(slice: &[T]) -> Self {
         Self {
-            is_alloc: slice[0].clone(),
-            clk: slice[1].clone(),
-            a: slice[2].clone(),
-            b: slice[3].clone(),
-            c: slice[4].clone(),
-            d: slice[5].clone(),
-            e: slice[6].clone(),
-            cmp: slice[7].clone(),
+            is_opcode: slice[0].clone(),
+            is_direct: slice[1].clone(),
+            clk: slice[2].clone(),
+            a: slice[3].clone(),
+            b: slice[4].clone(),
+            c: slice[5].clone(),
+            d: slice[6].clone(),
+            e: slice[7].clone(),
+            cmp: slice[8].clone(),
         }
     }
 }
 impl<T: Field> Poseidon2VmIoCols<T> {
     pub fn blank_row() -> Self {
         Self {
-            is_alloc: T::zero(),
+            is_opcode: T::zero(),
+            is_direct: T::zero(),
+            clk: T::zero(),
+            a: T::zero(),
+            b: T::zero(),
+            c: T::zero(),
+            d: T::one(),
+            e: T::zero(),
+            cmp: T::zero(),
+        }
+    }
+
+    pub fn direct_io_cols() -> Self {
+        Self {
+            is_opcode: T::zero(),
+            is_direct: T::one(),
             clk: T::zero(),
             a: T::zero(),
             b: T::zero(),
@@ -129,16 +148,22 @@ impl<const WIDTH: usize, T: Clone> Poseidon2VmAuxCols<WIDTH, T> {
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        let mut result = self.addresses.to_vec();
-        result.push(self.d_is_zero.clone());
-        result.push(self.is_zero_inv.clone());
+        let mut result = vec![
+            self.dst.clone(),
+            self.lhs.clone(),
+            self.rhs.clone(),
+            self.d_is_zero.clone(),
+            self.is_zero_inv.clone(),
+        ];
         result.extend(self.internal.flatten());
         result
     }
 
     pub fn from_slice(slice: &[T], index_map: &Poseidon2ColsIndexMap<WIDTH>) -> Self {
         Self {
-            addresses: from_fn(|i| slice[i].clone()),
+            dst: slice[0].clone(),
+            lhs: slice[1].clone(),
+            rhs: slice[2].clone(),
             d_is_zero: slice[3].clone(),
             is_zero_inv: slice[4].clone(),
             internal: Poseidon2Cols::from_slice(&slice[5..], index_map),
@@ -148,7 +173,9 @@ impl<const WIDTH: usize, T: Clone> Poseidon2VmAuxCols<WIDTH, T> {
 impl<const WIDTH: usize, T: Field> Poseidon2VmAuxCols<WIDTH, T> {
     pub fn blank_row(air: &Poseidon2Air<WIDTH, T>) -> Self {
         Self {
-            addresses: [T::zero(); 3],
+            dst: T::default(),
+            lhs: T::default(),
+            rhs: T::default(),
             d_is_zero: T::zero(),
             is_zero_inv: T::one(),
             internal: Poseidon2Cols::blank_row(air),

@@ -1,4 +1,4 @@
-use afs_chips::{
+use afs_page::{
     group_by::group_by_input::GroupByOperation, single_page_index_scan::page_index_scan_input::Comp,
 };
 

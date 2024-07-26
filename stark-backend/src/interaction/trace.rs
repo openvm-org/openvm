@@ -1,3 +1,6 @@
+use std::iter;
+
+use itertools::Itertools;
 use p3_field::{ExtensionField, Field};
 use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
@@ -10,7 +13,7 @@ use crate::{
         symbolic_expression::{SymbolicEvaluator, SymbolicExpression},
         symbolic_variable::{Entry, SymbolicVariable},
     },
-    utils::batch_multiplicative_inverse_allowing_zero,
+    interaction::utils::generate_betas,
 };
 
 use super::{utils::generate_rlc_elements, Interaction, InteractionType};
@@ -43,7 +46,7 @@ where
     let [alpha, beta] = permutation_randomness.expect("Not enough permutation challenges");
 
     let alphas = generate_rlc_elements(alpha, all_interactions);
-    let betas = beta.powers();
+    let betas = generate_betas(beta, all_interactions);
 
     // Compute the reciprocal columns
     //
@@ -61,10 +64,10 @@ where
         "All main trace parts must have same height"
     );
 
-    // perm_values is height x perm_width
-    let perm_values: Vec<EF> = (0..height)
+    // reciprocals is height x all_interactions.len()
+    let reciprocals: Vec<EF> = (0..height)
         .into_par_iter()
-        .flat_map(|n| {
+        .flat_map(|n| -> Vec<_> {
             let evaluator = Evaluator {
                 preprocessed,
                 partitioned_main,
@@ -72,23 +75,35 @@ where
                 height,
                 local_index: n,
             };
-            // Recall: perm_width = all_interactions.len() + 1
-            let mut row = vec![EF::zero(); perm_width];
-            for (row_j, interaction) in row.iter_mut().zip(all_interactions) {
-                let alpha = alphas[interaction.bus_index];
-                let mut rlc = EF::zero();
-                for (expr, beta) in interaction.fields.iter().zip(betas.clone()) {
-                    rlc += beta * evaluator.eval_expr(expr);
-                }
-                rlc += alpha;
-                *row_j = rlc;
-            }
-            row
+            all_interactions
+                .iter()
+                .map(|interaction| {
+                    let alpha = alphas[interaction.bus_index];
+                    debug_assert!(interaction.fields.len() <= betas.len());
+                    let mut fields = interaction.fields.iter();
+                    let mut rlc = alpha
+                        + evaluator.eval_expr(fields.next().expect("fields should not be empty"));
+                    for (expr, &beta) in fields.zip(betas.iter().skip(1)) {
+                        rlc += beta * evaluator.eval_expr(expr);
+                    }
+                    rlc
+                })
+                .collect()
         })
         .collect();
-    // TODO: Switch to batch_multiplicative_inverse (not allowing zero)?
-    // Zero should be vanishingly unlikely if properly randomized?
-    let perm_values = batch_multiplicative_inverse_allowing_zero(perm_values);
+    // Zero should be vanishingly unlikely if alpha, beta are properly pseudo-randomized
+    // The logup reciprocals should never be zero, so trace generation should panic if
+    // trying to divide by zero.
+    let perm_values = p3_field::batch_multiplicative_inverse(&reciprocals);
+    drop(reciprocals);
+    // Need to add the `phi` column to perm_values as a RowMajorMatrix
+    // TODO[jpw]: is there a more memory efficient way to do this?
+    let perm_values = perm_values
+        .into_iter()
+        .chunks(all_interactions.len())
+        .into_iter()
+        .flat_map(|row| row.chain(iter::once(EF::zero())))
+        .collect();
     let mut perm = RowMajorMatrix::new(perm_values, perm_width);
 
     let _span = tracing::info_span!("compute logup partial sums").entered();

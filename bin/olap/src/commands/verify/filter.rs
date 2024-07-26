@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use afs_chips::single_page_index_scan::page_controller::PageController;
+use afs_page::single_page_index_scan::page_controller::PageController;
 use afs_stark_backend::{
     config::PcsProverData, keygen::types::MultiStarkVerifyingKey, prover::types::Proof,
 };

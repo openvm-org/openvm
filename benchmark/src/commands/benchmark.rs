@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, time::Instant};
+use std::{collections::HashMap, fs, path::Path, time::Instant};
 
 use afs_test_utils::page_config::PageConfig;
 use chrono::Local;
@@ -34,6 +34,11 @@ pub fn benchmark_setup(
     let output_file = output_file
         .clone()
         .unwrap_or(default_output_filename(benchmark_name.clone()));
+    // Extract the directory path from the output file path
+    if let Some(output_directory) = Path::new(&output_file).parent() {
+        // Create the directory and any necessary parent directories
+        fs::create_dir_all(output_directory).unwrap();
+    }
 
     println!("Output file: {}", output_file.clone());
     write_csv_header(

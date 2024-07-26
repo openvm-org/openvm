@@ -1,4 +1,4 @@
-use afs_chips::common::{page::Page, page_cols::PageCols};
+use afs_page::common::{page::Page, page_cols::PageCols};
 
 use crate::{
     afs_interface::utils::string_to_table_id,

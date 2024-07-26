@@ -90,12 +90,6 @@ pub enum DslIr<C: Config> {
     DivEI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::EF),
     /// Divides and extension field immediate and an extension field element (ext = ext field imm / ext).
     DivEIN(Ext<C::F, C::EF>, C::EF, Ext<C::F, C::EF>),
-    /// Divides an extension field element and a field immediate (ext = ext / field imm).
-    DivEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
-    /// Divides a field immediate and an extension field element (ext = field imm / ext).
-    DivEFIN(Ext<C::F, C::EF>, C::F, Ext<C::F, C::EF>),
-    /// Divides an extension field element and a field element (ext = ext / felt).
-    DivEF(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Felt<C::F>),
 
     // Negations.
     /// Negates a variable (var = -var).
@@ -104,10 +98,6 @@ pub enum DslIr<C: Config> {
     NegF(Felt<C::F>, Felt<C::F>),
     /// Negates an extension field element (ext = -ext).
     NegE(Ext<C::F, C::EF>, Ext<C::F, C::EF>),
-    /// Inverts a variable (var = 1 / var).
-    InvV(Var<C::N>, Var<C::N>),
-    /// Inverts a field element (felt = 1 / felt).
-    InvF(Felt<C::F>, Felt<C::F>),
     /// Inverts an extension field element (ext = 1 / ext).
     InvE(Ext<C::F, C::EF>, Ext<C::F, C::EF>),
 

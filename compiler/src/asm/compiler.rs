@@ -42,6 +42,7 @@ pub struct AsmCompiler<F, EF> {
     break_counter: usize,
     contains_break: BTreeSet<F>,
     function_labels: BTreeMap<String, F>,
+    word_size: usize,
 }
 
 impl<F> Var<F> {
@@ -74,7 +75,7 @@ impl<F> Ptr<F> {
 
 impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCompiler<F, EF> {
     /// Creates a new [AsmCompiler].
-    pub fn new() -> Self {
+    pub fn new(word_size: usize) -> Self {
         Self {
             basic_blocks: vec![BasicBlock::new()],
             break_label: None,
@@ -82,6 +83,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             contains_break: BTreeSet::new(),
             function_labels: BTreeMap::new(),
             break_counter: 0,
+            word_size,
         }
     }
 
@@ -129,19 +131,16 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::AddE(dst.fp(), lhs.fp(), rhs.fp()), trace);
                 }
                 DslIr::AddEI(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::AddEI(dst.fp(), lhs.fp(), rhs), trace);
+                    self.add_ext_exti(dst, lhs, rhs, trace);
                 }
                 DslIr::AddEF(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::AddE(dst.fp(), lhs.fp(), rhs.fp()), trace);
+                    self.add_ext_felt(dst, lhs, rhs, trace);
                 }
                 DslIr::AddEFFI(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::AddEFFI(dst.fp(), lhs.fp(), rhs), trace);
+                    self.add_felt_exti(dst, lhs, rhs, trace);
                 }
                 DslIr::AddEFI(dst, lhs, rhs) => {
-                    self.push(
-                        AsmInstruction::AddEI(dst.fp(), lhs.fp(), EF::from_base(rhs)),
-                        trace,
-                    );
+                    self.add_ext_exti(dst, lhs, EF::from_base(rhs), trace);
                 }
                 DslIr::SubV(dst, lhs, rhs) => {
                     self.push(AsmInstruction::SubF(dst.fp(), lhs.fp(), rhs.fp()), trace);
@@ -150,7 +149,8 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::SubFI(dst.fp(), lhs.fp(), rhs), trace);
                 }
                 DslIr::SubVIN(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::SubFIN(dst.fp(), lhs, rhs.fp()), trace);
+                    self.push(AsmInstruction::SubFI(A0, rhs.fp(), lhs), trace.clone());
+                    self.push(AsmInstruction::MulFI(dst.fp(), A0, F::neg_one()), trace);
                 }
                 DslIr::SubF(dst, lhs, rhs) => {
                     self.push(AsmInstruction::SubF(dst.fp(), lhs.fp(), rhs.fp()), trace);
@@ -159,13 +159,20 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::SubFI(dst.fp(), lhs.fp(), rhs), trace);
                 }
                 DslIr::SubFIN(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::SubFIN(dst.fp(), lhs, rhs.fp()), trace);
+                    self.push(AsmInstruction::SubFI(A0, rhs.fp(), lhs), trace.clone());
+                    self.push(AsmInstruction::MulFI(dst.fp(), A0, F::neg_one()), trace);
                 }
                 DslIr::NegV(dst, src) => {
-                    self.push(AsmInstruction::SubFIN(dst.fp(), F::zero(), src.fp()), trace);
+                    self.push(
+                        AsmInstruction::MulFI(dst.fp(), src.fp(), F::neg_one()),
+                        trace,
+                    );
                 }
                 DslIr::NegF(dst, src) => {
-                    self.push(AsmInstruction::SubFIN(dst.fp(), F::zero(), src.fp()), trace);
+                    self.push(
+                        AsmInstruction::MulFI(dst.fp(), src.fp(), F::neg_one()),
+                        trace,
+                    );
                 }
                 DslIr::DivF(dst, lhs, rhs) => {
                     self.push(AsmInstruction::DivF(dst.fp(), lhs.fp(), rhs.fp()), trace);
@@ -174,64 +181,44 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::DivFI(dst.fp(), lhs.fp(), rhs), trace);
                 }
                 DslIr::DivFIN(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::DivFIN(dst.fp(), lhs, rhs.fp()), trace);
-                }
-                DslIr::InvV(dst, src) => {
-                    self.push(AsmInstruction::DivFIN(dst.fp(), F::one(), src.fp()), trace);
-                }
-                DslIr::InvF(dst, src) => {
-                    self.push(AsmInstruction::DivFIN(dst.fp(), F::one(), src.fp()), trace);
-                }
-                DslIr::DivEF(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::DivE(dst.fp(), lhs.fp(), rhs.fp()), trace);
-                }
-                DslIr::DivEFI(dst, lhs, rhs) => {
-                    self.push(
-                        AsmInstruction::DivEI(dst.fp(), lhs.fp(), EF::from_base(rhs)),
-                        trace,
-                    );
+                    self.push(AsmInstruction::AddFI(A0, ZERO, lhs), trace.clone());
+                    self.push(AsmInstruction::DivF(dst.fp(), A0, rhs.fp()), trace);
                 }
                 DslIr::DivEIN(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::DivEIN(dst.fp(), lhs, rhs.fp()), trace);
+                    self.push(AsmInstruction::InvE(A0, rhs.fp()), trace.clone());
+                    self.push(AsmInstruction::MulEI(dst.fp(), A0, lhs), trace);
                 }
-                DslIr::DivEFIN(dst, lhs, rhs) => {
+                DslIr::DivE(dst, lhs, rhs) => {
+                    self.push(AsmInstruction::InvE(A0, rhs.fp()), trace.clone());
+                    self.push(AsmInstruction::MulE(dst.fp(), lhs.fp(), A0), trace);
+                }
+                DslIr::DivEI(dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::DivEIN(dst.fp(), EF::from_base(lhs), rhs.fp()),
+                        AsmInstruction::MulEI(dst.fp(), lhs.fp(), rhs.inverse()),
                         trace,
                     );
                 }
-                DslIr::DivE(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::DivE(dst.fp(), lhs.fp(), rhs.fp()), trace);
-                }
-                DslIr::DivEI(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::DivEI(dst.fp(), lhs.fp(), rhs), trace);
-                }
                 DslIr::InvE(dst, src) => {
-                    self.push(AsmInstruction::DivEIN(dst.fp(), EF::one(), src.fp()), trace);
+                    self.push(AsmInstruction::InvE(dst.fp(), src.fp()), trace);
                 }
                 DslIr::SubEF(dst, lhs, rhs) => {
                     self.push(AsmInstruction::SubE(dst.fp(), lhs.fp(), rhs.fp()), trace);
                 }
                 DslIr::SubEFI(dst, lhs, rhs) => {
-                    self.push(
-                        AsmInstruction::SubEI(dst.fp(), lhs.fp(), EF::from_base(rhs)),
-                        trace,
-                    );
+                    self.add_ext_exti(dst, lhs, EF::from_base(rhs.neg()), trace);
                 }
                 DslIr::SubEIN(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::SubEIN(dst.fp(), lhs, rhs.fp()), trace);
+                    self.add_ext_exti(dst, rhs, lhs.neg(), trace.clone());
+                    self.mul_ext_felti(dst, dst, F::neg_one(), trace);
                 }
                 DslIr::SubE(dst, lhs, rhs) => {
                     self.push(AsmInstruction::SubE(dst.fp(), lhs.fp(), rhs.fp()), trace);
                 }
                 DslIr::SubEI(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::SubEI(dst.fp(), lhs.fp(), rhs), trace);
+                    self.add_ext_exti(dst, lhs, rhs.neg(), trace);
                 }
                 DslIr::NegE(dst, src) => {
-                    self.push(
-                        AsmInstruction::SubEIN(dst.fp(), EF::zero(), src.fp()),
-                        trace,
-                    );
+                    self.mul_ext_felti(dst, src, F::neg_one(), trace);
                 }
                 DslIr::MulV(dst, lhs, rhs) => {
                     self.push(AsmInstruction::MulF(dst.fp(), lhs.fp(), rhs.fp()), trace);
@@ -252,13 +239,10 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::MulEI(dst.fp(), lhs.fp(), rhs), trace);
                 }
                 DslIr::MulEF(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::MulE(dst.fp(), lhs.fp(), rhs.fp()), trace);
+                    self.mul_ext_felt(dst, lhs, rhs, trace);
                 }
                 DslIr::MulEFI(dst, lhs, rhs) => {
-                    self.push(
-                        AsmInstruction::MulEI(dst.fp(), lhs.fp(), EF::from_base(rhs)),
-                        trace,
-                    );
+                    self.mul_ext_felti(dst, lhs, rhs, trace);
                 }
                 DslIr::IfEq(lhs, rhs, then_block, else_block) => {
                     let if_compiler = IfCompiler {
@@ -495,9 +479,9 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         (Array::Dyn(result, _), Array::Dyn(left, _), Array::Dyn(right, _)) => self
                             .push(
                                 AsmInstruction::Poseidon2Compress(
+                                    result.fp(),
                                     left.fp(),
                                     right.fp(),
-                                    result.fp(),
                                 ),
                                 trace,
                             ),
@@ -814,6 +798,95 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
                 let instr = AsmInstruction::Bne(loop_label, self.loop_var.fp(), end.fp());
                 self.compiler.push(instr, None);
             }
+        }
+    }
+}
+
+// Ext compiler logic.
+impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCompiler<F, EF> {
+    fn add_ext_exti(
+        &mut self,
+        dst: Ext<F, EF>,
+        lhs: Ext<F, EF>,
+        rhs: EF,
+        trace: Option<Backtrace>,
+    ) {
+        let rhs = rhs.as_base_slice();
+        for i in 0..EF::D {
+            let j = (i * self.word_size) as i32;
+            self.push(
+                AsmInstruction::AddFI(dst.fp() - j, lhs.fp() - j, rhs[i]),
+                trace.clone(),
+            );
+        }
+    }
+
+    fn add_ext_felt(
+        &mut self,
+        dst: Ext<F, EF>,
+        lhs: Ext<F, EF>,
+        rhs: Felt<F>,
+        trace: Option<Backtrace>,
+    ) {
+        self.push(
+            AsmInstruction::AddF(dst.fp(), lhs.fp(), rhs.fp()),
+            trace.clone(),
+        );
+        for i in 1..EF::D {
+            let j = (i * self.word_size) as i32;
+            self.push(
+                AsmInstruction::AddFI(dst.fp() - j, lhs.fp() - j, F::zero()),
+                trace.clone(),
+            );
+        }
+    }
+
+    fn add_felt_exti(&mut self, dst: Ext<F, EF>, lhs: Felt<F>, rhs: EF, trace: Option<Backtrace>) {
+        let rhs = rhs.as_base_slice();
+
+        self.push(
+            AsmInstruction::AddFI(dst.fp(), lhs.fp(), rhs[0]),
+            trace.clone(),
+        );
+
+        for i in 1..EF::D {
+            let j = (i * self.word_size) as i32;
+            self.push(
+                AsmInstruction::AddFI(dst.fp() - j, ZERO, rhs[i]),
+                trace.clone(),
+            );
+        }
+    }
+
+    fn mul_ext_felt(
+        &mut self,
+        dst: Ext<F, EF>,
+        lhs: Ext<F, EF>,
+        rhs: Felt<F>,
+        trace: Option<Backtrace>,
+    ) {
+        for i in 0..EF::D {
+            let j = (i * self.word_size) as i32;
+            self.push(
+                AsmInstruction::MulF(dst.fp() - j, lhs.fp() - j, rhs.fp()),
+                trace.clone(),
+            );
+        }
+    }
+
+    fn mul_ext_felti(
+        &mut self,
+        dst: Ext<F, EF>,
+        lhs: Ext<F, EF>,
+        rhs: F,
+        trace: Option<Backtrace>,
+    ) {
+        for i in 0..EF::D {
+            let j = (i * self.word_size) as i32;
+            self.push(
+                AsmInstruction::MulFI(dst.fp() - j, lhs.fp() - j, rhs),
+                trace.clone(),
+            );
         }
     }
 }

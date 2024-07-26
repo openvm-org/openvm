@@ -1,4 +1,4 @@
-use afs_chips::common::page::Page;
+use afs_page::common::page::Page;
 use itertools::{izip, Itertools};
 use logical_interface::utils::u16_vec_to_hex_string;
 

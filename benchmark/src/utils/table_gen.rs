@@ -1,6 +1,6 @@
 use std::{collections::HashSet, fs::File, io::Write};
 
-use afs_chips::common::page::Page;
+use afs_page::common::page::Page;
 use afs_test_utils::page_config::PageConfig;
 use color_eyre::eyre::Result;
 use core::cmp::min;

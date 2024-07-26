@@ -8,7 +8,7 @@ use p3_matrix::Matrix;
 use crate::field_extension::{BETA, EXTENSION_DEGREE};
 
 use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
-use afs_chips::sub_chip::AirConfig;
+use afs_primitives::sub_chip::AirConfig;
 
 impl AirConfig for FieldExtensionArithmeticAir {
     type Cols<T> = FieldExtensionArithmeticCols<T>;

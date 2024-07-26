@@ -86,8 +86,13 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
         self.placeholder_main_matrix_in_commit = vec![vec![]];
 
         for (i, pk) in pk.per_air.iter().enumerate() {
+            let width = pk.vk.width();
             println!("AIR {i} [{}]:", &pk.air_name);
             println!("  quotient degree: {}", pk.vk.quotient_degree);
+            println!("  number of columns:");
+            println!("      preprocessed: {:?}", width.preprocessed);
+            println!("      main (partitioned): {:?}", width.partitioned_main);
+            println!("      after challenge: {:?}", width.after_challenge);
             println!(
                 "  num symbolic constraints: {}",
                 pk.vk.symbolic_constraints.constraints.len()
