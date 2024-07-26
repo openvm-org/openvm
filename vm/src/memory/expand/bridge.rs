@@ -1,6 +1,6 @@
 use std::iter;
 
-use p3_field::{AbstractField, Field};
+use p3_field::AbstractField;
 
 use afs_stark_backend::interaction::InteractionBuilder;
 
@@ -14,14 +14,10 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
         builder: &mut AB,
         local: ExpandCols<CHUNK, AB::Var>,
     ) {
-        // direction =  1   => parent_is_final = 0
-        // direction = -1   => parent_is_final = 1
-        let parent_is_final = (AB::Expr::one() - local.expand_direction) * AB::F::two().inverse();
-
         builder.push_send(
             EXPAND_BUS,
             [
-                parent_is_final.clone(),
+                local.expand_direction.into(),
                 local.address_space.into(),
                 local.parent_height.into(),
                 local.parent_label.into(),
@@ -34,7 +30,7 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
         builder.push_receive(
             EXPAND_BUS,
             [
-                parent_is_final.clone() - local.left_direction_change,
+                local.expand_direction + (local.left_direction_change * AB::F::two()),
                 local.address_space.into(),
                 local.parent_height - AB::F::one(),
                 local.parent_label * AB::F::two(),
@@ -47,7 +43,7 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
         builder.push_receive(
             EXPAND_BUS,
             [
-                parent_is_final.clone() - local.right_direction_change,
+                local.expand_direction + (local.right_direction_change * AB::F::two()),
                 local.address_space.into(),
                 local.parent_height - AB::F::one(),
                 (local.parent_label * AB::F::two()) + AB::F::one(),
