@@ -196,7 +196,7 @@ where
         for i in 0..num_airs {
             let log_degree = builder.get(log_degree_per_air, i);
 
-            let domain = pcs.natural_domain_for_log_degree(builder, Usize::Var(log_degree));
+            let domain = pcs.natural_domain_for_log_degree(builder, log_degree);
             builder.set_value(&mut trace_domains, i, domain.clone());
 
             let mut trace_points = builder.dyn_array::<Ext<_, _>>(2);
@@ -204,11 +204,8 @@ where
             builder.set_value(&mut trace_points, 0, zeta);
             builder.set_value(&mut trace_points, 1, zeta_next);
 
-            let log_quotient_degree: Var<_> = builder.constant(C::N::from_canonical_usize(
-                vk.per_air[i].log_quotient_degree(),
-            ));
-            let quotient_degree: Var<_> =
-                builder.constant(C::N::from_canonical_usize(vk.per_air[i].quotient_degree));
+            let log_quotient_degree = Usize::Const(vk.per_air[i].log_quotient_degree());
+            let quotient_degree = Usize::Const(vk.per_air[i].quotient_degree);
             let log_quotient_size: Usize<_> = builder.eval(log_degree + log_quotient_degree);
             let quotient_domain =
                 domain.create_disjoint_domain(builder, log_quotient_size, Some(pcs.config.clone()));

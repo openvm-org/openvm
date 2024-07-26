@@ -30,7 +30,7 @@ pub struct StarkVerifyingParams {
     /// Number of values to expose to verifier in each trace challenge phase
     pub num_exposed_values_after_challenge: Vec<usize>,
     /// For only this RAP, how many challenges are needed in each trace challenge phase
-    pub(crate) num_challenges_to_sample: Vec<usize>,
+    pub num_challenges_to_sample: Vec<usize>,
 }
 
 /// Proving key for a single STARK (corresponding to single AIR matrix)

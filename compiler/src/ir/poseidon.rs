@@ -89,7 +89,7 @@ impl<C: Config> Builder<C> {
                 });
                 // Insert elements of the chunk.
                 builder.range(0, HASH_RATE).for_each(|j, builder| {
-                    let index: Var<_> = builder.eval(i + j);
+                    let index: Usize<_> = builder.eval(i + j);
                     let element = builder.get(array, index);
                     builder.set_value(&mut state, j, element);
                     builder.if_eq(index, last_index).then(|builder| {

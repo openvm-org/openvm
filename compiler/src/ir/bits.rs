@@ -142,7 +142,7 @@ impl<C: Config> Builder<C> {
 
         let mut result_bits = self.dyn_array::<Var<_>>(NUM_BITS);
         self.range(0, bit_len).for_each(|i, builder| {
-            let index: Var<C::N> = builder.eval(bit_len - i - C::N::one());
+            let index: Usize<_> = builder.eval(bit_len - i - 1);
             let entry = builder.get(index_bits, index);
             builder.set_value(&mut result_bits, i, entry);
         });

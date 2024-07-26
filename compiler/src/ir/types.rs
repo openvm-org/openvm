@@ -513,6 +513,34 @@ impl<C: Config> MemVariable<C> for Var<C::N> {
     }
 }
 
+impl<C: Config> MemVariable<C> for Usize<C::N> {
+    fn size_of() -> usize {
+        1
+    }
+
+    fn load(&self, ptr: Ptr<C::N>, index: MemIndex<C::N>, builder: &mut Builder<C>) {
+        match self {
+            Usize::Const(_) => {
+                panic!("Usize::Const should not be loaded");
+            }
+            Usize::Var(v) => {
+                builder.push(DslIr::LoadV(*v, ptr, index));
+            }
+        }
+    }
+
+    fn store(&self, ptr: Ptr<<C as Config>::N>, index: MemIndex<C::N>, builder: &mut Builder<C>) {
+        match self {
+            Usize::Const(_) => {
+                panic!("Usize::Const should not be stored");
+            }
+            Usize::Var(v) => {
+                builder.push(DslIr::StoreV(*v, ptr, index));
+            }
+        }
+    }
+}
+
 impl<F: Field> Felt<F> {
     fn assign_with_cache<C: Config<F = F>>(
         &self,

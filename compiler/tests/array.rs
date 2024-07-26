@@ -71,7 +71,7 @@ fn test_compiler_array() {
 
     // Put values dynamically
     builder.range(0, dyn_len).for_each(|i, builder| {
-        builder.set(&mut var_array, i, i * F::two());
+        builder.set(&mut var_array, i, i * 2);
         builder.set(&mut felt_array, i, F::from_canonical_u32(3));
         builder.set(&mut ext_array, i, EF::from_canonical_u32(4).cons());
     });
@@ -79,7 +79,7 @@ fn test_compiler_array() {
     // Assert values set.
     builder.range(0, dyn_len).for_each(|i, builder| {
         let var_value = builder.get(&var_array, i);
-        builder.assert_var_eq(var_value, i * F::two());
+        builder.assert_var_eq(var_value, i * 2);
         let felt_value = builder.get(&felt_array, i);
         builder.assert_felt_eq(felt_value, F::from_canonical_u32(3));
         let ext_value = builder.get(&ext_array, i);
