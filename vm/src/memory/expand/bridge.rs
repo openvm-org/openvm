@@ -16,7 +16,7 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
     ) {
         // direction =  1   => parent_is_final = 0
         // direction = -1   => parent_is_final = 1
-        let parent_is_final = (AB::Expr::one() - local.direction) * AB::F::two().inverse();
+        let parent_is_final = (AB::Expr::one() - local.expand_direction) * AB::F::two().inverse();
 
         builder.push_send(
             EXPAND_BUS,
@@ -28,33 +28,33 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
             ]
             .into_iter()
             .chain(local.parent_hash.into_iter().map(Into::into)),
-            local.direction.into(),
+            local.expand_direction.into(),
         );
 
         builder.push_receive(
             EXPAND_BUS,
             [
-                parent_is_final.clone() + local.left_is_final,
+                parent_is_final.clone() - local.left_direction_change,
                 local.address_space.into(),
                 local.parent_height - AB::F::one(),
                 local.parent_label * AB::F::two(),
             ]
             .into_iter()
             .chain(local.left_child_hash.into_iter().map(Into::into)),
-            local.direction.into(),
+            local.expand_direction.into(),
         );
 
         builder.push_receive(
             EXPAND_BUS,
             [
-                parent_is_final.clone() + local.right_is_final,
+                parent_is_final.clone() - local.right_direction_change,
                 local.address_space.into(),
                 local.parent_height - AB::F::one(),
                 (local.parent_label * AB::F::two()) + AB::F::one(),
             ]
             .into_iter()
             .chain(local.right_child_hash.into_iter().map(Into::into)),
-            local.direction.into(),
+            local.expand_direction.into(),
         );
 
         let hash_fields = iter::empty()

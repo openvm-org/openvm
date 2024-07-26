@@ -1,7 +1,8 @@
-use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
+
+use afs_stark_backend::interaction::InteractionBuilder;
 
 use crate::memory::expand::columns::ExpandCols;
 
@@ -21,12 +22,12 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for ExpandAir<CHUNK> {
 
         // `direction` should be -1, 0, 1
         builder.assert_eq(
-            local.direction,
-            local.direction * local.direction * local.direction,
+            local.expand_direction,
+            local.expand_direction * local.expand_direction * local.expand_direction,
         );
 
-        builder.assert_bool(local.left_is_final);
-        builder.assert_bool(local.right_is_final);
+        builder.assert_bool(local.left_direction_change);
+        builder.assert_bool(local.right_direction_change);
 
         self.eval_interactions(builder, local);
     }
