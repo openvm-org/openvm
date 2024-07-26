@@ -30,18 +30,7 @@ pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(
     program: Vec<Instruction<F>>,
     input_stream: Vec<Vec<F>>,
 ) {
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
-        VmConfig {
-            field_arithmetic_enabled: true,
-            field_extension_enabled: true,
-            limb_bits: 28,
-            decomp: 4,
-            compress_poseidon2_enabled: true,
-            perm_poseidon2_enabled: true,
-        },
-        program,
-        input_stream,
-    );
+    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(VmConfig::default(), program, input_stream);
     vm.traces().unwrap();
 }
 
