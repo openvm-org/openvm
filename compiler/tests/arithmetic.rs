@@ -27,6 +27,8 @@ fn test_compiler_arithmetic() {
     builder.assert_felt_eq(one * one, F::one());
     builder.assert_felt_eq(one + one, F::two());
 
+    builder.assert_felt_eq(one / F::two(), F::two().inverse());
+
     let zero_ext: Ext<_, _> = builder.eval(EF::zero().cons());
     let one_ext: Ext<_, _> = builder.eval(EF::one().cons());
     let two_ext: Ext<_, _> = builder.eval(EF::two().cons());
