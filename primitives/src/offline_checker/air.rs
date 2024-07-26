@@ -32,9 +32,6 @@ impl<F: Field> BaseAir<F> for OfflineChecker {
 }
 
 impl<AB: InteractionBuilder> Air<AB> for OfflineChecker {
-    /// This constrains extra rows to be at the bottom and the following on non-extra rows:
-    /// same_addr_space, same_pointer, same_data, lt_bit is correct (see definition in columns.rs)
-    /// A read must be preceded by a write with the same address space, pointer, and data
     fn eval(&self, builder: &mut AB) {
         let main = &builder.main();
 
@@ -49,6 +46,9 @@ impl<AB: InteractionBuilder> SubAir<AB> for OfflineChecker {
     type IoView = (OfflineCheckerCols<AB::Var>, OfflineCheckerCols<AB::Var>);
     type AuxView = ();
 
+    /// This constrains extra rows to be at the bottom and the following on non-extra rows:
+    /// same_idx and lt_bit are correct (see definition in columns.rs), and lt_bit is on
+    /// for non-extra rows
     fn eval(&self, builder: &mut AB, io: Self::IoView, _: Self::AuxView) {
         let (local_cols, next_cols) = io;
 
@@ -59,7 +59,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for OfflineChecker {
         builder.assert_bool(local_cols.is_valid);
         builder.assert_bool(local_cols.is_receive);
 
-        // Making sure first row starts with same_idx, same_data being false
+        // Making sure first row starts with same_idx being false
         builder.when_first_row().assert_zero(local_cols.same_idx);
 
         // Making sure same_idx is correct across rows

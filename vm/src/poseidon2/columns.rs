@@ -1,5 +1,3 @@
-use std::array::from_fn;
-
 use p3_field::Field;
 
 use poseidon2_air::poseidon2::columns::{Poseidon2Cols, Poseidon2ColsIndexMap};
@@ -38,7 +36,9 @@ pub struct Poseidon2VmIoCols<T> {
 /// * `internal`: auxiliary columns used by Poseidon2Air for interpreting opcode, evaluating indicators, inverse, and explicit computations.
 #[derive(Clone, Debug)]
 pub struct Poseidon2VmAuxCols<const WIDTH: usize, T> {
-    pub addresses: [T; 3],
+    pub dst: T,
+    pub lhs: T,
+    pub rhs: T,
     pub d_is_zero: T,
     pub is_zero_inv: T,
     pub internal: Poseidon2Cols<WIDTH, T>,
@@ -148,16 +148,22 @@ impl<const WIDTH: usize, T: Clone> Poseidon2VmAuxCols<WIDTH, T> {
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        let mut result = self.addresses.to_vec();
-        result.push(self.d_is_zero.clone());
-        result.push(self.is_zero_inv.clone());
+        let mut result = vec![
+            self.dst.clone(),
+            self.lhs.clone(),
+            self.rhs.clone(),
+            self.d_is_zero.clone(),
+            self.is_zero_inv.clone(),
+        ];
         result.extend(self.internal.flatten());
         result
     }
 
     pub fn from_slice(slice: &[T], index_map: &Poseidon2ColsIndexMap<WIDTH>) -> Self {
         Self {
-            addresses: from_fn(|i| slice[i].clone()),
+            dst: slice[0].clone(),
+            lhs: slice[1].clone(),
+            rhs: slice[2].clone(),
             d_is_zero: slice[3].clone(),
             is_zero_inv: slice[4].clone(),
             internal: Poseidon2Cols::from_slice(&slice[5..], index_map),
@@ -167,7 +173,9 @@ impl<const WIDTH: usize, T: Clone> Poseidon2VmAuxCols<WIDTH, T> {
 impl<const WIDTH: usize, T: Field> Poseidon2VmAuxCols<WIDTH, T> {
     pub fn blank_row(air: &Poseidon2Air<WIDTH, T>) -> Self {
         Self {
-            addresses: [T::zero(); 3],
+            dst: T::default(),
+            lhs: T::default(),
+            rhs: T::default(),
             d_is_zero: T::zero(),
             is_zero_inv: T::one(),
             internal: Poseidon2Cols::blank_row(air),

@@ -248,7 +248,7 @@ fn test_vm_compress_poseidon2() {
     }
     let output = 4;
     program.push(Instruction::from_isize(
-        COMP_POS2, input_a, input_b, output, 0, 1,
+        COMP_POS2, output, input_a, input_b, 0, 1,
     ));
     program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
 
@@ -285,7 +285,7 @@ fn test_vm_compress_poseidon2_as2() {
     program.push(Instruction::from_isize(STOREW, input_b, 1, 0, 0, 1));
     program.push(Instruction::from_isize(STOREW, output, 2, 0, 0, 1));
 
-    program.push(Instruction::from_isize(COMP_POS2, 0, 1, 2, 1, 2));
+    program.push(Instruction::from_isize(COMP_POS2, 2, 0, 1, 1, 2));
     program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
 
     air_test_with_poseidon2(false, false, true, program);

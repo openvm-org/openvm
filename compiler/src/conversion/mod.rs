@@ -11,11 +11,21 @@ use crate::asm::{AsmInstruction, AssemblyCode};
 
 pub mod field_extension_conversion;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct CompilerOptions {
     pub compile_prints: bool,
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
+}
+
+impl Default for CompilerOptions {
+    fn default() -> Self {
+        CompilerOptions {
+            compile_prints: true,
+            field_arithmetic_enabled: true,
+            field_extension_enabled: true,
+        }
+    }
 }
 
 fn inst<F: PrimeField64>(
@@ -644,16 +654,11 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             }
         }
         AsmInstruction::AddE(..)
-        | AsmInstruction::AddEI(..)
-        | AsmInstruction::AddEFFI(..)
         | AsmInstruction::SubE(..)
-        | AsmInstruction::SubEI(..)
         | AsmInstruction::SubEIN(..)
         | AsmInstruction::MulE(..)
         | AsmInstruction::MulEI(..)
-        | AsmInstruction::DivE(..)
-        | AsmInstruction::DivEI(..)
-        | AsmInstruction::DivEIN(..) => {
+        | AsmInstruction::InvE(..) => {
             let fe_utility_registers = from_fn(|i| utility_registers[i]);
             if options.field_extension_enabled {
                 convert_field_extension::<WORD_SIZE, F, EF>(instruction, fe_utility_registers)
@@ -669,15 +674,15 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 )
             }
         }
-        AsmInstruction::Poseidon2Compress(src1, src2, dst) => vec![inst(
+        AsmInstruction::Poseidon2Compress(dst, src1, src2) => vec![inst(
             COMP_POS2,
+            register(dst),
             register(src1),
             register(src2),
-            register(dst),
             AS::Register,
             AS::Memory,
         )],
-        AsmInstruction::Poseidon2Permute(src, dst) => vec![
+        AsmInstruction::Poseidon2Permute(dst, src) => vec![
             inst(
                 FADD,
                 utility_register,
@@ -688,9 +693,9 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
             inst(
                 PERM_POS2,
+                register(dst),
                 register(src),
                 utility_register,
-                register(dst),
                 AS::Register,
                 AS::Memory,
             ),

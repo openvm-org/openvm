@@ -17,7 +17,7 @@ use p3_maybe_rayon::prelude::*;
 
 impl PageOfflineChecker {
     /// Each row in the trace follow the same order as the Cols struct:
-    /// [is_initial, is_final_write, is_final_delete, is_internal, is_final_write_x3, clk, idx, data, op_type, same_idx, lt_bit, is_extra, is_equal_idx_aux, lt_aux]
+    /// [is_initial, is_final_write, is_final_delete, is_internal, clk, idx, data, op_type, same_idx, lt_bit, is_extra, is_equal_idx_aux, lt_aux]
     ///
     /// The trace consists of a row for every read/write/delete operation plus some extra rows
     /// The trace is sorted by idx and then by clk, so every idx has a block of consective rows in the trace with the following structure
@@ -41,9 +41,9 @@ impl PageOfflineChecker {
         let max_clk = ops.iter().map(|op| op.clk).max().unwrap_or(0) + 1;
 
         #[cfg(feature = "parallel")]
-        ops.par_sort_by_key(|op| (op.idx.clone(), op.clk));
+        ops.par_sort_by(|a, b| a.idx.cmp(&b.idx).then_with(|| a.clk.cmp(&b.clk)));
         #[cfg(not(feature = "parallel"))]
-        ops.sort_by_key(|op| (op.idx.clone(), op.clk));
+        ops.sort_by(|a, b| a.idx.cmp(&b.idx).then_with(|| a.clk.cmp(&b.clk)));
 
         let dummy_op = Operation {
             idx: vec![0; self.offline_checker.idx_len],
@@ -52,9 +52,8 @@ impl PageOfflineChecker {
             clk: 0,
         };
 
-        // This takes the information for the current row and references for the last row
-        // It uses those values to generate the new row in the trace, and it updates the references
-        // to the new row's information
+        // This takes the operations for the previous row and current row and some extra information.
+        // It uses those values to generate the new row in the trace
         let gen_row = |is_first_row: &mut bool,
                        is_initial: bool,
                        is_final: bool,
@@ -97,13 +96,11 @@ impl PageOfflineChecker {
                 is_initial: Val::<SC>::from_bool(is_initial),
                 is_final_write: Val::<SC>::from_bool(is_final_write),
                 is_final_delete: Val::<SC>::from_bool(is_final_delete),
-                is_final_write_x3: Val::<SC>::from_canonical_u8(is_final_write as u8 * 3),
                 is_read: Val::<SC>::from_bool(is_read),
                 is_write: Val::<SC>::from_bool(is_write),
                 is_delete: Val::<SC>::from_bool(is_delete),
             };
 
-            assert!(cols.flatten().len() == self.air_width());
             cols.flatten()
         };
 
@@ -230,13 +227,6 @@ impl PageOfflineChecker {
                 &prev_op,
                 false,
             )
-        });
-
-        tracing::debug_span!("Offline Checker trace by row: ").in_scope(|| {
-            for row in &rows {
-                let cols = PageOfflineCheckerCols::from_slice(row, self);
-                tracing::debug!("{:?}", cols);
-            }
         });
 
         RowMajorMatrix::new(rows.concat(), self.air_width())

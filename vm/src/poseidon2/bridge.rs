@@ -1,4 +1,5 @@
 use afs_stark_backend::interaction::InteractionBuilder;
+use itertools::Itertools;
 use p3_field::{AbstractField, Field};
 
 use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS, POSEIDON2_DIRECT_BUS};
@@ -18,7 +19,6 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
         io: Poseidon2VmIoCols<AB::Var>,
         aux: &Poseidon2VmAuxCols<WIDTH, AB::Var>,
     ) {
-        let addresses = aux.addresses;
         let d_is_zero = aux.d_is_zero;
 
         let fields = io.flatten().into_iter().skip(2);
@@ -28,7 +28,10 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
 
         let mut timestamp_offset = 0;
         // read addresses
-        for (i, addr) in [io.a, io.b, io.c].into_iter().enumerate() {
+        for (io_addr, aux_addr) in [io.a, io.b, io.c]
+            .into_iter()
+            .zip_eq([aux.dst, aux.lhs, aux.rhs])
+        {
             let timestamp = io.clk + AB::F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
 
@@ -36,8 +39,8 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
                 timestamp,
                 AB::Expr::from_bool(false),
                 io.d.into(),
-                addr.into(),
-                addresses[i].into(),
+                io_addr.into(),
+                aux_addr.into(),
             ];
             builder.push_send(MEMORY_BUS, fields, io.is_opcode - d_is_zero);
         }
@@ -47,11 +50,8 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
             let timestamp = io.clk + AB::F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
 
-            let address = if i < chunks {
-                addresses[0]
-            } else {
-                addresses[1]
-            } + AB::F::from_canonical_usize(if i < chunks { i } else { i - chunks });
+            let address = if i < chunks { aux.lhs } else { aux.rhs }
+                + F::from_canonical_usize(if i < chunks { i } else { i - chunks });
 
             let fields = [
                 timestamp,
@@ -69,7 +69,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
             let timestamp = io.clk + AB::F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
 
-            let address = aux.addresses[2] + AB::F::from_canonical_usize(i);
+            let address = aux.dst + AB::F::from_canonical_usize(i);
 
             let fields = [
                 timestamp,
@@ -89,14 +89,16 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
         }
 
         // DIRECT
-        let expand_fields = aux
-            .internal
-            .io
-            .flatten()
-            .into_iter()
-            .take(WIDTH + WIDTH / 2)
-            .collect::<Vec<AB::Var>>();
+        if self.direct {
+            let expand_fields = aux
+                .internal
+                .io
+                .flatten()
+                .into_iter()
+                .take(WIDTH + WIDTH / 2)
+                .collect::<Vec<AB::Var>>();
 
-        builder.push_receive(POSEIDON2_DIRECT_BUS, expand_fields, io.is_direct);
+            builder.push_receive(POSEIDON2_DIRECT_BUS, expand_fields, io.is_direct);
+        }
     }
 }
