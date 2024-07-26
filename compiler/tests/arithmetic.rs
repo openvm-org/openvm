@@ -174,6 +174,31 @@ fn test_in_place_arithmetic() {
 }
 
 #[test]
+fn test_field_immediate() {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+
+    let mut builder = AsmBuilder::<F, EF>::default();
+
+    let mut rng = thread_rng();
+
+    let a = rng.gen();
+    let b = rng.gen();
+
+    let v: Felt<_> = builder.constant(a);
+
+    builder.assert_felt_eq(v + b, a + b);
+    builder.assert_felt_eq(v - b, a - b);
+    builder.assert_felt_eq(v * b, a * b);
+    builder.assert_felt_eq(v / b, a / b);
+
+    builder.halt();
+
+    let program = builder.compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE, _>(program, vec![]);
+}
+
+#[test]
 fn test_ext_immediate() {
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, 4>;
