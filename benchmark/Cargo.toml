@@ -46,3 +46,6 @@ harness = false
 [features]
 default = ["afs-stark-backend/mimalloc"]
 parallel = ["afs/parallel", "olap/parallel"]
+
+[profile.bench]
+debug = true
