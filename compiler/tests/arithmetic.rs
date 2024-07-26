@@ -204,4 +204,65 @@ fn test_ext_immediate() {
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
     execute_program::<WORD_SIZE, _>(program, vec![]);
+
+    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+        field_extension_enabled: false,
+        ..Default::default()
+    });
+    execute_program::<WORD_SIZE, _>(program, vec![]);
+}
+
+#[test]
+fn test_ext_felt_arithmetic() {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+    let mut builder = AsmBuilder::<F, EF>::default();
+
+    let f = F::from_canonical_u32(314159265);
+
+    let ef = EF::from_base_slice(&[
+        F::from_canonical_u32(1163664312),
+        F::from_canonical_u32(1251518712),
+        F::from_canonical_u32(1133200680),
+        F::from_canonical_u32(1689596134),
+    ]);
+
+    let felt: Felt<_> = builder.constant(f);
+    let ext: Ext<_, _> = builder.constant(ef);
+
+    let x: Ext<_, _> = builder.uninit();
+    builder.assign(x, ext + felt);
+    builder.assert_ext_eq(x, (ef + f).cons());
+
+    builder.assign(x, ext + f);
+    builder.assert_ext_eq(x, (ef + f).cons());
+
+    builder.assign(x, ext - felt);
+    builder.assert_ext_eq(x, (ef - f).cons());
+
+    builder.assign(x, ext - f);
+    builder.assert_ext_eq(x, (ef - f).cons());
+
+    builder.assign(x, ext * felt);
+    builder.assert_ext_eq(x, (ef * f).cons());
+
+    builder.assign(x, ext * f);
+    builder.assert_ext_eq(x, (ef * f).cons());
+
+    builder.assign(x, ext / felt);
+    builder.assert_ext_eq(x, (ef / EF::from_base(f)).cons());
+
+    builder.assign(x, ext / f);
+    builder.assert_ext_eq(x, (ef / EF::from_base(f)).cons());
+
+    builder.halt();
+
+    let program = builder.clone().compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE, _>(program, vec![]);
+
+    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+        field_extension_enabled: false,
+        ..Default::default()
+    });
+    execute_program::<WORD_SIZE, _>(program, vec![]);
 }
