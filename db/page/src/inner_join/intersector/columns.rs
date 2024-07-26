@@ -1,5 +1,3 @@
-use std::iter;
-
 use afs_primitives::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 
 use super::IntersectorAir;
@@ -29,15 +27,13 @@ impl<T: Clone> IntersectorIoCols<T> {
         }
     }
 
-    pub fn flatten(&self) -> Vec<T> {
-        self.idx
-            .clone()
-            .into_iter()
-            .chain(iter::once(self.t1_mult.clone()))
-            .chain(iter::once(self.t2_mult.clone()))
-            .chain(iter::once(self.out_mult.clone()))
-            .chain(iter::once(self.is_extra.clone()))
-            .collect()
+    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
+        buf[start..start + self.idx.len()].clone_from_slice(&self.idx);
+        buf[start + self.idx.len()] = self.t1_mult.clone();
+        buf[start + self.idx.len() + 1] = self.t2_mult.clone();
+        buf[start + self.idx.len() + 2] = self.out_mult.clone();
+        buf[start + self.idx.len() + 3] = self.is_extra.clone();
+        self.idx.len() + 4
     }
 
     pub fn width(intersector_air: &IntersectorAir) -> usize {
@@ -64,12 +60,10 @@ impl<T: Clone> IntersectorAuxCols<T> {
         }
     }
 
-    pub fn flatten(&self) -> Vec<T> {
-        self.lt_aux
-            .flatten()
-            .into_iter()
-            .chain(iter::once(self.lt_out.clone()))
-            .collect()
+    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
+        let lt_len = self.lt_aux.flatten(buf, start);
+        buf[start + lt_len] = self.lt_out.clone();
+        lt_len + 1
     }
 
     pub fn width(intersector_air: &IntersectorAir) -> usize {
@@ -96,12 +90,10 @@ impl<T: Clone> IntersectorCols<T> {
         }
     }
 
-    pub fn flatten(&self) -> Vec<T> {
-        self.io
-            .flatten()
-            .into_iter()
-            .chain(self.aux.flatten())
-            .collect()
+    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
+        let io_len = self.io.flatten(buf, start);
+        let aux_len = self.aux.flatten(buf, start + io_len);
+        io_len + aux_len
     }
 
     pub fn width(intersector_air: &IntersectorAir) -> usize {

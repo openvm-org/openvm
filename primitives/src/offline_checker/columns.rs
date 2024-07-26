@@ -39,22 +39,22 @@ impl<T> OfflineCheckerCols<T>
 where
     T: Clone,
 {
-    pub fn flatten(&self) -> Vec<T> {
-        let mut flattened = vec![self.clk.clone()];
-        flattened.extend(self.idx.clone());
-        flattened.extend(self.data.clone());
-        flattened.extend(vec![
-            self.op_type.clone(),
-            self.same_idx.clone(),
-            self.lt_bit.clone(),
-            self.is_valid.clone(),
-            self.is_receive.clone(),
-        ]);
-
-        flattened.extend(self.is_equal_idx_aux.flatten());
-        flattened.extend(self.lt_aux.flatten());
-
-        flattened
+    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
+        buf[start] = self.clk.clone();
+        buf[start + 1..start + 1 + self.idx.len()].clone_from_slice(&self.idx);
+        buf[start + 1 + self.idx.len()..start + 1 + self.idx.len() + self.data.len()]
+            .clone_from_slice(&self.data);
+        buf[start + 1 + self.idx.len() + self.data.len()] = self.op_type.clone();
+        buf[start + 2 + self.idx.len() + self.data.len()] = self.same_idx.clone();
+        buf[start + 3 + self.idx.len() + self.data.len()] = self.lt_bit.clone();
+        buf[start + 4 + self.idx.len() + self.data.len()] = self.is_valid.clone();
+        buf[start + 5 + self.idx.len() + self.data.len()] = self.is_receive.clone();
+        let mut cum_len = 6 + self.idx.len() + self.data.len();
+        let is_eq_aux_len = self.is_equal_idx_aux.flatten(buf, start + cum_len);
+        cum_len += is_eq_aux_len;
+        let lt_aux_len = self.lt_aux.flatten(buf, start + cum_len);
+        cum_len += lt_aux_len;
+        cum_len
     }
 
     pub fn from_slice(slc: &[T], oc: &OfflineChecker) -> Self {

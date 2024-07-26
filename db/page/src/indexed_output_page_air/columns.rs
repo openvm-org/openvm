@@ -1,5 +1,3 @@
-use std::iter;
-
 use afs_primitives::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 
 use crate::common::page_cols::PageCols;
@@ -64,11 +62,9 @@ impl<T: Clone> IndexedOutputPageAuxCols<T> {
         }
     }
 
-    pub fn flatten(&self) -> Vec<T> {
-        self.lt_cols
-            .flatten()
-            .into_iter()
-            .chain(iter::once(self.lt_out.clone()))
-            .collect()
+    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
+        let lt_len = self.lt_cols.flatten(buf, start);
+        buf[start + lt_len] = self.lt_out.clone();
+        lt_len + 1
     }
 }

@@ -63,7 +63,7 @@ impl IntersectorAir {
             );
 
             prv_idx.clone_from(&idx);
-
+            let mut row = vec![F::zero(); self.air_width()];
             let inter_cols = IntersectorCols {
                 io: IntersectorIoCols {
                     idx: to_field_vec::<F>(idx),
@@ -77,8 +77,8 @@ impl IntersectorAir {
                     lt_out: lt_cols.io.tuple_less_than,
                 },
             };
-
-            rows.push(inter_cols.flatten());
+            inter_cols.flatten(&mut row, 0);
+            rows.push(row);
         }
 
         // Padding the trace to be of degree trace_degree
@@ -94,6 +94,7 @@ impl IntersectorAir {
 
             prv_idx = vec![0; self.idx_len];
 
+            let mut row = vec![F::zero(); self.air_width()];
             let inter_cols = IntersectorCols {
                 io: IntersectorIoCols {
                     idx: vec![F::zero(); self.idx_len],
@@ -108,7 +109,8 @@ impl IntersectorAir {
                 },
             };
 
-            inter_cols.flatten()
+            inter_cols.flatten(&mut row, 0);
+            row
         });
 
         RowMajorMatrix::new(rows.concat(), self.air_width())

@@ -1,5 +1,3 @@
-use std::iter;
-
 use crate::indexed_output_page_air::{
     columns::{IndexedOutputPageAuxCols, IndexedOutputPageCols},
     IndexedOutputPageAir,
@@ -60,11 +58,9 @@ impl<T: Clone> IndexedPageWriteAuxCols<T> {
         }
     }
 
-    pub fn flatten(&self) -> Vec<T> {
-        self.final_page_aux_cols
-            .flatten()
-            .into_iter()
-            .chain(iter::once(self.rcv_mult.clone()))
-            .collect()
+    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
+        let aux_len = self.final_page_aux_cols.flatten(buf, start);
+        buf[start + aux_len] = self.rcv_mult.clone();
+        1 + aux_len
     }
 }

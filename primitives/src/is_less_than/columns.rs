@@ -18,8 +18,11 @@ impl<T: Clone> IsLessThanIoCols<T> {
         }
     }
 
-    pub fn flatten(&self) -> Vec<T> {
-        vec![self.x.clone(), self.y.clone(), self.less_than.clone()]
+    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
+        buf[start] = self.x.clone();
+        buf[start + 1] = self.y.clone();
+        buf[start + 2] = self.less_than.clone();
+        3
     }
 
     pub fn width() -> usize {
@@ -43,10 +46,10 @@ impl<T: Clone> IsLessThanAuxCols<T> {
         }
     }
 
-    pub fn flatten(&self) -> Vec<T> {
-        let mut flattened = vec![self.lower.clone()];
-        flattened.extend(self.lower_decomp.iter().cloned());
-        flattened
+    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
+        buf[start] = self.lower.clone();
+        buf[start + 1..start + 1 + self.lower_decomp.len()].clone_from_slice(&self.lower_decomp);
+        1 + self.lower_decomp.len()
     }
 
     pub fn width(lt_air: &IsLessThanAir) -> usize {
@@ -67,10 +70,10 @@ impl<T: Clone> IsLessThanCols<T> {
         Self { io, aux }
     }
 
-    pub fn flatten(&self) -> Vec<T> {
-        let mut flattened = self.io.flatten();
-        flattened.extend(self.aux.flatten());
-        flattened
+    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
+        let io_len = self.io.flatten(buf, start);
+        let aux_len = self.aux.flatten(buf, start + io_len);
+        io_len + aux_len
     }
 
     pub fn width(lt_air: &IsLessThanAir) -> usize {

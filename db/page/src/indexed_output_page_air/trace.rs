@@ -4,7 +4,7 @@ use afs_primitives::{
     is_less_than_tuple::columns::IsLessThanTupleCols, range_gate::RangeCheckerGateChip,
     sub_chip::LocalTraceInstructions,
 };
-use p3_field::PrimeField;
+use p3_field::{AbstractField, PrimeField};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
@@ -46,13 +46,13 @@ impl IndexedOutputPageAir {
                 &self.lt_air,
                 (prv_idx, cur_idx, range_checker.clone()),
             );
-
+            let mut row = vec![Val::<SC>::zero(); self.aux_width()];
             let page_aux_cols = IndexedOutputPageAuxCols {
                 lt_cols: lt_cols.aux,
                 lt_out: lt_cols.io.tuple_less_than,
             };
-
-            rows.push(page_aux_cols.flatten());
+            let _ = page_aux_cols.flatten(&mut row, 0);
+            rows.push(row);
         }
 
         RowMajorMatrix::new(rows.concat(), self.aux_width())

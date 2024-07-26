@@ -1,3 +1,4 @@
+use p3_air::BaseAir;
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -20,12 +21,13 @@ impl AssertSortedChip {
             } else {
                 keys[i + 1].clone()
             };
-
-            let is_less_than_tuple_trace = LocalTraceInstructions::generate_trace_row(
+            let mut is_less_than_tuple_trace =
+                vec![F::zero(); BaseAir::<F>::width(&self.air.is_less_than_tuple_air)];
+            let _ = LocalTraceInstructions::generate_trace_row(
                 &self.air.is_less_than_tuple_air,
                 (key.clone(), next_key.clone(), self.range_checker.clone()),
             )
-            .flatten();
+            .flatten(&mut is_less_than_tuple_trace, 0);
 
             // the current key
             let mut row: Vec<F> =

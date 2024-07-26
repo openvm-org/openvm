@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use afs_primitives::{
-    is_less_than_tuple::IsLessThanTupleAir, range_gate::RangeCheckerGateChip,
+    is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
+    range_gate::RangeCheckerGateChip,
     sub_chip::LocalTraceInstructions,
 };
 use itertools::Itertools;
@@ -29,6 +30,11 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
         range: (Vec<u32>, Vec<u32>),
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> RowMajorMatrix<F> {
+        let aux_size = IsLessThanTupleAuxCols::<usize>::width(&IsLessThanTupleAir::new(
+            0,
+            vec![self.is_less_than_tuple_param().limb_bits; *self.idx_len()],
+            self.is_less_than_tuple_param().decomp,
+        ));
         RowMajorMatrix::new(
             page.iter()
                 .zip(mults)
@@ -64,7 +70,9 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
                              air: IsLessThanTupleAir| {
                                 let lt_cols =
                                     air.generate_trace_row((idx1, idx2, range_checker.clone()));
-                                trace_row.extend(lt_cols.aux.flatten());
+                                let mut row = vec![F::zero(); aux_size];
+                                lt_cols.aux.flatten(&mut row, 0);
+                                trace_row.extend(row);
                                 trace_row[6 + lt_res_idx] = lt_cols.io.tuple_less_than;
                             };
                         gen_aux(

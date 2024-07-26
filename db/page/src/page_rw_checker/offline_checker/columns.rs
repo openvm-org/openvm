@@ -24,21 +24,15 @@ impl<T> PageOfflineCheckerCols<T>
 where
     T: Clone,
 {
-    pub fn flatten(&self) -> Vec<T> {
-        let mut flattened = self.offline_checker_cols.flatten();
-
-        flattened.extend(vec![
-            self.is_initial.clone(),
-            self.is_final_write.clone(),
-            self.is_final_delete.clone(),
-        ]);
-        flattened.extend(vec![
-            self.is_read.clone(),
-            self.is_write.clone(),
-            self.is_delete.clone(),
-        ]);
-
-        flattened
+    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
+        let cum_len = self.offline_checker_cols.flatten(buf, start);
+        buf[start + cum_len] = self.is_initial.clone();
+        buf[start + cum_len + 1] = self.is_final_write.clone();
+        buf[start + cum_len + 2] = self.is_final_delete.clone();
+        buf[start + cum_len + 3] = self.is_read.clone();
+        buf[start + cum_len + 4] = self.is_write.clone();
+        buf[start + cum_len + 5] = self.is_delete.clone();
+        cum_len + 6
     }
 
     pub fn from_slice(slc: &[T], oc: &PageOfflineChecker) -> Self {

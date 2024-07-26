@@ -71,7 +71,8 @@ fn test_flatten_fromslice_roundtrip() {
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
     let cols_numbered = CpuCols::<TEST_WORD_SIZE, usize>::from_slice(&all_cols, options);
-    let flattened = cols_numbered.flatten(options);
+    let mut flattened = vec![0; num_cols];
+    let _ = cols_numbered.flatten(&mut flattened, 0, options);
 
     for (i, col) in flattened.iter().enumerate() {
         assert_eq!(*col, all_cols[i]);
@@ -226,7 +227,10 @@ fn air_test_change<
     change(&mut rows, &mut vm);
     let mut flattened = vec![];
     for row in rows {
-        flattened.extend(row.flatten(vm.options()));
+        let mut buf =
+            vec![BabyBear::zero(); CpuCols::<WORD_SIZE, BabyBear>::get_width(vm.options())];
+        row.flatten(&mut buf, 0, vm.options());
+        flattened.extend(buf);
     }
     let trace = DenseMatrix::new(flattened, trace.width());
 

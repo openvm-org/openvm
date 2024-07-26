@@ -11,10 +11,7 @@ use afs_test_utils::{
     interaction::dummy_interaction_air::DummyInteractionAir, utils::to_field_vec,
 };
 
-use crate::{
-    is_less_than::columns::IsLessThanCols, range_gate::RangeCheckerGateChip,
-    sub_chip::LocalTraceInstructions, sum::SumChip,
-};
+use crate::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions, sum::SumChip};
 
 const INPUT_BUS: usize = 0;
 const OUTPUT_BUS: usize = 1;
@@ -65,11 +62,14 @@ fn run_sum_air_trace_test(sum_trace_u32: &[(u32, u32, u32, u32)]) -> Result<(), 
         let row = [key, val, sum, is_final];
         let mut row: Vec<BabyBear> = row.into_iter().map(BabyBear::from_canonical_u32).collect();
 
-        let is_less_than_row: IsLessThanCols<BabyBear> = LocalTraceInstructions::generate_trace_row(
+        let mut lt_row =
+            vec![BabyBear::zero(); BaseAir::<BabyBear>::width(&sum_chip.air.is_lt_air)];
+        let is_less_than_row = LocalTraceInstructions::generate_trace_row(
             &sum_chip.air.is_lt_air,
             (key, next_key, sum_chip.range_checker.clone()),
         );
-        row.extend(is_less_than_row.aux.flatten());
+        is_less_than_row.aux.flatten(&mut lt_row, 0);
+        row.extend(lt_row);
         rows.push(row);
     }
 

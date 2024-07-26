@@ -31,8 +31,10 @@ pub struct InternalPageAir<const COMMITMENT_LEN: usize> {
     data_bus_index: usize,
     // parameter telling if this is a leaf chip on the init side or the final side.
     is_less_than_tuple_air: Option<InternalPageSubAirs>,
+    #[getset(get = "pub")]
     is_less_than_tuple_param: MyLessThanTupleParams,
     is_init: bool,
+    #[getset(get = "pub")]
     idx_len: usize,
     air_id: u32,
 }

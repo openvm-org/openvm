@@ -38,9 +38,12 @@ pub struct LeafPageAir<const COMMITMENT_LEN: usize> {
     page_chip: PageRwAir,
     // parameter telling if this is a leaf chip on the init side or the final side.
     is_less_than_tuple_air: Option<LeafPageSubAirs>,
+    #[getset(get = "pub")]
     is_less_than_tuple_param: MyLessThanTupleParams,
     is_init: bool,
+    #[getset(get = "pub")]
     idx_len: usize,
+    #[getset(get = "pub")]
     data_len: usize,
     air_id: u32,
 }

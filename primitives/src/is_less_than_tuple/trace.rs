@@ -26,10 +26,11 @@ impl IsLessThanTupleChip {
 
         // for each tuple pair, generate the trace row
         for (x, y) in tuple_pairs {
-            let row: Vec<F> = self
+            let mut row = vec![F::zero(); num_cols];
+            let _ = self
                 .air
-                .generate_trace_row((x.clone(), y.clone(), self.range_checker.clone()))
-                .flatten();
+                .generate_trace_row((x, y, self.range_checker.clone()))
+                .flatten(&mut row, 0);
             rows.extend(row);
         }
 
@@ -114,10 +115,10 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanTupleAir {
 
         // compute less_than_aux and is_equal_vec_aux
         let mut less_than_aux: Vec<IsLessThanAuxCols<F>> = vec![];
-        for i in 0..x.len() {
+        for (lower, lower_decomp) in lower_vec.into_iter().zip(lower_decomp_vec.into_iter()) {
             let less_than_col = IsLessThanAuxCols {
-                lower: lower_vec[i],
-                lower_decomp: lower_decomp_vec[i].clone(),
+                lower,
+                lower_decomp,
             };
             less_than_aux.push(less_than_col);
         }

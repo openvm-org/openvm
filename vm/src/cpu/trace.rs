@@ -317,7 +317,9 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             };
 
             let cols = CpuCols { io, aux };
-            rows.extend(cols.flatten(vm.options()));
+            let mut row = vec![F::zero(); CpuCols::<WORD_SIZE, F>::get_width(vm.options())];
+            let _ = cols.flatten(&mut row, 0, vm.options());
+            rows.extend(row);
 
             pc = next_pc;
             timestamp += max_accesses_per_instruction(opcode);

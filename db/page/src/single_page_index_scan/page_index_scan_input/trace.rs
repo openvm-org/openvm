@@ -1,4 +1,5 @@
 use afs_primitives::sub_chip::LocalTraceInstructions;
+use p3_air::BaseAir;
 use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
@@ -108,13 +109,16 @@ impl PageIndexScanInputChip {
                 | PageIndexScanInputAirVariants::Lte(NonStrictCompAir {
                     is_less_than_tuple_air,
                     ..
-                }) => Some(
+                }) => Some({
+                    let mut row =
+                        vec![Val::<SC>::zero(); BaseAir::<Val<SC>>::width(is_less_than_tuple_air)];
                     LocalTraceInstructions::generate_trace_row(
                         is_less_than_tuple_air,
                         (idx.clone(), x.clone(), self.range_checker.clone()),
                     )
-                    .flatten(),
-                ),
+                    .flatten(&mut row, 0);
+                    row
+                }),
                 PageIndexScanInputAirVariants::Gt(StrictCompAir {
                     is_less_than_tuple_air,
                     ..
@@ -122,11 +126,16 @@ impl PageIndexScanInputChip {
                 | PageIndexScanInputAirVariants::Gte(NonStrictCompAir {
                     is_less_than_tuple_air,
                     ..
-                }) => Some(
-                    is_less_than_tuple_air
-                        .generate_trace_row((x.clone(), idx.clone(), self.range_checker.clone()))
-                        .flatten(),
-                ),
+                }) => Some({
+                    let mut row =
+                        vec![Val::<SC>::zero(); BaseAir::<Val<SC>>::width(is_less_than_tuple_air)];
+                    LocalTraceInstructions::generate_trace_row(
+                        is_less_than_tuple_air,
+                        (x.clone(), idx.clone(), self.range_checker.clone()),
+                    )
+                    .flatten(&mut row, 0);
+                    row
+                }),
                 _ => None,
             };
 

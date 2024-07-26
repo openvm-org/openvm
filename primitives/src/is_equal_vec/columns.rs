@@ -6,10 +6,11 @@ pub struct IsEqualVecIoCols<T> {
 }
 
 impl<T: Clone> IsEqualVecIoCols<T> {
-    pub fn flatten(&self) -> Vec<T> {
-        let mut res: Vec<T> = self.x.iter().chain(self.y.iter()).cloned().collect();
-        res.push(self.is_equal.clone());
-        res
+    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
+        buf[start..start + self.x.len()].clone_from_slice(&self.x);
+        buf[start + self.x.len()..start + self.x.len() + self.y.len()].clone_from_slice(&self.y);
+        buf[start + self.x.len() + self.y.len()] = self.is_equal.clone();
+        self.x.len() + self.y.len() + 1
     }
 
     pub fn from_slice(slc: &[T], vec_len: usize) -> Self {
@@ -36,8 +37,11 @@ impl<T: Clone> IsEqualVecAuxCols<T> {
         Self { prods, invs }
     }
 
-    pub fn flatten(&self) -> Vec<T> {
-        self.prods.iter().chain(self.invs.iter()).cloned().collect()
+    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
+        buf[start..start + self.prods.len()].clone_from_slice(&self.prods);
+        buf[start + self.prods.len()..start + self.prods.len() + self.invs.len()]
+            .clone_from_slice(&self.invs);
+        self.prods.len() + self.invs.len()
     }
 
     pub fn from_slice(slc: &[T], vec_len: usize) -> Self {

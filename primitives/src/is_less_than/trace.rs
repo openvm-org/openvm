@@ -18,10 +18,11 @@ impl IsLessThanChip {
 
         // generate a row for each pair of numbers to compare
         for (x, y) in pairs {
-            let row: Vec<F> = self
+            let mut row = vec![F::zero(); num_cols];
+            let _ = self
                 .air
                 .generate_trace_row((x, y, self.range_checker.clone()))
-                .flatten();
+                .flatten(&mut row, 0);
             rows.extend(row);
         }
 
