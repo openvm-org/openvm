@@ -180,6 +180,8 @@ fn test_ext_immediate() {
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
+    let f = F::from_canonical_u32(314159265);
+
     let ef = EF::from_base_slice(&[
         F::from_canonical_u32(1163664312),
         F::from_canonical_u32(1251518712),
@@ -193,14 +195,33 @@ fn test_ext_immediate() {
     builder.assign(x, ext + ef);
     builder.assert_ext_eq(x, (ef + ef).cons());
 
+    let x: Ext<_, _> = builder.uninit();
+    builder.assign(x, ext + f);
+    builder.assert_ext_eq(x, (ef + f).cons());
+
+    let x: Ext<_, _> = builder.uninit();
     builder.assign(x, ext - ef);
     builder.assert_ext_eq(x, EF::zero().cons());
 
+    let x: Ext<_, _> = builder.uninit();
+    builder.assign(x, ext - f);
+    builder.assert_ext_eq(x, (ef - f).cons());
+
+    let x: Ext<_, _> = builder.uninit();
     builder.assign(x, ext * ef);
     builder.assert_ext_eq(x, (ef * ef).cons());
 
+    let x: Ext<_, _> = builder.uninit();
+    builder.assign(x, ext * f);
+    builder.assert_ext_eq(x, (ef * f).cons());
+
+    let x: Ext<_, _> = builder.uninit();
     builder.assign(x, ext / ef);
     builder.assert_ext_eq(x, EF::one().cons());
+
+    let x: Ext<_, _> = builder.uninit();
+    builder.assign(x, ext / f);
+    builder.assert_ext_eq(x, (ef / f.into()).cons());
 
     builder.halt();
 
