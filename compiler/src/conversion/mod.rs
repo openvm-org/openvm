@@ -3,9 +3,9 @@ use std::array::from_fn;
 use p3_field::{ExtensionField, PrimeField64};
 
 use field_extension_conversion::{convert_field_extension, convert_field_extension_with_base};
+use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode;
 use stark_vm::cpu::OpCode::*;
-use stark_vm::cpu::trace::Instruction;
 
 use crate::asm::{AsmInstruction, AssemblyCode};
 

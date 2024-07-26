@@ -1,5 +1,5 @@
-use std::{collections::BTreeMap, error::Error, fmt::Display};
 use std::collections::VecDeque;
+use std::{collections::BTreeMap, error::Error, fmt::Display};
 
 use p3_field::{Field, PrimeField32, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
@@ -8,17 +8,17 @@ use afs_primitives::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
 
-use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
 use crate::cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual};
 use crate::memory::{compose, decompose};
 use crate::poseidon2::Poseidon2Chip;
 use crate::vm::cycle_tracker::CycleTracker;
+use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
-    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE,
-    CPU_MAX_WRITES_PER_CYCLE,
-    CpuAir, INST_WIDTH, max_accesses_per_instruction, OpCode::{self, *},
+    max_accesses_per_instruction, CpuAir,
+    OpCode::{self, *},
+    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
