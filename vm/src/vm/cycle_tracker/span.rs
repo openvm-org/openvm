@@ -1,17 +1,15 @@
-#[derive(Debug)]
+use std::collections::BTreeMap;
+use std::fmt::Display;
+
+#[derive(Debug, Clone)]
 pub struct CycleTrackerData {
     pub cpu_rows: usize,
     pub clock_cycles: usize,
     pub time_elapsed: usize,
-    pub mem_accesses: usize,
-    pub field_arithmetic_ops: usize,
-    pub field_extension_ops: usize,
-    pub range_checker_count: usize,
-    pub poseidon2_rows: usize,
-    pub input_stream_len: usize,
+    pub vm_metrics: BTreeMap<String, usize>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CycleTrackerSpan {
     pub is_active: bool,
     pub start: CycleTrackerData,
@@ -24,36 +22,22 @@ impl CycleTrackerSpan {
         start_cpu_rows: usize,
         start_clock_cycle: usize,
         start_timestamp: usize,
-        start_mem_accesses: usize,
-        start_field_arithmetic_ops: usize,
-        start_field_extension_ops: usize,
-        start_range_checker_count: usize,
-        start_poseidon2_rows: usize,
-        start_input_stream_len: usize,
+        vm_metrics: &BTreeMap<String, usize>,
     ) -> Self {
+        let vm_metrics_zero = vm_metrics.iter().map(|(k, _)| (k.clone(), 0)).collect();
         Self {
             is_active: true,
             start: CycleTrackerData {
                 cpu_rows: start_cpu_rows,
                 clock_cycles: start_clock_cycle,
                 time_elapsed: start_timestamp,
-                mem_accesses: start_mem_accesses,
-                field_arithmetic_ops: start_field_arithmetic_ops,
-                field_extension_ops: start_field_extension_ops,
-                range_checker_count: start_range_checker_count,
-                poseidon2_rows: start_poseidon2_rows,
-                input_stream_len: start_input_stream_len,
+                vm_metrics: vm_metrics.clone(),
             },
             end: CycleTrackerData {
                 cpu_rows: 0,
                 clock_cycles: 0,
                 time_elapsed: 0,
-                mem_accesses: 0,
-                field_arithmetic_ops: 0,
-                field_extension_ops: 0,
-                range_checker_count: 0,
-                poseidon2_rows: 0,
-                input_stream_len: 0,
+                vm_metrics: vm_metrics_zero,
             },
         }
     }
@@ -64,22 +48,27 @@ impl CycleTrackerSpan {
         end_cpu_rows: usize,
         end_clock_cycle: usize,
         end_timestamp: usize,
-        end_mem_accesses: usize,
-        end_field_arithmetic_ops: usize,
-        end_field_extension_ops: usize,
-        end_range_checker_count: usize,
-        end_poseidon2_rows: usize,
-        end_input_stream_len: usize,
+        vm_metrics: &BTreeMap<String, usize>,
     ) {
         self.is_active = false;
         self.end.cpu_rows = end_cpu_rows - self.start.cpu_rows;
         self.end.clock_cycles = end_clock_cycle - self.start.clock_cycles;
         self.end.time_elapsed = end_timestamp - self.start.time_elapsed;
-        self.end.mem_accesses = end_mem_accesses - self.start.mem_accesses;
-        self.end.field_arithmetic_ops = end_field_arithmetic_ops - self.start.field_arithmetic_ops;
-        self.end.field_extension_ops = end_field_extension_ops - self.start.field_extension_ops;
-        self.end.range_checker_count = end_range_checker_count - self.start.range_checker_count;
-        self.end.poseidon2_rows = end_poseidon2_rows - self.start.poseidon2_rows;
-        self.end.input_stream_len = end_input_stream_len - self.start.input_stream_len;
+        for (key, value) in vm_metrics {
+            let diff = value - self.start.vm_metrics.get(key).unwrap();
+            self.end.vm_metrics.insert(key.clone(), diff);
+        }
+    }
+}
+
+impl Display for CycleTrackerSpan {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "  - cpu_rows: {}", self.end.cpu_rows)?;
+        writeln!(f, "  - clock_cycles: {}", self.end.clock_cycles)?;
+        writeln!(f, "  - time_elapsed: {}", self.end.time_elapsed)?;
+        for (key, value) in &self.end.vm_metrics {
+            writeln!(f, "  - {}: {}", key, value)?;
+        }
+        Ok(())
     }
 }

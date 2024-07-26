@@ -290,8 +290,10 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     let base_pointer = read!(d, a);
                     write!(e, base_pointer + b, hint);
                 }
-                CT_START => cycle_tracker.start(debug, vm, &rows, clock_cycle, timestamp),
-                CT_END => cycle_tracker.end(debug, vm, &rows, clock_cycle, timestamp),
+                CT_START => {
+                    cycle_tracker.start(debug, &rows, clock_cycle, timestamp, &vm.metrics())
+                }
+                CT_END => cycle_tracker.end(debug, &rows, clock_cycle, timestamp, &vm.metrics()),
             };
 
             let mut operation_flags = BTreeMap::new();
@@ -326,7 +328,6 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             }
         }
 
-        cycle_tracker.end_all_active(vm, &rows, clock_cycle, timestamp);
         cycle_tracker.print();
 
         Ok(RowMajorMatrix::new(
