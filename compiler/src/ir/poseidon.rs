@@ -123,6 +123,7 @@ impl<C: Config> Builder<C> {
                 let element = builder.get(&subarray, j);
                 builder.set_value(&mut state, idx, element);
                 builder.assign(idx, idx + C::N::one());
+                builder.cycle_tracker_end("poseidon2-hash-setup");
                 builder.cycle_tracker_start("poseidon2-hash-setup");
                 builder
                     .if_eq(idx, C::N::from_canonical_usize(HASH_RATE))
