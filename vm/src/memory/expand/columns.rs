@@ -22,7 +22,7 @@ impl<const CHUNK: usize, T: Clone> ExpandCols<CHUNK, T> {
 
         let expand_direction = take();
         let address_space = take();
-        let height = take();
+        let parent_height = take();
         let parent_label = take();
         let parent_hash = std::array::from_fn(|_| take());
         let left_child_hash = std::array::from_fn(|_| take());
@@ -33,7 +33,7 @@ impl<const CHUNK: usize, T: Clone> ExpandCols<CHUNK, T> {
         Self {
             expand_direction,
             address_space,
-            parent_height: height,
+            parent_height,
             parent_label,
             parent_hash,
             left_child_hash,
