@@ -143,8 +143,8 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
                 parent_hash: hash,
                 left_child_hash: left.hash(),
                 right_child_hash: right.hash(),
-                left_direction_change: F::from_bool(left_direction_change),
-                right_direction_change: F::from_bool(right_direction_change),
+                left_direction_different: F::from_bool(left_direction_change),
+                right_direction_different: F::from_bool(right_direction_change),
             }
         } else {
             panic!("trace_rows expects node = {:?} to be NonLeaf", node);

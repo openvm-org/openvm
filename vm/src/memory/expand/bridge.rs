@@ -30,7 +30,7 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
         builder.push_receive(
             EXPAND_BUS,
             [
-                local.expand_direction + (local.left_direction_change * AB::F::two()),
+                local.expand_direction + (local.left_direction_different * AB::F::two()),
                 local.address_space.into(),
                 local.parent_height - AB::F::one(),
                 local.parent_label * AB::F::two(),
@@ -43,7 +43,7 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
         builder.push_receive(
             EXPAND_BUS,
             [
-                local.expand_direction + (local.right_direction_change * AB::F::two()),
+                local.expand_direction + (local.right_direction_different * AB::F::two()),
                 local.address_space.into(),
                 local.parent_height - AB::F::one(),
                 (local.parent_label * AB::F::two()) + AB::F::one(),

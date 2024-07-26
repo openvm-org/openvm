@@ -26,8 +26,8 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for ExpandAir<CHUNK> {
             local.expand_direction * local.expand_direction * local.expand_direction,
         );
 
-        builder.assert_bool(local.left_direction_change);
-        builder.assert_bool(local.right_direction_change);
+        builder.assert_bool(local.left_direction_different);
+        builder.assert_bool(local.right_direction_different);
 
         self.eval_interactions(builder, local);
     }
