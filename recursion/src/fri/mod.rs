@@ -132,7 +132,7 @@ where
     C::F: TwoAdicField,
     C::EF: TwoAdicField,
 {
-    builder.cycle_tracker("verify-query");
+    builder.cycle_tracker_start("verify-query");
     let folded_eval: Ext<C::F, C::EF> = builder.eval(C::F::zero());
     let two_adic_generator_f = config.get_two_adic_generator(builder, log_max_height);
 
@@ -206,7 +206,7 @@ where
             builder.assign(x, x * x);
         });
 
-    builder.cycle_tracker("verify-query");
+    builder.cycle_tracker_end("verify-query");
     folded_eval
 }
 
@@ -225,7 +225,7 @@ pub fn verify_batch<C: Config, const D: usize>(
     opened_values: Array<C, Array<C, Ext<C::F, C::EF>>>,
     proof: &Array<C, DigestVariable<C>>,
 ) {
-    builder.cycle_tracker("verify-batch");
+    builder.cycle_tracker_start("verify-batch");
     // The index of which table to process next.
     let index: Var<C::N> = builder.eval(C::N::zero());
 
@@ -290,7 +290,7 @@ pub fn verify_batch<C: Config, const D: usize>(
         let e2 = builder.get(&root, i);
         builder.assert_felt_eq(e1, e2);
     }
-    builder.cycle_tracker("verify-batch");
+    builder.cycle_tracker_end("verify-batch");
 }
 
 // FIXME: D=1 means that we are doing MMCS for Felts despite that opened_values are Exts.
@@ -306,11 +306,11 @@ pub fn reduce_fast<C: Config, const D: usize>(
     curr_height_padded: Var<C::N>,
     opened_values: &Array<C, Array<C, Ext<C::F, C::EF>>>,
 ) -> Array<C, Felt<C::F>> {
-    builder.cycle_tracker("verify-batch-reduce-fast");
+    builder.cycle_tracker_start("verify-batch-reduce-fast");
     let nb_opened_values: Var<_> = builder.eval(C::N::zero());
     let mut nested_opened_values: Array<_, Array<_, Ext<_, _>>> = builder.dyn_array(8192);
     let start_dim_idx: Var<_> = builder.eval(dim_idx);
-    builder.cycle_tracker("verify-batch-reduce-fast-setup");
+    builder.cycle_tracker_start("verify-batch-reduce-fast-setup");
     builder
         .range(start_dim_idx, dims.len())
         .for_each(|i, builder| {
@@ -326,7 +326,7 @@ pub fn reduce_fast<C: Config, const D: usize>(
                 builder.assign(dim_idx, dim_idx + C::N::one());
             });
         });
-    builder.cycle_tracker("verify-batch-reduce-fast-setup");
+    builder.cycle_tracker_end("verify-batch-reduce-fast-setup");
 
     let h = if D == 1 {
         let mut packed_nested_opened_values = builder.dyn_array(nb_opened_values);
@@ -353,6 +353,6 @@ pub fn reduce_fast<C: Config, const D: usize>(
         nested_opened_values.truncate(builder, Usize::Var(nb_opened_values));
         builder.poseidon2_hash_ext(&nested_opened_values)
     };
-    builder.cycle_tracker("verify-batch-reduce-fast");
+    builder.cycle_tracker_end("verify-batch-reduce-fast");
     h
 }

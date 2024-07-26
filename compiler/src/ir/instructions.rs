@@ -262,6 +262,10 @@ pub enum DslIr<C: Config> {
     // Debugging instructions.
     /// Executes less than (var = var < var).  This operation is NOT constrained.
     LessThan(Var<C::N>, Var<C::N>, Var<C::N>),
-    /// Tracks the number of cycles used by a block of code annotated by the string input.
-    CycleTracker(String),
+
+    /// Start the cycle tracker used by a block of code annotated by the string input. Calling this with the same
+    /// string will end the open cycle tracker instance and start a new one with an increasing numeric postfix.
+    CycleTrackerStart(String),
+    /// End the cycle tracker used by a block of code annotated by the string input.
+    CycleTrackerEnd(String),
 }

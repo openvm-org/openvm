@@ -101,7 +101,7 @@ macro_rules! run_perm_ops {
             Poseidon2Chip::<16, BabyBear>::poseidon2_perm(
                 &mut vm,
                 start_timestamp,
-                $instructions[i],
+                $instructions[i].clone(),
             );
         });
 
@@ -116,7 +116,7 @@ macro_rules! run_perm_ops {
                     .flat_map(|i| {
                         Poseidon2VmAir::<16, BabyBear>::make_io_cols(
                             16 * $num_ops + (time_per * i),
-                            $instructions[i],
+                            $instructions[i].clone(),
                         )
                         .flatten()
                         .iter()
@@ -196,6 +196,7 @@ fn random_instructions<const NUM_OPS: usize>() -> [Instruction<BabyBear>; NUM_OP
             op_c: c,
             d: BabyBear::zero(),
             e,
+            debug: String::new(),
         }
     })
 }

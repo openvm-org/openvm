@@ -43,6 +43,19 @@ fn inst<F: PrimeField64>(
         op_c,
         d: d.to_field(),
         e: e.to_field(),
+        debug: String::new(),
+    }
+}
+
+fn dbg<F: PrimeField64>(opcode: OpCode, debug: String) -> Instruction<F> {
+    Instruction {
+        opcode,
+        op_a: F::zero(),
+        op_b: F::zero(),
+        op_c: F::zero(),
+        d: F::zero(),
+        e: F::zero(),
+        debug,
     }
 }
 
@@ -655,7 +668,6 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         }
         AsmInstruction::AddE(..)
         | AsmInstruction::SubE(..)
-        | AsmInstruction::SubEIN(..)
         | AsmInstruction::MulE(..)
         | AsmInstruction::MulEI(..)
         | AsmInstruction::InvE(..) => {
@@ -700,7 +712,8 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 AS::Memory,
             ),
         ],
-        AsmInstruction::CycleTracker(_) => vec![],
+        AsmInstruction::CycleTrackerStart(name) => vec![dbg(CT_START, name)],
+        AsmInstruction::CycleTrackerEnd(name) => vec![dbg(CT_END, name)],
         _ => panic!("Unsupported instruction {:?}", instruction),
     }
 }

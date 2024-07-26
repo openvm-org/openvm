@@ -76,6 +76,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
             op_c,
             d,
             e,
+            debug: _debug,
         } = instruction;
         Poseidon2VmIoCols::<F> {
             is_opcode: F::one(),
@@ -115,8 +116,8 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
             op_c,
             d,
             e,
-        } = instruction;
-
+            debug: _debug,
+        } = instruction.clone();
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
 
         let mut timestamp = start_timestamp;
