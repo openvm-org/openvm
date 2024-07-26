@@ -137,7 +137,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.add_ext_felt(dst, lhs, rhs, trace);
                 }
                 DslIr::AddEFFI(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::AddEFFI(dst.fp(), lhs.fp(), rhs), trace);
+                    self.add_felt_exti(dst, lhs, rhs, trace);
                 }
                 DslIr::AddEFI(dst, lhs, rhs) => {
                     self.add_ext_felti(dst, lhs, rhs, trace);
@@ -857,5 +857,22 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             AsmInstruction::AddFI(dst.fp(), lhs.fp(), rhs),
             trace.clone(),
         );
+    }
+
+    fn add_felt_exti(&mut self, dst: Ext<F, EF>, lhs: Felt<F>, rhs: EF, trace: Option<Backtrace>) {
+        let base_slice = rhs.as_base_slice();
+
+        self.push(
+            AsmInstruction::AddFI(dst.fp(), lhs.fp(), base_slice[0]),
+            trace.clone(),
+        );
+
+        for i in 1..(EF::D) {
+            let j = -((i * self.word_size) as i32);
+            self.push(
+                AsmInstruction::AddFI(dst.fp() + j, ZERO, base_slice[i]),
+                trace.clone(),
+            );
+        }
     }
 }

@@ -293,53 +293,6 @@ pub fn convert_field_extension_with_base<
                 ),
             ]
         }
-        AsmInstruction::AddEFFI(dst, lhs, rhs) => {
-            let a0 = dst;
-            let a1 = dst - word_size_i32;
-            let a2 = dst - 2 * word_size_i32;
-            let a3 = dst - 3 * word_size_i32;
-
-            let slc = rhs.as_base_slice();
-            let c0 = slc[0];
-            let c1 = slc[1];
-            let c2 = slc[2];
-            let c3 = slc[3];
-
-            vec![
-                inst(
-                    FADD,
-                    register(a0),
-                    register(lhs),
-                    c0,
-                    AS::Register,
-                    AS::Immediate,
-                ),
-                inst(
-                    STOREW,
-                    c1,
-                    F::zero(),
-                    register(a1),
-                    AS::Immediate,
-                    AS::Register,
-                ),
-                inst(
-                    STOREW,
-                    c2,
-                    F::zero(),
-                    register(a2),
-                    AS::Immediate,
-                    AS::Register,
-                ),
-                inst(
-                    STOREW,
-                    c3,
-                    F::zero(),
-                    register(a3),
-                    AS::Immediate,
-                    AS::Register,
-                ),
-            ]
-        }
         AsmInstruction::SubE(dst, lhs, rhs) => {
             let a0 = dst;
             let a1 = dst - word_size_i32;
@@ -563,8 +516,7 @@ pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField64, EF: Exte
         )],
         AsmInstruction::SubEI(_, _, _)
         | AsmInstruction::SubEIN(_, _, _)
-        | AsmInstruction::MulEI(_, _, _)
-        | AsmInstruction::AddEFFI(_, _, _) => {
+        | AsmInstruction::MulEI(_, _, _) => {
             convert_field_extension_with_base::<WORD_SIZE, F, EF>(instruction, utility_registers)
         }
         AsmInstruction::SubE(dst, lhs, rhs) => vec![inst(
