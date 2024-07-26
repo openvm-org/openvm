@@ -42,6 +42,7 @@ pub struct AsmCompiler<F, EF> {
     break_counter: usize,
     contains_break: BTreeSet<F>,
     function_labels: BTreeMap<String, F>,
+    word_size: usize,
 }
 
 impl<F> Var<F> {
@@ -74,7 +75,7 @@ impl<F> Ptr<F> {
 
 impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCompiler<F, EF> {
     /// Creates a new [AsmCompiler].
-    pub fn new() -> Self {
+    pub fn new(word_size: usize) -> Self {
         Self {
             basic_blocks: vec![BasicBlock::new()],
             break_label: None,
@@ -82,6 +83,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             contains_break: BTreeSet::new(),
             function_labels: BTreeMap::new(),
             break_counter: 0,
+            word_size,
         }
     }
 
@@ -129,19 +131,16 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::AddE(dst.fp(), lhs.fp(), rhs.fp()), trace);
                 }
                 DslIr::AddEI(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::AddEI(dst.fp(), lhs.fp(), rhs), trace);
+                    self.add_ext_exti(dst, lhs, rhs, trace);
                 }
                 DslIr::AddEF(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::AddE(dst.fp(), lhs.fp(), rhs.fp()), trace);
+                    self.add_ext_felt(dst, lhs, rhs, trace);
                 }
                 DslIr::AddEFFI(dst, lhs, rhs) => {
                     self.push(AsmInstruction::AddEFFI(dst.fp(), lhs.fp(), rhs), trace);
                 }
                 DslIr::AddEFI(dst, lhs, rhs) => {
-                    self.push(
-                        AsmInstruction::AddEI(dst.fp(), lhs.fp(), EF::from_base(rhs)),
-                        trace,
-                    );
+                    self.add_ext_felti(dst, lhs, rhs, trace);
                 }
                 DslIr::SubV(dst, lhs, rhs) => {
                     self.push(AsmInstruction::SubF(dst.fp(), lhs.fp(), rhs.fp()), trace);
@@ -805,5 +804,58 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
                 self.compiler.push(instr, None);
             }
         }
+    }
+}
+
+// Ext compiler logic.
+impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCompiler<F, EF> {
+    fn add_ext_exti(
+        &mut self,
+        dst: Ext<F, EF>,
+        lhs: Ext<F, EF>,
+        rhs: EF,
+        trace: Option<Backtrace>,
+    ) {
+        let rhs = rhs.as_base_slice();
+        for i in 0..EF::D {
+            let j = -((i * self.word_size) as i32);
+            self.push(
+                AsmInstruction::AddFI(dst.fp() + j, lhs.fp() + j, rhs[i]),
+                trace.clone(),
+            );
+        }
+    }
+
+    fn add_ext_felt(
+        &mut self,
+        dst: Ext<F, EF>,
+        lhs: Ext<F, EF>,
+        rhs: Felt<F>,
+        trace: Option<Backtrace>,
+    ) {
+        self.push(
+            AsmInstruction::AddF(dst.fp(), lhs.fp(), rhs.fp()),
+            trace.clone(),
+        );
+        for i in 1..EF::D {
+            let j = -((i * self.word_size) as i32);
+            self.push(
+                AsmInstruction::AddFI(dst.fp() + j, lhs.fp() + j, F::zero()),
+                trace.clone(),
+            );
+        }
+    }
+
+    fn add_ext_felti(
+        &mut self,
+        dst: Ext<F, EF>,
+        lhs: Ext<F, EF>,
+        rhs: F,
+        trace: Option<Backtrace>,
+    ) {
+        self.push(
+            AsmInstruction::AddFI(dst.fp(), lhs.fp(), rhs),
+            trace.clone(),
+        );
     }
 }

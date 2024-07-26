@@ -11,7 +11,7 @@ use crate::asm::{AsmInstruction, AssemblyCode};
 
 pub mod field_extension_conversion;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct CompilerOptions {
     pub compile_prints: bool,
     pub field_arithmetic_enabled: bool,
@@ -21,7 +21,7 @@ pub struct CompilerOptions {
 impl Default for CompilerOptions {
     fn default() -> Self {
         CompilerOptions {
-            compile_prints: true,
+            compile_prints: false,
             field_arithmetic_enabled: true,
             field_extension_enabled: true,
         }
@@ -654,7 +654,6 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             }
         }
         AsmInstruction::AddE(..)
-        | AsmInstruction::AddEI(..)
         | AsmInstruction::AddEFFI(..)
         | AsmInstruction::SubE(..)
         | AsmInstruction::SubEI(..)
