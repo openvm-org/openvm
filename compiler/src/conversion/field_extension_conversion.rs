@@ -344,60 +344,6 @@ pub fn convert_field_extension_with_base<
                 ),
             ]
         }
-        AsmInstruction::SubEI(dst, lhs, rhs) => {
-            let a0 = dst;
-            let a1 = dst - word_size_i32;
-            let a2 = dst - 2 * word_size_i32;
-            let a3 = dst - 3 * word_size_i32;
-
-            let b0 = lhs;
-            let b1 = lhs - word_size_i32;
-            let b2 = lhs - 2 * word_size_i32;
-            let b3 = lhs - 3 * word_size_i32;
-
-            let slc = rhs.as_base_slice();
-            let c0 = slc[0];
-            let c1 = slc[1];
-            let c2 = slc[2];
-            let c3 = slc[3];
-
-            let instructions = vec![
-                inst(
-                    FSUB,
-                    register(a0),
-                    register(b0),
-                    c0,
-                    AS::Register,
-                    AS::Immediate,
-                ),
-                inst(
-                    FSUB,
-                    register(a1),
-                    register(b1),
-                    c1,
-                    AS::Register,
-                    AS::Immediate,
-                ),
-                inst(
-                    FSUB,
-                    register(a2),
-                    register(b2),
-                    c2,
-                    AS::Register,
-                    AS::Immediate,
-                ),
-                inst(
-                    FSUB,
-                    register(a3),
-                    register(b3),
-                    c3,
-                    AS::Register,
-                    AS::Immediate,
-                ),
-            ];
-
-            instructions
-        }
         AsmInstruction::SubEIN(dst, lhs, rhs) => {
             let a0 = dst;
             let a1 = dst - word_size_i32;
@@ -514,9 +460,7 @@ pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField64, EF: Exte
             AS::Register,
             AS::Register,
         )],
-        AsmInstruction::SubEI(_, _, _)
-        | AsmInstruction::SubEIN(_, _, _)
-        | AsmInstruction::MulEI(_, _, _) => {
+        AsmInstruction::SubEIN(_, _, _) | AsmInstruction::MulEI(_, _, _) => {
             convert_field_extension_with_base::<WORD_SIZE, F, EF>(instruction, utility_registers)
         }
         AsmInstruction::SubE(dst, lhs, rhs) => vec![inst(

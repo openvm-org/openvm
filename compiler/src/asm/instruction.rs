@@ -65,9 +65,6 @@ pub enum AsmInstruction<F, EF> {
     /// Subtract extension, dst = lhs - rhs.
     SubE(i32, i32, i32),
 
-    /// Subtract immediate extension, dst = lhs - rhs.
-    SubEI(i32, i32, EF),
-
     /// Subtract value from immediate extension, dst = lhs - rhs.
     SubEIN(i32, EF, i32),
 
@@ -936,9 +933,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::SubE(dst, lhs, rhs) => {
                 write!(f, "esub  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
-            }
-            AsmInstruction::SubEI(dst, lhs, rhs) => {
-                write!(f, "esubi ({})fp, ({})fp, {}", dst, lhs, rhs)
             }
             AsmInstruction::SubEIN(dst, lhs, rhs) => {
                 write!(f, "esubin ({})fp, {}, ({})fp", dst, lhs, rhs)

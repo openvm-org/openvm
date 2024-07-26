@@ -205,10 +205,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::SubE(dst.fp(), lhs.fp(), rhs.fp()), trace);
                 }
                 DslIr::SubEFI(dst, lhs, rhs) => {
-                    self.push(
-                        AsmInstruction::SubEI(dst.fp(), lhs.fp(), EF::from_base(rhs)),
-                        trace,
-                    );
+                    self.add_ext_felti(dst, lhs, rhs.neg(), trace);
                 }
                 DslIr::SubEIN(dst, lhs, rhs) => {
                     self.push(AsmInstruction::SubEIN(dst.fp(), lhs, rhs.fp()), trace);
@@ -217,7 +214,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::SubE(dst.fp(), lhs.fp(), rhs.fp()), trace);
                 }
                 DslIr::SubEI(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::SubEI(dst.fp(), lhs.fp(), rhs), trace);
+                    self.add_ext_exti(dst, lhs, rhs.neg(), trace);
                 }
                 DslIr::NegE(dst, src) => {
                     self.push(
