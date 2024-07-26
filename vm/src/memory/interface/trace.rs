@@ -17,7 +17,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryInterfaceChip<CHUNK, F> {
             let mut initial_values = [F::zero(); CHUNK];
             let mut initial_values_matter = [F::zero(); CHUNK];
             let mut final_values = [F::zero(); CHUNK];
-            let mut final_values_are_from_offline_checker = [F::zero(); CHUNK];
+            let mut final_values_directly_from_initial = [F::zero(); CHUNK];
             for i in 0..CHUNK {
                 let full_address = &(address_space, F::from_canonical_usize((CHUNK * label) + i));
                 final_values[i] = *final_memory.get(full_address).unwrap_or(&F::zero());
@@ -25,12 +25,12 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryInterfaceChip<CHUNK, F> {
                     Some(cell) => {
                         initial_values[i] = cell.initial_value;
                         initial_values_matter[i] = F::from_bool(cell.read_initially);
-                        final_values_are_from_offline_checker[i] = F::from_bool(true);
+                        final_values_directly_from_initial[i] = F::from_bool(false);
                     }
                     None => {
                         initial_values[i] = final_values[i];
                         initial_values_matter[i] = F::from_bool(true);
-                        final_values_are_from_offline_checker[i] = F::from_bool(false);
+                        final_values_directly_from_initial[i] = F::from_bool(true);
                     }
                 }
             }
@@ -46,7 +46,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryInterfaceChip<CHUNK, F> {
                 address_space,
                 leaf_label: F::from_canonical_usize(label),
                 values: final_values,
-                auxes: final_values_are_from_offline_checker,
+                auxes: final_values_directly_from_initial,
             };
             rows.extend(initial_cols.flatten());
             rows.extend(final_cols.flatten());

@@ -6,7 +6,8 @@ pub struct MemoryInterfaceCols<const CHUNK: usize, T> {
     pub address_space: T,
     pub leaf_label: T,
     pub values: [T; CHUNK],
-    // `auxes` represents: multiplicity when `expand_direction` = 1, is_final when `expand_direction` = -1
+    // when `expand_direction` = 1, `auxes[i]` indicates whether `values[i]` is read by offline checker
+    // when `expand_direction` = -1, `auxes[i]` indicates whether `values[i]` comes directly from initial
     pub auxes: [T; CHUNK],
 }
 
