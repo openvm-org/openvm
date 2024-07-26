@@ -234,11 +234,6 @@ pub fn convert_field_extension_with_base<
     instruction: AsmInstruction<F, EF>,
     utility_registers: [F; 8],
 ) -> Vec<Instruction<F>> {
-    let x0 = utility_registers[0];
-    let x1 = utility_registers[1];
-    let x2 = utility_registers[2];
-    let x3 = utility_registers[3];
-
     let word_size_i32: i32 = WORD_SIZE as i32;
 
     match instruction {
@@ -344,62 +339,6 @@ pub fn convert_field_extension_with_base<
                 ),
             ]
         }
-        AsmInstruction::SubEIN(dst, lhs, rhs) => {
-            let a0 = dst;
-            let a1 = dst - word_size_i32;
-            let a2 = dst - 2 * word_size_i32;
-            let a3 = dst - 3 * word_size_i32;
-
-            let slc = lhs.as_base_slice();
-            let b0 = slc[0];
-            let b1 = slc[1];
-            let b2 = slc[2];
-            let b3 = slc[3];
-
-            let c0 = rhs;
-            let c1 = rhs - word_size_i32;
-            let c2 = rhs - 2 * word_size_i32;
-            let c3 = rhs - 3 * word_size_i32;
-
-            vec![
-                inst(STOREW, b0, F::zero(), x0, AS::Immediate, AS::Register),
-                inst(STOREW, b1, F::zero(), x1, AS::Immediate, AS::Register),
-                inst(STOREW, b2, F::zero(), x2, AS::Immediate, AS::Register),
-                inst(STOREW, b3, F::zero(), x3, AS::Immediate, AS::Register),
-                inst(
-                    FSUB,
-                    register(a0),
-                    x0,
-                    register(c0),
-                    AS::Register,
-                    AS::Register,
-                ),
-                inst(
-                    FSUB,
-                    register(a1),
-                    x1,
-                    register(c1),
-                    AS::Register,
-                    AS::Register,
-                ),
-                inst(
-                    FSUB,
-                    register(a2),
-                    x2,
-                    register(c2),
-                    AS::Register,
-                    AS::Register,
-                ),
-                inst(
-                    FSUB,
-                    register(a3),
-                    x3,
-                    register(c3),
-                    AS::Register,
-                    AS::Register,
-                ),
-            ]
-        }
         AsmInstruction::MulE(dst, lhs, rhs) => {
             let rhs_register = [
                 register(rhs),
@@ -460,7 +399,7 @@ pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField64, EF: Exte
             AS::Register,
             AS::Register,
         )],
-        AsmInstruction::SubEIN(_, _, _) | AsmInstruction::MulEI(_, _, _) => {
+        AsmInstruction::MulEI(_, _, _) => {
             convert_field_extension_with_base::<WORD_SIZE, F, EF>(instruction, utility_registers)
         }
         AsmInstruction::SubE(dst, lhs, rhs) => vec![inst(

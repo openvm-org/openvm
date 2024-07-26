@@ -208,7 +208,8 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.add_ext_exti(dst, lhs, EF::from_base(rhs.neg()), trace);
                 }
                 DslIr::SubEIN(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::SubEIN(dst.fp(), lhs, rhs.fp()), trace);
+                    self.add_ext_exti(dst, rhs, lhs.neg(), trace.clone());
+                    self.mul_ext_felti(dst, dst, F::neg_one(), trace);
                 }
                 DslIr::SubE(dst, lhs, rhs) => {
                     self.push(AsmInstruction::SubE(dst.fp(), lhs.fp(), rhs.fp()), trace);
@@ -217,10 +218,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.add_ext_exti(dst, lhs, rhs.neg(), trace);
                 }
                 DslIr::NegE(dst, src) => {
-                    self.push(
-                        AsmInstruction::SubEIN(dst.fp(), EF::zero(), src.fp()),
-                        trace,
-                    );
+                    self.mul_ext_felti(dst, src, F::neg_one(), trace);
                 }
                 DslIr::MulV(dst, lhs, rhs) => {
                     self.push(AsmInstruction::MulF(dst.fp(), lhs.fp(), rhs.fp()), trace);
