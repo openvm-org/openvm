@@ -9,8 +9,8 @@ use afs_test_utils::config::baby_bear_blake3::run_simple_test_no_pis;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::create_seeded_rng;
 
+use crate::memory::interface::{EXPAND_BUS, MEMORY_INTERFACE_BUS, MemoryInterfaceChip};
 use crate::memory::interface::columns::MemoryInterfaceCols;
-use crate::memory::interface::{MemoryInterfaceChip, EXPAND_BUS, MEMORY_INTERFACE_BUS};
 use crate::memory::OpType::{Read, Write};
 
 const DEFAULT_CHUNK: usize = 8;
@@ -60,9 +60,9 @@ fn random_test<const CHUNK: usize>(
     let mut offline_checker_interaction =
         |is_final: bool, address_space: BabyBear, address: BabyBear, value: BabyBear| {
             dummy_offline_checker_trace_rows.push(if is_final {
-                BabyBear::one()
-            } else {
                 BabyBear::neg_one()
+            } else {
+                BabyBear::one()
             });
             dummy_offline_checker_trace_rows.extend(&[
                 BabyBear::from_bool(is_final),
@@ -176,7 +176,7 @@ fn random_test<const CHUNK: usize>(
         dummy_offline_checker_trace_rows,
         dummy_offline_checker_air.field_width() + 1,
     );
-    let dummy_expand_air = DummyInteractionAir::new(4 + CHUNK, true, EXPAND_BUS);
+    let dummy_expand_air = DummyInteractionAir::new(4 + CHUNK, false, EXPAND_BUS);
 
     while !(dummy_expand_trace_rows.len() / (dummy_expand_air.field_width() + 1)).is_power_of_two()
     {

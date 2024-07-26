@@ -2,9 +2,9 @@ use p3_field::{AbstractField, Field};
 
 use afs_stark_backend::interaction::InteractionBuilder;
 
+use crate::memory::interface::{EXPAND_BUS, MEMORY_INTERFACE_BUS};
 use crate::memory::interface::air::MemoryInterfaceAir;
 use crate::memory::interface::columns::MemoryInterfaceCols;
-use crate::memory::interface::{EXPAND_BUS, MEMORY_INTERFACE_BUS};
 
 impl<const CHUNK: usize> MemoryInterfaceAir<CHUNK> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -21,7 +21,7 @@ impl<const CHUNK: usize> MemoryInterfaceAir<CHUNK> {
             local.leaf_label.into(),
         ];
         expand_fields.extend(local.values.map(AB::Var::into));
-        builder.push_receive(EXPAND_BUS, expand_fields, local.expand_direction.into());
+        builder.push_send(EXPAND_BUS, expand_fields, local.expand_direction.into());
 
         for i in 0..CHUNK {
             // when `expand_direction` is -1, `is_final` should be `auxes[i]`
@@ -38,7 +38,7 @@ impl<const CHUNK: usize> MemoryInterfaceAir<CHUNK> {
                         * AB::F::two().inverse()
                         * (AB::Expr::one() - local.auxes[i])));
 
-            builder.push_send(
+            builder.push_receive(
                 MEMORY_INTERFACE_BUS,
                 [
                     is_final,
