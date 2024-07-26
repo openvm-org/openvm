@@ -31,19 +31,15 @@ impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {
             );
         }
         while rows.len() != trace_degree * ExpandCols::<CHUNK, F>::get_width() {
-            rows.extend(unused_row(hasher).flatten());
+            rows.extend(unused_row::<CHUNK, F>().flatten());
         }
         let trace = RowMajorMatrix::new(rows, ExpandCols::<CHUNK, F>::get_width());
         (trace, final_trees)
     }
 }
 
-fn unused_row<const CHUNK: usize, F: PrimeField32>(
-    hasher: &mut impl Hasher<CHUNK, F>,
-) -> ExpandCols<CHUNK, F> {
-    let mut result = ExpandCols::from_slice(&vec![F::zero(); ExpandCols::<CHUNK, F>::get_width()]);
-    result.parent_hash = hasher.hash([F::zero(); CHUNK], [F::zero(); CHUNK]);
-    result
+fn unused_row<const CHUNK: usize, F: PrimeField32>() -> ExpandCols<CHUNK, F> {
+    ExpandCols::from_slice(&vec![F::zero(); ExpandCols::<CHUNK, F>::get_width()])
 }
 
 struct TreeHelper<'a, const CHUNK: usize, F: PrimeField32> {

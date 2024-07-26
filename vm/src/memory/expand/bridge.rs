@@ -58,6 +58,10 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
             .chain(local.right_child_hash)
             .chain(local.parent_hash);
         // TODO: do not hardcode the hash bus
-        builder.push_send(POSEIDON2_DIRECT_REQUEST_BUS, hash_fields, AB::F::one());
+        builder.push_send(
+            POSEIDON2_DIRECT_REQUEST_BUS,
+            hash_fields,
+            local.expand_direction * local.expand_direction,
+        );
     }
 }
