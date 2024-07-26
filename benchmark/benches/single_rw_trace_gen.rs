@@ -30,29 +30,13 @@ pub fn trace_gen_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("trace gen");
     group.sample_size(10);
 
-    group.bench_function("trace gen", |b| {
-        b.iter(|| {
-            generate_trace(
-                black_box(16),
-                black_box(512),
-                black_box(15),
-                black_box(15),
-                black_box(16),
-                black_box(16),
-            )
-        })
-    });
-    group.finish();
-}
+    let idx_len = 16;
+    let data_len = 512;
+    let log_page_height = 15;
+    let log_num_ops = 16;
+    let idx_limb_bits = 16;
+    let idx_decomp = 16;
 
-pub fn generate_trace(
-    idx_len: usize,
-    data_len: usize,
-    log_page_height: usize,
-    log_num_ops: usize,
-    idx_limb_bits: usize,
-    idx_decomp: usize,
-) {
     let page_bus_index = 0;
     let range_bus_index = 1;
     let ops_bus_index = 2;
@@ -64,23 +48,17 @@ pub fn generate_trace(
     let oc_trace_degree = num_ops * 4;
     let max_idx = 1 << idx_limb_bits;
 
-    let (page, ops) = generate_page_and_ops(
-        black_box(idx_len),
-        black_box(data_len),
-        black_box(page_height),
-        black_box(num_ops),
-        black_box(max_idx),
-        black_box(MAX_VAL),
-    );
+    let (page, ops) =
+        generate_page_and_ops(idx_len, data_len, page_height, num_ops, max_idx, MAX_VAL);
 
     let mut page_controller: PageController<BabyBearPoseidon2Config> = PageController::new(
-        black_box(page_bus_index),
-        black_box(range_bus_index),
-        black_box(ops_bus_index),
-        black_box(idx_len),
-        black_box(data_len),
-        black_box(idx_limb_bits),
-        black_box(idx_decomp),
+        page_bus_index,
+        range_bus_index,
+        ops_bus_index,
+        idx_len,
+        data_len,
+        idx_limb_bits,
+        idx_decomp,
     );
     let ops_sender = DummyInteractionAir::new(idx_len + data_len + 2, true, ops_bus_index);
 
@@ -95,16 +73,22 @@ pub fn generate_trace(
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
     let dummy_ptd = get_dummy_ptd(&mut trace_builder.committer);
-    page_controller.load_page_and_ops(
-        black_box(&page),
-        black_box(Some(Arc::new(dummy_ptd.clone()))),
-        black_box(Some(Arc::new(dummy_ptd))),
-        black_box(&ops),
-        black_box(oc_trace_degree),
-        black_box(&mut trace_builder.committer),
-    );
 
-    gen_ops_sender_trace(black_box(&ops_sender), black_box(&ops));
+    group.bench_function("trace gen", |b| {
+        b.iter(|| {
+            page_controller.load_page_and_ops(
+                black_box(&page),
+                black_box(Some(Arc::new(dummy_ptd.clone()))),
+                black_box(Some(Arc::new(dummy_ptd.clone()))),
+                black_box(&ops),
+                black_box(oc_trace_degree),
+                black_box(&mut trace_builder.committer),
+            );
+
+            gen_ops_sender_trace(black_box(&ops_sender), black_box(&ops));
+        })
+    });
+    group.finish();
 }
 
 fn generate_page_and_ops(
@@ -119,13 +103,13 @@ fn generate_page_and_ops(
 
     // Generating a random page with distinct indices
     let initial_page = Page::random(
-        black_box(&mut rng),
-        black_box(idx_len),
-        black_box(data_len),
-        black_box(max_idx),
-        black_box(max_data),
-        black_box(page_height),
-        black_box(page_height),
+        &mut rng,
+        idx_len,
+        data_len,
+        max_idx,
+        max_data,
+        page_height,
+        page_height,
     );
 
     // We will generate the final page from the initial page below
@@ -152,7 +136,7 @@ fn generate_page_and_ops(
             }
         };
 
-        let mut idx = final_page.get_random_idx(black_box(&mut rng));
+        let mut idx = final_page.get_random_idx(&mut rng);
 
         // if this is a write operation, make it an insert sometimes
         if op_type == OpType::Write && rng.gen::<u32>() % 2 == 0 && !final_page.is_full() {
@@ -173,7 +157,7 @@ fn generate_page_and_ops(
             if final_page.contains(&idx) {
                 final_page[black_box(&idx)].clone_from(&data);
             } else {
-                final_page.insert(black_box(&idx), black_box(&data));
+                final_page.insert(&idx, &data);
             }
         } else if op_type == OpType::Delete {
             final_page.delete(black_box(&idx));
