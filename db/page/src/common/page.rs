@@ -37,15 +37,8 @@ impl Page {
         }
     }
 
-    pub fn from_2d_vec_consume(page: &mut Vec<Vec<u32>>, idx_len: usize, data_len: usize) -> Self {
-        let mut rows = vec![];
-        let height = page.len();
-        for _ in 0..height {
-            let row = PageCols::from_slice(&page.pop().unwrap(), idx_len, data_len);
-            rows.push(row);
-        }
-        rows.reverse();
-        Self { rows }
+    pub fn from_2d_vec_consume(page: Vec<Vec<u32>>, idx_len: usize, data_len: usize) -> Self {
+        Self::from_2d_vec(&page, idx_len, data_len)
     }
 
     pub fn from_trace<F: PrimeField>(

@@ -63,7 +63,13 @@ pub fn extract_timing_data_from_log(
                             let time_busy =
                                 line[time_busy_start..time_busy_start + end].to_string();
                             let time_busy_string = convert_to_ms_string(&time_busy).unwrap();
-                            results.insert(val.to_string(), time_busy_string);
+                            if let Some(s) = results.get(val) {
+                                let cum_time = convert_string_to_ms(s)?;
+                                let time_busy = convert_string_to_ms(&time_busy_string)?;
+                                results.insert(val.to_string(), (cum_time + time_busy).to_string());
+                            } else {
+                                results.insert(val.to_string(), time_busy_string);
+                            }
                         }
                     }
                 }
@@ -112,4 +118,8 @@ fn convert_to_ms_string(time_string: &str) -> Result<String> {
     };
     let time_in_ms = time_value.parse::<f64>()? * time_unit_float;
     Ok(format!("{:.2}", time_in_ms))
+}
+
+fn convert_string_to_ms(time_string: &str) -> Result<f64> {
+    Ok(time_string.parse::<f64>()?)
 }

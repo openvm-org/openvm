@@ -42,7 +42,7 @@ pub struct MultitierRwCommand {
     // pub percent_reads: usize,
     #[arg(
         long = "start-config",
-        short = 's',
+        short = 'i',
         help = "Choose to start a certain config",
         default_value = "0",
         required = true
@@ -198,12 +198,12 @@ impl MultitierRwCommand {
             init_tree.commit(&trace_builder.committer, DB_FOLDER.to_string());
         }
         // Run keygen
-        let keygen_span = info_span!("ReadWrite keygen").entered();
+        let keygen_span = info_span!("Benchmark keygen").entered();
         KeygenCommand::execute(config, engine, KEY_FOLDER.to_string())?;
         keygen_span.exit();
 
         // Run prove
-        let prove_span = info_span!("ReadWrite prove").entered();
+        let prove_span = info_span!("Benchmark prove").entered();
         ProveCommand::execute(
             config,
             engine,
@@ -215,7 +215,7 @@ impl MultitierRwCommand {
         prove_span.exit();
 
         // Run verify
-        let verify_span = info_span!("ReadWrite verify").entered();
+        let verify_span = info_span!("Benchmark verify").entered();
         VerifyCommand::execute(
             config,
             engine,

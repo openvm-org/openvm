@@ -258,22 +258,21 @@ where
     keygen_builder.add_air(&ops_sender, 0);
 
     let pk = keygen_builder.generate_pk();
-    let (mut init_pages, init_root_is_leaf, mut final_pages, final_root_is_leaf, ops) =
-        generate_inputs(
-            idx_len,
-            data_len,
-            page_height,
-            limb_bits,
-            num_ops,
-            &mut trace_builder.committer,
-        );
+    let (init_pages, init_root_is_leaf, final_pages, final_root_is_leaf, ops) = generate_inputs(
+        idx_len,
+        data_len,
+        page_height,
+        limb_bits,
+        num_ops,
+        &mut trace_builder.committer,
+    );
     let res = load_page_test(
         &engine,
-        &mut init_pages.leaf_pages,
+        init_pages.leaf_pages,
         init_pages.internal_pages,
         init_root_is_leaf,
         0,
-        &mut final_pages.leaf_pages,
+        final_pages.leaf_pages,
         final_pages.internal_pages,
         final_root_is_leaf,
         0,
@@ -294,11 +293,11 @@ where
 #[allow(clippy::too_many_arguments)]
 fn load_page_test(
     engine: &BabyBearPoseidon2Engine,
-    init_leaf_pages: &mut [Vec<Vec<u32>>],
+    init_leaf_pages: Vec<Vec<Vec<u32>>>,
     init_internal_pages: Vec<Vec<Vec<u32>>>,
     init_root_is_leaf: bool,
     init_root_idx: usize,
-    final_leaf_pages: &mut [Vec<Vec<u32>>],
+    final_leaf_pages: Vec<Vec<Vec<u32>>>,
     final_internal_pages: Vec<Vec<Vec<u32>>>,
     final_root_is_leaf: bool,
     final_root_idx: usize,

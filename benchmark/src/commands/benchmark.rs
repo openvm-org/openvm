@@ -11,8 +11,8 @@ use crate::{
     },
     utils::{
         output_writer::{
-            default_output_filename, save_afi_to_new_db, write_csv_header, write_csv_line,
-            write_multitier_csv_line,
+            default_output_filename, multitier_page_config_to_row, page_config_to_row,
+            save_afi_to_new_db, write_csv_header, write_csv_line,
         },
         tracing::{clear_tracing_log, extract_event_data_from_log, extract_timing_data_from_log},
     },
@@ -136,14 +136,8 @@ pub fn benchmark_execute(
         let mut log_data: HashMap<String, String> = event_data;
         log_data.extend(timing_data);
 
-        write_csv_line(
-            output_file.clone(),
-            benchmark_name.clone(),
-            scenario.clone(),
-            config,
-            &benchmark_data,
-            &log_data,
-        )?;
+        let init_row = page_config_to_row(benchmark_name.clone(), scenario.clone(), config);
+        write_csv_line(output_file.clone(), init_row, &benchmark_data, &log_data)?;
     }
 
     println!("Benchmark [{}: {}] completed.", benchmark_name, scenario);
@@ -247,14 +241,9 @@ pub fn benchmark_multitier_execute(
 
         let mut log_data: HashMap<String, String> = event_data;
         log_data.extend(timing_data);
-
-        write_multitier_csv_line(
-            output_file.clone(),
-            benchmark_name.clone(),
-            scenario.clone(),
-            config,
-            &log_data,
-        )?;
+        let init_row =
+            multitier_page_config_to_row(benchmark_name.clone(), scenario.clone(), config);
+        write_csv_line(output_file.clone(), init_row, &benchmark_data, &log_data)?;
     }
 
     println!("Benchmark [{}: {}] completed.", benchmark_name, scenario);

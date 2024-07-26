@@ -234,8 +234,8 @@ impl ProveCommand {
         info_span!("Page BTree Commit to Disk")
             .in_scope(|| db.commit(&trace_builder.committer, db_folder.clone()));
         let page_btree_load_span = info_span!("Page BTree Load Traces and Prover Data").entered();
-        let mut init_pages = db.gen_loaded_trace();
-        let mut final_pages = db.gen_all_trace(&trace_builder.committer, None);
+        let init_pages = db.gen_loaded_trace();
+        let final_pages = db.gen_all_trace(&trace_builder.committer, None);
         let init_root_is_leaf = init_pages.internal_pages.is_empty();
         let final_root_is_leaf = final_pages.internal_pages.is_empty();
 
@@ -322,11 +322,11 @@ impl ProveCommand {
         println!("Start Load Pages");
         let (mut data_trace, mut main_trace, commits, mut prover_data) = page_controller
             .load_page_and_ops(
-                &mut init_pages.leaf_pages,
+                init_pages.leaf_pages,
                 init_pages.internal_pages,
                 init_root_is_leaf,
                 0,
-                &mut final_pages.leaf_pages,
+                final_pages.leaf_pages,
                 final_pages.internal_pages,
                 final_root_is_leaf,
                 0,
@@ -377,10 +377,6 @@ impl ProveCommand {
                 data_trace.final_internal_chip_traces.remove(0),
                 prover_data.final_internal_page.remove(0),
             );
-        }
-
-        for _ in 0..page_controller.init_leaf_chips.len() {
-            trace_builder.load_trace(main_trace.init_leaf_chip_main_traces.remove(0));
         }
 
         for _ in 0..page_controller.init_internal_chips.len() {

@@ -147,9 +147,9 @@ impl KeygenCommand {
         let prover = MultiTraceStarkProver::new(engine.config());
         let trace_builder = TraceCommitmentBuilder::<SC>::new(prover.pcs());
 
-        let mut blank_leaf = vec![vec![0; 1 + idx_len + data_len]; leaf_height];
+        let blank_leaf = vec![vec![0; 1 + idx_len + data_len]; leaf_height];
 
-        let blank_leaf = Page::from_2d_vec_consume(&mut blank_leaf, idx_len, data_len);
+        let blank_leaf = Page::from_2d_vec_consume(blank_leaf, idx_len, data_len);
 
         let mut blank_internal_row = vec![2];
         blank_internal_row.resize(2 + 2 * idx_len + BABYBEAR_COMMITMENT_LEN, 0);
@@ -180,7 +180,6 @@ impl KeygenCommand {
         .unwrap();
 
         let mut init_leaf_data_ptrs = vec![];
-        let mut init_leaf_main_ptrs = vec![];
 
         let mut init_internal_data_ptrs = vec![];
         let mut init_internal_main_ptrs = vec![];
@@ -210,12 +209,6 @@ impl KeygenCommand {
             final_internal_data_ptrs.push(
                 keygen_builder.add_cached_main_matrix(2 + 2 * idx_len + BABYBEAR_COMMITMENT_LEN),
             );
-        }
-
-        for _ in 0..tree_params.init_leaf_cap {
-            init_leaf_main_ptrs.push(keygen_builder.add_main_matrix(
-                page_controller.init_leaf_chips[0].air_width() - 1 - idx_len - data_len,
-            ));
         }
 
         for _ in 0..tree_params.init_internal_cap {
@@ -249,12 +242,12 @@ impl KeygenCommand {
         let final_root_ptr =
             keygen_builder.add_main_matrix(page_controller.final_root_signal.air_width());
 
-        for i in 0..tree_params.init_leaf_cap {
-            keygen_builder.add_partitioned_air(
-                &page_controller.init_leaf_chips[i],
-                BABYBEAR_COMMITMENT_LEN,
-                vec![init_leaf_data_ptrs[i], init_leaf_main_ptrs[i]],
-            );
+        for (chip, ptr) in page_controller
+            .init_leaf_chips
+            .iter()
+            .zip(init_leaf_data_ptrs.into_iter())
+        {
+            keygen_builder.add_partitioned_air(chip, BABYBEAR_COMMITMENT_LEN, vec![ptr]);
         }
 
         for i in 0..tree_params.init_internal_cap {
@@ -299,15 +292,16 @@ impl KeygenCommand {
 
         keygen_builder.add_air(&ops_sender, 0);
 
-        let partial_pk = keygen_builder.generate_pk();
-        let partial_vk = partial_pk.vk();
+        let pk = keygen_builder.generate_pk();
+
+        let vk = pk.vk();
         let (total_preprocessed, total_partitioned_main, total_after_challenge) =
-            partial_vk.total_air_width();
+            vk.total_air_width();
         let air_width = total_preprocessed + total_partitioned_main + total_after_challenge;
         info!("Keygen: total air width: {}", air_width);
         println!("Keygen: total air width: {}", air_width);
-        let encoded_pk: Vec<u8> = bincode::serialize(&partial_pk)?;
-        let encoded_vk: Vec<u8> = bincode::serialize(&partial_vk)?;
+        let encoded_pk: Vec<u8> = bincode::serialize(&pk)?;
+        let encoded_vk: Vec<u8> = bincode::serialize(&vk)?;
         let pk_path = output_folder.clone() + "/" + &prefix.clone() + ".partial.pk";
         let vk_path = output_folder.clone() + "/" + &prefix.clone() + ".partial.vk";
         write_bytes(&encoded_pk, pk_path).unwrap();

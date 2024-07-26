@@ -1,6 +1,6 @@
 use afs_stark_backend::config::Com;
 use p3_field::{AbstractField, PrimeField64};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use p3_uni_stark::{StarkGenericConfig, Val};
 
@@ -34,6 +34,7 @@ where
     pub fn dfs(
         leaf_pages: &[Page],
         internal_pages: &[Vec<Vec<u32>>],
+        internal_indices: &HashSet<Vec<u32>>,
         leaf_ranges: &mut Vec<(Vec<u32>, Vec<u32>)>,
         internal_ranges: &mut Vec<(Vec<u32>, Vec<u32>)>,
         commitment_to_node: &BTreeMap<Vec<Val<SC>>, Node>,
@@ -75,6 +76,7 @@ where
                             let m = PageTreeGraph::<SC, COMMITMENT_LEN>::dfs(
                                 leaf_pages,
                                 internal_pages,
+                                internal_indices,
                                 leaf_ranges,
                                 internal_ranges,
                                 commitment_to_node,
@@ -97,7 +99,7 @@ where
         } else {
             let mut ans = 0;
             for row in &leaf_pages[cur_node.1].rows {
-                if row.is_alloc == 1 {
+                if row.is_alloc == 1 && internal_indices.contains(&row.idx) {
                     mega_page.rows.push(row.clone());
                     ans += 1;
                 }
@@ -106,9 +108,11 @@ where
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         leaf_pages: &[Page],
         internal_pages: &[Vec<Vec<u32>>],
+        internal_indices: &HashSet<Vec<u32>>,
         leaf_commits: &[Com<SC>],
         internal_commits: &[Com<SC>],
         root: (bool, usize),
@@ -185,6 +189,7 @@ where
         let root_mult = PageTreeGraph::<SC, COMMITMENT_LEN>::dfs(
             leaf_pages,
             internal_pages,
+            internal_indices,
             &mut leaf_ranges,
             &mut internal_ranges,
             &commitment_to_node,

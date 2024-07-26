@@ -99,16 +99,16 @@ pub fn generate_multitier_configs() -> Vec<MultitierPageConfig> {
         .into_iter()
         .flatten()
         .collect::<Vec<FriParameters>>();
-    // let idx_bytes_vec = vec![16, 32];
-    // let data_bytes_vec = vec![16, 32];
-    let idx_bytes_vec = vec![32];
-    let data_bytes_vec = vec![32];
+    let idx_bytes_vec = vec![16, 32];
+    let data_bytes_vec = vec![16, 32];
+    // let idx_bytes_vec = vec![32];
+    // let data_bytes_vec = vec![32];
 
     // Currently we have the max_rw_ops use the height vec to reduce the number of permutations
     let height_vec = vec![(1_048_576, 1_024), (262_144, 4_096), (32, 32)];
     // let height_vec = vec![(1_048_576, 1_024)];
-    // let num_ops = vec![1, 8];
-    let num_ops = vec![8];
+    let num_ops = vec![1, 8];
+    // let num_ops = vec![8];
     // let height_vec = vec![16, 64]; // Run a mini-benchmark for testing
 
     let engine_vec = vec![
