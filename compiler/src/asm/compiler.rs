@@ -241,13 +241,10 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::MulEI(dst.fp(), lhs.fp(), rhs), trace);
                 }
                 DslIr::MulEF(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::MulE(dst.fp(), lhs.fp(), rhs.fp()), trace);
+                    self.mul_ext_felt(dst, lhs, rhs, trace);
                 }
                 DslIr::MulEFI(dst, lhs, rhs) => {
-                    self.push(
-                        AsmInstruction::MulEI(dst.fp(), lhs.fp(), EF::from_base(rhs)),
-                        trace,
-                    );
+                    self.mul_ext_felti(dst, lhs, rhs, trace);
                 }
                 DslIr::IfEq(lhs, rhs, then_block, else_block) => {
                     let if_compiler = IfCompiler {
@@ -857,17 +854,49 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
     }
 
     fn add_felt_exti(&mut self, dst: Ext<F, EF>, lhs: Felt<F>, rhs: EF, trace: Option<Backtrace>) {
-        let base_slice = rhs.as_base_slice();
+        let rhs = rhs.as_base_slice();
 
         self.push(
-            AsmInstruction::AddFI(dst.fp(), lhs.fp(), base_slice[0]),
+            AsmInstruction::AddFI(dst.fp(), lhs.fp(), rhs[0]),
             trace.clone(),
         );
 
-        for i in 1..(EF::D) {
+        for i in 1..EF::D {
             let j = -((i * self.word_size) as i32);
             self.push(
-                AsmInstruction::AddFI(dst.fp() + j, ZERO, base_slice[i]),
+                AsmInstruction::AddFI(dst.fp() + j, ZERO, rhs[i]),
+                trace.clone(),
+            );
+        }
+    }
+
+    fn mul_ext_felt(
+        &mut self,
+        dst: Ext<F, EF>,
+        lhs: Ext<F, EF>,
+        rhs: Felt<F>,
+        trace: Option<Backtrace>,
+    ) {
+        for i in 0..EF::D {
+            let j = -((i * self.word_size) as i32);
+            self.push(
+                AsmInstruction::MulF(dst.fp() + j, lhs.fp() + j, rhs.fp()),
+                trace.clone(),
+            );
+        }
+    }
+
+    fn mul_ext_felti(
+        &mut self,
+        dst: Ext<F, EF>,
+        lhs: Ext<F, EF>,
+        rhs: F,
+        trace: Option<Backtrace>,
+    ) {
+        for i in 0..EF::D {
+            let j = -((i * self.word_size) as i32);
+            self.push(
+                AsmInstruction::MulFI(dst.fp() + j, lhs.fp() + j, rhs),
                 trace.clone(),
             );
         }
