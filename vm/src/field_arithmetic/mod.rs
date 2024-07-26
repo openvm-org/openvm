@@ -69,6 +69,7 @@ pub struct FieldArithmeticChip<F: Field> {
 }
 
 impl<F: Field> FieldArithmeticChip<F> {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             air: FieldArithmeticAir {},

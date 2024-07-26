@@ -107,6 +107,7 @@ pub struct FieldExtensionArithmeticChip<const WORD_SIZE: usize, F: PrimeField32>
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_SIZE, F> {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             air: FieldExtensionArithmeticAir {},
