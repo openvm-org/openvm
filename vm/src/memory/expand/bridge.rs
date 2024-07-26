@@ -28,7 +28,7 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
             ]
             .into_iter()
             .chain(local.parent_hash.into_iter().map(Into::into)),
-            -local.direction.into(),
+            local.direction.into(),
         );
 
         builder.push_receive(
@@ -41,7 +41,7 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
             ]
             .into_iter()
             .chain(local.left_child_hash.into_iter().map(Into::into)),
-            -local.direction.into(),
+            local.direction.into(),
         );
 
         builder.push_receive(
@@ -54,7 +54,7 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
             ]
             .into_iter()
             .chain(local.right_child_hash.into_iter().map(Into::into)),
-            -local.direction.into(),
+            local.direction.into(),
         );
 
         let hash_fields = iter::empty()
