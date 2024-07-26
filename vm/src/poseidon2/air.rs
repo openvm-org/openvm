@@ -45,11 +45,17 @@ impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2VmAir<WIDT
         // can only be comparing if row is allocated
         builder.assert_eq(cols.io.is_opcode * cols.io.cmp, cols.io.cmp);
         // immediates
-        for (i, operand) in [cols.io.a, cols.io.b, cols.io.c].into_iter().enumerate() {
-            builder
-                .when(cols.aux.d_is_zero)
-                .assert_eq(cols.aux.addresses[i], operand);
-        }
+
+        builder
+            .when(cols.aux.d_is_zero)
+            .assert_eq(cols.aux.dst, cols.io.a);
+        builder
+            .when(cols.aux.d_is_zero)
+            .assert_eq(cols.aux.lhs, cols.io.b);
+        builder
+            .when(cols.aux.d_is_zero)
+            .assert_eq(cols.aux.rhs, cols.io.c);
+
         // d is zero SubAir
         SubAir::eval(
             &IsZeroAir {},

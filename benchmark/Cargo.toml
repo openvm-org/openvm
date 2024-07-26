@@ -35,6 +35,15 @@ chrono = "0.4.38"
 itertools = "0.13.0"
 regex = "1.10.5"
 stark-vm = { path = "../vm", default-features = false }
+p3-maybe-rayon = { workspace = true }
+
+[dev-dependencies]
+criterion = "0.5.1"
+pprof = { version = "0.13", features = ["criterion", "flamegraph"] }
+
+[[bench]]
+name = "single_rw_trace_gen"
+harness = false
 
 [features]
 default = ["afs-stark-backend/mimalloc"]

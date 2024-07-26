@@ -198,7 +198,7 @@ where
             &page_init,
             Some(Arc::new(init_prover_data)),
             None,
-            zk_ops.clone(),
+            &zk_ops,
             checker_trace_degree,
             &mut trace_builder.committer,
         );

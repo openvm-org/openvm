@@ -6,7 +6,7 @@ use super::PageReadAir;
 
 impl PageReadAir {
     /// Sends page rows (idx, data) for every allocated row on page_bus
-    /// Some of this is received by OfflineChecker and some by MyFinalPageChip
+    /// Some of this is received by OfflineChecker and some by IndexedPageWriteAir
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,

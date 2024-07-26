@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
@@ -8,6 +8,8 @@ use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 use poseidon2_air::poseidon2::Poseidon2Config;
+
+pub mod cycle_tracker;
 
 pub enum Void {}
 
@@ -126,6 +128,32 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             checker_trace_degree = std::cmp::max(checker_trace_degree, trace.height());
         }
         Ok(log2_strict_usize(checker_trace_degree))
+    }
+
+    pub fn metrics(&mut self) -> BTreeMap<String, usize> {
+        let mut metrics = BTreeMap::new();
+        metrics.insert(
+            "memory_chip_accesses".to_string(),
+            self.memory_chip.accesses.len(),
+        );
+        metrics.insert(
+            "field_arithmetic_ops".to_string(),
+            self.field_arithmetic_chip.operations.len(),
+        );
+        metrics.insert(
+            "field_extension_ops".to_string(),
+            self.field_extension_chip.operations.len(),
+        );
+        metrics.insert(
+            "range_checker_count".to_string(),
+            self.range_checker.count.len(),
+        );
+        metrics.insert(
+            "poseidon2_chip_rows".to_string(),
+            self.poseidon2_chip.rows.len(),
+        );
+        metrics.insert("input_stream_len".to_string(), self.input_stream.len());
+        metrics
     }
 }
 

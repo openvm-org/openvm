@@ -8,7 +8,7 @@ use p3_field::AbstractField;
 use p3_matrix::Matrix;
 
 use crate::{
-    interaction::InteractionType,
+    interaction::{utils::generate_betas, InteractionType},
     rap::{PermutationAirBuilderWithExposedValues, Rap},
 };
 
@@ -64,18 +64,20 @@ where
     let phi_next = perm_next[num_interactions];
 
     let alphas = generate_rlc_elements(rand_elems[0].into(), &all_interactions);
-    let betas = rand_elems[1].into().powers();
+    let betas = generate_betas(rand_elems[1].into(), &all_interactions);
 
     let lhs = phi_next.into() - phi_local.into();
     let mut rhs = AB::ExprEF::zero();
     let mut phi_0 = AB::ExprEF::zero();
     for (i, (interaction, mult_next)) in all_interactions.into_iter().zip(mults_next).enumerate() {
         // Reciprocal constraints
-        let mut rlc = AB::ExprEF::zero();
-        for (elem, beta) in interaction.fields.into_iter().zip(betas.clone()) {
-            rlc += beta * elem;
+        debug_assert!(interaction.fields.len() <= betas.len());
+        let mut fields = interaction.fields.into_iter();
+        let mut rlc = alphas[interaction.bus_index].clone()
+            + fields.next().expect("fields should not be empty");
+        for (elem, beta) in fields.zip(betas.iter().skip(1)) {
+            rlc += beta.clone() * elem;
         }
-        rlc += alphas[interaction.bus_index].clone();
         builder.assert_one_ext(rlc * perm_local[i].into());
 
         let mult_local = interaction.count;

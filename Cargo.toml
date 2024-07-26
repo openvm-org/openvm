@@ -25,15 +25,26 @@ edition = "2021"
 # Fastest runtime configuration
 [profile.release]
 opt-level = 3
-debug = false
-debug-assertions = false
+lto = "thin"
+debug = "line-tables-only"
+strip = true
+panic = "unwind"
+codegen-units = 16
+
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = false
+
+# Make sure debug symbols are in the bench profile for flamegraphs
+[profile.bench]
+inherits = "profiling"
+
+# This will compile slowly
+[profile.maxperf]
+inherits = "release"
 lto = "fat"
 codegen-units = 1
-panic = "abort"
-incremental = false
-
-[profile.bench]
-inherits = "release"
 
 # For O3 optimization but still fast(ish) compile times
 [profile.fast]

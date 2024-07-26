@@ -123,7 +123,7 @@ where
             }
         }
 
-        builder.cycle_tracker("stage-c-build-rounds");
+        builder.cycle_tracker_start("stage-c-build-rounds");
 
         for i in 0..num_airs {
             if let Some(preprocessed_data) = vk.per_air[i].preprocessed_data.as_ref() {
@@ -384,15 +384,15 @@ where
         // Sanity check: the number of rounds matches.
         assert_eq!(round_idx, total_rounds);
 
-        builder.cycle_tracker("stage-c-build-rounds");
+        builder.cycle_tracker_end("stage-c-build-rounds");
 
         // Verify the pcs proof
-        builder.cycle_tracker("stage-d-verify-pcs");
+        builder.cycle_tracker_start("stage-d-verify-pcs");
         pcs.verify(builder, rounds, proof.opening.proof.clone(), challenger);
-        builder.cycle_tracker("stage-d-verify-pcs");
+        builder.cycle_tracker_end("stage-d-verify-pcs");
 
         // TODO[sp1] CONSTRAIN: that the preprocessed chips get called with verify_constraints.
-        builder.cycle_tracker("stage-e-verify-constraints");
+        builder.cycle_tracker_start("stage-e-verify-constraints");
 
         // TODO[zach]: make per phase; for now just 1 phase so OK
         let after_challenge_idx: Var<C::N> = builder.constant(C::N::zero());
@@ -478,7 +478,7 @@ where
             );
         }
 
-        builder.cycle_tracker("stage-e-verify-constraints");
+        builder.cycle_tracker_end("stage-e-verify-constraints");
         // TODO[jpw] cumulative sum check
     }
 
