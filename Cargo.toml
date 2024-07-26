@@ -27,7 +27,7 @@ edition = "2021"
 # Fastest runtime configuration
 [profile.release]
 opt-level = 3
-debug = true
+debug = false
 debug-assertions = false
 lto = "fat"
 codegen-units = 1
@@ -35,6 +35,7 @@ panic = "abort"
 incremental = false
 
 [profile.bench]
+debug = true
 inherits = "release"
 
 # For O3 optimization but still fast(ish) compile times
