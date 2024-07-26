@@ -33,8 +33,8 @@ pub fn trace_gen_benchmark(c: &mut Criterion) {
     group.bench_function("trace gen", |b| {
         b.iter(|| {
             generate_trace(
-                black_box(32),
-                black_box(32),
+                black_box(16),
+                black_box(512),
                 black_box(15),
                 black_box(15),
                 black_box(16),
