@@ -317,8 +317,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             };
 
             let cols = CpuCols { io, aux };
-            let mut row = vec![F::zero(); CpuCols::<WORD_SIZE, F>::get_width(vm.options())];
-            let _ = cols.flatten(&mut row, 0, vm.options());
+            let row = cols.flatten(vm.options());
             rows.extend(row);
 
             pc = next_pc;

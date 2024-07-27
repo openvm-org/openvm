@@ -37,11 +37,15 @@ impl<T: Clone> IsEqualVecAuxCols<T> {
         Self { prods, invs }
     }
 
-    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
-        buf[start..start + self.prods.len()].clone_from_slice(&self.prods);
-        buf[start + self.prods.len()..start + self.prods.len() + self.invs.len()]
-            .clone_from_slice(&self.invs);
-        self.prods.len() + self.invs.len()
+    pub fn to_buf(self, buf: &mut Vec<T>) {
+        buf.extend(self.prods);
+        buf.extend(self.invs);
+    }
+
+    pub fn flatten(self, vec_len: usize) -> Vec<T> {
+        let mut buf = Vec::with_capacity(Self::width(vec_len));
+        self.to_buf(&mut buf);
+        buf
     }
 
     pub fn from_slice(slc: &[T], vec_len: usize) -> Self {

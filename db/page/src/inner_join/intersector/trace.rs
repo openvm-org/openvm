@@ -63,8 +63,7 @@ impl IntersectorAir {
             );
 
             prv_idx.clone_from(&idx);
-            let mut row = vec![F::zero(); self.air_width()];
-            let inter_cols = IntersectorCols {
+            let row = IntersectorCols {
                 io: IntersectorIoCols {
                     idx: to_field_vec::<F>(idx),
                     t1_mult: F::from_canonical_u32(t1_mult),
@@ -76,8 +75,8 @@ impl IntersectorAir {
                     lt_aux: lt_cols.aux,
                     lt_out: lt_cols.io.tuple_less_than,
                 },
-            };
-            inter_cols.flatten(&mut row, 0);
+            }
+            .flatten(self);
             rows.push(row);
         }
 
@@ -94,8 +93,7 @@ impl IntersectorAir {
 
             prv_idx = vec![0; self.idx_len];
 
-            let mut row = vec![F::zero(); self.air_width()];
-            let inter_cols = IntersectorCols {
+            IntersectorCols {
                 io: IntersectorIoCols {
                     idx: vec![F::zero(); self.idx_len],
                     t1_mult: F::zero(),
@@ -107,10 +105,8 @@ impl IntersectorAir {
                     lt_aux: lt_cols.aux,
                     lt_out: lt_cols.io.tuple_less_than,
                 },
-            };
-
-            inter_cols.flatten(&mut row, 0);
-            row
+            }
+            .flatten(self)
         });
 
         RowMajorMatrix::new(rows.concat(), self.air_width())

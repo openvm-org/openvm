@@ -62,9 +62,18 @@ impl<T: Clone> IndexedOutputPageAuxCols<T> {
         }
     }
 
-    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
-        let lt_len = self.lt_cols.flatten(buf, start);
-        buf[start + lt_len] = self.lt_out.clone();
-        lt_len + 1
+    pub fn to_buf(self, buf: &mut Vec<T>) {
+        self.lt_cols.to_buf(buf);
+        buf.push(self.lt_out);
+    }
+
+    pub fn flatten(self, indexed_page_air: &IndexedOutputPageAir) -> Vec<T> {
+        let mut buf = Vec::with_capacity(Self::width(indexed_page_air));
+        self.to_buf(&mut buf);
+        buf
+    }
+
+    pub fn width(indexed_page_air: &IndexedOutputPageAir) -> usize {
+        IsLessThanTupleAuxCols::<T>::width(&indexed_page_air.lt_air) + 1
     }
 }

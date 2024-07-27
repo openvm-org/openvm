@@ -21,8 +21,7 @@ fn test_flatten_fromslice_roundtrip() {
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
     let cols_numbered = IsLessThanCols::<usize>::from_slice(&all_cols);
-    let mut flattened = vec![0; num_cols];
-    let _ = cols_numbered.flatten(&mut flattened, 0);
+    let flattened = cols_numbered.flatten(&lt_air);
 
     for (i, col) in flattened.iter().enumerate() {
         assert_eq!(*col, all_cols[i]);

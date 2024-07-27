@@ -32,16 +32,15 @@ impl<T: Clone> CpuIoCols<T> {
         }
     }
 
-    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
-        buf[start] = self.timestamp.clone();
-        buf[start + 1] = self.pc.clone();
-        buf[start + 2] = self.opcode.clone();
-        buf[start + 3] = self.op_a.clone();
-        buf[start + 4] = self.op_b.clone();
-        buf[start + 5] = self.op_c.clone();
-        buf[start + 6] = self.d.clone();
-        buf[start + 7] = self.e.clone();
-        8
+    pub fn to_buf(self, buf: &mut Vec<T>) {
+        buf.push(self.timestamp);
+        buf.push(self.pc.clone());
+        buf.push(self.opcode.clone());
+        buf.push(self.op_a.clone());
+        buf.push(self.op_b.clone());
+        buf.push(self.op_c.clone());
+        buf.push(self.d.clone());
+        buf.push(self.e.clone());
     }
 
     pub fn get_width() -> usize {
@@ -73,16 +72,13 @@ impl<const WORD_SIZE: usize, T: Clone> MemoryAccessCols<WORD_SIZE, T> {
             data: from_fn(|i| slc[5 + i].clone()),
         }
     }
-    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
-        buf[start] = self.enabled.clone();
-        buf[start + 1] = self.address_space.clone();
-        buf[start + 2] = self.is_immediate.clone();
-        buf[start + 3] = self.is_zero_aux.clone();
-        buf[start + 4] = self.address.clone();
-        for (i, data) in self.data.iter().enumerate() {
-            buf[start + 5 + i] = data.clone();
-        }
-        5 + WORD_SIZE
+    pub fn to_buf(self, buf: &mut Vec<T>) {
+        buf.push(self.enabled);
+        buf.push(self.address_space);
+        buf.push(self.is_immediate);
+        buf.push(self.is_zero_aux);
+        buf.push(self.address);
+        buf.extend(self.data);
     }
 
     pub fn get_width() -> usize {
@@ -129,22 +125,15 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
         }
     }
 
-    pub fn flatten(&self, buf: &mut [T], start: usize, options: CpuOptions) -> usize {
-        let mut cum_len = 0;
+    pub fn to_buf(self, buf: &mut Vec<T>, options: CpuOptions) {
         for opcode in options.enabled_instructions() {
-            buf[start + cum_len] = self.operation_flags.get(&opcode).unwrap().clone();
-            cum_len += 1
+            buf.push(self.operation_flags.get(&opcode).unwrap().clone());
         }
-        for access in self.accesses.iter() {
-            let acc_len = access.flatten(buf, start + cum_len);
-            cum_len += acc_len;
+        for access in self.accesses.into_iter() {
+            access.to_buf(buf);
         }
-        buf[start + cum_len] = self.read0_equals_read1.clone();
-        cum_len += 1;
-        cum_len += self
-            .is_equal_vec_aux
-            .flatten(&mut buf[start + cum_len..], WORD_SIZE);
-        cum_len
+        buf.push(self.read0_equals_read1.clone());
+        self.is_equal_vec_aux.to_buf(buf);
     }
 
     pub fn get_width(options: CpuOptions) -> usize {
@@ -170,12 +159,15 @@ impl<const WORD_SIZE: usize, T: Clone> CpuCols<WORD_SIZE, T> {
         Self { io, aux }
     }
 
-    pub fn flatten(&self, buf: &mut [T], start: usize, options: CpuOptions) -> usize {
-        let io_len = self.io.flatten(buf, start);
-        let aux_len = self
-            .aux
-            .flatten(&mut buf[start + io_len..], start + io_len, options);
-        io_len + aux_len
+    pub fn to_buf(self, buf: &mut Vec<T>, options: CpuOptions) {
+        self.io.to_buf(buf);
+        self.aux.to_buf(buf, options);
+    }
+
+    pub fn flatten(self, options: CpuOptions) -> Vec<T> {
+        let mut buf = Vec::with_capacity(Self::get_width(options));
+        self.to_buf(&mut buf, options);
+        buf
     }
 
     pub fn get_width(options: CpuOptions) -> usize {

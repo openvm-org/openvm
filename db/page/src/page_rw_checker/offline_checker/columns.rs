@@ -24,15 +24,19 @@ impl<T> PageOfflineCheckerCols<T>
 where
     T: Clone,
 {
-    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
-        let cum_len = self.offline_checker_cols.flatten(buf, start);
-        buf[start + cum_len] = self.is_initial.clone();
-        buf[start + cum_len + 1] = self.is_final_write.clone();
-        buf[start + cum_len + 2] = self.is_final_delete.clone();
-        buf[start + cum_len + 3] = self.is_read.clone();
-        buf[start + cum_len + 4] = self.is_write.clone();
-        buf[start + cum_len + 5] = self.is_delete.clone();
-        cum_len + 6
+    pub fn write_to_buf(self, buf: &mut Vec<T>) {
+        self.offline_checker_cols.to_buf(buf);
+        buf.push(self.is_initial);
+        buf.push(self.is_final_write);
+        buf.push(self.is_final_delete);
+        buf.push(self.is_read);
+        buf.push(self.is_write);
+        buf.push(self.is_delete);
+    }
+    pub fn flatten(self, oc: &PageOfflineChecker) -> Vec<T> {
+        let mut buf = Vec::with_capacity(Self::width(oc));
+        self.write_to_buf(&mut buf);
+        buf
     }
 
     pub fn from_slice(slc: &[T], oc: &PageOfflineChecker) -> Self {

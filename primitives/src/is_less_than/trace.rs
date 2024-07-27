@@ -18,12 +18,11 @@ impl IsLessThanChip {
 
         // generate a row for each pair of numbers to compare
         for (x, y) in pairs {
-            let mut row = vec![F::zero(); num_cols];
-            let _ = self
-                .air
-                .generate_trace_row((x, y, self.range_checker.clone()))
-                .flatten(&mut row, 0);
-            rows.extend(row);
+            rows.extend(
+                self.air
+                    .generate_trace_row((x, y, self.range_checker.clone()))
+                    .flatten(&self.air) as Vec<F>,
+            );
         }
 
         RowMajorMatrix::new(rows, num_cols)

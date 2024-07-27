@@ -20,11 +20,10 @@ impl<T: Clone> IsLessThanTupleIoCols<T> {
         }
     }
 
-    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
-        buf[start..start + self.x.len()].clone_from_slice(&self.x);
-        buf[start + self.x.len()..start + self.x.len() + self.y.len()].clone_from_slice(&self.y);
-        buf[start + self.x.len() + self.y.len()] = self.tuple_less_than.clone();
-        self.x.len() + self.y.len() + 1
+    pub fn to_buf(self, buf: &mut Vec<T>) {
+        buf.extend(self.x);
+        buf.extend(self.y);
+        buf.push(self.tuple_less_than);
     }
 
     pub fn width(tuple_len: usize) -> usize {
@@ -70,25 +69,20 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
         }
     }
 
-    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
-        let mut cum_len = 0;
-        buf[start..start + self.less_than.len()].clone_from_slice(&self.less_than);
-        cum_len += self.less_than.len();
-        for i in 0..self.less_than_aux.len() {
-            let aux_width = self.less_than_aux[i].flatten(buf, start + cum_len);
-            cum_len += aux_width;
+    pub fn to_buf(self, buf: &mut Vec<T>) {
+        buf.extend(self.less_than);
+        for aux in self.less_than_aux.into_iter() {
+            aux.to_buf(buf);
         }
-        buf[start + cum_len..start + cum_len + self.is_equal_vec_aux.prods.len()]
-            .clone_from_slice(&self.is_equal_vec_aux.prods);
-        cum_len += self.is_equal_vec_aux.prods.len();
-        buf[start + cum_len..start + cum_len + self.is_equal_vec_aux.invs.len()]
-            .clone_from_slice(&self.is_equal_vec_aux.invs);
-        cum_len += self.is_equal_vec_aux.invs.len();
-        buf[start + cum_len..start + cum_len + self.less_than_cumulative.len()]
-            .clone_from_slice(&self.less_than_cumulative);
-        cum_len += self.less_than_cumulative.len();
+        buf.extend(self.is_equal_vec_aux.prods);
+        buf.extend(self.is_equal_vec_aux.invs);
+        buf.extend(self.less_than_cumulative);
+    }
 
-        cum_len
+    pub fn flatten(self, lt_air: &IsLessThanTupleAir) -> Vec<T> {
+        let mut buf = Vec::with_capacity(Self::width(lt_air));
+        self.to_buf(&mut buf);
+        buf
     }
 
     pub fn width(lt_air: &IsLessThanTupleAir) -> usize {
@@ -121,10 +115,15 @@ impl<T: Clone> IsLessThanTupleCols<T> {
         Self { io, aux }
     }
 
-    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
-        let io_len = self.io.flatten(buf, start);
-        let aux_len = self.aux.flatten(buf, start + io_len);
-        io_len + aux_len
+    pub fn to_buf(self, buf: &mut Vec<T>) {
+        self.io.to_buf(buf);
+        self.aux.to_buf(buf);
+    }
+
+    pub fn flatten(self, lt_air: &IsLessThanTupleAir) -> Vec<T> {
+        let mut buf = Vec::with_capacity(Self::width(lt_air));
+        self.to_buf(&mut buf);
+        buf
     }
 
     pub fn width(lt_air: &IsLessThanTupleAir) -> usize {

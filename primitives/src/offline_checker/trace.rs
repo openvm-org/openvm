@@ -29,8 +29,7 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
         let mut rows: Vec<Vec<F>> = vec![];
 
         if !accesses.is_empty() {
-            let mut row = vec![F::zero(); self.air.air_width()];
-            let _ = self
+            let row = self
                 .generate_trace_row((
                     true,
                     true,
@@ -39,13 +38,12 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
                     dummy_op.clone(),
                     range_checker.clone(),
                 ))
-                .flatten(&mut row, 0);
+                .flatten();
             rows.push(row);
         }
 
         for i in 1..accesses.len() {
-            let mut row = vec![F::zero(); self.air.air_width()];
-            let _ = self
+            let row = self
                 .generate_trace_row((
                     false,
                     true,
@@ -54,13 +52,12 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
                     accesses[i - 1].clone(),
                     range_checker.clone(),
                 ))
-                .flatten(&mut row, 0);
+                .flatten();
             rows.push(row);
         }
 
         if accesses.len() < trace_degree {
-            let mut row = vec![F::zero(); self.air.air_width()];
-            let _ = self
+            let row = self
                 .generate_trace_row((
                     false,
                     false,
@@ -69,13 +66,12 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
                     accesses[accesses.len() - 1].clone(),
                     range_checker.clone(),
                 ))
-                .flatten(&mut row, 0);
+                .flatten();
             rows.push(row);
         }
 
         for _i in 1..(trace_degree - accesses.len()) {
-            let mut row = vec![F::zero(); self.air.air_width()];
-            let _ = self
+            let row = self
                 .generate_trace_row((
                     false,
                     false,
@@ -84,7 +80,7 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
                     dummy_op.clone(),
                     range_checker.clone(),
                 ))
-                .flatten(&mut row, 0);
+                .flatten();
             rows.push(row);
         }
 

@@ -33,13 +33,13 @@ impl GroupByAir {
                 .iter()
                 .map(|row| row[..self.group_by_cols.len() + 1].to_vec())
                 .collect();
-            let mut flattened = vec![F::zero(); self.is_equal_vec_air.aux_width()];
             let local_is_eq_vec_cols = LocalTraceInstructions::generate_trace_row(
                 &self.is_equal_vec_air,
                 (vecs[0].clone(), vecs[1].clone()),
-            );
-            let _ = local_is_eq_vec_cols.aux.flatten(&mut flattened, 0);
-            eq_vec_aux_trace.push(flattened);
+            )
+            .aux
+            .flatten(self.is_equal_vec_air.vec_len);
+            eq_vec_aux_trace.push(local_is_eq_vec_cols);
             is_equal.push(vec![F::from_bool(vecs[0] == vecs[1])]);
         }
         // fill in the last row with zeros

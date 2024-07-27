@@ -90,8 +90,7 @@ impl PageOfflineChecker {
             let is_read = op_type == 0;
             let is_write = op_type == 1;
             let is_delete = op_type == 2;
-            let mut row = vec![Val::<SC>::zero(); self.air_width()];
-            let cols = PageOfflineCheckerCols {
+            PageOfflineCheckerCols {
                 offline_checker_cols,
                 is_initial: Val::<SC>::from_bool(is_initial),
                 is_final_write: Val::<SC>::from_bool(is_final_write),
@@ -99,10 +98,8 @@ impl PageOfflineChecker {
                 is_read: Val::<SC>::from_bool(is_read),
                 is_write: Val::<SC>::from_bool(is_write),
                 is_delete: Val::<SC>::from_bool(is_delete),
-            };
-
-            let _ = cols.flatten(&mut row, 0);
-            row
+            }
+            .flatten(self)
         };
 
         let mut rows = vec![];

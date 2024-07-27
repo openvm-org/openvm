@@ -27,13 +27,18 @@ impl<T: Clone> IntersectorIoCols<T> {
         }
     }
 
-    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
-        buf[start..start + self.idx.len()].clone_from_slice(&self.idx);
-        buf[start + self.idx.len()] = self.t1_mult.clone();
-        buf[start + self.idx.len() + 1] = self.t2_mult.clone();
-        buf[start + self.idx.len() + 2] = self.out_mult.clone();
-        buf[start + self.idx.len() + 3] = self.is_extra.clone();
-        self.idx.len() + 4
+    pub fn to_buf(self, buf: &mut Vec<T>) {
+        buf.extend(self.idx);
+        buf.push(self.t1_mult);
+        buf.push(self.t2_mult);
+        buf.push(self.out_mult);
+        buf.push(self.is_extra);
+    }
+
+    pub fn flatten(self, intersector_air: &IntersectorAir) -> Vec<T> {
+        let mut buf = Vec::with_capacity(Self::width(intersector_air));
+        self.to_buf(&mut buf);
+        buf
     }
 
     pub fn width(intersector_air: &IntersectorAir) -> usize {
@@ -60,10 +65,9 @@ impl<T: Clone> IntersectorAuxCols<T> {
         }
     }
 
-    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
-        let lt_len = self.lt_aux.flatten(buf, start);
-        buf[start + lt_len] = self.lt_out.clone();
-        lt_len + 1
+    pub fn to_buf(self, buf: &mut Vec<T>) {
+        self.lt_aux.to_buf(buf);
+        buf.push(self.lt_out);
     }
 
     pub fn width(intersector_air: &IntersectorAir) -> usize {
@@ -90,10 +94,15 @@ impl<T: Clone> IntersectorCols<T> {
         }
     }
 
-    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
-        let io_len = self.io.flatten(buf, start);
-        let aux_len = self.aux.flatten(buf, start + io_len);
-        io_len + aux_len
+    pub fn to_buf(self, buf: &mut Vec<T>) {
+        self.io.to_buf(buf);
+        self.aux.to_buf(buf);
+    }
+
+    pub fn flatten(self, intersector_air: &IntersectorAir) -> Vec<T> {
+        let mut buf = Vec::with_capacity(Self::width(intersector_air));
+        self.to_buf(&mut buf);
+        buf
     }
 
     pub fn width(intersector_air: &IntersectorAir) -> usize {

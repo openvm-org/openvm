@@ -2,7 +2,7 @@ use p3_air::BaseAir;
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::{is_less_than::columns::IsLessThanCols, sub_chip::LocalTraceInstructions};
+use crate::sub_chip::LocalTraceInstructions;
 
 use super::SumChip;
 
@@ -29,12 +29,12 @@ impl SumChip {
             // for the final row, there is no is_lt check, so we can use whatever for next_key;
             // wrapping around seems easiest
             let next_key = sorted_inputs[(i + 1) % n].0;
-            let mut lt_row = vec![F::zero(); BaseAir::<F>::width(&self.air.is_lt_air)];
-            let is_less_than_row: IsLessThanCols<F> = LocalTraceInstructions::generate_trace_row(
+            let lt_row: Vec<F> = LocalTraceInstructions::generate_trace_row(
                 &self.air.is_lt_air,
                 (key, next_key, self.range_checker.clone()),
-            );
-            is_less_than_row.aux.flatten(&mut lt_row, 0);
+            )
+            .aux
+            .flatten(&self.air.is_lt_air);
             row.extend(lt_row);
 
             rows.push(row);

@@ -26,11 +26,10 @@ impl IsLessThanTupleChip {
 
         // for each tuple pair, generate the trace row
         for (x, y) in tuple_pairs {
-            let mut row = vec![F::zero(); num_cols];
-            let _ = self
+            let row: Vec<F> = self
                 .air
                 .generate_trace_row((x, y, self.range_checker.clone()))
-                .flatten(&mut row, 0);
+                .flatten(&self.air);
             rows.extend(row);
         }
 

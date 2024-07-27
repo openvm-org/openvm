@@ -1,11 +1,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use afs_primitives::{
-    is_less_than_tuple::{
-        columns::{IsLessThanTupleAuxCols, IsLessThanTupleCols},
-        IsLessThanTupleAir,
-    },
-    range_gate::RangeCheckerGateChip,
+    is_less_than_tuple::columns::IsLessThanTupleCols, range_gate::RangeCheckerGateChip,
     sub_chip::LocalTraceInstructions,
 };
 use p3_field::{AbstractField, PrimeField, PrimeField64};
@@ -38,11 +34,6 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
             }
             _ => RowMajorMatrix::new(vec![], 1),
         };
-        let aux_size = IsLessThanTupleAuxCols::<usize>::width(&IsLessThanTupleAir::new(
-            0,
-            vec![self.is_less_than_tuple_param().limb_bits; *self.idx_len()],
-            self.is_less_than_tuple_param().decomp,
-        ));
         RowMajorMatrix::new(
             page.iter()
                 .enumerate()
@@ -67,12 +58,13 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                                     range.0.clone(),
                                     range_checker.clone(),
                                 ));
-                            let aux = tuple.aux;
                             let io = tuple.io;
                             trace_row[2 * range.0.len()] = io.tuple_less_than;
-                            let mut row = vec![Val::<SC>::zero(); aux_size];
-                            aux.flatten(&mut row, 0);
-                            trace_row.extend(row);
+                            trace_row.extend(
+                                tuple.aux.flatten(
+                                    &self.is_less_than_tuple_air.as_ref().unwrap().idx_start,
+                                ),
+                            );
                         }
                         {
                             let tuple: IsLessThanTupleCols<Val<SC>> = self
@@ -85,12 +77,13 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                                     row.idx.to_vec(),
                                     range_checker.clone(),
                                 ));
-                            let aux = tuple.aux;
                             let io = tuple.io;
                             trace_row[2 * range.0.len() + 1] = io.tuple_less_than;
-                            let mut row = vec![Val::<SC>::zero(); aux_size];
-                            aux.flatten(&mut row, 0);
-                            trace_row.extend(row);
+                            trace_row.extend(
+                                tuple.aux.flatten(
+                                    &self.is_less_than_tuple_air.as_ref().unwrap().end_idx,
+                                ),
+                            );
                         }
                         {
                             trace_row.append(&mut final_page_aux_rows.row_mut(i).to_vec());

@@ -58,9 +58,18 @@ impl<T: Clone> IndexedPageWriteAuxCols<T> {
         }
     }
 
-    pub fn flatten(&self, buf: &mut [T], start: usize) -> usize {
-        let aux_len = self.final_page_aux_cols.flatten(buf, start);
-        buf[start + aux_len] = self.rcv_mult.clone();
-        1 + aux_len
+    pub fn to_buf(self, buf: &mut Vec<T>) {
+        self.final_page_aux_cols.to_buf(buf);
+        buf.push(self.rcv_mult);
+    }
+
+    pub fn flatten(self, indexed_page_write_air: &IndexedPageWriteAir) -> Vec<T> {
+        let mut buf = Vec::with_capacity(Self::width(indexed_page_write_air));
+        self.to_buf(&mut buf);
+        buf
+    }
+
+    pub fn width(indexed_page_write_air: &IndexedPageWriteAir) -> usize {
+        IndexedOutputPageAuxCols::<T>::width(&indexed_page_write_air.final_air) + 1
     }
 }
