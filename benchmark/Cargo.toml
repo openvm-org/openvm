@@ -12,6 +12,7 @@ afs-stark-backend = { path = "../stark-backend", default-features = false }
 logical-interface = { path = "../logical-interface" }
 afs-test-utils = { path = "../test-utils" }
 afs-page = { path = "../db/page", default-features = false }
+afs-primitives = { path = "../primitives", default-features = false }
 serde = { version = "1.0.203", features = ["derive"] }
 clap = { version = "4.5.4", features = ["derive"] }
 color-eyre = "0.6.3"
@@ -38,9 +39,12 @@ p3-maybe-rayon = { workspace = true }
 criterion = "0.5.1"
 pprof = { version = "0.13", features = ["criterion", "flamegraph"] }
 
-
 [[bench]]
 name = "single_rw_trace_gen"
+harness = false
+
+[[bench]]
+name = "xor_bits"
 harness = false
 
 [features]
