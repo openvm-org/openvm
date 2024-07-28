@@ -245,8 +245,8 @@ impl<C: Config> CanObserveVariable<C, Felt<C::F>> for DuplexChallengerVariable<C
                 });
             }
             Array::Fixed(values) => {
-                values.iter().for_each(|value| {
-                    self.observe(builder, *value);
+                values.borrow().iter().cloned().for_each(|value| {
+                    self.observe(builder, value.unwrap());
                 });
             }
         }

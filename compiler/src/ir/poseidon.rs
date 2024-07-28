@@ -13,7 +13,7 @@ impl<C: Config> Builder<C> {
     pub fn poseidon2_permute(&mut self, array: &Array<C, Felt<C::F>>) -> Array<C, Felt<C::F>> {
         let output = match array {
             Array::Fixed(values) => {
-                assert_eq!(values.len(), PERMUTATION_WIDTH);
+                assert_eq!(values.borrow().len(), PERMUTATION_WIDTH);
                 self.array::<Felt<C::F>>(Usize::Const(PERMUTATION_WIDTH))
             }
             Array::Dyn(_, len) => self.array::<Felt<C::F>>(*len),

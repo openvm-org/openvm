@@ -136,6 +136,12 @@ impl<C: Config> Builder<C> {
         }
     }
 
+    /// Enable `unroll_loop` flag for the builder.
+    pub fn unroll_loop(mut self, enable: bool) -> Self {
+        self.flags.unroll_loop = enable;
+        self
+    }
+
     /// Pushes an operation to the builder.
     pub fn push(&mut self, op: DslIr<C>) {
         self.operations.push(op);
@@ -153,9 +159,7 @@ impl<C: Config> Builder<C> {
 
     /// Evaluates an expression and returns a variable.
     pub fn eval<V: Variable<C>, E: Into<V::Expression>>(&mut self, expr: E) -> V {
-        let dst = V::uninit(self);
-        dst.assign(expr.into(), self);
-        dst
+        V::eval(self, expr)
     }
 
     /// Evaluates a constant expression and returns a variable.
