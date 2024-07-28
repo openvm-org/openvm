@@ -53,7 +53,7 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
                 if let Usize::Const(shift) = shift {
                     Array::Fixed(v[shift..].to_vec())
                 } else {
-                    unreachable!("")
+                    panic!("Cannot shift a fixed array with a variable shift");
                 }
             }
             Self::Dyn(ptr, len) => {
