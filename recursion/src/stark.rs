@@ -1,6 +1,5 @@
 use std::any::{type_name, Any};
 
-use afs_stark_backend::air_builders::symbolic::{SymbolicConstraints, SymbolicRapBuilder};
 use itertools::Itertools;
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
@@ -10,6 +9,7 @@ use p3_matrix::dense::RowMajorMatrixView;
 use p3_matrix::stack::VerticalPair;
 
 use afs_compiler::ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize, Var};
+use afs_stark_backend::air_builders::symbolic::{SymbolicConstraints, SymbolicRapBuilder};
 use afs_stark_backend::prover::opener::AdjacentOpenedValues;
 use afs_stark_backend::rap::Rap;
 use afs_test_utils::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
@@ -259,7 +259,7 @@ where
                     points: trace_points.clone(),
                 };
 
-                let mut mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.dyn_array(num_airs);
+                let mut mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.dyn_array(1);
                 builder.set_value(&mut mats, 0, prep_mat);
 
                 builder.set_value(
