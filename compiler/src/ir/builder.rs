@@ -560,7 +560,7 @@ impl<'a, C: Config> IfBuilder<'a, C> {
             self.builder.felt_count,
             self.builder.ext_count,
             self.builder.nb_public_values,
-            self.builder.flags.clone(),
+            self.builder.flags,
         );
         f(&mut f_builder);
         let then_instructions = f_builder.operations;
@@ -608,7 +608,7 @@ impl<'a, C: Config> IfBuilder<'a, C> {
             self.builder.felt_count,
             self.builder.ext_count,
             self.builder.nb_public_values,
-            self.builder.flags.clone(),
+            self.builder.flags,
         );
 
         // Execute the `then` and `else_then` blocks and collect the instructions.
@@ -620,7 +620,7 @@ impl<'a, C: Config> IfBuilder<'a, C> {
             self.builder.felt_count,
             self.builder.ext_count,
             self.builder.nb_public_values,
-            self.builder.flags.clone(),
+            self.builder.flags,
         );
         else_f(&mut else_builder);
         let else_instructions = else_builder.operations;
@@ -763,7 +763,7 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
             self.builder.felt_count,
             self.builder.ext_count,
             self.builder.nb_public_values,
-            self.builder.flags.clone(),
+            self.builder.flags,
         );
 
         f(Usize::Var(loop_variable), &mut loop_body_builder);
