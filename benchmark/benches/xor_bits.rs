@@ -12,7 +12,7 @@ type Val = BabyBear;
 
 pub fn xor_bits_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("trace gen");
-    group.sample_size(10);
+    group.sample_size(100);
 
     let mut rng = create_seeded_rng();
 
