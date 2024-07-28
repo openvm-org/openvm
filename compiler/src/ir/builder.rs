@@ -87,7 +87,7 @@ impl<T> IntoIterator for TracedVec<T> {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct BuilderFlags {
     pub(crate) debug: bool,
     /// If true, the loop with constant start and end will be unrolled.
