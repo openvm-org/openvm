@@ -148,8 +148,8 @@ fn test_compiler_break() {
     let is_break: Var<_> = builder.eval(F::one());
     builder.range(0, array.len()).for_each(|i, builder| {
         let materialized_i = builder.materialize(i);
-        let exp_value: Var<_> =
-            builder.eval(materialized_i * is_break + (SymbolicVar::<F>::one() - is_break) * break_len);
+        let exp_value: Var<_> = builder
+            .eval(materialized_i * is_break + (SymbolicVar::<F>::one() - is_break) * break_len);
         let value = builder.get(&array, i);
         builder.assert_var_eq(value, exp_value);
         builder
