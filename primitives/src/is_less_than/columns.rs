@@ -77,3 +77,51 @@ impl<T: Clone> IsLessThanCols<T> {
         IsLessThanIoCols::<T>::width() + IsLessThanAuxCols::<T>::width(lt_air)
     }
 }
+
+pub struct IsLessThanIoColsMut<'a, T> {
+    pub x: &'a mut T,
+    pub y: &'a mut T,
+    pub less_than: &'a mut T,
+}
+
+impl<'a, T> IsLessThanIoColsMut<'a, T> {
+    pub fn from_slice(slc: &'a mut [T]) -> Self {
+        let (x, rest) = slc.split_first_mut().unwrap();
+        let (y, rest) = rest.split_first_mut().unwrap();
+        let (less_than, _) = rest.split_first_mut().unwrap();
+
+        Self { x, y, less_than }
+    }
+}
+
+pub struct IsLessThanAuxColsMut<'a, T> {
+    pub lower: &'a mut T,
+    pub lower_decomp: &'a mut [T],
+}
+
+impl<'a, T> IsLessThanAuxColsMut<'a, T> {
+    pub fn from_slice(slc: &'a mut [T]) -> Self {
+        let (lower, lower_decomp) = slc.split_first_mut().unwrap();
+
+        Self {
+            lower,
+            lower_decomp,
+        }
+    }
+}
+
+pub struct IsLessThanColsMut<'a, T> {
+    pub io: IsLessThanIoColsMut<'a, T>,
+    pub aux: IsLessThanAuxColsMut<'a, T>,
+}
+
+impl<'a, T> IsLessThanColsMut<'a, T> {
+    pub fn from_slice(slc: &'a mut [T]) -> Self {
+        let (io, aux) = slc.split_at_mut(3);
+
+        let io = IsLessThanIoColsMut::from_slice(io);
+        let aux = IsLessThanAuxColsMut::from_slice(aux);
+
+        Self { io, aux }
+    }
+}
