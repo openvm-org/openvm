@@ -28,7 +28,7 @@ type Val = BabyBear;
 
 pub fn trace_gen_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("trace gen");
-    group.sample_size(10);
+    group.sample_size(100);
 
     let idx_len = 16;
     let data_len = 512;
