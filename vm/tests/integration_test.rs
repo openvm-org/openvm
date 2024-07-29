@@ -22,6 +22,7 @@ fn air_test(
     field_extension_enabled: bool,
     program: Vec<Instruction<BabyBear>>,
     witness_stream: Vec<Vec<BabyBear>>,
+    fast_segmentation: bool,
 ) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
@@ -35,7 +36,10 @@ fn air_test(
         program,
         witness_stream,
     );
-    vm.adjust_max_len(7);
+
+    if fast_segmentation {
+        vm.adjust_max_len(7);
+    }
 
     let ExecutionResult {
         nonempty_chips: chips,
@@ -115,7 +119,7 @@ fn test_vm_1() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(true, false, program, vec![]);
+    air_test(true, false, program, vec![], true);
 }
 
 #[test]
@@ -148,6 +152,7 @@ fn test_vm_without_field_arithmetic() {
         field_extension_enabled,
         program,
         vec![],
+        true,
     );
 }
 
@@ -169,7 +174,7 @@ fn test_vm_fibonacci_old() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(true, false, program.clone(), vec![]);
+    air_test(true, false, program.clone(), vec![], true);
 }
 
 #[test]
@@ -199,7 +204,7 @@ fn test_vm_fibonacci_old_cycle_tracker() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(true, false, program.clone(), vec![]);
+    air_test(true, false, program.clone(), vec![], false);
 }
 
 #[test]
@@ -226,6 +231,7 @@ fn test_vm_field_extension_arithmetic() {
         field_extension_enabled,
         program,
         vec![],
+        true,
     );
 }
 
@@ -265,6 +271,7 @@ fn test_vm_hint() {
         field_extension_enabled,
         program,
         witness_stream,
+        true,
     );
 }
 
