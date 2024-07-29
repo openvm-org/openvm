@@ -10,7 +10,7 @@ pub struct ExpandCols<const CHUNK: usize, T> {
     pub left_child_hash: [T; CHUNK],
     pub right_child_hash: [T; CHUNK],
     // indicate whether `expand_direction` is different from origin
-    // when `expand_direction` = 1, should be 0
+    // when `expand_direction` != -1, must be 0
     pub left_direction_different: T,
     pub right_direction_different: T,
 }
