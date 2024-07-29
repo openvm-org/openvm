@@ -35,6 +35,10 @@ pub fn fill_slc_to_f<F: Field>(dest: &mut [F], src: &[u32]) {
         .for_each(|(d, s)| *d = F::from_canonical_u32(*s));
 }
 
+pub fn to_field_vec<F: Field>(src: &[u32]) -> Vec<F> {
+    src.iter().map(|s| F::from_canonical_u32(*s)).collect()
+}
+
 pub fn not<AB: AirBuilder>(a: AB::Expr) -> AB::Expr {
     AB::Expr::one() - a
 }

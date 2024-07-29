@@ -131,11 +131,11 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> LocalTraceInstructi
             }
         }
 
-        let is_equal_idx_aux = self
-            .air
-            .is_equal_idx_air
-            .generate_trace_row((prev_idx.clone(), curr_idx.clone()))
-            .aux;
+        let is_equal_idx_aux = LocalTraceInstructions::generate_trace_row(
+            &self.air.is_equal_idx_air,
+            (prev_idx.clone(), curr_idx.clone()),
+        )
+        .aux;
 
         let mut prev_idx_timestamp = prev_idx
             .clone()

@@ -6,7 +6,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use crate::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 
 use super::{
-    columns::{IsLessThanCols, IsLessThanColsMut},
+    columns::{IsLessThanAuxColsMut, IsLessThanCols, IsLessThanColsMut},
     IsLessThanAir, IsLessThanChip,
 };
 
@@ -16,11 +16,11 @@ impl IsLessThanChip {
 
         let mut rows_concat = vec![F::zero(); width * pairs.len()];
         for (i, (x, y)) in pairs.iter().enumerate() {
-            let lt_cols =
+            let mut lt_cols =
                 IsLessThanColsMut::<F>::from_slice(&mut rows_concat[i * width..(i + 1) * width]);
 
             self.air
-                .generate_trace_row(*x, *y, self.range_checker.clone(), lt_cols);
+                .generate_trace_row(*x, *y, self.range_checker.clone(), &mut lt_cols);
         }
 
         RowMajorMatrix::new(rows_concat, width)
@@ -28,15 +28,29 @@ impl IsLessThanChip {
 }
 
 impl IsLessThanAir {
-    fn generate_trace_row<F: PrimeField>(
+    pub fn generate_trace_row<F: PrimeField>(
         &self,
         x: u32,
         y: u32,
         range_checker: Arc<RangeCheckerGateChip>,
-        lt_cols: IsLessThanColsMut<F>,
+        lt_cols: &mut IsLessThanColsMut<F>,
     ) {
         let less_than = if x < y { 1 } else { 0 };
 
+        *lt_cols.io.x = F::from_canonical_u32(x);
+        *lt_cols.io.y = F::from_canonical_u32(y);
+        *lt_cols.io.less_than = F::from_canonical_u32(less_than);
+
+        self.generate_trace_row_aux(x, y, range_checker, &mut lt_cols.aux);
+    }
+
+    pub fn generate_trace_row_aux<F: PrimeField>(
+        &self,
+        x: u32,
+        y: u32,
+        range_checker: Arc<RangeCheckerGateChip>,
+        lt_aux_cols: &mut IsLessThanAuxColsMut<F>,
+    ) {
         // obtain the lower_bits
         let check_less_than = (1 << self.max_bits) + y - x - 1;
         let lower_u32 = check_less_than & ((1 << self.max_bits) - 1);
@@ -59,13 +73,8 @@ impl IsLessThanAir {
             }
         }
 
-        *lt_cols.io.x = F::from_canonical_u32(x);
-        *lt_cols.io.y = F::from_canonical_u32(y);
-        *lt_cols.io.less_than = F::from_canonical_u32(less_than);
-
-        *lt_cols.aux.lower = F::from_canonical_u32(lower_u32);
-        lt_cols
-            .aux
+        *lt_aux_cols.lower = F::from_canonical_u32(lower_u32);
+        lt_aux_cols
             .lower_decomp
             .clone_from_slice(lower_decomp.as_slice());
     }
@@ -78,9 +87,9 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanAir {
         let width: usize = IsLessThanCols::<F>::width(self);
 
         let mut row = vec![F::zero(); width];
-        let lt_cols = IsLessThanColsMut::<F>::from_slice(&mut row);
+        let mut lt_cols = IsLessThanColsMut::<F>::from_slice(&mut row);
 
-        self.generate_trace_row(input.0, input.1, input.2, lt_cols);
+        self.generate_trace_row(input.0, input.1, input.2, &mut lt_cols);
 
         IsLessThanCols::<F>::from_slice(&row)
     }

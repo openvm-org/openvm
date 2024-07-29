@@ -48,7 +48,9 @@ impl<T: Clone> IsLessThanAuxCols<T> {
         flattened.extend(self.lower_decomp.iter().cloned());
         flattened
     }
+}
 
+impl<T> IsLessThanAuxCols<T> {
     pub fn width(lt_air: &IsLessThanAir) -> usize {
         1 + lt_air.num_limbs + (lt_air.max_bits % lt_air.decomp != 0) as usize
     }
