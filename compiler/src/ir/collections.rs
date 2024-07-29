@@ -5,10 +5,11 @@ use std::cell::RefCell;
 
 use super::{Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, Usize, Var, Variable};
 
-/// An array that is either on stack or heap.
+/// A logical array.
 #[derive(Debug, Clone)]
 pub enum Array<C: Config, T> {
-    /// Array on stack. Index access cannot use variables.
+    /// Array of some local variables or constants, which can only be manipulated statically. It
+    /// only exists in the DSL syntax and isn't backed by memory.
     Fixed(Rc<RefCell<Vec<Option<T>>>>),
     /// Array on heap. Index access can use variables. Length could be determined on runtime but
     /// cannot change after initialization.
@@ -228,7 +229,7 @@ impl<C: Config> Builder<C> {
                     let value = self.eval(value);
                     v.borrow_mut()[idx] = Some(value);
                 } else {
-                    panic!("Cannot index into a fixed slice with a variable size")
+                    panic!("Cannot index into a fixed slice with a variable index")
                 }
             }
             Array::Dyn(ptr, len) => {

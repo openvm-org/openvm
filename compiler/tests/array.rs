@@ -124,7 +124,7 @@ fn test_compiler_array() {
 }
 
 #[test]
-fn test_fixed_array() {
+fn test_fixed_array_const() {
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, 4>;
 
@@ -149,6 +149,40 @@ fn test_fixed_array() {
     assert_eq!(
         builder.operations.vec.len(),
         0,
+        "No operations should be generated"
+    );
+}
+
+#[test]
+fn test_fixed_array_var() {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+
+    let mut builder = AsmBuilder::<F, EF>::default().unroll_loop(true);
+
+    // Sum all the values of an array.
+    let len: usize = 1000;
+    let mut fixed_array = builder.uninit_fixed_array(len);
+
+    // Put values statically
+    builder.range(0, fixed_array.len()).for_each(|i, builder| {
+        let one: Var<_>= builder.eval(F::one());
+        // `len` instructions
+        builder.set(&mut fixed_array, i, Usize::Var(one));
+    });
+    // Assert values set.
+    builder.range(0, fixed_array.len()).for_each(|i, builder| {
+        let value: Usize<_> = builder.get(&fixed_array, i);
+        // `len` instructions to initialize variables. FIXME: this is not optimal.
+        // `len` instructions of `assert_eq`
+        builder.assert_eq::<Var<_>>(value, Usize::Const(2));
+    });
+    let mut fixed_2d = builder.uninit_fixed_array(1);
+    builder.set_value(&mut fixed_2d, 0, fixed_array);
+
+    assert_eq!(
+        builder.operations.vec.len(),
+        len * 3,
         "No operations should be generated"
     );
 }
