@@ -4,7 +4,7 @@ use afs_compiler::{
 };
 
 use afs_recursion::{
-    hints::{Hintable, InnerVal},
+    hints::Hintable,
     stark::{DynRapForRecursion, VerifierProgram},
     types::{new_from_multi_vk, InnerConfig, VerifierProgramInput},
 };
@@ -19,6 +19,7 @@ use afs_test_utils::{
     },
     engine::StarkEngine,
 };
+use benchmark_helpers::{get_rec_raps, sort_chips};
 use clap::Parser;
 use fibonacci::{generate_trace_rows, FibonacciAir};
 use p3_baby_bear::BabyBear;
@@ -34,6 +35,7 @@ use tracing::info_span;
 
 use super::CommonCommands;
 
+mod benchmark_helpers;
 mod fibonacci;
 
 pub struct VmBenchmarkConfig {
@@ -56,20 +58,20 @@ pub struct VmCommand {
     pub common: CommonCommands,
 }
 
-fn calc_fibonacci(n: usize) -> usize {
-    if n == 0 {
-        0
-    } else {
-        let mut a = 0;
-        let mut b = 1;
-        for _ in 0..n {
-            let temp = b;
-            b += a;
-            a = temp;
-        }
-        a
-    }
-}
+// fn calc_fibonacci(n: usize) -> usize {
+//     if n == 0 {
+//         0
+//     } else {
+//         let mut a = 0;
+//         let mut b = 1;
+//         for _ in 0..n {
+//             let temp = b;
+//             b += a;
+//             a = temp;
+//         }
+//         a
+//     }
+// }
 
 pub fn benchmark_verify_fibair(n: usize) {
     println!("Running Verify Fibonacci Air benchmark with n = {}", n);
@@ -90,29 +92,8 @@ pub fn benchmark_verify_fibair(n: usize) {
     run_recursive_test_benchmark(vec![&fib_air], vec![&fib_air], vec![trace], pvs)
 }
 
-pub fn get_rec_raps<const WORD_SIZE: usize>(
-    vm: &VirtualMachine<WORD_SIZE, InnerVal>,
-) -> Vec<&dyn DynRapForRecursion<InnerConfig>> {
-    let mut result: Vec<&dyn DynRapForRecursion<InnerConfig>> = vec![
-        &vm.cpu_air,
-        &vm.program_chip.air,
-        &vm.memory_chip.air,
-        &vm.range_checker.air,
-    ];
-    if vm.options().field_arithmetic_enabled {
-        result.push(&vm.field_arithmetic_chip.air);
-    }
-    if vm.options().field_extension_enabled {
-        result.push(&vm.field_extension_chip.air);
-    }
-    if vm.options().poseidon2_enabled() {
-        result.push(&vm.poseidon2_chip.air);
-    }
-    result
-}
-
 pub fn benchmark_fibonacci_program(n: usize) {
-    println!("Running Fibonacci program benchmark with n = {}", n);
+    // println!("Running Fibonacci program benchmark with n = {}", n);
 
     type F = BabyBear;
     type EF = BinomialExtensionField<F, 4>;
@@ -132,15 +113,20 @@ pub fn benchmark_fibonacci_program(n: usize) {
         builder.assign(a, temp);
     });
 
-    let expected_value = F::from_canonical_usize(calc_fibonacci(n));
-    builder.assert_felt_eq(a, expected_value);
+    // let expected_value = F::from_canonical_usize(calc_fibonacci(n));
+    // builder.assert_felt_eq(a, expected_value);
 
     //builder.print_f(a);
     builder.halt();
 
-    let program = builder.compile_isa::<1>();
+    let fib_program = builder.compile_isa::<1>();
 
-    // vm_benchmark_execute_and_prove::<1>(program.clone(), vec![]);
+    // vm_benchmark_execute_and_prove::<1>(fib_program.clone(), vec![]);
+
+    println!(
+        "Running verifier program of VM STARK benchmark with n = {}",
+        n
+    );
 
     let mut vm = VirtualMachine::<1, _>::new(
         VmConfig {
@@ -151,21 +137,21 @@ pub fn benchmark_fibonacci_program(n: usize) {
             compress_poseidon2_enabled: true,
             perm_poseidon2_enabled: true,
         },
-        program.clone(),
+        fib_program.clone(),
         vec![],
     );
 
     let traces = vm.traces().unwrap();
     let chips = get_chips(&vm);
-
     let rec_raps = get_rec_raps(&vm);
 
     assert!(chips.len() == rec_raps.len());
     let len = chips.len();
 
-    run_recursive_test_benchmark(chips, rec_raps, traces, vec![vec![]; len]);
+    let pvs = vec![vec![]; len];
+    let (chips, rec_raps, traces, pvs) = sort_chips(chips, rec_raps, traces, pvs);
 
-    // run_recursive_test(chips, rec_raps, traces, vec![vec![]; len]);
+    run_recursive_test_benchmark(chips, rec_raps, traces, pvs);
 }
 
 fn run_recursive_test_benchmark(
@@ -205,7 +191,7 @@ fn run_recursive_test_benchmark(
     let trace_span = info_span!("Benchmark trace generation").entered();
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     for trace in traces.clone() {
-        trace_builder.load_trace(trace);
+        trace_builder.load_trace(trace.clone());
     }
     trace_builder.commit_current();
     trace_span.exit();

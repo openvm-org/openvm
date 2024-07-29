@@ -1,0 +1,65 @@
+Running verifier program of VM STARK benchmark with n = 1048576
+
+[1;32mINFO    [0m commit to trace data [ 1.02ms | 37.24% / 100.00% ]
+[1;32mINFO    [0m ┕━ coset_lde_batch [ 641µs | 62.76% ] dims: 7x16
+AIR 0 [stark_vm::memory::offline_checker::MemoryOfflineChecker]:
+  quotient degree: 4
+  number of columns:
+      preprocessed: None
+      main (partitioned): [48]
+      after challenge: [23]
+  num symbolic constraints: 59
+  num interactions: 22 on buses [1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]
+AIR 1 [stark_vm::cpu::CpuAir<1>]:
+  quotient degree: 2
+  number of columns:
+      preprocessed: None
+      main (partitioned): [49]
+      after challenge: [8]
+  num symbolic constraints: 113
+  num interactions: 7 on buses [0, 1, 1, 1, 2, 3, 5]
+AIR 2 [stark_vm::field_arithmetic::FieldArithmeticAir]:
+  quotient degree: 2
+  number of columns:
+      preprocessed: None
+      main (partitioned): [13]
+      after challenge: [2]
+  num symbolic constraints: 14
+  num interactions: 1 on buses [2]
+AIR 3 [stark_vm::program::ProgramAir<p3_baby_bear::baby_bear::BabyBear>]:
+  quotient degree: 2
+  number of columns:
+      preprocessed: Some(7)
+      main (partitioned): [1]
+      after challenge: [2]
+  num symbolic constraints: 4
+  num interactions: 1 on buses [0]
+AIR 4 [afs_primitives::range_gate::air::RangeCheckerGateAir]:
+  quotient degree: 2
+  number of columns:
+      preprocessed: None
+      main (partitioned): [2]
+      after challenge: [2]
+  num symbolic constraints: 6
+  num interactions: 1 on buses [4]
+AIR 5 [stark_vm::field_extension::FieldExtensionArithmeticAir]:
+  quotient degree: 2
+  number of columns:
+      preprocessed: None
+      main (partitioned): [37]
+      after challenge: [14]
+  num symbolic constraints: 39
+  num interactions: 13 on buses [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3]
+AIR 6 [stark_vm::poseidon2::Poseidon2VmAir<16, p3_baby_bear::baby_bear::BabyBear>]:
+  quotient degree: 8
+  number of columns:
+      preprocessed: None
+      main (partitioned): [382]
+      after challenge: [38]
+  num symbolic constraints: 401
+  num interactions: 37 on buses [5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 6]
+[1;32mINFO    [0m Benchmark keygen [ 2.03ms | 100.00% ]
+[1;32mINFO    [0m Benchmark trace and prove outside of eDSL [ 22.0s | 0.00% / 100.00% ]
+[1;32mINFO    [0m ┕━ Benchmark trace generation [ 22.0s | 25.63% / 100.00% ]
+[1;32mINFO    [0m    ┕━ commit to trace data [ 16.3s | 3.30% / 74.37% ]
+[1;32mINFO    [0m       ┕━ coset_lde_batch [ 15.6s | 71.07% ] dims: 48x16777216
