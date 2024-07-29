@@ -7,7 +7,6 @@ pub mod is_less_than_tuple;
 pub mod is_less_than_tuple_bits;
 pub mod is_zero;
 // pub mod merkle_proof;
-pub mod hashes;
 pub mod offline_checker;
 pub mod range;
 pub mod range_gate;

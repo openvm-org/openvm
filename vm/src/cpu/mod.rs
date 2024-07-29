@@ -105,7 +105,7 @@ impl OpCode {
 }
 
 use crate::field_extension::FieldExtensionArithmeticAir;
-use crate::poseidon2::Poseidon2Chip;
+use crate::hashes::poseidon2::Poseidon2Chip;
 use OpCode::*;
 
 pub const CORE_INSTRUCTIONS: [OpCode; 11] = [

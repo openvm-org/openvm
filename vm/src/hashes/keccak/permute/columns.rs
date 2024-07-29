@@ -9,11 +9,12 @@ use p3_util::indices_arr;
 pub struct KeccakPermuteCols<T> {
     pub keccak: KeccakCols<T>,
 
-    pub is_real: T,
-
-    pub is_real_input: T,
-
-    pub is_real_output: T,
+    /// Whether row corresponds to an opcode (PERMUTE)
+    // pub is_opcode: T,
+    /// Whether row is for a direct inter-chip permute interaction
+    pub is_direct: T,
+    /// The clock cycle (NOT timestamp)
+    pub clk: T,
 }
 
 pub const NUM_KECCAK_PERMUTE_COLS: usize = size_of::<KeccakPermuteCols<u8>>();

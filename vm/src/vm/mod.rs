@@ -20,8 +20,8 @@ use crate::{
     },
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
+    hashes::poseidon2::Poseidon2Chip,
     memory::offline_checker::MemoryChip,
-    poseidon2::Poseidon2Chip,
     program::ProgramChip,
 };
 

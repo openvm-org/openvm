@@ -23,13 +23,7 @@ impl KeccakPermuteAir {
 
         for (i, row) in trace.rows_mut().enumerate() {
             if i < num_inputs * NUM_ROUNDS {
-                row[KECCAK_PERMUTE_COL_MAP.is_real] = F::one();
-                if i % NUM_ROUNDS == 0 {
-                    row[KECCAK_PERMUTE_COL_MAP.is_real_input] = F::one();
-                }
-                if i % NUM_ROUNDS == NUM_ROUNDS - 1 {
-                    row[KECCAK_PERMUTE_COL_MAP.is_real_output] = F::one();
-                }
+                row[KECCAK_PERMUTE_COL_MAP.is_direct] = F::one();
             }
         }
 

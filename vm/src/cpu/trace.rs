@@ -7,8 +7,8 @@ use afs_primitives::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
 
+use crate::hashes::poseidon2::Poseidon2Chip;
 use crate::memory::{compose, decompose};
-use crate::poseidon2::Poseidon2Chip;
 use crate::vm::cycle_tracker::CycleTracker;
 use crate::{field_extension::FieldExtensionArithmeticChip, vm::VirtualMachine};
 

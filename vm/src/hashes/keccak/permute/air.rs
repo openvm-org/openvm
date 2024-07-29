@@ -1,16 +1,16 @@
-use core::borrow::Borrow;
+use std::borrow::Borrow;
 
 use afs_stark_backend::{air_builders::sub::SubAirBuilder, interaction::InteractionBuilder};
 use p3_air::{Air, BaseAir};
-use p3_keccak_air::{KeccakAir, NUM_KECCAK_COLS, NUM_ROUNDS};
+use p3_keccak_air::{KeccakAir, NUM_KECCAK_COLS};
 use p3_matrix::Matrix;
 
 use super::columns::{KeccakPermuteCols, NUM_KECCAK_PERMUTE_COLS};
 
 #[derive(Clone, Copy, Debug)]
 pub struct KeccakPermuteAir {
-    pub bus_input: usize,
-    pub bus_output: usize,
+    pub input_bus: usize,
+    pub output_bus: usize,
 }
 
 impl<F> BaseAir<F> for KeccakPermuteAir {
@@ -25,15 +25,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakPermuteAir {
         let local = main.row_slice(0);
         let local: &KeccakPermuteCols<AB::Var> = (*local).borrow();
 
-        builder.assert_bool(local.is_real);
-        builder.assert_eq(
-            local.is_real * local.keccak.step_flags[0],
-            local.is_real_input,
-        );
-        builder.assert_eq(
-            local.is_real * local.keccak.step_flags[NUM_ROUNDS - 1],
-            local.is_real_output,
-        );
+        builder.assert_bool(local.is_direct);
 
         let keccak_air = KeccakAir {};
         let mut sub_builder =

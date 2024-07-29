@@ -1,4 +1,5 @@
 use afs_stark_backend::interaction::InteractionBuilder;
+use p3_keccak_air::NUM_ROUNDS;
 
 use super::{columns::KeccakPermuteCols, KeccakPermuteAir, NUM_U64_HASH_ELEMS};
 
@@ -16,9 +17,11 @@ impl KeccakPermuteAir {
                 })
             })
         });
-        builder.push_send(self.bus_output, output, local.is_real_output);
-
         let input = local.keccak.preimage.into_iter().flatten().flatten();
-        builder.push_receive(self.bus_input, input, local.is_real_input);
+        let is_input = local.is_direct * local.keccak.step_flags[0];
+        builder.push_receive(self.input_bus, input, is_input);
+
+        let is_output = local.is_direct * local.keccak.step_flags[NUM_ROUNDS - 1];
+        builder.push_send(self.output_bus, output, is_output);
     }
 }
