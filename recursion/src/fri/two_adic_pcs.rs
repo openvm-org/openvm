@@ -36,10 +36,10 @@ pub fn verify_two_adic_pcs<C: Config>(
     let blowup = config.blowup;
     let alpha = challenger.sample_ext(builder);
 
-    builder.cycle_tracker("stage-d-1-verify-shape-and-sample-challenges");
+    builder.cycle_tracker_start("stage-d-1-verify-shape-and-sample-challenges");
     let fri_challenges =
         verify_shape_and_sample_challenges(builder, config, &proof.fri_proof, challenger);
-    builder.cycle_tracker("stage-d-1-verify-shape-and-sample-challenges");
+    builder.cycle_tracker_end("stage-d-1-verify-shape-and-sample-challenges");
 
     let commit_phase_commits_len = proof
         .fri_proof
@@ -51,7 +51,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     let mut reduced_openings: Array<_, Array<_, Ext<_, _>>> =
         builder.array(proof.query_openings.len());
 
-    builder.cycle_tracker("stage-d-2-fri-fold");
+    builder.cycle_tracker_start("stage-d-2-fri-fold");
     builder
         .range(0, proof.query_openings.len())
         .for_each(|i, builder| {
@@ -91,7 +91,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                 });
 
                 let log_batch_max_height = builder.get(&batch_heights_log2, 0);
-                let bits_reduced: Var<_> =
+                let bits_reduced: Usize<_> =
                     builder.eval(log_global_max_height - log_batch_max_height);
                 let index_bits_shifted_v1 = index_bits.shift(builder, bits_reduced);
                 verify_batch::<C, 1>(
@@ -114,18 +114,18 @@ pub fn verify_two_adic_pcs<C: Config>(
                         let log2_domain_size = mat.domain.log_n;
                         let log_height: Var<C::N> = builder.eval(log2_domain_size + log_blowup);
 
-                        let bits_reduced: Var<C::N> =
+                        let bits_reduced: Usize<_> =
                             builder.eval(log_global_max_height - log_height);
                         let index_bits_shifted = index_bits.shift(builder, bits_reduced);
 
                         let two_adic_generator = config.get_two_adic_generator(builder, log_height);
-                        builder.cycle_tracker("exp_reverse_bits_len");
+                        builder.cycle_tracker_start("exp_reverse_bits_len");
                         let two_adic_generator_exp = builder.exp_reverse_bits_len(
                             two_adic_generator,
                             &index_bits_shifted,
                             log_height,
                         );
-                        builder.cycle_tracker("exp_reverse_bits_len");
+                        builder.cycle_tracker_end("exp_reverse_bits_len");
                         let x: Felt<C::F> = builder.eval(two_adic_generator_exp * g);
 
                         builder.range(0, mat_points.len()).for_each(|l, builder| {
@@ -152,9 +152,9 @@ pub fn verify_two_adic_pcs<C: Config>(
 
             builder.set_value(&mut reduced_openings, i, ro);
         });
-    builder.cycle_tracker("stage-d-2-fri-fold");
+    builder.cycle_tracker_end("stage-d-2-fri-fold");
 
-    builder.cycle_tracker("stage-d-3-verify-challenges");
+    builder.cycle_tracker_start("stage-d-3-verify-challenges");
     verify_challenges(
         builder,
         config,
@@ -162,7 +162,7 @@ pub fn verify_two_adic_pcs<C: Config>(
         &fri_challenges,
         &reduced_openings,
     );
-    builder.cycle_tracker("stage-d-3-verify-challenges");
+    builder.cycle_tracker_end("stage-d-3-verify-challenges");
 }
 
 impl<C: Config> FromConstant<C> for TwoAdicPcsRoundVariable<C>
@@ -381,6 +381,6 @@ pub mod tests {
         use afs_compiler::util::execute_program;
 
         let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 16);
-        execute_program::<WORD_SIZE, _>(program, witness);
+        execute_program::<WORD_SIZE>(program, witness);
     }
 }

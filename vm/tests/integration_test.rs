@@ -1,28 +1,30 @@
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
-use afs_test_utils::config::baby_bear_poseidon2::{
-    engine_from_perm, random_perm, run_simple_test_no_pis,
+use afs_test_utils::config::baby_bear_poseidon2::{engine_from_perm, random_perm, run_simple_test};
+use afs_test_utils::config::fri_params::{
+    fri_params_fast_testing, fri_params_with_80_bits_of_security,
 };
-use afs_test_utils::config::fri_params::fri_params_with_80_bits_of_security;
 use afs_test_utils::engine::StarkEngine;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
-use stark_vm::vm::config::VmConfig;
-use stark_vm::vm::get_chips;
+use stark_vm::vm::config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN};
+use stark_vm::vm::ExecutionResult;
 use stark_vm::vm::VirtualMachine;
 
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 30;
-const DECOMP: usize = 15;
+const DECOMP: usize = 5;
 
+#[cfg(test)]
 fn air_test(
     field_arithmetic_enabled: bool,
     field_extension_enabled: bool,
     program: Vec<Instruction<BabyBear>>,
     witness_stream: Vec<Vec<BabyBear>>,
+    fast_segmentation: bool,
 ) {
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
             field_arithmetic_enabled,
             field_extension_enabled,
@@ -30,23 +32,36 @@ fn air_test(
             perm_poseidon2_enabled: false,
             limb_bits: LIMB_BITS,
             decomp: DECOMP,
+            num_public_values: 4,
+            max_segment_len: if fast_segmentation {
+                7
+            } else {
+                DEFAULT_MAX_SEGMENT_LEN
+            },
         },
         program,
         witness_stream,
     );
 
-    let traces = vm.traces().unwrap();
-    let chips = get_chips(&vm);
-    run_simple_test_no_pis(chips, traces).expect("Verification failed");
+    let ExecutionResult {
+        nonempty_chips: chips,
+        nonempty_traces: traces,
+        nonempty_pis: pis,
+        ..
+    } = vm.execute().unwrap();
+    let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
+
+    run_simple_test(chips, traces, pis).expect("Verification failed");
 }
 
+#[cfg(test)]
 fn air_test_with_poseidon2(
     field_arithmetic_enabled: bool,
     field_extension_enabled: bool,
     compress_poseidon2_enabled: bool,
     program: Vec<Instruction<BabyBear>>,
 ) {
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
             field_arithmetic_enabled,
             field_extension_enabled,
@@ -54,23 +69,32 @@ fn air_test_with_poseidon2(
             perm_poseidon2_enabled: false,
             limb_bits: LIMB_BITS,
             decomp: DECOMP,
+            num_public_values: 4,
+            max_segment_len: 6,
         },
         program,
         vec![],
     );
 
-    let max_log_degree = vm.max_log_degree().unwrap();
-    let traces = vm.traces().unwrap();
-    let chips = get_chips(&vm);
+    let ExecutionResult {
+        max_log_degree,
+        nonempty_chips: chips,
+        nonempty_traces: traces,
+        nonempty_pis: pis,
+        ..
+    } = vm.execute().unwrap();
 
     let perm = random_perm();
-    let fri_params = fri_params_with_80_bits_of_security()[1];
+    let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
+        fri_params_fast_testing()[1]
+    } else {
+        fri_params_with_80_bits_of_security()[1]
+    };
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
 
-    let num_chips = chips.len();
-
+    let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
     engine
-        .run_simple_test(chips, traces, vec![vec![]; num_chips])
+        .run_simple_test(chips, traces, pis)
         .expect("Verification failed");
 }
 
@@ -98,7 +122,7 @@ fn test_vm_1() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(true, false, program, vec![]);
+    air_test(true, false, program, vec![], true);
 }
 
 #[test]
@@ -131,6 +155,7 @@ fn test_vm_without_field_arithmetic() {
         field_extension_enabled,
         program,
         vec![],
+        true,
     );
 }
 
@@ -152,7 +177,37 @@ fn test_vm_fibonacci_old() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(true, false, program.clone(), vec![]);
+    air_test(true, false, program.clone(), vec![], true);
+}
+
+#[test]
+fn test_vm_fibonacci_old_cycle_tracker() {
+    // NOTE: Instructions commented until cycle tracker instructions are not counted as additional assembly Instructions
+    let program = vec![
+        Instruction::debug(CT_START, "full program"),
+        Instruction::debug(CT_START, "store"),
+        Instruction::from_isize(STOREW, 9, 0, 0, 0, 1),
+        Instruction::from_isize(STOREW, 1, 0, 2, 0, 1),
+        Instruction::from_isize(STOREW, 1, 0, 3, 0, 1),
+        Instruction::from_isize(STOREW, 0, 0, 0, 0, 2),
+        Instruction::from_isize(STOREW, 1, 0, 1, 0, 2),
+        Instruction::debug(CT_END, "store"),
+        Instruction::debug(CT_START, "total loop"),
+        Instruction::from_isize(BEQ, 2, 0, 9, 1, 1), // Instruction::from_isize(BEQ, 2, 0, 7, 1, 1),
+        Instruction::from_isize(FADD, 2, 2, 3, 1, 1),
+        Instruction::debug(CT_START, "inner loop"),
+        Instruction::from_isize(LOADW, 4, -2, 2, 1, 2),
+        Instruction::from_isize(LOADW, 5, -1, 2, 1, 2),
+        Instruction::from_isize(FADD, 6, 4, 5, 1, 1),
+        Instruction::from_isize(STOREW, 6, 0, 2, 1, 2),
+        Instruction::debug(CT_END, "inner loop"),
+        Instruction::from_isize(JAL, 7, -8, 0, 1, 0), // Instruction::from_isize(JAL, 7, -6, 0, 1, 0),
+        Instruction::debug(CT_END, "total loop"),
+        Instruction::debug(CT_END, "full program"),
+        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
+    ];
+
+    air_test(true, false, program.clone(), vec![], false);
 }
 
 #[test]
@@ -179,6 +234,7 @@ fn test_vm_field_extension_arithmetic() {
         field_extension_enabled,
         program,
         vec![],
+        true,
     );
 }
 
@@ -218,6 +274,7 @@ fn test_vm_hint() {
         field_extension_enabled,
         program,
         witness_stream,
+        true,
     );
 }
 
@@ -248,7 +305,7 @@ fn test_vm_compress_poseidon2() {
     }
     let output = 4;
     program.push(Instruction::from_isize(
-        COMP_POS2, input_a, input_b, output, 0, 1,
+        COMP_POS2, output, input_a, input_b, 0, 1,
     ));
     program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
 
@@ -285,7 +342,7 @@ fn test_vm_compress_poseidon2_as2() {
     program.push(Instruction::from_isize(STOREW, input_b, 1, 0, 0, 1));
     program.push(Instruction::from_isize(STOREW, output, 2, 0, 0, 1));
 
-    program.push(Instruction::from_isize(COMP_POS2, 0, 1, 2, 1, 2));
+    program.push(Instruction::from_isize(COMP_POS2, 2, 0, 1, 1, 2));
     program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
 
     air_test_with_poseidon2(false, false, true, program);

@@ -11,11 +11,21 @@ use crate::asm::{AsmInstruction, AssemblyCode};
 
 pub mod field_extension_conversion;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct CompilerOptions {
     pub compile_prints: bool,
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
+}
+
+impl Default for CompilerOptions {
+    fn default() -> Self {
+        CompilerOptions {
+            compile_prints: true,
+            field_arithmetic_enabled: true,
+            field_extension_enabled: true,
+        }
+    }
 }
 
 fn inst<F: PrimeField64>(
@@ -33,6 +43,19 @@ fn inst<F: PrimeField64>(
         op_c,
         d: d.to_field(),
         e: e.to_field(),
+        debug: String::new(),
+    }
+}
+
+fn dbg<F: PrimeField64>(opcode: OpCode, debug: String) -> Instruction<F> {
+    Instruction {
+        opcode,
+        op_a: F::zero(),
+        op_b: F::zero(),
+        op_c: F::zero(),
+        d: F::zero(),
+        e: F::zero(),
+        debug,
     }
 }
 
@@ -236,22 +259,6 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
     let utility_register = utility_registers[0];
 
     match instruction {
-        AsmInstruction::ImmE(dst, val) => {
-            let val_slice = val.as_base_slice();
-
-            (0..EF::D)
-                .map(|i|
-                // register[dst + i * WORD_SIZE] <- val_slice[i]
-                inst(
-                    STOREW,
-                    val_slice[i],
-                    register(dst - (i * WORD_SIZE) as i32),
-                    F::zero(),
-                    AS::Immediate,
-                    AS::Register,
-                ))
-                .collect()
-        }
         AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
         AsmInstruction::LoadF(dst, src, index, offset, size) => vec![
             // register[util] <- register[index] * size
@@ -644,16 +651,10 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             }
         }
         AsmInstruction::AddE(..)
-        | AsmInstruction::AddEI(..)
-        | AsmInstruction::AddEFFI(..)
         | AsmInstruction::SubE(..)
-        | AsmInstruction::SubEI(..)
-        | AsmInstruction::SubEIN(..)
         | AsmInstruction::MulE(..)
         | AsmInstruction::MulEI(..)
-        | AsmInstruction::DivE(..)
-        | AsmInstruction::DivEI(..)
-        | AsmInstruction::DivEIN(..) => {
+        | AsmInstruction::InvE(..) => {
             let fe_utility_registers = from_fn(|i| utility_registers[i]);
             if options.field_extension_enabled {
                 convert_field_extension::<WORD_SIZE, F, EF>(instruction, fe_utility_registers)
@@ -669,15 +670,15 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 )
             }
         }
-        AsmInstruction::Poseidon2Compress(src1, src2, dst) => vec![inst(
+        AsmInstruction::Poseidon2Compress(dst, src1, src2) => vec![inst(
             COMP_POS2,
+            register(dst),
             register(src1),
             register(src2),
-            register(dst),
             AS::Register,
             AS::Memory,
         )],
-        AsmInstruction::Poseidon2Permute(src, dst) => vec![
+        AsmInstruction::Poseidon2Permute(dst, src) => vec![
             inst(
                 FADD,
                 utility_register,
@@ -688,14 +689,23 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
             inst(
                 PERM_POS2,
+                register(dst),
                 register(src),
                 utility_register,
-                register(dst),
                 AS::Register,
                 AS::Memory,
             ),
         ],
-        AsmInstruction::CycleTracker(_) => vec![],
+        AsmInstruction::CycleTrackerStart(name) => vec![dbg(CT_START, name)],
+        AsmInstruction::CycleTrackerEnd(name) => vec![dbg(CT_END, name)],
+        AsmInstruction::Publish(val, index) => vec![inst(
+            PUBLISH,
+            register(index),
+            register(val),
+            F::zero(),
+            AS::Register,
+            AS::Register,
+        )],
         _ => panic!("Unsupported instruction {:?}", instruction),
     }
 }

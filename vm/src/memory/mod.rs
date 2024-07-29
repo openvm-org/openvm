@@ -1,9 +1,11 @@
-use afs_primitives::offline_checker::OfflineCheckerOperation;
 use p3_field::PrimeField64;
-use std::array::from_fn;
+
+use afs_primitives::offline_checker::OfflineCheckerOperation;
 
 pub mod expand;
 pub mod offline_checker;
+
+pub mod interface;
 #[cfg(test)]
 pub mod tests;
 pub mod tree;
@@ -51,5 +53,5 @@ pub fn compose<const WORD_SIZE: usize, F: PrimeField64>(word: [F; WORD_SIZE]) ->
 }
 
 pub fn decompose<const WORD_SIZE: usize, F: PrimeField64>(field_elem: F) -> [F; WORD_SIZE] {
-    from_fn(|i| if i == 0 { field_elem } else { F::zero() })
+    std::array::from_fn(|i| if i == 0 { field_elem } else { F::zero() })
 }

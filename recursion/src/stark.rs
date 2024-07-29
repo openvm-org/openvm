@@ -1,6 +1,5 @@
 use std::any::{type_name, Any};
 
-use afs_stark_backend::air_builders::symbolic::{SymbolicConstraints, SymbolicRapBuilder};
 use itertools::Itertools;
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
@@ -10,6 +9,7 @@ use p3_matrix::dense::RowMajorMatrixView;
 use p3_matrix::stack::VerticalPair;
 
 use afs_compiler::ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize, Var};
+use afs_stark_backend::air_builders::symbolic::{SymbolicConstraints, SymbolicRapBuilder};
 use afs_stark_backend::prover::opener::AdjacentOpenedValues;
 use afs_stark_backend::rap::Rap;
 use afs_test_utils::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
@@ -123,7 +123,7 @@ where
             }
         }
 
-        builder.cycle_tracker("stage-c-build-rounds");
+        builder.cycle_tracker_start("stage-c-build-rounds");
 
         for i in 0..num_airs {
             if let Some(preprocessed_data) = vk.per_air[i].preprocessed_data.as_ref() {
@@ -196,7 +196,7 @@ where
         for i in 0..num_airs {
             let log_degree = builder.get(log_degree_per_air, i);
 
-            let domain = pcs.natural_domain_for_log_degree(builder, Usize::Var(log_degree));
+            let domain = pcs.natural_domain_for_log_degree(builder, log_degree);
             builder.set_value(&mut trace_domains, i, domain.clone());
 
             let mut trace_points = builder.dyn_array::<Ext<_, _>>(2);
@@ -204,11 +204,8 @@ where
             builder.set_value(&mut trace_points, 0, zeta);
             builder.set_value(&mut trace_points, 1, zeta_next);
 
-            let log_quotient_degree: Var<_> = builder.constant(C::N::from_canonical_usize(
-                vk.per_air[i].log_quotient_degree(),
-            ));
-            let quotient_degree: Var<_> =
-                builder.constant(C::N::from_canonical_usize(vk.per_air[i].quotient_degree));
+            let log_quotient_degree = Usize::Const(vk.per_air[i].log_quotient_degree());
+            let quotient_degree = Usize::Const(vk.per_air[i].quotient_degree);
             let log_quotient_size: Usize<_> = builder.eval(log_degree + log_quotient_degree);
             let quotient_domain =
                 domain.create_disjoint_domain(builder, log_quotient_size, Some(pcs.config.clone()));
@@ -259,7 +256,7 @@ where
                     points: trace_points.clone(),
                 };
 
-                let mut mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.dyn_array(num_airs);
+                let mut mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.dyn_array(1);
                 builder.set_value(&mut mats, 0, prep_mat);
 
                 builder.set_value(
@@ -384,15 +381,15 @@ where
         // Sanity check: the number of rounds matches.
         assert_eq!(round_idx, total_rounds);
 
-        builder.cycle_tracker("stage-c-build-rounds");
+        builder.cycle_tracker_end("stage-c-build-rounds");
 
         // Verify the pcs proof
-        builder.cycle_tracker("stage-d-verify-pcs");
+        builder.cycle_tracker_start("stage-d-verify-pcs");
         pcs.verify(builder, rounds, proof.opening.proof.clone(), challenger);
-        builder.cycle_tracker("stage-d-verify-pcs");
+        builder.cycle_tracker_end("stage-d-verify-pcs");
 
         // TODO[sp1] CONSTRAIN: that the preprocessed chips get called with verify_constraints.
-        builder.cycle_tracker("stage-e-verify-constraints");
+        builder.cycle_tracker_start("stage-e-verify-constraints");
 
         // TODO[zach]: make per phase; for now just 1 phase so OK
         let after_challenge_idx: Var<C::N> = builder.constant(C::N::zero());
@@ -478,7 +475,7 @@ where
             );
         }
 
-        builder.cycle_tracker("stage-e-verify-constraints");
+        builder.cycle_tracker_end("stage-e-verify-constraints");
         // TODO[jpw] cumulative sum check
     }
 

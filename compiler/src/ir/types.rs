@@ -220,6 +220,14 @@ impl<C: Config> Variable<C> for Usize<C::N> {
             }
         }
     }
+
+    fn eval(builder: &mut Builder<C>, expr: impl Into<Self::Expression>) -> Self {
+        let expr = expr.into();
+        match expr {
+            SymbolicUsize::Const(c) => Usize::Const(c),
+            SymbolicUsize::Var(v) => Usize::Var(builder.eval(v)),
+        }
+    }
 }
 
 impl<N: Field> Var<N> {
@@ -510,6 +518,34 @@ impl<C: Config> MemVariable<C> for Var<C::N> {
 
     fn store(&self, ptr: Ptr<<C as Config>::N>, index: MemIndex<C::N>, builder: &mut Builder<C>) {
         builder.push(DslIr::StoreV(*self, ptr, index));
+    }
+}
+
+impl<C: Config> MemVariable<C> for Usize<C::N> {
+    fn size_of() -> usize {
+        1
+    }
+
+    fn load(&self, ptr: Ptr<C::N>, index: MemIndex<C::N>, builder: &mut Builder<C>) {
+        match self {
+            Usize::Const(_) => {
+                panic!("Usize::Const should not be loaded");
+            }
+            Usize::Var(v) => {
+                builder.push(DslIr::LoadV(*v, ptr, index));
+            }
+        }
+    }
+
+    fn store(&self, ptr: Ptr<<C as Config>::N>, index: MemIndex<C::N>, builder: &mut Builder<C>) {
+        match self {
+            Usize::Const(_) => {
+                panic!("Usize::Const should not be stored");
+            }
+            Usize::Var(v) => {
+                builder.push(DslIr::StoreV(*v, ptr, index));
+            }
+        }
     }
 }
 

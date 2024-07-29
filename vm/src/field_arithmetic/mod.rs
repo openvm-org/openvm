@@ -58,16 +58,8 @@ impl FieldArithmeticAir {
             OpCode::FSUB => Some(operands.0 - operands.1),
             OpCode::FMUL => Some(operands.0 * operands.1),
             OpCode::FDIV => Some(operands.0 / operands.1),
-            _ => None,
+            _ => unreachable!(),
         }
-    }
-
-    /// Vectorized solve<>
-    pub fn solve_all<T: Field>(ops: Vec<OpCode>, operands: Vec<(T, T)>) -> Vec<T> {
-        ops.iter()
-            .zip(operands.iter())
-            .filter_map(|(op, operand)| Self::solve::<T>(*op, *operand))
-            .collect()
     }
 }
 
@@ -77,6 +69,7 @@ pub struct FieldArithmeticChip<F: Field> {
 }
 
 impl<F: Field> FieldArithmeticChip<F> {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             air: FieldArithmeticAir {},
@@ -100,10 +93,8 @@ impl<F: Field> FieldArithmeticChip<F> {
             self.calculate(*op, *operands);
         }
     }
-}
 
-impl<F: Field> Default for FieldArithmeticChip<F> {
-    fn default() -> Self {
-        Self::new()
+    pub fn current_height(&self) -> usize {
+        self.operations.len()
     }
 }

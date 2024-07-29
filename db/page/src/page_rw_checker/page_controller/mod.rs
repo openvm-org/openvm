@@ -81,7 +81,7 @@ struct PageCommitments<SC: StarkGenericConfig> {
 }
 
 /// This is a controller for read/write/delete for one page. Here's an outline of how it works
-/// It owns three chips: a init_chip (MyInitialPageAir), offline_checker (OfflineChecker), and final_chip (MyFinalPageAir)
+/// It owns three chips: a init_chip (PageReadAir), offline_checker (PageOfflineChecker), and final_chip (IndexedPageWriteAir)
 /// The only trace partition of init_chip is the initial page and a trace partition of final_chip is the final page. The goal of
 /// those chips and the offline_checker is to prove that the difference between the initial and final pages is exactly
 /// the list of operations sent on the ops_bus to the offline_checker.
@@ -222,12 +222,13 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         ));
     }
 
+    /// Used to load the initial page and the operations
     pub fn load_page_and_ops(
         &mut self,
         page: &Page,
         init_page_pdata: Option<Arc<ProverTraceData<SC>>>,
         final_page_pdata: Option<Arc<ProverTraceData<SC>>>,
-        ops: Vec<Operation>,
+        ops: &[Operation],
         trace_degree: usize,
         trace_committer: &mut TraceCommitter<SC>,
     ) -> (Arc<ProverTraceData<SC>>, Arc<ProverTraceData<SC>>)
@@ -241,7 +242,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         let init_page_trace = self.gen_page_trace(&page);
 
         let offline_checker_trace =
-            self.gen_ops_trace(&mut page, &ops, self.range_checker.clone(), trace_degree);
+            self.gen_ops_trace(&mut page, ops, self.range_checker.clone(), trace_degree);
 
         // HashSet of all indices intercepted by Offline Checker to be written to the final page
         let mut final_write_indices = HashSet::new();

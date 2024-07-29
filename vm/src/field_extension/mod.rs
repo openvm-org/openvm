@@ -1,8 +1,9 @@
 use p3_field::{Field, PrimeField32};
 
 use crate::cpu::trace::Instruction;
+use crate::cpu::OpCode;
 use crate::cpu::FIELD_EXTENSION_INSTRUCTIONS;
-use crate::{cpu::OpCode, vm::VirtualMachine};
+use crate::vm::ExecutionSegment;
 
 pub mod air;
 pub mod bridge;
@@ -27,16 +28,6 @@ pub struct FieldExtensionArithmeticOperation<F> {
     pub operand1: [F; EXTENSION_DEGREE],
     pub operand2: [F; EXTENSION_DEGREE],
     pub result: [F; EXTENSION_DEGREE],
-}
-
-impl<F: Field> FieldExtensionArithmeticOperation<F> {
-    pub fn to_vec(&self) -> Vec<F> {
-        let mut result = vec![F::from_canonical_usize(self.opcode as usize)];
-        result.extend(self.operand1.iter());
-        result.extend(self.operand2.iter());
-        result.extend(self.result.iter());
-        result
-    }
 }
 
 /// Field extension arithmetic chip. The irreducible polynomial is x^4 - 11.
@@ -109,25 +100,6 @@ impl FieldExtensionArithmeticAir {
             _ => None,
         }
     }
-
-    /// Vectorized solve<>
-    pub fn solve_all<T: Field>(
-        ops: Vec<OpCode>,
-        operands: Vec<([T; EXTENSION_DEGREE], [T; EXTENSION_DEGREE])>,
-    ) -> Vec<[T; EXTENSION_DEGREE]> {
-        let mut result = Vec::<[T; EXTENSION_DEGREE]>::new();
-
-        for i in 0..ops.len() {
-            match Self::solve::<T>(ops[i], operands[i].0, operands[i].1) {
-                Some(res) => result.push(res),
-                None => {
-                    panic!("FieldExtensionArithmeticAir::solve_all: non-field extension opcode")
-                }
-            }
-        }
-
-        result
-    }
 }
 
 pub struct FieldExtensionArithmeticChip<const WORD_SIZE: usize, F: PrimeField32> {
@@ -136,6 +108,7 @@ pub struct FieldExtensionArithmeticChip<const WORD_SIZE: usize, F: PrimeField32>
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_SIZE, F> {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             air: FieldExtensionArithmeticAir {},
@@ -145,7 +118,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
 
     #[allow(clippy::too_many_arguments)]
     pub fn calculate(
-        vm: &mut VirtualMachine<WORD_SIZE, F>,
+        vm: &mut ExecutionSegment<WORD_SIZE, F>,
         start_timestamp: usize,
         instruction: Instruction<F>,
     ) -> [F; EXTENSION_DEGREE] {
@@ -156,6 +129,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
             op_c,
             d,
             e,
+            debug: _debug,
         } = instruction;
         assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
 
@@ -196,7 +170,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
     }
 
     fn read_extension_element(
-        vm: &mut VirtualMachine<WORD_SIZE, F>,
+        vm: &mut ExecutionSegment<WORD_SIZE, F>,
         timestamp: usize,
         address_space: F,
         address: F,
@@ -219,7 +193,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
     }
 
     fn write_extension_element(
-        vm: &mut VirtualMachine<WORD_SIZE, F>,
+        vm: &mut ExecutionSegment<WORD_SIZE, F>,
         timestamp: usize,
         address_space: F,
         address: F,
@@ -236,12 +210,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
             );
         }
     }
-}
 
-impl<const WORD_SIZE: usize, F: PrimeField32> Default
-    for FieldExtensionArithmeticChip<WORD_SIZE, F>
-{
-    fn default() -> Self {
-        Self::new()
+    pub fn current_height(&self) -> usize {
+        self.operations.len()
     }
 }

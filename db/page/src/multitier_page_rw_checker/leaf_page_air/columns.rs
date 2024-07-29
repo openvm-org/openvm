@@ -18,7 +18,7 @@ pub struct LeafPageSubAirCols<T> {
     pub idx_start: IsLessThanTupleAuxCols<T>,
     // check if the upper bound assigned to this page is less than the idx of this row -> want this to be false
     pub end_idx: IsLessThanTupleAuxCols<T>,
-    // constrain sortedness (which is done with MyFinalPageAir)
+    // constrain sortedness (which is done with IndexedPageWriteAir)
     pub final_page_aux: IndexedPageWriteAuxCols<T>,
 }
 

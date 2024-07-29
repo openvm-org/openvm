@@ -245,8 +245,8 @@ impl<C: Config> CanObserveVariable<C, Felt<C::F>> for DuplexChallengerVariable<C
                 });
             }
             Array::Fixed(values) => {
-                values.iter().for_each(|value| {
-                    self.observe(builder, *value);
+                values.borrow().iter().for_each(|value| {
+                    self.observe(builder, value.unwrap());
                 });
             }
         }
@@ -340,6 +340,6 @@ mod tests {
 
         const WORD_SIZE: usize = 1;
         let program = builder.compile_isa::<WORD_SIZE>();
-        execute_program::<WORD_SIZE, _>(program, vec![]);
+        execute_program::<WORD_SIZE>(program, vec![]);
     }
 }

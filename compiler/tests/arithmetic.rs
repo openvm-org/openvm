@@ -3,11 +3,14 @@ use p3_field::extension::BinomialExtensionField;
 use p3_field::{AbstractExtensionField, AbstractField, Field};
 use rand::{thread_rng, Rng};
 
-use afs_compiler::asm::AsmBuilder;
+use afs_compiler::asm::{AsmBuilder, AsmConfig};
 use afs_compiler::conversion::CompilerOptions;
-use afs_compiler::ir::{Ext, Felt, SymbolicExt};
+use afs_compiler::ir::{Builder, Ext, Felt, SymbolicExt};
 use afs_compiler::ir::{ExtConst, Var};
 use afs_compiler::util::execute_program;
+use stark_vm::cpu::trace::ExecutionError::Fail;
+use stark_vm::vm::config::VmConfig;
+use stark_vm::vm::VirtualMachine;
 
 #[allow(dead_code)]
 const WORD_SIZE: usize = 1;
@@ -26,6 +29,8 @@ fn test_compiler_arithmetic() {
     builder.assert_felt_eq(zero * one, F::zero());
     builder.assert_felt_eq(one * one, F::one());
     builder.assert_felt_eq(one + one, F::two());
+
+    builder.assert_felt_eq(one / F::two(), F::two().inverse());
 
     let zero_ext: Ext<_, _> = builder.eval(EF::zero().cons());
     let one_ext: Ext<_, _> = builder.eval(EF::one().cons());
@@ -92,27 +97,14 @@ fn test_compiler_arithmetic() {
 
     builder.halt();
 
-    // generate program with only base field operations
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 
-    // let options = CompilerOptions {
-    //     compile_prints: true,
-    //     field_arithmetic_enabled: true,
-    //     field_extension_enabled: true,
-    // };
-
-    // // use extension field operations
-    // let program = builder.compile_isa_with_options::<WORD_SIZE>(options);
-    // display_program(&program);
-    // execute_program::<WORD_SIZE, _>(program, vec![]);
-
-    // let program = builder.compile_program();
-
-    // let config = SC::default();
-    // let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
-    // runtime.run();
-    // runtime.print_stats();
+    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+        field_extension_enabled: false,
+        ..Default::default()
+    });
+    execute_program::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -135,13 +127,20 @@ fn test_compiler_arithmetic_2() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
+
+    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+        field_extension_enabled: false,
+        ..Default::default()
+    });
+    execute_program::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
 fn test_in_place_arithmetic() {
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, 4>;
+
     let mut builder = AsmBuilder::<F, EF>::default();
 
     let ef = EF::from_base_slice(&[
@@ -169,10 +168,286 @@ fn test_in_place_arithmetic() {
 
     builder.halt();
 
+    let program = builder.clone().compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE>(program, vec![]);
+
+    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+        field_extension_enabled: false,
+        ..Default::default()
+    });
+    execute_program::<WORD_SIZE>(program, vec![]);
+}
+
+#[test]
+fn test_field_immediate() {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+
+    let mut builder = AsmBuilder::<F, EF>::default();
+
+    let mut rng = thread_rng();
+
+    let a = rng.gen();
+    let b = rng.gen();
+
+    let v: Felt<_> = builder.constant(a);
+
+    builder.assert_felt_eq(v + b, a + b);
+    builder.assert_felt_eq(v - b, a - b);
+    builder.assert_felt_eq(v * b, a * b);
+    builder.assert_felt_eq(v / b, a / b);
+
+    builder.halt();
+
+    let program = builder.compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE>(program, vec![]);
+}
+
+#[test]
+fn test_ext_immediate() {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+
+    let mut builder = AsmBuilder::<F, EF>::default();
+
+    let f = F::from_canonical_u32(314159265);
+
+    let ef = EF::from_base_slice(&[
+        F::from_canonical_u32(1163664312),
+        F::from_canonical_u32(1251518712),
+        F::from_canonical_u32(1133200680),
+        F::from_canonical_u32(1689596134),
+    ]);
+
+    let ext: Ext<_, _> = builder.constant(ef);
+
+    let x: Ext<_, _> = builder.uninit();
+    builder.assign(x, ext + ef);
+    builder.assert_ext_eq(x, (ef + ef).cons());
+
+    let x: Ext<_, _> = builder.uninit();
+    builder.assign(x, ef.cons() + ext);
+    builder.assert_ext_eq(x, (ef + ef).cons());
+
+    let x: Ext<_, _> = builder.uninit();
+    builder.assign(x, ext + f);
+    builder.assert_ext_eq(x, (ef + f).cons());
+
+    let x: Ext<_, _> = builder.uninit();
+    builder.assign(x, ext - ef);
+    builder.assert_ext_eq(x, EF::zero().cons());
+
+    let x: Ext<_, _> = builder.uninit();
+    builder.assign(x, ef.cons() - ext);
+    builder.assert_ext_eq(x, EF::zero().cons());
+
+    let x: Ext<_, _> = builder.uninit();
+    builder.assign(x, ext - f);
+    builder.assert_ext_eq(x, (ef - f).cons());
+
+    let x: Ext<_, _> = builder.uninit();
+    builder.assign(x, ext * ef);
+    builder.assert_ext_eq(x, (ef * ef).cons());
+
+    let x: Ext<_, _> = builder.uninit();
+    builder.assign(x, ef.cons() * ext);
+    builder.assert_ext_eq(x, (ef * ef).cons());
+
+    let x: Ext<_, _> = builder.uninit();
+    builder.assign(x, ext * f);
+    builder.assert_ext_eq(x, (ef * f).cons());
+
+    let x: Ext<_, _> = builder.uninit();
+    builder.assign(x, ext / ef);
+    builder.assert_ext_eq(x, EF::one().cons());
+
+    let x: Ext<_, _> = builder.uninit();
+    builder.assign(x, ef.cons() / ext);
+    builder.assert_ext_eq(x, EF::one().cons());
+
+    let x: Ext<_, _> = builder.uninit();
+    builder.assign(x, ext / f);
+    builder.assert_ext_eq(x, (ef / f.into()).cons());
+
+    builder.halt();
+
+    let program = builder.clone().compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE>(program, vec![]);
+
     let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
         compile_prints: false,
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
     });
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
+}
+
+#[test]
+fn test_ext_felt_arithmetic() {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+
+    let mut builder = AsmBuilder::<F, EF>::default();
+
+    let f = F::from_canonical_u32(314159265);
+
+    let ef = EF::from_base_slice(&[
+        F::from_canonical_u32(1163664312),
+        F::from_canonical_u32(1251518712),
+        F::from_canonical_u32(1133200680),
+        F::from_canonical_u32(1689596134),
+    ]);
+
+    let felt: Felt<_> = builder.constant(f);
+    let ext: Ext<_, _> = builder.constant(ef);
+
+    let x: Ext<_, _> = builder.uninit();
+    builder.assign(x, ext + felt);
+    builder.assert_ext_eq(x, (ef + f).cons());
+
+    builder.assign(x, ext + f);
+    builder.assert_ext_eq(x, (ef + f).cons());
+
+    builder.assign(x, ext - felt);
+    builder.assert_ext_eq(x, (ef - f).cons());
+
+    builder.assign(x, ext - f);
+    builder.assert_ext_eq(x, (ef - f).cons());
+
+    builder.assign(x, ext * felt);
+    builder.assert_ext_eq(x, (ef * f).cons());
+
+    builder.assign(x, ext * f);
+    builder.assert_ext_eq(x, (ef * f).cons());
+
+    builder.assign(x, ext / felt);
+    builder.assert_ext_eq(x, (ef / EF::from_base(f)).cons());
+
+    builder.assign(x, ext / f);
+    builder.assert_ext_eq(x, (ef / EF::from_base(f)).cons());
+
+    builder.halt();
+
+    let program = builder.clone().compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE>(program, vec![]);
+
+    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+        compile_prints: false,
+        field_arithmetic_enabled: true,
+        field_extension_enabled: true,
+    });
+    execute_program::<WORD_SIZE>(program, vec![]);
+}
+
+#[test]
+fn test_felt_equality() {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+
+    let mut rng = thread_rng();
+    let f = rng.gen::<F>();
+
+    let mut builder = AsmBuilder::<F, EF>::default();
+
+    let a: Felt<_> = builder.constant(f);
+    builder.assert_felt_eq(a, f);
+    builder.assert_felt_eq(f, a);
+    builder.assert_felt_eq(a, a);
+    builder.assert_ext_eq(a, a);
+
+    builder.assert_felt_ne(a, a + F::one());
+    builder.assert_felt_ne(a, f + F::one());
+    builder.assert_felt_ne(a + F::one(), a);
+    builder.assert_felt_ne(f + F::one(), a);
+
+    builder.halt();
+
+    let program = builder.clone().compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE>(program, vec![]);
+}
+
+#[test]
+fn test_felt_equality_negative() {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+
+    let mut rng = thread_rng();
+    let f = rng.gen::<F>();
+
+    let mut builder = AsmBuilder::<F, EF>::default();
+    let a: Felt<_> = builder.constant(f);
+    builder.assert_felt_ne(a, a);
+    builder.halt();
+    assert_failed_assertion(builder);
+
+    let mut builder = AsmBuilder::<F, EF>::default();
+    let a: Felt<_> = builder.constant(f);
+    builder.assert_felt_eq(a, a + F::one());
+    builder.halt();
+
+    assert_failed_assertion(builder);
+}
+
+#[test]
+fn test_ext_equality() {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+
+    let mut rng = thread_rng();
+    let a_ext = rng.gen::<EF>();
+
+    let mut builder = AsmBuilder::<F, EF>::default();
+
+    let a: Ext<_, _> = builder.constant(a_ext);
+    builder.assert_ext_eq(a, a);
+    builder.assert_ext_eq(a, a_ext.cons());
+    builder.assert_ext_eq(a_ext.cons(), a);
+
+    builder.assert_ext_ne(a, a + EF::one());
+    builder.assert_ext_ne(a + EF::one(), a);
+    builder.assert_ext_ne(a, (a_ext + EF::one()).cons());
+    builder.assert_ext_ne((a_ext + EF::one()).cons(), a);
+
+    for i in 0..4 {
+        let mut base = a_ext.as_base_slice().to_vec();
+        base[i] = rng.gen::<F>();
+        let b_ext = EF::from_base_slice(&base);
+        builder.assert_ext_ne(a, b_ext.cons());
+        builder.assert_ext_ne(b_ext.cons(), a);
+    }
+
+    builder.halt();
+
+    let program = builder.compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE>(program, vec![]);
+}
+
+#[test]
+fn test_ext_equality_negative() {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+
+    let mut rng = thread_rng();
+    let a_ext = rng.gen::<EF>();
+
+    let mut builder = AsmBuilder::<F, EF>::default();
+    let a: Ext<_, _> = builder.constant(a_ext);
+    builder.assert_ext_ne(a, a);
+    builder.halt();
+    assert_failed_assertion(builder);
+
+    let mut builder = AsmBuilder::<F, EF>::default();
+    let a: Ext<_, _> = builder.constant(a_ext);
+    builder.assert_ext_eq(a, a + EF::one());
+    builder.halt();
+    assert_failed_assertion(builder);
+}
+
+fn assert_failed_assertion(
+    builder: Builder<AsmConfig<BabyBear, BinomialExtensionField<BabyBear, 4>>>,
+) {
+    let program = builder.compile_isa::<WORD_SIZE>();
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(VmConfig::default(), program, vec![]);
+    let result = vm.execute();
+    assert!(matches!(result, Err(Fail(_))));
 }

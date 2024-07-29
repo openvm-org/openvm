@@ -43,7 +43,7 @@ jobs:
 
       - name: Run benchmark
         run: |
-          RUSTFLAGS="-Ctarget-cpu=native" cargo run --profile=fast --bin benchmark --features parallel -- rw -r 90 -w 10 --config-folder benchmark/config/single_rw
+          RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- rw -r 90 -w 10 --config-folder benchmark/config/single_rw
 
   bench-new:
     name: Run benchmark on workflow ref/branch
@@ -60,7 +60,7 @@ jobs:
 
       - name: Run benchmark
         run: |
-          RUSTFLAGS="-Ctarget-cpu=native" cargo run --profile=fast --bin benchmark --features parallel -- rw -r 90 -w 10 --config-folder benchmark/config/single_rw
+          RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- rw -r 90 -w 10 --config-folder benchmark/config/single_rw
 
   stop-runner:
     name: Stop self-hosted EC2 runner

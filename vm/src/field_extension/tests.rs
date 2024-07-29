@@ -1,14 +1,16 @@
 use std::ops::{Add, Div, Mul, Sub};
 
-use crate::cpu::{OpCode, WORD_SIZE};
-use afs_stark_backend::prover::USE_DEBUG_BUILDER;
-use afs_stark_backend::verifier::VerificationError;
-use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
-use afs_test_utils::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
 use p3_field::{AbstractExtensionField, AbstractField};
 use rand::Rng;
+
+use afs_stark_backend::prover::USE_DEBUG_BUILDER;
+use afs_stark_backend::verifier::VerificationError;
+use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use afs_test_utils::utils::create_seeded_rng;
+
+use crate::cpu::{OpCode, FIELD_EXTENSION_INSTRUCTIONS, WORD_SIZE};
 
 use super::columns::FieldExtensionArithmeticIoCols;
 use super::{
@@ -24,7 +26,7 @@ fn generate_field_extension_operations(
     let mut requests = vec![];
 
     for _ in 0..len_ops {
-        let op = OpCode::from_u8(rng.gen_range(12..=15)).unwrap();
+        let op = FIELD_EXTENSION_INSTRUCTIONS[rng.gen_range(0..4)];
 
         // dummy values for clock cycle and addr_space and pointers
         let timestamp: usize = 0;

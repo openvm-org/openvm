@@ -27,16 +27,15 @@ impl PageOfflineChecker {
         clk_bits: usize,
         idx_decomp: usize,
     ) -> Self {
-        let offline_checker = OfflineChecker::new(
-            [vec![idx_limb_bits; idx_len], vec![clk_bits]].concat(),
-            idx_decomp,
-            idx_len,
-            data_len,
-            range_bus_index,
-            ops_bus_index,
-        );
         Self {
-            offline_checker,
+            offline_checker: OfflineChecker::new(
+                [vec![idx_limb_bits; idx_len], vec![clk_bits]].concat(),
+                idx_decomp,
+                idx_len,
+                data_len,
+                range_bus_index,
+                ops_bus_index,
+            ),
             page_bus_index,
         }
     }

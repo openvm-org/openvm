@@ -40,6 +40,6 @@ impl<F: PrimeField64> ProgramChip<F> {
             return Err(PcOutOfBounds(pc, self.true_program_length));
         }
         self.execution_frequencies[pc] += 1;
-        Ok(self.air.program[pc])
+        Ok(self.air.program[pc].clone())
     }
 }

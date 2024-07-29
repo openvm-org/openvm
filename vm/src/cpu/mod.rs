@@ -1,5 +1,11 @@
 use enum_utils::FromStr;
 use p3_baby_bear::BabyBear;
+use p3_field::PrimeField32;
+
+use OpCode::*;
+
+use crate::field_extension::FieldExtensionArithmeticAir;
+use crate::poseidon2::Poseidon2Chip;
 
 #[cfg(test)]
 pub mod tests;
@@ -35,76 +41,63 @@ pub enum OpCode {
     BEQ = 3,
     BNE = 4,
     TERMINATE = 5,
+    PUBLISH = 6,
+    FADD = 10,
+    FSUB = 11,
+    FMUL = 12,
+    FDIV = 13,
 
-    FADD = 6,
-    FSUB = 7,
-    FMUL = 8,
-    FDIV = 9,
+    FAIL = 20,
+    PRINTF = 21,
 
-    FAIL = 10,
-    PRINTF = 11,
+    FE4ADD = 30,
+    FE4SUB = 31,
+    BBE4MUL = 32,
+    BBE4INV = 33,
 
-    FE4ADD = 12,
-    FE4SUB = 13,
-    BBE4MUL = 14,
-    BBE4INV = 15,
-
-    PERM_POS2 = 16,
-    COMP_POS2 = 17,
+    PERM_POS2 = 40,
+    COMP_POS2 = 41,
 
     /// Instruction to write the next hint word into memory.
-    SHINTW = 18,
+    SHINTW = 50,
 
     /// Phantom instruction to prepare the next input vector for hinting.
-    HINT_INPUT = 19,
+    HINT_INPUT = 51,
     /// Phantom instruction to prepare the little-endian bit decomposition of a variable for hinting.
-    HINT_BITS = 20,
+    HINT_BITS = 52,
+
+    /// Phantom instruction to start tracing
+    CT_START = 60,
+    /// Phantom instruction to end tracing
+    CT_END = 61,
+
+    NOP = 100,
 }
 
-impl OpCode {
-    pub fn from_u8(value: u8) -> Option<Self> {
-        match value {
-            0 => Some(LOADW),
-            1 => Some(STOREW),
-            2 => Some(JAL),
-            3 => Some(BEQ),
-            4 => Some(BNE),
-            5 => Some(TERMINATE),
-
-            6 => Some(FADD),
-            7 => Some(FSUB),
-            8 => Some(FMUL),
-            9 => Some(FDIV),
-
-            10 => Some(FAIL),
-            11 => Some(PRINTF),
-
-            12 => Some(FE4ADD),
-            13 => Some(FE4SUB),
-            14 => Some(BBE4MUL),
-            15 => Some(BBE4INV),
-
-            16 => Some(PERM_POS2),
-            17 => Some(COMP_POS2),
-
-            18 => Some(SHINTW),
-            19 => Some(HINT_INPUT),
-            20 => Some(HINT_BITS),
-
-            _ => None,
-        }
-    }
-}
-
-use crate::field_extension::FieldExtensionArithmeticAir;
-use crate::poseidon2::Poseidon2Chip;
-use OpCode::*;
-
-pub const CORE_INSTRUCTIONS: [OpCode; 9] = [
-    LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, SHINTW, HINT_INPUT, HINT_BITS,
+pub const CORE_INSTRUCTIONS: [OpCode; 13] = [
+    LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, SHINTW, HINT_INPUT, HINT_BITS, PUBLISH, CT_START,
+    CT_END, NOP,
 ];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
+
+impl OpCode {
+    pub fn all_opcodes() -> Vec<OpCode> {
+        let mut all_opcodes = vec![];
+        all_opcodes.extend(CORE_INSTRUCTIONS);
+        all_opcodes.extend(FIELD_ARITHMETIC_INSTRUCTIONS);
+        all_opcodes.extend(FIELD_EXTENSION_INSTRUCTIONS);
+        all_opcodes.extend([FAIL, PRINTF]);
+        all_opcodes.extend([PERM_POS2, COMP_POS2]);
+        all_opcodes
+    }
+
+    pub fn from_u8(value: u8) -> Option<Self> {
+        Self::all_opcodes()
+            .into_iter()
+            .find(|&opcode| value == opcode as u8)
+    }
+}
 
 fn max_accesses_per_instruction(opcode: OpCode) -> usize {
     match opcode {
@@ -113,6 +106,7 @@ fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         JAL => 3,
         BEQ | BNE => 2,
         TERMINATE => 0,
+        PUBLISH => 2,
         opcode if FIELD_ARITHMETIC_INSTRUCTIONS.contains(&opcode) => 3,
         opcode if FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode) => {
             FieldExtensionArithmeticAir::max_accesses_per_instruction(opcode)
@@ -124,6 +118,8 @@ fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         }
         SHINTW => 3,
         HINT_INPUT | HINT_BITS => 0,
+        CT_START | CT_END => 0,
+        NOP => 0,
         _ => panic!(),
     }
 }
@@ -134,6 +130,16 @@ pub struct CpuOptions {
     pub field_extension_enabled: bool,
     pub compress_poseidon2_enabled: bool,
     pub perm_poseidon2_enabled: bool,
+    pub num_public_values: usize,
+}
+
+#[derive(Default, Clone, Copy)]
+/// State of the CPU.
+pub struct ExecutionState {
+    pub clock_cycle: usize,
+    pub timestamp: usize,
+    pub pc: usize,
+    pub is_done: bool,
 }
 
 impl CpuOptions {
@@ -164,6 +170,7 @@ impl CpuOptions {
 }
 
 #[derive(Default, Clone)]
+/// Air for the CPU. Carries no state and does not own execution.
 pub struct CpuAir<const WORD_SIZE: usize> {
     pub options: CpuOptions,
 }
@@ -171,5 +178,59 @@ pub struct CpuAir<const WORD_SIZE: usize> {
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
     pub fn new(options: CpuOptions) -> Self {
         Self { options }
+    }
+}
+
+/// Chip for the CPU. Carries all state and owns execution.
+pub struct CpuChip<const WORD_SIZE: usize, F: Clone> {
+    pub air: CpuAir<WORD_SIZE>,
+    pub rows: Vec<Vec<F>>,
+    pub state: ExecutionState,
+    /// Program counter at the start of the current segment.
+    pub start_state: ExecutionState,
+    /// Public inputs for the current segment.
+    pub pis: Vec<F>,
+}
+
+impl<const WORD_SIZE: usize, F: Clone> CpuChip<WORD_SIZE, F> {
+    pub fn new(options: CpuOptions) -> Self {
+        Self {
+            air: CpuAir::new(options),
+            rows: vec![],
+            state: ExecutionState::default(),
+            start_state: ExecutionState::default(),
+            pis: vec![],
+        }
+    }
+
+    pub fn current_height(&self) -> usize {
+        self.rows.len()
+    }
+
+    /// Sets the current state of the CPU.
+    pub fn set_state(&mut self, state: ExecutionState) {
+        self.state = state;
+    }
+
+    /// Sets the current state of the CPU.
+    pub fn from_state(options: CpuOptions, state: ExecutionState) -> Self {
+        let mut chip = Self::new(options);
+        chip.state = state;
+        chip.start_state = state;
+        chip
+    }
+}
+
+impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
+    /// Writes the public inputs for the current segment (beginning and end program counters).
+    ///
+    /// Should only be called after segment end.
+    fn generate_pvs(&mut self) {
+        let first_row_pc = self.start_state.pc;
+        let last_row_pc = self.state.pc;
+        self.pis = vec![
+            F::from_canonical_usize(first_row_pc),
+            F::from_canonical_usize(last_row_pc),
+        ];
     }
 }

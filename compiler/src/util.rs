@@ -1,13 +1,13 @@
-use afs_test_utils::config::setup_tracing;
 use p3_baby_bear::BabyBear;
 use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
+use stark_vm::vm::ExecutionResult;
 
 use afs_test_utils::config::baby_bear_poseidon2::{engine_from_perm, random_perm};
 use afs_test_utils::config::fri_params::{
     fri_params_fast_testing, fri_params_with_80_bits_of_security,
 };
+use afs_test_utils::config::setup_tracing;
 use afs_test_utils::engine::StarkEngine;
-use stark_vm::vm::get_chips;
 use stark_vm::{
     cpu::trace::Instruction,
     vm::{config::VmConfig, VirtualMachine},
@@ -26,23 +26,38 @@ pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
     }
 }
 
-pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(
-    program: Vec<Instruction<F>>,
-    input_stream: Vec<Vec<F>>,
+pub fn execute_program<const WORD_SIZE: usize>(
+    program: Vec<Instruction<BabyBear>>,
+    input_stream: Vec<Vec<BabyBear>>,
 ) {
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
-            field_arithmetic_enabled: true,
-            field_extension_enabled: true,
-            limb_bits: 28,
-            decomp: 4,
-            compress_poseidon2_enabled: true,
-            perm_poseidon2_enabled: true,
+            num_public_values: 4,
+            ..Default::default()
         },
         program,
         input_stream,
     );
-    vm.traces().unwrap();
+    vm.execute().unwrap();
+}
+
+pub fn execute_program_with_public_values<const WORD_SIZE: usize>(
+    program: Vec<Instruction<BabyBear>>,
+    input_stream: Vec<Vec<BabyBear>>,
+    public_values: &[(usize, BabyBear)],
+) {
+    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
+        VmConfig {
+            num_public_values: 4,
+            ..Default::default()
+        },
+        program,
+        input_stream,
+    );
+    for &(index, value) in public_values {
+        vm.segments[0].public_values[index] = Some(value);
+    }
+    vm.execute().unwrap();
 }
 
 pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
@@ -54,8 +69,12 @@ pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
             op_c,
             d,
             e,
+            debug,
         } = instruction;
-        println!("{:?} {} {} {} {} {}", opcode, op_a, op_b, op_c, d, e);
+        println!(
+            "{:?} {} {} {} {} {} {}",
+            opcode, op_a, op_b, op_c, d, e, debug
+        );
     }
 }
 
@@ -68,10 +87,11 @@ pub fn display_program_with_pc<F: PrimeField32>(program: &[Instruction<F>]) {
             op_c,
             d,
             e,
+            debug,
         } = instruction;
         println!(
-            "{} | {:?} {} {} {} {} {}",
-            pc, opcode, op_a, op_b, op_c, d, e
+            "{} | {:?} {} {} {} {} {} {}",
+            pc, opcode, op_a, op_b, op_c, d, e, debug
         );
     }
 }
@@ -91,21 +111,23 @@ pub fn execute_and_prove_program<const WORD_SIZE: usize>(
     program: Vec<Instruction<BabyBear>>,
     input_stream: Vec<Vec<BabyBear>>,
 ) {
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
-            field_arithmetic_enabled: true,
-            field_extension_enabled: true,
-            limb_bits: 28,
-            decomp: 4,
-            compress_poseidon2_enabled: true,
-            perm_poseidon2_enabled: true,
+            num_public_values: 4,
+            ..Default::default()
         },
         program,
         input_stream,
     );
-    let max_log_degree = vm.max_log_degree().unwrap();
-    let traces = vm.traces().unwrap();
-    let chips = get_chips(&vm);
+
+    let ExecutionResult {
+        max_log_degree,
+        nonempty_chips: chips,
+        nonempty_traces: traces,
+        nonempty_pis: pis,
+        ..
+    } = vm.execute().unwrap();
+    let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
 
     let perm = random_perm();
     // blowup factor 8 for poseidon2 chip
@@ -116,10 +138,8 @@ pub fn execute_and_prove_program<const WORD_SIZE: usize>(
     };
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
 
-    let num_chips = chips.len();
-
     setup_tracing();
     engine
-        .run_simple_test(chips, traces, vec![vec![]; num_chips])
+        .run_simple_test(chips, traces, pis)
         .expect("Verification failed");
 }

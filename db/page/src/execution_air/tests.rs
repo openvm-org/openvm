@@ -46,7 +46,7 @@ fn load_page_test(
         page_init,
         None,
         None,
-        ops.to_vec(),
+        ops,
         trace_degree,
         &mut trace_builder.committer,
     );

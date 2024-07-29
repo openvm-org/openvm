@@ -8,12 +8,9 @@ use super::A0;
 
 #[derive(Debug, Clone)]
 pub enum AsmInstruction<F, EF> {
-    /// Load extension immediate (address, value)
-    ImmE(i32, EF),
-
     /// Load word (dst, src, index, offset, size).
     ///
-    /// Load a value from the address stored at src(fp) into dstfp).
+    /// Load a value from the address stored at src(fp) into dst(fp).
     LoadF(i32, i32, i32, F, F),
     LoadFI(i32, i32, F, F, F),
 
@@ -62,20 +59,8 @@ pub enum AsmInstruction<F, EF> {
     /// Add extension, dst = lhs + rhs.
     AddE(i32, i32, i32),
 
-    /// Add immediate extension, dst = lhs + rhs.
-    AddEI(i32, i32, EF),
-
-    /// Add field element with an immediate extension, dst = lhs + rhs.
-    AddEFFI(i32, i32, EF),
-
     /// Subtract extension, dst = lhs - rhs.
     SubE(i32, i32, i32),
-
-    /// Subtract immediate extension, dst = lhs - rhs.
-    SubEI(i32, i32, EF),
-
-    /// Subtract value from immediate extension, dst = lhs - rhs.
-    SubEIN(i32, EF, i32),
 
     /// Multiply extension, dst = lhs * rhs.
     MulE(i32, i32, i32),
@@ -83,14 +68,8 @@ pub enum AsmInstruction<F, EF> {
     /// Multiply immediate extension.
     MulEI(i32, i32, EF),
 
-    /// Divide extension, dst = lhs / rhs.
-    DivE(i32, i32, i32),
-
-    /// Divide immediate extension, dst = lhs / rhs.
-    DivEI(i32, i32, EF),
-
-    /// Divide value from immediate extension, dst = lhs / rhs.
-    DivEIN(i32, EF, i32),
+    /// Extension inverse, dst = 1 / src.
+    InvE(i32, i32),
 
     /// Jump and link.
     Jal(i32, F, F),
@@ -159,15 +138,16 @@ pub enum AsmInstruction<F, EF> {
     /// FRIFold(m, input).
     FriFold(i32, i32),
 
-    /// Commit(val, index).
-    Commit(i32, i32),
+    /// Publish(val, index).
+    Publish(i32, i32),
 
     /// RegisterPublicValue(val).
     RegisterPublicValue(i32),
 
     LessThan(i32, i32, i32),
 
-    CycleTracker(String),
+    CycleTrackerStart(String),
+    CycleTrackerEnd(String),
 }
 
 impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
@@ -860,9 +840,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::LessThan(dst, left, right) => {
                 write!(f, "lt  ({})fp, {}, {}", dst, left, right,)
             }
-            AsmInstruction::ImmE(dst, val) => {
-                write!(f, "imme   ({})fp, {}", dst, val)
-            }
             AsmInstruction::LoadF(dst, src, index, offset, size) => {
                 write!(
                     f,
@@ -944,22 +921,10 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                 )
             }
             AsmInstruction::AddE(dst, lhs, rhs) => {
-                write!(f, "eadd  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
-            }
-            AsmInstruction::AddEI(dst, lhs, rhs) => {
-                write!(f, "eaddi ({})fp, ({})fp, {}", dst, lhs, rhs)
-            }
-            AsmInstruction::AddEFFI(dst, lhs, rhs) => {
-                write!(f, "eefaddi ({})fp, ({})fp, {}", dst, lhs, rhs)
+                write!(f, "eadd ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
             }
             AsmInstruction::SubE(dst, lhs, rhs) => {
                 write!(f, "esub  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
-            }
-            AsmInstruction::SubEI(dst, lhs, rhs) => {
-                write!(f, "esubi ({})fp, ({})fp, {}", dst, lhs, rhs)
-            }
-            AsmInstruction::SubEIN(dst, lhs, rhs) => {
-                write!(f, "esubin ({})fp, {}, ({})fp", dst, lhs, rhs)
             }
             AsmInstruction::MulE(dst, lhs, rhs) => {
                 write!(f, "emul  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
@@ -967,14 +932,8 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::MulEI(dst, lhs, rhs) => {
                 write!(f, "emuli ({})fp, ({})fp, {}", dst, lhs, rhs)
             }
-            AsmInstruction::DivE(dst, lhs, rhs) => {
-                write!(f, "ediv  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
-            }
-            AsmInstruction::DivEI(dst, lhs, rhs) => {
-                write!(f, "edivi ({})fp, ({})fp, {}", dst, lhs, rhs)
-            }
-            AsmInstruction::DivEIN(dst, lhs, rhs) => {
-                write!(f, "edivin ({})fp, {}, ({})fp", dst, lhs, rhs)
+            AsmInstruction::InvE(dst, src) => {
+                write!(f, "einv ({})fp, ({})fp", dst, src)
             }
             AsmInstruction::Jal(dst, label, offset) => {
                 if *offset == F::zero() {
@@ -1100,14 +1059,17 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                     result, src1, src2
                 )
             }
-            AsmInstruction::Commit(val, index) => {
+            AsmInstruction::Publish(val, index) => {
                 write!(f, "commit ({})fp ({})fp", val, index)
             }
             AsmInstruction::RegisterPublicValue(val) => {
                 write!(f, "register_public_value ({})fp", val)
             }
-            AsmInstruction::CycleTracker(name) => {
-                write!(f, "cycle-tracker {}", name)
+            AsmInstruction::CycleTrackerStart(name) => {
+                write!(f, "cycle_tracker_start {}", name)
+            }
+            AsmInstruction::CycleTrackerEnd(name) => {
+                write!(f, "cycle_tracker_end {}", name)
             }
         }
     }

@@ -137,7 +137,13 @@ impl Hintable<InnerConfig> for VerifierProgramInput<BabyBearPoseidon2Config> {
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
         let proof = Proof::<BabyBearPoseidon2Config>::read(builder);
-        let log_degree_per_air = Vec::<usize>::read(builder);
+        let raw_log_degree_per_air = Vec::<usize>::read(builder);
+        // A hacky way to cast ptr.
+        let log_degree_per_air = if let Array::Dyn(ptr, len) = raw_log_degree_per_air {
+            Array::Dyn(ptr, len)
+        } else {
+            unreachable!();
+        };
         let public_values = Vec::<Vec<InnerVal>>::read(builder);
 
         VerifierProgramInputVariable {
@@ -169,6 +175,21 @@ impl Hintable<InnerConfig> for Vec<usize> {
         vec![self
             .iter()
             .map(|x| InnerVal::from_canonical_usize(*x))
+            .collect()]
+    }
+}
+
+impl Hintable<InnerConfig> for Vec<u8> {
+    type HintVariable = Array<InnerConfig, Var<InnerVal>>;
+
+    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
+        builder.hint_vars()
+    }
+
+    fn write(&self) -> Vec<Vec<InnerVal>> {
+        vec![self
+            .iter()
+            .map(|x| InnerVal::from_canonical_u8(*x))
             .collect()]
     }
 }
@@ -416,7 +437,7 @@ mod test {
         builder.halt();
 
         let program = builder.compile_isa::<1>();
-        execute_program::<1, _>(program, stream);
+        execute_program::<1>(program, stream);
     }
 
     #[test]
@@ -463,6 +484,6 @@ mod test {
         builder.halt();
 
         let program = builder.compile_isa::<1>();
-        execute_program::<1, _>(program, stream);
+        execute_program::<1>(program, stream);
     }
 }

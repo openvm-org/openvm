@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::cpu::CpuOptions;
 
+pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 20) - 100;
+
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct VmConfig {
     pub field_arithmetic_enabled: bool,
@@ -10,8 +12,25 @@ pub struct VmConfig {
     pub perm_poseidon2_enabled: bool,
     pub limb_bits: usize,
     pub decomp: usize,
+    pub num_public_values: usize,
+    pub max_segment_len: usize,
     /*pub max_program_length: usize,
     pub max_operations: usize,*/
+}
+
+impl Default for VmConfig {
+    fn default() -> Self {
+        VmConfig {
+            field_arithmetic_enabled: true,
+            field_extension_enabled: true,
+            compress_poseidon2_enabled: true,
+            perm_poseidon2_enabled: true,
+            limb_bits: 28,
+            decomp: 4,
+            num_public_values: 0,
+            max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
+        }
+    }
 }
 
 impl VmConfig {
@@ -21,6 +40,7 @@ impl VmConfig {
             field_extension_enabled: self.field_extension_enabled,
             compress_poseidon2_enabled: self.compress_poseidon2_enabled,
             perm_poseidon2_enabled: self.perm_poseidon2_enabled,
+            num_public_values: self.num_public_values,
         }
     }
 }

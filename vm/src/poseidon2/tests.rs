@@ -23,7 +23,7 @@ use crate::cpu::OpCode::{COMP_POS2, PERM_POS2};
 use crate::cpu::POSEIDON2_DIRECT_BUS;
 use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
 use crate::memory::tree::Hasher;
-use crate::vm::config::VmConfig;
+use crate::vm::config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN};
 use crate::vm::VirtualMachine;
 
 use super::{Poseidon2Chip, Poseidon2VmAir};
@@ -64,10 +64,13 @@ macro_rules! run_perm_ops {
                 perm_poseidon2_enabled: true,
                 limb_bits: LIMB_BITS,
                 decomp: DECOMP,
+                num_public_values: 4,
+                max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             },
             vec![],
             vec![],
         );
+        let mut segment = &mut vm.segments[0];
 
         let write_ops: [[WriteOps; 16]; $num_ops] = core::array::from_fn(|i| {
             core::array::from_fn(|j| {
@@ -75,14 +78,14 @@ macro_rules! run_perm_ops {
                     WriteOps {
                         clk: 16 * i + j,
                         ad_s: $instructions[i].e,
-                        address: $instructions[i].op_a + BabyBear::from_canonical_usize(j),
+                        address: $instructions[i].op_b + BabyBear::from_canonical_usize(j),
                         data: [$data[i][j]],
                     }
                 } else {
                     WriteOps {
                         clk: 16 * i + j,
                         ad_s: $instructions[i].e,
-                        address: $instructions[i].op_b + BabyBear::from_canonical_usize(j - 8),
+                        address: $instructions[i].op_c + BabyBear::from_canonical_usize(j - 8),
                         data: [$data[i][j]],
                     }
                 }
@@ -90,7 +93,8 @@ macro_rules! run_perm_ops {
         });
 
         write_ops.iter().flatten().for_each(|op| {
-            vm.memory_chip
+            segment
+                .memory_chip
                 .write_word(op.clk, op.ad_s, op.address, op.data);
         });
 
@@ -99,9 +103,9 @@ macro_rules! run_perm_ops {
         (0..$num_ops).for_each(|i| {
             let start_timestamp = 16 * $num_ops + (time_per * i);
             Poseidon2Chip::<16, BabyBear>::poseidon2_perm(
-                &mut vm,
+                &mut segment,
                 start_timestamp,
-                $instructions[i],
+                $instructions[i].clone(),
             );
         });
 
@@ -116,7 +120,7 @@ macro_rules! run_perm_ops {
                     .flat_map(|i| {
                         Poseidon2VmAir::<16, BabyBear>::make_io_cols(
                             16 * $num_ops + (time_per * i),
-                            $instructions[i],
+                            $instructions[i].clone(),
                         )
                         .flatten()
                         .iter()
@@ -157,9 +161,11 @@ macro_rules! run_perm_ops {
             5 + 1,
         );
 
-        let memory_chip_trace = vm.memory_chip.generate_trace(vm.range_checker.clone());
-        let range_checker_trace = vm.range_checker.generate_trace();
-        let poseidon2_trace = vm.poseidon2_chip.generate_trace();
+        let memory_chip_trace = segment
+            .memory_chip
+            .generate_trace(segment.range_checker.clone());
+        let range_checker_trace = segment.range_checker.generate_trace();
+        let poseidon2_trace = segment.poseidon2_chip.generate_trace();
 
         let traces = vec![
             range_checker_trace,
@@ -196,6 +202,7 @@ fn random_instructions<const NUM_OPS: usize>() -> [Instruction<BabyBear>; NUM_OP
             op_c: c,
             d: BabyBear::zero(),
             e,
+            debug: String::new(),
         }
     })
 }
@@ -216,9 +223,9 @@ fn poseidon2_chip_random_50_test() {
     engine
         .run_simple_test(
             vec![
-                &vm.range_checker.air,
-                &vm.memory_chip.air,
-                &vm.poseidon2_chip.air,
+                &vm.segments[0].range_checker.air,
+                &vm.segments[0].memory_chip.air,
+                &vm.segments[0].poseidon2_chip.air,
                 &dummy_cpu_memory,
                 &dummy_cpu_poseidon2,
             ],
@@ -253,9 +260,9 @@ fn poseidon2_negative_test() {
         assert_eq!(
             engine.run_simple_test(
                 vec![
-                    &vm.range_checker.air,
-                    &vm.memory_chip.air,
-                    &vm.poseidon2_chip.air,
+                    &vm.segments[0].range_checker.air,
+                    &vm.segments[0].memory_chip.air,
+                    &vm.segments[0].poseidon2_chip.air,
                     &dummy_cpu_memory,
                     &dummy_cpu_poseidon2,
                 ],
