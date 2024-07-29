@@ -34,6 +34,30 @@ pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(
     vm.traces().unwrap();
 }
 
+pub fn execute_program_with_public_values<const WORD_SIZE: usize, F: PrimeField32>(
+    program: Vec<Instruction<F>>,
+    input_stream: Vec<Vec<F>>,
+    public_values: &[(usize, F)],
+) {
+    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
+        VmConfig {
+            field_arithmetic_enabled: true,
+            field_extension_enabled: true,
+            limb_bits: 28,
+            decomp: 4,
+            compress_poseidon2_enabled: true,
+            perm_poseidon2_enabled: true,
+            num_public_values: 4,
+        },
+        program,
+        input_stream,
+    );
+    for &(index, value) in public_values {
+        vm.public_values[index] = Some(value);
+    }
+    vm.traces().unwrap();
+}
+
 pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
     for instruction in program.iter() {
         let Instruction {
