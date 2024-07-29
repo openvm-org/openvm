@@ -14,6 +14,19 @@ pub struct VmConfig {
     pub max_operations: usize,*/
 }
 
+impl Default for VmConfig {
+    fn default() -> Self {
+        VmConfig {
+            field_arithmetic_enabled: true,
+            field_extension_enabled: true,
+            compress_poseidon2_enabled: true,
+            perm_poseidon2_enabled: true,
+            limb_bits: 28,
+            decomp: 4,
+        }
+    }
+}
+
 impl VmConfig {
     pub fn cpu_options(&self) -> CpuOptions {
         CpuOptions {

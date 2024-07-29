@@ -3,9 +3,9 @@ use std::env;
 use super::FriParameters;
 
 pub fn default_fri_params() -> FriParameters {
-    // blowup factor = 4
+    // blowup factor = 3
     if matches!(env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
-        fri_params_fast_testing()[2]
+        fri_params_fast_testing()[1]
     } else {
         fri_params_with_80_bits_of_security()[2]
     }

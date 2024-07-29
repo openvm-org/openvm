@@ -137,7 +137,13 @@ impl Hintable<InnerConfig> for VerifierProgramInput<BabyBearPoseidon2Config> {
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
         let proof = Proof::<BabyBearPoseidon2Config>::read(builder);
-        let log_degree_per_air = Vec::<usize>::read(builder);
+        let raw_log_degree_per_air = Vec::<usize>::read(builder);
+        // A hacky way to cast ptr.
+        let log_degree_per_air = if let Array::Dyn(ptr, len) = raw_log_degree_per_air {
+            Array::Dyn(ptr, len)
+        } else {
+            unreachable!();
+        };
         let public_values = Vec::<Vec<InnerVal>>::read(builder);
 
         VerifierProgramInputVariable {

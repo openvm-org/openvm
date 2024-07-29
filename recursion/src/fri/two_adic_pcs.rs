@@ -91,7 +91,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                 });
 
                 let log_batch_max_height = builder.get(&batch_heights_log2, 0);
-                let bits_reduced: Var<_> =
+                let bits_reduced: Usize<_> =
                     builder.eval(log_global_max_height - log_batch_max_height);
                 let index_bits_shifted_v1 = index_bits.shift(builder, bits_reduced);
                 verify_batch::<C, 1>(
@@ -114,7 +114,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                         let log2_domain_size = mat.domain.log_n;
                         let log_height: Var<C::N> = builder.eval(log2_domain_size + log_blowup);
 
-                        let bits_reduced: Var<C::N> =
+                        let bits_reduced: Usize<_> =
                             builder.eval(log_global_max_height - log_height);
                         let index_bits_shifted = index_bits.shift(builder, bits_reduced);
 

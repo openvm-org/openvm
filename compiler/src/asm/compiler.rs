@@ -113,7 +113,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::AddFI(dst.fp(), ZERO, src), trace);
                 }
                 DslIr::ImmE(dst, src) => {
-                    self.push(AsmInstruction::ImmE(dst.fp(), src), trace);
+                    self.assign_exti(dst, src, trace);
                 }
                 DslIr::AddV(dst, lhs, rhs) => {
                     self.push(AsmInstruction::AddF(dst.fp(), lhs.fp(), rhs.fp()), trace);
@@ -804,6 +804,17 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
 
 // Ext compiler logic.
 impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCompiler<F, EF> {
+    fn assign_exti(&mut self, dst: Ext<F, EF>, imm: EF, trace: Option<Backtrace>) {
+        let imm = imm.as_base_slice();
+        for i in 0..EF::D {
+            let j = (i * self.word_size) as i32;
+            self.push(
+                AsmInstruction::AddFI(dst.fp() - j, ZERO, imm[i]),
+                trace.clone(),
+            );
+        }
+    }
+
     fn add_ext_exti(
         &mut self,
         dst: Ext<F, EF>,

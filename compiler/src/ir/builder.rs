@@ -87,6 +87,13 @@ impl<T> IntoIterator for TracedVec<T> {
     }
 }
 
+#[derive(Debug, Copy, Clone, Default)]
+pub struct BuilderFlags {
+    pub(crate) debug: bool,
+    /// If true, the loop with constant start and end will be unrolled.
+    pub(crate) unroll_loop: bool,
+}
+
 /// A builder for the DSL.
 ///
 /// Can compile to both assembly and a set of constraints.
@@ -100,7 +107,7 @@ pub struct Builder<C: Config> {
     pub(crate) witness_var_count: u32,
     pub(crate) witness_felt_count: u32,
     pub(crate) witness_ext_count: u32,
-    pub(crate) debug: bool,
+    pub(crate) flags: BuilderFlags,
     pub(crate) is_sub_builder: bool,
 }
 
@@ -111,7 +118,7 @@ impl<C: Config> Builder<C> {
         felt_count: u32,
         ext_count: u32,
         nb_public_values: Option<Var<C::N>>,
-        debug: bool,
+        flags: BuilderFlags,
     ) -> Self {
         Self {
             felt_count,
@@ -124,7 +131,7 @@ impl<C: Config> Builder<C> {
             witness_ext_count: 0,
             operations: Default::default(),
             nb_public_values,
-            debug,
+            flags,
             is_sub_builder: true,
         }
     }
@@ -390,7 +397,7 @@ impl<C: Config> Builder<C> {
         // Write the content hints directly into the array memory.
         self.range(0, vlen).for_each(|i, builder| {
             let index = MemIndex {
-                index: Usize::Var(i),
+                index: i,
                 offset: 0,
                 size: 1,
             };
@@ -553,7 +560,7 @@ impl<'a, C: Config> IfBuilder<'a, C> {
             self.builder.felt_count,
             self.builder.ext_count,
             self.builder.nb_public_values,
-            self.builder.debug,
+            self.builder.flags,
         );
         f(&mut f_builder);
         let then_instructions = f_builder.operations;
@@ -601,7 +608,7 @@ impl<'a, C: Config> IfBuilder<'a, C> {
             self.builder.felt_count,
             self.builder.ext_count,
             self.builder.nb_public_values,
-            self.builder.debug,
+            self.builder.flags,
         );
 
         // Execute the `then` and `else_then` blocks and collect the instructions.
@@ -613,7 +620,7 @@ impl<'a, C: Config> IfBuilder<'a, C> {
             self.builder.felt_count,
             self.builder.ext_count,
             self.builder.nb_public_values,
-            self.builder.debug,
+            self.builder.flags,
         );
         else_f(&mut else_builder);
         let else_instructions = else_builder.operations;
@@ -739,7 +746,16 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
         self
     }
 
-    pub fn for_each(self, mut f: impl FnMut(Var<C::N>, &mut Builder<C>)) {
+    pub fn for_each(self, mut f: impl FnMut(Usize<C::N>, &mut Builder<C>)) {
+        if self.builder.flags.unroll_loop {
+            if let (Usize::Const(start), Usize::Const(end)) = (self.start, self.end) {
+                for i in (start..end).step_by(self.step_size) {
+                    f(Usize::Const(i), self.builder)
+                }
+                return;
+            }
+        }
+
         let step_size = C::N::from_canonical_usize(self.step_size);
         let loop_variable: Var<C::N> = self.builder.uninit();
         let mut loop_body_builder = Builder::<C>::new_sub_builder(
@@ -747,10 +763,10 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
             self.builder.felt_count,
             self.builder.ext_count,
             self.builder.nb_public_values,
-            self.builder.debug,
+            self.builder.flags,
         );
 
-        f(loop_variable, &mut loop_body_builder);
+        f(Usize::Var(loop_variable), &mut loop_body_builder);
 
         let loop_instructions = loop_body_builder.operations;
 

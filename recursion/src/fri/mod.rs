@@ -157,7 +157,7 @@ where
             let index_bit = builder.get(index_bits, i);
             let index_sibling_mod_2: Var<C::N> =
                 builder.eval(SymbolicVar::from(C::N::one()) - index_bit);
-            let i_plus_one = builder.eval(i + C::N::one());
+            let i_plus_one: Usize<_> = builder.eval(i + 1);
             let index_pair = index_bits.shift(builder, i_plus_one);
 
             let mut evals: Array<C, Ext<C::F, C::EF>> = builder.array(2);

@@ -6,7 +6,9 @@ use super::{Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, Usize, Va
 /// An array that is either of static or dynamic size.
 #[derive(Debug, Clone)]
 pub enum Array<C: Config, T> {
+    // Fixed-length array. Index access cannot use variables.
     Fixed(Vec<T>),
+    /// Dynamic-length array stored in heap. Index access can use variables but length cannot change after initialization.
     Dyn(Ptr<C::N>, Usize<C::N>),
 }
 
@@ -27,11 +29,32 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
         }
     }
 
-    /// Shifts the array by `shift` elements.
-    pub fn shift(&self, builder: &mut Builder<C>, shift: Var<C::N>) -> Array<C, V> {
+    /// Asserts that an array has a certain length. Change its length to constant if it is a variable.
+    pub fn assert_len(&self, builder: &mut Builder<C>, len: usize) {
         match self {
-            Self::Fixed(_) => {
-                todo!()
+            Self::Fixed(vec) => {
+                assert_eq!(vec.len(), len);
+            }
+            Self::Dyn(_, c_len) => match c_len {
+                Usize::Const(c_len) => {
+                    assert_eq!(*c_len, len);
+                }
+                Usize::Var(c_len) => {
+                    builder.assert_usize_eq(*c_len, len);
+                }
+            },
+        }
+    }
+
+    /// Shifts the array by `shift` elements.
+    pub fn shift(&self, builder: &mut Builder<C>, shift: Usize<C::N>) -> Array<C, V> {
+        match self {
+            Self::Fixed(v) => {
+                if let Usize::Const(shift) = shift {
+                    Array::Fixed(v[shift..].to_vec())
+                } else {
+                    panic!("Cannot shift a fixed array with a variable shift");
+                }
             }
             Self::Dyn(ptr, len) => {
                 assert!(V::size_of() == 1, "only support variables of size 1");
@@ -73,7 +96,7 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
                 }
             }
             Self::Dyn(_, len) => {
-                if builder.debug {
+                if builder.flags.debug {
                     let start_v = start.materialize(builder);
                     let end_v = end.materialize(builder);
                     let valid = builder.lt(start_v, end_v);
@@ -137,7 +160,7 @@ impl<C: Config> Builder<C> {
                 }
             }
             Array::Dyn(ptr, len) => {
-                if self.debug {
+                if self.flags.debug {
                     let index_v = index.materialize(self);
                     let len_v = len.materialize(self);
                     let valid = self.lt(index_v, len_v);
@@ -167,7 +190,7 @@ impl<C: Config> Builder<C> {
                 todo!()
             }
             Array::Dyn(ptr, len) => {
-                if self.debug {
+                if self.flags.debug {
                     let index_v = index.materialize(self);
                     let len_v = len.materialize(self);
                     let valid = self.lt(index_v, len_v);
@@ -198,7 +221,7 @@ impl<C: Config> Builder<C> {
                 todo!()
             }
             Array::Dyn(ptr, len) => {
-                if self.debug {
+                if self.flags.debug {
                     let index_v = index.materialize(self);
                     let len_v = len.materialize(self);
                     let valid = self.lt(index_v, len_v);
@@ -224,8 +247,12 @@ impl<C: Config> Builder<C> {
         let index = index.into();
 
         match slice {
-            Array::Fixed(_) => {
-                todo!()
+            Array::Fixed(v) => {
+                if let Usize::Const(idx) = index {
+                    self.assign(v[idx].clone(), value);
+                } else {
+                    panic!("Cannot index into a fixed slice with a variable size")
+                }
             }
             Array::Dyn(ptr, _) => {
                 let index = MemIndex {

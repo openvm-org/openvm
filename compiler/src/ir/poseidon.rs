@@ -89,7 +89,7 @@ impl<C: Config> Builder<C> {
                 });
                 // Insert elements of the chunk.
                 builder.range(0, HASH_RATE).for_each(|j, builder| {
-                    let index: Var<_> = builder.eval(i + j);
+                    let index: Usize<_> = builder.eval(i + j);
                     let element = builder.get(array, index);
                     builder.set_value(&mut state, j, element);
                     builder.if_eq(index, last_index).then(|builder| {
@@ -124,14 +124,12 @@ impl<C: Config> Builder<C> {
                 builder.set_value(&mut state, idx, element);
                 builder.assign(idx, idx + C::N::one());
                 builder.cycle_tracker_end("poseidon2-hash-setup");
-                builder.cycle_tracker_start("poseidon2-hash-setup");
                 builder
                     .if_eq(idx, C::N::from_canonical_usize(HASH_RATE))
                     .then(|builder| {
                         builder.poseidon2_permute_mut(&state);
                         builder.assign(idx, C::N::zero());
                     });
-                builder.cycle_tracker_end("poseidon2-hash-setup");
             });
         });
 

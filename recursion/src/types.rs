@@ -112,7 +112,7 @@ pub struct VerifierProgramInput<SC: StarkGenericConfig> {
 #[derive(DslVariable, Clone)]
 pub struct VerifierProgramInputVariable<C: Config> {
     pub proof: StarkProofVariable<C>,
-    pub log_degree_per_air: Array<C, Var<C::N>>,
+    pub log_degree_per_air: Array<C, Usize<C::N>>,
     pub public_values: Array<C, Array<C, Felt<C::F>>>,
 }
 
@@ -164,8 +164,6 @@ pub struct VerifierSinglePreprocessedDataInProgram<C: Config> {
 }
 
 /// Constants determined by AIRs.
-///
-/// !! This should be moved to the backend. !!
 pub struct StarkVerificationAdvice<C: Config> {
     /// Preprocessed trace data, if any
     pub preprocessed_data: Option<VerifierSinglePreprocessedDataInProgram<C>>,
@@ -178,6 +176,8 @@ pub struct StarkVerificationAdvice<C: Config> {
     pub quotient_degree: usize,
     /// Number of public values for this STARK only
     pub num_public_values: usize,
+    /// For only this RAP, how many challenges are needed in each trace challenge phase
+    pub num_challenges_to_sample: Vec<usize>,
     /// Number of values to expose to verifier in each trace challenge phase
     pub num_exposed_values_after_challenge: Vec<usize>,
     /// Symbolic representation of all AIR constraints, including logup constraints
@@ -211,6 +211,7 @@ where
         main_graph,
         quotient_degree,
         num_public_values: params.num_public_values,
+        num_challenges_to_sample: params.num_challenges_to_sample,
         num_exposed_values_after_challenge: params.num_exposed_values_after_challenge,
         symbolic_constraints,
     }
@@ -223,8 +224,6 @@ impl<C: Config> StarkVerificationAdvice<C> {
 }
 
 /// Constants determined by multiple AIRs.
-///
-/// !! This should be moved to the backend. !!
 pub struct MultiStarkVerificationAdvice<C: Config> {
     pub per_air: Vec<StarkVerificationAdvice<C>>,
     /// Number of multi-matrix commitments that hold commitments to the partitioned main trace matrices across all AIRs.
