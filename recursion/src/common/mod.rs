@@ -8,9 +8,6 @@ use p3_util::log2_strict_usize;
 use std::cmp::Reverse;
 
 use afs_compiler::util::execute_program;
-use afs_recursion::hints::{Hintable, InnerVal};
-use afs_recursion::stark::{DynRapForRecursion, VerifierProgram};
-use afs_recursion::types::{new_from_multi_vk, InnerConfig, VerifierProgramInput};
 use afs_stark_backend::prover::trace::TraceCommitmentBuilder;
 use afs_stark_backend::prover::types::Proof;
 use afs_stark_backend::rap::AnyRap;
@@ -19,6 +16,10 @@ use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseid
 use afs_test_utils::config::FriParameters;
 use afs_test_utils::engine::StarkEngine;
 use stark_vm::cpu::trace::Instruction;
+
+use crate::hints::{Hintable, InnerVal};
+use crate::stark::{DynRapForRecursion, VerifierProgram};
+use crate::types::{new_from_multi_vk, InnerConfig, VerifierProgramInput};
 
 pub struct VerificationParams<SC: StarkGenericConfig> {
     pub vk: MultiStarkVerifyingKey<SC>,

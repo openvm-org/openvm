@@ -6,7 +6,10 @@ use crate::{
         benchmark::benchmark_execute,
         predicate::{run_bench_predicate, PredicateCommand},
         rw::{run_bench_rw, RwCommand},
-        vm::{benchmark_fibonacci_program, benchmark_verify_fibair, VmCommand},
+        vm::{
+            benchmark_fibonacci_program, benchmark_fibonacci_verifier_program,
+            benchmark_verify_fibair, VmCommand,
+        },
     },
     config::benchmark_data::{benchmark_data_predicate, benchmark_data_rw},
     utils::table_gen::{generate_incremental_afi_rw, generate_random_afi_rw},
@@ -72,10 +75,12 @@ impl Cli {
                 )
                 .unwrap();
             }
-            Commands::Vm(vm) => {
-                benchmark_fibonacci_program(vm.n);
-                benchmark_verify_fibair(vm.n);
-            }
+            Commands::Vm(vm) => match vm.t {
+                1 => benchmark_fibonacci_program(vm.n),
+                2 => benchmark_verify_fibair(vm.n),
+                3 => benchmark_fibonacci_verifier_program(vm.n),
+                _ => panic!("Invalid benchmark type"),
+            },
         }
     }
 }

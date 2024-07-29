@@ -1,3 +1,4 @@
+use afs_recursion::common;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
@@ -6,8 +7,6 @@ use p3_uni_stark::Val;
 
 use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use afs_test_utils::config::setup_tracing;
-
-mod common;
 
 pub struct FibonacciAir;
 

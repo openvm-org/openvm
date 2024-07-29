@@ -9,9 +9,7 @@ use stark_vm::cpu::trace::Instruction;
 use stark_vm::vm::config::VmConfig;
 use stark_vm::vm::{get_chips, VirtualMachine};
 
-use crate::common::sort_chips;
-
-mod common;
+use afs_recursion::common::{self, sort_chips};
 
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Vec<Instruction<BabyBear>> {
     type F = BabyBear;

@@ -13,9 +13,7 @@ use afs_stark_backend::{prover::trace::TraceCommitmentBuilder, verifier::Verific
 use afs_test_utils::config::baby_bear_poseidon2::default_engine;
 use afs_test_utils::{engine::StarkEngine, utils::generate_random_matrix};
 
-use crate::common::VerificationParams;
-
-mod common;
+use afs_recursion::common::{self, VerificationParams};
 
 /// Inner value is width of y-submatrix
 pub struct SumAir(pub usize);

@@ -157,7 +157,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
         let mut pc = F::zero();
 
         let mut hint_stream = VecDeque::new();
-        let mut cycle_tracker = CycleTracker::new();
+        // let mut cycle_tracker = CycleTracker::new();
 
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
@@ -341,9 +341,11 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                     write!(e, base_pointer + b, hint);
                 }
                 CT_START => {
-                    cycle_tracker.start(debug, &rows, clock_cycle, timestamp, &vm.metrics())
+                    //cycle_tracker.start(debug, &rows, clock_cycle, timestamp, &vm.metrics())
                 }
-                CT_END => cycle_tracker.end(debug, &rows, clock_cycle, timestamp, &vm.metrics()),
+                CT_END => {
+                    //cycle_tracker.end(debug, &rows, clock_cycle, timestamp, &vm.metrics())
+                }
             };
 
             let mut operation_flags = BTreeMap::new();
@@ -379,7 +381,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             }
         }
 
-        cycle_tracker.print();
+        // cycle_tracker.print();
 
         Ok(RowMajorMatrix::new(
             rows,
