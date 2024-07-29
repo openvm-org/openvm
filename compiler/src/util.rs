@@ -1,4 +1,3 @@
-use afs_test_utils::config::setup_tracing;
 use p3_baby_bear::BabyBear;
 use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
 
@@ -6,6 +5,7 @@ use afs_test_utils::config::baby_bear_poseidon2::{engine_from_perm, random_perm}
 use afs_test_utils::config::fri_params::{
     fri_params_fast_testing, fri_params_with_80_bits_of_security,
 };
+use afs_test_utils::config::setup_tracing;
 use afs_test_utils::engine::StarkEngine;
 use stark_vm::vm::get_chips;
 use stark_vm::{
@@ -30,7 +30,33 @@ pub fn execute_program<const WORD_SIZE: usize, F: PrimeField32>(
     program: Vec<Instruction<F>>,
     input_stream: Vec<Vec<F>>,
 ) {
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(VmConfig::default(), program, input_stream);
+    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
+        VmConfig {
+            num_public_values: 4,
+            ..Default::default()
+        },
+        program,
+        input_stream,
+    );
+    vm.traces().unwrap();
+}
+
+pub fn execute_program_with_public_values<const WORD_SIZE: usize, F: PrimeField32>(
+    program: Vec<Instruction<F>>,
+    input_stream: Vec<Vec<F>>,
+    public_values: &[(usize, F)],
+) {
+    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
+        VmConfig {
+            num_public_values: 4,
+            ..Default::default()
+        },
+        program,
+        input_stream,
+    );
+    for &(index, value) in public_values {
+        vm.public_values[index] = Some(value);
+    }
     vm.traces().unwrap();
 }
 
@@ -87,18 +113,15 @@ pub fn execute_and_prove_program<const WORD_SIZE: usize>(
 ) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
-            field_arithmetic_enabled: true,
-            field_extension_enabled: true,
-            limb_bits: 28,
-            decomp: 4,
-            compress_poseidon2_enabled: true,
-            perm_poseidon2_enabled: true,
+            num_public_values: 4,
+            ..Default::default()
         },
         program,
         input_stream,
     );
     let max_log_degree = vm.max_log_degree().unwrap();
     let traces = vm.traces().unwrap();
+    let public_values = vm.get_public_values().unwrap();
     let chips = get_chips(&vm);
 
     let perm = random_perm();
@@ -110,10 +133,8 @@ pub fn execute_and_prove_program<const WORD_SIZE: usize>(
     };
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
 
-    let num_chips = chips.len();
-
     setup_tracing();
     engine
-        .run_simple_test(chips, traces, vec![vec![]; num_chips])
+        .run_simple_test(chips, traces, public_values)
         .expect("Verification failed");
 }

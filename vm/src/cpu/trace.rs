@@ -1,12 +1,14 @@
-use p3_field::{Field, PrimeField32, PrimeField64};
-use p3_matrix::dense::RowMajorMatrix;
 use std::collections::VecDeque;
 use std::{collections::BTreeMap, error::Error, fmt::Display};
+
+use p3_field::{Field, PrimeField32, PrimeField64};
+use p3_matrix::dense::RowMajorMatrix;
 
 use afs_primitives::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
 
+use crate::cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual};
 use crate::memory::{compose, decompose};
 use crate::poseidon2::Poseidon2Chip;
 use crate::vm::cycle_tracker::CycleTracker;
@@ -101,6 +103,8 @@ pub enum ExecutionError {
     DisabledOperation(usize, OpCode),
     HintOutOfBounds(usize),
     EndOfInputStream(usize),
+    PublicValueIndexOutOfBounds(usize, usize, usize),
+    PublicValueNotEqual(usize, usize, usize, usize),
 }
 
 impl Display for ExecutionError {
@@ -117,6 +121,25 @@ impl Display for ExecutionError {
             }
             ExecutionError::HintOutOfBounds(pc) => write!(f, "at pc = {}", pc),
             ExecutionError::EndOfInputStream(pc) => write!(f, "at pc = {}", pc),
+            ExecutionError::PublicValueIndexOutOfBounds(
+                pc,
+                num_public_values,
+                public_value_index,
+            ) => write!(
+                f,
+                "at pc = {}, tried to publish into index {} when num_public_values = {}",
+                pc, public_value_index, num_public_values
+            ),
+            ExecutionError::PublicValueNotEqual(
+                pc,
+                public_value_index,
+                existing_value,
+                new_value,
+            ) => write!(
+                f,
+                "at pc = {}, tried to publish value {} into index {}, but already had {}",
+                pc, new_value, public_value_index, existing_value
+            ),
         }
     }
 }
@@ -204,6 +227,8 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 return Err(ExecutionError::DisabledOperation(pc_usize, opcode));
             }
 
+            let mut public_value_flags = vec![F::zero(); vm.public_values.len()];
+
             match opcode {
                 // d[a] <- e[d[c] + b]
                 LOADW => {
@@ -240,6 +265,31 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 }
                 TERMINATE => {
                     next_pc = pc;
+                }
+                PUBLISH => {
+                    let public_value_index = read!(d, a).as_canonical_u64() as usize;
+                    let value = read!(e, b);
+                    if public_value_index >= vm.public_values.len() {
+                        return Err(PublicValueIndexOutOfBounds(
+                            pc_usize,
+                            vm.public_values.len(),
+                            public_value_index,
+                        ));
+                    }
+                    public_value_flags[public_value_index] = F::one();
+                    match vm.public_values[public_value_index] {
+                        None => vm.public_values[public_value_index] = Some(value),
+                        Some(exising_value) => {
+                            if value != exising_value {
+                                return Err(PublicValueNotEqual(
+                                    pc_usize,
+                                    public_value_index,
+                                    exising_value.as_canonical_u64() as usize,
+                                    value.as_canonical_u64() as usize,
+                                ));
+                            }
+                        }
+                    }
                 }
                 opcode @ (FADD | FSUB | FMUL | FDIV) => {
                     // read from d[b] and e[c]
@@ -311,6 +361,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
 
             let aux = CpuAuxCols {
                 operation_flags,
+                public_value_flags,
                 accesses,
                 read0_equals_read1,
                 is_equal_vec_aux,

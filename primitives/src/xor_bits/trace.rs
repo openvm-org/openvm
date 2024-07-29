@@ -1,10 +1,8 @@
 use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::sub_chip::LocalTraceInstructions;
-
 use super::{
-    columns::{XorBitCols, XorCols, XorIoCols},
+    columns::{XorCols, XorColsMut},
     XorBitsAir, XorBitsChip,
 };
 
@@ -15,36 +13,28 @@ impl<const N: usize> XorBitsChip<N> {
         let mut pairs_locked = self.pairs.lock();
         pairs_locked.sort();
 
-        let rows = pairs_locked
-            .iter()
-            .flat_map(|(x, y)| self.air.generate_trace_row((*x, *y)).flatten())
-            .collect();
+        let mut rows_concat = vec![F::zero(); num_xor_cols * pairs_locked.len()];
+        for (i, (x, y)) in pairs_locked.iter().enumerate() {
+            let xor_cols: XorColsMut<N, F> =
+                XorColsMut::from_slice(&mut rows_concat[i * num_xor_cols..(i + 1) * num_xor_cols]);
 
-        RowMajorMatrix::new(rows, num_xor_cols)
+            self.air.generate_trace_row(*x, *y, xor_cols);
+        }
+
+        RowMajorMatrix::new(rows_concat, num_xor_cols)
     }
 }
 
-impl<const N: usize, F: AbstractField> LocalTraceInstructions<F> for XorBitsAir<N> {
-    /// The input is (x, y) to be XOR-ed.
-    type LocalInput = (u32, u32);
-
-    fn generate_trace_row(&self, (x, y): (u32, u32)) -> Self::Cols<F> {
+impl<const N: usize> XorBitsAir<N> {
+    fn generate_trace_row<F: AbstractField>(&self, x: u32, y: u32, xor_cols: XorColsMut<N, F>) {
         let z = self.calc_xor(x, y);
-        let [x_bits, y_bits, z_bits] = [x, y, z].map(|x| {
-            (0..N)
-                .map(|i| (x >> i) & 1)
-                .map(F::from_canonical_u32)
-                .collect()
-        });
-        let [x, y, z] = [x, y, z].map(F::from_canonical_u32);
 
-        XorCols {
-            io: XorIoCols { x, y, z },
-            bits: XorBitCols {
-                x: x_bits,
-                y: y_bits,
-                z: z_bits,
-            },
+        [*xor_cols.io.x, *xor_cols.io.y, *xor_cols.io.z] = [x, y, z].map(F::from_canonical_u32);
+
+        for i in 0..N {
+            xor_cols.bits.x[i] = F::from_canonical_u32((x >> i) & 1);
+            xor_cols.bits.y[i] = F::from_canonical_u32((y >> i) & 1);
+            xor_cols.bits.z[i] = F::from_canonical_u32((z >> i) & 1);
         }
     }
 }

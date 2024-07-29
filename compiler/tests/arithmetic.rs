@@ -1,14 +1,13 @@
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
 use p3_field::{
-    AbstractExtensionField, AbstractField, ExtensionField, Field, PrimeField, PrimeField32,
-    TwoAdicField,
+    AbstractExtensionField, AbstractField, ExtensionField, Field, PrimeField32, TwoAdicField,
 };
 use rand::{thread_rng, Rng};
 
 use afs_compiler::asm::{AsmBuilder, AsmConfig};
 use afs_compiler::conversion::CompilerOptions;
-use afs_compiler::ir::{Builder, Config, Ext, Felt, SymbolicExt};
+use afs_compiler::ir::{Builder, Ext, Felt, SymbolicExt};
 use afs_compiler::ir::{ExtConst, Var};
 use afs_compiler::util::execute_program;
 use stark_vm::cpu::trace::ExecutionError::Fail;
