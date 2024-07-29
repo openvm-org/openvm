@@ -2,7 +2,7 @@ use std::iter;
 
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{AbstractField, Field, PrimeField, PrimeField64};
+use p3_field::{AbstractField, Field, PrimeField};
 use p3_matrix::Matrix;
 
 use super::{

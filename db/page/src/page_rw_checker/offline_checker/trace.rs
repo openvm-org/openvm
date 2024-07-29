@@ -1,17 +1,14 @@
 use std::sync::Arc;
 
-use afs_primitives::{
-    offline_checker::OfflineCheckerChip, range_gate::RangeCheckerGateChip,
-    sub_chip::LocalTraceInstructions,
-};
+use afs_primitives::{offline_checker::OfflineCheckerChip, range_gate::RangeCheckerGateChip};
 use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
+use super::columns::PageOfflineCheckerColsMut;
 use super::PageOfflineChecker;
 use crate::common::indexed_page_editor::IndexedPageEditor;
 use crate::common::page::Page;
-use crate::page_rw_checker::offline_checker::columns::PageOfflineCheckerCols;
 use crate::page_rw_checker::page_controller::{OpType, Operation};
 use p3_maybe_rayon::prelude::*;
 
@@ -54,57 +51,32 @@ impl PageOfflineChecker {
 
         // This takes the operations for the previous row and current row and some extra information.
         // It uses those values to generate the new row in the trace
-        let gen_row = |is_first_row: &mut bool,
+        let gen_row = |slc: &mut [Val<SC>],
+                       is_first_row: &mut bool,
                        is_initial: bool,
                        is_final: bool,
                        is_internal: bool,
                        curr_op: &Operation,
                        prev_op: &Operation,
                        is_valid: bool| {
-            let local_input = (
-                *is_first_row,
-                is_valid,
+            let mut oc_cols = PageOfflineCheckerColsMut::from_slice(slc, self);
+
+            self.generate_trace_row(
+                is_first_row,
+                is_initial,
+                is_final,
                 is_internal,
-                curr_op.clone(),
-                prev_op.clone(),
+                curr_op,
+                prev_op,
+                is_valid,
                 range_checker.clone(),
+                &mut oc_cols,
             );
-
-            let offline_checker_chip =
-                OfflineCheckerChip::<Val<SC>, Operation>::new(self.offline_checker.clone());
-
-            let mut offline_checker_cols = LocalTraceInstructions::<Val<SC>>::generate_trace_row(
-                &offline_checker_chip,
-                local_input,
-            );
-
-            if *is_first_row {
-                *is_first_row = false;
-                offline_checker_cols.same_idx = Val::<SC>::zero();
-            }
-
-            let op_type = curr_op.op_type as u8;
-
-            let is_final_write = is_final && op_type == 0;
-            let is_final_delete = is_final && op_type == 2;
-            let is_read = op_type == 0;
-            let is_write = op_type == 1;
-            let is_delete = op_type == 2;
-
-            let cols = PageOfflineCheckerCols {
-                offline_checker_cols,
-                is_initial: Val::<SC>::from_bool(is_initial),
-                is_final_write: Val::<SC>::from_bool(is_final_write),
-                is_final_delete: Val::<SC>::from_bool(is_final_delete),
-                is_read: Val::<SC>::from_bool(is_read),
-                is_write: Val::<SC>::from_bool(is_write),
-                is_delete: Val::<SC>::from_bool(is_delete),
-            };
-
-            cols.flatten()
         };
 
-        let mut rows = vec![];
+        let width = self.air_width();
+        let mut rows_concat = vec![Val::<SC>::zero(); trace_degree * width];
+        let mut slc_id = 0;
 
         let mut is_first_row = true;
 
@@ -130,7 +102,8 @@ impl PageOfflineChecker {
                 };
 
                 // Adding the is_initial row to the trace
-                rows.push(gen_row(
+                gen_row(
+                    &mut rows_concat[slc_id * width..(slc_id + 1) * width],
                     &mut is_first_row,
                     true,
                     false,
@@ -138,7 +111,8 @@ impl PageOfflineChecker {
                     &curr_op,
                     &prev_op,
                     true,
-                ));
+                );
+                slc_id += 1;
             }
 
             for op in ops.iter().take(j).skip(i) {
@@ -151,7 +125,8 @@ impl PageOfflineChecker {
                     page_editor.delete(&cur_idx);
                 }
 
-                rows.push(gen_row(
+                gen_row(
+                    &mut rows_concat[slc_id * width..(slc_id + 1) * width],
                     &mut is_first_row,
                     false,
                     false,
@@ -159,7 +134,8 @@ impl PageOfflineChecker {
                     &curr_op,
                     &prev_op,
                     true,
-                ));
+                );
+                slc_id += 1;
             }
 
             let final_data =
@@ -181,7 +157,8 @@ impl PageOfflineChecker {
             };
 
             // Adding the is_final row to the trace
-            rows.push(gen_row(
+            gen_row(
+                &mut rows_concat[slc_id * width..(slc_id + 1) * width],
                 &mut is_first_row,
                 false,
                 true,
@@ -189,7 +166,8 @@ impl PageOfflineChecker {
                 &curr_op,
                 &prev_op,
                 true,
-            ));
+            );
+            slc_id += 1;
 
             i = j;
         }
@@ -199,11 +177,13 @@ impl PageOfflineChecker {
 
         *page = page_editor.into_page();
 
-        if rows.len() < trace_degree {
-            prev_op = curr_op.clone();
+        // Adding rows to the trace to make the height trace_degree
+        while slc_id < trace_degree {
+            prev_op = curr_op;
             curr_op = dummy_op.clone();
 
-            rows.push(gen_row(
+            gen_row(
+                &mut rows_concat[slc_id * width..(slc_id + 1) * width],
                 &mut is_first_row,
                 false,
                 false,
@@ -211,24 +191,53 @@ impl PageOfflineChecker {
                 &curr_op,
                 &prev_op,
                 false,
-            ));
+            );
+            slc_id += 1;
         }
 
-        prev_op = dummy_op.clone();
+        RowMajorMatrix::new(rows_concat, width)
+    }
 
-        // Adding rows to the trace to make the height trace_degree
-        rows.resize_with(trace_degree, || {
-            gen_row(
-                &mut is_first_row,
-                false,
-                false,
-                false,
-                &curr_op,
-                &prev_op,
-                false,
-            )
-        });
+    // This takes the operations for the previous row and current row and some extra information.
+    // It uses those values to generate the new row in the trace
+    #[allow(clippy::too_many_arguments)]
+    pub fn generate_trace_row<F: PrimeField64>(
+        &self,
+        is_first_row: &mut bool,
+        is_initial: bool,
+        is_final: bool,
+        is_internal: bool,
+        curr_op: &Operation,
+        prev_op: &Operation,
+        is_valid: bool,
+        range_checker: Arc<RangeCheckerGateChip>,
+        oc_cols: &mut PageOfflineCheckerColsMut<F>,
+    ) {
+        let offline_checker_chip =
+            OfflineCheckerChip::<F, Operation>::new(self.offline_checker.clone());
 
-        RowMajorMatrix::new(rows.concat(), self.air_width())
+        offline_checker_chip.generate_trace_row(
+            *is_first_row,
+            is_valid,
+            is_internal,
+            curr_op,
+            prev_op,
+            range_checker.clone(),
+            &mut oc_cols.offline_checker_cols,
+        );
+
+        if *is_first_row {
+            *is_first_row = false;
+            *oc_cols.offline_checker_cols.same_idx = F::zero();
+        }
+
+        let op_type = curr_op.op_type as u8;
+
+        *oc_cols.is_initial = F::from_bool(is_initial);
+        *oc_cols.is_final_write = F::from_bool(is_final && op_type == 0);
+        *oc_cols.is_final_delete = F::from_bool(is_final && op_type == 2);
+        *oc_cols.is_read = F::from_bool(op_type == 0);
+        *oc_cols.is_write = F::from_bool(op_type == 1);
+        *oc_cols.is_delete = F::from_bool(op_type == 2);
     }
 }
