@@ -86,7 +86,6 @@ impl OpCode {
         all_opcodes.extend(FIELD_EXTENSION_INSTRUCTIONS);
         all_opcodes.extend([FAIL, PRINTF]);
         all_opcodes.extend([PERM_POS2, COMP_POS2]);
-        all_opcodes.extend([SHINTW, HINT_INPUT, HINT_BITS]);
         all_opcodes
     }
 

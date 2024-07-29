@@ -491,7 +491,7 @@ impl<C: Config> Builder<C> {
     }
 
     fn commit_public_value_and_increment(&mut self, val: Felt<C::F>, nb_public_values: Var<C::N>) {
-        self.operations.push(DslIr::Commit(val, nb_public_values));
+        self.operations.push(DslIr::Publish(val, nb_public_values));
         self.assign(nb_public_values, nb_public_values + C::N::one());
     }
 

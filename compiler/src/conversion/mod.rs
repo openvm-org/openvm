@@ -698,7 +698,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         ],
         AsmInstruction::CycleTrackerStart(name) => vec![dbg(CT_START, name)],
         AsmInstruction::CycleTrackerEnd(name) => vec![dbg(CT_END, name)],
-        AsmInstruction::Commit(val, index) => vec![inst(
+        AsmInstruction::Publish(val, index) => vec![inst(
             PUBLISH,
             register(index),
             register(val),

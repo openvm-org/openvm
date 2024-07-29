@@ -488,8 +488,8 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         _ => unimplemented!(),
                     }
                 }
-                DslIr::Commit(val, index) => {
-                    self.push(AsmInstruction::Commit(val.fp(), index.fp()), trace);
+                DslIr::Publish(val, index) => {
+                    self.push(AsmInstruction::Publish(val.fp(), index.fp()), trace);
                 }
                 DslIr::RegisterPublicValue(val) => {
                     self.push(AsmInstruction::RegisterPublicValue(val.fp()), trace);

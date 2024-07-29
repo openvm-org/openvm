@@ -228,30 +228,32 @@ impl<const WORD_SIZE: usize, AB: InteractionBuilder + AirBuilderWithPublicValues
         when_terminate.when_transition().assert_eq(next_pc, pc);
 
         // PUBLISH
+
         let publish_flag = operation_flags[&PUBLISH];
         read1_enabled_check = read1_enabled_check + publish_flag;
         read2_enabled_check = read2_enabled_check + publish_flag;
 
+        let mut sum_flags = AB::Expr::zero();
+        let mut match_public_value_index = AB::Expr::zero();
+        let mut match_public_value = AB::Expr::zero();
+        for (i, &flag) in public_value_flags.iter().enumerate() {
+            builder.assert_bool(flag);
+            sum_flags = sum_flags + flag;
+            match_public_value_index += flag * AB::F::from_canonical_usize(i);
+            match_public_value += flag * builder.public_values()[i].into();
+        }
+
         let mut when_publish = builder.when(publish_flag);
+
+        when_publish.assert_one(sum_flags);
+        self.assert_compose(&mut when_publish, read1.data, match_public_value_index);
+        self.assert_compose(&mut when_publish, read2.data, match_public_value);
 
         when_publish.assert_eq(read1.address_space, d);
         when_publish.assert_eq(read1.address, a);
 
         when_publish.assert_eq(read2.address_space, e);
         when_publish.assert_eq(read2.address, b);
-
-        let mut sum_flags = AB::Expr::zero();
-        let mut match_public_value_index = AB::Expr::zero();
-        let mut match_public_value = AB::Expr::zero();
-        for (i, &flag) in public_value_flags.iter().enumerate() {
-            when_publish.assert_bool(flag);
-            sum_flags = sum_flags + flag;
-            match_public_value_index += flag * AB::F::from_canonical_usize(i);
-            match_public_value += flag * when_publish.inner.public_values()[i].into();
-        }
-        when_publish.assert_one(sum_flags);
-        self.assert_compose(&mut when_publish, read1.data, match_public_value_index);
-        self.assert_compose(&mut when_publish, read2.data, match_public_value);
 
         // arithmetic operations
         if self.options.field_arithmetic_enabled {
