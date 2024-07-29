@@ -42,7 +42,8 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanAir {
         let lower = F::from_canonical_u32(lower_u32);
 
         // decompose lower_bits into limbs and range check
-        let mut lower_decomp: Vec<F> = vec![];
+        let mut lower_decomp: Vec<F> =
+            Vec::with_capacity(self.num_limbs + (self.max_bits % self.decomp != 0) as usize);
         for i in 0..self.num_limbs {
             let bits = (lower_u32 >> (i * self.decomp)) & ((1 << self.decomp) - 1);
 

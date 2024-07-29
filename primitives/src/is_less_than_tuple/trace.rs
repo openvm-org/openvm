@@ -43,9 +43,9 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanTupleAir {
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
         let (x, y, range_checker) = input;
 
-        let mut less_than: Vec<F> = vec![];
-        let mut lower_vec: Vec<F> = vec![];
-        let mut lower_decomp_vec: Vec<Vec<F>> = vec![];
+        let mut less_than: Vec<F> = Vec::with_capacity(self.tuple_len());
+        let mut lower_vec: Vec<F> = Vec::with_capacity(self.tuple_len());
+        let mut lower_decomp_vec: Vec<Vec<F>> = Vec::with_capacity(self.tuple_len());
 
         let mut valid = true;
         let mut tuple_less_than = F::zero();
@@ -90,7 +90,7 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanTupleAir {
             .inverse();
         }
 
-        let mut less_than_cumulative: Vec<F> = vec![];
+        let mut less_than_cumulative: Vec<F> = Vec::with_capacity(x.len());
 
         // compute less_than_cumulative
         for i in 0..x.len() {
@@ -114,7 +114,7 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanTupleAir {
         }
 
         // compute less_than_aux and is_equal_vec_aux
-        let mut less_than_aux: Vec<IsLessThanAuxCols<F>> = vec![];
+        let mut less_than_aux: Vec<IsLessThanAuxCols<F>> = Vec::with_capacity(x.len());
         for i in 0..x.len() {
             let less_than_col = IsLessThanAuxCols {
                 lower: lower_vec[i],
