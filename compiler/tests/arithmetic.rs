@@ -13,7 +13,7 @@ use afs_compiler::ir::{ExtConst, Var};
 use afs_compiler::util::execute_program;
 use stark_vm::cpu::trace::ExecutionError::Fail;
 use stark_vm::vm::config::VmConfig;
-use stark_vm::vm::VirtualMachine;
+use stark_vm::vm::{ExecutionResult, VirtualMachine};
 
 #[allow(dead_code)]
 const WORD_SIZE: usize = 1;
@@ -107,7 +107,7 @@ fn test_compiler_arithmetic() {
         field_extension_enabled: false,
         ..Default::default()
     });
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -275,14 +275,14 @@ fn test_ext_immediate() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 
     let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
         compile_prints: false,
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
     });
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -332,7 +332,7 @@ fn test_ext_felt_arithmetic() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 
     let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
         compile_prints: false,
@@ -366,7 +366,7 @@ fn test_felt_equality() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -422,7 +422,7 @@ fn test_ext_equality() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -446,11 +446,11 @@ fn test_ext_equality_negative() {
     assert_failed_assertion(builder);
 }
 
-fn assert_failed_assertion<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>(
-    builder: Builder<AsmConfig<F, EF>>,
+fn assert_failed_assertion(
+    builder: Builder<AsmConfig<BabyBear, BinomialExtensionField<BabyBear, 4>>>,
 ) {
     let program = builder.compile_isa::<WORD_SIZE>();
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(VmConfig::default(), program, vec![]);
-    let traces = vm.traces();
-    assert!(matches!(traces, Err(Fail(_))));
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(VmConfig::default(), program, vec![]);
+    let result = vm.execute();
+    assert!(matches!(result, Err(Fail(_))));
 }

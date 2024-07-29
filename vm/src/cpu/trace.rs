@@ -289,10 +289,20 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     let base_pointer = read!(d, a);
                     write!(e, base_pointer + b, hint);
                 }
-                CT_START => {
-                    cycle_tracker.start(debug, &rows, clock_cycle, timestamp, &vm.metrics())
-                }
-                CT_END => cycle_tracker.end(debug, &rows, clock_cycle, timestamp, &vm.metrics()),
+                CT_START => cycle_tracker.start(
+                    debug,
+                    &vm.cpu_chip.rows.concat(),
+                    clock_cycle,
+                    timestamp,
+                    &vm.metrics(),
+                ),
+                CT_END => cycle_tracker.end(
+                    debug,
+                    &vm.cpu_chip.rows.concat(),
+                    clock_cycle,
+                    timestamp,
+                    &vm.metrics(),
+                ),
             };
 
             let mut operation_flags = BTreeMap::new();

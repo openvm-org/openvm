@@ -17,6 +17,8 @@ use crate::cpu::{
     CpuOptions,
 };
 
+pub mod cycle_tracker;
+
 use self::config::VmConfig;
 
 pub mod config;

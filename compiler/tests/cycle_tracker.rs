@@ -37,5 +37,5 @@ fn test_cycle_tracker() {
 
     let program = builder.compile_isa::<WORD_SIZE>();
     display_program(&program);
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 }

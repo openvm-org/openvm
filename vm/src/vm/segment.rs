@@ -2,6 +2,7 @@ use super::ChipType;
 use super::VirtualMachineState;
 use afs_stark_backend::config::{StarkGenericConfig, Val};
 use afs_stark_backend::rap::AnyRap;
+use std::collections::BTreeMap;
 use std::collections::VecDeque;
 use std::sync::Arc;
 
@@ -178,6 +179,32 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         }
         assert!(result.len() == self.get_num_chips());
         result
+    }
+
+    pub fn metrics(&mut self) -> BTreeMap<String, usize> {
+        let mut metrics = BTreeMap::new();
+        metrics.insert(
+            "memory_chip_accesses".to_string(),
+            self.memory_chip.accesses.len(),
+        );
+        metrics.insert(
+            "field_arithmetic_ops".to_string(),
+            self.field_arithmetic_chip.operations.len(),
+        );
+        metrics.insert(
+            "field_extension_ops".to_string(),
+            self.field_extension_chip.operations.len(),
+        );
+        metrics.insert(
+            "range_checker_count".to_string(),
+            self.range_checker.count.len(),
+        );
+        metrics.insert(
+            "poseidon2_chip_rows".to_string(),
+            self.poseidon2_chip.rows.len(),
+        );
+        metrics.insert("input_stream_len".to_string(), self.input_stream.len());
+        metrics
     }
 }
 
