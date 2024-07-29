@@ -3,8 +3,8 @@ use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
 
 use afs_compiler::asm::AsmBuilder;
-use afs_compiler::ir::{Ext, Var};
-use afs_compiler::util::{end_to_end_test, execute_program};
+use afs_compiler::ir::Var;
+use afs_compiler::util::execute_program;
 use stark_vm::cpu::WORD_SIZE;
 
 type F = BabyBear;

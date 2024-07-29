@@ -24,6 +24,7 @@ impl Default for VmConfig {
             perm_poseidon2_enabled: true,
             limb_bits: 28,
             decomp: 4,
+            num_public_values: 4,
         }
     }
 }

@@ -7,11 +7,11 @@ use afs_test_utils::config::fri_params::{
 };
 use afs_test_utils::config::setup_tracing;
 use afs_test_utils::engine::StarkEngine;
+use stark_vm::vm::get_chips;
 use stark_vm::{
     cpu::trace::Instruction,
     vm::{config::VmConfig, VirtualMachine},
 };
-use stark_vm::vm::get_chips;
 
 use crate::asm::AsmBuilder;
 use crate::conversion::CompilerOptions;
