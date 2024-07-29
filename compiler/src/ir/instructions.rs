@@ -222,7 +222,7 @@ pub enum DslIr<C: Config> {
     /// Witness an extension field element. Should only be used when target is a gnark circuit.
     WitnessExt(Ext<C::F, C::EF>, u32),
     /// Label a field element as the ith public input.
-    Commit(Felt<C::F>, Var<C::N>),
+    Publish(Felt<C::F>, Var<C::N>),
     /// Registers a field element to the public inputs.
     RegisterPublicValue(Felt<C::F>),
     /// Operation to halt the program. Should be the last instruction in the program.

@@ -1,23 +1,27 @@
-use super::columns::FieldArithmeticCols;
-use super::columns::FieldArithmeticIoCols;
-use super::FieldArithmeticAir;
-use super::FieldArithmeticChip;
-use crate::cpu::OpCode;
-use afs_stark_backend::prover::USE_DEBUG_BUILDER;
-use afs_stark_backend::verifier::VerificationError;
-use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
-use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
-use afs_test_utils::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 
+use afs_stark_backend::prover::USE_DEBUG_BUILDER;
+use afs_stark_backend::verifier::VerificationError;
+use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
+use afs_test_utils::utils::create_seeded_rng;
+
+use crate::cpu::OpCode::FDIV;
+use crate::cpu::{OpCode, FIELD_ARITHMETIC_INSTRUCTIONS};
+
+use super::columns::FieldArithmeticCols;
+use super::columns::FieldArithmeticIoCols;
+use super::FieldArithmeticAir;
+use super::FieldArithmeticChip;
+
 /// Function for testing that generates a random program consisting only of field arithmetic operations.
 fn generate_arith_program(chip: &mut FieldArithmeticChip<BabyBear>, len_ops: usize) {
     let mut rng = create_seeded_rng();
     let ops = (0..len_ops)
-        .map(|_| OpCode::from_u8(rng.gen_range(6..=9)).unwrap())
+        .map(|_| FIELD_ARITHMETIC_INSTRUCTIONS[rng.gen_range(0..4)])
         .collect();
     let operands = (0..len_ops)
         .map(|_| {
@@ -106,7 +110,7 @@ fn au_air_zero_div_zero() {
     let dummy_trace = RowMajorMatrix::new(
         vec![
             BabyBear::one(),
-            BabyBear::from_canonical_u32(OpCode::FDIV as u32),
+            BabyBear::from_canonical_u32(FDIV as u32),
             BabyBear::zero(),
             BabyBear::zero(),
             BabyBear::zero(),

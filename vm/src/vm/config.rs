@@ -10,6 +10,9 @@ pub struct VmConfig {
     pub perm_poseidon2_enabled: bool,
     pub limb_bits: usize,
     pub decomp: usize,
+    pub num_public_values: usize,
+    /*pub max_program_length: usize,
+    pub max_operations: usize,*/
 }
 
 impl Default for VmConfig {
@@ -21,6 +24,7 @@ impl Default for VmConfig {
             perm_poseidon2_enabled: true,
             limb_bits: 28,
             decomp: 4,
+            num_public_values: 0,
         }
     }
 }
@@ -32,6 +36,7 @@ impl VmConfig {
             field_extension_enabled: self.field_extension_enabled,
             compress_poseidon2_enabled: self.compress_poseidon2_enabled,
             perm_poseidon2_enabled: self.perm_poseidon2_enabled,
+            num_public_values: self.num_public_values,
         }
     }
 }

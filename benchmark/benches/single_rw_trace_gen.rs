@@ -5,7 +5,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
-use pprof::criterion::{Output, PProfProfiler}; // Add this line
+use pprof::criterion::{Output, PProfProfiler};
 use rand::Rng;
 
 use afs_page::common::page::Page;

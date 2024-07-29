@@ -63,3 +63,43 @@ impl<const N: usize, T: Clone> XorCols<N, T> {
         }
     }
 }
+
+pub struct XorIoColsMut<'a, T> {
+    pub x: &'a mut T,
+    pub y: &'a mut T,
+    pub z: &'a mut T,
+}
+
+/// Bit decompositions
+pub struct XorBitColsMut<'a, T> {
+    pub x: &'a mut [T],
+    pub y: &'a mut [T],
+    pub z: &'a mut [T],
+}
+
+pub struct XorColsMut<'a, const N: usize, T> {
+    pub io: XorIoColsMut<'a, T>,
+    pub bits: XorBitColsMut<'a, T>,
+}
+
+impl<'a, const N: usize, T> XorColsMut<'a, N, T> {
+    pub fn from_slice(slc: &'a mut [T]) -> Self {
+        let (io, bits) = slc.split_at_mut(3);
+
+        let (x, rest) = io.split_at_mut(1);
+        let (y, z) = rest.split_at_mut(1);
+        let [x, y, z] = [x, y, z].map(|x| &mut x[0]);
+
+        let (x_bits, rest) = bits.split_at_mut(N);
+        let (y_bits, z_bits) = rest.split_at_mut(N);
+
+        Self {
+            io: XorIoColsMut { x, y, z },
+            bits: XorBitColsMut {
+                x: x_bits,
+                y: y_bits,
+                z: z_bits,
+            },
+        }
+    }
+}

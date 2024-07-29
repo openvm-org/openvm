@@ -10,6 +10,7 @@ use afs_primitives::{
     is_zero::{columns::IsZeroIoCols, IsZeroAir},
     sub_chip::SubAir,
 };
+use afs_stark_backend::interaction::InteractionBuilder;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
@@ -79,6 +80,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
 
         let CpuAuxCols {
             operation_flags,
+            public_value_flags,
             accesses,
             read0_equals_read1,
             is_equal_vec_aux,
@@ -242,6 +244,34 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         let terminate_flag = operation_flags[&TERMINATE];
         let mut when_terminate = builder.when(terminate_flag);
         when_terminate.when_transition().assert_eq(next_pc, pc);
+
+        // PUBLISH
+
+        let publish_flag = operation_flags[&PUBLISH];
+        read1_enabled_check = read1_enabled_check + publish_flag;
+        read2_enabled_check = read2_enabled_check + publish_flag;
+
+        let mut sum_flags = AB::Expr::zero();
+        let mut match_public_value_index = AB::Expr::zero();
+        let mut match_public_value = AB::Expr::zero();
+        for (i, &flag) in public_value_flags.iter().enumerate() {
+            builder.assert_bool(flag);
+            sum_flags = sum_flags + flag;
+            match_public_value_index += flag * AB::F::from_canonical_usize(i);
+            match_public_value += flag * builder.public_values()[i].into();
+        }
+
+        let mut when_publish = builder.when(publish_flag);
+
+        when_publish.assert_one(sum_flags);
+        self.assert_compose(&mut when_publish, read1.data, match_public_value_index);
+        self.assert_compose(&mut when_publish, read2.data, match_public_value);
+
+        when_publish.assert_eq(read1.address_space, d);
+        when_publish.assert_eq(read1.address, a);
+
+        when_publish.assert_eq(read2.address_space, e);
+        when_publish.assert_eq(read2.address, b);
 
         // arithmetic operations
         if self.options.field_arithmetic_enabled {

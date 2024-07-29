@@ -479,31 +479,35 @@ impl<C: Config> Builder<C> {
         self.operations.push(DslIr::RegisterPublicValue(val));
     }
 
-    /// Register and commits a felt as public value.  This value will be constrained when verified.
-    pub fn commit_public_value(&mut self, val: Felt<C::F>) {
-        assert!(
-            !self.is_sub_builder,
-            "Cannot commit to a public value with a sub builder"
-        );
-        if self.nb_public_values.is_none() {
-            self.nb_public_values = Some(self.eval(C::N::zero()));
-        }
-        let nb_public_values = *self.nb_public_values.as_ref().unwrap();
-
-        self.operations.push(DslIr::Commit(val, nb_public_values));
-        self.assign(nb_public_values, nb_public_values + C::N::one());
-    }
-
-    /// Commits an array of felts in public values.
-    pub fn commit_public_values(&mut self, vals: &Array<C, Felt<C::F>>) {
+    fn get_nb_public_values(&mut self) -> Var<C::N> {
         assert!(
             !self.is_sub_builder,
             "Cannot commit to public values with a sub builder"
         );
+        if self.nb_public_values.is_none() {
+            self.nb_public_values = Some(self.eval(C::N::zero()));
+        }
+        *self.nb_public_values.as_ref().unwrap()
+    }
+
+    fn commit_public_value_and_increment(&mut self, val: Felt<C::F>, nb_public_values: Var<C::N>) {
+        self.operations.push(DslIr::Publish(val, nb_public_values));
+        self.assign(nb_public_values, nb_public_values + C::N::one());
+    }
+
+    /// Register and commits a felt as public value.  This value will be constrained when verified.
+    pub fn commit_public_value(&mut self, val: Felt<C::F>) {
+        let nb_public_values = self.get_nb_public_values();
+        self.commit_public_value_and_increment(val, nb_public_values);
+    }
+
+    /// Commits an array of felts in public values.
+    pub fn commit_public_values(&mut self, vals: &Array<C, Felt<C::F>>) {
+        let nb_public_values = self.get_nb_public_values();
         let len = vals.len();
         self.range(0, len).for_each(|i, builder| {
             let val = builder.get(vals, i);
-            builder.commit_public_value(val);
+            builder.commit_public_value_and_increment(val, nb_public_values);
         });
     }
 
