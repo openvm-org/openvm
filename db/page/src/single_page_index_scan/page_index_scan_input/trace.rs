@@ -123,9 +123,11 @@ impl PageIndexScanInputChip {
                     is_less_than_tuple_air,
                     ..
                 }) => Some(
-                    is_less_than_tuple_air
-                        .generate_trace_row((x.clone(), idx.clone(), self.range_checker.clone()))
-                        .flatten(),
+                    LocalTraceInstructions::generate_trace_row(
+                        is_less_than_tuple_air,
+                        (x.clone(), idx.clone(), self.range_checker.clone()),
+                    )
+                    .flatten(),
                 ),
                 _ => None,
             };

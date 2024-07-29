@@ -42,8 +42,8 @@ pub struct IsLessThanTupleAuxCols<T> {
     pub less_than_aux: Vec<IsLessThanAuxCols<T>>,
     pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
     // TODO: I moved the following column to be its own field instead of being a part of the
-    // IsEqualVecAuxCols field (to align with the new IsEqualVec interface), but I think
-    // it can be removed entirely from the AIR
+    // IsEqualVecAuxCols field (to align with the new IsEqualVec interface so it can be used as a SubAir),
+    // but I think it can be removed entirely from the AIR
     pub is_equal_out: T,
     pub less_than_cumulative: Vec<T>,
 }

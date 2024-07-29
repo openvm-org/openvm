@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 
-use crate::is_equal_vec::columns::IsEqualVecAuxCols;
 use crate::is_equal_vec::IsEqualVecAir;
-use crate::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 use crate::is_less_than_tuple::IsLessThanTupleAir;
+
+use self::columns::OfflineCheckerCols;
 
 pub mod air;
 pub mod bridge;
@@ -56,10 +56,7 @@ impl OfflineChecker {
     }
 
     pub fn air_width(&self) -> usize {
-        6 + self.idx_len
-            + self.data_len
-            + IsEqualVecAuxCols::<usize>::width(self.idx_len)
-            + IsLessThanTupleAuxCols::<usize>::width(&self.lt_tuple_air)
+        OfflineCheckerCols::<usize>::width(self)
     }
 }
 

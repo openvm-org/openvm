@@ -1,4 +1,4 @@
-use afs_primitives::offline_checker::columns::OfflineCheckerCols;
+use afs_primitives::offline_checker::columns::{OfflineCheckerCols, OfflineCheckerColsMut};
 
 use super::PageOfflineChecker;
 
@@ -61,5 +61,47 @@ where
 
     pub fn width(oc: &PageOfflineChecker) -> usize {
         oc.offline_checker.air_width() + 6
+    }
+}
+
+pub struct PageOfflineCheckerColsMut<'a, T> {
+    pub offline_checker_cols: OfflineCheckerColsMut<'a, T>,
+    /// this bit indicates if this row comes from the initial page
+    pub is_initial: &'a mut T,
+    /// this bit indicates if this is the final row of an idx and that it should be sent to the final chip
+    pub is_final_write: &'a mut T,
+    /// this bit indicates if this is the final row of an idx and that it that it was deleted (shouldn't be sent to the final chip)
+    pub is_final_delete: &'a mut T,
+
+    /// 1 if the operation is a read, 0 otherwise
+    pub is_read: &'a mut T,
+    /// 1 if the operation is a write, 0 otherwise
+    pub is_write: &'a mut T,
+    /// 1 if the operation is a delete, 0 otherwise
+    pub is_delete: &'a mut T,
+}
+
+impl<'a, T> PageOfflineCheckerColsMut<'a, T> {
+    pub fn from_slice(slc: &'a mut [T], oc: &PageOfflineChecker) -> Self {
+        let oc_width = oc.offline_checker.air_width();
+        let (oc_cols, rest) = slc.split_at_mut(oc_width);
+
+        let offline_checker_cols = OfflineCheckerColsMut::from_slice(oc_cols, &oc.offline_checker);
+        let (is_initial, rest) = rest.split_first_mut().unwrap();
+        let (is_final_write, rest) = rest.split_first_mut().unwrap();
+        let (is_final_delete, rest) = rest.split_first_mut().unwrap();
+        let (is_read, rest) = rest.split_first_mut().unwrap();
+        let (is_write, rest) = rest.split_first_mut().unwrap();
+        let (is_delete, _) = rest.split_first_mut().unwrap();
+
+        Self {
+            offline_checker_cols,
+            is_initial,
+            is_final_write,
+            is_final_delete,
+            is_read,
+            is_write,
+            is_delete,
+        }
     }
 }

@@ -39,7 +39,7 @@ impl IsLessThanTupleChip {
 }
 
 impl IsLessThanTupleAir {
-    fn generate_trace_row<F: PrimeField>(
+    pub fn generate_trace_row<F: PrimeField>(
         &self,
         x: &[u32],
         y: &[u32],
@@ -53,7 +53,7 @@ impl IsLessThanTupleAir {
         self.generate_trace_row_aux(x, y, range_checker, &mut lt_cols.aux);
     }
 
-    fn generate_trace_row_aux<F: PrimeField>(
+    pub fn generate_trace_row_aux<F: PrimeField>(
         &self,
         x: &[u32],
         y: &[u32],
