@@ -8,7 +8,7 @@ use afs_test_utils::config::fri_params::{
 use afs_test_utils::engine::StarkEngine;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
-use stark_vm::vm::config::VmConfig;
+use stark_vm::vm::config::{DEFAULT_MAX_SEGMENT_LEN, VmConfig};
 use stark_vm::vm::ExecutionResult;
 use stark_vm::vm::VirtualMachine;
 
@@ -24,7 +24,7 @@ fn air_test(
     witness_stream: Vec<Vec<BabyBear>>,
     fast_segmentation: bool,
 ) {
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
             field_arithmetic_enabled,
             field_extension_enabled,
@@ -33,14 +33,11 @@ fn air_test(
             limb_bits: LIMB_BITS,
             decomp: DECOMP,
             num_public_values: 4,
+            max_segment_len: if fast_segmentation { 7 } else { DEFAULT_MAX_SEGMENT_LEN },
         },
         program,
         witness_stream,
     );
-
-    if fast_segmentation {
-        vm.adjust_max_len(7);
-    }
 
     let ExecutionResult {
         nonempty_chips: chips,
@@ -60,7 +57,7 @@ fn air_test_with_poseidon2(
     compress_poseidon2_enabled: bool,
     program: Vec<Instruction<BabyBear>>,
 ) {
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
             field_arithmetic_enabled,
             field_extension_enabled,
@@ -69,11 +66,11 @@ fn air_test_with_poseidon2(
             limb_bits: LIMB_BITS,
             decomp: DECOMP,
             num_public_values: 4,
+            max_segment_len: 6,
         },
         program,
         vec![],
     );
-    vm.adjust_max_len(6);
 
     let ExecutionResult {
         max_log_degree,

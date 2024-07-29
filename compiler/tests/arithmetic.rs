@@ -1,8 +1,6 @@
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
-use p3_field::{
-    AbstractExtensionField, AbstractField, ExtensionField, Field, PrimeField32, TwoAdicField,
-};
+use p3_field::{AbstractExtensionField, AbstractField, Field};
 use rand::{thread_rng, Rng};
 
 use afs_compiler::asm::{AsmBuilder, AsmConfig};
@@ -12,7 +10,7 @@ use afs_compiler::ir::{ExtConst, Var};
 use afs_compiler::util::execute_program;
 use stark_vm::cpu::trace::ExecutionError::Fail;
 use stark_vm::vm::config::VmConfig;
-use stark_vm::vm::{ExecutionResult, VirtualMachine};
+use stark_vm::vm::VirtualMachine;
 
 #[allow(dead_code)]
 const WORD_SIZE: usize = 1;

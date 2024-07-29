@@ -12,7 +12,7 @@ use crate::cpu::columns::{CpuCols, CpuIoCols};
 use crate::cpu::{max_accesses_per_instruction, CpuChip, CpuOptions};
 use crate::field_arithmetic::ArithmeticOperation;
 use crate::memory::{decompose, MemoryAccess, OpType};
-use crate::vm::config::VmConfig;
+use crate::vm::config::{DEFAULT_MAX_SEGMENT_LEN, VmConfig};
 use crate::vm::{ExecutionSegment, VirtualMachine};
 
 use super::columns::MemoryAccessCols;
@@ -38,6 +38,7 @@ fn make_vm<const WORD_SIZE: usize>(
             limb_bits: LIMB_BITS,
             decomp: DECOMP,
             num_public_values: 4,
+            max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
         },
         program,
         vec![],

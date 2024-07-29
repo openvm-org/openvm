@@ -23,7 +23,7 @@ use crate::cpu::OpCode::{COMP_POS2, PERM_POS2};
 use crate::cpu::POSEIDON2_DIRECT_BUS;
 use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
 use crate::memory::tree::Hasher;
-use crate::vm::config::VmConfig;
+use crate::vm::config::{DEFAULT_MAX_SEGMENT_LEN, VmConfig};
 use crate::vm::VirtualMachine;
 
 use super::{Poseidon2Chip, Poseidon2VmAir};
@@ -65,6 +65,7 @@ macro_rules! run_perm_ops {
                 limb_bits: LIMB_BITS,
                 decomp: DECOMP,
                 num_public_values: 4,
+                max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             },
             vec![],
             vec![],
