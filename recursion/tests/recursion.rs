@@ -1,14 +1,14 @@
-use std::ops::Deref;
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
 use p3_field::{AbstractField, PrimeField32};
+use std::ops::Deref;
 
 use afs_compiler::asm::AsmBuilder;
 use afs_compiler::ir::{Config, Var};
 use afs_recursion::stark::DynRapForRecursion;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::vm::config::VmConfig;
-use stark_vm::vm::{ExecutionResult, VirtualMachine, ExecutionSegment};
+use stark_vm::vm::{ExecutionResult, ExecutionSegment, VirtualMachine};
 
 use crate::common::sort_chips;
 
@@ -63,8 +63,7 @@ fn test_fibonacci_program_verify() {
     let (fib_verification_program, input_stream) =
         common::build_verification_program(rec_raps, pvs, vparams);
 
-    let vm =
-        VirtualMachine::<1, _>::new(vm_config, fib_verification_program, input_stream);
+    let vm = VirtualMachine::<1, _>::new(vm_config, fib_verification_program, input_stream);
     vm.execute().unwrap();
 }
 
