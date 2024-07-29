@@ -43,6 +43,9 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
     }
 
     /// Shifts the array by `shift` elements.
+    /// !Attention!: the behavior of `Fixed` and `Dyn` is different. For Dyn, the shift is a view
+    /// and shares memory with the original. For `Fixed`, `set`/`set_value` on slices won't impact
+    /// the original array.
     pub fn shift(&self, builder: &mut Builder<C>, shift: Usize<C::N>) -> Array<C, V> {
         match self {
             Self::Fixed(v) => {
@@ -77,6 +80,10 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
         };
     }
 
+    /// Slices the array from `start` to `end`.
+    /// !Attention!: the behavior of `Fixed` and `Dyn` is different. For Dyn, the shift is a view
+    /// and shares memory with the original. For `Fixed`, `set`/`set_value` on slices won't impact
+    /// the original array.
     pub fn slice(
         &self,
         builder: &mut Builder<C>,

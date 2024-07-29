@@ -166,7 +166,7 @@ fn test_fixed_array_var() {
 
     // Put values statically
     builder.range(0, fixed_array.len()).for_each(|i, builder| {
-        let one: Var<_>= builder.eval(F::one());
+        let one: Var<_> = builder.eval(F::one());
         // `len` instructions
         builder.set(&mut fixed_array, i, Usize::Var(one));
     });
