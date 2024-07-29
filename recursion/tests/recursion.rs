@@ -39,10 +39,15 @@ fn fibonacci_program(a: u32, b: u32, n: u32) -> Vec<Instruction<BabyBear>> {
 fn test_fibonacci_program_verify() {
     let fib_program = fibonacci_program(0, 1, 32);
 
-    let dummy_vm = VirtualMachine::<1, _>::new(VmConfig::default(), fib_program.clone(), vec![]);
+    let vm_config = VmConfig {
+        max_segment_len: 2000000,
+        ..Default::default()
+    };
+
+    let dummy_vm = VirtualMachine::<1, _>::new(vm_config, fib_program.clone(), vec![]);
     let rec_raps = get_rec_raps(&dummy_vm.segments[0]);
 
-    let vm = VirtualMachine::<1, _>::new(VmConfig::default(), fib_program, vec![]);
+    let vm = VirtualMachine::<1, _>::new(vm_config, fib_program, vec![]);
     let ExecutionResult {
         nonempty_traces: traces,
         nonempty_chips: chips,
@@ -59,7 +64,7 @@ fn test_fibonacci_program_verify() {
         common::build_verification_program(rec_raps, pvs, vparams);
 
     let vm =
-        VirtualMachine::<1, _>::new(VmConfig::default(), fib_verification_program, input_stream);
+        VirtualMachine::<1, _>::new(vm_config, fib_verification_program, input_stream);
     vm.execute().unwrap();
 }
 

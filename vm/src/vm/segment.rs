@@ -37,8 +37,6 @@ pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub hint_stream: VecDeque<F>,
     pub has_generation_happened: bool,
     pub public_values: Vec<Option<F>>,
-
-    max_len: usize,
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
@@ -47,7 +45,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         config: VmConfig,
         program: Vec<Instruction<F>>,
         state: VirtualMachineState<F>,
-        max_len: usize,
     ) -> Self {
         let decomp = config.decomp;
         let limb_bits = config.limb_bits;
@@ -77,15 +74,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             poseidon2_chip,
             input_stream: state.input_stream,
             hint_stream: state.hint_stream,
-            max_len,
         }
-    }
-
-    /// Used to adjust the max_len
-    ///
-    /// Default value is 1 << 20 - 100
-    pub fn set_max_len(&mut self, max_len: usize) {
-        self.max_len = max_len;
     }
 
     pub fn options(&self) -> CpuOptions {
@@ -104,7 +93,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             self.poseidon2_chip.current_height(),
         ];
         let max_height = *heights.iter().max().unwrap();
-        max_height >= self.max_len
+        max_height >= self.config.max_segment_len
     }
 
     /// Called by VM to generate traces for current segment. Includes empty traces.

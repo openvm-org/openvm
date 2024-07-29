@@ -23,8 +23,6 @@ use self::config::VmConfig;
 
 pub mod config;
 
-pub const DEFAULT_MAX_LEN: usize = (1 << 20) - 100;
-
 /// Parent struct that holds all execution segments, program, config.
 ///
 /// Key method is `vm.execute()` which consumes the VM and returns a `ExecutionResult` struct. Segment switching is handled by
@@ -38,8 +36,6 @@ pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub program: Vec<Instruction<F>>,
     pub segments: Vec<ExecutionSegment<WORD_SIZE, F>>,
     pub traces: Vec<DenseMatrix<F>>,
-
-    max_len: usize,
 }
 
 /// Enum representing the different types of chips used in the VM
@@ -93,7 +89,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             program,
             segments: vec![],
             traces: vec![],
-            max_len: DEFAULT_MAX_LEN,
         };
         vm.segment(VirtualMachineState {
             state: ExecutionState::default(),
@@ -104,20 +99,12 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
         vm
     }
 
-    /// Sets the max length of the VM.
-    pub fn adjust_max_len(&mut self, max_len: usize) {
-        self.max_len = max_len;
-        self.segments.iter_mut().for_each(|segment| {
-            segment.set_max_len(max_len);
-        });
-    }
-
     /// Create a new segment with a given state.
     ///
     /// The segment will be created from the given state and the program.
     pub fn segment(&mut self, state: VirtualMachineState<F>) {
         let program = self.program.clone();
-        let segment = ExecutionSegment::new(self.config, program, state, self.max_len);
+        let segment = ExecutionSegment::new(self.config, program, state);
         self.segments.push(segment);
     }
 
@@ -161,7 +148,7 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
         let num_chips = self.segments[0].get_num_chips();
 
         let unique_chips = get_chips::<WORD_SIZE, BabyBearPoseidon2Config>(
-            ExecutionSegment::new(self.config, vec![], self.current_state(), self.max_len),
+            ExecutionSegment::new(self.config, vec![], self.current_state()),
             &vec![true; num_chips],
         );
 
@@ -207,11 +194,11 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
             })
             .for_each(|(trace, chip_type)| {
                 assert!(
-                    trace.height() <= (self.max_len + 31).next_power_of_two(),
+                    trace.height() <= (self.config.max_segment_len + 31).next_power_of_two(),
                     "Trace height for {:?} exceeds max_len. Height: {}, Max: {}",
                     chip_type,
                     trace.height(),
-                    self.max_len
+                    self.config.max_segment_len
                 );
             });
 
