@@ -62,13 +62,11 @@ fn run_sum_air_trace_test(sum_trace_u32: &[(u32, u32, u32, u32)]) -> Result<(), 
         let row = [key, val, sum, is_final];
         let mut row: Vec<BabyBear> = row.into_iter().map(BabyBear::from_canonical_u32).collect();
 
-        let lt_row = vec![BabyBear::zero(); BaseAir::<BabyBear>::width(&sum_chip.air.is_lt_air)];
         let is_less_than_row = LocalTraceInstructions::<BabyBear>::generate_trace_row(
             &sum_chip.air.is_lt_air,
             (key, next_key, sum_chip.range_checker.clone()),
         );
-        is_less_than_row.aux.flatten(&sum_chip.air.is_lt_air);
-        row.extend(lt_row);
+        row.extend(is_less_than_row.aux.flatten(&sum_chip.air.is_lt_air));
         rows.push(row);
     }
 

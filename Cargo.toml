@@ -12,8 +12,8 @@ members = [
     "recursion",
     "stark-backend",
     "test-utils",
-    # "vm",
-    # "vm/bin",
+    "vm",
+    "vm/bin",
 ]
 resolver = "2"
 
