@@ -47,12 +47,6 @@ inherits = "profiling"
 inherits = "release"
 lto = "fat"
 codegen-units = 1
-panic = "abort"
-incremental = false
-
-[profile.bench]
-debug = true
-inherits = "release"
 
 # For O3 optimization but still fast(ish) compile times
 [profile.fast]
