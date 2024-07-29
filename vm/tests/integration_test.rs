@@ -8,7 +8,7 @@ use afs_test_utils::config::fri_params::{
 use afs_test_utils::engine::StarkEngine;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
-use stark_vm::vm::config::{DEFAULT_MAX_SEGMENT_LEN, VmConfig};
+use stark_vm::vm::config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN};
 use stark_vm::vm::ExecutionResult;
 use stark_vm::vm::VirtualMachine;
 
@@ -33,7 +33,11 @@ fn air_test(
             limb_bits: LIMB_BITS,
             decomp: DECOMP,
             num_public_values: 4,
-            max_segment_len: if fast_segmentation { 7 } else { DEFAULT_MAX_SEGMENT_LEN },
+            max_segment_len: if fast_segmentation {
+                7
+            } else {
+                DEFAULT_MAX_SEGMENT_LEN
+            },
         },
         program,
         witness_stream,

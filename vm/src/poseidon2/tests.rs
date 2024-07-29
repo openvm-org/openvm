@@ -23,7 +23,7 @@ use crate::cpu::OpCode::{COMP_POS2, PERM_POS2};
 use crate::cpu::POSEIDON2_DIRECT_BUS;
 use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
 use crate::memory::tree::Hasher;
-use crate::vm::config::{DEFAULT_MAX_SEGMENT_LEN, VmConfig};
+use crate::vm::config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN};
 use crate::vm::VirtualMachine;
 
 use super::{Poseidon2Chip, Poseidon2VmAir};

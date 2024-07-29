@@ -12,7 +12,7 @@ use crate::cpu::columns::{CpuCols, CpuIoCols};
 use crate::cpu::{max_accesses_per_instruction, CpuChip, CpuOptions};
 use crate::field_arithmetic::ArithmeticOperation;
 use crate::memory::{decompose, MemoryAccess, OpType};
-use crate::vm::config::{DEFAULT_MAX_SEGMENT_LEN, VmConfig};
+use crate::vm::config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN};
 use crate::vm::{ExecutionSegment, VirtualMachine};
 
 use super::columns::MemoryAccessCols;
