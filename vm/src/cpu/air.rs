@@ -10,7 +10,6 @@ use afs_primitives::{
     is_zero::{columns::IsZeroIoCols, IsZeroAir},
     sub_chip::SubAir,
 };
-use afs_stark_backend::interaction::InteractionBuilder;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
@@ -258,7 +257,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
             builder.assert_bool(flag);
             sum_flags = sum_flags + flag;
             match_public_value_index += flag * AB::F::from_canonical_usize(i);
-            match_public_value += flag * builder.public_values()[i].into();
+            match_public_value += flag * builder.public_values()[i + 2].into();
         }
 
         let mut when_publish = builder.when(publish_flag);

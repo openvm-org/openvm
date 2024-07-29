@@ -74,50 +74,6 @@ pub enum OpCode {
     NOP = 100,
 }
 
-impl OpCode {
-    pub fn from_u8(value: u8) -> Option<Self> {
-        match value {
-            0 => Some(LOADW),
-            1 => Some(STOREW),
-            2 => Some(JAL),
-            3 => Some(BEQ),
-            4 => Some(BNE),
-            5 => Some(TERMINATE),
-
-            6 => Some(FADD),
-            7 => Some(FSUB),
-            8 => Some(FMUL),
-            9 => Some(FDIV),
-
-            10 => Some(FAIL),
-            11 => Some(PRINTF),
-
-            12 => Some(FE4ADD),
-            13 => Some(FE4SUB),
-            14 => Some(BBE4MUL),
-            15 => Some(BBE4INV),
-
-            16 => Some(PERM_POS2),
-            17 => Some(COMP_POS2),
-
-            18 => Some(SHINTW),
-            19 => Some(HINT_INPUT),
-            20 => Some(HINT_BITS),
-
-            21 => Some(CT_START),
-            22 => Some(CT_END),
-
-            100 => Some(NOP),
-
-            _ => None,
-        }
-    }
-}
-
-use crate::field_extension::FieldExtensionArithmeticAir;
-use crate::poseidon2::Poseidon2Chip;
-use OpCode::*;
-
 pub const CORE_INSTRUCTIONS: [OpCode; 13] = [
     LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, SHINTW, HINT_INPUT, HINT_BITS, PUBLISH, CT_START,
     CT_END, NOP,
@@ -175,15 +131,6 @@ pub struct CpuOptions {
     pub compress_poseidon2_enabled: bool,
     pub perm_poseidon2_enabled: bool,
     pub num_public_values: usize,
-}
-
-#[derive(Default, Clone, Copy)]
-/// State of the CPU.
-pub struct ExecutionState {
-    pub clock_cycle: usize,
-    pub timestamp: usize,
-    pub pc: usize,
-    pub is_done: bool,
 }
 
 #[derive(Default, Clone, Copy)]

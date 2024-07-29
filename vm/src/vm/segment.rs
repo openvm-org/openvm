@@ -35,6 +35,8 @@ pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub poseidon2_chip: Poseidon2Chip<16, F>,
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
+    pub has_generation_happened: bool,
+    pub public_values: Vec<Option<F>>,
 
     max_len: usize,
 }
@@ -64,6 +66,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
 
         Self {
             config,
+            has_generation_happened: false,
+            public_values: vec![None; config.num_public_values],
             cpu_chip,
             program_chip,
             memory_chip,
@@ -156,7 +160,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
     pub fn get_pis(&self) -> Vec<Vec<F>> {
         let len = self.get_num_chips();
         let mut result: Vec<Vec<F>> = vec![vec![]; len];
-        result[0].clone_from(&self.cpu_chip.pis);
+        let mut cpu_public_values = self.cpu_chip.pis.clone();
+        cpu_public_values.extend(self.public_values.iter().map(|x| x.unwrap_or(F::zero())));
+        result[0].clone_from(&cpu_public_values);
         result
     }
 

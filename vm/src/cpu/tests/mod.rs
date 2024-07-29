@@ -14,18 +14,10 @@ use crate::field_arithmetic::ArithmeticOperation;
 use crate::memory::{decompose, MemoryAccess, OpType};
 use crate::vm::config::VmConfig;
 use crate::vm::{ExecutionSegment, VirtualMachine};
-use afs_primitives::is_zero::IsZeroAir;
-use afs_stark_backend::verifier::VerificationError;
-use afs_test_utils::config::baby_bear_poseidon2::run_simple_test;
-use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
-use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField64};
-use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
-use p3_matrix::Matrix;
 
 use super::columns::MemoryAccessCols;
 use super::trace::isize_to_field;
-use super::{max_accesses_per_instruction, trace::Instruction, CpuAir, CpuOptions, OpCode::*};
+use super::{trace::Instruction, OpCode::*};
 use super::{ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS};
 
 const TEST_WORD_SIZE: usize = 1;
@@ -301,15 +293,20 @@ fn air_test_change<
     let arithmetic_trace = RowMajorMatrix::new(arithmetic_rows, 5);
 
     segment.cpu_chip.generate_pvs();
-    let cpu_pi = segment.cpu_chip.pis.clone();
+    // let cpu_pi = segment.cpu_chip.pis.clone();
 
-    let cpu_public_values = vm
-        .public_values
-        .iter()
-        .map(|pi| pi.unwrap_or(BabyBear::zero()))
-        .collect();
-    let mut all_public_values = vec![vec![]; if field_arithmetic_enabled { 4 } else { 3 }];
-    all_public_values[0] = cpu_public_values;
+    // let cpu_public_values = segment
+    //     .public_values
+    //     .iter()
+    //     .map(|pi| pi.unwrap_or(BabyBear::zero()))
+    //     .collect();
+    // let mut all_public_values = vec![vec![]; if field_arithmetic_enabled { 4 } else { 3 }];
+    // all_public_values[0] = cpu_public_values;
+    let all_public_values = segment.get_pis();
+    let all_public_values = all_public_values
+        .into_iter()
+        .take(3 + usize::from(field_arithmetic_enabled))
+        .collect::<Vec<_>>();
 
     let test_result = if field_arithmetic_enabled {
         run_simple_test(
@@ -663,39 +660,9 @@ fn test_cpu_publish() {
         false,
         program,
         false,
-        |_, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
+        |_, segment: &mut ExecutionSegment<TEST_WORD_SIZE, BabyBear>| {
             assert_eq!(
-                vm.public_values[index as usize],
-                Some(BabyBear::from_canonical_usize(value as usize))
-            );
-        },
-    );
-}
-
-#[test]
-fn test_cpu_publish() {
-    let index = 2;
-    let value = 4;
-
-    let program = vec![
-        // word[0]_1 <- word[index]_0
-        Instruction::from_isize(STOREW, index, 0, 0, 0, 1),
-        // word[1]_1 <- word[value]_0
-        Instruction::from_isize(STOREW, value, 0, 1, 0, 1),
-        // public_values[word[0]_1] === word[1]_1
-        Instruction::from_isize(PUBLISH, 0, 1, 0, 1, 1),
-        // terminate
-        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
-    ];
-
-    air_test_change(
-        true,
-        false,
-        program,
-        false,
-        |_, vm: &mut VirtualMachine<TEST_WORD_SIZE, BabyBear>| {
-            assert_eq!(
-                vm.public_values[index as usize],
+                segment.public_values[index as usize],
                 Some(BabyBear::from_canonical_usize(value as usize))
             );
         },

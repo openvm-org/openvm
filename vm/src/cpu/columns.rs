@@ -188,6 +188,7 @@ impl<const WORD_SIZE: usize, T: PrimeField64> CpuAuxCols<WORD_SIZE, T> {
         );
         Self {
             operation_flags,
+            public_value_flags: vec![T::zero(); options.num_public_values],
             accesses,
             read0_equals_read1: T::one(),
             is_equal_vec_aux: is_equal_vec_cols.aux,

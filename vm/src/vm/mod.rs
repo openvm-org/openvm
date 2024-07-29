@@ -146,6 +146,7 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
         let mut traces = vec![];
         loop {
             let last_seg = self.segments.last_mut().unwrap();
+            last_seg.has_generation_happened = true;
             traces.extend(last_seg.generate_traces()?);
             traces.extend(last_seg.generate_commitments()?);
             if last_seg.cpu_chip.state.is_done {
