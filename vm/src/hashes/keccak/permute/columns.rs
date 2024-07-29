@@ -7,8 +7,14 @@ use p3_util::indices_arr;
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct KeccakPermuteCols<T> {
-    pub keccak: KeccakCols<T>,
+    pub inner: KeccakCols<T>,
+    pub io: KeccakPermuteIoCols<T>,
+    pub aux: KeccakPermuteAuxCols<T>,
+}
 
+#[repr(C)]
+#[derive(AlignedBorrow)]
+pub struct KeccakPermuteIoCols<T> {
     /// Whether row corresponds to an opcode (PERMUTE)
     pub is_opcode: T,
     /// The clock cycle (NOT timestamp)
@@ -18,11 +24,13 @@ pub struct KeccakPermuteCols<T> {
     pub c: T,
     pub d: T,
     pub e: T,
+}
 
+#[repr(C)]
+#[derive(AlignedBorrow)]
+pub struct KeccakPermuteAuxCols<T> {
     pub dst: T,
     pub src: T,
-    pub d_is_zero: T,
-    pub is_zero_inv: T,
 }
 
 pub const NUM_KECCAK_PERMUTE_COLS: usize = size_of::<KeccakPermuteCols<u8>>();

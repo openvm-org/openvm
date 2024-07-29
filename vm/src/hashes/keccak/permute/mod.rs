@@ -7,3 +7,6 @@ pub mod trace;
 pub const NUM_U64_HASH_ELEMS: usize = 4;
 
 pub use air::KeccakPermuteAir;
+
+#[derive(Clone, Copy, Debug)]
+pub struct KeccakPermuteChip;

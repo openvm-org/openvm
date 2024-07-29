@@ -13,88 +13,89 @@ impl KeccakPermuteAir {
         builder: &mut AB,
         local: &KeccakPermuteCols<AB::Var>,
     ) {
-        let input = local.keccak.preimage.into_iter().flatten().flatten();
-        let output = (0..5).flat_map(move |x| {
-            (0..5).flat_map(move |y| {
-                (0..NUM_U64_HASH_ELEMS).map(move |limb| {
-                    // TODO: after switching to latest p3 commit, this should be y, x
-                    local.keccak.a_prime_prime_prime(x, y, limb)
-                })
-            })
-        });
-        let is_input = local.is_direct * local.keccak.step_flags[0];
-        builder.push_receive(self.input_bus, input, is_input);
-
-        let is_output = local.is_direct * local.keccak.step_flags[NUM_ROUNDS - 1];
-        builder.push_send(self.output_bus, output, is_output);
-
+        let is_input = local.io.is_opcode * local.inner.step_flags[0];
+        // receive the opcode itself
         builder.push_receive(
             KECCAK_PERMUTE_BUS,
             [
-                local.clk.into(),
-                local.a.into(),
+                local.io.clk.into(),
+                local.io.a.into(),
                 AB::Expr::zero(),
-                local.c.into(),
-                local.d.into(),
-                local.e.into(),
+                local.io.c.into(),
+                local.io.d.into(),
+                local.io.e.into(),
             ],
-            local.is_opcode,
+            is_input.clone(),
         );
 
         let mut timestamp_offset = 0;
+
         // read addresses
-        for (io_addr, aux_addr) in [local.a, local.c]
+        // dst = word[a]_d, src = word[c]_d
+        for (ptr, value) in [local.io.a, local.io.c]
             .into_iter()
-            .zip_eq([local.dst, local.src])
+            .zip_eq([local.aux.dst, local.aux.src])
         {
-            let timestamp = local.clk + AB::F::from_canonical_usize(timestamp_offset);
+            let timestamp = local.io.clk + AB::F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
 
             let fields = [
                 timestamp,
                 AB::Expr::from_bool(false), // read
-                local.d.into(),
-                io_addr.into(),
-                aux_addr.into(),
+                local.io.d.into(),
+                ptr.into(),
+                value.into(),
             ];
-            builder.push_send(MEMORY_BUS, fields, local.is_opcode - local.d_is_zero);
+            builder.push_send(MEMORY_BUS, fields, is_input.clone());
         }
 
-        // READ
-        for i in 0..WIDTH {
-            let timestamp = local.clk + AB::F::from_canonical_usize(timestamp_offset);
+        // read `state` into `word[src + ...]_e`
+        // iterator of state as u16:
+        let input = local.inner.preimage.into_iter().flatten().flatten();
+        for (i, input) in input.enumerate() {
+            let timestamp = local.io.clk + AB::F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
 
-            let address = local.src + AB::F::from_canonical_usize(i);
+            let address = local.aux.src + AB::F::from_canonical_usize(i);
 
             let fields = [
                 timestamp,
                 AB::Expr::from_bool(false), // read
-                local.e.into(),
+                local.io.e.into(),
                 address,
-                local.inner.io.input[i].into(),
+                input.into(),
             ];
 
-            builder.push_send(MEMORY_BUS, fields, local.is_opcode);
+            builder.push_send(MEMORY_BUS, fields, is_input.clone());
         }
 
-        // WRITE
-        for i in 0..WIDTH {
-            let timestamp = local.clk + AB::F::from_canonical_usize(timestamp_offset);
+        // write `new_state` into `word[dst + ...]_e`
+        let is_output = local.io.is_opcode * local.inner.step_flags[NUM_ROUNDS - 1];
+        // iterator of `new_state` as u16, in y-major order:
+        let output = (0..5).flat_map(move |y| {
+            (0..5).flat_map(move |x| {
+                (0..NUM_U64_HASH_ELEMS).map(move |limb| {
+                    // TODO: after switching to latest p3 commit, this should be y, x
+                    // This is next.a[y][x][limb]
+                    local.inner.a_prime_prime_prime(x, y, limb)
+                })
+            })
+        });
+        for (i, output) in output.enumerate() {
+            let timestamp = local.io.clk + AB::F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
 
-            let address = local.dst + AB::F::from_canonical_usize(i);
+            let address = local.aux.dst + AB::F::from_canonical_usize(i);
 
             let fields = [
                 timestamp,
                 AB::Expr::from_bool(true), // write
-                local.e.into(),
+                local.io.e.into(),
                 address,
-                local.inner.io.output[i].into(),
+                output.into(),
             ];
 
-            let count = local.is_opcode.into();
-            builder.push_send(MEMORY_BUS, fields, count);
+            builder.push_send(MEMORY_BUS, fields, is_output.clone());
         }
     }
 }
