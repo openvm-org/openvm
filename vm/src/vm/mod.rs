@@ -107,7 +107,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
     /// Sets the max length of the VM.
     pub fn adjust_max_len(&mut self, max_len: usize) {
         self.max_len = max_len;
-        self.segments[0].set_max_len(max_len);
+        self.segments.iter_mut().for_each(|segment| {
+            segment.set_max_len(max_len);
+        });
     }
 
     /// Create a new segment with a given state.

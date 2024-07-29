@@ -52,8 +52,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
 
         let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, 1 << decomp));
 
-        let mut cpu_chip = CpuChip::new(config.cpu_options());
-        cpu_chip.from_state(state.state);
+        let cpu_chip = CpuChip::from_state(config.cpu_options(), state.state);
         let program_chip = ProgramChip::new(program);
         let memory_chip = MemoryChip::new(limb_bits, limb_bits, limb_bits, decomp, state.memory);
         let field_arithmetic_chip = FieldArithmeticChip::new();
