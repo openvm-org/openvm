@@ -208,7 +208,9 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 // d[a] <- e[d[c] + b]
                 LOADW => {
                     let base_pointer = read!(d, c);
+                    println!("base_pointer: {}", base_pointer);
                     let value = read!(e, base_pointer + b);
+                    println!("value: {}", value);
                     write!(d, a, value);
                 }
                 // e[d[c] + b] <- d[a]
