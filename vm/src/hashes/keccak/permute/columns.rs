@@ -10,11 +10,19 @@ pub struct KeccakPermuteCols<T> {
     pub keccak: KeccakCols<T>,
 
     /// Whether row corresponds to an opcode (PERMUTE)
-    // pub is_opcode: T,
-    /// Whether row is for a direct inter-chip permute interaction
-    pub is_direct: T,
+    pub is_opcode: T,
     /// The clock cycle (NOT timestamp)
     pub clk: T,
+    pub a: T,
+    // pub b: T, // b = offset = 0
+    pub c: T,
+    pub d: T,
+    pub e: T,
+
+    pub dst: T,
+    pub src: T,
+    pub d_is_zero: T,
+    pub is_zero_inv: T,
 }
 
 pub const NUM_KECCAK_PERMUTE_COLS: usize = size_of::<KeccakPermuteCols<u8>>();

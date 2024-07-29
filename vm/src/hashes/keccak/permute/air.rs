@@ -25,7 +25,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakPermuteAir {
         let local = main.row_slice(0);
         let local: &KeccakPermuteCols<AB::Var> = (*local).borrow();
 
-        builder.assert_bool(local.is_direct);
+        builder.assert_bool(local.is_opcode);
 
         let keccak_air = KeccakAir {};
         let mut sub_builder =
