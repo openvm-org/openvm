@@ -59,7 +59,7 @@ pub struct WriteCommand {
     pub clean: bool,
 }
 
-/// `mock read` subcommand
+/// `mock write` subcommand, does an unverified updates 
 impl WriteCommand {
     /// Execute the `mock read` command
     pub fn execute(&self, config: &MultitierPageConfig) -> Result<()> {

@@ -31,15 +31,6 @@ use super::CommonCommands;
 
 #[derive(Debug, Parser)]
 pub struct MultitierRwCommand {
-    // #[arg(
-    //     long = "percent-reads",
-    //     short = 'r',
-    //     help = "Percentage of max_rw_ops that are reads (100 = 100%)",
-    //     default_value = "50",
-    //     required = true
-    // )]
-    // /// Percentage of max_rw_ops that are reads (100 = 100%)
-    // pub percent_reads: usize,
     #[arg(
         long = "start-config",
         short = 'i',
@@ -55,108 +46,13 @@ pub struct MultitierRwCommand {
         help = "Choose to start with a new tree or a large tree",
         required = true
     )]
-    /// Percentage of max_rw_ops that are writes (100 = 100%)
+    /// Whether we do the benchmark on a new tree or an existing one.
     pub new_tree: bool,
     #[command(flatten)]
     pub common: CommonCommands,
 }
 
 impl MultitierRwCommand {
-    // pub fn execute(&self) -> Result<()> {
-    //     println!("Executing Multitier Read/Write benchmark");
-
-    //     // assert!(self.percent_reads + self.percent_writes <= 100);
-
-    //     // Generate/Parse config(s)
-    //     let configs = if let Some(config_folder) = self.common.config_folder.clone() {
-    //         parse_multitier_config_folder(config_folder)
-    //     } else {
-    //         generate_multitier_configs()
-    //     };
-    //     let configs_len = configs.len();
-
-    //     // Create tmp folder
-    //     let _ = fs::create_dir_all(TMP_FOLDER);
-
-    //     // Write .csv file
-    //     let output_file = self
-    //         .common
-    //         .output_file
-    //         .clone()
-    //         .unwrap_or(self.common.output_file);
-    //     write_multitier_csv_header(output_file.clone())?;
-    //     println!("Output file: {}", output_file.clone());
-
-    //     // Parse engine
-    //     for (idx, config) in configs.iter().rev().enumerate() {
-    //         let timestamp = Local::now().format("%H:%M:%S");
-    //         println!(
-    //             "[{}] Running config {:?}: {} of {}",
-    //             timestamp,
-    //             config.generate_filename(),
-    //             idx + 1,
-    //             configs_len
-    //         );
-
-    //         clear_tracing_log(TMP_TRACING_LOG.as_str())?;
-
-    //         // Generate AFI file
-    //         let generate_afi_instant = Instant::now();
-    //         generate_random_multitier_afi_rw(
-    //             config,
-    //             MULTITIER_TABLE_ID.to_string(),
-    //             AFI_FILE_PATH.to_string(),
-    //         )?;
-    //         let generate_afi_duration = generate_afi_instant.elapsed();
-    //         println!("Setup: generate AFI duration: {:?}", generate_afi_duration);
-
-    //         run_rw_bench(config, self.new_tree).unwrap();
-
-    //         let event_data = extract_event_data_from_log(
-    //             TMP_TRACING_LOG.as_str(),
-    //             &[
-    //                 "Total air width: preprocessed=",
-    //                 "Total air width: partitioned_main=",
-    //                 "Total air width: after_challenge=",
-    //             ],
-    //         )?;
-    //         let timing_data = extract_timing_data_from_log(
-    //             TMP_TRACING_LOG.as_str(),
-    //             &[
-    //                 "ReadWrite keygen",
-    //                 "ReadWrite prove",
-    //                 "Page BTree Updates",
-    //                 "Page BTree Commit to Disk",
-    //                 "Page BTree Load Traces and Prover Data",
-    //                 "prove:Load page trace generation: afs_chips::multitier_page_rw_checker::page_controller",
-    //                 "Prove.generate_trace",
-    //                 "prove:Prove trace commitment",
-    //                 "ReadWrite verify",
-    //             ],
-    //         )?;
-
-    //         println!("Config: {:?}", config);
-    //         println!("Event data: {:?}", event_data);
-    //         println!("Timing data: {:?}", timing_data);
-    //         println!("Output file: {}", output_file.clone());
-
-    //         let mut log_data: HashMap<String, String> = event_data;
-    //         log_data.extend(timing_data);
-
-    //         write_multitier_csv_line(
-    //             output_file.clone(),
-    //             "Multitier ReadWrite".to_string(),
-    //             scenario,
-    //             config,
-    //             &log_data,
-    //         )?;
-    //     }
-
-    //     println!("Benchmark ReadWrite completed.");
-
-    //     Ok(())
-    // }
-
     pub fn bench_all<SC: StarkGenericConfig, E: StarkEngine<SC>>(
         config: &MultitierPageConfig,
         engine: &E,

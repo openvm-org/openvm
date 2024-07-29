@@ -123,4 +123,21 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                         self.is_less_than_tuple_param.decomp,
                     )))
     }
+
+    pub fn main_width(&self) -> usize {
+        self.page_chip().air_width()
+            + (1 - self.is_init as usize)
+                * (2 * self.idx_len
+                    + 2
+                    + 2 * IsLessThanTupleAuxCols::<usize>::width(&IsLessThanTupleAir::new(
+                        0,
+                        vec![self.is_less_than_tuple_param.limb_bits; self.idx_len],
+                        self.is_less_than_tuple_param.decomp,
+                    )))
+            - self.cached_width()
+    }
+
+    pub fn cached_width(&self) -> usize {
+        1 + self.idx_len + self.data_len
+    }
 }

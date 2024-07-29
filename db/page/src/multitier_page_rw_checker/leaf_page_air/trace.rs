@@ -34,7 +34,7 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                         .collect::<Vec<F>>()
                 })
                 .collect(),
-            1 + self.idx_len + self.data_len,
+            self.cached_width(),
         )
     }
 
@@ -115,7 +115,7 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                     })
                     .collect()
             }),
-            self.air_width() - (1 + self.idx_len + self.data_len),
+            self.main_width(),
         )
     }
 }

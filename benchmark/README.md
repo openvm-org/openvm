@@ -73,5 +73,5 @@ RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark -- rw -r 90 
 Run this command for multitier read/write
 
 ```bash
-cargo run --release --bin benchmark -- mtrw -n
+RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark -- mtrw -n
 ```

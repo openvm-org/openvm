@@ -21,7 +21,7 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
                         .collect::<Vec<F>>()
                 })
                 .collect(),
-            2 + 2 * self.idx_len + COMMITMENT_LEN,
+            self.cached_width(),
         )
     }
 
@@ -115,7 +115,7 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
                     }
                 })
                 .collect(),
-            self.air_width() - (2 + 2 * self.idx_len + COMMITMENT_LEN),
+            self.main_width(),
         )
     }
 }

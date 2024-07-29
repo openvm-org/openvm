@@ -167,73 +167,6 @@ pub fn benchmark_data_predicate() -> BenchmarkData {
     build_benchmark_data(setup)
 }
 
-// writer.write_record(&vec![
-//     "benchmark",
-//     "",
-//     "stark engine",
-//     "page config",
-//     "",
-//     "",
-//     "",
-//     "",
-//     "",
-//     "",
-//     "",
-//     "",
-//     "",
-//     "",
-//     "",
-//     "fri params",
-//     "",
-//     "",
-//     "air width",
-//     "",
-//     "",
-//     "timing",
-//     "",
-//     "",
-//     "",
-//     "",
-//     "",
-//     "",
-//     "",
-//     "",
-// ])?;
-
-// // headers
-// writer.write_record(&vec![
-//     "test_type",
-//     "scenario",
-//     "engine",
-//     "index_bytes",
-//     "data_bytes",
-//     "page_width",
-//     "leaf_height",
-//     "internal_height",
-//     "init_leaf_cap",
-//     "init_internal_cap",
-//     "final_leaf_cap",
-//     "final_internal_cap",
-//     "max_rw_ops",
-//     "bits_per_fe",
-//     "mode",
-//     "log_blowup",
-//     "num_queries",
-//     "pow_bits",
-//     "preprocessed",
-//     "main",
-//     "challenge",
-//     "keygen_time",
-//     "prove_load_trace_gen_and_commit",
-//     "prove_generate",
-//     "prove_commit",
-//     "prove_time",
-//     "verify_time",
-//     "page_btree_updates_time",
-//     "page_btree_commit_to_disk_time",
-//     "page_btree_load_time",
-// ])?;
-/// Format for ReadWrite benchmark
 pub fn benchmark_data_rw() -> BenchmarkData {
     let setup = BenchmarkSetup {
         event_section: "air width".to_string(),
@@ -323,7 +256,7 @@ pub fn benchmark_data_multitier_rw() -> BenchmarkData {
             "Verify time",
             "Page BTree: Update Time",
             "Page BTree: Commit To Disk Time",
-            "Page BTree: Load Time",
+            "Page BTree: Load and Generate Output Time",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -346,7 +279,7 @@ pub fn benchmark_data_multitier_rw() -> BenchmarkData {
             "Benchmark verify: benchmark",
             "Page BTree Updates",
             "Page BTree Commit to Disk",
-            "Page BTree Load Traces and Prover Data",
+            "Page BTree Load Traces and Prover Data, Generate Output Traces",
         ]
         .iter()
         .map(|s| s.to_string())

@@ -1,5 +1,5 @@
 [page]
-index_bytes = 16
+index_bytes = 32
 data_bytes = 32
 bits_per_fe = 16
 leaf_height = 1048576
