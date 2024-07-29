@@ -179,6 +179,21 @@ impl Hintable<InnerConfig> for Vec<usize> {
     }
 }
 
+impl Hintable<InnerConfig> for Vec<u8> {
+    type HintVariable = Array<InnerConfig, Var<InnerVal>>;
+
+    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
+        builder.hint_vars()
+    }
+
+    fn write(&self) -> Vec<Vec<InnerVal>> {
+        vec![self
+            .iter()
+            .map(|x| InnerVal::from_canonical_u8(*x))
+            .collect()]
+    }
+}
+
 impl Hintable<InnerConfig> for Vec<InnerVal> {
     type HintVariable = Array<InnerConfig, Felt<InnerVal>>;
 
