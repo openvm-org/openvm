@@ -76,30 +76,17 @@ impl<F: Field> LocalTraceInstructions<F> for IsEqualVecAir {
     type LocalInput = (Vec<F>, Vec<F>);
 
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
-        assert_eq!(self.vec_len, local_input.0.len());
-        assert_eq!(self.vec_len, local_input.1.len());
-        let (x_row, y_row) = local_input;
-        let vec_len = self.vec_len;
-        let mut transition_index = 0;
-        while transition_index < vec_len && x_row[transition_index] == y_row[transition_index] {
-            transition_index += 1;
-        }
+        let width = self.get_width();
 
-        let prods = std::iter::repeat(F::one())
-            .take(transition_index)
-            .chain(std::iter::repeat(F::zero()).take(vec_len - transition_index))
-            .collect::<Vec<F>>();
+        let mut row = vec![F::zero(); width];
+        let is_equal_cols = IsEqualVecColsMut::from_slice(&mut row, self);
 
-        let is_equal = prods[vec_len - 1];
+        self.generate_trace_row(
+            local_input.0.as_slice(),
+            local_input.1.as_slice(),
+            is_equal_cols,
+        );
 
-        let mut invs = std::iter::repeat(F::zero())
-            .take(vec_len)
-            .collect::<Vec<F>>();
-
-        if transition_index != vec_len {
-            invs[transition_index] = (x_row[transition_index] - y_row[transition_index]).inverse();
-        }
-
-        IsEqualVecCols::new(x_row, y_row, is_equal, prods[..vec_len - 1].to_vec(), invs)
+        IsEqualVecCols::<F>::from_slice(&row, self.vec_len)
     }
 }
