@@ -5,7 +5,11 @@ use p3_matrix::Matrix;
 
 use crate::memory::expand::columns::ExpandCols;
 
-pub struct ExpandAir<const CHUNK: usize> {}
+pub struct ExpandAir<const CHUNK: usize> {
+    pub as_height: usize,
+    pub address_height: usize,
+    pub as_offset: usize,
+}
 
 impl<const CHUNK: usize, F: Field> BaseAir<F> for ExpandAir<CHUNK> {
     fn width(&self) -> usize {
@@ -35,6 +39,15 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for ExpandAir<CHUNK> {
         builder
             .when_ne(local.expand_direction, AB::F::neg_one())
             .assert_zero(local.right_direction_different);
+
+        builder.assert_bool(local.children_height_section);
+        // if `children_height_section` != 1, then `children_height_within` should not be `address_height`
+        builder
+            .when_ne(local.children_height_section, AB::Expr::one())
+            .assert_one(
+                (local.children_height_within - AB::F::from_canonical_usize(self.address_height))
+                    * local.height_inverse,
+            );
 
         self.eval_interactions(builder, local);
     }

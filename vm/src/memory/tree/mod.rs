@@ -82,24 +82,19 @@ fn from_memory<const CHUNK: usize, F: PrimeField32>(
     }
 }
 
-pub fn trees_from_full_memory<const CHUNK: usize, F: PrimeField32>(
-    height: usize,
-    address_spaces: &[F],
+pub fn tree_from_memory<const CHUNK: usize, F: PrimeField32>(
+    as_height: usize,
+    address_height: usize,
+    as_offset: usize,
     memory: &HashMap<(F, F), F>,
     hasher: &mut impl Hasher<CHUNK, F>,
-) -> HashMap<F, MemoryNode<CHUNK, F>> {
-    let mut trees = HashMap::new();
-    for &address_space in address_spaces {
-        let mut memory_here = HashMap::new();
-        for (&(relevant_address_space, address), &value) in memory {
-            if relevant_address_space == address_space {
-                memory_here.insert(address.as_canonical_u64() as usize, value);
-            }
-        }
-        trees.insert(
-            address_space,
-            from_memory(&memory_here.into_iter().collect(), height, 0, hasher),
-        );
+) -> MemoryNode<CHUNK, F> {
+    let mut memory_modified = BTreeMap::new();
+    for (&(address_space, address), &value) in memory {
+        let complete_address = (((address_space.as_canonical_u64() as usize) - as_offset)
+            * (CHUNK << address_height))
+            + (address.as_canonical_u64() as usize);
+        memory_modified.insert(complete_address, value);
     }
-    trees
+    from_memory(&memory_modified, as_height + address_height, 0, hasher)
 }

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use p3_field::PrimeField32;
 
@@ -16,45 +16,48 @@ pub const EXPAND_BUS: usize = 4;
 pub const POSEIDON2_DIRECT_REQUEST_BUS: usize = 6;
 
 pub struct ExpandChip<const CHUNK: usize, F: PrimeField32> {
-    pub height: usize,
-    initial_trees: HashMap<F, MemoryNode<CHUNK, F>>,
-    touched_nodes: HashSet<(F, usize, usize)>,
+    pub air: ExpandAir<CHUNK>,
+    initial_tree: MemoryNode<CHUNK, F>,
+    touched_nodes: HashSet<(usize, usize, usize)>,
     num_touched_nonleaves: usize,
 }
 
 impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {
-    pub fn new(height: usize, initial_trees: HashMap<F, MemoryNode<CHUNK, F>>) -> Self {
-        let touched_nodes = initial_trees
-            .keys()
-            .map(|&address_space| (address_space, height, 0))
-            .collect();
-        let num_touched_nonleaves = initial_trees.len();
+    pub fn new(
+        as_height: usize,
+        address_height: usize,
+        as_offset: usize,
+        initial_tree: MemoryNode<CHUNK, F>,
+    ) -> Self {
+        let mut touched_nodes = HashSet::new();
+        touched_nodes.insert((as_height + address_height, 0, 0));
         Self {
-            height,
-            initial_trees,
+            air: ExpandAir {
+                as_height,
+                address_height,
+                as_offset,
+            },
+            initial_tree,
             touched_nodes,
-            num_touched_nonleaves,
+            num_touched_nonleaves: 1,
         }
     }
 
-    pub fn air(&self) -> ExpandAir<CHUNK> {
-        ExpandAir {}
-    }
-
-    fn touch_node(&mut self, address_space: F, height: usize, label: usize) {
-        if self.touched_nodes.insert((address_space, height, label)) {
-            assert_ne!(height, self.height);
+    fn touch_node(&mut self, height: usize, as_label: usize, address_label: usize) {
+        if self.touched_nodes.insert((height, as_label, address_label)) {
+            assert_ne!(height, self.air.as_height + self.air.address_height);
             if height != 0 {
                 self.num_touched_nonleaves += 1;
             }
-            self.touch_node(address_space, height + 1, label / 2);
+            self.touch_node(height + 1, as_label / 2, address_label / 2);
         }
     }
 
     pub fn touch_address(&mut self, address_space: F, address: F) {
         self.touch_node(
-            address_space,
             0,
+            ((address_space.as_canonical_u64() as usize) - self.air.as_offset)
+                << self.air.address_height,
             (address.as_canonical_u64() as usize) / CHUNK,
         );
     }

@@ -3,12 +3,23 @@ pub struct ExpandCols<const CHUNK: usize, T> {
     // `expand_direction` = -1 corresponds to final memory state
     // `expand_direction` =  0 corresponds to irrelevant row (all interactions multiplicity 0)
     pub expand_direction: T,
-    pub address_space: T,
-    pub parent_height: T,
-    pub parent_label: T,
+
+    // height_section = 0 indicates that as_label is being expanded
+    // height_within = 1 indicates that address_label is being expanded
+    // height can be computed as (height_section * address_bits) + height_within
+    pub children_height_section: T,
+    pub children_height_within: T,
+    // aux column used to constrain that (height_section, height_within) != (0, address_bits)
+    // because that should instead be (height_section, height_within) = (1, 0)
+    pub height_inverse: T,
+
+    pub parent_as_label: T,
+    pub parent_address_label: T,
+
     pub parent_hash: [T; CHUNK],
     pub left_child_hash: [T; CHUNK],
     pub right_child_hash: [T; CHUNK],
+
     // indicate whether `expand_direction` is different from origin
     // when `expand_direction` != -1, must be 0
     pub left_direction_different: T,
@@ -21,8 +32,10 @@ impl<const CHUNK: usize, T: Clone> ExpandCols<CHUNK, T> {
         let mut take = || iter.next().unwrap().clone();
 
         let expand_direction = take();
-        let address_space = take();
-        let parent_height = take();
+        let parent_height_section = take();
+        let parent_height_within = take();
+        let height_inverse = take();
+        let parent_as_label = take();
         let parent_label = take();
         let parent_hash = std::array::from_fn(|_| take());
         let left_child_hash = std::array::from_fn(|_| take());
@@ -32,9 +45,11 @@ impl<const CHUNK: usize, T: Clone> ExpandCols<CHUNK, T> {
 
         Self {
             expand_direction,
-            address_space,
-            parent_height,
-            parent_label,
+            parent_as_label,
+            children_height_section: parent_height_section,
+            children_height_within: parent_height_within,
+            height_inverse,
+            parent_address_label: parent_label,
             parent_hash,
             left_child_hash,
             right_child_hash,
@@ -46,9 +61,11 @@ impl<const CHUNK: usize, T: Clone> ExpandCols<CHUNK, T> {
     pub fn flatten(&self) -> Vec<T> {
         let mut result = vec![
             self.expand_direction.clone(),
-            self.address_space.clone(),
-            self.parent_height.clone(),
-            self.parent_label.clone(),
+            self.children_height_section.clone(),
+            self.children_height_within.clone(),
+            self.height_inverse.clone(),
+            self.parent_as_label.clone(),
+            self.parent_address_label.clone(),
         ];
         result.extend(self.parent_hash.clone());
         result.extend(self.left_child_hash.clone());
@@ -59,6 +76,6 @@ impl<const CHUNK: usize, T: Clone> ExpandCols<CHUNK, T> {
     }
 
     pub fn get_width() -> usize {
-        4 + (3 * CHUNK) + 2
+        6 + (3 * CHUNK) + 2
     }
 }
