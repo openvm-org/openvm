@@ -36,10 +36,12 @@ pub fn run_recursive_test_benchmark(
 
     let log_degree = log2_strict_usize(trace_heights.clone().into_iter().max().unwrap());
 
+    // FRI params to prove `any_raps` with
+    // log_blowup_factor = 1
     let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
-        fri_params_fast_testing()[1]
+        fri_params_fast_testing()[2]
     } else {
-        fri_params_with_80_bits_of_security()[1]
+        fri_params_with_80_bits_of_security()[2]
     };
     let perm = default_perm();
     let engine = engine_from_perm(perm, log_degree, fri_params);
@@ -59,13 +61,13 @@ pub fn run_recursive_test_benchmark(
 
     // span for starting trace geneartion to proof finishes outside of eDSL
     let trace_and_prove_span =
-        info_span!("Benchmark trace commitment and prove outside of eDSL").entered();
+        info_span!("Benchmark trace commitment and prove before recursion").entered();
 
     // span for trace generation
     let trace_commitment_span = info_span!("Benchmark trace commitment").entered();
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     for trace in traces.clone() {
-        trace_builder.load_trace(trace.clone());
+        trace_builder.load_trace(trace);
     }
     trace_builder.commit_current();
     trace_commitment_span.exit();
