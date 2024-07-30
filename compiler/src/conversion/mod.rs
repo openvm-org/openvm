@@ -698,16 +698,20 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 AS::Memory,
             ),
         ],
-        AsmInstruction::CycleTrackerStart(name) => if options.enable_cycle_tracker {
-            vec![dbg(CT_START, name)]
-        } else {
-            vec![]
-        },
-        AsmInstruction::CycleTrackerEnd(name) => if options.enable_cycle_tracker {
-            vec![dbg(CT_END, name)]
-        } else {
-            vec![]
-        },
+        AsmInstruction::CycleTrackerStart(name) => {
+            if options.enable_cycle_tracker {
+                vec![dbg(CT_START, name)]
+            } else {
+                vec![]
+            }
+        }
+        AsmInstruction::CycleTrackerEnd(name) => {
+            if options.enable_cycle_tracker {
+                vec![dbg(CT_END, name)]
+            } else {
+                vec![]
+            }
+        }
         AsmInstruction::Publish(val, index) => vec![inst(
             PUBLISH,
             register(index),
