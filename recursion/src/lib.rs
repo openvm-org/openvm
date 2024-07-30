@@ -1,6 +1,5 @@
 mod challenger;
 mod commit;
-pub mod common;
 mod folder;
 pub mod fri;
 pub mod hints;

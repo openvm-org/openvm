@@ -1,3 +1,4 @@
+use afs_recursion::stark::{get_rec_raps, sort_chips};
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
@@ -9,7 +10,7 @@ use stark_vm::cpu::trace::Instruction;
 use stark_vm::vm::config::VmConfig;
 use stark_vm::vm::{ExecutionResult, VirtualMachine};
 
-use afs_recursion::common::{self, get_rec_raps, sort_chips};
+mod common;
 
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Vec<Instruction<BabyBear>> {
     type F = BabyBear;

@@ -5,7 +5,7 @@ use afs_compiler::{
 
 use super::benchmark_helpers::run_recursive_test_benchmark;
 use afs_recursion::{
-    common::{get_rec_raps, sort_chips},
+    stark::{get_rec_raps, sort_chips},
     types::InnerConfig,
 };
 use p3_baby_bear::BabyBear;

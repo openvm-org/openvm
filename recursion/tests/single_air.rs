@@ -1,4 +1,3 @@
-use afs_recursion::common;
 use afs_test_utils::utils::{generate_fib_trace_rows, FibonacciAir};
 use p3_field::AbstractField;
 use p3_matrix::Matrix;
@@ -6,6 +5,8 @@ use p3_uni_stark::Val;
 
 use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use afs_test_utils::config::setup_tracing;
+
+mod common;
 
 #[test]
 fn test_fibonacci() {
