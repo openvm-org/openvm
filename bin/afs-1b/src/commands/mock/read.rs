@@ -59,7 +59,7 @@ impl ReadCommand {
                 "".to_owned(),
             )
         };
-        let idx_u16 = string_to_u16_vec(self.idx.clone(), config.page.index_bytes);
+        let idx_u16 = string_to_u16_vec(self.idx.clone(), idx_len);
         let data = db.search(&idx_u16).unwrap();
         println!(
             "Table ID: {}",

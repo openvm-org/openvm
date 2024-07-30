@@ -40,7 +40,7 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
 
     pub fn generate_main_trace<SC: StarkGenericConfig>(
         &self,
-        page: &Page,
+        page: Page,
         range: (Vec<u32>, Vec<u32>),
         range_checker: Arc<RangeCheckerGateChip>,
         internal_indices: &HashSet<Vec<u32>>,
@@ -51,7 +51,7 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
         let mut final_page_aux_rows = match &self.page_chip {
             PageRwAir::Final(fin) => {
                 tracing::info_span!("Final Page Trace Generation").in_scope(|| {
-                    fin.gen_aux_trace::<SC>(page, range_checker.clone(), internal_indices)
+                    fin.gen_aux_trace::<SC>(&page, range_checker.clone(), internal_indices)
                 })
             }
             _ => RowMajorMatrix::new(vec![], 1),

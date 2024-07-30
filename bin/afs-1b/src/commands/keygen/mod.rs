@@ -1,28 +1,17 @@
 use std::{
     fs::{self, File},
     io::{BufWriter, Write},
-    sync::Arc,
     time::Instant,
 };
 
-use afs_page::{
-    common::page::Page,
-    execution_air::ExecutionAir,
-    multitier_page_rw_checker::page_controller::{
-        MyLessThanTupleParams, PageController, PageTreeParams,
-    },
-};
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_page::{common::page::Page, multitier_page_rw_checker::page_controller::PageController};
 use afs_stark_backend::{
-    config::PcsProverData,
+    config::{Com, PcsProverData},
     keygen::MultiStarkKeygenBuilder,
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
 };
-use afs_test_utils::{config::baby_bear_poseidon2::BabyBearPoseidon2Config, page_config::PageMode};
-use afs_test_utils::{
-    engine::StarkEngine,
-    page_config::{MultitierPageConfig, TreeParamsConfig},
-};
+use afs_test_utils::page_config::PageMode;
+use afs_test_utils::{engine::StarkEngine, page_config::MultitierPageConfig};
 use clap::Parser;
 use color_eyre::eyre::Result;
 use p3_field::{PrimeField, PrimeField64};
@@ -30,10 +19,10 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{de::DeserializeOwned, Serialize};
 use tracing::info;
 
+use crate::commands::{get_ops_sender, get_page_controller};
+
 use super::create_prefix;
 use super::BABYBEAR_COMMITMENT_LEN;
-use super::DECOMP_BITS;
-use super::LIMB_BITS;
 
 /// `afs keygen` command
 /// Uses information from config.toml to generate partial proving and verifying keys and
@@ -61,21 +50,12 @@ impl KeygenCommand {
         E: StarkEngine<SC>,
         Val<SC>: PrimeField + PrimeField64,
         PcsProverData<SC>: Serialize + DeserializeOwned,
+        Com<SC>: Into<[Val<SC>; BABYBEAR_COMMITMENT_LEN]>,
     {
         let start = Instant::now();
         let prefix = create_prefix(config);
         match config.page.mode {
-            PageMode::ReadWrite => Self::execute_rw(
-                engine,
-                output_folder,
-                (config.page.index_bytes + 1) / 2,
-                (config.page.data_bytes + 1) / 2,
-                config.page.leaf_height,
-                config.page.internal_height,
-                config.page.bits_per_fe,
-                &config.tree,
-                prefix,
-            )?,
+            PageMode::ReadWrite => Self::execute_rw(engine, config, output_folder, prefix)?,
             PageMode::ReadOnly => panic!(),
         }
 
@@ -87,61 +67,23 @@ impl KeygenCommand {
     #[allow(clippy::too_many_arguments)]
     fn execute_rw<SC: StarkGenericConfig, E>(
         engine: &E,
+        config: &MultitierPageConfig,
         output_folder: String,
-        idx_len: usize,
-        data_len: usize,
-        leaf_height: usize,
-        internal_height: usize,
-        _limb_bits: usize,
-        tree_params: &TreeParamsConfig,
         prefix: String,
     ) -> Result<()>
     where
         E: StarkEngine<SC>,
         Val<SC>: PrimeField + PrimeField64,
         PcsProverData<SC>: Serialize + DeserializeOwned,
+        Com<SC>: Into<[Val<SC>; BABYBEAR_COMMITMENT_LEN]>,
     {
-        let data_bus_index = 0;
-        let internal_data_bus_index = 1;
-        let lt_bus_index = 2;
-
-        let init_path_bus = 3;
-        let final_path_bus = 4;
-        let ops_bus_index = 5;
-
-        let less_than_tuple_param = MyLessThanTupleParams {
-            limb_bits: LIMB_BITS,
-            decomp: DECOMP_BITS,
-        };
-
-        let range_checker = Arc::new(RangeCheckerGateChip::new(lt_bus_index, 1 << DECOMP_BITS));
-
-        let page_controller: PageController<BABYBEAR_COMMITMENT_LEN> =
-            PageController::new::<BabyBearPoseidon2Config>(
-                data_bus_index,
-                internal_data_bus_index,
-                ops_bus_index,
-                lt_bus_index,
-                idx_len,
-                data_len,
-                PageTreeParams {
-                    path_bus_index: init_path_bus,
-                    leaf_cap: tree_params.init_leaf_cap,
-                    internal_cap: tree_params.init_internal_cap,
-                    leaf_page_height: leaf_height,
-                    internal_page_height: internal_height,
-                },
-                PageTreeParams {
-                    path_bus_index: final_path_bus,
-                    leaf_cap: tree_params.final_leaf_cap,
-                    internal_cap: tree_params.final_internal_cap,
-                    leaf_page_height: leaf_height,
-                    internal_page_height: internal_height,
-                },
-                less_than_tuple_param,
-                range_checker,
-            );
-        let ops_sender = ExecutionAir::new(ops_bus_index, idx_len, data_len);
+        let idx_len = (config.page.index_bytes + 1) / 2;
+        let data_len = (config.page.data_bytes + 1) / 2;
+        let leaf_height = config.page.leaf_height;
+        let internal_height = config.page.internal_height;
+        let page_controller: PageController<SC, BABYBEAR_COMMITMENT_LEN> =
+            get_page_controller(config, idx_len, data_len);
+        let ops_sender = get_ops_sender(idx_len, data_len);
         let mut keygen_builder = MultiStarkKeygenBuilder::new(engine.config());
 
         let prover = MultiTraceStarkProver::new(engine.config());
@@ -179,118 +121,7 @@ impl KeygenCommand {
         )
         .unwrap();
 
-        let mut init_leaf_data_ptrs = vec![];
-
-        let mut init_internal_data_ptrs = vec![];
-        let mut init_internal_main_ptrs = vec![];
-
-        let mut final_leaf_data_ptrs = vec![];
-        let mut final_leaf_main_ptrs = vec![];
-
-        let mut final_internal_data_ptrs = vec![];
-        let mut final_internal_main_ptrs = vec![];
-
-        for _ in 0..tree_params.init_leaf_cap {
-            init_leaf_data_ptrs.push(keygen_builder.add_cached_main_matrix(1 + idx_len + data_len));
-        }
-
-        for _ in 0..tree_params.init_internal_cap {
-            init_internal_data_ptrs.push(
-                keygen_builder.add_cached_main_matrix(2 + 2 * idx_len + BABYBEAR_COMMITMENT_LEN),
-            );
-        }
-
-        for _ in 0..tree_params.final_leaf_cap {
-            final_leaf_data_ptrs
-                .push(keygen_builder.add_cached_main_matrix(1 + idx_len + data_len));
-        }
-
-        for _ in 0..tree_params.final_internal_cap {
-            final_internal_data_ptrs.push(
-                keygen_builder.add_cached_main_matrix(2 + 2 * idx_len + BABYBEAR_COMMITMENT_LEN),
-            );
-        }
-
-        for _ in 0..tree_params.init_internal_cap {
-            init_internal_main_ptrs.push(keygen_builder.add_main_matrix(
-                page_controller.init_internal_chips[0].air_width()
-                    - 2
-                    - 2 * idx_len
-                    - BABYBEAR_COMMITMENT_LEN,
-            ));
-        }
-
-        for _ in 0..tree_params.final_leaf_cap {
-            final_leaf_main_ptrs.push(keygen_builder.add_main_matrix(
-                page_controller.final_leaf_chips[0].air_width() - 1 - idx_len - data_len,
-            ));
-        }
-
-        for _ in 0..tree_params.final_internal_cap {
-            final_internal_main_ptrs.push(keygen_builder.add_main_matrix(
-                page_controller.final_internal_chips[0].air_width()
-                    - 2
-                    - 2 * idx_len
-                    - BABYBEAR_COMMITMENT_LEN,
-            ));
-        }
-
-        let ops_ptr = keygen_builder.add_main_matrix(page_controller.offline_checker.air_width());
-
-        let init_root_ptr =
-            keygen_builder.add_main_matrix(page_controller.init_root_signal.air_width());
-        let final_root_ptr =
-            keygen_builder.add_main_matrix(page_controller.final_root_signal.air_width());
-
-        for (chip, ptr) in page_controller
-            .init_leaf_chips
-            .iter()
-            .zip(init_leaf_data_ptrs.into_iter())
-        {
-            keygen_builder.add_partitioned_air(chip, BABYBEAR_COMMITMENT_LEN, vec![ptr]);
-        }
-
-        for i in 0..tree_params.init_internal_cap {
-            keygen_builder.add_partitioned_air(
-                &page_controller.init_internal_chips[i],
-                BABYBEAR_COMMITMENT_LEN,
-                vec![init_internal_data_ptrs[i], init_internal_main_ptrs[i]],
-            );
-        }
-
-        for i in 0..tree_params.final_leaf_cap {
-            keygen_builder.add_partitioned_air(
-                &page_controller.final_leaf_chips[i],
-                BABYBEAR_COMMITMENT_LEN,
-                vec![final_leaf_data_ptrs[i], final_leaf_main_ptrs[i]],
-            );
-        }
-
-        for i in 0..tree_params.final_internal_cap {
-            keygen_builder.add_partitioned_air(
-                &page_controller.final_internal_chips[i],
-                BABYBEAR_COMMITMENT_LEN,
-                vec![final_internal_data_ptrs[i], final_internal_main_ptrs[i]],
-            );
-        }
-
-        keygen_builder.add_partitioned_air(&page_controller.offline_checker, 0, vec![ops_ptr]);
-
-        keygen_builder.add_partitioned_air(
-            &page_controller.init_root_signal,
-            BABYBEAR_COMMITMENT_LEN,
-            vec![init_root_ptr],
-        );
-
-        keygen_builder.add_partitioned_air(
-            &page_controller.final_root_signal,
-            BABYBEAR_COMMITMENT_LEN,
-            vec![final_root_ptr],
-        );
-
-        keygen_builder.add_air(&page_controller.range_checker.air, 0);
-
-        keygen_builder.add_air(&ops_sender, 0);
+        page_controller.set_up_keygen_builder(&mut keygen_builder, &ops_sender);
 
         let pk = keygen_builder.generate_pk();
 

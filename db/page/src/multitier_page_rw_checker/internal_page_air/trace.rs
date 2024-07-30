@@ -27,7 +27,7 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
 
     pub fn generate_main_trace<F: PrimeField64>(
         &self,
-        page: &[Vec<u32>],
+        page: Vec<Vec<u32>>,
         child_ids: &[u32],
         mults: &[u32],
         range: (Vec<u32>, Vec<u32>),

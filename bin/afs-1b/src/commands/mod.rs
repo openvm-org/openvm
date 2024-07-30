@@ -1,16 +1,25 @@
-use afs_page::page_btree::PageBTree;
-use afs_stark_backend::prover::trace::ProverTraceData;
+use afs_page::{
+    execution_air::ExecutionAir,
+    multitier_page_rw_checker::page_controller::{
+        MyLessThanTupleParams, PageController, PageTreeParams,
+    },
+    page_btree::PageBTree,
+};
+use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_stark_backend::{config::Com, prover::trace::ProverTraceData};
 use afs_test_utils::page_config::MultitierPageConfig;
 use color_eyre::eyre::Result;
 use logical_interface::{
     afs_input::{types::InputFileOp, AfsInputFile},
     utils::string_to_u16_vec,
 };
-use p3_uni_stark::StarkGenericConfig;
+use p3_field::{AbstractField, PrimeField64};
+use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
     fs::File,
     io::{BufReader, BufWriter, Read, Write},
+    sync::Arc,
 };
 
 pub mod keygen;
@@ -23,6 +32,12 @@ pub const DECOMP_BITS: usize = 16;
 pub const LIMB_BITS: usize = 16;
 pub const LEAF_HEIGHT: usize = 32;
 pub const INTERNAL_HEIGHT: usize = 32;
+pub const DATA_BUS: usize = 0;
+pub const INTERNAL_DATA_BUS: usize = 1;
+pub const LT_BUS: usize = 2;
+pub const INIT_PATH_BUS: usize = 3;
+pub const FINAL_PATH_BUS: usize = 4;
+pub const OPS_BUS: usize = 5;
 
 fn read_from_path(path: String) -> Option<Vec<u8>> {
     let file = File::open(path).unwrap();
@@ -104,4 +119,48 @@ pub fn load_input_file<const COMMITMENT_LEN: usize>(
             _ => panic!(),
         };
     }
+}
+
+pub fn get_page_controller<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>(
+    config: &MultitierPageConfig,
+    idx_len: usize,
+    data_len: usize,
+) -> PageController<SC, COMMITMENT_LEN>
+where
+    Val<SC>: AbstractField + PrimeField64,
+    Com<SC>: Into<[Val<SC>; COMMITMENT_LEN]>,
+{
+    let range_checker = Arc::new(RangeCheckerGateChip::new(2, 1 << DECOMP_BITS));
+
+    PageController::new(
+        DATA_BUS,
+        INTERNAL_DATA_BUS,
+        OPS_BUS,
+        LT_BUS,
+        idx_len,
+        data_len,
+        PageTreeParams {
+            path_bus_index: INIT_PATH_BUS,
+            leaf_cap: config.tree.init_leaf_cap,
+            internal_cap: config.tree.init_internal_cap,
+            leaf_page_height: config.page.leaf_height,
+            internal_page_height: config.page.internal_height,
+        },
+        PageTreeParams {
+            path_bus_index: FINAL_PATH_BUS,
+            leaf_cap: config.tree.final_leaf_cap,
+            internal_cap: config.tree.final_internal_cap,
+            leaf_page_height: config.page.leaf_height,
+            internal_page_height: config.page.internal_height,
+        },
+        MyLessThanTupleParams {
+            limb_bits: config.page.bits_per_fe,
+            decomp: DECOMP_BITS,
+        },
+        range_checker,
+    )
+}
+
+pub fn get_ops_sender(idx_len: usize, data_len: usize) -> ExecutionAir {
+    ExecutionAir::new(OPS_BUS, idx_len, data_len)
 }

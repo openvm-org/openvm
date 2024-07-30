@@ -1,22 +1,14 @@
 use std::{
     fs::{remove_file, File},
     io::{copy, BufReader, BufWriter},
-    sync::Arc,
     time::Instant,
 };
 
-use afs_page::{
-    execution_air::ExecutionAir,
-    multitier_page_rw_checker::page_controller::{
-        MyLessThanTupleParams, PageController, PageTreeParams,
-    },
-};
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_page::multitier_page_rw_checker::page_controller::PageController;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkVerifyingKey,
     prover::types::Proof,
-    rap::AnyRap,
 };
 use afs_test_utils::{
     engine::StarkEngine,
@@ -28,7 +20,9 @@ use p3_field::{PrimeField, PrimeField32, PrimeField64};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::commands::{read_from_path, BABYBEAR_COMMITMENT_LEN, DECOMP_BITS, LIMB_BITS};
+use crate::commands::{
+    get_ops_sender, get_page_controller, read_from_path, BABYBEAR_COMMITMENT_LEN,
+};
 
 use super::create_prefix;
 
@@ -115,80 +109,24 @@ impl VerifyCommand {
     {
         let idx_len = (config.page.index_bytes + 1) / 2;
         let data_len = (config.page.data_bytes + 1) / 2;
-        let data_bus_index = 0;
-        let internal_data_bus_index = 1;
-        let lt_bus_index = 2;
-
-        let init_path_bus = 3;
-        let final_path_bus = 4;
-        let ops_bus_index = 5;
-
-        let less_than_tuple_param = MyLessThanTupleParams {
-            limb_bits: LIMB_BITS,
-            decomp: DECOMP_BITS,
-        };
         let proof_path = db_folder.clone() + "/" + &table_id + ".prove.bin";
         let original_root = db_folder.clone() + "/root/" + &table_id;
         println!("Verifying proof file: {}", proof_path);
         // verify::verify_ops(&proof_file).await?;
         let encoded_vk =
             read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.vk").unwrap();
-        let partial_vk: MultiStarkVerifyingKey<SC> = bincode::deserialize(&encoded_vk).unwrap();
+        let vk: MultiStarkVerifyingKey<SC> = bincode::deserialize(&encoded_vk).unwrap();
 
         let encoded_proof = read_from_path(proof_path).unwrap();
         let proof: Proof<SC> = bincode::deserialize(&encoded_proof).unwrap();
-        let range_checker = Arc::new(RangeCheckerGateChip::new(lt_bus_index, 1 << DECOMP_BITS));
-
-        let page_controller: PageController<BABYBEAR_COMMITMENT_LEN> = PageController::new::<SC>(
-            data_bus_index,
-            internal_data_bus_index,
-            ops_bus_index,
-            lt_bus_index,
-            idx_len,
-            data_len,
-            PageTreeParams {
-                path_bus_index: init_path_bus,
-                leaf_cap: config.tree.init_leaf_cap,
-                internal_cap: config.tree.init_internal_cap,
-                leaf_page_height: config.page.leaf_height,
-                internal_page_height: config.page.internal_height,
-            },
-            PageTreeParams {
-                path_bus_index: final_path_bus,
-                leaf_cap: config.tree.final_leaf_cap,
-                internal_cap: config.tree.final_internal_cap,
-                leaf_page_height: config.page.leaf_height,
-                internal_page_height: config.page.internal_height,
-            },
-            less_than_tuple_param,
-            range_checker,
-        );
-        let ops_sender = ExecutionAir::new(ops_bus_index, idx_len, data_len);
-        let verifier = engine.verifier();
         let pis_path = db_folder.clone() + "/" + &table_id + ".pi.bin";
         let encoded_pis = read_from_path(pis_path).unwrap();
         let pis: Vec<Vec<Val<SC>>> = bincode::deserialize(&encoded_pis).unwrap();
 
-        let mut challenger = engine.new_challenger();
-        let mut airs: Vec<&dyn AnyRap<SC>> = vec![];
-        for chip in &page_controller.init_leaf_chips {
-            airs.push(chip);
-        }
-        for chip in &page_controller.init_internal_chips {
-            airs.push(chip);
-        }
-        for chip in &page_controller.final_leaf_chips {
-            airs.push(chip);
-        }
-        for chip in &page_controller.final_internal_chips {
-            airs.push(chip);
-        }
-        airs.push(&page_controller.offline_checker);
-        airs.push(&page_controller.init_root_signal);
-        airs.push(&page_controller.final_root_signal);
-        airs.push(&page_controller.range_checker.air);
-        airs.push(&ops_sender);
-        let result = verifier.verify(&mut challenger, &partial_vk, airs, &proof, &pis);
+        let page_controller: PageController<SC, BABYBEAR_COMMITMENT_LEN> =
+            get_page_controller(config, idx_len, data_len);
+        let ops_sender = get_ops_sender(idx_len, data_len);
+        let result = page_controller.verify(engine, &vk, &proof, &pis, &ops_sender);
         if result.is_err() {
             println!("Verification Unsuccessful");
         } else {

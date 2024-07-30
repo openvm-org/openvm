@@ -99,8 +99,10 @@ where
         } else {
             let mut ans = 0;
             for row in &leaf_pages[cur_node.1].rows {
-                if row.is_alloc == 1 && internal_indices.contains(&row.idx) {
-                    mega_page.rows.push(row.clone());
+                if row.is_alloc == 1 {
+                    if internal_indices.contains(&row.idx) {
+                        mega_page.rows.push(row.clone());
+                    }
                     ans += 1;
                 }
             }

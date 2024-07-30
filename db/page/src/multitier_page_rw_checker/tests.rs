@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::prover::trace::TraceCommitter;
-use afs_stark_backend::rap::AnyRap;
 use afs_stark_backend::verifier::VerificationError;
 use afs_stark_backend::{
     keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
@@ -15,7 +14,7 @@ use afs_test_utils::config::{
     baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
 };
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
-use afs_test_utils::{engine::StarkEngine, utils::create_seeded_rng};
+use afs_test_utils::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
@@ -131,8 +130,8 @@ where
 
     let range_checker = Arc::new(RangeCheckerGateChip::new(lt_bus_index, 1 << DECOMP_BITS));
 
-    let mut page_controller: PageController<BABYBEAR_COMMITMENT_LEN> =
-        PageController::new::<BabyBearPoseidon2Config>(
+    let mut page_controller: PageController<BabyBearPoseidon2Config, BABYBEAR_COMMITMENT_LEN> =
+        PageController::new(
             data_bus_index,
             internal_data_bus_index,
             ops_bus_index,
@@ -147,118 +146,7 @@ where
     let ops_sender = DummyInteractionAir::new(idx_len + data_len + 2, true, ops_bus_index);
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-    let mut init_leaf_data_ptrs = vec![];
-
-    let mut init_internal_data_ptrs = vec![];
-    let mut init_internal_main_ptrs = vec![];
-
-    let mut final_leaf_data_ptrs = vec![];
-    let mut final_leaf_main_ptrs = vec![];
-
-    let mut final_internal_data_ptrs = vec![];
-    let mut final_internal_main_ptrs = vec![];
-
-    for _ in 0..init_param.leaf_cap {
-        init_leaf_data_ptrs.push(
-            keygen_builder
-                .add_cached_main_matrix(page_controller.init_leaf_chips[0].cached_width()),
-        );
-    }
-
-    for _ in 0..init_param.internal_cap {
-        init_internal_data_ptrs.push(
-            keygen_builder
-                .add_cached_main_matrix(page_controller.init_internal_chips[0].cached_width()),
-        );
-    }
-
-    for _ in 0..final_param.leaf_cap {
-        final_leaf_data_ptrs.push(
-            keygen_builder
-                .add_cached_main_matrix(page_controller.final_leaf_chips[0].cached_width()),
-        );
-    }
-
-    for _ in 0..final_param.internal_cap {
-        final_internal_data_ptrs.push(
-            keygen_builder
-                .add_cached_main_matrix(page_controller.final_internal_chips[0].cached_width()),
-        );
-    }
-
-    for _ in 0..init_param.internal_cap {
-        init_internal_main_ptrs.push(
-            keygen_builder.add_main_matrix(page_controller.init_internal_chips[0].main_width()),
-        );
-    }
-
-    for _ in 0..final_param.leaf_cap {
-        final_leaf_main_ptrs
-            .push(keygen_builder.add_main_matrix(page_controller.final_leaf_chips[0].main_width()));
-    }
-
-    for _ in 0..final_param.internal_cap {
-        final_internal_main_ptrs.push(
-            keygen_builder.add_main_matrix(page_controller.final_internal_chips[0].main_width()),
-        );
-    }
-
-    let ops_ptr = keygen_builder.add_main_matrix(page_controller.offline_checker.air_width());
-
-    let init_root_ptr =
-        keygen_builder.add_main_matrix(page_controller.init_root_signal.air_width());
-    let final_root_ptr =
-        keygen_builder.add_main_matrix(page_controller.final_root_signal.air_width());
-
-    for (chip, ptr) in page_controller
-        .init_leaf_chips
-        .iter()
-        .zip(init_leaf_data_ptrs.into_iter())
-    {
-        keygen_builder.add_partitioned_air(chip, BABYBEAR_COMMITMENT_LEN, vec![ptr]);
-    }
-
-    for i in 0..init_param.internal_cap {
-        keygen_builder.add_partitioned_air(
-            &page_controller.init_internal_chips[i],
-            BABYBEAR_COMMITMENT_LEN,
-            vec![init_internal_data_ptrs[i], init_internal_main_ptrs[i]],
-        );
-    }
-
-    for i in 0..final_param.leaf_cap {
-        keygen_builder.add_partitioned_air(
-            &page_controller.final_leaf_chips[i],
-            BABYBEAR_COMMITMENT_LEN,
-            vec![final_leaf_data_ptrs[i], final_leaf_main_ptrs[i]],
-        );
-    }
-
-    for i in 0..final_param.internal_cap {
-        keygen_builder.add_partitioned_air(
-            &page_controller.final_internal_chips[i],
-            BABYBEAR_COMMITMENT_LEN,
-            vec![final_internal_data_ptrs[i], final_internal_main_ptrs[i]],
-        );
-    }
-
-    keygen_builder.add_partitioned_air(&page_controller.offline_checker, 0, vec![ops_ptr]);
-
-    keygen_builder.add_partitioned_air(
-        &page_controller.init_root_signal,
-        BABYBEAR_COMMITMENT_LEN,
-        vec![init_root_ptr],
-    );
-
-    keygen_builder.add_partitioned_air(
-        &page_controller.final_root_signal,
-        BABYBEAR_COMMITMENT_LEN,
-        vec![final_root_ptr],
-    );
-
-    keygen_builder.add_air(&page_controller.range_checker.air, 0);
-
-    keygen_builder.add_air(&ops_sender, 0);
+    page_controller.set_up_keygen_builder(&mut keygen_builder, &ops_sender);
 
     let pk = keygen_builder.generate_pk();
     let (init_pages, init_root_is_leaf, final_pages, final_root_is_leaf, ops) = generate_inputs(
@@ -307,13 +195,16 @@ fn load_page_test(
     ops: &[Operation],
     num_ops: usize,
     ops_sender: &DummyInteractionAir,
-    page_controller: &mut page_controller::PageController<BABYBEAR_COMMITMENT_LEN>,
+    page_controller: &mut page_controller::PageController<
+        BabyBearPoseidon2Config,
+        BABYBEAR_COMMITMENT_LEN,
+    >,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
     pk: &MultiStarkProvingKey<BabyBearPoseidon2Config>,
     trace_degree: usize,
 ) -> Result<(), VerificationError> {
     page_controller.range_checker.clear();
-    let (data_trace, main_trace, commits, mut prover_data) = page_controller.load_page_and_ops(
+    let prover_data = page_controller.load_page_and_ops(
         init_leaf_pages,
         init_internal_pages,
         init_root_is_leaf,
@@ -328,10 +219,6 @@ fn load_page_test(
         None,
         None,
     );
-    let offline_checker_trace = main_trace.offline_checker_trace;
-    let init_root = main_trace.init_root_signal_trace;
-    let final_root = main_trace.final_root_signal_trace;
-    let range_trace = page_controller.range_checker.generate_trace();
     let ops_sender_trace = RowMajorMatrix::new(
         ops.iter()
             .flat_map(|op| {
@@ -349,100 +236,15 @@ fn load_page_test(
             .collect(),
         1 + ops_sender.field_width(),
     );
-    trace_builder.clear();
-
-    for trace in data_trace.init_leaf_chip_traces.iter() {
-        trace_builder.load_cached_trace(trace.clone(), prover_data.init_leaf_page.remove(0));
-    }
-
-    for trace in data_trace.init_internal_chip_traces.iter() {
-        trace_builder.load_cached_trace(trace.clone(), prover_data.init_internal_page.remove(0));
-    }
-
-    for trace in data_trace.final_leaf_chip_traces.iter() {
-        trace_builder.load_cached_trace(trace.clone(), prover_data.final_leaf_page.remove(0));
-    }
-
-    for trace in data_trace.final_internal_chip_traces.iter() {
-        trace_builder.load_cached_trace(trace.clone(), prover_data.final_internal_page.remove(0));
-    }
-
-    for trace in main_trace.init_internal_chip_main_traces.iter() {
-        trace_builder.load_trace(trace.clone());
-    }
-
-    for trace in main_trace.final_leaf_chip_main_traces.iter() {
-        trace_builder.load_trace(trace.clone());
-    }
-
-    for trace in main_trace.final_internal_chip_main_traces.iter() {
-        trace_builder.load_trace(trace.clone());
-    }
-
-    trace_builder.load_trace(offline_checker_trace);
-    trace_builder.load_trace(init_root);
-    trace_builder.load_trace(final_root);
-    trace_builder.load_trace(range_trace);
-    trace_builder.load_trace(ops_sender_trace);
-    trace_builder.commit_current();
-
-    let mut airs: Vec<&dyn AnyRap<BabyBearPoseidon2Config>> = vec![];
-    for chip in &page_controller.init_leaf_chips {
-        airs.push(chip);
-    }
-    for chip in &page_controller.init_internal_chips {
-        airs.push(chip);
-    }
-    for chip in &page_controller.final_leaf_chips {
-        airs.push(chip);
-    }
-    for chip in &page_controller.final_internal_chips {
-        airs.push(chip);
-    }
-    airs.push(&page_controller.offline_checker);
-    airs.push(&page_controller.init_root_signal);
-    airs.push(&page_controller.final_root_signal);
-    airs.push(&page_controller.range_checker.air);
-    airs.push(ops_sender);
-    let vk = pk.vk();
-    let main_trace_data = trace_builder.view(&vk, airs.clone());
-
-    let mut pis = vec![];
-    for c in commits.init_leaf_page_commitments {
-        let c: [BabyBear; BABYBEAR_COMMITMENT_LEN] = c.into();
-        pis.push(c.to_vec());
-    }
-    for c in commits.init_internal_page_commitments {
-        let c: [BabyBear; BABYBEAR_COMMITMENT_LEN] = c.into();
-        pis.push(c.to_vec());
-    }
-    for c in commits.final_leaf_page_commitments {
-        let c: [BabyBear; BABYBEAR_COMMITMENT_LEN] = c.into();
-        pis.push(c.to_vec());
-    }
-    for c in commits.final_internal_page_commitments {
-        let c: [BabyBear; BABYBEAR_COMMITMENT_LEN] = c.into();
-        pis.push(c.to_vec());
-    }
-    pis.push(vec![]);
-    {
-        let c: [BabyBear; BABYBEAR_COMMITMENT_LEN] = commits.init_root_commitment.into();
-        pis.push(c.to_vec());
-    }
-    {
-        let c: [BabyBear; BABYBEAR_COMMITMENT_LEN] = commits.final_root_commitment.into();
-        pis.push(c.to_vec());
-    }
-    pis.push(vec![]);
-    pis.push(vec![]);
-    let prover = engine.prover();
-    let verifier = engine.verifier();
-
-    let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, pk, main_trace_data, &pis);
-
-    let mut challenger = engine.new_challenger();
-    verifier.verify(&mut challenger, &vk, airs, &proof, &pis)
+    let (proof, pis) = page_controller.prove(
+        engine,
+        pk,
+        trace_builder,
+        prover_data,
+        ops_sender,
+        ops_sender_trace,
+    );
+    page_controller.verify(engine, &pk.vk(), &proof, &pis, ops_sender)
 }
 
 fn generate_no_new_keys(
