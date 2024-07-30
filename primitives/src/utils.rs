@@ -39,20 +39,22 @@ pub fn to_field_vec<F: Field>(src: &[u32]) -> Vec<F> {
     src.iter().map(|s| F::from_canonical_u32(*s)).collect()
 }
 
-pub fn not<AB: AirBuilder>(a: AB::Expr) -> AB::Expr {
-    AB::Expr::one() - a
+pub fn not<AB: AirBuilder>(a: impl Into<AB::Expr>) -> AB::Expr {
+    AB::Expr::one() - a.into()
 }
 
-pub fn and<AB: AirBuilder>(a: AB::Expr, b: AB::Expr) -> AB::Expr {
-    a * b
+pub fn and<AB: AirBuilder>(a: impl Into<AB::Expr>, b: impl Into<AB::Expr>) -> AB::Expr {
+    a.into() * b.into()
 }
 
 /// Assumes that a and b are boolean
-pub fn or<AB: AirBuilder>(a: AB::Expr, b: AB::Expr) -> AB::Expr {
+pub fn or<AB: AirBuilder>(a: impl Into<AB::Expr>, b: impl Into<AB::Expr>) -> AB::Expr {
+    let a = a.into();
+    let b = b.into();
     a.clone() + b.clone() - and::<AB>(a, b)
 }
 
 /// Assumes that a and b are boolean
-pub fn implies<AB: AirBuilder>(a: AB::Expr, b: AB::Expr) -> AB::Expr {
-    or::<AB>(AB::Expr::one() - a, b)
+pub fn implies<AB: AirBuilder>(a: impl Into<AB::Expr>, b: impl Into<AB::Expr>) -> AB::Expr {
+    or::<AB>(AB::Expr::one() - a.into(), b.into())
 }
