@@ -1,13 +1,14 @@
 use enum_utils::FromStr;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
-
-use OpCode::*;
+use strum::{EnumIter, FromRepr, IntoEnumIterator};
 
 use crate::{
     field_extension::FieldExtensionArithmeticAir,
     hashes::{keccak::permute::KeccakPermuteChip, poseidon2::Poseidon2Chip},
 };
+
+use OpCode::*;
 
 #[cfg(test)]
 pub mod tests;
@@ -34,7 +35,7 @@ pub const CPU_MAX_ACCESSES_PER_CYCLE: usize = CPU_MAX_READS_PER_CYCLE + CPU_MAX_
 
 pub const WORD_SIZE: usize = 1;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, FromStr, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, FromStr, PartialOrd, Ord, FromRepr, EnumIter)]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum OpCode {
@@ -87,19 +88,11 @@ pub const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, 
 
 impl OpCode {
     pub fn all_opcodes() -> Vec<OpCode> {
-        let mut all_opcodes = vec![];
-        all_opcodes.extend(CORE_INSTRUCTIONS);
-        all_opcodes.extend(FIELD_ARITHMETIC_INSTRUCTIONS);
-        all_opcodes.extend(FIELD_EXTENSION_INSTRUCTIONS);
-        all_opcodes.extend([FAIL, PRINTF]);
-        all_opcodes.extend([PERM_POS2, COMP_POS2]);
-        all_opcodes
+        OpCode::iter().collect()
     }
 
     pub fn from_u8(value: u8) -> Option<Self> {
-        Self::all_opcodes()
-            .into_iter()
-            .find(|&opcode| value == opcode as u8)
+        OpCode::from_repr(value as usize)
     }
 }
 
