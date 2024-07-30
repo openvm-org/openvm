@@ -1,4 +1,4 @@
-use std::{iter, sync::Arc};
+use std::{collections::HashMap, iter, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
@@ -31,6 +31,7 @@ fn test_offline_checker() {
         POINTER_LIMB_BITS,
         CLK_LIMB_BITS,
         DECOMP,
+        HashMap::new(),
     );
     let requester = DummyInteractionAir::new(
         2 + memory_chip.air.offline_checker.idx_data_width(),
@@ -175,6 +176,7 @@ fn test_offline_checker_valid_first_read() {
         POINTER_LIMB_BITS,
         CLK_LIMB_BITS,
         DECOMP,
+        HashMap::new(),
     );
     let requester = DummyInteractionAir::new(
         2 + memory_chip.air.offline_checker.idx_data_width(),
@@ -231,6 +233,7 @@ fn test_offline_checker_negative_data_mismatch() {
         POINTER_LIMB_BITS,
         CLK_LIMB_BITS,
         DECOMP,
+        HashMap::new(),
     );
     let requester = DummyInteractionAir::new(
         2 + memory_chip.air.offline_checker.idx_data_width(),

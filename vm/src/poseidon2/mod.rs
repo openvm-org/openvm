@@ -1,16 +1,16 @@
 use p3_field::PrimeField32;
 use std::array;
 
-use crate::memory::tree::Hasher;
-use columns::*;
-use poseidon2_air::poseidon2::Poseidon2Air;
-use poseidon2_air::poseidon2::Poseidon2Config;
-
 use crate::cpu::trace::Instruction;
 use crate::cpu::OpCode;
 use crate::cpu::OpCode::*;
-use crate::vm::VirtualMachine;
+use crate::vm::ExecutionSegment;
+
+use crate::memory::tree::Hasher;
 use afs_primitives::{is_zero::IsZeroAir, sub_chip::LocalTraceInstructions};
+use columns::*;
+use poseidon2_air::poseidon2::Poseidon2Air;
+use poseidon2_air::poseidon2::Poseidon2Config;
 
 #[cfg(test)]
 pub mod tests;
@@ -105,7 +105,7 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     /// the given instruction using the subair, storing it in `rows`. Then, writes output to memory,
     /// truncating if the instruction is a compression.
     pub fn poseidon2_perm<const WORD_SIZE: usize>(
-        vm: &mut VirtualMachine<WORD_SIZE, F>,
+        vm: &mut ExecutionSegment<WORD_SIZE, F>,
         start_timestamp: usize,
         instruction: Instruction<F>,
     ) {
@@ -166,6 +166,10 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     pub fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
         3 + (2 * WIDTH)
+    }
+
+    pub fn current_height(&self) -> usize {
+        self.rows.len()
     }
 }
 

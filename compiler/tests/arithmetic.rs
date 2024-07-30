@@ -1,8 +1,6 @@
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
-use p3_field::{
-    AbstractExtensionField, AbstractField, ExtensionField, Field, PrimeField32, TwoAdicField,
-};
+use p3_field::{AbstractExtensionField, AbstractField, Field};
 use rand::{thread_rng, Rng};
 
 use afs_compiler::asm::{AsmBuilder, AsmConfig};
@@ -100,13 +98,13 @@ fn test_compiler_arithmetic() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 
     let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
         field_extension_enabled: false,
         ..Default::default()
     });
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -129,13 +127,13 @@ fn test_compiler_arithmetic_2() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 
     let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
         field_extension_enabled: false,
         ..Default::default()
     });
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -171,13 +169,13 @@ fn test_in_place_arithmetic() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 
     let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
         field_extension_enabled: false,
         ..Default::default()
     });
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -202,7 +200,7 @@ fn test_field_immediate() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -274,14 +272,15 @@ fn test_ext_immediate() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 
     let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
         compile_prints: false,
+        enable_cycle_tracker: false,
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
     });
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -331,14 +330,15 @@ fn test_ext_felt_arithmetic() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 
     let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
         compile_prints: false,
+        enable_cycle_tracker: false,
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
     });
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -365,7 +365,7 @@ fn test_felt_equality() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -421,7 +421,7 @@ fn test_ext_equality() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -445,11 +445,11 @@ fn test_ext_equality_negative() {
     assert_failed_assertion(builder);
 }
 
-fn assert_failed_assertion<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>(
-    builder: Builder<AsmConfig<F, EF>>,
+fn assert_failed_assertion(
+    builder: Builder<AsmConfig<BabyBear, BinomialExtensionField<BabyBear, 4>>>,
 ) {
     let program = builder.compile_isa::<WORD_SIZE>();
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(VmConfig::default(), program, vec![]);
-    let traces = vm.traces();
-    assert!(matches!(traces, Err(Fail(_))));
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(VmConfig::default(), program, vec![]);
+    let result = vm.execute();
+    assert!(matches!(result, Err(Fail(_))));
 }

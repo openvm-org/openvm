@@ -7,6 +7,9 @@ use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_strict_usize;
 use std::cmp::Reverse;
 
+use crate::hints::{Hintable, InnerVal};
+use crate::stark::{DynRapForRecursion, VerifierProgram};
+use crate::types::{new_from_multi_vk, InnerConfig, VerifierInput};
 use afs_compiler::util::execute_program;
 use afs_stark_backend::prover::trace::TraceCommitmentBuilder;
 use afs_stark_backend::prover::types::Proof;
@@ -16,10 +19,6 @@ use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseid
 use afs_test_utils::config::FriParameters;
 use afs_test_utils::engine::StarkEngine;
 use stark_vm::cpu::trace::Instruction;
-
-use crate::hints::{Hintable, InnerVal};
-use crate::stark::{DynRapForRecursion, VerifierProgram};
-use crate::types::{new_from_multi_vk, InnerConfig, VerifierProgramInput};
 
 pub struct VerificationParams<SC: StarkGenericConfig> {
     pub vk: MultiStarkVerifyingKey<SC>,
@@ -97,7 +96,7 @@ pub fn build_verification_program(
         .map(|degree| log2_strict_usize(*degree))
         .collect();
 
-    let input = VerifierProgramInput {
+    let input = VerifierInput {
         proof,
         log_degree_per_air,
         public_values: pvs.clone(),
@@ -122,7 +121,7 @@ pub fn run_recursive_test(
     let vparams = make_verification_params(&any_raps, traces, &pvs);
 
     let (program, witness_stream) = build_verification_program(rec_raps, pvs, vparams);
-    execute_program::<1, _>(program, witness_stream);
+    execute_program::<1>(program, witness_stream);
 }
 
 #[allow(clippy::type_complexity)]

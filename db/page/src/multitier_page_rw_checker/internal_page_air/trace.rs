@@ -62,8 +62,10 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
                              idx2: Vec<u32>,
                              lt_res_idx: usize,
                              air: IsLessThanTupleAir| {
-                                let lt_cols =
-                                    air.generate_trace_row((idx1, idx2, range_checker.clone()));
+                                let lt_cols = LocalTraceInstructions::generate_trace_row(
+                                    &air,
+                                    (idx1, idx2, range_checker.clone()),
+                                );
                                 trace_row.extend(lt_cols.aux.flatten());
                                 trace_row[6 + lt_res_idx] = lt_cols.io.tuple_less_than;
                             };

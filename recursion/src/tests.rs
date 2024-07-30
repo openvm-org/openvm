@@ -21,7 +21,7 @@ use afs_test_utils::utils::{generate_fib_trace_rows, to_field_vec, FibonacciAir}
 
 use crate::hints::Hintable;
 use crate::stark::{DynRapForRecursion, VerifierProgram};
-use crate::types::{new_from_multi_vk, InnerConfig, VerifierProgramInput};
+use crate::types::{new_from_multi_vk, InnerConfig, VerifierInput};
 
 #[test]
 fn test_fibonacci() {
@@ -156,7 +156,7 @@ fn run_recursive_test(
 
     let program = VerifierProgram::build(rec_raps, advice, &engine.fri_params);
 
-    let input = VerifierProgramInput {
+    let input = VerifierInput {
         proof,
         log_degree_per_air,
         public_values: pvs.clone(),
@@ -165,5 +165,5 @@ fn run_recursive_test(
     let mut witness_stream = Vec::new();
     witness_stream.extend(input.write());
 
-    execute_program::<1, _>(program, witness_stream);
+    execute_program::<1>(program, witness_stream);
 }

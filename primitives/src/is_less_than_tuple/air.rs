@@ -6,6 +6,7 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use crate::{
+    is_equal_vec::IsEqualVecAir,
     is_less_than::{
         columns::{IsLessThanAuxCols, IsLessThanCols, IsLessThanIoCols},
         IsLessThanAir,
@@ -23,6 +24,8 @@ pub struct IsLessThanTupleAir {
     pub decomp: usize,
     /// IsLessThanAirs for each tuple element
     pub is_less_than_airs: Vec<IsLessThanAir>,
+    /// IsEqualVecAirs
+    pub is_equal_vec_air: IsEqualVecAir,
     // Better to store this separately to avoid re-allocating vectors each time
     pub limb_bits: Vec<usize>,
 }
@@ -38,6 +41,7 @@ impl IsLessThanTupleAir {
             bus_index,
             decomp,
             is_less_than_airs,
+            is_equal_vec_air: IsEqualVecAir::new(limb_bits.len()),
             limb_bits,
         }
     }
@@ -82,7 +86,8 @@ impl IsLessThanTupleAir {
             );
         }
 
-        let prods = aux.is_equal_vec_aux.prods.clone();
+        let mut prods = aux.is_equal_vec_aux.prods.clone();
+        prods.push(aux.is_equal_out);
         let invs = aux.is_equal_vec_aux.invs.clone();
 
         // initialize prods[0] = is_equal(x[0], y[0])

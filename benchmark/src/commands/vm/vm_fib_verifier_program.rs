@@ -7,7 +7,7 @@ use super::benchmark_helpers::{get_rec_raps, run_recursive_test_benchmark};
 use afs_recursion::common::sort_chips;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use stark_vm::vm::{config::VmConfig, get_chips, VirtualMachine};
+use stark_vm::vm::{config::VmConfig, ExecutionResult, VirtualMachine};
 
 pub fn benchmark_fib_verifier_program(n: usize) {
     println!(
@@ -37,23 +37,24 @@ pub fn benchmark_fib_verifier_program(n: usize) {
 
     let fib_program = builder.compile_isa::<1>();
 
-    let mut vm = VirtualMachine::<1, _>::new(
-        VmConfig {
-            field_arithmetic_enabled: true,
-            field_extension_enabled: true,
-            limb_bits: 28,
-            decomp: 4,
-            compress_poseidon2_enabled: true,
-            perm_poseidon2_enabled: true,
-            num_public_values: 0,
-        },
-        fib_program.clone(),
-        vec![],
-    );
+    let vm_config = VmConfig {
+        max_segment_len: 2000000,
+        ..Default::default()
+    };
 
-    let traces = vm.traces().unwrap();
-    let chips = get_chips(&vm);
-    let rec_raps = get_rec_raps(&vm);
+    let vm = VirtualMachine::<1, _>::new(vm_config, fib_program.clone(), vec![]);
+
+    let ExecutionResult {
+        max_log_degree: _,
+        nonempty_chips: chips,
+        nonempty_traces: traces,
+        nonempty_pis: _,
+        ..
+    } = vm.execute().unwrap();
+    let chips = VirtualMachine::<1, _>::get_chips(&chips);
+
+    let dummy_vm = VirtualMachine::<1, _>::new(vm_config, fib_program.clone(), vec![]);
+    let rec_raps = get_rec_raps(&dummy_vm.segments[0]);
 
     assert!(chips.len() == rec_raps.len());
     let len = chips.len();

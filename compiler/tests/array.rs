@@ -4,8 +4,8 @@ use p3_field::AbstractField;
 use rand::{thread_rng, Rng};
 
 use afs_compiler::asm::AsmBuilder;
-use afs_compiler::ir::Array;
 use afs_compiler::ir::ExtConst;
+use afs_compiler::ir::{Array, Usize};
 use afs_compiler::ir::{Config, Ext, Felt, Var};
 use afs_compiler::prelude::Builder;
 use afs_compiler::prelude::MemIndex;
@@ -120,5 +120,69 @@ fn test_compiler_array() {
 
     const WORD_SIZE: usize = 1;
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE, _>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
+}
+
+#[test]
+fn test_fixed_array_const() {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+
+    let mut builder = AsmBuilder::<F, EF>::default().unroll_loop(true);
+
+    // Sum all the values of an array.
+    let len: usize = 1000;
+    let mut fixed_array = builder.vec(vec![Usize::Const(1); len]);
+
+    // Put values statically
+    builder.range(0, fixed_array.len()).for_each(|i, builder| {
+        builder.set(&mut fixed_array, i, Usize::Const(2));
+    });
+    // Assert values set.
+    builder.range(0, fixed_array.len()).for_each(|i, builder| {
+        let value = builder.get(&fixed_array, i);
+        builder.assert_eq::<Usize<_>>(value, Usize::Const(2));
+    });
+    let mut fixed_2d = builder.uninit_fixed_array(1);
+    builder.set_value(&mut fixed_2d, 0, fixed_array);
+
+    assert_eq!(
+        builder.operations.vec.len(),
+        0,
+        "No operations should be generated"
+    );
+}
+
+#[test]
+fn test_fixed_array_var() {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+
+    let mut builder = AsmBuilder::<F, EF>::default().unroll_loop(true);
+
+    // Sum all the values of an array.
+    let len: usize = 1000;
+    let mut fixed_array = builder.uninit_fixed_array(len);
+
+    // Put values statically
+    builder.range(0, fixed_array.len()).for_each(|i, builder| {
+        let one: Var<_> = builder.eval(F::one());
+        // `len` instructions
+        builder.set(&mut fixed_array, i, Usize::Var(one));
+    });
+    // Assert values set.
+    builder.range(0, fixed_array.len()).for_each(|i, builder| {
+        let value: Usize<_> = builder.get(&fixed_array, i);
+        // `len` instructions to initialize variables. FIXME: this is not optimal.
+        // `len` instructions of `assert_eq`
+        builder.assert_eq::<Var<_>>(value, Usize::Const(2));
+    });
+    let mut fixed_2d = builder.uninit_fixed_array(1);
+    builder.set_value(&mut fixed_2d, 0, fixed_array);
+
+    assert_eq!(
+        builder.operations.vec.len(),
+        len * 3,
+        "No operations should be generated"
+    );
 }

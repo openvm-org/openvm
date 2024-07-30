@@ -1,7 +1,10 @@
 use std::{array::from_fn, collections::BTreeMap};
 
-use afs_primitives::is_equal_vec::columns::IsEqualVecAuxCols;
+use super::trace::disabled_memory_cols;
+use afs_primitives::is_equal_vec::{columns::IsEqualVecAuxCols, IsEqualVecAir};
+use afs_primitives::sub_chip::LocalTraceInstructions;
 use itertools::Itertools;
+use p3_field::{Field, PrimeField64};
 
 use super::{CpuOptions, OpCode, CPU_MAX_ACCESSES_PER_CYCLE};
 
@@ -47,6 +50,21 @@ impl<T: Clone> CpuIoCols<T> {
 
     pub fn get_width() -> usize {
         8
+    }
+}
+
+impl<T: Field> CpuIoCols<T> {
+    pub fn nop_row(pc: T, timestamp: T) -> Self {
+        Self {
+            timestamp,
+            pc,
+            opcode: T::from_canonical_usize(OpCode::NOP as usize),
+            op_a: T::default(),
+            op_b: T::default(),
+            op_c: T::default(),
+            d: T::default(),
+            e: T::default(),
+        }
     }
 }
 
@@ -157,6 +175,27 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
     }
 }
 
+impl<const WORD_SIZE: usize, T: PrimeField64> CpuAuxCols<WORD_SIZE, T> {
+    pub fn nop_row(options: CpuOptions) -> Self {
+        let mut operation_flags = BTreeMap::new();
+        for opcode in options.enabled_instructions() {
+            operation_flags.insert(opcode, T::from_bool(opcode == OpCode::NOP));
+        }
+        let accesses = [disabled_memory_cols(); CPU_MAX_ACCESSES_PER_CYCLE];
+        let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
+            &IsEqualVecAir::new(WORD_SIZE),
+            (accesses[0].data.to_vec(), accesses[1].data.to_vec()),
+        );
+        Self {
+            operation_flags,
+            public_value_flags: vec![T::zero(); options.num_public_values],
+            accesses,
+            read0_equals_read1: T::one(),
+            is_equal_vec_aux: is_equal_vec_cols.aux,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuCols<const WORD_SIZE: usize, T> {
     pub io: CpuIoCols<T>,
@@ -180,5 +219,14 @@ impl<const WORD_SIZE: usize, T: Clone> CpuCols<WORD_SIZE, T> {
 
     pub fn get_width(options: CpuOptions) -> usize {
         CpuIoCols::<T>::get_width() + CpuAuxCols::<WORD_SIZE, T>::get_width(options)
+    }
+}
+
+impl<const WORD_SIZE: usize, T: PrimeField64> CpuCols<WORD_SIZE, T> {
+    pub fn nop_row(options: CpuOptions, pc: T, timestamp: T) -> Self {
+        Self {
+            io: CpuIoCols::<T>::nop_row(pc, timestamp),
+            aux: CpuAuxCols::<WORD_SIZE, T>::nop_row(options),
+        }
     }
 }

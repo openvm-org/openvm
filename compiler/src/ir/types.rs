@@ -220,6 +220,14 @@ impl<C: Config> Variable<C> for Usize<C::N> {
             }
         }
     }
+
+    fn eval(builder: &mut Builder<C>, expr: impl Into<Self::Expression>) -> Self {
+        let expr = expr.into();
+        match expr {
+            SymbolicUsize::Const(c) => Usize::Const(c),
+            SymbolicUsize::Var(v) => Usize::Var(builder.eval(v)),
+        }
+    }
 }
 
 impl<N: Field> Var<N> {

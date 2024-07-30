@@ -1,7 +1,7 @@
 use afs_recursion::{
     hints::{Hintable, InnerVal},
     stark::{DynRapForRecursion, VerifierProgram},
-    types::{new_from_multi_vk, InnerConfig, VerifierProgramInput},
+    types::{new_from_multi_vk, InnerConfig, VerifierInput},
 };
 use afs_stark_backend::{
     prover::trace::TraceCommitmentBuilder, rap::AnyRap, verifier::MultiTraceStarkVerifier,
@@ -19,15 +19,15 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_strict_usize;
 use stark_vm::{
     cpu::trace::Instruction,
-    vm::{config::VmConfig, get_chips, VirtualMachine},
+    vm::{config::VmConfig, ExecutionResult, ExecutionSegment, VirtualMachine},
 };
 use tracing::info_span;
 
 pub fn get_rec_raps<const WORD_SIZE: usize>(
-    vm: &VirtualMachine<WORD_SIZE, InnerVal>,
+    vm: &ExecutionSegment<WORD_SIZE, InnerVal>,
 ) -> Vec<&dyn DynRapForRecursion<InnerConfig>> {
     let mut result: Vec<&dyn DynRapForRecursion<InnerConfig>> = vec![
-        &vm.cpu_air,
+        &vm.cpu_chip.air,
         &vm.program_chip.air,
         &vm.memory_chip.air,
         &vm.range_checker.air,
@@ -116,7 +116,7 @@ pub fn run_recursive_test_benchmark(
 
     let program = VerifierProgram::build(rec_raps, advice, &engine.fri_params);
 
-    let input = VerifierProgramInput {
+    let input = VerifierInput {
         proof,
         log_degree_per_air,
         public_values: pvs.clone(),
@@ -132,20 +132,21 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     program: Vec<Instruction<BabyBear>>,
     input_stream: Vec<Vec<BabyBear>>,
 ) {
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
-        VmConfig {
-            field_arithmetic_enabled: true,
-            field_extension_enabled: true,
-            limb_bits: 28,
-            decomp: 4,
-            compress_poseidon2_enabled: true,
-            perm_poseidon2_enabled: true,
-            num_public_values: 0,
-        },
-        program,
-        input_stream,
-    );
-    let max_log_degree = vm.max_log_degree().unwrap();
+    let vm_config = VmConfig {
+        max_segment_len: 2000000,
+        ..Default::default()
+    };
+
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(vm_config, program, input_stream);
+
+    let ExecutionResult {
+        max_log_degree,
+        nonempty_chips: chips,
+        nonempty_traces: traces,
+        nonempty_pis: _,
+        ..
+    } = vm.execute().unwrap();
+    let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
 
     let perm = default_perm();
     // blowup factor 8 for poseidon2 chip
@@ -156,10 +157,7 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     };
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
 
-    let trace_span = info_span!("Benchmark trace generation").entered();
-    let traces = vm.traces().unwrap();
-
-    let chips = get_chips(&vm);
+    setup_tracing();
 
     assert_eq!(chips.len(), traces.len());
 
@@ -170,11 +168,8 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         trace_builder.load_trace(trace);
     }
     trace_builder.commit_current();
-    trace_span.exit();
 
     let num_chips = chips.len();
-
-    setup_tracing();
 
     let public_values = vec![vec![]; num_chips];
 

@@ -23,7 +23,7 @@ use crate::fri::{TwoAdicFriPcsVariable, TwoAdicMultiplicativeCosetVariable};
 use crate::hints::Hintable;
 use crate::types::{
     AdjacentOpenedValuesVariable, CommitmentsVariable, InnerConfig, MultiStarkVerificationAdvice,
-    StarkVerificationAdvice, VerifierProgramInput, VerifierProgramInputVariable, PROOF_MAX_NUM_PVS,
+    StarkVerificationAdvice, VerifierInput, VerifierInputVariable, PROOF_MAX_NUM_PVS,
 };
 use crate::utils::const_fri_config;
 
@@ -68,13 +68,13 @@ impl VerifierProgram<InnerConfig> {
     ) -> Vec<Instruction<BabyBear>> {
         let mut builder = Builder::<InnerConfig>::default();
 
-        let input: VerifierProgramInputVariable<_> = builder.uninit();
-        VerifierProgramInput::<BabyBearPoseidon2Config>::witness(&input, &mut builder);
+        let input: VerifierInputVariable<_> = builder.uninit();
+        VerifierInput::<BabyBearPoseidon2Config>::witness(&input, &mut builder);
 
         let pcs = TwoAdicFriPcsVariable {
             config: const_fri_config(&mut builder, fri_params),
         };
-        Self::verify(&mut builder, &pcs, raps, constants, &input);
+        StarkVerifier::verify(&mut builder, &pcs, raps, constants, &input);
 
         const WORD_SIZE: usize = 1;
         builder.compile_isa::<WORD_SIZE>()
@@ -90,6 +90,48 @@ impl<C: Config> StarkVerifier<C>
 where
     C::F: TwoAdicField,
 {
+    /// Reference: [afs_stark_backend::verifier::MultiTraceStarkVerifier::verify].
+    pub fn verify(
+        builder: &mut Builder<C>,
+        pcs: &TwoAdicFriPcsVariable<C>,
+        raps: Vec<&dyn DynRapForRecursion<C>>,
+        constants: MultiStarkVerificationAdvice<C>,
+        input: &VerifierInputVariable<C>,
+    ) {
+        let proof = &input.proof;
+
+        let cumulative_sum: Ext<C::F, C::EF> = builder.eval(C::F::zero());
+        let num_phases = constants.num_challenges_to_sample.len();
+        // Currently only support 0 or 1 phase is supported.
+        assert!(num_phases <= 1);
+        // Tmp solution to support 0 or 1 phase.
+        if num_phases > 0 {
+            builder
+                .range(0, proof.exposed_values_after_challenge.len())
+                .for_each(|i, builder| {
+                    let exposed_values = builder.get(&proof.exposed_values_after_challenge, i);
+
+                    // Verifier does not support more than 1 challenge phase
+                    builder.assert_usize_eq(exposed_values.len(), 1);
+
+                    let values = builder.get(&exposed_values, 0);
+
+                    // Only exposed value should be cumulative sum
+                    builder.assert_usize_eq(values.len(), 1);
+
+                    let summand = builder.get(&values, 0);
+                    builder.assign(cumulative_sum, cumulative_sum + summand);
+                });
+        }
+        builder.assert_ext_eq(cumulative_sum, C::EF::zero().cons());
+
+        let mut challenger = DuplexChallengerVariable::new(builder);
+
+        Self::verify_raps(builder, pcs, raps, constants, &mut challenger, input);
+
+        builder.halt();
+    }
+
     /// Reference: [afs_stark_backend::verifier::MultiTraceStarkVerifier::verify_raps].
     pub fn verify_raps(
         builder: &mut Builder<C>,
@@ -97,14 +139,14 @@ where
         raps: Vec<&dyn DynRapForRecursion<C>>,
         vk: MultiStarkVerificationAdvice<C>,
         challenger: &mut DuplexChallengerVariable<C>,
-        input: &VerifierProgramInputVariable<C>,
+        input: &VerifierInputVariable<C>,
     ) where
         C::F: TwoAdicField,
         C::EF: TwoAdicField,
     {
         Self::validate_inputs(builder, &raps, &vk, input);
 
-        let VerifierProgramInputVariable::<C> {
+        let VerifierInputVariable::<C> {
             proof,
             log_degree_per_air,
             public_values,
@@ -719,7 +761,7 @@ where
         builder: &mut Builder<C>,
         raps: &[&dyn DynRapForRecursion<C>],
         vk: &MultiStarkVerificationAdvice<C>,
-        input: &VerifierProgramInputVariable<C>,
+        input: &VerifierInputVariable<C>,
     ) {
         assert_eq!(raps.len(), vk.per_air.len());
         let num_airs = raps.len();
@@ -727,7 +769,7 @@ where
         // Currently only support 0 or 1 phase is supported.
         assert!(num_phases <= 1);
 
-        let VerifierProgramInputVariable::<C> {
+        let VerifierInputVariable::<C> {
             proof,
             log_degree_per_air,
             public_values,

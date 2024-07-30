@@ -381,6 +381,6 @@ pub mod tests {
         use afs_compiler::util::execute_program;
 
         let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 16);
-        execute_program::<WORD_SIZE, _>(program, witness);
+        execute_program::<WORD_SIZE>(program, witness);
     }
 }

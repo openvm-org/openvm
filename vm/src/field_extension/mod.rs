@@ -1,8 +1,9 @@
 use p3_field::{Field, PrimeField32};
 
 use crate::cpu::trace::Instruction;
+use crate::cpu::OpCode;
 use crate::cpu::FIELD_EXTENSION_INSTRUCTIONS;
-use crate::{cpu::OpCode, vm::VirtualMachine};
+use crate::vm::ExecutionSegment;
 
 pub mod air;
 pub mod bridge;
@@ -117,7 +118,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
 
     #[allow(clippy::too_many_arguments)]
     pub fn calculate(
-        vm: &mut VirtualMachine<WORD_SIZE, F>,
+        vm: &mut ExecutionSegment<WORD_SIZE, F>,
         start_timestamp: usize,
         instruction: Instruction<F>,
     ) -> [F; EXTENSION_DEGREE] {
@@ -169,7 +170,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
     }
 
     fn read_extension_element(
-        vm: &mut VirtualMachine<WORD_SIZE, F>,
+        vm: &mut ExecutionSegment<WORD_SIZE, F>,
         timestamp: usize,
         address_space: F,
         address: F,
@@ -192,7 +193,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
     }
 
     fn write_extension_element(
-        vm: &mut VirtualMachine<WORD_SIZE, F>,
+        vm: &mut ExecutionSegment<WORD_SIZE, F>,
         timestamp: usize,
         address_space: F,
         address: F,
@@ -208,5 +209,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
                 *row,
             );
         }
+    }
+
+    pub fn current_height(&self) -> usize {
+        self.operations.len()
     }
 }

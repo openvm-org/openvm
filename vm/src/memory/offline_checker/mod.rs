@@ -34,6 +34,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         pointer_limb_bits: usize,
         clk_limb_bits: usize,
         decomp: usize,
+        memory: HashMap<(F, F), F>,
     ) -> Self {
         let idx_clk_limb_bits = vec![addr_space_limb_bits, pointer_limb_bits, clk_limb_bits];
 
@@ -49,7 +50,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         Self {
             air: MemoryOfflineChecker { offline_checker },
             accesses: vec![],
-            memory: HashMap::new(),
+            memory,
             last_timestamp: None,
         }
     }
@@ -105,6 +106,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         });
     }
 
+    pub fn memory_clone(&self) -> HashMap<(F, F), F> {
+        self.memory.clone()
+    }
+
     pub fn read_elem(&mut self, timestamp: usize, address_space: F, address: F) -> F {
         compose(self.read_word(timestamp, address_space, address))
     }
@@ -118,5 +123,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
 
     pub fn write_elem(&mut self, timestamp: usize, address_space: F, address: F, data: F) {
         self.write_word(timestamp, address_space, address, decompose(data));
+    }
+
+    pub fn current_height(&self) -> usize {
+        self.accesses.len()
     }
 }

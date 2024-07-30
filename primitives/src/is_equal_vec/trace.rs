@@ -1,10 +1,10 @@
-use std::iter::zip;
-
 use p3_field::Field;
+use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::sub_chip::LocalTraceInstructions;
+use crate::{is_equal_vec::columns::IsEqualVecColsMut, sub_chip::LocalTraceInstructions};
 
+use super::columns::IsEqualVecAuxColsMut;
 use super::{columns::IsEqualVecCols, IsEqualVecAir};
 
 impl IsEqualVecAir {
@@ -14,45 +14,81 @@ impl IsEqualVecAir {
         assert!(height.is_power_of_two());
         assert_eq!(x.len(), y.len());
 
-        let rows: Vec<_> = zip(x, y)
-            .flat_map(|(x_row, y_row)| {
-                let row = self.generate_trace_row((x_row, y_row));
-                row.flatten()
-            })
-            .collect();
+        let mut rows_concat = vec![F::zero(); width * x.len()];
+        for (i, (x, y)) in x.iter().zip(y.iter()).enumerate() {
+            let mut is_equal_cols =
+                IsEqualVecColsMut::from_slice(&mut rows_concat[i * width..(i + 1) * width], self);
 
-        RowMajorMatrix::new(rows, width)
+            self.generate_trace_row(x, y, &mut is_equal_cols);
+        }
+
+        RowMajorMatrix::new(rows_concat, width)
     }
-}
 
-impl<F: Field> LocalTraceInstructions<F> for IsEqualVecAir {
-    type LocalInput = (Vec<F>, Vec<F>);
+    pub fn generate_trace_row<F: Field>(
+        &self,
+        x: &[F],
+        y: &[F],
+        is_equal_cols: &mut IsEqualVecColsMut<F>,
+    ) {
+        is_equal_cols.io.x.clone_from_slice(x);
+        is_equal_cols.io.y.clone_from_slice(y);
+        *is_equal_cols.io.is_equal = if x == y { F::one() } else { F::zero() };
 
-    fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
-        assert_eq!(self.vec_len, local_input.0.len());
-        assert_eq!(self.vec_len, local_input.1.len());
-        let (x_row, y_row) = local_input;
+        self.generate_trace_row_aux(x, y, &mut is_equal_cols.aux);
+    }
+
+    // TODO: should the input always be u32s? This will make more sense when we have the inverse opt in place
+    // Assumes that input of IsEqualVecColsMut is filled out
+    pub fn generate_trace_row_aux<F: Field>(
+        &self,
+        x_row: &[F],
+        y_row: &[F],
+        is_equal_aux_cols: &mut IsEqualVecAuxColsMut<F>,
+    ) {
         let vec_len = self.vec_len;
         let mut transition_index = 0;
         while transition_index < vec_len && x_row[transition_index] == y_row[transition_index] {
             transition_index += 1;
         }
 
-        let prods = std::iter::repeat(F::one())
-            .take(transition_index)
-            .chain(std::iter::repeat(F::zero()).take(vec_len - transition_index))
-            .collect::<Vec<F>>();
+        // TODO: test if initializing a mut vec and editting it is more efficient
+        let prods: Vec<F> = (0..vec_len - 1)
+            .map(|i| {
+                if i < transition_index {
+                    F::one()
+                } else {
+                    F::zero()
+                }
+            })
+            .collect();
 
-        let is_equal = prods[vec_len - 1];
-
-        let mut invs = std::iter::repeat(F::zero())
-            .take(vec_len)
-            .collect::<Vec<F>>();
-
+        let mut invs = vec![F::zero(); vec_len];
         if transition_index != vec_len {
             invs[transition_index] = (x_row[transition_index] - y_row[transition_index]).inverse();
         }
 
-        IsEqualVecCols::new(x_row, y_row, is_equal, prods[..vec_len - 1].to_vec(), invs)
+        // Filling out is_equal_cols
+        is_equal_aux_cols.prods.clone_from_slice(&prods);
+        is_equal_aux_cols.invs.clone_from_slice(&invs);
+    }
+}
+
+impl<F: PrimeField> LocalTraceInstructions<F> for IsEqualVecAir {
+    type LocalInput = (Vec<F>, Vec<F>);
+
+    fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
+        let width = self.get_width();
+
+        let mut row = vec![F::zero(); width];
+        let mut is_equal_cols = IsEqualVecColsMut::from_slice(&mut row, self);
+
+        self.generate_trace_row(
+            local_input.0.as_slice(),
+            local_input.1.as_slice(),
+            &mut is_equal_cols,
+        );
+
+        IsEqualVecCols::<F>::from_slice(&row, self.vec_len)
     }
 }
