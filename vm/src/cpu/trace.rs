@@ -392,7 +392,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             }
         }
 
-        // cycle_tracker.print();
+        cycle_tracker.print();
 
         // Update CPU chip state with all changes from this segment.
         vm.cpu_chip.set_state(ExecutionState {
