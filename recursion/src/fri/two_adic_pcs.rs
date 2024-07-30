@@ -120,6 +120,9 @@ pub fn verify_two_adic_pcs<C: Config>(
                         let log2_domain_size = mat.domain.log_n;
                         let log_height: Var<C::N> = builder.eval(log2_domain_size + log_blowup);
 
+                        let cur_ro = builder.get(&ro, log_height);
+                        let cur_alpha_pow = builder.get(&alpha_pow, log_height);
+
                         let bits_reduced: Usize<_> =
                             builder.eval(log_global_max_height - log_height);
                         let index_bits_shifted = index_bits.shift(builder, bits_reduced);
@@ -138,21 +141,20 @@ pub fn verify_two_adic_pcs<C: Config>(
                             let z: Ext<C::F, C::EF> = builder.get(&mat_points, l);
                             let ps_at_z = builder.get(&mat_values, l);
 
+                            builder.cycle_tracker_start("fri_fold");
                             builder.range(0, ps_at_z.len()).for_each(|t, builder| {
                                 let p_at_x = builder.get(&mat_opening, t);
                                 let p_at_z = builder.get(&ps_at_z, t);
-                                let quotient = (-p_at_z + p_at_x) / (-z + x);
+                                let quotient = (p_at_z - p_at_x) / (z - x);
 
-                                let old_ro = builder.get(&ro, log_height);
-                                let old_alpha_pow = builder.get(&alpha_pow, log_height);
-
-                                let new_ro = builder.eval(old_ro + old_alpha_pow * quotient);
-                                builder.set_value(&mut ro, log_height, new_ro);
-
-                                let new_alpha_pow = builder.eval(old_alpha_pow * alpha);
-                                builder.set_value(&mut alpha_pow, log_height, new_alpha_pow);
+                                builder.assign(cur_ro, cur_ro + cur_alpha_pow * quotient);
+                                builder.assign(cur_alpha_pow, cur_alpha_pow * alpha);
                             });
+                            builder.cycle_tracker_end("fri_fold");
                         });
+
+                        builder.set_value(&mut ro, log_height, cur_ro);
+                        builder.set_value(&mut alpha_pow, log_height, cur_alpha_pow);
                     });
             });
 
