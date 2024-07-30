@@ -575,8 +575,10 @@ version = "0.1.0"
 dependencies = [
  "afs",
  "afs-1b",
+ "afs-compiler",
  "afs-page",
  "afs-primitives",
+ "afs-recursion",
  "afs-stark-backend",
  "afs-test-utils",
  "chrono",
@@ -602,6 +604,7 @@ dependencies = [
  "rand",
  "regex",
  "serde",
+ "stark-vm",
  "tracing",
  "tracing-forest",
  "tracing-subscriber",

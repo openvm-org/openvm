@@ -36,7 +36,11 @@ pub fn run_recursive_test_benchmark(
 
     let log_degree = log2_strict_usize(trace_heights.clone().into_iter().max().unwrap());
 
-    let fri_params = fri_params_fast_testing()[0];
+    let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
+        fri_params_fast_testing()[1]
+    } else {
+        fri_params_with_80_bits_of_security()[1]
+    };
     let perm = default_perm();
     let engine = engine_from_perm(perm, log_degree, fri_params);
 

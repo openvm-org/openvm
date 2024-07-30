@@ -66,6 +66,22 @@ RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark -- mtrw -n -
 
 This command goes through many configs, including large and small page heights. We run benchmarks on the case that n leaves are revealed via n insert operations, where n is 1 or 8. To account for the worst case scenario, we double the leaves in the final tree for certain configs (so 2n). The -n flag tells it to use a new, empty Btree (this should always be on, I haven't implemented large tree yet). The -i flag decides where to start the benchmarking, in terms of config #. To directly jump to worst case testing, setting -i to 8 suffices.
 
+## VM
+
+Run this command for the N-th fibonacci number
+
+```bash
+RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- COMMAND -n N
+```
+
+where `COMMAND` is one of the following:
+
+- `vm_fib_program`
+- `vm_verify_fibair`
+- `vm_fib_verifier_program`
+
+The first command is for the fibonacci program for the N-th fibonacci number. The second command is for the verifier program of FibonacciAir (the hand written air). The last command is for the verifier program of the VM STARK that runs the fibonacci program for N-th fib number.
+
 ## Additional test commands
 
 To run only small configs for testing
