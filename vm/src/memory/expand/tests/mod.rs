@@ -1,19 +1,20 @@
 use std::collections::{HashMap, HashSet};
 
-use afs_stark_backend::interaction::InteractionType;
-use afs_test_utils::{
-    config::baby_bear_blake3::run_simple_test_no_pis,
-    interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
-};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField64};
-use p3_matrix::dense::RowMajorMatrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::RngCore;
 
-use crate::memory::expand::{EXPAND_BUS, ExpandChip};
-use crate::memory::expand::columns::ExpandCols;
-use crate::memory::expand::tests::util::HashTestChip;
-use crate::memory::tree::tree_from_memory;
+use afs_stark_backend::interaction::InteractionType;
+use afs_test_utils::{
+    config::baby_bear_poseidon2::run_simple_test,
+    interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
+};
+
+use crate::memory::{
+    expand::{columns::ExpandCols, EXPAND_BUS, ExpandChip, tests::util::HashTestChip},
+    tree::tree_from_memory,
+};
 
 mod util;
 
@@ -74,11 +75,13 @@ fn test<const CHUNK: usize>(
         &mut HashTestChip::new(),
     );
 
-    let mut chip = ExpandChip::new(as_height, address_height, as_offset, initial_tree.clone());
+    let mut chip =
+        ExpandChip::<CHUNK, _>::new(as_height, address_height, as_offset, initial_tree.clone());
     for &(address_space, address) in touched_addresses.iter() {
         chip.touch_address(address_space, address);
     }
 
+    println!("trace height = {}", chip.get_trace_height());
     let trace_degree = chip.get_trace_height().next_power_of_two();
     let mut hash_test_chip = HashTestChip::new();
     let (trace, final_tree) =
@@ -111,7 +114,7 @@ fn test<const CHUNK: usize>(
         ]);
         dummy_interaction_trace_rows.extend(hash);
     };
-    interaction(
+    /*interaction(
         InteractionType::Receive,
         false,
         as_height + address_height,
@@ -126,7 +129,7 @@ fn test<const CHUNK: usize>(
         0,
         0,
         final_tree_check.hash(),
-    );
+    );*/
     let touched_leaves: HashSet<_> = touched_addresses
         .iter()
         .map(|(address_space, address)| {
@@ -181,9 +184,14 @@ fn test<const CHUNK: usize>(
         dummy_interaction_air.field_width() + 1,
     );
 
-    run_simple_test_no_pis(
+    let mut public_values = vec![vec![]; 3];
+    public_values[0].extend(initial_tree.hash());
+    public_values[0].extend(final_tree_check.hash());
+
+    run_simple_test(
         vec![&chip.air, &dummy_interaction_air, &hash_test_chip.air()],
         vec![trace, dummy_interaction_trace, hash_test_chip.trace()],
+        public_values,
     )
     .expect("Verification failed");
 }
@@ -250,7 +258,7 @@ fn expand_test_2() {
 }
 
 #[test]
-fn expand_negative_test_check() {
+fn expand_test_no_accesses() {
     let as_height = 2;
     let address_height = 1;
     let as_offset = 7;
@@ -264,15 +272,66 @@ fn expand_negative_test_check() {
         &mut HashTestChip::new(),
     );
 
-    let chip = ExpandChip::new(as_height, address_height, as_offset, tree.clone());
+    let mut chip = ExpandChip::new(as_height, address_height, as_offset, tree.clone());
 
-    let trace_degree = 2;
+    let trace_degree = 16;
     let mut hash_test_chip = HashTestChip::new();
     let (trace, _) = chip.generate_trace_and_final_tree(&memory, trace_degree, &mut hash_test_chip);
 
-    run_simple_test_no_pis(
+    let mut public_values = vec![vec![]; 2];
+    public_values[0].extend(tree.hash());
+    public_values[0].extend(tree.hash());
+
+    run_simple_test(
         vec![&chip.air, &hash_test_chip.air()],
         vec![trace, hash_test_chip.trace()],
+        public_values,
+    )
+    .expect("This should occur");
+}
+
+#[test]
+#[should_panic]
+fn expand_test_negative() {
+    let as_height = 2;
+    let address_height = 1;
+    let as_offset = 7;
+
+    let memory = HashMap::new();
+    let tree = tree_from_memory::<DEFAULT_CHUNK, _>(
+        as_height,
+        address_height,
+        as_offset,
+        &memory,
+        &mut HashTestChip::new(),
+    );
+
+    let mut chip = ExpandChip::new(as_height, address_height, as_offset, tree.clone());
+
+    let trace_degree = 16;
+    let mut hash_test_chip = HashTestChip::new();
+    let (trace, _) = chip.generate_trace_and_final_tree(&memory, trace_degree, &mut hash_test_chip);
+    let mut new_rows = vec![];
+    for i in 0..trace.height() {
+        let row: Vec<_> = trace.row(i).collect();
+        let mut cols = ExpandCols::<DEFAULT_CHUNK, _>::from_slice(&row);
+        if cols.expand_direction == BabyBear::neg_one() {
+            cols.left_direction_different = BabyBear::zero();
+            cols.right_direction_different = BabyBear::zero();
+        }
+        new_rows.extend(cols.flatten());
+    }
+    let new_trace =
+        RowMajorMatrix::new(new_rows, ExpandCols::<DEFAULT_CHUNK, BabyBear>::get_width());
+
+    let mut public_values = vec![vec![]; 2];
+    public_values[0].extend(tree.hash());
+    public_values[0].extend(tree.hash());
+
+    run_simple_test(
+        vec![&chip.air, &hash_test_chip.air()],
+        vec![new_trace, hash_test_chip.trace()],
+        public_values,
     )
     .expect("This should occur");
 }

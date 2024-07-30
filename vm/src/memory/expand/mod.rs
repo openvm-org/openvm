@@ -29,6 +29,8 @@ impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {
         as_offset: usize,
         initial_tree: MemoryNode<CHUNK, F>,
     ) -> Self {
+        assert!(as_height > 0);
+        assert!(address_height > 0);
         let mut touched_nodes = HashSet::new();
         touched_nodes.insert((as_height + address_height, 0, 0));
         Self {
@@ -44,6 +46,7 @@ impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {
     }
 
     fn touch_node(&mut self, height: usize, as_label: usize, address_label: usize) {
+        println!("{} {} {}", height, as_label, address_label);
         if self.touched_nodes.insert((height, as_label, address_label)) {
             assert_ne!(height, self.air.as_height + self.air.address_height);
             if height != 0 {
