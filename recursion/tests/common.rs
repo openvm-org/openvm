@@ -10,7 +10,7 @@ use std::cmp::Reverse;
 use afs_compiler::util::execute_program;
 use afs_recursion::hints::{Hintable, InnerVal};
 use afs_recursion::stark::{DynRapForRecursion, VerifierProgram};
-use afs_recursion::types::{new_from_multi_vk, InnerConfig, VerifierProgramInput};
+use afs_recursion::types::{new_from_multi_vk, InnerConfig, VerifierInput};
 use afs_stark_backend::prover::trace::TraceCommitmentBuilder;
 use afs_stark_backend::prover::types::Proof;
 use afs_stark_backend::rap::AnyRap;
@@ -96,7 +96,7 @@ pub fn build_verification_program(
         .map(|degree| log2_strict_usize(*degree))
         .collect();
 
-    let input = VerifierProgramInput {
+    let input = VerifierInput {
         proof,
         log_degree_per_air,
         public_values: pvs.clone(),

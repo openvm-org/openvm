@@ -22,14 +22,14 @@ pub type InnerConfig = AsmConfig<InnerVal, InnerChallenge>;
 /// verification program expects the public values vec to be fixed length.
 pub const PROOF_MAX_NUM_PVS: usize = 240;
 
-pub struct VerifierProgramInput<SC: StarkGenericConfig> {
+pub struct VerifierInput<SC: StarkGenericConfig> {
     pub proof: Proof<SC>,
     pub log_degree_per_air: Vec<usize>,
     pub public_values: Vec<Vec<Val<SC>>>,
 }
 
 #[derive(DslVariable, Clone)]
-pub struct VerifierProgramInputVariable<C: Config> {
+pub struct VerifierInputVariable<C: Config> {
     pub proof: StarkProofVariable<C>,
     pub log_degree_per_air: Array<C, Usize<C::N>>,
     pub public_values: Array<C, Array<C, Felt<C::F>>>,

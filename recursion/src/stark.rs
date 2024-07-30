@@ -4,7 +4,7 @@ use itertools::Itertools;
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
-use p3_field::{AbstractExtensionField, AbstractField, PrimeField32, TwoAdicField};
+use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrixView;
 use p3_matrix::stack::VerticalPair;
 
@@ -23,7 +23,7 @@ use crate::fri::{TwoAdicFriPcsVariable, TwoAdicMultiplicativeCosetVariable};
 use crate::hints::Hintable;
 use crate::types::{
     AdjacentOpenedValuesVariable, CommitmentsVariable, InnerConfig, MultiStarkVerificationAdvice,
-    StarkVerificationAdvice, VerifierProgramInput, VerifierProgramInputVariable, PROOF_MAX_NUM_PVS,
+    StarkVerificationAdvice, VerifierInput, VerifierInputVariable, PROOF_MAX_NUM_PVS,
 };
 use crate::utils::const_fri_config;
 
@@ -59,9 +59,36 @@ pub struct VerifierProgram<C: Config> {
     _phantom: std::marker::PhantomData<C>,
 }
 
-impl<C: Config> VerifierProgram<C>
+impl VerifierProgram<InnerConfig> {
+    /// Create a new instance of the program for the [BabyBearPoseidon2] config.
+    pub fn build(
+        raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
+        constants: MultiStarkVerificationAdvice<InnerConfig>,
+        fri_params: &FriParameters,
+    ) -> Vec<Instruction<BabyBear>> {
+        let mut builder = Builder::<InnerConfig>::default();
+
+        let input: VerifierInputVariable<_> = builder.uninit();
+        VerifierInput::<BabyBearPoseidon2Config>::witness(&input, &mut builder);
+
+        let pcs = TwoAdicFriPcsVariable {
+            config: const_fri_config(&mut builder, fri_params),
+        };
+        StarkVerifier::verify(&mut builder, &pcs, raps, constants, &input);
+
+        const WORD_SIZE: usize = 1;
+        builder.compile_isa::<WORD_SIZE>()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct StarkVerifier<C: Config> {
+    _phantom: std::marker::PhantomData<C>,
+}
+
+impl<C: Config> StarkVerifier<C>
 where
-    C::F: PrimeField32 + TwoAdicField,
+    C::F: TwoAdicField,
 {
     /// Reference: [afs_stark_backend::verifier::MultiTraceStarkVerifier::verify].
     pub fn verify(
@@ -69,7 +96,7 @@ where
         pcs: &TwoAdicFriPcsVariable<C>,
         raps: Vec<&dyn DynRapForRecursion<C>>,
         constants: MultiStarkVerificationAdvice<C>,
-        input: &VerifierProgramInputVariable<C>,
+        input: &VerifierInputVariable<C>,
     ) {
         let proof = &input.proof;
 
@@ -100,43 +127,11 @@ where
 
         let mut challenger = DuplexChallengerVariable::new(builder);
 
-        StarkVerifier::<C>::verify_raps(builder, pcs, raps, constants, &mut challenger, input);
+        Self::verify_raps(builder, pcs, raps, constants, &mut challenger, input);
 
         builder.halt();
     }
-}
 
-impl VerifierProgram<InnerConfig> {
-    /// Create a new instance of the program for the [BabyBearPoseidon2] config.
-    pub fn build(
-        raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
-        constants: MultiStarkVerificationAdvice<InnerConfig>,
-        fri_params: &FriParameters,
-    ) -> Vec<Instruction<BabyBear>> {
-        let mut builder = Builder::<InnerConfig>::default();
-
-        let input: VerifierProgramInputVariable<_> = builder.uninit();
-        VerifierProgramInput::<BabyBearPoseidon2Config>::witness(&input, &mut builder);
-
-        let pcs = TwoAdicFriPcsVariable {
-            config: const_fri_config(&mut builder, fri_params),
-        };
-        Self::verify(&mut builder, &pcs, raps, constants, &input);
-
-        const WORD_SIZE: usize = 1;
-        builder.compile_isa::<WORD_SIZE>()
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct StarkVerifier<C: Config> {
-    _phantom: std::marker::PhantomData<C>,
-}
-
-impl<C: Config> StarkVerifier<C>
-where
-    C::F: TwoAdicField,
-{
     /// Reference: [afs_stark_backend::verifier::MultiTraceStarkVerifier::verify_raps].
     pub fn verify_raps(
         builder: &mut Builder<C>,
@@ -144,14 +139,14 @@ where
         raps: Vec<&dyn DynRapForRecursion<C>>,
         vk: MultiStarkVerificationAdvice<C>,
         challenger: &mut DuplexChallengerVariable<C>,
-        input: &VerifierProgramInputVariable<C>,
+        input: &VerifierInputVariable<C>,
     ) where
         C::F: TwoAdicField,
         C::EF: TwoAdicField,
     {
         Self::validate_inputs(builder, &raps, &vk, input);
 
-        let VerifierProgramInputVariable::<C> {
+        let VerifierInputVariable::<C> {
             proof,
             log_degree_per_air,
             public_values,
@@ -766,7 +761,7 @@ where
         builder: &mut Builder<C>,
         raps: &[&dyn DynRapForRecursion<C>],
         vk: &MultiStarkVerificationAdvice<C>,
-        input: &VerifierProgramInputVariable<C>,
+        input: &VerifierInputVariable<C>,
     ) {
         assert_eq!(raps.len(), vk.per_air.len());
         let num_airs = raps.len();
@@ -774,7 +769,7 @@ where
         // Currently only support 0 or 1 phase is supported.
         assert!(num_phases <= 1);
 
-        let VerifierProgramInputVariable::<C> {
+        let VerifierInputVariable::<C> {
             proof,
             log_degree_per_air,
             public_values,
