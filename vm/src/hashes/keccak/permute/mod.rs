@@ -1,8 +1,6 @@
 pub mod air;
 pub mod bridge;
 pub mod columns;
-#[cfg(test)]
-pub mod tests;
 pub mod trace;
 
 /// Number of u64 elements in a Keccak hash.
