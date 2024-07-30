@@ -15,10 +15,7 @@ use super::types::FriConfigVariable;
 use super::types::TwoAdicPcsMatsVariable;
 use super::types::TwoAdicPcsProofVariable;
 use super::types::TwoAdicPcsRoundVariable;
-use super::{
-    verify_batch, verify_challenges, verify_shape_and_sample_challenges,
-    TwoAdicMultiplicativeCosetVariable,
-};
+use super::{verify_batch, verify_challenges, verify_shape_and_sample_challenges, TwoAdicMultiplicativeCosetVariable, NestedOpenedValues};
 
 pub fn verify_two_adic_pcs<C: Config>(
     builder: &mut Builder<C>,
@@ -94,19 +91,28 @@ pub fn verify_two_adic_pcs<C: Config>(
                 let bits_reduced: Usize<_> =
                     builder.eval(log_global_max_height - log_batch_max_height);
                 let index_bits_shifted_v1 = index_bits.shift(builder, bits_reduced);
-                verify_batch::<C, 1>(
+
+                let opened_values = NestedOpenedValues::Felt(batch_opening.opened_values);
+
+                verify_batch::<C>(
                     builder,
                     &batch_commit,
                     batch_dims,
                     index_bits_shifted_v1,
-                    batch_opening.opened_values.clone(),
+                    &opened_values,
                     &batch_opening.opening_proof,
                 );
 
+                // hack to move batch_opening.opened_values back
+                let opened_values = match opened_values {
+                    NestedOpenedValues::Felt(opened_values) => opened_values,
+                    _ => unreachable!(),
+                };
+
                 builder
-                    .range(0, batch_opening.opened_values.len())
+                    .range(0, opened_values.len())
                     .for_each(|k, builder| {
-                        let mat_opening = builder.get(&batch_opening.opened_values, k);
+                        let mat_opening = builder.get(&opened_values, k);
                         let mat = builder.get(&mats, k);
                         let mat_points = mat.points;
                         let mat_values = mat.values;
