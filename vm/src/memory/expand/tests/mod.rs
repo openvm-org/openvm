@@ -12,7 +12,9 @@ use afs_test_utils::{
 };
 
 use crate::memory::{
-    expand::{columns::ExpandCols, EXPAND_BUS, ExpandChip, tests::util::HashTestChip},
+    expand::{
+        columns::ExpandCols, EXPAND_BUS, ExpandChip, MemoryDimensions, tests::util::HashTestChip,
+    },
     tree::tree_from_memory,
 };
 
@@ -36,13 +38,16 @@ fn test_flatten_fromslice_roundtrip() {
 }
 
 fn test<const CHUNK: usize>(
-    as_height: usize,
-    address_height: usize,
-    as_offset: usize,
+    memory_dimensions: MemoryDimensions,
     initial_memory: &HashMap<(BabyBear, BabyBear), BabyBear>,
     touched_addresses: HashSet<(BabyBear, BabyBear)>,
     final_memory: &HashMap<(BabyBear, BabyBear), BabyBear>,
 ) {
+    let MemoryDimensions {
+        as_height,
+        address_height,
+        as_offset,
+    } = memory_dimensions;
     println!("initial_memory = {:?}", initial_memory);
     println!("final_memory = {:?}", final_memory);
     // checking validity of test data
@@ -60,23 +65,12 @@ fn test<const CHUNK: usize>(
         assert!(final_memory.contains_key(address));
     }
 
-    let initial_tree = tree_from_memory(
-        as_height,
-        address_height,
-        as_offset,
-        initial_memory,
-        &mut HashTestChip::new(),
-    );
-    let final_tree_check = tree_from_memory(
-        as_height,
-        address_height,
-        as_offset,
-        final_memory,
-        &mut HashTestChip::new(),
-    );
+    let initial_tree =
+        tree_from_memory(memory_dimensions, initial_memory, &mut HashTestChip::new());
+    let final_tree_check =
+        tree_from_memory(memory_dimensions, final_memory, &mut HashTestChip::new());
 
-    let mut chip =
-        ExpandChip::<CHUNK, _>::new(as_height, address_height, as_offset, initial_tree.clone());
+    let mut chip = ExpandChip::<CHUNK, _>::new(memory_dimensions, initial_tree.clone());
     for &(address_space, address) in touched_addresses.iter() {
         chip.touch_address(address_space, address);
     }
@@ -238,9 +232,11 @@ fn random_test<const CHUNK: usize>(
     }
 
     test::<CHUNK>(
-        1,
-        height,
-        1,
+        MemoryDimensions {
+            as_height: 1,
+            address_height: height,
+            as_offset: 1,
+        },
         &initial_memory,
         touched_addresses,
         &final_memory,
@@ -259,20 +255,17 @@ fn expand_test_2() {
 
 #[test]
 fn expand_test_no_accesses() {
-    let as_height = 2;
-    let address_height = 1;
-    let as_offset = 7;
+    let memory_dimensions = MemoryDimensions {
+        as_height: 2,
+        address_height: 1,
+        as_offset: 7,
+    };
 
     let memory = HashMap::new();
-    let tree = tree_from_memory::<DEFAULT_CHUNK, _>(
-        as_height,
-        address_height,
-        as_offset,
-        &memory,
-        &mut HashTestChip::new(),
-    );
+    let tree =
+        tree_from_memory::<DEFAULT_CHUNK, _>(memory_dimensions, &memory, &mut HashTestChip::new());
 
-    let mut chip = ExpandChip::new(as_height, address_height, as_offset, tree.clone());
+    let mut chip = ExpandChip::new(memory_dimensions, tree.clone());
 
     let trace_degree = 16;
     let mut hash_test_chip = HashTestChip::new();
@@ -293,20 +286,17 @@ fn expand_test_no_accesses() {
 #[test]
 #[should_panic]
 fn expand_test_negative() {
-    let as_height = 2;
-    let address_height = 1;
-    let as_offset = 7;
+    let memory_dimensions = MemoryDimensions {
+        as_height: 2,
+        address_height: 1,
+        as_offset: 7,
+    };
 
     let memory = HashMap::new();
-    let tree = tree_from_memory::<DEFAULT_CHUNK, _>(
-        as_height,
-        address_height,
-        as_offset,
-        &memory,
-        &mut HashTestChip::new(),
-    );
+    let tree =
+        tree_from_memory::<DEFAULT_CHUNK, _>(memory_dimensions, &memory, &mut HashTestChip::new());
 
-    let mut chip = ExpandChip::new(as_height, address_height, as_offset, tree.clone());
+    let mut chip = ExpandChip::new(memory_dimensions, tree.clone());
 
     let trace_degree = 16;
     let mut hash_test_chip = HashTestChip::new();

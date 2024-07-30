@@ -6,6 +6,8 @@ use std::{
 use p3_field::PrimeField32;
 use MemoryNode::*;
 
+use crate::memory::expand::MemoryDimensions;
+
 pub trait Hasher<const CHUNK: usize, F> {
     fn hash(&mut self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK];
 }
@@ -83,18 +85,22 @@ fn from_memory<const CHUNK: usize, F: PrimeField32>(
 }
 
 pub fn tree_from_memory<const CHUNK: usize, F: PrimeField32>(
-    as_height: usize,
-    address_height: usize,
-    as_offset: usize,
+    memory_dimensions: MemoryDimensions,
     memory: &HashMap<(F, F), F>,
     hasher: &mut impl Hasher<CHUNK, F>,
 ) -> MemoryNode<CHUNK, F> {
     let mut memory_modified = BTreeMap::new();
     for (&(address_space, address), &value) in memory {
-        let complete_address = (((address_space.as_canonical_u64() as usize) - as_offset)
-            * (CHUNK << address_height))
+        let complete_address = (((address_space.as_canonical_u64() as usize)
+            - memory_dimensions.as_offset)
+            * (CHUNK << memory_dimensions.address_height))
             + (address.as_canonical_u64() as usize);
         memory_modified.insert(complete_address, value);
     }
-    from_memory(&memory_modified, as_height + address_height, 0, hasher)
+    from_memory(
+        &memory_modified,
+        memory_dimensions.overall_height(),
+        0,
+        hasher,
+    )
 }

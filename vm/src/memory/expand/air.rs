@@ -5,11 +5,10 @@ use p3_matrix::Matrix;
 use afs_stark_backend::interaction::InteractionBuilder;
 
 use crate::memory::expand::columns::ExpandCols;
+use crate::memory::expand::MemoryDimensions;
 
 pub struct ExpandAir<const CHUNK: usize> {
-    pub as_height: usize,
-    pub address_height: usize,
-    pub as_offset: usize,
+    pub memory_dimensions: MemoryDimensions,
 }
 
 impl<const CHUNK: usize, F: Field> BaseAir<F> for ExpandAir<CHUNK> {
@@ -70,14 +69,14 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
             .when_transition()
             .when_ne(
                 local.parent_height,
-                AB::F::from_canonical_usize(self.address_height + 1),
+                AB::F::from_canonical_usize(self.memory_dimensions.address_height + 1),
             )
             .assert_eq(local.height_section, next.height_section);
         builder
             .when_transition()
             .when_ne(
                 next.parent_height,
-                AB::F::from_canonical_usize(self.address_height),
+                AB::F::from_canonical_usize(self.memory_dimensions.address_height),
             )
             .assert_eq(local.height_section, next.height_section);
         // two adjacent rows with `is_root` = 1 should have
@@ -90,7 +89,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
         // roots should have correct height
         builder.when(local.is_root).assert_eq(
             local.parent_height,
-            AB::Expr::from_canonical_usize(self.as_height + self.address_height),
+            AB::Expr::from_canonical_usize(self.memory_dimensions.overall_height()),
         );
 
         // constrain public values
