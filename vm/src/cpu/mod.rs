@@ -65,6 +65,8 @@ pub enum OpCode {
     CT_START = 21,
     /// Phantom instruction to end tracing
     CT_END = 22,
+
+    PERM_KECCAK = 23,
 }
 
 impl OpCode {
@@ -99,6 +101,8 @@ impl OpCode {
 
             21 => Some(CT_START),
             22 => Some(CT_END),
+
+            23 => Some(PERM_KECCAK),
 
             _ => None,
         }

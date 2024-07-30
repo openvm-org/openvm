@@ -1,11 +1,10 @@
-use core::mem::{size_of, transmute};
+use core::mem::size_of;
 
 use afs_derive::AlignedBorrow;
 use p3_keccak_air::KeccakCols;
-use p3_util::indices_arr;
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(Debug, AlignedBorrow)]
 pub struct KeccakPermuteCols<T> {
     pub inner: KeccakCols<T>,
     pub io: KeccakPermuteIoCols<T>,
@@ -13,11 +12,12 @@ pub struct KeccakPermuteCols<T> {
 }
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(Copy, Clone, Debug, Default, AlignedBorrow, derive_new::new)]
 pub struct KeccakPermuteIoCols<T> {
     /// Whether row corresponds to an opcode (PERMUTE)
     pub is_opcode: T,
-    /// The clock cycle (NOT timestamp)
+    /// The timestamp when the opcode was received.
+    /// The execution of the opcode will use multiple timestamps, with `clk` as the initial one.
     pub clk: T,
     pub a: T,
     // pub b: T, // b = offset = 0
@@ -27,16 +27,10 @@ pub struct KeccakPermuteIoCols<T> {
 }
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(Copy, Clone, Debug, Default, AlignedBorrow, derive_new::new)]
 pub struct KeccakPermuteAuxCols<T> {
     pub dst: T,
     pub src: T,
 }
 
 pub const NUM_KECCAK_PERMUTE_COLS: usize = size_of::<KeccakPermuteCols<u8>>();
-pub(crate) const KECCAK_PERMUTE_COL_MAP: KeccakPermuteCols<usize> = make_col_map();
-
-const fn make_col_map() -> KeccakPermuteCols<usize> {
-    let indices_arr = indices_arr::<NUM_KECCAK_PERMUTE_COLS>();
-    unsafe { transmute::<[usize; NUM_KECCAK_PERMUTE_COLS], KeccakPermuteCols<usize>>(indices_arr) }
-}

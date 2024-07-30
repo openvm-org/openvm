@@ -13,6 +13,7 @@ pub mod cycle_tracker;
 
 pub enum Void {}
 
+use crate::hashes::keccak::permute::KeccakPermuteChip;
 use crate::{
     cpu::{
         trace::{ExecutionError, Instruction},
@@ -39,6 +40,7 @@ pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub field_extension_chip: FieldExtensionArithmeticChip<WORD_SIZE, F>,
     pub range_checker: Arc<RangeCheckerGateChip>,
     pub poseidon2_chip: Poseidon2Chip<16, F>,
+    pub keccak_perm_chip: KeccakPermuteChip<F>,
     pub input_stream: VecDeque<Vec<F>>,
 
     traces: Vec<DenseMatrix<F>>,
@@ -60,6 +62,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
             POSEIDON2_BUS,
         );
+        let keccak_perm_chip = KeccakPermuteChip::new();
 
         Self {
             config,
@@ -70,6 +73,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             field_extension_chip,
             range_checker,
             poseidon2_chip,
+            keccak_perm_chip,
             traces: vec![],
             input_stream: VecDeque::from(input_stream),
         }

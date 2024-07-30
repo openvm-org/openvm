@@ -7,6 +7,7 @@ use afs_primitives::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
 
+use crate::hashes::keccak::permute::KeccakPermuteChip;
 use crate::hashes::poseidon2::Poseidon2Chip;
 use crate::memory::{compose, decompose};
 use crate::vm::cycle_tracker::CycleTracker;
@@ -261,6 +262,9 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 }
                 PERM_POS2 | COMP_POS2 => {
                     Poseidon2Chip::<16, _>::poseidon2_perm(vm, timestamp, instruction);
+                }
+                PERM_KECCAK => {
+                    KeccakPermuteChip::<_>::keccak_permute(vm, timestamp, instruction);
                 }
                 HINT_INPUT => {
                     let hint = match vm.input_stream.pop_front() {

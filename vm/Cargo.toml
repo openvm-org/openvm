@@ -24,6 +24,7 @@ parking_lot = "0.12.2"
 itertools = "0.13.0"
 getset = "0.1.2"
 derive-new = "0.5.1"
+tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 
 rand = "0.8"
 serde = "1.0.203"

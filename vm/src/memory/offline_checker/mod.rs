@@ -25,7 +25,6 @@ pub struct MemoryChip<const WORD_SIZE: usize, F: PrimeField32> {
     pub air: MemoryOfflineChecker,
     pub accesses: Vec<MemoryAccess<WORD_SIZE, F>>,
     memory: HashMap<(F, F), F>,
-    last_timestamp: Option<usize>,
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
@@ -50,7 +49,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             air: MemoryOfflineChecker { offline_checker },
             accesses: vec![],
             memory: HashMap::new(),
-            last_timestamp: None,
         }
     }
 
@@ -58,10 +56,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         if address_space == F::zero() {
             return decompose(address);
         }
-        if let Some(last_timestamp) = self.last_timestamp {
-            assert!(timestamp > last_timestamp);
-        }
-        self.last_timestamp = Some(timestamp);
         let data = from_fn(|i| self.memory[&(address_space, address + F::from_canonical_usize(i))]);
         self.accesses.push(MemoryAccess {
             timestamp,
@@ -88,10 +82,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         data: [F; WORD_SIZE],
     ) {
         assert!(address_space != F::zero());
-        if let Some(last_timestamp) = self.last_timestamp {
-            assert!(timestamp > last_timestamp);
-        }
-        self.last_timestamp = Some(timestamp);
         for (i, &datum) in data.iter().enumerate() {
             self.memory
                 .insert((address_space, address + F::from_canonical_usize(i)), datum);
