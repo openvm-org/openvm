@@ -7,8 +7,9 @@ use crate::{
         predicate::{run_bench_predicate, PredicateCommand},
         rw::{run_bench_rw, RwCommand},
         vm::{
-            benchmark_fibonacci_program, benchmark_fibonacci_verifier_program,
-            benchmark_verify_fibair, VmCommand,
+            vm_fib_program::benchmark_fib_program,
+            vm_fib_verifier_program::benchmark_fib_verifier_program,
+            vm_verify_fibair::benchmark_verify_fibair, VmCommand,
         },
     },
     config::benchmark_data::{benchmark_data_predicate, benchmark_data_rw},
@@ -33,8 +34,17 @@ pub enum Commands {
     /// Predicate functions
     Predicate(PredicateCommand),
 
-    #[command(name = "vm", about = "Benchmark VM")]
-    Vm(VmCommand),
+    #[command(name = "vm_fib_program", about = "Benchmark VM Fibonacci Program")]
+    VmFibProgram(VmCommand),
+
+    #[command(name = "vm_verify_fibair", about = "Benchmark VM Verify FibAir")]
+    VmVerifyFibAir(VmCommand),
+
+    #[command(
+        name = "vm_fib_verifier_program",
+        about = "Benchmark VM Fibonacci Verifier Program"
+    )]
+    VmFibVerifierProgram(VmCommand),
 }
 
 impl Cli {
@@ -75,12 +85,9 @@ impl Cli {
                 )
                 .unwrap();
             }
-            Commands::Vm(vm) => match vm.t {
-                1 => benchmark_fibonacci_program(vm.n),
-                2 => benchmark_verify_fibair(vm.n),
-                3 => benchmark_fibonacci_verifier_program(vm.n),
-                _ => panic!("Invalid benchmark type"),
-            },
+            Commands::VmFibProgram(vm) => benchmark_fib_program(vm.n),
+            Commands::VmVerifyFibAir(vm) => benchmark_verify_fibair(vm.n),
+            Commands::VmFibVerifierProgram(vm) => benchmark_fib_verifier_program(vm.n),
         }
     }
 }
