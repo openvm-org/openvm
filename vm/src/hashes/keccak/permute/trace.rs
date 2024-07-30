@@ -9,7 +9,7 @@ use crate::{
     hashes::keccak::permute::columns::{
         KeccakPermuteAuxCols, KeccakPermuteCols, KeccakPermuteIoCols,
     },
-    vm::VirtualMachine,
+    vm::ExecutionSegment,
 };
 
 use super::{columns::NUM_KECCAK_PERMUTE_COLS, KeccakPermuteChip};
@@ -24,7 +24,7 @@ impl<F: PrimeField32> KeccakPermuteChip<F> {
 
     // TODO: only WORD_SIZE=1 works right now
     pub fn keccak_permute<const WORD_SIZE: usize>(
-        vm: &mut VirtualMachine<WORD_SIZE, F>,
+        vm: &mut ExecutionSegment<WORD_SIZE, F>,
         start_timestamp: usize,
         instruction: Instruction<F>,
     ) {
@@ -93,8 +93,8 @@ impl<F: PrimeField32> KeccakPermuteChip<F> {
         }
 
         // Add the events to chip state for later trace generation usage
-        vm.keccak_perm_chip.requests.push((io, aux));
-        vm.keccak_perm_chip.inputs.push(input_u64);
+        vm.keccak_permute_chip.requests.push((io, aux));
+        vm.keccak_permute_chip.inputs.push(input_u64);
     }
 
     /// The offset from `start_timestamp` when output is written to memory

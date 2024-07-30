@@ -20,10 +20,10 @@ pub fn const_fri_config(
     builder: &mut RecursionBuilder,
     params: &FriParameters,
 ) -> FriConfigVariable<RecursionConfig> {
-    let two_addicity = Val::TWO_ADICITY;
-    let mut generators = builder.dyn_array(two_addicity);
-    let mut subgroups = builder.dyn_array(two_addicity);
-    for i in 0..two_addicity {
+    let two_adicity = Val::TWO_ADICITY;
+    let mut generators = builder.dyn_array(two_adicity);
+    let mut subgroups = builder.dyn_array(two_adicity);
+    for i in 0..two_adicity {
         let constant_generator = Val::two_adic_generator(i);
         builder.set(&mut generators, i, constant_generator);
 
@@ -62,6 +62,7 @@ pub fn static_const_fri_config(
             builder.constant(constant_domain)
         })
         .collect_vec();
+
     FriConfigVariable {
         log_blowup: builder.eval(BabyBear::from_canonical_usize(params.log_blowup)),
         blowup: builder.eval(BabyBear::from_canonical_usize(1 << params.log_blowup)),

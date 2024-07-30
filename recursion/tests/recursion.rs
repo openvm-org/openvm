@@ -1,13 +1,14 @@
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
 use p3_field::{AbstractField, PrimeField32};
+use std::ops::Deref;
 
 use afs_compiler::asm::AsmBuilder;
 use afs_compiler::ir::{Config, Var};
 use afs_recursion::stark::DynRapForRecursion;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::vm::config::VmConfig;
-use stark_vm::vm::{get_chips, VirtualMachine};
+use stark_vm::vm::{ExecutionResult, ExecutionSegment, VirtualMachine};
 
 use crate::common::sort_chips;
 
@@ -38,14 +39,23 @@ fn fibonacci_program(a: u32, b: u32, n: u32) -> Vec<Instruction<BabyBear>> {
 fn test_fibonacci_program_verify() {
     let fib_program = fibonacci_program(0, 1, 32);
 
-    let mut vm = VirtualMachine::<1, _>::new(VmConfig::default(), fib_program, vec![]);
-    let traces = vm.traces().unwrap();
+    let vm_config = VmConfig {
+        max_segment_len: 2000000,
+        ..Default::default()
+    };
 
-    let chips = get_chips(&vm);
-    let num_chips = chips.len();
-    let pvs = vec![vec![]; num_chips];
-    let rec_raps = get_rec_raps(&vm);
+    let dummy_vm = VirtualMachine::<1, _>::new(vm_config, fib_program.clone(), vec![]);
+    let rec_raps = get_rec_raps(&dummy_vm.segments[0]);
 
+    let vm = VirtualMachine::<1, _>::new(vm_config, fib_program, vec![]);
+    let ExecutionResult {
+        nonempty_traces: traces,
+        nonempty_chips: chips,
+        nonempty_pis: pvs,
+        ..
+    } = vm.execute().unwrap();
+
+    let chips = chips.iter().map(|x| x.deref()).collect();
     let (chips, rec_raps, traces, pvs) = sort_chips(chips, rec_raps, traces, pvs);
 
     let vparams = common::make_verification_params(&chips, traces, &pvs);
@@ -53,19 +63,18 @@ fn test_fibonacci_program_verify() {
     let (fib_verification_program, input_stream) =
         common::build_verification_program(rec_raps, pvs, vparams);
 
-    let mut vm =
-        VirtualMachine::<1, _>::new(VmConfig::default(), fib_verification_program, input_stream);
-    vm.traces().unwrap();
+    let vm = VirtualMachine::<1, _>::new(vm_config, fib_verification_program, input_stream);
+    vm.execute().unwrap();
 }
 
 pub fn get_rec_raps<const WORD_SIZE: usize, C: Config>(
-    vm: &VirtualMachine<WORD_SIZE, C::F>,
+    vm: &ExecutionSegment<WORD_SIZE, C::F>,
 ) -> Vec<&dyn DynRapForRecursion<C>>
 where
     C::F: PrimeField32,
 {
     let mut result: Vec<&dyn DynRapForRecursion<C>> = vec![
-        &vm.cpu_air,
+        &vm.cpu_chip.air,
         &vm.program_chip.air,
         &vm.memory_chip.air,
         &vm.range_checker.air,

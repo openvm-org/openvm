@@ -31,19 +31,15 @@ impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {
             );
         }
         while rows.len() != trace_degree * ExpandCols::<CHUNK, F>::get_width() {
-            rows.extend(unused_row(hasher).flatten());
+            rows.extend(unused_row::<CHUNK, F>().flatten());
         }
         let trace = RowMajorMatrix::new(rows, ExpandCols::<CHUNK, F>::get_width());
         (trace, final_trees)
     }
 }
 
-fn unused_row<const CHUNK: usize, F: PrimeField32>(
-    hasher: &mut impl Hasher<CHUNK, F>,
-) -> ExpandCols<CHUNK, F> {
-    let mut result = ExpandCols::from_slice(&vec![F::zero(); ExpandCols::<CHUNK, F>::get_width()]);
-    result.parent_hash = hasher.hash([F::zero(); CHUNK], [F::zero(); CHUNK]);
-    result
+fn unused_row<const CHUNK: usize, F: PrimeField32>() -> ExpandCols<CHUNK, F> {
+    ExpandCols::from_slice(&vec![F::zero(); ExpandCols::<CHUNK, F>::get_width()])
 }
 
 struct TreeHelper<'a, const CHUNK: usize, F: PrimeField32> {
@@ -107,13 +103,13 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
             };
 
             let final_node = MemoryNode::new_nonleaf(final_left_node, final_right_node, hasher);
+            self.add_trace_row(height, label, initial_node, None);
             self.add_trace_row(
                 height,
                 label,
-                initial_node,
+                final_node.clone(),
                 Some([left_is_final, right_is_final]),
             );
-            self.add_trace_row(height, label, final_node.clone(), None);
             final_node
         } else {
             panic!("Leaf {:?} found at nonzero height {}", initial_node, height);
@@ -126,12 +122,13 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
         height: usize,
         label: usize,
         node: MemoryNode<CHUNK, F>,
-        are_final: Option<[bool; 2]>,
+        direction_changes: Option<[bool; 2]>,
     ) {
-        let [left_is_final, right_is_final] = are_final.unwrap_or([false; 2]);
+        let [left_direction_change, right_direction_change] =
+            direction_changes.unwrap_or([false; 2]);
         let cols = if let NonLeaf { hash, left, right } = node {
             ExpandCols {
-                direction: if are_final.is_some() {
+                expand_direction: if direction_changes.is_none() {
                     F::one()
                 } else {
                     F::neg_one()
@@ -142,8 +139,8 @@ impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
                 parent_hash: hash,
                 left_child_hash: left.hash(),
                 right_child_hash: right.hash(),
-                left_is_final: F::from_bool(left_is_final),
-                right_is_final: F::from_bool(right_is_final),
+                left_direction_different: F::from_bool(left_direction_change),
+                right_direction_different: F::from_bool(right_direction_change),
             }
         } else {
             panic!("trace_rows expects node = {:?} to be NonLeaf", node);

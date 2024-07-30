@@ -39,8 +39,8 @@ pub struct RecursiveVerifierConstraintFolder<'a, C: Config> {
 
 impl<'a, C: Config> AirBuilder for RecursiveVerifierConstraintFolder<'a, C> {
     type F = C::F;
-    type Var = Ext<C::F, C::EF>;
     type Expr = SymbolicExt<C::F, C::EF>;
+    type Var = Ext<C::F, C::EF>;
     type M = ViewPair<'a, Self::Var>;
 
     /// It is difficult to horizontally concatenate matrices when the main trace is partitioned, so we disable this method in that case.

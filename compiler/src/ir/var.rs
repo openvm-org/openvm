@@ -18,6 +18,12 @@ pub trait Variable<C: Config>: Clone {
         rhs: impl Into<Self::Expression>,
         builder: &mut Builder<C>,
     );
+
+    fn eval(builder: &mut Builder<C>, expr: impl Into<Self::Expression>) -> Self {
+        let dst: Self = builder.uninit();
+        dst.assign(expr.into(), builder);
+        dst
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

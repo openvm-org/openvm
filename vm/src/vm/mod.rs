@@ -1,196 +1,231 @@
-use std::collections::{BTreeMap, VecDeque};
-use std::sync::Arc;
-
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use crate::cpu::ExecutionState;
 use afs_stark_backend::rap::AnyRap;
+use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::DenseMatrix, Matrix};
-use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
-use poseidon2_air::poseidon2::Poseidon2Config;
+use std::collections::HashMap;
+use std::collections::VecDeque;
+use std::ops::Deref;
+
+mod segment;
+pub use segment::{get_chips, ExecutionSegment};
+
+use crate::cpu::{
+    trace::{ExecutionError, Instruction},
+    CpuOptions,
+};
 
 pub mod cycle_tracker;
-
-pub enum Void {}
-
-use crate::hashes::keccak::permute::KeccakPermuteChip;
-use crate::{
-    cpu::{
-        trace::{ExecutionError, Instruction},
-        CpuAir, CpuOptions, POSEIDON2_BUS, RANGE_CHECKER_BUS,
-    },
-    field_arithmetic::FieldArithmeticChip,
-    field_extension::FieldExtensionArithmeticChip,
-    hashes::poseidon2::Poseidon2Chip,
-    memory::offline_checker::MemoryChip,
-    program::ProgramChip,
-};
 
 use self::config::VmConfig;
 
 pub mod config;
 
+/// Parent struct that holds all execution segments, program, config.
+///
+/// Key method is `vm.execute()` which consumes the VM and returns a `ExecutionResult` struct. Segment switching is handled by
+/// `ExecutionSegment::should_segment()`, called every CPU clock cycle, which when `true`
+///  triggers `VirtualMachine::next_segment()`.
+///
+/// Chips, traces, and public values should be retrieved by unpacking the `ExecutionResult` struct.
+/// `VirtualMachine::get_chips()` can be used to convert the boxes of chips to concrete chips.
 pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub config: VmConfig,
+    pub program: Vec<Instruction<F>>,
+    pub segments: Vec<ExecutionSegment<WORD_SIZE, F>>,
+    pub traces: Vec<DenseMatrix<F>>,
+}
 
-    pub cpu_air: CpuAir<WORD_SIZE>,
-    pub program_chip: ProgramChip<F>,
-    pub memory_chip: MemoryChip<WORD_SIZE, F>,
-    pub field_arithmetic_chip: FieldArithmeticChip<F>,
-    pub field_extension_chip: FieldExtensionArithmeticChip<WORD_SIZE, F>,
-    pub range_checker: Arc<RangeCheckerGateChip>,
-    pub poseidon2_chip: Poseidon2Chip<16, F>,
-    pub keccak_perm_chip: KeccakPermuteChip<F>,
-    pub input_stream: VecDeque<Vec<F>>,
+/// Enum representing the different types of chips used in the VM
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChipType {
+    Cpu,
+    Program,
+    Memory,
+    RangeChecker,
+    FieldArithmetic,
+    FieldExtension,
+    Poseidon2,
+    KeccakPermute,
+}
 
-    traces: Vec<DenseMatrix<F>>,
+/// Struct that holds the return state of the VM. StarkConfig is hardcoded to BabyBearPoseidon2Config.
+pub struct ExecutionResult<const WORD_SIZE: usize> {
+    /// Traces of the VM
+    pub nonempty_traces: Vec<DenseMatrix<BabyBear>>,
+    pub all_traces: Vec<DenseMatrix<BabyBear>>,
+    /// Public inputs of the VM
+    pub nonempty_pis: Vec<Vec<BabyBear>>,
+    /// Boxed chips of the VM
+    pub nonempty_chips: Vec<Box<dyn AnyRap<BabyBearPoseidon2Config>>>,
+    pub unique_chips: Vec<Box<dyn AnyRap<BabyBearPoseidon2Config>>>,
+    /// Types of the chips
+    pub chip_types: Vec<ChipType>,
+    /// Maximum log degree of the VM
+    pub max_log_degree: usize,
+}
+
+/// Struct that holds the current state of the VM. For now, includes memory, input stream, and hint stream.
+/// Hint stream cannot be added to during execution, but must be copied because it is popped from.
+pub struct VirtualMachineState<F: PrimeField32> {
+    /// Current state of the CPU
+    state: ExecutionState,
+    /// Current memory of the CPU
+    memory: HashMap<(F, F), F>,
+    /// Input stream of the CPU
+    input_stream: VecDeque<Vec<F>>,
+    /// Hint stream of the CPU
+    hint_stream: VecDeque<F>,
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
+    /// Create a new VM with a given config, program, and input stream.
+    ///
+    /// The VM will start with a single segment, which is created from the initial state of the CPU.
     pub fn new(config: VmConfig, program: Vec<Instruction<F>>, input_stream: Vec<Vec<F>>) -> Self {
-        let decomp = config.decomp;
-        let limb_bits = config.limb_bits;
-
-        let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, 1 << decomp));
-
-        let cpu_air = CpuAir::new(config.cpu_options());
-        let program_chip = ProgramChip::new(program.clone());
-        let memory_chip = MemoryChip::new(limb_bits, limb_bits, limb_bits, decomp);
-        let field_arithmetic_chip = FieldArithmeticChip::new();
-        let field_extension_chip = FieldExtensionArithmeticChip::new();
-        let poseidon2_chip = Poseidon2Chip::from_poseidon2_config(
-            Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
-            POSEIDON2_BUS,
-        );
-        let keccak_perm_chip = KeccakPermuteChip::new();
-
-        Self {
+        let mut vm = Self {
             config,
-            cpu_air,
-            program_chip,
-            memory_chip,
-            field_arithmetic_chip,
-            field_extension_chip,
-            range_checker,
-            poseidon2_chip,
-            keccak_perm_chip,
+            program,
+            segments: vec![],
             traces: vec![],
+        };
+        vm.segment(VirtualMachineState {
+            state: ExecutionState::default(),
+            memory: HashMap::new(),
             input_stream: VecDeque::from(input_stream),
+            hint_stream: VecDeque::new(),
+        });
+        vm
+    }
+
+    /// Create a new segment with a given state.
+    ///
+    /// The segment will be created from the given state and the program.
+    pub fn segment(&mut self, state: VirtualMachineState<F>) {
+        let program = self.program.clone();
+        let segment = ExecutionSegment::new(self.config, program, state);
+        self.segments.push(segment);
+    }
+
+    /// Retrieves the current state of the VM by querying the last segment.
+    pub fn current_state(&self) -> VirtualMachineState<F> {
+        let last_seg = self.segments.last().unwrap();
+        VirtualMachineState {
+            state: last_seg.cpu_chip.state,
+            memory: last_seg.memory_chip.memory_clone(),
+            input_stream: last_seg.input_stream.clone(),
+            hint_stream: last_seg.hint_stream.clone(),
         }
     }
 
+    /// Retrieves the CPU options from the VM's config.
     pub fn options(&self) -> CpuOptions {
         self.config.cpu_options()
     }
+}
 
-    fn generate_traces(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
-        let cpu_trace = CpuAir::generate_trace(self)?;
-        let mut result = vec![
-            cpu_trace,
-            self.program_chip.generate_trace(),
-            self.memory_chip.generate_trace(self.range_checker.clone()),
-            self.range_checker.generate_trace(),
-        ];
-        if self.options().field_arithmetic_enabled {
-            result.push(self.field_arithmetic_chip.generate_trace());
+/// Executes the VM by calling `ExecutionSegment::generate_traces()` until the CPU hits `TERMINATE`
+/// and `cpu_chip.is_done`. Between every segment, the VM will call `generate_commitments()` and then
+/// `next_segment()`.
+impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
+    pub fn execute(mut self) -> Result<ExecutionResult<WORD_SIZE>, ExecutionError> {
+        let mut traces = vec![];
+        loop {
+            let last_seg = self.segments.last_mut().unwrap();
+            last_seg.has_generation_happened = true;
+            traces.extend(last_seg.generate_traces()?);
+            traces.extend(last_seg.generate_commitments()?);
+            if last_seg.cpu_chip.state.is_done {
+                break;
+            }
+            self.segment(self.current_state());
         }
-        if self.options().field_extension_enabled {
-            result.push(self.field_extension_chip.generate_trace());
-        }
-        if self.options().poseidon2_enabled() {
-            result.push(self.poseidon2_chip.generate_trace());
-        }
-        if self.options().perm_keccak_enabled {
-            result.push(self.keccak_perm_chip.generate_trace());
-        }
-        Ok(result)
-    }
 
-    pub fn traces(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
-        if self.traces.is_empty() {
-            self.traces = self.generate_traces()?;
-        }
-        Ok(self.traces.clone())
-    }
+        let mut pis = vec![];
+        let mut chips = vec![];
+        let mut types = vec![];
+        let num_chips = self.segments[0].get_num_chips();
 
-    /*fn max_trace_heights(&self) -> Vec<usize> {
-        let max_operations = self.config.max_operations;
-        let max_program_length = self.config.max_program_length;
-        let result = [
-            max_operations,
-            max_program_length,
-            3 * max_operations,
-            max_operations,
-            max_operations,
-        ];
-        result
+        let unique_chips = get_chips::<WORD_SIZE, BabyBearPoseidon2Config>(
+            ExecutionSegment::new(self.config, vec![], self.current_state()),
+            &vec![true; num_chips],
+        );
+
+        // Iterate over each segment and add its public inputs, types, and chips to the result,
+        // skipping empty traces.
+        for (i, segment) in self.segments.into_iter().enumerate() {
+            let trace_slice = &traces[i * num_chips..(i + 1) * num_chips];
+            let inclusion_mask = trace_slice
+                .iter()
+                .map(|trace| !trace.values.is_empty())
+                .collect::<Vec<bool>>();
+
+            let segment_pis = segment.get_pis();
+            let segment_types = segment.get_types();
+            chips.extend(get_chips::<WORD_SIZE, BabyBearPoseidon2Config>(
+                segment,
+                &inclusion_mask,
+            ));
+            for index in 0..inclusion_mask.len() {
+                if inclusion_mask[index] {
+                    pis.push(segment_pis[index].clone());
+                    types.push(segment_types[index]);
+                }
+            }
+        }
+
+        let nonempty_traces = traces
             .iter()
-            .map(|height| height.next_power_of_two())
-            .collect()
-    }*/
+            .filter(|trace| !trace.values.is_empty())
+            .cloned()
+            .collect::<Vec<DenseMatrix<BabyBear>>>();
 
-    pub fn max_log_degree(&mut self) -> Result<usize, ExecutionError> {
-        let mut checker_trace_degree = 0;
-        for trace in self.traces()? {
-            checker_trace_degree = std::cmp::max(checker_trace_degree, trace.height());
-        }
-        Ok(log2_strict_usize(checker_trace_degree))
+        let max_log_degree =
+            log2_strict_usize(traces.iter().map(|trace| trace.height()).max().unwrap());
+
+        // Assert that trace heights are within the max_len, except for Program and RangeChecker
+        // +31 is needed because Poseidon2Permute adds 32 rows to memory at once
+        traces
+            .iter()
+            .zip(types.iter())
+            .filter(|(_, &chip_type)| {
+                chip_type != ChipType::Program && chip_type != ChipType::RangeChecker
+            })
+            .for_each(|(trace, chip_type)| {
+                assert!(
+                    trace.height() <= (self.config.max_segment_len + 31).next_power_of_two(),
+                    "Trace height for {:?} exceeds max_len. Height: {}, Max: {}",
+                    chip_type,
+                    trace.height(),
+                    self.config.max_segment_len
+                );
+            });
+
+        let chip_data = ExecutionResult {
+            nonempty_traces,
+            all_traces: traces,
+            nonempty_pis: pis,
+            nonempty_chips: chips,
+            unique_chips,
+            chip_types: types,
+            max_log_degree,
+        };
+
+        Ok(chip_data)
     }
 
-    pub fn metrics(&mut self) -> BTreeMap<String, usize> {
-        let mut metrics = BTreeMap::new();
-        metrics.insert(
-            "memory_chip_accesses".to_string(),
-            self.memory_chip.accesses.len(),
-        );
-        metrics.insert(
-            "field_arithmetic_ops".to_string(),
-            self.field_arithmetic_chip.operations.len(),
-        );
-        metrics.insert(
-            "field_extension_ops".to_string(),
-            self.field_extension_chip.operations.len(),
-        );
-        metrics.insert(
-            "range_checker_count".to_string(),
-            self.range_checker.count.len(),
-        );
-        metrics.insert(
-            "poseidon2_chip_rows".to_string(),
-            self.poseidon2_chip.rows.len(),
-        );
-        metrics.insert(
-            "keccak_permute_chip_requests".to_string(), // each request corresponds to NUM_ROUNDS=24 rows
-            self.keccak_perm_chip.requests.len(),
-        );
-        metrics.insert("input_stream_len".to_string(), self.input_stream.len());
-        metrics
+    /// Convert the VM's chips from Boxes to concrete types.
+    pub fn get_chips(
+        chips: &[Box<dyn AnyRap<BabyBearPoseidon2Config>>],
+    ) -> Vec<&dyn AnyRap<BabyBearPoseidon2Config>> {
+        chips.iter().map(|x| x.deref()).collect()
     }
 }
 
-pub fn get_chips<const WORD_SIZE: usize, SC: StarkGenericConfig>(
-    vm: &VirtualMachine<WORD_SIZE, Val<SC>>,
-) -> Vec<&dyn AnyRap<SC>>
-where
-    Val<SC>: PrimeField32,
-{
-    let mut result: Vec<&dyn AnyRap<SC>> = vec![
-        &vm.cpu_air,
-        &vm.program_chip.air,
-        &vm.memory_chip.air,
-        &vm.range_checker.air,
-    ];
-    if vm.options().field_arithmetic_enabled {
-        result.push(&vm.field_arithmetic_chip.air as &dyn AnyRap<SC>);
+impl<const WORD_SIZE: usize> ExecutionResult<WORD_SIZE> {
+    pub fn get_chips(&self) -> Vec<&dyn AnyRap<BabyBearPoseidon2Config>> {
+        self.nonempty_chips.iter().map(|x| x.deref()).collect()
     }
-    if vm.options().field_extension_enabled {
-        result.push(&vm.field_extension_chip.air as &dyn AnyRap<SC>);
-    }
-    if vm.options().poseidon2_enabled() {
-        result.push(&vm.poseidon2_chip.air as &dyn AnyRap<SC>);
-    }
-    if vm.options().perm_keccak_enabled {
-        result.push(&vm.keccak_perm_chip.air as &dyn AnyRap<SC>);
-    }
-    result
 }

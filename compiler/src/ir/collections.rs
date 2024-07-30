@@ -1,30 +1,26 @@
+use alloc::rc::Rc;
 use itertools::Itertools;
 use p3_field::AbstractField;
+use std::cell::RefCell;
 
 use super::{Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, Usize, Var, Variable};
 
-/// An array that is either of static or dynamic size.
+/// A logical array.
 #[derive(Debug, Clone)]
 pub enum Array<C: Config, T> {
-    // Fixed-length array. Index access cannot use variables.
-    Fixed(Vec<T>),
-    /// Dynamic-length array stored in heap. Index access can use variables but length cannot change after initialization.
+    /// Array of some local variables or constants, which can only be manipulated statically. It
+    /// only exists in the DSL syntax and isn't backed by memory.
+    Fixed(Rc<RefCell<Vec<Option<T>>>>),
+    /// Array on heap. Index access can use variables. Length could be determined on runtime but
+    /// cannot change after initialization.
     Dyn(Ptr<C::N>, Usize<C::N>),
 }
 
 impl<C: Config, V: MemVariable<C>> Array<C, V> {
-    /// Gets a fixed version of the array.
-    pub fn vec(&self) -> Vec<V> {
-        match self {
-            Self::Fixed(vec) => vec.clone(),
-            _ => panic!("array is dynamic, not fixed"),
-        }
-    }
-
     /// Gets the length of the array as a variable inside the DSL.
     pub fn len(&self) -> Usize<C::N> {
         match self {
-            Self::Fixed(vec) => Usize::from(vec.len()),
+            Self::Fixed(vec) => Usize::from(vec.borrow().len()),
             Self::Dyn(_, len) => *len,
         }
     }
@@ -33,7 +29,7 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
     pub fn assert_len(&self, builder: &mut Builder<C>, len: usize) {
         match self {
             Self::Fixed(vec) => {
-                assert_eq!(vec.len(), len);
+                assert_eq!(vec.borrow().len(), len);
             }
             Self::Dyn(_, c_len) => match c_len {
                 Usize::Const(c_len) => {
@@ -47,11 +43,14 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
     }
 
     /// Shifts the array by `shift` elements.
+    /// !Attention!: the behavior of `Fixed` and `Dyn` is different. For Dyn, the shift is a view
+    /// and shares memory with the original. For `Fixed`, `set`/`set_value` on slices won't impact
+    /// the original array.
     pub fn shift(&self, builder: &mut Builder<C>, shift: Usize<C::N>) -> Array<C, V> {
         match self {
             Self::Fixed(v) => {
                 if let Usize::Const(shift) = shift {
-                    Array::Fixed(v[shift..].to_vec())
+                    Array::Fixed(Rc::new(RefCell::new(v.borrow()[shift..].to_vec())))
                 } else {
                     panic!("Cannot shift a fixed array with a variable shift");
                 }
@@ -81,6 +80,10 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
         };
     }
 
+    /// Slices the array from `start` to `end`.
+    /// !Attention!: the behavior of `Fixed` and `Dyn` is different. For Dyn, the shift is a view
+    /// and shares memory with the original. For `Fixed`, `set`/`set_value` on slices won't impact
+    /// the original array.
     pub fn slice(
         &self,
         builder: &mut Builder<C>,
@@ -88,9 +91,9 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
         end: Usize<C::N>,
     ) -> Array<C, V> {
         match self {
-            Self::Fixed(vec) => {
+            Self::Fixed(v) => {
                 if let (Usize::Const(start), Usize::Const(end)) = (start, end) {
-                    builder.vec(vec[start..end].to_vec())
+                    Array::Fixed(Rc::new(RefCell::new(v.borrow()[start..end].to_vec())))
                 } else {
                     panic!("Cannot slice a fixed array with a variable start or end");
                 }
@@ -130,7 +133,14 @@ impl<C: Config> Builder<C> {
 
     /// Creates an array from a vector.
     pub fn vec<V: MemVariable<C>>(&mut self, v: Vec<V>) -> Array<C, V> {
-        Array::Fixed(v)
+        Array::Fixed(Rc::new(RefCell::new(
+            v.into_iter().map(|x| Some(x)).collect(),
+        )))
+    }
+
+    /// Create an uninitialized Array::Fixed.
+    pub fn uninit_fixed_array<V: Variable<C>>(&mut self, len: usize) -> Array<C, V> {
+        Array::Fixed(Rc::new(RefCell::new(vec![None::<V>; len])))
     }
 
     /// Creates a dynamic array for a length.
@@ -154,7 +164,11 @@ impl<C: Config> Builder<C> {
         match slice {
             Array::Fixed(slice) => {
                 if let Usize::Const(idx) = index {
-                    slice[idx].clone()
+                    if let Some(ele) = &slice.borrow()[idx] {
+                        ele.clone()
+                    } else {
+                        panic!("Cannot get an uninitialized element in a fixed slice");
+                    }
                 } else {
                     panic!("Cannot index into a fixed slice with a variable size")
                 }
@@ -217,8 +231,13 @@ impl<C: Config> Builder<C> {
         let index = index.into();
 
         match slice {
-            Array::Fixed(_) => {
-                todo!()
+            Array::Fixed(v) => {
+                if let Usize::Const(idx) = index {
+                    let value = self.eval(value);
+                    v.borrow_mut()[idx] = Some(value);
+                } else {
+                    panic!("Cannot index into a fixed slice with a variable index")
+                }
             }
             Array::Dyn(ptr, len) => {
                 if self.flags.debug {
@@ -249,7 +268,7 @@ impl<C: Config> Builder<C> {
         match slice {
             Array::Fixed(v) => {
                 if let Usize::Const(idx) = index {
-                    self.assign(v[idx].clone(), value);
+                    v.borrow_mut()[idx] = Some(value);
                 } else {
                     panic!("Cannot index into a fixed slice with a variable size")
                 }
@@ -293,10 +312,17 @@ impl<C: Config, T: MemVariable<C>> Variable<C> for Array<C, T> {
 
         match (lhs.clone(), rhs.clone()) {
             (Array::Fixed(lhs), Array::Fixed(rhs)) => {
-                for (l, r) in lhs.iter().zip_eq(rhs.iter()) {
+                // No need to compare if they are the same reference. The same reference will
+                // also cause borrow errors in the following loop.
+                if Rc::ptr_eq(&lhs, &rhs) {
+                    return;
+                }
+                for (l, r) in lhs.borrow().iter().zip_eq(rhs.borrow().iter()) {
+                    assert!(l.is_some(), "lhs array is not fully initialized");
+                    assert!(r.is_some(), "rhs array is not fully initialized");
                     T::assert_eq(
-                        T::Expression::from(l.clone()),
-                        T::Expression::from(r.clone()),
+                        T::Expression::from(l.as_ref().unwrap().clone()),
+                        T::Expression::from(r.as_ref().unwrap().clone()),
                         builder,
                     );
                 }
@@ -328,10 +354,17 @@ impl<C: Config, T: MemVariable<C>> Variable<C> for Array<C, T> {
 
         match (lhs.clone(), rhs.clone()) {
             (Array::Fixed(lhs), Array::Fixed(rhs)) => {
-                for (l, r) in lhs.iter().zip_eq(rhs.iter()) {
+                // No need to compare if they are the same reference. The same reference will
+                // also cause borrow errors.
+                if Rc::ptr_eq(&lhs, &rhs) {
+                    panic!("assert not equal on the same array");
+                }
+                for (l, r) in lhs.borrow().iter().zip_eq(rhs.borrow().iter()) {
+                    assert!(l.is_some(), "lhs array is not fully initialized");
+                    assert!(r.is_some(), "rhs array is not fully initialized");
                     T::assert_ne(
-                        T::Expression::from(l.clone()),
-                        T::Expression::from(r.clone()),
+                        T::Expression::from(l.as_ref().unwrap().clone()),
+                        T::Expression::from(r.as_ref().unwrap().clone()),
                         builder,
                     );
                 }
@@ -348,6 +381,11 @@ impl<C: Config, T: MemVariable<C>> Variable<C> for Array<C, T> {
             }
             _ => panic!("cannot compare arrays of different types"),
         }
+    }
+
+    // The default version calls `uninit`. If `expr` is `Fixed`, it will be converted into `Dyn`.
+    fn eval(_builder: &mut Builder<C>, expr: impl Into<Self::Expression>) -> Self {
+        expr.into()
     }
 }
 

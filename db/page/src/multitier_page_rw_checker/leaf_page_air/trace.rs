@@ -48,32 +48,22 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                             .map(Val::<SC>::from_canonical_u32)
                             .collect();
                         {
-                            let tuple: IsLessThanTupleCols<Val<SC>> = self
-                                .is_less_than_tuple_air
-                                .clone()
-                                .unwrap()
-                                .idx_start
-                                .generate_trace_row((
-                                    row.idx.to_vec(),
-                                    range.0.clone(),
-                                    range_checker.clone(),
-                                ));
+                            let tuple: IsLessThanTupleCols<Val<SC>> =
+                                LocalTraceInstructions::generate_trace_row(
+                                    &self.is_less_than_tuple_air.clone().unwrap().idx_start,
+                                    (row.idx.to_vec(), range.0.clone(), range_checker.clone()),
+                                );
                             let aux = tuple.aux;
                             let io = tuple.io;
                             trace_row[2 * range.0.len()] = io.tuple_less_than;
                             trace_row.extend(aux.flatten());
                         }
                         {
-                            let tuple: IsLessThanTupleCols<Val<SC>> = self
-                                .is_less_than_tuple_air
-                                .clone()
-                                .unwrap()
-                                .end_idx
-                                .generate_trace_row((
-                                    range.1.clone(),
-                                    row.idx.to_vec(),
-                                    range_checker.clone(),
-                                ));
+                            let tuple: IsLessThanTupleCols<Val<SC>> =
+                                LocalTraceInstructions::generate_trace_row(
+                                    &self.is_less_than_tuple_air.clone().unwrap().end_idx,
+                                    (range.1.clone(), row.idx.to_vec(), range_checker.clone()),
+                                );
                             let aux = tuple.aux;
                             let io = tuple.io;
                             trace_row[2 * range.0.len() + 1] = io.tuple_less_than;

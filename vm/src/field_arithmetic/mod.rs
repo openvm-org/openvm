@@ -93,4 +93,8 @@ impl<F: Field> FieldArithmeticChip<F> {
             self.calculate(*op, *operands);
         }
     }
+
+    pub fn current_height(&self) -> usize {
+        self.operations.len()
+    }
 }

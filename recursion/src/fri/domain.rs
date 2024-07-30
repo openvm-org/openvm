@@ -52,7 +52,7 @@ impl<C: Config> PolynomialSpaceVariable<C> for TwoAdicMultiplicativeCosetVariabl
 where
     C::F: TwoAdicField,
 {
-    type Constant = p3_commit::TwoAdicMultiplicativeCoset<C::F>;
+    type Constant = TwoAdicMultiplicativeCoset<C::F>;
 
     fn next_point(
         &self,
@@ -274,6 +274,6 @@ pub(crate) mod tests {
 
         const WORD_SIZE: usize = 1;
         let program = builder.compile_isa::<WORD_SIZE>();
-        execute_program::<WORD_SIZE, _>(program, vec![]);
+        execute_program::<WORD_SIZE>(program, vec![]);
     }
 }

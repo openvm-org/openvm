@@ -1,31 +1,12 @@
 use std::iter;
 
+use p3_field::AbstractField;
+
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_field::{AbstractField, Field};
 
 use crate::memory::expand::{
     air::ExpandAir, columns::ExpandCols, EXPAND_BUS, POSEIDON2_DIRECT_REQUEST_BUS,
 };
-
-fn push_expand_send<const CHUNK: usize, AB: InteractionBuilder>(
-    builder: &mut AB,
-    sends: impl Into<AB::Expr>,
-    is_final: impl Into<AB::Expr>,
-    height: impl Into<AB::Expr>,
-    label: impl Into<AB::Expr>,
-    address_space: impl Into<AB::Expr>,
-    hash: [impl Into<AB::Expr>; CHUNK],
-) {
-    let fields = [
-        is_final.into(),
-        address_space.into(),
-        height.into(),
-        label.into(),
-    ]
-    .into_iter()
-    .chain(hash.into_iter().map(Into::into));
-    builder.push_send(EXPAND_BUS, fields, sends);
-}
 
 impl<const CHUNK: usize> ExpandAir<CHUNK> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -33,35 +14,43 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
         builder: &mut AB,
         local: ExpandCols<CHUNK, AB::Var>,
     ) {
-        let child_height = local.parent_height - AB::F::one();
-        let two_inv = AB::F::two().inverse();
+        builder.push_send(
+            EXPAND_BUS,
+            [
+                local.expand_direction.into(),
+                local.address_space.into(),
+                local.parent_height.into(),
+                local.parent_label.into(),
+            ]
+            .into_iter()
+            .chain(local.parent_hash.into_iter().map(Into::into)),
+            local.expand_direction.into(),
+        );
 
-        push_expand_send(
-            builder,
-            -local.direction.into(),
-            AB::Expr::from(two_inv) - local.direction * two_inv,
-            local.parent_height,
-            local.parent_label,
-            local.address_space,
-            local.parent_hash,
+        builder.push_receive(
+            EXPAND_BUS,
+            [
+                local.expand_direction + (local.left_direction_different * AB::F::two()),
+                local.address_space.into(),
+                local.parent_height - AB::F::one(),
+                local.parent_label * AB::F::two(),
+            ]
+            .into_iter()
+            .chain(local.left_child_hash.into_iter().map(Into::into)),
+            local.expand_direction.into(),
         );
-        push_expand_send(
-            builder,
-            local.direction,
-            AB::Expr::from(two_inv) - local.direction * two_inv + local.left_is_final,
-            child_height.clone(),
-            local.parent_label * AB::F::two(),
-            local.address_space,
-            local.left_child_hash,
-        );
-        push_expand_send(
-            builder,
-            local.direction,
-            AB::Expr::from(two_inv) - local.direction * two_inv + local.right_is_final,
-            child_height,
-            local.parent_label * AB::F::two() + AB::F::one(),
-            local.address_space,
-            local.right_child_hash,
+
+        builder.push_receive(
+            EXPAND_BUS,
+            [
+                local.expand_direction + (local.right_direction_different * AB::F::two()),
+                local.address_space.into(),
+                local.parent_height - AB::F::one(),
+                (local.parent_label * AB::F::two()) + AB::F::one(),
+            ]
+            .into_iter()
+            .chain(local.right_child_hash.into_iter().map(Into::into)),
+            local.expand_direction.into(),
         );
 
         let hash_fields = iter::empty()
@@ -69,6 +58,10 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
             .chain(local.right_child_hash)
             .chain(local.parent_hash);
         // TODO: do not hardcode the hash bus
-        builder.push_send(POSEIDON2_DIRECT_REQUEST_BUS, hash_fields, AB::F::one());
+        builder.push_send(
+            POSEIDON2_DIRECT_REQUEST_BUS,
+            hash_fields,
+            local.expand_direction * local.expand_direction,
+        );
     }
 }

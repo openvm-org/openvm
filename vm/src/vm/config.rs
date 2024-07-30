@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::cpu::CpuOptions;
 
+pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 20) - 100;
+
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct VmConfig {
     // TODO: VmConfig should just contain CpuOptions to reduce redundancy
@@ -12,6 +14,8 @@ pub struct VmConfig {
     pub perm_keccak_enabled: bool,
     pub limb_bits: usize,
     pub decomp: usize,
+    pub num_public_values: usize,
+    pub max_segment_len: usize,
     /*pub max_program_length: usize,
     pub max_operations: usize,*/
 }
@@ -26,6 +30,8 @@ impl Default for VmConfig {
             perm_keccak_enabled: false,
             limb_bits: 28,
             decomp: 4,
+            num_public_values: 0,
+            max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
         }
     }
 }
@@ -38,6 +44,7 @@ impl VmConfig {
             compress_poseidon2_enabled: self.compress_poseidon2_enabled,
             perm_poseidon2_enabled: self.perm_poseidon2_enabled,
             perm_keccak_enabled: self.perm_keccak_enabled,
+            num_public_values: self.num_public_values,
         }
     }
 
@@ -50,6 +57,8 @@ impl VmConfig {
             perm_keccak_enabled: false,
             limb_bits: 28,
             decomp: 4,
+            num_public_values: 0,
+            max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
         }
     }
 }

@@ -421,6 +421,18 @@ impl<N: Field> From<Var<N>> for SymbolicVar<N> {
     }
 }
 
+impl<N: Field> From<SymbolicUsize<N>> for SymbolicVar<N> {
+    fn from(v: SymbolicUsize<N>) -> Self {
+        match v {
+            SymbolicUsize::Const(c) => {
+                let f = N::from_canonical_usize(c);
+                SymbolicVar::Const(f, f.into())
+            }
+            SymbolicUsize::Var(v) => v,
+        }
+    }
+}
+
 impl<F: Field> From<Felt<F>> for SymbolicFelt<F> {
     fn from(f: Felt<F>) -> Self {
         SymbolicFelt::Val(f, digest_id(f.0))

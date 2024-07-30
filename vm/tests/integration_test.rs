@@ -1,22 +1,22 @@
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
-use afs_test_utils::config::baby_bear_poseidon2::{
-    engine_from_perm, random_perm, run_simple_test_no_pis,
+use afs_test_utils::config::baby_bear_poseidon2::{engine_from_perm, random_perm, run_simple_test};
+use afs_test_utils::config::fri_params::{
+    fri_params_fast_testing, fri_params_with_80_bits_of_security,
 };
-use afs_test_utils::config::fri_params::fri_params_with_80_bits_of_security;
 use afs_test_utils::engine::StarkEngine;
 use p3_keccak_air::U64_LIMBS;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
-use stark_vm::vm::config::VmConfig;
-use stark_vm::vm::get_chips;
+use stark_vm::vm::config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN};
+use stark_vm::vm::ExecutionResult;
 use stark_vm::vm::VirtualMachine;
 use tiny_keccak::keccakf;
 
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 30;
-const DECOMP: usize = 15;
+const DECOMP: usize = 5;
 
 fn vm_config_with_field_arithmetic() -> VmConfig {
     VmConfig {
@@ -32,20 +32,33 @@ fn air_test(
     config: VmConfig,
     program: Vec<Instruction<BabyBear>>,
     witness_stream: Vec<Vec<BabyBear>>,
+    fast_segmentation: bool,
 ) {
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
             limb_bits: LIMB_BITS,
             decomp: DECOMP,
+            num_public_values: 4,
+            max_segment_len: if fast_segmentation {
+                7
+            } else {
+                DEFAULT_MAX_SEGMENT_LEN
+            },
             ..config
         },
         program,
         witness_stream,
     );
 
-    let traces = vm.traces().unwrap();
-    let chips = get_chips(&vm);
-    run_simple_test_no_pis(chips, traces).expect("Verification failed");
+    let ExecutionResult {
+        nonempty_chips: chips,
+        nonempty_traces: traces,
+        nonempty_pis: pis,
+        ..
+    } = vm.execute().unwrap();
+    let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
+
+    run_simple_test(chips, traces, pis).expect("Verification failed");
 }
 
 // log_blowup = 3 for poseidon2 chip
@@ -55,7 +68,7 @@ fn air_test_with_poseidon2(
     compress_poseidon2_enabled: bool,
     program: Vec<Instruction<BabyBear>>,
 ) {
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
             field_arithmetic_enabled,
             field_extension_enabled,
@@ -63,24 +76,33 @@ fn air_test_with_poseidon2(
             perm_poseidon2_enabled: false,
             limb_bits: LIMB_BITS,
             decomp: DECOMP,
+            num_public_values: 4,
+            max_segment_len: 6,
             ..Default::default()
         },
         program,
         vec![],
     );
 
-    let max_log_degree = vm.max_log_degree().unwrap();
-    let traces = vm.traces().unwrap();
-    let chips = get_chips(&vm);
+    let ExecutionResult {
+        max_log_degree,
+        nonempty_chips: chips,
+        nonempty_traces: traces,
+        nonempty_pis: pis,
+        ..
+    } = vm.execute().unwrap();
 
     let perm = random_perm();
-    let fri_params = fri_params_with_80_bits_of_security()[1];
+    let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
+        fri_params_fast_testing()[1]
+    } else {
+        fri_params_with_80_bits_of_security()[1]
+    };
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
 
-    let num_chips = chips.len();
-
+    let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
     engine
-        .run_simple_test(chips, traces, vec![vec![]; num_chips])
+        .run_simple_test(chips, traces, pis)
         .expect("Verification failed");
 }
 
@@ -108,7 +130,7 @@ fn test_vm_1() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(vm_config_with_field_arithmetic(), program, vec![]);
+    air_test(vm_config_with_field_arithmetic(), program, vec![], true);
 }
 
 #[test]
@@ -133,7 +155,7 @@ fn test_vm_without_field_arithmetic() {
         Instruction::from_isize(BEQ, 0, 5, -1, 1, 0),
     ];
 
-    air_test(VmConfig::core(), program, vec![]);
+    air_test(VmConfig::core(), program, vec![], true);
 }
 
 #[test]
@@ -154,7 +176,7 @@ fn test_vm_fibonacci_old() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(vm_config_with_field_arithmetic(), program, vec![]);
+    air_test(vm_config_with_field_arithmetic(), program, vec![], true);
 }
 
 #[test]
@@ -184,7 +206,7 @@ fn test_vm_fibonacci_old_cycle_tracker() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(vm_config_with_field_arithmetic(), program, vec![]);
+    air_test(vm_config_with_field_arithmetic(), program, vec![], false);
 }
 
 #[test]
@@ -211,6 +233,7 @@ fn test_vm_field_extension_arithmetic() {
         },
         program,
         vec![],
+        true,
     );
 }
 
@@ -242,7 +265,12 @@ fn test_vm_hint() {
 
     let witness_stream: Vec<Vec<F>> = vec![vec![F::two()]];
 
-    air_test(vm_config_with_field_arithmetic(), program, witness_stream);
+    air_test(
+        vm_config_with_field_arithmetic(),
+        program,
+        witness_stream,
+        true,
+    );
 }
 
 #[test]
@@ -371,5 +399,6 @@ fn test_vm_permute_keccak() {
         },
         program,
         vec![],
+        false,
     );
 }
