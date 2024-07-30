@@ -56,6 +56,16 @@ Pass in an .afo file that contains the predicate instruction. Example .afo file:
 FILTER 0xfade INDEX <= 0xdac0
 ```
 
+## Predicate
+
+Run this command for multitier read/write
+
+```bash
+RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark -- mtrw -n -i 0
+```
+
+This command goes through many configs, including large and small page heights. We run benchmarks on the case that n leaves are revealed via n insert operations, where n is 1 or 8. To account for the worst case scenario, we double the leaves in the final tree for certain configs (so 2n). The -n flag tells it to use a new, empty Btree (this should always be on, I haven't implemented large tree yet). The -i flag decides where to start the benchmarking, in terms of config #. To directly jump to worst case testing, setting -i to 8 suffices.
+
 ## Additional test commands
 
 To run only small configs for testing
@@ -68,10 +78,4 @@ For running tests with only the large configs
 
 ```bash
 RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark -- rw -r 90 -w 10 --config-folder benchmark/config/large
-```
-
-Run this command for multitier read/write
-
-```bash
-RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark -- mtrw -n -i 0
 ```
