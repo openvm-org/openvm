@@ -52,7 +52,7 @@ impl<C: Config> PolynomialSpaceVariable<C> for TwoAdicMultiplicativeCosetVariabl
 where
     C::F: TwoAdicField,
 {
-    type Constant = p3_commit::TwoAdicMultiplicativeCoset<C::F>;
+    type Constant = TwoAdicMultiplicativeCoset<C::F>;
 
     fn next_point(
         &self,

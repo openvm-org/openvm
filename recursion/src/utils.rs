@@ -22,7 +22,7 @@ pub fn const_fri_config(
 ) -> FriConfigVariable<RecursionConfig> {
     let two_adicity = Val::TWO_ADICITY;
     let mut generators = builder.dyn_array(two_adicity);
-    let mut subgroups = builder.dyn_array(two_addicity);
+    let mut subgroups = builder.dyn_array(two_adicity);
     for i in 0..two_adicity {
         let constant_generator = Val::two_adic_generator(i);
         builder.set(&mut generators, i, constant_generator);
