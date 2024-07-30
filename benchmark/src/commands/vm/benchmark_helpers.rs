@@ -1,5 +1,5 @@
 use afs_recursion::{
-    hints::{Hintable, InnerVal},
+    hints::Hintable,
     stark::{DynRapForRecursion, VerifierProgram},
     types::{new_from_multi_vk, InnerConfig, VerifierInput},
 };
@@ -19,30 +19,9 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_strict_usize;
 use stark_vm::{
     cpu::trace::Instruction,
-    vm::{config::VmConfig, ExecutionResult, ExecutionSegment, VirtualMachine},
+    vm::{config::VmConfig, ExecutionResult, VirtualMachine},
 };
 use tracing::info_span;
-
-pub fn get_rec_raps<const WORD_SIZE: usize>(
-    vm: &ExecutionSegment<WORD_SIZE, InnerVal>,
-) -> Vec<&dyn DynRapForRecursion<InnerConfig>> {
-    let mut result: Vec<&dyn DynRapForRecursion<InnerConfig>> = vec![
-        &vm.cpu_chip.air,
-        &vm.program_chip.air,
-        &vm.memory_chip.air,
-        &vm.range_checker.air,
-    ];
-    if vm.options().field_arithmetic_enabled {
-        result.push(&vm.field_arithmetic_chip.air);
-    }
-    if vm.options().field_extension_enabled {
-        result.push(&vm.field_extension_chip.air);
-    }
-    if vm.options().poseidon2_enabled() {
-        result.push(&vm.poseidon2_chip.air);
-    }
-    result
-}
 
 pub fn run_recursive_test_benchmark(
     // TODO: find way to not duplicate parameters

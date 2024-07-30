@@ -3,8 +3,11 @@ use afs_compiler::{
     ir::{Felt, Var},
 };
 
-use super::benchmark_helpers::{get_rec_raps, run_recursive_test_benchmark};
-use afs_recursion::common::sort_chips;
+use super::benchmark_helpers::run_recursive_test_benchmark;
+use afs_recursion::{
+    common::{get_rec_raps, sort_chips},
+    types::InnerConfig,
+};
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::vm::{config::VmConfig, ExecutionResult, VirtualMachine};
@@ -54,7 +57,7 @@ pub fn benchmark_fib_verifier_program(n: usize) {
     let chips = VirtualMachine::<1, _>::get_chips(&chips);
 
     let dummy_vm = VirtualMachine::<1, _>::new(vm_config, fib_program.clone(), vec![]);
-    let rec_raps = get_rec_raps(&dummy_vm.segments[0]);
+    let rec_raps = get_rec_raps::<1, InnerConfig>(&dummy_vm.segments[0]);
 
     assert!(chips.len() == rec_raps.len());
 

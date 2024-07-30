@@ -1,10 +1,13 @@
+use afs_compiler::ir::Config;
 use afs_stark_backend::keygen::types::MultiStarkVerifyingKey;
 use itertools::{izip, Itertools};
 use p3_baby_bear::BabyBear;
+use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_strict_usize;
+use stark_vm::vm::ExecutionSegment;
 use std::cmp::Reverse;
 
 use crate::hints::{Hintable, InnerVal};
@@ -145,4 +148,28 @@ pub fn sort_chips<'a>(
     let traces = groups.into_iter().map(|(_, _, x, _)| x).collect_vec();
 
     (chips, rec_raps, traces, pvs)
+}
+
+pub fn get_rec_raps<const WORD_SIZE: usize, C: Config>(
+    vm: &ExecutionSegment<WORD_SIZE, C::F>,
+) -> Vec<&dyn DynRapForRecursion<C>>
+where
+    C::F: PrimeField32,
+{
+    let mut result: Vec<&dyn DynRapForRecursion<C>> = vec![
+        &vm.cpu_chip.air,
+        &vm.program_chip.air,
+        &vm.memory_chip.air,
+        &vm.range_checker.air,
+    ];
+    if vm.options().field_arithmetic_enabled {
+        result.push(&vm.field_arithmetic_chip.air);
+    }
+    if vm.options().field_extension_enabled {
+        result.push(&vm.field_extension_chip.air);
+    }
+    if vm.options().poseidon2_enabled() {
+        result.push(&vm.poseidon2_chip.air);
+    }
+    result
 }
