@@ -35,6 +35,7 @@ fn make_vm<const WORD_SIZE: usize>(
             perm_poseidon2_enabled: false,
             limb_bits: LIMB_BITS,
             decomp: DECOMP,
+            ..Default::default()
         },
         program,
         vec![],
@@ -66,6 +67,7 @@ fn test_flatten_fromslice_roundtrip() {
         field_extension_enabled: false,
         compress_poseidon2_enabled: false,
         perm_poseidon2_enabled: false,
+        ..Default::default()
     };
     let num_cols = CpuCols::<TEST_WORD_SIZE, usize>::get_width(options);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();

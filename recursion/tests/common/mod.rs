@@ -56,7 +56,7 @@ pub fn make_verification_params(
     let main_trace_data = trace_builder.view(&vk, raps.to_vec());
 
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pvs);
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, pvs);
 
     let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier
@@ -65,7 +65,7 @@ pub fn make_verification_params(
             &vk,
             raps.to_vec(),
             &proof,
-            &pvs,
+            pvs,
         )
         .expect("proof should verify");
 
@@ -124,6 +124,7 @@ pub fn run_recursive_test(
     execute_program::<1, _>(program, witness_stream);
 }
 
+#[allow(clippy::type_complexity)]
 pub fn sort_chips<'a>(
     chips: Vec<&'a dyn AnyRap<BabyBearPoseidon2Config>>,
     rec_raps: Vec<&'a dyn DynRapForRecursion<InnerConfig>>,

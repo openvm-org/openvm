@@ -6,8 +6,8 @@ use p3_field::AbstractField;
 use super::{
     columns::{CpuIoCols, MemoryAccessCols},
     CpuAir, OpCode, ARITHMETIC_BUS, CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE,
-    FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_BUS, FIELD_EXTENSION_INSTRUCTIONS, MEMORY_BUS,
-    POSEIDON2_BUS, READ_INSTRUCTION_BUS,
+    FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_BUS, FIELD_EXTENSION_INSTRUCTIONS,
+    KECCAK_PERMUTE_BUS, MEMORY_BUS, POSEIDON2_BUS, READ_INSTRUCTION_BUS,
 };
 
 use crate::cpu::OpCode::{COMP_POS2, PERM_POS2};
@@ -85,6 +85,17 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 count = count + operation_flags[&PERM_POS2];
             }
             builder.push_send(POSEIDON2_BUS, fields, count);
+        }
+
+        // Interaction with keccak permutation
+        if self.options.perm_keccak_enabled {
+            // This forces op_b to be zero
+            let fields = [io.timestamp, io.op_a, io.op_b, io.op_c, io.d, io.e];
+            builder.push_send(
+                KECCAK_PERMUTE_BUS,
+                fields,
+                operation_flags[&OpCode::PERM_KECCAK],
+            );
         }
     }
 }

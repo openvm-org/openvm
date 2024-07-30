@@ -6,30 +6,38 @@ use afs_test_utils::config::baby_bear_poseidon2::{
 };
 use afs_test_utils::config::fri_params::fri_params_with_80_bits_of_security;
 use afs_test_utils::engine::StarkEngine;
+use p3_keccak_air::U64_LIMBS;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode::*;
 use stark_vm::vm::config::VmConfig;
 use stark_vm::vm::get_chips;
 use stark_vm::vm::VirtualMachine;
+use tiny_keccak::keccakf;
 
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 30;
 const DECOMP: usize = 15;
 
+fn vm_config_with_field_arithmetic() -> VmConfig {
+    VmConfig {
+        field_arithmetic_enabled: true,
+        limb_bits: LIMB_BITS,
+        decomp: DECOMP,
+        ..VmConfig::core()
+    }
+}
+
+// log_blowup = 2 by default
 fn air_test(
-    field_arithmetic_enabled: bool,
-    field_extension_enabled: bool,
+    config: VmConfig,
     program: Vec<Instruction<BabyBear>>,
     witness_stream: Vec<Vec<BabyBear>>,
 ) {
     let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
-            field_arithmetic_enabled,
-            field_extension_enabled,
-            compress_poseidon2_enabled: false,
-            perm_poseidon2_enabled: false,
             limb_bits: LIMB_BITS,
             decomp: DECOMP,
+            ..config
         },
         program,
         witness_stream,
@@ -40,6 +48,7 @@ fn air_test(
     run_simple_test_no_pis(chips, traces).expect("Verification failed");
 }
 
+// log_blowup = 3 for poseidon2 chip
 fn air_test_with_poseidon2(
     field_arithmetic_enabled: bool,
     field_extension_enabled: bool,
@@ -54,6 +63,7 @@ fn air_test_with_poseidon2(
             perm_poseidon2_enabled: false,
             limb_bits: LIMB_BITS,
             decomp: DECOMP,
+            ..Default::default()
         },
         program,
         vec![],
@@ -98,14 +108,11 @@ fn test_vm_1() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(true, false, program, vec![]);
+    air_test(vm_config_with_field_arithmetic(), program, vec![]);
 }
 
 #[test]
 fn test_vm_without_field_arithmetic() {
-    let field_arithmetic_enabled = false;
-    let field_extension_enabled = false;
-
     /*
     Instruction 0 assigns word[0]_1 to 5.
     Instruction 1 checks if word[0]_1 is *not* 4, and if so jumps to instruction 4.
@@ -126,12 +133,7 @@ fn test_vm_without_field_arithmetic() {
         Instruction::from_isize(BEQ, 0, 5, -1, 1, 0),
     ];
 
-    air_test(
-        field_arithmetic_enabled,
-        field_extension_enabled,
-        program,
-        vec![],
-    );
+    air_test(VmConfig::core(), program, vec![]);
 }
 
 #[test]
@@ -152,7 +154,7 @@ fn test_vm_fibonacci_old() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(true, false, program.clone(), vec![]);
+    air_test(vm_config_with_field_arithmetic(), program, vec![]);
 }
 
 #[test]
@@ -182,14 +184,11 @@ fn test_vm_fibonacci_old_cycle_tracker() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(true, false, program.clone(), vec![]);
+    air_test(vm_config_with_field_arithmetic(), program, vec![]);
 }
 
 #[test]
 fn test_vm_field_extension_arithmetic() {
-    let field_arithmetic_enabled = true;
-    let field_extension_enabled = true;
-
     let program = vec![
         Instruction::from_isize(STOREW, 1, 0, 0, 0, 1),
         Instruction::from_isize(STOREW, 2, 1, 0, 0, 1),
@@ -205,8 +204,11 @@ fn test_vm_field_extension_arithmetic() {
     ];
 
     air_test(
-        field_arithmetic_enabled,
-        field_extension_enabled,
+        VmConfig {
+            field_arithmetic_enabled: true,
+            field_extension_enabled: true,
+            ..VmConfig::core()
+        },
         program,
         vec![],
     );
@@ -214,9 +216,6 @@ fn test_vm_field_extension_arithmetic() {
 
 #[test]
 fn test_vm_hint() {
-    let field_arithmetic_enabled = true;
-    let field_extension_enabled = false;
-
     let program = vec![
         Instruction::from_isize(STOREW, 0, 0, 16, 0, 1),
         Instruction::from_isize(FADD, 20, 16, 16777220, 1, 0),
@@ -243,12 +242,7 @@ fn test_vm_hint() {
 
     let witness_stream: Vec<Vec<F>> = vec![vec![F::two()]];
 
-    air_test(
-        field_arithmetic_enabled,
-        field_extension_enabled,
-        program,
-        witness_stream,
-    );
+    air_test(vm_config_with_field_arithmetic(), program, witness_stream);
 }
 
 #[test]
@@ -319,4 +313,63 @@ fn test_vm_compress_poseidon2_as2() {
     program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
 
     air_test_with_poseidon2(false, false, true, program);
+}
+
+#[test]
+fn test_vm_permute_keccak() {
+    let mut program = vec![];
+    // src = word[0]_1 <- 0
+    let src = 0;
+    program.push(Instruction::from_isize(STOREW, src, 0, 0, 0, 1));
+    // dst word[1]_1 <- 3 // use weird offset
+    let dst = 3;
+    program.push(Instruction::from_isize(STOREW, dst, 0, 1, 0, 1));
+    let mut expected = [0u64; 25];
+
+    for y in 0..5 {
+        for x in 0..5 {
+            for limb in 0..U64_LIMBS {
+                let index: usize = (y * 5 + x) * U64_LIMBS + limb;
+                program.push(Instruction::from_isize(
+                    STOREW,
+                    ((expected[y * 5] >> (16 * limb)) & 0xFFFF) as isize,
+                    0,
+                    src + index as isize,
+                    0,
+                    2,
+                ));
+            }
+        }
+    }
+    // dst = word[1]_1, src = word[0]_1, read and write to address space 2
+    program.push(Instruction::from_isize(PERM_KECCAK, 1, 0, 0, 1, 2));
+
+    keccakf(&mut expected);
+    // read expected result to check correctness
+    for y in 0..5 {
+        for x in 0..5 {
+            for limb in 0..U64_LIMBS {
+                let index: usize = (y * 5 + x) * U64_LIMBS + limb;
+                program.push(Instruction::from_isize(
+                    BNE,
+                    dst + index as isize,
+                    ((expected[y * 5 + x] >> (16 * limb)) & 0xFFFF) as isize,
+                    (U64_LIMBS * 25 + 1 - index) as isize, // jump to fail
+                    2,
+                    0,
+                ));
+            }
+        }
+    }
+    program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
+    // program.push(Instruction::from_isize(FAIL, 0, 0, 0, 0, 0));
+
+    air_test(
+        VmConfig {
+            perm_keccak_enabled: true,
+            ..VmConfig::core()
+        },
+        program,
+        vec![],
+    );
 }

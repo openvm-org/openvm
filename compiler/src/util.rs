@@ -85,18 +85,7 @@ pub fn execute_and_prove_program<const WORD_SIZE: usize>(
     program: Vec<Instruction<BabyBear>>,
     input_stream: Vec<Vec<BabyBear>>,
 ) {
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
-        VmConfig {
-            field_arithmetic_enabled: true,
-            field_extension_enabled: true,
-            limb_bits: 28,
-            decomp: 4,
-            compress_poseidon2_enabled: true,
-            perm_poseidon2_enabled: true,
-        },
-        program,
-        input_stream,
-    );
+    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(VmConfig::default(), program, input_stream);
     let max_log_degree = vm.max_log_degree().unwrap();
     let traces = vm.traces().unwrap();
     let chips = get_chips(&vm);

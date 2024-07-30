@@ -100,6 +100,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
         if self.options().poseidon2_enabled() {
             result.push(self.poseidon2_chip.generate_trace());
         }
+        if self.options().perm_keccak_enabled {
+            result.push(self.keccak_perm_chip.generate_trace());
+        }
         Ok(result)
     }
 
@@ -156,6 +159,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
             "poseidon2_chip_rows".to_string(),
             self.poseidon2_chip.rows.len(),
         );
+        metrics.insert(
+            "keccak_permute_chip_requests".to_string(), // each request corresponds to NUM_ROUNDS=24 rows
+            self.keccak_perm_chip.requests.len(),
+        );
         metrics.insert("input_stream_len".to_string(), self.input_stream.len());
         metrics
     }
@@ -181,6 +188,9 @@ where
     }
     if vm.options().poseidon2_enabled() {
         result.push(&vm.poseidon2_chip.air as &dyn AnyRap<SC>);
+    }
+    if vm.options().perm_keccak_enabled {
+        result.push(&vm.keccak_perm_chip.air as &dyn AnyRap<SC>);
     }
     result
 }

@@ -64,6 +64,7 @@ macro_rules! run_perm_ops {
                 perm_poseidon2_enabled: true,
                 limb_bits: LIMB_BITS,
                 decomp: DECOMP,
+                ..Default::default()
             },
             vec![],
             vec![],

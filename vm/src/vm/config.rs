@@ -4,10 +4,12 @@ use crate::cpu::CpuOptions;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct VmConfig {
+    // TODO: VmConfig should just contain CpuOptions to reduce redundancy
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
     pub compress_poseidon2_enabled: bool,
     pub perm_poseidon2_enabled: bool,
+    pub perm_keccak_enabled: bool,
     pub limb_bits: usize,
     pub decomp: usize,
     /*pub max_program_length: usize,
@@ -21,6 +23,7 @@ impl Default for VmConfig {
             field_extension_enabled: true,
             compress_poseidon2_enabled: true,
             perm_poseidon2_enabled: true,
+            perm_keccak_enabled: false,
             limb_bits: 28,
             decomp: 4,
         }
@@ -34,6 +37,19 @@ impl VmConfig {
             field_extension_enabled: self.field_extension_enabled,
             compress_poseidon2_enabled: self.compress_poseidon2_enabled,
             perm_poseidon2_enabled: self.perm_poseidon2_enabled,
+            perm_keccak_enabled: self.perm_keccak_enabled,
+        }
+    }
+
+    pub fn core() -> Self {
+        VmConfig {
+            field_arithmetic_enabled: false,
+            field_extension_enabled: false,
+            compress_poseidon2_enabled: false,
+            perm_poseidon2_enabled: false,
+            perm_keccak_enabled: false,
+            limb_bits: 28,
+            decomp: 4,
         }
     }
 }
