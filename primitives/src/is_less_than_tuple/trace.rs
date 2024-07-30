@@ -1,96 +1,84 @@
 use std::sync::Arc;
 
-use p3_field::{PrimeField, PrimeField64};
+use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
-    is_equal_vec::columns::IsEqualVecAuxCols,
-    is_less_than::{columns::IsLessThanAuxCols, IsLessThanChip},
     range_gate::RangeCheckerGateChip,
     sub_chip::LocalTraceInstructions,
+    utils::{fill_slc_to_f, to_field_vec},
 };
 
 use super::{
-    columns::{IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupleIoCols},
+    columns::{IsLessThanTupleAuxColsMut, IsLessThanTupleCols, IsLessThanTupleColsMut},
     IsLessThanTupleAir, IsLessThanTupleChip,
 };
 
 impl IsLessThanTupleChip {
-    pub fn generate_trace<F: PrimeField64>(
+    pub fn generate_trace<F: PrimeField>(
         &self,
         tuple_pairs: Vec<(Vec<u32>, Vec<u32>)>,
     ) -> RowMajorMatrix<F> {
-        let num_cols: usize = IsLessThanTupleCols::<F>::width(&self.air);
+        let width: usize = IsLessThanTupleCols::<F>::width(&self.air);
 
-        let mut rows: Vec<F> = vec![];
+        let mut rows_concat: Vec<F> = vec![F::zero(); width * tuple_pairs.len()];
 
         // for each tuple pair, generate the trace row
-        for (x, y) in tuple_pairs {
-            let row: Vec<F> = self
-                .air
-                .generate_trace_row((x.clone(), y.clone(), self.range_checker.clone()))
-                .flatten();
-            rows.extend(row);
+        for (i, (x, y)) in tuple_pairs.iter().enumerate() {
+            let mut cols = IsLessThanTupleColsMut::from_slice(
+                &mut rows_concat[width * i..width * (i + 1)],
+                &self.air,
+            );
+
+            self.air
+                .generate_trace_row(x, y, self.range_checker.clone(), &mut cols);
         }
 
-        RowMajorMatrix::new(rows, num_cols)
+        RowMajorMatrix::new(rows_concat, width)
     }
 }
 
-impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanTupleAir {
-    type LocalInput = (Vec<u32>, Vec<u32>, Arc<RangeCheckerGateChip>);
+impl IsLessThanTupleAir {
+    pub fn generate_trace_row<F: PrimeField>(
+        &self,
+        x: &[u32],
+        y: &[u32],
+        range_checker: Arc<RangeCheckerGateChip>,
+        lt_cols: &mut IsLessThanTupleColsMut<F>,
+    ) {
+        fill_slc_to_f(lt_cols.io.x, x);
+        fill_slc_to_f(lt_cols.io.y, y);
+        *lt_cols.io.tuple_less_than = F::from_bool(x < y);
 
-    fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
-        let (x, y, range_checker) = input;
+        self.generate_trace_row_aux(x, y, range_checker, &mut lt_cols.aux);
+    }
 
-        let mut less_than: Vec<F> = vec![];
-        let mut lower_vec: Vec<F> = vec![];
-        let mut lower_decomp_vec: Vec<Vec<F>> = vec![];
-
-        let mut valid = true;
-        let mut tuple_less_than = F::zero();
-
-        // use subchip to generate relevant columns
-        for (i, &limb_bits) in self.limb_bits.iter().enumerate() {
-            let is_less_than_chip = IsLessThanChip::new(
-                self.bus_index,
-                limb_bits,
-                self.decomp,
+    pub fn generate_trace_row_aux<F: PrimeField>(
+        &self,
+        x: &[u32],
+        y: &[u32],
+        range_checker: Arc<RangeCheckerGateChip>,
+        lt_aux_cols: &mut IsLessThanTupleAuxColsMut<F>,
+    ) {
+        for i in 0..self.limb_bits.len() {
+            lt_aux_cols.less_than[i] = F::from_bool(x[i] < y[i]);
+            self.is_less_than_airs[i].generate_trace_row_aux(
+                x[i],
+                y[i],
                 range_checker.clone(),
+                &mut lt_aux_cols.less_than_aux[i],
             );
-
-            let curr_less_than_row = LocalTraceInstructions::generate_trace_row(
-                &is_less_than_chip.air,
-                (x[i], y[i], range_checker.clone()),
-            )
-            .flatten();
-            less_than.push(curr_less_than_row[2]);
-            lower_vec.push(curr_less_than_row[3]);
-            lower_decomp_vec.push(curr_less_than_row[4..].to_vec());
         }
 
-        // compute prods and invs
-        let mut transition_index = 0;
-        while transition_index < x.len() && x[transition_index] == y[transition_index] {
-            transition_index += 1;
-        }
+        self.is_equal_vec_air.generate_trace_row_aux(
+            to_field_vec(x).as_slice(),
+            to_field_vec(y).as_slice(),
+            &mut lt_aux_cols.is_equal_vec_aux,
+        );
 
-        let prods = std::iter::repeat(F::one())
-            .take(transition_index)
-            .chain(std::iter::repeat(F::zero()).take(x.len() - transition_index))
-            .collect::<Vec<F>>();
+        *lt_aux_cols.is_equal_out = F::from_bool(x == y);
 
-        let mut invs = std::iter::repeat(F::zero())
-            .take(x.len())
-            .collect::<Vec<F>>();
-
-        if transition_index != x.len() {
-            invs[transition_index] = (F::from_canonical_u32(x[transition_index])
-                - F::from_canonical_u32(y[transition_index]))
-            .inverse();
-        }
-
-        let mut less_than_cumulative: Vec<F> = vec![];
+        let less_than_cumulative = &mut *lt_aux_cols.less_than_cumulative;
 
         // compute less_than_cumulative
         for i in 0..x.len() {
@@ -100,43 +88,31 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanTupleAir {
                 F::zero()
             };
 
-            if x[i] < y[i] && (i == 0 || prods[i - 1] == F::one()) {
+            if x[i] < y[i] && (i == 0 || lt_aux_cols.is_equal_vec_aux.prods[i - 1] == F::one()) {
                 less_than_curr = F::one();
             }
 
-            if x[i] < y[i] && valid {
-                tuple_less_than = F::one();
-            } else if x[i] > y[i] && valid {
-                valid = false;
-            }
-
-            less_than_cumulative.push(less_than_curr);
+            less_than_cumulative[i] = less_than_curr;
         }
+    }
+}
 
-        // compute less_than_aux and is_equal_vec_aux
-        let mut less_than_aux: Vec<IsLessThanAuxCols<F>> = vec![];
-        for i in 0..x.len() {
-            let less_than_col = IsLessThanAuxCols {
-                lower: lower_vec[i],
-                lower_decomp: lower_decomp_vec[i].clone(),
-            };
-            less_than_aux.push(less_than_col);
-        }
+impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanTupleAir {
+    type LocalInput = (Vec<u32>, Vec<u32>, Arc<RangeCheckerGateChip>);
 
-        let is_equal_vec_aux = IsEqualVecAuxCols { prods, invs };
+    fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
+        let width: usize = IsLessThanTupleCols::<F>::width(self);
 
-        let io = IsLessThanTupleIoCols {
-            x: x.into_iter().map(F::from_canonical_u32).collect(),
-            y: y.into_iter().map(F::from_canonical_u32).collect(),
-            tuple_less_than,
-        };
-        let aux = IsLessThanTupleAuxCols {
-            less_than,
-            less_than_aux,
-            is_equal_vec_aux,
-            less_than_cumulative,
-        };
+        let mut row = vec![F::zero(); width];
+        let mut lt_cols = IsLessThanTupleColsMut::<F>::from_slice(&mut row, self);
 
-        IsLessThanTupleCols { io, aux }
+        self.generate_trace_row(
+            input.0.as_slice(),
+            input.1.as_slice(),
+            input.2,
+            &mut lt_cols,
+        );
+
+        IsLessThanTupleCols::<F>::from_slice(&row, self)
     }
 }

@@ -14,6 +14,7 @@ pub mod field_extension_conversion;
 #[derive(Clone, Copy, Debug)]
 pub struct CompilerOptions {
     pub compile_prints: bool,
+    pub enable_cycle_tracker: bool,
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
 }
@@ -22,6 +23,7 @@ impl Default for CompilerOptions {
     fn default() -> Self {
         CompilerOptions {
             compile_prints: true,
+            enable_cycle_tracker: false,
             field_arithmetic_enabled: true,
             field_extension_enabled: true,
         }
@@ -696,8 +698,20 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 AS::Memory,
             ),
         ],
-        AsmInstruction::CycleTrackerStart(name) => vec![dbg(CT_START, name)],
-        AsmInstruction::CycleTrackerEnd(name) => vec![dbg(CT_END, name)],
+        AsmInstruction::CycleTrackerStart(name) => {
+            if options.enable_cycle_tracker {
+                vec![dbg(CT_START, name)]
+            } else {
+                vec![]
+            }
+        }
+        AsmInstruction::CycleTrackerEnd(name) => {
+            if options.enable_cycle_tracker {
+                vec![dbg(CT_END, name)]
+            } else {
+                vec![]
+            }
+        }
         AsmInstruction::Publish(val, index) => vec![inst(
             PUBLISH,
             register(index),

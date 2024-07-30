@@ -15,8 +15,8 @@ use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::types::{
     AdjacentOpenedValuesVariable, CommitmentsVariable, InnerConfig, OpenedValuesVariable,
-    OpeningProofVariable, StarkProofVariable, TraceWidthVariable, VerifierProgramInput,
-    VerifierProgramInputVariable,
+    OpeningProofVariable, StarkProofVariable, TraceWidthVariable, VerifierInput,
+    VerifierInputVariable,
 };
 
 pub type InnerVal = BabyBear;
@@ -132,8 +132,8 @@ impl<I: VecAutoHintable<InnerConfig>> Hintable<InnerConfig> for Vec<I> {
     }
 }
 
-impl Hintable<InnerConfig> for VerifierProgramInput<BabyBearPoseidon2Config> {
-    type HintVariable = VerifierProgramInputVariable<InnerConfig>;
+impl Hintable<InnerConfig> for VerifierInput<BabyBearPoseidon2Config> {
+    type HintVariable = VerifierInputVariable<InnerConfig>;
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
         let proof = Proof::<BabyBearPoseidon2Config>::read(builder);
@@ -146,7 +146,7 @@ impl Hintable<InnerConfig> for VerifierProgramInput<BabyBearPoseidon2Config> {
         };
         let public_values = Vec::<Vec<InnerVal>>::read(builder);
 
-        VerifierProgramInputVariable {
+        VerifierInputVariable {
             proof,
             log_degree_per_air,
             public_values,
@@ -303,9 +303,7 @@ impl Hintable<InnerConfig> for Proof<BabyBearPoseidon2Config> {
     }
 }
 
-impl Hintable<InnerConfig>
-    for afs_stark_backend::prover::opener::OpeningProof<BabyBearPoseidon2Config>
-{
+impl Hintable<InnerConfig> for OpeningProof<BabyBearPoseidon2Config> {
     type HintVariable = OpeningProofVariable<InnerConfig>;
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {

@@ -22,7 +22,7 @@ use afs_test_utils::utils::to_field_vec;
 
 use crate::hints::Hintable;
 use crate::stark::{DynRapForRecursion, VerifierProgram};
-use crate::types::{new_from_multi_vk, InnerConfig, VerifierProgramInput};
+use crate::types::{new_from_multi_vk, InnerConfig, VerifierInput};
 
 pub struct FibonacciAir;
 
@@ -200,7 +200,7 @@ fn run_recursive_test(
 
     let program = VerifierProgram::build(rec_raps, advice, &engine.fri_params);
 
-    let input = VerifierProgramInput {
+    let input = VerifierInput {
         proof,
         log_degree_per_air,
         public_values: pvs.clone(),

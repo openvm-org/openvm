@@ -101,6 +101,7 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
 ) {
     let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
         compile_prints: false,
+        enable_cycle_tracker: false,
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
     });

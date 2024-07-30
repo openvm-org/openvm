@@ -276,6 +276,7 @@ fn test_ext_immediate() {
 
     let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
         compile_prints: false,
+        enable_cycle_tracker: false,
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
     });
@@ -333,6 +334,7 @@ fn test_ext_felt_arithmetic() {
 
     let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
         compile_prints: false,
+        enable_cycle_tracker: false,
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
     });

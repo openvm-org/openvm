@@ -1,6 +1,6 @@
 use afs_primitives::sub_chip::LocalTraceInstructions;
 use itertools::izip;
-use p3_field::Field;
+use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::common::page::Page;
@@ -12,7 +12,7 @@ impl GroupByAir {
     /// To generate page trace, use `Page::gen_trace`
     ///
     /// Solves for each segment of the trace independently, then zips them all together
-    pub fn gen_aux_trace<F: Field>(&self, grouped_page: &Page) -> RowMajorMatrix<F> {
+    pub fn gen_aux_trace<F: PrimeField>(&self, grouped_page: &Page) -> RowMajorMatrix<F> {
         let page_f: Vec<Vec<F>> = grouped_page
             .iter()
             .map(|row| {

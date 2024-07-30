@@ -3,7 +3,7 @@ use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
 
 use afs_compiler::asm::AsmBuilder;
-use afs_compiler::ir::Var;
+use afs_compiler::ir::{Usize, Var};
 use afs_compiler::util::execute_program;
 use stark_vm::cpu::WORD_SIZE;
 
@@ -84,4 +84,38 @@ fn test_compiler_conditionals_v2() {
 
     let program = builder.compile_isa::<WORD_SIZE>();
     execute_program::<WORD_SIZE>(program, vec![]);
+}
+
+#[test]
+fn test_compiler_conditionals_const() {
+    let mut builder = AsmBuilder::<F, EF>::default();
+
+    let zero: Usize<_> = builder.eval(0);
+    let one: Usize<_> = builder.eval(1);
+    let two: Usize<_> = builder.eval(2);
+    let three: Usize<_> = builder.eval(3);
+    let four: Usize<_> = builder.eval(4);
+
+    // 1 instruction to evaluate the variable.
+    let c: Var<_> = builder.eval(F::zero());
+    builder.if_ne(zero, one).then(|builder| {
+        builder.if_eq(zero, zero).then(|builder| {
+            builder.if_eq(one, one).then(|builder| {
+                builder.if_eq(two, two).then(|builder| {
+                    builder.if_eq(three, three).then(|builder| {
+                        builder
+                            .if_eq(four, four)
+                            // 1 instruction to assign the variable.
+                            .then(|builder| builder.assign(c, F::one()))
+                    })
+                })
+            })
+        })
+    });
+
+    assert_eq!(
+        builder.operations.vec.len(),
+        2,
+        "Constant conditionals should be optimized"
+    );
 }
