@@ -59,9 +59,9 @@ pub struct WriteCommand {
     pub clean: bool,
 }
 
-/// `mock write` subcommand, does an unverified updates 
+/// `mock write` subcommand, does unverified updates
 impl WriteCommand {
-    /// Execute the `mock read` command
+    /// Execute the `mock write` command
     pub fn execute(&self, config: &MultitierPageConfig) -> Result<()> {
         let start1 = Instant::now();
         let idx_len = (config.page.index_bytes + 1) / 2;
