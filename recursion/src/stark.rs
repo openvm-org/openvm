@@ -4,7 +4,7 @@ use itertools::Itertools;
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
-use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
+use p3_field::{AbstractExtensionField, AbstractField, PrimeField32, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrixView;
 use p3_matrix::stack::VerticalPair;
 
@@ -57,6 +57,53 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct VerifierProgram<C: Config> {
     _phantom: std::marker::PhantomData<C>,
+}
+
+impl<C: Config> VerifierProgram<C>
+where
+    C::F: PrimeField32 + TwoAdicField,
+{
+    /// Reference: [afs_stark_backend::verifier::MultiTraceStarkVerifier::verify].
+    pub fn verify(
+        builder: &mut Builder<C>,
+        pcs: &TwoAdicFriPcsVariable<C>,
+        raps: Vec<&dyn DynRapForRecursion<C>>,
+        constants: MultiStarkVerificationAdvice<C>,
+        input: &VerifierProgramInputVariable<C>,
+    ) {
+        let proof = &input.proof;
+
+        let cumulative_sum: Ext<C::F, C::EF> = builder.eval(C::F::zero());
+        let num_phases = constants.num_challenges_to_sample.len();
+        // Currently only support 0 or 1 phase is supported.
+        assert!(num_phases <= 1);
+        // Tmp solution to support 0 or 1 phase.
+        if num_phases > 0 {
+            builder
+                .range(0, proof.exposed_values_after_challenge.len())
+                .for_each(|i, builder| {
+                    let exposed_values = builder.get(&proof.exposed_values_after_challenge, i);
+
+                    // Verifier does not support more than 1 challenge phase
+                    builder.assert_usize_eq(exposed_values.len(), 1);
+
+                    let values = builder.get(&exposed_values, 0);
+
+                    // Only exposed value should be cumulative sum
+                    builder.assert_usize_eq(values.len(), 1);
+
+                    let summand = builder.get(&values, 0);
+                    builder.assign(cumulative_sum, cumulative_sum + summand);
+                });
+        }
+        builder.assert_ext_eq(cumulative_sum, C::EF::zero().cons());
+
+        let mut challenger = DuplexChallengerVariable::new(builder);
+
+        StarkVerifier::<C>::verify_raps(builder, pcs, raps, constants, &mut challenger, input);
+
+        builder.halt();
+    }
 }
 
 impl VerifierProgram<InnerConfig> {

@@ -288,9 +288,7 @@ impl Hintable<InnerConfig> for Proof<BabyBearPoseidon2Config> {
     }
 }
 
-impl Hintable<InnerConfig>
-    for afs_stark_backend::prover::opener::OpeningProof<BabyBearPoseidon2Config>
-{
+impl Hintable<InnerConfig> for OpeningProof<BabyBearPoseidon2Config> {
     type HintVariable = OpeningProofVariable<InnerConfig>;
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
