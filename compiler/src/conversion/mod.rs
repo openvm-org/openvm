@@ -436,10 +436,9 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                     AS::Memory,
                 ))
             .collect(),
-        AsmInstruction::Jal(dst, label, offset) => {
-            assert_eq!(offset, F::zero());
+        AsmInstruction::Jump(dst, label) => {
             vec![
-                // pc <- labels[label] + offset, register[dst] <- pc
+                // pc <- labels[label], register[dst] <- pc
                 inst(
                     JAL,
                     register(dst),
@@ -450,7 +449,6 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 ),
             ]
         }
-        AsmInstruction::JalR(_dst, _label, _offset) => panic!("Jalr should never be used"),
         AsmInstruction::Bne(label, lhs, rhs) => vec![
             // if register[lhs] != register[rhs], pc <- labels[label]
             inst(

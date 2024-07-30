@@ -71,11 +71,8 @@ pub enum AsmInstruction<F, EF> {
     /// Extension inverse, dst = 1 / src.
     InvE(i32, i32),
 
-    /// Jump and link.
-    Jal(i32, F, F),
-
-    /// Jump and link value.
-    JalR(i32, i32, i32),
+    /// Jump.
+    Jump(i32, F),
 
     /// Branch not equal.
     Bne(F, i32, i32),
@@ -152,7 +149,7 @@ pub enum AsmInstruction<F, EF> {
 
 impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
     pub fn j(label: F) -> Self {
-        AsmInstruction::Jal(A0, label, F::zero())
+        AsmInstruction::Jump(A0, label)
     }
 
     pub fn fmt(&self, labels: &BTreeMap<F, String>, f: &mut fmt::Formatter) -> fmt::Result {
@@ -256,25 +253,13 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::InvE(dst, src) => {
                 write!(f, "einv ({})fp, ({})fp", dst, src)
             }
-            AsmInstruction::Jal(dst, label, offset) => {
-                if *offset == F::zero() {
-                    return write!(
-                        f,
-                        "j     ({})fp, {}",
-                        dst,
-                        labels.get(label).unwrap_or(&format!(".L{}", label))
-                    );
-                }
+            AsmInstruction::Jump(dst, label) => {
                 write!(
                     f,
-                    "jal   ({})fp, {}, {}",
+                    "j     ({})fp, {}",
                     dst,
-                    labels.get(label).unwrap_or(&format!(".L{}", label)),
-                    offset
+                    labels.get(label).unwrap_or(&format!(".L{}", label))
                 )
-            }
-            AsmInstruction::JalR(dst, label, offset) => {
-                write!(f, "jalr  ({})fp, ({})fp, ({})fp", dst, label, offset)
             }
             AsmInstruction::Bne(label, lhs, rhs) => {
                 write!(
