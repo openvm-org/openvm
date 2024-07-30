@@ -118,10 +118,10 @@ impl Default for Poseidon2Config<16, BabyBear> {
 }
 
 lazy_static! {
-    static ref HL_BABYBEAR_EXT_CONST_16: Vec<[BabyBear; 16]> =
+    pub static ref HL_BABYBEAR_EXT_CONST_16: Vec<[BabyBear; 16]> =
         Poseidon2Air::<16, BabyBear>::horizen_round_consts_16().0;
-    static ref HL_BABYBEAR_INT_CONST_16: Vec<BabyBear> =
+    pub static ref HL_BABYBEAR_INT_CONST_16: Vec<BabyBear> =
         Poseidon2Air::<16, BabyBear>::horizen_round_consts_16().1;
-    static ref HL_BABYBEAR_INT_DIAG_16: [BabyBear; 16] =
+    pub static ref HL_BABYBEAR_INT_DIAG_16: [BabyBear; 16] =
         Poseidon2Air::<16, BabyBear>::horizen_round_consts_16().2;
 }
