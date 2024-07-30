@@ -48,7 +48,7 @@ pub fn benchmark_fib_verifier_program(n: usize) {
         max_log_degree: _,
         nonempty_chips: chips,
         nonempty_traces: traces,
-        nonempty_pis: _,
+        nonempty_pis: pis,
         ..
     } = vm.execute().unwrap();
     let chips = VirtualMachine::<1, _>::get_chips(&chips);
@@ -57,9 +57,8 @@ pub fn benchmark_fib_verifier_program(n: usize) {
     let rec_raps = get_rec_raps(&dummy_vm.segments[0]);
 
     assert!(chips.len() == rec_raps.len());
-    let len = chips.len();
 
-    let pvs = vec![vec![]; len];
+    let pvs = pis;
     let (chips, rec_raps, traces, pvs) = sort_chips(chips, rec_raps, traces, pvs);
 
     run_recursive_test_benchmark(chips, rec_raps, traces, pvs);

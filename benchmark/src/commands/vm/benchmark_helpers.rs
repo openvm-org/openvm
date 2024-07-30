@@ -75,16 +75,17 @@ pub fn run_recursive_test_benchmark(
     let prover = engine.prover();
 
     // span for starting trace geneartion to proof finishes outside of eDSL
-    let trace_and_prove_span = info_span!("Benchmark trace and prove outside of eDSL").entered();
+    let trace_and_prove_span =
+        info_span!("Benchmark trace commitment and prove outside of eDSL").entered();
 
     // span for trace generation
-    let trace_span = info_span!("Benchmark trace generation").entered();
+    let trace_commitment_span = info_span!("Benchmark trace commitment").entered();
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     for trace in traces.clone() {
         trace_builder.load_trace(trace.clone());
     }
     trace_builder.commit_current();
-    trace_span.exit();
+    trace_commitment_span.exit();
 
     let main_trace_data = trace_builder.view(&vk, any_raps.clone());
 
@@ -139,13 +140,16 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
 
     let vm = VirtualMachine::<WORD_SIZE, _>::new(vm_config, program, input_stream);
 
+    let vm_execute_span = info_span!("Benchmark vm execute").entered();
     let ExecutionResult {
         max_log_degree,
         nonempty_chips: chips,
         nonempty_traces: traces,
-        nonempty_pis: _,
+        nonempty_pis: pis,
         ..
     } = vm.execute().unwrap();
+    vm_execute_span.exit();
+
     let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
 
     let perm = default_perm();
@@ -162,16 +166,16 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     assert_eq!(chips.len(), traces.len());
 
     let prover = engine.prover();
-    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
+    let trace_commitment_span = info_span!("Benchmark trace commitment").entered();
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     for trace in traces {
         trace_builder.load_trace(trace);
     }
     trace_builder.commit_current();
+    trace_commitment_span.exit();
 
-    let num_chips = chips.len();
-
-    let public_values = vec![vec![]; num_chips];
+    let public_values = pis;
 
     let keygen_span = info_span!("Benchmark keygen").entered();
     let mut keygen_builder = engine.keygen_builder();
