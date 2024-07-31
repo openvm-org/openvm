@@ -284,7 +284,7 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationAir {
                 self.quotient_bits,
                 system_cols.total_quotient
                     + AB::F::from_canonical_usize(
-                        (1 << (2 * self.small_modulus_bits)) - (1 << self.quotient_bits),
+                        (1 << self.quotient_bits) - (1 << (2 * self.small_modulus_bits)),
                     ),
             );
             builder.assert_eq(
