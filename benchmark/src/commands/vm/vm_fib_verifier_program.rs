@@ -2,6 +2,7 @@ use afs_compiler::{
     asm::AsmBuilder,
     ir::{Felt, Var},
 };
+use color_eyre::eyre::Result;
 
 use super::benchmark_helpers::run_recursive_test_benchmark;
 use afs_recursion::{
@@ -12,7 +13,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::vm::{config::VmConfig, ExecutionResult, VirtualMachine};
 
-pub fn benchmark_fib_verifier_program(n: usize) {
+pub fn benchmark_fib_verifier_program(n: usize) -> Result<()> {
     println!(
         "Running verifier program of VM STARK benchmark with n = {}",
         n
@@ -64,5 +65,5 @@ pub fn benchmark_fib_verifier_program(n: usize) {
     let pvs = pis;
     let (chips, rec_raps, traces, pvs) = sort_chips(chips, rec_raps, traces, pvs);
 
-    run_recursive_test_benchmark(chips, rec_raps, traces, pvs);
+    run_recursive_test_benchmark(chips, rec_raps, traces, pvs)
 }

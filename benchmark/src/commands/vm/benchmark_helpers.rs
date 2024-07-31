@@ -1,19 +1,23 @@
+use std::{collections::HashMap, fs::File};
+
 use afs_recursion::{
     hints::Hintable,
     stark::{DynRapForRecursion, VerifierProgram},
     types::{new_from_multi_vk, InnerConfig, VerifierInput},
 };
 use afs_stark_backend::{
-    prover::trace::TraceCommitmentBuilder, rap::AnyRap, verifier::MultiTraceStarkVerifier,
+    prover::{metrics::trace_metrics, trace::TraceCommitmentBuilder},
+    rap::AnyRap,
+    verifier::MultiTraceStarkVerifier,
 };
 use afs_test_utils::{
     config::{
         baby_bear_poseidon2::{default_perm, engine_from_perm, BabyBearPoseidon2Config},
         fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},
-        setup_tracing,
     },
     engine::StarkEngine,
 };
+use color_eyre::eyre;
 use p3_baby_bear::BabyBear;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_strict_usize;
@@ -23,13 +27,19 @@ use stark_vm::{
 };
 use tracing::info_span;
 
+use crate::{
+    config::benchmark_data::{BenchmarkSetup, BACKEND_TIMING_FILTERS, BACKEND_TIMING_HEADERS},
+    utils::tracing::{clear_tracing_log, extract_timing_data_from_log, setup_benchmark_tracing},
+    TMP_RESULT_JSON, TMP_TRACING_LOG,
+};
+
 pub fn run_recursive_test_benchmark(
     // TODO: find way to not duplicate parameters
     any_raps: Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
     rec_raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
     traces: Vec<RowMajorMatrix<BabyBear>>,
     pvs: Vec<Vec<BabyBear>>,
-) {
+) -> eyre::Result<()> {
     let num_pvs: Vec<usize> = pvs.iter().map(|pv| pv.len()).collect();
 
     let trace_heights: Vec<usize> = traces.iter().map(|t| t.height()).collect();
@@ -111,13 +121,15 @@ pub fn run_recursive_test_benchmark(
     let mut witness_stream = Vec::new();
     witness_stream.extend(input.write());
 
-    vm_benchmark_execute_and_prove::<1>(program, witness_stream);
+    vm_benchmark_execute_and_prove::<1>(program, witness_stream)
 }
 
 pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     program: Vec<Instruction<BabyBear>>,
     input_stream: Vec<Vec<BabyBear>>,
-) {
+) -> eyre::Result<()> {
+    clear_tracing_log(TMP_TRACING_LOG.as_str())?;
+    setup_benchmark_tracing();
     let vm_config = VmConfig {
         max_segment_len: 1 << 25, // turn off segmentation
         ..Default::default()
@@ -146,8 +158,6 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     };
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
 
-    setup_tracing();
-
     assert_eq!(chips.len(), traces.len());
 
     let keygen_span = info_span!("Benchmark keygen").entered();
@@ -162,7 +172,7 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     keygen_span.exit();
 
     let prover = engine.prover();
-
+    let prove_span = info_span!("Benchmark prove").entered(); // prove includes trace generation
     let trace_commitment_span = info_span!("Benchmark trace commitment").entered();
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     for trace in traces {
@@ -175,7 +185,6 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
 
     let mut challenger = engine.new_challenger();
 
-    let prove_span = info_span!("Benchmark prove").entered();
     let proof = prover.prove(&mut challenger, &pk, main_trace_data, &public_values);
     prove_span.exit();
 
@@ -187,4 +196,70 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         .verify(&mut challenger, &vk, chips, &proof, &public_values)
         .expect("Verification failed");
     verify_span.exit();
+
+    let setup = benchmark_setup_vm();
+    let timing_data =
+        extract_timing_data_from_log(TMP_TRACING_LOG.as_str(), setup.timing_filters.clone())?;
+    let timing_data: HashMap<String, f64> = timing_data
+        .into_iter()
+        .map(|(k, v)| (k, v.parse::<f64>().unwrap()))
+        .collect();
+    let trace_metrics = trace_metrics(&pk.per_air, &proof.degrees);
+    let mut results: HashMap<String, String> = HashMap::new();
+    let perm_trace_gen_time = timing_data[BACKEND_TIMING_FILTERS[0]];
+    let quotient_values_time = timing_data[BACKEND_TIMING_FILTERS[2]];
+    results.insert(
+        "Main & perm trace generation".to_string(),
+        (timing_data["Benchmark vm execute: benchmark"] + perm_trace_gen_time).to_string(),
+    );
+    results.insert(
+        "Compute quotient values".to_string(),
+        quotient_values_time.to_string(),
+    );
+    results.insert(
+        "Rest of proving".to_string(),
+        (timing_data["Benchmark prove: benchmark"] - perm_trace_gen_time - quotient_values_time)
+            .to_string(),
+    );
+    results.insert(
+        "Total F cells".to_string(),
+        trace_metrics.total_cells.to_string(),
+    );
+    serde_json::to_writer(File::create(TMP_RESULT_JSON.as_str())?, &results)?;
+    Ok(())
+}
+
+pub fn benchmark_setup_vm() -> BenchmarkSetup {
+    BenchmarkSetup {
+        event_section: "air width".to_string(),
+        event_headers: ["preprocessed", "main", "challenge"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        event_filters: [
+            "Total air width: preprocessed=",
+            "Total air width: partitioned_main=",
+            "Total air width: after_challenge=",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect(),
+        timing_section: "timing (ms)".to_string(),
+        timing_headers: ["Keygen time", "Main trace generation", "Main trace commit"]
+            .iter()
+            .chain(BACKEND_TIMING_HEADERS)
+            .chain(&["Prove time (total)", "Verify time"])
+            .map(|s| s.to_string())
+            .collect(),
+        timing_filters: [
+            "Benchmark keygen: benchmark",
+            "Benchmark vm execute: benchmark",
+            "Benchmark trace commitment: benchmark",
+        ]
+        .iter()
+        .chain(BACKEND_TIMING_FILTERS)
+        .chain(&["Benchmark prove: benchmark", "Benchmark verify: benchmark"])
+        .map(|s| s.to_string())
+        .collect(),
+    }
 }

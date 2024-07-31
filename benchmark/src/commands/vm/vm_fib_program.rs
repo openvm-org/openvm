@@ -2,12 +2,13 @@ use afs_compiler::{
     asm::AsmBuilder,
     ir::{Felt, Var},
 };
+use color_eyre::eyre::Result;
 
 use super::benchmark_helpers::vm_benchmark_execute_and_prove;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 
-pub fn benchmark_fib_program(n: usize) {
+pub fn benchmark_fib_program(n: usize) -> Result<()> {
     println!("Running Fibonacci program benchmark with n = {}", n);
 
     type F = BabyBear;
@@ -32,5 +33,5 @@ pub fn benchmark_fib_program(n: usize) {
 
     let fib_program = builder.compile_isa::<1>();
 
-    vm_benchmark_execute_and_prove::<1>(fib_program.clone(), vec![]);
+    vm_benchmark_execute_and_prove::<1>(fib_program.clone(), vec![])
 }
