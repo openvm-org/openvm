@@ -28,16 +28,8 @@ impl<F: PrimeField32> CycleTracker<F> {
 
     /// Starts a new cycle tracker span for the given name.
     /// If a span already exists for the given name, it ends the existing span and pushes a new one to the vec.
-    pub fn start(
-        &mut self,
-        name: String,
-        num_rows: usize,
-        clock_cycle: usize,
-        timestamp: usize,
-        vm_metrics: &BTreeMap<String, usize>,
-    ) {
-        let cycle_tracker_span =
-            CycleTrackerSpan::start(num_rows, clock_cycle, timestamp, vm_metrics);
+    pub fn start(&mut self, name: String, vm_metrics: &BTreeMap<String, usize>) {
+        let cycle_tracker_span = CycleTrackerSpan::start(vm_metrics);
         match self.instances.entry(name.clone()) {
             Entry::Occupied(mut entry) => {
                 let spans = entry.get_mut();
@@ -58,19 +50,12 @@ impl<F: PrimeField32> CycleTracker<F> {
 
     /// Ends the cycle tracker span for the given name.
     /// If no span exists for the given name, it panics.
-    pub fn end(
-        &mut self,
-        name: String,
-        num_rows: usize,
-        clock_cycle: usize,
-        timestamp: usize,
-        vm_metrics: &BTreeMap<String, usize>,
-    ) {
+    pub fn end(&mut self, name: String, vm_metrics: &BTreeMap<String, usize>) {
         match self.instances.entry(name.clone()) {
             Entry::Occupied(mut entry) => {
                 let spans = entry.get_mut();
                 let last = spans.last_mut().unwrap();
-                last.end(num_rows, clock_cycle, timestamp, vm_metrics);
+                last.end(vm_metrics);
             }
             Entry::Vacant(_) => {
                 panic!("Cycle tracker instance {} does not exist", name);
@@ -99,15 +84,30 @@ impl<F: PrimeField32> Display for CycleTracker<F> {
         for name in &self.order {
             let spans = self.instances.get(name).unwrap();
             let num_spans = spans.len();
-            for (i, span) in spans.iter().enumerate() {
-                let postfix = if num_spans == 1 {
-                    String::new()
-                } else {
-                    format!(" {}", i)
-                };
-                writeln!(f, "span [{}{}]:", name, postfix)?;
-                writeln!(f, "{}", span)?;
+
+            if num_spans == 0 {
+                continue;
             }
+
+            let mut total_vm_metrics = std::collections::HashMap::new();
+
+            for span in spans {
+                for (key, value) in &span.end.vm_metrics {
+                    *total_vm_metrics.entry(key.clone()).or_insert(0) += value;
+                }
+            }
+
+            writeln!(f, "span [{}] ({}):", name, num_spans)?;
+            for (key, value) in &total_vm_metrics {
+                let avg_value = value / num_spans;
+                if num_spans == 1 {
+                    writeln!(f, "  - {}: {}", key, value)?;
+                } else {
+                    writeln!(f, "  - tot_{}: {}", key, value)?;
+                    writeln!(f, "  - avg_{}: {}", key, avg_value)?;
+                }
+            }
+            writeln!(f)?;
         }
         Ok(())
     }
