@@ -1,17 +1,18 @@
 use std::sync::Arc;
 
-use crate::is_less_than::IsLessThanAir;
-use crate::range_gate::RangeCheckerGateChip;
-
-use super::super::is_less_than::IsLessThanChip;
-use super::columns::IsLessThanCols;
+use p3_baby_bear::BabyBear;
+use p3_field::{AbstractField, Field};
+use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 
 use afs_stark_backend::prover::USE_DEBUG_BUILDER;
 use afs_stark_backend::verifier::VerificationError;
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_matrix::dense::DenseMatrix;
+
+use crate::is_less_than::IsLessThanAir;
+use crate::range_gate::RangeCheckerGateChip;
+
+use super::columns::{IsLessThanAuxCols, IsLessThanCols, IsLessThanIoCols};
+use super::super::is_less_than::IsLessThanChip;
 
 #[test]
 fn test_flatten_fromslice_roundtrip() {
@@ -88,6 +89,46 @@ fn test_is_less_than_negative() {
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
     });
+    assert_eq!(
+        run_simple_test_no_pis(
+            vec![&chip.air, &chip.range_checker.air],
+            vec![trace, range_trace],
+        ),
+        Err(VerificationError::OodEvaluationMismatch),
+        "Expected verification to fail, but it passed"
+    );
+}
+
+#[test]
+fn test_is_less_than_hack() {
+    let bus_index: usize = 0;
+    let max_bits: usize = 3;
+    let decomp: usize = 2;
+    let range_max: u32 = 1 << decomp;
+
+    let range_checker = Arc::new(RangeCheckerGateChip::new(bus_index, range_max));
+
+    let chip = IsLessThanChip::new(bus_index, max_bits, decomp, range_checker);
+
+    let cols = IsLessThanCols {
+        io: IsLessThanIoCols {
+            x: BabyBear::zero(),
+            y: BabyBear::one(),
+            less_than: BabyBear::zero(),
+        },
+        aux: IsLessThanAuxCols {
+            lower: BabyBear::from_canonical_usize(8),
+            lower_decomp: vec![
+                BabyBear::two(),
+                BabyBear::one() + BabyBear::two().inverse(),
+                BabyBear::from_canonical_usize(3),
+            ],
+        },
+    };
+    let trace = RowMajorMatrix::new(cols.flatten(), IsLessThanCols::<BabyBear>::width(&chip.air));
+
+    let range_trace = chip.range_checker.generate_trace();
+
     assert_eq!(
         run_simple_test_no_pis(
             vec![&chip.air, &chip.range_checker.air],
