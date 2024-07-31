@@ -1,6 +1,3 @@
-use std::iter;
-
-use itertools::Itertools;
 use p3_field::{ExtensionField, Field};
 use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
@@ -93,8 +90,8 @@ where
     let reciprocals = p3_field::batch_multiplicative_inverse(&rlcs);
     drop(rlcs);
 
-    let interactions_chuck_size = 1;
-    let perm_width = (num_interactions + interactions_chuck_size - 1) / interactions_chuck_size + 1;
+    let interaction_chunk_size = 2;
+    let perm_width = (num_interactions + interaction_chunk_size - 1) / interaction_chunk_size + 1;
     let mut perm_values = vec![EF::zero(); height * perm_width];
 
     perm_values
@@ -113,36 +110,32 @@ where
             debug_assert!(perm_row.len() == perm_width);
             debug_assert!(reciprocal_chunk.len() == num_interactions);
 
-            // TODO: maybe change this to use chunks
-            for (i, interaction) in all_interactions.iter().enumerate() {
-                let interaction_val = reciprocal_chunk[i] * evaluator.eval_expr(&interaction.count);
-
-                match interaction.interaction_type {
-                    InteractionType::Send => {
-                        assert!(perm_row[i / interactions_chuck_size].is_zero());
-                        perm_row[i / interactions_chuck_size] += interaction_val;
+            let mut row_sum = EF::zero();
+            for (perm_val, (reciprocal_chunk, interaction_chunk)) in perm_row.iter_mut().zip(
+                reciprocal_chunk
+                    .chunks(interaction_chunk_size)
+                    .zip(all_interactions.chunks(interaction_chunk_size)),
+            ) {
+                for (reciprocal, interaction) in
+                    reciprocal_chunk.iter().zip(interaction_chunk.iter())
+                {
+                    let mut interaction_val = *reciprocal * evaluator.eval_expr(&interaction.count);
+                    if interaction.interaction_type == InteractionType::Receive {
+                        interaction_val = -interaction_val;
                     }
-                    InteractionType::Receive => {
-                        assert!(perm_row[i / interactions_chuck_size].is_zero());
-                        perm_row[i / interactions_chuck_size] -= interaction_val;
-                    }
+                    *perm_val += interaction_val;
                 }
+                row_sum += *perm_val;
             }
 
-            assert!(perm_row.last().unwrap().is_zero());
+            perm_row[perm_width - 1] = row_sum;
         });
 
     let _span = tracing::info_span!("compute logup partial sums").entered();
     let mut phi = EF::zero();
     for perm_chunk in perm_values.chunks_mut(perm_width) {
-        for (i, perm_val) in perm_chunk.iter_mut().enumerate() {
-            if i == perm_width - 1 {
-                assert_eq!(*perm_val, EF::zero());
-                *perm_val = phi;
-            } else {
-                phi += *perm_val;
-            }
-        }
+        phi += perm_chunk[perm_width - 1];
+        perm_chunk[perm_width - 1] = phi;
     }
     _span.exit();
 

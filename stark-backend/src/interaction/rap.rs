@@ -55,13 +55,13 @@ where
     let perm_next: &[AB::VarEF] = (*perm_next).borrow();
 
     let all_interactions = builder.all_interactions().to_vec();
-    let mults_next = builder.all_multiplicities_next();
+    let interaction_chunk_size = 2;
     let num_interactions = all_interactions.len();
-    debug_assert_eq!(num_interactions, mults_next.len());
-    debug_assert_eq!(num_interactions + 1, perm_local.len());
-    debug_assert_eq!(num_interactions + 1, perm_next.len());
-    let phi_local = perm_local[num_interactions];
-    let phi_next = perm_next[num_interactions];
+    let perm_width = (num_interactions + interaction_chunk_size - 1) / interaction_chunk_size + 1;
+    debug_assert_eq!(perm_width, perm_local.len());
+    debug_assert_eq!(perm_width, perm_next.len());
+    let phi_local = *perm_local.last().unwrap();
+    let phi_next = *perm_next.last().unwrap();
 
     let alphas = generate_rlc_elements(rand_elems[0].into(), &all_interactions);
     let betas = generate_betas(rand_elems[1].into(), &all_interactions);
@@ -69,26 +69,44 @@ where
     let lhs = phi_next.into() - phi_local.into();
     let mut rhs = AB::ExprEF::zero();
     let mut phi_0 = AB::ExprEF::zero();
-    for (i, interaction) in all_interactions.into_iter().enumerate() {
-        // Reciprocal constraints
-        debug_assert!(interaction.fields.len() <= betas.len());
-        let mut mult_local = interaction.count;
-        if interaction.interaction_type == InteractionType::Receive {
-            mult_local = -mult_local;
+
+    for (chunk_idx, interaction_chunk) in
+        all_interactions.chunks(interaction_chunk_size).enumerate()
+    {
+        let mut rlcs = vec![AB::ExprEF::zero(); interaction_chunk.len()];
+        let interaction_chunk = interaction_chunk.to_vec();
+        for (i, interaction) in interaction_chunk.iter().enumerate() {
+            assert!(!interaction.fields.is_empty(), "fields should not be empty");
+            let mut rlc = alphas[interaction.bus_index].clone();
+            for (elem, beta) in interaction.fields.iter().zip(betas.iter()) {
+                rlc += beta.clone() * elem.clone();
+            }
+            rlcs[i] = rlc;
         }
 
-        let mut fields = interaction.fields.into_iter();
-        let mut rlc = alphas[interaction.bus_index].clone()
-            + fields.next().expect("fields should not be empty");
-        for (elem, beta) in fields.zip(betas.iter().skip(1)) {
-            rlc += beta.clone() * elem;
+        let mut row_lhs: AB::ExprEF = perm_local[chunk_idx].into();
+        for rlc in rlcs.iter() {
+            row_lhs *= rlc.clone();
         }
 
-        builder.assert_eq_ext(rlc * perm_local[i].into(), mult_local);
+        let mut row_rhs = AB::ExprEF::zero();
+        for (i, interaction) in interaction_chunk.into_iter().enumerate() {
+            let mut term: AB::ExprEF = interaction.count.into();
+            if interaction.interaction_type == InteractionType::Receive {
+                term = -term;
+            }
+            for (j, rlc) in rlcs.iter().enumerate() {
+                if i != j {
+                    term *= rlc.clone();
+                }
+            }
+            row_rhs += term;
+        }
 
-        // Build the RHS of the permutation constraint
-        phi_0 += perm_local[i].into();
-        rhs += perm_next[i].into();
+        builder.assert_eq_ext(row_lhs, row_rhs);
+
+        phi_0 += perm_local[chunk_idx].into();
+        rhs += perm_next[chunk_idx].into();
     }
 
     // Running sum constraints
