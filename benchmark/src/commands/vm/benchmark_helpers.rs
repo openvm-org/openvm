@@ -119,7 +119,7 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     input_stream: Vec<Vec<BabyBear>>,
 ) {
     let vm_config = VmConfig {
-        max_segment_len: 2000000,
+        max_segment_len: 1 << 25, // turn off segmentation
         ..Default::default()
     };
 
