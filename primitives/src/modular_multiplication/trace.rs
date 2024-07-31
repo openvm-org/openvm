@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 
 use itertools::Itertools;
 use num_bigint::BigUint;
+use num_traits::abs;
 use p3_air::BaseAir;
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
@@ -124,7 +125,13 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
                 let total =
                     ((a_residue * b_residue) as isize) - ((pq_reduced + r_reduced) as isize);
                 assert_eq!(total % (small_modulus as isize), 0);
-                let total_quotient = total / small_modulus;
+
+                let total_quotient_abs = (abs(total) as usize) / small_modulus;
+                let total_quotient_abs_elem = F::from_canonical_usize(total_quotient_abs);
+                let total_quotient_elem =
+                    total_quotient_abs_elem * if total > 0 { F::one() } else { F::neg_one() };
+                let total_quotient = total_quotient_elem.as_canonical_u64() as usize;
+
                 SmallModulusSystemCols {
                     a_residue,
                     a_quotient,
