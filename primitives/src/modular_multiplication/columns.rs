@@ -63,7 +63,7 @@ impl<T: Clone> ModularMultiplicationAuxCols<T> {
         let mut end = 0;
 
         let a_limbs = air
-            .elem_limbs
+            .io_limb_sizes
             .iter()
             .map(|limbs| {
                 end += limbs.len();
@@ -74,7 +74,7 @@ impl<T: Clone> ModularMultiplicationAuxCols<T> {
             .collect();
 
         let b_limbs = air
-            .elem_limbs
+            .io_limb_sizes
             .iter()
             .map(|limbs| {
                 end += limbs.len();
@@ -85,7 +85,7 @@ impl<T: Clone> ModularMultiplicationAuxCols<T> {
             .collect();
 
         let r_limbs = air
-            .elem_limbs
+            .io_limb_sizes
             .iter()
             .map(|limbs| {
                 end += limbs.len();
@@ -95,7 +95,7 @@ impl<T: Clone> ModularMultiplicationAuxCols<T> {
             })
             .collect();
 
-        end += air.pure_limbs.len();
+        end += air.q_limb_sizes.len();
         let q_limbs = slc[start..end].to_vec();
         start = end;
 
@@ -136,8 +136,8 @@ impl<T: Clone> ModularMultiplicationAuxCols<T> {
     }
 
     pub fn get_width(air: &ModularMultiplicationAir) -> usize {
-        (3 * air.num_elem_limbs)
-            + air.pure_limbs.len()
+        (3 * air.num_io_limbs)
+            + air.q_limb_sizes.len()
             + (air.small_moduli_systems.len() * SmallModulusSystemCols::<T>::get_width())
     }
 }
@@ -147,15 +147,15 @@ impl<T: Clone> ModularMultiplicationIoCols<T> {
         let mut start = 0;
         let mut end = 0;
 
-        end += air.elem_limbs.len();
+        end += air.io_limb_sizes.len();
         let a_elems = slc[start..end].to_vec();
         start = end;
 
-        end += air.elem_limbs.len();
+        end += air.io_limb_sizes.len();
         let b_elems = slc[start..end].to_vec();
         start = end;
 
-        end += air.elem_limbs.len();
+        end += air.io_limb_sizes.len();
         let r_elems = slc[start..end].to_vec();
         start = end;
 
@@ -175,7 +175,7 @@ impl<T: Clone> ModularMultiplicationIoCols<T> {
     }
 
     pub fn get_width(air: &ModularMultiplicationAir) -> usize {
-        3 * air.elem_limbs.len()
+        3 * air.io_limb_sizes.len()
     }
 }
 

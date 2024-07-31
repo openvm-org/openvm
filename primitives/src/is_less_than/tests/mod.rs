@@ -11,8 +11,8 @@ use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use crate::is_less_than::IsLessThanAir;
 use crate::range_gate::RangeCheckerGateChip;
 
-use super::columns::{IsLessThanAuxCols, IsLessThanCols, IsLessThanIoCols};
 use super::super::is_less_than::IsLessThanChip;
+use super::columns::{IsLessThanAuxCols, IsLessThanCols, IsLessThanIoCols};
 
 #[test]
 fn test_flatten_fromslice_roundtrip() {
