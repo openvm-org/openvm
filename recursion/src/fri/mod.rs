@@ -19,7 +19,7 @@ use crate::challenger::CanObserveVariable;
 use crate::challenger::CanSampleBitsVariable;
 use crate::challenger::DuplexChallengerVariable;
 use crate::challenger::FeltChallenger;
-use crate::fri::types::BatchOpeningVariable;
+
 use self::types::DigestVariable;
 use self::types::DimensionsVariable;
 use self::types::FriChallengesVariable;
@@ -239,8 +239,12 @@ pub fn verify_batch<C: Config>(
 
     // Reduce all the tables that have the same height to a single root.
     let root = match opened_values {
-        NestedOpenedValues::Felt(opened_values) => reduce_fast::<C>(builder, index, &dimensions, current_height, opened_values),
-        NestedOpenedValues::Ext(opened_values) => reduce_fast_ext::<C>(builder, index, &dimensions, current_height, opened_values),
+        NestedOpenedValues::Felt(opened_values) => {
+            reduce_fast::<C>(builder, index, &dimensions, current_height, opened_values)
+        }
+        NestedOpenedValues::Ext(opened_values) => {
+            reduce_fast_ext::<C>(builder, index, &dimensions, current_height, opened_values)
+        }
     };
     let root_ptr = match root {
         Array::Fixed(_) => panic!("root is fixed"),
@@ -277,8 +281,16 @@ pub fn verify_batch<C: Config>(
             let next_height = builder.get(&dimensions, index).height;
             builder.if_eq(next_height, current_height).then(|builder| {
                 let next_height_openings_digest = match opened_values {
-                    NestedOpenedValues::Felt(opened_values) => reduce_fast::<C>(builder, index, &dimensions, current_height, opened_values),
-                    NestedOpenedValues::Ext(opened_values) => reduce_fast_ext::<C>(builder, index, &dimensions, current_height, opened_values),
+                    NestedOpenedValues::Felt(opened_values) => {
+                        reduce_fast::<C>(builder, index, &dimensions, current_height, opened_values)
+                    }
+                    NestedOpenedValues::Ext(opened_values) => reduce_fast_ext::<C>(
+                        builder,
+                        index,
+                        &dimensions,
+                        current_height,
+                        opened_values,
+                    ),
                 };
                 builder.poseidon2_compress_x(
                     &mut root.clone(),

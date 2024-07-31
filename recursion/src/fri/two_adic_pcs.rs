@@ -15,7 +15,10 @@ use super::types::FriConfigVariable;
 use super::types::TwoAdicPcsMatsVariable;
 use super::types::TwoAdicPcsProofVariable;
 use super::types::TwoAdicPcsRoundVariable;
-use super::{verify_batch, verify_challenges, verify_shape_and_sample_challenges, TwoAdicMultiplicativeCosetVariable, NestedOpenedValues};
+use super::{
+    verify_batch, verify_challenges, verify_shape_and_sample_challenges, NestedOpenedValues,
+    TwoAdicMultiplicativeCosetVariable,
+};
 
 pub fn verify_two_adic_pcs<C: Config>(
     builder: &mut Builder<C>,
