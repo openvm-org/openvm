@@ -45,7 +45,7 @@ Percentage (where 100 = 100%) of config file's `max_rw_ops` that are `READ`s. No
 Run these commands from the root of the repository
 
 ```bash
-RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark -- predicate -f benchmark/config/olap/filter_0xfade.afo
+RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- predicate -f benchmark/config/olap/filter_0xfade.afo
 ```
 
 ### `--afo-file` (`-f`)

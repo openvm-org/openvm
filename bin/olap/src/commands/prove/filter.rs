@@ -137,8 +137,7 @@ where
 
         // Load from disk and deserialize partial proving key
         let prefix = config.generate_filename();
-        let encoded_pk =
-            read_from_path(keys_folder.clone() + "/" + &prefix + ".partial.pk").unwrap();
+        let encoded_pk = read_from_path(keys_folder.clone() + "/" + &prefix + ".pk").unwrap();
         let pk: MultiStarkProvingKey<SC> = bincode::deserialize(&encoded_pk).unwrap();
 
         // Prove
