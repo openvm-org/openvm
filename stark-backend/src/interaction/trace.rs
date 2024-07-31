@@ -1,3 +1,4 @@
+use itertools::izip;
 use p3_field::{ExtensionField, Field};
 use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
@@ -48,13 +49,20 @@ where
 
     // Compute the reciprocal columns
     //
-    // Row: | q_1 | q_2 | q_3 | ... | q_n | \phi |
-    // * q_i = \frac{1}{\alpha^i + \sum_j \beta^j * f_{i,j}}
-    // * f_{i,j} is the jth main trace column for the ith interaction
-    // * \phi is the running sum
+    // For every row we do the following
+    // We first compute the reciprocals: r_1, r_2, ..., r_n, where
+    // r_i = \frac{1}{\alpha^i + \sum_j \beta^j * f_{i, j}}, where
+    // f_{i, j} is the jth main trace column for the ith interaction
     //
-    // Note: We can optimize this by combining several reciprocal columns into one (the
-    // number is subject to a target constraint degree).
+    // We then bundle every interaction_chunk_size interactions together
+    // to get the value perm_i = \sum_{i \in bundle} r_i * m_i, where m_i
+    // the signed count for the interaction.
+    //
+    // Finally, the last column, \phi, of every row is the running sum of
+    // all the previous perm values
+    //
+    // Row: | perm_1 | perm_2 | perm_3 | ... | perm_s | phi |, where s
+    // is the number of bundles
     let num_interactions = all_interactions.len();
     let height = partitioned_main[0].height();
     assert!(
@@ -99,6 +107,9 @@ where
         .zip(reciprocals.par_chunks(num_interactions))
         .enumerate()
         .for_each(|(n, (perm_row, reciprocal_chunk))| {
+            debug_assert!(perm_row.len() == perm_width);
+            debug_assert!(reciprocal_chunk.len() == num_interactions);
+
             let evaluator = Evaluator {
                 preprocessed,
                 partitioned_main,
@@ -107,14 +118,11 @@ where
                 local_index: n,
             };
 
-            debug_assert!(perm_row.len() == perm_width);
-            debug_assert!(reciprocal_chunk.len() == num_interactions);
-
             let mut row_sum = EF::zero();
-            for (perm_val, (reciprocal_chunk, interaction_chunk)) in perm_row.iter_mut().zip(
-                reciprocal_chunk
-                    .chunks(interaction_chunk_size)
-                    .zip(all_interactions.chunks(interaction_chunk_size)),
+            for (perm_val, reciprocal_chunk, interaction_chunk) in izip!(
+                perm_row.iter_mut(),
+                reciprocal_chunk.chunks(interaction_chunk_size),
+                all_interactions.chunks(interaction_chunk_size)
             ) {
                 for (reciprocal, interaction) in
                     reciprocal_chunk.iter().zip(interaction_chunk.iter())

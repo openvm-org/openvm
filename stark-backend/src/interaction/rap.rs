@@ -40,9 +40,10 @@ where
 }
 
 // Initial version taken from valida/machine/src/chip.rs under MIT license.
-/// The permutation row consists of 1 column for each interaction (send or receive)
+/// The permutation row consists of 1 column for each bundle of interactions
 /// and one column for the partial sum of log derivative. These columns are trace columns
 /// "after challenge" phase 0, and they are valued in the extension field.
+/// For more details, see the comment in the trace.rs file
 pub fn eval_permutation_constraints<AB>(builder: &mut AB, cumulative_sum: AB::VarEF)
 where
     AB: InteractionBuilder + PermutationAirBuilder,
@@ -66,8 +67,8 @@ where
     let alphas = generate_rlc_elements(rand_elems[0].into(), &all_interactions);
     let betas = generate_betas(rand_elems[1].into(), &all_interactions);
 
-    let lhs = phi_next.into() - phi_local.into();
-    let mut rhs = AB::ExprEF::zero();
+    let phi_lhs = phi_next.into() - phi_local.into();
+    let mut phi_rhs = AB::ExprEF::zero();
     let mut phi_0 = AB::ExprEF::zero();
 
     for (chunk_idx, interaction_chunk) in
@@ -106,11 +107,11 @@ where
         builder.assert_eq_ext(row_lhs, row_rhs);
 
         phi_0 += perm_local[chunk_idx].into();
-        rhs += perm_next[chunk_idx].into();
+        phi_rhs += perm_next[chunk_idx].into();
     }
 
     // Running sum constraints
-    builder.when_transition().assert_eq_ext(lhs, rhs);
+    builder.when_transition().assert_eq_ext(phi_lhs, phi_rhs);
     builder
         .when_first_row()
         .assert_eq_ext(*perm_local.last().unwrap(), phi_0);
