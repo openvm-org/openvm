@@ -82,15 +82,17 @@ where
             }
         });
     #[cfg(feature = "parallel")]
-    let mut old_perm_values = vec![EF::zero(); reciprocals.len()];
-    let num_threads = current_num_threads();
-    let chunk_size = (old_perm_values.len() + num_threads - 1) / num_threads;
-    old_perm_values
-        .par_chunks_mut(chunk_size)
-        .enumerate()
-        .for_each(|(i, r)| {
-            batch_multiplicative_inverse_with_buf(&reciprocals[i * chunk_size..], r);
-        });
+    let old_perm_values = {
+        let num_threads = current_num_threads();
+        let chunk_size = (reciprocals.len() + num_threads - 1) / num_threads;
+        let mut vals = vec![EF::zero(); reciprocals.len()];
+        vals.par_chunks_mut(chunk_size)
+            .enumerate()
+            .for_each(|(i, r)| {
+                batch_multiplicative_inverse_with_buf(&reciprocals[i * chunk_size..], r);
+            });
+        vals
+    };
     #[cfg(not(feature = "parallel"))]
     let old_perm_values = p3_field::batch_multiplicative_inverse(&reciprocals);
 
