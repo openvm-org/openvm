@@ -1,4 +1,3 @@
-use p3_field::AbstractExtensionField;
 use p3_field::AbstractField;
 
 use afs_compiler::ir::DIGEST_SIZE;

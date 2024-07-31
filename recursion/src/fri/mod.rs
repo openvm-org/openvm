@@ -210,6 +210,7 @@ where
     folded_eval
 }
 
+#[allow(clippy::type_complexity)]
 pub enum NestedOpenedValues<C: Config> {
     Felt(Array<C, Array<C, Felt<C::F>>>),
     Ext(Array<C, Array<C, Ext<C::F, C::EF>>>),
@@ -328,7 +329,7 @@ pub fn reduce_fast<C: Config>(
         .for_each(|i, builder| {
             let height = builder.get(dims, i).height;
             builder.if_eq(height, curr_height_padded).then(|builder| {
-                let opened_values = builder.get(&opened_values, i);
+                let opened_values = builder.get(opened_values, i);
                 builder.set_value(
                     &mut nested_opened_values,
                     nb_opened_values,
@@ -346,6 +347,7 @@ pub fn reduce_fast<C: Config>(
     h
 }
 
+#[allow(clippy::type_complexity)]
 pub fn reduce_fast_ext<C: Config>(
     builder: &mut Builder<C>,
     dim_idx: Var<C::N>,
@@ -363,7 +365,7 @@ pub fn reduce_fast_ext<C: Config>(
         .for_each(|i, builder| {
             let height = builder.get(dims, i).height;
             builder.if_eq(height, curr_height_padded).then(|builder| {
-                let opened_values = builder.get(&opened_values, i);
+                let opened_values = builder.get(opened_values, i);
                 builder.set_value(
                     &mut nested_opened_values,
                     nb_opened_values,
