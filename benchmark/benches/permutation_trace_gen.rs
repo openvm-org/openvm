@@ -214,38 +214,38 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
 
     group.bench_function("trace gen", |b| {
         b.iter(|| {
-            let _ = pk
-                .per_air
-                .par_iter()
-                .zip_eq(main_trace_data.air_traces.par_iter())
-                .zip_eq(public_values.par_iter())
-                .map(|((pk, main), public_values)| {
-                    let interactions = &pk.vk.symbolic_constraints.interactions;
-                    let preprocessed_trace =
-                        pk.preprocessed_data.as_ref().map(|d| d.trace.as_view());
-                    generate_permutation_trace(
-                        interactions,
-                        &preprocessed_trace,
-                        &main.partitioned_main_trace,
-                        public_values,
-                        perm_challenges,
-                    )
-                })
-                .collect::<Vec<_>>();
+            // let _ = pk
+            //     .per_air
+            //     .par_iter()
+            //     .zip_eq(main_trace_data.air_traces.par_iter())
+            //     .zip_eq(public_values.par_iter())
+            //     .map(|((pk, main), public_values)| {
+            //         let interactions = &pk.vk.symbolic_constraints.interactions;
+            //         let preprocessed_trace =
+            //             pk.preprocessed_data.as_ref().map(|d| d.trace.as_view());
+            //         generate_permutation_trace(
+            //             interactions,
+            //             &preprocessed_trace,
+            //             &main.partitioned_main_trace,
+            //             public_values,
+            //             perm_challenges,
+            //         )
+            //     })
+            //     .collect::<Vec<_>>();
             // })
-            // let idx = 2;
-            // let pk = &pk.per_air[idx];
-            // let main = &main_trace_data.air_traces[idx];
-            // let public_values = &public_values[idx];
-            // let interactions = &pk.vk.symbolic_constraints.interactions;
-            // let preprocessed_trace = pk.preprocessed_data.as_ref().map(|d| d.trace.as_view());
-            // generate_permutation_trace(
-            //     interactions,
-            //     &preprocessed_trace,
-            //     &main.partitioned_main_trace,
-            //     public_values,
-            //     perm_challenges,
-            // );
+            let idx = 2;
+            let pk = &pk.per_air[idx];
+            let main = &main_trace_data.air_traces[idx];
+            let public_values = &public_values[idx];
+            let interactions = &pk.vk.symbolic_constraints.interactions;
+            let preprocessed_trace = pk.preprocessed_data.as_ref().map(|d| d.trace.as_view());
+            generate_permutation_trace(
+                interactions,
+                &preprocessed_trace,
+                &main.partitioned_main_trace,
+                public_values,
+                perm_challenges,
+            );
         })
     });
     group.finish();

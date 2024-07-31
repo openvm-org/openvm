@@ -4,6 +4,7 @@ use p3_matrix::{
     Matrix,
 };
 use p3_maybe_rayon::prelude::*;
+use rayon::current_num_threads;
 
 use crate::{
     air_builders::symbolic::{
@@ -56,9 +57,9 @@ where
     // number is subject to a target constraint degree).
     let perm_width = all_interactions.len() + 1;
     let height = partitioned_main[0].height();
-    let mut reciprocals = vec![EF::zero(); height * (perm_width - 1)];
+    let mut reciprocals = vec![EF::one(); height * perm_width];
     reciprocals
-        .par_chunks_mut(perm_width - 1)
+        .par_chunks_mut(perm_width)
         .enumerate()
         .for_each(|(i, r)| {
             let evaluator = Evaluator {
@@ -80,25 +81,38 @@ where
                 r[j] = rlc;
             }
         });
+    #[cfg(feature = "parallel")]
+    let mut old_perm_values = vec![EF::zero(); reciprocals.len()];
+    let num_threads = current_num_threads();
+    let chunk_size = (old_perm_values.len() + num_threads - 1) / num_threads;
+    old_perm_values
+        .par_chunks_mut(chunk_size)
+        .enumerate()
+        .for_each(|(i, r)| {
+            batch_multiplicative_inverse_with_buf(&reciprocals[i * chunk_size..], r);
+        });
+    #[cfg(not(feature = "parallel"))]
+    let old_perm_values = p3_field::batch_multiplicative_inverse(&reciprocals);
+
     // Zero should be vanishingly unlikely if alpha, beta are properly pseudo-randomized
     // The logup reciprocals should never be zero, so trace generation should panic if
     // trying to divide by zero.
-    let old_perm_values = p3_field::batch_multiplicative_inverse(&reciprocals);
+    // let old_perm_values = p3_field::batch_multiplicative_inverse(&reciprocals);
     drop(reciprocals);
     // Need to add the `phi` column to perm_values as a RowMajorMatrix
     // TODO[jpw]: is there a more memory efficient way to do this?
-    let mut perm_values = vec![EF::zero(); height * perm_width];
-    perm_values
-        .par_chunks_mut(perm_width)
-        .zip(old_perm_values.par_chunks(perm_width - 1))
-        .for_each(|(row, old_row)| {
-            let (left, _) = row.split_at_mut(perm_width - 1);
-            left.copy_from_slice(old_row)
-        });
+    // let mut perm_values = vec![EF::zero(); height * perm_width];
+    // perm_values
+    //     .chunks_mut(perm_width)
+    //     .zip(old_perm_values.chunks(perm_width - 1))
+    //     .for_each(|(row, old_row)| {
+    //         let (left, _) = row.split_at_mut(perm_width - 1);
+    //         left.copy_from_slice(old_row)
+    //     });
 
     let _span = tracing::info_span!("compute logup partial sums").entered();
     // Compute the running sum column
-    let mut perm = RowMajorMatrix::new(perm_values, perm_width);
+    let mut perm = RowMajorMatrix::new(old_perm_values, perm_width);
 
     let _span = tracing::info_span!("compute logup partial sums").entered();
     // Compute the running sum column
@@ -202,7 +216,18 @@ where
     // Zero should be vanishingly unlikely if alpha, beta are properly pseudo-randomized
     // The logup reciprocals should never be zero, so trace generation should panic if
     // trying to divide by zero.
-    let old_perm_values = p3_field::batch_multiplicative_inverse(&reciprocals);
+    let mut old_perm_values = vec![EF::zero(); height * (perm_width - 1)];
+    let chunk_size = height;
+    old_perm_values
+        .par_chunks_mut(chunk_size)
+        .enumerate()
+        .for_each(|(i, r)| {
+            batch_multiplicative_inverse_with_buf(
+                &reciprocals[i * chunk_size..(i + 1) * chunk_size],
+                r,
+            );
+        });
+    // let old_perm_values = p3_field::batch_multiplicative_inverse(&reciprocals);
     drop(reciprocals);
     // Need to add the `phi` column to perm_values as a RowMajorMatrix
     // TODO[jpw]: is there a more memory efficient way to do this?
@@ -258,4 +283,93 @@ where
     let perm_values = p3_field::batch_multiplicative_inverse(&reciprocals);
     drop(reciprocals);
     perm_values
+}
+
+pub fn batch_multiplicative_inverse_with_buf<F: Field>(x: &[F], buf: &mut [F]) {
+    // Higher WIDTH increases instruction-level parallelism, but too high a value will cause us
+    // to run out of registers.
+    const WIDTH: usize = 4;
+    // JN note: WIDTH is 4. The code is specialized to this value and will need
+    // modification if it is changed. I tried to make it more generic, but Rust's const
+    // generics are not yet good enough.
+
+    // Handle special cases. Paradoxically, below is repetitive but concise.
+    // The branches should be very predictable.
+    let n = buf.len();
+    if n == 0 {
+        return;
+    } else if n == 1 {
+        buf[0] = x[0].inverse();
+        return;
+    } else if n == 2 {
+        let x01 = x[0] * x[1];
+        let x01inv = x01.inverse();
+        buf[0] = x01inv * x[1];
+        buf[1] = x01inv * x[0];
+        return;
+    } else if n == 3 {
+        let x01 = x[0] * x[1];
+        let x012 = x01 * x[2];
+        let x012inv = x012.inverse();
+        let x01inv = x012inv * x[2];
+        buf[0] = x01inv * x[1];
+        buf[1] = x01inv * x[0];
+        buf[2] = x012inv * x01;
+        return;
+    }
+    debug_assert!(n >= WIDTH);
+
+    // Buf is reused for a few things to save allocations.
+    // Fill buf with cumulative product of x, only taking every 4th value. Concretely, buf will
+    // be [
+    //   x[0], x[1], x[2], x[3],
+    //   x[0] * x[4], x[1] * x[5], x[2] * x[6], x[3] * x[7],
+    //   x[0] * x[4] * x[8], x[1] * x[5] * x[9], x[2] * x[6] * x[10], x[3] * x[7] * x[11],
+    //   ...
+    // ].
+    // If n is not a multiple of WIDTH, the result is truncated from the end. For example,
+    // for n == 5, we get [x[0], x[1], x[2], x[3], x[0] * x[4]].
+    // let mut buf: Vec<F> = Vec::with_capacity(n);
+    // cumul_prod holds the last WIDTH elements of buf. This is redundant, but it's how we
+    // convince LLVM to keep the values in the registers.
+    let mut cumul_prod: [F; WIDTH] = x[..WIDTH].try_into().unwrap();
+    buf[0..WIDTH].copy_from_slice(&cumul_prod);
+    for (i, &xi) in x[WIDTH..n].iter().enumerate() {
+        cumul_prod[i % WIDTH] *= xi;
+        buf[WIDTH + i] = cumul_prod[i % WIDTH];
+    }
+    debug_assert_eq!(buf.len(), n);
+
+    let mut a_inv = {
+        // This is where the four dependency chains meet.
+        // Take the last four elements of buf and invert them all.
+        let c01 = cumul_prod[0] * cumul_prod[1];
+        let c23 = cumul_prod[2] * cumul_prod[3];
+        let c0123 = c01 * c23;
+        let c0123inv = c0123.inverse();
+        let c01inv = c0123inv * c23;
+        let c23inv = c0123inv * c01;
+        [
+            c01inv * cumul_prod[1],
+            c01inv * cumul_prod[0],
+            c23inv * cumul_prod[3],
+            c23inv * cumul_prod[2],
+        ]
+    };
+
+    for i in (WIDTH..n).rev() {
+        // buf[i - WIDTH] has not been written to by this loop, so it equals
+        // x[i % WIDTH] * x[i % WIDTH + WIDTH] * ... * x[i - WIDTH].
+        buf[i] = buf[i - WIDTH] * a_inv[i % WIDTH];
+        // buf[i] now holds the inverse of x[i].
+        a_inv[i % WIDTH] *= x[i];
+    }
+    for i in (0..WIDTH).rev() {
+        buf[i] = a_inv[i];
+    }
+
+    for (&bi, &xi) in buf.iter().zip(x) {
+        // Sanity check only.
+        debug_assert_eq!(bi * xi, F::one());
+    }
 }
