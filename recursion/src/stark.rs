@@ -72,6 +72,7 @@ impl VerifierProgram<InnerConfig> {
     ) -> Vec<Instruction<BabyBear>> {
         let mut builder = Builder::<InnerConfig>::default();
 
+        builder.cycle_tracker_start("VerifierProgram");
         let input: VerifierInputVariable<_> = builder.uninit();
         VerifierInput::<BabyBearPoseidon2Config>::witness(&input, &mut builder);
 
@@ -79,6 +80,8 @@ impl VerifierProgram<InnerConfig> {
             config: const_fri_config(&mut builder, fri_params),
         };
         StarkVerifier::verify(&mut builder, &pcs, raps, constants, &input);
+
+        builder.cycle_tracker_end("VerifierProgram");
         builder.halt();
 
         const WORD_SIZE: usize = 1;
