@@ -15,6 +15,7 @@ use afs_stark_backend::prover::opener::AdjacentOpenedValues;
 use afs_stark_backend::rap::{AnyRap, Rap};
 use afs_test_utils::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
 use p3_matrix::Matrix;
+use afs_compiler::conversion::CompilerOptions;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::vm::ExecutionSegment;
 
@@ -78,9 +79,13 @@ impl VerifierProgram<InnerConfig> {
             config: const_fri_config(&mut builder, fri_params),
         };
         StarkVerifier::verify(&mut builder, &pcs, raps, constants, &input);
+        builder.halt();
 
         const WORD_SIZE: usize = 1;
-        builder.compile_isa::<WORD_SIZE>()
+        builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+            enable_cycle_tracker: true,
+            ..Default::default()
+        })
     }
 }
 
@@ -131,8 +136,6 @@ where
         let mut challenger = DuplexChallengerVariable::new(builder);
 
         Self::verify_raps(builder, pcs, raps, constants, &mut challenger, input);
-
-        builder.halt();
     }
 
     /// Reference: [afs_stark_backend::verifier::MultiTraceStarkVerifier::verify_raps].
