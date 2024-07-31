@@ -195,7 +195,12 @@ impl<F: Field> BaseAir<F> for ModularMultiplicationAir {
 }
 
 impl ModularMultiplicationAir {
-    fn range_check<AB: InteractionBuilder>(&self, builder: &mut AB, bits: usize, var: AB::Var) {
+    fn range_check<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        bits: usize,
+        var: impl Into<AB::Expr>,
+    ) {
         assert!(bits <= self.decomp);
         if bits == self.decomp {
             builder.push_send(self.range_bus, [var], AB::F::one());
@@ -274,7 +279,14 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationAir {
 
             let reduced =
                 (system_cols.a_residue * system_cols.b_residue) - (pq_reduced + r_reduced);
-            self.range_check(builder, self.quotient_bits, system_cols.total_quotient);
+            self.range_check(
+                builder,
+                self.quotient_bits,
+                system_cols.total_quotient
+                    + AB::F::from_canonical_usize(
+                        (1 << (2 * self.small_modulus_bits)) - (1 << self.quotient_bits),
+                    ),
+            );
             builder.assert_eq(
                 reduced,
                 AB::Expr::from_canonical_usize(system.small_modulus) * system_cols.total_quotient,
