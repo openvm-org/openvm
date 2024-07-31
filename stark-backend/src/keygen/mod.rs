@@ -37,6 +37,10 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
         }
     }
 
+    pub fn set_interaction_chunk_size(&mut self, size: usize) {
+        self.pk.interaction_chunk_size = size;
+    }
+
     /// Generates proving key, resetting the state of the builder.
     /// The verifying key can be obtained from the proving key.
     pub fn generate_pk(&mut self) -> MultiStarkProvingKey<SC> {
@@ -174,7 +178,14 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             partitioned_main: main_widths,
             after_challenge: vec![],
         };
-        let symbolic_builder = get_symbolic_builder(air, &width, num_public_values, &[], &[]);
+        let symbolic_builder = get_symbolic_builder(
+            air,
+            &width,
+            num_public_values,
+            &[],
+            &[],
+            self.pk.interaction_chunk_size,
+        );
 
         let params = symbolic_builder.params();
         let symbolic_constraints = symbolic_builder.constraints();
@@ -188,11 +199,13 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             symbolic_constraints,
             main_graph: MatrixCommitmentPointers::new(partitioned_main_ptrs),
             quotient_degree,
+            interaction_chunk_size: self.pk.interaction_chunk_size,
         };
         let pk = StarkProvingKey {
             air_name: air.name(),
             vk,
             preprocessed_data: prep_prover_data,
+            interaction_chunk_size: self.pk.interaction_chunk_size,
         };
 
         self.pk.per_air.push(pk);

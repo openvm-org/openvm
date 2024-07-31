@@ -311,18 +311,16 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         let final_page_aux_ptr = keygen_builder.add_main_matrix(self.final_chip.aux_width());
 
         keygen_builder.add_partitioned_air(&self.init_chip, 0, vec![init_page_ptr]);
-
         keygen_builder.add_partitioned_air(
             &self.final_chip,
             0,
             vec![final_page_ptr, final_page_aux_ptr],
         );
-
         keygen_builder.add_air(&self.offline_checker, 0);
-
         keygen_builder.add_air(&self.range_checker.air, 0);
-
         keygen_builder.add_air(ops_sender, 0);
+
+        keygen_builder.set_interaction_chunk_size(2);
     }
 
     /// This function clears the trace_builder, loads in the traces for all involved chips

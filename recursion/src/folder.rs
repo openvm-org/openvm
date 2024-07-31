@@ -195,6 +195,11 @@ impl<'a, C: Config> InteractionBuilder for RecursiveVerifierConstraintFolder<'a,
             .map(|i| self.eval_expr(&i.count.next()))
             .collect()
     }
+
+    fn interaction_chunk_size(&self) -> usize {
+        // TODO: add support for interaction_chunk_size
+        1
+    }
 }
 
 impl<'a, C: Config> SymbolicEvaluator<C::F, Expr<C>> for RecursiveVerifierConstraintFolder<'a, C> {

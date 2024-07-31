@@ -32,6 +32,7 @@ pub fn generate_permutation_trace<F, EF>(
     partitioned_main: &[RowMajorMatrixView<F>],
     public_values: &[F],
     permutation_randomness: Option<[EF; 2]>,
+    interaction_chunk_size: usize,
 ) -> Option<RowMajorMatrix<EF>>
 where
     F: Field,
@@ -90,7 +91,6 @@ where
     let reciprocals = p3_field::batch_multiplicative_inverse(&rlcs);
     drop(rlcs);
 
-    let interaction_chunk_size = 2;
     let perm_width = (num_interactions + interaction_chunk_size - 1) / interaction_chunk_size + 1;
     let mut perm_values = vec![EF::zero(); height * perm_width];
 

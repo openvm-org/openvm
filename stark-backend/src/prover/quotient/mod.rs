@@ -148,6 +148,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
                 .iter()
                 .map(|v| v.as_slice())
                 .collect_vec(),
+            vk.interaction_chunk_size,
         );
         SingleQuotientData {
             quotient_degree,

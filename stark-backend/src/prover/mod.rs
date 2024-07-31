@@ -124,6 +124,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
                             &main.partitioned_main_trace,
                             public_values,
                             perm_challenges,
+                            pk.interaction_chunk_size,
                         )
                     })
                     .collect::<Vec<_>>();

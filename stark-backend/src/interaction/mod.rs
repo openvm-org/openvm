@@ -89,4 +89,7 @@ pub trait InteractionBuilder: AirBuilder {
     /// For internal use. For each interaction, the expression for the multiplicity on the _next_ row.
     // This could be supplied by the user, but the devex seems worse.
     fn all_multiplicities_next(&self) -> Vec<Self::Expr>;
+
+    /// TODO: this returns the number
+    fn interaction_chunk_size(&self) -> usize;
 }

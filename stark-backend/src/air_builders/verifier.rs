@@ -34,6 +34,7 @@ pub struct VerifierConstraintFolder<'a, SC: StarkGenericConfig> {
     /// Symbolic interactions, gotten from vkey. Needed for multiplicity in next row calculation.
     pub symbolic_interactions: &'a [SymbolicInteraction<Val<SC>>],
     pub interactions: Vec<Interaction<SC::Challenge>>,
+    pub interaction_chunk_size: usize,
 }
 
 impl<'a, SC: StarkGenericConfig> AirBuilder for VerifierConstraintFolder<'a, SC> {
@@ -195,6 +196,10 @@ where
             .iter()
             .map(|i| self.eval_expr(&i.count.next()))
             .collect()
+    }
+
+    fn interaction_chunk_size(&self) -> usize {
+        self.interaction_chunk_size
     }
 }
 

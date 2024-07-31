@@ -166,6 +166,8 @@ where
         num_main_trace_commitments,
         main_commit_to_air_graph,
         num_challenges_to_sample,
+        // TODO: add support for interaction_chunk_size
+        ..
     } = vk;
     MultiStarkVerificationAdvice {
         per_air: per_air.clone().into_iter().map(new_from_vk).collect(),

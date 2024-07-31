@@ -129,6 +129,7 @@ where
 
         symbolic_interactions: &vk.symbolic_constraints.interactions,
         interactions: vec![],
+        interaction_chunk_size: vk.interaction_chunk_size,
     };
     rap.eval(&mut folder);
 
