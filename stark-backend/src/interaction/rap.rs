@@ -57,9 +57,9 @@ where
     let all_interactions = builder.all_interactions().to_vec();
     let mults_next = builder.all_multiplicities_next();
     let num_interactions = all_interactions.len();
-    assert_eq!(num_interactions, mults_next.len());
-    assert_eq!(num_interactions + 1, perm_local.len());
-    assert_eq!(num_interactions + 1, perm_next.len());
+    debug_assert_eq!(num_interactions, mults_next.len());
+    debug_assert_eq!(num_interactions + 1, perm_local.len());
+    debug_assert_eq!(num_interactions + 1, perm_next.len());
     let phi_local = perm_local[num_interactions];
     let phi_next = perm_next[num_interactions];
 
@@ -69,30 +69,26 @@ where
     let lhs = phi_next.into() - phi_local.into();
     let mut rhs = AB::ExprEF::zero();
     let mut phi_0 = AB::ExprEF::zero();
-    for (i, (interaction, mult_next)) in all_interactions.into_iter().zip(mults_next).enumerate() {
+    for (i, interaction) in all_interactions.into_iter().enumerate() {
         // Reciprocal constraints
         debug_assert!(interaction.fields.len() <= betas.len());
+        let mut mult_local = interaction.count;
+        if interaction.interaction_type == InteractionType::Receive {
+            mult_local = -mult_local;
+        }
+
         let mut fields = interaction.fields.into_iter();
         let mut rlc = alphas[interaction.bus_index].clone()
             + fields.next().expect("fields should not be empty");
         for (elem, beta) in fields.zip(betas.iter().skip(1)) {
             rlc += beta.clone() * elem;
         }
-        builder.assert_one_ext(rlc * perm_local[i].into());
 
-        let mult_local = interaction.count;
+        builder.assert_eq_ext(rlc * perm_local[i].into(), mult_local);
 
         // Build the RHS of the permutation constraint
-        match interaction.interaction_type {
-            InteractionType::Send => {
-                phi_0 += perm_local[i].into() * mult_local;
-                rhs += perm_next[i].into() * mult_next;
-            }
-            InteractionType::Receive => {
-                phi_0 -= perm_local[i].into() * mult_local;
-                rhs -= perm_next[i].into() * mult_next;
-            }
-        }
+        phi_0 += perm_local[i].into();
+        rhs += perm_next[i].into();
     }
 
     // Running sum constraints

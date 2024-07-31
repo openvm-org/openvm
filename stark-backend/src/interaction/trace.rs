@@ -57,59 +57,15 @@ where
     //
     // Note: We can optimize this by combining several reciprocal columns into one (the
     // number is subject to a target constraint degree).
-    let perm_width = all_interactions.len() + 1;
+    let num_interactions = all_interactions.len();
     let height = partitioned_main[0].height();
     assert!(
         partitioned_main.iter().all(|m| m.height() == height),
         "All main trace parts must have same height"
     );
 
-    // reciprocals is height x all_interactions.len()
-    let reciprocals: Vec<EF> = (0..height)
-        .into_par_iter()
-        .flat_map(|n| -> Vec<_> {
-            let evaluator = Evaluator {
-                preprocessed,
-                partitioned_main,
-                public_values,
-                height,
-                local_index: n,
-            };
-            all_interactions
-                .iter()
-                .map(|interaction| {
-                    let alpha = alphas[interaction.bus_index];
-                    debug_assert!(interaction.fields.len() <= betas.len());
-                    let mut fields = interaction.fields.iter();
-                    let mut rlc = alpha
-                        + evaluator.eval_expr(fields.next().expect("fields should not be empty"));
-                    for (expr, &beta) in fields.zip(betas.iter().skip(1)) {
-                        rlc += beta * evaluator.eval_expr(expr);
-                    }
-                    rlc
-                })
-                .collect()
-        })
-        .collect();
-    // Zero should be vanishingly unlikely if alpha, beta are properly pseudo-randomized
-    // The logup reciprocals should never be zero, so trace generation should panic if
-    // trying to divide by zero.
-    let perm_values = p3_field::batch_multiplicative_inverse(&reciprocals);
-    drop(reciprocals);
-    // Need to add the `phi` column to perm_values as a RowMajorMatrix
-    // TODO[jpw]: is there a more memory efficient way to do this?
-    let perm_values = perm_values
-        .into_iter()
-        .chunks(all_interactions.len())
-        .into_iter()
-        .flat_map(|row| row.chain(iter::once(EF::zero())))
-        .collect();
-    let mut perm = RowMajorMatrix::new(perm_values, perm_width);
-
-    let _span = tracing::info_span!("compute logup partial sums").entered();
-    // Compute the running sum column
-    let mut phi = vec![EF::zero(); perm.height()];
-    for n in 0..height {
+    let mut rlcs = vec![EF::zero(); height * num_interactions];
+    for (n, chuck) in rlcs.chunks_mut(num_interactions).enumerate() {
         let evaluator = Evaluator {
             preprocessed,
             partitioned_main,
@@ -117,29 +73,80 @@ where
             height,
             local_index: n,
         };
-        if n > 0 {
-            phi[n] = phi[n - 1];
-        }
-        let perm_row = perm.row_slice(n);
+
         for (i, interaction) in all_interactions.iter().enumerate() {
-            let mult = evaluator.eval_expr(&interaction.count);
-            match interaction.interaction_type {
-                InteractionType::Send => {
-                    phi[n] += perm_row[i] * mult;
+            let alpha = alphas[interaction.bus_index];
+            debug_assert!(interaction.fields.len() <= betas.len());
+            let mut fields = interaction.fields.iter();
+            let mut rlc =
+                alpha + evaluator.eval_expr(fields.next().expect("fields should not be empty"));
+            for (expr, &beta) in fields.zip(betas.iter().skip(1)) {
+                rlc += beta * evaluator.eval_expr(expr);
+            }
+            chuck[i] = rlc;
+        }
+    }
+
+    // Zero should be vanishingly unlikely if alpha, beta are properly pseudo-randomized
+    // The logup reciprocals should never be zero, so trace generation should panic if
+    // trying to divide by zero.
+    let reciprocals = p3_field::batch_multiplicative_inverse(&rlcs);
+    drop(rlcs);
+
+    let interactions_chuck_size = 1;
+    let perm_width = (num_interactions + interactions_chuck_size - 1) / interactions_chuck_size + 1;
+    let mut perm_values = vec![EF::zero(); height * perm_width];
+
+    perm_values
+        .par_chunks_mut(perm_width)
+        .zip(reciprocals.par_chunks(num_interactions))
+        .enumerate()
+        .for_each(|(n, (perm_row, reciprocal_chunk))| {
+            let evaluator = Evaluator {
+                preprocessed,
+                partitioned_main,
+                public_values,
+                height,
+                local_index: n,
+            };
+
+            debug_assert!(perm_row.len() == perm_width);
+            debug_assert!(reciprocal_chunk.len() == num_interactions);
+
+            // TODO: maybe change this to use chunks
+            for (i, interaction) in all_interactions.iter().enumerate() {
+                let interaction_val = reciprocal_chunk[i] * evaluator.eval_expr(&interaction.count);
+
+                match interaction.interaction_type {
+                    InteractionType::Send => {
+                        assert!(perm_row[i / interactions_chuck_size].is_zero());
+                        perm_row[i / interactions_chuck_size] += interaction_val;
+                    }
+                    InteractionType::Receive => {
+                        assert!(perm_row[i / interactions_chuck_size].is_zero());
+                        perm_row[i / interactions_chuck_size] -= interaction_val;
+                    }
                 }
-                InteractionType::Receive => {
-                    phi[n] -= perm_row[i] * mult;
-                }
+            }
+
+            assert!(perm_row.last().unwrap().is_zero());
+        });
+
+    let _span = tracing::info_span!("compute logup partial sums").entered();
+    let mut phi = EF::zero();
+    for perm_chunk in perm_values.chunks_mut(perm_width) {
+        for (i, perm_val) in perm_chunk.iter_mut().enumerate() {
+            if i == perm_width - 1 {
+                assert_eq!(*perm_val, EF::zero());
+                *perm_val = phi;
+            } else {
+                phi += *perm_val;
             }
         }
     }
-
-    for (n, row) in perm.as_view_mut().rows_mut().enumerate() {
-        *row.last_mut().unwrap() = phi[n];
-    }
     _span.exit();
 
-    Some(perm)
+    Some(RowMajorMatrix::new(perm_values, perm_width))
 }
 
 pub(super) struct Evaluator<'a, F: Field> {

@@ -13,7 +13,7 @@ mod utils;
 pub const NUM_PERM_CHALLENGES: usize = 2;
 pub const NUM_PERM_EXPOSED_VALUES: usize = 1;
 
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum InteractionType {
     Send,
     Receive,
