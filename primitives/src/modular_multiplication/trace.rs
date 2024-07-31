@@ -121,8 +121,9 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
                     .zip_eq(&q_limbs)
                     .map(|(coefficient, limb)| coefficient * limb)
                     .sum::<usize>();
-                let total = (a_residue * b_residue) - (pq_reduced + r_reduced);
-                assert_eq!(total % small_modulus, 0);
+                let total =
+                    ((a_residue * b_residue) as isize) - ((pq_reduced + r_reduced) as isize);
+                assert_eq!(total % (small_modulus as isize), 0);
                 let total_quotient = total / small_modulus;
                 SmallModulusSystemCols {
                     a_residue,
