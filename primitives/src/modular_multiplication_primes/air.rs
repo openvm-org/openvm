@@ -9,7 +9,7 @@ use p3_matrix::Matrix;
 
 use afs_stark_backend::interaction::InteractionBuilder;
 
-use crate::modular_multiplication::columns::ModularMultiplicationPrimesCols;
+use crate::modular_multiplication_primes::columns::ModularMultiplicationPrimesCols;
 use crate::sub_chip::AirConfig;
 
 pub struct LimbDimensions {
@@ -36,7 +36,7 @@ pub struct SmallModulusSystem<F: Field> {
     pub q_coefficients: Vec<usize>,
 }
 
-pub struct ModularMultiplicationAir<F: Field> {
+pub struct ModularMultiplicationPrimesAir<F: Field> {
     pub modulus: BigUint,
     pub total_bits: usize,
 
@@ -55,7 +55,7 @@ pub struct ModularMultiplicationAir<F: Field> {
 /// However, any of a, b, r may be >= `modulus`
 /// Furthermore, (a, b, r) is guaranteed to be verifiable if a, b, r < `modulus` and a * b == r (mod `modulus`)
 /// If a * b == r (mod `modulus`) but one of a, b, r is >= `modulus`, then (a, b, r) may not be verifiable
-impl<F: Field> ModularMultiplicationAir<F> {
+impl<F: Field> ModularMultiplicationPrimesAir<F> {
     // `F` should have size at least 2^`bits_per_elem`
     pub fn new(
         modulus: BigUint,
@@ -203,17 +203,17 @@ fn gcd(a: usize, b: usize) -> usize {
     }
 }
 
-impl<F: Field> AirConfig for ModularMultiplicationAir<F> {
+impl<F: Field> AirConfig for ModularMultiplicationPrimesAir<F> {
     type Cols<T> = ModularMultiplicationPrimesCols<T>;
 }
 
-impl<F: Field> BaseAir<F> for ModularMultiplicationAir<F> {
+impl<F: Field> BaseAir<F> for ModularMultiplicationPrimesAir<F> {
     fn width(&self) -> usize {
         ModularMultiplicationPrimesCols::<F>::get_width(&self)
     }
 }
 
-impl<F: Field> ModularMultiplicationAir<F> {
+impl<F: Field> ModularMultiplicationPrimesAir<F> {
     fn range_check<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
@@ -235,7 +235,7 @@ impl<F: Field> ModularMultiplicationAir<F> {
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationAir<AB::F> {
+impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationPrimesAir<AB::F> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
