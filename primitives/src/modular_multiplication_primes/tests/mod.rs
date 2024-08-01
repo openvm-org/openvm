@@ -9,8 +9,8 @@ use rand::RngCore;
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use afs_test_utils::utils::create_seeded_rng;
 
-use crate::modular_multiplication::air::ModularMultiplicationAir;
-use crate::modular_multiplication::columns::ModularMultiplicationPrimesCols;
+use crate::modular_multiplication_primes::air::ModularMultiplicationPrimesAir;
+use crate::modular_multiplication_primes::columns::ModularMultiplicationPrimesCols;
 use crate::range_gate::RangeCheckerGateChip;
 
 fn secp256k1_prime() -> BigUint {
@@ -21,8 +21,8 @@ fn secp256k1_prime() -> BigUint {
     result
 }
 
-fn default_air<F: Field>() -> ModularMultiplicationAir<F> {
-    ModularMultiplicationAir::new(secp256k1_prime(), 256, 31, 15, 0, 27, 9, 9, 15)
+fn default_air<F: Field>() -> ModularMultiplicationPrimesAir<F> {
+    ModularMultiplicationPrimesAir::new(secp256k1_prime(), 256, 31, 15, 0, 27, 9, 9, 15)
 }
 
 #[test]

@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use p3_field::Field;
 
-use crate::modular_multiplication::air::{LimbDimensions, ModularMultiplicationAir};
+use crate::modular_multiplication_primes::air::{LimbDimensions, ModularMultiplicationPrimesAir};
 
 // a * b = (p * q) + r
 
@@ -136,7 +136,7 @@ impl<T: Clone> ModularMultiplicationIoCols<T> {
 }
 
 impl<T: Clone> ModularMultiplicationPrimesCols<T> {
-    pub fn from_slice<F: Field>(slc: &[T], air: &ModularMultiplicationAir<F>) -> Self {
+    pub fn from_slice<F: Field>(slc: &[T], air: &ModularMultiplicationPrimesAir<F>) -> Self {
         let mut start = 0;
         let mut end = 0;
 
@@ -174,7 +174,7 @@ impl<T: Clone> ModularMultiplicationPrimesCols<T> {
         result
     }
 
-    pub fn get_width<F: Field>(air: &ModularMultiplicationAir<F>) -> usize {
+    pub fn get_width<F: Field>(air: &ModularMultiplicationPrimesAir<F>) -> usize {
         ModularMultiplicationIoCols::<T>::get_width(&air.limb_dimensions)
             + ModularMultiplicationAuxCols::<T>::get_width(&air.limb_dimensions)
             + (air.small_moduli_systems.len() * SmallModulusSystemCols::<T>::get_width())

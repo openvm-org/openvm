@@ -8,15 +8,15 @@ use p3_air::BaseAir;
 use p3_field::{Field, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::modular_multiplication::air::ModularMultiplicationAir;
-use crate::modular_multiplication::columns::{
+use crate::modular_multiplication_primes::air::ModularMultiplicationPrimesAir;
+use crate::modular_multiplication_primes::columns::{
     ModularMultiplicationAuxCols, ModularMultiplicationIoCols, ModularMultiplicationPrimesCols,
     SmallModulusSystemCols,
 };
 use crate::range_gate::RangeCheckerGateChip;
 use crate::sub_chip::LocalTraceInstructions;
 
-impl<F: PrimeField64> ModularMultiplicationAir<F> {
+impl<F: PrimeField64> ModularMultiplicationPrimesAir<F> {
     pub fn generate_trace(
         &self,
         pairs: Vec<(BigUint, BigUint)>,
@@ -64,7 +64,7 @@ fn without_first_limbs<T: Clone>(limbs: Vec<Vec<T>>) -> Vec<Vec<T>> {
         .collect()
 }
 
-impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir<F> {
+impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationPrimesAir<F> {
     type LocalInput = (BigUint, BigUint, Arc<RangeCheckerGateChip>);
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
