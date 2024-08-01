@@ -71,7 +71,7 @@ where
     );
 
     let mut rlcs = vec![EF::zero(); height * num_interactions];
-    for (n, chuck) in rlcs.chunks_mut(num_interactions).enumerate() {
+    for (n, chunk) in rlcs.chunks_mut(num_interactions).enumerate() {
         let evaluator = Evaluator {
             preprocessed,
             partitioned_main,
@@ -89,7 +89,7 @@ where
             for (expr, &beta) in fields.zip(betas.iter().skip(1)) {
                 rlc += beta * evaluator.eval_expr(expr);
             }
-            chuck[i] = rlc;
+            chunk[i] = rlc;
         }
     }
 
