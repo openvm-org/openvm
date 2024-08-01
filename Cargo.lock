@@ -214,6 +214,7 @@ dependencies = [
  "p3-uni-stark",
  "p3-util",
  "rand",
+ "rayon",
  "serde",
  "serde_json",
  "tikv-jemallocator",

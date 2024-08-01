@@ -4,8 +4,8 @@ use p3_matrix::{
     Matrix,
 };
 use p3_maybe_rayon::prelude::*;
-// #[cfg(feature = "parallel")]
-// use rayon::current_num_threads;
+#[cfg(feature = "parallel")]
+use rayon::current_num_threads;
 
 use crate::{
     air_builders::symbolic::{
@@ -84,7 +84,7 @@ where
         });
     #[cfg(feature = "parallel")]
     let old_perm_values = {
-        let num_threads = 16;
+        let num_threads = current_num_threads();
         let chunk_size = (reciprocals.len() + num_threads - 1) / num_threads;
         let mut vals = vec![EF::zero(); reciprocals.len()];
         vals.par_chunks_mut(chunk_size)
