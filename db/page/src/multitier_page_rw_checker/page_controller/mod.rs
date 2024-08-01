@@ -408,10 +408,10 @@ where
         prover_data
     }
 
-    pub fn set_up_keygen_builder(
-        &self,
-        keygen_builder: &mut MultiStarkKeygenBuilder<SC>,
-        ops_sender: &dyn AnyRap<SC>,
+    pub fn set_up_keygen_builder<'a>(
+        &'a self,
+        keygen_builder: &mut MultiStarkKeygenBuilder<'a, SC>,
+        ops_sender: &'a dyn AnyRap<SC>,
     ) {
         let mut init_leaf_data_ptrs = vec![];
 

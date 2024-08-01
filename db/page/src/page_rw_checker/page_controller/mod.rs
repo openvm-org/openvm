@@ -299,10 +299,10 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     /// Sets up keygen with the different trace partitions for the chips
     /// init_chip, final_chip, offline_checker, range_checker, and the
     /// ops_sender, which is passed in
-    pub fn set_up_keygen_builder(
-        &self,
-        keygen_builder: &mut MultiStarkKeygenBuilder<SC>,
-        ops_sender: &dyn AnyRap<SC>,
+    pub fn set_up_keygen_builder<'a>(
+        &'a self,
+        keygen_builder: &mut MultiStarkKeygenBuilder<'a, SC>,
+        ops_sender: &'a dyn AnyRap<SC>,
     ) where
         Val<SC>: PrimeField,
     {
@@ -320,7 +320,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         keygen_builder.add_air(&self.range_checker.air, 0);
         keygen_builder.add_air(ops_sender, 0);
 
-        keygen_builder.set_interaction_chunk_size(2);
+        // keygen_builder.set_interaction_chunk_size(2);
     }
 
     /// This function clears the trace_builder, loads in the traces for all involved chips

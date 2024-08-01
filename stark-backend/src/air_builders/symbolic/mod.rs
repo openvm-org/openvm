@@ -48,12 +48,6 @@ impl<F: Field> SymbolicConstraints<F> {
         // But we pad it to a power of two so that we can efficiently decompose the quotient.
         log2_ceil_usize(constraint_degree - 1)
     }
-
-    /// Number of columns in the trace matrix after challenge phase 0 for logup permutation.
-    pub fn perm_width(&self) -> Option<usize> {
-        let num_interactions = self.interactions.len();
-        (num_interactions != 0).then(|| num_interactions + 1)
-    }
 }
 
 #[instrument(name = "evaluate constraints symbolically", skip_all, level = "debug")]

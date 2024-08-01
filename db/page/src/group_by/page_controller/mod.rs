@@ -169,7 +169,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     }
 
     /// Set up the keygen builder for the group-by test case by querying trace widths.
-    pub fn set_up_keygen_builder(&self, keygen_builder: &mut MultiStarkKeygenBuilder<SC>)
+    pub fn set_up_keygen_builder<'a>(&'a self, keygen_builder: &mut MultiStarkKeygenBuilder<'a, SC>)
     where
         Val<SC>: PrimeField64,
     {
