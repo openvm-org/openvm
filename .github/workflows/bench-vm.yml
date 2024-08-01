@@ -9,6 +9,13 @@ on:
       - "vm/**"
       - "compiler/**"
       - "recursion/**"
+  push:
+    branches: ["main"]
+    paths:
+      - "stark-backend/**"
+      - "vm/**"
+      - "compiler/**"
+      - "recursion/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -84,14 +91,17 @@ jobs:
             });
 
       - name: Commit and push changes
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'push'
         run: |
           export HOME=~
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          BRANCH_NAME="benchmark-vm-${{ github.run_id }}"
+          git checkout -b ${BRANCH_NAME}
           git add benchmark/github/results/vm_verify_fibair.json
           git commit -m "Update benchmark"
-          git push origin ${{ github.head_ref }}
+          git push origin ${BRANCH_NAME}
+          gh pr create -B main -H ${BRANCH_NAME} --title 'Update benchmark (vm verify fibair)' --body 'Created by Github action'
 
   stop-runner:
     name: Stop self-hosted EC2 runner

@@ -7,6 +7,11 @@ on:
     paths:
       - "stark-backend/**"
       - "db/**"
+  push:
+    branches: ["main"]
+    paths:
+      - "stark-backend/**"
+      - "db/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -81,15 +86,18 @@ jobs:
               body: `Benchmark (single page r/w) results:\n\nPrevious: ${previousBenchmark}\nCurrent: ${newBenchmark}`
             });
 
-      - name: Commit and push changes
-        if: github.event_name == 'pull_request'
+      - name: Commit the result and make a new PR.
+        if: github.event_name == 'push'
         run: |
           export HOME=~
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          BRANCH_NAME="benchmark-rw-${{ github.run_id }}"
+          git checkout -b ${BRANCH_NAME}
           git add benchmark/github/results/single_rw.json
           git commit -m "Update benchmark"
-          git push origin ${{ github.head_ref }}
+          git push origin ${BRANCH_NAME}
+          gh pr create -B main -H ${BRANCH_NAME} --title 'Update benchmark (single page r/w)' --body 'Created by Github action'
 
   stop-runner:
     name: Stop self-hosted EC2 runner
