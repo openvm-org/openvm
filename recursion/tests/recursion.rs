@@ -1,16 +1,14 @@
+use afs_recursion::stark::{get_rec_raps, sort_chips};
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
-use p3_field::{AbstractField, PrimeField32};
+use p3_field::AbstractField;
 use std::ops::Deref;
 
 use afs_compiler::asm::AsmBuilder;
-use afs_compiler::ir::{Config, Var};
-use afs_recursion::stark::DynRapForRecursion;
+use afs_compiler::ir::Var;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::vm::config::VmConfig;
-use stark_vm::vm::{ExecutionResult, ExecutionSegment, VirtualMachine};
-
-use crate::common::sort_chips;
+use stark_vm::vm::{ExecutionResult, VirtualMachine};
 
 mod common;
 
@@ -65,28 +63,4 @@ fn test_fibonacci_program_verify() {
 
     let vm = VirtualMachine::<1, _>::new(vm_config, fib_verification_program, input_stream);
     vm.execute().unwrap();
-}
-
-pub fn get_rec_raps<const WORD_SIZE: usize, C: Config>(
-    vm: &ExecutionSegment<WORD_SIZE, C::F>,
-) -> Vec<&dyn DynRapForRecursion<C>>
-where
-    C::F: PrimeField32,
-{
-    let mut result: Vec<&dyn DynRapForRecursion<C>> = vec![
-        &vm.cpu_chip.air,
-        &vm.program_chip.air,
-        &vm.memory_chip.air,
-        &vm.range_checker.air,
-    ];
-    if vm.options().field_arithmetic_enabled {
-        result.push(&vm.field_arithmetic_chip.air);
-    }
-    if vm.options().field_extension_enabled {
-        result.push(&vm.field_extension_chip.air);
-    }
-    if vm.options().poseidon2_enabled() {
-        result.push(&vm.poseidon2_chip.air);
-    }
-    result
 }

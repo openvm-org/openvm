@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use itertools::{izip, Itertools};
+use metrics::trace_metrics;
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::AbstractExtensionField;
@@ -26,6 +27,8 @@ use self::{
     types::{Commitments, MultiAirCommittedTraceData, Proof},
 };
 
+/// Metrics about trace and other statistics related to prover performance
+pub mod metrics;
 /// Polynomial opening proofs
 pub mod opener;
 /// Computation of DEEP quotient polynomial and commitment
@@ -407,6 +410,8 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
                     .collect_vec()
             })
             .collect_vec();
+
+        tracing::info!("{}", trace_metrics(&pk.per_air, &degrees));
 
         Proof {
             degrees,

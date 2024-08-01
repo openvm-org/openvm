@@ -16,7 +16,7 @@ use super::types::TwoAdicPcsMatsVariable;
 use super::types::TwoAdicPcsProofVariable;
 use super::types::TwoAdicPcsRoundVariable;
 use super::{
-    verify_batch, verify_challenges, verify_shape_and_sample_challenges,
+    verify_batch, verify_challenges, verify_shape_and_sample_challenges, NestedOpenedValues,
     TwoAdicMultiplicativeCosetVariable,
 };
 
@@ -94,25 +94,37 @@ pub fn verify_two_adic_pcs<C: Config>(
                 let bits_reduced: Usize<_> =
                     builder.eval(log_global_max_height - log_batch_max_height);
                 let index_bits_shifted_v1 = index_bits.shift(builder, bits_reduced);
-                verify_batch::<C, 1>(
+
+                let opened_values = NestedOpenedValues::Felt(batch_opening.opened_values);
+
+                verify_batch::<C>(
                     builder,
                     &batch_commit,
                     batch_dims,
                     index_bits_shifted_v1,
-                    batch_opening.opened_values.clone(),
+                    &opened_values,
                     &batch_opening.opening_proof,
                 );
 
+                // hack to move batch_opening.opened_values back
+                let opened_values = match opened_values {
+                    NestedOpenedValues::Felt(opened_values) => opened_values,
+                    _ => unreachable!(),
+                };
+
                 builder
-                    .range(0, batch_opening.opened_values.len())
+                    .range(0, opened_values.len())
                     .for_each(|k, builder| {
-                        let mat_opening = builder.get(&batch_opening.opened_values, k);
+                        let mat_opening = builder.get(&opened_values, k);
                         let mat = builder.get(&mats, k);
                         let mat_points = mat.points;
                         let mat_values = mat.values;
 
                         let log2_domain_size = mat.domain.log_n;
                         let log_height: Var<C::N> = builder.eval(log2_domain_size + log_blowup);
+
+                        let cur_ro = builder.get(&ro, log_height);
+                        let cur_alpha_pow = builder.get(&alpha_pow, log_height);
 
                         let bits_reduced: Usize<_> =
                             builder.eval(log_global_max_height - log_height);
@@ -132,21 +144,20 @@ pub fn verify_two_adic_pcs<C: Config>(
                             let z: Ext<C::F, C::EF> = builder.get(&mat_points, l);
                             let ps_at_z = builder.get(&mat_values, l);
 
+                            builder.cycle_tracker_start("fri_fold");
                             builder.range(0, ps_at_z.len()).for_each(|t, builder| {
                                 let p_at_x = builder.get(&mat_opening, t);
                                 let p_at_z = builder.get(&ps_at_z, t);
-                                let quotient = (-p_at_z + p_at_x) / (-z + x);
+                                let quotient = (p_at_z - p_at_x) / (z - x);
 
-                                let old_ro = builder.get(&ro, log_height);
-                                let old_alpha_pow = builder.get(&alpha_pow, log_height);
-
-                                let new_ro = builder.eval(old_ro + old_alpha_pow * quotient);
-                                builder.set_value(&mut ro, log_height, new_ro);
-
-                                let new_alpha_pow = builder.eval(old_alpha_pow * alpha);
-                                builder.set_value(&mut alpha_pow, log_height, new_alpha_pow);
+                                builder.assign(cur_ro, cur_ro + cur_alpha_pow * quotient);
+                                builder.assign(cur_alpha_pow, cur_alpha_pow * alpha);
                             });
+                            builder.cycle_tracker_end("fri_fold");
                         });
+
+                        builder.set_value(&mut ro, log_height, cur_ro);
+                        builder.set_value(&mut alpha_pow, log_height, cur_alpha_pow);
                     });
             });
 

@@ -81,5 +81,10 @@ pub fn fri_params_fast_testing() -> Vec<FriParameters> {
             num_queries: 2,
             proof_of_work_bits: 0,
         },
+        FriParameters {
+            log_blowup: 1,
+            num_queries: 2,
+            proof_of_work_bits: 0,
+        },
     ]
 }

@@ -1,19 +1,22 @@
 use std::any::{type_name, Any};
+use std::cmp::Reverse;
 
-use itertools::Itertools;
+use itertools::{izip, Itertools};
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
-use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
-use p3_matrix::dense::RowMajorMatrixView;
+use p3_field::{AbstractExtensionField, AbstractField, PrimeField32, TwoAdicField};
+use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
 use p3_matrix::stack::VerticalPair;
 
 use afs_compiler::ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize, Var};
 use afs_stark_backend::air_builders::symbolic::{SymbolicConstraints, SymbolicRapBuilder};
 use afs_stark_backend::prover::opener::AdjacentOpenedValues;
-use afs_stark_backend::rap::Rap;
+use afs_stark_backend::rap::{AnyRap, Rap};
 use afs_test_utils::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
+use p3_matrix::Matrix;
 use stark_vm::cpu::trace::Instruction;
+use stark_vm::vm::ExecutionSegment;
 
 use crate::challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger};
 use crate::commit::{PcsVariable, PolynomialSpaceVariable};
@@ -831,4 +834,51 @@ where
         builder.assert_usize_eq(proof.opening.values.preprocessed.len(), num_preprocessed);
         // FIXME: check if all necessary validation is covered.
     }
+}
+
+#[allow(clippy::type_complexity)]
+pub fn sort_chips<'a>(
+    chips: Vec<&'a dyn AnyRap<BabyBearPoseidon2Config>>,
+    rec_raps: Vec<&'a dyn DynRapForRecursion<InnerConfig>>,
+    traces: Vec<RowMajorMatrix<BabyBear>>,
+    pvs: Vec<Vec<BabyBear>>,
+) -> (
+    Vec<&'a dyn AnyRap<BabyBearPoseidon2Config>>,
+    Vec<&'a dyn DynRapForRecursion<InnerConfig>>,
+    Vec<RowMajorMatrix<BabyBear>>,
+    Vec<Vec<BabyBear>>,
+) {
+    let mut groups = izip!(chips, rec_raps, traces, pvs).collect_vec();
+    groups.sort_by_key(|(_, _, trace, _)| Reverse(trace.height()));
+
+    let chips = groups.iter().map(|(x, _, _, _)| *x).collect_vec();
+    let rec_raps = groups.iter().map(|(_, x, _, _)| *x).collect_vec();
+    let pvs = groups.iter().map(|(_, _, _, x)| x.clone()).collect_vec();
+    let traces = groups.into_iter().map(|(_, _, x, _)| x).collect_vec();
+
+    (chips, rec_raps, traces, pvs)
+}
+
+pub fn get_rec_raps<const WORD_SIZE: usize, C: Config>(
+    vm: &ExecutionSegment<WORD_SIZE, C::F>,
+) -> Vec<&dyn DynRapForRecursion<C>>
+where
+    C::F: PrimeField32,
+{
+    let mut result: Vec<&dyn DynRapForRecursion<C>> = vec![
+        &vm.cpu_chip.air,
+        &vm.program_chip.air,
+        &vm.memory_chip.air,
+        &vm.range_checker.air,
+    ];
+    if vm.options().field_arithmetic_enabled {
+        result.push(&vm.field_arithmetic_chip.air);
+    }
+    if vm.options().field_extension_enabled {
+        result.push(&vm.field_extension_chip.air);
+    }
+    if vm.options().poseidon2_enabled() {
+        result.push(&vm.poseidon2_chip.air);
+    }
+    result
 }

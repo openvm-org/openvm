@@ -155,7 +155,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
         let mut pc = F::from_canonical_usize(vm.cpu_chip.state.pc);
 
         let mut hint_stream = vm.hint_stream.clone();
-        let mut cycle_tracker = CycleTracker::new();
+        let mut cycle_tracker = CycleTracker::<F>::new();
         let mut is_done = false;
 
         loop {
@@ -341,14 +341,14 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 }
                 CT_START => cycle_tracker.start(
                     debug,
-                    &vm.cpu_chip.rows.concat(),
+                    vm.cpu_chip.rows.len(),
                     clock_cycle,
                     timestamp,
                     &vm.metrics(),
                 ),
                 CT_END => cycle_tracker.end(
                     debug,
-                    &vm.cpu_chip.rows.concat(),
+                    vm.cpu_chip.rows.len(),
                     clock_cycle,
                     timestamp,
                     &vm.metrics(),

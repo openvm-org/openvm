@@ -9,6 +9,7 @@ pub mod multitier_rw;
 pub mod benchmark;
 pub mod predicate;
 pub mod rw;
+pub mod vm;
 
 #[derive(Debug, Parser)]
 pub struct CommonCommands {

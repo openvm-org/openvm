@@ -1,3 +1,4 @@
+use common::VerificationParams;
 use itertools::Itertools;
 use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
@@ -12,8 +13,6 @@ use afs_stark_backend::air_builders::PartitionedAirBuilder;
 use afs_stark_backend::{prover::trace::TraceCommitmentBuilder, verifier::VerificationError};
 use afs_test_utils::config::baby_bear_poseidon2::default_engine;
 use afs_test_utils::{engine::StarkEngine, utils::generate_random_matrix};
-
-use crate::common::VerificationParams;
 
 mod common;
 
