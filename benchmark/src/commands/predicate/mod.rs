@@ -1,4 +1,7 @@
-use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
+use afs_stark_backend::{
+    config::{Com, PcsProof, PcsProverData},
+    prover::metrics::TraceMetrics,
+};
 use afs_test_utils::{
     config::{
         baby_bear_blake3::BabyBearBlake3Engine,
@@ -51,7 +54,7 @@ impl PredicateCommand {
         config: &PageConfig,
         engine: &E,
         _extra_data: String,
-    ) -> Result<()>
+    ) -> Result<TraceMetrics>
     where
         Val<SC>: PrimeField64,
         PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
@@ -72,27 +75,24 @@ impl PredicateCommand {
 
         // Run keygen
         let keygen_span = info_span!("Benchmark keygen").entered();
-        KeygenFilterCommand::execute(config, engine, &common, op.clone(), KEYS_FOLDER.to_string())
-            .unwrap();
+        KeygenFilterCommand::execute(config, engine, &common, op.clone(), KEYS_FOLDER.to_string())?;
         keygen_span.exit();
 
         // Cache span for compatibility
         let cache_span = info_span!("Benchmark cache").entered();
-        CacheFilterCommand::execute(config, engine, &common, op.clone(), TMP_FOLDER.to_string())
-            .unwrap();
+        CacheFilterCommand::execute(config, engine, &common, op.clone(), TMP_FOLDER.to_string())?;
         cache_span.exit();
 
         // Run prove
         let prove_span = info_span!("Benchmark prove").entered();
-        ProveFilterCommand::execute(
+        let metrics = ProveFilterCommand::execute(
             config,
             engine,
             &common,
             op.clone(),
             KEYS_FOLDER.to_string(),
             TMP_FOLDER.to_string(),
-        )
-        .unwrap();
+        )?;
         prove_span.exit();
 
         // Run verify
@@ -105,15 +105,14 @@ impl PredicateCommand {
             KEYS_FOLDER.to_string(),
             Some(TMP_FOLDER.to_string()),
             None,
-        )
-        .unwrap();
+        )?;
         verify_span.exit();
 
-        Ok(())
+        Ok(metrics)
     }
 }
 
-pub fn run_bench_predicate(config: &PageConfig, extra_data: String) -> Result<()> {
+pub fn run_bench_predicate(config: &PageConfig, extra_data: String) -> Result<TraceMetrics> {
     let checker_trace_degree = config.page.max_rw_ops * 4;
     let pcs_log_degree = log2_strict_usize(checker_trace_degree)
         .max(log2_strict_usize(config.page.height))

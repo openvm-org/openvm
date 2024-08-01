@@ -4,7 +4,10 @@ use afs_page::single_page_index_scan::page_controller::PageController;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkProvingKey,
-    prover::trace::{ProverTraceData, TraceCommitmentBuilder},
+    prover::{
+        metrics::{trace_metrics, TraceMetrics},
+        trace::{ProverTraceData, TraceCommitmentBuilder},
+    },
 };
 use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
 use bin_common::utils::{
@@ -51,7 +54,7 @@ where
         op: AfsOperation,
         keys_folder: String,
         cache_folder: String,
-    ) -> Result<()> {
+    ) -> Result<TraceMetrics> {
         let (
             start,
             filter_op,
@@ -167,6 +170,6 @@ where
             println!("Proving completed in {:?}", start.elapsed());
             println!("Proof written to {}", proof_path);
         }
-        Ok(())
+        Ok(trace_metrics(&pk.per_air, &proof.degrees))
     }
 }
