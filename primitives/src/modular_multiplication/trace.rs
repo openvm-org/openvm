@@ -173,9 +173,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
                 let total_quotient = total_quotient_elem.as_canonical_u64() as usize;
 
                 SmallModulusSystemCols {
-                    a_residue,
                     a_quotient,
-                    b_residue,
                     b_quotient,
                     total_quotient,
                 }

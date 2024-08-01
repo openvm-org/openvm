@@ -267,25 +267,24 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationAir {
                     reduced
                 });
 
-            for (reduced, residue, quotient) in [
-                (a_reduced, system_cols.a_residue, system_cols.a_quotient),
-                (b_reduced, system_cols.b_residue, system_cols.b_quotient),
-            ] {
-                self.range_check(builder, self.small_modulus_bits, residue);
+            let [a_residue, b_residue] = [
+                (a_reduced, system_cols.a_quotient),
+                (b_reduced, system_cols.b_quotient),
+            ]
+            .map(|(reduced, quotient)| {
                 self.range_check(builder, self.quotient_bits, quotient);
-                builder.assert_eq(
-                    reduced,
-                    (AB::Expr::from_canonical_usize(system.small_modulus) * quotient) + residue,
-                );
-            }
+                let residue =
+                    reduced - (AB::Expr::from_canonical_usize(system.small_modulus) * quotient);
+                self.range_check(builder, self.small_modulus_bits, residue.clone());
+                residue
+            });
 
             let mut pq_reduced = AB::Expr::zero();
             for (&coefficient, &limb) in system.q_coefficients.iter().zip_eq(&local.aux.q_limbs) {
                 pq_reduced += AB::Expr::from_canonical_usize(coefficient) * limb;
             }
 
-            let reduced =
-                (system_cols.a_residue * system_cols.b_residue) - (pq_reduced + r_reduced);
+            let reduced = (a_residue * b_residue) - (pq_reduced + r_reduced);
             self.range_check(
                 builder,
                 self.quotient_bits,

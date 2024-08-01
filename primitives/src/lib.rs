@@ -11,6 +11,7 @@ pub mod is_zero;
 // pub mod keccak_permute;
 // pub mod merkle_proof;
 mod modular_multiplication;
+mod modular_multiplication_bigint;
 pub mod offline_checker;
 pub mod range;
 pub mod range_gate;
