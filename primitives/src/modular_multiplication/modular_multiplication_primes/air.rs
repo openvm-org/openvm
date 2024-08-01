@@ -9,7 +9,7 @@ use p3_matrix::Matrix;
 
 use afs_stark_backend::interaction::InteractionBuilder;
 
-use crate::modular_multiplication::columns::ModularMultiplicationCols;
+use crate::modular_multiplication::air::{constrain_limbs, FullLimbs};
 use crate::modular_multiplication::LimbDimensions;
 use crate::modular_multiplication::modular_multiplication_primes::columns::ModularMultiplicationPrimesCols;
 use crate::sub_chip::AirConfig;
@@ -227,59 +227,29 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationPrimesAir<AB::F> {
         let local = ModularMultiplicationPrimesCols::<AB::Var>::from_slice(&local, &self);
 
         let ModularMultiplicationPrimesCols {
-            general: ModularMultiplicationCols { io, aux },
+            general,
             system_cols,
         } = local;
 
-        let [a_first_limbs, b_first_limbs, r_first_limbs] = [
-            (io.a_elems, &aux.a_limbs_without_first),
-            (io.b_elems, &aux.b_limbs_without_first),
-            (io.r_elems, &aux.r_limbs_without_first),
-        ]
-        .map(|(elems, limbs)| {
-            self.limb_dimensions
-                .io_limb_sizes
-                .iter()
-                .zip_eq(elems.iter().zip_eq(limbs))
-                .map(|(limb_sizes, (&elem, limbs_here))| {
-                    let mut first_limb = elem.into();
-                    let mut shift = limb_sizes[0];
-                    for (&limb_size, &limb) in limb_sizes.iter().skip(1).zip_eq(limbs_here) {
-                        self.range_check(builder, limb_size, limb);
-                        first_limb -= AB::Expr::from_canonical_usize(1 << shift) * limb;
-                        shift += limb_size;
-                    }
-                    self.range_check(builder, limb_sizes[0], first_limb.clone());
-                    first_limb
-                })
-                .collect_vec()
-        });
-
-        for (&limb_size, &limb) in self
-            .limb_dimensions
-            .q_limb_sizes
-            .iter()
-            .zip_eq(&aux.q_limbs)
-        {
-            self.range_check(builder, limb_size, limb);
-        }
+        let FullLimbs {
+            a_limbs,
+            b_limbs,
+            r_limbs,
+            q_limbs,
+        } = constrain_limbs(
+            builder,
+            self.range_bus,
+            self.decomp,
+            &self.limb_dimensions,
+            general,
+        );
 
         for (system, system_cols_here) in self.small_moduli_systems.iter().zip_eq(system_cols) {
-            let [a_reduced, b_reduced, r_reduced] = [
-                (&a_first_limbs, &aux.a_limbs_without_first),
-                (&b_first_limbs, &aux.b_limbs_without_first),
-                (&r_first_limbs, &aux.r_limbs_without_first),
-            ]
-            .map(|(first_limbs, limbs_without_first)| {
+            let [a_reduced, b_reduced, r_reduced] = [&a_limbs, &b_limbs, &r_limbs].map(|limbs| {
                 let mut reduced = AB::Expr::zero();
-                for (coefficients, (first_limb, limbs_here)) in system
-                    .io_coefficients
-                    .iter()
-                    .zip_eq(first_limbs.iter().zip_eq(limbs_without_first))
-                {
-                    reduced += AB::Expr::from_canonical_usize(coefficients[0]) * first_limb.clone();
-                    for (&coefficient, &limb) in coefficients.iter().skip(1).zip_eq(limbs_here) {
-                        reduced += AB::Expr::from_canonical_usize(coefficient) * limb;
+                for (coefficients, limbs_here) in system.io_coefficients.iter().zip_eq(limbs) {
+                    for (&coefficient, limb) in coefficients.iter().zip_eq(limbs_here) {
+                        reduced += AB::Expr::from_canonical_usize(coefficient) * limb.clone();
                     }
                 }
                 reduced
@@ -298,8 +268,8 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationPrimesAir<AB::F> {
             });
 
             let mut pq_reduced = AB::Expr::zero();
-            for (&coefficient, &limb) in system.q_coefficients.iter().zip_eq(&aux.q_limbs) {
-                pq_reduced += AB::Expr::from_canonical_usize(coefficient) * limb;
+            for (&coefficient, limb) in system.q_coefficients.iter().zip_eq(&q_limbs) {
+                pq_reduced += AB::Expr::from_canonical_usize(coefficient) * limb.clone();
             }
 
             let reduced = (a_residue * b_residue) - (pq_reduced + r_reduced);
