@@ -1,14 +1,12 @@
 use itertools::Itertools;
-use p3_field::Field;
 
-use crate::modular_multiplication_primes::air::{LimbDimensions, ModularMultiplicationPrimesAir};
+use crate::modular_multiplication::LimbDimensions;
 
 // a * b = (p * q) + r
 
-pub struct ModularMultiplicationPrimesCols<T> {
+pub struct ModularMultiplicationCols<T> {
     pub io: ModularMultiplicationIoCols<T>,
     pub aux: ModularMultiplicationAuxCols<T>,
-    pub system_cols: Vec<SmallModulusSystemCols<T>>,
 }
 
 pub struct ModularMultiplicationIoCols<T> {
@@ -22,28 +20,6 @@ pub struct ModularMultiplicationAuxCols<T> {
     pub b_limbs_without_first: Vec<Vec<T>>,
     pub r_limbs_without_first: Vec<Vec<T>>,
     pub q_limbs: Vec<T>,
-}
-
-pub struct SmallModulusSystemCols<T> {
-    pub a_quotient: T,
-    pub b_quotient: T,
-}
-
-impl<T: Clone> SmallModulusSystemCols<T> {
-    pub fn from_slice(slc: &[T]) -> Self {
-        SmallModulusSystemCols {
-            a_quotient: slc[0].clone(),
-            b_quotient: slc[1].clone(),
-        }
-    }
-
-    pub fn flatten(&self) -> Vec<T> {
-        vec![self.a_quotient.clone(), self.b_quotient.clone()]
-    }
-
-    pub fn get_width() -> usize {
-        2
-    }
 }
 
 impl<T: Clone> ModularMultiplicationAuxCols<T> {
@@ -135,48 +111,30 @@ impl<T: Clone> ModularMultiplicationIoCols<T> {
     }
 }
 
-impl<T: Clone> ModularMultiplicationPrimesCols<T> {
-    pub fn from_slice<F: Field>(slc: &[T], air: &ModularMultiplicationPrimesAir<F>) -> Self {
+impl<T: Clone> ModularMultiplicationCols<T> {
+    pub fn from_slice(slc: &[T], limb_dimensions: &LimbDimensions) -> Self {
         let mut start = 0;
         let mut end = 0;
 
-        end += ModularMultiplicationIoCols::<T>::get_width(&air.limb_dimensions);
-        let io = ModularMultiplicationIoCols::from_slice(&slc[start..end], &air.limb_dimensions);
+        end += ModularMultiplicationIoCols::<T>::get_width(&limb_dimensions);
+        let io = ModularMultiplicationIoCols::from_slice(&slc[start..end], &limb_dimensions);
         start = end;
 
-        end += ModularMultiplicationAuxCols::<T>::get_width(&air.limb_dimensions);
-        let aux = ModularMultiplicationAuxCols::from_slice(&slc[start..end], &air.limb_dimensions);
-        start = end;
+        end += ModularMultiplicationAuxCols::<T>::get_width(&limb_dimensions);
+        let aux = ModularMultiplicationAuxCols::from_slice(&slc[start..end], &limb_dimensions);
 
-        let system_cols = (0..air.small_moduli_systems.len())
-            .map(|_| {
-                end += SmallModulusSystemCols::<T>::get_width();
-                let result = SmallModulusSystemCols::from_slice(&slc[start..end]);
-                start = end;
-                result
-            })
-            .collect();
-
-        Self {
-            io,
-            aux,
-            system_cols,
-        }
+        Self { io, aux }
     }
 
     pub fn flatten(&self) -> Vec<T> {
         let mut result = vec![];
         result.extend(self.io.flatten());
         result.extend(self.aux.flatten());
-        for system_cols in self.system_cols.iter() {
-            result.extend(system_cols.flatten());
-        }
         result
     }
 
-    pub fn get_width<F: Field>(air: &ModularMultiplicationPrimesAir<F>) -> usize {
-        ModularMultiplicationIoCols::<T>::get_width(&air.limb_dimensions)
-            + ModularMultiplicationAuxCols::<T>::get_width(&air.limb_dimensions)
-            + (air.small_moduli_systems.len() * SmallModulusSystemCols::<T>::get_width())
+    pub fn get_width(limb_dimensions: &LimbDimensions) -> usize {
+        ModularMultiplicationIoCols::<T>::get_width(&limb_dimensions)
+            + ModularMultiplicationAuxCols::<T>::get_width(&limb_dimensions)
     }
 }
