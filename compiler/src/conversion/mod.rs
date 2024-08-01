@@ -262,35 +262,52 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
 
     match instruction {
         AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
-        AsmInstruction::LoadF(dst, src, index, offset, size) => vec![
-            // register[util] <- register[index] * size
-            inst(
-                FMUL,
-                utility_register,
-                register(index),
-                size,
-                AS::Register,
-                AS::Immediate,
-            ),
-            // register[util] <- register[src] + register[util]
-            inst(
-                FADD,
-                utility_register,
-                register(src),
-                utility_register,
-                AS::Register,
-                AS::Register,
-            ),
-            // register[dst] <- mem[register[util] + offset]
-            inst(
-                LOADW,
-                register(dst),
-                offset,
-                utility_register,
-                AS::Register,
-                AS::Memory,
-            ),
-        ],
+        AsmInstruction::LoadF(dst, src, index, offset, size) => {
+            let mut result = if size != F::one() {
+                vec![
+                    // register[util] <- register[index] * size
+                    inst(
+                        FMUL,
+                        utility_register,
+                        register(index),
+                        size,
+                        AS::Register,
+                        AS::Immediate,
+                    ),
+                    // register[util] <- register[src] + register[util]
+                    inst(
+                        FADD,
+                        utility_register,
+                        register(src),
+                        utility_register,
+                        AS::Register,
+                        AS::Register,
+                    ),
+                ]
+            } else {
+                vec![inst(
+                    FADD,
+                    utility_register,
+                    register(src),
+                    register(index),
+                    AS::Register,
+                    AS::Register,
+                )]
+            };
+
+            result.push(
+                // register[dst] <- mem[register[util] + offset]
+                inst(
+                    LOADW,
+                    register(dst),
+                    offset,
+                    utility_register,
+                    AS::Register,
+                    AS::Memory,
+                ),
+            );
+            result
+        },
         AsmInstruction::LoadFI(dst, src, index, offset, size) => vec![
             // register[dst] <- mem[register[src] + ((index * size) + offset)]
             inst(
@@ -303,26 +320,37 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
         ],
         AsmInstruction::LoadE(dst, src, index, offset, size) => {
-            let mut result = vec![
-                // register[util] <- register[index] * size
-                inst(
-                    FMUL,
-                    utility_register,
-                    register(index),
-                    size,
-                    AS::Register,
-                    AS::Immediate,
-                ),
-                // register[util] <- register[src] + register[util]
-                inst(
+            let mut result = if size != F::one() {
+                vec![
+                    // register[util] <- register[index] * size
+                    inst(
+                        FMUL,
+                        utility_register,
+                        register(index),
+                        size,
+                        AS::Register,
+                        AS::Immediate,
+                    ),
+                    // register[util] <- register[src] + register[util]
+                    inst(
+                        FADD,
+                        utility_register,
+                        register(src),
+                        utility_register,
+                        AS::Register,
+                        AS::Register,
+                    ),
+                ]
+            } else {
+                vec![inst(
                     FADD,
                     utility_register,
                     register(src),
-                    utility_register,
+                    register(index),
                     AS::Register,
                     AS::Register,
-                ),
-            ];
+                )]
+            };
 
             for i in 0..EF::D {
                 // register[dst] <- mem[register[util] + offset + (i * WORD_SIZE)]
@@ -349,35 +377,51 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                     AS::Memory,
                 ))
             .collect(),
-        AsmInstruction::StoreF(val, addr, index, offset, size) => vec![
-            // register[util] <- register[index] * size
-            inst(
-                FMUL,
-                utility_register,
-                register(index),
-                size,
-                AS::Register,
-                AS::Immediate,
-            ),
-            // register[util] <- register[src] + register[util]
-            inst(
-                FADD,
-                utility_register,
-                register(addr),
-                utility_register,
-                AS::Register,
-                AS::Register,
-            ),
-            //  mem[register[util] + offset] <- register[val]
-            inst(
-                STOREW,
-                register(val),
-                offset,
-                utility_register,
-                AS::Register,
-                AS::Memory,
-            ),
-        ],
+        AsmInstruction::StoreF(val, addr, index, offset, size) => {
+            let mut result = if size != F::one() {
+                vec![
+                    // register[util] <- register[index] * size
+                    inst(
+                        FMUL,
+                        utility_register,
+                        register(index),
+                        size,
+                        AS::Register,
+                        AS::Immediate,
+                    ),
+                    // register[util] <- register[src] + register[util]
+                    inst(
+                        FADD,
+                        utility_register,
+                        register(addr),
+                        utility_register,
+                        AS::Register,
+                        AS::Register,
+                    ),
+                ]
+            } else {
+                vec![inst(
+                    FADD,
+                    utility_register,
+                    register(addr),
+                    register(index),
+                    AS::Register,
+                    AS::Register,
+                )]
+            };
+            result.push(
+                //  mem[register[util] + offset] <- register[val]
+                inst(
+                    STOREW,
+                    register(val),
+                    offset,
+                    utility_register,
+                    AS::Register,
+                    AS::Memory,
+                ),
+            );
+            result
+        },
         AsmInstruction::StoreFI(val, addr, index, offset, size) => vec![
             // mem[register[addr] + ((index * size) + offset)] <- register[val]
             inst(
@@ -390,26 +434,37 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             ),
         ],
         AsmInstruction::StoreE(val, addr, index, offset, size) => {
-            let mut result = vec![
-                // register[util] <- register[index] * size
-                inst(
-                    FMUL,
-                    utility_register,
-                    register(index),
-                    size,
-                    AS::Register,
-                    AS::Immediate,
-                ),
-                // register[util] <- register[src] + register[util]
-                inst(
+            let mut result = if size != F::one() {
+                vec![
+                    // register[util] <- register[index] * size
+                    inst(
+                        FMUL,
+                        utility_register,
+                        register(index),
+                        size,
+                        AS::Register,
+                        AS::Immediate,
+                    ),
+                    // register[util] <- register[addr] + register[util]
+                    inst(
+                        FADD,
+                        utility_register,
+                        register(addr),
+                        utility_register,
+                        AS::Register,
+                        AS::Register,
+                    ),
+                ]
+            } else {
+                vec![inst(
                     FADD,
                     utility_register,
                     register(addr),
-                    utility_register,
+                    register(index),
                     AS::Register,
                     AS::Register,
-                ),
-            ];
+                )]
+            };
 
             for i in 0..EF::D {
                 // mem[register[util] + offset + (i * WORD_SIZE)] <- register[val]

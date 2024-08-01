@@ -55,6 +55,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     builder
         .range(0, proof.query_openings.len())
         .for_each(|i, builder| {
+            builder.cycle_tracker_start("stage-d-2-fri-fold-allocation");
             let query_opening = builder.get(&proof.query_openings, i);
             let index_bits = builder.get(&fri_challenges.query_indices, i);
 
@@ -68,8 +69,10 @@ pub fn verify_two_adic_pcs<C: Config>(
             for j in 0..32 {
                 builder.set_value(&mut alpha_pow, j, one_ef);
             }
+            builder.cycle_tracker_end("stage-d-2-fri-fold-allocation");
 
             builder.range(0, rounds.len()).for_each(|j, builder| {
+                builder.cycle_tracker_start("verify-batch-setup");
                 let batch_opening = builder.get(&query_opening, j);
                 let round = builder.get(&rounds, j);
                 let batch_commit = round.batch_commit;
@@ -94,6 +97,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                 let bits_reduced: Usize<_> =
                     builder.eval(log_global_max_height - log_batch_max_height);
                 let index_bits_shifted_v1 = index_bits.shift(builder, bits_reduced);
+                builder.cycle_tracker_end("verify-batch-setup");
 
                 let opened_values = NestedOpenedValues::Felt(batch_opening.opened_values);
 

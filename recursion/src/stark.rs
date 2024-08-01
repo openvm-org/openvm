@@ -70,7 +70,7 @@ impl VerifierProgram<InnerConfig> {
         constants: MultiStarkVerificationAdvice<InnerConfig>,
         fri_params: &FriParameters,
     ) -> Vec<Instruction<BabyBear>> {
-        let mut builder = Builder::<InnerConfig>::default();
+        let mut builder = Builder::<InnerConfig>::default().unroll_loop(true);
 
         builder.cycle_tracker_start("VerifierProgram");
         let input: VerifierInputVariable<_> = builder.uninit();

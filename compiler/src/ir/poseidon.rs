@@ -11,6 +11,7 @@ impl<C: Config> Builder<C> {
     ///
     /// Reference: [p3_poseidon2::Poseidon2]
     pub fn poseidon2_permute(&mut self, array: &Array<C, Felt<C::F>>) -> Array<C, Felt<C::F>> {
+        self.cycle_tracker_start("poseidon2_permute");
         let output = match array {
             Array::Fixed(values) => {
                 assert_eq!(values.borrow().len(), PERMUTATION_WIDTH);
@@ -22,6 +23,7 @@ impl<C: Config> Builder<C> {
             output.clone(),
             array.clone(),
         ));
+        self.cycle_tracker_end("poseidon2_permute");
         output
     }
 
@@ -29,10 +31,12 @@ impl<C: Config> Builder<C> {
     ///
     /// Reference: [p3_poseidon2::Poseidon2]
     pub fn poseidon2_permute_mut(&mut self, array: &Array<C, Felt<C::F>>) {
+        self.cycle_tracker_start("poseidon2_permute_mut");
         self.operations.push(DslIr::Poseidon2PermuteBabyBear(
             array.clone(),
             array.clone(),
         ));
+        self.cycle_tracker_end("poseidon2_permute_mut");
     }
 
     /// Applies the Poseidon2 compression function to the given array.
@@ -43,6 +47,7 @@ impl<C: Config> Builder<C> {
         left: &Array<C, Felt<C::F>>,
         right: &Array<C, Felt<C::F>>,
     ) -> Array<C, Felt<C::F>> {
+        self.cycle_tracker_start("poseidon2_compress");
         let mut input = self.dyn_array(PERMUTATION_WIDTH);
         for i in 0..DIGEST_SIZE {
             let a = self.get(left, i);
@@ -51,6 +56,7 @@ impl<C: Config> Builder<C> {
             self.set(&mut input, i + DIGEST_SIZE, b);
         }
         self.poseidon2_permute_mut(&input);
+        self.cycle_tracker_end("poseidon2_compress");
         input
     }
 
@@ -63,21 +69,26 @@ impl<C: Config> Builder<C> {
         left: &Array<C, Felt<C::F>>,
         right: &Array<C, Felt<C::F>>,
     ) {
+        self.cycle_tracker_start("poseidon2_compress_x");
         self.operations.push(DslIr::Poseidon2CompressBabyBear(
             result.clone(),
             left.clone(),
             right.clone(),
         ));
+        self.cycle_tracker_end("poseidon2_compress_x");
     }
 
     /// Applies the Poseidon2 permutation to the given array.
     ///
     /// Reference: [p3_symmetric::PaddingFreeSponge]
     pub fn poseidon2_hash(&mut self, array: &Array<C, Felt<C::F>>) -> Array<C, Felt<C::F>> {
+        self.cycle_tracker_start("poseidon2_hash");
+        self.cycle_tracker_start("poseidon2_hash_alloc_zero");
         let mut state: Array<C, Felt<C::F>> = self.dyn_array(PERMUTATION_WIDTH);
         self.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
             builder.set(&mut state, i, C::F::zero());
         });
+        self.cycle_tracker_end("poseidon2_hash_alloc_zero");
 
         let break_flag: Var<_> = self.eval(C::N::zero());
         let last_index: Usize<_> = self.eval(array.len() - 1);
@@ -102,6 +113,7 @@ impl<C: Config> Builder<C> {
             });
 
         state.truncate(self, Usize::Const(DIGEST_SIZE));
+        self.cycle_tracker_end("poseidon2_hash");
         state
     }
 
@@ -109,11 +121,13 @@ impl<C: Config> Builder<C> {
         &mut self,
         array: &Array<C, Array<C, Felt<C::F>>>,
     ) -> Array<C, Felt<C::F>> {
-        self.cycle_tracker_start("poseidon2-hash");
+        self.cycle_tracker_start("poseidon2_hash_x");
+        self.cycle_tracker_start("poseidon2_hash_alloc_zero");
         let mut state: Array<C, Felt<C::F>> = self.dyn_array(PERMUTATION_WIDTH);
         self.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
             builder.set(&mut state, i, C::F::zero());
         });
+        self.cycle_tracker_end("poseidon2_hash_alloc_zero");
 
         let idx: Var<_> = self.eval(C::N::zero());
         self.range(0, array.len()).for_each(|i, builder| {
@@ -138,7 +152,7 @@ impl<C: Config> Builder<C> {
         });
 
         state.truncate(self, Usize::Const(DIGEST_SIZE));
-        self.cycle_tracker_end("poseidon2-hash");
+        self.cycle_tracker_end("poseidon2_hash_x");
         state
     }
 
@@ -146,7 +160,7 @@ impl<C: Config> Builder<C> {
         &mut self,
         array: &Array<C, Array<C, Ext<C::F, C::EF>>>,
     ) -> Array<C, Felt<C::F>> {
-        self.cycle_tracker_start("poseidon2-hash-ext");
+        self.cycle_tracker_start("poseidon2_hash_ext");
         let mut state: Array<C, Felt<C::F>> = self.dyn_array(PERMUTATION_WIDTH);
         self.range(HASH_RATE, PERMUTATION_WIDTH)
             .for_each(|i, builder| {
@@ -178,7 +192,7 @@ impl<C: Config> Builder<C> {
         });
 
         state.truncate(self, Usize::Const(DIGEST_SIZE));
-        self.cycle_tracker_end("poseidon2-hash-ext");
+        self.cycle_tracker_end("poseidon2_hash_ext");
         state
     }
 }
