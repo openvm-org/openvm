@@ -349,6 +349,8 @@ fn test_static_values() {
     let engine = config::baby_bear_poseidon2::default_engine(degree);
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
+    // page_controller.set_up_keygen_builder(&mut keygen_builder);
+
     let prover = engine.prover();
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     let (group_by_traces, _group_by_commitments, input_pdata, output_pdata) =
