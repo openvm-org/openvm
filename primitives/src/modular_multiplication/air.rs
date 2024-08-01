@@ -228,24 +228,28 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationAir {
         let local = main.row_slice(0);
         let local = ModularMultiplicationCols::<AB::Var>::from_slice(&local, &self);
 
-        for (elems, limbs) in [
-            (local.io.a_elems, &local.aux.a_limbs),
-            (local.io.b_elems, &local.aux.b_limbs),
-            (local.io.r_elems, &local.aux.r_limbs),
-        ] {
-            for (limb_sizes, (&elem, limbs_here)) in
-                self.io_limb_sizes.iter().zip_eq(elems.iter().zip_eq(limbs))
-            {
-                let mut elem_check = AB::Expr::zero();
-                let mut shift = 0;
-                for (&limb_size, &limb) in limb_sizes.iter().zip_eq(limbs_here) {
-                    self.range_check(builder, limb_size, limb);
-                    elem_check += AB::Expr::from_canonical_usize(1 << shift) * limb;
-                    shift += limb_size;
-                }
-                builder.assert_eq(elem, elem_check);
-            }
-        }
+        let [a_first_limbs, b_first_limbs, r_first_limbs] = [
+            (local.io.a_elems, &local.aux.a_limbs_without_first),
+            (local.io.b_elems, &local.aux.b_limbs_without_first),
+            (local.io.r_elems, &local.aux.r_limbs_without_first),
+        ]
+        .map(|(elems, limbs)| {
+            self.io_limb_sizes
+                .iter()
+                .zip_eq(elems.iter().zip_eq(limbs))
+                .map(|(limb_sizes, (&elem, limbs_here))| {
+                    let mut first_limb = elem.into();
+                    let mut shift = limb_sizes[0];
+                    for (&limb_size, &limb) in limb_sizes.iter().skip(1).zip_eq(limbs_here) {
+                        self.range_check(builder, limb_size, limb);
+                        first_limb -= AB::Expr::from_canonical_usize(1 << shift) * limb;
+                        shift += limb_size;
+                    }
+                    self.range_check(builder, limb_sizes[0], first_limb.clone());
+                    first_limb
+                })
+                .collect_vec()
+        });
 
         for (&limb_size, &limb) in self.q_limb_sizes.iter().zip_eq(&local.aux.q_limbs) {
             self.range_check(builder, limb_size, limb);
@@ -256,16 +260,25 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationAir {
             .iter()
             .zip_eq(local.aux.system_cols)
         {
-            let [a_reduced, b_reduced, r_reduced] =
-                [&local.aux.a_limbs, &local.aux.b_limbs, &local.aux.r_limbs].map(|limbs| {
-                    let mut reduced = AB::Expr::zero();
-                    for (coefficients, limbs_here) in system.io_coefficients.iter().zip_eq(limbs) {
-                        for (&coefficient, &limb) in coefficients.iter().zip_eq(limbs_here) {
-                            reduced += AB::Expr::from_canonical_usize(coefficient) * limb;
-                        }
+            let [a_reduced, b_reduced, r_reduced] = [
+                (&a_first_limbs, &local.aux.a_limbs_without_first),
+                (&b_first_limbs, &local.aux.b_limbs_without_first),
+                (&r_first_limbs, &local.aux.r_limbs_without_first),
+            ]
+            .map(|(first_limbs, limbs_without_first)| {
+                let mut reduced = AB::Expr::zero();
+                for (coefficients, (first_limb, limbs_here)) in system
+                    .io_coefficients
+                    .iter()
+                    .zip_eq(first_limbs.iter().zip_eq(limbs_without_first))
+                {
+                    reduced += AB::Expr::from_canonical_usize(coefficients[0]) * first_limb.clone();
+                    for (&coefficient, &limb) in coefficients.iter().skip(1).zip_eq(limbs_here) {
+                        reduced += AB::Expr::from_canonical_usize(coefficient) * limb;
                     }
-                    reduced
-                });
+                }
+                reduced
+            });
 
             let [a_residue, b_residue] = [
                 (a_reduced, system_cols.a_quotient),

@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use crate::modular_multiplication::air::ModularMultiplicationAir;
 
 // a * b = (p * q) + r
@@ -14,9 +16,9 @@ pub struct ModularMultiplicationIoCols<T> {
 }
 
 pub struct ModularMultiplicationAuxCols<T> {
-    pub a_limbs: Vec<Vec<T>>,
-    pub b_limbs: Vec<Vec<T>>,
-    pub r_limbs: Vec<Vec<T>>,
+    pub a_limbs_without_first: Vec<Vec<T>>,
+    pub b_limbs_without_first: Vec<Vec<T>>,
+    pub r_limbs_without_first: Vec<Vec<T>>,
     pub q_limbs: Vec<T>,
     pub system_cols: Vec<SmallModulusSystemCols<T>>,
 }
@@ -54,38 +56,21 @@ impl<T: Clone> ModularMultiplicationAuxCols<T> {
         let mut start = 0;
         let mut end = 0;
 
-        let a_limbs = air
-            .io_limb_sizes
-            .iter()
-            .map(|limbs| {
-                end += limbs.len();
-                let result = slc[start..end].to_vec();
-                start = end;
-                result
-            })
-            .collect();
+        let mut take_io_limbs = || {
+            air.io_limb_sizes
+                .iter()
+                .map(|limbs| {
+                    end += limbs.len() - 1;
+                    let result = slc[start..end].to_vec();
+                    start = end;
+                    result
+                })
+                .collect_vec()
+        };
 
-        let b_limbs = air
-            .io_limb_sizes
-            .iter()
-            .map(|limbs| {
-                end += limbs.len();
-                let result = slc[start..end].to_vec();
-                start = end;
-                result
-            })
-            .collect();
-
-        let r_limbs = air
-            .io_limb_sizes
-            .iter()
-            .map(|limbs| {
-                end += limbs.len();
-                let result = slc[start..end].to_vec();
-                start = end;
-                result
-            })
-            .collect();
+        let a_limbs = take_io_limbs();
+        let b_limbs = take_io_limbs();
+        let r_limbs = take_io_limbs();
 
         end += air.q_limb_sizes.len();
         let q_limbs = slc[start..end].to_vec();
@@ -101,9 +86,9 @@ impl<T: Clone> ModularMultiplicationAuxCols<T> {
             .collect();
 
         Self {
-            a_limbs,
-            b_limbs,
-            r_limbs,
+            a_limbs_without_first: a_limbs,
+            b_limbs_without_first: b_limbs,
+            r_limbs_without_first: r_limbs,
             q_limbs,
             system_cols,
         }
@@ -111,13 +96,13 @@ impl<T: Clone> ModularMultiplicationAuxCols<T> {
 
     pub fn flatten(&self) -> Vec<T> {
         let mut result = vec![];
-        for limbs in self.a_limbs.iter() {
+        for limbs in self.a_limbs_without_first.iter() {
             result.extend(limbs.clone());
         }
-        for limbs in self.b_limbs.iter() {
+        for limbs in self.b_limbs_without_first.iter() {
             result.extend(limbs.clone());
         }
-        for limbs in self.r_limbs.iter() {
+        for limbs in self.r_limbs_without_first.iter() {
             result.extend(limbs.clone());
         }
         result.extend(self.q_limbs.clone());
@@ -128,7 +113,7 @@ impl<T: Clone> ModularMultiplicationAuxCols<T> {
     }
 
     pub fn get_width(air: &ModularMultiplicationAir) -> usize {
-        (3 * air.num_io_limbs)
+        (3 * (air.num_io_limbs - air.io_limb_sizes.len()))
             + air.q_limb_sizes.len()
             + (air.small_moduli_systems.len() * SmallModulusSystemCols::<T>::get_width())
     }

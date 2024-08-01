@@ -57,6 +57,13 @@ fn take_limb(deque: &mut VecDeque<usize>, limb_size: usize) -> usize {
     }
 }
 
+fn without_first_limbs<T: Clone>(limbs: Vec<Vec<T>>) -> Vec<Vec<T>> {
+    limbs
+        .iter()
+        .map(|limbs_here| limbs_here[1..].to_vec())
+        .collect()
+}
+
 impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
     type LocalInput = (BigUint, BigUint, Arc<RangeCheckerGateChip>);
 
@@ -187,9 +194,9 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
                 r_elems,
             },
             aux: ModularMultiplicationAuxCols {
-                a_limbs,
-                b_limbs,
-                r_limbs,
+                a_limbs_without_first: without_first_limbs(a_limbs),
+                b_limbs_without_first: without_first_limbs(b_limbs),
+                r_limbs_without_first: without_first_limbs(r_limbs),
                 q_limbs,
                 system_cols,
             },
