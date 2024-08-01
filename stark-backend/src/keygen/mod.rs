@@ -108,8 +108,6 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             multi_pk.per_air.push(pk);
         }
 
-        // --------
-
         // Determine global num challenges to sample
         let num_phases = multi_pk
             .per_air

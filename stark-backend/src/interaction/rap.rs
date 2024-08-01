@@ -74,20 +74,20 @@ where
     for (chunk_idx, interaction_chunk) in
         all_interactions.chunks(interaction_chunk_size).enumerate()
     {
-        let mut rlcs = vec![AB::ExprEF::zero(); interaction_chunk.len()];
+        let mut denoms = vec![AB::ExprEF::zero(); interaction_chunk.len()];
         let interaction_chunk = interaction_chunk.to_vec();
         for (i, interaction) in interaction_chunk.iter().enumerate() {
             assert!(!interaction.fields.is_empty(), "fields should not be empty");
-            let mut rlc = alphas[interaction.bus_index].clone();
+            let mut denom = alphas[interaction.bus_index].clone();
             for (elem, beta) in interaction.fields.iter().zip(betas.iter()) {
-                rlc += beta.clone() * elem.clone();
+                denom += beta.clone() * elem.clone();
             }
-            rlcs[i] = rlc;
+            denoms[i] = denom;
         }
 
         let mut row_lhs: AB::ExprEF = perm_local[chunk_idx].into();
-        for rlc in rlcs.iter() {
-            row_lhs *= rlc.clone();
+        for denom in denoms.iter() {
+            row_lhs *= denom.clone();
         }
 
         let mut row_rhs = AB::ExprEF::zero();
@@ -96,9 +96,9 @@ where
             if interaction.interaction_type == InteractionType::Receive {
                 term = -term;
             }
-            for (j, rlc) in rlcs.iter().enumerate() {
+            for (j, denom) in denoms.iter().enumerate() {
                 if i != j {
-                    term *= rlc.clone();
+                    term *= denom.clone();
                 }
             }
             row_rhs += term;

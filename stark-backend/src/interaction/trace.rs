@@ -56,7 +56,7 @@ where
     //
     // We then bundle every interaction_chunk_size interactions together
     // to get the value perm_i = \sum_{i \in bundle} r_i * m_i, where m_i
-    // the signed count for the interaction.
+    // is the signed count for the interaction.
     //
     // Finally, the last column, \phi, of every row is the running sum of
     // all the previous perm values
@@ -124,9 +124,7 @@ where
                 reciprocal_chunk.chunks(interaction_chunk_size),
                 all_interactions.chunks(interaction_chunk_size)
             ) {
-                for (reciprocal, interaction) in
-                    reciprocal_chunk.iter().zip(interaction_chunk.iter())
-                {
+                for (reciprocal, interaction) in izip!(reciprocal_chunk, interaction_chunk) {
                     let mut interaction_val = *reciprocal * evaluator.eval_expr(&interaction.count);
                     if interaction.interaction_type == InteractionType::Receive {
                         interaction_val = -interaction_val;
