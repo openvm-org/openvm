@@ -7,6 +7,7 @@ pub struct CycleTrackerData {
     pub clock_cycles: usize,
     pub time_elapsed: usize,
     pub vm_metrics: BTreeMap<String, usize>,
+    pub opcode_counts: BTreeMap<String, usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -23,8 +24,10 @@ impl CycleTrackerSpan {
         start_clock_cycle: usize,
         start_timestamp: usize,
         vm_metrics: &BTreeMap<String, usize>,
+        opcode_counts: &BTreeMap<String, usize>,
     ) -> Self {
         let vm_metrics_zero = vm_metrics.iter().map(|(k, _)| (k.clone(), 0)).collect();
+        let opcode_counts_zero = opcode_counts.iter().map(|(k, _)| (k.clone(), 0)).collect();
         Self {
             is_active: true,
             start: CycleTrackerData {
@@ -32,12 +35,14 @@ impl CycleTrackerSpan {
                 clock_cycles: start_clock_cycle,
                 time_elapsed: start_timestamp,
                 vm_metrics: vm_metrics.clone(),
+                opcode_counts: opcode_counts.clone(),
             },
             end: CycleTrackerData {
                 cpu_rows: 0,
                 clock_cycles: 0,
                 time_elapsed: 0,
                 vm_metrics: vm_metrics_zero,
+                opcode_counts: opcode_counts_zero,
             },
         }
     }
@@ -49,6 +54,7 @@ impl CycleTrackerSpan {
         end_clock_cycle: usize,
         end_timestamp: usize,
         vm_metrics: &BTreeMap<String, usize>,
+        opcode_counts: &BTreeMap<String, usize>,
     ) {
         self.is_active = false;
         self.end.cpu_rows = end_cpu_rows - self.start.cpu_rows;
@@ -57,6 +63,10 @@ impl CycleTrackerSpan {
         for (key, value) in vm_metrics {
             let diff = value - self.start.vm_metrics.get(key).unwrap();
             self.end.vm_metrics.insert(key.clone(), diff);
+        }
+        for (key, value) in opcode_counts {
+            let diff = value - self.start.opcode_counts.get(key).unwrap_or(&0);
+            self.end.opcode_counts.insert(key.clone(), diff);
         }
     }
 }
@@ -68,6 +78,11 @@ impl Display for CycleTrackerSpan {
         writeln!(f, "  - time_elapsed: {}", self.end.time_elapsed)?;
         for (key, value) in &self.end.vm_metrics {
             writeln!(f, "  - {}: {}", key, value)?;
+        }
+        for (key, value) in &self.end.opcode_counts {
+            if *value > 0 {
+                writeln!(f, "  - {}: {}", key, value)?;
+            }
         }
         Ok(())
     }

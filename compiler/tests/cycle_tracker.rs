@@ -1,3 +1,4 @@
+use afs_compiler::conversion::CompilerOptions;
 use afs_compiler::util::{display_program, execute_program};
 use afs_compiler::{asm::AsmBuilder, ir::Var};
 use p3_baby_bear::BabyBear;
@@ -12,7 +13,9 @@ type EF = BinomialExtensionField<BabyBear, 4>;
 fn test_cycle_tracker() {
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    builder.cycle_tracker_start("test");
+    builder.cycle_tracker_start("test_unclosed");
+
+    builder.cycle_tracker_start("test_outer");
 
     let n_val = F::from_canonical_u32(10);
     let m_val = F::from_canonical_u32(20);
@@ -31,11 +34,20 @@ fn test_cycle_tracker() {
 
     builder.cycle_tracker_end("loop");
 
+    builder.cycle_tracker_end("test_outer");
+
     builder.halt();
 
-    builder.cycle_tracker_end("test");
+    // after TERMINATE, so this CT_END opcode will not be executed
+    builder.cycle_tracker_end("test_unclosed");
 
-    let program = builder.compile_isa::<WORD_SIZE>();
+    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+        compile_prints: false,
+        enable_cycle_tracker: true,
+        field_arithmetic_enabled: true,
+        field_extension_enabled: true,
+    });
+
     display_program(&program);
     execute_program::<WORD_SIZE>(program, vec![]);
 }

@@ -219,6 +219,11 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 }};
             }
 
+            vm.opcode_counts
+                .entry(opcode.to_string())
+                .and_modify(|count| *count += 1)
+                .or_insert(1);
+
             if opcode == FAIL {
                 return Err(ExecutionError::Fail(pc_usize));
             }
@@ -345,6 +350,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     clock_cycle,
                     timestamp,
                     &vm.metrics(),
+                    &vm.opcode_counts,
                 ),
                 CT_END => cycle_tracker.end(
                     debug,
@@ -352,6 +358,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     clock_cycle,
                     timestamp,
                     &vm.metrics(),
+                    &vm.opcode_counts,
                 ),
             };
 

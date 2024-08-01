@@ -35,9 +35,10 @@ impl<F: PrimeField32> CycleTracker<F> {
         clock_cycle: usize,
         timestamp: usize,
         vm_metrics: &BTreeMap<String, usize>,
+        opcode_counts: &BTreeMap<String, usize>,
     ) {
         let cycle_tracker_span =
-            CycleTrackerSpan::start(num_rows, clock_cycle, timestamp, vm_metrics);
+            CycleTrackerSpan::start(num_rows, clock_cycle, timestamp, vm_metrics, opcode_counts);
         match self.instances.entry(name.clone()) {
             Entry::Occupied(mut entry) => {
                 let spans = entry.get_mut();
@@ -53,6 +54,7 @@ impl<F: PrimeField32> CycleTracker<F> {
                 self.order.push(name);
             }
         }
+
         self.num_active_instances += 1;
     }
 
@@ -65,12 +67,13 @@ impl<F: PrimeField32> CycleTracker<F> {
         clock_cycle: usize,
         timestamp: usize,
         vm_metrics: &BTreeMap<String, usize>,
+        opcode_counts: &BTreeMap<String, usize>,
     ) {
         match self.instances.entry(name.clone()) {
             Entry::Occupied(mut entry) => {
                 let spans = entry.get_mut();
                 let last = spans.last_mut().unwrap();
-                last.end(num_rows, clock_cycle, timestamp, vm_metrics);
+                last.end(num_rows, clock_cycle, timestamp, vm_metrics, opcode_counts);
             }
             Entry::Vacant(_) => {
                 panic!("Cycle tracker instance {} does not exist", name);

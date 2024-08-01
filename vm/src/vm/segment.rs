@@ -37,6 +37,7 @@ pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub hint_stream: VecDeque<F>,
     pub has_generation_happened: bool,
     pub public_values: Vec<Option<F>>,
+    pub opcode_counts: BTreeMap<String, usize>,
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
@@ -61,6 +62,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             POSEIDON2_BUS,
         );
 
+        let opcode_counts = BTreeMap::new();
+
         Self {
             config,
             has_generation_happened: false,
@@ -74,6 +77,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             poseidon2_chip,
             input_stream: state.input_stream,
             hint_stream: state.hint_stream,
+            opcode_counts,
         }
     }
 
