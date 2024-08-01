@@ -9,25 +9,10 @@ use p3_matrix::Matrix;
 
 use afs_stark_backend::interaction::InteractionBuilder;
 
-use crate::modular_multiplication_primes::columns::ModularMultiplicationPrimesCols;
+use crate::modular_multiplication::columns::ModularMultiplicationCols;
+use crate::modular_multiplication::LimbDimensions;
+use crate::modular_multiplication::modular_multiplication_primes::columns::ModularMultiplicationPrimesCols;
 use crate::sub_chip::AirConfig;
-
-pub struct LimbDimensions {
-    pub io_limb_sizes: Vec<Vec<usize>>,
-    pub q_limb_sizes: Vec<usize>,
-    pub num_materialized_io_limbs: usize,
-}
-
-impl LimbDimensions {
-    fn new(io_limb_sizes: Vec<Vec<usize>>, q_limb_sizes: Vec<usize>) -> Self {
-        let num_materialized_io_limbs = io_limb_sizes.iter().map(|limbs| limbs.len() - 1).sum();
-        Self {
-            io_limb_sizes,
-            q_limb_sizes,
-            num_materialized_io_limbs,
-        }
-    }
-}
 
 pub struct SmallModulusSystem<F: Field> {
     pub small_modulus: usize,
@@ -241,10 +226,15 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationPrimesAir<AB::F> {
         let local = main.row_slice(0);
         let local = ModularMultiplicationPrimesCols::<AB::Var>::from_slice(&local, &self);
 
+        let ModularMultiplicationPrimesCols {
+            general: ModularMultiplicationCols { io, aux },
+            system_cols,
+        } = local;
+
         let [a_first_limbs, b_first_limbs, r_first_limbs] = [
-            (local.io.a_elems, &local.aux.a_limbs_without_first),
-            (local.io.b_elems, &local.aux.b_limbs_without_first),
-            (local.io.r_elems, &local.aux.r_limbs_without_first),
+            (io.a_elems, &aux.a_limbs_without_first),
+            (io.b_elems, &aux.b_limbs_without_first),
+            (io.r_elems, &aux.r_limbs_without_first),
         ]
         .map(|(elems, limbs)| {
             self.limb_dimensions
@@ -269,16 +259,16 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationPrimesAir<AB::F> {
             .limb_dimensions
             .q_limb_sizes
             .iter()
-            .zip_eq(&local.aux.q_limbs)
+            .zip_eq(&aux.q_limbs)
         {
             self.range_check(builder, limb_size, limb);
         }
 
-        for (system, system_cols) in self.small_moduli_systems.iter().zip_eq(local.system_cols) {
+        for (system, system_cols_here) in self.small_moduli_systems.iter().zip_eq(system_cols) {
             let [a_reduced, b_reduced, r_reduced] = [
-                (&a_first_limbs, &local.aux.a_limbs_without_first),
-                (&b_first_limbs, &local.aux.b_limbs_without_first),
-                (&r_first_limbs, &local.aux.r_limbs_without_first),
+                (&a_first_limbs, &aux.a_limbs_without_first),
+                (&b_first_limbs, &aux.b_limbs_without_first),
+                (&r_first_limbs, &aux.r_limbs_without_first),
             ]
             .map(|(first_limbs, limbs_without_first)| {
                 let mut reduced = AB::Expr::zero();
@@ -296,8 +286,8 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationPrimesAir<AB::F> {
             });
 
             let [a_residue, b_residue] = [
-                (a_reduced, system_cols.a_quotient),
-                (b_reduced, system_cols.b_quotient),
+                (a_reduced, system_cols_here.a_quotient),
+                (b_reduced, system_cols_here.b_quotient),
             ]
             .map(|(reduced, quotient)| {
                 self.range_check(builder, self.quotient_bits, quotient);
@@ -308,7 +298,7 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationPrimesAir<AB::F> {
             });
 
             let mut pq_reduced = AB::Expr::zero();
-            for (&coefficient, &limb) in system.q_coefficients.iter().zip_eq(&local.aux.q_limbs) {
+            for (&coefficient, &limb) in system.q_coefficients.iter().zip_eq(&aux.q_limbs) {
                 pq_reduced += AB::Expr::from_canonical_usize(coefficient) * limb;
             }
 

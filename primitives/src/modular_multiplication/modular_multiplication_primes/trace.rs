@@ -5,13 +5,15 @@ use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use p3_air::BaseAir;
-use p3_field::{Field, PrimeField64};
+use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::modular_multiplication_primes::air::ModularMultiplicationPrimesAir;
-use crate::modular_multiplication_primes::columns::{
-    ModularMultiplicationAuxCols, ModularMultiplicationIoCols, ModularMultiplicationPrimesCols,
-    SmallModulusSystemCols,
+use crate::modular_multiplication::columns::{
+    ModularMultiplicationAuxCols, ModularMultiplicationCols, ModularMultiplicationIoCols,
+};
+use crate::modular_multiplication::modular_multiplication_primes::air::ModularMultiplicationPrimesAir;
+use crate::modular_multiplication::modular_multiplication_primes::columns::{
+    ModularMultiplicationPrimesCols, SmallModulusSystemCols,
 };
 use crate::range_gate::RangeCheckerGateChip;
 use crate::sub_chip::LocalTraceInstructions;
@@ -183,16 +185,18 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationPrimesA
             .collect();
 
         let cols_usize = ModularMultiplicationPrimesCols {
-            io: ModularMultiplicationIoCols {
-                a_elems,
-                b_elems,
-                r_elems,
-            },
-            aux: ModularMultiplicationAuxCols {
-                a_limbs_without_first: without_first_limbs(a_limbs),
-                b_limbs_without_first: without_first_limbs(b_limbs),
-                r_limbs_without_first: without_first_limbs(r_limbs),
-                q_limbs,
+            general: ModularMultiplicationCols {
+                io: ModularMultiplicationIoCols {
+                    a_elems,
+                    b_elems,
+                    r_elems,
+                },
+                aux: ModularMultiplicationAuxCols {
+                    a_limbs_without_first: without_first_limbs(a_limbs),
+                    b_limbs_without_first: without_first_limbs(b_limbs),
+                    r_limbs_without_first: without_first_limbs(r_limbs),
+                    q_limbs,
+                },
             },
             system_cols,
         };
