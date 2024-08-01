@@ -20,6 +20,7 @@ pub struct SmallModulusSystem {
 
 pub struct ModularMultiplicationAir {
     pub modulus: BigUint,
+    pub total_bits: usize,
 
     pub decomp: usize,
     pub range_bus: usize,
@@ -33,6 +34,11 @@ pub struct ModularMultiplicationAir {
     pub small_moduli_systems: Vec<SmallModulusSystem>,
 }
 
+/// Has IO columns (a, b, r)
+/// It is guaranteed that if (a, b, r) is verifiable then a * b == r (mod `modulus`)
+/// However, any of a, b, r may be >= `modulus`
+/// Furthermore, (a, b, r) is guaranteed to be verifiable if a, b, r < `modulus` and a * b == r (mod `modulus`)
+/// If a * b == r (mod `modulus`) but one of a, b, r is >= `modulus`, then (a, b, r) may not be verifiable
 impl ModularMultiplicationAir {
     // resulting Air can only be used with fields of size at least 2^`bits_per_elem`
     pub fn new(
@@ -142,6 +148,7 @@ impl ModularMultiplicationAir {
 
         Self {
             modulus,
+            total_bits,
             decomp,
             range_bus,
             io_limb_sizes,

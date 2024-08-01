@@ -52,7 +52,7 @@ fn take_limb(deque: &mut VecDeque<usize>, limb_size: usize) -> usize {
     if limb_size == 0 {
         0
     } else {
-        let bit = deque.pop_front().unwrap();
+        let bit = deque.pop_front().unwrap_or(0);
         bit + (2 * take_limb(deque, limb_size - 1))
     }
 }
@@ -62,6 +62,8 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
         let (a, b, range_checker) = input;
+        assert!(a.bits() <= self.total_bits as u64);
+        assert!(b.bits() <= self.total_bits as u64);
 
         let range_check = |bits: usize, value: usize| {
             let value = value as u32;
@@ -84,7 +86,8 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
 
         let [(a_elems, a_limbs), (b_elems, b_limbs), (r_elems, r_limbs)] =
             [&mut a_bits, &mut b_bits, &mut r_bits].map(|bits| {
-                self.io_limb_sizes
+                let elems = self
+                    .io_limb_sizes
                     .iter()
                     .map(|limb_sizes_here| {
                         let mut elem = 0;
@@ -101,7 +104,9 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
                             .collect();
                         (elem, limbs)
                     })
-                    .unzip()
+                    .unzip();
+                assert!(bits.is_empty());
+                elems
             });
 
         let q_limbs = self
@@ -113,6 +118,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
                 limb
             })
             .collect();
+        assert!(q_bits.is_empty());
 
         let system_cols = self
             .small_moduli_systems
