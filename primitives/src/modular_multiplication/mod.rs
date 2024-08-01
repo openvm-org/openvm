@@ -2,6 +2,7 @@ mod air;
 mod columns;
 mod modular_multiplication_bigint;
 mod modular_multiplication_primes;
+mod trace;
 
 pub struct LimbDimensions {
     pub io_limb_sizes: Vec<Vec<usize>>,
@@ -18,4 +19,11 @@ impl LimbDimensions {
             num_materialized_io_limbs,
         }
     }
+}
+
+pub struct FullLimbs<T> {
+    pub a_limbs: Vec<Vec<T>>,
+    pub b_limbs: Vec<Vec<T>>,
+    pub r_limbs: Vec<Vec<T>>,
+    pub q_limbs: Vec<T>,
 }

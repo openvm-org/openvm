@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::sync::Arc;
 
 use itertools::Itertools;
@@ -8,13 +7,12 @@ use p3_air::BaseAir;
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::modular_multiplication::columns::{
-    ModularMultiplicationAuxCols, ModularMultiplicationCols, ModularMultiplicationIoCols,
-};
 use crate::modular_multiplication::modular_multiplication_primes::air::ModularMultiplicationPrimesAir;
 use crate::modular_multiplication::modular_multiplication_primes::columns::{
     ModularMultiplicationPrimesCols, SmallModulusSystemCols,
 };
+use crate::modular_multiplication::trace::generate_modular_multiplication_trace_row;
+use crate::modular_multiplication::FullLimbs;
 use crate::range_gate::RangeCheckerGateChip;
 use crate::sub_chip::LocalTraceInstructions;
 
@@ -40,32 +38,6 @@ impl<F: PrimeField64> ModularMultiplicationPrimesAir<F> {
     }
 }
 
-fn big_uint_to_bits(x: BigUint) -> VecDeque<usize> {
-    let mut result = VecDeque::new();
-    for byte in x.to_bytes_le() {
-        for i in 0..8 {
-            result.push_back(((byte >> i) as usize) & 1);
-        }
-    }
-    result
-}
-
-fn take_limb(deque: &mut VecDeque<usize>, limb_size: usize) -> usize {
-    if limb_size == 0 {
-        0
-    } else {
-        let bit = deque.pop_front().unwrap_or(0);
-        bit + (2 * take_limb(deque, limb_size - 1))
-    }
-}
-
-fn without_first_limbs<T: Clone>(limbs: Vec<Vec<T>>) -> Vec<Vec<T>> {
-    limbs
-        .iter()
-        .map(|limbs_here| limbs_here[1..].to_vec())
-        .collect()
-}
-
 impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationPrimesAir<F> {
     type LocalInput = (BigUint, BigUint, Arc<RangeCheckerGateChip>);
 
@@ -84,52 +56,20 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationPrimesA
             }
         };
 
-        let product = a.clone() * b.clone();
-        let r = product.clone() % self.modulus.clone();
-        let q = product.clone() / self.modulus.clone();
-
-        let mut a_bits = big_uint_to_bits(a);
-        let mut b_bits = big_uint_to_bits(b);
-        let mut r_bits = big_uint_to_bits(r);
-        let mut q_bits = big_uint_to_bits(q);
-
-        let [(a_elems, a_limbs), (b_elems, b_limbs), (r_elems, r_limbs)] =
-            [&mut a_bits, &mut b_bits, &mut r_bits].map(|bits| {
-                let elems = self
-                    .limb_dimensions
-                    .io_limb_sizes
-                    .iter()
-                    .map(|limb_sizes_here| {
-                        let mut elem = 0;
-                        let mut shift = 0;
-                        let limbs = limb_sizes_here
-                            .iter()
-                            .map(|&limb_size| {
-                                let limb = take_limb(bits, limb_size);
-                                range_check(limb_size, limb);
-                                elem += limb << shift;
-                                shift += limb_size;
-                                limb
-                            })
-                            .collect();
-                        (elem, limbs)
-                    })
-                    .unzip();
-                assert!(bits.is_empty());
-                elems
-            });
-
-        let q_limbs = self
-            .limb_dimensions
-            .q_limb_sizes
-            .iter()
-            .map(|&limb_size| {
-                let limb = take_limb(&mut q_bits, limb_size);
-                range_check(limb_size, limb);
-                limb
-            })
-            .collect();
-        assert!(q_bits.is_empty());
+        let (general, full_limbs) = generate_modular_multiplication_trace_row(
+            self.modulus.clone(),
+            &self.limb_dimensions,
+            range_checker.clone(),
+            self.decomp,
+            a,
+            b,
+        );
+        let FullLimbs {
+            a_limbs,
+            b_limbs,
+            r_limbs,
+            q_limbs,
+        } = full_limbs;
 
         let system_cols = self
             .small_moduli_systems
@@ -185,19 +125,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationPrimesA
             .collect();
 
         let cols_usize = ModularMultiplicationPrimesCols {
-            general: ModularMultiplicationCols {
-                io: ModularMultiplicationIoCols {
-                    a_elems,
-                    b_elems,
-                    r_elems,
-                },
-                aux: ModularMultiplicationAuxCols {
-                    a_limbs_without_first: without_first_limbs(a_limbs),
-                    b_limbs_without_first: without_first_limbs(b_limbs),
-                    r_limbs_without_first: without_first_limbs(r_limbs),
-                    q_limbs,
-                },
-            },
+            general,
             system_cols,
         };
 
