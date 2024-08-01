@@ -68,16 +68,11 @@ impl<F: PrimeField64> OfflineCheckerOperation<F> for Operation {
     }
 }
 
-#[derive(Getters)]
 pub struct PageRWTraces<F> {
-    #[getset(get = "pub")]
-    init_page_trace: RowMajorMatrix<F>,
-    #[getset(get = "pub")]
-    final_page_trace: RowMajorMatrix<F>,
-    #[getset(get = "pub")]
-    final_page_aux_trace: RowMajorMatrix<F>,
-    #[getset(get = "pub")]
-    offline_checker_trace: RowMajorMatrix<F>,
+    pub init_page_trace: RowMajorMatrix<F>,
+    pub final_page_trace: RowMajorMatrix<F>,
+    pub final_page_aux_trace: RowMajorMatrix<F>,
+    pub offline_checker_trace: RowMajorMatrix<F>,
 }
 
 #[allow(dead_code)]

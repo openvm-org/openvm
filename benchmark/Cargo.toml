@@ -48,20 +48,13 @@ p3-commit = { workspace = true }
 pprof = { version = "0.13", features = ["criterion", "flamegraph"] }
 
 [[bench]]
-name = "single_rw_trace_gen"
+name = "single_rw"
 harness = false
 
 [[bench]]
 name = "xor_bits"
 harness = false
 
-[[bench]]
-name = "permutation_trace_gen"
-harness = false
-
-[[bench]]
-name = "quotient_poly"
-harness = false
 
 [features]
 default = ["afs-stark-backend/mimalloc"]

@@ -14,7 +14,7 @@ p3-matrix = { workspace = true }
 p3-maybe-rayon = { workspace = true }
 p3-uni-stark = { workspace = true }
 p3-util = { workspace = true }
-rayon = "1.5.0"
+rayon = { version = "1.10", optional = true }
 
 itertools = "0.13.0"
 serde = { version = "1.0", default-features = false, features = [
@@ -53,6 +53,6 @@ eyre = "0.6.12"
 
 [features]
 default = []
-parallel = ["p3-maybe-rayon/parallel"]
+parallel = ["p3-maybe-rayon/parallel", "rayon"]
 jemalloc = ["dep:tikv-jemallocator"]
 jemalloc-prof = ["jemalloc", "tikv-jemallocator?/profiling"]
