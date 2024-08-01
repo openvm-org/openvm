@@ -9,29 +9,45 @@ use p3_matrix::Matrix;
 
 use afs_stark_backend::interaction::InteractionBuilder;
 
-use crate::modular_multiplication::columns::ModularMultiplicationCols;
+use crate::modular_multiplication::columns::ModularMultiplicationPrimesCols;
 use crate::sub_chip::AirConfig;
 
-pub struct SmallModulusSystem {
+pub struct LimbDimensions {
+    pub io_limb_sizes: Vec<Vec<usize>>,
+    pub q_limb_sizes: Vec<usize>,
+    pub num_materialized_io_limbs: usize,
+}
+
+impl LimbDimensions {
+    fn new(io_limb_sizes: Vec<Vec<usize>>, q_limb_sizes: Vec<usize>) -> Self {
+        let num_materialized_io_limbs = io_limb_sizes.iter().map(|limbs| limbs.len() - 1).sum();
+        Self {
+            io_limb_sizes,
+            q_limb_sizes,
+            num_materialized_io_limbs,
+        }
+    }
+}
+
+pub struct SmallModulusSystem<F: Field> {
     pub small_modulus: usize,
+    pub small_modulus_inverse: F,
     pub io_coefficients: Vec<Vec<usize>>,
     pub q_coefficients: Vec<usize>,
 }
 
-pub struct ModularMultiplicationAir {
+pub struct ModularMultiplicationAir<F: Field> {
     pub modulus: BigUint,
     pub total_bits: usize,
 
     pub decomp: usize,
     pub range_bus: usize,
 
-    pub io_limb_sizes: Vec<Vec<usize>>,
-    pub num_io_limbs: usize,
-    pub q_limb_sizes: Vec<usize>,
+    pub limb_dimensions: LimbDimensions,
 
     pub small_modulus_bits: usize,
     pub quotient_bits: usize,
-    pub small_moduli_systems: Vec<SmallModulusSystem>,
+    pub small_moduli_systems: Vec<SmallModulusSystem<F>>,
 }
 
 /// Has IO columns (a, b, r)
@@ -39,8 +55,8 @@ pub struct ModularMultiplicationAir {
 /// However, any of a, b, r may be >= `modulus`
 /// Furthermore, (a, b, r) is guaranteed to be verifiable if a, b, r < `modulus` and a * b == r (mod `modulus`)
 /// If a * b == r (mod `modulus`) but one of a, b, r is >= `modulus`, then (a, b, r) may not be verifiable
-impl ModularMultiplicationAir {
-    // resulting Air can only be used with fields of size at least 2^`bits_per_elem`
+impl<F: Field> ModularMultiplicationAir<F> {
+    // `F` should have size at least 2^`bits_per_elem`
     pub fn new(
         modulus: BigUint,
         total_bits: usize,
@@ -137,22 +153,19 @@ impl ModularMultiplicationAir {
                     .collect();
                 SmallModulusSystem {
                     small_modulus,
+                    small_modulus_inverse: F::from_canonical_usize(small_modulus).inverse(),
                     io_coefficients: elem_coefficients,
                     q_coefficients: pure_coefficients,
                 }
             })
             .collect();
 
-        let num_io_limbs = io_limb_sizes.iter().map(|limbs| limbs.len()).sum();
-
         Self {
             modulus,
             total_bits,
             decomp,
             range_bus,
-            io_limb_sizes,
-            num_io_limbs,
-            q_limb_sizes,
+            limb_dimensions: LimbDimensions::new(io_limb_sizes, q_limb_sizes),
             small_modulus_bits,
             quotient_bits,
             small_moduli_systems,
@@ -190,17 +203,17 @@ fn gcd(a: usize, b: usize) -> usize {
     }
 }
 
-impl AirConfig for ModularMultiplicationAir {
-    type Cols<T> = ModularMultiplicationCols<T>;
+impl<F: Field> AirConfig for ModularMultiplicationAir<F> {
+    type Cols<T> = ModularMultiplicationPrimesCols<T>;
 }
 
-impl<F: Field> BaseAir<F> for ModularMultiplicationAir {
+impl<F: Field> BaseAir<F> for ModularMultiplicationAir<F> {
     fn width(&self) -> usize {
-        ModularMultiplicationCols::<F>::get_width(&self)
+        ModularMultiplicationPrimesCols::<F>::get_width(&self)
     }
 }
 
-impl ModularMultiplicationAir {
+impl<F: Field> ModularMultiplicationAir<F> {
     fn range_check<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
@@ -222,11 +235,11 @@ impl ModularMultiplicationAir {
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationAir {
+impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationAir<AB::F> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let local = ModularMultiplicationCols::<AB::Var>::from_slice(&local, &self);
+        let local = ModularMultiplicationPrimesCols::<AB::Var>::from_slice(&local, &self);
 
         let [a_first_limbs, b_first_limbs, r_first_limbs] = [
             (local.io.a_elems, &local.aux.a_limbs_without_first),
@@ -234,7 +247,8 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationAir {
             (local.io.r_elems, &local.aux.r_limbs_without_first),
         ]
         .map(|(elems, limbs)| {
-            self.io_limb_sizes
+            self.limb_dimensions
+                .io_limb_sizes
                 .iter()
                 .zip_eq(elems.iter().zip_eq(limbs))
                 .map(|(limb_sizes, (&elem, limbs_here))| {
@@ -251,15 +265,16 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationAir {
                 .collect_vec()
         });
 
-        for (&limb_size, &limb) in self.q_limb_sizes.iter().zip_eq(&local.aux.q_limbs) {
+        for (&limb_size, &limb) in self
+            .limb_dimensions
+            .q_limb_sizes
+            .iter()
+            .zip_eq(&local.aux.q_limbs)
+        {
             self.range_check(builder, limb_size, limb);
         }
 
-        for (system, system_cols) in self
-            .small_moduli_systems
-            .iter()
-            .zip_eq(local.aux.system_cols)
-        {
+        for (system, system_cols) in self.small_moduli_systems.iter().zip_eq(local.system_cols) {
             let [a_reduced, b_reduced, r_reduced] = [
                 (&a_first_limbs, &local.aux.a_limbs_without_first),
                 (&b_first_limbs, &local.aux.b_limbs_without_first),
@@ -298,17 +313,14 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationAir {
             }
 
             let reduced = (a_residue * b_residue) - (pq_reduced + r_reduced);
+            let quotient = reduced * system.small_modulus_inverse;
             self.range_check(
                 builder,
                 self.quotient_bits,
-                system_cols.total_quotient
+                quotient
                     + AB::F::from_canonical_usize(
                         (1 << self.quotient_bits) - (1 << self.small_modulus_bits),
                     ),
-            );
-            builder.assert_eq(
-                reduced,
-                AB::Expr::from_canonical_usize(system.small_modulus) * system_cols.total_quotient,
             );
         }
     }
