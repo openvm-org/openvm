@@ -21,6 +21,7 @@ impl LimbDimensions {
     }
 }
 
+/// Essentially `ModularMultiplicationAuxCols` but with the first limbs
 pub struct FullLimbs<T> {
     pub a_limbs: Vec<Vec<T>>,
     pub b_limbs: Vec<Vec<T>>,
