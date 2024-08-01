@@ -3,14 +3,14 @@ use std::sync::Arc;
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use p3_field::{AbstractField, Field};
 use rand::RngCore;
 
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use afs_test_utils::utils::create_seeded_rng;
 
 use crate::modular_multiplication::air::ModularMultiplicationAir;
-use crate::modular_multiplication::columns::ModularMultiplicationCols;
+use crate::modular_multiplication::columns::ModularMultiplicationPrimesCols;
 use crate::range_gate::RangeCheckerGateChip;
 
 fn secp256k1_prime() -> BigUint {
@@ -21,18 +21,18 @@ fn secp256k1_prime() -> BigUint {
     result
 }
 
-fn default_air() -> ModularMultiplicationAir {
+fn default_air<F: Field>() -> ModularMultiplicationAir<F> {
     ModularMultiplicationAir::new(secp256k1_prime(), 256, 31, 15, 0, 27, 9, 9, 15)
 }
 
 #[test]
 fn test_flatten_fromslice_roundtrip() {
-    let air = default_air();
+    let air = default_air::<BabyBear>();
 
-    let num_cols = ModularMultiplicationCols::<usize>::get_width(&air);
+    let num_cols = ModularMultiplicationPrimesCols::<usize>::get_width(&air);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-    let cols_numbered = ModularMultiplicationCols::<usize>::from_slice(&all_cols, &air);
+    let cols_numbered = ModularMultiplicationPrimesCols::<usize>::from_slice(&all_cols, &air);
     let flattened = cols_numbered.flatten();
 
     for (i, col) in flattened.iter().enumerate() {

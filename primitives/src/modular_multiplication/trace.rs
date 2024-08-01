@@ -3,21 +3,21 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use num_bigint::BigUint;
-use num_traits::{abs, ToPrimitive};
+use num_traits::ToPrimitive;
 use p3_air::BaseAir;
-use p3_field::PrimeField64;
+use p3_field::{Field, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::modular_multiplication::air::ModularMultiplicationAir;
 use crate::modular_multiplication::columns::{
-    ModularMultiplicationAuxCols, ModularMultiplicationCols, ModularMultiplicationIoCols,
+    ModularMultiplicationAuxCols, ModularMultiplicationIoCols, ModularMultiplicationPrimesCols,
     SmallModulusSystemCols,
 };
 use crate::range_gate::RangeCheckerGateChip;
 use crate::sub_chip::LocalTraceInstructions;
 
-impl ModularMultiplicationAir {
-    pub fn generate_trace<F: PrimeField64>(
+impl<F: PrimeField64> ModularMultiplicationAir<F> {
+    pub fn generate_trace(
         &self,
         pairs: Vec<(BigUint, BigUint)>,
         range_checker: Arc<RangeCheckerGateChip>,
@@ -64,7 +64,7 @@ fn without_first_limbs<T: Clone>(limbs: Vec<Vec<T>>) -> Vec<Vec<T>> {
         .collect()
 }
 
-impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
+impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir<F> {
     type LocalInput = (BigUint, BigUint, Arc<RangeCheckerGateChip>);
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
@@ -94,6 +94,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
         let [(a_elems, a_limbs), (b_elems, b_limbs), (r_elems, r_limbs)] =
             [&mut a_bits, &mut b_bits, &mut r_bits].map(|bits| {
                 let elems = self
+                    .limb_dimensions
                     .io_limb_sizes
                     .iter()
                     .map(|limb_sizes_here| {
@@ -117,6 +118,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
             });
 
         let q_limbs = self
+            .limb_dimensions
             .q_limb_sizes
             .iter()
             .map(|&limb_size| {
@@ -173,21 +175,14 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
                     total_quotient_shifted.to_usize().unwrap(),
                 );
 
-                let total_quotient_abs = (abs(total) as usize) / small_modulus;
-                let total_quotient_abs_elem = F::from_canonical_usize(total_quotient_abs);
-                let total_quotient_elem =
-                    total_quotient_abs_elem * if total > 0 { F::one() } else { F::neg_one() };
-                let total_quotient = total_quotient_elem.as_canonical_u64() as usize;
-
                 SmallModulusSystemCols {
                     a_quotient,
                     b_quotient,
-                    total_quotient,
                 }
             })
             .collect();
 
-        let cols_usize = ModularMultiplicationCols {
+        let cols_usize = ModularMultiplicationPrimesCols {
             io: ModularMultiplicationIoCols {
                 a_elems,
                 b_elems,
@@ -198,11 +193,11 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
                 b_limbs_without_first: without_first_limbs(b_limbs),
                 r_limbs_without_first: without_first_limbs(r_limbs),
                 q_limbs,
-                system_cols,
             },
+            system_cols,
         };
 
-        ModularMultiplicationCols::from_slice(
+        ModularMultiplicationPrimesCols::from_slice(
             &cols_usize
                 .flatten()
                 .iter()
