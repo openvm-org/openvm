@@ -1,7 +1,5 @@
 use crate::modular_multiplication::air::ModularMultiplicationAir;
 
-pub const NUM_COLS: usize = 3;
-
 // a * b = (p * q) + r
 
 pub struct ModularMultiplicationCols<T> {
@@ -157,7 +155,6 @@ impl<T: Clone> ModularMultiplicationIoCols<T> {
 
         end += air.io_limb_sizes.len();
         let r_elems = slc[start..end].to_vec();
-        start = end;
 
         Self {
             a_elems,
