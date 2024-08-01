@@ -63,17 +63,9 @@ jobs:
       - name: Update benchmark value
         id: update-benchmark
         run: |
+          mkdir -p benchmark/github/results
           mv benchmark/tmp/_result.json benchmark/github/results/vm_verify_fibair.json
           echo "::set-output name=new-benchmark::$(cat benchmark/github/results/vm_verify_fibair.json)"
-
-      - name: Commit and push changes
-        if: github.event_name == 'pull_request'
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add benchmark/github/results/vm_verify_fibair.json
-          git commit -m "Update benchmark"
-          git push
 
       - name: Add comment to pull request
         if: github.event_name == 'pull_request'
@@ -88,6 +80,16 @@ jobs:
               repo: context.repo.repo,
               body: `Benchmark results:\n\nPrevious: ${previousBenchmark}\nCurrent: ${newBenchmark}`
             });
+
+      - name: Commit and push changes
+        if: github.event_name == 'pull_request'
+        run: |
+          export HOME=~
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add benchmark/github/results/vm_verify_fibair.json
+          git commit -m "Update benchmark"
+          git push origin ${{ github.head_ref }}
 
   stop-runner:
     name: Stop self-hosted EC2 runner

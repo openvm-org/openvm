@@ -61,31 +61,33 @@ jobs:
       - name: Update benchmark value
         id: update-benchmark
         run: |
+          mkdir -p benchmark/github/results
           mv benchmark/tmp/_result.json benchmark/github/results/single_rw.json
           echo "::set-output name=new-benchmark::$(cat benchmark/github/results/single_rw.json)"
-
-      - name: Commit and push changes
-        if: github.event_name == 'pull_request'
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add benchmark/github/results/single_rw.json
-          git commit -m "Update benchmark"
-          git push
 
       - name: Add comment to pull request
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
-            const previousBenchmark = "${{ steps.get-previous-benchmark.outputs.previous-benchmark }}";
-            const newBenchmark = "${{ steps.update-benchmark.outputs.new-benchmark }}";
+            const previousBenchmark = `${{ steps.get-previous-benchmark.outputs.previous-benchmark }}`;
+            const newBenchmark = `${{ steps.update-benchmark.outputs.new-benchmark }}`;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: `Benchmark results:\n\nPrevious: ${previousBenchmark}\nCurrent: ${newBenchmark}`
             });
+
+      - name: Commit and push changes
+        if: github.event_name == 'pull_request'
+        run: |
+          export HOME=~
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add benchmark/github/results/single_rw.json
+          git commit -m "Update benchmark"
+          git push origin ${{ github.head_ref }}
 
   stop-runner:
     name: Stop self-hosted EC2 runner
