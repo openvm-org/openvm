@@ -1,8 +1,9 @@
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 use itertools::Itertools;
 use num_bigint::BigUint;
-use num_traits::abs;
+use num_traits::{abs, ToPrimitive};
 use p3_air::BaseAir;
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
@@ -12,12 +13,14 @@ use crate::modular_multiplication::columns::{
     ModularMultiplicationAuxCols, ModularMultiplicationCols, ModularMultiplicationIoCols,
     SmallModulusSystemCols,
 };
+use crate::range_gate::RangeCheckerGateChip;
 use crate::sub_chip::LocalTraceInstructions;
 
 impl ModularMultiplicationAir {
     pub fn generate_trace<F: PrimeField64>(
         &self,
         pairs: Vec<(BigUint, BigUint)>,
+        range_checker: Arc<RangeCheckerGateChip>,
     ) -> RowMajorMatrix<F> {
         let num_cols: usize = BaseAir::<F>::width(self);
 
@@ -25,7 +28,9 @@ impl ModularMultiplicationAir {
 
         // generate a row for each pair of numbers to multiply
         for (a, b) in pairs {
-            let row: Vec<F> = self.generate_trace_row((a, b)).flatten();
+            let row: Vec<F> = self
+                .generate_trace_row((a, b, range_checker.clone()))
+                .flatten();
             rows.extend(row);
         }
 
@@ -53,10 +58,20 @@ fn take_limb(deque: &mut VecDeque<usize>, limb_size: usize) -> usize {
 }
 
 impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
-    type LocalInput = (BigUint, BigUint);
+    type LocalInput = (BigUint, BigUint, Arc<RangeCheckerGateChip>);
 
-    fn generate_trace_row(&self, input: (BigUint, BigUint)) -> Self::Cols<F> {
-        let (a, b) = input;
+    fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
+        let (a, b, range_checker) = input;
+
+        let range_check = |bits: usize, value: usize| {
+            let value = value as u32;
+            if bits == self.decomp {
+                range_checker.add_count(value);
+            } else {
+                range_checker.add_count(value);
+                range_checker.add_count(value << (self.decomp - bits));
+            }
+        };
 
         let product = a.clone() * b.clone();
         let r = product.clone() % self.modulus.clone();
@@ -78,6 +93,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
                             .iter()
                             .map(|&limb_size| {
                                 let limb = take_limb(bits, limb_size);
+                                range_check(limb_size, limb);
                                 elem += limb << shift;
                                 shift += limb_size;
                                 limb
@@ -91,7 +107,11 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
         let q_limbs = self
             .q_limb_sizes
             .iter()
-            .map(|&limb_size| take_limb(&mut q_bits, limb_size))
+            .map(|&limb_size| {
+                let limb = take_limb(&mut q_bits, limb_size);
+                range_check(limb_size, limb);
+                limb
+            })
             .collect();
 
         let system_cols = self
@@ -115,7 +135,13 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
                             .sum::<usize>()
                     });
                 let [(a_residue, a_quotient), (b_residue, b_quotient)] = [a_reduced, b_reduced]
-                    .map(|reduced| (reduced % small_modulus, reduced / small_modulus));
+                    .map(|reduced| {
+                        let residue = reduced % small_modulus;
+                        let quotient = reduced / small_modulus;
+                        range_check(self.small_modulus_bits, residue);
+                        range_check(self.quotient_bits, quotient);
+                        (residue, quotient)
+                    });
                 let pq_reduced = system
                     .q_coefficients
                     .iter()
@@ -125,6 +151,14 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
                 let total =
                     ((a_residue * b_residue) as isize) - ((pq_reduced + r_reduced) as isize);
                 assert_eq!(total % (small_modulus as isize), 0);
+
+                let total_quotient_shifted = (total / (small_modulus as isize))
+                    + (1 << self.quotient_bits)
+                    - (1 << self.small_modulus_bits);
+                range_check(
+                    self.quotient_bits,
+                    total_quotient_shifted.to_usize().unwrap(),
+                );
 
                 let total_quotient_abs = (abs(total) as usize) / small_modulus;
                 let total_quotient_abs_elem = F::from_canonical_usize(total_quotient_abs);
