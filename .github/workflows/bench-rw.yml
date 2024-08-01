@@ -45,7 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }} 
+          ref: ${{ github.head_ref || github.ref }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -78,7 +78,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `Benchmark results:\n\nPrevious: ${previousBenchmark}\nCurrent: ${newBenchmark}`
+              body: `Benchmark (single page r/w) results:\n\nPrevious: ${previousBenchmark}\nCurrent: ${newBenchmark}`
             });
 
       - name: Commit and push changes
