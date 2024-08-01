@@ -86,10 +86,6 @@ pub trait InteractionBuilder: AirBuilder {
     /// For internal use. Called after all constraints prior to challenge phases have been evaluated.
     fn finalize_interactions(&mut self);
 
-    /// For internal use. For each interaction, the expression for the multiplicity on the _next_ row.
-    // This could be supplied by the user, but the devex seems worse.
-    fn all_multiplicities_next(&self) -> Vec<Self::Expr>;
-
-    /// TODO: this returns the number
+    /// Returns number of interactions to bundle in permutation trace
     fn interaction_chunk_size(&self) -> usize;
 }

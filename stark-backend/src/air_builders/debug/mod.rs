@@ -206,10 +206,6 @@ where
         &[]
     }
 
-    fn all_multiplicities_next(&self) -> Vec<Self::Expr> {
-        vec![]
-    }
-
     fn interaction_chunk_size(&self) -> usize {
         0
     }

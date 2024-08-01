@@ -70,8 +70,8 @@ where
         "All main trace parts must have same height"
     );
 
-    let mut rlcs = vec![EF::zero(); height * num_interactions];
-    for (n, chunk) in rlcs.chunks_mut(num_interactions).enumerate() {
+    let mut demons = vec![EF::zero(); height * num_interactions];
+    for (n, chunk) in demons.chunks_mut(num_interactions).enumerate() {
         let evaluator = Evaluator {
             preprocessed,
             partitioned_main,
@@ -84,20 +84,20 @@ where
             let alpha = alphas[interaction.bus_index];
             debug_assert!(interaction.fields.len() <= betas.len());
             let mut fields = interaction.fields.iter();
-            let mut rlc =
+            let mut denom =
                 alpha + evaluator.eval_expr(fields.next().expect("fields should not be empty"));
             for (expr, &beta) in fields.zip(betas.iter().skip(1)) {
-                rlc += beta * evaluator.eval_expr(expr);
+                denom += beta * evaluator.eval_expr(expr);
             }
-            chunk[i] = rlc;
+            chunk[i] = denom;
         }
     }
 
     // Zero should be vanishingly unlikely if alpha, beta are properly pseudo-randomized
     // The logup reciprocals should never be zero, so trace generation should panic if
     // trying to divide by zero.
-    let reciprocals = p3_field::batch_multiplicative_inverse(&rlcs);
-    drop(rlcs);
+    let reciprocals = p3_field::batch_multiplicative_inverse(&demons);
+    drop(demons);
 
     let perm_width = (num_interactions + interaction_chunk_size - 1) / interaction_chunk_size + 1;
     let mut perm_values = vec![EF::zero(); height * perm_width];

@@ -36,6 +36,7 @@ pub struct ProverConstraintFolder<'a, SC: StarkGenericConfig> {
     /// Symbolic interactions, gotten from vkey. Needed for multiplicity in next row calculation.
     pub symbolic_interactions: &'a [SymbolicInteraction<Val<SC>>],
     pub interactions: Vec<Interaction<PackedVal<SC>>>,
+    /// Number of interactions to bundle in permutation trace
     pub interaction_chunk_size: usize,
 }
 
@@ -194,16 +195,6 @@ where
             self.interactions.len(),
             "Interaction count does not match vkey"
         );
-    }
-
-    fn all_multiplicities_next(&self) -> Vec<Self::Expr> {
-        // TODO: `i.count.next()` can be cached in the vkey
-        // we expect this to only be called once per construction of Self,
-        // so we don't cache the computation
-        self.symbolic_interactions
-            .iter()
-            .map(|i| self.eval_expr(&i.count.next()))
-            .collect()
     }
 
     fn interaction_chunk_size(&self) -> usize {

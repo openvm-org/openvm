@@ -378,13 +378,6 @@ impl<F: Field> InteractionBuilder for SymbolicRapBuilder<F> {
         }
     }
 
-    fn all_multiplicities_next(&self) -> Vec<Self::Expr> {
-        self.interactions
-            .iter()
-            .map(|interaction| interaction.count.next())
-            .collect()
-    }
-
     fn interaction_chunk_size(&self) -> usize {
         self.interaction_chunk_size
     }

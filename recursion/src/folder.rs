@@ -189,13 +189,6 @@ impl<'a, C: Config> InteractionBuilder for RecursiveVerifierConstraintFolder<'a,
         );
     }
 
-    fn all_multiplicities_next(&self) -> Vec<Self::Expr> {
-        self.symbolic_interactions
-            .iter()
-            .map(|i| self.eval_expr(&i.count.next()))
-            .collect()
-    }
-
     fn interaction_chunk_size(&self) -> usize {
         // TODO: add support for interaction_chunk_size
         1
