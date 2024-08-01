@@ -10,6 +10,10 @@ on:
       - "compiler/**"
       - "recursion/**"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 jobs:
   start-runner:
     name: Start self-hosted EC2 runner
