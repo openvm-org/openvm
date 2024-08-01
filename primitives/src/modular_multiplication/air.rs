@@ -4,14 +4,7 @@ use p3_field::AbstractField;
 use afs_stark_backend::interaction::InteractionBuilder;
 
 use crate::modular_multiplication::columns::ModularMultiplicationCols;
-use crate::modular_multiplication::LimbDimensions;
-
-pub struct FullLimbs<T> {
-    pub a_limbs: Vec<Vec<T>>,
-    pub b_limbs: Vec<Vec<T>>,
-    pub r_limbs: Vec<Vec<T>>,
-    pub q_limbs: Vec<T>,
-}
+use crate::modular_multiplication::{FullLimbs, LimbDimensions};
 
 pub fn range_check<AB: InteractionBuilder>(
     builder: &mut AB,

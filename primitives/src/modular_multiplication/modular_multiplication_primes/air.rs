@@ -9,9 +9,9 @@ use p3_matrix::Matrix;
 
 use afs_stark_backend::interaction::InteractionBuilder;
 
-use crate::modular_multiplication::air::{constrain_limbs, FullLimbs};
-use crate::modular_multiplication::LimbDimensions;
+use crate::modular_multiplication::air::constrain_limbs;
 use crate::modular_multiplication::modular_multiplication_primes::columns::ModularMultiplicationPrimesCols;
+use crate::modular_multiplication::{FullLimbs, LimbDimensions};
 use crate::sub_chip::AirConfig;
 
 pub struct SmallModulusSystem<F: Field> {
