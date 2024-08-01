@@ -37,6 +37,7 @@ impl ModularMultiplicationAir {
     // resulting Air can only be used with fields of size at least 2^`bits_per_elem`
     pub fn new(
         modulus: BigUint,
+        total_bits: usize,
         bits_per_elem: usize,
         // global parameters: range checker
         decomp: usize,
@@ -47,7 +48,6 @@ impl ModularMultiplicationAir {
         // max_limb_bits and small_modulus_bits should be maximized subject to some constraints
         max_limb_bits: usize,
         small_modulus_bits: usize,
-        small_modulus_lower_bound: usize,
         quotient_bits: usize,
     ) -> Self {
         assert!(2 * decomp <= bits_per_elem);
@@ -55,8 +55,8 @@ impl ModularMultiplicationAir {
         assert!(max_limb_bits <= decomp);
         assert!(small_modulus_bits <= decomp);
         assert!(quotient_bits <= decomp);
-        // `total_bits` is # of bits necessary to represent numbers 0..`modulus`
-        let total_bits = (modulus.clone() - BigUint::one()).bits() as usize;
+        // `total_bits` should be sufficient to represent numbers 0..`modulus`
+        assert!(total_bits >= (modulus.clone() - BigUint::one()).bits() as usize);
 
         let mut io_limb_sizes = vec![];
         let mut rem_bits = total_bits;
@@ -65,7 +65,7 @@ impl ModularMultiplicationAir {
             let mut rem_bits_here = min(rem_bits, repr_bits);
             rem_bits -= rem_bits_here;
             while rem_bits_here > 0 {
-                let limb = min(rem_bits_here, decomp);
+                let limb = min(rem_bits_here, max_limb_bits);
                 rem_bits_here -= limb;
                 limbs_here.push(limb);
             }
@@ -75,25 +75,25 @@ impl ModularMultiplicationAir {
         let mut q_limb_sizes = vec![];
         let mut rem_bits = total_bits;
         while rem_bits > 0 {
-            let limb = min(rem_bits, decomp);
+            let limb = min(rem_bits, max_limb_bits);
             rem_bits -= limb;
             q_limb_sizes.push(limb);
         }
 
-        let mut max_sum_elem_limbs: usize = 0;
+        let mut max_sum_io_limbs: usize = 0;
         for limbs in io_limb_sizes.iter() {
             for &limb in limbs.iter() {
-                max_sum_elem_limbs += (1 << limb) - 1;
+                max_sum_io_limbs += (1 << limb) - 1;
             }
         }
-        let mut max_sum_pure_limbs: usize = 0;
+        let mut max_sum_q_limbs: usize = 0;
         for &limb in q_limb_sizes.iter() {
-            max_sum_pure_limbs += (1 << limb) - 1;
+            max_sum_q_limbs += (1 << limb) - 1;
         }
-        let max_sum_pq_r = max_sum_elem_limbs + max_sum_pure_limbs;
+        let max_sum_pq_r = max_sum_io_limbs + max_sum_q_limbs;
 
         // ensures that expression for a, b is at most 2^small_modulus_bits * 2^quotient_bits
-        assert!(max_sum_elem_limbs <= (1 << quotient_bits));
+        assert!(max_sum_io_limbs <= (1 << quotient_bits));
         // ensures that the range of ab - (pq + r) is at most 2^small_modulus_bits * 2^quotient_bits
         assert!((1 << small_modulus_bits) + max_sum_pq_r <= (1 << quotient_bits));
         // ensures no overflow of (small_modulus * quotient) + residue
@@ -199,16 +199,17 @@ impl ModularMultiplicationAir {
         &self,
         builder: &mut AB,
         bits: usize,
-        var: impl Into<AB::Expr>,
+        into_expr: impl Into<AB::Expr>,
     ) {
         assert!(bits <= self.decomp);
+        let expr = into_expr.into();
         if bits == self.decomp {
-            builder.push_send(self.range_bus, [var], AB::F::one());
+            builder.push_send(self.range_bus, [expr], AB::F::one());
         } else {
-            builder.push_send(self.range_bus, [var], AB::F::one());
+            builder.push_send(self.range_bus, [expr.clone()], AB::F::one());
             builder.push_send(
                 self.range_bus,
-                [var * AB::F::from_canonical_usize(1 << (self.decomp - bits))],
+                [expr * AB::F::from_canonical_usize(1 << (self.decomp - bits))],
                 AB::F::one(),
             );
         }
@@ -284,7 +285,7 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationAir {
                 self.quotient_bits,
                 system_cols.total_quotient
                     + AB::F::from_canonical_usize(
-                        (1 << self.quotient_bits) - (1 << (2 * self.small_modulus_bits)),
+                        (1 << self.quotient_bits) - (1 << self.small_modulus_bits),
                     ),
             );
             builder.assert_eq(

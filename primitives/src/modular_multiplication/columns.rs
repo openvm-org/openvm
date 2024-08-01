@@ -182,7 +182,7 @@ impl<T: Clone> ModularMultiplicationIoCols<T> {
 impl<T: Clone> ModularMultiplicationCols<T> {
     pub fn from_slice(slc: &[T], air: &ModularMultiplicationAir) -> Self {
         let io_width = ModularMultiplicationIoCols::<T>::get_width(air);
-        let aux_width = ModularMultiplicationIoCols::<T>::get_width(air);
+        let aux_width = ModularMultiplicationAuxCols::<T>::get_width(air);
         Self {
             io: ModularMultiplicationIoCols::from_slice(&slc[0..io_width], air),
             aux: ModularMultiplicationAuxCols::from_slice(
