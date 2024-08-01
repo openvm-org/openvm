@@ -55,6 +55,10 @@ harness = false
 name = "permutation_trace_gen"
 harness = false
 
+[[bench]]
+name = "quotient_poly"
+harness = false
+
 [features]
 default = ["afs-stark-backend/mimalloc"]
 parallel = ["afs/parallel", "olap/parallel"]

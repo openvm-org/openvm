@@ -1,27 +1,24 @@
-use afs_stark_backend::commit::CommittedSingleMatrixView;
 use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
 use afs_stark_backend::interaction::trace::generate_permutation_trace;
 use afs_stark_backend::keygen::types::MultiStarkProvingKey;
 use afs_stark_backend::prover::types::MultiAirCommittedTraceData;
 use afs_stark_backend::rap::AnyRap;
 use afs_test_utils::engine::StarkEngine;
-use p3_commit::Pcs;
-use p3_matrix::Matrix;
 use p3_maybe_rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::sync::Arc;
 
 use benchmark::utils::bench::{gen_ops_sender_trace, generate_page_and_ops, get_dummy_ptd};
 use criterion::measurement::WallTime;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkGroup, Criterion};
-use itertools::{izip, Itertools};
+use itertools::Itertools;
 use p3_challenger::{CanObserve, FieldChallenger};
-use p3_field::{AbstractExtensionField, PrimeField};
+use p3_field::PrimeField;
 use p3_matrix::dense::DenseMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use pprof::criterion::{Output, PProfProfiler}; // Add this line
 
 use afs_page::page_rw_checker::page_controller::PageController;
-use afs_stark_backend::prover::trace::{ProverTraceData, SingleRapCommittedTraceView};
+use afs_stark_backend::prover::trace::ProverTraceData;
 use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
@@ -168,20 +165,11 @@ pub fn pc_prove_with_group<SC: StarkGenericConfig>(
 
     let pis = vec![vec![]; vk.per_air.len()];
     let mut challenger = engine.new_challenger();
-    let mut prover = engine.prover();
-    partial_prove_with_group(
-        group,
-        &mut prover,
-        &mut challenger,
-        pk,
-        main_trace_data,
-        &pis,
-    )
+    partial_prove_with_group(group, &mut challenger, pk, main_trace_data, &pis)
 }
 
 pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
     mut group: BenchmarkGroup<WallTime>,
-    prover: &mut MultiTraceStarkProver<SC>,
     challenger: &mut SC::Challenger,
     pk: &'a MultiStarkProvingKey<SC>,
     main_trace_data: MultiAirCommittedTraceData<'a, SC>,
@@ -194,8 +182,6 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
     SC::Challenge: Send + Sync,
     PcsProof<SC>: Send + Sync,
 {
-    let pcs = prover.config.pcs();
-
     // Challenger must observe public values
     for pis in public_values.iter() {
         challenger.observe_slice(pis);
@@ -224,125 +210,58 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
 
     // TODO: ===== Permutation Trace Generation should be moved to separate module ====
     // Generate permutation traces
-    let (perm_traces, cumulative_sums_and_indices): (Vec<Option<_>>, Vec<Option<_>>) =
-        tracing::info_span!("generate permutation traces").in_scope(|| {
-            let perm_challenges = challenges.first().map(|c| [c[0], c[1]]); // must have 2 challenges
-            let perm_traces = pk
-                .per_air
-                .par_iter()
-                .zip_eq(main_trace_data.air_traces.par_iter())
-                .zip_eq(public_values.par_iter())
-                .map(|((pk, main), public_values)| {
-                    let interactions = &pk.vk.symbolic_constraints.interactions;
-                    let preprocessed_trace =
-                        pk.preprocessed_data.as_ref().map(|d| d.trace.as_view());
-                    generate_permutation_trace(
-                        interactions,
-                        &preprocessed_trace,
-                        &main.partitioned_main_trace,
-                        public_values,
-                        perm_challenges,
-                    )
-                })
-                .collect::<Vec<_>>();
-            let mut count = 0usize;
-            let cumulative_sums_and_indices = perm_traces
-                .iter()
-                .map(|opt_trace| {
-                    opt_trace.as_ref().map(|trace| {
-                        // The cumulative sum is the element in last row of phi, which is the last column in perm_trace
-                        let cumulative_sum = *trace.row_slice(trace.height() - 1).last().unwrap();
-                        let matrix_index = count;
-                        count += 1;
-                        (cumulative_sum, matrix_index)
-                    })
-                })
-                .collect();
-            (perm_traces, cumulative_sums_and_indices)
-        });
+    let perm_challenges = challenges.first().map(|c| [c[0], c[1]]); // must have 2 challenges
 
-    // Challenger needs to observe permutation_exposed_values (aka cumulative_sums)
-    for (cumulative_sum, _) in cumulative_sums_and_indices.iter().flatten() {
-        challenger.observe_slice(cumulative_sum.as_base_slice());
-    }
+    // group.bench_function("offline checker perm trace gen", |b| {
+    //     b.iter(|| {
+    //         let idx = 2;
+    //         let pk = &pk.per_air[idx];
+    //         let main = &main_trace_data.air_traces[idx];
+    //         let public_values = &public_values[idx];
+    //         let interactions = &pk.vk.symbolic_constraints.interactions;
+    //         let preprocessed_trace = pk.preprocessed_data.as_ref().map(|d| d.trace.as_view());
+    //         generate_permutation_trace(
+    //             interactions,
+    //             &preprocessed_trace,
+    //             &main.partitioned_main_trace,
+    //             public_values,
+    //             perm_challenges,
+    //         );
+    //     })
+    // });
 
-    // Commit to permutation traces: this means only 1 challenge round right now
-    // One shared commit for all permutation traces
-    let perm_pcs_data = tracing::info_span!("commit to permutation traces").in_scope(|| {
-        let flattened_traces_with_domains: Vec<_> = perm_traces
-            .into_iter()
-            .zip_eq(&main_trace_data.air_traces)
-            .flat_map(|(perm_trace, data)| {
-                perm_trace.map(|trace| (data.domain, trace.flatten_to_base()))
-            })
-            .collect();
-        // Only commit if there are permutation traces
-        if !flattened_traces_with_domains.is_empty() {
-            let (commit, data) = pcs.commit(flattened_traces_with_domains);
-            // Challenger observes commitment
-            challenger.observe(commit.clone());
-            Some((commit, data))
-        } else {
-            None
-        }
-    });
-    // Either 0 or 1 after_challenge commits, depending on if there are any permutation traces
-    let after_challenge_pcs_data: Vec<_> = perm_pcs_data.into_iter().collect();
-    let main_pcs_data = &main_trace_data.pcs_data;
+    // group.bench_function("init page trace gen", |b| {
+    //     b.iter(|| {
+    //         let idx = 0;
+    //         let pk = &pk.per_air[idx];
+    //         let main = &main_trace_data.air_traces[idx];
+    //         let public_values = &public_values[idx];
+    //         let interactions = &pk.vk.symbolic_constraints.interactions;
+    //         let preprocessed_trace = pk.preprocessed_data.as_ref().map(|d| d.trace.as_view());
+    //         generate_permutation_trace(
+    //             interactions,
+    //             &preprocessed_trace,
+    //             &main.partitioned_main_trace,
+    //             public_values,
+    //             perm_challenges,
+    //         );
+    //     })
+    // });
 
-    // Prepare the proven RAP trace views
-    // Abstraction boundary: after this, we consider InteractiveAIR as a RAP with virtual columns included in the trace.
-    let (raps, trace_views): (Vec<_>, Vec<_>) = izip!(
-        main_trace_data.air_traces,
-        &pk.per_air,
-        cumulative_sums_and_indices
-    )
-    .map(|(main, pk, cumulative_sum_and_index)| {
-        // The AIR will be treated as the full RAP with virtual columns after this
-        let rap = main.air;
-        let domain = main.domain;
-        let preprocessed = pk.preprocessed_data.as_ref().map(|p| {
-            // TODO: currently assuming each chip has it's own preprocessed commitment
-            CommittedSingleMatrixView::new(p.data.as_ref(), 0)
-        });
-        let matrix_ptrs = &pk.vk.main_graph.matrix_ptrs;
-        assert_eq!(main.partitioned_main_trace.len(), matrix_ptrs.len());
-        let partitioned_main = matrix_ptrs
-            .iter()
-            .map(|ptr| {
-                CommittedSingleMatrixView::new(main_pcs_data[ptr.commit_index].1, ptr.matrix_index)
-            })
-            .collect_vec();
-
-        // There will be either 0 or 1 after_challenge traces
-        let after_challenge = if let Some((cumulative_sum, index)) = cumulative_sum_and_index {
-            let matrix = CommittedSingleMatrixView::new(&after_challenge_pcs_data[0].1, index);
-            let exposed_values = vec![cumulative_sum];
-            vec![(matrix, exposed_values)]
-        } else {
-            Vec::new()
-        };
-        let trace_view = SingleRapCommittedTraceView {
-            domain,
-            preprocessed,
-            partitioned_main,
-            after_challenge,
-        };
-        (rap, trace_view)
-    })
-    .unzip();
-    // === END of logic specific to Interactions/permutations, we can now deal with general RAP ===
-    group.bench_function("quotient poly calc", |b| {
+    group.bench_function("final page trace gen", |b| {
         b.iter(|| {
-            prover.prove_raps_with_committed_traces(
-                challenger,
-                pk,
-                raps.clone(),
-                trace_views.clone(),
-                main_pcs_data,
-                &after_challenge_pcs_data,
-                &challenges,
+            let idx = 1;
+            let pk = &pk.per_air[idx];
+            let main = &main_trace_data.air_traces[idx];
+            let public_values = &public_values[idx];
+            let interactions = &pk.vk.symbolic_constraints.interactions;
+            let preprocessed_trace = pk.preprocessed_data.as_ref().map(|d| d.trace.as_view());
+            generate_permutation_trace(
+                interactions,
+                &preprocessed_trace,
+                &main.partitioned_main_trace,
                 public_values,
+                perm_challenges,
             );
         })
     });

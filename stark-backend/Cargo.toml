@@ -14,8 +14,7 @@ p3-matrix = { workspace = true }
 p3-maybe-rayon = { workspace = true }
 p3-uni-stark = { workspace = true }
 p3-util = { workspace = true }
-
-rayon = "1.5.0"
+# rayon = "1.5.0"
 
 itertools = "0.13.0"
 serde = { version = "1.0", default-features = false, features = [

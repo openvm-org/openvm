@@ -22,7 +22,7 @@ pub fn trace_gen_benchmark(c: &mut Criterion) {
     let idx_len = 16;
     let data_len = 512;
     let log_page_height = 15;
-    let log_num_ops = 16;
+    let log_num_ops = 15;
     let idx_limb_bits = 16;
     let idx_decomp = 16;
 
