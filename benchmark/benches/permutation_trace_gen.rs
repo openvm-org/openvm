@@ -4,7 +4,7 @@ use afs_stark_backend::keygen::types::MultiStarkProvingKey;
 use afs_stark_backend::prover::types::MultiAirCommittedTraceData;
 use afs_stark_backend::rap::AnyRap;
 use afs_test_utils::engine::StarkEngine;
-use p3_maybe_rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use p3_maybe_rayon::prelude::ParallelIterator;
 use std::sync::Arc;
 
 use benchmark::utils::bench::{gen_ops_sender_trace, generate_page_and_ops, get_dummy_ptd};

@@ -2,18 +2,16 @@ use afs_stark_backend::commit::CommittedSingleMatrixView;
 use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
 use afs_stark_backend::interaction::trace::generate_permutation_trace;
 use afs_stark_backend::keygen::types::MultiStarkProvingKey;
-use afs_stark_backend::prover::opener::OpeningProver;
 use afs_stark_backend::prover::quotient::QuotientCommitter;
-use afs_stark_backend::prover::types::{Commitments, MultiAirCommittedTraceData};
+use afs_stark_backend::prover::types::MultiAirCommittedTraceData;
 use afs_stark_backend::rap::AnyRap;
 use afs_test_utils::engine::StarkEngine;
-use p3_commit::{Pcs, PolynomialSpace};
+use p3_commit::Pcs;
 use p3_matrix::Matrix;
-use p3_maybe_rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use std::ops::Mul;
+use p3_maybe_rayon::prelude::ParallelIterator;
 use std::sync::Arc;
 
-use benchmark::utils::bench::{gen_ops_sender_trace, generate_page_and_ops, get_dummy_ptd};
+use benchmark::utils::bench::{gen_ops_sender_trace, generate_page_and_ops};
 use criterion::measurement::WallTime;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkGroup, Criterion};
 use itertools::{izip, Itertools};
@@ -80,8 +78,6 @@ pub fn perm_trace_gen_benchmark(c: &mut Criterion) {
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
-
-    let dummy_ptd = get_dummy_ptd(&mut trace_builder.committer);
 
     let (init_page_pdata, final_page_pdata) = page_controller.load_page_and_ops(
         black_box(&page),
@@ -349,6 +345,7 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn prove_raps_with_committed_traces_with_groups<'a, SC: StarkGenericConfig>(
     mut group: BenchmarkGroup<WallTime>,
     prover: &MultiTraceStarkProver<SC>,
@@ -375,7 +372,7 @@ pub fn prove_raps_with_committed_traces_with_groups<'a, SC: StarkGenericConfig>(
 
     group.bench_function("quotient poly", |b| {
         b.iter(|| {
-            let quotient_values = quotient_committer.quotient_values(
+            let _ = quotient_committer.quotient_values(
                 raps.clone(),
                 pk,
                 trace_views.clone(),
