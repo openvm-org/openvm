@@ -56,7 +56,6 @@ impl ModularMultiplicationAir {
         small_modulus_bits: usize,
         quotient_bits: usize,
     ) -> Self {
-        assert!(2 * decomp <= bits_per_elem);
         assert!(repr_bits <= bits_per_elem);
         assert!(max_limb_bits <= decomp);
         assert!(small_modulus_bits <= decomp);
@@ -216,7 +215,7 @@ impl ModularMultiplicationAir {
             builder.push_send(self.range_bus, [expr.clone()], AB::F::one());
             builder.push_send(
                 self.range_bus,
-                [expr * AB::F::from_canonical_usize(1 << (self.decomp - bits))],
+                [expr + AB::F::from_canonical_usize((1 << self.decomp) - (1 << bits))],
                 AB::F::one(),
             );
         }

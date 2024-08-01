@@ -71,7 +71,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationAir {
                 range_checker.add_count(value);
             } else {
                 range_checker.add_count(value);
-                range_checker.add_count(value << (self.decomp - bits));
+                range_checker.add_count(value + (1 << self.decomp) - (1 << bits));
             }
         };
 
