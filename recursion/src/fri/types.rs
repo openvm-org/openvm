@@ -71,7 +71,7 @@ pub struct TwoAdicPcsProofVariable<C: Config> {
 #[derive(DslVariable, Clone)]
 pub struct BatchOpeningVariable<C: Config> {
     #[allow(clippy::type_complexity)]
-    pub opened_values: Array<C, Array<C, Ext<C::F, C::EF>>>,
+    pub opened_values: Array<C, Array<C, Felt<C::F>>>,
     pub opening_proof: Array<C, Array<C, Felt<C::F>>>,
 }
 

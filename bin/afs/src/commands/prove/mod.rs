@@ -7,7 +7,10 @@ use afs_page::{
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     keygen::types::MultiStarkProvingKey,
-    prover::trace::{ProverTraceData, TraceCommitmentBuilder},
+    prover::{
+        metrics::{trace_metrics, TraceMetrics},
+        trace::{ProverTraceData, TraceCommitmentBuilder},
+    },
 };
 use afs_test_utils::{
     engine::StarkEngine,
@@ -103,10 +106,10 @@ where
         keys_folder: String,
         cache_folder: String,
         silent: bool,
-    ) -> Result<()> {
+    ) -> Result<TraceMetrics> {
         let start = Instant::now();
         let prefix = config.generate_filename();
-        match config.page.mode {
+        let metrics = match config.page.mode {
             PageMode::ReadWrite => Self::execute_rw(
                 config,
                 engine,
@@ -118,12 +121,12 @@ where
                 silent,
             )?,
             PageMode::ReadOnly => panic!(),
-        }
+        };
 
         let duration = start.elapsed();
         println!("Proved table operations in {:?}", duration);
 
-        Ok(())
+        Ok(metrics)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -137,7 +140,7 @@ where
         cache_folder: String,
         silent: bool,
         // durations: Option<&mut (Duration, Duration)>,
-    ) -> Result<()> {
+    ) -> Result<TraceMetrics> {
         println!("Proving ops file: {}", afi_file_path);
         let instructions = AfsInputFile::open(&afi_file_path)?;
         let mut db = MockDb::from_file(&db_file_path);
@@ -231,7 +234,7 @@ where
         let proof_path = db_file_path.clone() + ".prove.bin";
         write_bytes(&encoded_proof, proof_path).unwrap();
         db.save_to_file(&(db_file_path.clone() + ".0"))?;
-        Ok(())
+        Ok(trace_metrics(&pk.per_air, &proof.degrees))
     }
 }
 

@@ -1,15 +1,13 @@
 use afs_stark_backend::keygen::types::MultiStarkVerifyingKey;
-use itertools::{izip, Itertools};
 use p3_baby_bear::BabyBear;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_strict_usize;
-use std::cmp::Reverse;
 
 use afs_compiler::util::execute_program;
 use afs_recursion::hints::{Hintable, InnerVal};
-use afs_recursion::stark::{DynRapForRecursion, VerifierProgram};
+use afs_recursion::stark::{sort_chips, DynRapForRecursion, VerifierProgram};
 use afs_recursion::types::{new_from_multi_vk, InnerConfig, VerifierInput};
 use afs_stark_backend::prover::trace::TraceCommitmentBuilder;
 use afs_stark_backend::prover::types::Proof;
@@ -56,7 +54,7 @@ pub fn make_verification_params(
     let main_trace_data = trace_builder.view(&vk, raps.to_vec());
 
     let mut challenger = engine.new_challenger();
-    let proof = prover.prove(&mut challenger, &pk, main_trace_data, &pvs);
+    let proof = prover.prove(&mut challenger, &pk, main_trace_data, pvs);
 
     let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier
@@ -65,7 +63,7 @@ pub fn make_verification_params(
             &vk,
             raps.to_vec(),
             &proof,
-            &pvs,
+            pvs,
         )
         .expect("proof should verify");
 
@@ -122,26 +120,4 @@ pub fn run_recursive_test(
 
     let (program, witness_stream) = build_verification_program(rec_raps, pvs, vparams);
     execute_program::<1>(program, witness_stream);
-}
-
-pub fn sort_chips<'a>(
-    chips: Vec<&'a dyn AnyRap<BabyBearPoseidon2Config>>,
-    rec_raps: Vec<&'a dyn DynRapForRecursion<InnerConfig>>,
-    traces: Vec<RowMajorMatrix<BabyBear>>,
-    pvs: Vec<Vec<BabyBear>>,
-) -> (
-    Vec<&'a dyn AnyRap<BabyBearPoseidon2Config>>,
-    Vec<&'a dyn DynRapForRecursion<InnerConfig>>,
-    Vec<RowMajorMatrix<BabyBear>>,
-    Vec<Vec<BabyBear>>,
-) {
-    let mut groups = izip!(chips, rec_raps, traces, pvs).collect_vec();
-    groups.sort_by_key(|(_, _, trace, _)| Reverse(trace.height()));
-
-    let chips = groups.iter().map(|(x, _, _, _)| *x).collect_vec();
-    let rec_raps = groups.iter().map(|(_, x, _, _)| *x).collect_vec();
-    let pvs = groups.iter().map(|(_, _, _, x)| x.clone()).collect_vec();
-    let traces = groups.into_iter().map(|(_, _, x, _)| x).collect_vec();
-
-    (chips, rec_raps, traces, pvs)
 }

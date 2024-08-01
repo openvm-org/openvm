@@ -97,20 +97,37 @@ pub struct BenchmarkData {
 }
 
 #[derive(Debug, Clone)]
-struct BenchmarkSetup {
+pub struct BenchmarkSetup {
     /// Section name for events
-    event_section: String,
+    pub event_section: String,
     /// Headers for each event column
-    event_headers: Vec<String>,
+    pub event_headers: Vec<String>,
     /// Filter queries for the tracing logs for events
-    event_filters: Vec<String>,
+    pub event_filters: Vec<String>,
     /// Section name for timing
-    timing_section: String,
+    pub timing_section: String,
     /// Headers for each timing column
-    timing_headers: Vec<String>,
+    pub timing_headers: Vec<String>,
     /// Filter queries for the tracing logs for timing
-    timing_filters: Vec<String>,
+    pub timing_filters: Vec<String>,
 }
+
+/// Descriptors for common timings in the stark-backend
+pub const BACKEND_TIMING_HEADERS: &[&str] = &[
+    "Prove: Gen permutation traces",
+    "Prove: Commit permutation traces",
+    "Prove: Compute quotient values",
+    "Prove: Commit to quotient poly",
+    "Prove: FRI opening proofs",
+];
+/// Timers from stark-backend
+pub const BACKEND_TIMING_FILTERS: &[&str] = &[
+    "prove:MultiTraceStarkProver::prove:generate permutation traces",
+    "prove:MultiTraceStarkProver::prove:commit to permutation traces",
+    "prove:prove_raps_with_committed_traces:compute quotient values",
+    "prove:prove_raps_with_committed_traces:commit to quotient poly",
+    "prove:prove_raps_with_committed_traces:FRI opening proofs",
+];
 
 /// Format for Predicate benchmark
 pub fn benchmark_data_predicate() -> BenchmarkData {
@@ -135,15 +152,10 @@ pub fn benchmark_data_predicate() -> BenchmarkData {
             "Prove: Load trace gen",
             "Prove: Load trace commit",
             "Prove: Main commit",
-            "Prove: Gen permutation traces",
-            "Prove: Commit permutation traces",
-            "Prove: Compute quotient values",
-            "Prove: Commit to quotient poly",
-            "Prove: FRI opening proofs",
-            "Prove time (total)",
-            "Verify time",
         ]
         .iter()
+        .chain(BACKEND_TIMING_HEADERS)
+        .chain(&["Prove time (total)", "Verify time"])
         .map(|s| s.to_string())
         .collect(),
         timing_filters: [
@@ -152,15 +164,10 @@ pub fn benchmark_data_predicate() -> BenchmarkData {
             "prove:Load page trace generation",
             "prove:Load page trace commitment",
             "prove:Prove trace commitment",
-            "prove:MultiTraceStarkProver::prove:generate permutation traces",
-            "prove:MultiTraceStarkProver::prove:commit to permutation traces",
-            "prove:prove_raps_with_committed_traces:compute quotient values",
-            "prove:prove_raps_with_committed_traces:commit to quotient poly",
-            "prove:prove_raps_with_committed_traces:FRI opening proofs",
-            "Benchmark prove: benchmark",
-            "Benchmark verify: benchmark",
         ]
         .iter()
+        .chain(BACKEND_TIMING_FILTERS)
+        .chain(&["Benchmark prove: benchmark", "Benchmark verify: benchmark"])
         .map(|s| s.to_string())
         .collect(),
     };
@@ -189,15 +196,10 @@ pub fn benchmark_data_rw() -> BenchmarkData {
             "Prove: Load trace gen",
             "Prove: Load trace commit",
             "Prove: Main commit",
-            "Prove: Gen permutation traces",
-            "Prove: Commit permutation traces",
-            "Prove: Compute quotient values",
-            "Prove: Commit to quotient poly",
-            "Prove: FRI opening proofs",
-            "Prove time (total)",
-            "Verify time",
         ]
         .iter()
+        .chain(BACKEND_TIMING_HEADERS)
+        .chain(&["Prove time (total)", "Verify time"])
         .map(|s| s.to_string())
         .collect(),
         timing_filters: [
@@ -206,15 +208,10 @@ pub fn benchmark_data_rw() -> BenchmarkData {
             "prove:Load page trace generation",
             "prove:Load page trace commitment",
             "prove:Prove trace commitment",
-            "prove:MultiTraceStarkProver::prove:generate permutation traces",
-            "prove:MultiTraceStarkProver::prove:commit to permutation traces",
-            "prove:prove_raps_with_committed_traces:compute quotient values",
-            "prove:prove_raps_with_committed_traces:commit to quotient poly",
-            "prove:prove_raps_with_committed_traces:FRI opening proofs",
-            "Benchmark prove: benchmark",
-            "Benchmark verify: benchmark",
         ]
         .iter()
+        .chain(BACKEND_TIMING_FILTERS)
+        .chain(&["Benchmark prove: benchmark", "Benchmark verify: benchmark"])
         .map(|s| s.to_string())
         .collect(),
     };
@@ -247,18 +244,16 @@ pub fn benchmark_data_multitier_rw() -> BenchmarkData {
             "Prove: Less Than Trace Generation",
             "Prove: Offline Checker Trace Generation",
             "Prove: Main commit",
-            "Prove: Gen permutation traces",
-            "Prove: Commit permutation traces",
-            "Prove: Compute quotient values",
-            "Prove: Commit to quotient poly",
-            "Prove: FRI opening proofs",
+        ]
+        .iter()
+        .chain(BACKEND_TIMING_HEADERS)
+        .chain(&[
             "Prove time (total)",
             "Verify time",
             "Page BTree: Update Time",
             "Page BTree: Commit To Disk Time",
             "Page BTree: Load and Generate Output Time",
-        ]
-        .iter()
+        ])
         .map(|s| s.to_string())
         .collect(),
         timing_filters: [
@@ -270,18 +265,16 @@ pub fn benchmark_data_multitier_rw() -> BenchmarkData {
             "prove:Load page trace generation:Main Trace Generation:Less Than Trace Generation",
             "prove:Load page trace generation:Ops Trace Generation",
             "prove:Prove trace commitment",
-            "prove:MultiTraceStarkProver::prove:generate permutation traces",
-            "prove:MultiTraceStarkProver::prove:commit to permutation traces",
-            "prove:prove_raps_with_committed_traces:compute quotient values",
-            "prove:prove_raps_with_committed_traces:commit to quotient poly",
-            "prove:prove_raps_with_committed_traces:FRI opening proofs",
+        ]
+        .iter()
+        .chain(BACKEND_TIMING_FILTERS)
+        .chain(&[
             "Benchmark prove: benchmark",
             "Benchmark verify: benchmark",
             "Page BTree Updates",
             "Page BTree Commit to Disk",
             "Page BTree Load Traces and Prover Data, Generate Output Traces",
-        ]
-        .iter()
+        ])
         .map(|s| s.to_string())
         .collect(),
     };

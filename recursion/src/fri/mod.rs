@@ -173,12 +173,12 @@ where
 
             let mut opened_values = builder.array(1);
             builder.set_value(&mut opened_values, 0, evals.clone());
-            verify_batch::<C, 4>(
+            verify_batch::<C>(
                 builder,
                 &commit,
                 dims_slice,
                 index_pair,
-                opened_values,
+                &NestedOpenedValues::Ext(opened_values),
                 &step.opening_proof,
             );
 
@@ -210,6 +210,12 @@ where
     folded_eval
 }
 
+#[allow(clippy::type_complexity)]
+pub enum NestedOpenedValues<C: Config> {
+    Felt(Array<C, Array<C, Felt<C::F>>>),
+    Ext(Array<C, Array<C, Ext<C::F, C::EF>>>),
+}
+
 /// Verifies a batch opening.
 ///
 /// Assumes the dimensions have already been sorted by tallest first.
@@ -217,12 +223,12 @@ where
 /// Reference: https://github.com/Plonky3/Plonky3/blob/4809fa7bedd9ba8f6f5d3267b1592618e3776c57/merkle-tree/src/mmcs.rs#L92
 #[allow(clippy::type_complexity)]
 #[allow(unused_variables)]
-pub fn verify_batch<C: Config, const D: usize>(
+pub fn verify_batch<C: Config>(
     builder: &mut Builder<C>,
     commit: &DigestVariable<C>,
     dimensions: Array<C, DimensionsVariable<C>>,
     index_bits: Array<C, Var<C::N>>,
-    opened_values: Array<C, Array<C, Ext<C::F, C::EF>>>,
+    opened_values: &NestedOpenedValues<C>,
     proof: &Array<C, DigestVariable<C>>,
 ) {
     builder.cycle_tracker_start("verify-batch");
@@ -233,7 +239,14 @@ pub fn verify_batch<C: Config, const D: usize>(
     let current_height = builder.get(&dimensions, index).height;
 
     // Reduce all the tables that have the same height to a single root.
-    let root = reduce_fast::<C, D>(builder, index, &dimensions, current_height, &opened_values);
+    let root = match opened_values {
+        NestedOpenedValues::Felt(opened_values) => {
+            reduce_fast::<C>(builder, index, &dimensions, current_height, opened_values)
+        }
+        NestedOpenedValues::Ext(opened_values) => {
+            reduce_fast_ext::<C>(builder, index, &dimensions, current_height, opened_values)
+        }
+    };
     let root_ptr = match root {
         Array::Fixed(_) => panic!("root is fixed"),
         Array::Dyn(ptr, _) => ptr,
@@ -268,13 +281,18 @@ pub fn verify_batch<C: Config, const D: usize>(
         builder.if_ne(index, dimensions.len()).then(|builder| {
             let next_height = builder.get(&dimensions, index).height;
             builder.if_eq(next_height, current_height).then(|builder| {
-                let next_height_openings_digest = reduce_fast::<C, D>(
-                    builder,
-                    index,
-                    &dimensions,
-                    current_height,
-                    &opened_values,
-                );
+                let next_height_openings_digest = match opened_values {
+                    NestedOpenedValues::Felt(opened_values) => {
+                        reduce_fast::<C>(builder, index, &dimensions, current_height, opened_values)
+                    }
+                    NestedOpenedValues::Ext(opened_values) => reduce_fast_ext::<C>(
+                        builder,
+                        index,
+                        &dimensions,
+                        current_height,
+                        opened_values,
+                    ),
+                };
                 builder.poseidon2_compress_x(
                     &mut root.clone(),
                     &root.clone(),
@@ -293,22 +311,17 @@ pub fn verify_batch<C: Config, const D: usize>(
     builder.cycle_tracker_end("verify-batch");
 }
 
-// FIXME: D=1 means that we are doing MMCS for Felts despite that opened_values are Exts.
-// This was a hack from SP1 to unify interface, and since they stored Ext and Felt both in one word,
-// they could just cast. In our VM, Ext requires 4 words, so we have to manually convert to Felt nested array
-// below. Ideally, this function is generic over type (see `exp_reverse_bits_len` for an example).
-// This also requires changing serialization of opened values.
 #[allow(clippy::type_complexity)]
-pub fn reduce_fast<C: Config, const D: usize>(
+pub fn reduce_fast<C: Config>(
     builder: &mut Builder<C>,
     dim_idx: Var<C::N>,
     dims: &Array<C, DimensionsVariable<C>>,
     curr_height_padded: Var<C::N>,
-    opened_values: &Array<C, Array<C, Ext<C::F, C::EF>>>,
+    opened_values: &Array<C, Array<C, Felt<C::F>>>,
 ) -> Array<C, Felt<C::F>> {
     builder.cycle_tracker_start("verify-batch-reduce-fast");
     let nb_opened_values: Var<_> = builder.eval(C::N::zero());
-    let mut nested_opened_values: Array<_, Array<_, Ext<_, _>>> = builder.dyn_array(8192);
+    let mut nested_opened_values = builder.dyn_array(8192);
     let start_dim_idx: Var<_> = builder.eval(dim_idx);
     builder.cycle_tracker_start("verify-batch-reduce-fast-setup");
     builder
@@ -328,31 +341,44 @@ pub fn reduce_fast<C: Config, const D: usize>(
         });
     builder.cycle_tracker_end("verify-batch-reduce-fast-setup");
 
-    let h = if D == 1 {
-        let mut packed_nested_opened_values = builder.dyn_array(nb_opened_values);
-        builder.range(0, nb_opened_values).for_each(|i, builder| {
-            let subarray = builder.get(&nested_opened_values, i);
-            let mut packed_subarray = builder.dyn_array(subarray.len());
+    nested_opened_values.truncate(builder, Usize::Var(nb_opened_values));
+    let h = builder.poseidon2_hash_x(&nested_opened_values);
+    builder.cycle_tracker_end("verify-batch-reduce-fast");
+    h
+}
 
-            builder
-                .range(0, packed_subarray.len())
-                .for_each(|j, builder| {
-                    let ext = builder.get(&subarray, j);
-                    let felts = builder.ext2felt(ext);
-                    for i in 1..3 {
-                        let felt = builder.get(&felts, i);
-                        builder.assert_felt_eq(felt, C::F::zero());
-                    }
-                    let felt = builder.get(&felts, 0);
-                    builder.set(&mut packed_subarray, j, felt);
-                });
-            builder.set(&mut packed_nested_opened_values, i, packed_subarray);
+#[allow(clippy::type_complexity)]
+pub fn reduce_fast_ext<C: Config>(
+    builder: &mut Builder<C>,
+    dim_idx: Var<C::N>,
+    dims: &Array<C, DimensionsVariable<C>>,
+    curr_height_padded: Var<C::N>,
+    opened_values: &Array<C, Array<C, Ext<C::F, C::EF>>>,
+) -> Array<C, Felt<C::F>> {
+    builder.cycle_tracker_start("verify-batch-reduce-fast");
+    let nb_opened_values: Var<_> = builder.eval(C::N::zero());
+    let mut nested_opened_values = builder.dyn_array(8192);
+    let start_dim_idx: Var<_> = builder.eval(dim_idx);
+    builder.cycle_tracker_start("verify-batch-reduce-fast-setup");
+    builder
+        .range(start_dim_idx, dims.len())
+        .for_each(|i, builder| {
+            let height = builder.get(dims, i).height;
+            builder.if_eq(height, curr_height_padded).then(|builder| {
+                let opened_values = builder.get(opened_values, i);
+                builder.set_value(
+                    &mut nested_opened_values,
+                    nb_opened_values,
+                    opened_values.clone(),
+                );
+                builder.assign(nb_opened_values, nb_opened_values + C::N::one());
+                builder.assign(dim_idx, dim_idx + C::N::one());
+            });
         });
-        builder.poseidon2_hash_x(&packed_nested_opened_values)
-    } else {
-        nested_opened_values.truncate(builder, Usize::Var(nb_opened_values));
-        builder.poseidon2_hash_ext(&nested_opened_values)
-    };
+    builder.cycle_tracker_end("verify-batch-reduce-fast-setup");
+
+    nested_opened_values.truncate(builder, Usize::Var(nb_opened_values));
+    let h = builder.poseidon2_hash_ext(&nested_opened_values);
     builder.cycle_tracker_end("verify-batch-reduce-fast");
     h
 }
