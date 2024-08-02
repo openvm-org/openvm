@@ -113,7 +113,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `Benchmark (single page r/w) results:\n\nPrevious: \`\`\`json\n${JSON.stringify(JSON.parse(previousBenchmark), null, 2)}\n\`\`\`\nCurrent: \`\`\`json\n${JSON.stringify(JSON.parse(newBenchmark), null, 2)}\n\`\`\``
+              body: `Benchmark (single page r/w) results:\n\nPrevious:\n\`\`\`json\n${JSON.stringify(JSON.parse(previousBenchmark), null, 2)}\n\`\`\`\nCurrent:\n\`\`\`json\n${JSON.stringify(JSON.parse(newBenchmark), null, 2)}\n\`\`\``
             });
 
       - name: Commit the result and make a new PR.
