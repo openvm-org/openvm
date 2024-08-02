@@ -1,3 +1,5 @@
+use std::cmp::min;
+
 mod air;
 mod columns;
 mod modular_multiplication_bigint;
@@ -18,6 +20,14 @@ impl LimbDimensions {
             q_limb_sizes,
             num_materialized_io_limbs,
         }
+    }
+
+    fn new_same_sizes(limb_sizes: Vec<usize>, limbs_per_elem: usize) -> Self {
+        let mut io_limb_sizes = vec![];
+        for i in (0..limb_sizes.len()).step_by(limbs_per_elem) {
+            io_limb_sizes.push(limb_sizes[i..min(i + limbs_per_elem, limb_sizes.len())].to_vec());
+        }
+        Self::new(io_limb_sizes, limb_sizes)
     }
 }
 

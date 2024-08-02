@@ -3,14 +3,14 @@ use std::sync::Arc;
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, Field};
+use p3_field::AbstractField;
 use rand::RngCore;
 
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use afs_test_utils::utils::create_seeded_rng;
 
-use crate::modular_multiplication::modular_multiplication_primes::air::ModularMultiplicationPrimesAir;
-use crate::modular_multiplication::modular_multiplication_primes::columns::ModularMultiplicationPrimesCols;
+use crate::modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir;
+use crate::modular_multiplication::modular_multiplication_bigint::columns::ModularMultiplicationBigIntCols;
 use crate::range_gate::RangeCheckerGateChip;
 
 fn secp256k1_prime() -> BigUint {
@@ -21,18 +21,18 @@ fn secp256k1_prime() -> BigUint {
     result
 }
 
-fn default_air<F: Field>() -> ModularMultiplicationPrimesAir<F> {
-    ModularMultiplicationPrimesAir::new(secp256k1_prime(), 256, 30, 15, 0, 27, 9, 9, 15)
+fn default_air() -> ModularMultiplicationBigIntAir {
+    ModularMultiplicationBigIntAir::new(secp256k1_prime(), 256, 15, 0, 30, 27, 9, 15, 1 << 14)
 }
 
 #[test]
 fn test_flatten_fromslice_roundtrip() {
-    let air = default_air::<BabyBear>();
+    let air = default_air();
 
-    let num_cols = ModularMultiplicationPrimesCols::<usize>::get_width(&air);
+    let num_cols = ModularMultiplicationBigIntCols::<usize>::get_width(&air);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-    let cols_numbered = ModularMultiplicationPrimesCols::<usize>::from_slice(&all_cols, &air);
+    let cols_numbered = ModularMultiplicationBigIntCols::<usize>::from_slice(&all_cols, &air);
     let flattened = cols_numbered.flatten();
 
     for (i, col) in flattened.iter().enumerate() {
@@ -43,7 +43,7 @@ fn test_flatten_fromslice_roundtrip() {
 }
 
 #[test]
-fn test_modular_multiplication_1() {
+fn test_modular_multiplication_bigint_1() {
     let air = default_air();
     let num_digits = 8;
     let range_checker = Arc::new(RangeCheckerGateChip::new(air.range_bus, 1 << air.decomp));
@@ -64,7 +64,7 @@ fn test_modular_multiplication_1() {
 }
 
 #[test]
-fn test_modular_multiplication_2() {
+fn test_modular_multiplication_bigint_2() {
     let air = default_air();
     let num_digits = 8;
     let range_checker = Arc::new(RangeCheckerGateChip::new(air.range_bus, 1 << air.decomp));
@@ -92,7 +92,7 @@ fn test_modular_multiplication_2() {
 }
 
 #[test]
-fn test_modular_multiplication_zero() {
+fn test_modular_multiplication_bigint_zero() {
     let air = default_air();
     let range_checker = Arc::new(RangeCheckerGateChip::new(air.range_bus, 1 << air.decomp));
 
@@ -107,7 +107,7 @@ fn test_modular_multiplication_zero() {
 
 #[test]
 #[should_panic]
-fn test_modular_multiplication_negative() {
+fn test_modular_multiplication_bigint_negative() {
     std::env::set_var("RUST_BACKTRACE", "1");
     let air = default_air();
     let num_digits = 8;
@@ -125,7 +125,7 @@ fn test_modular_multiplication_negative() {
 
 #[test]
 #[should_panic]
-fn test_modular_multiplication_negative_2() {
+fn test_modular_multiplication_bigint_negative_2() {
     let air = default_air();
     let num_digits = 8;
     let range_checker = Arc::new(RangeCheckerGateChip::new(air.range_bus, 1 << air.decomp));
