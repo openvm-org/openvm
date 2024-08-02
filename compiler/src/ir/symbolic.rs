@@ -314,6 +314,13 @@ impl<N: Field> AbstractField for SymbolicVar<N> {
     }
 }
 
+/// Trait to exclude SymbolicVar in generic parameters.
+trait NotSymbolicVar {}
+impl<N: Field> NotSymbolicVar for N {}
+impl<N: Field> NotSymbolicVar for Var<N> {}
+impl<N: PrimeField> NotSymbolicVar for Usize<N> {}
+impl<N: Field> NotSymbolicVar for RVar<N> {}
+
 impl<F: Field> AbstractField for SymbolicFelt<F> {
     type F = F;
 
@@ -471,10 +478,29 @@ impl<N: Field> Add for SymbolicVar<N> {
         let digest = self.digest() + rhs.digest();
         match (&self, &rhs) {
             (SymbolicVar::Const(a, _), SymbolicVar::Const(b, _)) => {
-                SymbolicVar::Const(*a + *b, digest)
+                return SymbolicVar::Const(*a + *b, digest);
             }
-            _ => SymbolicVar::Add(Rc::new(self), Rc::new(rhs), digest),
+            (SymbolicVar::Const(a, _), _) => {
+                if a.is_zero() {
+                    return rhs;
+                }
+            }
+            (_, SymbolicVar::Const(b, _)) => {
+                if b.is_zero() {
+                    return self;
+                }
+            }
+            _ => (),
         }
+        SymbolicVar::Add(Rc::new(self), Rc::new(rhs), digest)
+    }
+}
+
+impl<N: Field, RHS: Into<SymbolicVar<N>> + NotSymbolicVar> Add<RHS> for SymbolicVar<N> {
+    type Output = Self;
+
+    fn add(self, rhs: RHS) -> Self::Output {
+        self + rhs.into()
     }
 }
 
@@ -504,10 +530,35 @@ impl<N: Field> Mul for SymbolicVar<N> {
         let digest = self.digest() * rhs.digest();
         match (&self, &rhs) {
             (SymbolicVar::Const(a, _), SymbolicVar::Const(b, _)) => {
-                SymbolicVar::Const(*a * *b, digest)
+                return SymbolicVar::Const(*a * *b, digest);
             }
-            _ => SymbolicVar::Mul(Rc::new(self), Rc::new(rhs), digest),
+            (SymbolicVar::Const(a, _), _) => {
+                if a.is_zero() {
+                    return self;
+                }
+                if a.is_one() {
+                    return rhs;
+                }
+            }
+            (_, SymbolicVar::Const(b, _)) => {
+                if b.is_zero() {
+                    return rhs;
+                }
+                if b.is_one() {
+                    return self;
+                }
+            }
+            _ => (),
         }
+        SymbolicVar::Mul(Rc::new(self), Rc::new(rhs), digest)
+    }
+}
+
+impl<N: Field, RHS: Into<SymbolicVar<N>> + NotSymbolicVar> Mul<RHS> for SymbolicVar<N> {
+    type Output = Self;
+
+    fn mul(self, rhs: RHS) -> Self::Output {
+        self * rhs.into()
     }
 }
 
@@ -571,10 +622,29 @@ impl<N: Field> Sub for SymbolicVar<N> {
         let digest = self.digest() - rhs.digest();
         match (&self, &rhs) {
             (SymbolicVar::Const(a, _), SymbolicVar::Const(b, _)) => {
-                SymbolicVar::Const(*a - *b, digest)
+                return SymbolicVar::Const(*a - *b, digest);
             }
-            _ => SymbolicVar::Sub(Rc::new(self), Rc::new(rhs), digest),
+            (SymbolicVar::Const(a, _), _) => {
+                if a.is_zero() {
+                    return rhs;
+                }
+            }
+            (_, SymbolicVar::Const(b, _)) => {
+                if b.is_zero() {
+                    return self;
+                }
+            }
+            _ => (),
         }
+        SymbolicVar::Sub(Rc::new(self), Rc::new(rhs), digest)
+    }
+}
+
+impl<N: Field, RHS: Into<SymbolicVar<N>> + NotSymbolicVar> Sub<RHS> for SymbolicVar<N> {
+    type Output = Self;
+
+    fn sub(self, rhs: RHS) -> Self::Output {
+        self - rhs.into()
     }
 }
 
@@ -718,14 +788,6 @@ impl<F: Field, EF: ExtensionField<F>> Neg for SymbolicExt<F, EF> {
 
 // Implement all operations between N, F, EF, and SymbolicVar<N>, SymbolicFelt<F>, SymbolicExt<F, EF>
 
-impl<N: Field> Add<N> for SymbolicVar<N> {
-    type Output = Self;
-
-    fn add(self, rhs: N) -> Self::Output {
-        self + SymbolicVar::from(rhs)
-    }
-}
-
 impl<F: Field> Add<F> for SymbolicFelt<F> {
     type Output = Self;
 
@@ -734,28 +796,11 @@ impl<F: Field> Add<F> for SymbolicFelt<F> {
     }
 }
 
-impl<N: Field> Mul<N> for SymbolicVar<N> {
-    type Output = Self;
-
-    fn mul(self, rhs: N) -> Self::Output {
-        self * SymbolicVar::from(rhs)
-    }
-}
-
 impl<F: Field> Mul<F> for SymbolicFelt<F> {
     type Output = Self;
 
     fn mul(self, rhs: F) -> Self::Output {
         self * SymbolicFelt::from(rhs)
-    }
-}
-
-impl<N: Field> Sub<N> for SymbolicVar<N> {
-    type Output = Self;
-
-    fn sub(self, rhs: N) -> Self::Output {
-        let digest = self.digest() - rhs;
-        SymbolicVar::Sub(Rc::new(self), Rc::new(SymbolicVar::from_f(rhs)), digest)
     }
 }
 
@@ -770,14 +815,6 @@ impl<F: Field> Sub<F> for SymbolicFelt<F> {
 // Implement all operations between SymbolicVar<N>, SymbolicFelt<F>, SymbolicExt<F, EF>, and Var<N>,
 //  Felt<F>, Ext<F, EF>.
 
-impl<N: Field> Add<Var<N>> for SymbolicVar<N> {
-    type Output = SymbolicVar<N>;
-
-    fn add(self, rhs: Var<N>) -> Self::Output {
-        self + SymbolicVar::from(rhs)
-    }
-}
-
 impl<F: Field> Add<Felt<F>> for SymbolicFelt<F> {
     type Output = SymbolicFelt<F>;
 
@@ -786,27 +823,11 @@ impl<F: Field> Add<Felt<F>> for SymbolicFelt<F> {
     }
 }
 
-impl<N: Field> Mul<Var<N>> for SymbolicVar<N> {
-    type Output = SymbolicVar<N>;
-
-    fn mul(self, rhs: Var<N>) -> Self::Output {
-        self * SymbolicVar::from(rhs)
-    }
-}
-
 impl<F: Field> Mul<Felt<F>> for SymbolicFelt<F> {
     type Output = SymbolicFelt<F>;
 
     fn mul(self, rhs: Felt<F>) -> Self::Output {
         self * SymbolicFelt::from(rhs)
-    }
-}
-
-impl<N: Field> Sub<Var<N>> for SymbolicVar<N> {
-    type Output = SymbolicVar<N>;
-
-    fn sub(self, rhs: Var<N>) -> Self::Output {
-        self - SymbolicVar::from(rhs)
     }
 }
 
@@ -1115,38 +1136,38 @@ impl<F: Field, EF: ExtensionField<F>, E: Any> ExtensionOperand<F, EF> for E {
     fn to_operand(self) -> ExtOperand<F, EF> {
         match self.type_id() {
             ty if ty == TypeId::of::<F>() => {
-                // *Saftey*: We know that E is a F and we can transmute it to F which implements
+                // *Safety*: We know that E is a F and we can transmute it to F which implements
                 // the Copy trait.
                 let value = unsafe { mem::transmute_copy::<E, F>(&self) };
                 ExtOperand::<F, EF>::Base(value)
             }
             ty if ty == TypeId::of::<EF>() => {
-                // *Saftey*: We know that E is a EF and we can transmute it to EF which implements
+                // *Safety*: We know that E is a EF and we can transmute it to EF which implements
                 // the Copy trait.
                 let value = unsafe { mem::transmute_copy::<E, EF>(&self) };
                 ExtOperand::<F, EF>::Const(value)
             }
             ty if ty == TypeId::of::<Felt<F>>() => {
-                // *Saftey*: We know that E is a Felt<F> and we can transmute it to Felt<F> which
+                // *Safety*: We know that E is a Felt<F> and we can transmute it to Felt<F> which
                 // implements the Copy trait.
                 let value = unsafe { mem::transmute_copy::<E, Felt<F>>(&self) };
                 ExtOperand::<F, EF>::Felt(value)
             }
             ty if ty == TypeId::of::<Ext<F, EF>>() => {
-                // *Saftey*: We know that E is a Ext<F, EF> and we can transmute it to Ext<F, EF>
+                // *Safety*: We know that E is a Ext<F, EF> and we can transmute it to Ext<F, EF>
                 // which implements the Copy trait.
                 let value = unsafe { mem::transmute_copy::<E, Ext<F, EF>>(&self) };
                 ExtOperand::<F, EF>::Ext(value)
             }
             ty if ty == TypeId::of::<SymbolicFelt<F>>() => {
-                // *Saftey*: We know that E is a Symbolic Felt<F> and we can transmute it to
+                // *Safety*: We know that E is a Symbolic Felt<F> and we can transmute it to
                 // SymbolicFelt<F> but we need to clone the pointer.
                 let value_ref = unsafe { mem::transmute::<&E, &SymbolicFelt<F>>(&self) };
                 let value = value_ref.clone();
                 ExtOperand::<F, EF>::SymFelt(value)
             }
             ty if ty == TypeId::of::<SymbolicExt<F, EF>>() => {
-                // *Saftey*: We know that E is a SymbolicExt<F, EF> and we can transmute it to
+                // *Safety*: We know that E is a SymbolicExt<F, EF> and we can transmute it to
                 // SymbolicExt<F, EF> but we need to clone the pointer.
                 let value_ref = unsafe { mem::transmute::<&E, &SymbolicExt<F, EF>>(&self) };
                 let value = value_ref.clone();
@@ -1217,25 +1238,6 @@ impl<N: Field> Mul<SymbolicVar<N>> for Var<N> {
 
     fn mul(self, rhs: SymbolicVar<N>) -> Self::Output {
         SymbolicVar::<N>::from(self) * rhs
-    }
-}
-
-impl<N: PrimeField> Sub<Usize<N>> for SymbolicVar<N> {
-    type Output = SymbolicVar<N>;
-
-    fn sub(self, rhs: Usize<N>) -> Self::Output {
-        match rhs {
-            Usize::Const(n) => self - *n.borrow(),
-            Usize::Var(n) => self - n,
-        }
-    }
-}
-
-impl<N: PrimeField> Sub<RVar<N>> for SymbolicVar<N> {
-    type Output = SymbolicVar<N>;
-
-    fn sub(self, rhs: RVar<N>) -> Self::Output {
-        self - Self::from(rhs)
     }
 }
 
