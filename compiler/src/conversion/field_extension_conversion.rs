@@ -1,9 +1,9 @@
 use p3_field::{ExtensionField, PrimeField64};
 
-use crate::asm::AsmInstruction;
-
 use stark_vm::cpu::OpCode::*;
 use stark_vm::{cpu::trace::Instruction, field_extension::BETA};
+
+use crate::asm::AsmInstruction;
 
 use super::{inst, register, AS};
 

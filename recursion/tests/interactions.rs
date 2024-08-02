@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use afs_test_utils::config::fri_params::default_fri_params;
 use p3_matrix::dense::RowMajorMatrix;
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
@@ -9,6 +8,7 @@ use afs_recursion::stark::DynRapForRecursion;
 use afs_recursion::types::InnerConfig;
 use afs_stark_backend::rap::AnyRap;
 use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use afs_test_utils::config::fri_params::default_fri_params;
 use afs_test_utils::config::setup_tracing;
 use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use afs_test_utils::utils::to_field_vec;

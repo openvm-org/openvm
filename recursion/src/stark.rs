@@ -8,6 +8,7 @@ use p3_commit::LagrangeSelectors;
 use p3_field::{AbstractExtensionField, AbstractField, PrimeField32, TwoAdicField};
 use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
 use p3_matrix::stack::VerticalPair;
+use p3_matrix::Matrix;
 
 use afs_compiler::conversion::CompilerOptions;
 use afs_compiler::ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize, Var};
@@ -15,7 +16,6 @@ use afs_stark_backend::air_builders::symbolic::{SymbolicConstraints, SymbolicRap
 use afs_stark_backend::prover::opener::AdjacentOpenedValues;
 use afs_stark_backend::rap::{AnyRap, Rap};
 use afs_test_utils::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
-use p3_matrix::Matrix;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::vm::ExecutionSegment;
 
