@@ -13,7 +13,9 @@ use afs_stark_backend::prover::trace::TraceCommitmentBuilder;
 use afs_stark_backend::prover::types::Proof;
 use afs_stark_backend::rap::AnyRap;
 use afs_stark_backend::verifier::MultiTraceStarkVerifier;
-use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
+use afs_test_utils::config::baby_bear_poseidon2::{
+    default_perm, engine_from_perm, BabyBearPoseidon2Config,
+};
 use afs_test_utils::config::FriParameters;
 use afs_test_utils::engine::StarkEngine;
 use stark_vm::cpu::trace::Instruction;
@@ -28,13 +30,14 @@ pub fn make_verification_params(
     raps: &[&dyn AnyRap<BabyBearPoseidon2Config>],
     traces: Vec<RowMajorMatrix<BabyBear>>,
     pvs: &[Vec<BabyBear>],
+    fri_params: FriParameters,
 ) -> VerificationParams<BabyBearPoseidon2Config> {
     let num_pvs: Vec<usize> = pvs.iter().map(|pv| pv.len()).collect();
 
     let trace_heights: Vec<usize> = traces.iter().map(|t| t.height()).collect();
     let log_degree = log2_strict_usize(trace_heights.into_iter().max().unwrap());
 
-    let engine = default_engine(log_degree);
+    let engine = engine_from_perm(default_perm(), log_degree, fri_params);
 
     let mut keygen_builder = engine.keygen_builder();
     for (&rap, &num_pv) in raps.iter().zip(num_pvs.iter()) {
@@ -113,10 +116,11 @@ pub fn run_recursive_test(
     rec_raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
     traces: Vec<RowMajorMatrix<BabyBear>>,
     pvs: Vec<Vec<BabyBear>>,
+    fri_params: FriParameters,
 ) {
     let (any_raps, rec_raps, traces, pvs) = sort_chips(any_raps, rec_raps, traces, pvs);
 
-    let vparams = make_verification_params(&any_raps, traces, &pvs);
+    let vparams = make_verification_params(&any_raps, traces, &pvs, fri_params);
 
     let (program, witness_stream) = build_verification_program(rec_raps, pvs, vparams);
     execute_program::<1>(program, witness_stream);

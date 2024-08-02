@@ -517,6 +517,7 @@ where
                 after_challenge_values,
                 &challenges,
                 &exposed_values_after_challenge,
+                air_const.interaction_chunk_size,
             );
         }
 
@@ -542,6 +543,7 @@ where
         after_challenge_values: AdjacentOpenedValuesVariable<C>,
         challenges: &[Vec<Ext<C::F, C::EF>>],
         exposed_values_after_challenge: &[Vec<Ext<C::F, C::EF>>],
+        interaction_chunk_size: usize,
     ) where
         R: for<'b> Rap<RecursiveVerifierConstraintFolder<'b, C>> + Sync + ?Sized,
     {
@@ -617,6 +619,7 @@ where
             after_challenge,
             challenges,
             exposed_values_after_challenge,
+            interaction_chunk_size,
         );
 
         let num_quotient_chunks = 1 << constants.log_quotient_degree();
@@ -656,6 +659,7 @@ where
         after_challenge: AdjacentOpenedValues<Ext<C::F, C::EF>>,
         challenges: &[Vec<Ext<C::F, C::EF>>],
         exposed_values_after_challenge: &[Vec<Ext<C::F, C::EF>>],
+        interaction_chunk_size: usize,
     ) -> Ext<C::F, C::EF>
     where
         R: for<'b> Rap<RecursiveVerifierConstraintFolder<'b, C>> + Sync + ?Sized,
@@ -712,6 +716,7 @@ where
             exposed_values_after_challenge, // FIXME
 
             symbolic_interactions: &symbolic_constraints.interactions,
+            interaction_chunk_size,
             interactions: vec![],
         };
 

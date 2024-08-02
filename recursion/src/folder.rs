@@ -35,6 +35,8 @@ pub struct RecursiveVerifierConstraintFolder<'a, C: Config> {
     /// Symbolic interactions, gotten from vkey. Needed for multiplicity in next row calculation.
     pub symbolic_interactions: &'a [SymbolicInteraction<C::F>],
     pub interactions: Vec<Interaction<Expr<C>>>,
+    /// TODO: remove this
+    pub interaction_chunk_size: usize,
 }
 
 impl<'a, C: Config> AirBuilder for RecursiveVerifierConstraintFolder<'a, C> {
@@ -190,8 +192,7 @@ impl<'a, C: Config> InteractionBuilder for RecursiveVerifierConstraintFolder<'a,
     }
 
     fn interaction_chunk_size(&self) -> usize {
-        // TODO: add support for interaction_chunk_size
-        1
+        self.interaction_chunk_size
     }
 }
 
