@@ -457,13 +457,13 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 }
                 DslIr::StoreHintWord(ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
-                        AsmInstruction::StoreHintWordI(ptr.fp(), index, offset, size),
+                        AsmInstruction::StoreHintWordI(ptr.fp(), size * index + offset),
                         trace,
                     ),
-                    IndexTriple::Var(index, offset, size) => self.push(
-                        AsmInstruction::StoreHintWord(ptr.fp(), index, offset, size),
-                        trace,
-                    ),
+                    IndexTriple::Var(index, offset, size) => {
+                        self.add_scaled(A0, ptr.fp(), index, size, trace.clone());
+                        self.push(AsmInstruction::StoreHintWordI(A0, offset), trace)
+                    }
                 },
                 DslIr::FriFold(m, input_ptr) => {
                     if let Array::Dyn(ptr, _) = input_ptr {

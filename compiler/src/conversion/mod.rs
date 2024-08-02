@@ -437,43 +437,14 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             AS::Register,
             AS::Memory,
         )],
-        AsmInstruction::StoreHintWordI(val, offset, index, size) => vec![inst(
+        AsmInstruction::StoreHintWordI(val, offset) => vec![inst(
             SHINTW,
             register(val),
-            (index * size) + offset,
+            offset,
             F::zero(),
             AS::Register,
             AS::Memory,
         )],
-        AsmInstruction::StoreHintWord(addr, index, offset, size) => vec![
-            // register[util] <- register[index] * size
-            inst(
-                FMUL,
-                utility_register,
-                register(index),
-                size,
-                AS::Register,
-                AS::Immediate,
-            ),
-            // register[util] <- register[src] + register[util]
-            inst(
-                FADD,
-                utility_register,
-                register(addr),
-                utility_register,
-                AS::Register,
-                AS::Register,
-            ),
-            //  mem[register[util] + offset] <- hint_word
-            inst(
-                SHINTW,
-                utility_register,
-                offset,
-                F::zero(),
-                AS::Register,
-                AS::Memory,
-            ),
-        ],
         AsmInstruction::PrintV(..) | AsmInstruction::PrintF(..) | AsmInstruction::PrintE(..) => {
             if options.compile_prints {
                 convert_print_instruction::<WORD_SIZE, F, EF>(instruction)

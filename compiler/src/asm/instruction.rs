@@ -114,9 +114,8 @@ pub enum AsmInstruction<F, EF> {
     /// Bit decompose the field element `src` and add in little endian to hint stream.
     HintBits(i32),
 
-    /// Stores the next hint stream word at `dst`.
-    StoreHintWord(i32, i32, F, F),
-    StoreHintWordI(i32, F, F, F),
+    /// Stores the next hint stream word into value stored at addr + value.
+    StoreHintWordI(i32, F),
 
     /// FRIFold(m, input).
     FriFold(i32, i32),
@@ -285,11 +284,8 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                 write!(f, "print_e ({})fp", dst)
             }
             AsmInstruction::HintInputVec() => write!(f, "hint_vec"),
-            AsmInstruction::StoreHintWord(dst, index, offset, size) => {
-                write!(f, "shintw ({})fp ({})fp {} {}", dst, index, offset, size)
-            }
-            AsmInstruction::StoreHintWordI(dst, index, offset, size) => {
-                write!(f, "shintw ({})fp {} {} {}", dst, index, offset, size)
+            AsmInstruction::StoreHintWordI(dst, offset) => {
+                write!(f, "shintw ({})fp {}", dst, offset)
             }
             AsmInstruction::FriFold(m, input_ptr) => {
                 write!(f, "fri_fold ({})fp, ({})fp", m, input_ptr)
