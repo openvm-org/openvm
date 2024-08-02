@@ -1,4 +1,4 @@
-use super::{Array, Config, Ext, Felt, FriFoldInput, MemIndex, Ptr, TracedVec, Usize, Var};
+use super::{Array, Config, Ext, Felt, FriFoldInput, MemIndex, Ptr, RVar, TracedVec, Var};
 
 /// An intermeddiate instruction set for implementing programs.
 ///
@@ -102,13 +102,7 @@ pub enum DslIr<C: Config> {
 
     // Control flow.
     /// Executes a for loop with the parameters (start step value, end step value, step size, step variable, body).
-    For(
-        Usize<C::N>,
-        Usize<C::N>,
-        C::N,
-        Var<C::N>,
-        TracedVec<DslIr<C>>,
-    ),
+    For(RVar<C::N>, RVar<C::N>, C::N, Var<C::N>, TracedVec<DslIr<C>>),
     /// Executes an equal conditional branch with the parameters (lhs var, rhs var, then body, else body).
     IfEq(
         Var<C::N>,
@@ -158,7 +152,7 @@ pub enum DslIr<C: Config> {
 
     // Memory instructions.
     /// Allocate (ptr, len, size) a memory slice of length len
-    Alloc(Ptr<C::N>, Usize<C::N>, usize),
+    Alloc(Ptr<C::N>, RVar<C::N>, usize),
     /// Load variable (var, ptr, index)
     LoadV(Var<C::N>, Ptr<C::N>, MemIndex<C::N>),
     /// Load field element (var, ptr, index)
@@ -206,7 +200,7 @@ pub enum DslIr<C: Config> {
     /// Prepare next input vector (preceded by its length) for hinting.
     HintInputVec(),
     /// Prepare bit decomposition for hinting.
-    HintBitsU(Usize<C::N>),
+    HintBitsU(RVar<C::N>),
     /// Prepare bit decomposition for hinting.
     HintBitsV(Var<C::N>),
     /// Prepare bit decomposition for hinting.

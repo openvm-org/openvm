@@ -151,19 +151,19 @@ fn test_in_place_arithmetic() {
     ]);
 
     let x: Ext<_, _> = builder.constant(ef);
-    builder.assign(x, x + x);
+    builder.assign(&x, x + x);
     builder.assert_ext_eq(x, (ef + ef).cons());
 
     let x: Ext<_, _> = builder.constant(ef);
-    builder.assign(x, x - x);
+    builder.assign(&x, x - x);
     builder.assert_ext_eq(x, EF::zero().cons());
 
     let x: Ext<_, _> = builder.constant(ef);
-    builder.assign(x, x * x);
+    builder.assign(&x, x * x);
     builder.assert_ext_eq(x, (ef * ef).cons());
 
     let x: Ext<_, _> = builder.constant(ef);
-    builder.assign(x, x / x);
+    builder.assign(&x, x / x);
     builder.assert_ext_eq(x, EF::one().cons());
 
     builder.halt();
@@ -222,51 +222,51 @@ fn test_ext_immediate() {
     let ext: Ext<_, _> = builder.constant(ef);
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ext + ef);
+    builder.assign(&x, ext + ef);
     builder.assert_ext_eq(x, (ef + ef).cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ef.cons() + ext);
+    builder.assign(&x, ef.cons() + ext);
     builder.assert_ext_eq(x, (ef + ef).cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ext + f);
+    builder.assign(&x, ext + f);
     builder.assert_ext_eq(x, (ef + f).cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ext - ef);
+    builder.assign(&x, ext - ef);
     builder.assert_ext_eq(x, EF::zero().cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ef.cons() - ext);
+    builder.assign(&x, ef.cons() - ext);
     builder.assert_ext_eq(x, EF::zero().cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ext - f);
+    builder.assign(&x, ext - f);
     builder.assert_ext_eq(x, (ef - f).cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ext * ef);
+    builder.assign(&x, ext * ef);
     builder.assert_ext_eq(x, (ef * ef).cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ef.cons() * ext);
+    builder.assign(&x, ef.cons() * ext);
     builder.assert_ext_eq(x, (ef * ef).cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ext * f);
+    builder.assign(&x, ext * f);
     builder.assert_ext_eq(x, (ef * f).cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ext / ef);
+    builder.assign(&x, ext / ef);
     builder.assert_ext_eq(x, EF::one().cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ef.cons() / ext);
+    builder.assign(&x, ef.cons() / ext);
     builder.assert_ext_eq(x, EF::one().cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ext / f);
+    builder.assign(&x, ext / f);
     builder.assert_ext_eq(x, (ef / f.into()).cons());
 
     builder.halt();
@@ -303,28 +303,28 @@ fn test_ext_felt_arithmetic() {
     let ext: Ext<_, _> = builder.constant(ef);
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ext + felt);
+    builder.assign(&x, ext + felt);
     builder.assert_ext_eq(x, (ef + f).cons());
 
-    builder.assign(x, ext + f);
+    builder.assign(&x, ext + f);
     builder.assert_ext_eq(x, (ef + f).cons());
 
-    builder.assign(x, ext - felt);
+    builder.assign(&x, ext - felt);
     builder.assert_ext_eq(x, (ef - f).cons());
 
-    builder.assign(x, ext - f);
+    builder.assign(&x, ext - f);
     builder.assert_ext_eq(x, (ef - f).cons());
 
-    builder.assign(x, ext * felt);
+    builder.assign(&x, ext * felt);
     builder.assert_ext_eq(x, (ef * f).cons());
 
-    builder.assign(x, ext * f);
+    builder.assign(&x, ext * f);
     builder.assert_ext_eq(x, (ef * f).cons());
 
-    builder.assign(x, ext / felt);
+    builder.assign(&x, ext / felt);
     builder.assert_ext_eq(x, (ef / EF::from_base(f)).cons());
 
-    builder.assign(x, ext / f);
+    builder.assign(&x, ext / f);
     builder.assert_ext_eq(x, (ef / EF::from_base(f)).cons());
 
     builder.halt();

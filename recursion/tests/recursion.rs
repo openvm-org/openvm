@@ -25,9 +25,9 @@ fn fibonacci_program(a: u32, b: u32, n: u32) -> Vec<Instruction<BabyBear>> {
 
     for _ in 0..n {
         let tmp: Var<_> = builder.uninit();
-        builder.assign(tmp, next);
-        builder.assign(next, prev + next);
-        builder.assign(prev, tmp);
+        builder.assign(&tmp, next);
+        builder.assign(&next, prev + next);
+        builder.assign(&prev, tmp);
     }
 
     builder.halt();

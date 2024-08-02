@@ -32,9 +32,9 @@ pub fn benchmark_fib_verifier_program(n: usize) -> Result<()> {
 
     builder.range(start, end).for_each(|_, builder| {
         let temp: Felt<_> = builder.uninit();
-        builder.assign(temp, b);
-        builder.assign(b, a + b);
-        builder.assign(a, temp);
+        builder.assign(&temp, b);
+        builder.assign(&b, a + b);
+        builder.assign(&a, temp);
     });
 
     builder.halt();

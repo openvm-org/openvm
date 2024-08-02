@@ -2,12 +2,12 @@ use alloc::{collections::BTreeMap, vec};
 use std::collections::BTreeSet;
 
 use backtrace::Backtrace;
-use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
+use p3_field::{ExtensionField, Field, PrimeField32, TwoAdicField};
 
 use super::{config::AsmConfig, AssemblyCode, BasicBlock, IndexTriple, ValueOrConst};
 use crate::{
     asm::AsmInstruction,
-    ir::{Array, DslIr, Ext, Felt, Ptr, Usize, Var},
+    ir::{Array, DslIr, Ext, Felt, Ptr, RVar, Var},
     prelude::TracedVec,
 };
 
@@ -505,12 +505,18 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         }
     }
 
-    pub fn alloc(&mut self, ptr: Ptr<F>, len: Usize<F>, size: usize, backtrace: Option<Backtrace>) {
+    pub fn alloc(
+        &mut self,
+        ptr: Ptr<F>,
+        len: impl Into<RVar<F>>,
+        size: usize,
+        backtrace: Option<Backtrace>,
+    ) {
         // Load the current heap ptr address to the stack value and advance the heap ptr.
         let size = F::from_canonical_usize(size);
+        let len = len.into();
         match len {
-            Usize::Const(len) => {
-                let len = F::from_canonical_usize(len);
+            RVar::Const(len) => {
                 self.push(
                     AsmInstruction::AddFI(ptr.fp(), HEAP_PTR, F::zero()),
                     backtrace.clone(),
@@ -520,7 +526,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     backtrace,
                 );
             }
-            Usize::Var(len) => {
+            RVar::Val(len) => {
                 self.push(
                     AsmInstruction::AddFI(ptr.fp(), HEAP_PTR, F::zero()),
                     backtrace.clone(),
@@ -691,10 +697,10 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
 /// A builder for a for loop.
 ///
 /// SAFETY: Starting with end < start will lead to undefined behavior.
-pub struct ForCompiler<'a, F, EF> {
+pub struct ForCompiler<'a, F: Field, EF> {
     compiler: &'a mut AsmCompiler<F, EF>,
-    start: Usize<F>,
-    end: Usize<F>,
+    start: RVar<F>,
+    end: RVar<F>,
     step_size: F,
     loop_var: Var<F>,
 }
@@ -771,13 +777,11 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
 
     fn set_loop_var(&mut self) {
         match self.start {
-            Usize::Const(start) => {
-                self.compiler.push(
-                    AsmInstruction::AddFI(self.loop_var.fp(), ZERO, F::from_canonical_usize(start)),
-                    None,
-                );
+            RVar::Const(start) => {
+                self.compiler
+                    .push(AsmInstruction::AddFI(self.loop_var.fp(), ZERO, start), None);
             }
-            Usize::Var(var) => {
+            RVar::Val(var) => {
                 self.compiler.push(
                     AsmInstruction::AddFI(self.loop_var.fp(), var.fp(), F::zero()),
                     None,
@@ -788,15 +792,11 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
 
     fn jump_to_loop_body(&mut self, loop_label: F) {
         match self.end {
-            Usize::Const(end) => {
-                let instr = AsmInstruction::BneI(
-                    loop_label,
-                    self.loop_var.fp(),
-                    F::from_canonical_usize(end),
-                );
+            RVar::Const(end) => {
+                let instr = AsmInstruction::BneI(loop_label, self.loop_var.fp(), end);
                 self.compiler.push(instr, None);
             }
-            Usize::Var(end) => {
+            RVar::Val(end) => {
                 let instr = AsmInstruction::Bne(loop_label, self.loop_var.fp(), end.fp());
                 self.compiler.push(instr, None);
             }

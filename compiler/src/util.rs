@@ -7,7 +7,7 @@ use afs_test_utils::{
     engine::StarkEngine,
 };
 use p3_baby_bear::BabyBear;
-use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
+use p3_field::{ExtensionField, PrimeField, PrimeField32, TwoAdicField};
 use stark_vm::{
     cpu::trace::Instruction,
     vm::{config::VmConfig, ExecutionResult, VirtualMachine},
@@ -25,6 +25,20 @@ pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
     }
 }
 
+/// Converts a prime field element to a usize.
+pub fn prime_field_to_usize<F: PrimeField>(x: F) -> usize {
+    let bu = x.as_canonical_biguint();
+    let digits = bu.to_u64_digits();
+    if digits.is_empty() {
+        return 0;
+    }
+    let ret = digits[0] as usize;
+    for i in 1..digits.len() {
+        assert_eq!(digits[i], 0, "Prime field element too large");
+    }
+    ret
+}
+
 pub fn execute_program<const WORD_SIZE: usize>(
     program: Vec<Instruction<BabyBear>>,
     input_stream: Vec<Vec<BabyBear>>,
@@ -32,6 +46,7 @@ pub fn execute_program<const WORD_SIZE: usize>(
     let vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
             num_public_values: 4,
+            max_segment_len: (1 << 25) - 100,
             ..Default::default()
         },
         program,

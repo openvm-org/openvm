@@ -49,7 +49,7 @@ pub fn verify_two_adic_pcs<C: Config>(
 
     builder.cycle_tracker_start("stage-d-2-fri-fold");
     builder
-        .range(0, proof.query_openings.len())
+        .range0(proof.query_openings.len())
         .for_each(|i, builder| {
             let query_opening = builder.get(&proof.query_openings, i);
             let index_bits = builder.get(&fri_challenges.query_indices, i);
@@ -65,20 +65,20 @@ pub fn verify_two_adic_pcs<C: Config>(
                 builder.set_value(&mut alpha_pow, j, one_ef);
             }
 
-            builder.range(0, rounds.len()).for_each(|j, builder| {
+            builder.range0(rounds.len()).for_each(|j, builder| {
                 let batch_opening = builder.get(&query_opening, j);
                 let round = builder.get(&rounds, j);
                 let batch_commit = round.batch_commit;
                 let mats = round.mats;
 
                 let mut batch_heights_log2: Array<C, Var<C::N>> = builder.array(mats.len());
-                builder.range(0, mats.len()).for_each(|k, builder| {
+                builder.range0(mats.len()).for_each(|k, builder| {
                     let mat = builder.get(&mats, k);
                     let height_log2: Var<_> = builder.eval(mat.domain.log_n + log_blowup);
                     builder.set_value(&mut batch_heights_log2, k, height_log2);
                 });
                 let mut batch_dims: Array<C, DimensionsVariable<C>> = builder.array(mats.len());
-                builder.range(0, mats.len()).for_each(|k, builder| {
+                builder.range0(mats.len()).for_each(|k, builder| {
                     let mat = builder.get(&mats, k);
                     let dim = DimensionsVariable::<C> {
                         height: builder.eval(mat.domain.size() * blowup),
@@ -111,53 +111,50 @@ pub fn verify_two_adic_pcs<C: Config>(
                 };
 
                 builder.cycle_tracker_start("compute-reduced-opening");
-                builder
-                    .range(0, opened_values.len())
-                    .for_each(|k, builder| {
-                        let mat_opening = builder.get(&opened_values, k);
-                        let mat = builder.get(&mats, k);
-                        let mat_points = mat.points;
-                        let mat_values = mat.values;
+                builder.range0(opened_values.len()).for_each(|k, builder| {
+                    let mat_opening = builder.get(&opened_values, k);
+                    let mat = builder.get(&mats, k);
+                    let mat_points = mat.points;
+                    let mat_values = mat.values;
 
-                        let log2_domain_size = mat.domain.log_n;
-                        let log_height: Var<C::N> = builder.eval(log2_domain_size + log_blowup);
+                    let log2_domain_size = mat.domain.log_n;
+                    let log_height: Var<C::N> = builder.eval(log2_domain_size + log_blowup);
 
-                        let cur_ro = builder.get(&ro, log_height);
-                        let cur_alpha_pow = builder.get(&alpha_pow, log_height);
+                    let cur_ro = builder.get(&ro, log_height);
+                    let cur_alpha_pow = builder.get(&alpha_pow, log_height);
 
-                        let bits_reduced: Usize<_> =
-                            builder.eval(log_global_max_height - log_height);
-                        let index_bits_shifted = index_bits.shift(builder, bits_reduced);
+                    let bits_reduced: Usize<_> = builder.eval(log_global_max_height - log_height);
+                    let index_bits_shifted = index_bits.shift(builder, bits_reduced);
 
-                        let two_adic_generator = config.get_two_adic_generator(builder, log_height);
-                        builder.cycle_tracker_start("exp-reverse-bits-len");
-                        let two_adic_generator_exp = builder.exp_reverse_bits_len(
-                            two_adic_generator,
-                            &index_bits_shifted,
-                            log_height,
-                        );
-                        builder.cycle_tracker_end("exp-reverse-bits-len");
-                        let x: Felt<C::F> = builder.eval(two_adic_generator_exp * g);
+                    let two_adic_generator = config.get_two_adic_generator(builder, log_height);
+                    builder.cycle_tracker_start("exp-reverse-bits-len");
+                    let two_adic_generator_exp = builder.exp_reverse_bits_len(
+                        two_adic_generator,
+                        &index_bits_shifted,
+                        log_height,
+                    );
+                    builder.cycle_tracker_end("exp-reverse-bits-len");
+                    let x: Felt<C::F> = builder.eval(two_adic_generator_exp * g);
 
-                        builder.range(0, mat_points.len()).for_each(|l, builder| {
-                            let z: Ext<C::F, C::EF> = builder.get(&mat_points, l);
-                            let ps_at_z = builder.get(&mat_values, l);
+                    builder.range0(mat_points.len()).for_each(|l, builder| {
+                        let z: Ext<C::F, C::EF> = builder.get(&mat_points, l);
+                        let ps_at_z = builder.get(&mat_values, l);
 
-                            builder.cycle_tracker_start("sp1-fri-fold");
-                            builder.range(0, ps_at_z.len()).for_each(|t, builder| {
-                                let p_at_x = builder.get(&mat_opening, t);
-                                let p_at_z = builder.get(&ps_at_z, t);
-                                let quotient = (p_at_z - p_at_x) / (z - x);
+                        builder.cycle_tracker_start("sp1-fri-fold");
+                        builder.range0(ps_at_z.len()).for_each(|t, builder| {
+                            let p_at_x = builder.get(&mat_opening, t);
+                            let p_at_z = builder.get(&ps_at_z, t);
+                            let quotient = (p_at_z - p_at_x) / (z - x);
 
-                                builder.assign(cur_ro, cur_ro + cur_alpha_pow * quotient);
-                                builder.assign(cur_alpha_pow, cur_alpha_pow * alpha);
-                            });
-                            builder.cycle_tracker_end("sp1-fri-fold");
+                            builder.assign(&cur_ro, cur_ro + cur_alpha_pow * quotient);
+                            builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha);
                         });
-
-                        builder.set_value(&mut ro, log_height, cur_ro);
-                        builder.set_value(&mut alpha_pow, log_height, cur_alpha_pow);
+                        builder.cycle_tracker_end("sp1-fri-fold");
                     });
+
+                    builder.set_value(&mut ro, log_height, cur_ro);
+                    builder.set_value(&mut alpha_pow, log_height, cur_alpha_pow);
+                });
                 builder.cycle_tracker_end("compute-reduced-opening");
             });
 
@@ -195,8 +192,8 @@ where
             builder.set(&mut commit, i, f);
         }
 
-        let mut mats =
-            builder.dyn_array::<TwoAdicPcsMatsVariable<C>>(domains_and_openings_val.len());
+        let mut mats = builder
+            .dyn_array::<TwoAdicPcsMatsVariable<C>>(RVar::from(domains_and_openings_val.len()));
 
         for (i, (domain, openning)) in domains_and_openings_val.into_iter().enumerate() {
             let domain = builder.constant::<TwoAdicMultiplicativeCosetVariable<_>>(domain);
@@ -252,7 +249,7 @@ where
     fn natural_domain_for_log_degree(
         &self,
         builder: &mut Builder<C>,
-        log_degree: Usize<C::N>,
+        log_degree: RVar<C::N>,
     ) -> Self::Domain {
         self.config.get_subgroup(builder, log_degree)
     }
@@ -274,14 +271,13 @@ pub mod tests {
 
     use afs_compiler::{
         asm::AsmBuilder,
-        ir::{Array, Usize, Var, DIGEST_SIZE},
+        ir::{Array, RVar, DIGEST_SIZE},
     };
     use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
     use itertools::Itertools;
     use p3_baby_bear::BabyBear;
     use p3_challenger::{CanObserve, FieldChallenger};
     use p3_commit::{Pcs, TwoAdicMultiplicativeCoset};
-    use p3_field::AbstractField;
     use p3_matrix::dense::RowMajorMatrix;
     use p3_uni_stark::{StarkGenericConfig, Val};
     use rand::rngs::OsRng;
@@ -360,8 +356,8 @@ pub mod tests {
 
         // Test natural domain for degree.
         for log_d_val in log_degrees.iter() {
-            let log_d: Var<_> = builder.eval(F::from_canonical_usize(*log_d_val));
-            let domain = pcs_var.natural_domain_for_log_degree(&mut builder, Usize::Var(log_d));
+            let log_d = *log_d_val;
+            let domain = pcs_var.natural_domain_for_log_degree(&mut builder, RVar::from(log_d));
 
             let domain_val =
                 <ScPcs as Pcs<EF, Challenger>>::natural_domain_for_degree(pcs, 1 << log_d_val);
