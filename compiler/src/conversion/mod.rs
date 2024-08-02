@@ -273,53 +273,6 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 AS::Memory,
             ),
         ],
-        AsmInstruction::LoadE(dst, src, index, offset, size) => {
-            let mut result = vec![
-                // register[util] <- register[index] * size
-                inst(
-                    FMUL,
-                    utility_register,
-                    register(index),
-                    size,
-                    AS::Register,
-                    AS::Immediate,
-                ),
-                // register[util] <- register[src] + register[util]
-                inst(
-                    FADD,
-                    utility_register,
-                    register(src),
-                    utility_register,
-                    AS::Register,
-                    AS::Register,
-                ),
-            ];
-
-            for i in 0..EF::D {
-                // register[dst] <- mem[register[util] + offset + (i * WORD_SIZE)]
-                result.push(inst(
-                    LOADW,
-                    register(dst - ((i * WORD_SIZE) as i32)),
-                    offset + F::from_canonical_usize(i * WORD_SIZE),
-                    utility_register,
-                    AS::Register,
-                    AS::Memory,
-                ))
-            }
-            result
-        }
-        AsmInstruction::LoadEI(dst, src, index, offset, size) => (0..EF::D)
-            .map(|i|
-                // register[dst] <- mem[register[src] + ((index * size) + offset + (i * WORD_SIZE))]
-                inst(
-                    LOADW,
-                    register(dst - ((i * WORD_SIZE) as i32)),
-                    (index * size) + offset + F::from_canonical_usize(i * WORD_SIZE),
-                    register(src),
-                    AS::Register,
-                    AS::Memory,
-                ))
-            .collect(),
         AsmInstruction::StoreFI(val, addr, offset) => vec![
             // mem[register[addr] + offset] <- register[val]
             inst(
@@ -331,53 +284,6 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 AS::Memory,
             ),
         ],
-        AsmInstruction::StoreE(val, addr, index, offset, size) => {
-            let mut result = vec![
-                // register[util] <- register[index] * size
-                inst(
-                    FMUL,
-                    utility_register,
-                    register(index),
-                    size,
-                    AS::Register,
-                    AS::Immediate,
-                ),
-                // register[util] <- register[src] + register[util]
-                inst(
-                    FADD,
-                    utility_register,
-                    register(addr),
-                    utility_register,
-                    AS::Register,
-                    AS::Register,
-                ),
-            ];
-
-            for i in 0..EF::D {
-                // mem[register[util] + offset + (i * WORD_SIZE)] <- register[val]
-                result.push(inst(
-                    STOREW,
-                    register(val - ((i * WORD_SIZE) as i32)),
-                    offset + F::from_canonical_usize(i * WORD_SIZE),
-                    utility_register,
-                    AS::Register,
-                    AS::Memory,
-                ))
-            }
-            result
-        }
-        AsmInstruction::StoreEI(val, addr, index, offset, size) => (0..EF::D)
-            .map(|i|
-                // mem[register[addr] + ((index * size) + offset + (i * WORD_SIZE))] <- register[val]
-                inst(
-                    STOREW,
-                    register(val - ((i * WORD_SIZE) as i32)),
-                    (index * size) + offset + F::from_canonical_usize(i * WORD_SIZE),
-                    register(addr),
-                    AS::Register,
-                    AS::Memory,
-                ))
-            .collect(),
         AsmInstruction::Jump(dst, label) => {
             vec![
                 // pc <- labels[label], register[dst] <- pc

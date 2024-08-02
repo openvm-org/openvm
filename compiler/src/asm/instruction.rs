@@ -42,18 +42,6 @@ pub enum AsmInstruction<F, EF> {
     /// Divide immediate, dst = lhs / rhs.
     DivFI(i32, i32, F),
 
-    /// Load an ext value (dst, src, index, offset, size).
-    ///
-    /// Load a value from the address stored at src(fp) into dst(fp).
-    LoadE(i32, i32, i32, F, F),
-    LoadEI(i32, i32, F, F, F),
-
-    /// Store an ext value (val, addr, index, offset, size).
-    ///
-    /// Store a value from val(fp) into the address stored at addr(fp) with given index and offset.
-    StoreE(i32, i32, i32, F, F),
-    StoreEI(i32, i32, F, F, F),
-
     /// Add extension, dst = lhs + rhs.
     AddE(i32, i32, i32),
 
@@ -185,34 +173,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::DivFI(dst, lhs, rhs) => {
                 write!(f, "divi  ({})fp, ({})fp, {}", dst, lhs, rhs)
-            }
-            AsmInstruction::LoadE(dst, src, index, offset, size) => {
-                write!(
-                    f,
-                    "le    ({})fp, ({})fp, ({})fp, {}, {}",
-                    dst, src, index, offset, size
-                )
-            }
-            AsmInstruction::LoadEI(dst, src, index, offset, size) => {
-                write!(
-                    f,
-                    "lei   ({})fp, ({})fp, {}, {}, {}",
-                    dst, src, index, offset, size
-                )
-            }
-            AsmInstruction::StoreE(dst, src, index, offset, size) => {
-                write!(
-                    f,
-                    "se    ({})fp, ({})fp, ({})fp, {}, {}",
-                    dst, src, index, offset, size
-                )
-            }
-            AsmInstruction::StoreEI(dst, src, index, offset, size) => {
-                write!(
-                    f,
-                    "sei   ({})fp, ({})fp, {}, {}, {}",
-                    dst, src, index, offset, size
-                )
             }
             AsmInstruction::AddE(dst, lhs, rhs) => {
                 write!(f, "eadd ({})fp, ({})fp, ({})fp", dst, lhs, rhs)

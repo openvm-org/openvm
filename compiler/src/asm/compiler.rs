@@ -396,16 +396,12 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     }
                 },
                 DslIr::LoadE(var, ptr, index) => match index.fp() {
-                    IndexTriple::Const(index, offset, size) => self.push(
-                        AsmInstruction::LoadEI(var.fp(), ptr.fp(), index, offset, size),
-                        trace,
-                    ),
+                    IndexTriple::Const(index, offset, size) => {
+                        self.load_ext(var, ptr.fp(), index * size + offset, trace)
+                    },
                     IndexTriple::Var(index, offset, size) => {
                         self.add_scaled(A0, ptr.fp(), index, size, trace.clone());
-                        self.push(
-                            AsmInstruction::LoadEI(var.fp(), A0, F::zero(), offset, F::zero()),
-                            trace,
-                        )
+                        self.load_ext(var, A0, offset, trace)
                     },
                 },
                 DslIr::StoreV(var, ptr, index) => match index.fp() {
@@ -429,16 +425,12 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     }
                 },
                 DslIr::StoreE(var, ptr, index) => match index.fp() {
-                    IndexTriple::Const(index, offset, size) => self.push(
-                        AsmInstruction::StoreEI(var.fp(), ptr.fp(), index, offset, size),
-                        trace,
-                    ),
+                    IndexTriple::Const(index, offset, size) => {
+                        self.store_ext(var, ptr.fp(), index * size + offset, trace)
+                    },
                     IndexTriple::Var(index, offset, size) => {
                         self.add_scaled(A0, ptr.fp(), index, size, trace.clone());
-                        self.push(
-                            AsmInstruction::StoreEI(var.fp(), A0, F::zero(), offset, F::zero()),
-                            trace,
-                        )
+                        self.store_ext(var, A0, offset, trace)
                     },
                 },
                 DslIr::HintBitsF(var) => {
@@ -829,6 +821,24 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 AsmInstruction::AddFI(dst.fp() - j, ZERO, imm[i]),
                 trace.clone(),
             );
+        }
+    }
+
+    fn load_ext(&mut self, val: Ext<F, EF>, addr: i32, offset: F, trace: Option<Backtrace>) {
+        for i in 0..EF::D {
+            self.push(
+                AsmInstruction::LoadFI(val.fp() - (i * self.word_size) as i32, addr, offset + F::from_canonical_usize(i * self.word_size)),
+                trace.clone(),
+            )
+        }
+    }
+
+    fn store_ext(&mut self, val: Ext<F, EF>, addr: i32, offset: F, trace: Option<Backtrace>) {
+        for i in 0..EF::D {
+            self.push(
+                AsmInstruction::StoreFI(val.fp() - (i * self.word_size) as i32, addr, offset + F::from_canonical_usize(i * self.word_size)),
+                trace.clone(),
+            )
         }
     }
 
