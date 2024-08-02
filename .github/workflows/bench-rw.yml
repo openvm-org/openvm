@@ -89,8 +89,6 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.issue.number
             });
-            console.log(comments);
-            console.log("123");
             for (const comment of comments.data) {
               if (comment.body.startsWith("Benchmark (single page r/w)")) {
                 console.log("deleting comment ", comment.id);
