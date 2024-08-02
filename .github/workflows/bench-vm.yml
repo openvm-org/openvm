@@ -62,7 +62,7 @@ jobs:
  
       - name: Setup gh command line.
         if: github.event_name == 'push'
-        uses: actions4gh/setup-gh@v1
+        uses: dev-hanz-ops/install-gh-cli-action@v0.1.0
 
       - name: Run benchmark
         run: |
