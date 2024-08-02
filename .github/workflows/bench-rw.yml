@@ -88,8 +88,15 @@ jobs:
             });
             console.log(comments);
             console.log("123");
-            for (const comment of comments) {
-              console.log(comment.body);
+            for (const comment of comments.data) {
+              if (comment.body.startsWith("Benchmark (single page r/w)")) {
+                console.log("deleting comment ", comment.id);
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: comment.id
+                });
+              }
             }
 
       - name: Add comment to pull request
