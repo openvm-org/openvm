@@ -1,12 +1,18 @@
-use std::{collections::HashMap, fs, path::Path, time::Instant};
+use std::{
+    collections::HashMap,
+    fs::{self, File},
+    path::Path,
+    time::Instant,
+};
 
+use afs_stark_backend::prover::metrics::TraceMetrics;
 use afs_test_utils::page_config::{MultitierPageConfig, PageConfig};
 use chrono::Local;
 use color_eyre::eyre::Result;
 
 use crate::{
     config::{
-        benchmark_data::BenchmarkData,
+        benchmark_data::{BenchmarkData, BACKEND_TIMING_FILTERS},
         config_gen::{get_configs, get_multitier_configs},
     },
     utils::{
@@ -16,7 +22,8 @@ use crate::{
         },
         tracing::{clear_tracing_log, extract_event_data_from_log, extract_timing_data_from_log},
     },
-    AFI_FILE_PATH, DB_FILE_PATH, MULTITIER_TABLE_ID, TABLE_ID, TMP_FOLDER, TMP_TRACING_LOG,
+    AFI_FILE_PATH, DB_FILE_PATH, MULTITIER_TABLE_ID, TABLE_ID, TMP_FOLDER, TMP_RESULT_JSON,
+    TMP_TRACING_LOG,
 };
 
 use super::CommonCommands;
@@ -62,7 +69,7 @@ pub fn benchmark_execute(
     scenario: String,
     common: CommonCommands,
     extra_data: String,
-    benchmark_fn: fn(&PageConfig, String) -> Result<()>,
+    benchmark_fn: fn(&PageConfig, String) -> Result<TraceMetrics>,
     benchmark_data_fn: fn() -> BenchmarkData,
     afi_gen_fn: fn(&PageConfig, String, String, usize, usize) -> Result<()>,
 ) -> Result<()> {
@@ -117,7 +124,7 @@ pub fn benchmark_execute(
         println!("Setup: save AFI to DB duration: {:?}", save_afi_duration);
 
         // Run the benchmark function
-        benchmark_fn(config, extra_data.clone()).unwrap();
+        let metrics = benchmark_fn(config, extra_data.clone())?;
 
         let event_data = extract_event_data_from_log(
             TMP_TRACING_LOG.as_str(),
@@ -128,9 +135,28 @@ pub fn benchmark_execute(
             benchmark_data.timing_filters.clone(),
         )?;
 
+        // TODO: generalize this
+        let main_trace_gen_time = timing_data["prove:Load page trace generation"].parse::<f64>()?;
+        let perm_trace_gen_time = timing_data[BACKEND_TIMING_FILTERS[0]].parse::<f64>()?;
+        let quotient_values_time = timing_data[BACKEND_TIMING_FILTERS[2]].parse::<f64>()?;
+        let total_prove_time = timing_data["Benchmark prove: benchmark"].parse::<f64>()?;
+        let mut results: HashMap<String, String> = HashMap::new();
+        results.insert(
+            "Main & perm trace generation".to_string(),
+            (main_trace_gen_time + perm_trace_gen_time).to_string(),
+        );
+        results.insert(
+            "Compute quotient values".to_string(),
+            quotient_values_time.to_string(),
+        );
+        results.insert(
+            "Rest of proving".to_string(),
+            (total_prove_time - perm_trace_gen_time - quotient_values_time).to_string(),
+        );
+        results.insert("Total F cells".to_string(), metrics.total_cells.to_string());
+        serde_json::to_writer(File::create(TMP_RESULT_JSON.as_str())?, &results)?;
+
         println!("Config: {:?}", config);
-        println!("Event data: {:?}", event_data);
-        println!("Timing data: {:?}", timing_data);
         println!("Output file: {}", output_file.clone());
 
         let mut log_data: HashMap<String, String> = event_data;

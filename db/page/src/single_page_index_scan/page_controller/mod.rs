@@ -276,9 +276,9 @@ where
         Page::from_2d_vec(&output, page.idx_len(), page.data_len())
     }
 
-    pub fn set_up_keygen_builder(
-        &self,
-        keygen_builder: &mut MultiStarkKeygenBuilder<SC>,
+    pub fn set_up_keygen_builder<'a>(
+        &'a self,
+        keygen_builder: &mut MultiStarkKeygenBuilder<'a, SC>,
         page_width: usize,
         idx_len: usize,
     ) {

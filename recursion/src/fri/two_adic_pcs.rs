@@ -97,6 +97,7 @@ pub fn verify_two_adic_pcs<C: Config>(
 
                 let opened_values = NestedOpenedValues::Felt(batch_opening.opened_values);
 
+                builder.cycle_tracker_start("verify-batch");
                 verify_batch::<C>(
                     builder,
                     &batch_commit,
@@ -105,6 +106,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                     &opened_values,
                     &batch_opening.opening_proof,
                 );
+                builder.cycle_tracker_end("verify-batch");
 
                 // hack to move batch_opening.opened_values back
                 let opened_values = match opened_values {
@@ -112,6 +114,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                     _ => unreachable!(),
                 };
 
+                builder.cycle_tracker_start("compute-reduced-opening");
                 builder
                     .range(0, opened_values.len())
                     .for_each(|k, builder| {
@@ -131,20 +134,20 @@ pub fn verify_two_adic_pcs<C: Config>(
                         let index_bits_shifted = index_bits.shift(builder, bits_reduced);
 
                         let two_adic_generator = config.get_two_adic_generator(builder, log_height);
-                        builder.cycle_tracker_start("exp_reverse_bits_len");
+                        builder.cycle_tracker_start("exp-reverse-bits-len");
                         let two_adic_generator_exp = builder.exp_reverse_bits_len(
                             two_adic_generator,
                             &index_bits_shifted,
                             log_height,
                         );
-                        builder.cycle_tracker_end("exp_reverse_bits_len");
+                        builder.cycle_tracker_end("exp-reverse-bits-len");
                         let x: Felt<C::F> = builder.eval(two_adic_generator_exp * g);
 
                         builder.range(0, mat_points.len()).for_each(|l, builder| {
                             let z: Ext<C::F, C::EF> = builder.get(&mat_points, l);
                             let ps_at_z = builder.get(&mat_values, l);
 
-                            builder.cycle_tracker_start("fri_fold");
+                            builder.cycle_tracker_start("sp1-fri-fold");
                             builder.range(0, ps_at_z.len()).for_each(|t, builder| {
                                 let p_at_x = builder.get(&mat_opening, t);
                                 let p_at_z = builder.get(&ps_at_z, t);
@@ -153,12 +156,13 @@ pub fn verify_two_adic_pcs<C: Config>(
                                 builder.assign(cur_ro, cur_ro + cur_alpha_pow * quotient);
                                 builder.assign(cur_alpha_pow, cur_alpha_pow * alpha);
                             });
-                            builder.cycle_tracker_end("fri_fold");
+                            builder.cycle_tracker_end("sp1-fri-fold");
                         });
 
                         builder.set_value(&mut ro, log_height, cur_ro);
                         builder.set_value(&mut alpha_pow, log_height, cur_alpha_pow);
                     });
+                builder.cycle_tracker_end("compute-reduced-opening");
             });
 
             builder.set_value(&mut reduced_openings, i, ro);

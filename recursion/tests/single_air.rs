@@ -1,3 +1,4 @@
+use afs_test_utils::config::fri_params::default_fri_params;
 use afs_test_utils::utils::{generate_fib_trace_rows, FibonacciAir};
 use p3_field::AbstractField;
 use p3_matrix::Matrix;
@@ -24,5 +25,11 @@ fn test_fibonacci() {
         trace.get(n - 1, 1),
     ]];
 
-    common::run_recursive_test(vec![&fib_air], vec![&fib_air], vec![trace], pvs)
+    common::run_recursive_test(
+        vec![&fib_air],
+        vec![&fib_air],
+        vec![trace],
+        pvs,
+        default_fri_params(),
+    )
 }

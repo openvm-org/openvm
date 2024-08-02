@@ -110,7 +110,7 @@ dependencies = [
  "afs-stark-backend",
  "afs-test-utils",
  "bincode",
- "derive-new",
+ "derive-new 0.5.9",
  "derive_more",
  "getset",
  "hex",
@@ -136,7 +136,7 @@ dependencies = [
  "afs-derive",
  "afs-stark-backend",
  "afs-test-utils",
- "derive-new",
+ "derive-new 0.6.0",
  "getset",
  "itertools 0.13.0",
  "p3-air",
@@ -214,6 +214,7 @@ dependencies = [
  "p3-uni-stark",
  "p3-util",
  "rand",
+ "rayon",
  "serde",
  "serde_json",
  "tikv-jemallocator",
@@ -594,6 +595,8 @@ dependencies = [
  "p3-air",
  "p3-baby-bear",
  "p3-blake3",
+ "p3-challenger",
+ "p3-commit",
  "p3-field",
  "p3-keccak",
  "p3-matrix",
@@ -1118,6 +1121,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "derive-new"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d150dea618e920167e5973d70ae6ece4385b7164e0d799fe7c122dd0a5d912ad"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.66",
 ]
 
 [[package]]
@@ -2878,7 +2892,7 @@ dependencies = [
  "afs-stark-backend",
  "afs-test-utils",
  "ark-ff 0.4.2",
- "derive-new",
+ "derive-new 0.5.9",
  "enum-utils",
  "getset",
  "itertools 0.13.0",

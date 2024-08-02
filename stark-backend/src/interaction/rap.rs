@@ -40,9 +40,10 @@ where
 }
 
 // Initial version taken from valida/machine/src/chip.rs under MIT license.
-/// The permutation row consists of 1 column for each interaction (send or receive)
+/// The permutation row consists of 1 column for each bundle of interactions
 /// and one column for the partial sum of log derivative. These columns are trace columns
 /// "after challenge" phase 0, and they are valued in the extension field.
+/// For more details, see the comment in the trace.rs file
 pub fn eval_permutation_constraints<AB>(builder: &mut AB, cumulative_sum: AB::VarEF)
 where
     AB: InteractionBuilder + PermutationAirBuilder,
@@ -55,48 +56,62 @@ where
     let perm_next: &[AB::VarEF] = (*perm_next).borrow();
 
     let all_interactions = builder.all_interactions().to_vec();
-    let mults_next = builder.all_multiplicities_next();
+    let interaction_chunk_size = builder.interaction_chunk_size();
     let num_interactions = all_interactions.len();
-    assert_eq!(num_interactions, mults_next.len());
-    assert_eq!(num_interactions + 1, perm_local.len());
-    assert_eq!(num_interactions + 1, perm_next.len());
-    let phi_local = perm_local[num_interactions];
-    let phi_next = perm_next[num_interactions];
+    let perm_width = (num_interactions + interaction_chunk_size - 1) / interaction_chunk_size + 1;
+    debug_assert_eq!(perm_width, perm_local.len());
+    debug_assert_eq!(perm_width, perm_next.len());
+    let phi_local = *perm_local.last().unwrap();
+    let phi_next = *perm_next.last().unwrap();
 
     let alphas = generate_rlc_elements(rand_elems[0].into(), &all_interactions);
     let betas = generate_betas(rand_elems[1].into(), &all_interactions);
 
-    let lhs = phi_next.into() - phi_local.into();
-    let mut rhs = AB::ExprEF::zero();
+    let phi_lhs = phi_next.into() - phi_local.into();
+    let mut phi_rhs = AB::ExprEF::zero();
     let mut phi_0 = AB::ExprEF::zero();
-    for (i, (interaction, mult_next)) in all_interactions.into_iter().zip(mults_next).enumerate() {
-        // Reciprocal constraints
-        debug_assert!(interaction.fields.len() <= betas.len());
-        let mut fields = interaction.fields.into_iter();
-        let mut rlc = alphas[interaction.bus_index].clone()
-            + fields.next().expect("fields should not be empty");
-        for (elem, beta) in fields.zip(betas.iter().skip(1)) {
-            rlc += beta.clone() * elem;
-        }
-        builder.assert_one_ext(rlc * perm_local[i].into());
 
-        let mult_local = interaction.count;
-
-        // Build the RHS of the permutation constraint
-        match interaction.interaction_type {
-            InteractionType::Send => {
-                phi_0 += perm_local[i].into() * mult_local;
-                rhs += perm_next[i].into() * mult_next;
+    for (chunk_idx, interaction_chunk) in
+        all_interactions.chunks(interaction_chunk_size).enumerate()
+    {
+        let mut denoms = vec![AB::ExprEF::zero(); interaction_chunk.len()];
+        let interaction_chunk = interaction_chunk.to_vec();
+        for (i, interaction) in interaction_chunk.iter().enumerate() {
+            assert!(!interaction.fields.is_empty(), "fields should not be empty");
+            let mut denom = alphas[interaction.bus_index].clone();
+            for (elem, beta) in interaction.fields.iter().zip(betas.iter()) {
+                denom += beta.clone() * elem.clone();
             }
-            InteractionType::Receive => {
-                phi_0 -= perm_local[i].into() * mult_local;
-                rhs -= perm_next[i].into() * mult_next;
-            }
+            denoms[i] = denom;
         }
+
+        let mut row_lhs: AB::ExprEF = perm_local[chunk_idx].into();
+        for denom in denoms.iter() {
+            row_lhs *= denom.clone();
+        }
+
+        let mut row_rhs = AB::ExprEF::zero();
+        for (i, interaction) in interaction_chunk.into_iter().enumerate() {
+            let mut term: AB::ExprEF = interaction.count.into();
+            if interaction.interaction_type == InteractionType::Receive {
+                term = -term;
+            }
+            for (j, denom) in denoms.iter().enumerate() {
+                if i != j {
+                    term *= denom.clone();
+                }
+            }
+            row_rhs += term;
+        }
+
+        builder.assert_eq_ext(row_lhs, row_rhs);
+
+        phi_0 += perm_local[chunk_idx].into();
+        phi_rhs += perm_next[chunk_idx].into();
     }
 
     // Running sum constraints
-    builder.when_transition().assert_eq_ext(lhs, rhs);
+    builder.when_transition().assert_eq_ext(phi_lhs, phi_rhs);
     builder
         .when_first_row()
         .assert_eq_ext(*perm_local.last().unwrap(), phi_0);

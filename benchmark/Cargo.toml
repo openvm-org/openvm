@@ -42,15 +42,19 @@ serde_json = "1.0.121"
 
 [dev-dependencies]
 criterion = "0.5.1"
+p3-challenger = { workspace = true }
+p3-matrix = { workspace = true }
+p3-commit = { workspace = true }
 pprof = { version = "0.13", features = ["criterion", "flamegraph"] }
 
 [[bench]]
-name = "single_rw_trace_gen"
+name = "single_rw"
 harness = false
 
 [[bench]]
 name = "xor_bits"
 harness = false
+
 
 [features]
 default = ["afs-stark-backend/mimalloc"]

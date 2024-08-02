@@ -1,4 +1,4 @@
-name: Run single page r/w benchmark
+name: Run Fibonacci Air recursion benchmark
 
 on:
   workflow_dispatch:
@@ -6,12 +6,16 @@ on:
     branches: ["main"]
     paths:
       - "stark-backend/**"
-      - "db/**"
+      - "vm/**"
+      - "compiler/**"
+      - "recursion/**"
   push:
     branches: ["main"]
     paths:
       - "stark-backend/**"
-      - "db/**"
+      - "vm/**"
+      - "compiler/**"
+      - "recursion/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -55,26 +59,26 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-
+ 
       - name: Setup gh command line.
         if: github.event_name == 'push'
         uses: actions4gh/setup-gh@v1
 
       - name: Run benchmark
         run: |
-          RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- rw -r 90 -w 10 --config-folder benchmark/config/single_rw
+          RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- vm_verify_fibair -n 16
 
       - name: Get previous benchmark value
         id: get-previous-benchmark
         run: |
-          echo "::set-output name=previous-benchmark::$(cat benchmark/github/results/single_rw.json)"
+          echo "::set-output name=previous-benchmark::$(cat benchmark/github/results/vm_verify_fibair.json)"
 
       - name: Update benchmark value
         id: update-benchmark
         run: |
           mkdir -p benchmark/github/results
-          mv benchmark/tmp/_result.json benchmark/github/results/single_rw.json
-          echo "::set-output name=new-benchmark::$(cat benchmark/github/results/single_rw.json)"
+          mv benchmark/tmp/_result.json benchmark/github/results/vm_verify_fibair.json
+          echo "::set-output name=new-benchmark::$(cat benchmark/github/results/vm_verify_fibair.json)"
 
       - name: Add comment to pull request
         if: github.event_name == 'pull_request'
@@ -87,21 +91,21 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `Benchmark (single page r/w) results:\n\nPrevious: ${previousBenchmark}\nCurrent: ${newBenchmark}`
+              body: `Benchmark (vm verify fibair) results:\n\nPrevious: ${previousBenchmark}\nCurrent: ${newBenchmark}`
             });
 
-      - name: Commit the result and make a new PR.
+      - name: Commit and push changes
         if: github.event_name == 'push'
         run: |
           export HOME=~
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          BRANCH_NAME="benchmark-rw-${{ github.run_id }}"
+          BRANCH_NAME="benchmark-vm-${{ github.run_id }}"
           git checkout -b ${BRANCH_NAME}
-          git add benchmark/github/results/single_rw.json
+          git add benchmark/github/results/vm_verify_fibair.json
           git commit -m "Update benchmark"
           git push origin ${BRANCH_NAME}
-          gh pr create -B main -H ${BRANCH_NAME} --title 'Update benchmark (single page r/w)' --body 'Created by Github action'
+          gh pr create -B main -H ${BRANCH_NAME} --title 'Update benchmark (vm verify fibair)' --body 'Created by Github action'
 
   stop-runner:
     name: Stop self-hosted EC2 runner

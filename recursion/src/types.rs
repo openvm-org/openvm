@@ -101,6 +101,8 @@ pub struct StarkVerificationAdvice<C: Config> {
     pub num_exposed_values_after_challenge: Vec<usize>,
     /// Symbolic representation of all AIR constraints, including logup constraints
     pub symbolic_constraints: SymbolicConstraints<C::F>,
+    /// TODO: remove this once dyn Rap is no longer necessary
+    pub(crate) interaction_chunk_size: usize,
 }
 
 // TODO: the bound C::F = Val<SC> is very awkward
@@ -120,6 +122,7 @@ where
         main_graph,
         quotient_degree,
         symbolic_constraints,
+        interaction_chunk_size,
         ..
     } = vk;
     StarkVerificationAdvice {
@@ -133,6 +136,7 @@ where
         num_challenges_to_sample: params.num_challenges_to_sample,
         num_exposed_values_after_challenge: params.num_exposed_values_after_challenge,
         symbolic_constraints,
+        interaction_chunk_size,
     }
 }
 
@@ -166,6 +170,8 @@ where
         num_main_trace_commitments,
         main_commit_to_air_graph,
         num_challenges_to_sample,
+        // TODO: add support for interaction_chunk_size
+        ..
     } = vk;
     MultiStarkVerificationAdvice {
         per_air: per_air.clone().into_iter().map(new_from_vk).collect(),

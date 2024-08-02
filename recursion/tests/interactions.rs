@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use afs_test_utils::config::fri_params::default_fri_params;
 use p3_matrix::dense::RowMajorMatrix;
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
@@ -76,5 +77,5 @@ fn test_interactions() {
     let traces = vec![sum_trace, sender_trace, receiver_trace, range_checker_trace];
     let pvs = vec![vec![], vec![], vec![], vec![]];
 
-    common::run_recursive_test(any_raps, rec_raps, traces, pvs)
+    common::run_recursive_test(any_raps, rec_raps, traces, pvs, default_fri_params())
 }

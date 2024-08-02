@@ -181,6 +181,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
 
     pub fn metrics(&mut self) -> BTreeMap<String, usize> {
         let mut metrics = BTreeMap::new();
+        metrics.insert("cpu_cycles".to_string(), self.cpu_chip.rows.len());
+        metrics.insert("cpu_timestamp".to_string(), self.cpu_chip.state.timestamp);
         metrics.insert(
             "memory_chip_accesses".to_string(),
             self.memory_chip.accesses.len(),
@@ -201,7 +203,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             "poseidon2_chip_rows".to_string(),
             self.poseidon2_chip.rows.len(),
         );
-        metrics.insert("input_stream_len".to_string(), self.input_stream.len());
         metrics
     }
 }
