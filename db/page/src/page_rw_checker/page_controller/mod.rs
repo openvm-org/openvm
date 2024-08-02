@@ -325,8 +325,6 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         keygen_builder.add_air(&self.offline_checker, 0);
         keygen_builder.add_air(&self.range_checker.air, 0);
         keygen_builder.add_air(ops_sender, 0);
-
-        // keygen_builder.set_interaction_chunk_size(2);
     }
 
     /// This function clears the trace_builder, loads in the traces for all involved chips
