@@ -377,63 +377,69 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 }
                 DslIr::LoadV(var, ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
-                        AsmInstruction::LoadFI(var.fp(), ptr.fp(), index, offset, size),
+                        AsmInstruction::LoadFI(var.fp(), ptr.fp(), index * size + offset),
                         trace,
                     ),
-                    IndexTriple::Var(index, offset, size) => self.push(
-                        AsmInstruction::LoadF(var.fp(), ptr.fp(), index, offset, size),
-                        trace,
-                    ),
+                    IndexTriple::Var(index, offset, size) => {
+                        self.add_scaled(A0, ptr.fp(), index, size, trace.clone());
+                        self.push(AsmInstruction::LoadFI(var.fp(), A0, offset), trace)
+                    }
                 },
                 DslIr::LoadF(var, ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
-                        AsmInstruction::LoadFI(var.fp(), ptr.fp(), index, offset, size),
+                        AsmInstruction::LoadFI(var.fp(), ptr.fp(), index * size + offset),
                         trace,
                     ),
-                    IndexTriple::Var(index, offset, size) => self.push(
-                        AsmInstruction::LoadF(var.fp(), ptr.fp(), index, offset, size),
-                        trace,
-                    ),
+                    IndexTriple::Var(index, offset, size) => {
+                        self.add_scaled(A0, ptr.fp(), index, size, trace.clone());
+                        self.push(AsmInstruction::LoadFI(var.fp(), A0, offset), trace)
+                    }
                 },
                 DslIr::LoadE(var, ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
                         AsmInstruction::LoadEI(var.fp(), ptr.fp(), index, offset, size),
                         trace,
                     ),
-                    IndexTriple::Var(index, offset, size) => self.push(
-                        AsmInstruction::LoadE(var.fp(), ptr.fp(), index, offset, size),
-                        trace,
-                    ),
+                    IndexTriple::Var(index, offset, size) => {
+                        self.add_scaled(A0, ptr.fp(), index, size, trace.clone());
+                        self.push(
+                            AsmInstruction::LoadEI(var.fp(), A0, F::zero(), offset, F::zero()),
+                            trace,
+                        )
+                    },
                 },
                 DslIr::StoreV(var, ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
-                        AsmInstruction::StoreFI(var.fp(), ptr.fp(), index, offset, size),
+                        AsmInstruction::StoreFI(var.fp(), ptr.fp(), index * size + offset),
                         trace,
                     ),
-                    IndexTriple::Var(index, offset, size) => self.push(
-                        AsmInstruction::StoreF(var.fp(), ptr.fp(), index, offset, size),
-                        trace,
-                    ),
+                    IndexTriple::Var(index, offset, size) => {
+                        self.add_scaled(A0, ptr.fp(), index, size, trace.clone());
+                        self.push(AsmInstruction::StoreFI(var.fp(), A0, offset), trace)
+                    }
                 },
                 DslIr::StoreF(var, ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
-                        AsmInstruction::StoreFI(var.fp(), ptr.fp(), index, offset, size),
+                        AsmInstruction::StoreFI(var.fp(), ptr.fp(), index * size + offset),
                         trace,
                     ),
-                    IndexTriple::Var(index, offset, size) => self.push(
-                        AsmInstruction::StoreF(var.fp(), ptr.fp(), index, offset, size),
-                        trace,
-                    ),
+                    IndexTriple::Var(index, offset, size) => {
+                        self.add_scaled(A0, ptr.fp(), index, size, trace.clone());
+                        self.push(AsmInstruction::StoreFI(var.fp(), A0, offset), trace)
+                    }
                 },
                 DslIr::StoreE(var, ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
                         AsmInstruction::StoreEI(var.fp(), ptr.fp(), index, offset, size),
                         trace,
                     ),
-                    IndexTriple::Var(index, offset, size) => self.push(
-                        AsmInstruction::StoreE(var.fp(), ptr.fp(), index, offset, size),
-                        trace,
-                    ),
+                    IndexTriple::Var(index, offset, size) => {
+                        self.add_scaled(A0, ptr.fp(), index, size, trace.clone());
+                        self.push(
+                            AsmInstruction::StoreEI(var.fp(), A0, F::zero(), offset, F::zero()),
+                            trace,
+                        )
+                    },
                 },
                 DslIr::HintBitsF(var) => {
                     self.push(AsmInstruction::HintBits(var.fp()), trace);
@@ -590,6 +596,17 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             .last_mut()
             .unwrap()
             .push(instruction, backtrace);
+    }
+
+    // reg[dst] <- reg[src] + c * reg[val]
+    // assumes dst != src
+    fn add_scaled(&mut self, dst: i32, src: i32, val: i32, c: F, trace: Option<Backtrace>) {
+        if c == F::one() {
+            self.push(AsmInstruction::AddF(dst, src, val), trace);
+        } else {
+            self.push(AsmInstruction::MulFI(dst, val, c), trace.clone());
+            self.push(AsmInstruction::AddF(dst, dst, src), trace);
+        }
     }
 }
 

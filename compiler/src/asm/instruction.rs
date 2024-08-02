@@ -8,17 +8,15 @@ use super::A0;
 
 #[derive(Debug, Clone)]
 pub enum AsmInstruction<F, EF> {
-    /// Load word (dst, src, index, offset, size).
+    /// Load word (dst, src, offset).
     ///
-    /// Load a value from the address stored at src(fp) into dst(fp).
-    LoadF(i32, i32, i32, F, F),
-    LoadFI(i32, i32, F, F, F),
+    /// Load a value from the address stored at src(fp) + offset into dst(fp).
+    LoadFI(i32, i32, F),
 
     /// Store word (val, addr, index, offset, size)
     ///
-    /// Store a value from val(fp) into the address stored at addr(fp) with given index and offset.
-    StoreF(i32, i32, i32, F, F),
-    StoreFI(i32, i32, F, F, F),
+    /// Store a value from val(fp) into the address stored at addr(fp) + offset.
+    StoreFI(i32, i32, F),
 
     /// Add, dst = lhs + rhs.
     AddF(i32, i32, i32),
@@ -158,33 +156,11 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::LessThan(dst, left, right) => {
                 write!(f, "lt  ({})fp, {}, {}", dst, left, right,)
             }
-            AsmInstruction::LoadF(dst, src, index, offset, size) => {
-                write!(
-                    f,
-                    "lw    ({})fp, ({})fp, ({})fp, {}, {}",
-                    dst, src, index, offset, size
-                )
+            AsmInstruction::LoadFI(dst, src, offset) => {
+                write!(f, "lwi   ({})fp, ({})fp, {}", dst, src, offset)
             }
-            AsmInstruction::LoadFI(dst, src, index, offset, size) => {
-                write!(
-                    f,
-                    "lwi   ({})fp, ({})fp, {}, {}, {}",
-                    dst, src, index, offset, size
-                )
-            }
-            AsmInstruction::StoreF(dst, src, index, offset, size) => {
-                write!(
-                    f,
-                    "sw    ({})fp, ({})fp, ({})fp, {}, {}",
-                    dst, src, index, offset, size
-                )
-            }
-            AsmInstruction::StoreFI(dst, src, index, offset, size) => {
-                write!(
-                    f,
-                    "swi   ({})fp, ({})fp, {}, {}, {}",
-                    dst, src, index, offset, size
-                )
+            AsmInstruction::StoreFI(dst, src, offset) => {
+                write!(f, "swi   ({})fp, ({})fp, {}", dst, src, offset)
             }
             AsmInstruction::AddF(dst, lhs, rhs) => {
                 write!(f, "add   ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
