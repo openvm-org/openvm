@@ -22,7 +22,7 @@ fn secp256k1_prime() -> BigUint {
 }
 
 fn default_air() -> ModularMultiplicationBigIntAir {
-    ModularMultiplicationBigIntAir::new(secp256k1_prime(), 256, 15, 0, 30, 27, 9, 15, 1 << 14)
+    ModularMultiplicationBigIntAir::new(secp256k1_prime(), 256, 16, 0, 30, 30, 10, 16, 1 << 15)
 }
 
 #[test]
