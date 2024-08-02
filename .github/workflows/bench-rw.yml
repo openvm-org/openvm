@@ -109,11 +109,27 @@ jobs:
           script: |
             const previousBenchmark = `${{ steps.get-previous-benchmark.outputs.previous-benchmark }}`;
             const newBenchmark = `${{ steps.update-benchmark.outputs.new-benchmark }}`;
+            function prettyPrintJson(jsonString) {
+              try {
+                const jsonObj = JSON.parse(jsonString);
+                const sortedJsonObj = Object.keys(jsonObj).sort().reduce((acc, key) => {
+                  acc[key] = jsonObj[key];
+                  return acc;
+                }, {});
+                return JSON.stringify(sortedJsonObj, null, 2);
+              } catch (error) {
+                console.error("Invalid JSON string provided:", error);
+                return jsonString;
+              }
+            }
+
+            const previousBenchmarkPretty = prettyPrintJson(previousBenchmark);
+            const newBenchmarkPretty = prettyPrintJson(newBenchmark);
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `Benchmark (single page r/w) results:\n\nPrevious:\n\`\`\`json\n${JSON.stringify(JSON.parse(previousBenchmark), null, 2)}\n\`\`\`\nCurrent:\n\`\`\`json\n${JSON.stringify(JSON.parse(newBenchmark), null, 2)}\n\`\`\``
+              body: `Benchmark (single page r/w) results:\n\nPrevious:\n\`\`\`json\n${previousBenchmarkPretty}\n\`\`\`\nCurrent:\n\`\`\`json\n${newBenchmarkPretty}\n\`\`\``
             });
 
       - name: Commit the result and make a new PR.
