@@ -1,11 +1,13 @@
 use std::cmp::min;
+use std::collections::HashSet;
 
 use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::{One, ToPrimitive};
 use p3_air::{Air, BaseAir};
-use p3_field::{AbstractField, Field};
+use p3_field::{AbstractField, Field, PrimeField64};
 use p3_matrix::Matrix;
+use prime_factorization::Factorization;
 
 use afs_stark_backend::interaction::InteractionBuilder;
 
@@ -40,12 +42,11 @@ pub struct ModularMultiplicationPrimesAir<F: Field> {
 /// However, any of a, b, r may be >= `modulus`
 /// Furthermore, (a, b, r) is guaranteed to be verifiable if a, b, r < `modulus` and a * b == r (mod `modulus`)
 /// If a * b == r (mod `modulus`) but one of a, b, r is >= `modulus`, then (a, b, r) may not be verifiable
-impl<F: Field> ModularMultiplicationPrimesAir<F> {
+impl<F: PrimeField64> ModularMultiplicationPrimesAir<F> {
     // `F` should have size at least 2^`bits_per_elem`
     pub fn new(
         modulus: BigUint,
         total_bits: usize,
-        bits_per_elem: usize,
         // global parameters: range checker
         decomp: usize,
         range_bus: usize,
@@ -55,14 +56,17 @@ impl<F: Field> ModularMultiplicationPrimesAir<F> {
         // max_limb_bits and small_modulus_bits should be maximized subject to some constraints
         max_limb_bits: usize,
         small_modulus_bits: usize,
+        small_modulus_limit: usize,
         quotient_bits: usize,
     ) -> Self {
-        assert!(repr_bits <= bits_per_elem);
+        let field_size = F::neg_one().as_canonical_u64() as usize;
+        assert!((1 << repr_bits) <= field_size);
         assert!(max_limb_bits <= decomp);
         assert!(small_modulus_bits <= decomp);
         assert!(quotient_bits <= decomp);
         // `total_bits` should be sufficient to represent numbers 0..`modulus`
         assert!(total_bits >= (modulus.clone() - BigUint::one()).bits() as usize);
+        assert!(small_modulus_limit <= (1 << small_modulus_bits));
 
         let mut io_limb_sizes = vec![];
         let mut rem_bits = total_bits;
@@ -103,10 +107,15 @@ impl<F: Field> ModularMultiplicationPrimesAir<F> {
         // ensures that the range of ab - (pq + r) is at most 2^small_modulus_bits * 2^quotient_bits
         assert!((1 << small_modulus_bits) + max_sum_pq_r <= (1 << quotient_bits));
         // ensures no overflow of (small_modulus * quotient) + residue
-        assert!(small_modulus_bits + quotient_bits <= bits_per_elem);
+        assert!(
+            (small_modulus_limit * ((1 << quotient_bits) - 1)) + (1 << small_modulus_bits)
+                <= field_size
+        );
 
-        let small_moduli =
-            Self::choose_small_moduli(BigUint::one() << (2 * total_bits), 1 << small_modulus_bits);
+        let small_moduli = Self::choose_small_moduli_prime_powers(
+            BigUint::one() << (2 * total_bits),
+            small_modulus_limit,
+        );
 
         let small_moduli_systems = small_moduli
             .iter()
@@ -162,7 +171,7 @@ impl<F: Field> ModularMultiplicationPrimesAir<F> {
     // greedy will choose [10, 9, 7] then fail because nothing left
     // optimal is [9, 7, 8, 5]
     // algorithm that only considers prime powers may be useful alternative
-    fn choose_small_moduli(need: BigUint, small_modulus_limit: usize) -> Vec<usize> {
+    fn choose_small_moduli_greedy(need: BigUint, small_modulus_limit: usize) -> Vec<usize> {
         let mut small_moduli = vec![];
         let mut small_mod_prod = BigUint::one();
         let mut candidate = small_modulus_limit;
@@ -171,6 +180,27 @@ impl<F: Field> ModularMultiplicationPrimesAir<F> {
                 panic!("Not able to find sufficiently large set of small moduli");
             }
             if small_moduli.iter().all(|&x| gcd(x, candidate) == 1) {
+                small_moduli.push(candidate);
+                small_mod_prod *= candidate;
+            }
+            candidate -= 1;
+        }
+        small_moduli
+    }
+
+    fn choose_small_moduli_prime_powers(need: BigUint, small_modulus_limit: usize) -> Vec<usize> {
+        let mut small_moduli = vec![];
+        let mut small_mod_prod = BigUint::one();
+        let mut candidate = small_modulus_limit;
+        let mut seen_primes = HashSet::new();
+        while small_mod_prod < need {
+            if candidate == 1 {
+                panic!("Not able to find sufficiently large set of small moduli");
+            }
+            let prime_factors = Factorization::run(candidate as u64);
+            if prime_factors.prime_factor_repr().len() == 1
+                && seen_primes.insert(prime_factors.factors[0])
+            {
                 small_moduli.push(candidate);
                 small_mod_prod *= candidate;
             }

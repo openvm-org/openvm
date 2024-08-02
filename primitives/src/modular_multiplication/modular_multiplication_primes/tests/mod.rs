@@ -3,7 +3,7 @@ use std::sync::Arc;
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, Field};
+use p3_field::{AbstractField, PrimeField64};
 use rand::RngCore;
 
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
@@ -21,8 +21,18 @@ fn secp256k1_prime() -> BigUint {
     result
 }
 
-fn default_air<F: Field>() -> ModularMultiplicationPrimesAir<F> {
-    ModularMultiplicationPrimesAir::new(secp256k1_prime(), 256, 30, 15, 0, 27, 9, 9, 15)
+fn default_air<F: PrimeField64>() -> ModularMultiplicationPrimesAir<F> {
+    ModularMultiplicationPrimesAir::new(
+        secp256k1_prime(),
+        256,
+        17,
+        0,
+        30,
+        10,
+        14,
+        (1 << 14) - 2000,
+        17,
+    )
 }
 
 #[test]
