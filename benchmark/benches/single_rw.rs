@@ -1,15 +1,8 @@
-use afs_stark_backend::commit::CommittedSingleMatrixView;
-use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
-use afs_stark_backend::interaction::trace::generate_permutation_trace;
-use afs_stark_backend::keygen::types::MultiStarkProvingKey;
-use afs_stark_backend::prover::quotient::QuotientCommitter;
-use afs_stark_backend::prover::types::MultiAirCommittedTraceData;
-use afs_stark_backend::rap::AnyRap;
-use afs_test_utils::engine::StarkEngine;
+use std::sync::Arc;
+
 use p3_commit::Pcs;
 use p3_matrix::Matrix;
 use p3_maybe_rayon::prelude::ParallelIterator;
-use std::sync::Arc;
 
 use benchmark::utils::bench::{gen_ops_sender_trace, generate_page_and_ops, get_dummy_ptd};
 use criterion::measurement::WallTime;
@@ -22,11 +15,19 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use pprof::criterion::{Output, PProfProfiler}; // Add this line
 
 use afs_page::page_rw_checker::page_controller::PageController;
+use afs_stark_backend::commit::CommittedSingleMatrixView;
+use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
+use afs_stark_backend::interaction::trace::generate_permutation_trace;
+use afs_stark_backend::keygen::types::MultiStarkProvingKey;
+use afs_stark_backend::prover::quotient::QuotientCommitter;
 use afs_stark_backend::prover::trace::{ProverTraceData, SingleRapCommittedTraceView};
+use afs_stark_backend::prover::types::MultiAirCommittedTraceData;
+use afs_stark_backend::rap::AnyRap;
 use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
 };
+use afs_test_utils::engine::StarkEngine;
 use afs_test_utils::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
     interaction::dummy_interaction_air::DummyInteractionAir,
@@ -35,10 +36,8 @@ use afs_test_utils::{
 pub fn perm_trace_gen_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("trace gen");
     group.sample_size(10);
-    #[cfg(feature = "parallel")]
-    println!("BRUH");
     let idx_len = 16;
-    let data_len = 16;
+    let data_len = 64;
     let log_page_height = 15;
     let log_num_ops = 15;
     let idx_limb_bits = 16;
@@ -75,6 +74,7 @@ pub fn perm_trace_gen_benchmark(c: &mut Criterion) {
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
     page_controller.set_up_keygen_builder(&mut keygen_builder, &ops_sender);
+    let pk = keygen_builder.generate_pk();
 
     let prover = MultiTraceStarkProver::new(&engine.config);
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
@@ -82,12 +82,12 @@ pub fn perm_trace_gen_benchmark(c: &mut Criterion) {
     let dummy_ptd = get_dummy_ptd(&mut trace_builder.committer);
 
     let (init_page_pdata, final_page_pdata) = page_controller.load_page_and_ops(
-        black_box(&page),
-        black_box(None),
-        black_box(None),
-        black_box(&ops),
-        black_box(oc_trace_degree),
-        black_box(&mut trace_builder.committer),
+        &page,
+        None,
+        None,
+        &ops,
+        oc_trace_degree,
+        &mut trace_builder.committer,
     );
 
     group.bench_function("main trace gen", |b| {
@@ -106,7 +106,6 @@ pub fn perm_trace_gen_benchmark(c: &mut Criterion) {
     });
 
     let ops_sender_trace = gen_ops_sender_trace(black_box(&ops_sender), black_box(&ops));
-    let pk = keygen_builder.generate_pk();
     pc_prove_with_group(
         group,
         &page_controller,
@@ -239,6 +238,8 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
         })
         .collect();
 
+    let interaction_chunk_size = pk.interaction_chunk_size;
+
     // TODO: ===== Permutation Trace Generation should be moved to separate module ====
     // Generate permutation traces
     {
@@ -258,6 +259,7 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
                     &main.partitioned_main_trace,
                     public_values,
                     perm_challenges,
+                    interaction_chunk_size,
                 );
             })
         });
@@ -276,6 +278,7 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
                     &main.partitioned_main_trace,
                     public_values,
                     perm_challenges,
+                    interaction_chunk_size,
                 );
             })
         });
@@ -294,6 +297,7 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
                     &main.partitioned_main_trace,
                     public_values,
                     perm_challenges,
+                    interaction_chunk_size,
                 );
             })
         });
@@ -316,6 +320,7 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
                         &main.partitioned_main_trace,
                         public_values,
                         perm_challenges,
+                        interaction_chunk_size,
                     )
                 })
                 .collect::<Vec<_>>();
