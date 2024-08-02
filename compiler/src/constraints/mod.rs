@@ -1,17 +1,18 @@
-// pub mod groth16_ffi;
-pub mod opcodes;
-
 use core::fmt::Debug;
+use std::marker::PhantomData;
+
 use p3_field::AbstractExtensionField;
 use p3_field::Field;
 use p3_field::PrimeField;
 use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
 
-use self::opcodes::ConstraintOpcode;
 use crate::ir::Config;
 use crate::ir::DslIr;
 use crate::prelude::TracedVec;
+
+use self::opcodes::ConstraintOpcode;
+
+pub mod opcodes;
 
 /// A constraint is an operation and a list of nested arguments.
 #[derive(Debug, Clone, Serialize, Deserialize)]

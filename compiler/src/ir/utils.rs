@@ -1,5 +1,6 @@
-use p3_field::{AbstractExtensionField, AbstractField};
 use std::ops::{Add, Mul, MulAssign};
+
+use p3_field::{AbstractExtensionField, AbstractField};
 
 use super::{
     Array, Builder, Config, DslIr, Ext, Felt, MemIndex, SymbolicExt, Usize, Var, Variable,
