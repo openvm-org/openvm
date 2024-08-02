@@ -4,7 +4,7 @@ use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
 use std::ops::Deref;
 
-use afs_compiler::asm::AsmBuilder;
+use afs_compiler::asm::{AsmBuilder, AsmConfig, Program};
 use afs_compiler::ir::Var;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::vm::config::VmConfig;
@@ -12,7 +12,11 @@ use stark_vm::vm::{ExecutionResult, VirtualMachine};
 
 mod common;
 
-fn fibonacci_program(a: u32, b: u32, n: u32) -> Vec<Instruction<BabyBear>> {
+fn fibonacci_program(
+    a: u32,
+    b: u32,
+    n: u32,
+) -> Program<BabyBear, AsmConfig<BabyBear, BinomialExtensionField<BabyBear, 4>>> {
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, 4>;
 
@@ -42,10 +46,11 @@ fn test_fibonacci_program_verify() {
         ..Default::default()
     };
 
-    let dummy_vm = VirtualMachine::<1, _>::new(vm_config, fib_program.clone(), vec![]);
+    let dummy_vm =
+        VirtualMachine::<1, _>::new(vm_config, fib_program.isa_instructions.clone(), vec![]);
     let rec_raps = get_rec_raps(&dummy_vm.segments[0]);
 
-    let vm = VirtualMachine::<1, _>::new(vm_config, fib_program, vec![]);
+    let vm = VirtualMachine::<1, _>::new(vm_config, fib_program.isa_instructions, vec![]);
     let ExecutionResult {
         nonempty_traces: traces,
         nonempty_chips: chips,
@@ -61,6 +66,10 @@ fn test_fibonacci_program_verify() {
     let (fib_verification_program, input_stream) =
         common::build_verification_program(rec_raps, pvs, vparams);
 
-    let vm = VirtualMachine::<1, _>::new(vm_config, fib_verification_program, input_stream);
+    let vm = VirtualMachine::<1, _>::new(
+        vm_config,
+        fib_verification_program.isa_instructions,
+        input_stream,
+    );
     vm.execute().unwrap();
 }

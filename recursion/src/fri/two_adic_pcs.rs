@@ -282,6 +282,8 @@ pub mod tests {
     use crate::hints::{Hintable, InnerPcsProof, InnerVal};
     use crate::utils::const_fri_config;
     use afs_compiler::asm::AsmBuilder;
+    use afs_compiler::asm::AsmConfig;
+    use afs_compiler::asm::Program;
     use afs_compiler::ir::{Array, Usize, Var, DIGEST_SIZE};
     use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
     use itertools::Itertools;
@@ -290,6 +292,7 @@ pub mod tests {
     use p3_challenger::FieldChallenger;
     use p3_commit::Pcs;
     use p3_commit::TwoAdicMultiplicativeCoset;
+    use p3_field::extension::BinomialExtensionField;
     use p3_field::AbstractField;
     use p3_matrix::dense::RowMajorMatrix;
     use p3_uni_stark::{StarkGenericConfig, Val};
@@ -303,7 +306,10 @@ pub mod tests {
     pub fn build_test_fri_with_cols_and_log2_rows(
         nb_cols: usize,
         nb_log2_rows: usize,
-    ) -> (Vec<Instruction<BabyBear>>, Vec<Vec<BabyBear>>) {
+    ) -> (
+        Program<BabyBear, AsmConfig<BabyBear, BinomialExtensionField<BabyBear, 4>>>,
+        Vec<Vec<BabyBear>>,
+    ) {
         type SC = BabyBearPoseidon2Config;
         type F = Val<SC>;
         type EF = <SC as StarkGenericConfig>::Challenge;
@@ -390,8 +396,9 @@ pub mod tests {
     #[ignore = "test takes too long"]
     fn test_two_adic_fri_pcs_single_batch() {
         use afs_compiler::util::execute_program;
+        type EF = BinomialExtensionField<BabyBear, 4>;
 
         let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 16);
-        execute_program::<WORD_SIZE>(program, witness);
+        execute_program::<WORD_SIZE, EF>(program, witness);
     }
 }

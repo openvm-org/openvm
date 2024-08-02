@@ -31,7 +31,7 @@ fn test_compiler_public_values() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program_with_public_values::<WORD_SIZE>(
+    execute_program_with_public_values::<WORD_SIZE, EF>(
         program,
         vec![],
         &[(0, public_value_0), (1, public_value_1)],
@@ -58,7 +58,7 @@ fn test_compiler_public_values_no_initial() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program::<WORD_SIZE, EF>(program, vec![]);
 }
 
 #[test]
@@ -83,7 +83,7 @@ fn test_compiler_public_values_negative() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program_with_public_values::<WORD_SIZE>(
+    execute_program_with_public_values::<WORD_SIZE, EF>(
         program,
         vec![],
         &[(0, public_value_0), (1, public_value_1)],

@@ -32,8 +32,8 @@ fn test_hint_bits_felt() {
     builder.halt();
 
     let program = builder.compile_isa::<1>();
-    display_program(&program);
-    execute_program::<WORD_SIZE>(program, vec![]);
+    display_program(&program.isa_instructions);
+    execute_program::<WORD_SIZE, EF>(program, vec![]);
 }
 
 #[test]
@@ -58,6 +58,6 @@ fn test_hint_bits_var() {
     builder.halt();
 
     let program = builder.compile_isa::<1>();
-    display_program(&program);
-    execute_program::<WORD_SIZE>(program, vec![]);
+    display_program(&program.isa_instructions);
+    execute_program::<WORD_SIZE, EF>(program, vec![]);
 }

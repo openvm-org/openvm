@@ -48,6 +48,6 @@ fn test_cycle_tracker() {
         field_extension_enabled: true,
     });
 
-    display_program(&program);
-    execute_program::<WORD_SIZE>(program, vec![]);
+    display_program(&program.isa_instructions);
+    execute_program::<WORD_SIZE, EF>(program, vec![]);
 }

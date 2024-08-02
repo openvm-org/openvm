@@ -7,7 +7,10 @@ use stark_vm::cpu::trace::Instruction;
 use stark_vm::cpu::OpCode;
 use stark_vm::cpu::OpCode::*;
 
-use crate::asm::{AsmInstruction, AssemblyCode};
+use crate::{
+    asm::{AsmInstruction, AssemblyCode, DebugInfo, Program},
+    ir::Config,
+};
 
 pub mod field_extension_conversion;
 
@@ -251,16 +254,22 @@ fn convert_print_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: Extens
     }
 }
 
-fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionField<F>>(
+fn convert_instruction<
+    const WORD_SIZE: usize,
+    F: PrimeField64,
+    EF: ExtensionField<F>,
+    C: Config,
+>(
     instruction: AsmInstruction<F, EF>,
+    debug_info: Option<DebugInfo<C>>,
     pc: F,
     labels: impl Fn(F) -> F,
     options: CompilerOptions,
-) -> Vec<Instruction<F>> {
+) -> Program<F, C> {
     let utility_registers: [F; NUM_UTILITY_REGISTERS] = from_fn(|i| F::from_canonical_usize(i));
     let utility_register = utility_registers[0];
 
-    match instruction {
+    let isa_instructions = match instruction {
         AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
         AsmInstruction::LoadF(dst, src, index, offset, size) => vec![
             // register[util] <- register[index] * size
@@ -721,13 +730,24 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             AS::Register,
         )],
         _ => panic!("Unsupported instruction {:?}", instruction),
+    };
+
+    let debug_info_vec = vec![debug_info; isa_instructions.len()];
+    Program {
+        isa_instructions,
+        debug_info_vec,
     }
 }
 
-pub fn convert_program<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionField<F>>(
-    program: AssemblyCode<F, EF>,
+pub fn convert_program<
+    const WORD_SIZE: usize,
+    F: PrimeField64,
+    EF: ExtensionField<F>,
+    C: Config,
+>(
+    program: AssemblyCode<F, EF, C>,
     options: CompilerOptions,
-) -> Vec<Instruction<F>> {
+) -> Program<F, C> {
     // register[0] <- 0
     let init_register_0 = inst(
         STOREW,
@@ -737,14 +757,19 @@ pub fn convert_program<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         AS::Immediate,
         AS::Register,
     );
+    let init_debug_info = None;
 
     let mut block_start = vec![];
     let mut pc = 1;
     for block in program.blocks.iter() {
         block_start.push(pc);
-        for instruction in block.0.iter() {
-            let instructions = convert_instruction::<WORD_SIZE, F, EF>(
+
+        for i in 0..block.0.len() {
+            let instruction = &block.0[i];
+            let debug_info = &block.1[i];
+            let instructions = convert_instruction::<WORD_SIZE, F, EF, C>(
                 instruction.clone(),
+                debug_info.clone(),
                 F::from_canonical_usize(pc),
                 |label| label,
                 options,
@@ -753,19 +778,28 @@ pub fn convert_program<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         }
     }
 
-    let mut result = vec![init_register_0];
+    let mut isa_instructions = vec![init_register_0];
+    let mut debug_info_vec = vec![init_debug_info];
     for block in program.blocks.iter() {
-        for instruction in block.0.iter() {
+        for i in 0..block.0.len() {
+            let instruction = &block.0[i];
+            let debug_info = &block.1[i];
             let labels =
                 |label: F| F::from_canonical_usize(block_start[label.as_canonical_u64() as usize]);
-            result.extend(convert_instruction::<WORD_SIZE, F, EF>(
+            let result = convert_instruction::<WORD_SIZE, F, EF, C>(
                 instruction.clone(),
-                F::from_canonical_usize(result.len()),
+                debug_info.clone(),
+                F::from_canonical_usize(isa_instructions.len()),
                 labels,
                 options,
-            ));
+            );
+            isa_instructions.extend(result.isa_instructions);
+            debug_info_vec.extend(result.debug_info_vec);
         }
     }
 
-    result
+    Program {
+        isa_instructions,
+        debug_info_vec,
+    }
 }

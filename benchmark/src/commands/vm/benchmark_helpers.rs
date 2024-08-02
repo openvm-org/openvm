@@ -1,5 +1,6 @@
 use std::{collections::HashMap, fs::File};
 
+use afs_compiler::asm::{AsmConfig, Program};
 use afs_recursion::{
     hints::Hintable,
     stark::{DynRapForRecursion, VerifierProgram},
@@ -19,6 +20,7 @@ use afs_test_utils::{
 };
 use color_eyre::eyre;
 use p3_baby_bear::BabyBear;
+use p3_field::{extension::BinomialExtensionField, ExtensionField, TwoAdicField};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_strict_usize;
 use stark_vm::{
@@ -121,11 +123,17 @@ pub fn run_recursive_test_benchmark(
     let mut witness_stream = Vec::new();
     witness_stream.extend(input.write());
 
-    vm_benchmark_execute_and_prove::<1>(program, witness_stream)
+    vm_benchmark_execute_and_prove::<1, BinomialExtensionField<BabyBear, 4>>(
+        program,
+        witness_stream,
+    )
 }
 
-pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
-    program: Vec<Instruction<BabyBear>>,
+pub fn vm_benchmark_execute_and_prove<
+    const WORD_SIZE: usize,
+    EF: ExtensionField<BabyBear> + TwoAdicField,
+>(
+    program: Program<BabyBear, AsmConfig<BabyBear, EF>>,
     input_stream: Vec<Vec<BabyBear>>,
 ) -> eyre::Result<()> {
     clear_tracing_log(TMP_TRACING_LOG.as_str())?;
@@ -135,7 +143,7 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         ..Default::default()
     };
 
-    let vm = VirtualMachine::<WORD_SIZE, _>::new(vm_config, program, input_stream);
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(vm_config, program.isa_instructions, input_stream);
 
     let vm_execute_span = info_span!("Benchmark vm execute").entered();
     let ExecutionResult {

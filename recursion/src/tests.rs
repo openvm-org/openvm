@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use p3_baby_bear::BabyBear;
+use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
@@ -165,5 +166,5 @@ fn run_recursive_test(
     let mut witness_stream = Vec::new();
     witness_stream.extend(input.write());
 
-    execute_program::<1>(program, witness_stream);
+    execute_program::<1, BinomialExtensionField<BabyBear, 4>>(program, witness_stream);
 }

@@ -402,6 +402,8 @@ impl Hintable<InnerConfig> for Commitments<BabyBearPoseidon2Config> {
 
 #[cfg(test)]
 mod test {
+    use p3_baby_bear::BabyBear;
+    use p3_field::extension::BinomialExtensionField;
     use p3_field::AbstractField;
 
     use afs_compiler::asm::AsmBuilder;
@@ -435,7 +437,7 @@ mod test {
         builder.halt();
 
         let program = builder.compile_isa::<1>();
-        execute_program::<1>(program, stream);
+        execute_program::<1, BinomialExtensionField<BabyBear, 4>>(program, stream);
     }
 
     #[test]
@@ -482,6 +484,6 @@ mod test {
         builder.halt();
 
         let program = builder.compile_isa::<1>();
-        execute_program::<1>(program, stream);
+        execute_program::<1, BinomialExtensionField<BabyBear, 4>>(program, stream);
     }
 }

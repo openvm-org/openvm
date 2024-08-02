@@ -3,19 +3,20 @@ use alloc::format;
 use core::fmt;
 use core::fmt::Display;
 
-use backtrace::Backtrace;
-use p3_field::{ExtensionField, PrimeField32};
+use p3_field::{ExtensionField, PrimeField, PrimeField32};
 
-use super::AsmInstruction;
+use crate::ir::Config;
+
+use super::{AsmInstruction, DebugInfo};
 
 /// A basic block of assembly instructions.
 #[derive(Debug, Clone, Default)]
-pub struct BasicBlock<F, EF>(
+pub struct BasicBlock<F, EF, C: Config>(
     pub(crate) Vec<AsmInstruction<F, EF>>,
-    pub(crate) Vec<Option<Backtrace>>,
+    pub(crate) Vec<Option<DebugInfo<C>>>,
 );
 
-impl<F: PrimeField32, EF: ExtensionField<F>> BasicBlock<F, EF> {
+impl<F: PrimeField32, EF: ExtensionField<F>, C: Config> BasicBlock<F, EF, C> {
     /// Creates a new basic block.
     pub fn new() -> Self {
         Self(Vec::new(), Vec::new())
@@ -25,23 +26,22 @@ impl<F: PrimeField32, EF: ExtensionField<F>> BasicBlock<F, EF> {
     pub(crate) fn push(
         &mut self,
         instruction: AsmInstruction<F, EF>,
-        backtrace: Option<Backtrace>,
+        debug_info: Option<DebugInfo<C>>,
     ) {
         self.0.push(instruction);
-        self.1.push(backtrace);
+        self.1.push(debug_info);
     }
 }
 
 /// Assembly code for a program.
-#[derive(Debug, Clone)]
-pub struct AssemblyCode<F, EF> {
-    pub blocks: Vec<BasicBlock<F, EF>>,
+pub struct AssemblyCode<F: PrimeField, EF: ExtensionField<F>, C: Config> {
+    pub blocks: Vec<BasicBlock<F, EF, C>>,
     pub labels: BTreeMap<F, String>,
 }
 
-impl<F: PrimeField32, EF: ExtensionField<F>> AssemblyCode<F, EF> {
+impl<F: PrimeField32, EF: ExtensionField<F>, C: Config> AssemblyCode<F, EF, C> {
     /// Creates a new assembly code.
-    pub fn new(blocks: Vec<BasicBlock<F, EF>>, labels: BTreeMap<F, String>) -> Self {
+    pub fn new(blocks: Vec<BasicBlock<F, EF, C>>, labels: BTreeMap<F, String>) -> Self {
         Self { blocks, labels }
     }
 
@@ -50,7 +50,7 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AssemblyCode<F, EF> {
     }
 }
 
-impl<F: PrimeField32, EF: ExtensionField<F>> Display for AssemblyCode<F, EF> {
+impl<F: PrimeField32, EF: ExtensionField<F>, C: Config> Display for AssemblyCode<F, EF, C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (i, block) in self.blocks.iter().enumerate() {
             writeln!(

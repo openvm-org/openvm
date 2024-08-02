@@ -13,7 +13,7 @@ use stark_vm::{
     vm::{config::VmConfig, VirtualMachine},
 };
 
-use crate::asm::AsmBuilder;
+use crate::asm::{AsmBuilder, AsmConfig, Program};
 use crate::conversion::CompilerOptions;
 
 pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
@@ -26,8 +26,8 @@ pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
     }
 }
 
-pub fn execute_program<const WORD_SIZE: usize>(
-    program: Vec<Instruction<BabyBear>>,
+pub fn execute_program<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + TwoAdicField>(
+    program: Program<BabyBear, AsmConfig<BabyBear, EF>>,
     input_stream: Vec<Vec<BabyBear>>,
 ) {
     let vm = VirtualMachine::<WORD_SIZE, _>::new(
@@ -35,14 +35,17 @@ pub fn execute_program<const WORD_SIZE: usize>(
             num_public_values: 4,
             ..Default::default()
         },
-        program,
+        program.isa_instructions,
         input_stream,
     );
     vm.execute().unwrap();
 }
 
-pub fn execute_program_with_public_values<const WORD_SIZE: usize>(
-    program: Vec<Instruction<BabyBear>>,
+pub fn execute_program_with_public_values<
+    const WORD_SIZE: usize,
+    EF: ExtensionField<BabyBear> + TwoAdicField,
+>(
+    program: Program<BabyBear, AsmConfig<BabyBear, EF>>,
     input_stream: Vec<Vec<BabyBear>>,
     public_values: &[(usize, BabyBear)],
 ) {
@@ -51,7 +54,7 @@ pub fn execute_program_with_public_values<const WORD_SIZE: usize>(
             num_public_values: 4,
             ..Default::default()
         },
-        program,
+        program.isa_instructions,
         input_stream,
     );
     for &(index, value) in public_values {
@@ -105,11 +108,14 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
     });
-    execute_and_prove_program::<WORD_SIZE>(program, input_stream)
+    execute_and_prove_program::<WORD_SIZE, EF>(program, input_stream)
 }
 
-pub fn execute_and_prove_program<const WORD_SIZE: usize>(
-    program: Vec<Instruction<BabyBear>>,
+pub fn execute_and_prove_program<
+    const WORD_SIZE: usize,
+    EF: ExtensionField<BabyBear> + TwoAdicField,
+>(
+    program: Program<BabyBear, AsmConfig<BabyBear, EF>>,
     input_stream: Vec<Vec<BabyBear>>,
 ) {
     let vm = VirtualMachine::<WORD_SIZE, _>::new(
@@ -117,7 +123,7 @@ pub fn execute_and_prove_program<const WORD_SIZE: usize>(
             num_public_values: 4,
             ..Default::default()
         },
-        program,
+        program.isa_instructions,
         input_stream,
     );
 

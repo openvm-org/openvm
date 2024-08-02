@@ -1,5 +1,7 @@
+use afs_compiler::asm::{AsmConfig, Program};
 use afs_stark_backend::keygen::types::MultiStarkVerifyingKey;
 use p3_baby_bear::BabyBear;
+use p3_field::extension::BinomialExtensionField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 use p3_uni_stark::StarkGenericConfig;
@@ -78,7 +80,10 @@ pub fn build_verification_program(
     rec_raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
     pvs: Vec<Vec<InnerVal>>,
     vparams: VerificationParams<BabyBearPoseidon2Config>,
-) -> (Vec<Instruction<BabyBear>>, Vec<Vec<InnerVal>>) {
+) -> (
+    Program<BabyBear, AsmConfig<BabyBear, BinomialExtensionField<BabyBear, 4>>>,
+    Vec<Vec<InnerVal>>,
+) {
     let VerificationParams {
         vk,
         proof,
@@ -119,5 +124,5 @@ pub fn run_recursive_test(
     let vparams = make_verification_params(&any_raps, traces, &pvs);
 
     let (program, witness_stream) = build_verification_program(rec_raps, pvs, vparams);
-    execute_program::<1>(program, witness_stream);
+    execute_program::<1, BinomialExtensionField<BabyBear, 4>>(program, witness_stream);
 }

@@ -9,11 +9,14 @@ use p3_field::{AbstractExtensionField, AbstractField, PrimeField32, TwoAdicField
 use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
 use p3_matrix::stack::VerticalPair;
 
+use afs_compiler::asm::AsmConfig;
+use afs_compiler::asm::Program;
 use afs_compiler::ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize, Var};
 use afs_stark_backend::air_builders::symbolic::{SymbolicConstraints, SymbolicRapBuilder};
 use afs_stark_backend::prover::opener::AdjacentOpenedValues;
 use afs_stark_backend::rap::{AnyRap, Rap};
 use afs_test_utils::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
+use p3_field::extension::BinomialExtensionField;
 use p3_matrix::Matrix;
 use stark_vm::cpu::trace::Instruction;
 use stark_vm::vm::ExecutionSegment;
@@ -68,7 +71,7 @@ impl VerifierProgram<InnerConfig> {
         raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
         constants: MultiStarkVerificationAdvice<InnerConfig>,
         fri_params: &FriParameters,
-    ) -> Vec<Instruction<BabyBear>> {
+    ) -> Program<BabyBear, AsmConfig<BabyBear, BinomialExtensionField<BabyBear, 4>>> {
         let mut builder = Builder::<InnerConfig>::default();
 
         let input: VerifierInputVariable<_> = builder.uninit();

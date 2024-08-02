@@ -54,6 +54,6 @@ fn test_io() {
     ];
 
     let program = builder.compile_isa::<1>();
-    display_program(&program);
-    execute_program::<WORD_SIZE>(program, witness_stream);
+    display_program(&program.isa_instructions);
+    execute_program::<WORD_SIZE, EF>(program, witness_stream);
 }

@@ -120,7 +120,7 @@ fn test_compiler_array() {
 
     const WORD_SIZE: usize = 1;
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program::<WORD_SIZE, EF>(program, vec![]);
 }
 
 #[test]

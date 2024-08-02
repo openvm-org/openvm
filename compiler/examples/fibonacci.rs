@@ -49,8 +49,8 @@ fn main() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    display_program(&program);
-    execute_program::<WORD_SIZE>(program, vec![]);
+    display_program(&program.isa_instructions);
+    execute_program::<WORD_SIZE, EF>(program, vec![]);
 
     // let program = code.machine_code();
     // println!("Program size = {}", program.instructions.len());

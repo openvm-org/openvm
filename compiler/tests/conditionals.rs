@@ -54,7 +54,7 @@ fn test_compiler_conditionals() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program::<WORD_SIZE, EF>(program, vec![]);
 }
 
 #[test]
@@ -83,7 +83,7 @@ fn test_compiler_conditionals_v2() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program::<WORD_SIZE, EF>(program, vec![]);
 }
 
 #[test]

@@ -2,6 +2,7 @@ use common::VerificationParams;
 use itertools::Itertools;
 use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
+use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
@@ -87,7 +88,7 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
         fri_params: engine.fri_params,
     };
     let (program, input_stream) = common::build_verification_program(vec![&air], pvs, vparams);
-    execute_program::<1>(program, input_stream);
+    execute_program::<1, BinomialExtensionField<BabyBear, 4>>(program, input_stream);
 
     Ok(())
 }
