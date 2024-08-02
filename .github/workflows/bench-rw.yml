@@ -70,14 +70,14 @@ jobs:
       - name: Get previous benchmark value
         id: get-previous-benchmark
         run: |
-          echo "::set-output name=previous-benchmark::$(jq --sort-keys . benchmark/github/results/single_rw.json)"
+          echo "::set-output name=previous-benchmark::$(cat benchmark/github/results/single_rw.json)"
 
       - name: Update benchmark value
         id: update-benchmark
         run: |
           mkdir -p benchmark/github/results
           mv benchmark/tmp/_result.json benchmark/github/results/single_rw.json
-          echo "::set-output name=new-benchmark::$(jq --sort-keys . benchmark/github/results/single_rw.json)"
+          echo "::set-output name=new-benchmark::$(cat benchmark/github/results/single_rw.json)"
 
       - name: Remove previous comment (if exists)
         if: github.event_name == 'pull_request'
@@ -113,7 +113,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `Benchmark (single page r/w) results:\n\nPrevious: ${previousBenchmark}\nCurrent: ${newBenchmark}`
+              body: `Benchmark (single page r/w) results:\n\nPrevious: \`\`\`json\n${JSON.stringify(JSON.parse(previousBenchmark), null, 2)}\n\`\`\`\nCurrent: \`\`\`json\n${JSON.stringify(JSON.parse(newBenchmark), null, 2)}\n\`\`\``
             });
 
       - name: Commit the result and make a new PR.
