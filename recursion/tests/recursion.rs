@@ -1,4 +1,4 @@
-use afs_recursion::stark::{get_rec_raps, sort_chips};
+use afs_recursion::stark::get_rec_raps;
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
@@ -54,13 +54,6 @@ fn test_fibonacci_program_verify() {
     } = vm.execute().unwrap();
 
     let chips = chips.iter().map(|x| x.deref()).collect();
-    let (chips, rec_raps, traces, pvs) = sort_chips(chips, rec_raps, traces, pvs);
 
-    let vparams = common::make_verification_params(&chips, traces, &pvs);
-
-    let (fib_verification_program, input_stream) =
-        common::build_verification_program(rec_raps, pvs, vparams);
-
-    let vm = VirtualMachine::<1, _>::new(vm_config, fib_verification_program, input_stream);
-    vm.execute().unwrap();
+    common::run_recursive_test(chips, rec_raps, traces, pvs);
 }

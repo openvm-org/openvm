@@ -5,7 +5,7 @@ use p3_matrix::Matrix;
 use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_strict_usize;
 
-use afs_compiler::util::execute_program;
+use afs_compiler::util::{execute_and_prove_program, execute_program};
 use afs_recursion::hints::{Hintable, InnerVal};
 use afs_recursion::stark::{sort_chips, DynRapForRecursion, VerifierProgram};
 use afs_recursion::types::{new_from_multi_vk, InnerConfig, VerifierInput};
@@ -119,5 +119,5 @@ pub fn run_recursive_test(
     let vparams = make_verification_params(&any_raps, traces, &pvs);
 
     let (program, witness_stream) = build_verification_program(rec_raps, pvs, vparams);
-    execute_program::<1>(program, witness_stream);
+    execute_and_prove_program::<1>(program, witness_stream);
 }

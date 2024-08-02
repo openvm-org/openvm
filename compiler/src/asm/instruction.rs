@@ -65,9 +65,6 @@ pub enum AsmInstruction<F, EF> {
     /// Multiply extension, dst = lhs * rhs.
     MulE(i32, i32, i32),
 
-    /// Multiply immediate extension.
-    MulEI(i32, i32, EF),
-
     /// Extension inverse, dst = 1 / src.
     InvE(i32, i32),
 
@@ -249,9 +246,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::MulE(dst, lhs, rhs) => {
                 write!(f, "emul  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
-            }
-            AsmInstruction::MulEI(dst, lhs, rhs) => {
-                write!(f, "emuli ({})fp, ({})fp, {}", dst, lhs, rhs)
             }
             AsmInstruction::InvE(dst, src) => {
                 write!(f, "einv ({})fp, ({})fp", dst, src)

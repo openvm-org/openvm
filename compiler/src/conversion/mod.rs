@@ -655,12 +655,11 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         AsmInstruction::AddE(..)
         | AsmInstruction::SubE(..)
         | AsmInstruction::MulE(..)
-        | AsmInstruction::MulEI(..)
         | AsmInstruction::InvE(..) => {
-            let fe_utility_registers = from_fn(|i| utility_registers[i]);
             if options.field_extension_enabled {
-                convert_field_extension::<WORD_SIZE, F, EF>(instruction, fe_utility_registers)
+                convert_field_extension::<WORD_SIZE, F, EF>(instruction)
             } else if options.field_arithmetic_enabled {
+                let fe_utility_registers = from_fn(|i| utility_registers[i]);
                 convert_field_extension_with_base::<WORD_SIZE, F, EF>(
                     instruction,
                     fe_utility_registers,

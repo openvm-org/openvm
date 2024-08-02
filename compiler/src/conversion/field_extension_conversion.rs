@@ -360,22 +360,6 @@ pub fn convert_field_extension_with_base<
                 utility_registers,
             )
         }
-        AsmInstruction::MulEI(dst, lhs, rhs) => {
-            let lhs_register = [
-                register(lhs),
-                register(lhs - word_size_i32),
-                register(lhs - 2 * word_size_i32),
-                register(lhs - 3 * word_size_i32),
-            ];
-            let rhs_slc = rhs.as_base_slice().try_into().unwrap();
-            convert_field_extension_mult::<WORD_SIZE, F>(
-                dst,
-                lhs_register,
-                rhs_slc,
-                AS::Immediate,
-                utility_registers,
-            )
-        }
         AsmInstruction::InvE(dst, src) => {
             convert_field_extension_inv::<WORD_SIZE, F>(dst, src, utility_registers)
         }
@@ -388,7 +372,6 @@ pub fn convert_field_extension_with_base<
 
 pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
-    utility_registers: [F; 8],
 ) -> Vec<Instruction<F>> {
     match instruction {
         AsmInstruction::AddE(dst, lhs, rhs) => vec![inst(
@@ -399,9 +382,6 @@ pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField64, EF: Exte
             AS::Register,
             AS::Register,
         )],
-        AsmInstruction::MulEI(_, _, _) => {
-            convert_field_extension_with_base::<WORD_SIZE, F, EF>(instruction, utility_registers)
-        }
         AsmInstruction::SubE(dst, lhs, rhs) => vec![inst(
             FE4SUB,
             register(dst),

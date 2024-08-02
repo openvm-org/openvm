@@ -22,13 +22,13 @@ use super::{AssemblyCode, BasicBlock};
 pub(crate) const ZERO: i32 = 0;
 
 /// The offset which the stack starts.
-pub(crate) const STACK_START_OFFSET: i32 = 16;
+pub(crate) const STACK_START_OFFSET: i32 = 100;
 
 /// The heap pointer address.
 pub(crate) const HEAP_PTR: i32 = -4;
 
-/// The address of A0.
 pub(crate) const A0: i32 = -8;
+pub(crate) const A4: i32 = -24;
 
 // sizeof(var) = sizeof(felt) = 1 and sizeof(ext) == 4
 pub const FP_INCREMENT: i32 = 6;
@@ -113,7 +113,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::AddFI(dst.fp(), ZERO, src), trace);
                 }
                 DslIr::ImmE(dst, src) => {
-                    self.assign_exti(dst, src, trace);
+                    self.assign_exti(dst.fp(), src, trace);
                 }
                 DslIr::AddV(dst, lhs, rhs) => {
                     self.push(AsmInstruction::AddF(dst.fp(), lhs.fp(), rhs.fp()), trace);
@@ -186,17 +186,16 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 }
                 DslIr::DivEIN(dst, lhs, rhs) => {
                     self.push(AsmInstruction::InvE(A0, rhs.fp()), trace.clone());
-                    self.push(AsmInstruction::MulEI(dst.fp(), A0, lhs), trace);
+                    self.assign_exti(A4, lhs, trace.clone());
+                    self.push(AsmInstruction::MulE(dst.fp(), A0, A4), trace);
                 }
                 DslIr::DivE(dst, lhs, rhs) => {
                     self.push(AsmInstruction::InvE(A0, rhs.fp()), trace.clone());
                     self.push(AsmInstruction::MulE(dst.fp(), lhs.fp(), A0), trace);
                 }
                 DslIr::DivEI(dst, lhs, rhs) => {
-                    self.push(
-                        AsmInstruction::MulEI(dst.fp(), lhs.fp(), rhs.inverse()),
-                        trace,
-                    );
+                    self.assign_exti(A0, rhs.inverse(), trace.clone());
+                    self.push(AsmInstruction::MulE(dst.fp(), lhs.fp(), A0), trace);
                 }
                 DslIr::InvE(dst, src) => {
                     self.push(AsmInstruction::InvE(dst.fp(), src.fp()), trace);
@@ -236,7 +235,8 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::MulE(dst.fp(), lhs.fp(), rhs.fp()), trace);
                 }
                 DslIr::MulEI(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::MulEI(dst.fp(), lhs.fp(), rhs), trace);
+                    self.assign_exti(A0, rhs, trace.clone());
+                    self.push(AsmInstruction::MulE(dst.fp(), lhs.fp(), A0), trace);
                 }
                 DslIr::MulEF(dst, lhs, rhs) => {
                     self.mul_ext_felt(dst, lhs, rhs, trace);
@@ -804,14 +804,11 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
 
 // Ext compiler logic.
 impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCompiler<F, EF> {
-    fn assign_exti(&mut self, dst: Ext<F, EF>, imm: EF, trace: Option<Backtrace>) {
+    fn assign_exti(&mut self, dst: i32, imm: EF, trace: Option<Backtrace>) {
         let imm = imm.as_base_slice();
         for i in 0..EF::D {
             let j = (i * self.word_size) as i32;
-            self.push(
-                AsmInstruction::AddFI(dst.fp() - j, ZERO, imm[i]),
-                trace.clone(),
-            );
+            self.push(AsmInstruction::AddFI(dst - j, ZERO, imm[i]), trace.clone());
         }
     }
 
