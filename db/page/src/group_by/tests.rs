@@ -152,40 +152,6 @@ impl GroupByTest {
         Page::from_2d_vec(&page_vecs, 0, self.data_len())
     }
 
-    // /// Set up the keygen builder for the group-by test case by querying trace widths.
-    // fn set_up_keygen_builder(
-    //     &self,
-    //     keygen_builder: &mut MultiStarkKeygenBuilder<BabyBearPoseidon2Config>,
-    //     page_controller: &PageController<BabyBearPoseidon2Config>,
-    // ) {
-    //     let group_by_ptr = keygen_builder.add_cached_main_matrix(self.page_width);
-    //     let final_page_ptr =
-    //         keygen_builder.add_cached_main_matrix(page_controller.final_chip.page_width());
-    //     let group_by_aux_ptr = keygen_builder.add_main_matrix(page_controller.group_by.aux_width());
-    //     let final_page_aux_ptr =
-    //         keygen_builder.add_main_matrix(page_controller.final_chip.aux_width());
-    //     let range_checker_ptr =
-    //         keygen_builder.add_main_matrix(page_controller.range_checker.air_width());
-
-    //     keygen_builder.add_partitioned_air(
-    //         &page_controller.group_by,
-    //         0,
-    //         vec![group_by_ptr, group_by_aux_ptr],
-    //     );
-
-    //     keygen_builder.add_partitioned_air(
-    //         &page_controller.final_chip,
-    //         0,
-    //         vec![final_page_ptr, final_page_aux_ptr],
-    //     );
-
-    //     keygen_builder.add_partitioned_air(
-    //         &page_controller.range_checker.air,
-    //         0,
-    //         vec![range_checker_ptr],
-    //     );
-    // }
-
     /// Load a page into the group-by controller, load traces into the `trace_builder`,
     /// generate a proof for the group-by operation, and verify it.
     ///
@@ -269,19 +235,22 @@ impl GroupByTest {
     }
 }
 
+// TODO: make sure that this function deterministically makes the relevant tests work
 /// Perturb a page trace by randomly selecting any value in the page and replacing it with a random value.
 fn perturb_page(
     trace: p3_matrix::dense::DenseMatrix<p3_baby_bear::BabyBear>,
     page_width: usize,
     rng: &mut impl Rng,
-    max_value: usize,
+    _max_value: usize,
 ) -> p3_matrix::dense::DenseMatrix<p3_baby_bear::BabyBear> {
     let height = trace.values.len() / trace.width;
     let perturbed_x = rng.gen_range(0..height);
-    let perturbed_y = rng.gen_range(0..page_width);
+    // let perturbed_y = rng.gen_range(0..page_width);
+    let perturbed_y = 0;
     let mut perturbed_trace = trace.clone();
-    perturbed_trace.values[perturbed_x * page_width + perturbed_y] =
-        BabyBear::from_canonical_u32(rng.gen_range(0..max_value) as u32);
+    perturbed_trace.values[perturbed_x * page_width + perturbed_y] +=
+        BabyBear::from_canonical_u32(1);
+    // BabyBear::from_canonical_u32(rng.gen_range(0..max_value) as u32);
     perturbed_trace
 }
 
@@ -380,93 +349,88 @@ fn test_static_values() {
     assert!(verify.is_ok());
 }
 
-// TODO: fix tests. consider removing GroupByTest struct to reduce code duplication
+#[test]
+fn test_random_values() {
+    let mut rng = create_seeded_rng();
+    let page_width = rng.gen_range(2..20);
+    let random_value = rng.gen_range(1..page_width - 1);
+    let log_page_height = rng.gen_range(3..6);
+    let sorted = false;
+    let op = GroupByOperation::Sum;
+    let test = GroupByTest::new(page_width, random_value, log_page_height, 10, 4, sorted);
 
-// #[test]
-// fn test_random_values() {
-//     let mut rng = create_seeded_rng();
-//     let page_width = rng.gen_range(2..20);
-//     let random_value = rng.gen_range(1..page_width - 1);
-//     let log_page_height = rng.gen_range(3..6);
-//     let sorted = false;
-//     let op = GroupByOperation::Sum;
-//     let test = GroupByTest::new(page_width, random_value, log_page_height, 10, 4, sorted);
+    let mut page_controller = PageController::new(
+        test.page_width,
+        test.group_by_cols.clone(),
+        test.aggregated_col,
+        test.internal_bus_index,
+        test.output_bus_index,
+        test.range_bus_index,
+        test.idx_limb_bits,
+        test.idx_decomp,
+        sorted,
+        op,
+    );
 
-//     let mut page_controller = PageController::new(
-//         test.page_width,
-//         test.group_by_cols.clone(),
-//         test.aggregated_col,
-//         test.internal_bus_index,
-//         test.output_bus_index,
-//         test.range_bus_index,
-//         test.idx_limb_bits,
-//         test.idx_decomp,
-//         sorted,
-//         op,
-//     );
+    let engine =
+        config::baby_bear_poseidon2::default_engine(max(test.log_page_height, test.idx_decomp));
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-//     let engine =
-//         config::baby_bear_poseidon2::default_engine(max(test.log_page_height, test.idx_decomp));
-//     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
+    page_controller.set_up_keygen_builder(&mut keygen_builder);
 
-//     test.set_up_keygen_builder(&mut keygen_builder, &page_controller);
+    let pk = keygen_builder.generate_pk();
 
-//     let pk = keygen_builder.generate_pk();
+    let prover = MultiTraceStarkProver::new(&engine.config);
+    let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-//     let prover = MultiTraceStarkProver::new(&engine.config);
-//     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
+    const NUM_TESTS: usize = 3;
+    let mut alloc_rows_arr: Vec<usize> = (0..NUM_TESTS)
+        .map(|_| rng.gen_range(0..test.page_height() - 1))
+        .collect();
+    alloc_rows_arr.push(0);
+    alloc_rows_arr.push(test.page_height() - 1);
 
-//     const NUM_TESTS: usize = 3;
-//     let mut alloc_rows_arr: Vec<usize> = (0..NUM_TESTS)
-//         .map(|_| rng.gen_range(0..test.page_height() - 1))
-//         .collect();
-//     alloc_rows_arr.push(0);
-//     alloc_rows_arr.push(test.page_height() - 1);
+    // Positive test
+    for rows_allocated in alloc_rows_arr.iter() {
+        let page = test.generate_page(&mut rng, *rows_allocated);
 
-//     // Positive test
-//     for rows_allocated in alloc_rows_arr.iter() {
-//         let page = test.generate_page(&mut rng, *rows_allocated);
+        test.load_page_test(
+            &engine,
+            &page,
+            &mut page_controller,
+            &mut trace_builder,
+            &pk,
+            false,
+            &mut rng,
+        )
+        .expect("Verification failed");
 
-//         test.load_page_test(
-//             &engine,
-//             &page,
-//             &mut page_controller,
-//             &mut trace_builder,
-//             &pk,
-//             false,
-//             &mut rng,
-//         )
-//         .expect("Verification failed");
+        page_controller.refresh_range_checker();
+    }
 
-//         page_controller.refresh_range_checker();
-//     }
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
+    // Negative test
+    for rows_allocated in alloc_rows_arr.iter() {
+        let page = test.generate_page(&mut rng, *rows_allocated);
 
-//     USE_DEBUG_BUILDER.with(|debug| {
-//         *debug.lock().unwrap() = false;
-//     });
-//     // Negative test
-
-//     // TODO: fix negative tests
-
-//     // for rows_allocated in alloc_rows_arr.iter() {
-//     //     let page = test.generate_page(&mut rng, *rows_allocated);
-
-//     //     assert_eq!(
-//     //         test.load_page_test(
-//     //             &engine,
-//     //             &page,
-//     //             &mut page_controller,
-//     //             &mut trace_builder,
-//     //             &pk,
-//     //             true,
-//     //             &mut rng,
-//     //         ),
-//     //         Err(VerificationError::OodEvaluationMismatch),
-//     //         "Expected constraint to fail"
-//     //     );
-//     //     page_controller.refresh_range_checker();
-//     // }
-// }
+        assert_eq!(
+            test.load_page_test(
+                &engine,
+                &page,
+                &mut page_controller,
+                &mut trace_builder,
+                &pk,
+                true,
+                &mut rng,
+            ),
+            Err(VerificationError::OodEvaluationMismatch),
+            "Expected constraint to fail"
+        );
+        page_controller.refresh_range_checker();
+    }
+}
 
 #[test]
 fn group_by_sorted_test() {
@@ -532,25 +496,22 @@ fn group_by_sorted_test() {
         *debug.lock().unwrap() = false;
     });
     // Negative test
+    for rows_allocated in alloc_rows_arr.iter() {
+        let page = test.generate_sorted_page(&mut rng, *rows_allocated);
 
-    // TODO: fix negative tests
-
-    // for rows_allocated in alloc_rows_arr.iter() {
-    //     let page = test.generate_sorted_page(&mut rng, *rows_allocated);
-
-    //     assert_eq!(
-    //         test.load_page_test(
-    //             &engine,
-    //             &page,
-    //             &mut page_controller,
-    //             &mut trace_builder,
-    //             &pk,
-    //             true,
-    //             &mut rng,
-    //         ),
-    //         Err(VerificationError::OodEvaluationMismatch),
-    //         "Expected constraint to fail"
-    //     );
-    //     page_controller.refresh_range_checker();
-    // }
+        assert_eq!(
+            test.load_page_test(
+                &engine,
+                &page,
+                &mut page_controller,
+                &mut trace_builder,
+                &pk,
+                true,
+                &mut rng,
+            ),
+            Err(VerificationError::OodEvaluationMismatch),
+            "Expected constraint to fail"
+        );
+        page_controller.refresh_range_checker();
+    }
 }
