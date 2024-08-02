@@ -86,7 +86,9 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.issue.number
             });
-            for (const comment of comments.data) {
+            console.log(comments);
+            console.log("123");
+            for (const comment of comments) {
               console.log(comment.body);
             }
 
