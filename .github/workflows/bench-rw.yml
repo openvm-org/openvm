@@ -59,6 +59,9 @@ jobs:
       - name: Setup gh command line.
         if: github.event_name == 'push'
         uses: actions4gh/setup-gh@v1
+      
+      - name: 'Setup jq'
+        uses: dcarbone/install-jq-action@v2
 
       - name: Run benchmark
         run: |
@@ -67,14 +70,14 @@ jobs:
       - name: Get previous benchmark value
         id: get-previous-benchmark
         run: |
-          echo "::set-output name=previous-benchmark::$(cat benchmark/github/results/single_rw.json)"
+          echo "::set-output name=previous-benchmark::$(jq --sort-keys . benchmark/github/results/single_rw.json)"
 
       - name: Update benchmark value
         id: update-benchmark
         run: |
           mkdir -p benchmark/github/results
           mv benchmark/tmp/_result.json benchmark/github/results/single_rw.json
-          echo "::set-output name=new-benchmark::$(cat benchmark/github/results/single_rw.json)"
+          echo "::set-output name=new-benchmark::$(jq --sort-keys . benchmark/github/results/single_rw.json)"
 
       - name: Remove previous comment (if exists)
         if: github.event_name == 'pull_request'
