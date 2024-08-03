@@ -1,25 +1,24 @@
-name: Run Fibonacci Air recursion benchmark
+name: "Benchmark: Coordinate Runner & Reporting"
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches: ["main"]
-    paths:
-      - "stark-backend/**"
-      - "vm/**"
-      - "compiler/**"
-      - "recursion/**"
-  push:
-    branches: ["main"]
-    paths:
-      - "stark-backend/**"
-      - "vm/**"
-      - "compiler/**"
-      - "recursion/**"
+    inputs:
+      benchmark_name:
+        type: choice
+        required: true
+        description: The name of the benchmark to run
+        options:
+          - vm_verify_fibair
+          - single_rw
+  workflow_call:
+    inputs:
+      benchmark_name:
+        type: string
+        required: true
+        description: The name of the benchmark to run
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: true
+env:
+  RESULT_PATH: benchmark/github/results/${{ inputs.benchmark_name }}.md
 
 jobs:
   start-runner:
@@ -64,36 +63,41 @@ jobs:
         if: github.event_name == 'push'
         uses: dev-hanz-ops/install-gh-cli-action@v0.1.0
 
+      ######################################################
+      # Run a different benchmark based on benchmark_name:
       - name: Run benchmark
+        if: inputs.benchmark_name == 'vm_verify_fibair'
         run: |
           RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- vm_verify_fibair -n 16
 
+      - name: Run benchmark
+        if: inputs.benchmark_name == 'single_rw'
+        run: |
+          RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- rw -r 90 -w 10 --config-folder benchmark/config/single_rw
+      ######################################################
+      # If we want this read from main, split this into a different job
       - name: Get previous benchmark value
         id: get-previous-benchmark
         run: |
-          markdown="$(<benchmark/github/results/vm_verify_fibair.md)"
           echo 'previous-benchmark<<EOF' >> $GITHUB_ENV
-          echo "$markdown" >> $GITHUB_ENV
+          echo  "$(<${{ env.RESULT_PATH }})" >> $GITHUB_ENV
           echo 'EOF' >> $GITHUB_ENV
 
       - name: Update benchmark value
         id: update-benchmark
         run: |
           mkdir -p benchmark/github/results
-          mv benchmark/tmp/_result.md benchmark/github/results/vm_verify_fibair.md
-          markdown="$(<benchmark/github/results/vm_verify_fibair.md)"
+          mv benchmark/tmp/_result.md ${{ env.RESULT_PATH }}
           echo 'new-benchmark<<EOF' >> $GITHUB_ENV
-          echo "$markdown" >> $GITHUB_ENV
+          echo "$(<${{ env.RESULT_PATH }})" >> $GITHUB_ENV
           echo 'EOF' >> $GITHUB_ENV
 
       - name: Remove previous comment (if exists)
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
-        env:
-          previous_benchmark: ${{ env.previous-benchmark }}
         with:
           script: |
-            const previousBenchmark = process.env['previous_benchmark'];
+            const previousBenchmark = process.env['previous-benchmark'];
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -113,13 +117,10 @@ jobs:
       - name: Add comment to pull request
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
-        env:
-          previous_benchmark: ${{ env.previous-benchmark }}
-          new_benchmark: ${{ env.new-benchmark }}
         with:
           script: |
-            const previousBenchmark = process.env['previous_benchmark'];
-            const newBenchmark = process.env['new_benchmark'];
+            const previousBenchmark = process.env['previous-benchmark'];
+            const newBenchmark = process.env['new-benchmark'];
 
             console.log(newBenchmark);
 
@@ -131,17 +132,17 @@ jobs:
             });
 
       - name: Commit and push changes
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           export HOME=~
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          BRANCH_NAME="benchmark-vm-${{ github.run_id }}"
+          BRANCH_NAME="benchmark-${{ inputs.benchmark_name }}-${{ github.run_id }}"
           git checkout -b ${BRANCH_NAME}
-          git add benchmark/github/results/vm_verify_fibair.md
+          git add ${{ env.RESULT_PATH }}
           git commit -m "Update benchmark"
           git push origin ${BRANCH_NAME}
-          gh pr create -B main -H ${BRANCH_NAME} --title 'Update benchmark (vm verify fibair)' --body 'Created by Github action'
+          gh pr create -B main -H ${BRANCH_NAME} --title 'Update benchmark (${{ inputs.benchmark_name }})' --body 'Created by Github action'
 
   stop-runner:
     name: Stop self-hosted EC2 runner
