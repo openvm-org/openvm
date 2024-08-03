@@ -78,14 +78,9 @@ jobs:
           mkdir -p benchmark/github/results
           mv benchmark/tmp/_result.md benchmark/github/results/single_rw.md
           markdown="$(<benchmark/github/results/single_rw.md)"
-          echo "$markdown"
           echo 'new-benchmark<<EOF' >> $GITHUB_ENV
           echo "$markdown" >> $GITHUB_ENV
           echo 'EOF' >> $GITHUB_ENV
-
-      - name: test
-        run: |
-          echo ${{ env.new-benchmark }}
 
       - name: Remove previous comment (if exists)
         if: github.event_name == 'pull_request'
