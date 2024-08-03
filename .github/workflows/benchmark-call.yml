@@ -12,7 +12,7 @@ on:
           - single_rw
       aws_instance_type:
         type: string
-        required: true
+        required: false
         description: The type of EC2 instance to start
         default: r7g.8xlarge
   workflow_call:
@@ -23,7 +23,7 @@ on:
         description: The name of the benchmark to run
       aws_instance_type:
         type: string
-        required: true
+        required: false
         description: The type of EC2 instance to start
         default: r7g.8xlarge
 
