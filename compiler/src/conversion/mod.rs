@@ -1,12 +1,9 @@
 use std::array::from_fn;
 
-use field_extension_conversion::{convert_field_extension, convert_field_extension_with_base};
 use p3_field::{ExtensionField, PrimeField64};
 use stark_vm::cpu::{trace::Instruction, OpCode, OpCode::*};
 
 use crate::asm::{AsmInstruction, AssemblyCode};
-
-pub mod field_extension_conversion;
 
 #[derive(Clone, Copy, Debug)]
 pub struct CompilerOptions {
@@ -180,6 +177,49 @@ fn convert_base_arithmetic_instruction<F: PrimeField64, EF: ExtensionField<F>>(
         ],
         _ => panic!(
             "Illegal argument to convert_field_arithmetic_instruction: {:?}",
+            instruction
+        ),
+    }
+}
+
+pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionField<F>>(
+    instruction: AsmInstruction<F, EF>,
+) -> Vec<Instruction<F>> {
+    match instruction {
+        AsmInstruction::AddE(dst, lhs, rhs) => vec![inst(
+            FE4ADD,
+            register(dst),
+            register(lhs),
+            register(rhs),
+            AS::Register,
+            AS::Register,
+        )],
+        AsmInstruction::SubE(dst, lhs, rhs) => vec![inst(
+            FE4SUB,
+            register(dst),
+            register(lhs),
+            register(rhs),
+            AS::Register,
+            AS::Register,
+        )],
+        AsmInstruction::MulE(dst, lhs, rhs) => vec![inst(
+            BBE4MUL,
+            register(dst),
+            register(lhs),
+            register(rhs),
+            AS::Register,
+            AS::Register,
+        )],
+        AsmInstruction::InvE(dst, src) => vec![inst(
+            BBE4INV,
+            register(dst),
+            register(src),
+            register(src),
+            AS::Register,
+            AS::Register,
+        )],
+        _ => panic!(
+            "Illegal argument to convert_field_extension: {:?}",
             instruction
         ),
     }
@@ -472,12 +512,6 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         | AsmInstruction::InvE(..) => {
             if options.field_extension_enabled {
                 convert_field_extension::<WORD_SIZE, F, EF>(instruction)
-            } else if options.field_arithmetic_enabled {
-                let fe_utility_registers = from_fn(|i| utility_registers[i]);
-                convert_field_extension_with_base::<WORD_SIZE, F, EF>(
-                    instruction,
-                    fe_utility_registers,
-                )
             } else {
                 panic!(
                     "Unsupported instruction {:?}, field extension arithmetic is disabled",
