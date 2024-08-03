@@ -49,6 +49,7 @@ fn make_vm<const WORD_SIZE: usize>(
             decomp: DECOMP,
             num_public_values: 4,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
+            ..Default::default()
         },
         program,
         vec![],

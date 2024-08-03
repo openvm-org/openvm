@@ -12,7 +12,7 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::DenseMatrix;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
-use super::{ChipType, VirtualMachineState, VmConfig};
+use super::{ChipType, VirtualMachineState, VmConfig, VmMetrics};
 use crate::{
     cpu::{
         trace::{ExecutionError, Instruction},
@@ -38,6 +38,9 @@ pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub hint_stream: VecDeque<F>,
     pub has_generation_happened: bool,
     pub public_values: Vec<Option<F>>,
+    /// Collected metrics for this segment alone.
+    /// Only collected when `config.collect_metrics` is true.
+    pub(crate) collected_metrics: VmMetrics,
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
@@ -75,6 +78,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             poseidon2_chip,
             input_stream: state.input_stream,
             hint_stream: state.hint_stream,
+            collected_metrics: Default::default(),
         }
     }
 
@@ -176,7 +180,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         result
     }
 
-    pub fn metrics(&mut self) -> BTreeMap<String, usize> {
+    pub fn metrics(&self) -> BTreeMap<String, usize> {
         let mut metrics = BTreeMap::new();
         metrics.insert("cpu_cycles".to_string(), self.cpu_chip.rows.len());
         metrics.insert("cpu_timestamp".to_string(), self.cpu_chip.state.timestamp);

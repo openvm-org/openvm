@@ -41,6 +41,7 @@ fn air_test(
             } else {
                 DEFAULT_MAX_SEGMENT_LEN
             },
+            ..Default::default()
         },
         program,
         witness_stream,
@@ -74,6 +75,7 @@ fn air_test_with_poseidon2(
             decomp: DECOMP,
             num_public_values: 4,
             max_segment_len: 6,
+            ..Default::default()
         },
         program,
         vec![],

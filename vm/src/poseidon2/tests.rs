@@ -69,6 +69,7 @@ macro_rules! run_perm_ops {
                 decomp: DECOMP,
                 num_public_values: 4,
                 max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
+                ..Default::default()
             },
             vec![],
             vec![],
