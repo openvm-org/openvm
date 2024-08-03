@@ -75,6 +75,7 @@ jobs:
       - name: Get previous benchmark value
         id: get-previous-benchmark
         run: |
+          git fetch origin main
           main_sha=$(git rev-parse origin/main)
           echo "Main branch SHA: $main_sha"
           echo "main_sha=${main_sha}" >> $GITHUB_ENV
