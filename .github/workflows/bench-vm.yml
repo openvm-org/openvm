@@ -72,9 +72,9 @@ jobs:
         id: get-previous-benchmark
         run: |
           markdown="$(<benchmark/github/results/vm_verify_fibair.md)"
-          echo 'previous-benchmark<<EOF' >> $GITHUB_OUTPUT
-          echo $markdown >> $GITHUB_OUTPUT
-          echo 'EOF' >> $GITHUB_OUTPUT
+          echo 'previous-benchmark<<EOF' >> $GITHUB_ENV
+          echo $markdown >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
 
       - name: Update benchmark value
         id: update-benchmark
@@ -82,16 +82,16 @@ jobs:
           mkdir -p benchmark/github/results
           mv benchmark/tmp/_result.md benchmark/github/results/vm_verify_fibair.md
           markdown="$(<benchmark/github/results/vm_verify_fibair.md)"
-          echo 'new-benchmark<<EOF' >> $GITHUB_OUTPUT
-          echo $markdown >> $GITHUB_OUTPUT
-          echo 'EOF' >> $GITHUB_OUTPUT
+          echo 'new-benchmark<<EOF' >> $GITHUB_ENV
+          echo $markdown >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
 
       - name: Remove previous comment (if exists)
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
-            const previousBenchmark = `${{ steps.get-previous-benchmark.outputs.previous-benchmark }}`;
+            const previousBenchmark = process.env['previous-benchmark'];
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -113,8 +113,8 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const previousBenchmark = `${{ steps.get-previous-benchmark.outputs.previous-benchmark }}`;
-            const newBenchmark = `${{ steps.update-benchmark.outputs.new-benchmark }}`;
+            const previousBenchmark = process.env['previous-benchmark'];
+            const newBenchmark = process.env['new-benchmark'];
 
             console.log(newBenchmark);
 
