@@ -19,6 +19,7 @@ use crate::{
 pub struct TraceWidth {
     pub preprocessed: Option<usize>,
     pub partitioned_main: Vec<usize>,
+    /// Width counted by extension field elements, _not_ base field elements
     pub after_challenge: Vec<usize>,
 }
 
@@ -248,7 +249,7 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
         let mut total_preprocessed = 0;
         let mut total_partitioned_main = 0;
         let mut total_after_challenge = 0;
-        for (air_idx, per_air) in self.per_air.iter().enumerate() {
+        for per_air in self.per_air.iter() {
             let preprocessed_width = per_air.width().preprocessed.unwrap_or(0);
             total_preprocessed += preprocessed_width;
             let partitioned_main_width = per_air

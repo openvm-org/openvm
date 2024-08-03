@@ -142,10 +142,10 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
 
         for pk in multi_pk.per_air.iter() {
             let width = pk.vk.width();
-            tracing::info!("{:<20} | Quotient Deg = {:<2} | Prep Cols = {:<5?} | Main Cols = {:<8} | Perm Cols = {:<4} | {:<4} Constraints | {:<3} Interactions On Buses {:?}",
+            tracing::info!("{:<20} | Quotient Deg = {:<2} | Prep Cols = {:<2} | Main Cols = {:<8} | Perm Cols = {:<4} | {:<4} Constraints | {:<3} Interactions On Buses {:?}",
                 pk.air_name,
                 pk.vk.quotient_degree,
-                width.preprocessed,
+                width.preprocessed.unwrap_or(0),
                 format!("{:?}",width.partitioned_main),
                 format!("{:?}",width.after_challenge.iter().map(|&x| x * <SC::Challenge as AbstractExtensionField<Val<SC>>>::D).collect_vec()),
                 pk.vk.symbolic_constraints.constraints.len(),
