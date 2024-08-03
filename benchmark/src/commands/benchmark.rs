@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     fs::{self, File},
+    io::Write as _,
     path::Path,
     time::Instant,
 };
@@ -22,7 +23,8 @@ use crate::{
         },
         tracing::{clear_tracing_log, extract_event_data_from_log, extract_timing_data_from_log},
     },
-    AFI_FILE_PATH, DB_FILE_PATH, MULTITIER_TABLE_ID, TABLE_ID, TMP_FOLDER, TMP_RESULT_JSON,
+    workflow::metrics::BenchmarkMetrics,
+    AFI_FILE_PATH, DB_FILE_PATH, MULTITIER_TABLE_ID, TABLE_ID, TMP_FOLDER, TMP_RESULT_MD,
     TMP_TRACING_LOG,
 };
 
@@ -124,7 +126,7 @@ pub fn benchmark_execute(
         println!("Setup: save AFI to DB duration: {:?}", save_afi_duration);
 
         // Run the benchmark function
-        let metrics = benchmark_fn(config, extra_data.clone())?;
+        let trace_metrics = benchmark_fn(config, extra_data.clone())?;
 
         let event_data = extract_event_data_from_log(
             TMP_TRACING_LOG.as_str(),
@@ -136,25 +138,19 @@ pub fn benchmark_execute(
         )?;
 
         // TODO: generalize this
-        let main_trace_gen_time = timing_data["prove:Load page trace generation"].parse::<f64>()?;
-        let perm_trace_gen_time = timing_data[BACKEND_TIMING_FILTERS[0]].parse::<f64>()?;
-        let quotient_values_time = timing_data[BACKEND_TIMING_FILTERS[2]].parse::<f64>()?;
-        let total_prove_time = timing_data["Benchmark prove: benchmark"].parse::<f64>()?;
-        let mut results: HashMap<String, String> = HashMap::new();
-        results.insert(
-            "Main & perm trace generation".to_string(),
-            (main_trace_gen_time + perm_trace_gen_time).to_string(),
-        );
-        results.insert(
-            "Compute quotient values".to_string(),
-            quotient_values_time.to_string(),
-        );
-        results.insert(
-            "Rest of proving".to_string(),
-            (total_prove_time - perm_trace_gen_time - quotient_values_time).to_string(),
-        );
-        results.insert("Total F cells".to_string(), metrics.total_cells.to_string());
-        serde_json::to_writer(File::create(TMP_RESULT_JSON.as_str())?, &results)?;
+        let main_trace_gen_ms = timing_data["prove:Load page trace generation"].parse::<f64>()?;
+        let perm_trace_gen_ms = timing_data[BACKEND_TIMING_FILTERS[0]].parse::<f64>()?;
+        let calc_quotient_values_ms = timing_data[BACKEND_TIMING_FILTERS[2]].parse::<f64>()?;
+        let total_prove_ms = timing_data["Benchmark prove: benchmark"].parse::<f64>()?;
+        let metrics = BenchmarkMetrics {
+            total_prove_ms,
+            main_trace_gen_ms,
+            perm_trace_gen_ms,
+            calc_quotient_values_ms,
+            trace: trace_metrics,
+            custom: Default::default(),
+        };
+        write!(File::create(TMP_RESULT_MD.as_str())?, "{}", metrics)?;
 
         println!("Config: {:?}", config);
         println!("Output file: {}", output_file.clone());

@@ -102,7 +102,7 @@ pub fn trace_metrics<SC: StarkGenericConfig>(
     }
 }
 
-fn format_number_with_underscores(n: usize) -> String {
+pub fn format_number_with_underscores(n: usize) -> String {
     let num_str = n.to_string();
     let mut result = String::new();
 
