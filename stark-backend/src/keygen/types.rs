@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use derivative::Derivative;
 use itertools::Itertools;
+use p3_field::AbstractExtensionField;
 use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
@@ -262,11 +263,9 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
                 .iter()
                 .fold(0, |acc, x| acc + *x);
             total_after_challenge += after_challenge_width;
-            info!(
-                "Air width [air_idx={}]: preprocessed={} partitioned_main={} after_challenge={}",
-                air_idx, preprocessed_width, partitioned_main_width, after_challenge_width
-            );
         }
+        let ext_degree = <SC::Challenge as AbstractExtensionField<Val<SC>>>::D;
+        total_after_challenge *= ext_degree;
         info!("Total air width: preprocessed={} ", total_preprocessed);
         info!(
             "Total air width: partitioned_main={} ",
