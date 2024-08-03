@@ -65,5 +65,11 @@ pub fn benchmark_fib_verifier_program(n: usize) -> Result<()> {
     let pvs = pis;
     let (chips, rec_raps, traces, pvs) = sort_chips(chips, rec_raps, traces, pvs);
 
-    run_recursive_test_benchmark(chips, rec_raps, traces, pvs)
+    run_recursive_test_benchmark(
+        chips,
+        rec_raps,
+        traces,
+        pvs,
+        "VM Verifier of VM Fibonacci Program",
+    )
 }

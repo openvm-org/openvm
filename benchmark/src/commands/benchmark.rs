@@ -143,6 +143,7 @@ pub fn benchmark_execute(
         let calc_quotient_values_ms = timing_data[BACKEND_TIMING_FILTERS[2]].parse::<f64>()?;
         let total_prove_ms = timing_data["Benchmark prove: benchmark"].parse::<f64>()?;
         let metrics = BenchmarkMetrics {
+            name: benchmark_name.clone(),
             total_prove_ms,
             main_trace_gen_ms,
             perm_trace_gen_ms,

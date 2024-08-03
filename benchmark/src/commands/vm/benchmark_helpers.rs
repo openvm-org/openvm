@@ -40,6 +40,7 @@ pub fn run_recursive_test_benchmark(
     rec_raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
     traces: Vec<RowMajorMatrix<BabyBear>>,
     pvs: Vec<Vec<BabyBear>>,
+    benchmark_name: &str,
 ) -> eyre::Result<()> {
     let num_pvs: Vec<usize> = pvs.iter().map(|pv| pv.len()).collect();
 
@@ -122,12 +123,13 @@ pub fn run_recursive_test_benchmark(
     let mut witness_stream = Vec::new();
     witness_stream.extend(input.write());
 
-    vm_benchmark_execute_and_prove::<1>(program, witness_stream)
+    vm_benchmark_execute_and_prove::<1>(program, witness_stream, benchmark_name)
 }
 
 pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     program: Vec<Instruction<BabyBear>>,
     input_stream: Vec<Vec<BabyBear>>,
+    benchmark_name: &str,
 ) -> eyre::Result<()> {
     clear_tracing_log(TMP_TRACING_LOG.as_str())?;
     setup_benchmark_tracing();
@@ -211,6 +213,7 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     let calc_quotient_values_ms = timing_data[BACKEND_TIMING_FILTERS[2]];
     let total_prove_ms = timing_data["Benchmark prove: benchmark"];
     let metrics = BenchmarkMetrics {
+        name: benchmark_name.to_string(),
         total_prove_ms,
         main_trace_gen_ms,
         perm_trace_gen_ms,

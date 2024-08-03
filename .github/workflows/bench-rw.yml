@@ -67,14 +67,14 @@ jobs:
       - name: Get previous benchmark value
         id: get-previous-benchmark
         run: |
-          echo "::set-output name=previous-benchmark::$(cat benchmark/github/results/single_rw.json)"
+          echo "::set-output name=previous-benchmark::$(cat benchmark/github/results/single_rw.md)"
 
       - name: Update benchmark value
         id: update-benchmark
         run: |
           mkdir -p benchmark/github/results
-          mv benchmark/tmp/_result.json benchmark/github/results/single_rw.json
-          echo "::set-output name=new-benchmark::$(cat benchmark/github/results/single_rw.json)"
+          mv benchmark/tmp/_result.md benchmark/github/results/single_rw.md
+          echo "::set-output name=new-benchmark::$(cat benchmark/github/results/single_rw.md)"
 
       - name: Remove previous comment (if exists)
         if: github.event_name == 'pull_request'
@@ -87,7 +87,7 @@ jobs:
               issue_number: context.issue.number
             });
             for (const comment of comments.data) {
-              if (comment.body.startsWith("Benchmark (single page r/w)")) {
+              if (comment.body.startsWith("# Previous Benchmark")) {
                 console.log("deleting comment ", comment.id);
                 await github.rest.issues.deleteComment({
                   owner: context.repo.owner,
@@ -104,15 +104,12 @@ jobs:
           script: |
             const previousBenchmark = `${{ steps.get-previous-benchmark.outputs.previous-benchmark }}`;
             const newBenchmark = `${{ steps.update-benchmark.outputs.new-benchmark }}`;
-            const { prettyPrintJson } = require('./scripts/common');
 
-            const previousBenchmarkPretty = prettyPrintJson(previousBenchmark);
-            const newBenchmarkPretty = prettyPrintJson(newBenchmark);
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `Benchmark (single page r/w) results:\n\nPrevious:\n\`\`\`json\n${previousBenchmarkPretty}\n\`\`\`\nCurrent:\n\`\`\`json\n${newBenchmarkPretty}\n\`\`\``
+              body: `# Previous Benchmark\n${previousBenchmark}\n\n# New Benchmark\n${newBenchmark}\n`
             });
 
       - name: Commit the result and make a new PR.
@@ -123,7 +120,7 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           BRANCH_NAME="benchmark-rw-${{ github.run_id }}"
           git checkout -b ${BRANCH_NAME}
-          git add benchmark/github/results/single_rw.json
+          git add benchmark/github/results/single_rw.md
           git commit -m "Update benchmark"
           git push origin ${BRANCH_NAME}
           gh pr create -B main -H ${BRANCH_NAME} --title 'Update benchmark (single page r/w)' --body 'Created by Github action'

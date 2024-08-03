@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 /// Reusable struct for storing benchmark metrics
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BenchmarkMetrics {
+    /// Benchmark name
+    pub name: String,
     // Timings:
     pub total_prove_ms: f64,
     pub main_trace_gen_ms: f64,
@@ -23,6 +25,7 @@ pub struct BenchmarkMetrics {
 // Implement the Display trait for BenchmarkMetrics to create a markdown table
 impl fmt::Display for BenchmarkMetrics {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "## Benchmark for {}", self.name)?;
         // Write the markdown table header
         writeln!(
             f,

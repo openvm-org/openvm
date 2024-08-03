@@ -26,5 +26,11 @@ pub fn benchmark_verify_fibair(n: usize) -> Result<()> {
         trace.get(n - 1, 1),
     ]];
 
-    run_recursive_test_benchmark(vec![&fib_air], vec![&fib_air], vec![trace], pvs)
+    run_recursive_test_benchmark(
+        vec![&fib_air],
+        vec![&fib_air],
+        vec![trace],
+        pvs,
+        "VM Verifier for Fibonacci Air",
+    )
 }
