@@ -12,7 +12,7 @@ pub enum AsmInstruction<F, EF> {
     /// Load a value from the address stored at src(fp) + offset into dst(fp).
     LoadFI(i32, i32, F),
 
-    /// Store word (val, addr, index, offset, size)
+    /// Store word (val, addr, offset)
     ///
     /// Store a value from val(fp) into the address stored at addr(fp) + offset.
     StoreFI(i32, i32, F),
