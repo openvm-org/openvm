@@ -83,7 +83,7 @@ jobs:
           s5cmd cp "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md" results.md
 
           previous_result="$(<results.md)"
-          commit_url="https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${main_sha}"
+          commit_url="https://github.com/${{ github.repository }}/commit/${main_sha}"
 
           echo 'previous-benchmark<<EOF' >> $GITHUB_ENV
           echo '# Previous Benchmark' >> $GITHUB_ENV
@@ -104,7 +104,7 @@ jobs:
           new_result="$(<${RESULT_PATH})"
           echo "${new_result}"
 
-          commit_url="https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${current_sha}"
+          commit_url="https://github.com/${{ github.repository }}/commit/${current_sha}"
 
           echo 'new-benchmark<<EOF' >> $GITHUB_ENV
           echo "# New Benchmark" >> $GITHUB_ENV
