@@ -109,6 +109,7 @@ jobs:
           echo "current_sha=${current_sha}" >> $GITHUB_ENV
 
           RESULT_PATH=benchmark/tmp/_result.md
+          echo "" >> $RESULT_PATH
           echo "AWS Instance Type: [${{ inputs.aws_instance_type }}](https://instances.vantage.sh/aws/ec2/${{ inputs.aws_instance_type }})" >> $RESULT_PATH
           s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${{ inputs.benchmark_name }}.md"
 
