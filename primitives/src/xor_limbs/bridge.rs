@@ -1,7 +1,8 @@
-use super::{air::XorLimbsAir, columns::XorLimbsCols};
 use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::izip;
 use p3_field::AbstractField;
+
+use super::{air::XorLimbsAir, columns::XorLimbsCols};
 
 impl<const N: usize, const M: usize> XorLimbsAir<N, M> {
     pub fn eval_interactions<AB: InteractionBuilder>(

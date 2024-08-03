@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::iter;
+use std::{collections::HashMap, iter};
 
 use afs_primitives::{
     is_equal_vec::{columns::IsEqualVecIoCols, IsEqualVecAir},
@@ -10,12 +9,11 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use crate::common::{page::Page, page_cols::PageCols};
-
 use super::{
     columns::{GroupByAuxCols, GroupByCols, GroupedPageCols},
     GroupByOperation,
 };
+use crate::common::{page::Page, page_cols::PageCols};
 
 impl<F: Field> BaseAir<F> for GroupByAir {
     fn width(&self) -> usize {

@@ -1,10 +1,10 @@
+use afs_compiler::{
+    asm::AsmBuilder,
+    ir::{Felt, Var},
+    util::{display_program, execute_program},
+};
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
-use p3_field::AbstractField;
-
-use afs_compiler::asm::AsmBuilder;
-use afs_compiler::ir::{Felt, Var};
-use afs_compiler::util::{display_program, execute_program};
+use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::cpu::WORD_SIZE;
 
 type F = BabyBear;

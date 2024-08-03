@@ -6,9 +6,8 @@ use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use crate::sub_chip::{AirConfig, SubAir};
-
 use super::columns::{XorBitCols, XorCols, XorIoCols};
+use crate::sub_chip::{AirConfig, SubAir};
 
 /// AIR that computes the xor of two numbers of at most N bits each.
 /// This struct only implements SubAir.

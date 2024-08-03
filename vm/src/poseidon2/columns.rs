@@ -1,7 +1,8 @@
 use p3_field::Field;
-
-use poseidon2_air::poseidon2::columns::{Poseidon2Cols, Poseidon2ColsIndexMap};
-use poseidon2_air::poseidon2::Poseidon2Air;
+use poseidon2_air::poseidon2::{
+    columns::{Poseidon2Cols, Poseidon2ColsIndexMap},
+    Poseidon2Air,
+};
 
 use super::Poseidon2VmAir;
 

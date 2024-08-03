@@ -1,7 +1,5 @@
-use alloc::collections::BTreeMap;
-use alloc::format;
-use core::fmt;
-use core::fmt::Display;
+use alloc::{collections::BTreeMap, format};
+use core::{fmt, fmt::Display};
 
 use backtrace::Backtrace;
 use p3_field::{ExtensionField, PrimeField32};

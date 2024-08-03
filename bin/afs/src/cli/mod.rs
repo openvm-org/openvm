@@ -1,31 +1,29 @@
-use crate::commands::cache::CacheCommand;
-use crate::commands::keygen::KeygenCommand;
-use crate::commands::prove::ProveCommand;
-use crate::commands::verify::VerifyCommand;
-use crate::commands::{cache, keygen, mock, prove, verify};
-use crate::RANGE_CHECK_BITS;
-use afs_stark_backend::config::Com;
-use afs_stark_backend::config::PcsProof;
-use afs_stark_backend::config::PcsProverData;
-use afs_test_utils::config::baby_bear_blake3::BabyBearBlake3Engine;
-use afs_test_utils::config::baby_bear_bytehash::engine_from_byte_hash;
-use afs_test_utils::config::baby_bear_keccak::BabyBearKeccakEngine;
-use afs_test_utils::config::baby_bear_poseidon2;
-use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
-use afs_test_utils::config::goldilocks_poseidon::GoldilocksPoseidonEngine;
-use afs_test_utils::config::{goldilocks_poseidon, EngineType};
-use afs_test_utils::engine::StarkEngine;
-use afs_test_utils::page_config::PageConfig;
-use clap::Parser;
-use clap::Subcommand;
+use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
+use afs_test_utils::{
+    config::{
+        baby_bear_blake3::BabyBearBlake3Engine, baby_bear_bytehash::engine_from_byte_hash,
+        baby_bear_keccak::BabyBearKeccakEngine, baby_bear_poseidon2,
+        baby_bear_poseidon2::BabyBearPoseidon2Engine, goldilocks_poseidon,
+        goldilocks_poseidon::GoldilocksPoseidonEngine, EngineType,
+    },
+    engine::StarkEngine,
+    page_config::PageConfig,
+};
+use clap::{Parser, Subcommand};
 use p3_blake3::Blake3;
 use p3_field::PrimeField64;
 use p3_keccak::Keccak256Hash;
-use p3_uni_stark::Domain;
-use p3_uni_stark::{StarkGenericConfig, Val};
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{de::DeserializeOwned, Serialize};
+
+use crate::{
+    commands::{
+        cache, cache::CacheCommand, keygen, keygen::KeygenCommand, mock, prove,
+        prove::ProveCommand, verify, verify::VerifyCommand,
+    },
+    RANGE_CHECK_BITS,
+};
 
 #[derive(Debug, Parser)]
 #[command(author, version, about = "AFS CLI")]

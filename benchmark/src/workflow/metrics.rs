@@ -1,5 +1,4 @@
-use std::collections::BTreeMap;
-use std::fmt;
+use std::{collections::BTreeMap, fmt};
 
 use afs_stark_backend::prover::metrics::{format_number_with_underscores, TraceMetrics};
 use serde::{Deserialize, Serialize};

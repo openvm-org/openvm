@@ -1,22 +1,15 @@
-use alloc::collections::BTreeMap;
-use alloc::vec;
+use alloc::{collections::BTreeMap, vec};
 use std::collections::BTreeSet;
 
 use backtrace::Backtrace;
-use p3_field::ExtensionField;
-use p3_field::PrimeField32;
-use p3_field::TwoAdicField;
+use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
 
-use crate::asm::AsmInstruction;
-use crate::ir::Array;
-use crate::ir::Usize;
-use crate::ir::{DslIr, Ext, Felt, Ptr, Var};
-use crate::prelude::TracedVec;
-
-use super::config::AsmConfig;
-use super::IndexTriple;
-use super::ValueOrConst;
-use super::{AssemblyCode, BasicBlock};
+use super::{config::AsmConfig, AssemblyCode, BasicBlock, IndexTriple, ValueOrConst};
+use crate::{
+    asm::AsmInstruction,
+    ir::{Array, DslIr, Ext, Felt, Ptr, Usize, Var},
+    prelude::TracedVec,
+};
 
 /// The zero address.
 pub(crate) const ZERO: i32 = 0;

@@ -1,9 +1,8 @@
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix; // Import the constant from columns.rs
 
-use crate::sub_chip::LocalTraceInstructions;
-
 use super::{columns::IsZeroCols, IsZeroAir};
+use crate::sub_chip::LocalTraceInstructions;
 
 impl IsZeroAir {
     pub fn generate_trace<F: Field>(&self, x: Vec<F>) -> RowMajorMatrix<F> {

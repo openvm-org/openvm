@@ -1,11 +1,11 @@
+use afs_compiler::{
+    ir::{DIGEST_SIZE, PERMUTATION_WIDTH},
+    prelude::{
+        Array, Builder, Config, DslVariable, Ext, Felt, MemIndex, MemVariable, Ptr, Usize, Var,
+        Variable,
+    },
+};
 use p3_field::AbstractField;
-
-use afs_compiler::ir::{DIGEST_SIZE, PERMUTATION_WIDTH};
-use afs_compiler::prelude::MemIndex;
-use afs_compiler::prelude::MemVariable;
-use afs_compiler::prelude::Ptr;
-use afs_compiler::prelude::Variable;
-use afs_compiler::prelude::{Array, Builder, Config, DslVariable, Ext, Felt, Usize, Var};
 
 use crate::fri::types::DigestVariable;
 
@@ -287,17 +287,18 @@ impl<C: Config> FeltChallenger<C> for DuplexChallengerVariable<C> {
 
 #[cfg(test)]
 mod tests {
-    use p3_challenger::CanObserve;
-    use p3_challenger::CanSample;
+    use afs_compiler::{
+        asm::{AsmBuilder, AsmConfig},
+        ir::{Felt, Usize, Var, PERMUTATION_WIDTH},
+        util::execute_program,
+    };
+    use afs_test_utils::{
+        config::{baby_bear_blake3::default_engine, baby_bear_poseidon2::BabyBearPoseidon2Config},
+        engine::StarkEngine,
+    };
+    use p3_challenger::{CanObserve, CanSample};
     use p3_field::AbstractField;
     use p3_uni_stark::{StarkGenericConfig, Val};
-
-    use afs_compiler::asm::{AsmBuilder, AsmConfig};
-    use afs_compiler::ir::{Felt, Usize, Var, PERMUTATION_WIDTH};
-    use afs_compiler::util::execute_program;
-    use afs_test_utils::config::baby_bear_blake3::default_engine;
-    use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-    use afs_test_utils::engine::StarkEngine;
 
     use crate::challenger::DuplexChallengerVariable;
 

@@ -9,9 +9,8 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 use tracing::info_span;
 
-use crate::{common::page::Page, multitier_page_rw_checker::leaf_page_air::PageRwAir};
-
 use super::LeafPageAir;
+use crate::{common::page::Page, multitier_page_rw_checker::leaf_page_air::PageRwAir};
 
 impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
     // The trace is the whole page (including the is_alloc column)

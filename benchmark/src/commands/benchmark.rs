@@ -11,6 +11,7 @@ use afs_test_utils::page_config::{MultitierPageConfig, PageConfig};
 use chrono::Local;
 use color_eyre::eyre::Result;
 
+use super::CommonCommands;
 use crate::{
     config::{
         benchmark_data::{BenchmarkData, BACKEND_TIMING_FILTERS},
@@ -27,8 +28,6 @@ use crate::{
     AFI_FILE_PATH, DB_FILE_PATH, MULTITIER_TABLE_ID, TABLE_ID, TMP_FOLDER, TMP_RESULT_MD,
     TMP_TRACING_LOG,
 };
-
-use super::CommonCommands;
 
 /// Function for setting up the benchmark
 pub fn benchmark_setup(

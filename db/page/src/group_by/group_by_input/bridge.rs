@@ -2,8 +2,7 @@ use std::iter;
 
 use afs_stark_backend::interaction::InteractionBuilder;
 
-use super::columns::GroupByCols;
-use super::GroupByAir;
+use super::{columns::GroupByCols, GroupByAir};
 
 // impl<F: PrimeField64> AirBridge<F> for GroupByAir {
 impl GroupByAir {

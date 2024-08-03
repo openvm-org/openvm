@@ -3,8 +3,7 @@ use std::collections::HashMap;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::memory::interface::columns::MemoryInterfaceCols;
-use crate::memory::interface::MemoryInterfaceChip;
+use crate::memory::interface::{columns::MemoryInterfaceCols, MemoryInterfaceChip};
 
 impl<const CHUNK: usize, F: PrimeField32> MemoryInterfaceChip<CHUNK, F> {
     pub fn generate_trace(

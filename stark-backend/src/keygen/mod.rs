@@ -7,16 +7,15 @@ use tracing::instrument;
 
 pub mod types;
 
+use self::types::{
+    create_commit_to_air_graph, MultiStarkProvingKey, ProverOnlySinglePreprocessedData,
+    StarkProvingKey, StarkVerifyingKey, TraceWidth, VerifierSinglePreprocessedData,
+};
 use crate::{
     air_builders::symbolic::{get_symbolic_builder, SymbolicRapBuilder},
     commit::{MatrixCommitmentPointers, SingleMatrixCommitPtr},
     prover::trace::TraceCommitter,
     rap::AnyRap,
-};
-
-use self::types::{
-    create_commit_to_air_graph, MultiStarkProvingKey, ProverOnlySinglePreprocessedData,
-    StarkProvingKey, StarkVerifyingKey, TraceWidth, VerifierSinglePreprocessedData,
 };
 
 /// Stateful builder to create multi-stark proving and verifying keys

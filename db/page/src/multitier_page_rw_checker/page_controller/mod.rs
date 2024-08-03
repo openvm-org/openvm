@@ -1,14 +1,19 @@
-use std::collections::HashSet;
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
-use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
-use afs_stark_backend::keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey};
-use afs_stark_backend::keygen::MultiStarkKeygenBuilder;
-use afs_stark_backend::prover::trace::{ProverTraceData, TraceCommitmentBuilder, TraceCommitter};
-use afs_stark_backend::prover::types::Proof;
-use afs_stark_backend::rap::AnyRap;
-use afs_stark_backend::verifier::VerificationError;
+use afs_stark_backend::{
+    config::{Com, PcsProof, PcsProverData},
+    keygen::{
+        types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
+        MultiStarkKeygenBuilder,
+    },
+    prover::{
+        trace::{ProverTraceData, TraceCommitmentBuilder, TraceCommitter},
+        types::Proof,
+    },
+    rap::AnyRap,
+    verifier::VerificationError,
+};
 use afs_test_utils::engine::StarkEngine;
 use itertools::Itertools;
 use p3_field::{AbstractField, Field, PrimeField, PrimeField64};
@@ -16,17 +21,14 @@ use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::info_span;
 
-use crate::common::page_cols::PageCols;
-use crate::{
-    common::page::Page, page_rw_checker::offline_checker::PageOfflineChecker,
-    page_rw_checker::page_controller::Operation,
-};
-
 use self::page_tree_graph::PageTreeGraph;
-
-use super::internal_page_air::InternalPageAir;
-use super::leaf_page_air::LeafPageAir;
-use super::root_signal_air::RootSignalAir;
+use super::{
+    internal_page_air::InternalPageAir, leaf_page_air::LeafPageAir, root_signal_air::RootSignalAir,
+};
+use crate::{
+    common::{page::Page, page_cols::PageCols},
+    page_rw_checker::{offline_checker::PageOfflineChecker, page_controller::Operation},
+};
 
 pub mod page_tree_graph;
 

@@ -2,9 +2,8 @@ use std::iter;
 
 use afs_primitives::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 
-use crate::common::page_cols::PageCols;
-
 use super::IndexedOutputPageAir;
+use crate::common::page_cols::PageCols;
 
 #[derive(Clone)]
 pub struct IndexedOutputPageCols<T> {

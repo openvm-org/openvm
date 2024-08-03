@@ -1,8 +1,7 @@
 use afs_stark_backend::interaction::InteractionBuilder;
 
-use crate::common::page_cols::PageCols;
-
 use super::PageReadAir;
+use crate::common::page_cols::PageCols;
 
 impl PageReadAir {
     /// Sends page rows (idx, data) for every allocated row on page_bus

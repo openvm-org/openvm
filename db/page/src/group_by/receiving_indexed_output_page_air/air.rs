@@ -5,8 +5,7 @@ use p3_field::Field;
 use p3_matrix::Matrix;
 
 use super::ReceivingIndexedOutputPageAir;
-use crate::common::page_cols::PageCols;
-use crate::indexed_output_page_air::columns::IndexedOutputPageCols;
+use crate::{common::page_cols::PageCols, indexed_output_page_air::columns::IndexedOutputPageCols};
 
 impl<F: Field> BaseAir<F> for ReceivingIndexedOutputPageAir {
     fn width(&self) -> usize {

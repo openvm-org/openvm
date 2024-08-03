@@ -6,14 +6,15 @@ pub mod tests;
 pub mod types;
 pub mod utils;
 
-use color_eyre::eyre::Result;
-use header::AfsHeader;
-use operations_file::AfsOperationsFile;
-use serde_derive::{Deserialize, Serialize};
 use std::{
     fs::File,
     io::{BufRead, BufReader, Write},
 };
+
+use color_eyre::eyre::Result;
+use header::AfsHeader;
+use operations_file::AfsOperationsFile;
+use serde_derive::{Deserialize, Serialize};
 use types::AfsOperation;
 
 pub const HEADER_SIZE: usize = 3;

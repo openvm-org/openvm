@@ -1,9 +1,8 @@
 use afs_derive::AlignedBorrow;
 use p3_air::BaseAir;
 
-use crate::is_less_than::{columns::IsLessThanAuxCols, IsLessThanAir};
-
 use super::SumAir;
+use crate::is_less_than::{columns::IsLessThanAuxCols, IsLessThanAir};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]

@@ -4,12 +4,11 @@ use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use crate::{common::page_cols::PageCols, indexed_output_page_air::columns::IndexedOutputPageCols};
-
 use super::{
     columns::{IndexedPageWriteAuxCols, IndexedPageWriteCols},
     IndexedPageWriteAir,
 };
+use crate::{common::page_cols::PageCols, indexed_output_page_air::columns::IndexedOutputPageCols};
 
 impl<F: Field> BaseAir<F> for IndexedPageWriteAir {
     fn width(&self) -> usize {

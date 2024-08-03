@@ -2,16 +2,16 @@ use afs_compiler::{
     asm::AsmBuilder,
     ir::{Felt, Var},
 };
-use color_eyre::eyre::Result;
-
-use super::benchmark_helpers::run_recursive_test_benchmark;
 use afs_recursion::{
     stark::{get_rec_raps, sort_chips},
     types::InnerConfig,
 };
+use color_eyre::eyre::Result;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::vm::{config::VmConfig, ExecutionResult, VirtualMachine};
+
+use super::benchmark_helpers::run_recursive_test_benchmark;
 
 pub fn benchmark_fib_verifier_program(n: usize) -> Result<()> {
     println!(

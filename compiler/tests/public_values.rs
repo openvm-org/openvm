@@ -1,10 +1,10 @@
+use afs_compiler::{
+    asm::AsmBuilder,
+    prelude::*,
+    util::{execute_program, execute_program_with_public_values},
+};
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
-use p3_field::AbstractField;
-
-use afs_compiler::asm::AsmBuilder;
-use afs_compiler::prelude::*;
-use afs_compiler::util::{execute_program, execute_program_with_public_values};
+use p3_field::{extension::BinomialExtensionField, AbstractField};
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;

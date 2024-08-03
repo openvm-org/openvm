@@ -12,9 +12,8 @@ use clap::Parser;
 use color_eyre::eyre::Result;
 use stark_vm::vm::{config::VmConfig, VirtualMachine};
 
-use crate::asm::parse_asm_file;
-
 use super::{write_bytes, WORD_SIZE};
+use crate::asm::parse_asm_file;
 
 /// `afs keygen` command
 /// Uses information from config.toml to generate partial proving and verifying keys and

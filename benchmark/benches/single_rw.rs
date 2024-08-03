@@ -1,37 +1,36 @@
 use std::sync::Arc;
 
-use p3_commit::Pcs;
-use p3_matrix::Matrix;
-use p3_maybe_rayon::prelude::ParallelIterator;
-
-use benchmark::utils::bench::{gen_ops_sender_trace, generate_page_and_ops, get_dummy_ptd};
-use criterion::measurement::WallTime;
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkGroup, Criterion};
-use itertools::{izip, Itertools};
-use p3_challenger::{CanObserve, FieldChallenger};
-use p3_field::{AbstractExtensionField, PrimeField};
-use p3_matrix::dense::DenseMatrix;
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
-use pprof::criterion::{Output, PProfProfiler}; // Add this line
-
 use afs_page::page_rw_checker::page_controller::PageController;
-use afs_stark_backend::commit::CommittedSingleMatrixView;
-use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
-use afs_stark_backend::interaction::trace::generate_permutation_trace;
-use afs_stark_backend::keygen::types::MultiStarkProvingKey;
-use afs_stark_backend::prover::quotient::QuotientCommitter;
-use afs_stark_backend::prover::trace::{ProverTraceData, SingleRapCommittedTraceView};
-use afs_stark_backend::prover::types::MultiAirCommittedTraceData;
-use afs_stark_backend::rap::AnyRap;
 use afs_stark_backend::{
-    keygen::MultiStarkKeygenBuilder,
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+    commit::CommittedSingleMatrixView,
+    config::{Com, PcsProof, PcsProverData},
+    interaction::trace::generate_permutation_trace,
+    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
+    prover::{
+        quotient::QuotientCommitter,
+        trace::{ProverTraceData, SingleRapCommittedTraceView, TraceCommitmentBuilder},
+        types::MultiAirCommittedTraceData,
+        MultiTraceStarkProver,
+    },
+    rap::AnyRap,
 };
-use afs_test_utils::engine::StarkEngine;
 use afs_test_utils::{
     config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config},
+    engine::StarkEngine,
     interaction::dummy_interaction_air::DummyInteractionAir,
 };
+use benchmark::utils::bench::{gen_ops_sender_trace, generate_page_and_ops, get_dummy_ptd};
+use criterion::{
+    black_box, criterion_group, criterion_main, measurement::WallTime, BenchmarkGroup, Criterion,
+};
+use itertools::{izip, Itertools};
+use p3_challenger::{CanObserve, FieldChallenger};
+use p3_commit::Pcs;
+use p3_field::{AbstractExtensionField, PrimeField};
+use p3_matrix::{dense::DenseMatrix, Matrix};
+use p3_maybe_rayon::prelude::ParallelIterator;
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use pprof::criterion::{Output, PProfProfiler}; // Add this line
 
 pub fn perm_trace_gen_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("trace gen");

@@ -3,10 +3,10 @@ use afs_compiler::{
     ir::{Felt, Var},
 };
 use color_eyre::eyre::Result;
-
-use super::benchmark_helpers::vm_benchmark_execute_and_prove;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
+
+use super::benchmark_helpers::vm_benchmark_execute_and_prove;
 
 pub fn benchmark_fib_program(n: usize) -> Result<()> {
     println!("Running Fibonacci program benchmark with n = {}", n);

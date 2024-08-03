@@ -1,15 +1,14 @@
 use std::sync::Arc;
 
-use crate::is_less_than_tuple::columns::IsLessThanTupleCols;
-use crate::is_less_than_tuple::IsLessThanTupleAir;
-use crate::range_gate::RangeCheckerGateChip;
-
-use super::super::is_less_than_tuple::IsLessThanTupleChip;
-
-use afs_stark_backend::prover::USE_DEBUG_BUILDER;
-use afs_stark_backend::verifier::VerificationError;
+use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use p3_field::AbstractField;
+
+use super::super::is_less_than_tuple::IsLessThanTupleChip;
+use crate::{
+    is_less_than_tuple::{columns::IsLessThanTupleCols, IsLessThanTupleAir},
+    range_gate::RangeCheckerGateChip,
+};
 
 #[test]
 fn test_flatten_fromslice_roundtrip() {

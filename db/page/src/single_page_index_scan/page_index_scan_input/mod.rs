@@ -1,7 +1,8 @@
+use std::sync::Arc;
+
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 pub mod air;
 pub mod bridge;

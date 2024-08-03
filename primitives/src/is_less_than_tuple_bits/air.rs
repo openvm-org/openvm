@@ -4,6 +4,9 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
+use super::columns::{
+    IsLessThanTupleBitsAuxCols, IsLessThanTupleBitsCols, IsLessThanTupleBitsIoCols,
+};
 use crate::{
     is_equal::{
         columns::{IsEqualAuxCols, IsEqualCols, IsEqualIoCols},
@@ -14,10 +17,6 @@ use crate::{
         IsLessThanBitsAir,
     },
     sub_chip::{AirConfig, SubAir},
-};
-
-use super::columns::{
-    IsLessThanTupleBitsAuxCols, IsLessThanTupleBitsCols, IsLessThanTupleBitsIoCols,
 };
 
 #[derive(Clone, Debug)]

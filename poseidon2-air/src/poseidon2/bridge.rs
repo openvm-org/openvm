@@ -1,9 +1,8 @@
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::Field;
 
-use crate::poseidon2::Poseidon2Air;
-
 use super::columns::Poseidon2IoCols;
+use crate::poseidon2::Poseidon2Air;
 
 // Receives input and output columns in one interaction
 impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {

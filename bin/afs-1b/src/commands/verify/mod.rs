@@ -20,11 +20,10 @@ use p3_field::{PrimeField, PrimeField32, PrimeField64};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{de::DeserializeOwned, Serialize};
 
+use super::create_prefix;
 use crate::commands::{
     get_ops_sender, get_page_controller, read_from_path, BABYBEAR_COMMITMENT_LEN,
 };
-
-use super::create_prefix;
 
 /// `afs verify` command
 /// Uses information from config.toml to verify a proof using the verifying key in `output-folder`

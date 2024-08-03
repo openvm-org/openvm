@@ -1,18 +1,16 @@
 use std::ops::Deref;
 
-use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
-use p3_field::AbstractField;
-
-use afs_compiler::asm::AsmBuilder;
-use afs_compiler::ir::Var;
+use afs_compiler::{asm::AsmBuilder, ir::Var};
 use afs_recursion::stark::{get_rec_raps, sort_chips};
 use afs_test_utils::config::fri_params::{
     fri_params_fast_testing, fri_params_with_80_bits_of_security,
 };
-use stark_vm::cpu::trace::Instruction;
-use stark_vm::vm::config::VmConfig;
-use stark_vm::vm::{ExecutionResult, VirtualMachine};
+use p3_baby_bear::BabyBear;
+use p3_field::{extension::BinomialExtensionField, AbstractField};
+use stark_vm::{
+    cpu::trace::Instruction,
+    vm::{config::VmConfig, ExecutionResult, VirtualMachine},
+};
 
 mod common;
 

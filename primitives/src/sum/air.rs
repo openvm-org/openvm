@@ -5,9 +5,8 @@ use p3_air::{Air, AirBuilder};
 use p3_field::AbstractField;
 use p3_matrix::Matrix;
 
-use crate::is_less_than::{columns::IsLessThanIoCols, IsLessThanAir};
-
 use super::columns::SumCols;
+use crate::is_less_than::{columns::IsLessThanIoCols, IsLessThanAir};
 
 /// The `SumAir` defines constraints for a trace matrix that accumulates the sums of
 /// values grouped by keys from key-value pair inputs.

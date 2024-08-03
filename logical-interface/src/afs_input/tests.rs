@@ -2,6 +2,7 @@ use afs_page::{
     group_by::group_by_input::GroupByOperation, single_page_index_scan::page_index_scan_input::Comp,
 };
 
+use super::{operation::GroupByOp, AfsInputFile, AfsOperation};
 use crate::{
     afs_input::{
         operation::{FilterOp, InnerJoinOp, Operand, ReadOp, WriteOp},
@@ -9,8 +10,6 @@ use crate::{
     },
     afs_interface::utils::string_to_table_id,
 };
-
-use super::{operation::GroupByOp, AfsInputFile, AfsOperation};
 
 #[test]
 pub fn test_read_file() {

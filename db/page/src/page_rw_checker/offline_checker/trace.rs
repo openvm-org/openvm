@@ -3,15 +3,15 @@ use std::sync::Arc;
 use afs_primitives::{offline_checker::OfflineCheckerChip, range_gate::RangeCheckerGateChip};
 use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{StarkGenericConfig, Val};
-
-use super::columns::PageOfflineCheckerColsMut;
-use super::PageOfflineChecker;
-use crate::common::indexed_page_editor::IndexedPageEditor;
-use crate::common::page::Page;
-use crate::page_rw_checker::page_controller::{OpType, Operation};
 #[cfg(feature = "parallel")]
 use p3_maybe_rayon::prelude::*;
+use p3_uni_stark::{StarkGenericConfig, Val};
+
+use super::{columns::PageOfflineCheckerColsMut, PageOfflineChecker};
+use crate::{
+    common::{indexed_page_editor::IndexedPageEditor, page::Page},
+    page_rw_checker::page_controller::{OpType, Operation},
+};
 
 impl PageOfflineChecker {
     /// Each row in the trace follow the same order as the Cols struct:

@@ -1,9 +1,10 @@
+use std::str::FromStr;
+
 use afs_page::{
     group_by::group_by_input::GroupByOperation, single_page_index_scan::page_index_scan_input::Comp,
 };
 use color_eyre::eyre::{eyre, Result};
 use serde_derive::{Deserialize, Serialize};
-use std::str::FromStr;
 
 use crate::{afs_interface::utils::string_to_table_id, table::types::TableId};
 

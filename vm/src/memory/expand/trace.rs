@@ -1,13 +1,15 @@
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::memory::expand::columns::ExpandCols;
-use crate::memory::expand::ExpandChip;
-use crate::memory::tree::MemoryNode::NonLeaf;
-use crate::memory::tree::{Hasher, MemoryNode};
+use crate::memory::{
+    expand::{columns::ExpandCols, ExpandChip},
+    tree::{Hasher, MemoryNode, MemoryNode::NonLeaf},
+};
 
 impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {
     pub fn generate_trace_and_final_tree(

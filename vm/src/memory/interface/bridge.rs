@@ -1,10 +1,9 @@
+use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::{AbstractField, Field};
 
-use afs_stark_backend::interaction::InteractionBuilder;
-
-use crate::memory::interface::air::MemoryInterfaceAir;
-use crate::memory::interface::columns::MemoryInterfaceCols;
-use crate::memory::interface::{EXPAND_BUS, MEMORY_INTERFACE_BUS};
+use crate::memory::interface::{
+    air::MemoryInterfaceAir, columns::MemoryInterfaceCols, EXPAND_BUS, MEMORY_INTERFACE_BUS,
+};
 
 impl<const CHUNK: usize> MemoryInterfaceAir<CHUNK> {
     pub fn eval_interactions<AB: InteractionBuilder>(
