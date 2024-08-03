@@ -72,7 +72,9 @@ jobs:
         id: get-previous-benchmark
         run: |
           markdown="$(<benchmark/github/results/vm_verify_fibair.md)"
-          echo "previous-benchmark=$markdown" >> $GITHUB_OUTPUT
+          echo 'previous-benchmark<<EOF' >> $GITHUB_OUTPUT
+          echo $markdown >> $GITHUB_OUTPUT
+          echo 'EOF' >> $GITHUB_OUTPUT
 
       - name: Update benchmark value
         id: update-benchmark
@@ -80,7 +82,9 @@ jobs:
           mkdir -p benchmark/github/results
           mv benchmark/tmp/_result.md benchmark/github/results/vm_verify_fibair.md
           markdown="$(<benchmark/github/results/vm_verify_fibair.md)"
-          echo "new-benchmark=$markdown" >> $GITHUB_OUTPUT
+          echo 'new-benchmark<<EOF' >> $GITHUB_OUTPUT
+          echo $markdown >> $GITHUB_OUTPUT
+          echo 'EOF' >> $GITHUB_OUTPUT
 
       - name: Remove previous comment (if exists)
         if: github.event_name == 'pull_request'
