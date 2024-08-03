@@ -18,7 +18,7 @@ on:
         description: The name of the benchmark to run
 
 env:
-  S3_PATH: s3://axiom-workflow-data-staging-us-east-1/benchmarks/github/results
+  S3_PATH: s3://axiom-workflow-data-staging-us-east-1/benchmark/github/results
 
 jobs:
   start-runner:
