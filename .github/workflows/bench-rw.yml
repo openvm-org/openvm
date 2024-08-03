@@ -105,6 +105,8 @@ jobs:
             const previousBenchmark = `${{ steps.get-previous-benchmark.outputs.previous-benchmark }}`;
             const newBenchmark = `${{ steps.update-benchmark.outputs.new-benchmark }}`;
 
+            console.log(newBenchmark);
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
