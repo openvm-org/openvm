@@ -5,10 +5,8 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use crate::is_less_than_tuple::columns::IsLessThanTupleIoCols;
-use crate::is_less_than_tuple::IsLessThanTupleAir;
-
 use super::columns::AssertSortedCols;
+use crate::is_less_than_tuple::{columns::IsLessThanTupleIoCols, IsLessThanTupleAir};
 
 #[derive(Clone, Debug)]
 pub struct AssertSortedAir {

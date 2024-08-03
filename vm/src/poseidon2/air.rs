@@ -1,14 +1,13 @@
 use std::borrow::Borrow;
 
+use afs_primitives::{
+    is_zero::{columns::IsZeroIoCols, IsZeroAir},
+    sub_chip::{AirConfig, SubAir},
+};
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
-
-use afs_primitives::is_zero::columns::IsZeroIoCols;
-use afs_primitives::is_zero::IsZeroAir;
-use afs_primitives::sub_chip::AirConfig;
-use afs_primitives::sub_chip::SubAir;
 use poseidon2_air::poseidon2::columns::Poseidon2Cols;
 
 use super::{columns::Poseidon2VmCols, Poseidon2VmAir};

@@ -8,12 +8,11 @@ use afs_test_utils::utils::to_field_vec;
 use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::common::page::Page;
-
 use super::{
     columns::{IntersectorAuxCols, IntersectorCols, IntersectorIoCols},
     IntersectorAir,
 };
+use crate::common::page::Page;
 
 impl IntersectorAir {
     pub fn generate_trace<F: PrimeField>(

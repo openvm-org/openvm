@@ -2,9 +2,8 @@ use itertools::Itertools;
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::sub_chip::LocalTraceInstructions;
-
 use super::{columns::IsEqualCols, IsEqualAir};
+use crate::sub_chip::LocalTraceInstructions;
 
 impl IsEqualAir {
     pub fn generate_trace<F: Field>(&self, x: Vec<F>, y: Vec<F>) -> RowMajorMatrix<F> {

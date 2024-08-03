@@ -1,35 +1,46 @@
-use std::any::{type_name, Any};
-use std::cmp::Reverse;
+use std::{
+    any::{type_name, Any},
+    cmp::Reverse,
+};
 
+use afs_compiler::{
+    conversion::CompilerOptions,
+    ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize, Var},
+};
+use afs_stark_backend::{
+    air_builders::symbolic::{SymbolicConstraints, SymbolicRapBuilder},
+    prover::opener::AdjacentOpenedValues,
+    rap::{AnyRap, Rap},
+};
+use afs_test_utils::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
 use itertools::{izip, Itertools};
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
 use p3_field::{AbstractExtensionField, AbstractField, PrimeField32, TwoAdicField};
-use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
-use p3_matrix::stack::VerticalPair;
-
-use afs_compiler::conversion::CompilerOptions;
-use afs_compiler::ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize, Var};
-use afs_stark_backend::air_builders::symbolic::{SymbolicConstraints, SymbolicRapBuilder};
-use afs_stark_backend::prover::opener::AdjacentOpenedValues;
-use afs_stark_backend::rap::{AnyRap, Rap};
-use afs_test_utils::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
-use p3_matrix::Matrix;
-use stark_vm::cpu::trace::Instruction;
-use stark_vm::vm::ExecutionSegment;
-
-use crate::challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger};
-use crate::commit::{PcsVariable, PolynomialSpaceVariable};
-use crate::folder::RecursiveVerifierConstraintFolder;
-use crate::fri::types::{TwoAdicPcsMatsVariable, TwoAdicPcsRoundVariable};
-use crate::fri::{TwoAdicFriPcsVariable, TwoAdicMultiplicativeCosetVariable};
-use crate::hints::Hintable;
-use crate::types::{
-    AdjacentOpenedValuesVariable, CommitmentsVariable, InnerConfig, MultiStarkVerificationAdvice,
-    StarkVerificationAdvice, VerifierInput, VerifierInputVariable, PROOF_MAX_NUM_PVS,
+use p3_matrix::{
+    dense::{RowMajorMatrix, RowMajorMatrixView},
+    stack::VerticalPair,
+    Matrix,
 };
-use crate::utils::const_fri_config;
+use stark_vm::{cpu::trace::Instruction, vm::ExecutionSegment};
+
+use crate::{
+    challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger},
+    commit::{PcsVariable, PolynomialSpaceVariable},
+    folder::RecursiveVerifierConstraintFolder,
+    fri::{
+        types::{TwoAdicPcsMatsVariable, TwoAdicPcsRoundVariable},
+        TwoAdicFriPcsVariable, TwoAdicMultiplicativeCosetVariable,
+    },
+    hints::Hintable,
+    types::{
+        AdjacentOpenedValuesVariable, CommitmentsVariable, InnerConfig,
+        MultiStarkVerificationAdvice, StarkVerificationAdvice, VerifierInput,
+        VerifierInputVariable, PROOF_MAX_NUM_PVS,
+    },
+    utils::const_fri_config,
+};
 
 pub trait DynRapForRecursion<C: Config>:
     Rap<SymbolicRapBuilder<C::F>>
@@ -523,6 +534,7 @@ where
                 after_challenge_values,
                 &challenges,
                 &exposed_values_after_challenge,
+                air_const.interaction_chunk_size,
             );
         }
 
@@ -548,6 +560,7 @@ where
         after_challenge_values: AdjacentOpenedValuesVariable<C>,
         challenges: &[Vec<Ext<C::F, C::EF>>],
         exposed_values_after_challenge: &[Vec<Ext<C::F, C::EF>>],
+        interaction_chunk_size: usize,
     ) where
         R: for<'b> Rap<RecursiveVerifierConstraintFolder<'b, C>> + Sync + ?Sized,
     {
@@ -623,6 +636,7 @@ where
             after_challenge,
             challenges,
             exposed_values_after_challenge,
+            interaction_chunk_size,
         );
 
         let num_quotient_chunks = 1 << constants.log_quotient_degree();
@@ -662,6 +676,7 @@ where
         after_challenge: AdjacentOpenedValues<Ext<C::F, C::EF>>,
         challenges: &[Vec<Ext<C::F, C::EF>>],
         exposed_values_after_challenge: &[Vec<Ext<C::F, C::EF>>],
+        interaction_chunk_size: usize,
     ) -> Ext<C::F, C::EF>
     where
         R: for<'b> Rap<RecursiveVerifierConstraintFolder<'b, C>> + Sync + ?Sized,
@@ -718,6 +733,7 @@ where
             exposed_values_after_challenge, // FIXME
 
             symbolic_interactions: &symbolic_constraints.interactions,
+            interaction_chunk_size,
             interactions: vec![],
         };
 

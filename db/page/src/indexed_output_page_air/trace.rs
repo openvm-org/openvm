@@ -8,9 +8,8 @@ use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::common::page::Page;
-
 use super::{columns::IndexedOutputPageAuxCols, IndexedOutputPageAir};
+use crate::common::page::Page;
 
 impl IndexedOutputPageAir {
     /// The trace is the whole page (including the is_alloc column)

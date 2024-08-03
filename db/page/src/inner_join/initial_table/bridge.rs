@@ -1,8 +1,7 @@
 use afs_stark_backend::interaction::InteractionBuilder;
 
-use crate::common::page_cols::PageCols;
-
 use super::{InitialTableAir, TableType};
+use crate::common::page_cols::PageCols;
 
 impl InitialTableAir {
     /// For T1:

@@ -1,10 +1,8 @@
 use itertools::Itertools;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, PrimeField32};
-use p3_matrix::dense::RowMajorMatrix;
-use p3_matrix::Matrix;
-use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 
 pub struct FibonacciAir;
 

@@ -68,6 +68,11 @@ where
     }
 
     fn name(&self) -> String {
-        type_name::<Self>().to_string()
+        let full_name = type_name::<Self>().to_string();
+        full_name
+            .split("::")
+            .last()
+            .map(String::from)
+            .unwrap_or(full_name)
     }
 }

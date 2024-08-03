@@ -3,8 +3,7 @@ use std::borrow::Borrow;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, BaseAir, PairBuilder};
 use p3_field::Field;
-use p3_matrix::dense::RowMajorMatrix;
-use p3_matrix::Matrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use super::columns::{RangeCols, RangePreprocessedCols, NUM_RANGE_COLS};
 

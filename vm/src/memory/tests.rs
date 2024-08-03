@@ -10,9 +10,8 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::cpu::{MEMORY_BUS, RANGE_CHECKER_BUS};
-
 use super::{offline_checker::MemoryChip, MemoryAccess, OpType};
+use crate::cpu::{MEMORY_BUS, RANGE_CHECKER_BUS};
 
 const WORD_SIZE: usize = 3;
 const ADDR_SPACE_LIMB_BITS: usize = 8;

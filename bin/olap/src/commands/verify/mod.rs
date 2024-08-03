@@ -10,7 +10,6 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::de::DeserializeOwned;
 
 use self::{filter::VerifyFilterCommand, inner_join::VerifyInnerJoinCommand};
-
 use super::{parse_afo_file, CommonCommands};
 
 pub mod filter;

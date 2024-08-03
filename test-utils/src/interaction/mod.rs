@@ -1,9 +1,9 @@
-use afs_stark_backend::keygen::MultiStarkKeygenBuilder;
-use afs_stark_backend::prover::trace::TraceCommitmentBuilder;
-use afs_stark_backend::prover::MultiTraceStarkProver;
-
-use afs_stark_backend::rap::AnyRap;
-use afs_stark_backend::verifier::{MultiTraceStarkVerifier, VerificationError};
+use afs_stark_backend::{
+    keygen::MultiStarkKeygenBuilder,
+    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+    rap::AnyRap,
+    verifier::{MultiTraceStarkVerifier, VerificationError},
+};
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_matrix::dense::RowMajorMatrix;

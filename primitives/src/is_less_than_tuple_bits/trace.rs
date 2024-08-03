@@ -3,15 +3,14 @@ use std::cmp::Ordering;
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
+use super::{
+    columns::{IsLessThanTupleBitsAuxCols, IsLessThanTupleBitsCols, IsLessThanTupleBitsIoCols},
+    IsLessThanTupleBitsAir,
+};
 use crate::{
     is_equal::{columns::IsEqualAuxCols, IsEqualAir},
     is_less_than_bits::{columns::IsLessThanBitsAuxCols, IsLessThanBitsAir},
     sub_chip::LocalTraceInstructions,
-};
-
-use super::{
-    columns::{IsLessThanTupleBitsAuxCols, IsLessThanTupleBitsCols, IsLessThanTupleBitsIoCols},
-    IsLessThanTupleBitsAir,
 };
 
 impl IsLessThanTupleBitsAir {

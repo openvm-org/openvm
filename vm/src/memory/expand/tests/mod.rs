@@ -1,19 +1,19 @@
 use std::collections::{HashMap, HashSet};
 
+use afs_stark_backend::interaction::InteractionType;
+use afs_test_utils::{
+    config::baby_bear_blake3::run_simple_test_no_pis,
+    interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
+};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 
-use afs_stark_backend::interaction::InteractionType;
-use afs_test_utils::config::baby_bear_blake3::run_simple_test_no_pis;
-use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
-use afs_test_utils::utils::create_seeded_rng;
-
-use crate::memory::expand::columns::ExpandCols;
-use crate::memory::expand::tests::util::HashTestChip;
-use crate::memory::expand::{ExpandChip, EXPAND_BUS};
-use crate::memory::tree::trees_from_full_memory;
+use crate::memory::{
+    expand::{columns::ExpandCols, tests::util::HashTestChip, ExpandChip, EXPAND_BUS},
+    tree::trees_from_full_memory,
+};
 
 mod util;
 

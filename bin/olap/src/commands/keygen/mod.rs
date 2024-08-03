@@ -10,7 +10,6 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::Serialize;
 
 use self::{filter::KeygenFilterCommand, inner_join::KeygenInnerJoinCommand};
-
 use super::{parse_afo_file, CommonCommands};
 
 pub mod filter;

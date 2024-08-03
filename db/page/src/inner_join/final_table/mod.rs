@@ -10,12 +10,11 @@ use p3_field::{Field, PrimeField};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
 
+use super::controller::{T2Format, TableFormat};
 use crate::{
     common::{page::Page, page_cols::PageCols},
     indexed_output_page_air::IndexedOutputPageAir,
 };
-
-use super::controller::{T2Format, TableFormat};
 
 pub mod bridge;
 

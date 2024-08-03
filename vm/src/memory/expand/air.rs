@@ -1,8 +1,7 @@
+use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
-
-use afs_stark_backend::interaction::InteractionBuilder;
 
 use crate::memory::expand::columns::ExpandCols;
 

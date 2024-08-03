@@ -1,5 +1,4 @@
-use std::collections::HashSet;
-use std::{iter, panic};
+use std::{collections::HashSet, iter, panic};
 
 use afs_stark_backend::{
     keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
@@ -19,8 +18,10 @@ use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 
-use crate::common::{page::Page, page_cols::PageCols};
-use crate::page_rw_checker::page_controller::{self, OpType, Operation, PageController};
+use crate::{
+    common::{page::Page, page_cols::PageCols},
+    page_rw_checker::page_controller::{self, OpType, Operation, PageController},
+};
 
 type Val = BabyBear;
 

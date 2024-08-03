@@ -1,20 +1,19 @@
+use afs_test_utils::{
+    config::{
+        baby_bear_poseidon2::{engine_from_perm, random_perm},
+        fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},
+        setup_tracing,
+    },
+    engine::StarkEngine,
+};
 use p3_baby_bear::BabyBear;
 use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
-use stark_vm::vm::ExecutionResult;
-
-use afs_test_utils::config::baby_bear_poseidon2::{engine_from_perm, random_perm};
-use afs_test_utils::config::fri_params::{
-    fri_params_fast_testing, fri_params_with_80_bits_of_security,
-};
-use afs_test_utils::config::setup_tracing;
-use afs_test_utils::engine::StarkEngine;
 use stark_vm::{
     cpu::trace::Instruction,
-    vm::{config::VmConfig, VirtualMachine},
+    vm::{config::VmConfig, ExecutionResult, VirtualMachine},
 };
 
-use crate::asm::AsmBuilder;
-use crate::conversion::CompilerOptions;
+use crate::{asm::AsmBuilder, conversion::CompilerOptions};
 
 pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
     let modulus = F::ORDER_U32;

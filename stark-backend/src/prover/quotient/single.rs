@@ -35,6 +35,7 @@ pub fn compute_single_rap_quotient_values<'a, SC, R, Mat>(
     public_values: &'a [Val<SC>],
     // Values exposed to verifier after challenge round i
     exposed_values_after_challenge: &'a [&'a [PackedChallenge<SC>]],
+    interaction_chunk_size: usize,
 ) -> Vec<SC::Challenge>
 where
     // TODO: avoid ?Sized to prevent dynamic dispatching because `eval` is called many many times
@@ -158,6 +159,7 @@ where
 
                 symbolic_interactions: &symbolic_constraints.interactions,
                 interactions: vec![],
+                interaction_chunk_size,
             };
             rap.eval(&mut folder);
 

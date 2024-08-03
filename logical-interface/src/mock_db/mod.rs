@@ -1,12 +1,13 @@
-use color_eyre::eyre::Result;
-use serde_derive::{Deserialize, Serialize};
-
-use crate::table::types::{TableId, TableMetadata};
 use std::{
     collections::{btree_map::Entry, BTreeMap},
     fs::File,
     io::{Read, Write},
 };
+
+use color_eyre::eyre::Result;
+use serde_derive::{Deserialize, Serialize};
+
+use crate::table::types::{TableId, TableMetadata};
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct MockDb {

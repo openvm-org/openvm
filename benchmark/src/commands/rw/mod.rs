@@ -27,9 +27,8 @@ use p3_util::log2_strict_usize;
 use serde::{de::DeserializeOwned, Serialize};
 use tracing::info_span;
 
-use crate::{AFI_FILE_PATH, DB_FILE_PATH, TABLE_ID, TMP_FOLDER};
-
 use super::CommonCommands;
+use crate::{AFI_FILE_PATH, DB_FILE_PATH, TABLE_ID, TMP_FOLDER};
 
 #[derive(Debug, Parser)]
 pub struct RwCommand {

@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use derivative::Derivative;
 use itertools::Itertools;
+use p3_field::AbstractExtensionField;
 use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
@@ -18,6 +19,7 @@ use crate::{
 pub struct TraceWidth {
     pub preprocessed: Option<usize>,
     pub partitioned_main: Vec<usize>,
+    /// Width counted by extension field elements, _not_ base field elements
     pub after_challenge: Vec<usize>,
 }
 
@@ -46,6 +48,8 @@ pub struct StarkProvingKey<SC: StarkGenericConfig> {
     pub vk: StarkVerifyingKey<SC>,
     /// Prover only data for preprocessed trace
     pub preprocessed_data: Option<ProverOnlySinglePreprocessedData<SC>>,
+    /// Number of interactions to bundle in permutation trace
+    pub interaction_chunk_size: usize,
 }
 
 /// Verifying key for a single STARK (corresponding to single AIR matrix)
@@ -68,6 +72,8 @@ pub struct StarkVerifyingKey<SC: StarkGenericConfig> {
     /// The factor to multiple the trace degree by to get the degree of the quotient polynomial. Determined from the max constraint degree of the AIR constraints.
     /// This is equivalently the number of chunks the quotient polynomial is split into.
     pub quotient_degree: usize,
+    /// Number of interactions to bundle in permutation trace
+    pub interaction_chunk_size: usize,
 }
 
 impl<SC: StarkGenericConfig> StarkVerifyingKey<SC> {
@@ -125,6 +131,8 @@ pub struct MultiStarkProvingKey<SC: StarkGenericConfig> {
     /// The number of challenges to sample in each challenge phase.
     /// The length determines the global number of challenge phases.
     pub num_challenges_to_sample: Vec<usize>,
+    /// Number of interactions to bundle in permutation trace
+    pub interaction_chunk_size: usize,
 }
 
 impl<SC: StarkGenericConfig> Default for MultiStarkProvingKey<SC> {
@@ -143,6 +151,7 @@ impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
                 commit_to_air_index: vec![vec![]],
             },
             num_challenges_to_sample: Vec::new(),
+            interaction_chunk_size: 1,
         }
     }
 
@@ -150,6 +159,7 @@ impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
         per_air: Vec<StarkProvingKey<SC>>,
         num_main_trace_commitments: usize,
         num_challenges_to_sample: Vec<usize>,
+        interaction_chunk_size: usize,
     ) -> Self {
         let air_matrices = per_air
             .iter()
@@ -162,6 +172,7 @@ impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
             num_main_trace_commitments,
             main_commit_to_air_graph,
             num_challenges_to_sample,
+            interaction_chunk_size,
         }
     }
 
@@ -171,6 +182,7 @@ impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
             main_commit_to_air_graph: self.main_commit_to_air_graph.clone(),
             num_main_trace_commitments: self.num_main_trace_commitments,
             num_challenges_to_sample: self.num_challenges_to_sample.clone(),
+            interaction_chunk_size: self.interaction_chunk_size,
         }
     }
 
@@ -210,6 +222,8 @@ pub struct MultiStarkVerifyingKey<SC: StarkGenericConfig> {
     /// The number of challenges to sample in each challenge phase.
     /// The length determines the global number of challenge phases.
     pub num_challenges_to_sample: Vec<usize>,
+    /// Number of interactions to bundle in permutation trace
+    pub interaction_chunk_size: usize,
 }
 
 impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
@@ -217,6 +231,7 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
         per_air: Vec<StarkVerifyingKey<SC>>,
         num_main_trace_commitments: usize,
         num_challenges_to_sample: Vec<usize>,
+        interaction_chunk_size: usize,
     ) -> Self {
         let air_matrices = per_air.iter().map(|vk| vk.main_graph.clone()).collect_vec();
         let main_commit_to_air_graph =
@@ -226,6 +241,7 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
             num_main_trace_commitments,
             main_commit_to_air_graph,
             num_challenges_to_sample,
+            interaction_chunk_size,
         }
     }
 
@@ -233,7 +249,7 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
         let mut total_preprocessed = 0;
         let mut total_partitioned_main = 0;
         let mut total_after_challenge = 0;
-        for (air_idx, per_air) in self.per_air.iter().enumerate() {
+        for per_air in self.per_air.iter() {
             let preprocessed_width = per_air.width().preprocessed.unwrap_or(0);
             total_preprocessed += preprocessed_width;
             let partitioned_main_width = per_air
@@ -248,11 +264,9 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
                 .iter()
                 .fold(0, |acc, x| acc + *x);
             total_after_challenge += after_challenge_width;
-            info!(
-                "Air width [air_idx={}]: preprocessed={} partitioned_main={} after_challenge={}",
-                air_idx, preprocessed_width, partitioned_main_width, after_challenge_width
-            );
         }
+        let ext_degree = <SC::Challenge as AbstractExtensionField<Val<SC>>>::D;
+        total_after_challenge *= ext_degree;
         info!("Total air width: preprocessed={} ", total_preprocessed);
         info!(
             "Total air width: partitioned_main={} ",

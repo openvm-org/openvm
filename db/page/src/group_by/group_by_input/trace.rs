@@ -3,9 +3,8 @@ use itertools::izip;
 use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::common::page::Page;
-
 use super::{columns::GroupByCols, GroupByAir};
+use crate::common::page::Page;
 
 impl GroupByAir {
     /// Generate the auxilliary trace for the group-by operation

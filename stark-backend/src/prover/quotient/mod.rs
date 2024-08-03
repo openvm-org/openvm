@@ -6,16 +6,14 @@ use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{Domain, PackedChallenge, StarkGenericConfig, Val};
 use tracing::instrument;
 
+use self::single::compute_single_rap_quotient_values;
+use super::trace::SingleRapCommittedTraceView;
 use crate::{
     air_builders::prover::ProverConstraintFolder,
     config::{Com, PcsProverData},
     keygen::types::{MultiStarkProvingKey, StarkVerifyingKey},
     rap::{AnyRap, Rap},
 };
-
-use super::trace::SingleRapCommittedTraceView;
-
-use self::single::compute_single_rap_quotient_values;
 
 pub mod single;
 
@@ -148,6 +146,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
                 .iter()
                 .map(|v| v.as_slice())
                 .collect_vec(),
+            vk.interaction_chunk_size,
         );
         SingleQuotientData {
             quotient_degree,

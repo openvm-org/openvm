@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
-use crate::xor_lookup::XorLookupChip;
 use air::XorLimbsAir;
 use parking_lot::Mutex;
+
+use crate::xor_lookup::XorLookupChip;
 
 pub mod air;
 pub mod bridge;

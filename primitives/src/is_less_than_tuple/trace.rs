@@ -3,15 +3,14 @@ use std::sync::Arc;
 use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
 
+use super::{
+    columns::{IsLessThanTupleAuxColsMut, IsLessThanTupleCols, IsLessThanTupleColsMut},
+    IsLessThanTupleAir, IsLessThanTupleChip,
+};
 use crate::{
     range_gate::RangeCheckerGateChip,
     sub_chip::LocalTraceInstructions,
     utils::{fill_slc_to_f, to_field_vec},
-};
-
-use super::{
-    columns::{IsLessThanTupleAuxColsMut, IsLessThanTupleCols, IsLessThanTupleColsMut},
-    IsLessThanTupleAir, IsLessThanTupleChip,
 };
 
 impl IsLessThanTupleChip {

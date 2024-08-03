@@ -3,13 +3,15 @@ pub mod codec;
 pub mod tests;
 pub mod types;
 
+use std::collections::BTreeMap;
+
+use afs_page::common::{page::Page, page_cols::PageCols};
+use serde_derive::{Deserialize, Serialize};
+use types::{TableId, TableMetadata};
+
 use crate::{
     mock_db::MockDbTable, table::codec::fixed_bytes::FixedBytesCodec, utils::fixed_bytes_to_u16_vec,
 };
-use afs_page::common::{page::Page, page_cols::PageCols};
-use serde_derive::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-use types::{TableId, TableMetadata};
 
 /// Read-only Table object that returns an underlying database table as simple types
 #[derive(Debug, Clone, Serialize, Deserialize)]

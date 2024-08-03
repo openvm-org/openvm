@@ -4,8 +4,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::AirBuilderWithPublicValues;
 use p3_field::AbstractField;
 
-use super::columns::LeafPageCols;
-use super::LeafPageAir;
+use super::{columns::LeafPageCols, LeafPageAir};
 
 impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
     fn custom_receives_path<AB: InteractionBuilder + AirBuilderWithPublicValues>(

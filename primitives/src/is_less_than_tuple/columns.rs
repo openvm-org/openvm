@@ -1,11 +1,10 @@
 use afs_derive::AlignedBorrow;
 
+use super::IsLessThanTupleAir;
 use crate::{
     is_equal_vec::columns::{IsEqualVecAuxCols, IsEqualVecAuxColsMut},
     is_less_than::columns::{IsLessThanAuxCols, IsLessThanAuxColsMut},
 };
-
-use super::IsLessThanTupleAir;
 
 #[derive(Default, Debug, AlignedBorrow)]
 pub struct IsLessThanTupleIoCols<T> {

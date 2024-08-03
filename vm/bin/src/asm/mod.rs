@@ -1,7 +1,8 @@
-use std::fs::File;
-
-use std::io::{BufRead, BufReader};
-use std::path::Path;
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    path::Path,
+};
 
 use color_eyre::eyre::{Report, Result};
 use p3_field::PrimeField64;

@@ -1,9 +1,8 @@
 use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::Itertools;
 
-use crate::is_less_than::columns::IsLessThanAuxCols;
-
 use super::IsLessThanTupleAir;
+use crate::is_less_than::columns::IsLessThanAuxCols;
 
 impl IsLessThanTupleAir {
     pub fn eval_interactions<AB: InteractionBuilder>(

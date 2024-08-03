@@ -1,21 +1,20 @@
-use p3_field::AbstractField;
-
-use afs_compiler::ir::DIGEST_SIZE;
 use afs_compiler::{
     asm::AsmConfig,
-    ir::{Array, Builder, Config},
+    ir::{Array, Builder, Config, DIGEST_SIZE},
 };
-
-use crate::fri::types::{
-    DigestVariable, FriCommitPhaseProofStepVariable, FriProofVariable, FriQueryProofVariable,
-};
-use crate::hints::{
-    Hintable, InnerBatchOpening, InnerChallenge, InnerCommitPhaseStep, InnerDigest, InnerFriProof,
-    InnerPcsProof, InnerQueryProof, InnerVal,
-};
-use crate::types::InnerConfig;
+use p3_field::AbstractField;
 
 use super::types::{BatchOpeningVariable, TwoAdicPcsProofVariable};
+use crate::{
+    fri::types::{
+        DigestVariable, FriCommitPhaseProofStepVariable, FriProofVariable, FriQueryProofVariable,
+    },
+    hints::{
+        Hintable, InnerBatchOpening, InnerChallenge, InnerCommitPhaseStep, InnerDigest,
+        InnerFriProof, InnerPcsProof, InnerQueryProof, InnerVal,
+    },
+    types::InnerConfig,
+};
 
 type C = InnerConfig;
 

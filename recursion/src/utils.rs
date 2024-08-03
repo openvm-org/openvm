@@ -1,15 +1,11 @@
+use afs_compiler::{asm::AsmConfig, ir::Builder};
+use afs_test_utils::config::FriParameters;
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_commit::TwoAdicMultiplicativeCoset;
-use p3_field::extension::BinomialExtensionField;
-use p3_field::{AbstractField, TwoAdicField};
+use p3_field::{extension::BinomialExtensionField, AbstractField, TwoAdicField};
 
-use afs_compiler::asm::AsmConfig;
-use afs_compiler::ir::Builder;
-use afs_test_utils::config::FriParameters;
-
-use crate::fri::types::FriConfigVariable;
-use crate::fri::TwoAdicMultiplicativeCosetVariable;
+use crate::fri::{types::FriConfigVariable, TwoAdicMultiplicativeCosetVariable};
 
 type Val = BabyBear;
 type Challenge = BinomialExtensionField<Val, 4>;

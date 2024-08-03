@@ -1,17 +1,19 @@
+use afs_compiler::ir::{Array, Builder, Config, Ext, Felt, MemVariable, Var, DIGEST_SIZE};
+use afs_stark_backend::{
+    keygen::types::TraceWidth,
+    prover::{
+        opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
+        types::{Commitments, Proof},
+    },
+};
+use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_commit::ExtensionMmcs;
-use p3_field::extension::BinomialExtensionField;
-use p3_field::{AbstractExtensionField, AbstractField, Field};
+use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
 use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof, TwoAdicFriPcsProof};
 use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
-
-use afs_compiler::ir::{Array, Builder, Config, Ext, Felt, MemVariable, Var, DIGEST_SIZE};
-use afs_stark_backend::keygen::types::TraceWidth;
-use afs_stark_backend::prover::opener::{AdjacentOpenedValues, OpenedValues, OpeningProof};
-use afs_stark_backend::prover::types::{Commitments, Proof};
-use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::types::{
     AdjacentOpenedValuesVariable, CommitmentsVariable, InnerConfig, OpenedValuesVariable,
@@ -402,11 +404,12 @@ impl Hintable<InnerConfig> for Commitments<BabyBearPoseidon2Config> {
 
 #[cfg(test)]
 mod test {
+    use afs_compiler::{
+        asm::AsmBuilder,
+        ir::{Ext, Felt, Var},
+        util::execute_program,
+    };
     use p3_field::AbstractField;
-
-    use afs_compiler::asm::AsmBuilder;
-    use afs_compiler::ir::{Ext, Felt, Var};
-    use afs_compiler::util::execute_program;
 
     use crate::hints::{Hintable, InnerChallenge, InnerVal};
 

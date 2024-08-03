@@ -1,5 +1,6 @@
-use serde_derive::{Deserialize, Serialize};
 use std::fmt::Debug;
+
+use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct FixedBytesConfig {

@@ -1,9 +1,7 @@
 use std::marker::PhantomData;
 
-use crate::is_equal_vec::IsEqualVecAir;
-use crate::is_less_than_tuple::IsLessThanTupleAir;
-
 use self::columns::OfflineCheckerCols;
+use crate::{is_equal_vec::IsEqualVecAir, is_less_than_tuple::IsLessThanTupleAir};
 
 pub mod air;
 pub mod bridge;
