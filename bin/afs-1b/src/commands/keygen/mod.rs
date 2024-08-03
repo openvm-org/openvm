@@ -10,8 +10,10 @@ use afs_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
     prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
 };
-use afs_test_utils::page_config::PageMode;
-use afs_test_utils::{engine::StarkEngine, page_config::MultitierPageConfig};
+use afs_test_utils::{
+    engine::StarkEngine,
+    page_config::{MultitierPageConfig, PageMode},
+};
 use clap::Parser;
 use color_eyre::eyre::Result;
 use p3_field::{PrimeField, PrimeField64};
@@ -19,10 +21,8 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{de::DeserializeOwned, Serialize};
 use tracing::info;
 
+use super::{create_prefix, BABYBEAR_COMMITMENT_LEN};
 use crate::commands::{get_ops_sender, get_page_controller};
-
-use super::create_prefix;
-use super::BABYBEAR_COMMITMENT_LEN;
 
 /// `afs keygen` command
 /// Uses information from config.toml to generate partial proving and verifying keys and

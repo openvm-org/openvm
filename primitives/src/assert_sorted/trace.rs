@@ -1,9 +1,8 @@
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::sub_chip::LocalTraceInstructions;
-
 use super::{columns::AssertSortedCols, AssertSortedChip};
+use crate::sub_chip::LocalTraceInstructions;
 
 impl AssertSortedChip {
     pub fn generate_trace<F: PrimeField64>(&self, keys: Vec<Vec<u32>>) -> RowMajorMatrix<F> {

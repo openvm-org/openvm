@@ -1,6 +1,5 @@
-use itertools::Itertools;
-
 use afs_stark_backend::interaction::InteractionBuilder;
+use itertools::Itertools;
 use p3_field::AbstractField;
 
 use super::{columns::PageOfflineCheckerCols, PageOfflineChecker};

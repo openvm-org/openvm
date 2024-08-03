@@ -12,11 +12,13 @@ use afs_test_utils::{
 };
 use rand::Rng;
 
-use crate::inner_join::{
-    self,
-    controller::{self, T2Format, TableFormat},
+use crate::{
+    common::page::Page,
+    inner_join::{
+        self,
+        controller::{self, IJBuses, T2Format, TableFormat},
+    },
 };
-use crate::{common::page::Page, inner_join::controller::IJBuses};
 
 #[allow(clippy::too_many_arguments)]
 fn load_tables_test(

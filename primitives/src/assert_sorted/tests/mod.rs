@@ -1,15 +1,13 @@
 use std::sync::Arc;
 
-use crate::range_gate::RangeCheckerGateChip;
-
-use super::super::assert_sorted;
-
-use afs_stark_backend::prover::USE_DEBUG_BUILDER;
-use afs_stark_backend::verifier::VerificationError;
+use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use assert_sorted::AssertSortedChip;
 use p3_baby_bear::BabyBear;
 use p3_matrix::dense::DenseMatrix;
+
+use super::super::assert_sorted;
+use crate::range_gate::RangeCheckerGateChip;
 
 /*
  * Testing strategy for the assert sorted chip:

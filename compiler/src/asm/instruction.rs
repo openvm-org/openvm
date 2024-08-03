@@ -1,5 +1,4 @@
-use alloc::collections::BTreeMap;
-use alloc::format;
+use alloc::{collections::BTreeMap, format};
 use core::fmt;
 
 use p3_field::{ExtensionField, PrimeField32};

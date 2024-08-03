@@ -7,12 +7,11 @@ use p3_air::{Air, ExtensionBuilder, PermutationAirBuilder};
 use p3_field::AbstractField;
 use p3_matrix::Matrix;
 
+use super::{utils::generate_rlc_elements, InteractionBuilder};
 use crate::{
     interaction::{utils::generate_betas, InteractionType},
     rap::{PermutationAirBuilderWithExposedValues, Rap},
 };
-
-use super::{utils::generate_rlc_elements, InteractionBuilder};
 
 impl<AB, A> Rap<AB> for A
 where

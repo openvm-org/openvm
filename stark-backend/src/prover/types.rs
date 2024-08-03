@@ -3,12 +3,11 @@ use p3_matrix::dense::RowMajorMatrixView;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
+use super::opener::OpeningProof;
 use crate::{
     config::{Com, PcsProverData},
     rap::AnyRap,
 };
-
-use super::opener::OpeningProof;
 
 /// Prover trace data for multiple AIRs where each AIR has partitioned main trace.
 /// The different main trace parts can belong to different commitments.

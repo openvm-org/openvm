@@ -1,16 +1,14 @@
 use core::fmt::Debug;
 use std::marker::PhantomData;
 
-use p3_field::AbstractExtensionField;
-use p3_field::Field;
-use p3_field::PrimeField;
+use p3_field::{AbstractExtensionField, Field, PrimeField};
 use serde::{Deserialize, Serialize};
 
-use crate::ir::Config;
-use crate::ir::DslIr;
-use crate::prelude::TracedVec;
-
 use self::opcodes::ConstraintOpcode;
+use crate::{
+    ir::{Config, DslIr},
+    prelude::TracedVec,
+};
 
 pub mod opcodes;
 

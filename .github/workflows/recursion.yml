@@ -20,7 +20,7 @@ env:
   AXIOM_FAST_TEST: "1"
 
 jobs:
-  build:
+  tests:
     runs-on: ubuntu-latest
 
     steps:
@@ -34,3 +34,9 @@ jobs:
         working-directory: recursion
         run: |
           cargo test --profile=fast --features parallel
+
+  benchmark:
+    uses: ./.github/workflows/benchmark-call.yml
+    with:
+      benchmark_name: vm_verify_fibair
+    secrets: inherit

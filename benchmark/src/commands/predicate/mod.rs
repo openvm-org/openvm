@@ -31,9 +31,8 @@ use p3_util::log2_strict_usize;
 use serde::{de::DeserializeOwned, Serialize};
 use tracing::info_span;
 
-use crate::{DB_FILE_PATH, FILTER_FILE_PATH, TMP_FOLDER};
-
 use super::CommonCommands;
+use crate::{DB_FILE_PATH, FILTER_FILE_PATH, TMP_FOLDER};
 
 #[derive(Debug, Parser)]
 pub struct PredicateCommand {

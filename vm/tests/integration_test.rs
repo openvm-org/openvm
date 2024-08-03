@@ -1,16 +1,19 @@
+use afs_test_utils::{
+    config::{
+        baby_bear_poseidon2::{engine_from_perm, random_perm, run_simple_test},
+        fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},
+    },
+    engine::StarkEngine,
+};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-
-use afs_test_utils::config::baby_bear_poseidon2::{engine_from_perm, random_perm, run_simple_test};
-use afs_test_utils::config::fri_params::{
-    fri_params_fast_testing, fri_params_with_80_bits_of_security,
+use stark_vm::{
+    cpu::{trace::Instruction, OpCode::*},
+    vm::{
+        config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN},
+        ExecutionResult, VirtualMachine,
+    },
 };
-use afs_test_utils::engine::StarkEngine;
-use stark_vm::cpu::trace::Instruction;
-use stark_vm::cpu::OpCode::*;
-use stark_vm::vm::config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN};
-use stark_vm::vm::ExecutionResult;
-use stark_vm::vm::VirtualMachine;
 
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 30;

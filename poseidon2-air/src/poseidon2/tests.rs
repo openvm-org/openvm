@@ -1,34 +1,36 @@
-use super::{HL_BABYBEAR_EXT_CONST_16, HL_BABYBEAR_INT_CONST_16};
-use super::{HL_MDS_MAT_4, MDS_MAT_4};
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use afs_test_utils::config::{
-    baby_bear_poseidon2::{engine_from_perm, random_perm},
-    fri_params::fri_params_with_80_bits_of_security,
+use afs_test_utils::{
+    config::{
+        baby_bear_poseidon2::{engine_from_perm, random_perm},
+        fri_params::fri_params_with_80_bits_of_security,
+    },
+    engine::StarkEngine,
+    interaction::dummy_interaction_air::DummyInteractionAir,
+    utils::create_seeded_rng,
 };
-use afs_test_utils::engine::StarkEngine;
-use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
-use afs_test_utils::utils::create_seeded_rng;
 use ark_ff::PrimeField as _;
 use p3_baby_bear::{
     BabyBear, DiffusionMatrixBabyBear, POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY,
 };
 use p3_field::{AbstractField, Field, PrimeField32};
-use p3_matrix::dense::RowMajorMatrix;
-use p3_matrix::Matrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::Permutation;
 use p3_util::log2_strict_usize;
-use rand::RngCore;
-use rand::SeedableRng;
 use rand::{
     distributions::{Distribution, Standard},
-    Rng,
+    Rng, RngCore, SeedableRng,
 };
 use rand_xoshiro::Xoroshiro128Plus;
-use zkhash::fields::babybear::FpBabyBear as HorizenBabyBear;
-use zkhash::poseidon2::poseidon2::Poseidon2 as HorizenPoseidon2;
-use zkhash::poseidon2::poseidon2_instance_babybear::POSEIDON2_BABYBEAR_16_PARAMS;
+use zkhash::{
+    fields::babybear::FpBabyBear as HorizenBabyBear,
+    poseidon2::{
+        poseidon2::Poseidon2 as HorizenPoseidon2,
+        poseidon2_instance_babybear::POSEIDON2_BABYBEAR_16_PARAMS,
+    },
+};
 
+use super::{HL_BABYBEAR_EXT_CONST_16, HL_BABYBEAR_INT_CONST_16, HL_MDS_MAT_4, MDS_MAT_4};
 use crate::poseidon2::Poseidon2Air;
 
 #[test]

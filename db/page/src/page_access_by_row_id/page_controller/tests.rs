@@ -1,16 +1,17 @@
 use std::iter;
 
-use afs_stark_backend::prover::USE_DEBUG_BUILDER;
-use afs_stark_backend::verifier::VerificationError;
 use afs_stark_backend::{
-    keygen::types::MultiStarkProvingKey, prover::trace::TraceCommitmentBuilder,
-};
-use afs_test_utils::config::{
-    self,
-    baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+    keygen::types::MultiStarkProvingKey,
+    prover::{trace::TraceCommitmentBuilder, USE_DEBUG_BUILDER},
+    verifier::VerificationError,
 };
 use afs_test_utils::{
-    engine::StarkEngine, interaction::dummy_interaction_air::DummyInteractionAir,
+    config::{
+        self,
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+    },
+    engine::StarkEngine,
+    interaction::dummy_interaction_air::DummyInteractionAir,
     utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;

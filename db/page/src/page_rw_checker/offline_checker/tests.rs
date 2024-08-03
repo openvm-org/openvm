@@ -1,5 +1,4 @@
-use super::columns::PageOfflineCheckerCols;
-use super::PageOfflineChecker;
+use super::{columns::PageOfflineCheckerCols, PageOfflineChecker};
 
 #[test]
 fn offline_checker_from_slice_test() {

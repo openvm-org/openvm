@@ -1,32 +1,35 @@
 use core::array::from_fn;
 
+use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use afs_test_utils::{
+    config::{
+        baby_bear_poseidon2::{engine_from_perm, random_perm},
+        fri_params::fri_params_with_80_bits_of_security,
+    },
+    engine::StarkEngine,
+    interaction::dummy_interaction_air::DummyInteractionAir,
+    utils::create_seeded_rng,
+};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrix;
-use p3_matrix::Matrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_strict_usize;
 use poseidon2_air::poseidon2::Poseidon2Config;
-use rand::Rng;
-use rand::RngCore;
-
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use afs_test_utils::config::{
-    baby_bear_poseidon2::{engine_from_perm, random_perm},
-    fri_params::fri_params_with_80_bits_of_security,
-};
-use afs_test_utils::engine::StarkEngine;
-use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
-use afs_test_utils::utils::create_seeded_rng;
-
-use crate::cpu::trace::Instruction;
-use crate::cpu::OpCode::{COMP_POS2, PERM_POS2};
-use crate::cpu::POSEIDON2_DIRECT_BUS;
-use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS};
-use crate::memory::tree::Hasher;
-use crate::vm::config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN};
-use crate::vm::VirtualMachine;
+use rand::{Rng, RngCore};
 
 use super::{Poseidon2Chip, Poseidon2VmAir};
+use crate::{
+    cpu::{
+        trace::Instruction,
+        OpCode::{COMP_POS2, PERM_POS2},
+        MEMORY_BUS, POSEIDON2_BUS, POSEIDON2_DIRECT_BUS,
+    },
+    memory::tree::Hasher,
+    vm::{
+        config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN},
+        VirtualMachine,
+    },
+};
 
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 16;

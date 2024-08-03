@@ -6,6 +6,7 @@ use p3_matrix::{
 };
 use p3_maybe_rayon::prelude::*;
 
+use super::{utils::generate_rlc_elements, Interaction, InteractionType};
 use crate::{
     air_builders::symbolic::{
         symbolic_expression::{SymbolicEvaluator, SymbolicExpression},
@@ -13,8 +14,6 @@ use crate::{
     },
     interaction::utils::generate_betas,
 };
-
-use super::{utils::generate_rlc_elements, Interaction, InteractionType};
 
 // Copied from valida/machine/src/chip.rs, modified to allow partitioned main trace
 /// Generate the permutation trace for a chip given the main trace.

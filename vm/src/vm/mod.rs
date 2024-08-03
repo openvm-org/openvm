@@ -1,13 +1,16 @@
-use crate::cpu::ExecutionState;
+use std::{
+    collections::{HashMap, VecDeque},
+    ops::Deref,
+};
+
 use afs_stark_backend::rap::AnyRap;
 use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_util::log2_strict_usize;
-use std::collections::HashMap;
-use std::collections::VecDeque;
-use std::ops::Deref;
+
+use crate::cpu::ExecutionState;
 
 mod segment;
 pub use segment::{get_chips, ExecutionSegment};

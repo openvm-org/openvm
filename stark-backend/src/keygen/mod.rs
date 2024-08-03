@@ -1,21 +1,21 @@
 use itertools::Itertools;
 use p3_air::BaseAir;
+use p3_field::AbstractExtensionField;
 use p3_matrix::Matrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 use tracing::instrument;
 
 pub mod types;
 
+use self::types::{
+    create_commit_to_air_graph, MultiStarkProvingKey, ProverOnlySinglePreprocessedData,
+    StarkProvingKey, StarkVerifyingKey, TraceWidth, VerifierSinglePreprocessedData,
+};
 use crate::{
     air_builders::symbolic::{get_symbolic_builder, SymbolicRapBuilder},
     commit::{MatrixCommitmentPointers, SingleMatrixCommitPtr},
     prover::trace::TraceCommitter,
     rap::AnyRap,
-};
-
-use self::types::{
-    create_commit_to_air_graph, MultiStarkProvingKey, ProverOnlySinglePreprocessedData,
-    StarkProvingKey, StarkVerifyingKey, TraceWidth, VerifierSinglePreprocessedData,
 };
 
 /// Stateful builder to create multi-stark proving and verifying keys
@@ -139,20 +139,15 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
         self.placeholder_main_matrix_in_commit = vec![vec![]];
         self.interaction_chunk_size = None;
 
-        for (i, pk) in multi_pk.per_air.iter().enumerate() {
+        for pk in multi_pk.per_air.iter() {
             let width = pk.vk.width();
-            println!("AIR {i} [{}]:", &pk.air_name);
-            println!("  quotient degree: {}", pk.vk.quotient_degree);
-            println!("  number of columns:");
-            println!("      preprocessed: {:?}", width.preprocessed);
-            println!("      main (partitioned): {:?}", width.partitioned_main);
-            println!("      after challenge: {:?}", width.after_challenge);
-            println!(
-                "  num symbolic constraints: {}",
-                pk.vk.symbolic_constraints.constraints.len()
-            );
-            println!(
-                "  num interactions: {} on buses {:?}",
+            tracing::info!("{:<20} | Quotient Deg = {:<2} | Prep Cols = {:<2} | Main Cols = {:<8} | Perm Cols = {:<4} | {:<4} Constraints | {:<3} Interactions On Buses {:?}",
+                pk.air_name,
+                pk.vk.quotient_degree,
+                width.preprocessed.unwrap_or(0),
+                format!("{:?}",width.partitioned_main),
+                format!("{:?}",width.after_challenge.iter().map(|&x| x * <SC::Challenge as AbstractExtensionField<Val<SC>>>::D).collect_vec()),
+                pk.vk.symbolic_constraints.constraints.len(),
                 pk.vk.symbolic_constraints.interactions.len(),
                 pk.vk
                     .symbolic_constraints

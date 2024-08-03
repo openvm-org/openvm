@@ -1,19 +1,18 @@
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrix;
-use std::collections::HashSet;
-use std::iter;
+use std::{collections::HashSet, iter};
 
-use rand::Rng;
-
-use afs_page::common::page::Page;
-use afs_page::page_rw_checker::page_controller::{OpType, Operation};
-use afs_stark_backend::prover::trace::ProverTraceData;
-use afs_stark_backend::prover::trace::TraceCommitter;
+use afs_page::{
+    common::page::Page,
+    page_rw_checker::page_controller::{OpType, Operation},
+};
+use afs_stark_backend::prover::trace::{ProverTraceData, TraceCommitter};
 use afs_test_utils::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
 };
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
+use p3_matrix::dense::RowMajorMatrix;
+use rand::Rng;
 
 type Val = BabyBear;
 

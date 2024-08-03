@@ -1,7 +1,7 @@
-use afs_stark_backend::config::Com;
-use p3_field::{AbstractField, PrimeField64};
 use std::collections::{BTreeMap, HashSet};
 
+use afs_stark_backend::config::Com;
+use p3_field::{AbstractField, PrimeField64};
 use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::{common::page::Page, page_btree::cmp};

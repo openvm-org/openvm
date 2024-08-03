@@ -4,8 +4,7 @@ use afs_stark_backend::{rap::AnyRap, verifier::VerificationError};
 use p3_challenger::DuplexChallenger;
 use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
-use p3_field::extension::BinomialExtensionField;
-use p3_field::Field;
+use p3_field::{extension::BinomialExtensionField, Field};
 use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_goldilocks::{Goldilocks, MdsMatrixGoldilocks};
 use p3_matrix::{dense::DenseMatrix, Matrix};
@@ -16,10 +15,12 @@ use p3_uni_stark::StarkConfig;
 use p3_util::log2_strict_usize;
 use rand::{rngs::StdRng, SeedableRng};
 
+use super::{
+    fri_params::default_fri_params,
+    instrument::{HashStatistics, Instrumented, StarkHashStatistics},
+    FriParameters,
+};
 use crate::engine::{StarkEngine, StarkEngineWithHashInstrumentation};
-
-use super::instrument::{HashStatistics, Instrumented, StarkHashStatistics};
-use super::{fri_params::default_fri_params, FriParameters};
 
 const RATE: usize = 4;
 // permutation width

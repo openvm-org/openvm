@@ -1,24 +1,27 @@
-use std::collections::VecDeque;
-use std::{collections::BTreeMap, error::Error, fmt::Display};
-
-use p3_field::{Field, PrimeField32, PrimeField64};
-use p3_matrix::dense::RowMajorMatrix;
+use std::{
+    collections::{BTreeMap, VecDeque},
+    error::Error,
+    fmt::Display,
+};
 
 use afs_primitives::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
-
-use crate::cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual};
-use crate::memory::{compose, decompose};
-use crate::poseidon2::Poseidon2Chip;
-use crate::vm::cycle_tracker::CycleTracker;
-use crate::{field_extension::FieldExtensionArithmeticChip, vm::ExecutionSegment};
+use p3_field::{Field, PrimeField32, PrimeField64};
+use p3_matrix::dense::RowMajorMatrix;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
     max_accesses_per_instruction, CpuChip, ExecutionState,
     OpCode::{self, *},
     CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
+};
+use crate::{
+    cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
+    field_extension::FieldExtensionArithmeticChip,
+    memory::{compose, decompose},
+    poseidon2::Poseidon2Chip,
+    vm::{cycle_tracker::CycleTracker, ExecutionSegment},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]

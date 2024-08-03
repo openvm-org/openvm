@@ -1,23 +1,19 @@
+use afs_compiler::prelude::*;
 use p3_commit::TwoAdicMultiplicativeCoset;
-use p3_field::AbstractField;
-use p3_field::TwoAdicField;
+use p3_field::{AbstractField, TwoAdicField};
 use p3_symmetric::Hash;
 
-use afs_compiler::prelude::*;
-
-use crate::challenger::DuplexChallengerVariable;
-use crate::challenger::FeltChallenger;
-use crate::commit::PcsVariable;
-
-use super::types::DigestVariable;
-use super::types::DimensionsVariable;
-use super::types::FriConfigVariable;
-use super::types::TwoAdicPcsMatsVariable;
-use super::types::TwoAdicPcsProofVariable;
-use super::types::TwoAdicPcsRoundVariable;
 use super::{
+    types::{
+        DigestVariable, DimensionsVariable, FriConfigVariable, TwoAdicPcsMatsVariable,
+        TwoAdicPcsProofVariable, TwoAdicPcsRoundVariable,
+    },
     verify_batch, verify_challenges, verify_shape_and_sample_challenges, NestedOpenedValues,
     TwoAdicMultiplicativeCosetVariable,
+};
+use crate::{
+    challenger::{DuplexChallengerVariable, FeltChallenger},
+    commit::PcsVariable,
 };
 
 pub fn verify_two_adic_pcs<C: Config>(
@@ -276,29 +272,31 @@ where
 pub mod tests {
     use std::cmp::Reverse;
 
-    use crate::challenger::CanObserveVariable;
-    use crate::challenger::DuplexChallengerVariable;
-    use crate::challenger::FeltChallenger;
-    use crate::commit::PcsVariable;
-    use crate::fri::types::TwoAdicPcsRoundVariable;
-    use crate::fri::TwoAdicFriPcsVariable;
-    use crate::fri::TwoAdicMultiplicativeCosetVariable;
-    use crate::hints::{Hintable, InnerPcsProof, InnerVal};
-    use crate::utils::const_fri_config;
-    use afs_compiler::asm::AsmBuilder;
-    use afs_compiler::ir::{Array, Usize, Var, DIGEST_SIZE};
+    use afs_compiler::{
+        asm::AsmBuilder,
+        ir::{Array, Usize, Var, DIGEST_SIZE},
+    };
     use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
     use itertools::Itertools;
     use p3_baby_bear::BabyBear;
-    use p3_challenger::CanObserve;
-    use p3_challenger::FieldChallenger;
-    use p3_commit::Pcs;
-    use p3_commit::TwoAdicMultiplicativeCoset;
+    use p3_challenger::{CanObserve, FieldChallenger};
+    use p3_commit::{Pcs, TwoAdicMultiplicativeCoset};
     use p3_field::AbstractField;
     use p3_matrix::dense::RowMajorMatrix;
     use p3_uni_stark::{StarkGenericConfig, Val};
     use rand::rngs::OsRng;
     use stark_vm::cpu::trace::Instruction;
+
+    use crate::{
+        challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger},
+        commit::PcsVariable,
+        fri::{
+            types::TwoAdicPcsRoundVariable, TwoAdicFriPcsVariable,
+            TwoAdicMultiplicativeCosetVariable,
+        },
+        hints::{Hintable, InnerPcsProof, InnerVal},
+        utils::const_fri_config,
+    };
 
     #[allow(dead_code)]
     const WORD_SIZE: usize = 1;

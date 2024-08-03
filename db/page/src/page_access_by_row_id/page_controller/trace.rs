@@ -1,6 +1,5 @@
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
-
 use p3_uni_stark::StarkGenericConfig;
 
 use super::PageController;

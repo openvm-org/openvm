@@ -1,16 +1,18 @@
 use itertools::izip;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field};
-use p3_matrix::dense::RowMajorMatrixView;
-use p3_matrix::stack::VerticalPair;
-use p3_matrix::Matrix;
+use p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair, Matrix};
 use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::air_builders::debug::DebugConstraintBuilder;
-use crate::interaction::debug::{generate_logical_interactions, LogicalInteractions};
-use crate::interaction::{InteractionType, SymbolicInteraction};
-use crate::rap::Rap;
+use crate::{
+    air_builders::debug::DebugConstraintBuilder,
+    interaction::{
+        debug::{generate_logical_interactions, LogicalInteractions},
+        InteractionType, SymbolicInteraction,
+    },
+    rap::Rap,
+};
 
 /// Check that all constraints vanish on the subgroup.
 pub fn check_constraints<R, SC>(

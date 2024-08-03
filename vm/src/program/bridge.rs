@@ -3,9 +3,8 @@ use p3_air::PairBuilder;
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use crate::cpu::READ_INSTRUCTION_BUS;
-
 use super::ProgramAir;
+use crate::cpu::READ_INSTRUCTION_BUS;
 
 impl<F: Field> ProgramAir<F> {
     pub fn eval_interactions<AB: PairBuilder<F = F> + InteractionBuilder>(&self, builder: &mut AB) {

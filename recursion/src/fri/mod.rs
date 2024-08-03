@@ -1,31 +1,17 @@
-use p3_field::AbstractField;
-use p3_field::Field;
-use p3_field::TwoAdicField;
-
-use afs_compiler::ir::Builder;
-use afs_compiler::ir::Config;
-use afs_compiler::ir::Ext;
-use afs_compiler::ir::ExtensionOperand;
-use afs_compiler::ir::Felt;
-use afs_compiler::ir::Ptr;
-use afs_compiler::ir::SymbolicVar;
-use afs_compiler::ir::Usize;
-use afs_compiler::ir::Var;
-use afs_compiler::ir::{Array, DIGEST_SIZE};
+use afs_compiler::ir::{
+    Array, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, SymbolicVar, Usize, Var, DIGEST_SIZE,
+};
 pub use domain::*;
+use p3_field::{AbstractField, Field, TwoAdicField};
 pub use two_adic_pcs::*;
 
-use crate::challenger::CanObserveVariable;
-use crate::challenger::CanSampleBitsVariable;
-use crate::challenger::DuplexChallengerVariable;
-use crate::challenger::FeltChallenger;
-
-use self::types::DigestVariable;
-use self::types::DimensionsVariable;
-use self::types::FriChallengesVariable;
-use self::types::FriConfigVariable;
-use self::types::FriProofVariable;
-use self::types::FriQueryProofVariable;
+use self::types::{
+    DigestVariable, DimensionsVariable, FriChallengesVariable, FriConfigVariable, FriProofVariable,
+    FriQueryProofVariable,
+};
+use crate::challenger::{
+    CanObserveVariable, CanSampleBitsVariable, DuplexChallengerVariable, FeltChallenger,
+};
 
 pub mod domain;
 pub mod hints;

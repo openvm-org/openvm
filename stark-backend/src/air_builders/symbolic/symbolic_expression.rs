@@ -1,8 +1,10 @@
 // Copied from uni-stark/src/symbolic_expression.rs to use Arc instead of Rc.
 
-use core::fmt::Debug;
-use core::iter::{Product, Sum};
-use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use core::{
+    fmt::Debug,
+    iter::{Product, Sum},
+    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+};
 use std::sync::Arc;
 
 use p3_field::{AbstractField, Field};

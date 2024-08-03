@@ -1,19 +1,13 @@
-use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
-use p3_field::AbstractField;
-use rand::{thread_rng, Rng};
-
-use afs_compiler::asm::AsmBuilder;
-use afs_compiler::ir::ExtConst;
-use afs_compiler::ir::{Array, Usize};
-use afs_compiler::ir::{Config, Ext, Felt, Var};
-use afs_compiler::prelude::Builder;
-use afs_compiler::prelude::MemIndex;
-use afs_compiler::prelude::MemVariable;
-use afs_compiler::prelude::Ptr;
-use afs_compiler::prelude::Variable;
-use afs_compiler::util::execute_program;
+use afs_compiler::{
+    asm::AsmBuilder,
+    ir::{Array, Config, Ext, ExtConst, Felt, Usize, Var},
+    prelude::{Builder, MemIndex, MemVariable, Ptr, Variable},
+    util::execute_program,
+};
 use afs_derive::DslVariable;
+use p3_baby_bear::BabyBear;
+use p3_field::{extension::BinomialExtensionField, AbstractField};
+use rand::{thread_rng, Rng};
 
 #[derive(DslVariable, Clone, Debug)]
 pub struct Point<C: Config> {

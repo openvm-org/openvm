@@ -12,6 +12,5 @@ pub mod util;
 pub mod prelude {
     pub use afs_derive::DslVariable;
 
-    pub use crate::asm::AsmCompiler;
-    pub use crate::ir::*;
+    pub use crate::{asm::AsmCompiler, ir::*};
 }

@@ -1,10 +1,9 @@
+use super::AfsInterface;
 use crate::{
     afs_interface::utils::string_to_table_id,
     mock_db::MockDb,
     utils::{string_to_u8_vec, uint_to_be_vec},
 };
-
-use super::AfsInterface;
 
 #[test]
 pub fn test_initialize_interface() {

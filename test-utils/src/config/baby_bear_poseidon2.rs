@@ -5,8 +5,7 @@ use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_challenger::DuplexChallenger;
 use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
-use p3_field::Field;
-use p3_field::{extension::BinomialExtensionField, AbstractField};
+use p3_field::{extension::BinomialExtensionField, AbstractField, Field};
 use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_merkle_tree::FieldMerkleTreeMmcs;
@@ -20,13 +19,12 @@ use zkhash::{
     poseidon2::poseidon2_instance_babybear::RC16,
 };
 
-use crate::engine::{StarkEngine, StarkEngineWithHashInstrumentation};
-
 use super::{
     fri_params::default_fri_params,
     instrument::{HashStatistics, InstrumentCounter, Instrumented, StarkHashStatistics},
     FriParameters,
 };
+use crate::engine::{StarkEngine, StarkEngineWithHashInstrumentation};
 
 const RATE: usize = 8;
 // permutation width

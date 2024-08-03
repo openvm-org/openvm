@@ -1,18 +1,19 @@
+use afs_compiler::ir::{Config, Ext, Felt, SymbolicExt};
+use afs_stark_backend::{
+    air_builders::{
+        symbolic::{
+            symbolic_expression::SymbolicEvaluator,
+            symbolic_variable::{Entry, SymbolicVariable},
+        },
+        PartitionedAirBuilder,
+    },
+    interaction::{Interaction, InteractionBuilder, InteractionType, SymbolicInteraction},
+    rap::PermutationAirBuilderWithExposedValues,
+};
 use p3_air::{
     AirBuilder, AirBuilderWithPublicValues, ExtensionBuilder, PairBuilder, PermutationAirBuilder,
 };
-use p3_matrix::dense::RowMajorMatrixView;
-use p3_matrix::stack::VerticalPair;
-use p3_matrix::Matrix;
-
-use afs_compiler::ir::{Config, Ext, Felt, SymbolicExt};
-use afs_stark_backend::air_builders::symbolic::symbolic_expression::SymbolicEvaluator;
-use afs_stark_backend::air_builders::symbolic::symbolic_variable::{Entry, SymbolicVariable};
-use afs_stark_backend::air_builders::PartitionedAirBuilder;
-use afs_stark_backend::interaction::{
-    Interaction, InteractionBuilder, InteractionType, SymbolicInteraction,
-};
-use afs_stark_backend::rap::PermutationAirBuilderWithExposedValues;
+use p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair, Matrix};
 
 type ViewPair<'a, T> = VerticalPair<RowMajorMatrixView<'a, T>, RowMajorMatrixView<'a, T>>;
 

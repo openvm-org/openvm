@@ -1,11 +1,11 @@
 use p3_field::{ExtensionField, PrimeField64};
-
-use stark_vm::cpu::OpCode::*;
-use stark_vm::{cpu::trace::Instruction, field_extension::BETA};
-
-use crate::asm::AsmInstruction;
+use stark_vm::{
+    cpu::{trace::Instruction, OpCode::*},
+    field_extension::BETA,
+};
 
 use super::{inst, register, AS};
+use crate::asm::AsmInstruction;
 
 fn convert_field_extension_mult<const WORD_SIZE: usize, F: PrimeField64>(
     dst: i32,

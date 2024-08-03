@@ -1,9 +1,10 @@
-use color_eyre::eyre::Result;
 use std::{
     fs::File,
     io::{BufReader, BufWriter, Read, Write},
     path::Path,
 };
+
+use color_eyre::eyre::Result;
 
 pub mod keygen;
 pub mod prove;

@@ -1,12 +1,18 @@
-use super::ChipType;
-use super::VirtualMachineState;
-use afs_stark_backend::config::{StarkGenericConfig, Val};
-use afs_stark_backend::rap::AnyRap;
-use std::collections::BTreeMap;
-use std::collections::VecDeque;
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, VecDeque},
+    sync::Arc,
+};
 
-use super::VmConfig;
+use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    rap::AnyRap,
+};
+use p3_field::PrimeField32;
+use p3_matrix::dense::DenseMatrix;
+use poseidon2_air::poseidon2::Poseidon2Config;
+
+use super::{ChipType, VirtualMachineState, VmConfig};
 use crate::{
     cpu::{
         trace::{ExecutionError, Instruction},
@@ -18,11 +24,6 @@ use crate::{
     poseidon2::Poseidon2Chip,
     program::ProgramChip,
 };
-use afs_primitives::range_gate::RangeCheckerGateChip;
-use poseidon2_air::poseidon2::Poseidon2Config;
-
-use p3_field::PrimeField32;
-use p3_matrix::dense::DenseMatrix;
 
 pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub config: VmConfig,

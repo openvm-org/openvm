@@ -1,8 +1,9 @@
 use p3_field::PrimeField64;
 
-use crate::cpu::trace::ExecutionError::PcOutOfBounds;
-use crate::cpu::trace::{ExecutionError, Instruction};
-use crate::cpu::OpCode::FAIL;
+use crate::cpu::{
+    trace::{ExecutionError, ExecutionError::PcOutOfBounds, Instruction},
+    OpCode::FAIL,
+};
 
 #[cfg(test)]
 pub mod tests;

@@ -1,23 +1,26 @@
+use afs_compiler::util::execute_program;
+use afs_recursion::{
+    hints::{Hintable, InnerVal},
+    stark::{sort_chips, DynRapForRecursion, VerifierProgram},
+    types::{new_from_multi_vk, InnerConfig, VerifierInput},
+};
+use afs_stark_backend::{
+    keygen::types::MultiStarkVerifyingKey,
+    prover::{trace::TraceCommitmentBuilder, types::Proof},
+    rap::AnyRap,
+    verifier::MultiTraceStarkVerifier,
+};
+use afs_test_utils::{
+    config::{
+        baby_bear_poseidon2::{default_perm, engine_from_perm, BabyBearPoseidon2Config},
+        FriParameters,
+    },
+    engine::StarkEngine,
+};
 use p3_baby_bear::BabyBear;
-use p3_matrix::dense::RowMajorMatrix;
-use p3_matrix::Matrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_strict_usize;
-
-use afs_compiler::util::execute_program;
-use afs_recursion::hints::{Hintable, InnerVal};
-use afs_recursion::stark::{sort_chips, DynRapForRecursion, VerifierProgram};
-use afs_recursion::types::{new_from_multi_vk, InnerConfig, VerifierInput};
-use afs_stark_backend::keygen::types::MultiStarkVerifyingKey;
-use afs_stark_backend::prover::trace::TraceCommitmentBuilder;
-use afs_stark_backend::prover::types::Proof;
-use afs_stark_backend::rap::AnyRap;
-use afs_stark_backend::verifier::MultiTraceStarkVerifier;
-use afs_test_utils::config::baby_bear_poseidon2::{
-    default_perm, engine_from_perm, BabyBearPoseidon2Config,
-};
-use afs_test_utils::config::FriParameters;
-use afs_test_utils::engine::StarkEngine;
 use stark_vm::cpu::trace::Instruction;
 
 pub struct VerificationParams<SC: StarkGenericConfig> {
