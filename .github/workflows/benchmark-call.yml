@@ -18,7 +18,7 @@ on:
         description: The name of the benchmark to run
 
 env:
-  RESULT_PATH: benchmark/github/results/${{ inputs.benchmark_name }}.md
+  S3_PATH: s3://axiom-workflow-data-staging-us-east-1/benchmarks/github/results
 
 jobs:
   start-runner:
@@ -59,10 +59,6 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Setup gh command line.
-        if: github.event_name == 'push'
-        uses: dev-hanz-ops/install-gh-cli-action@v0.1.0
-
       ######################################################
       # Run a different benchmark based on benchmark_name:
       - name: Run benchmark
@@ -79,17 +75,40 @@ jobs:
       - name: Get previous benchmark value
         id: get-previous-benchmark
         run: |
+          main_sha=$(git rev-parse origin/main)
+          echo "Main branch SHA: $main_sha"
+          echo "main_sha=${main_sha}" >> $GITHUB_ENV
+
+          s5cmd cp "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md" results.md
+
+          previous_result="$(<results.md)"
+          commit_url="https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${main_sha}"
+
           echo 'previous-benchmark<<EOF' >> $GITHUB_ENV
-          echo  "$(<${{ env.RESULT_PATH }})" >> $GITHUB_ENV
+          echo '# Previous Benchmark' >> $GITHUB_ENV
+          echo "${commit_url}" >> $GITHUB_ENV
+          echo "${previous_result}" >> $GITHUB_ENV
           echo 'EOF' >> $GITHUB_ENV
 
       - name: Update benchmark value
         id: update-benchmark
         run: |
-          mkdir -p benchmark/github/results
-          mv benchmark/tmp/_result.md ${{ env.RESULT_PATH }}
+          current_sha=$(git rev-parse HEAD)
+          echo "Current SHA: $current_sha"
+          echo "current_sha=${current_sha}" >> $GITHUB_ENV
+
+          RESULT_PATH=benchmark/tmp/_result.md
+          s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${{ inputs.benchmark_name }}.md"
+
+          new_result="$(<${RESULT_PATH})"
+          echo "${new_result}"
+
+          commit_url="https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${current_sha}"
+
           echo 'new-benchmark<<EOF' >> $GITHUB_ENV
-          echo "$(<${{ env.RESULT_PATH }})" >> $GITHUB_ENV
+          echo "# New Benchmark" >> $GITHUB_ENV
+          echo "${commit_url}" >> $GITHUB_ENV
+          echo "${new_result}" >> $GITHUB_ENV
           echo 'EOF' >> $GITHUB_ENV
 
       - name: Remove previous comment (if exists)
@@ -104,7 +123,7 @@ jobs:
               issue_number: context.issue.number
             });
             for (const comment of comments.data) {
-              if (comment.body.startsWith(`# Previous Benchmark\n${previousBenchmark}`)) {
+              if (comment.body.startsWith(previousBenchmark)) {
                 console.log("deleting comment ", comment.id);
                 await github.rest.issues.deleteComment({
                   owner: context.repo.owner,
@@ -122,27 +141,17 @@ jobs:
             const previousBenchmark = process.env['previous-benchmark'];
             const newBenchmark = process.env['new-benchmark'];
 
-            console.log(newBenchmark);
-
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `# Previous Benchmark\n${previousBenchmark}\n\n# New Benchmark\n${newBenchmark}\n`
+              body: `${previousBenchmark}\n\n${newBenchmark}`
             });
 
-      - name: Commit and push changes
+      - name: Update latest main result in s3
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          export HOME=~
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          BRANCH_NAME="benchmark-${{ inputs.benchmark_name }}-${{ github.run_id }}"
-          git checkout -b ${BRANCH_NAME}
-          git add ${{ env.RESULT_PATH }}
-          git commit -m "Update benchmark"
-          git push origin ${BRANCH_NAME}
-          gh pr create -B main -H ${BRANCH_NAME} --title 'Update benchmark (${{ inputs.benchmark_name }})' --body 'Created by Github action'
+          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${{ inputs.benchmark_name }}.md" "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md"
 
   stop-runner:
     name: Stop self-hosted EC2 runner
