@@ -73,7 +73,7 @@ jobs:
         run: |
           markdown="$(<benchmark/github/results/vm_verify_fibair.md)"
           echo 'previous-benchmark<<EOF' >> $GITHUB_ENV
-          echo $markdown >> $GITHUB_ENV
+          echo "$markdown" >> $GITHUB_ENV
           echo 'EOF' >> $GITHUB_ENV
 
       - name: Update benchmark value
@@ -83,7 +83,7 @@ jobs:
           mv benchmark/tmp/_result.md benchmark/github/results/vm_verify_fibair.md
           markdown="$(<benchmark/github/results/vm_verify_fibair.md)"
           echo 'new-benchmark<<EOF' >> $GITHUB_ENV
-          echo $markdown >> $GITHUB_ENV
+          echo "$markdown" >> $GITHUB_ENV
           echo 'EOF' >> $GITHUB_ENV
 
       - name: Remove previous comment (if exists)
