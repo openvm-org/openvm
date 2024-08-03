@@ -85,19 +85,12 @@ jobs:
       - name: Get previous benchmark value
         id: get-previous-benchmark
         run: |
-          git fetch origin main
-          main_sha=$(git rev-parse origin/main)
-          echo "Main branch SHA: $main_sha"
-          echo "main_sha=${main_sha}" >> $GITHUB_ENV
-
           s5cmd cp "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md" results.md
 
           previous_result="$(<results.md)"
-          commit_url="https://github.com/${{ github.repository }}/commit/${main_sha}"
 
           echo 'previous-benchmark<<EOF' >> $GITHUB_ENV
           echo '# Previous Benchmark' >> $GITHUB_ENV
-          echo "${commit_url}" >> $GITHUB_ENV
           echo "${previous_result}" >> $GITHUB_ENV
           echo 'EOF' >> $GITHUB_ENV
 
@@ -107,9 +100,11 @@ jobs:
           current_sha=$(git rev-parse HEAD)
           echo "Current SHA: $current_sha"
           echo "current_sha=${current_sha}" >> $GITHUB_ENV
+          commit_url="https://github.com/${{ github.repository }}/commit/${current_sha}"
 
           RESULT_PATH=benchmark/tmp/_result.md
           echo "" >> $RESULT_PATH
+          echo "Commit: ${commit_url}" >> $RESULT_PATH
           echo "AWS Instance Type: [${{ inputs.aws_instance_type }}](https://instances.vantage.sh/aws/ec2/${{ inputs.aws_instance_type }})" >> $RESULT_PATH
           echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $RESULT_PATH
           s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${{ inputs.benchmark_name }}.md"
@@ -117,11 +112,8 @@ jobs:
           new_result="$(<${RESULT_PATH})"
           echo "${new_result}"
 
-          commit_url="https://github.com/${{ github.repository }}/commit/${current_sha}"
-
           echo 'new-benchmark<<EOF' >> $GITHUB_ENV
           echo "# New Benchmark" >> $GITHUB_ENV
-          echo "${commit_url}" >> $GITHUB_ENV
           echo "${new_result}" >> $GITHUB_ENV
           echo 'EOF' >> $GITHUB_ENV
 
