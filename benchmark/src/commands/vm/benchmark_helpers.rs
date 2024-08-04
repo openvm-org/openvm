@@ -140,7 +140,8 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         ..Default::default()
     };
 
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(vm_config, program, input_stream);
+    let mut vm =
+        VirtualMachine::<WORD_SIZE, _>::new(vm_config, program.isa_instructions, input_stream);
     vm.enable_metrics_collection();
 
     let vm_execute_span = info_span!("Benchmark vm execute").entered();
