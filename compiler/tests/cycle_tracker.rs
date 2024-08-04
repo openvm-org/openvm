@@ -49,5 +49,5 @@ fn test_cycle_tracker() {
     });
 
     display_program(&program.isa_instructions);
-    execute_program::<WORD_SIZE, EF>(program, vec![]);
+    execute_program::<WORD_SIZE>(program, vec![]);
 }

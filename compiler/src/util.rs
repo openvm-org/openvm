@@ -26,8 +26,8 @@ pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
     }
 }
 
-pub fn execute_program<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + TwoAdicField>(
-    program: Program<BabyBear, AsmConfig<BabyBear, EF>>,
+pub fn execute_program<const WORD_SIZE: usize>(
+    program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
 ) {
     let vm = VirtualMachine::<WORD_SIZE, _>::new(
@@ -41,11 +41,8 @@ pub fn execute_program<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
     vm.execute().unwrap();
 }
 
-pub fn execute_program_with_public_values<
-    const WORD_SIZE: usize,
-    EF: ExtensionField<BabyBear> + TwoAdicField,
->(
-    program: Program<BabyBear, AsmConfig<BabyBear, EF>>,
+pub fn execute_program_with_public_values<const WORD_SIZE: usize>(
+    program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
     public_values: &[(usize, BabyBear)],
 ) {
@@ -108,14 +105,11 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
     });
-    execute_and_prove_program::<WORD_SIZE, EF>(program, input_stream)
+    execute_and_prove_program::<WORD_SIZE>(program, input_stream)
 }
 
-pub fn execute_and_prove_program<
-    const WORD_SIZE: usize,
-    EF: ExtensionField<BabyBear> + TwoAdicField,
->(
-    program: Program<BabyBear, AsmConfig<BabyBear, EF>>,
+pub fn execute_and_prove_program<const WORD_SIZE: usize>(
+    program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
 ) {
     let vm = VirtualMachine::<WORD_SIZE, _>::new(

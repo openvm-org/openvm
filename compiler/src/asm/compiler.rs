@@ -36,8 +36,8 @@ pub const FP_INCREMENT: i32 = 6;
 
 /// The assembly compiler.
 // #[derive(Debug, Clone, Default)]
-pub struct AsmCompiler<F, EF, C: Config> {
-    basic_blocks: Vec<BasicBlock<F, EF, C>>,
+pub struct AsmCompiler<F, EF> {
+    basic_blocks: Vec<BasicBlock<F, EF>>,
     break_label: Option<F>,
     break_label_map: BTreeMap<F, F>,
     break_counter: usize,
@@ -74,9 +74,7 @@ impl<F> Ptr<F> {
     }
 }
 
-impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
-    AsmCompiler<F, EF, AsmConfig<F, EF>>
-{
+impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCompiler<F, EF> {
     /// Creates a new [AsmCompiler].
     pub fn new(word_size: usize) -> Self {
         Self {
@@ -108,7 +106,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
 
         // For each operation, generate assembly instructions.
         for (op, trace) in operations.clone() {
-            let debug_info = Some(DebugInfo::new(op.clone(), trace));
+            let debug_info = Some(DebugInfo::new(op.to_string(), trace));
             match op {
                 DslIr::ImmV(dst, src) => {
                     self.push(AsmInstruction::AddFI(dst.fp(), ZERO, src), debug_info);
@@ -575,7 +573,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         ptr: Ptr<F>,
         len: Usize<F>,
         size: usize,
-        debug_info: Option<DebugInfo<AsmConfig<F, EF>>>,
+        debug_info: Option<DebugInfo>,
     ) {
         // Load the current heap ptr address to the stack value and advance the heap ptr.
         let size = F::from_canonical_usize(size);
@@ -610,7 +608,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         lhs: i32,
         rhs: ValueOrConst<F, EF>,
         is_eq: bool,
-        debug_info: Option<DebugInfo<AsmConfig<F, EF>>>,
+        debug_info: Option<DebugInfo>,
     ) {
         let if_compiler = IfCompiler {
             compiler: self,
@@ -624,7 +622,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         );
     }
 
-    pub fn code(self) -> AssemblyCode<F, EF, AsmConfig<F, EF>> {
+    pub fn code(self) -> AssemblyCode<F, EF> {
         let labels = self
             .function_labels
             .into_iter()
@@ -645,7 +643,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         &mut self,
         block_label: F,
         instruction: AsmInstruction<F, EF>,
-        debug_info: Option<DebugInfo<AsmConfig<F, EF>>>,
+        debug_info: Option<DebugInfo>,
     ) {
         self.basic_blocks
             .get_mut(block_label.as_canonical_u32() as usize)
@@ -653,11 +651,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
             .push(instruction, debug_info);
     }
 
-    fn push(
-        &mut self,
-        instruction: AsmInstruction<F, EF>,
-        debug_info: Option<DebugInfo<AsmConfig<F, EF>>>,
-    ) {
+    fn push(&mut self, instruction: AsmInstruction<F, EF>, debug_info: Option<DebugInfo>) {
         self.basic_blocks
             .last_mut()
             .unwrap()
@@ -665,19 +659,19 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
     }
 }
 
-pub struct IfCompiler<'a, F, EF, C: Config> {
-    compiler: &'a mut AsmCompiler<F, EF, C>,
+pub struct IfCompiler<'a, F, EF> {
+    compiler: &'a mut AsmCompiler<F, EF>,
     lhs: i32,
     rhs: ValueOrConst<F, EF>,
     is_eq: bool,
 }
 
 impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
-    IfCompiler<'a, F, EF, AsmConfig<F, EF>>
+    IfCompiler<'a, F, EF>
 {
-    pub fn then<Func>(self, f: Func, debug_info: Option<DebugInfo<AsmConfig<F, EF>>>)
+    pub fn then<Func>(self, f: Func, debug_info: Option<DebugInfo>)
     where
-        Func: FnOnce(&mut AsmCompiler<F, EF, AsmConfig<F, EF>>),
+        Func: FnOnce(&mut AsmCompiler<F, EF>),
     {
         let Self {
             compiler,
@@ -706,10 +700,10 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         self,
         then_f: ThenFunc,
         else_f: ElseFunc,
-        debug_info: Option<DebugInfo<AsmConfig<F, EF>>>,
+        debug_info: Option<DebugInfo>,
     ) where
-        ThenFunc: FnOnce(&mut AsmCompiler<F, EF, AsmConfig<F, EF>>),
-        ElseFunc: FnOnce(&mut AsmCompiler<F, EF, AsmConfig<F, EF>>),
+        ThenFunc: FnOnce(&mut AsmCompiler<F, EF>),
+        ElseFunc: FnOnce(&mut AsmCompiler<F, EF>),
     {
         let Self {
             compiler,
@@ -765,8 +759,8 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
 /// A builder for a for loop.
 ///
 /// SAFETY: Starting with end < start will lead to undefined behavior.
-pub struct ForCompiler<'a, F, EF, C: Config> {
-    compiler: &'a mut AsmCompiler<F, EF, C>,
+pub struct ForCompiler<'a, F, EF> {
+    compiler: &'a mut AsmCompiler<F, EF>,
     start: Usize<F>,
     end: Usize<F>,
     step_size: F,
@@ -774,12 +768,12 @@ pub struct ForCompiler<'a, F, EF, C: Config> {
 }
 
 impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
-    ForCompiler<'a, F, EF, AsmConfig<F, EF>>
+    ForCompiler<'a, F, EF>
 {
     pub(super) fn for_each(
         mut self,
-        f: impl FnOnce(Var<F>, &mut AsmCompiler<F, EF, AsmConfig<F, EF>>),
-        debug_info: Option<DebugInfo<AsmConfig<F, EF>>>,
+        f: impl FnOnce(Var<F>, &mut AsmCompiler<F, EF>),
+        debug_info: Option<DebugInfo>,
     ) {
         // The function block structure:
         // - Setting the loop range
@@ -848,7 +842,7 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         // self.compiler.contains_break.clear();
     }
 
-    fn set_loop_var(&mut self, debug_info: Option<DebugInfo<AsmConfig<F, EF>>>) {
+    fn set_loop_var(&mut self, debug_info: Option<DebugInfo>) {
         match self.start {
             Usize::Const(start) => {
                 self.compiler.push(
@@ -865,11 +859,7 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         }
     }
 
-    fn jump_to_loop_body(
-        &mut self,
-        loop_label: F,
-        debug_info: Option<DebugInfo<AsmConfig<F, EF>>>,
-    ) {
+    fn jump_to_loop_body(&mut self, loop_label: F, debug_info: Option<DebugInfo>) {
         match self.end {
             Usize::Const(end) => {
                 let instr = AsmInstruction::BneI(
@@ -888,15 +878,8 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
 }
 
 // Ext compiler logic.
-impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
-    AsmCompiler<F, EF, AsmConfig<F, EF>>
-{
-    fn assign_exti(
-        &mut self,
-        dst: Ext<F, EF>,
-        imm: EF,
-        debug_info: Option<DebugInfo<AsmConfig<F, EF>>>,
-    ) {
+impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCompiler<F, EF> {
+    fn assign_exti(&mut self, dst: Ext<F, EF>, imm: EF, debug_info: Option<DebugInfo>) {
         let imm = imm.as_base_slice();
         for i in 0..EF::D {
             let j = (i * self.word_size) as i32;
@@ -912,7 +895,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         dst: Ext<F, EF>,
         lhs: Ext<F, EF>,
         rhs: EF,
-        debug_info: Option<DebugInfo<AsmConfig<F, EF>>>,
+        debug_info: Option<DebugInfo>,
     ) {
         let rhs = rhs.as_base_slice();
         for i in 0..EF::D {
@@ -929,7 +912,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         dst: Ext<F, EF>,
         lhs: Ext<F, EF>,
         rhs: Felt<F>,
-        debug_info: Option<DebugInfo<AsmConfig<F, EF>>>,
+        debug_info: Option<DebugInfo>,
     ) {
         self.push(
             AsmInstruction::AddF(dst.fp(), lhs.fp(), rhs.fp()),
@@ -949,7 +932,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         dst: Ext<F, EF>,
         lhs: Felt<F>,
         rhs: EF,
-        debug_info: Option<DebugInfo<AsmConfig<F, EF>>>,
+        debug_info: Option<DebugInfo>,
     ) {
         let rhs = rhs.as_base_slice();
 
@@ -972,7 +955,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         dst: Ext<F, EF>,
         lhs: Ext<F, EF>,
         rhs: Felt<F>,
-        debug_info: Option<DebugInfo<AsmConfig<F, EF>>>,
+        debug_info: Option<DebugInfo>,
     ) {
         for i in 0..EF::D {
             let j = (i * self.word_size) as i32;
@@ -988,7 +971,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         dst: Ext<F, EF>,
         lhs: Ext<F, EF>,
         rhs: F,
-        debug_info: Option<DebugInfo<AsmConfig<F, EF>>>,
+        debug_info: Option<DebugInfo>,
     ) {
         for i in 0..EF::D {
             let j = (i * self.word_size) as i32;

@@ -271,7 +271,7 @@ pub enum DslIr<C: Config> {
 }
 
 impl<C: Config> DslIr<C> {
-    fn to_string(&self) -> String {
+    pub fn to_string(&self) -> String {
         match self {
             DslIr::ImmV(..) => "ImmV".to_string(),
             DslIr::ImmF(..) => "ImmF".to_string(),

@@ -310,10 +310,7 @@ pub mod tests {
     pub fn build_test_fri_with_cols_and_log2_rows(
         nb_cols: usize,
         nb_log2_rows: usize,
-    ) -> (
-        Program<BabyBear, AsmConfig<BabyBear, BinomialExtensionField<BabyBear, 4>>>,
-        Vec<Vec<BabyBear>>,
-    ) {
+    ) -> (Program<BabyBear>, Vec<Vec<BabyBear>>) {
         type SC = BabyBearPoseidon2Config;
         type F = Val<SC>;
         type EF = <SC as StarkGenericConfig>::Challenge;
@@ -400,9 +397,8 @@ pub mod tests {
     #[ignore = "test takes too long"]
     fn test_two_adic_fri_pcs_single_batch() {
         use afs_compiler::util::execute_program;
-        type EF = BinomialExtensionField<BabyBear, 4>;
 
         let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 16);
-        execute_program::<WORD_SIZE, EF>(program, witness);
+        execute_program::<WORD_SIZE>(program, witness);
     }
 }

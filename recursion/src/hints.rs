@@ -437,7 +437,7 @@ mod test {
         builder.halt();
 
         let program = builder.compile_isa::<1>();
-        execute_program::<1, BinomialExtensionField<BabyBear, 4>>(program, stream);
+        execute_program::<1>(program, stream);
     }
 
     #[test]
@@ -484,6 +484,6 @@ mod test {
         builder.halt();
 
         let program = builder.compile_isa::<1>();
-        execute_program::<1, BinomialExtensionField<BabyBear, 4>>(program, stream);
+        execute_program::<1>(program, stream);
     }
 }

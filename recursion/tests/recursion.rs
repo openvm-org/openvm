@@ -15,11 +15,7 @@ use stark_vm::vm::{ExecutionResult, VirtualMachine};
 
 mod common;
 
-fn fibonacci_program(
-    a: u32,
-    b: u32,
-    n: u32,
-) -> Program<BabyBear, AsmConfig<BabyBear, BinomialExtensionField<BabyBear, 4>>> {
+fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, 4>;
 

@@ -254,18 +254,13 @@ fn convert_print_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: Extens
     }
 }
 
-fn convert_instruction<
-    const WORD_SIZE: usize,
-    F: PrimeField64,
-    EF: ExtensionField<F>,
-    C: Config,
->(
+fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
-    debug_info: Option<DebugInfo<C>>,
+    debug_info: Option<DebugInfo>,
     pc: F,
     labels: impl Fn(F) -> F,
     options: CompilerOptions,
-) -> Program<F, C> {
+) -> Program<F> {
     let utility_registers: [F; NUM_UTILITY_REGISTERS] = from_fn(|i| F::from_canonical_usize(i));
     let utility_register = utility_registers[0];
 
@@ -739,15 +734,10 @@ fn convert_instruction<
     }
 }
 
-pub fn convert_program<
-    const WORD_SIZE: usize,
-    F: PrimeField64,
-    EF: ExtensionField<F>,
-    C: Config,
->(
-    program: AssemblyCode<F, EF, C>,
+pub fn convert_program<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionField<F>>(
+    program: AssemblyCode<F, EF>,
     options: CompilerOptions,
-) -> Program<F, C> {
+) -> Program<F> {
     // register[0] <- 0
     let init_register_0 = inst(
         STOREW,
@@ -767,7 +757,7 @@ pub fn convert_program<
         for i in 0..block.0.len() {
             let instruction = &block.0[i];
             let debug_info = &block.1[i];
-            let instructions = convert_instruction::<WORD_SIZE, F, EF, C>(
+            let instructions = convert_instruction::<WORD_SIZE, F, EF>(
                 instruction.clone(),
                 debug_info.clone(),
                 F::from_canonical_usize(pc),
@@ -786,7 +776,7 @@ pub fn convert_program<
             let debug_info = &block.1[i];
             let labels =
                 |label: F| F::from_canonical_usize(block_start[label.as_canonical_u64() as usize]);
-            let result = convert_instruction::<WORD_SIZE, F, EF, C>(
+            let result = convert_instruction::<WORD_SIZE, F, EF>(
                 instruction.clone(),
                 debug_info.clone(),
                 F::from_canonical_usize(isa_instructions.len()),

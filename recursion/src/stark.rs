@@ -72,7 +72,7 @@ impl VerifierProgram<InnerConfig> {
         raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
         constants: MultiStarkVerificationAdvice<InnerConfig>,
         fri_params: &FriParameters,
-    ) -> Program<BabyBear, AsmConfig<BabyBear, BinomialExtensionField<BabyBear, 4>>> {
+    ) -> Program<BabyBear> {
         let mut builder = Builder::<InnerConfig>::default();
 
         builder.cycle_tracker_start("VerifierProgram");

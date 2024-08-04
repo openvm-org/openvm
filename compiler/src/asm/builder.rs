@@ -16,13 +16,13 @@ use super::{config::AsmConfig, AsmCompiler};
 pub type AsmBuilder<F, EF> = Builder<AsmConfig<F, EF>>;
 
 #[derive(Debug, Clone, Default)]
-pub struct DebugInfo<C: Config> {
-    dsl_instruction: DslIr<C>,
+pub struct DebugInfo {
+    dsl_instruction: String,
     trace: Option<Backtrace>,
 }
 
-impl<C: Config> DebugInfo<C> {
-    pub fn new(dsl_instruction: DslIr<C>, trace: Option<Backtrace>) -> Self {
+impl DebugInfo {
+    pub fn new(dsl_instruction: String, trace: Option<Backtrace>) -> Self {
         Self {
             dsl_instruction,
             trace,
@@ -30,29 +30,29 @@ impl<C: Config> DebugInfo<C> {
     }
 }
 
-pub struct Program<F, C: Config> {
+pub struct Program<F> {
     pub isa_instructions: Vec<Instruction<F>>,
-    pub debug_info_vec: Vec<Option<DebugInfo<C>>>,
+    pub debug_info_vec: Vec<Option<DebugInfo>>,
 }
 
-impl<F, C: Config> Program<F, C> {
+impl<F> Program<F> {
     pub fn len(&self) -> usize {
         self.isa_instructions.len()
     }
 }
 
 impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmBuilder<F, EF> {
-    pub fn compile_isa<const WORD_SIZE: usize>(self) -> Program<F, AsmConfig<F, EF>> {
+    pub fn compile_isa<const WORD_SIZE: usize>(self) -> Program<F> {
         self.compile_isa_with_options::<WORD_SIZE>(CompilerOptions::default())
     }
 
     pub fn compile_isa_with_options<const WORD_SIZE: usize>(
         self,
         options: CompilerOptions,
-    ) -> Program<F, AsmConfig<F, EF>> {
+    ) -> Program<F> {
         let mut compiler = AsmCompiler::new(WORD_SIZE);
         compiler.build(self.operations);
         let asm_code = compiler.code();
-        convert_program::<WORD_SIZE, F, EF, AsmConfig<F, EF>>(asm_code, options)
+        convert_program::<WORD_SIZE, F, EF>(asm_code, options)
     }
 }

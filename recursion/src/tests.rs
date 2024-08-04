@@ -166,5 +166,5 @@ fn run_recursive_test(
     let mut witness_stream = Vec::new();
     witness_stream.extend(input.write());
 
-    execute_program::<1, BinomialExtensionField<BabyBear, 4>>(program, witness_stream);
+    execute_program::<1>(program, witness_stream);
 }
