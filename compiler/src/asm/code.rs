@@ -2,10 +2,10 @@ use alloc::{collections::BTreeMap, format};
 use core::{fmt, fmt::Display};
 
 use p3_field::{ExtensionField, PrimeField, PrimeField32};
+use stark_vm::program::DebugInfo;
 
+use super::AsmInstruction;
 use crate::ir::Config;
-
-use super::{AsmInstruction, DebugInfo};
 
 /// A basic block of assembly instructions.
 #[derive(Debug, Clone, Default)]

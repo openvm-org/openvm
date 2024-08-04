@@ -1,7 +1,7 @@
 use std::ops::Deref;
 
 use afs_compiler::{
-    asm::{AsmBuilder, AsmConfig, Program},
+    asm::{AsmBuilder, AsmConfig},
     ir::Var,
 };
 use afs_recursion::stark::get_rec_raps;
@@ -12,6 +12,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
     cpu::trace::Instruction,
+    program::Program,
     vm::{config::VmConfig, ExecutionResult, VirtualMachine},
 };
 
@@ -47,11 +48,10 @@ fn test_fibonacci_program_verify() {
         ..Default::default()
     };
 
-    let dummy_vm =
-        VirtualMachine::<1, _>::new(vm_config, fib_program.isa_instructions.clone(), vec![]);
+    let dummy_vm = VirtualMachine::<1, _>::new(vm_config, fib_program.clone(), vec![]);
     let rec_raps = get_rec_raps(&dummy_vm.segments[0]);
 
-    let vm = VirtualMachine::<1, _>::new(vm_config, fib_program.isa_instructions, vec![]);
+    let vm = VirtualMachine::<1, _>::new(vm_config, fib_program, vec![]);
     let ExecutionResult {
         nonempty_traces: traces,
         nonempty_chips: chips,

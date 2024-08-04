@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs::File, io::Write as _};
 
-use afs_compiler::asm::{AsmConfig, Program};
+use afs_compiler::asm::AsmConfig;
 use afs_recursion::{
     hints::Hintable,
     stark::{DynRapForRecursion, VerifierProgram},
@@ -25,6 +25,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_strict_usize;
 use stark_vm::{
     cpu::trace::Instruction,
+    program::Program,
     vm::{config::VmConfig, ExecutionResult, VirtualMachine},
 };
 use tracing::info_span;
@@ -140,8 +141,7 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         ..Default::default()
     };
 
-    let mut vm =
-        VirtualMachine::<WORD_SIZE, _>::new(vm_config, program.isa_instructions, input_stream);
+    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(vm_config, program, input_stream);
     vm.enable_metrics_collection();
 
     let vm_execute_span = info_span!("Benchmark vm execute").entered();

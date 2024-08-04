@@ -4,7 +4,7 @@ use std::{
 };
 
 use afs_compiler::{
-    asm::{AsmConfig, Program},
+    asm::AsmConfig,
     conversion::CompilerOptions,
     ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize, Var},
 };
@@ -27,7 +27,7 @@ use p3_matrix::{
     stack::VerticalPair,
     Matrix,
 };
-use stark_vm::{cpu::trace::Instruction, vm::ExecutionSegment};
+use stark_vm::{cpu::trace::Instruction, program::Program, vm::ExecutionSegment};
 
 use crate::{
     challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger},

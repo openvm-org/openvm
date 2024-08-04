@@ -22,7 +22,7 @@ use crate::{
     field_extension::FieldExtensionArithmeticChip,
     memory::offline_checker::MemoryChip,
     poseidon2::Poseidon2Chip,
-    program::ProgramChip,
+    program::{Program, ProgramChip},
 };
 
 pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
@@ -39,6 +39,7 @@ pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub has_generation_happened: bool,
     pub public_values: Vec<Option<F>>,
     pub opcode_counts: BTreeMap<String, usize>,
+    pub dsl_counts: BTreeMap<String, usize>,
     /// Collected metrics for this segment alone.
     /// Only collected when `config.collect_metrics` is true.
     pub(crate) collected_metrics: VmMetrics,
@@ -46,11 +47,7 @@ pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
 
 impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
     /// Creates a new execution segment from a program and initial state, using parent VM config
-    pub fn new(
-        config: VmConfig,
-        program: Vec<Instruction<F>>,
-        state: VirtualMachineState<F>,
-    ) -> Self {
+    pub fn new(config: VmConfig, program: Program<F>, state: VirtualMachineState<F>) -> Self {
         let decomp = config.decomp;
         let limb_bits = config.limb_bits;
 
@@ -67,6 +64,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         );
 
         let opcode_counts = BTreeMap::new();
+        let dsl_counts = BTreeMap::new();
 
         Self {
             config,
@@ -82,6 +80,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             input_stream: state.input_stream,
             hint_stream: state.hint_stream,
             opcode_counts,
+            dsl_counts,
             collected_metrics: Default::default(),
         }
     }

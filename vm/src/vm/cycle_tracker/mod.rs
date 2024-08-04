@@ -35,8 +35,9 @@ impl<F: PrimeField32> CycleTracker<F> {
         name: String,
         vm_metrics: &BTreeMap<String, usize>,
         opcode_counts: &BTreeMap<String, usize>,
+        dsl_counts: &BTreeMap<String, usize>,
     ) {
-        let cycle_tracker_span = CycleTrackerSpan::start(vm_metrics, opcode_counts);
+        let cycle_tracker_span = CycleTrackerSpan::start(vm_metrics, opcode_counts, dsl_counts);
         match self.instances.entry(name.clone()) {
             Entry::Occupied(mut entry) => {
                 let spans = entry.get_mut();
@@ -63,12 +64,13 @@ impl<F: PrimeField32> CycleTracker<F> {
         name: String,
         vm_metrics: &BTreeMap<String, usize>,
         opcode_counts: &BTreeMap<String, usize>,
+        dsl_counts: &BTreeMap<String, usize>,
     ) {
         match self.instances.entry(name.clone()) {
             Entry::Occupied(mut entry) => {
                 let spans = entry.get_mut();
                 let last = spans.last_mut().unwrap();
-                last.end(vm_metrics, opcode_counts);
+                last.end(vm_metrics, opcode_counts, dsl_counts);
             }
             Entry::Vacant(_) => {
                 panic!("Cycle tracker instance {} does not exist", name);
@@ -103,10 +105,18 @@ impl<F: PrimeField32> Display for CycleTracker<F> {
             }
 
             let mut total_vm_metrics = std::collections::HashMap::new();
+            let mut total_opcode_counts = std::collections::HashMap::new();
+            let mut total_dsl_counts = std::collections::HashMap::new();
 
             for span in spans {
                 for (key, value) in &span.end.vm_metrics {
                     *total_vm_metrics.entry(key.clone()).or_insert(0) += value;
+                }
+                for (key, value) in &span.end.opcode_counts {
+                    *total_opcode_counts.entry(key.clone()).or_insert(0) += value;
+                }
+                for (key, value) in &span.end.dsl_counts {
+                    *total_dsl_counts.entry(key.clone()).or_insert(0) += value;
                 }
             }
 
@@ -118,6 +128,16 @@ impl<F: PrimeField32> Display for CycleTracker<F> {
                 } else {
                     writeln!(f, "  - tot_{}: {}", key, value)?;
                     writeln!(f, "  - avg_{}: {}", key, avg_value)?;
+                }
+            }
+            for (key, value) in &total_opcode_counts {
+                if *value > 0 {
+                    writeln!(f, "  - {}: {}", key, value)?;
+                }
+            }
+            for (key, value) in &total_dsl_counts {
+                if *value > 0 {
+                    writeln!(f, "  - {}: {}", key, value)?;
                 }
             }
             writeln!(f)?;

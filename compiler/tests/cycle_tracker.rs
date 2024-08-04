@@ -50,6 +50,10 @@ fn test_cycle_tracker() {
         field_extension_enabled: true,
     });
 
+    for (i, debug_info) in program.debug_info_vec.iter().enumerate() {
+        println!("debug_info {}: {:?}", i, debug_info);
+    }
+
     display_program(&program.isa_instructions);
     execute_program::<WORD_SIZE>(program, vec![]);
 }

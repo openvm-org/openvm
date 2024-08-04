@@ -273,7 +273,7 @@ pub mod tests {
     use std::cmp::Reverse;
 
     use afs_compiler::{
-        asm::{AsmBuilder, AsmConfig, Program},
+        asm::{AsmBuilder, AsmConfig},
         ir::{Array, Usize, Var, DIGEST_SIZE},
     };
     use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
@@ -285,7 +285,7 @@ pub mod tests {
     use p3_matrix::dense::RowMajorMatrix;
     use p3_uni_stark::{StarkGenericConfig, Val};
     use rand::rngs::OsRng;
-    use stark_vm::cpu::trace::Instruction;
+    use stark_vm::{cpu::trace::Instruction, program::Program};
 
     use crate::{
         challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger},

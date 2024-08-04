@@ -2892,6 +2892,7 @@ dependencies = [
  "afs-stark-backend",
  "afs-test-utils",
  "ark-ff 0.4.2",
+ "backtrace",
  "derive-new 0.5.9",
  "enum-utils",
  "getset",

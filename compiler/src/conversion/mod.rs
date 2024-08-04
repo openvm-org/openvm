@@ -1,10 +1,16 @@
 use std::array::from_fn;
 
 use p3_field::{ExtensionField, PrimeField64};
-use stark_vm::cpu::{trace::Instruction, OpCode, OpCode::*};
+use stark_vm::{
+    cpu::{
+        trace::Instruction,
+        OpCode::{self, *},
+    },
+    program::{DebugInfo, Program},
+};
 
 use crate::{
-    asm::{AsmInstruction, AssemblyCode, DebugInfo, Program},
+    asm::{AsmInstruction, AssemblyCode},
     ir::Config,
 };
 

@@ -10,11 +10,12 @@ use p3_baby_bear::BabyBear;
 use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
 use stark_vm::{
     cpu::trace::Instruction,
+    program::Program,
     vm::{config::VmConfig, ExecutionResult, VirtualMachine},
 };
 
 use crate::{
-    asm::{AsmBuilder, AsmConfig, Program},
+    asm::{AsmBuilder, AsmConfig},
     conversion::CompilerOptions,
 };
 
@@ -37,7 +38,7 @@ pub fn execute_program<const WORD_SIZE: usize>(
             num_public_values: 4,
             ..Default::default()
         },
-        program.isa_instructions,
+        program,
         input_stream,
     );
     vm.execute().unwrap();
@@ -53,7 +54,7 @@ pub fn execute_program_with_public_values<const WORD_SIZE: usize>(
             num_public_values: 4,
             ..Default::default()
         },
-        program.isa_instructions,
+        program,
         input_stream,
     );
     for &(index, value) in public_values {
@@ -119,7 +120,7 @@ pub fn execute_and_prove_program<const WORD_SIZE: usize>(
             num_public_values: 4,
             ..Default::default()
         },
-        program.isa_instructions,
+        program,
         input_stream,
     );
 

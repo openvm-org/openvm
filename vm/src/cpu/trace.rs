@@ -166,7 +166,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
 
-            let instruction = vm.program_chip.get_instruction(pc_usize)?;
+            let (instruction, debug_info) = vm.program_chip.get_instruction(pc_usize)?;
+            let dsl_instr = debug_info.unwrap_or_default().dsl_instruction;
+            println!("dsl_instr: {:?}", dsl_instr);
 
             let opcode = instruction.opcode;
             let a = instruction.op_a;
@@ -226,6 +228,11 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
 
             vm.opcode_counts
                 .entry(opcode.to_string())
+                .and_modify(|count| *count += 1)
+                .or_insert(1);
+
+            vm.dsl_counts
+                .entry(dsl_instr)
                 .and_modify(|count| *count += 1)
                 .or_insert(1);
 
@@ -349,8 +356,12 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     let base_pointer = read!(d, a);
                     write!(e, base_pointer + b, hint);
                 }
-                CT_START => cycle_tracker.start(debug, &vm.metrics(), &vm.opcode_counts),
-                CT_END => cycle_tracker.end(debug, &vm.metrics(), &vm.opcode_counts),
+                CT_START => {
+                    cycle_tracker.start(debug, &vm.metrics(), &vm.opcode_counts, &vm.dsl_counts)
+                }
+                CT_END => {
+                    cycle_tracker.end(debug, &vm.metrics(), &vm.opcode_counts, &vm.dsl_counts)
+                }
             };
 
             let mut operation_flags = BTreeMap::new();

@@ -10,7 +10,7 @@ use p3_field::PrimeField32;
 use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_util::log2_strict_usize;
 
-use crate::cpu::ExecutionState;
+use crate::{cpu::ExecutionState, program::Program};
 
 mod segment;
 pub use segment::{get_chips, ExecutionSegment};
@@ -36,7 +36,7 @@ pub mod config;
 /// `VirtualMachine::get_chips()` can be used to convert the boxes of chips to concrete chips.
 pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub config: VmConfig,
-    pub program: Vec<Instruction<F>>,
+    pub program: Program<F>,
     pub segments: Vec<ExecutionSegment<WORD_SIZE, F>>,
     pub traces: Vec<DenseMatrix<F>>,
 }
@@ -90,7 +90,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
     /// Create a new VM with a given config, program, and input stream.
     ///
     /// The VM will start with a single segment, which is created from the initial state of the CPU.
-    pub fn new(config: VmConfig, program: Vec<Instruction<F>>, input_stream: Vec<Vec<F>>) -> Self {
+    pub fn new(config: VmConfig, program: Program<F>, input_stream: Vec<Vec<F>>) -> Self {
         let mut vm = Self {
             config,
             program,
@@ -111,6 +111,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
     /// The segment will be created from the given state and the program.
     pub fn segment(&mut self, state: VirtualMachineState<F>) {
         let program = self.program.clone();
+        let instruction_len = program.isa_instructions.len();
         let segment = ExecutionSegment::new(self.config, program, state);
         self.segments.push(segment);
     }
@@ -174,8 +175,13 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
         let mut types = Vec::with_capacity(self.segments.len());
         let num_chips = self.segments[0].get_num_chips();
 
+        let empty_program = Program {
+            isa_instructions: vec![],
+            debug_info_vec: vec![],
+        };
+
         let unique_chips = get_chips::<WORD_SIZE, BabyBearPoseidon2Config>(
-            ExecutionSegment::new(self.config, vec![], self.current_state()),
+            ExecutionSegment::new(self.config, empty_program, self.current_state()),
             &vec![true; num_chips],
         );
 
