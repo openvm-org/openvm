@@ -109,16 +109,16 @@ where
 
     let init_param = PageTreeParams {
         path_bus_index: init_path_bus,
-        leaf_cap: 8,
-        internal_cap: 24,
+        leaf_cap: Some(8),
+        internal_cap: Some(24),
         leaf_page_height: page_height,
         internal_page_height: page_height,
     };
 
     let final_param = PageTreeParams {
         path_bus_index: final_path_bus,
-        leaf_cap: 8,
-        internal_cap: 24,
+        leaf_cap: None,
+        internal_cap: None,
         leaf_page_height: page_height,
         internal_page_height: page_height,
     };
