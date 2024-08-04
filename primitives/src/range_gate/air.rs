@@ -5,8 +5,7 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::columns::RangeGateCols;
-use super::columns::NUM_RANGE_GATE_COLS;
+use super::columns::{RangeGateCols, NUM_RANGE_GATE_COLS};
 
 #[derive(Clone, Copy, Debug)]
 pub struct RangeCheckerGateAir {

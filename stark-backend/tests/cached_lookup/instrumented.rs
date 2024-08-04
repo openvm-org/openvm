@@ -14,6 +14,7 @@ use p3_util::log2_ceil_usize;
 use rand::{rngs::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
+use super::prove::{get_data_sizes, prove, BenchParams};
 use crate::{
     cached_lookup::prove::generate_random_trace,
     config::{
@@ -21,8 +22,6 @@ use crate::{
         FriParameters,
     },
 };
-
-use super::prove::{get_data_sizes, prove, BenchParams};
 
 fn instrumented_verify<SC: StarkGenericConfig, E: StarkEngineWithHashInstrumentation<SC>>(
     engine: &mut E,

@@ -1,24 +1,27 @@
-use std::collections::VecDeque;
-use std::{collections::BTreeMap, error::Error, fmt::Display};
-
-use p3_field::{Field, PrimeField32, PrimeField64};
-use p3_matrix::dense::RowMajorMatrix;
+use std::{
+    collections::{BTreeMap, VecDeque},
+    error::Error,
+    fmt::Display,
+};
 
 use afs_primitives::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
-
-use crate::cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual};
-use crate::memory::{compose, decompose};
-use crate::poseidon2::Poseidon2Chip;
-use crate::vm::cycle_tracker::CycleTracker;
-use crate::{field_extension::FieldExtensionArithmeticChip, vm::ExecutionSegment};
+use p3_field::{Field, PrimeField32, PrimeField64};
+use p3_matrix::dense::RowMajorMatrix;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
     max_accesses_per_instruction, CpuChip, ExecutionState,
     OpCode::{self, *},
     CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
+};
+use crate::{
+    cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
+    field_extension::FieldExtensionArithmeticChip,
+    memory::{compose, decompose},
+    poseidon2::Poseidon2Chip,
+    vm::{cycle_tracker::CycleTracker, ExecutionSegment},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
@@ -157,6 +160,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
         let mut hint_stream = vm.hint_stream.clone();
         let mut cycle_tracker = CycleTracker::<F>::new();
         let mut is_done = false;
+        let mut collect_metrics = vm.config.collect_metrics;
+        dbg!(collect_metrics);
 
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
@@ -339,20 +344,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     let base_pointer = read!(d, a);
                     write!(e, base_pointer + b, hint);
                 }
-                CT_START => cycle_tracker.start(
-                    debug,
-                    vm.cpu_chip.rows.len(),
-                    clock_cycle,
-                    timestamp,
-                    &vm.metrics(),
-                ),
-                CT_END => cycle_tracker.end(
-                    debug,
-                    vm.cpu_chip.rows.len(),
-                    clock_cycle,
-                    timestamp,
-                    &vm.metrics(),
-                ),
+                CT_START => cycle_tracker.start(debug, &vm.metrics()),
+                CT_END => cycle_tracker.end(debug, &vm.metrics()),
             };
 
             let mut operation_flags = BTreeMap::new();
@@ -383,6 +376,13 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             timestamp += max_accesses_per_instruction(opcode);
 
             clock_cycle += 1;
+            if opcode == TERMINATE {
+                // Due to row padding, the padded rows will all have opcode TERMINATE, so stop metric collection after the first one
+                if collect_metrics {
+                    vm.collected_metrics = vm.metrics();
+                    collect_metrics = false;
+                }
+            }
             if opcode == TERMINATE && vm.cpu_chip.current_height().is_power_of_two() {
                 is_done = true;
                 break;
@@ -393,6 +393,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
         }
 
         cycle_tracker.print();
+        if collect_metrics {
+            // No TERMINATE was encountered, so collect metrics at the end of the segment
+            vm.collected_metrics = vm.metrics();
+        }
 
         // Update CPU chip state with all changes from this segment.
         vm.cpu_chip.set_state(ExecutionState {

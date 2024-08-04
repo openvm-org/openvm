@@ -2,9 +2,8 @@ use p3_air::BaseAir;
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::{is_less_than::columns::IsLessThanCols, sub_chip::LocalTraceInstructions};
-
 use super::SumChip;
+use crate::{is_less_than::columns::IsLessThanCols, sub_chip::LocalTraceInstructions};
 
 impl SumChip {
     pub fn generate_trace<F: PrimeField64>(&self, inputs: &[(u32, u32)]) -> RowMajorMatrix<F> {

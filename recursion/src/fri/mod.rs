@@ -1,31 +1,17 @@
-use p3_field::AbstractField;
-use p3_field::Field;
-use p3_field::TwoAdicField;
-
-use afs_compiler::ir::Builder;
-use afs_compiler::ir::Config;
-use afs_compiler::ir::Ext;
-use afs_compiler::ir::ExtensionOperand;
-use afs_compiler::ir::Felt;
-use afs_compiler::ir::Ptr;
-use afs_compiler::ir::SymbolicVar;
-use afs_compiler::ir::Usize;
-use afs_compiler::ir::Var;
-use afs_compiler::ir::{Array, DIGEST_SIZE};
+use afs_compiler::ir::{
+    Array, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, SymbolicVar, Usize, Var, DIGEST_SIZE,
+};
 pub use domain::*;
+use p3_field::{AbstractField, Field, TwoAdicField};
 pub use two_adic_pcs::*;
 
-use crate::challenger::CanObserveVariable;
-use crate::challenger::CanSampleBitsVariable;
-use crate::challenger::DuplexChallengerVariable;
-use crate::challenger::FeltChallenger;
-
-use self::types::DigestVariable;
-use self::types::DimensionsVariable;
-use self::types::FriChallengesVariable;
-use self::types::FriConfigVariable;
-use self::types::FriProofVariable;
-use self::types::FriQueryProofVariable;
+use self::types::{
+    DigestVariable, DimensionsVariable, FriChallengesVariable, FriConfigVariable, FriProofVariable,
+    FriQueryProofVariable,
+};
+use crate::challenger::{
+    CanObserveVariable, CanSampleBitsVariable, DuplexChallengerVariable, FeltChallenger,
+};
 
 pub mod domain;
 pub mod hints;
@@ -173,6 +159,7 @@ where
 
             let mut opened_values = builder.array(1);
             builder.set_value(&mut opened_values, 0, evals.clone());
+            builder.cycle_tracker_start("verify-batch-ext");
             verify_batch::<C>(
                 builder,
                 &commit,
@@ -181,6 +168,7 @@ where
                 &NestedOpenedValues::Ext(opened_values),
                 &step.opening_proof,
             );
+            builder.cycle_tracker_end("verify-batch-ext");
 
             let two_adic_generator_one = config.get_two_adic_generator(builder, Usize::Const(1));
             let xs_0: Ext<_, _> = builder.eval(x);
@@ -231,7 +219,6 @@ pub fn verify_batch<C: Config>(
     opened_values: &NestedOpenedValues<C>,
     proof: &Array<C, DigestVariable<C>>,
 ) {
-    builder.cycle_tracker_start("verify-batch");
     // The index of which table to process next.
     let index: Var<C::N> = builder.eval(C::N::zero());
 
@@ -308,7 +295,6 @@ pub fn verify_batch<C: Config>(
         let e2 = builder.get(&root, i);
         builder.assert_felt_eq(e1, e2);
     }
-    builder.cycle_tracker_end("verify-batch");
 }
 
 #[allow(clippy::type_complexity)]
@@ -355,11 +341,11 @@ pub fn reduce_fast_ext<C: Config>(
     curr_height_padded: Var<C::N>,
     opened_values: &Array<C, Array<C, Ext<C::F, C::EF>>>,
 ) -> Array<C, Felt<C::F>> {
-    builder.cycle_tracker_start("verify-batch-reduce-fast");
+    builder.cycle_tracker_start("verify-batch-reduce-fast-ext");
     let nb_opened_values: Var<_> = builder.eval(C::N::zero());
     let mut nested_opened_values = builder.dyn_array(8192);
     let start_dim_idx: Var<_> = builder.eval(dim_idx);
-    builder.cycle_tracker_start("verify-batch-reduce-fast-setup");
+    builder.cycle_tracker_start("verify-batch-reduce-fast-setup-ext");
     builder
         .range(start_dim_idx, dims.len())
         .for_each(|i, builder| {
@@ -375,10 +361,10 @@ pub fn reduce_fast_ext<C: Config>(
                 builder.assign(dim_idx, dim_idx + C::N::one());
             });
         });
-    builder.cycle_tracker_end("verify-batch-reduce-fast-setup");
+    builder.cycle_tracker_end("verify-batch-reduce-fast-setup-ext");
 
     nested_opened_values.truncate(builder, Usize::Var(nb_opened_values));
     let h = builder.poseidon2_hash_ext(&nested_opened_values);
-    builder.cycle_tracker_end("verify-batch-reduce-fast");
+    builder.cycle_tracker_end("verify-batch-reduce-fast-ext");
     h
 }

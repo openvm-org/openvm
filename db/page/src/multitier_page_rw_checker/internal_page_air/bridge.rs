@@ -4,8 +4,7 @@ use afs_stark_backend::interaction::{InteractionBuilder, InteractionType};
 use p3_air::AirBuilderWithPublicValues;
 use p3_field::AbstractField;
 
-use super::columns::InternalPageCols;
-use super::InternalPageAir;
+use super::{columns::InternalPageCols, InternalPageAir};
 
 impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
     fn custom_receives_path<AB: InteractionBuilder + AirBuilderWithPublicValues>(

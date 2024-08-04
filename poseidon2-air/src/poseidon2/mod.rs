@@ -7,8 +7,7 @@ pub mod trace;
 pub mod tests;
 
 use lazy_static::lazy_static;
-use p3_baby_bear::BabyBear;
-use p3_baby_bear::POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY;
+use p3_baby_bear::{BabyBear, POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY};
 use p3_field::{AbstractField, PrimeField32};
 
 pub use self::{air::Poseidon2Air, columns::Poseidon2Cols};

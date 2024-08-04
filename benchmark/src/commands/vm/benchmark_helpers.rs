@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs::File};
+use std::{collections::HashMap, fs::File, io::Write as _};
 
 use afs_recursion::{
     hints::Hintable,
@@ -30,7 +30,8 @@ use tracing::info_span;
 use crate::{
     config::benchmark_data::{BenchmarkSetup, BACKEND_TIMING_FILTERS, BACKEND_TIMING_HEADERS},
     utils::tracing::{clear_tracing_log, extract_timing_data_from_log, setup_benchmark_tracing},
-    TMP_RESULT_JSON, TMP_TRACING_LOG,
+    workflow::metrics::BenchmarkMetrics,
+    TMP_RESULT_MD, TMP_TRACING_LOG,
 };
 
 pub fn run_recursive_test_benchmark(
@@ -39,6 +40,7 @@ pub fn run_recursive_test_benchmark(
     rec_raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
     traces: Vec<RowMajorMatrix<BabyBear>>,
     pvs: Vec<Vec<BabyBear>>,
+    benchmark_name: &str,
 ) -> eyre::Result<()> {
     let num_pvs: Vec<usize> = pvs.iter().map(|pv| pv.len()).collect();
 
@@ -121,12 +123,13 @@ pub fn run_recursive_test_benchmark(
     let mut witness_stream = Vec::new();
     witness_stream.extend(input.write());
 
-    vm_benchmark_execute_and_prove::<1>(program, witness_stream)
+    vm_benchmark_execute_and_prove::<1>(program, witness_stream, benchmark_name)
 }
 
 pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     program: Vec<Instruction<BabyBear>>,
     input_stream: Vec<Vec<BabyBear>>,
+    benchmark_name: &str,
 ) -> eyre::Result<()> {
     clear_tracing_log(TMP_TRACING_LOG.as_str())?;
     setup_benchmark_tracing();
@@ -135,7 +138,8 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         ..Default::default()
     };
 
-    let vm = VirtualMachine::<WORD_SIZE, _>::new(vm_config, program, input_stream);
+    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(vm_config, program, input_stream);
+    vm.enable_metrics_collection();
 
     let vm_execute_span = info_span!("Benchmark vm execute").entered();
     let ExecutionResult {
@@ -143,6 +147,7 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         nonempty_chips: chips,
         nonempty_traces: traces,
         nonempty_pis: public_values,
+        metrics: mut vm_metrics,
         ..
     } = vm.execute().unwrap();
     vm_execute_span.exit();
@@ -205,27 +210,25 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         .map(|(k, v)| (k, v.parse::<f64>().unwrap()))
         .collect();
     let trace_metrics = trace_metrics(&pk.per_air, &proof.degrees);
-    let mut results: HashMap<String, String> = HashMap::new();
-    let perm_trace_gen_time = timing_data[BACKEND_TIMING_FILTERS[0]];
-    let quotient_values_time = timing_data[BACKEND_TIMING_FILTERS[2]];
-    results.insert(
-        "Main & perm trace generation".to_string(),
-        (timing_data["Benchmark vm execute: benchmark"] + perm_trace_gen_time).to_string(),
-    );
-    results.insert(
-        "Compute quotient values".to_string(),
-        quotient_values_time.to_string(),
-    );
-    results.insert(
-        "Rest of proving".to_string(),
-        (timing_data["Benchmark prove: benchmark"] - perm_trace_gen_time - quotient_values_time)
-            .to_string(),
-    );
-    results.insert(
-        "Total F cells".to_string(),
-        trace_metrics.total_cells.to_string(),
-    );
-    serde_json::to_writer(File::create(TMP_RESULT_JSON.as_str())?, &results)?;
+    let main_trace_gen_ms = timing_data["Benchmark vm execute: benchmark"];
+    let perm_trace_gen_ms = timing_data[BACKEND_TIMING_FILTERS[0]];
+    let calc_quotient_values_ms = timing_data[BACKEND_TIMING_FILTERS[2]];
+    let total_prove_ms = timing_data["Benchmark prove: benchmark"];
+    let vm_metrics = vm_metrics.pop().unwrap(); // only 1 segment
+    let metrics = BenchmarkMetrics {
+        name: benchmark_name.to_string(),
+        total_prove_ms,
+        main_trace_gen_ms,
+        perm_trace_gen_ms,
+        calc_quotient_values_ms,
+        trace: trace_metrics,
+        custom: vm_metrics
+            .into_iter()
+            .map(|(k, v)| (k, v.to_string()))
+            .collect(),
+    };
+
+    write!(File::create(TMP_RESULT_MD.as_str())?, "{}", metrics)?;
     Ok(())
 }
 

@@ -1,8 +1,7 @@
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::columns::NUM_XOR_REQUESTER_COLS;
-use super::XorRequesterChip;
+use super::{columns::NUM_XOR_REQUESTER_COLS, XorRequesterChip};
 
 impl<const N: usize> XorRequesterChip<N> {
     pub fn generate_trace<F: PrimeField64>(&self) -> RowMajorMatrix<F> {

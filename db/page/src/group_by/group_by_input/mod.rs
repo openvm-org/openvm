@@ -1,6 +1,7 @@
+use std::str::FromStr;
+
 use air::GroupByAir;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 
 pub mod air;
 pub mod bridge;

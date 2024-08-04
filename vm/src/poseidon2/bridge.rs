@@ -2,10 +2,11 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::Itertools;
 use p3_field::{AbstractField, Field};
 
+use super::{
+    columns::{Poseidon2VmAuxCols, Poseidon2VmIoCols},
+    Poseidon2VmAir,
+};
 use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS, POSEIDON2_DIRECT_BUS};
-
-use super::columns::{Poseidon2VmAuxCols, Poseidon2VmIoCols};
-use super::Poseidon2VmAir;
 
 impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
     /// Receives instructions from the CPU on the designated `POSEIDON2_BUS` (opcodes) or `POSEIDON2_DIRECT_BUS` (direct), and sends both read and write requests to the memory chip.

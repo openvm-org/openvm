@@ -1,5 +1,4 @@
-use std::collections::HashSet;
-use std::{iter, sync::Arc};
+use std::{collections::HashSet, iter, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{
@@ -9,8 +8,8 @@ use afs_stark_backend::{
 };
 use afs_test_utils::{
     config::{
-        self, baby_bear_poseidon2::BabyBearPoseidon2Config,
-        baby_bear_poseidon2::BabyBearPoseidon2Engine,
+        self,
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
     },
     engine::StarkEngine,
     utils::create_seeded_rng,

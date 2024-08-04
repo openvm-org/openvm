@@ -1,3 +1,4 @@
+use itertools::izip;
 use p3_field::{ExtensionField, Field};
 use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
@@ -7,6 +8,7 @@ use p3_maybe_rayon::prelude::*;
 #[cfg(feature = "parallel")]
 use rayon::current_num_threads;
 
+use super::{utils::generate_rlc_elements, Interaction, InteractionType};
 use crate::{
     air_builders::symbolic::{
         symbolic_expression::{SymbolicEvaluator, SymbolicExpression},
@@ -14,8 +16,6 @@ use crate::{
     },
     interaction::utils::generate_betas,
 };
-
-use super::{utils::generate_rlc_elements, Interaction, InteractionType};
 
 // Copied from valida/machine/src/chip.rs, modified to allow partitioned main trace
 /// Generate the permutation trace for a chip given the main trace.
@@ -34,6 +34,7 @@ pub fn generate_permutation_trace<F, EF>(
     partitioned_main: &[RowMajorMatrixView<F>],
     public_values: &[F],
     permutation_randomness: Option<[EF; 2]>,
+    interaction_chunk_size: usize,
 ) -> Option<RowMajorMatrix<EF>>
 where
     F: Field,
@@ -49,107 +50,125 @@ where
 
     // Compute the reciprocal columns
     //
-    // Row: | q_1 | q_2 | q_3 | ... | q_n | \phi |
-    // * q_i = \frac{1}{\alpha^i + \sum_j \beta^j * f_{i,j}}
-    // * f_{i,j} is the jth main trace column for the ith interaction
-    // * \phi is the running sum
+    // For every row we do the following
+    // We first compute the reciprocals: r_1, r_2, ..., r_n, where
+    // r_i = \frac{1}{\alpha^i + \sum_j \beta^j * f_{i, j}}, where
+    // f_{i, j} is the jth main trace column for the ith interaction
     //
-    // Note: We can optimize this by combining several reciprocal columns into one (the
-    // number is subject to a target constraint degree).
-    let perm_width = all_interactions.len() + 1;
+    // We then bundle every interaction_chunk_size interactions together
+    // to get the value perm_i = \sum_{i \in bundle} r_i * m_i, where m_i
+    // is the signed count for the interaction.
+    //
+    // Finally, the last column, \phi, of every row is the running sum of
+    // all the previous perm values
+    //
+    // Row: | perm_1 | perm_2 | perm_3 | ... | perm_s | phi |, where s
+    // is the number of bundles
+    let num_interactions = all_interactions.len();
     let height = partitioned_main[0].height();
-    let mut reciprocals = vec![EF::one(); height * perm_width];
-    reciprocals
-        .par_chunks_mut(perm_width)
-        .enumerate()
-        .for_each(|(i, r)| {
-            let evaluator = Evaluator {
-                preprocessed,
-                partitioned_main,
-                public_values,
-                height,
-                local_index: i,
-            };
-            for (j, interaction) in all_interactions.iter().enumerate() {
-                let alpha = alphas[interaction.bus_index];
-                debug_assert!(interaction.fields.len() <= betas.len());
-                let mut fields = interaction.fields.iter();
-                let mut rlc =
-                    alpha + evaluator.eval_expr(fields.next().expect("fields should not be empty"));
-                for (expr, &beta) in fields.zip(betas.iter().skip(1)) {
-                    rlc += beta * evaluator.eval_expr(expr);
-                }
-                r[j] = rlc;
-            }
-        });
+    // To optimize memory and parallelism, we split the trace rows into chunks
+    // based on the number of cpu threads available, and then do all
+    // computations necessary for that chunk within a single thread.
+    let perm_width = (num_interactions + interaction_chunk_size - 1) / interaction_chunk_size + 1;
+    let mut perm_values = vec![EF::zero(); height * perm_width];
+    debug_assert!(
+        partitioned_main.iter().all(|m| m.height() == height),
+        "All main trace parts must have same height"
+    );
+
     #[cfg(feature = "parallel")]
-    let old_perm_values = {
-        let num_threads = current_num_threads();
-        let chunk_size = (reciprocals.len() + num_threads - 1) / num_threads;
-        let mut vals = vec![EF::zero(); reciprocals.len()];
-        vals.par_chunks_mut(chunk_size)
-            .enumerate()
-            .for_each(|(i, r)| {
-                batch_multiplicative_inverse_with_buf(&reciprocals[i * chunk_size..], r);
-            });
-        vals
-    };
+    let num_threads = rayon::current_num_threads();
     #[cfg(not(feature = "parallel"))]
-    let old_perm_values = p3_field::batch_multiplicative_inverse(&reciprocals);
+    let num_threads = 1;
 
-    // Zero should be vanishingly unlikely if alpha, beta are properly pseudo-randomized
-    // The logup reciprocals should never be zero, so trace generation should panic if
-    // trying to divide by zero.
-    // let old_perm_values = p3_field::batch_multiplicative_inverse(&reciprocals);
-    drop(reciprocals);
-    // Need to add the `phi` column to perm_values as a RowMajorMatrix
-    // TODO[jpw]: is there a more memory efficient way to do this?
-    // let mut perm_values = vec![EF::zero(); height * perm_width];
-    // perm_values
-    //     .chunks_mut(perm_width)
-    //     .zip(old_perm_values.chunks(perm_width - 1))
-    //     .for_each(|(row, old_row)| {
-    //         let (left, _) = row.split_at_mut(perm_width - 1);
-    //         left.copy_from_slice(old_row)
-    //     });
-
-    let _span = tracing::info_span!("compute logup partial sums").entered();
-    // Compute the running sum column
-    let mut perm = RowMajorMatrix::new(old_perm_values, perm_width);
-
-    let _span = tracing::info_span!("compute logup partial sums").entered();
-    // Compute the running sum column
-    // let mut phi = vec![EF::zero(); perm.height()];
-    let mut phi = Vec::with_capacity(height);
-    phi.push(EF::zero());
-    for n in 0..height {
-        let evaluator = Evaluator {
-            preprocessed,
-            partitioned_main,
-            public_values,
-            height,
-            local_index: n,
-        };
-        if n > 0 {
-            phi.push(phi[n - 1]);
-        }
-        let perm_row = perm.row_mut(n);
-        for (i, interaction) in all_interactions.iter().enumerate() {
-            let mult = evaluator.eval_expr(&interaction.count);
-            match interaction.interaction_type {
-                InteractionType::Send => {
-                    phi[n] += perm_row[i] * mult;
-                }
-                InteractionType::Receive => {
-                    phi[n] -= perm_row[i] * mult;
+    let height_chunk_size = (height + num_threads - 1) / num_threads;
+    perm_values
+        .par_chunks_mut(height_chunk_size * perm_width)
+        .enumerate()
+        .for_each(|(chunk_idx, perm_values)| {
+            // perm_values is now local_height x perm_width row-major matrix
+            let num_rows = perm_values.len() / perm_width;
+            // the interaction chunking requires more memory because we must
+            // allocate separate memory for the denominators and reciprocals
+            let mut denoms = vec![EF::zero(); num_rows * num_interactions];
+            let row_offset = chunk_idx * height_chunk_size;
+            // compute the denominators to be inverted:
+            for (n, denom_row) in denoms.chunks_exact_mut(num_interactions).enumerate() {
+                let evaluator = Evaluator {
+                    preprocessed,
+                    partitioned_main,
+                    public_values,
+                    height,
+                    local_index: row_offset + n,
+                };
+                for (denom, interaction) in denom_row.iter_mut().zip(all_interactions.iter()) {
+                    let alpha = alphas[interaction.bus_index];
+                    debug_assert!(interaction.fields.len() <= betas.len());
+                    let mut fields = interaction.fields.iter();
+                    *denom = alpha
+                        + evaluator.eval_expr(fields.next().expect("fields should not be empty"));
+                    for (expr, &beta) in fields.zip(betas.iter().skip(1)) {
+                        *denom += beta * evaluator.eval_expr(expr);
+                    }
                 }
             }
-        }
-        perm_row[perm_width - 1] = phi[n];
-    }
-    _span.exit();
 
-    Some(perm)
+            // Zero should be vanishingly unlikely if alpha, beta are properly pseudo-randomized
+            // The logup reciprocals should never be zero, so trace generation should panic if
+            // trying to divide by zero.
+            let reciprocals = p3_field::batch_multiplicative_inverse(&denoms);
+            drop(denoms);
+            // This block should already be in a single thread, but rayon is able
+            // to do more magic sometimes
+            perm_values
+                .par_chunks_exact_mut(perm_width)
+                .zip(reciprocals.par_chunks_exact(num_interactions))
+                .enumerate()
+                .for_each(|(n, (perm_row, reciprocal_chunk))| {
+                    debug_assert_eq!(perm_row.len(), perm_width);
+                    debug_assert_eq!(reciprocal_chunk.len(), num_interactions);
+
+                    let evaluator = Evaluator {
+                        preprocessed,
+                        partitioned_main,
+                        public_values,
+                        height,
+                        local_index: row_offset + n,
+                    };
+
+                    let mut row_sum = EF::zero();
+                    for (perm_val, reciprocal_chunk, interaction_chunk) in izip!(
+                        perm_row.iter_mut(),
+                        reciprocal_chunk.chunks(interaction_chunk_size),
+                        all_interactions.chunks(interaction_chunk_size)
+                    ) {
+                        for (reciprocal, interaction) in izip!(reciprocal_chunk, interaction_chunk)
+                        {
+                            let mut interaction_val =
+                                *reciprocal * evaluator.eval_expr(&interaction.count);
+                            if interaction.interaction_type == InteractionType::Receive {
+                                interaction_val = -interaction_val;
+                            }
+                            *perm_val += interaction_val;
+                        }
+                        row_sum += *perm_val;
+                    }
+
+                    perm_row[perm_width - 1] = row_sum;
+                });
+        });
+
+    // At this point, the trace matrix is complete except that the last column
+    // has the row sum but not the partial sum
+    tracing::info_span!("compute logup partial sums").in_scope(|| {
+        let mut phi = EF::zero();
+        for perm_chunk in perm_values.chunks_exact_mut(perm_width) {
+            phi += *perm_chunk.last().unwrap();
+            *perm_chunk.last_mut().unwrap() = phi;
+        }
+    });
+
+    Some(RowMajorMatrix::new(perm_values, perm_width))
 }
 
 pub(super) struct Evaluator<'a, F: Field> {
@@ -175,204 +194,5 @@ impl<'a, F: Field> SymbolicEvaluator<F, F> for Evaluator<'a, F> {
             Entry::Public => self.public_values[index],
             _ => unreachable!("There should be no after challenge variables"),
         }
-    }
-}
-
-pub fn standard<F, EF>(
-    all_interactions: &[Interaction<SymbolicExpression<F>>],
-    preprocessed: &Option<RowMajorMatrixView<F>>,
-    partitioned_main: &[RowMajorMatrixView<F>],
-    public_values: &[F],
-    alphas: Vec<EF>,
-    betas: Vec<EF>,
-) -> Vec<EF>
-where
-    F: Field,
-    EF: ExtensionField<F>,
-{
-    let perm_width = all_interactions.len() + 1;
-    let height = partitioned_main[0].height();
-    let mut reciprocals = vec![EF::zero(); height * (perm_width - 1)];
-    reciprocals
-        .par_chunks_mut(perm_width - 1)
-        .enumerate()
-        .for_each(|(i, r)| {
-            let evaluator = Evaluator {
-                preprocessed,
-                partitioned_main,
-                public_values,
-                height,
-                local_index: i,
-            };
-            for (j, interaction) in all_interactions.iter().enumerate() {
-                let alpha = alphas[interaction.bus_index];
-                debug_assert!(interaction.fields.len() <= betas.len());
-                let mut fields = interaction.fields.iter();
-                let mut rlc =
-                    alpha + evaluator.eval_expr(fields.next().expect("fields should not be empty"));
-                for (expr, &beta) in fields.zip(betas.iter().skip(1)) {
-                    rlc += beta * evaluator.eval_expr(expr);
-                }
-                r[j] = rlc;
-            }
-        });
-    // Zero should be vanishingly unlikely if alpha, beta are properly pseudo-randomized
-    // The logup reciprocals should never be zero, so trace generation should panic if
-    // trying to divide by zero.
-    let mut old_perm_values = vec![EF::zero(); height * (perm_width - 1)];
-    let chunk_size = height;
-    old_perm_values
-        .par_chunks_mut(chunk_size)
-        .enumerate()
-        .for_each(|(i, r)| {
-            batch_multiplicative_inverse_with_buf(
-                &reciprocals[i * chunk_size..(i + 1) * chunk_size],
-                r,
-            );
-        });
-    // let old_perm_values = p3_field::batch_multiplicative_inverse(&reciprocals);
-    drop(reciprocals);
-    // Need to add the `phi` column to perm_values as a RowMajorMatrix
-    // TODO[jpw]: is there a more memory efficient way to do this?
-    let mut perm_values = vec![EF::zero(); height * perm_width];
-    perm_values
-        .par_chunks_mut(perm_width)
-        .enumerate()
-        .for_each(|(i, row)| {
-            let (left, _) = row.split_at_mut(perm_width - 1);
-            left.copy_from_slice(&old_perm_values[i * (perm_width - 1)..(i + 1) * (perm_width - 1)])
-        });
-    perm_values
-}
-
-pub fn substitute_one<F, EF>(
-    all_interactions: &[Interaction<SymbolicExpression<F>>],
-    preprocessed: &Option<RowMajorMatrixView<F>>,
-    partitioned_main: &[RowMajorMatrixView<F>],
-    public_values: &[F],
-    alphas: Vec<EF>,
-    betas: Vec<EF>,
-) -> Vec<EF>
-where
-    F: Field,
-    EF: ExtensionField<F>,
-{
-    let perm_width = all_interactions.len() + 1;
-    let height = partitioned_main[0].height();
-    let mut reciprocals = vec![EF::one(); height * perm_width];
-    reciprocals
-        .par_chunks_mut(perm_width)
-        .enumerate()
-        .for_each(|(i, r)| {
-            let evaluator = Evaluator {
-                preprocessed,
-                partitioned_main,
-                public_values,
-                height,
-                local_index: i,
-            };
-            for (j, interaction) in all_interactions.iter().enumerate() {
-                let alpha = alphas[interaction.bus_index];
-                debug_assert!(interaction.fields.len() <= betas.len());
-                let mut fields = interaction.fields.iter();
-                let mut rlc =
-                    alpha + evaluator.eval_expr(fields.next().expect("fields should not be empty"));
-                for (expr, &beta) in fields.zip(betas.iter().skip(1)) {
-                    rlc += beta * evaluator.eval_expr(expr);
-                }
-                r[j] = rlc;
-            }
-        });
-    let perm_values = p3_field::batch_multiplicative_inverse(&reciprocals);
-    drop(reciprocals);
-    perm_values
-}
-
-pub fn batch_multiplicative_inverse_with_buf<F: Field>(x: &[F], buf: &mut [F]) {
-    // Higher WIDTH increases instruction-level parallelism, but too high a value will cause us
-    // to run out of registers.
-    const WIDTH: usize = 4;
-    // JN note: WIDTH is 4. The code is specialized to this value and will need
-    // modification if it is changed. I tried to make it more generic, but Rust's const
-    // generics are not yet good enough.
-
-    // Handle special cases. Paradoxically, below is repetitive but concise.
-    // The branches should be very predictable.
-    let n = buf.len();
-    if n == 0 {
-        return;
-    } else if n == 1 {
-        buf[0] = x[0].inverse();
-        return;
-    } else if n == 2 {
-        let x01 = x[0] * x[1];
-        let x01inv = x01.inverse();
-        buf[0] = x01inv * x[1];
-        buf[1] = x01inv * x[0];
-        return;
-    } else if n == 3 {
-        let x01 = x[0] * x[1];
-        let x012 = x01 * x[2];
-        let x012inv = x012.inverse();
-        let x01inv = x012inv * x[2];
-        buf[0] = x01inv * x[1];
-        buf[1] = x01inv * x[0];
-        buf[2] = x012inv * x01;
-        return;
-    }
-    debug_assert!(n >= WIDTH);
-
-    // Buf is reused for a few things to save allocations.
-    // Fill buf with cumulative product of x, only taking every 4th value. Concretely, buf will
-    // be [
-    //   x[0], x[1], x[2], x[3],
-    //   x[0] * x[4], x[1] * x[5], x[2] * x[6], x[3] * x[7],
-    //   x[0] * x[4] * x[8], x[1] * x[5] * x[9], x[2] * x[6] * x[10], x[3] * x[7] * x[11],
-    //   ...
-    // ].
-    // If n is not a multiple of WIDTH, the result is truncated from the end. For example,
-    // for n == 5, we get [x[0], x[1], x[2], x[3], x[0] * x[4]].
-    // let mut buf: Vec<F> = Vec::with_capacity(n);
-    // cumul_prod holds the last WIDTH elements of buf. This is redundant, but it's how we
-    // convince LLVM to keep the values in the registers.
-    let mut cumul_prod: [F; WIDTH] = x[..WIDTH].try_into().unwrap();
-    buf[0..WIDTH].copy_from_slice(&cumul_prod);
-    for (i, &xi) in x[WIDTH..n].iter().enumerate() {
-        cumul_prod[i % WIDTH] *= xi;
-        buf[WIDTH + i] = cumul_prod[i % WIDTH];
-    }
-    debug_assert_eq!(buf.len(), n);
-
-    let mut a_inv = {
-        // This is where the four dependency chains meet.
-        // Take the last four elements of buf and invert them all.
-        let c01 = cumul_prod[0] * cumul_prod[1];
-        let c23 = cumul_prod[2] * cumul_prod[3];
-        let c0123 = c01 * c23;
-        let c0123inv = c0123.inverse();
-        let c01inv = c0123inv * c23;
-        let c23inv = c0123inv * c01;
-        [
-            c01inv * cumul_prod[1],
-            c01inv * cumul_prod[0],
-            c23inv * cumul_prod[3],
-            c23inv * cumul_prod[2],
-        ]
-    };
-
-    for i in (WIDTH..n).rev() {
-        // buf[i - WIDTH] has not been written to by this loop, so it equals
-        // x[i % WIDTH] * x[i % WIDTH + WIDTH] * ... * x[i - WIDTH].
-        buf[i] = buf[i - WIDTH] * a_inv[i % WIDTH];
-        // buf[i] now holds the inverse of x[i].
-        a_inv[i % WIDTH] *= x[i];
-    }
-    for i in (0..WIDTH).rev() {
-        buf[i] = a_inv[i];
-    }
-
-    for (&bi, &xi) in buf.iter().zip(x) {
-        // Sanity check only.
-        debug_assert_eq!(bi * xi, F::one());
     }
 }

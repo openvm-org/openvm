@@ -1,13 +1,11 @@
 use std::borrow::Borrow;
 
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::AbstractField;
-use p3_field::Field;
+use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use crate::sub_chip::{AirConfig, SubAir};
-
 use super::columns::{IsZeroCols, IsZeroIoCols, NUM_COLS};
+use crate::sub_chip::{AirConfig, SubAir};
 
 #[derive(Copy, Clone, Default)]
 /// A chip that checks if a number equals 0

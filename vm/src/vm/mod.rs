@@ -1,13 +1,16 @@
-use crate::cpu::ExecutionState;
+use std::{
+    collections::{BTreeMap, HashMap, VecDeque},
+    ops::Deref,
+};
+
 use afs_stark_backend::rap::AnyRap;
 use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_util::log2_strict_usize;
-use std::collections::HashMap;
-use std::collections::VecDeque;
-use std::ops::Deref;
+
+use crate::cpu::ExecutionState;
 
 mod segment;
 pub use segment::{get_chips, ExecutionSegment};
@@ -64,7 +67,11 @@ pub struct ExecutionResult<const WORD_SIZE: usize> {
     pub chip_types: Vec<ChipType>,
     /// Maximum log degree of the VM
     pub max_log_degree: usize,
+    /// VM metrics per segment, only collected if enabled
+    pub metrics: Vec<VmMetrics>,
 }
+
+pub type VmMetrics = BTreeMap<String, usize>;
 
 /// Struct that holds the current state of the VM. For now, includes memory, input stream, and hint stream.
 /// Hint stream cannot be added to during execution, but must be copied because it is popped from.
@@ -123,6 +130,22 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
     pub fn options(&self) -> CpuOptions {
         self.config.cpu_options()
     }
+
+    /// Enable metrics collection on all segments
+    pub fn enable_metrics_collection(&mut self) {
+        self.config.collect_metrics = true;
+        for segment in &mut self.segments {
+            segment.config.collect_metrics = true;
+        }
+    }
+
+    /// Disable metrics collection on all segments
+    pub fn disable_metrics_collection(&mut self) {
+        self.config.collect_metrics = false;
+        for segment in &mut self.segments {
+            segment.config.collect_metrics = false;
+        }
+    }
 }
 
 /// Executes the VM by calling `ExecutionSegment::generate_traces()` until the CPU hits `TERMINATE`
@@ -131,20 +154,24 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
 impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
     pub fn execute(mut self) -> Result<ExecutionResult<WORD_SIZE>, ExecutionError> {
         let mut traces = vec![];
+        let mut metrics = Vec::new();
         loop {
             let last_seg = self.segments.last_mut().unwrap();
             last_seg.has_generation_happened = true;
             traces.extend(last_seg.generate_traces()?);
             traces.extend(last_seg.generate_commitments()?);
+            if self.config.collect_metrics {
+                metrics.push(last_seg.collected_metrics.clone());
+            }
             if last_seg.cpu_chip.state.is_done {
                 break;
             }
             self.segment(self.current_state());
         }
 
-        let mut pis = vec![];
-        let mut chips = vec![];
-        let mut types = vec![];
+        let mut pis = Vec::with_capacity(self.segments.len());
+        let mut chips = Vec::with_capacity(self.segments.len());
+        let mut types = Vec::with_capacity(self.segments.len());
         let num_chips = self.segments[0].get_num_chips();
 
         let unique_chips = get_chips::<WORD_SIZE, BabyBearPoseidon2Config>(
@@ -210,6 +237,7 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
             unique_chips,
             chip_types: types,
             max_log_degree,
+            metrics,
         };
 
         Ok(chip_data)

@@ -5,9 +5,8 @@ use p3_field::PrimeField;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::common::page::Page;
-
 use super::ReceivingIndexedOutputPageAir;
+use crate::common::page::Page;
 
 impl ReceivingIndexedOutputPageAir {
     /// Naked trace of only the page, including the is_alloc column

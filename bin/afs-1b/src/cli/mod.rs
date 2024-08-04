@@ -1,21 +1,22 @@
-use crate::commands::keygen::KeygenCommand;
-use crate::commands::prove::ProveCommand;
-use crate::commands::verify::VerifyCommand;
-use crate::commands::{keygen, mock, prove, verify, BABYBEAR_COMMITMENT_LEN, DECOMP_BITS};
 use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
-use afs_test_utils::config::baby_bear_poseidon2::{
-    engine_from_perm, random_perm, BabyBearPoseidon2Engine,
+use afs_test_utils::{
+    config::{
+        baby_bear_poseidon2::{engine_from_perm, random_perm, BabyBearPoseidon2Engine},
+        EngineType,
+    },
+    engine::StarkEngine,
+    page_config::MultitierPageConfig,
 };
-use afs_test_utils::config::EngineType;
-use afs_test_utils::engine::StarkEngine;
-use afs_test_utils::page_config::MultitierPageConfig;
-use clap::Parser;
-use clap::Subcommand;
+use clap::{Parser, Subcommand};
 use p3_field::{PrimeField, PrimeField32, PrimeField64};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{de::DeserializeOwned, Serialize};
+
+use crate::commands::{
+    keygen, keygen::KeygenCommand, mock, prove, prove::ProveCommand, verify, verify::VerifyCommand,
+    BABYBEAR_COMMITMENT_LEN, DECOMP_BITS,
+};
 
 #[derive(Debug, Parser)]
 #[command(author, version, about = "AFS CLI")]

@@ -1,8 +1,9 @@
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
 use p3_field::PrimeField32;
-
 use MemoryNode::*;
 
 pub trait Hasher<const CHUNK: usize, F> {

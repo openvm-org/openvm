@@ -1,12 +1,18 @@
-use super::ChipType;
-use super::VirtualMachineState;
-use afs_stark_backend::config::{StarkGenericConfig, Val};
-use afs_stark_backend::rap::AnyRap;
-use std::collections::BTreeMap;
-use std::collections::VecDeque;
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, VecDeque},
+    sync::Arc,
+};
 
-use super::VmConfig;
+use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    rap::AnyRap,
+};
+use p3_field::PrimeField32;
+use p3_matrix::dense::DenseMatrix;
+use poseidon2_air::poseidon2::Poseidon2Config;
+
+use super::{ChipType, VirtualMachineState, VmConfig, VmMetrics};
 use crate::{
     cpu::{
         trace::{ExecutionError, Instruction},
@@ -18,11 +24,6 @@ use crate::{
     poseidon2::Poseidon2Chip,
     program::ProgramChip,
 };
-use afs_primitives::range_gate::RangeCheckerGateChip;
-use poseidon2_air::poseidon2::Poseidon2Config;
-
-use p3_field::PrimeField32;
-use p3_matrix::dense::DenseMatrix;
 
 pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub config: VmConfig,
@@ -37,6 +38,9 @@ pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub hint_stream: VecDeque<F>,
     pub has_generation_happened: bool,
     pub public_values: Vec<Option<F>>,
+    /// Collected metrics for this segment alone.
+    /// Only collected when `config.collect_metrics` is true.
+    pub(crate) collected_metrics: VmMetrics,
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
@@ -74,6 +78,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             poseidon2_chip,
             input_stream: state.input_stream,
             hint_stream: state.hint_stream,
+            collected_metrics: Default::default(),
         }
     }
 
@@ -175,8 +180,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         result
     }
 
-    pub fn metrics(&mut self) -> BTreeMap<String, usize> {
+    pub fn metrics(&self) -> BTreeMap<String, usize> {
         let mut metrics = BTreeMap::new();
+        metrics.insert("cpu_cycles".to_string(), self.cpu_chip.rows.len());
+        metrics.insert("cpu_timestamp".to_string(), self.cpu_chip.state.timestamp);
         metrics.insert(
             "memory_chip_accesses".to_string(),
             self.memory_chip.accesses.len(),
@@ -197,7 +204,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             "poseidon2_chip_rows".to_string(),
             self.poseidon2_chip.rows.len(),
         );
-        metrics.insert("input_stream_len".to_string(), self.input_stream.len());
         metrics
     }
 }

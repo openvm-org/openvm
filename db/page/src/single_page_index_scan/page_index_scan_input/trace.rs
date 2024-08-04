@@ -3,12 +3,11 @@ use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::common::page::Page;
-
 use super::{
     air::{EqCompAir, NonStrictCompAir, PageIndexScanInputAirVariants, StrictCompAir},
     PageIndexScanInputChip,
 };
+use crate::common::page::Page;
 
 impl PageIndexScanInputChip {
     /// Generate the trace for the page table

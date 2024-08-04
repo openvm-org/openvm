@@ -1,16 +1,16 @@
+use afs_compiler::{
+    asm::{AsmBuilder, AsmConfig},
+    conversion::CompilerOptions,
+    ir::{Builder, Ext, ExtConst, Felt, SymbolicExt, Var},
+    util::execute_program,
+};
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
-use p3_field::{AbstractExtensionField, AbstractField, Field};
+use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
 use rand::{thread_rng, Rng};
-
-use afs_compiler::asm::{AsmBuilder, AsmConfig};
-use afs_compiler::conversion::CompilerOptions;
-use afs_compiler::ir::{Builder, Ext, Felt, SymbolicExt};
-use afs_compiler::ir::{ExtConst, Var};
-use afs_compiler::util::execute_program;
-use stark_vm::cpu::trace::ExecutionError::Fail;
-use stark_vm::vm::config::VmConfig;
-use stark_vm::vm::VirtualMachine;
+use stark_vm::{
+    cpu::trace::ExecutionError::Fail,
+    vm::{config::VmConfig, VirtualMachine},
+};
 
 #[allow(dead_code)]
 const WORD_SIZE: usize = 1;

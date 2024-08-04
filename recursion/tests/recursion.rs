@@ -1,14 +1,16 @@
-use afs_recursion::stark::{get_rec_raps, sort_chips};
-use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
-use p3_field::AbstractField;
 use std::ops::Deref;
 
-use afs_compiler::asm::AsmBuilder;
-use afs_compiler::ir::Var;
-use stark_vm::cpu::trace::Instruction;
-use stark_vm::vm::config::VmConfig;
-use stark_vm::vm::{ExecutionResult, VirtualMachine};
+use afs_compiler::{asm::AsmBuilder, ir::Var};
+use afs_recursion::stark::get_rec_raps;
+use afs_test_utils::config::fri_params::{
+    fri_params_fast_testing, fri_params_with_80_bits_of_security,
+};
+use p3_baby_bear::BabyBear;
+use p3_field::{extension::BinomialExtensionField, AbstractField};
+use stark_vm::{
+    cpu::trace::Instruction,
+    vm::{config::VmConfig, ExecutionResult, VirtualMachine},
+};
 
 mod common;
 
@@ -54,13 +56,12 @@ fn test_fibonacci_program_verify() {
     } = vm.execute().unwrap();
 
     let chips = chips.iter().map(|x| x.deref()).collect();
-    let (chips, rec_raps, traces, pvs) = sort_chips(chips, rec_raps, traces, pvs);
 
-    let vparams = common::make_verification_params(&chips, traces, &pvs);
-
-    let (fib_verification_program, input_stream) =
-        common::build_verification_program(rec_raps, pvs, vparams);
-
-    let vm = VirtualMachine::<1, _>::new(vm_config, fib_verification_program, input_stream);
-    vm.execute().unwrap();
+    // blowup factor = 3
+    let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
+        fri_params_fast_testing()[1]
+    } else {
+        fri_params_with_80_bits_of_security()[1]
+    };
+    common::run_recursive_test(chips, rec_raps, traces, pvs, fri_params);
 }

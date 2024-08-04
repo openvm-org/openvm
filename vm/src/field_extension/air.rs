@@ -1,14 +1,13 @@
 use std::borrow::Borrow;
 
+use afs_primitives::sub_chip::AirConfig;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use crate::field_extension::{BETA, EXTENSION_DEGREE};
-
 use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
-use afs_primitives::sub_chip::AirConfig;
+use crate::field_extension::{BETA, EXTENSION_DEGREE};
 
 impl AirConfig for FieldExtensionArithmeticAir {
     type Cols<T> = FieldExtensionArithmeticCols<T>;

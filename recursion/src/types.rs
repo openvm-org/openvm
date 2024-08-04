@@ -1,19 +1,22 @@
+use afs_compiler::{
+    asm::AsmConfig,
+    ir::{Array, Builder, Config, Ext, Felt, Var},
+    prelude::*,
+};
+use afs_stark_backend::{
+    air_builders::symbolic::SymbolicConstraints,
+    commit::MatrixCommitmentPointers,
+    config::Com,
+    keygen::types::{CommitmentToAirGraph, MultiStarkVerifyingKey, StarkVerifyingKey, TraceWidth},
+    prover::types::Proof,
+};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 
-use afs_compiler::asm::AsmConfig;
-use afs_compiler::ir::{Array, Builder, Config, Ext, Felt, Var};
-use afs_compiler::prelude::*;
-use afs_stark_backend::air_builders::symbolic::SymbolicConstraints;
-use afs_stark_backend::commit::MatrixCommitmentPointers;
-use afs_stark_backend::config::Com;
-use afs_stark_backend::keygen::types::{
-    CommitmentToAirGraph, MultiStarkVerifyingKey, StarkVerifyingKey, TraceWidth,
+use crate::{
+    fri::types::{DigestVariable, TwoAdicPcsProofVariable},
+    hints::{InnerChallenge, InnerVal},
 };
-use afs_stark_backend::prover::types::Proof;
-
-use crate::fri::types::{DigestVariable, TwoAdicPcsProofVariable};
-use crate::hints::{InnerChallenge, InnerVal};
 
 pub type InnerConfig = AsmConfig<InnerVal, InnerChallenge>;
 
@@ -101,6 +104,8 @@ pub struct StarkVerificationAdvice<C: Config> {
     pub num_exposed_values_after_challenge: Vec<usize>,
     /// Symbolic representation of all AIR constraints, including logup constraints
     pub symbolic_constraints: SymbolicConstraints<C::F>,
+    /// TODO: remove this once dyn Rap is no longer necessary
+    pub(crate) interaction_chunk_size: usize,
 }
 
 // TODO: the bound C::F = Val<SC> is very awkward
@@ -120,6 +125,7 @@ where
         main_graph,
         quotient_degree,
         symbolic_constraints,
+        interaction_chunk_size,
         ..
     } = vk;
     StarkVerificationAdvice {
@@ -133,6 +139,7 @@ where
         num_challenges_to_sample: params.num_challenges_to_sample,
         num_exposed_values_after_challenge: params.num_exposed_values_after_challenge,
         symbolic_constraints,
+        interaction_chunk_size,
     }
 }
 
@@ -166,6 +173,8 @@ where
         num_main_trace_commitments,
         main_commit_to_air_graph,
         num_challenges_to_sample,
+        // TODO: add support for interaction_chunk_size
+        ..
     } = vk;
     MultiStarkVerificationAdvice {
         per_air: per_air.clone().into_iter().map(new_from_vk).collect(),

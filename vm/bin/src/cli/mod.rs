@@ -1,8 +1,7 @@
-use crate::commands::keygen::KeygenCommand;
-use crate::commands::{keygen, prove, verify};
-use clap::Parser;
-use clap::Subcommand;
+use clap::{Parser, Subcommand};
 use stark_vm::vm::config::VmConfig;
+
+use crate::commands::{keygen, keygen::KeygenCommand, prove, verify};
 
 #[derive(Debug, Parser)]
 #[command(author, version, about = "VM STARK CLI")]

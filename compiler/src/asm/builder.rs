@@ -1,13 +1,11 @@
 use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
-
 use stark_vm::cpu::trace::Instruction;
 
+use super::{config::AsmConfig, AsmCompiler};
 use crate::{
     conversion::{convert_program, CompilerOptions},
     prelude::Builder,
 };
-
-use super::{config::AsmConfig, AsmCompiler};
 
 /// A builder that compiles assembly code.
 pub type AsmBuilder<F, EF> = Builder<AsmConfig<F, EF>>;

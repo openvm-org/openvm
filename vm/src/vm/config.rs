@@ -16,6 +16,7 @@ pub struct VmConfig {
     pub max_segment_len: usize,
     /*pub max_program_length: usize,
     pub max_operations: usize,*/
+    pub collect_metrics: bool,
 }
 
 impl Default for VmConfig {
@@ -29,6 +30,7 @@ impl Default for VmConfig {
             decomp: 4,
             num_public_values: 0,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
+            collect_metrics: false,
         }
     }
 }

@@ -3,13 +3,11 @@ use std::sync::Arc;
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::range_gate::RangeCheckerGateChip;
-use crate::sub_chip::LocalTraceInstructions;
-
 use super::{
     columns::{OfflineCheckerCols, OfflineCheckerColsMut},
     OfflineCheckerChip, OfflineCheckerOperation,
 };
+use crate::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 
 impl<F: PrimeField64, Operation: OfflineCheckerOperation<F> + Clone>
     OfflineCheckerChip<F, Operation>
