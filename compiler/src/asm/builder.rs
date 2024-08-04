@@ -1,11 +1,9 @@
-use backtrace::Backtrace;
 use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
-use stark_vm::{cpu::trace::Instruction, program::Program};
+use stark_vm::program::Program;
 
 use super::{config::AsmConfig, AsmCompiler};
 use crate::{
     conversion::{convert_program, CompilerOptions},
-    ir::{Config, DslIr},
     prelude::Builder,
 };
 

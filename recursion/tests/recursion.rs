@@ -1,9 +1,6 @@
 use std::ops::Deref;
 
-use afs_compiler::{
-    asm::{AsmBuilder, AsmConfig},
-    ir::Var,
-};
+use afs_compiler::{asm::AsmBuilder, ir::Var};
 use afs_recursion::stark::get_rec_raps;
 use afs_test_utils::config::fri_params::{
     fri_params_fast_testing, fri_params_with_80_bits_of_security,
@@ -11,7 +8,6 @@ use afs_test_utils::config::fri_params::{
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
-    cpu::trace::Instruction,
     program::Program,
     vm::{config::VmConfig, ExecutionResult, VirtualMachine},
 };

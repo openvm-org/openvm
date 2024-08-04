@@ -409,8 +409,7 @@ mod test {
         ir::{Ext, Felt, Var},
         util::execute_program,
     };
-    use p3_baby_bear::BabyBear;
-    use p3_field::{extension::BinomialExtensionField, AbstractField};
+    use p3_field::AbstractField;
 
     use crate::hints::{Hintable, InnerChallenge, InnerVal};
 

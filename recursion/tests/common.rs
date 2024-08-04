@@ -1,4 +1,4 @@
-use afs_compiler::{asm::AsmConfig, util::execute_and_prove_program};
+use afs_compiler::util::execute_and_prove_program;
 use afs_recursion::{
     hints::{Hintable, InnerVal},
     stark::{sort_chips, DynRapForRecursion, VerifierProgram},
@@ -18,11 +18,10 @@ use afs_test_utils::{
     engine::StarkEngine,
 };
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_strict_usize;
-use stark_vm::{cpu::trace::Instruction, program::Program};
+use stark_vm::program::Program;
 
 pub struct VerificationParams<SC: StarkGenericConfig> {
     pub vk: MultiStarkVerifyingKey<SC>,

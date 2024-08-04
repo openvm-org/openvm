@@ -4,7 +4,6 @@ use std::{
 };
 
 use afs_compiler::{
-    asm::AsmConfig,
     conversion::CompilerOptions,
     ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize, Var},
 };
@@ -18,16 +17,13 @@ use itertools::{izip, Itertools};
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
-use p3_field::{
-    extension::BinomialExtensionField, AbstractExtensionField, AbstractField, PrimeField32,
-    TwoAdicField,
-};
+use p3_field::{AbstractExtensionField, AbstractField, PrimeField32, TwoAdicField};
 use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
     stack::VerticalPair,
     Matrix,
 };
-use stark_vm::{cpu::trace::Instruction, program::Program, vm::ExecutionSegment};
+use stark_vm::{program::Program, vm::ExecutionSegment};
 
 use crate::{
     challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger},

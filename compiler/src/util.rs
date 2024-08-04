@@ -14,10 +14,7 @@ use stark_vm::{
     vm::{config::VmConfig, ExecutionResult, VirtualMachine},
 };
 
-use crate::{
-    asm::{AsmBuilder, AsmConfig},
-    conversion::CompilerOptions,
-};
+use crate::{asm::AsmBuilder, conversion::CompilerOptions};
 
 pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
     let modulus = F::ORDER_U32;

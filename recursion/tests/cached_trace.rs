@@ -10,7 +10,6 @@ use common::VerificationParams;
 use itertools::Itertools;
 use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_ceil_usize;

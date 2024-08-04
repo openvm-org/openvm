@@ -15,10 +15,7 @@ use crate::{cpu::ExecutionState, program::Program};
 mod segment;
 pub use segment::{get_chips, ExecutionSegment};
 
-use crate::cpu::{
-    trace::{ExecutionError, Instruction},
-    CpuOptions,
-};
+use crate::cpu::{trace::ExecutionError, CpuOptions};
 
 pub mod cycle_tracker;
 
@@ -111,7 +108,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
     /// The segment will be created from the given state and the program.
     pub fn segment(&mut self, state: VirtualMachineState<F>) {
         let program = self.program.clone();
-        let instruction_len = program.isa_instructions.len();
         let segment = ExecutionSegment::new(self.config, program, state);
         self.segments.push(segment);
     }

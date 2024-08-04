@@ -39,6 +39,10 @@ impl<F> Program<F> {
     pub fn len(&self) -> usize {
         self.isa_instructions.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.isa_instructions.is_empty()
+    }
 }
 
 pub struct ProgramAir<F> {

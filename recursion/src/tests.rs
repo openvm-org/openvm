@@ -15,7 +15,6 @@ use afs_test_utils::{
     utils::{generate_fib_trace_rows, to_field_vec, FibonacciAir},
 };
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::Val;

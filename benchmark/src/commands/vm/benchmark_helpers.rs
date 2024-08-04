@@ -1,6 +1,5 @@
 use std::{collections::HashMap, fs::File, io::Write as _};
 
-use afs_compiler::asm::AsmConfig;
 use afs_recursion::{
     hints::Hintable,
     stark::{DynRapForRecursion, VerifierProgram},
@@ -20,11 +19,9 @@ use afs_test_utils::{
 };
 use color_eyre::eyre;
 use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, ExtensionField, TwoAdicField};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_strict_usize;
 use stark_vm::{
-    cpu::trace::Instruction,
     program::Program,
     vm::{config::VmConfig, ExecutionResult, VirtualMachine},
 };

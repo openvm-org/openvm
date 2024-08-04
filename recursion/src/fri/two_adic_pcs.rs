@@ -273,7 +273,7 @@ pub mod tests {
     use std::cmp::Reverse;
 
     use afs_compiler::{
-        asm::{AsmBuilder, AsmConfig},
+        asm::AsmBuilder,
         ir::{Array, Usize, Var, DIGEST_SIZE},
     };
     use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
@@ -281,11 +281,11 @@ pub mod tests {
     use p3_baby_bear::BabyBear;
     use p3_challenger::{CanObserve, FieldChallenger};
     use p3_commit::{Pcs, TwoAdicMultiplicativeCoset};
-    use p3_field::{extension::BinomialExtensionField, AbstractField};
+    use p3_field::AbstractField;
     use p3_matrix::dense::RowMajorMatrix;
     use p3_uni_stark::{StarkGenericConfig, Val};
     use rand::rngs::OsRng;
-    use stark_vm::{cpu::trace::Instruction, program::Program};
+    use stark_vm::program::Program;
 
     use crate::{
         challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger},

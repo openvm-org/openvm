@@ -9,10 +9,7 @@ use stark_vm::{
     program::{DebugInfo, Program},
 };
 
-use crate::{
-    asm::{AsmInstruction, AssemblyCode},
-    ir::Config,
-};
+use crate::asm::{AsmInstruction, AssemblyCode};
 
 #[derive(Clone, Copy, Debug)]
 pub struct CompilerOptions {

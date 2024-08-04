@@ -14,10 +14,7 @@ use poseidon2_air::poseidon2::Poseidon2Config;
 
 use super::{ChipType, VirtualMachineState, VmConfig, VmMetrics};
 use crate::{
-    cpu::{
-        trace::{ExecutionError, Instruction},
-        CpuChip, CpuOptions, POSEIDON2_BUS, RANGE_CHECKER_BUS,
-    },
+    cpu::{trace::ExecutionError, CpuChip, CpuOptions, POSEIDON2_BUS, RANGE_CHECKER_BUS},
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
     memory::offline_checker::MemoryChip,

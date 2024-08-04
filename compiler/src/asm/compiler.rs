@@ -1,14 +1,13 @@
 use alloc::{collections::BTreeMap, vec};
 use std::collections::BTreeSet;
 
-use backtrace::Backtrace;
 use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
 use stark_vm::program::DebugInfo;
 
 use super::{config::AsmConfig, AssemblyCode, BasicBlock, IndexTriple, ValueOrConst};
 use crate::{
     asm::AsmInstruction,
-    ir::{Array, Config, DslIr, Ext, Felt, Ptr, Usize, Var},
+    ir::{Array, DslIr, Ext, Felt, Ptr, Usize, Var},
     prelude::TracedVec,
 };
 
