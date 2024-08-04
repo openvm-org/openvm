@@ -269,6 +269,7 @@ pub enum DslIr<C: Config> {
     CycleTrackerEnd(String),
 }
 
+#[allow(clippy::inherent_to_string)]
 impl<C: Config> DslIr<C> {
     pub fn to_string(&self) -> String {
         match self {

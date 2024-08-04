@@ -168,7 +168,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
 
             let (instruction, debug_info) = vm.program_chip.get_instruction(pc_usize)?;
             let dsl_instr = debug_info.unwrap_or_default().dsl_instruction;
-            println!("dsl_instr: {:?}", dsl_instr);
 
             let opcode = instruction.opcode;
             let a = instruction.op_a;
