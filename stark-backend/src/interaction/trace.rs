@@ -5,8 +5,6 @@ use p3_matrix::{
     Matrix,
 };
 use p3_maybe_rayon::prelude::*;
-#[cfg(feature = "parallel")]
-use rayon::current_num_threads;
 
 use super::{utils::generate_rlc_elements, Interaction, InteractionType};
 use crate::{
