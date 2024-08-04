@@ -5,22 +5,24 @@ use p3_air::{
     AirBuilder, AirBuilderWithPublicValues, ExtensionBuilder, PairBuilder, PermutationAirBuilder,
 };
 use p3_field::Field;
-use p3_matrix::dense::RowMajorMatrix;
-use p3_matrix::Matrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_ceil_usize;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::interaction::{
-    Interaction, InteractionBuilder, InteractionType, NUM_PERM_CHALLENGES, NUM_PERM_EXPOSED_VALUES,
+use self::{
+    symbolic_expression::SymbolicExpression,
+    symbolic_variable::{Entry, SymbolicVariable},
 };
-use crate::keygen::types::{StarkVerifyingParams, TraceWidth};
-use crate::rap::{PermutationAirBuilderWithExposedValues, Rap};
-
 use super::PartitionedAirBuilder;
-
-use self::symbolic_expression::SymbolicExpression;
-use self::symbolic_variable::{Entry, SymbolicVariable};
+use crate::{
+    interaction::{
+        Interaction, InteractionBuilder, InteractionType, NUM_PERM_CHALLENGES,
+        NUM_PERM_EXPOSED_VALUES,
+    },
+    keygen::types::{StarkVerifyingParams, TraceWidth},
+    rap::{PermutationAirBuilderWithExposedValues, Rap},
+};
 
 pub mod symbolic_expression;
 pub mod symbolic_variable;

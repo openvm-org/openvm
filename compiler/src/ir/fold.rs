@@ -1,13 +1,10 @@
 use afs_derive::DslVariable;
 
-use crate::ir::{Array, Config};
-use crate::prelude::Builder;
-use crate::prelude::MemIndex;
-use crate::prelude::MemVariable;
-use crate::prelude::Ptr;
-use crate::prelude::Variable;
-
 use super::{Ext, Felt, Var};
+use crate::{
+    ir::{Array, Config},
+    prelude::{Builder, MemIndex, MemVariable, Ptr, Variable},
+};
 
 #[derive(DslVariable, Debug, Clone)]
 pub struct FriFoldInput<C: Config> {

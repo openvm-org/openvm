@@ -1,9 +1,12 @@
-use afs_stark_backend::config::Com;
-use afs_stark_backend::prover::trace::{ProverTraceData, TraceCommitter};
+use std::sync::{atomic::AtomicU32, Arc};
+
+use afs_stark_backend::{
+    config::Com,
+    prover::trace::{ProverTraceData, TraceCommitter},
+};
 use p3_field::AbstractField;
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
-use std::sync::{atomic::AtomicU32, Arc};
 
 use super::PageAccessByRowIdAir;
 

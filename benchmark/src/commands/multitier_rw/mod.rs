@@ -25,9 +25,8 @@ use p3_util::log2_strict_usize;
 use serde::{de::DeserializeOwned, Serialize};
 use tracing::info_span;
 
-use crate::{AFI_FILE_PATH, DB_FOLDER, KEY_FOLDER, MULTITIER_TABLE_ID};
-
 use super::CommonCommands;
+use crate::{AFI_FILE_PATH, DB_FOLDER, KEY_FOLDER, MULTITIER_TABLE_ID};
 
 #[derive(Debug, Parser)]
 pub struct MultitierRwCommand {

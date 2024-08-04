@@ -19,12 +19,11 @@ use p3_matrix::dense::DenseMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::info_span;
 
-use crate::common::page::Page;
-
 use super::{
     page_index_scan_input::{Comp, PageIndexScanInputChip},
     page_index_scan_output::PageIndexScanOutputChip,
 };
+use crate::common::page::Page;
 
 pub struct PageController<SC: StarkGenericConfig>
 where

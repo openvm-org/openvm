@@ -5,9 +5,8 @@ use p3_field::{AbstractField, PrimeField};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::common::page::Page;
-
 use super::IndexedPageWriteAir;
+use crate::common::page::Page;
 
 impl IndexedPageWriteAir {
     /// This generates the auxiliary trace required to ensure proper formating

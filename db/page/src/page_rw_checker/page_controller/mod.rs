@@ -1,5 +1,4 @@
-use std::collections::HashSet;
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use afs_primitives::{offline_checker::OfflineCheckerOperation, range_gate::RangeCheckerGateChip};
 use afs_stark_backend::{
@@ -22,11 +21,10 @@ use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::info_span;
 
-use crate::common::page::Page;
-
 use super::{
     final_page::IndexedPageWriteAir, initial_page::PageReadAir, offline_checker::PageOfflineChecker,
 };
+use crate::common::page::Page;
 
 #[derive(PartialEq, Clone, Debug, Copy)]
 pub enum OpType {

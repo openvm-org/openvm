@@ -1,8 +1,10 @@
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::columns::{IsLessThanBitsAuxCols, IsLessThanBitsCols, IsLessThanBitsIoCols};
-use super::IsLessThanBitsAir;
+use super::{
+    columns::{IsLessThanBitsAuxCols, IsLessThanBitsCols, IsLessThanBitsIoCols},
+    IsLessThanBitsAir,
+};
 use crate::sub_chip::LocalTraceInstructions;
 
 impl IsLessThanBitsAir {

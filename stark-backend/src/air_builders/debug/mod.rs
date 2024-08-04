@@ -2,16 +2,14 @@ use p3_air::{
     AirBuilder, AirBuilderWithPublicValues, ExtensionBuilder, PairBuilder, PermutationAirBuilder,
 };
 use p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrixView;
-use p3_matrix::stack::VerticalPair;
+use p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair};
 use p3_uni_stark::{StarkGenericConfig, Val};
 
+use super::{PartitionedAirBuilder, ViewPair};
 use crate::{
     interaction::{Interaction, InteractionBuilder, InteractionType},
     rap::PermutationAirBuilderWithExposedValues,
 };
-
-use super::{PartitionedAirBuilder, ViewPair};
 
 pub mod check_constraints;
 

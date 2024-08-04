@@ -2,8 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use p3_field::PrimeField32;
 
-use crate::memory::expand::air::ExpandAir;
-use crate::memory::tree::MemoryNode;
+use crate::memory::{expand::air::ExpandAir, tree::MemoryNode};
 
 pub mod air;
 pub mod bridge;

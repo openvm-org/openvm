@@ -18,8 +18,7 @@ mod partitioned_sum_air;
 
 #[test]
 fn test_single_fib_stark() {
-    use fib_air::air::FibonacciAir;
-    use fib_air::trace::generate_trace_rows;
+    use fib_air::{air::FibonacciAir, trace::generate_trace_rows};
 
     let log_trace_degree = 3;
 
@@ -41,8 +40,7 @@ fn test_single_fib_stark() {
 
 #[test]
 fn test_single_fib_triples_stark() {
-    use fib_triples_air::air::FibonacciAir;
-    use fib_triples_air::trace::generate_trace_rows;
+    use fib_triples_air::{air::FibonacciAir, trace::generate_trace_rows};
 
     let log_trace_degree = 3;
 
@@ -65,8 +63,7 @@ fn test_single_fib_triples_stark() {
 
 #[test]
 fn test_single_fib_selector_stark() {
-    use fib_selector_air::air::FibonacciSelectorAir;
-    use fib_selector_air::trace::generate_trace_rows;
+    use fib_selector_air::{air::FibonacciSelectorAir, trace::generate_trace_rows};
 
     let log_trace_degree = 3;
 

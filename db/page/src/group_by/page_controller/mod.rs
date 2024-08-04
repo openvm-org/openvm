@@ -1,5 +1,4 @@
-use std::marker::PhantomData;
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{
@@ -19,9 +18,13 @@ use p3_field::{AbstractField, PrimeField, PrimeField64};
 use p3_matrix::dense::DenseMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
-use crate::common::page::Page;
-use crate::group_by::group_by_input::{air::GroupByAir, GroupByOperation};
-use crate::group_by::receiving_indexed_output_page_air::ReceivingIndexedOutputPageAir;
+use crate::{
+    common::page::Page,
+    group_by::{
+        group_by_input::{air::GroupByAir, GroupByOperation},
+        receiving_indexed_output_page_air::ReceivingIndexedOutputPageAir,
+    },
+};
 
 /// Main struct for group-by integration testing with `MyFinalPage`
 ///

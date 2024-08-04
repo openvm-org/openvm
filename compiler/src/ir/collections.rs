@@ -1,7 +1,8 @@
 use alloc::rc::Rc;
+use std::cell::RefCell;
+
 use itertools::Itertools;
 use p3_field::AbstractField;
-use std::cell::RefCell;
 
 use super::{Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, Usize, Var, Variable};
 

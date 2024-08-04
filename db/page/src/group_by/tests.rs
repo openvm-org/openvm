@@ -1,10 +1,3 @@
-use super::page_controller::PageController;
-use crate::common::page::Page;
-use crate::group_by::group_by_input::GroupByOperation;
-use itertools::Itertools;
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_util::log2_strict_usize;
 use std::{cmp::max, sync::Arc};
 
 use afs_stark_backend::{
@@ -20,7 +13,14 @@ use afs_test_utils::{
     engine::StarkEngine,
     utils::create_seeded_rng,
 };
+use itertools::Itertools;
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
+use p3_util::log2_strict_usize;
 use rand::Rng;
+
+use super::page_controller::PageController;
+use crate::{common::page::Page, group_by::group_by_input::GroupByOperation};
 
 /// Struct for generating a group-by test case.
 ///

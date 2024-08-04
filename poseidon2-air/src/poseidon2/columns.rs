@@ -1,6 +1,8 @@
-use crate::poseidon2::Poseidon2Air;
-use p3_field::Field;
 use std::ops::Range;
+
+use p3_field::Field;
+
+use crate::poseidon2::Poseidon2Air;
 
 /// Composed of IO and Aux columns, which are disjoint
 /// Aux columns composed of Vec<Vec<T>>, one for each phase

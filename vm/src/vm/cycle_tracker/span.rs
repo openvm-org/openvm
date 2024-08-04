@@ -1,5 +1,4 @@
-use std::collections::BTreeMap;
-use std::fmt::Display;
+use std::{collections::BTreeMap, fmt::Display};
 
 #[derive(Debug, Clone)]
 pub struct CycleTrackerData {

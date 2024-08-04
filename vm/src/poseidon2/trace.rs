@@ -1,13 +1,10 @@
-use super::columns::*;
-use crate::cpu::trace::Instruction;
-
-use afs_primitives::is_zero::IsZeroAir;
-use afs_primitives::sub_chip::LocalTraceInstructions;
+use afs_primitives::{is_zero::IsZeroAir, sub_chip::LocalTraceInstructions};
 use p3_air::BaseAir;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::{Poseidon2Chip, Poseidon2VmAir};
+use super::{columns::*, Poseidon2Chip, Poseidon2VmAir};
+use crate::cpu::trace::Instruction;
 
 impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
     /// Generates a single row from inputs.

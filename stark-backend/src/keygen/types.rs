@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use derivative::Derivative;
 use itertools::Itertools;
+use p3_field::AbstractExtensionField;
 use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
@@ -18,6 +19,7 @@ use crate::{
 pub struct TraceWidth {
     pub preprocessed: Option<usize>,
     pub partitioned_main: Vec<usize>,
+    /// Width counted by extension field elements, _not_ base field elements
     pub after_challenge: Vec<usize>,
 }
 
@@ -247,7 +249,7 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
         let mut total_preprocessed = 0;
         let mut total_partitioned_main = 0;
         let mut total_after_challenge = 0;
-        for (air_idx, per_air) in self.per_air.iter().enumerate() {
+        for per_air in self.per_air.iter() {
             let preprocessed_width = per_air.width().preprocessed.unwrap_or(0);
             total_preprocessed += preprocessed_width;
             let partitioned_main_width = per_air
@@ -262,11 +264,9 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
                 .iter()
                 .fold(0, |acc, x| acc + *x);
             total_after_challenge += after_challenge_width;
-            info!(
-                "Air width [air_idx={}]: preprocessed={} partitioned_main={} after_challenge={}",
-                air_idx, preprocessed_width, partitioned_main_width, after_challenge_width
-            );
         }
+        let ext_degree = <SC::Challenge as AbstractExtensionField<Val<SC>>>::D;
+        total_after_challenge *= ext_degree;
         info!("Total air width: preprocessed={} ", total_preprocessed);
         info!(
             "Total air width: partitioned_main={} ",

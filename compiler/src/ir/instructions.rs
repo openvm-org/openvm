@@ -1,5 +1,4 @@
-use super::{Array, FriFoldInput, MemIndex, Ptr, TracedVec};
-use super::{Config, Ext, Felt, Usize, Var};
+use super::{Array, Config, Ext, Felt, FriFoldInput, MemIndex, Ptr, TracedVec, Usize, Var};
 
 /// An intermeddiate instruction set for implementing programs.
 ///

@@ -8,8 +8,10 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use super::columns::{IntersectorAuxCols, IntersectorCols, IntersectorIoCols};
-use super::IntersectorAir;
+use super::{
+    columns::{IntersectorAuxCols, IntersectorCols, IntersectorIoCols},
+    IntersectorAir,
+};
 
 impl<F: Field> BaseAir<F> for IntersectorAir {
     fn width(&self) -> usize {

@@ -3,9 +3,8 @@ use afs_primitives::{
     is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
 };
 
-use crate::common::page_cols::PageCols;
-
 use super::Comp;
+use crate::common::page_cols::PageCols;
 
 pub struct StrictCompAuxCols<T> {
     pub is_less_than_tuple_aux: IsLessThanTupleAuxCols<T>,

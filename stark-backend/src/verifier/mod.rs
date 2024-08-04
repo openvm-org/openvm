@@ -10,13 +10,12 @@ mod error;
 
 pub use error::*;
 
+use self::constraints::verify_single_rap_constraints;
 use crate::{
     keygen::types::MultiStarkVerifyingKey,
     prover::{opener::AdjacentOpenedValues, types::Proof},
     rap::AnyRap,
 };
-
-use self::constraints::verify_single_rap_constraints;
 
 /// Verifies a partitioned proof of multi-matrix AIRs.
 pub struct MultiTraceStarkVerifier<'c, SC: StarkGenericConfig> {

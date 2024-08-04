@@ -1,11 +1,10 @@
 use derive_new::new;
 
+use super::OfflineChecker;
 use crate::{
     is_equal_vec::columns::{IsEqualVecAuxCols, IsEqualVecAuxColsMut},
     is_less_than_tuple::columns::{IsLessThanTupleAuxCols, IsLessThanTupleAuxColsMut},
 };
-
-use super::OfflineChecker;
 
 #[allow(clippy::too_many_arguments)]
 #[derive(Debug, Clone, new)]
