@@ -102,7 +102,10 @@ impl fmt::Display for BenchmarkMetrics {
 
         if !self.custom.dsl_counts.is_empty() {
             writeln!(f)?;
-            writeln!(f, "### DSL counts")?;
+            writeln!(
+                f,
+                "### DSL counts - how many isa instructions each DSL instruction generates"
+            )?;
             writeln!(f, "| Name | Count |")?;
             writeln!(f, "|------|-------|")?;
             for (name, value) in self.custom.dsl_counts.iter() {
