@@ -56,7 +56,7 @@ fn dbg<F: PrimeField64>(opcode: OpCode, debug: String) -> Instruction<F> {
 }
 
 #[derive(Clone, Copy)]
-enum AS {
+pub enum AS {
     Immediate,
     Register,
     Memory,
@@ -77,10 +77,10 @@ const POSEIDON2_WIDTH: usize = 16;
 const NUM_UTILITY_REGISTERS: usize = POSEIDON2_WIDTH;
 
 fn register<F: PrimeField64>(value: i32) -> F {
-    let value = (NUM_UTILITY_REGISTERS as i32) - value;
+    // let value = (NUM_UTILITY_REGISTERS as i32) - value;
     //println!("register index: {}", value);
-    assert!(value > 0);
-    F::from_canonical_usize(value as usize)
+    assert!(value < 0);
+    -F::from_canonical_usize(-value as usize)
 }
 
 fn convert_base_arithmetic_instruction<F: PrimeField64, EF: ExtensionField<F>>(
