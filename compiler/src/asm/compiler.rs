@@ -94,8 +94,13 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         // Initialize the heap pointer value.
         if self.block_label().is_zero() {
             self.push(AsmInstruction::AddFI(HEAP_PTR, ZERO, F::zero()), None);
+            self.push(AsmInstruction::j(F::from_canonical_u32(2)), None);
+            self.new_break_label();
+            self.basic_block();
+            self.push(AsmInstruction::Trap, None);
+            self.new_break_label();
+            self.basic_block();
         }
-
         // For each operation, generate assembly instructions.
         for (op, trace) in operations.clone() {
             match op {
@@ -441,7 +446,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     }
                     _ => unimplemented!(),
                 },
-                DslIr::Error() => self.push(AsmInstruction::Trap, trace),
+                DslIr::Error() => self.push(AsmInstruction::j(F::one()), trace),
                 DslIr::PrintF(dst) => self.push(AsmInstruction::PrintF(dst.fp()), trace),
                 DslIr::PrintV(dst) => self.push(AsmInstruction::PrintV(dst.fp()), trace),
                 DslIr::PrintE(dst) => self.push(AsmInstruction::PrintE(dst.fp()), trace),
@@ -542,9 +547,9 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             compiler: self,
             lhs,
             rhs,
-            is_eq,
+            is_eq: !is_eq,
         };
-        if_compiler.then(|builder| builder.push(AsmInstruction::Trap, backtrace));
+        if_compiler.then_label(F::one(), backtrace);
     }
 
     pub fn code(self) -> AssemblyCode<F, EF> {
@@ -630,6 +635,22 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         // Get the branch instruction to push to the `current_block`.
         let instr = Self::branch(lhs, rhs, is_eq, after_if_block);
         compiler.push_to_block(current_block, instr, None);
+    }
+
+    pub fn then_label(self, label: F, backtrace: Option<Backtrace>) {
+        let Self {
+            compiler,
+            lhs,
+            rhs,
+            is_eq,
+        } = self;
+
+        // Get the label for the current block.
+        let current_block = compiler.block_label();
+
+        // Get the branch instruction to push to the `current_block`.
+        let instr = Self::branch(lhs, rhs, is_eq, label);
+        compiler.push_to_block(current_block, instr, backtrace);
     }
 
     pub fn then_or_else<ThenFunc, ElseFunc>(self, then_f: ThenFunc, else_f: ElseFunc)
