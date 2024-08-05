@@ -1,4 +1,8 @@
-use std::{collections::HashMap, fs::File, io::Write as _};
+use std::{
+    collections::{BTreeMap, HashMap},
+    fs::File,
+    io::Write as _,
+};
 
 use afs_recursion::{
     hints::Hintable,
@@ -148,6 +152,8 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         nonempty_traces: traces,
         nonempty_pis: public_values,
         metrics: mut vm_metrics,
+        mut opcode_counts,
+        mut dsl_counts,
         ..
     } = vm.execute().unwrap();
     vm_execute_span.exit();
@@ -215,6 +221,20 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     let calc_quotient_values_ms = timing_data[BACKEND_TIMING_FILTERS[2]];
     let total_prove_ms = timing_data["Benchmark prove: benchmark"];
     let vm_metrics = vm_metrics.pop().unwrap(); // only 1 segment
+    let opcode_counts = opcode_counts.pop().unwrap();
+    let dsl_counts = dsl_counts.pop().unwrap();
+
+    let mut custom: BTreeMap<String, String> = vm_metrics
+        .into_iter()
+        .map(|(k, v)| (k, v.to_string()))
+        .collect();
+    for (k, v) in opcode_counts {
+        custom.insert(format!("opcode_{}", k), v.to_string());
+    }
+    for (k, v) in dsl_counts {
+        custom.insert(format!("dsl_{}", k), v.to_string());
+    }
+
     let metrics = BenchmarkMetrics {
         name: benchmark_name.to_string(),
         total_prove_ms,
@@ -222,10 +242,7 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         perm_trace_gen_ms,
         calc_quotient_values_ms,
         trace: trace_metrics,
-        custom: vm_metrics
-            .into_iter()
-            .map(|(k, v)| (k, v.to_string()))
-            .collect(),
+        custom,
     };
 
     write!(File::create(TMP_RESULT_MD.as_str())?, "{}", metrics)?;

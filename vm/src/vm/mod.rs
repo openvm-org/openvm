@@ -66,6 +66,8 @@ pub struct ExecutionResult<const WORD_SIZE: usize> {
     pub max_log_degree: usize,
     /// VM metrics per segment, only collected if enabled
     pub metrics: Vec<VmMetrics>,
+    pub opcode_counts: Vec<BTreeMap<String, usize>>,
+    pub dsl_counts: Vec<BTreeMap<String, usize>>,
 }
 
 pub type VmMetrics = BTreeMap<String, usize>;
@@ -152,6 +154,8 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
     pub fn execute(mut self) -> Result<ExecutionResult<WORD_SIZE>, ExecutionError> {
         let mut traces = vec![];
         let mut metrics = Vec::new();
+        let mut opcode_counts = Vec::new();
+        let mut dsl_counts = Vec::new();
         loop {
             let last_seg = self.segments.last_mut().unwrap();
             last_seg.has_generation_happened = true;
@@ -159,6 +163,8 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
             traces.extend(last_seg.generate_commitments()?);
             if self.config.collect_metrics {
                 metrics.push(last_seg.collected_metrics.clone());
+                opcode_counts.push(last_seg.opcode_counts.clone());
+                dsl_counts.push(last_seg.dsl_counts.clone());
             }
             if last_seg.cpu_chip.state.is_done {
                 break;
@@ -240,6 +246,8 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
             chip_types: types,
             max_log_degree,
             metrics,
+            opcode_counts,
+            dsl_counts,
         };
 
         Ok(chip_data)
