@@ -74,7 +74,7 @@ jobs:
       - name: Run benchmark
         if: inputs.benchmark_name == 'vm_verify_fibair'
         run: |
-          RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- vm_verify_fibair -n 16
+          RUSTFLAGS="-Ctarget-cpu=native" cargo run --profile=fast --bin benchmark --features parallel -- vm_verify_fibair -n 16
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'single_rw'
