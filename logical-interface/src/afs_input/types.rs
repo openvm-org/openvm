@@ -1,9 +1,10 @@
-use color_eyre::eyre::{eyre, Result};
-use serde_derive::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter},
     str::FromStr,
 };
+
+use color_eyre::eyre::{eyre, Result};
+use serde_derive::{Deserialize, Serialize};
 
 /// Represents a single operation in an AFS input file
 #[derive(Debug, Serialize, Deserialize, Clone)]

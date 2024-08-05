@@ -1,9 +1,8 @@
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::page_rw_checker::page_controller::Operation;
-
 use super::ExecutionAir;
+use crate::page_rw_checker::page_controller::Operation;
 
 impl ExecutionAir {
     /// trace_degree is MAX_OPS

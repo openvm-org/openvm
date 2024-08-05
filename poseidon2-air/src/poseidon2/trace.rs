@@ -1,8 +1,8 @@
-use super::columns::Poseidon2Cols;
-use super::Poseidon2Air;
 use afs_primitives::sub_chip::LocalTraceInstructions;
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
+
+use super::{columns::Poseidon2Cols, Poseidon2Air};
 
 impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
     /// Return cached state trace if it exists (input is ignored), otherwise generate trace and return

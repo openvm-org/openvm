@@ -10,6 +10,11 @@ use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::instrument;
 
+use self::{
+    opener::OpeningProver,
+    quotient::QuotientCommitter,
+    types::{Commitments, MultiAirCommittedTraceData, Proof},
+};
 #[cfg(debug_assertions)]
 use crate::air_builders::debug::check_constraints::{check_constraints, check_logup};
 use crate::{
@@ -19,12 +24,6 @@ use crate::{
     keygen::types::MultiStarkProvingKey,
     prover::trace::SingleRapCommittedTraceView,
     rap::AnyRap,
-};
-
-use self::{
-    opener::OpeningProver,
-    quotient::QuotientCommitter,
-    types::{Commitments, MultiAirCommittedTraceData, Proof},
 };
 
 /// Metrics about trace and other statistics related to prover performance

@@ -1,32 +1,35 @@
-use std::collections::HashMap;
-use std::iter;
-use std::sync::Arc;
+use std::{collections::HashMap, iter, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
-use afs_stark_backend::prover::trace::TraceCommitter;
-use afs_stark_backend::verifier::VerificationError;
 use afs_stark_backend::{
     keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+    prover::{
+        trace::{TraceCommitmentBuilder, TraceCommitter},
+        MultiTraceStarkProver,
+    },
+    verifier::VerificationError,
 };
-use afs_test_utils::config::{
-    self,
-    baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+use afs_test_utils::{
+    config::{
+        self,
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+    },
+    interaction::dummy_interaction_air::DummyInteractionAir,
+    utils::create_seeded_rng,
 };
-use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
-use afs_test_utils::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 
-use crate::multitier_page_rw_checker::page_controller::{
-    MyLessThanTupleParams, PageController, PageTreeParams,
-};
-use crate::page_btree::{PageBTree, PageBTreePages};
-use crate::page_rw_checker::page_controller::{OpType, Operation};
-
 use super::page_controller;
+use crate::{
+    multitier_page_rw_checker::page_controller::{
+        MyLessThanTupleParams, PageController, PageTreeParams,
+    },
+    page_btree::{PageBTree, PageBTreePages},
+    page_rw_checker::page_controller::{OpType, Operation},
+};
 
 pub const BABYBEAR_COMMITMENT_LEN: usize = 8;
 pub const DECOMP_BITS: usize = 6;

@@ -1,6 +1,8 @@
-use std::collections::{btree_map::Entry, BTreeMap};
-use std::fmt::Display;
-use std::marker::PhantomData;
+use std::{
+    collections::{btree_map::Entry, BTreeMap},
+    fmt::Display,
+    marker::PhantomData,
+};
 
 use p3_field::PrimeField32;
 

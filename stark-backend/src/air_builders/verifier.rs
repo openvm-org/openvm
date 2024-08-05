@@ -5,17 +5,16 @@ use p3_field::AbstractField;
 use p3_matrix::Matrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::{
-    interaction::{Interaction, InteractionBuilder, InteractionType, SymbolicInteraction},
-    rap::PermutationAirBuilderWithExposedValues,
-};
-
 use super::{
     symbolic::{
         symbolic_expression::SymbolicEvaluator,
         symbolic_variable::{Entry, SymbolicVariable},
     },
     PartitionedAirBuilder, ViewPair,
+};
+use crate::{
+    interaction::{Interaction, InteractionBuilder, InteractionType, SymbolicInteraction},
+    rap::PermutationAirBuilderWithExposedValues,
 };
 
 pub struct VerifierConstraintFolder<'a, SC: StarkGenericConfig> {

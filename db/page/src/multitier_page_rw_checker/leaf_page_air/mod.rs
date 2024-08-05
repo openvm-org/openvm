@@ -1,9 +1,8 @@
 use afs_primitives::is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir};
 use getset::Getters;
 
-use crate::page_rw_checker::{final_page::IndexedPageWriteAir, initial_page::PageReadAir};
-
 use super::page_controller::MyLessThanTupleParams;
+use crate::page_rw_checker::{final_page::IndexedPageWriteAir, initial_page::PageReadAir};
 
 pub mod air;
 pub mod bridge;

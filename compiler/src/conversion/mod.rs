@@ -1,15 +1,9 @@
 use std::array::from_fn;
 
 use p3_field::{ExtensionField, PrimeField64};
-
-use field_extension_conversion::{convert_field_extension, convert_field_extension_with_base};
-use stark_vm::cpu::trace::Instruction;
-use stark_vm::cpu::OpCode;
-use stark_vm::cpu::OpCode::*;
+use stark_vm::cpu::{trace::Instruction, OpCode, OpCode::*};
 
 use crate::asm::{AsmInstruction, AssemblyCode};
-
-pub mod field_extension_conversion;
 
 #[derive(Clone, Copy, Debug)]
 pub struct CompilerOptions {
@@ -188,6 +182,49 @@ fn convert_base_arithmetic_instruction<F: PrimeField64, EF: ExtensionField<F>>(
     }
 }
 
+pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionField<F>>(
+    instruction: AsmInstruction<F, EF>,
+) -> Vec<Instruction<F>> {
+    match instruction {
+        AsmInstruction::AddE(dst, lhs, rhs) => vec![inst(
+            FE4ADD,
+            register(dst),
+            register(lhs),
+            register(rhs),
+            AS::Register,
+            AS::Register,
+        )],
+        AsmInstruction::SubE(dst, lhs, rhs) => vec![inst(
+            FE4SUB,
+            register(dst),
+            register(lhs),
+            register(rhs),
+            AS::Register,
+            AS::Register,
+        )],
+        AsmInstruction::MulE(dst, lhs, rhs) => vec![inst(
+            BBE4MUL,
+            register(dst),
+            register(lhs),
+            register(rhs),
+            AS::Register,
+            AS::Register,
+        )],
+        AsmInstruction::InvE(dst, src) => vec![inst(
+            BBE4INV,
+            register(dst),
+            register(src),
+            register(src),
+            AS::Register,
+            AS::Register,
+        )],
+        _ => panic!(
+            "Illegal argument to convert_field_extension: {:?}",
+            instruction
+        ),
+    }
+}
+
 fn convert_print_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
 ) -> Vec<Instruction<F>> {
@@ -262,184 +299,31 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
 
     match instruction {
         AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
-        AsmInstruction::LoadF(dst, src, index, offset, size) => vec![
-            // register[util] <- register[index] * size
-            inst(
-                FMUL,
-                utility_register,
-                register(index),
-                size,
-                AS::Register,
-                AS::Immediate,
-            ),
-            // register[util] <- register[src] + register[util]
-            inst(
-                FADD,
-                utility_register,
-                register(src),
-                utility_register,
-                AS::Register,
-                AS::Register,
-            ),
-            // register[dst] <- mem[register[util] + offset]
+        AsmInstruction::LoadFI(dst, src, offset) => vec![
+            // register[dst] <- mem[register[src] + offset]
             inst(
                 LOADW,
                 register(dst),
                 offset,
-                utility_register,
-                AS::Register,
-                AS::Memory,
-            ),
-        ],
-        AsmInstruction::LoadFI(dst, src, index, offset, size) => vec![
-            // register[dst] <- mem[register[src] + ((index * size) + offset)]
-            inst(
-                LOADW,
-                register(dst),
-                (index * size) + offset,
                 register(src),
                 AS::Register,
                 AS::Memory,
             ),
         ],
-        AsmInstruction::LoadE(dst, src, index, offset, size) => {
-            let mut result = vec![
-                // register[util] <- register[index] * size
-                inst(
-                    FMUL,
-                    utility_register,
-                    register(index),
-                    size,
-                    AS::Register,
-                    AS::Immediate,
-                ),
-                // register[util] <- register[src] + register[util]
-                inst(
-                    FADD,
-                    utility_register,
-                    register(src),
-                    utility_register,
-                    AS::Register,
-                    AS::Register,
-                ),
-            ];
-
-            for i in 0..EF::D {
-                // register[dst] <- mem[register[util] + offset + (i * WORD_SIZE)]
-                result.push(inst(
-                    LOADW,
-                    register(dst - ((i * WORD_SIZE) as i32)),
-                    offset + F::from_canonical_usize(i * WORD_SIZE),
-                    utility_register,
-                    AS::Register,
-                    AS::Memory,
-                ))
-            }
-            result
-        }
-        AsmInstruction::LoadEI(dst, src, index, offset, size) => (0..EF::D)
-            .map(|i|
-                // register[dst] <- mem[register[src] + ((index * size) + offset + (i * WORD_SIZE))]
-                inst(
-                    LOADW,
-                    register(dst - ((i * WORD_SIZE) as i32)),
-                    (index * size) + offset + F::from_canonical_usize(i * WORD_SIZE),
-                    register(src),
-                    AS::Register,
-                    AS::Memory,
-                ))
-            .collect(),
-        AsmInstruction::StoreF(val, addr, index, offset, size) => vec![
-            // register[util] <- register[index] * size
-            inst(
-                FMUL,
-                utility_register,
-                register(index),
-                size,
-                AS::Register,
-                AS::Immediate,
-            ),
-            // register[util] <- register[src] + register[util]
-            inst(
-                FADD,
-                utility_register,
-                register(addr),
-                utility_register,
-                AS::Register,
-                AS::Register,
-            ),
-            //  mem[register[util] + offset] <- register[val]
+        AsmInstruction::StoreFI(val, addr, offset) => vec![
+            // mem[register[addr] + offset] <- register[val]
             inst(
                 STOREW,
                 register(val),
                 offset,
-                utility_register,
-                AS::Register,
-                AS::Memory,
-            ),
-        ],
-        AsmInstruction::StoreFI(val, addr, index, offset, size) => vec![
-            // mem[register[addr] + ((index * size) + offset)] <- register[val]
-            inst(
-                STOREW,
-                register(val),
-                (index * size) + offset,
                 register(addr),
                 AS::Register,
                 AS::Memory,
             ),
         ],
-        AsmInstruction::StoreE(val, addr, index, offset, size) => {
-            let mut result = vec![
-                // register[util] <- register[index] * size
-                inst(
-                    FMUL,
-                    utility_register,
-                    register(index),
-                    size,
-                    AS::Register,
-                    AS::Immediate,
-                ),
-                // register[util] <- register[src] + register[util]
-                inst(
-                    FADD,
-                    utility_register,
-                    register(addr),
-                    utility_register,
-                    AS::Register,
-                    AS::Register,
-                ),
-            ];
-
-            for i in 0..EF::D {
-                // mem[register[util] + offset + (i * WORD_SIZE)] <- register[val]
-                result.push(inst(
-                    STOREW,
-                    register(val - ((i * WORD_SIZE) as i32)),
-                    offset + F::from_canonical_usize(i * WORD_SIZE),
-                    utility_register,
-                    AS::Register,
-                    AS::Memory,
-                ))
-            }
-            result
-        }
-        AsmInstruction::StoreEI(val, addr, index, offset, size) => (0..EF::D)
-            .map(|i|
-                // mem[register[addr] + ((index * size) + offset + (i * WORD_SIZE))] <- register[val]
-                inst(
-                    STOREW,
-                    register(val - ((i * WORD_SIZE) as i32)),
-                    (index * size) + offset + F::from_canonical_usize(i * WORD_SIZE),
-                    register(addr),
-                    AS::Register,
-                    AS::Memory,
-                ))
-            .collect(),
-        AsmInstruction::Jal(dst, label, offset) => {
-            assert_eq!(offset, F::zero());
+        AsmInstruction::Jump(dst, label) => {
             vec![
-                // pc <- labels[label] + offset, register[dst] <- pc
+                // pc <- labels[label], register[dst] <- pc
                 inst(
                     JAL,
                     register(dst),
@@ -450,7 +334,6 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 ),
             ]
         }
-        AsmInstruction::JalR(_dst, _label, _offset) => panic!("Jalr should never be used"),
         AsmInstruction::Bne(label, lhs, rhs) => vec![
             // if register[lhs] != register[rhs], pc <- labels[label]
             inst(
@@ -591,43 +474,14 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             AS::Register,
             AS::Memory,
         )],
-        AsmInstruction::StoreHintWordI(val, offset, index, size) => vec![inst(
+        AsmInstruction::StoreHintWordI(val, offset) => vec![inst(
             SHINTW,
             register(val),
-            (index * size) + offset,
+            offset,
             F::zero(),
             AS::Register,
             AS::Memory,
         )],
-        AsmInstruction::StoreHintWord(addr, index, offset, size) => vec![
-            // register[util] <- register[index] * size
-            inst(
-                FMUL,
-                utility_register,
-                register(index),
-                size,
-                AS::Register,
-                AS::Immediate,
-            ),
-            // register[util] <- register[src] + register[util]
-            inst(
-                FADD,
-                utility_register,
-                register(addr),
-                utility_register,
-                AS::Register,
-                AS::Register,
-            ),
-            //  mem[register[util] + offset] <- hint_word
-            inst(
-                SHINTW,
-                utility_register,
-                offset,
-                F::zero(),
-                AS::Register,
-                AS::Memory,
-            ),
-        ],
         AsmInstruction::PrintV(..) | AsmInstruction::PrintF(..) | AsmInstruction::PrintE(..) => {
             if options.compile_prints {
                 convert_print_instruction::<WORD_SIZE, F, EF>(instruction)
@@ -655,16 +509,9 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         AsmInstruction::AddE(..)
         | AsmInstruction::SubE(..)
         | AsmInstruction::MulE(..)
-        | AsmInstruction::MulEI(..)
         | AsmInstruction::InvE(..) => {
-            let fe_utility_registers = from_fn(|i| utility_registers[i]);
             if options.field_extension_enabled {
-                convert_field_extension::<WORD_SIZE, F, EF>(instruction, fe_utility_registers)
-            } else if options.field_arithmetic_enabled {
-                convert_field_extension_with_base::<WORD_SIZE, F, EF>(
-                    instruction,
-                    fe_utility_registers,
-                )
+                convert_field_extension::<WORD_SIZE, F, EF>(instruction)
             } else {
                 panic!(
                     "Unsupported instruction {:?}, field extension arithmetic is disabled",

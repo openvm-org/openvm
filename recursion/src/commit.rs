@@ -1,6 +1,5 @@
-use p3_commit::{LagrangeSelectors, PolynomialSpace};
-
 use afs_compiler::ir::{Array, Builder, Config, Ext, FromConstant, Usize};
+use p3_commit::{LagrangeSelectors, PolynomialSpace};
 
 use crate::fri::types::{FriConfigVariable, TwoAdicPcsRoundVariable};
 

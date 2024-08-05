@@ -1,3 +1,9 @@
+use std::{
+    fs::File,
+    io::{BufReader, BufWriter, Read, Write},
+    sync::Arc,
+};
+
 use afs_page::{
     execution_air::ExecutionAir,
     multitier_page_rw_checker::page_controller::{
@@ -16,11 +22,6 @@ use logical_interface::{
 use p3_field::{AbstractField, PrimeField64};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{de::DeserializeOwned, Serialize};
-use std::{
-    fs::File,
-    io::{BufReader, BufWriter, Read, Write},
-    sync::Arc,
-};
 
 pub mod keygen;
 pub mod mock;

@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
 use afs_primitives::xor_bits::XorBitsChip;
+use afs_test_utils::utils::create_seeded_rng;
 use criterion::{criterion_group, criterion_main, Criterion};
 use p3_baby_bear::BabyBear;
 use pprof::criterion::{Output, PProfProfiler};
 use rand::Rng;
-
-use afs_test_utils::utils::create_seeded_rng;
 
 type Val = BabyBear;
 

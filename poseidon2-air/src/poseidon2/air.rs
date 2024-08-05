@@ -6,9 +6,11 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
-use zkhash::ark_ff::PrimeField as _;
-use zkhash::fields::babybear::FpBabyBear as HorizenBabyBear;
-use zkhash::poseidon2::poseidon2_instance_babybear::{MAT_DIAG16_M_1, RC16};
+use zkhash::{
+    ark_ff::PrimeField as _,
+    fields::babybear::FpBabyBear as HorizenBabyBear,
+    poseidon2::poseidon2_instance_babybear::{MAT_DIAG16_M_1, RC16},
+};
 
 use super::{
     columns::{Poseidon2AuxCols, Poseidon2Cols, Poseidon2IoCols},

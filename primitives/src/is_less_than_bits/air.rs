@@ -4,9 +4,8 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
 use p3_matrix::Matrix;
 
-use crate::sub_chip::{AirConfig, SubAir};
-
 use super::columns::{IsLessThanBitsAuxCols, IsLessThanBitsCols, IsLessThanBitsIoCols};
+use crate::sub_chip::{AirConfig, SubAir};
 
 #[derive(Copy, Clone, Debug)]
 pub struct IsLessThanBitsAir {

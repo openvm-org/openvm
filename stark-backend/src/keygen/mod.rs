@@ -1,21 +1,21 @@
 use itertools::Itertools;
 use p3_air::BaseAir;
+use p3_field::AbstractExtensionField;
 use p3_matrix::Matrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
 use tracing::instrument;
 
 pub mod types;
 
-use crate::{
-    air_builders::symbolic::get_symbolic_builder,
-    commit::{MatrixCommitmentPointers, SingleMatrixCommitPtr},
-    prover::trace::TraceCommitter,
-    rap::AnyRap,
-};
-
 use self::types::{
     create_commit_to_air_graph, MultiStarkProvingKey, ProverOnlySinglePreprocessedData,
     StarkProvingKey, StarkVerifyingKey, TraceWidth, VerifierSinglePreprocessedData,
+};
+use crate::{
+    air_builders::symbolic::{get_symbolic_builder, SymbolicRapBuilder},
+    commit::{MatrixCommitmentPointers, SingleMatrixCommitPtr},
+    prover::trace::TraceCommitter,
+    rap::AnyRap,
 };
 
 /// Stateful builder to create multi-stark proving and verifying keys
@@ -51,7 +51,8 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     pub fn generate_pk(&mut self) -> MultiStarkProvingKey<SC> {
         if self.interaction_chunk_size.is_none() {
             // If this interaction_chunk_size is not set, use the following as a default
-            // so that permutation constraint degree matches max AIR constraint degree
+            // so that logup constraints degree matches max AIR constraint degree, assuming
+            // `fields` and `count` are of degree 1 in all interactions
             self.interaction_chunk_size = Some(self.all_airs_max_constraint_degree() - 1);
         }
 
@@ -60,29 +61,13 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
 
         let partitioned_airs = std::mem::take(&mut self.partitioned_airs);
         for (air, num_public_values, partitioned_main_ptrs) in partitioned_airs.into_iter() {
-            let (prep_prover_data, prep_verifier_data): (Option<_>, Option<_>) =
-                self.get_single_preprocessed_data(air).unzip();
-            let preprocessed_width = prep_prover_data.as_ref().map(|d| d.trace.width());
-
-            let main_widths = partitioned_main_ptrs
-                .iter()
-                .map(|ptr| {
-                    self.placeholder_main_matrix_in_commit[ptr.commit_index][ptr.matrix_index]
-                })
-                .collect();
-            let width = TraceWidth {
-                preprocessed: preprocessed_width,
-                partitioned_main: main_widths,
-                after_challenge: vec![],
-            };
-            let symbolic_builder = get_symbolic_builder(
-                air,
-                &width,
-                num_public_values,
-                &[],
-                &[],
-                interaction_chunk_size,
-            );
+            let (prep_prover_data, prep_verifier_data, symbolic_builder) = self
+                .get_prep_data_and_symbolic_builder(
+                    air,
+                    num_public_values,
+                    &partitioned_main_ptrs,
+                    interaction_chunk_size,
+                );
 
             let params = symbolic_builder.params();
             let symbolic_constraints = symbolic_builder.constraints();
@@ -152,21 +137,17 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
             create_commit_to_air_graph(&air_matrices, multi_pk.num_main_trace_commitments);
         // reset state
         self.placeholder_main_matrix_in_commit = vec![vec![]];
+        self.interaction_chunk_size = None;
 
-        for (i, pk) in multi_pk.per_air.iter().enumerate() {
+        for pk in multi_pk.per_air.iter() {
             let width = pk.vk.width();
-            println!("AIR {i} [{}]:", &pk.air_name);
-            println!("  quotient degree: {}", pk.vk.quotient_degree);
-            println!("  number of columns:");
-            println!("      preprocessed: {:?}", width.preprocessed);
-            println!("      main (partitioned): {:?}", width.partitioned_main);
-            println!("      after challenge: {:?}", width.after_challenge);
-            println!(
-                "  num symbolic constraints: {}",
-                pk.vk.symbolic_constraints.constraints.len()
-            );
-            println!(
-                "  num interactions: {} on buses {:?}",
+            tracing::info!("{:<20} | Quotient Deg = {:<2} | Prep Cols = {:<2} | Main Cols = {:<8} | Perm Cols = {:<4} | {:<4} Constraints | {:<3} Interactions On Buses {:?}",
+                pk.air_name,
+                pk.vk.quotient_degree,
+                width.preprocessed.unwrap_or(0),
+                format!("{:?}",width.partitioned_main),
+                format!("{:?}",width.after_challenge.iter().map(|&x| x * <SC::Challenge as AbstractExtensionField<Val<SC>>>::D).collect_vec()),
+                pk.vk.symbolic_constraints.constraints.len(),
                 pk.vk.symbolic_constraints.interactions.len(),
                 pk.vk
                     .symbolic_constraints
@@ -240,7 +221,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     /// - Adds main trace to the default shared main trace commitment.
     #[instrument(level = "debug", skip_all)]
     pub fn get_single_preprocessed_data(
-        &mut self,
+        &self,
         air: &dyn AnyRap<SC>,
     ) -> Option<(
         ProverOnlySinglePreprocessedData<SC>,
@@ -263,27 +244,14 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
     }
 
     fn all_airs_max_constraint_degree(&mut self) -> usize {
-        let partitioned_airs = std::mem::take(&mut self.partitioned_airs);
         let mut max_constraint_degree = 0;
-        for (air, num_public_values, partitioned_main_ptrs) in partitioned_airs.iter() {
-            let (prep_prover_data, _): (Option<_>, Option<_>) =
-                self.get_single_preprocessed_data(*air).unzip();
-            let preprocessed_width = prep_prover_data.as_ref().map(|d| d.trace.width());
-
-            let main_widths = partitioned_main_ptrs
-                .iter()
-                .map(|ptr| {
-                    self.placeholder_main_matrix_in_commit[ptr.commit_index][ptr.matrix_index]
-                })
-                .collect();
-            let width = TraceWidth {
-                preprocessed: preprocessed_width,
-                partitioned_main: main_widths,
-                after_challenge: vec![],
-            };
-
-            let symbolic_builder =
-                get_symbolic_builder(*air, &width, *num_public_values, &[], &[], 1);
+        for (air, num_public_values, partitioned_main_ptrs) in self.partitioned_airs.iter() {
+            let (_, _, symbolic_builder) = self.get_prep_data_and_symbolic_builder(
+                *air,
+                *num_public_values,
+                partitioned_main_ptrs,
+                1,
+            );
 
             let symbolic_constraints = symbolic_builder.constraints();
 
@@ -291,7 +259,43 @@ impl<'a, SC: StarkGenericConfig> MultiStarkKeygenBuilder<'a, SC> {
                 max_constraint_degree.max(symbolic_constraints.max_constraint_degree());
         }
 
-        self.partitioned_airs = partitioned_airs;
         max_constraint_degree
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn get_prep_data_and_symbolic_builder(
+        &self,
+        air: &dyn AnyRap<SC>,
+        num_public_values: usize,
+        partitioned_main_ptrs: &[SingleMatrixCommitPtr],
+        interaction_chunk_size: usize,
+    ) -> (
+        Option<ProverOnlySinglePreprocessedData<SC>>,
+        Option<VerifierSinglePreprocessedData<SC>>,
+        SymbolicRapBuilder<Val<SC>>,
+    ) {
+        let (prep_prover_data, prep_verifier_data): (Option<_>, Option<_>) =
+            self.get_single_preprocessed_data(air).unzip();
+        let preprocessed_width = prep_prover_data.as_ref().map(|d| d.trace.width());
+
+        let main_widths = partitioned_main_ptrs
+            .iter()
+            .map(|ptr| self.placeholder_main_matrix_in_commit[ptr.commit_index][ptr.matrix_index])
+            .collect();
+        let width = TraceWidth {
+            preprocessed: preprocessed_width,
+            partitioned_main: main_widths,
+            after_challenge: vec![],
+        };
+        let symbolic_builder = get_symbolic_builder(
+            air,
+            &width,
+            num_public_values,
+            &[],
+            &[],
+            interaction_chunk_size,
+        );
+
+        (prep_prover_data, prep_verifier_data, symbolic_builder)
     }
 }

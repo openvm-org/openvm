@@ -1,10 +1,11 @@
-use std::fs;
-use std::{marker::PhantomData, time::Instant};
+use std::{fs, marker::PhantomData, time::Instant};
 
 use afs_page::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
 use afs_stark_backend::{config::PcsProverData, keygen::MultiStarkKeygenBuilder};
-use afs_test_utils::page_config::PageMode;
-use afs_test_utils::{engine::StarkEngine, page_config::PageConfig};
+use afs_test_utils::{
+    engine::StarkEngine,
+    page_config::{PageConfig, PageMode},
+};
 use bin_common::utils::io::write_bytes;
 use clap::Parser;
 use color_eyre::eyre::Result;

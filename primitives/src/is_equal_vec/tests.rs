@@ -5,10 +5,9 @@ use afs_test_utils::{
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::Rng;
+use test_case::test_case;
 
 use crate::is_equal_vec::IsEqualVecAir;
-
-use test_case::test_case;
 
 #[test_case([1, 2, 3], [1, 2, 3], 1, [1, 1] ; "1, 2, 3 == 1, 2, 3")]
 #[test_case([1, 2, 3], [1, 2, 1], 0, [1, 1] ; "1, 2, 3 != 1, 2, 1")]

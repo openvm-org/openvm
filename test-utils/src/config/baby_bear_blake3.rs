@@ -4,14 +4,13 @@ use p3_blake3::Blake3;
 use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_util::log2_strict_usize;
 
-use crate::engine::StarkEngine;
-
 use super::{
     baby_bear_bytehash::{
         self, config_from_byte_hash, BabyBearByteHashConfig, BabyBearByteHashEngine,
     },
     fri_params::default_fri_params,
 };
+use crate::engine::StarkEngine;
 
 pub type BabyBearBlake3Config = BabyBearByteHashConfig<Blake3>;
 pub type BabyBearBlake3Engine = BabyBearByteHashEngine<Blake3>;

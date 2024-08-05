@@ -1,11 +1,9 @@
+use afs_compiler::prelude::*;
 use p3_commit::{LagrangeSelectors, TwoAdicMultiplicativeCoset};
 use p3_field::{AbstractField, TwoAdicField};
 
-use afs_compiler::prelude::*;
-
-use crate::commit::PolynomialSpaceVariable;
-
 use super::types::FriConfigVariable;
+use crate::commit::PolynomialSpaceVariable;
 
 /// Reference: [p3_commit::TwoAdicMultiplicativeCoset]
 #[derive(DslVariable, Clone, Copy)]
@@ -160,19 +158,17 @@ where
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use afs_compiler::asm::AsmBuilder;
-    use afs_compiler::util::execute_program;
-    use afs_test_utils::config::baby_bear_poseidon2::{
-        default_config, default_perm, BabyBearPoseidon2Config,
+    use afs_compiler::{asm::AsmBuilder, util::execute_program};
+    use afs_test_utils::config::{
+        baby_bear_poseidon2::{default_config, default_perm, BabyBearPoseidon2Config},
+        fri_params::default_fri_params,
     };
-    use afs_test_utils::config::fri_params::default_fri_params;
     use p3_commit::{Pcs, PolynomialSpace};
     use p3_uni_stark::{Domain, StarkGenericConfig, Val};
     use rand::{thread_rng, Rng};
 
-    use crate::utils::const_fri_config;
-
     use super::*;
+    use crate::utils::const_fri_config;
 
     pub(crate) fn domain_assertions<F: TwoAdicField, C: Config<N = F, F = F>>(
         builder: &mut Builder<C>,

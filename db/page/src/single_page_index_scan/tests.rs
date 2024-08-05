@@ -8,9 +8,8 @@ use afs_test_utils::config::{
     baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
 };
 
-use crate::common::page::Page;
-
 use super::{page_controller::PageController, page_index_scan_input::Comp};
+use crate::common::page::Page;
 
 const PAGE_BUS_INDEX: usize = 0;
 const RANGE_BUS_INDEX: usize = 1;

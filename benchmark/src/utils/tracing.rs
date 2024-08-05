@@ -5,13 +5,12 @@ use std::{
     sync::Mutex,
 };
 
+use color_eyre::eyre::{eyre, Result};
 use regex::Regex;
 use tracing::Level;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{fmt::format::FmtSpan, layer::SubscriberExt};
-use tracing_subscriber::{EnvFilter, Layer};
-
-use color_eyre::eyre::{eyre, Result};
+use tracing_subscriber::{
+    fmt::format::FmtSpan, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer,
+};
 
 use crate::TMP_TRACING_LOG;
 

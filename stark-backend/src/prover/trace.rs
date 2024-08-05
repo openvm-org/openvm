@@ -8,14 +8,13 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 use tracing::info_span;
 
+use super::types::{MultiAirCommittedTraceData, SingleAirCommittedTrace};
 use crate::{
     commit::CommittedSingleMatrixView,
     config::{Com, PcsProverData},
     keygen::types::MultiStarkVerifyingKey,
     rap::AnyRap,
 };
-
-use super::types::{MultiAirCommittedTraceData, SingleAirCommittedTrace};
 
 /// Stateful builder to help with computing multi-stark trace commitments
 pub struct TraceCommitmentBuilder<'a, SC: StarkGenericConfig> {

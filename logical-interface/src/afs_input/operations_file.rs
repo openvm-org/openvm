@@ -1,10 +1,11 @@
-use color_eyre::eyre::Result;
-use serde_derive::{Deserialize, Serialize};
 use std::{
     fs::File,
     io::{BufRead, BufReader},
     str::FromStr,
 };
+
+use color_eyre::eyre::Result;
+use serde_derive::{Deserialize, Serialize};
 
 use super::types::{AfsOperation, InputFileOp};
 

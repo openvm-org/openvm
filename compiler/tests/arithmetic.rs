@@ -1,16 +1,16 @@
+use afs_compiler::{
+    asm::{AsmBuilder, AsmConfig},
+    conversion::CompilerOptions,
+    ir::{Builder, Ext, ExtConst, Felt, SymbolicExt, Var},
+    util::execute_program,
+};
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
-use p3_field::{AbstractExtensionField, AbstractField, Field};
+use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
 use rand::{thread_rng, Rng};
-
-use afs_compiler::asm::{AsmBuilder, AsmConfig};
-use afs_compiler::conversion::CompilerOptions;
-use afs_compiler::ir::{Builder, Ext, Felt, SymbolicExt};
-use afs_compiler::ir::{ExtConst, Var};
-use afs_compiler::util::execute_program;
-use stark_vm::cpu::trace::ExecutionError::Fail;
-use stark_vm::vm::config::VmConfig;
-use stark_vm::vm::VirtualMachine;
+use stark_vm::{
+    cpu::trace::ExecutionError::Fail,
+    vm::{config::VmConfig, VirtualMachine},
+};
 
 #[allow(dead_code)]
 const WORD_SIZE: usize = 1;
@@ -99,12 +99,6 @@ fn test_compiler_arithmetic() {
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
     execute_program::<WORD_SIZE>(program, vec![]);
-
-    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
-        field_extension_enabled: false,
-        ..Default::default()
-    });
-    execute_program::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -127,12 +121,6 @@ fn test_compiler_arithmetic_2() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
-
-    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
-        field_extension_enabled: false,
-        ..Default::default()
-    });
     execute_program::<WORD_SIZE>(program, vec![]);
 }
 
@@ -169,12 +157,6 @@ fn test_in_place_arithmetic() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
-
-    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
-        field_extension_enabled: false,
-        ..Default::default()
-    });
     execute_program::<WORD_SIZE>(program, vec![]);
 }
 

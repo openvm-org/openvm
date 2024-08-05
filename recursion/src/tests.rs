@@ -1,27 +1,30 @@
 use std::sync::Arc;
 
+use afs_compiler::util::execute_program;
+use afs_primitives::{range_gate::RangeCheckerGateChip, sum::SumChip};
+use afs_stark_backend::{
+    prover::trace::TraceCommitmentBuilder, rap::AnyRap, verifier::MultiTraceStarkVerifier,
+};
+use afs_test_utils::{
+    config::{
+        baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
+        setup_tracing,
+    },
+    engine::StarkEngine,
+    interaction::dummy_interaction_air::DummyInteractionAir,
+    utils::{generate_fib_trace_rows, to_field_vec, FibonacciAir},
+};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrix;
-use p3_matrix::Matrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::Val;
 use p3_util::log2_strict_usize;
 
-use afs_compiler::util::execute_program;
-use afs_primitives::range_gate::RangeCheckerGateChip;
-use afs_primitives::sum::SumChip;
-use afs_stark_backend::prover::trace::TraceCommitmentBuilder;
-use afs_stark_backend::rap::AnyRap;
-use afs_stark_backend::verifier::MultiTraceStarkVerifier;
-use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
-use afs_test_utils::config::setup_tracing;
-use afs_test_utils::engine::StarkEngine;
-use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
-use afs_test_utils::utils::{generate_fib_trace_rows, to_field_vec, FibonacciAir};
-
-use crate::hints::Hintable;
-use crate::stark::{DynRapForRecursion, VerifierProgram};
-use crate::types::{new_from_multi_vk, InnerConfig, VerifierInput};
+use crate::{
+    hints::Hintable,
+    stark::{DynRapForRecursion, VerifierProgram},
+    types::{new_from_multi_vk, InnerConfig, VerifierInput},
+};
 
 #[test]
 fn test_fibonacci() {

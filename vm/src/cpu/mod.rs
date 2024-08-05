@@ -1,11 +1,9 @@
 use enum_utils::FromStr;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
-
 use OpCode::*;
 
-use crate::field_extension::FieldExtensionArithmeticAir;
-use crate::poseidon2::Poseidon2Chip;
+use crate::{field_extension::FieldExtensionArithmeticAir, poseidon2::Poseidon2Chip};
 
 #[cfg(test)]
 pub mod tests;

@@ -1,0 +1,180 @@
+name: "Benchmark: Coordinate Runner & Reporting"
+
+on:
+  workflow_dispatch:
+    inputs:
+      benchmark_name:
+        type: choice
+        required: true
+        description: The name of the benchmark to run
+        options:
+          - vm_verify_fibair
+          - single_rw
+      aws_instance_type:
+        type: string
+        required: false
+        description: The type of EC2 instance to start
+        default: r7g.8xlarge
+  workflow_call:
+    inputs:
+      benchmark_name:
+        type: string
+        required: true
+        description: The name of the benchmark to run
+      aws_instance_type:
+        type: string
+        required: false
+        description: The type of EC2 instance to start
+        default: r7g.8xlarge
+
+env:
+  S3_PATH: s3://axiom-workflow-data-staging-us-east-1/benchmark/github/results
+
+jobs:
+  start-runner:
+    name: Start self-hosted EC2 runner
+    runs-on: [self-hosted, coordinator, staging]
+    outputs:
+      label: ${{ steps.start-ec2-runner.outputs.label }}
+      ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-1
+      - name: Start EC2 runner
+        id: start-ec2-runner
+        uses: machulav/ec2-github-runner@v2
+        with:
+          mode: start
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          ec2-image-id: ami-0a071ac3e1220fe60 # arm64-rust-dev-32gb
+          # ami-06dd8940c223fd887 # arm64-rust-dev-1024gb
+          ec2-instance-type: ${{ inputs.aws_instance_type }}
+          subnet-id: subnet-08094bf4edad62d10 # staging tooling private subnet
+          security-group-id: sg-09543a06c701894f8 # allow all outbound
+          iam-role-name: github-temp-runner # IAM role name to attach to the created EC2 runner
+
+  bench-new:
+    name: Run benchmark on workflow ref/branch
+    needs:
+      - start-runner
+    runs-on: ${{ needs.start-runner.outputs.label }} # run the job on the newly created runner
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      ######################################################
+      # Run a different benchmark based on benchmark_name:
+      - name: Run benchmark
+        if: inputs.benchmark_name == 'vm_verify_fibair'
+        run: |
+          RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- vm_verify_fibair -n 16
+
+      - name: Run benchmark
+        if: inputs.benchmark_name == 'single_rw'
+        run: |
+          RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- rw -r 90 -w 10 --config-folder benchmark/config/single_rw
+      ######################################################
+      # If we want this read from main, split this into a different job
+      - name: Get previous benchmark value
+        id: get-previous-benchmark
+        run: |
+          s5cmd cp "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md" results.md
+
+          previous_result="$(<results.md)"
+
+          echo 'previous-benchmark<<EOF' >> $GITHUB_ENV
+          echo '# Previous Benchmark' >> $GITHUB_ENV
+          echo "${previous_result}" >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+
+      - name: Update benchmark value
+        id: update-benchmark
+        run: |
+          current_sha=$(git rev-parse HEAD)
+          echo "Current SHA: $current_sha"
+          echo "current_sha=${current_sha}" >> $GITHUB_ENV
+          commit_url="https://github.com/${{ github.repository }}/commit/${current_sha}"
+
+          RESULT_PATH=benchmark/tmp/_result.md
+          echo "" >> $RESULT_PATH
+          echo "Commit: ${commit_url}" >> $RESULT_PATH
+          echo "AWS Instance Type: [${{ inputs.aws_instance_type }}](https://instances.vantage.sh/aws/ec2/${{ inputs.aws_instance_type }})" >> $RESULT_PATH
+          echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $RESULT_PATH
+          s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${{ inputs.benchmark_name }}.md"
+
+          new_result="$(<${RESULT_PATH})"
+          echo "${new_result}"
+
+          echo 'new-benchmark<<EOF' >> $GITHUB_ENV
+          echo "# New Benchmark" >> $GITHUB_ENV
+          echo "${new_result}" >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+
+      - name: Remove previous comment (if exists)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const previousBenchmark = process.env['previous-benchmark'];
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+            for (const comment of comments.data) {
+              if (comment.body.startsWith(previousBenchmark)) {
+                console.log("deleting comment ", comment.id);
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: comment.id
+                });
+              }
+            }
+
+      - name: Add comment to pull request
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const previousBenchmark = process.env['previous-benchmark'];
+            const newBenchmark = process.env['new-benchmark'];
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `${previousBenchmark}\n\n${newBenchmark}`
+            });
+
+      - name: Update latest main result in s3
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${{ inputs.benchmark_name }}.md" "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md"
+
+  stop-runner:
+    name: Stop self-hosted EC2 runner
+    needs:
+      - start-runner # required to get output from the start-runner job
+      - bench-new # wait for bench-new to finish
+    runs-on: [self-hosted, coordinator, staging]
+    if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: us-east-1
+      - name: Stop EC2 runner
+        uses: machulav/ec2-github-runner@v2
+        with:
+          mode: stop
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          label: ${{ needs.start-runner.outputs.label }}
+          ec2-instance-id: ${{ needs.start-runner.outputs.ec2-instance-id }}

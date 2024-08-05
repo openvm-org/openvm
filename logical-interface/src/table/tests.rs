@@ -1,12 +1,11 @@
 use afs_page::common::{page::Page, page_cols::PageCols};
 
+use super::Table;
 use crate::{
     afs_interface::utils::string_to_table_id,
     table::types::{TableId, TableMetadata},
     utils::uint_to_be_vec,
 };
-
-use super::Table;
 
 fn create_table() -> Table {
     let table_id = TableId::new([0; 32]);

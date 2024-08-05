@@ -1,9 +1,8 @@
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use crate::cpu::{FIELD_EXTENSION_BUS, MEMORY_BUS, WORD_SIZE};
-
 use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
+use crate::cpu::{FIELD_EXTENSION_BUS, MEMORY_BUS, WORD_SIZE};
 
 fn eval_rw_interactions<AB: InteractionBuilder>(
     builder: &mut AB,

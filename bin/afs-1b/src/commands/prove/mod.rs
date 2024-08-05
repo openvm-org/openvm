@@ -15,7 +15,6 @@ use afs_stark_backend::{
         MultiTraceStarkProver,
     },
 };
-
 use afs_test_utils::{
     engine::StarkEngine,
     page_config::{MultitierPageConfig, PageMode},
@@ -33,15 +32,13 @@ use logical_interface::{
 use p3_field::{PrimeField, PrimeField32, PrimeField64};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{de::DeserializeOwned, Serialize};
+use tracing::info_span;
 
+use super::create_prefix;
 use crate::commands::{
     commit_to_string, get_ops_sender, get_page_controller, get_prover_data_from_file,
     read_from_path, write_bytes, BABYBEAR_COMMITMENT_LEN,
 };
-
-use tracing::info_span;
-
-use super::create_prefix;
 
 /// `afs prove` command
 /// Uses information from config.toml to generate a proof of the changes made by a .afi file to a table

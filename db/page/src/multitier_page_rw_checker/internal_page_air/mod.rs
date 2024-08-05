@@ -1,9 +1,8 @@
-use getset::Getters;
-
 use afs_primitives::{
     is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
     is_zero::IsZeroAir,
 };
+use getset::Getters;
 
 use super::page_controller::MyLessThanTupleParams;
 

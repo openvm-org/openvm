@@ -1,11 +1,10 @@
 use std::iter;
 
+use super::IndexedPageWriteAir;
 use crate::indexed_output_page_air::{
     columns::{IndexedOutputPageAuxCols, IndexedOutputPageCols},
     IndexedOutputPageAir,
 };
-
-use super::IndexedPageWriteAir;
 
 #[derive(Clone)]
 pub struct IndexedPageWriteCols<T> {
