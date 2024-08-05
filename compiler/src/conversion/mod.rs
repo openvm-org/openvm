@@ -524,16 +524,14 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             AS::Register,
             AS::Memory,
         )],
-        AsmInstruction::Poseidon2Permute(dst, lhs, rhs) => vec![
-            inst(
-                PERM_POS2,
-                register(dst),
-                register(lhs),
-                register(rhs),
-                AS::Register,
-                AS::Memory,
-            ),
-        ],
+        AsmInstruction::Poseidon2Permute(dst, lhs, rhs) => vec![inst(
+            PERM_POS2,
+            register(dst),
+            register(lhs),
+            register(rhs),
+            AS::Register,
+            AS::Memory,
+        )],
         AsmInstruction::CycleTrackerStart(name) => {
             if options.enable_cycle_tracker {
                 vec![dbg(CT_START, name)]

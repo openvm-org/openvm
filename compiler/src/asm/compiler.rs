@@ -7,10 +7,9 @@ use stark_vm::program::DebugInfo;
 use super::{config::AsmConfig, AssemblyCode, BasicBlock, IndexTriple, ValueOrConst};
 use crate::{
     asm::AsmInstruction,
-    ir::{Array, DslIr, Ext, Felt, Ptr, Usize, Var},
+    ir::{Array, DslIr, Ext, Felt, Ptr, Usize, Var, PERMUTATION_WIDTH},
     prelude::TracedVec,
 };
-use crate::ir::PERMUTATION_WIDTH;
 
 /// The zero address.
 pub(crate) const ZERO: i32 = 0;
@@ -482,8 +481,18 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 }
                 DslIr::Poseidon2PermuteBabyBear(dst, src) => match (dst, src) {
                     (Array::Dyn(dst, _), Array::Dyn(src, _)) => {
-                        self.push(AsmInstruction::AddFI(A0, src.fp(), F::from_canonical_usize(PERMUTATION_WIDTH / 2)), debug_info.clone());
-                        self.push(AsmInstruction::Poseidon2Permute(dst.fp(), src.fp(), A0), debug_info)
+                        self.push(
+                            AsmInstruction::AddFI(
+                                A0,
+                                src.fp(),
+                                F::from_canonical_usize(PERMUTATION_WIDTH / 2),
+                            ),
+                            debug_info.clone(),
+                        );
+                        self.push(
+                            AsmInstruction::Poseidon2Permute(dst.fp(), src.fp(), A0),
+                            debug_info,
+                        )
                     }
                     _ => unimplemented!(),
                 },
