@@ -40,9 +40,15 @@ Note that `--percent-reads` and `--percent-writes` must be less than or equal to
 
 Percentage (where 100 = 100%) of config file's `max_rw_ops` that are `READ`s. Note that there must be at least one value already inserted.
 
-## Predicate
+## Predicate (Filter)
 
-Run these commands from the root of the repository
+To run a single fast benchmark, run from the root of the repository
+
+```bash
+RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- predicate --config-folder benchmark/config/single_filter -f benchmark/config/olap/filter_0xfade.afo
+```
+
+To generate a suite of configs and run benchmarks on all of them, run from the root of the repository
 
 ```bash
 RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- predicate -f benchmark/config/olap/filter_0xfade.afo
@@ -56,7 +62,7 @@ Pass in an .afo file that contains the predicate instruction. Example .afo file:
 FILTER 0xfade INDEX <= 0xdac0
 ```
 
-## Predicate
+## B-tree (Multi-tier) Read/Write
 
 Run this command for multitier read/write
 

@@ -10,6 +10,7 @@ on:
         options:
           - vm_verify_fibair
           - single_rw
+          - single_filter
       aws_instance_type:
         type: string
         required: false
@@ -80,8 +81,12 @@ jobs:
         if: inputs.benchmark_name == 'single_rw'
         run: |
           RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- rw -r 90 -w 10 --config-folder benchmark/config/single_rw
+
+      - name: Run benchmark
+        if: inputs.benchmark_name == 'single_filter'
+        run: |
+          RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- predicate --config-folder benchmark/config/single_filter -f benchmark/config/olap/filter_0xfade.afo
       ######################################################
-      # If we want this read from main, split this into a different job
       - name: Get previous benchmark value
         id: get-previous-benchmark
         run: |
