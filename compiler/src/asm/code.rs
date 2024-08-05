@@ -1,7 +1,7 @@
 use alloc::{collections::BTreeMap, format};
 use core::{fmt, fmt::Display};
 
-use p3_field::{ExtensionField, PrimeField, PrimeField32};
+use p3_field::{ExtensionField, PrimeField32};
 use stark_vm::program::DebugInfo;
 
 use super::AsmInstruction;
@@ -31,7 +31,7 @@ impl<F: PrimeField32, EF: ExtensionField<F>> BasicBlock<F, EF> {
 }
 
 /// Assembly code for a program.
-pub struct AssemblyCode<F: PrimeField, EF: ExtensionField<F>> {
+pub struct AssemblyCode<F, EF> {
     pub blocks: Vec<BasicBlock<F, EF>>,
     pub labels: BTreeMap<F, String>,
 }

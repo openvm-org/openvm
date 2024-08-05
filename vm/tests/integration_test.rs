@@ -129,8 +129,8 @@ fn test_vm_1() {
     ];
 
     let program = Program {
-        isa_instructions: instructions,
-        debug_info_vec: vec![None; 5],
+        instructions,
+        debug_infos: vec![None; 5],
     };
 
     air_test(true, false, program, vec![], true);
@@ -162,8 +162,8 @@ fn test_vm_without_field_arithmetic() {
     ];
 
     let program = Program {
-        isa_instructions: instructions,
-        debug_info_vec: vec![None; 5],
+        instructions,
+        debug_infos: vec![None; 5],
     };
 
     air_test(
@@ -196,8 +196,8 @@ fn test_vm_fibonacci_old() {
     let program_len = instructions.len();
 
     let program = Program {
-        isa_instructions: instructions,
-        debug_info_vec: vec![None; program_len],
+        instructions,
+        debug_infos: vec![None; program_len],
     };
 
     air_test(true, false, program.clone(), vec![], true);
@@ -233,8 +233,8 @@ fn test_vm_fibonacci_old_cycle_tracker() {
     let program_len = instructions.len();
 
     let program = Program {
-        isa_instructions: instructions,
-        debug_info_vec: vec![None; program_len],
+        instructions,
+        debug_infos: vec![None; program_len],
     };
 
     air_test(true, false, program.clone(), vec![], false);
@@ -262,8 +262,8 @@ fn test_vm_field_extension_arithmetic() {
     let program_len = instructions.len();
 
     let program = Program {
-        isa_instructions: instructions,
-        debug_info_vec: vec![None; program_len],
+        instructions,
+        debug_infos: vec![None; program_len],
     };
 
     air_test(
@@ -305,8 +305,8 @@ fn test_vm_hint() {
     let program_len = instructions.len();
 
     let program = Program {
-        isa_instructions: instructions,
-        debug_info_vec: vec![None; program_len],
+        instructions,
+        debug_infos: vec![None; program_len],
     };
 
     type F = BabyBear;
@@ -356,8 +356,8 @@ fn test_vm_compress_poseidon2() {
     let program_len = instructions.len();
 
     let program = Program {
-        isa_instructions: instructions,
-        debug_info_vec: vec![None; program_len],
+        instructions,
+        debug_infos: vec![None; program_len],
     };
 
     air_test_with_poseidon2(false, false, true, program);
@@ -399,8 +399,8 @@ fn test_vm_compress_poseidon2_as2() {
     let program_len = instructions.len();
 
     let program = Program {
-        isa_instructions: instructions,
-        debug_info_vec: vec![None; program_len],
+        instructions,
+        debug_infos: vec![None; program_len],
     };
 
     air_test_with_poseidon2(false, false, true, program);

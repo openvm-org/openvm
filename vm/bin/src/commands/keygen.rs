@@ -54,8 +54,8 @@ impl KeygenCommand {
         let instructions = parse_asm_file(Path::new(&self.asm_file_path.clone()))?;
         let program_len = instructions.len();
         let program = Program {
-            isa_instructions: instructions,
-            debug_info_vec: vec![None; program_len],
+            instructions,
+            debug_infos: vec![None; program_len],
         };
         let vm = VirtualMachine::<WORD_SIZE, _>::new(config, program, vec![]);
         let result = vm.execute()?;

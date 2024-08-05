@@ -304,7 +304,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
     let utility_registers: [F; NUM_UTILITY_REGISTERS] = from_fn(|i| F::from_canonical_usize(i));
     let utility_register = utility_registers[0];
 
-    let isa_instructions = match instruction {
+    let instructions = match instruction {
         AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
         AsmInstruction::LoadFI(dst, src, offset) => vec![
             // register[dst] <- mem[register[src] + offset]
@@ -577,10 +577,10 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         _ => panic!("Unsupported instruction {:?}", instruction),
     };
 
-    let debug_info_vec = vec![debug_info; isa_instructions.len()];
+    let debug_infos = vec![debug_info; instructions.len()];
     Program {
-        isa_instructions,
-        debug_info_vec,
+        instructions,
+        debug_infos,
     }
 }
 
@@ -618,8 +618,8 @@ pub fn convert_program<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         }
     }
 
-    let mut isa_instructions = vec![init_register_0];
-    let mut debug_info_vec = vec![init_debug_info];
+    let mut instructions = vec![init_register_0];
+    let mut debug_infos = vec![init_debug_info];
     for block in program.blocks.iter() {
         for i in 0..block.0.len() {
             let instruction = &block.0[i];
@@ -629,17 +629,17 @@ pub fn convert_program<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             let result = convert_instruction::<WORD_SIZE, F, EF>(
                 instruction.clone(),
                 debug_info.clone(),
-                F::from_canonical_usize(isa_instructions.len()),
+                F::from_canonical_usize(instructions.len()),
                 labels,
                 options,
             );
-            isa_instructions.extend(result.isa_instructions);
-            debug_info_vec.extend(result.debug_info_vec);
+            instructions.extend(result.instructions);
+            debug_infos.extend(result.debug_infos);
         }
     }
 
     Program {
-        isa_instructions,
-        debug_info_vec,
+        instructions,
+        debug_infos,
     }
 }

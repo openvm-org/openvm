@@ -31,17 +31,17 @@ impl DebugInfo {
 
 #[derive(Clone)]
 pub struct Program<F> {
-    pub isa_instructions: Vec<Instruction<F>>,
-    pub debug_info_vec: Vec<Option<DebugInfo>>,
+    pub instructions: Vec<Instruction<F>>,
+    pub debug_infos: Vec<Option<DebugInfo>>,
 }
 
 impl<F> Program<F> {
     pub fn len(&self) -> usize {
-        self.isa_instructions.len()
+        self.instructions.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.isa_instructions.is_empty()
+        self.instructions.is_empty()
     }
 }
 
@@ -60,9 +60,9 @@ impl<F: PrimeField64> ProgramChip<F> {
         let true_program_length = program.len();
         while !program.len().is_power_of_two() {
             program
-                .isa_instructions
+                .instructions
                 .push(Instruction::from_isize(FAIL, 0, 0, 0, 0, 0));
-            program.debug_info_vec.push(None);
+            program.debug_infos.push(None);
         }
         Self {
             execution_frequencies: vec![0; program.len()],
@@ -80,8 +80,8 @@ impl<F: PrimeField64> ProgramChip<F> {
         }
         self.execution_frequencies[pc] += 1;
         Ok((
-            self.air.program.isa_instructions[pc].clone(),
-            self.air.program.debug_info_vec[pc].clone(),
+            self.air.program.instructions[pc].clone(),
+            self.air.program.debug_infos[pc].clone(),
         ))
     }
 }

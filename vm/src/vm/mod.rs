@@ -172,8 +172,8 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
         let num_chips = self.segments[0].get_num_chips();
 
         let empty_program = Program {
-            isa_instructions: vec![],
-            debug_info_vec: vec![],
+            instructions: vec![],
+            debug_infos: vec![],
         };
 
         let unique_chips = get_chips::<WORD_SIZE, BabyBearPoseidon2Config>(

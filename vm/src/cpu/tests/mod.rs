@@ -165,12 +165,12 @@ fn execution_test<const WORD_SIZE: usize>(
             // don't check timestamp
             timestamp: cols.io.timestamp,
             pc: BabyBear::from_canonical_u64(pc as u64),
-            opcode: BabyBear::from_canonical_u64(program.isa_instructions[pc].opcode as u64),
-            op_a: program.isa_instructions[pc].op_a,
-            op_b: program.isa_instructions[pc].op_b,
-            op_c: program.isa_instructions[pc].op_c,
-            d: program.isa_instructions[pc].d,
-            e: program.isa_instructions[pc].e,
+            opcode: BabyBear::from_canonical_u64(program.instructions[pc].opcode as u64),
+            op_a: program.instructions[pc].op_a,
+            op_b: program.instructions[pc].op_b,
+            op_c: program.instructions[pc].op_c,
+            d: program.instructions[pc].d,
+            e: program.instructions[pc].e,
         };
         assert_eq!(cols.io, expected_io);
     }
@@ -255,7 +255,7 @@ fn air_test_change<
 
     let program_air = DummyInteractionAir::new(7, false, READ_INSTRUCTION_BUS);
     let mut program_rows = vec![];
-    for (pc, instruction) in program.isa_instructions.iter().enumerate() {
+    for (pc, instruction) in program.instructions.iter().enumerate() {
         program_rows.extend(vec![
             BabyBear::from_canonical_usize(segment.program_chip.execution_frequencies[pc]),
             BabyBear::from_canonical_usize(pc),
@@ -377,8 +377,8 @@ fn test_cpu_1() {
     ];
 
     let program = Program {
-        isa_instructions: instructions,
-        debug_info_vec: vec![None; 5],
+        instructions,
+        debug_infos: vec![None; 5],
     };
 
     let mut expected_execution: Vec<usize> = vec![0, 1];
@@ -455,8 +455,8 @@ fn test_cpu_without_field_arithmetic() {
     ];
 
     let program = Program {
-        isa_instructions: instructions,
-        debug_info_vec: vec![None; 5],
+        instructions,
+        debug_infos: vec![None; 5],
     };
 
     let expected_execution: Vec<usize> = vec![0, 1, 4, 3];
@@ -505,8 +505,8 @@ fn test_cpu_negative_wrong_pc() {
     ];
 
     let program = Program {
-        isa_instructions: instructions,
-        debug_info_vec: vec![None; 5],
+        instructions,
+        debug_infos: vec![None; 5],
     };
 
     air_test_change_pc::<TEST_WORD_SIZE>(true, false, program, true, 2, 3);
@@ -529,8 +529,8 @@ fn test_cpu_negative_wrong_pc_check() {
     ];
 
     let program = Program {
-        isa_instructions: instructions,
-        debug_info_vec: vec![None; 5],
+        instructions,
+        debug_infos: vec![None; 5],
     };
 
     air_test_change_pc::<TEST_WORD_SIZE>(true, false, program, false, 2, 2);
@@ -549,8 +549,8 @@ fn test_cpu_negative_hasnt_terminated() {
     ];
 
     let program = Program {
-        isa_instructions: instructions,
-        debug_info_vec: vec![None; 2],
+        instructions,
+        debug_infos: vec![None; 2],
     };
 
     air_test_change(
@@ -576,8 +576,8 @@ fn test_cpu_negative_secret_write() {
     ];
 
     let program = Program {
-        isa_instructions: instructions,
-        debug_info_vec: vec![None; 2],
+        instructions,
+        debug_infos: vec![None; 2],
     };
 
     air_test_change(
@@ -623,8 +623,8 @@ fn test_cpu_negative_disable_write() {
     ];
 
     let program = Program {
-        isa_instructions: instructions,
-        debug_info_vec: vec![None; 2],
+        instructions,
+        debug_infos: vec![None; 2],
     };
 
     air_test_change(
@@ -652,8 +652,8 @@ fn test_cpu_negative_disable_read0() {
     ];
 
     let program = Program {
-        isa_instructions: instructions,
-        debug_info_vec: vec![None; 3],
+        instructions,
+        debug_infos: vec![None; 3],
     };
 
     air_test_change(
@@ -681,8 +681,8 @@ fn test_cpu_negative_disable_read1() {
     ];
 
     let program = Program {
-        isa_instructions: instructions,
-        debug_info_vec: vec![None; 3],
+        instructions,
+        debug_infos: vec![None; 3],
     };
 
     air_test_change(
@@ -714,8 +714,8 @@ fn test_cpu_publish() {
     ];
 
     let program = Program {
-        isa_instructions: instructions,
-        debug_info_vec: vec![None; 4],
+        instructions,
+        debug_infos: vec![None; 4],
     };
 
     air_test_change(

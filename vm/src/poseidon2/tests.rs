@@ -60,8 +60,8 @@ macro_rules! run_perm_ops {
         let tot_ops: usize = ($num_ops as usize).next_power_of_two();
 
         let program = Program {
-            isa_instructions: vec![],
-            debug_info_vec: vec![],
+            instructions: vec![],
+            debug_infos: vec![],
         };
 
         // default VM with poseidon2 enabled

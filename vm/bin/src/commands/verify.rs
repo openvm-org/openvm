@@ -66,8 +66,8 @@ impl VerifyCommand {
         let instructions = parse_asm_file(Path::new(&self.asm_file_path))?;
         let program_len = instructions.len();
         let program = Program {
-            isa_instructions: instructions,
-            debug_info_vec: vec![None; program_len],
+            instructions,
+            debug_infos: vec![None; program_len],
         };
         let vm = VirtualMachine::<WORD_SIZE, _>::new(config, program, vec![]);
         let encoded_vk = read_from_path(&Path::new(&self.keys_folder).join("vk"))?;
