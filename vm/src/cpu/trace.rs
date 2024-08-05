@@ -225,11 +225,13 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 }};
             }
 
+            #[cfg(debug_assertions)]
             vm.opcode_counts
                 .entry(opcode.to_string())
                 .and_modify(|count| *count += 1)
                 .or_insert(1);
 
+            #[cfg(debug_assertions)]
             vm.dsl_counts
                 .entry(dsl_instr)
                 .and_modify(|count| *count += 1)

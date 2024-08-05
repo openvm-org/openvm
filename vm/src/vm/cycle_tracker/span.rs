@@ -67,12 +67,21 @@ impl Display for CycleTrackerSpan {
         for (key, value) in &self.end.vm_metrics {
             writeln!(f, "  - {}: {}", key, value)?;
         }
-        for (key, value) in &self.end.opcode_counts {
+
+        let mut sorted_opcode_counts: Vec<(&String, &usize)> =
+            self.end.opcode_counts.iter().collect();
+        sorted_opcode_counts.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
+
+        for (key, value) in sorted_opcode_counts {
             if *value > 0 {
                 writeln!(f, "  - {}: {}", key, value)?;
             }
         }
-        for (key, value) in &self.end.dsl_counts {
+
+        let mut sorted_dsl_counts: Vec<(&String, &usize)> = self.end.dsl_counts.iter().collect();
+        sorted_dsl_counts.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
+
+        for (key, value) in sorted_dsl_counts {
             if *value > 0 {
                 writeln!(f, "  - {}: {}", key, value)?;
             }

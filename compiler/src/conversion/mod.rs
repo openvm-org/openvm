@@ -604,9 +604,7 @@ pub fn convert_program<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
     for block in program.blocks.iter() {
         block_start.push(pc);
 
-        for i in 0..block.0.len() {
-            let instruction = &block.0[i];
-            let debug_info = &block.1[i];
+        for (instruction, debug_info) in block.0.iter().zip(block.1.iter()) {
             let instructions = convert_instruction::<WORD_SIZE, F, EF>(
                 instruction.clone(),
                 debug_info.clone(),
@@ -621,9 +619,7 @@ pub fn convert_program<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
     let mut instructions = vec![init_register_0];
     let mut debug_infos = vec![init_debug_info];
     for block in program.blocks.iter() {
-        for i in 0..block.0.len() {
-            let instruction = &block.0[i];
-            let debug_info = &block.1[i];
+        for (instruction, debug_info) in block.0.iter().zip(block.1.iter()) {
             let labels =
                 |label: F| F::from_canonical_usize(block_start[label.as_canonical_u64() as usize]);
             let result = convert_instruction::<WORD_SIZE, F, EF>(
