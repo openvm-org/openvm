@@ -2,7 +2,7 @@ use std::{collections::HashMap, iter, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{
-    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
+    keygen::MultiStarkKeygenBuilder,
     prover::{
         trace::{TraceCommitmentBuilder, TraceCommitter},
         MultiTraceStarkProver,

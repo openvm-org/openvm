@@ -745,6 +745,9 @@ where
         leaf_pages.resize(leaf_cap, blank_leaf_page.clone());
         internal_pages.resize(internal_cap, blank_internal_page.to_vec());
     } else {
+        if internal_pages.is_empty() {
+            internal_pages.push(blank_internal_page.to_vec());
+        }
         leaf_chips.truncate(leaf_pages.len());
         for i in leaf_chips.len()..leaf_pages.len() {
             leaf_chips.push(leaf_chips[0].clone_with_id(i as u32));
