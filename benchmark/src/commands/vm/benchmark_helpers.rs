@@ -230,14 +230,14 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         .clone()
         .into_iter()
         .sorted_by(|a, b| a.1.cmp(&b.1))
-        .map(|(k, v)| (format!("opcode_{}", k), v.to_string()))
+        .map(|(k, v)| (k, v.to_string()))
         .collect();
 
     let sorted_dsl_counts: Vec<(String, String)> = dsl_counts
         .clone()
         .into_iter()
         .sorted_by(|a, b| a.1.cmp(&b.1))
-        .map(|(k, v)| (format!("dsl_{}", k), v.to_string()))
+        .map(|(k, v)| (k, v.to_string()))
         .collect();
 
     let metrics = BenchmarkMetrics {
