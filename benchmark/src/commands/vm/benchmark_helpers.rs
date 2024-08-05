@@ -1,8 +1,4 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    fs::File,
-    io::Write as _,
-};
+use std::{collections::HashMap, fs::File, io::Write as _};
 
 use afs_recursion::{
     hints::Hintable,
@@ -22,6 +18,7 @@ use afs_test_utils::{
     engine::StarkEngine,
 };
 use color_eyre::eyre;
+use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_strict_usize;
@@ -34,7 +31,7 @@ use tracing::info_span;
 use crate::{
     config::benchmark_data::{BenchmarkSetup, BACKEND_TIMING_FILTERS, BACKEND_TIMING_HEADERS},
     utils::tracing::{clear_tracing_log, extract_timing_data_from_log, setup_benchmark_tracing},
-    workflow::metrics::BenchmarkMetrics,
+    workflow::metrics::{BenchmarkMetrics, CustomMetrics},
     TMP_RESULT_MD, TMP_TRACING_LOG,
 };
 
@@ -224,16 +221,24 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     let opcode_counts = opcode_counts.pop().unwrap();
     let dsl_counts = dsl_counts.pop().unwrap();
 
-    let mut custom: BTreeMap<String, String> = vm_metrics
+    let vm_metrics = vm_metrics
         .into_iter()
         .map(|(k, v)| (k, v.to_string()))
         .collect();
-    for (k, v) in opcode_counts {
-        custom.insert(format!("opcode_{}", k), v.to_string());
-    }
-    for (k, v) in dsl_counts {
-        custom.insert(format!("dsl_{}", k), v.to_string());
-    }
+
+    let sorted_opcode_counts: Vec<(String, String)> = opcode_counts
+        .clone()
+        .into_iter()
+        .sorted_by(|a, b| a.1.cmp(&b.1))
+        .map(|(k, v)| (format!("opcode_{}", k), v.to_string()))
+        .collect();
+
+    let sorted_dsl_counts: Vec<(String, String)> = dsl_counts
+        .clone()
+        .into_iter()
+        .sorted_by(|a, b| a.1.cmp(&b.1))
+        .map(|(k, v)| (format!("dsl_{}", k), v.to_string()))
+        .collect();
 
     let metrics = BenchmarkMetrics {
         name: benchmark_name.to_string(),
@@ -242,7 +247,11 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         perm_trace_gen_ms,
         calc_quotient_values_ms,
         trace: trace_metrics,
-        custom,
+        custom: CustomMetrics {
+            vm_metrics,
+            opcode_counts: sorted_opcode_counts,
+            dsl_counts: sorted_dsl_counts,
+        },
     };
 
     write!(File::create(TMP_RESULT_MD.as_str())?, "{}", metrics)?;

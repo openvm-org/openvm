@@ -167,7 +167,11 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let pc_usize = pc.as_canonical_u64() as usize;
 
             let (instruction, debug_info) = vm.program_chip.get_instruction(pc_usize)?;
-            let dsl_instr = debug_info.unwrap_or_default().dsl_instruction;
+
+            let dsl_instr = match debug_info {
+                Some(debug_info) => debug_info.dsl_instruction,
+                None => String::new(),
+            };
 
             let opcode = instruction.opcode;
             let a = instruction.op_a;
@@ -231,11 +235,13 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 .and_modify(|count| *count += 1)
                 .or_insert(1);
 
-            #[cfg(debug_assertions)]
-            vm.dsl_counts
-                .entry(dsl_instr)
-                .and_modify(|count| *count += 1)
-                .or_insert(1);
+            if !dsl_instr.is_empty() {
+                #[cfg(debug_assertions)]
+                vm.dsl_counts
+                    .entry(dsl_instr)
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
+            }
 
             if opcode == FAIL {
                 return Err(ExecutionError::Fail(pc_usize));
