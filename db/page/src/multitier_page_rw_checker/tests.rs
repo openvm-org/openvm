@@ -147,11 +147,7 @@ where
             range_checker,
         );
     let ops_sender = DummyInteractionAir::new(idx_len + data_len + 2, true, ops_bus_index);
-    let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-    page_controller.set_up_keygen_builder(&mut keygen_builder, &ops_sender);
-
-    let pk = keygen_builder.generate_pk();
     let (init_pages, init_root_is_leaf, final_pages, final_root_is_leaf, ops) = generate_inputs(
         idx_len,
         data_len,
@@ -175,7 +171,6 @@ where
         &ops_sender,
         &mut page_controller,
         &mut trace_builder,
-        &pk,
         trace_degree,
     );
     assert!(should_fail == res.is_err());
@@ -203,7 +198,6 @@ fn load_page_test(
         BABYBEAR_COMMITMENT_LEN,
     >,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
-    pk: &MultiStarkProvingKey<BabyBearPoseidon2Config>,
     trace_degree: usize,
 ) -> Result<(), VerificationError> {
     page_controller.range_checker.clear();
@@ -239,9 +233,14 @@ fn load_page_test(
             .collect(),
         1 + ops_sender.field_width(),
     );
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
+
+    page_controller.set_up_keygen_builder(&mut keygen_builder, ops_sender);
+
+    let pk = keygen_builder.generate_pk();
     let (proof, pis) = page_controller.prove(
         engine,
-        pk,
+        &pk,
         trace_builder,
         prover_data,
         ops_sender,

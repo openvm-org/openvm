@@ -47,6 +47,13 @@ pub struct MyLessThanTupleParams {
     pub decomp: usize,
 }
 
+pub struct MultitierCapacities {
+    pub init_leaf_cap: Option<usize>,
+    pub init_internal_cap: Option<usize>,
+    pub final_leaf_cap: Option<usize>,
+    pub final_internal_cap: Option<usize>,
+}
+
 struct TreeProducts<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>
 where
     Val<SC>: AbstractField + PrimeField64,
@@ -732,14 +739,21 @@ where
     Val<SC>: AbstractField + PrimeField64,
     Com<SC>: Into<[Val<SC>; COMMITMENT_LEN]>,
 {
-    let mut leaf_pages = leaf_pages.to_vec();
-    let mut internal_pages = internal_pages.to_vec();
+    let mut leaf_pages = leaf_pages;
+    let mut internal_pages = internal_pages;
     if let (Some(leaf_cap), Some(internal_cap)) = (params.leaf_cap, params.internal_cap) {
         leaf_pages.resize(leaf_cap, blank_leaf_page.clone());
         internal_pages.resize(internal_cap, blank_internal_page.to_vec());
+    } else {
+        leaf_chips.truncate(leaf_pages.len());
+        for i in leaf_chips.len()..leaf_pages.len() {
+            leaf_chips.push(leaf_chips[0].clone_with_id(i as u32));
+        }
+        for i in internal_chips.len()..internal_pages.len() {
+            internal_chips.push(internal_chips[0].clone_with_id(i as u32));
+        }
     }
-    leaf_chips.resize(leaf_pages.len(), leaf_chips[0].clone());
-    internal_chips.resize(internal_pages.len(), internal_chips[0].clone());
+
     let leaf_trace = leaf_pages
         .iter()
         .zip(leaf_chips.iter())
