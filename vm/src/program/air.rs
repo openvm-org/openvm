@@ -12,7 +12,7 @@ impl<F: Field> BaseAir<F> for ProgramAir<F> {
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
         let mut rows = vec![];
-        for (pc, instruction) in self.program.iter().enumerate() {
+        for (pc, instruction) in self.program.instructions.iter().enumerate() {
             let preprocessed_cols = ProgramPreprocessedCols {
                 pc: F::from_canonical_usize(pc),
                 opcode: F::from_canonical_usize(instruction.opcode as usize),

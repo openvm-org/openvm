@@ -10,6 +10,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
 use stark_vm::{
     cpu::trace::Instruction,
+    program::Program,
     vm::{config::VmConfig, ExecutionResult, VirtualMachine},
 };
 
@@ -26,7 +27,7 @@ pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
 }
 
 pub fn execute_program<const WORD_SIZE: usize>(
-    program: Vec<Instruction<BabyBear>>,
+    program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
 ) {
     let vm = VirtualMachine::<WORD_SIZE, _>::new(
@@ -41,7 +42,7 @@ pub fn execute_program<const WORD_SIZE: usize>(
 }
 
 pub fn execute_program_with_public_values<const WORD_SIZE: usize>(
-    program: Vec<Instruction<BabyBear>>,
+    program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
     public_values: &[(usize, BabyBear)],
 ) {
@@ -108,7 +109,7 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
 }
 
 pub fn execute_and_prove_program<const WORD_SIZE: usize>(
-    program: Vec<Instruction<BabyBear>>,
+    program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
 ) {
     let vm = VirtualMachine::<WORD_SIZE, _>::new(

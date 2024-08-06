@@ -33,8 +33,14 @@ jobs:
         run: |
           cargo t --features parallel
 
-  benchmark:
+  benchmark-rw:
     uses: ./.github/workflows/benchmark-call.yml
     with:
       benchmark_name: single_rw
+    secrets: inherit
+
+  benchmark-filter:
+    uses: ./.github/workflows/benchmark-call.yml
+    with:
+      benchmark_name: single_filter
     secrets: inherit

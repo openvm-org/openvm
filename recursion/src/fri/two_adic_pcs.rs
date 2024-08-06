@@ -285,7 +285,7 @@ pub mod tests {
     use p3_matrix::dense::RowMajorMatrix;
     use p3_uni_stark::{StarkGenericConfig, Val};
     use rand::rngs::OsRng;
-    use stark_vm::cpu::trace::Instruction;
+    use stark_vm::program::Program;
 
     use crate::{
         challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger},
@@ -305,7 +305,7 @@ pub mod tests {
     pub fn build_test_fri_with_cols_and_log2_rows(
         nb_cols: usize,
         nb_log2_rows: usize,
-    ) -> (Vec<Instruction<BabyBear>>, Vec<Vec<BabyBear>>) {
+    ) -> (Program<BabyBear>, Vec<Vec<BabyBear>>) {
         type SC = BabyBearPoseidon2Config;
         type F = Val<SC>;
         type EF = <SC as StarkGenericConfig>::Challenge;

@@ -1,8 +1,8 @@
 use alloc::{collections::BTreeMap, format};
 use core::{fmt, fmt::Display};
 
-use backtrace::Backtrace;
 use p3_field::{ExtensionField, PrimeField32};
+use stark_vm::program::DebugInfo;
 
 use super::AsmInstruction;
 
@@ -10,7 +10,7 @@ use super::AsmInstruction;
 #[derive(Debug, Clone, Default)]
 pub struct BasicBlock<F, EF>(
     pub(crate) Vec<AsmInstruction<F, EF>>,
-    pub(crate) Vec<Option<Backtrace>>,
+    pub(crate) Vec<Option<DebugInfo>>,
 );
 
 impl<F: PrimeField32, EF: ExtensionField<F>> BasicBlock<F, EF> {
@@ -23,15 +23,14 @@ impl<F: PrimeField32, EF: ExtensionField<F>> BasicBlock<F, EF> {
     pub(crate) fn push(
         &mut self,
         instruction: AsmInstruction<F, EF>,
-        backtrace: Option<Backtrace>,
+        debug_info: Option<DebugInfo>,
     ) {
         self.0.push(instruction);
-        self.1.push(backtrace);
+        self.1.push(debug_info);
     }
 }
 
 /// Assembly code for a program.
-#[derive(Debug, Clone)]
 pub struct AssemblyCode<F, EF> {
     pub blocks: Vec<BasicBlock<F, EF>>,
     pub labels: BTreeMap<F, String>,

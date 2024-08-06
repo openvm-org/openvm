@@ -1,7 +1,13 @@
 use std::array::from_fn;
 
 use p3_field::{ExtensionField, PrimeField64};
-use stark_vm::cpu::{trace::Instruction, OpCode, OpCode::*};
+use stark_vm::{
+    cpu::{
+        trace::Instruction,
+        OpCode::{self, *},
+    },
+    program::{DebugInfo, Program},
+};
 
 use crate::asm::{AsmInstruction, AssemblyCode};
 
@@ -290,14 +296,15 @@ fn convert_print_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: Extens
 
 fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
+    debug_info: Option<DebugInfo>,
     pc: F,
     labels: impl Fn(F) -> F,
     options: CompilerOptions,
-) -> Vec<Instruction<F>> {
+) -> Program<F> {
     let utility_registers: [F; NUM_UTILITY_REGISTERS] = from_fn(|i| F::from_canonical_usize(i));
     let utility_register = utility_registers[0];
 
-    match instruction {
+    let instructions = match instruction {
         AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
         AsmInstruction::LoadFI(dst, src, offset) => vec![
             // register[dst] <- mem[register[src] + offset]
@@ -568,13 +575,19 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             AS::Register,
         )],
         _ => panic!("Unsupported instruction {:?}", instruction),
+    };
+
+    let debug_infos = vec![debug_info; instructions.len()];
+    Program {
+        instructions,
+        debug_infos,
     }
 }
 
 pub fn convert_program<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionField<F>>(
     program: AssemblyCode<F, EF>,
     options: CompilerOptions,
-) -> Vec<Instruction<F>> {
+) -> Program<F> {
     // register[0] <- 0
     let init_register_0 = inst(
         STOREW,
@@ -584,14 +597,17 @@ pub fn convert_program<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         AS::Immediate,
         AS::Register,
     );
+    let init_debug_info = None;
 
     let mut block_start = vec![];
     let mut pc = 1;
     for block in program.blocks.iter() {
         block_start.push(pc);
-        for instruction in block.0.iter() {
+
+        for (instruction, debug_info) in block.0.iter().zip(block.1.iter()) {
             let instructions = convert_instruction::<WORD_SIZE, F, EF>(
                 instruction.clone(),
+                debug_info.clone(),
                 F::from_canonical_usize(pc),
                 |label| label,
                 options,
@@ -600,19 +616,26 @@ pub fn convert_program<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
         }
     }
 
-    let mut result = vec![init_register_0];
+    let mut instructions = vec![init_register_0];
+    let mut debug_infos = vec![init_debug_info];
     for block in program.blocks.iter() {
-        for instruction in block.0.iter() {
+        for (instruction, debug_info) in block.0.iter().zip(block.1.iter()) {
             let labels =
                 |label: F| F::from_canonical_usize(block_start[label.as_canonical_u64() as usize]);
-            result.extend(convert_instruction::<WORD_SIZE, F, EF>(
+            let result = convert_instruction::<WORD_SIZE, F, EF>(
                 instruction.clone(),
-                F::from_canonical_usize(result.len()),
+                debug_info.clone(),
+                F::from_canonical_usize(instructions.len()),
                 labels,
                 options,
-            ));
+            );
+            instructions.extend(result.instructions);
+            debug_infos.extend(result.debug_infos);
         }
     }
 
-    result
+    Program {
+        instructions,
+        debug_infos,
+    }
 }

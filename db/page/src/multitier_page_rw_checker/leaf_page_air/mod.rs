@@ -38,6 +38,7 @@ pub struct LeafPageAir<const COMMITMENT_LEN: usize> {
     // parameter telling if this is a leaf chip on the init side or the final side.
     is_less_than_tuple_air: Option<LeafPageSubAirs>,
     is_less_than_tuple_param: MyLessThanTupleParams,
+    #[getset(get = "pub")]
     is_init: bool,
     idx_len: usize,
     data_len: usize,
@@ -104,6 +105,20 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                 is_less_than_tuple_param,
                 air_id,
             }
+        }
+    }
+
+    pub fn clone_with_id(&self, air_id: u32) -> Self {
+        Self {
+            path_bus_index: self.path_bus_index,
+            data_bus_index: self.data_bus_index,
+            page_chip: self.page_chip.clone(),
+            idx_len: self.idx_len,
+            data_len: self.data_len,
+            is_init: self.is_init,
+            is_less_than_tuple_air: self.is_less_than_tuple_air.clone(),
+            is_less_than_tuple_param: self.is_less_than_tuple_param.clone(),
+            air_id,
         }
     }
 
