@@ -62,6 +62,7 @@ fn dbg<F: PrimeField64>(opcode: OpCode, debug: String) -> Instruction<F> {
 #[derive(Clone, Copy)]
 enum AS {
     Immediate,
+    #[allow(dead_code)]
     Register,
     Memory,
 }
@@ -87,90 +88,90 @@ fn convert_base_arithmetic_instruction<F: PrimeField64, EF: ExtensionField<F>>(
 ) -> Vec<Instruction<F>> {
     match instruction {
         AsmInstruction::AddF(dst, lhs, rhs) => vec![
-            // register[dst] <- register[lhs] + register[rhs]
+            // mem[dst] <- mem[lhs] + mem[rhs]
             inst(
                 FADD,
                 register(dst),
                 register(lhs),
                 register(rhs),
-                AS::Register,
-                AS::Register,
+                AS::Memory,
+                AS::Memory,
             ),
         ],
         AsmInstruction::AddFI(dst, lhs, rhs) => vec![
-            // register[dst] <- register[lhs] + rhs
+            // mem[dst] <- mem[lhs] + rhs
             inst(
                 FADD,
                 register(dst),
                 register(lhs),
                 rhs,
-                AS::Register,
+                AS::Memory,
                 AS::Immediate,
             ),
         ],
         AsmInstruction::SubF(dst, lhs, rhs) => vec![
-            // register[dst] <- register[lhs] - register[rhs]
+            // mem[dst] <- mem[lhs] - mem[rhs]
             inst(
                 FSUB,
                 register(dst),
                 register(lhs),
                 register(rhs),
-                AS::Register,
-                AS::Register,
+                AS::Memory,
+                AS::Memory,
             ),
         ],
         AsmInstruction::SubFI(dst, lhs, rhs) => vec![
-            // register[dst] <- register[lhs] - rhs
+            // mem[dst] <- mem[lhs] - rhs
             inst(
                 FSUB,
                 register(dst),
                 register(lhs),
                 rhs,
-                AS::Register,
+                AS::Memory,
                 AS::Immediate,
             ),
         ],
         AsmInstruction::MulF(dst, lhs, rhs) => vec![
-            // register[dst] <- register[lhs] * register[rhs]
+            // mem[dst] <- mem[lhs] * mem[rhs]
             inst(
                 FMUL,
                 register(dst),
                 register(lhs),
                 register(rhs),
-                AS::Register,
-                AS::Register,
+                AS::Memory,
+                AS::Memory,
             ),
         ],
         AsmInstruction::MulFI(dst, lhs, rhs) => vec![
-            // register[dst] <- register[lhs] * rhs
+            // mem[dst] <- mem[lhs] * rhs
             inst(
                 FMUL,
                 register(dst),
                 register(lhs),
                 rhs,
-                AS::Register,
+                AS::Memory,
                 AS::Immediate,
             ),
         ],
         AsmInstruction::DivF(dst, lhs, rhs) => vec![
-            // register[dst] <- register[lhs] / register[rhs]
+            // mem[dst] <- mem[lhs] / mem[rhs]
             inst(
                 FDIV,
                 register(dst),
                 register(lhs),
                 register(rhs),
-                AS::Register,
-                AS::Register,
+                AS::Memory,
+                AS::Memory,
             ),
         ],
         AsmInstruction::DivFI(dst, lhs, rhs) => vec![
-            // register[dst] <- register[lhs] / rhs
+            // mem[dst] <- mem[lhs] / rhs
             inst(
                 FDIV,
                 register(dst),
                 register(lhs),
                 rhs,
-                AS::Register,
+                AS::Memory,
                 AS::Immediate,
             ),
         ],
@@ -190,32 +191,32 @@ pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField64, EF: Exte
             register(dst),
             register(lhs),
             register(rhs),
-            AS::Register,
-            AS::Register,
+            AS::Memory,
+            AS::Memory,
         )],
         AsmInstruction::SubE(dst, lhs, rhs) => vec![inst(
             FE4SUB,
             register(dst),
             register(lhs),
             register(rhs),
-            AS::Register,
-            AS::Register,
+            AS::Memory,
+            AS::Memory,
         )],
         AsmInstruction::MulE(dst, lhs, rhs) => vec![inst(
             BBE4MUL,
             register(dst),
             register(lhs),
             register(rhs),
-            AS::Register,
-            AS::Register,
+            AS::Memory,
+            AS::Memory,
         )],
         AsmInstruction::InvE(dst, src) => vec![inst(
             BBE4INV,
             register(dst),
             register(src),
             register(src),
-            AS::Register,
-            AS::Register,
+            AS::Memory,
+            AS::Memory,
         )],
         _ => panic!(
             "Illegal argument to convert_field_extension: {:?}",
@@ -235,7 +236,7 @@ fn convert_print_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: Extens
             register(src),
             F::zero(),
             F::zero(),
-            AS::Register,
+            AS::Memory,
             AS::Immediate,
         )],
         AsmInstruction::PrintF(src) => vec![inst(
@@ -243,7 +244,7 @@ fn convert_print_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: Extens
             register(src),
             F::zero(),
             F::zero(),
-            AS::Register,
+            AS::Memory,
             AS::Immediate,
         )],
         AsmInstruction::PrintE(src) => vec![
@@ -252,7 +253,7 @@ fn convert_print_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: Extens
                 register(src),
                 F::zero(),
                 F::zero(),
-                AS::Register,
+                AS::Memory,
                 AS::Immediate,
             ),
             inst(
@@ -260,7 +261,7 @@ fn convert_print_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: Extens
                 register(src - word_size_i32),
                 F::zero(),
                 F::zero(),
-                AS::Register,
+                AS::Memory,
                 AS::Immediate,
             ),
             inst(
@@ -268,7 +269,7 @@ fn convert_print_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: Extens
                 register(src - 2 * word_size_i32),
                 F::zero(),
                 F::zero(),
-                AS::Register,
+                AS::Memory,
                 AS::Immediate,
             ),
             inst(
@@ -276,7 +277,7 @@ fn convert_print_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: Extens
                 register(src - 3 * word_size_i32),
                 F::zero(),
                 F::zero(),
-                AS::Register,
+                AS::Memory,
                 AS::Immediate,
             ),
         ],
@@ -297,112 +298,112 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
     let instructions = match instruction {
         AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
         AsmInstruction::LoadFI(dst, src, offset) => vec![
-            // register[dst] <- mem[register[src] + offset]
+            // mem[dst] <- mem[mem[src] + offset]
             inst(
                 LOADW,
                 register(dst),
                 offset,
                 register(src),
-                AS::Register,
+                AS::Memory,
                 AS::Memory,
             ),
         ],
         AsmInstruction::StoreFI(val, addr, offset) => vec![
-            // mem[register[addr] + offset] <- register[val]
+            // mem[mem[addr] + offset] <- mem[val]
             inst(
                 STOREW,
                 register(val),
                 offset,
                 register(addr),
-                AS::Register,
+                AS::Memory,
                 AS::Memory,
             ),
         ],
         AsmInstruction::Jump(dst, label) => {
             vec![
-                // pc <- labels[label], register[dst] <- pc
+                // pc <- labels[label], mem[dst] <- pc
                 inst(
                     JAL,
                     register(dst),
                     labels(label) - pc,
                     F::zero(),
-                    AS::Register,
+                    AS::Memory,
                     AS::Immediate,
                 ),
             ]
         }
         AsmInstruction::Bne(label, lhs, rhs) => vec![
-            // if register[lhs] != register[rhs], pc <- labels[label]
+            // if mem[lhs] != mem[rhs], pc <- labels[label]
             inst(
                 BNE,
                 register(lhs),
                 register(rhs),
                 labels(label) - pc,
-                AS::Register,
-                AS::Register,
+                AS::Memory,
+                AS::Memory,
             ),
         ],
         AsmInstruction::BneI(label, lhs, rhs) => vec![
-            // if register[lhs] != rhs, pc <- labels[label]
+            // if mem[lhs] != rhs, pc <- labels[label]
             inst(
                 BNE,
                 register(lhs),
                 rhs,
                 labels(label) - pc,
-                AS::Register,
+                AS::Memory,
                 AS::Immediate,
             ),
         ],
         AsmInstruction::Beq(label, lhs, rhs) => vec![
-            // if register[lhs] == register[rhs], pc <- labels[label]
+            // if mem[lhs] == mem[rhs], pc <- labels[label]
             inst(
                 BEQ,
                 register(lhs),
                 register(rhs),
                 labels(label) - pc,
-                AS::Register,
-                AS::Register,
+                AS::Memory,
+                AS::Memory,
             ),
         ],
         AsmInstruction::BeqI(label, lhs, rhs) => vec![
-            // if register[lhs] == rhs, pc <- labels[label]
+            // if mem[lhs] == rhs, pc <- labels[label]
             inst(
                 BEQ,
                 register(lhs),
                 rhs,
                 labels(label) - pc,
-                AS::Register,
+                AS::Memory,
                 AS::Immediate,
             ),
         ],
         AsmInstruction::BneE(label, lhs, rhs) => (0..EF::D)
             .map(|i|
-            // if register[lhs + i] != register[rhs +i] for i = 0..4, pc <- labels[label]
+            // if mem[lhs + i] != mem[rhs +i] for i = 0..4, pc <- labels[label]
             inst(
                 BNE,
                 register(lhs - ((i * WORD_SIZE) as i32)),
                 register(rhs - ((i * WORD_SIZE) as i32)),
                 labels(label) - (pc + F::from_canonical_usize(i)),
-                AS::Register,
-                AS::Register,
+                AS::Memory,
+                AS::Memory,
             ))
             .collect(),
         AsmInstruction::BneEI(label, lhs, rhs) => (0..EF::D)
             .map(|i|
-            // if register[lhs + i] != rhs[i] for i = 0..4, pc <- labels[label]
+            // if mem[lhs + i] != rhs[i] for i = 0..4, pc <- labels[label]
             inst(
                 BNE,
                 register(lhs - ((i * WORD_SIZE) as i32)),
                 rhs.as_base_slice()[i],
                 labels(label) - (pc + F::from_canonical_usize(i)),
-                AS::Register,
+                AS::Memory,
                 AS::Immediate,
             ))
             .collect(),
         AsmInstruction::BeqE(label, lhs, rhs) => (0..EF::D)
             .rev()
             .map(|i|
-            // if register[lhs + i] == register[rhs + i] for i = 0..4, pc <- labels[label]
+            // if mem[lhs + i] == mem[rhs + i] for i = 0..4, pc <- labels[label]
             inst(
                 if i == 0 { BEQ } else { BNE },
                 register(lhs - ((i * WORD_SIZE) as i32)),
@@ -412,14 +413,14 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 } else {
                     F::from_canonical_usize(i + 1)
                 },
-                AS::Register,
-                AS::Register,
+                AS::Memory,
+                AS::Memory,
             ))
             .collect(),
         AsmInstruction::BeqEI(label, lhs, rhs) => (0..EF::D)
             .rev()
             .map(|i|
-            // if register[lhs + i] == rhs[i] for i = 0..4, pc <- labels[label]
+            // if mem[lhs + i] == rhs[i] for i = 0..4, pc <- labels[label]
             inst(
                 if i == 0 { BEQ } else { BNE },
                 register(lhs - ((i * WORD_SIZE) as i32)),
@@ -429,7 +430,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
                 } else {
                     F::from_canonical_usize(i + 1)
                 },
-                AS::Register,
+                AS::Memory,
                 AS::Immediate,
             ))
             .collect(),
@@ -460,7 +461,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             F::zero(),
             F::zero(),
             F::zero(),
-            AS::Register,
+            AS::Memory,
             AS::Memory,
         )],
         AsmInstruction::HintBits(src) => vec![inst(
@@ -468,7 +469,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             register(src),
             F::zero(),
             F::zero(),
-            AS::Register,
+            AS::Memory,
             AS::Memory,
         )],
         AsmInstruction::StoreHintWordI(val, offset) => vec![inst(
@@ -476,7 +477,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             register(val),
             offset,
             F::zero(),
-            AS::Register,
+            AS::Memory,
             AS::Memory,
         )],
         AsmInstruction::PrintV(..) | AsmInstruction::PrintF(..) | AsmInstruction::PrintE(..) => {
@@ -521,7 +522,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             register(dst),
             register(src1),
             register(src2),
-            AS::Register,
+            AS::Memory,
             AS::Memory,
         )],
         AsmInstruction::Poseidon2Permute(dst, src) => vec![inst(
@@ -529,7 +530,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             register(dst),
             register(src),
             F::zero(),
-            AS::Register,
+            AS::Memory,
             AS::Memory,
         )],
         AsmInstruction::CycleTrackerStart(name) => {
@@ -551,8 +552,8 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             register(index),
             register(val),
             F::zero(),
-            AS::Register,
-            AS::Register,
+            AS::Memory,
+            AS::Memory,
         )],
         _ => panic!("Unsupported instruction {:?}", instruction),
     };
@@ -568,14 +569,14 @@ pub fn convert_program<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
     program: AssemblyCode<F, EF>,
     options: CompilerOptions,
 ) -> Program<F> {
-    // register[0] <- 0
+    // mem[0] <- 0
     let init_register_0 = inst(
         STOREW,
         F::zero(),
         F::zero(),
         register(0),
         AS::Immediate,
-        AS::Register,
+        AS::Memory,
     );
     let init_debug_info = None;
 

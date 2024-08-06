@@ -20,11 +20,15 @@ pub(crate) const STACK_START_OFFSET: i32 = 100;
 /// The heap pointer address.
 pub(crate) const HEAP_PTR: i32 = -4;
 
+pub(crate) const HEAP_START_ADDRESS: usize = STACK_SIZE + 4;
+
 pub(crate) const A0: i32 = -8;
 pub(crate) const A4: i32 = -24;
 
 // sizeof(var) = sizeof(felt) = 1 and sizeof(ext) == 4
 pub const FP_INCREMENT: i32 = 6;
+
+pub const STACK_SIZE: usize = 1 << 24;
 
 /// The assembly compiler.
 // #[derive(Debug, Clone, Default)]
@@ -93,7 +97,8 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
     pub fn build(&mut self, operations: TracedVec<DslIr<AsmConfig<F, EF>>>) {
         // Initialize the heap pointer value.
         if self.block_label().is_zero() {
-            self.push(AsmInstruction::AddFI(HEAP_PTR, ZERO, F::zero()), None);
+            let heap_start = F::from_canonical_usize(HEAP_START_ADDRESS);
+            self.push(AsmInstruction::AddFI(HEAP_PTR, ZERO, heap_start), None);
             self.push(AsmInstruction::j(F::from_canonical_u32(2)), None);
             self.new_break_label();
             self.basic_block();
@@ -648,7 +653,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             .push(instruction, debug_info);
     }
 
-    // reg[dst] <- reg[src] + c * reg[val]
+    // mem[dst] <- mem[src] + c * mem[val]
     // assumes dst != src
     fn add_scaled(&mut self, dst: i32, src: i32, val: i32, c: F, debug_info: Option<DebugInfo>) {
         if c == F::one() {
