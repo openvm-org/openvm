@@ -21,6 +21,7 @@ use crate::{
     field_extension::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticChip},
     memory::{compose, decompose},
     poseidon2::{columns::Poseidon2VmCols, Poseidon2Chip},
+    program::columns::ProgramPreprocessedCols,
     vm::{cycle_tracker::CycleTracker, ExecutionSegment},
 };
 
@@ -399,11 +400,13 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let num_poseidon2_rows = final_poseidon2_rows - initial_poseidon2_rows;
 
             let trace_cells = CpuCols::<WORD_SIZE, F>::get_width(vm.options())
+                + ProgramPreprocessedCols::<F>::get_width()
                 + num_accesses_memory_rows * vm.memory_chip.air.air_width()
                 + num_field_base_ops * FieldExtensionArithmeticCols::<F>::get_width()
                 + num_field_extension_ops * FieldExtensionArithmeticCols::<F>::get_width()
                 + num_poseidon2_rows * Poseidon2VmCols::<16, F>::get_width(&vm.poseidon2_chip.air);
 
+            #[cfg(debug_assertions)]
             vm.opcode_trace_cells
                 .entry(opcode.to_string())
                 .and_modify(|count| *count += trace_cells)
