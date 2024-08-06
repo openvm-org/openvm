@@ -6,7 +6,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::RngCore;
 
-use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
+use afs_test_utils::config::baby_bear_blake3::run_simple_test_no_pis;
 use afs_test_utils::utils::create_seeded_rng;
 
 use crate::modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir;
