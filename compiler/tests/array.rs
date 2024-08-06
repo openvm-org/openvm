@@ -65,14 +65,14 @@ pub struct Point<C: Config> {
 //     }
 //
 //     // Put values dynamically
-//     builder.range0(dyn_len).for_each(|i, builder| {
+//     builder.range(0, dyn_len).for_each(|i, builder| {
 //         builder.set(&mut var_array, i, i * 2);
 //         builder.set(&mut felt_array, i, F::from_canonical_u32(3));
 //         builder.set(&mut ext_array, i, EF::from_canonical_u32(4).cons());
 //     });
 //
 //     // Assert values set.
-//     builder.range0(dyn_len).for_each(|i, builder| {
+//     builder.range(0, dyn_len).for_each(|i, builder| {
 //         let var_value = builder.get(&var_array, i);
 //         builder.assert_var_eq(var_value, i * 2);
 //         let felt_value = builder.get(&felt_array, i);
@@ -84,7 +84,7 @@ pub struct Point<C: Config> {
 //     // Test the derived macro and mixed size allocations.
 //     let mut point_array = builder.dyn_array::<Point<_>>(len);
 //
-//     builder.range0(dyn_len).for_each(|i, builder| {
+//     builder.range(0, dyn_len).for_each(|i, builder| {
 //         let x: Var<_> = builder.eval(F::two());
 //         let y: Felt<_> = builder.eval(F::one());
 //         let z: Ext<_, _> = builder.eval(EF::one().cons());
@@ -92,7 +92,7 @@ pub struct Point<C: Config> {
 //         builder.set(&mut point_array, i, point);
 //     });
 //
-//     builder.range0(dyn_len).for_each(|i, builder| {
+//     builder.range(0, dyn_len).for_each(|i, builder| {
 //         let point = builder.get(&point_array, i);
 //         builder.assert_var_eq(point.x, F::two());
 //         builder.assert_felt_eq(point.y, F::one());
@@ -101,12 +101,12 @@ pub struct Point<C: Config> {
 //
 //     let mut array = builder.dyn_array::<Array<_, Var<_>>>(len);
 //
-//     builder.range0(array.len()).for_each(|i, builder| {
+//     builder.range(0, array.len()).for_each(|i, builder| {
 //         builder.set(&mut array, i, var_array.clone());
 //     });
 //
 //     // TODO: this part of the test is extremely slow.
-//     builder.range0(array.len()).for_each(|i, builder| {
+//     builder.range(0, array.len()).for_each(|i, builder| {
 //         let point_array_back = builder.get(&array, i);
 //         builder.assert_eq::<Array<_, _>>(point_array_back, var_array.clone());
 //     });
@@ -130,11 +130,11 @@ fn test_fixed_array_const() {
     let mut fixed_array = builder.vec(vec![Usize::from(1); len]);
 
     // Put values statically
-    builder.range0(fixed_array.len()).for_each(|i, builder| {
+    builder.range(0, fixed_array.len()).for_each(|i, builder| {
         builder.set(&mut fixed_array, i, Usize::from(2));
     });
     // Assert values set.
-    builder.range0(fixed_array.len()).for_each(|i, builder| {
+    builder.range(0, fixed_array.len()).for_each(|i, builder| {
         let value = builder.get(&fixed_array, i);
         builder.assert_eq::<Usize<_>>(value, Usize::from(2));
     });
@@ -160,13 +160,13 @@ fn test_fixed_array_var() {
     let mut fixed_array = builder.uninit_fixed_array(len);
 
     // Put values statically
-    builder.range0(fixed_array.len()).for_each(|i, builder| {
+    builder.range(0, fixed_array.len()).for_each(|i, builder| {
         let one: Var<_> = builder.eval(F::one());
         // `len` instructions
         builder.set(&mut fixed_array, i, Usize::Var(one));
     });
     // Assert values set.
-    builder.range0(fixed_array.len()).for_each(|i, builder| {
+    builder.range(0, fixed_array.len()).for_each(|i, builder| {
         let value: Usize<_> = builder.get(&fixed_array, i);
         // `len` instructions to initialize variables. FIXME: this is not optimal.
         // `len` instructions of `assert_eq`

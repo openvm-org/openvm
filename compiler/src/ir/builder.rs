@@ -311,12 +311,6 @@ impl<C: Config> Builder<C> {
         }
     }
 
-    /// Evaluate a block of operations over a range from 0 to end.
-    pub fn range0(&mut self, end: impl Into<RVar<C::N>>) -> RangeBuilder<C> {
-        let start = RVar::Const(C::N::zero());
-        self.range(start, end)
-    }
-
     /// Evaluate a block of operations over a range from start to end.
     pub fn range(
         &mut self,
@@ -421,7 +415,7 @@ impl<C: Config> Builder<C> {
         };
 
         // Write the content hints directly into the array memory.
-        self.range0(vlen).for_each(|i, builder| {
+        self.range(0, vlen).for_each(|i, builder| {
             let index = MemIndex {
                 index: i,
                 offset: 0,
@@ -531,7 +525,7 @@ impl<C: Config> Builder<C> {
     pub fn commit_public_values(&mut self, vals: &Array<C, Felt<C::F>>) {
         let nb_public_values = self.get_nb_public_values();
         let len = vals.len();
-        self.range0(len).for_each(|i, builder| {
+        self.range(0, len).for_each(|i, builder| {
             let val = builder.get(vals, i);
             builder.commit_public_value_and_increment(val, nb_public_values);
         });

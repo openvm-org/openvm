@@ -29,7 +29,7 @@ pub fn verify_shape_and_sample_challenges<C: Config>(
     let mut betas: Array<C, Ext<C::F, C::EF>> = builder.dyn_array(proof.commit_phase_commits.len());
 
     builder
-        .range0(proof.commit_phase_commits.len())
+        .range(0, proof.commit_phase_commits.len())
         .for_each(|i, builder| {
             let comm = builder.get(&proof.commit_phase_commits, i);
             challenger.observe(builder, comm);
@@ -49,7 +49,7 @@ pub fn verify_shape_and_sample_challenges<C: Config>(
     let num_commit_phase_commits = proof.commit_phase_commits.len().materialize(builder);
     let log_max_height: Var<_> = builder.eval(num_commit_phase_commits + config.log_blowup);
     let mut query_indices = builder.array(config.num_queries);
-    builder.range0(config.num_queries).for_each(|i, builder| {
+    builder.range(0, config.num_queries).for_each(|i, builder| {
         let index_bits = challenger.sample_bits(builder, Usize::Var(log_max_height));
         builder.set(&mut query_indices, i, index_bits);
     });
@@ -77,7 +77,7 @@ pub fn verify_challenges<C: Config>(
     let nb_commit_phase_commits = proof.commit_phase_commits.len().materialize(builder);
     let log_max_height = builder.eval(nb_commit_phase_commits + config.log_blowup);
     builder
-        .range0(challenges.query_indices.len())
+        .range(0, challenges.query_indices.len())
         .for_each(|i, builder| {
             let index_bits = builder.get(&challenges.query_indices, i);
             let query_proof = builder.get(&proof.query_proofs, i);
@@ -129,7 +129,7 @@ where
     let x = builder.exp_reverse_bits_len(two_adic_generator_ef, index_bits, log_max_height);
 
     builder
-        .range0(commit_phase_commits.len())
+        .range(0, commit_phase_commits.len())
         .for_each(|i, builder| {
             let log_folded_height = builder.eval_expr(log_max_height - i - C::N::one());
             let log_folded_height_plus_one = builder.eval_expr(log_folded_height + C::N::one());
@@ -243,7 +243,7 @@ pub fn verify_batch<C: Config>(
     let one: Var<_> = builder.eval(C::N::one());
     let left: Ptr<C::N> = builder.uninit();
     let right: Ptr<C::N> = builder.uninit();
-    builder.range0(proof.len()).for_each(|i, builder| {
+    builder.range(0, proof.len()).for_each(|i, builder| {
         let sibling = builder.get_ptr(proof, i);
         let bit = builder.get(&index_bits, i);
 

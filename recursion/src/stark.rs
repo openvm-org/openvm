@@ -130,7 +130,7 @@ where
         // Tmp solution to support 0 or 1 phase.
         if num_phases > 0 {
             builder
-                .range0(proof.exposed_values_after_challenge.len())
+                .range(0, proof.exposed_values_after_challenge.len())
                 .for_each(|i, builder| {
                     let exposed_values = builder.get(&proof.exposed_values_after_challenge, i);
 

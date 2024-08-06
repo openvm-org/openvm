@@ -62,7 +62,7 @@ impl<C: Config> Builder<C> {
     {
         let result: V = self.eval(V::Expression::one());
         let power_f: V = self.eval(x);
-        self.range0(power_bits.len()).for_each(|i, builder| {
+        self.range(0, power_bits.len()).for_each(|i, builder| {
             let bit = builder.get(power_bits, i);
             builder
                 .if_eq(bit, C::N::one())
@@ -143,7 +143,7 @@ impl<C: Config> Builder<C> {
     {
         let result: V = self.eval(base);
         let power_log = power_log.into();
-        self.range0(power_log)
+        self.range(0, power_log)
             .for_each(|_, builder| builder.assign(&result, result * result));
         result
     }
@@ -170,7 +170,7 @@ impl<C: Config> Builder<C> {
         V: Variable<C> + Copy + Add<Output = V::Expression>,
     {
         let result: V = self.eval(base);
-        self.range0(shift)
+        self.range(0, shift)
             .for_each(|_, builder| builder.assign(&result, result + result));
         result
     }

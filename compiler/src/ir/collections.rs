@@ -118,7 +118,7 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
 
                 let slice_len = builder.eval_expr(end - start);
                 let mut slice = builder.dyn_array(slice_len);
-                builder.range0(slice_len).for_each(|i, builder| {
+                builder.range(0, slice_len).for_each(|i, builder| {
                     let idx = builder.eval_expr(start + i);
                     let value = builder.get(self, idx);
                     builder.set(&mut slice, i, value);
@@ -328,7 +328,7 @@ impl<C: Config, T: MemVariable<C>> Variable<C> for Array<C, T> {
             (Array::Dyn(_, lhs_len), Array::Dyn(_, rhs_len)) => {
                 builder.assert_eq::<Usize<_>>(lhs_len.clone(), rhs_len);
 
-                builder.range0(lhs_len).for_each(|i, builder| {
+                builder.range(0, lhs_len).for_each(|i, builder| {
                     let a = builder.get(&lhs, i);
                     let b = builder.get(&rhs, i);
                     builder.assert_eq::<T>(a, b);
@@ -366,7 +366,7 @@ impl<C: Config, T: MemVariable<C>> Variable<C> for Array<C, T> {
             (Array::Dyn(_, lhs_len), Array::Dyn(_, rhs_len)) => {
                 builder.assert_eq::<Usize<_>>(lhs_len.clone(), rhs_len);
 
-                builder.range0(lhs_len).for_each(|i, builder| {
+                builder.range(0, lhs_len).for_each(|i, builder| {
                     let a = builder.get(&lhs, i);
                     let b = builder.get(&rhs, i);
                     builder.assert_ne::<T>(a, b);

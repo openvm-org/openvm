@@ -107,7 +107,7 @@ where
 
         let mut domains = builder.dyn_array(num_chunks);
 
-        builder.range0(num_chunks).for_each(|i, builder| {
+        builder.range(0, num_chunks).for_each(|i, builder| {
             let domain = TwoAdicMultiplicativeCosetVariable {
                 log_n,
                 size,

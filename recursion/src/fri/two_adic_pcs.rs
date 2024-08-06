@@ -49,7 +49,7 @@ pub fn verify_two_adic_pcs<C: Config>(
 
     builder.cycle_tracker_start("stage-d-2-fri-fold");
     builder
-        .range0(proof.query_openings.len())
+        .range(0, proof.query_openings.len())
         .for_each(|i, builder| {
             let query_opening = builder.get(&proof.query_openings, i);
             let index_bits = builder.get(&fri_challenges.query_indices, i);
@@ -65,20 +65,20 @@ pub fn verify_two_adic_pcs<C: Config>(
                 builder.set_value(&mut alpha_pow, j, one_ef);
             }
 
-            builder.range0(rounds.len()).for_each(|j, builder| {
+            builder.range(0, rounds.len()).for_each(|j, builder| {
                 let batch_opening = builder.get(&query_opening, j);
                 let round = builder.get(&rounds, j);
                 let batch_commit = round.batch_commit;
                 let mats = round.mats;
 
                 let mut batch_heights_log2: Array<C, Var<C::N>> = builder.array(mats.len());
-                builder.range0(mats.len()).for_each(|k, builder| {
+                builder.range(0, mats.len()).for_each(|k, builder| {
                     let mat = builder.get(&mats, k);
                     let height_log2: Var<_> = builder.eval(mat.domain.log_n + log_blowup);
                     builder.set_value(&mut batch_heights_log2, k, height_log2);
                 });
                 let mut batch_dims: Array<C, DimensionsVariable<C>> = builder.array(mats.len());
-                builder.range0(mats.len()).for_each(|k, builder| {
+                builder.range(0, mats.len()).for_each(|k, builder| {
                     let mat = builder.get(&mats, k);
                     let dim = DimensionsVariable::<C> {
                         height: builder.eval(mat.domain.size() * blowup),
@@ -111,7 +111,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                 };
 
                 builder.cycle_tracker_start("compute-reduced-opening");
-                builder.range0(opened_values.len()).for_each(|k, builder| {
+                builder.range(0, opened_values.len()).for_each(|k, builder| {
                     let mat_opening = builder.get(&opened_values, k);
                     let mat = builder.get(&mats, k);
                     let mat_points = mat.points;
@@ -136,12 +136,12 @@ pub fn verify_two_adic_pcs<C: Config>(
                     builder.cycle_tracker_end("exp-reverse-bits-len");
                     let x: Felt<C::F> = builder.eval(two_adic_generator_exp * g);
 
-                    builder.range0(mat_points.len()).for_each(|l, builder| {
+                    builder.range(0, mat_points.len()).for_each(|l, builder| {
                         let z: Ext<C::F, C::EF> = builder.get(&mat_points, l);
                         let ps_at_z = builder.get(&mat_values, l);
 
                         builder.cycle_tracker_start("sp1-fri-fold");
-                        builder.range0(ps_at_z.len()).for_each(|t, builder| {
+                        builder.range(0, ps_at_z.len()).for_each(|t, builder| {
                             let p_at_x = builder.get(&mat_opening, t);
                             let p_at_z = builder.get(&ps_at_z, t);
                             let quotient = (p_at_z - p_at_x) / (z - x);

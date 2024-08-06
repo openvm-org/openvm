@@ -97,7 +97,7 @@ impl<C: Config> Builder<C> {
     pub fn bits2num_v(&mut self, bits: &Array<C, Var<C::N>>) -> Var<C::N> {
         let num: Var<_> = self.eval(C::N::zero());
         let power: Var<_> = self.eval(C::N::one());
-        self.range0(bits.len()).for_each(|i, builder| {
+        self.range(0, bits.len()).for_each(|i, builder| {
             let bit = builder.get(bits, i);
             builder.assign(&num, num + bit * power);
             builder.assign(&power, power * C::N::from_canonical_u32(2));
@@ -142,7 +142,7 @@ impl<C: Config> Builder<C> {
         let num_bits = NUM_BITS;
 
         let mut result_bits = self.dyn_array::<Var<_>>(num_bits);
-        self.range0(bit_len).for_each(|i, builder| {
+        self.range(0, bit_len).for_each(|i, builder| {
             let idx = builder.eval_expr(bit_len - i - RVar::one());
             let entry = builder.get(index_bits, idx);
             builder.set_value(&mut result_bits, i, entry);

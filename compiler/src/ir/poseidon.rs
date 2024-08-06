@@ -80,7 +80,7 @@ impl<C: Config> Builder<C> {
     pub fn poseidon2_hash(&mut self, array: &Array<C, Felt<C::F>>) -> Array<C, Felt<C::F>> {
         let perm_width = PERMUTATION_WIDTH;
         let mut state: Array<C, Felt<C::F>> = self.dyn_array(perm_width);
-        self.range0(perm_width).for_each(|i, builder| {
+        self.range(0, perm_width).for_each(|i, builder| {
             builder.set(&mut state, i, C::F::zero());
         });
 
@@ -88,14 +88,14 @@ impl<C: Config> Builder<C> {
         let last_index: Usize<_> = self.eval(array.len() - C::N::one());
         let hash_rate: Var<_> = self.eval(C::N::from_canonical_usize(HASH_RATE));
 
-        self.range0(array.len())
+        self.range(0, array.len())
             .step_by(HASH_RATE)
             .for_each_may_break(|i, builder| {
                 builder
                     .if_eq(break_flag, C::N::one())
                     .then_may_break(|builder| builder.break_loop())?;
                 // Insert elements of the chunk.
-                builder.range0(hash_rate).for_each_may_break(|j, builder| {
+                builder.range(0, hash_rate).for_each_may_break(|j, builder| {
                     let index = builder.eval_expr(i + j);
                     let element = builder.get(array, index);
                     builder.set_value(&mut state, j, element);
@@ -122,14 +122,14 @@ impl<C: Config> Builder<C> {
         self.cycle_tracker_start("poseidon2-hash");
         let perm_width = PERMUTATION_WIDTH;
         let mut state: Array<C, Felt<C::F>> = self.dyn_array(perm_width);
-        self.range0(perm_width).for_each(|i, builder| {
+        self.range(0, perm_width).for_each(|i, builder| {
             builder.set(&mut state, i, C::F::zero());
         });
 
         let idx: Var<_> = self.eval(C::N::zero());
-        self.range0(array.len()).for_each(|i, builder| {
+        self.range(0, array.len()).for_each(|i, builder| {
             let subarray = builder.get(array, i);
-            builder.range0(subarray.len()).for_each(|j, builder| {
+            builder.range(0, subarray.len()).for_each(|j, builder| {
                 builder.cycle_tracker_start("poseidon2-hash-setup");
                 let element = builder.get(&subarray, j);
                 builder.set_value(&mut state, idx, element);
@@ -166,9 +166,9 @@ impl<C: Config> Builder<C> {
         });
 
         let idx: Var<_> = self.eval(C::N::zero());
-        self.range0(array.len()).for_each(|i, builder| {
+        self.range(0, array.len()).for_each(|i, builder| {
             let subarray = builder.get(array, i);
-            builder.range0(subarray.len()).for_each(|j, builder| {
+            builder.range(0, subarray.len()).for_each(|j, builder| {
                 let element = builder.get(&subarray, j);
                 let felts = builder.ext2felt(element);
                 for i in 0..4 {

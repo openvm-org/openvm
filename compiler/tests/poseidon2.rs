@@ -80,7 +80,7 @@ fn test_compiler_poseidon2_hash_1() {
     let result = builder.poseidon2_hash(&random_state_v1);
     let result_x = builder.poseidon2_hash_x(&nested_random_state);
 
-    builder.range0(result.len()).for_each(|i, builder| {
+    builder.range(0, result.len()).for_each(|i, builder| {
         let ei = builder.eval(i);
         builder.print_v(ei);
         let el = builder.get(&result, i);
