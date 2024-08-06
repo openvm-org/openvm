@@ -10,6 +10,7 @@ on:
         options:
           - vm_verify_fibair
           - single_rw
+          - single_filter
       aws_instance_type:
         type: string
         required: false
@@ -80,8 +81,12 @@ jobs:
         if: inputs.benchmark_name == 'single_rw'
         run: |
           RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- rw -r 90 -w 10 --config-folder benchmark/config/single_rw
+
+      - name: Run benchmark
+        if: inputs.benchmark_name == 'single_filter'
+        run: |
+          RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- predicate --config-folder benchmark/config/single_filter -f benchmark/config/olap/filter_0xfade.afo
       ######################################################
-      # If we want this read from main, split this into a different job
       - name: Get previous benchmark value
         id: get-previous-benchmark
         run: |
@@ -159,11 +164,31 @@ jobs:
         run: |
           s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${{ inputs.benchmark_name }}.md" "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md"
 
+  update-gh-pages:
+    name: Update github pages with new bench results
+    needs:
+      - start-runner
+      - bench-new
+    runs-on: ${{ needs.start-runner.outputs.label }} # run the job on the newly created runner
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Update markdown file
+        run: |
+          s5cmd cp "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md" benchmarks/${{ inputs.benchmark_name }}.md
+          git add benchmarks/${{ inputs.benchmark_name }}.md
+          git commit -m "Update benchmark result for ${{ inputs.benchmark_name }}"
+          git push
+
   stop-runner:
     name: Stop self-hosted EC2 runner
     needs:
       - start-runner # required to get output from the start-runner job
       - bench-new # wait for bench-new to finish
+      - update-gh-pages # wait for update-gh-pages to finish
     runs-on: [self-hosted, coordinator, staging]
     if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
     steps:

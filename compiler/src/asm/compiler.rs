@@ -7,7 +7,7 @@ use stark_vm::program::DebugInfo;
 use super::{config::AsmConfig, AssemblyCode, BasicBlock, IndexTriple, ValueOrConst};
 use crate::{
     asm::AsmInstruction,
-    ir::{Array, DslIr, Ext, Felt, Ptr, Usize, Var, PERMUTATION_WIDTH},
+    ir::{Array, DslIr, Ext, Felt, Ptr, Usize, Var},
     prelude::TracedVec,
 };
 
@@ -41,21 +41,21 @@ pub struct AsmCompiler<F, EF> {
 impl<F> Var<F> {
     /// Gets the frame pointer for a var.
     pub const fn fp(&self) -> i32 {
-        -((self.0 as i32) * FP_INCREMENT + STACK_START_OFFSET)
+        -(self.0 as i32 + STACK_START_OFFSET)
     }
 }
 
 impl<F> Felt<F> {
     /// Gets the frame pointer for a felt.
     pub const fn fp(&self) -> i32 {
-        -((self.0 as i32) * FP_INCREMENT + 1 + STACK_START_OFFSET)
+        -(self.0 as i32 + STACK_START_OFFSET)
     }
 }
 
 impl<F, EF> Ext<F, EF> {
     /// Gets the frame pointer for an extension element
     pub const fn fp(&self) -> i32 {
-        -((self.0 as i32) * FP_INCREMENT + 2 + STACK_START_OFFSET)
+        -(self.0 as i32 + STACK_START_OFFSET)
     }
 }
 
@@ -94,8 +94,13 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         // Initialize the heap pointer value.
         if self.block_label().is_zero() {
             self.push(AsmInstruction::AddFI(HEAP_PTR, ZERO, F::zero()), None);
+            self.push(AsmInstruction::j(F::from_canonical_u32(2)), None);
+            self.new_break_label();
+            self.basic_block();
+            self.push(AsmInstruction::Trap, None);
+            self.new_break_label();
+            self.basic_block();
         }
-
         // For each operation, generate assembly instructions.
         for (op, trace) in operations.clone() {
             let debug_info = Some(DebugInfo::new(op.to_string(), trace));
@@ -480,25 +485,13 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     todo!()
                 }
                 DslIr::Poseidon2PermuteBabyBear(dst, src) => match (dst, src) {
-                    (Array::Dyn(dst, _), Array::Dyn(src, _)) => {
-                        self.push(
-                            AsmInstruction::AddFI(
-                                A0,
-                                src.fp(),
-                                F::from_canonical_usize(PERMUTATION_WIDTH / 2),
-                            ),
-                            debug_info.clone(),
-                        );
-                        self.push(
-                            AsmInstruction::Poseidon2Permute(dst.fp(), src.fp(), A0),
-                            debug_info,
-                        )
-                    }
+                    (Array::Dyn(dst, _), Array::Dyn(src, _)) => self.push(
+                        AsmInstruction::Poseidon2Permute(dst.fp(), src.fp()),
+                        debug_info,
+                    ),
                     _ => unimplemented!(),
                 },
-                DslIr::Error() => {
-                    self.push(AsmInstruction::Trap, debug_info);
-                }
+                DslIr::Error() => self.push(AsmInstruction::j(F::one()), debug_info),
                 DslIr::PrintF(dst) => {
                     self.push(AsmInstruction::PrintF(dst.fp()), debug_info);
                 }
@@ -614,12 +607,9 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             compiler: self,
             lhs,
             rhs,
-            is_eq,
+            is_eq: !is_eq,
         };
-        if_compiler.then(
-            |builder| builder.push(AsmInstruction::Trap, debug_info.clone()),
-            debug_info.clone(),
-        );
+        if_compiler.then_label(F::one(), debug_info);
     }
 
     pub fn code(self) -> AssemblyCode<F, EF> {
@@ -704,6 +694,22 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
 
         // Get the branch instruction to push to the `current_block`.
         let instr = Self::branch(lhs, rhs, is_eq, after_if_block);
+        compiler.push_to_block(current_block, instr, debug_info);
+    }
+
+    pub fn then_label(self, label: F, debug_info: Option<DebugInfo>) {
+        let Self {
+            compiler,
+            lhs,
+            rhs,
+            is_eq,
+        } = self;
+
+        // Get the label for the current block.
+        let current_block = compiler.block_label();
+
+        // Get the branch instruction to push to the `current_block`.
+        let instr = Self::branch(lhs, rhs, is_eq, label);
         compiler.push_to_block(current_block, instr, debug_info);
     }
 

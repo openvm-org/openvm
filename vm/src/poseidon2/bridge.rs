@@ -1,5 +1,5 @@
 use afs_stark_backend::interaction::InteractionBuilder;
-use itertools::Itertools;
+use itertools::izip;
 use p3_field::{AbstractField, Field};
 
 use super::{
@@ -20,19 +20,20 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
         io: Poseidon2VmIoCols<AB::Var>,
         aux: &Poseidon2VmAuxCols<WIDTH, AB::Var>,
     ) {
-        let d_is_zero = aux.d_is_zero;
-
         let fields = io.flatten().into_iter().skip(2);
         builder.push_receive(POSEIDON2_BUS, fields, io.is_opcode);
 
         let chunks: usize = WIDTH / 2;
 
         let mut timestamp_offset = 0;
-        // read addresses
-        for (io_addr, aux_addr) in [io.a, io.b, io.c]
-            .into_iter()
-            .zip_eq([aux.dst, aux.lhs, aux.rhs])
-        {
+        // read addresses when is_opcode:
+        // dst <- [a]_d, lhs <- [b]_d
+        // Only when opcode is COMPRESS is rhs <- [c]_d read
+        for (io_addr, aux_addr, count) in izip!(
+            [io.a, io.b, io.c],
+            [aux.dst, aux.lhs, aux.rhs],
+            [io.is_opcode, io.is_opcode, io.cmp]
+        ) {
             let timestamp = io.clk + AB::F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
 
@@ -43,7 +44,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
                 io_addr.into(),
                 aux_addr.into(),
             ];
-            builder.push_send(MEMORY_BUS, fields, io.is_opcode - d_is_zero);
+            builder.push_send(MEMORY_BUS, fields, count);
         }
 
         // READ

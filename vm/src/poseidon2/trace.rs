@@ -1,4 +1,4 @@
-use afs_primitives::{is_zero::IsZeroAir, sub_chip::LocalTraceInstructions};
+use afs_primitives::sub_chip::LocalTraceInstructions;
 use p3_air::BaseAir;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
@@ -19,15 +19,12 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
     ) -> Poseidon2VmCols<WIDTH, F> {
         // SAFETY: only allowed because WIDTH constrained to 16 above
         let internal = self.inner.generate_trace_row(input_state);
-        let is_zero_row = IsZeroAir {}.generate_trace_row(instruction.d);
         Poseidon2VmCols {
             io: Poseidon2VmAir::<WIDTH, F>::make_io_cols(start_timestamp, instruction),
             aux: Poseidon2VmAuxCols {
                 dst,
                 lhs,
                 rhs,
-                d_is_zero: is_zero_row.io.is_zero,
-                is_zero_inv: is_zero_row.inv,
                 internal,
             },
         }
