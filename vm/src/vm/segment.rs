@@ -37,6 +37,7 @@ pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub public_values: Vec<Option<F>>,
     pub opcode_counts: BTreeMap<String, usize>,
     pub dsl_counts: BTreeMap<String, usize>,
+    pub opcode_trace_cells: BTreeMap<String, usize>,
     /// Collected metrics for this segment alone.
     /// Only collected when `config.collect_metrics` is true.
     pub(crate) collected_metrics: VmMetrics,
@@ -62,6 +63,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
 
         let opcode_counts = BTreeMap::new();
         let dsl_counts = BTreeMap::new();
+        let opcode_trace_cells = BTreeMap::new();
 
         Self {
             config,
@@ -78,6 +80,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             hint_stream: state.hint_stream,
             opcode_counts,
             dsl_counts,
+            opcode_trace_cells,
             collected_metrics: Default::default(),
         }
     }
