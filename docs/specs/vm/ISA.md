@@ -36,24 +36,42 @@ Each instruction is stored at a multiple of `INST_WIDTH`.
 
 ### Memory
 
-Memory is comprised of word-addressable cells, where the `WORD_SIZE` is a configurable constant of the VM. A given cell contains `WORD_SIZE` field elements. All core and ALU-related instructions operate on cells (i.e. any operand address is word aligned -- a multiple of `WORD_SIZE`). In the VM compiler, the address of newly added local variables in the stack is word aligned.
+Memory is comprised of word-addressable cells, where the `WORD_SIZE` is a configurable constant of the VM (and consequently of the ISA). A given _word_ contains `WORD_SIZE` field elements (referred to as _cells_). Presently, all opcodes operate on words (i.e. any operand address is word aligned -- a multiple of `WORD_SIZE`). In the VM compiler, the address of newly added local variables in the stack or heap is word aligned.
 
-The address pointer must lie in `[0, p)` so it can be represented by a field element.
-
-As an implementation detail of how to go between word-addressable cells and immediates, we _assume_ the existence of conversion functions
+We introduce the following types to clarify the different types associated with memory access:
 
 ```rust
-compose: [F; WORD_SIZE] -> F
-decompose: F -> [F; WORD_SIZE]
+AddressType = F;
+Word([F; WORD_SIZE]);
+PcType = F;
 ```
 
-such that `compose(decompose(x)) = x`. When `WORD_SIZE = 1` these are both identity. Otherwise, the default choice is for the VM to specify a `LIMB_BITS` and define
+where address pointers are of type `AddressType = F`, memory values are of type `Word`, which is `WORD_SIZE` field elements, and the program counter is of type `PcType`.
 
-```
-compose(word) = sum_{0<=i<WORD_SIZE} word[i] * 2^{LIMB_BITS * i}
+The VM _may_ impose additional conditions on the `Word` type. We also leave open the possibility in the future that different address spaces (see below) can have different `Word` types and even different word sizes -- but this is not currently implemented. At present there are two `Word` sizes we have in mind:
+
+- **[FVEC]** `Word` consists of `[F; WORD_SIZE]` arbitrary field elements. `AddressType = F`.
+- **[LIMB]** `Word` consists of `[F; WORD_SIZE]` field elements, where each field element is a limb in `[0, 2^LIMB_BITS)`. This would emulate a word in RISC-V memory. `AddressType = F` or `Word` (e.g., necessary for 64-bit addresses).
+
+While not relevant to the ISA itself, the ZK circuit implementation does usually represent `Word` as `WORD_SIZE` contiguous field elements in the same row of the trace matrix.
+
+#### Converters
+
+To define certain opcodes below, the VM needs to specify conversion functions between types:
+
+```rust
+proj_a: Word -> AddressType
+emb_op: F -> AddressType
+emb_addr: AddressType -> Word
+emb_pc: PcType -> Word
 ```
 
-(i.e., assume a word consists of limbs and compose them in little-endian). When `WORD_SIZE = 4`, the default `LIMB_BITS = 8` corresponds to a byte. The inverse `decompose` is defined under the requirement `WORD_SIZE * LIMB_BITS >= F::bits()`.
+with the property that `proj(emb_pc(x)) = x` for all `x`. We will likely use `AddressType = F` and `PcType = F` for the foreseeable future, so we assume `emb_addr = emb_pc` and `emb_op` is identity. We drop the subscripts and just use `proj` and `emb = emb_addr`.
+
+Here are default converters in the two scenarios [FVEC] and [LIMB] mentioned above:
+
+- **[FVEC]** `proj(word) = word[0]` and `emb(pc) = [pc, 0, .., 0]`.
+- **[LIMB]** `proj(word) = sum_{0<=i<WORD_SIZE} word[i] * 2^{LIMB_BITS * i}` and `emb(pc)` is the little-endian representation of `pc` in limbs of `LIMB_BITS` each.
 
 ### Immediate Values
 
@@ -64,7 +82,7 @@ Immediate values are treated as single field elements. Our VM cannot represent o
 Our zkVM treats general purpose registers as simply pointers to a separate address space, which is also comprised of
 word-addressable cells with the same `WORD_SIZE`.
 
-There is a single special purpose register `pc` for the program counter, which is currently a single field element. Namely, the program counter cannot be $\ge p$. (We may extend `pc` to multiple field elements to increase the program address space size in the future.)
+There is a single special purpose register `pc` for the program counter of type `PcType` (which is currently a single field element `F`). Namely, the program counter cannot be $\ge p$. (We may extend `pc` to multiple field elements to increase the program address space size in the future.)
 
 <!--
 Maybe it's simpler if `pc` is also just word-addressable.
@@ -80,7 +98,7 @@ The following notation is used throughout this document:
 
 **Addressing**: we support different address spaces via `as_b, as_c`.
 
-- We use `[a]_{as}` to denote the value at pointer location `a` in address space `as`. This is a single field element.
+- We use `[a]_{as}` to denote the single-cell value at pointer location `a` in address space `as`. This is a single field element.
 - We use `word[a]_{as}` to denote the slice `[a..a + WORD_SIZE]_{as}` -- this is an array of length `WORD_SIZE` field elements.
 
 We will always have the following fixed address spaces:
@@ -93,15 +111,17 @@ We will always have the following fixed address spaces:
 | `3`           | Program code |
 
 Address space `0` is not a real address space: it is reserved for denoting immediates. We
-define `word[a]_0 = decompose(a)` so `compose(word[a]_0) = a`.
+define `word[a]_0 = emb(a)` so `proj(word[a]_0) = a`.
 
 Address space `3` is reserved for program code but we do not currently use it.
 
-The number of address spaces supported is a fixed constant of the VM. To start we will fix this number to `4`.
+<!--
+(The following is not needed right now:) The number of address spaces supported is a fixed constant of the VM. To start we will fix this number to `4`.
+-->
 
-The size (= number of addresses) of each address space can be configured to be some subset of `F`. The memory address space should always be the full size of `F`.
+The size (= number of addresses) of each address space can be configured to be some subset of `F`. The memory address space (`2`) should always be the full size of `F`.
 
-> An element in any address space is always a field element, but the VM _may_ later impose additional bit size constraints on certain address spaces (e.g., everything in memory must be a byte). We do not impose such restrictions at present.
+> A memory cell in any address space is always a field element, but the VM _may_ later impose additional bit size constraints on certain address spaces (e.g., everything in memory must be a byte). See the `Word` type above.
 
 ## Instruction list
 
@@ -115,16 +135,16 @@ Listed below are the instructions offered in each configuration.
 
 This instruction set is always enabled.
 
-| Mnemonic            | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                                        |
-| ------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| **LW** / **LOADW**  | `a, offset, c`                                | Set `word[a]_d <- word[compose(word[c]_d) + offset]_e`. Loads field elements from one address space to another. |
-| **SW** / **STOREW** | `a, offset, c`                                | Set `word[compose(word[c]_d) + offset]_e <- word[a]_d`.                                                         |
-| **JAL**             | `a, offset, c`                                | Jump to address and link: set `word[a]_d <- decompose(pc + INST_WIDTH)` and `pc <- pc + offset`.                |
-| **BEQ**             | `a, b, offset`                                | If `word[a]_d == word[b]_e`, then set `pc <- pc + offset`                                                       |
-| **BNE**             | `a, b, offset`                                | If `word[a]_d != word[b]_e`, then set `pc <- pc + offset`                                                       |
-| **TERMINATE**       | `_, _, _`                                     | Terminates execution.                                                                                           |
-| **SHINTW**          | `a, b, _`                                     | Pops the next word off of the `hint_stream` into `word[word[a]_d + b]_e`.                                       |
-| **PUBLISH**         | `a, b, _`                                     | Constrains the public value at index `compose(word[a]_d)` to be equal to `compose(word[b]_e)`.                  |
+| Mnemonic            | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                            |
+| ------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| **LW** / **LOADW**  | `a, offset, c`                                | Set `word[a]_d <- word[proj(word[c]_d) + offset]_e`. Loads words from one address space to another. |
+| **SW** / **STOREW** | `a, offset, c`                                | Set `word[proj(word[c]_d) + offset]_e <- word[a]_d`.                                                |
+| **JAL**             | `a, offset, c`                                | Jump to address and link: set `word[a]_d <- emb(pc + INST_WIDTH)` and `pc <- pc + offset`.          |
+| **BEQ**             | `a, b, offset`                                | If `word[a]_d == word[b]_e`, then set `pc <- pc + offset`                                           |
+| **BNE**             | `a, b, offset`                                | If `word[a]_d != word[b]_e`, then set `pc <- pc + offset`                                           |
+| **TERMINATE**       | `_, _, _`                                     | Terminates execution.                                                                               |
+| **SHINTW**          | `a, b, _`                                     | Pops the next word off of the `hint_stream` into `word[proj(word[a]_d) + b]_e`.                     |
+| **PUBLISH**         | `a, b, _`                                     | Constrains the public value at index `proj(word[a]_d)` to be equal to `proj(word[b]_e)`.            |
 
 #### Notes about hints
 
@@ -141,20 +161,18 @@ Core instructions were chosen so a subset of RISC-V instructions can be directly
 
 This instruction set does native field operations. Some operations may be infeasible if the address space imposes additional bit size constraints.
 
-For brevity we use the notation `fe[a]_{as} := compose(word[a]_{as})`.
+This instruction set should only be enabled when `Word` type represents `[F; WORD_SIZE]` without bit size constraints. In this case the field operations are automatically vectorized.
 
-| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                                                                |
-| -------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **FADD** | `a, b, c`                                     | Set `word[a]_d <- decompose(fe[b]_d + fe[c]_e)`. This opcode presumes `a,b` are in the same address space. |
-| **FSUB** | `a, b, c`                                     | Set `word[a]_d <- decompose(fe[b]_d - fe[c]_e)`.                                                           |
-| **FMUL** | `a, b, c`                                     | Set `word[a]_d <- decompose(fe[b]_d * fe[c]_e)`.                                                           |
-| **FDIV** | `a, b, c`                                     | Set `word[a]_d <- decompose(fe[b]_d / fe[c]_e)`.                                                           |
-
-Note that field arithmetic instructions only operate on the first element in a cell, which represents a field element instead of a single byte.
+| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                                                         |
+| -------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| **FADD** | `a, b, c`                                     | Set `word[a]_d <- word[b]_d + word[c]_e`. This opcode presumes `a,b` are in the same address space. |
+| **FSUB** | `a, b, c`                                     | Set `word[a]_d <- word[b]_d - word[c]_e`.                                                           |
+| **FMUL** | `a, b, c`                                     | Set `[a + i]_d <- [b + i]_d * [c + i]_e` for `i = 0..WORD_SIZE`.                                    |
+| **FDIV** | `a, b, c`                                     | Set `[a + i]_d <- [b + i]_d / [c + i]_e` for `i = 0..WORD_SIZE`.                                    |
 
 ### Extension field arithmetic
 
-We will add special instruction set extensions for opcodes to perform degree 4 extension field arithmetic. For brevity we use the notation `fe[a]_{as} := compose(word[a]_{as})`.
+We will add special instruction set extensions for opcodes to perform degree `D = 4` extension field arithmetic. **This instruction set should only be enabled when field arithmetic instruction set is enabled and `WORD_SIZE = D`.** We will make use of the vectorized field arithmetic instructions.
 
 All elements in the field extension can be represented as a vector `[a_0, a_1, a_2, a_3]` which represents the polynomial $a_0 + a_1x + a_2x^2 + a_3x^3$. Given address space `as` and address `a` we define `a_0` as the element `fe[a]_{as}`, `a_1` as the element `fe[a+WORD_SIZE]_{as}`, `a_2` as the element `fe[a+2*WORD_SIZE]_{as}`, and `a_3` as the element `fe[a+3*WORD_SIZE]_{as}`.
 
@@ -198,7 +216,7 @@ We have special opcodes to enable different precompiled hash functions.
 Only subsets of these opcodes will be turned on depending on the VM use case.
 
 | Mnemonic                                                                                                                                                                                                                           | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                                                                                                                                                                                                                                                                                                                                  |
-|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **COMPRESS_POSEIDON2** `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a, b, c`                                     | This is a special 2-to-1 compression function.<br/><br/>Let `state[i] <- fe[fe[b]_d + i * WORD_SIZE]_e` for `i = 0..CHUNK` and `state[CHUNK + i] <- fe[fe[c]_d + i * WORD_SIZE]_e` for `i = 0..CHUNK`, so `state` has type `[F; 2*CHUNK]`.<br/><br/>Let `new_state` be the Poseidon2 permutation applied to `state`. Set `word[fe[a]_d + i * WORD_SIZE]_e <- decompose(new_state[i])` for `i = 0..CHUNK`. |
 | **PERM_POSEIDON2** `[WIDTH, PID]`                                                                                                                                                                                                  | `a, offset=0, c` (nonzero `offset` TODO)      | Let `state[i] <- fe[fe[c]_d + offset + i * WORD_SIZE]_e` for `i = 0..WIDTH` so `state` has type `[F; WIDTH]`.<br/><br/>Let `new_state` be the Poseidon2 permutation applied to `state`. Set `word[fe[a]_d + i * WORD_SIZE]_e <- decompose(new_state[i])` for `i = 0..WIDTH`.                                                                                                                              |
 | **PERM_KECCAK**                                                                                                                                                                                                                    | `a, offset=0, c`                              | Assume `WORD_SIZE=1` for now. Let `state[i] <- word[word[c]_d + i]_e` for `i = 0..WIDTH` where `state[i]` is `u16`.<br/><br/>Let `new_state` be the `keccak-f` permutation applied to `state`. Set `word[word[a]_d + i]_e <- new_state[i]` for `i = 0..WIDTH`.                                                                                                                                            |
@@ -206,7 +224,7 @@ Only subsets of these opcodes will be turned on depending on the VM use case.
 The `PID` is just some identifier to provide domain separation between different Poseidon2 constants. For now we can set:
 
 | `PID` | Description                                                                                                                                                                                                                                                         |
-|-------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0     | [`POSEIDON2_BABYBEAR_16_PARAMS`](https://github.com/HorizenLabs/poseidon2/blob/bb476b9ca38198cf5092487283c8b8c5d4317c4e/plain_implementations/src/poseidon2/poseidon2_instance_babybear.rs#L2023C20-L2023C48) but the Mat4 used is Plonky3's with a Monty reduction |
 
 and only support `CHUNK = 8` and `WIDTH = 16` above.
@@ -216,7 +234,7 @@ and only support `CHUNK = 8` and `WIDTH = 16` above.
 These instructions are never enabled. Any program that actually executes them cannot be verified.
 
 | Mnemonic   | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode     |
-|------------|-----------------------------------------------|------------------------------|
+| ---------- | --------------------------------------------- | ---------------------------- |
 | **FAIL**   | `_, _, _`                                     | Causes execution to fail.    |
 | **PRINTF** | `a, _, _`                                     | Prints `compose(word[a]_d)`. |
 
