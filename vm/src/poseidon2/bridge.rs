@@ -29,11 +29,11 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
         // read addresses when is_opcode:
         // dst <- [a]_d, lhs <- [b]_d
         // Only when opcode is COMPRESS is rhs <- [c]_d read
-        for ((io_addr, aux_addr), count) in [io.a, io.b, io.c]
-            .into_iter()
-            .zip_eq([aux.dst, aux.lhs, aux.rhs])
-            .zip_eq([io.is_opcode, io.is_opcode, io.cmp])
-        {
+        for (io_addr, aux_addr, count) in izip!(
+            [io.a, io.b, io.c],
+            [aux.dst, aux.lhs, aux.rhs],
+            [io.is_opcode, io.is_opcode, io.cmp]
+        ) {
             let timestamp = io.clk + AB::F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
 

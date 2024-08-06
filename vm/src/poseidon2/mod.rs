@@ -105,7 +105,7 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     /// truncating if the instruction is a compression.
     ///
     /// Used for both compression and permutation.
-    pub fn poseidon2_perm<const WORD_SIZE: usize>(
+    pub fn calculate<const WORD_SIZE: usize>(
         vm: &mut ExecutionSegment<WORD_SIZE, F>,
         start_timestamp: usize,
         instruction: Instruction<F>,
