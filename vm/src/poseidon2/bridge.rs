@@ -1,5 +1,5 @@
 use afs_stark_backend::interaction::InteractionBuilder;
-use itertools::Itertools;
+use itertools::izip;
 use p3_field::{AbstractField, Field};
 
 use super::{

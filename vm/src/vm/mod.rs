@@ -68,6 +68,7 @@ pub struct ExecutionResult<const WORD_SIZE: usize> {
     pub metrics: Vec<VmMetrics>,
     pub opcode_counts: Vec<BTreeMap<String, usize>>,
     pub dsl_counts: Vec<BTreeMap<String, usize>>,
+    pub opcode_trace_cells: Vec<BTreeMap<String, usize>>,
 }
 
 pub type VmMetrics = BTreeMap<String, usize>;
@@ -156,6 +157,8 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
         let mut metrics = Vec::new();
         let mut opcode_counts = Vec::new();
         let mut dsl_counts = Vec::new();
+        let mut opcode_trace_cells = Vec::new();
+
         loop {
             let last_seg = self.segments.last_mut().unwrap();
             last_seg.has_generation_happened = true;
@@ -165,6 +168,7 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
                 metrics.push(last_seg.collected_metrics.clone());
                 opcode_counts.push(last_seg.opcode_counts.clone());
                 dsl_counts.push(last_seg.dsl_counts.clone());
+                opcode_trace_cells.push(last_seg.opcode_trace_cells.clone());
             }
             if last_seg.cpu_chip.state.is_done {
                 break;
@@ -248,6 +252,7 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
             metrics,
             opcode_counts,
             dsl_counts,
+            opcode_trace_cells,
         };
 
         Ok(chip_data)

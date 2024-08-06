@@ -89,8 +89,12 @@ pub enum AsmInstruction<F, EF> {
     /// Break(label)
     Break(F),
 
-    /// Perform a permutation of the Poseidon2 hash function on the array specified by the ptr.
+    /// Perform a Poseidon2 permutation on state starting at address `lhs`
+    /// and store new state at `rhs`.
+    /// (a, b) are pointers to (lhs, rhs).
     Poseidon2Permute(i32, i32),
+    /// Perform 2-to-1 cryptographic compression using Poseidon2.
+    /// (a, b, c) are memory pointers to (dst, lhs, rhs)
     Poseidon2Compress(i32, i32, i32),
 
     /// Print a variable.
@@ -264,8 +268,8 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::Trap => write!(f, "trap"),
             AsmInstruction::Halt => write!(f, "halt"),
             AsmInstruction::HintBits(dst) => write!(f, "hint_bits ({})fp", dst),
-            AsmInstruction::Poseidon2Permute(dst, src) => {
-                write!(f, "poseidon2_permute ({})fp, ({})fp", dst, src)
+            AsmInstruction::Poseidon2Permute(dst, lhs) => {
+                write!(f, "poseidon2_permute ({})fp, ({})fp", dst, lhs)
             }
             AsmInstruction::PrintF(dst) => {
                 write!(f, "print_f ({})fp", dst)
