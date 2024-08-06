@@ -62,11 +62,11 @@ To define certain opcodes below, the VM needs to specify conversion functions be
 ```rust
 proj_a: Word -> AddressType
 emb_op: F -> AddressType
-emb_addr: AddressType -> Word
+emb_a: AddressType -> Word
 emb_pc: PcType -> Word
 ```
 
-with the property that `proj(emb_pc(x)) = x` for all `x`. We will likely use `AddressType = F` and `PcType = F` for the foreseeable future, so we assume `emb_addr = emb_pc` and `emb_op` is identity. We drop the subscripts and just use `proj` and `emb = emb_addr`.
+with the property that `proj(emb_pc(x)) = x` for all `x`. We will likely use `AddressType = F` and `PcType = F` for the foreseeable future, so we assume `emb_a = emb_pc` and `emb_op` is identity. We drop the subscripts and just use `proj` and `emb = emb_a`.
 
 Here are default converters in the two scenarios [FVEC] and [LIMB] mentioned above:
 
@@ -172,7 +172,7 @@ This instruction set should only be enabled when `Word` type represents `[F; WOR
 
 ### Extension field arithmetic
 
-We will add special instruction set extensions for opcodes to perform degree `D = 4` extension field arithmetic. **This instruction set should only be enabled when field arithmetic instruction set is enabled and `WORD_SIZE = D`.** We will make use of the vectorized field arithmetic instructions.
+We will add several special instruction set extensions for opcodes to perform degree `D` extension field arithmetic. **Such an instruction set extension should only be enabled when field arithmetic instruction set is enabled and `WORD_SIZE = D`.** We will make use of the vectorized field arithmetic instructions.
 
 All elements in the field extension can be represented as a vector `[a_0, a_1, a_2, a_3]` which represents the polynomial $a_0 + a_1x + a_2x^2 + a_3x^3$. Given address space `as` and address `a` we define `a_0` as the element `fe[a]_{as}`, `a_1` as the element `fe[a+WORD_SIZE]_{as}`, `a_2` as the element `fe[a+2*WORD_SIZE]_{as}`, and `a_3` as the element `fe[a+3*WORD_SIZE]_{as}`.
 
