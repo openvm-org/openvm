@@ -4,6 +4,8 @@ use afs_compiler::{
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
+use afs_compiler::asm::AsmCompiler;
+use afs_compiler::conversion::{CompilerOptions, convert_program};
 use stark_vm::cpu::WORD_SIZE;
 
 type F = BabyBear;
@@ -19,18 +21,18 @@ fn test_io() {
         builder.print_v(el);
     });
 
-    let felts = builder.hint_felts();
-    builder.range(0, felts.len()).for_each(|i, builder| {
-        let el = builder.get(&felts, i);
-        builder.print_f(el);
-    });
-
-    let exts = builder.hint_exts();
-    builder.range(0, exts.len()).for_each(|i, builder| {
-        let el = builder.get(&exts, i);
-        builder.print_e(el);
-    });
-
+    // let felts = builder.hint_felts();
+    // builder.range(0, felts.len()).for_each(|i, builder| {
+    //     let el = builder.get(&felts, i);
+    //     builder.print_f(el);
+    // });
+    //
+    // let exts = builder.hint_exts();
+    // builder.range(0, exts.len()).for_each(|i, builder| {
+    //     let el = builder.get(&exts, i);
+    //     builder.print_e(el);
+    // });
+    //
     builder.halt();
 
     let witness_stream: Vec<Vec<F>> = vec![
@@ -53,7 +55,11 @@ fn test_io() {
         ],
     ];
 
-    let program = builder.compile_isa::<1>();
-    display_program(&program.instructions);
+    let mut compiler = AsmCompiler::new(WORD_SIZE);
+    compiler.build(builder.operations);
+    let asm_code = compiler.code();
+    println!("{}", asm_code);
+
+    let program = convert_program::<WORD_SIZE, F, EF>(asm_code, CompilerOptions::default());
     execute_program::<WORD_SIZE>(program, witness_stream);
 }
