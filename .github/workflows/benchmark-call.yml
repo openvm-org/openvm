@@ -164,11 +164,31 @@ jobs:
         run: |
           s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${{ inputs.benchmark_name }}.md" "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md"
 
+  update-gh-pages:
+    name: Update github pages with new bench results
+    needs:
+      - start-runner
+      - bench-new
+    runs-on: ${{ needs.start-runner.outputs.label }} # run the job on the newly created runner
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Update markdown file
+        run: |
+          s5cmd cp "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md" benchmarks/${{ inputs.benchmark_name }}.md
+          git add benchmarks/${{ inputs.benchmark_name }}.md
+          git commit -m "Update benchmark result for ${{ inputs.benchmark_name }}"
+          git push
+
   stop-runner:
     name: Stop self-hosted EC2 runner
     needs:
       - start-runner # required to get output from the start-runner job
       - bench-new # wait for bench-new to finish
+      - update-gh-pages # wait for update-gh-pages to finish
     runs-on: [self-hosted, coordinator, staging]
     if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
     steps:
