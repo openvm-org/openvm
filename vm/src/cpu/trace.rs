@@ -161,7 +161,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
         let mut cycle_tracker = CycleTracker::<F>::new();
         let mut is_done = false;
         let mut collect_metrics = vm.config.collect_metrics;
-        dbg!(collect_metrics);
 
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;

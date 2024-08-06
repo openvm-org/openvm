@@ -323,47 +323,6 @@ fn test_vm_hint() {
 }
 
 #[test]
-fn test_vm_compress_poseidon2() {
-    let mut instructions = vec![];
-    let input_a = 37;
-    for i in 0..8 {
-        instructions.push(Instruction::from_isize(
-            STOREW,
-            43 - (7 * i),
-            input_a + i,
-            0,
-            0,
-            1,
-        ));
-    }
-    let input_b = 108;
-    for i in 0..8 {
-        instructions.push(Instruction::from_isize(
-            STOREW,
-            2 + (18 * i),
-            input_b + i,
-            0,
-            0,
-            1,
-        ));
-    }
-    let output = 4;
-    instructions.push(Instruction::from_isize(
-        COMP_POS2, output, input_a, input_b, 0, 1,
-    ));
-    instructions.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
-
-    let program_len = instructions.len();
-
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; program_len],
-    };
-
-    air_test_with_poseidon2(false, false, true, program);
-}
-
-#[test]
 fn test_vm_compress_poseidon2_as2() {
     let mut instructions = vec![];
     let input_a = 37;
@@ -389,6 +348,8 @@ fn test_vm_compress_poseidon2_as2() {
         ));
     }
     let output = 4;
+    // [0]_1 <- input_a
+    // [1]_1 <- input_b
     instructions.push(Instruction::from_isize(STOREW, input_a, 0, 0, 0, 1));
     instructions.push(Instruction::from_isize(STOREW, input_b, 1, 0, 0, 1));
     instructions.push(Instruction::from_isize(STOREW, output, 2, 0, 0, 1));
