@@ -334,7 +334,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     FieldExtensionArithmeticChip::calculate(vm, timestamp, instruction);
                 }
                 PERM_POS2 | COMP_POS2 => {
-                    Poseidon2Chip::<16, _>::poseidon2_perm(vm, timestamp, instruction);
+                    Poseidon2Chip::<16, _>::calculate(vm, timestamp, instruction);
                 }
                 HINT_INPUT => {
                     let hint = match vm.input_stream.pop_front() {

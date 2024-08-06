@@ -168,7 +168,7 @@ fn run_perm_ops(
 
     let start_timestamp = timestamp;
     (0..num_ops).for_each(|i| {
-        Poseidon2Chip::<16, BabyBear>::poseidon2_perm(segment, timestamp, instructions[i].clone());
+        Poseidon2Chip::<16, BabyBear>::calculate(segment, timestamp, instructions[i].clone());
         timestamp += time_per;
     });
 
