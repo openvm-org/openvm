@@ -95,10 +95,8 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         if self.block_label().is_zero() {
             self.push(AsmInstruction::AddFI(HEAP_PTR, ZERO, F::zero()), None);
             self.push(AsmInstruction::j(F::from_canonical_u32(2)), None);
-            self.new_break_label();
             self.basic_block();
             self.push(AsmInstruction::Trap, None);
-            self.new_break_label();
             self.basic_block();
         }
         // For each operation, generate assembly instructions.
