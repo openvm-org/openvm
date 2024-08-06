@@ -489,12 +489,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     ),
                     _ => unimplemented!(),
                 },
-<<<<<<< HEAD
-                DslIr::Error() => self.push(AsmInstruction::j(F::one()), trace),
-                DslIr::PrintF(dst) => self.push(AsmInstruction::PrintF(dst.fp()), trace),
-                DslIr::PrintV(dst) => self.push(AsmInstruction::PrintV(dst.fp()), trace),
-                DslIr::PrintE(dst) => self.push(AsmInstruction::PrintE(dst.fp()), trace),
-=======
                 DslIr::Error() => self.push(AsmInstruction::j(F::one()), debug_info),
                 DslIr::PrintF(dst) => {
                     self.push(AsmInstruction::PrintF(dst.fp()), debug_info);
@@ -505,7 +499,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::PrintE(dst) => {
                     self.push(AsmInstruction::PrintE(dst.fp()), debug_info);
                 }
->>>>>>> 3b3a6e6b191a6780e8bb26c372ea85c1c588d93b
                 DslIr::HintInputVec() => {
                     self.push(AsmInstruction::HintInputVec(), debug_info);
                 }
@@ -614,11 +607,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             rhs,
             is_eq: !is_eq,
         };
-<<<<<<< HEAD
-        if_compiler.then_label(F::one(), backtrace);
-=======
         if_compiler.then_label(F::one(), debug_info);
->>>>>>> 3b3a6e6b191a6780e8bb26c372ea85c1c588d93b
     }
 
     pub fn code(self) -> AssemblyCode<F, EF> {
@@ -706,11 +695,7 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         compiler.push_to_block(current_block, instr, debug_info);
     }
 
-<<<<<<< HEAD
-    pub fn then_label(self, label: F, backtrace: Option<Backtrace>) {
-=======
     pub fn then_label(self, label: F, debug_info: Option<DebugInfo>) {
->>>>>>> 3b3a6e6b191a6780e8bb26c372ea85c1c588d93b
         let Self {
             compiler,
             lhs,
@@ -723,13 +708,6 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
 
         // Get the branch instruction to push to the `current_block`.
         let instr = Self::branch(lhs, rhs, is_eq, label);
-<<<<<<< HEAD
-        compiler.push_to_block(current_block, instr, backtrace);
-    }
-
-    pub fn then_or_else<ThenFunc, ElseFunc>(self, then_f: ThenFunc, else_f: ElseFunc)
-    where
-=======
         compiler.push_to_block(current_block, instr, debug_info);
     }
 
@@ -739,7 +717,6 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         else_f: ElseFunc,
         debug_info: Option<DebugInfo>,
     ) where
->>>>>>> 3b3a6e6b191a6780e8bb26c372ea85c1c588d93b
         ThenFunc: FnOnce(&mut AsmCompiler<F, EF>),
         ElseFunc: FnOnce(&mut AsmCompiler<F, EF>),
     {
