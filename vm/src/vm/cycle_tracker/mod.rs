@@ -30,8 +30,14 @@ impl<F: PrimeField32> CycleTracker<F> {
 
     /// Starts a new cycle tracker span for the given name.
     /// If a span already exists for the given name, it ends the existing span and pushes a new one to the vec.
-    pub fn start(&mut self, name: String, vm_metrics: &BTreeMap<String, usize>) {
-        let cycle_tracker_span = CycleTrackerSpan::start(vm_metrics);
+    pub fn start(
+        &mut self,
+        name: String,
+        vm_metrics: &BTreeMap<String, usize>,
+        opcode_counts: &BTreeMap<String, usize>,
+        dsl_counts: &BTreeMap<String, usize>,
+    ) {
+        let cycle_tracker_span = CycleTrackerSpan::start(vm_metrics, opcode_counts, dsl_counts);
         match self.instances.entry(name.clone()) {
             Entry::Occupied(mut entry) => {
                 let spans = entry.get_mut();
@@ -47,17 +53,24 @@ impl<F: PrimeField32> CycleTracker<F> {
                 self.order.push(name);
             }
         }
+
         self.num_active_instances += 1;
     }
 
     /// Ends the cycle tracker span for the given name.
     /// If no span exists for the given name, it panics.
-    pub fn end(&mut self, name: String, vm_metrics: &BTreeMap<String, usize>) {
+    pub fn end(
+        &mut self,
+        name: String,
+        vm_metrics: &BTreeMap<String, usize>,
+        opcode_counts: &BTreeMap<String, usize>,
+        dsl_counts: &BTreeMap<String, usize>,
+    ) {
         match self.instances.entry(name.clone()) {
             Entry::Occupied(mut entry) => {
                 let spans = entry.get_mut();
                 let last = spans.last_mut().unwrap();
-                last.end(vm_metrics);
+                last.end(vm_metrics, opcode_counts, dsl_counts);
             }
             Entry::Vacant(_) => {
                 panic!("Cycle tracker instance {} does not exist", name);
@@ -92,10 +105,18 @@ impl<F: PrimeField32> Display for CycleTracker<F> {
             }
 
             let mut total_vm_metrics = std::collections::HashMap::new();
+            let mut total_opcode_counts = std::collections::HashMap::new();
+            let mut total_dsl_counts = std::collections::HashMap::new();
 
             for span in spans {
                 for (key, value) in &span.end.vm_metrics {
                     *total_vm_metrics.entry(key.clone()).or_insert(0) += value;
+                }
+                for (key, value) in &span.end.opcode_counts {
+                    *total_opcode_counts.entry(key.clone()).or_insert(0) += value;
+                }
+                for (key, value) in &span.end.dsl_counts {
+                    *total_dsl_counts.entry(key.clone()).or_insert(0) += value;
                 }
             }
 
@@ -109,6 +130,26 @@ impl<F: PrimeField32> Display for CycleTracker<F> {
                     writeln!(f, "  - avg_{}: {}", key, avg_value)?;
                 }
             }
+
+            let mut sorted_opcode_counts: Vec<(&String, &usize)> =
+                total_opcode_counts.iter().collect();
+            sorted_opcode_counts.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
+
+            for (key, value) in sorted_opcode_counts {
+                if *value > 0 {
+                    writeln!(f, "  - {}: {}", key, value)?;
+                }
+            }
+
+            let mut sorted_dsl_counts: Vec<(&String, &usize)> = total_dsl_counts.iter().collect();
+            sorted_dsl_counts.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
+
+            for (key, value) in sorted_dsl_counts {
+                if *value > 0 {
+                    writeln!(f, "  - {}: {}", key, value)?;
+                }
+            }
+
             writeln!(f)?;
         }
         Ok(())

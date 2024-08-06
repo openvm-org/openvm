@@ -29,7 +29,7 @@ fn test_ext2felt() {
     builder.halt();
 
     let program = builder.compile_isa::<1>();
-    display_program(&program);
+    display_program(&program.instructions);
     execute_program::<1>(program, vec![]);
 }
 
@@ -58,6 +58,6 @@ fn test_ext_from_base_slice() {
     builder.halt();
 
     let program = builder.compile_isa::<1>();
-    display_program_with_pc(&program);
+    display_program_with_pc(&program.instructions);
     execute_program::<1>(program, vec![]);
 }

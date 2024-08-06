@@ -10,15 +10,12 @@ use p3_field::PrimeField32;
 use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_util::log2_strict_usize;
 
-use crate::cpu::ExecutionState;
+use crate::{cpu::ExecutionState, program::Program};
 
 mod segment;
 pub use segment::{get_chips, ExecutionSegment};
 
-use crate::cpu::{
-    trace::{ExecutionError, Instruction},
-    CpuOptions,
-};
+use crate::cpu::{trace::ExecutionError, CpuOptions};
 
 pub mod cycle_tracker;
 
@@ -36,7 +33,7 @@ pub mod config;
 /// `VirtualMachine::get_chips()` can be used to convert the boxes of chips to concrete chips.
 pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub config: VmConfig,
-    pub program: Vec<Instruction<F>>,
+    pub program: Program<F>,
     pub segments: Vec<ExecutionSegment<WORD_SIZE, F>>,
     pub traces: Vec<DenseMatrix<F>>,
 }
@@ -69,6 +66,8 @@ pub struct ExecutionResult<const WORD_SIZE: usize> {
     pub max_log_degree: usize,
     /// VM metrics per segment, only collected if enabled
     pub metrics: Vec<VmMetrics>,
+    pub opcode_counts: Vec<BTreeMap<String, usize>>,
+    pub dsl_counts: Vec<BTreeMap<String, usize>>,
 }
 
 pub type VmMetrics = BTreeMap<String, usize>;
@@ -90,7 +89,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
     /// Create a new VM with a given config, program, and input stream.
     ///
     /// The VM will start with a single segment, which is created from the initial state of the CPU.
-    pub fn new(config: VmConfig, program: Vec<Instruction<F>>, input_stream: Vec<Vec<F>>) -> Self {
+    pub fn new(config: VmConfig, program: Program<F>, input_stream: Vec<Vec<F>>) -> Self {
         let mut vm = Self {
             config,
             program,
@@ -155,6 +154,8 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
     pub fn execute(mut self) -> Result<ExecutionResult<WORD_SIZE>, ExecutionError> {
         let mut traces = vec![];
         let mut metrics = Vec::new();
+        let mut opcode_counts = Vec::new();
+        let mut dsl_counts = Vec::new();
         loop {
             let last_seg = self.segments.last_mut().unwrap();
             last_seg.has_generation_happened = true;
@@ -162,6 +163,8 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
             traces.extend(last_seg.generate_commitments()?);
             if self.config.collect_metrics {
                 metrics.push(last_seg.collected_metrics.clone());
+                opcode_counts.push(last_seg.opcode_counts.clone());
+                dsl_counts.push(last_seg.dsl_counts.clone());
             }
             if last_seg.cpu_chip.state.is_done {
                 break;
@@ -174,8 +177,13 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
         let mut types = Vec::with_capacity(self.segments.len());
         let num_chips = self.segments[0].get_num_chips();
 
+        let empty_program = Program {
+            instructions: vec![],
+            debug_infos: vec![],
+        };
+
         let unique_chips = get_chips::<WORD_SIZE, BabyBearPoseidon2Config>(
-            ExecutionSegment::new(self.config, vec![], self.current_state()),
+            ExecutionSegment::new(self.config, empty_program, self.current_state()),
             &vec![true; num_chips],
         );
 
@@ -238,6 +246,8 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
             chip_types: types,
             max_log_degree,
             metrics,
+            opcode_counts,
+            dsl_counts,
         };
 
         Ok(chip_data)

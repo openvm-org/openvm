@@ -24,7 +24,7 @@ use crate::{
         },
         tracing::{clear_tracing_log, extract_event_data_from_log, extract_timing_data_from_log},
     },
-    workflow::metrics::BenchmarkMetrics,
+    workflow::metrics::{BenchmarkMetrics, CustomMetrics},
     AFI_FILE_PATH, DB_FILE_PATH, MULTITIER_TABLE_ID, TABLE_ID, TMP_FOLDER, TMP_RESULT_MD,
     TMP_TRACING_LOG,
 };
@@ -148,7 +148,7 @@ pub fn benchmark_execute(
             perm_trace_gen_ms,
             calc_quotient_values_ms,
             trace: trace_metrics,
-            custom: Default::default(),
+            custom: CustomMetrics::default(),
         };
         write!(File::create(TMP_RESULT_MD.as_str())?, "{}", metrics)?;
 

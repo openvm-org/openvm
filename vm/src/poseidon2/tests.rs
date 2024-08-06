@@ -25,6 +25,7 @@ use crate::{
         MEMORY_BUS, POSEIDON2_BUS, POSEIDON2_DIRECT_BUS,
     },
     memory::tree::Hasher,
+    program::Program,
     vm::{
         config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN},
         VirtualMachine,
@@ -58,6 +59,11 @@ macro_rules! run_perm_ops {
     ($instructions:expr, $num_ops:expr, $data:expr) => {{
         let tot_ops: usize = ($num_ops as usize).next_power_of_two();
 
+        let program = Program {
+            instructions: vec![],
+            debug_infos: vec![],
+        };
+
         // default VM with poseidon2 enabled
         let mut vm = VirtualMachine::<1, BabyBear>::new(
             VmConfig {
@@ -71,7 +77,7 @@ macro_rules! run_perm_ops {
                 max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
                 ..Default::default()
             },
-            vec![],
+            program,
             vec![],
         );
         let mut segment = &mut vm.segments[0];

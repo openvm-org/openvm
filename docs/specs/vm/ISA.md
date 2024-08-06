@@ -44,7 +44,7 @@ As an implementation detail of how to go between word-addressable cells and imme
 
 ```rust
 compose: [F; WORD_SIZE] -> F
-decompose: F -> [F: WORD_SIZE]
+decompose: F -> [F; WORD_SIZE]
 ```
 
 such that `compose(decompose(x)) = x`. When `WORD_SIZE = 1` these are both identity. Otherwise, the default choice is for the VM to specify a `LIMB_BITS` and define
@@ -61,7 +61,8 @@ Immediate values are treated as single field elements. Our VM cannot represent o
 
 ### Registers
 
-Our zkVM treats general purpose registers as simply pointers to a separate address space, with is also comprised of word-addressable cells with the same `WORD_SIZE`.
+Our zkVM treats general purpose registers as simply pointers to a separate address space, which is also comprised of
+word-addressable cells with the same `WORD_SIZE`.
 
 There is a single special purpose register `pc` for the program counter, which is currently a single field element. Namely, the program counter cannot be $\ge p$. (We may extend `pc` to multiple field elements to increase the program address space size in the future.)
 
@@ -91,7 +92,8 @@ We will always have the following fixed address spaces:
 | `2`           | Memory       |
 | `3`           | Program code |
 
-The `0` address space is not a real address space: it is reserved for denoting immediates. We define `word[a]_0 = decompose(a)` so `compose(word[a]_0) = a`.
+Address space `0` is not a real address space: it is reserved for denoting immediates. We
+define `word[a]_0 = decompose(a)` so `compose(word[a]_0) = a`.
 
 Address space `3` is reserved for program code but we do not currently use it.
 
@@ -103,7 +105,9 @@ The size (= number of addresses) of each address space can be configured to be s
 
 ## Instruction list
 
-Each instruction contains 5 field element operands, $a, b, c, d, e$. We omit $d,e$ as operands in the list below but they are used in the description to specify which address space to reference. Each of $a,b,c,d,e$ is a field element. We sometimes replace an operand with `offset` simply for emphasize on its purpose.
+Each instruction contains 5 field element operands, $a, b, c, d, e$. We omit $d,e$ as operands in the list below but
+they are used in the description to specify which address space to reference. Each of $a,b,c,d,e$ is a field element. We
+sometimes replace an operand with `offset` simply to emphasize its purpose.
 
 Listed below are the instructions offered in each configuration.
 
@@ -163,7 +167,8 @@ Specifically, for **FE4ADD** and **FE4SUB** we have
 | **FE4ADD** | `a, b, c`                                     | Set `word[a+i*WORD_SIZE]_d <- decompose(fe[b+i*WORD_SIZE]_d + fe[c+i*WORD_SIZE]_e)` for `0 <= i < 4`. This opcode presumes `a,b` are in the same address space. |
 | **FE4SUB** | `a, b, c`                                     | Set `word[a+i*WORD_SIZE]_d <- decompose(fe[b+i*WORD_SIZE]_d - fe[c+i*WORD_SIZE]_e)` for `0 <= i < 4`.                                                           |
 
-For **BBE4MUL** and **BBE4INV**, we will implement BabyBear quartic (deg 4) field extension with the irreducible polynomial is $x^4 - 11$.
+For **BBE4MUL** and **BBE4INV**, we will implement BabyBear quartic (deg 4) field extension with respect to the
+irreducible polynomial $x^4 - 11$.
 
 For **BBE4MUL**, let the first element represent the polynomial $a_0 + a_1x + a_2x^2 + a_3x^3$ and the second represent the polynomial $b_0 + b_1x + b_2x^2 + b_3x^3$. Then, multiplying we find
 
@@ -191,26 +196,29 @@ which is an element of the original field which we define as $c$. So, we may sim
 We have special opcodes to enable different precompiled hash functions.
 
 Only subsets of these opcodes will be turned on depending on the VM use case.
-| Mnemonic | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode |
-| ----------- | --- | ----- |
-| **COMPRESS_POSEIDON2** `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a, b, c` | This is a special 2-to-1 compression function.<br/><br/>Let `state[i] <- fe[fe[b]_d + i * WORD_SIZE]_e` for `i = 0..CHUNK` and `state[CHUNK + i] <- fe[fe[c]_d + i * WORD_SIZE]_e` for `i = 0..CHUNK`, so `state` has type `[F; 2*CHUNK]`.<br/><br/>Let `new_state` be the Poseidon2 permutation applied to `state`. Set `word[fe[a]_d + i * WORD_SIZE]_e <- decompose(new_state[i])` for `i = 0..CHUNK`. |
-| **PERM_POSEIDON2** `[WIDTH, PID]` | `a, offset=0, c` (nonzero `offset` TODO) | Let `state[i] <- fe[fe[c]_d + offset + i * WORD_SIZE]_e` for `i = 0..WIDTH` so `state` has type `[F; WIDTH]`.<br/><br/>Let `new_state` be the Poseidon2 permutation applied to `state`. Set `word[fe[a]_d + i * WORD_SIZE]_e <- decompose(new_state[i])` for `i = 0..WIDTH`. |
-| **PERM_KECCAK** | `a, offset=0, c` | Assume `WORD_SIZE=1` for now. Let `state[i] <- word[word[c]_d + i]_e` for `i = 0..WIDTH` where `state[i]` is `u16`.<br/><br/>Let `new_state` be the `keccak-f` permutation applied to `state`. Set `word[word[a]_d + i]_e <- new_state[i]` for `i = 0..WIDTH`. |
+
+| Mnemonic                                                                                                                                                                                                                           | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                                                                                                                                                                                                                                                                                                                                  |
+|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **COMPRESS_POSEIDON2** `[CHUNK, PID]` <br/><br/> Here `CHUNK` and `PID` are **constants** that determine different opcodes. `PID` is an internal identifier for particular Poseidon2 constants dependent on the field (see below). | `a, b, c`                                     | This is a special 2-to-1 compression function.<br/><br/>Let `state[i] <- fe[fe[b]_d + i * WORD_SIZE]_e` for `i = 0..CHUNK` and `state[CHUNK + i] <- fe[fe[c]_d + i * WORD_SIZE]_e` for `i = 0..CHUNK`, so `state` has type `[F; 2*CHUNK]`.<br/><br/>Let `new_state` be the Poseidon2 permutation applied to `state`. Set `word[fe[a]_d + i * WORD_SIZE]_e <- decompose(new_state[i])` for `i = 0..CHUNK`. |
+| **PERM_POSEIDON2** `[WIDTH, PID]`                                                                                                                                                                                                  | `a, offset=0, c` (nonzero `offset` TODO)      | Let `state[i] <- fe[fe[c]_d + offset + i * WORD_SIZE]_e` for `i = 0..WIDTH` so `state` has type `[F; WIDTH]`.<br/><br/>Let `new_state` be the Poseidon2 permutation applied to `state`. Set `word[fe[a]_d + i * WORD_SIZE]_e <- decompose(new_state[i])` for `i = 0..WIDTH`.                                                                                                                              |
+| **PERM_KECCAK**                                                                                                                                                                                                                    | `a, offset=0, c`                              | Assume `WORD_SIZE=1` for now. Let `state[i] <- word[word[c]_d + i]_e` for `i = 0..WIDTH` where `state[i]` is `u16`.<br/><br/>Let `new_state` be the `keccak-f` permutation applied to `state`. Set `word[word[a]_d + i]_e <- new_state[i]` for `i = 0..WIDTH`.                                                                                                                                            |
 
 The `PID` is just some identifier to provide domain separation between different Poseidon2 constants. For now we can set:
-| `PID` | Description |
-| ----- | ----------- |
-| 0 | [`POSEIDON2_BABYBEAR_16_PARAMS`](https://github.com/HorizenLabs/poseidon2/blob/bb476b9ca38198cf5092487283c8b8c5d4317c4e/plain_implementations/src/poseidon2/poseidon2_instance_babybear.rs#L2023C20-L2023C48) but the Mat4 used is Plonky3's with a Monty reduction |
+
+| `PID` | Description                                                                                                                                                                                                                                                         |
+|-------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 0     | [`POSEIDON2_BABYBEAR_16_PARAMS`](https://github.com/HorizenLabs/poseidon2/blob/bb476b9ca38198cf5092487283c8b8c5d4317c4e/plain_implementations/src/poseidon2/poseidon2_instance_babybear.rs#L2023C20-L2023C48) but the Mat4 used is Plonky3's with a Monty reduction |
 
 and only support `CHUNK = 8` and `WIDTH = 16` above.
 
 ### Excluded
 
 These instructions are never enabled. Any program that actually executes them cannot be verified.
-| Mnemonic | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode |
-| ----------- | --- | ----- |
-| **FAIL** | `_, _, _` | Causes execution to fail. |
-| **PRINTF** | `a, _, _` | Prints `compose(word[a]_d)`. |
+
+| Mnemonic   | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode     |
+|------------|-----------------------------------------------|------------------------------|
+| **FAIL**   | `_, _, _`                                     | Causes execution to fail.    |
+| **PRINTF** | `a, _, _`                                     | Prints `compose(word[a]_d)`. |
 
 The **FAIL** instruction is meant to allow programs to clearly signal that something has gone wrong, and will cause trace generation to fail. **TERMINATE** and **FAIL** can be seen as analogues of acceptance and rejection in the context of Turing machines.
 

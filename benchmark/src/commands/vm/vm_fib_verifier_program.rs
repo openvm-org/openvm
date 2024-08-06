@@ -57,7 +57,7 @@ pub fn benchmark_fib_verifier_program(n: usize) -> Result<()> {
     } = vm.execute().unwrap();
     let chips = VirtualMachine::<1, _>::get_chips(&chips);
 
-    let dummy_vm = VirtualMachine::<1, _>::new(vm_config, fib_program.clone(), vec![]);
+    let dummy_vm = VirtualMachine::<1, _>::new(vm_config, fib_program, vec![]);
     let rec_raps = get_rec_raps::<1, InnerConfig>(&dummy_vm.segments[0]);
 
     assert!(chips.len() == rec_raps.len());

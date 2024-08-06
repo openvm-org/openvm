@@ -9,7 +9,10 @@ use afs_test_utils::{
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
-use stark_vm::vm::{config::VmConfig, ExecutionResult, VirtualMachine};
+use stark_vm::{
+    program::Program,
+    vm::{config::VmConfig, ExecutionResult, VirtualMachine},
+};
 
 use crate::{
     asm::parse_asm_file,
@@ -54,7 +57,12 @@ impl ProveCommand {
     pub fn execute_helper(&self, config: VmConfig) -> Result<()> {
         println!("Proving program: {}", self.asm_file_path);
         let instructions = parse_asm_file(Path::new(&self.asm_file_path.clone()))?;
-        let vm = VirtualMachine::<WORD_SIZE, _>::new(config, instructions, vec![]);
+        let program_len = instructions.len();
+        let program = Program {
+            instructions,
+            debug_infos: vec![None; program_len],
+        };
+        let vm = VirtualMachine::<WORD_SIZE, _>::new(config, program, vec![]);
 
         let result = vm.execute()?;
         let engine = config::baby_bear_poseidon2::default_engine(result.max_log_degree);

@@ -23,7 +23,7 @@ use p3_matrix::{
     stack::VerticalPair,
     Matrix,
 };
-use stark_vm::{cpu::trace::Instruction, vm::ExecutionSegment};
+use stark_vm::{program::Program, vm::ExecutionSegment};
 
 use crate::{
     challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger},
@@ -80,7 +80,7 @@ impl VerifierProgram<InnerConfig> {
         raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
         constants: MultiStarkVerificationAdvice<InnerConfig>,
         fri_params: &FriParameters,
-    ) -> Vec<Instruction<BabyBear>> {
+    ) -> Program<BabyBear> {
         let mut builder = Builder::<InnerConfig>::default();
 
         builder.cycle_tracker_start("VerifierProgram");

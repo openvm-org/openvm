@@ -4,7 +4,7 @@ use super::{Array, Config, Ext, Felt, FriFoldInput, MemIndex, Ptr, TracedVec, Us
 ///
 /// Programs written in the DSL can compile both to the recursive zkVM and the R1CS or Plonk-ish
 /// circuits.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, strum_macros::Display)]
 pub enum DslIr<C: Config> {
     // Immediates.
     /// Assigns an immediate to a variable (var = imm).
@@ -267,4 +267,10 @@ pub enum DslIr<C: Config> {
     CycleTrackerStart(String),
     /// End the cycle tracker used by a block of code annotated by the string input.
     CycleTrackerEnd(String),
+}
+
+impl<C: Config> Default for DslIr<C> {
+    fn default() -> Self {
+        Self::Halt
+    }
 }

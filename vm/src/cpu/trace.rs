@@ -166,7 +166,12 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
 
-            let instruction = vm.program_chip.get_instruction(pc_usize)?;
+            let (instruction, debug_info) = vm.program_chip.get_instruction(pc_usize)?;
+
+            let dsl_instr = match debug_info {
+                Some(debug_info) => debug_info.dsl_instruction,
+                None => String::new(),
+            };
 
             let opcode = instruction.opcode;
             let a = instruction.op_a;
@@ -222,6 +227,22 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     accesses[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
                         memory_access_to_cols(true, $address_space, $address, word);
                 }};
+            }
+
+            if collect_metrics {
+                #[cfg(debug_assertions)]
+                vm.opcode_counts
+                    .entry(opcode.to_string())
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
+
+                if !dsl_instr.is_empty() {
+                    #[cfg(debug_assertions)]
+                    vm.dsl_counts
+                        .entry(dsl_instr)
+                        .and_modify(|count| *count += 1)
+                        .or_insert(1);
+                }
             }
 
             if opcode == FAIL {
@@ -344,8 +365,12 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     let base_pointer = read!(d, a);
                     write!(e, base_pointer + b, hint);
                 }
-                CT_START => cycle_tracker.start(debug, &vm.metrics()),
-                CT_END => cycle_tracker.end(debug, &vm.metrics()),
+                CT_START => {
+                    cycle_tracker.start(debug, &vm.metrics(), &vm.opcode_counts, &vm.dsl_counts)
+                }
+                CT_END => {
+                    cycle_tracker.end(debug, &vm.metrics(), &vm.opcode_counts, &vm.dsl_counts)
+                }
             };
 
             let mut operation_flags = BTreeMap::new();

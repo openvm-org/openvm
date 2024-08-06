@@ -73,6 +73,18 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
         }
     }
 
+    pub fn clone_with_id(&self, air_id: u32) -> Self {
+        Self {
+            path_bus_index: self.path_bus_index,
+            data_bus_index: self.data_bus_index,
+            is_less_than_tuple_air: self.is_less_than_tuple_air.clone(),
+            is_less_than_tuple_param: self.is_less_than_tuple_param.clone(),
+            is_init: self.is_init,
+            idx_len: self.idx_len,
+            air_id,
+        }
+    }
+
     // if self.is_final, we need to include range data to establish sortedness
     // in particular, for each idx, prove the idx lies in the start and end.
     // we then need extra columns that contain results of is_less_than comparisons

@@ -21,7 +21,7 @@ use p3_baby_bear::BabyBear;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_strict_usize;
-use stark_vm::cpu::trace::Instruction;
+use stark_vm::program::Program;
 
 pub struct VerificationParams<SC: StarkGenericConfig> {
     pub vk: MultiStarkVerifyingKey<SC>,
@@ -84,7 +84,7 @@ pub fn build_verification_program(
     rec_raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
     pvs: Vec<Vec<InnerVal>>,
     vparams: VerificationParams<BabyBearPoseidon2Config>,
-) -> (Vec<Instruction<BabyBear>>, Vec<Vec<InnerVal>>) {
+) -> (Program<BabyBear>, Vec<Vec<InnerVal>>) {
     let VerificationParams {
         vk,
         proof,

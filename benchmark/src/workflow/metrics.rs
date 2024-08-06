@@ -18,7 +18,14 @@ pub struct BenchmarkMetrics {
     pub trace: TraceMetrics,
 
     /// Custom metrics
-    pub custom: BTreeMap<String, String>,
+    pub custom: CustomMetrics,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CustomMetrics {
+    pub vm_metrics: BTreeMap<String, String>,
+    pub opcode_counts: Vec<(String, String)>,
+    pub dsl_counts: Vec<(String, String)>,
 }
 
 // Implement the Display trait for BenchmarkMetrics to create a markdown table
@@ -73,12 +80,35 @@ impl fmt::Display for BenchmarkMetrics {
             )?;
         }
 
-        if !self.custom.is_empty() {
+        if !self.custom.vm_metrics.is_empty() {
             writeln!(f)?;
             writeln!(f, "### Custom metrics")?;
             writeln!(f, "| Name | Value |")?;
             writeln!(f, "|------|-------|")?;
-            for (name, value) in self.custom.iter() {
+            for (name, value) in self.custom.vm_metrics.iter() {
+                writeln!(f, "| {:<20} | {:<10} |", name, value)?;
+            }
+        }
+
+        if !self.custom.opcode_counts.is_empty() {
+            writeln!(f)?;
+            writeln!(f, "### Opcode counts")?;
+            writeln!(f, "| Name | Count |")?;
+            writeln!(f, "|------|-------|")?;
+            for (name, value) in self.custom.opcode_counts.iter() {
+                writeln!(f, "| {:<20} | {:<10} |", name, value)?;
+            }
+        }
+
+        if !self.custom.dsl_counts.is_empty() {
+            writeln!(f)?;
+            writeln!(
+                f,
+                "### DSL counts - how many isa instructions each DSL instruction generates"
+            )?;
+            writeln!(f, "| Name | Count |")?;
+            writeln!(f, "|------|-------|")?;
+            for (name, value) in self.custom.dsl_counts.iter() {
                 writeln!(f, "| {:<20} | {:<10} |", name, value)?;
             }
         }
