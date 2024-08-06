@@ -1,5 +1,3 @@
-use std::array::from_fn;
-
 use p3_field::{ExtensionField, PrimeField64};
 use stark_vm::{
     cpu::{
@@ -301,9 +299,6 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
     labels: impl Fn(F) -> F,
     options: CompilerOptions,
 ) -> Program<F> {
-    let utility_registers: [F; NUM_UTILITY_REGISTERS] = from_fn(|i| F::from_canonical_usize(i));
-    let utility_register = utility_registers[0];
-
     let instructions = match instruction {
         AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
         AsmInstruction::LoadFI(dst, src, offset) => vec![
@@ -534,24 +529,14 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             AS::Register,
             AS::Memory,
         )],
-        AsmInstruction::Poseidon2Permute(dst, src) => vec![
-            inst(
-                FADD,
-                utility_register,
-                register(src),
-                F::from_canonical_usize(POSEIDON2_WIDTH / 2),
-                AS::Register,
-                AS::Immediate,
-            ),
-            inst(
-                PERM_POS2,
-                register(dst),
-                register(src),
-                utility_register,
-                AS::Register,
-                AS::Memory,
-            ),
-        ],
+        AsmInstruction::Poseidon2Permute(dst, src) => vec![inst(
+            PERM_POS2,
+            register(dst),
+            register(src),
+            F::zero(),
+            AS::Register,
+            AS::Memory,
+        )],
         AsmInstruction::CycleTrackerStart(name) => {
             if options.enable_cycle_tracker {
                 vec![dbg(CT_START, name)]
