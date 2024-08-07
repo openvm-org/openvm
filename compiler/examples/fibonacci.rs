@@ -49,7 +49,7 @@ fn main() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    display_program(&program);
+    display_program(&program.instructions);
     execute_program::<WORD_SIZE>(program, vec![]);
 
     // let program = code.machine_code();

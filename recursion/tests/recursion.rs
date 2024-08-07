@@ -8,13 +8,13 @@ use afs_test_utils::config::fri_params::{
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
-    cpu::trace::Instruction,
+    program::Program,
     vm::{config::VmConfig, ExecutionResult, VirtualMachine},
 };
 
 mod common;
 
-fn fibonacci_program(a: u32, b: u32, n: u32) -> Vec<Instruction<BabyBear>> {
+fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, 4>;
 

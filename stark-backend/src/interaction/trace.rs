@@ -64,85 +64,107 @@ where
     // is the number of bundles
     let num_interactions = all_interactions.len();
     let height = partitioned_main[0].height();
-    assert!(
+    // To optimize memory and parallelism, we split the trace rows into chunks
+    // based on the number of cpu threads available, and then do all
+    // computations necessary for that chunk within a single thread.
+    let perm_width = (num_interactions + interaction_chunk_size - 1) / interaction_chunk_size + 1;
+    let mut perm_values = vec![EF::zero(); height * perm_width];
+    debug_assert!(
         partitioned_main.iter().all(|m| m.height() == height),
         "All main trace parts must have same height"
     );
 
-    let mut demons = vec![EF::zero(); height * num_interactions];
-    for (n, chunk) in demons.chunks_mut(num_interactions).enumerate() {
-        let evaluator = Evaluator {
-            preprocessed,
-            partitioned_main,
-            public_values,
-            height,
-            local_index: n,
-        };
+    #[cfg(feature = "parallel")]
+    let num_threads = rayon::current_num_threads();
+    #[cfg(not(feature = "parallel"))]
+    let num_threads = 1;
 
-        for (i, interaction) in all_interactions.iter().enumerate() {
-            let alpha = alphas[interaction.bus_index];
-            debug_assert!(interaction.fields.len() <= betas.len());
-            let mut fields = interaction.fields.iter();
-            let mut denom =
-                alpha + evaluator.eval_expr(fields.next().expect("fields should not be empty"));
-            for (expr, &beta) in fields.zip(betas.iter().skip(1)) {
-                denom += beta * evaluator.eval_expr(expr);
-            }
-            chunk[i] = denom;
-        }
-    }
-
-    // Zero should be vanishingly unlikely if alpha, beta are properly pseudo-randomized
-    // The logup reciprocals should never be zero, so trace generation should panic if
-    // trying to divide by zero.
-    let reciprocals = p3_field::batch_multiplicative_inverse(&demons);
-    drop(demons);
-
-    let perm_width = (num_interactions + interaction_chunk_size - 1) / interaction_chunk_size + 1;
-    let mut perm_values = vec![EF::zero(); height * perm_width];
-
+    let height_chunk_size = (height + num_threads - 1) / num_threads;
     perm_values
-        .par_chunks_mut(perm_width)
-        .zip(reciprocals.par_chunks(num_interactions))
+        .par_chunks_mut(height_chunk_size * perm_width)
         .enumerate()
-        .for_each(|(n, (perm_row, reciprocal_chunk))| {
-            debug_assert!(perm_row.len() == perm_width);
-            debug_assert!(reciprocal_chunk.len() == num_interactions);
-
-            let evaluator = Evaluator {
-                preprocessed,
-                partitioned_main,
-                public_values,
-                height,
-                local_index: n,
-            };
-
-            let mut row_sum = EF::zero();
-            for (perm_val, reciprocal_chunk, interaction_chunk) in izip!(
-                perm_row.iter_mut(),
-                reciprocal_chunk.chunks(interaction_chunk_size),
-                all_interactions.chunks(interaction_chunk_size)
-            ) {
-                for (reciprocal, interaction) in izip!(reciprocal_chunk, interaction_chunk) {
-                    let mut interaction_val = *reciprocal * evaluator.eval_expr(&interaction.count);
-                    if interaction.interaction_type == InteractionType::Receive {
-                        interaction_val = -interaction_val;
+        .for_each(|(chunk_idx, perm_values)| {
+            // perm_values is now local_height x perm_width row-major matrix
+            let num_rows = perm_values.len() / perm_width;
+            // the interaction chunking requires more memory because we must
+            // allocate separate memory for the denominators and reciprocals
+            let mut denoms = vec![EF::zero(); num_rows * num_interactions];
+            let row_offset = chunk_idx * height_chunk_size;
+            // compute the denominators to be inverted:
+            for (n, denom_row) in denoms.chunks_exact_mut(num_interactions).enumerate() {
+                let evaluator = Evaluator {
+                    preprocessed,
+                    partitioned_main,
+                    public_values,
+                    height,
+                    local_index: row_offset + n,
+                };
+                for (denom, interaction) in denom_row.iter_mut().zip(all_interactions.iter()) {
+                    let alpha = alphas[interaction.bus_index];
+                    debug_assert!(interaction.fields.len() <= betas.len());
+                    let mut fields = interaction.fields.iter();
+                    *denom = alpha
+                        + evaluator.eval_expr(fields.next().expect("fields should not be empty"));
+                    for (expr, &beta) in fields.zip(betas.iter().skip(1)) {
+                        *denom += beta * evaluator.eval_expr(expr);
                     }
-                    *perm_val += interaction_val;
                 }
-                row_sum += *perm_val;
             }
 
-            perm_row[perm_width - 1] = row_sum;
+            // Zero should be vanishingly unlikely if alpha, beta are properly pseudo-randomized
+            // The logup reciprocals should never be zero, so trace generation should panic if
+            // trying to divide by zero.
+            let reciprocals = p3_field::batch_multiplicative_inverse(&denoms);
+            drop(denoms);
+            // This block should already be in a single thread, but rayon is able
+            // to do more magic sometimes
+            perm_values
+                .par_chunks_exact_mut(perm_width)
+                .zip(reciprocals.par_chunks_exact(num_interactions))
+                .enumerate()
+                .for_each(|(n, (perm_row, reciprocal_chunk))| {
+                    debug_assert_eq!(perm_row.len(), perm_width);
+                    debug_assert_eq!(reciprocal_chunk.len(), num_interactions);
+
+                    let evaluator = Evaluator {
+                        preprocessed,
+                        partitioned_main,
+                        public_values,
+                        height,
+                        local_index: row_offset + n,
+                    };
+
+                    let mut row_sum = EF::zero();
+                    for (perm_val, reciprocal_chunk, interaction_chunk) in izip!(
+                        perm_row.iter_mut(),
+                        reciprocal_chunk.chunks(interaction_chunk_size),
+                        all_interactions.chunks(interaction_chunk_size)
+                    ) {
+                        for (reciprocal, interaction) in izip!(reciprocal_chunk, interaction_chunk)
+                        {
+                            let mut interaction_val =
+                                *reciprocal * evaluator.eval_expr(&interaction.count);
+                            if interaction.interaction_type == InteractionType::Receive {
+                                interaction_val = -interaction_val;
+                            }
+                            *perm_val += interaction_val;
+                        }
+                        row_sum += *perm_val;
+                    }
+
+                    perm_row[perm_width - 1] = row_sum;
+                });
         });
 
-    let _span = tracing::info_span!("compute logup partial sums").entered();
-    let mut phi = EF::zero();
-    for perm_chunk in perm_values.chunks_mut(perm_width) {
-        phi += perm_chunk[perm_width - 1];
-        perm_chunk[perm_width - 1] = phi;
-    }
-    _span.exit();
+    // At this point, the trace matrix is complete except that the last column
+    // has the row sum but not the partial sum
+    tracing::info_span!("compute logup partial sums").in_scope(|| {
+        let mut phi = EF::zero();
+        for perm_chunk in perm_values.chunks_exact_mut(perm_width) {
+            phi += *perm_chunk.last().unwrap();
+            *perm_chunk.last_mut().unwrap() = phi;
+        }
+    });
 
     Some(RowMajorMatrix::new(perm_values, perm_width))
 }

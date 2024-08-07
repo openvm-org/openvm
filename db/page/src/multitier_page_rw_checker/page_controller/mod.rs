@@ -35,8 +35,8 @@ pub mod page_tree_graph;
 #[derive(Clone)]
 pub struct PageTreeParams {
     pub path_bus_index: usize,
-    pub leaf_cap: usize,
-    pub internal_cap: usize,
+    pub leaf_cap: Option<usize>,
+    pub internal_cap: Option<usize>,
     pub leaf_page_height: usize,
     pub internal_page_height: usize,
 }
@@ -45,6 +45,13 @@ pub struct PageTreeParams {
 pub struct MyLessThanTupleParams {
     pub limb_bits: usize,
     pub decomp: usize,
+}
+
+pub struct MultitierCapacities {
+    pub init_leaf_cap: Option<usize>,
+    pub init_internal_cap: Option<usize>,
+    pub final_leaf_cap: Option<usize>,
+    pub final_internal_cap: Option<usize>,
 }
 
 struct TreeProducts<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>
@@ -168,7 +175,7 @@ where
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
         Self {
-            init_leaf_chips: (0..init_param.leaf_cap)
+            init_leaf_chips: (0..init_param.leaf_cap.unwrap_or(1))
                 .map(|i| {
                     LeafPageAir::new(
                         init_param.path_bus_index,
@@ -182,7 +189,7 @@ where
                     )
                 })
                 .collect_vec(),
-            init_internal_chips: (0..init_param.internal_cap)
+            init_internal_chips: (0..init_param.internal_cap.unwrap_or(1))
                 .map(|i| {
                     InternalPageAir::new(
                         init_param.path_bus_index,
@@ -205,7 +212,7 @@ where
                 Val::<SC>::bits() - 1,
                 less_than_tuple_param.decomp,
             ),
-            final_leaf_chips: (0..final_param.leaf_cap)
+            final_leaf_chips: (0..final_param.leaf_cap.unwrap_or(1))
                 .map(|i| {
                     LeafPageAir::new(
                         final_param.path_bus_index,
@@ -219,7 +226,7 @@ where
                     )
                 })
                 .collect_vec(),
-            final_internal_chips: (0..final_param.internal_cap)
+            final_internal_chips: (0..final_param.internal_cap.unwrap_or(1))
                 .map(|i| {
                     InternalPageAir::new(
                         final_param.path_bus_index,
@@ -321,10 +328,10 @@ where
         let (init_tree_products, mega_page) = make_tree_products(
             trace_committer,
             init_leaf_pages,
-            &self.init_leaf_chips,
+            &mut self.init_leaf_chips,
             blank_init_leaf,
             init_internal_pages,
-            &self.init_internal_chips,
+            &mut self.init_internal_chips,
             blank_init_internal,
             &self.init_root_signal,
             &self.params.init_tree_params,
@@ -349,10 +356,10 @@ where
         let (final_tree_products, _) = make_tree_products(
             trace_committer,
             final_leaf_pages,
-            &self.final_leaf_chips,
+            &mut self.final_leaf_chips,
             blank_final_leaf,
             final_internal_pages,
-            &self.final_internal_chips,
+            &mut self.final_internal_chips,
             blank_final_internal,
             &self.final_root_signal,
             &self.params.final_tree_params,
@@ -426,41 +433,41 @@ where
         let mut final_internal_data_ptrs = vec![];
         let mut final_internal_main_ptrs = vec![];
 
-        for _ in 0..self.params.init_tree_params.leaf_cap {
+        for _ in 0..self.init_leaf_chips.len() {
             init_leaf_data_ptrs.push(
                 keygen_builder.add_cached_main_matrix(self.init_leaf_chips[0].cached_width()),
             );
         }
 
-        for _ in 0..self.params.init_tree_params.internal_cap {
+        for _ in 0..self.init_internal_chips.len() {
             init_internal_data_ptrs.push(
                 keygen_builder.add_cached_main_matrix(self.init_internal_chips[0].cached_width()),
             );
         }
 
-        for _ in 0..self.params.final_tree_params.leaf_cap {
+        for _ in 0..self.final_leaf_chips.len() {
             final_leaf_data_ptrs.push(
                 keygen_builder.add_cached_main_matrix(self.final_leaf_chips[0].cached_width()),
             );
         }
 
-        for _ in 0..self.params.final_tree_params.internal_cap {
+        for _ in 0..self.final_internal_chips.len() {
             final_internal_data_ptrs.push(
                 keygen_builder.add_cached_main_matrix(self.final_internal_chips[0].cached_width()),
             );
         }
 
-        for _ in 0..self.params.init_tree_params.internal_cap {
+        for _ in 0..self.init_internal_chips.len() {
             init_internal_main_ptrs
                 .push(keygen_builder.add_main_matrix(self.init_internal_chips[0].main_width()));
         }
 
-        for _ in 0..self.params.final_tree_params.leaf_cap {
+        for _ in 0..self.final_leaf_chips.len() {
             final_leaf_main_ptrs
                 .push(keygen_builder.add_main_matrix(self.final_leaf_chips[0].main_width()));
         }
 
-        for _ in 0..self.params.final_tree_params.internal_cap {
+        for _ in 0..self.final_internal_chips.len() {
             final_internal_main_ptrs
                 .push(keygen_builder.add_main_matrix(self.final_internal_chips[0].main_width()));
         }
@@ -478,7 +485,7 @@ where
             keygen_builder.add_partitioned_air(chip, COMMITMENT_LEN, vec![ptr]);
         }
 
-        for i in 0..self.params.init_tree_params.internal_cap {
+        for i in 0..self.init_internal_chips.len() {
             keygen_builder.add_partitioned_air(
                 &self.init_internal_chips[i],
                 COMMITMENT_LEN,
@@ -486,7 +493,7 @@ where
             );
         }
 
-        for i in 0..self.params.final_tree_params.leaf_cap {
+        for i in 0..self.final_leaf_chips.len() {
             keygen_builder.add_partitioned_air(
                 &self.final_leaf_chips[i],
                 COMMITMENT_LEN,
@@ -494,7 +501,7 @@ where
             );
         }
 
-        for i in 0..self.params.final_tree_params.internal_cap {
+        for i in 0..self.final_internal_chips.len() {
             keygen_builder.add_partitioned_air(
                 &self.final_internal_chips[i],
                 COMMITMENT_LEN,
@@ -709,10 +716,10 @@ where
 fn make_tree_products<SC: StarkGenericConfig, const COMMITMENT_LEN: usize>(
     committer: &mut TraceCommitter<SC>,
     leaf_pages: Vec<Page>,
-    leaf_chips: &[LeafPageAir<COMMITMENT_LEN>],
+    leaf_chips: &mut Vec<LeafPageAir<COMMITMENT_LEN>>,
     blank_leaf_page: Page,
     internal_pages: Vec<Vec<Vec<u32>>>,
-    internal_chips: &[InternalPageAir<COMMITMENT_LEN>],
+    internal_chips: &mut Vec<InternalPageAir<COMMITMENT_LEN>>,
     blank_internal_page: Vec<Vec<u32>>,
     root_signal: &RootSignalAir<COMMITMENT_LEN>,
     params: &PageTreeParams,
@@ -732,10 +739,24 @@ where
     Val<SC>: AbstractField + PrimeField64,
     Com<SC>: Into<[Val<SC>; COMMITMENT_LEN]>,
 {
-    let mut leaf_pages = leaf_pages.to_vec();
-    let mut internal_pages = internal_pages.to_vec();
-    leaf_pages.resize(params.leaf_cap, blank_leaf_page.clone());
-    internal_pages.resize(params.internal_cap, blank_internal_page.to_vec());
+    let mut leaf_pages = leaf_pages;
+    let mut internal_pages = internal_pages;
+    if let (Some(leaf_cap), Some(internal_cap)) = (params.leaf_cap, params.internal_cap) {
+        leaf_pages.resize(leaf_cap, blank_leaf_page.clone());
+        internal_pages.resize(internal_cap, blank_internal_page.to_vec());
+    } else {
+        if internal_pages.is_empty() {
+            internal_pages.push(blank_internal_page.to_vec());
+        }
+        leaf_chips.truncate(leaf_pages.len());
+        for i in leaf_chips.len()..leaf_pages.len() {
+            leaf_chips.push(leaf_chips[0].clone_with_id(i as u32));
+        }
+        for i in internal_chips.len()..internal_pages.len() {
+            internal_chips.push(internal_chips[0].clone_with_id(i as u32));
+        }
+    }
+
     let leaf_trace = leaf_pages
         .iter()
         .zip(leaf_chips.iter())

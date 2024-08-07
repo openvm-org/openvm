@@ -1,16 +1,13 @@
 use std::borrow::Borrow;
 
-use afs_primitives::{
-    is_zero::{columns::IsZeroIoCols, IsZeroAir},
-    sub_chip::{AirConfig, SubAir},
-};
+use afs_primitives::sub_chip::AirConfig;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::Field;
+use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 use poseidon2_air::poseidon2::columns::Poseidon2Cols;
 
-use super::{columns::Poseidon2VmCols, Poseidon2VmAir};
+use super::{columns::Poseidon2VmCols, Poseidon2VmAir, CHUNK};
 
 impl<const WIDTH: usize, F: Clone> AirConfig for Poseidon2VmAir<WIDTH, F> {
     type Cols<T> = Poseidon2VmCols<WIDTH, T>;
@@ -43,27 +40,10 @@ impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2VmAir<WIDT
         builder.assert_bool(cols.io.cmp);
         // can only be comparing if row is allocated
         builder.assert_eq(cols.io.is_opcode * cols.io.cmp, cols.io.cmp);
-        // immediates
-
-        builder
-            .when(cols.aux.d_is_zero)
-            .assert_eq(cols.aux.dst, cols.io.a);
-        builder
-            .when(cols.aux.d_is_zero)
-            .assert_eq(cols.aux.lhs, cols.io.b);
-        builder
-            .when(cols.aux.d_is_zero)
-            .assert_eq(cols.aux.rhs, cols.io.c);
-
-        // d is zero SubAir
-        SubAir::eval(
-            &IsZeroAir {},
-            builder,
-            IsZeroIoCols {
-                x: cols.io.d,
-                is_zero: cols.aux.d_is_zero,
-            },
-            cols.aux.is_zero_inv,
+        // if io.cmp is false, then constrain rhs = lhs + CHUNK
+        builder.when(cols.io.is_opcode - cols.io.cmp).assert_eq(
+            cols.aux.rhs,
+            cols.aux.lhs + AB::F::from_canonical_usize(CHUNK),
         );
     }
 }

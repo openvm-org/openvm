@@ -23,6 +23,7 @@ parking_lot = "0.12.2"
 itertools = "0.13.0"
 getset = "0.1.2"
 derive-new = "0.5.1"
+backtrace = "0.3.71"
 
 rand = "0.8"
 serde = "1.0.203"

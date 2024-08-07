@@ -18,9 +18,10 @@ use super::{
 };
 use crate::{
     cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
-    field_extension::FieldExtensionArithmeticChip,
+    field_extension::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticChip},
     memory::{compose, decompose},
-    poseidon2::Poseidon2Chip,
+    poseidon2::{columns::Poseidon2VmCols, Poseidon2Chip},
+    program::columns::ProgramPreprocessedCols,
     vm::{cycle_tracker::CycleTracker, ExecutionSegment},
 };
 
@@ -161,12 +162,16 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
         let mut cycle_tracker = CycleTracker::<F>::new();
         let mut is_done = false;
         let mut collect_metrics = vm.config.collect_metrics;
-        dbg!(collect_metrics);
 
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
 
-            let instruction = vm.program_chip.get_instruction(pc_usize)?;
+            let (instruction, debug_info) = vm.program_chip.get_instruction(pc_usize)?;
+
+            let dsl_instr = match debug_info {
+                Some(debug_info) => debug_info.dsl_instruction,
+                None => String::new(),
+            };
 
             let opcode = instruction.opcode;
             let a = instruction.op_a;
@@ -192,6 +197,11 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let mut accesses = [disabled_memory_cols(); CPU_MAX_ACCESSES_PER_CYCLE];
             let mut num_reads = 0;
             let mut num_writes = 0;
+
+            let initial_accesses = vm.memory_chip.accesses.len();
+            let initial_field_base_ops = vm.field_arithmetic_chip.operations.len();
+            let initial_field_extension_ops = vm.field_extension_chip.operations.len();
+            let initial_poseidon2_rows = vm.poseidon2_chip.rows.len();
 
             macro_rules! read {
                 ($address_space: expr, $address: expr) => {{
@@ -222,6 +232,22 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     accesses[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
                         memory_access_to_cols(true, $address_space, $address, word);
                 }};
+            }
+
+            if collect_metrics {
+                #[cfg(debug_assertions)]
+                vm.opcode_counts
+                    .entry(opcode.to_string())
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
+
+                if !dsl_instr.is_empty() {
+                    #[cfg(debug_assertions)]
+                    vm.dsl_counts
+                        .entry(dsl_instr)
+                        .and_modify(|count| *count += 1)
+                        .or_insert(1);
+                }
             }
 
             if opcode == FAIL {
@@ -314,7 +340,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     FieldExtensionArithmeticChip::calculate(vm, timestamp, instruction);
                 }
                 PERM_POS2 | COMP_POS2 => {
-                    Poseidon2Chip::<16, _>::poseidon2_perm(vm, timestamp, instruction);
+                    Poseidon2Chip::<16, _>::calculate(vm, timestamp, instruction);
                 }
                 HINT_INPUT => {
                     let hint = match vm.input_stream.pop_front() {
@@ -344,9 +370,46 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     let base_pointer = read!(d, a);
                     write!(e, base_pointer + b, hint);
                 }
-                CT_START => cycle_tracker.start(debug, &vm.metrics()),
-                CT_END => cycle_tracker.end(debug, &vm.metrics()),
+                CT_START => cycle_tracker.start(
+                    debug,
+                    &vm.metrics(),
+                    &vm.opcode_counts,
+                    &vm.dsl_counts,
+                    &vm.opcode_trace_cells,
+                ),
+                CT_END => cycle_tracker.end(
+                    debug,
+                    &vm.metrics(),
+                    &vm.opcode_counts,
+                    &vm.dsl_counts,
+                    &vm.opcode_trace_cells,
+                ),
             };
+
+            let final_accesses = vm.memory_chip.accesses.len();
+            let num_accesses_memory_rows = final_accesses - initial_accesses;
+
+            let final_field_base_ops = vm.field_arithmetic_chip.operations.len();
+            let num_field_base_ops = final_field_base_ops - initial_field_base_ops;
+
+            let final_field_extension_ops = vm.field_extension_chip.operations.len();
+            let num_field_extension_ops = final_field_extension_ops - initial_field_extension_ops;
+
+            let final_poseidon2_rows = vm.poseidon2_chip.rows.len();
+            let num_poseidon2_rows = final_poseidon2_rows - initial_poseidon2_rows;
+
+            let trace_cells = CpuCols::<WORD_SIZE, F>::get_width(vm.options())
+                + ProgramPreprocessedCols::<F>::get_width()
+                + num_accesses_memory_rows * vm.memory_chip.air.air_width()
+                + num_field_base_ops * FieldExtensionArithmeticCols::<F>::get_width()
+                + num_field_extension_ops * FieldExtensionArithmeticCols::<F>::get_width()
+                + num_poseidon2_rows * Poseidon2VmCols::<16, F>::get_width(&vm.poseidon2_chip.air);
+
+            #[cfg(debug_assertions)]
+            vm.opcode_trace_cells
+                .entry(opcode.to_string())
+                .and_modify(|count| *count += trace_cells)
+                .or_insert(trace_cells);
 
             let mut operation_flags = BTreeMap::new();
             for other_opcode in vm.options().enabled_instructions() {

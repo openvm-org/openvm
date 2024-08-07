@@ -1,3 +1,5 @@
+use std::fmt;
+
 use enum_utils::FromStr;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
@@ -70,6 +72,12 @@ pub enum OpCode {
     CT_END = 61,
 
     NOP = 100,
+}
+
+impl fmt::Display for OpCode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 pub const CORE_INSTRUCTIONS: [OpCode; 13] = [

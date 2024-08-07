@@ -20,9 +20,7 @@ use afs_test_utils::{
     interaction::dummy_interaction_air::DummyInteractionAir,
 };
 use benchmark::utils::bench::{gen_ops_sender_trace, generate_page_and_ops, get_dummy_ptd};
-use criterion::{
-    black_box, criterion_group, criterion_main, measurement::WallTime, BenchmarkGroup, Criterion,
-};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use itertools::{izip, Itertools};
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::Pcs;
@@ -33,8 +31,6 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use pprof::criterion::{Output, PProfProfiler}; // Add this line
 
 pub fn perm_trace_gen_benchmark(c: &mut Criterion) {
-    let mut group = c.benchmark_group("trace gen");
-    group.sample_size(10);
     let idx_len = 16;
     let data_len = 64;
     let log_page_height = 15;
@@ -71,7 +67,6 @@ pub fn perm_trace_gen_benchmark(c: &mut Criterion) {
         idx_decomp.max(log_page_height.max(3 + log_num_ops)),
     );
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
-
     page_controller.set_up_keygen_builder(&mut keygen_builder, &ops_sender);
     let pk = keygen_builder.generate_pk();
 
@@ -89,6 +84,8 @@ pub fn perm_trace_gen_benchmark(c: &mut Criterion) {
         &mut trace_builder.committer,
     );
 
+    let mut group = c.benchmark_group("main_trace_gen");
+    group.sample_size(10);
     group.bench_function("main trace gen", |b| {
         b.iter(|| {
             page_controller.load_page_and_ops(
@@ -103,10 +100,11 @@ pub fn perm_trace_gen_benchmark(c: &mut Criterion) {
             gen_ops_sender_trace(black_box(&ops_sender), black_box(&ops));
         })
     });
+    drop(group);
 
     let ops_sender_trace = gen_ops_sender_trace(black_box(&ops_sender), black_box(&ops));
     pc_prove_with_group(
-        group,
+        c,
         &page_controller,
         &engine,
         &pk,
@@ -117,6 +115,7 @@ pub fn perm_trace_gen_benchmark(c: &mut Criterion) {
         ops_sender_trace,
     );
 }
+
 /// This function clears the trace_builder, loads in the traces for all involved chips
 /// (including the range_checker and the ops_sender, which is passed in along with its trace),
 /// commits them, and then generates the proof.
@@ -124,7 +123,7 @@ pub fn perm_trace_gen_benchmark(c: &mut Criterion) {
 /// (init_page, final_page), which is returned by load_page_and_ops
 #[allow(clippy::too_many_arguments)]
 pub fn pc_prove_with_group<SC: StarkGenericConfig>(
-    group: BenchmarkGroup<WallTime>,
+    c: &mut Criterion,
     page_controller: &PageController<SC>,
     engine: &impl StarkEngine<SC>,
     pk: &MultiStarkProvingKey<SC>,
@@ -184,18 +183,11 @@ pub fn pc_prove_with_group<SC: StarkGenericConfig>(
     let pis = vec![vec![]; vk.per_air.len()];
     let mut challenger = engine.new_challenger();
     let mut prover = engine.prover();
-    partial_prove_with_group(
-        group,
-        &mut prover,
-        &mut challenger,
-        pk,
-        main_trace_data,
-        &pis,
-    )
+    partial_prove_with_group(c, &mut prover, &mut challenger, pk, main_trace_data, &pis)
 }
 
 pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
-    mut group: BenchmarkGroup<WallTime>,
+    c: &mut Criterion,
     prover: &mut MultiTraceStarkProver<SC>,
     challenger: &mut SC::Challenger,
     pk: &'a MultiStarkProvingKey<SC>,
@@ -242,6 +234,8 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
     // TODO: ===== Permutation Trace Generation should be moved to separate module ====
     // Generate permutation traces
     {
+        let mut group = c.benchmark_group("perm_trace_gen");
+        group.sample_size(10);
         let perm_challenges = challenges.first().map(|c| [c[0], c[1]]); // must have 2 challenges
 
         group.bench_function("offline checker perm trace gen", |b| {
@@ -412,7 +406,7 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
     // === END of logic specific to Interactions/permutations, we can now deal with general RAP ===
 
     prove_raps_with_committed_traces_with_groups(
-        group,
+        c,
         prover,
         challenger,
         pk,
@@ -425,7 +419,7 @@ pub fn partial_prove_with_group<'a, SC: StarkGenericConfig>(
 
 #[allow(clippy::too_many_arguments)]
 pub fn prove_raps_with_committed_traces_with_groups<'a, SC: StarkGenericConfig>(
-    mut group: BenchmarkGroup<WallTime>,
+    c: &mut Criterion,
     prover: &MultiTraceStarkProver<SC>,
     challenger: &mut SC::Challenger,
     pk: &'a MultiStarkProvingKey<SC>,
@@ -448,6 +442,8 @@ pub fn prove_raps_with_committed_traces_with_groups<'a, SC: StarkGenericConfig>(
     tracing::debug!("alpha: {alpha:?}");
     let quotient_committer = QuotientCommitter::new(pcs, challenges, alpha);
 
+    let mut group = c.benchmark_group("calc_quot_values");
+    group.sample_size(10);
     group.bench_function("quotient poly", |b| {
         b.iter(|| {
             let _ = quotient_committer.quotient_values(
@@ -456,11 +452,6 @@ pub fn prove_raps_with_committed_traces_with_groups<'a, SC: StarkGenericConfig>(
                 trace_views.clone(),
                 public_values,
             );
-            // Commit to quotient polynomias. One shared commit for all quotient polynomials
-            // let quotient_data = quotient_committer.commit(quotient_values);
-
-            // Observe quotient commitment
-            // challenger.observe(quotient_data.commit.clone());
         })
     });
 }

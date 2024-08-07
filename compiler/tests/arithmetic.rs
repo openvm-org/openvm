@@ -99,12 +99,6 @@ fn test_compiler_arithmetic() {
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
     execute_program::<WORD_SIZE>(program, vec![]);
-
-    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
-        field_extension_enabled: false,
-        ..Default::default()
-    });
-    execute_program::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -127,12 +121,6 @@ fn test_compiler_arithmetic_2() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
-
-    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
-        field_extension_enabled: false,
-        ..Default::default()
-    });
     execute_program::<WORD_SIZE>(program, vec![]);
 }
 
@@ -169,12 +157,6 @@ fn test_in_place_arithmetic() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
-
-    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
-        field_extension_enabled: false,
-        ..Default::default()
-    });
     execute_program::<WORD_SIZE>(program, vec![]);
 }
 
