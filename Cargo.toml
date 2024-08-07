@@ -15,7 +15,7 @@ members = [
     "stark-backend",
     "test-utils",
     "vm",
-    "vm/bin",
+    "vm/bin", "datafusion-interface",
 ]
 resolver = "2"
 
