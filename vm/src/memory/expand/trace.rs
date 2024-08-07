@@ -43,7 +43,8 @@ impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {
         while rows.len() != trace_degree {
             rows.push(unused_row::<CHUNK, F>());
         }
-        // important that this sort be stable
+        // important that this sort be stable,
+        // because we need the initial root to be first and the final root to be second
         rows.sort_by_key(|row| -(row.parent_height.as_canonical_u64() as i32));
         let trace = RowMajorMatrix::new(
             rows.iter().flat_map(ExpandCols::flatten).collect(),

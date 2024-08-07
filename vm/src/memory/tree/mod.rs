@@ -59,48 +59,48 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
             Self::new_nonleaf(child.clone(), child, hasher)
         }
     }
-}
 
-fn from_memory<const CHUNK: usize, F: PrimeField32>(
-    memory: &BTreeMap<usize, F>,
-    height: usize,
-    from: usize,
-    hasher: &mut impl Hasher<CHUNK, F>,
-) -> MemoryNode<CHUNK, F> {
-    let mut range = memory.range(from..from + (CHUNK << height));
-    if height == 0 {
-        let mut values = [F::zero(); CHUNK];
-        for (&address, &value) in range {
-            values[address - from] = value;
+    fn from_memory(
+        memory: &BTreeMap<usize, F>,
+        height: usize,
+        from: usize,
+        hasher: &mut impl Hasher<CHUNK, F>,
+    ) -> MemoryNode<CHUNK, F> {
+        let mut range = memory.range(from..from + (CHUNK << height));
+        if height == 0 {
+            let mut values = [F::zero(); CHUNK];
+            for (&address, &value) in range {
+                values[address - from] = value;
+            }
+            MemoryNode::new_leaf(values)
+        } else if range.next().is_none() {
+            MemoryNode::construct_all_zeros(height, hasher)
+        } else {
+            let midpoint = from + (CHUNK << (height - 1));
+            let left = Self::from_memory(memory, height - 1, from, hasher);
+            let right = Self::from_memory(memory, height - 1, midpoint, hasher);
+            MemoryNode::new_nonleaf(Arc::new(left), Arc::new(right), hasher)
         }
-        MemoryNode::new_leaf(values)
-    } else if range.next().is_none() {
-        MemoryNode::construct_all_zeros(height, hasher)
-    } else {
-        let midpoint = from + (CHUNK << (height - 1));
-        let left = from_memory(memory, height - 1, from, hasher);
-        let right = from_memory(memory, height - 1, midpoint, hasher);
-        MemoryNode::new_nonleaf(Arc::new(left), Arc::new(right), hasher)
     }
-}
 
-pub fn tree_from_memory<const CHUNK: usize, F: PrimeField32>(
-    memory_dimensions: MemoryDimensions,
-    memory: &HashMap<(F, F), F>,
-    hasher: &mut impl Hasher<CHUNK, F>,
-) -> MemoryNode<CHUNK, F> {
-    let mut memory_modified = BTreeMap::new();
-    for (&(address_space, address), &value) in memory {
-        let complete_address = (((address_space.as_canonical_u64() as usize)
-            - memory_dimensions.as_offset)
-            * (CHUNK << memory_dimensions.address_height))
-            + (address.as_canonical_u64() as usize);
-        memory_modified.insert(complete_address, value);
+    pub fn tree_from_memory(
+        memory_dimensions: MemoryDimensions,
+        memory: &HashMap<(F, F), F>,
+        hasher: &mut impl Hasher<CHUNK, F>,
+    ) -> MemoryNode<CHUNK, F> {
+        let mut memory_modified = BTreeMap::new();
+        for (&(address_space, address), &value) in memory {
+            let complete_address = (((address_space.as_canonical_u64() as usize)
+                - memory_dimensions.as_offset)
+                * (CHUNK << memory_dimensions.address_height))
+                + (address.as_canonical_u64() as usize);
+            memory_modified.insert(complete_address, value);
+        }
+        Self::from_memory(
+            &memory_modified,
+            memory_dimensions.overall_height(),
+            0,
+            hasher,
+        )
     }
-    from_memory(
-        &memory_modified,
-        memory_dimensions.overall_height(),
-        0,
-        hasher,
-    )
 }

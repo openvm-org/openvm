@@ -15,7 +15,7 @@ use crate::memory::{
     expand::{
         columns::ExpandCols, EXPAND_BUS, ExpandChip, MemoryDimensions, tests::util::HashTestChip,
     },
-    tree::tree_from_memory,
+    tree::MemoryNode,
 };
 
 mod util;
@@ -66,9 +66,9 @@ fn test<const CHUNK: usize>(
     }
 
     let initial_tree =
-        tree_from_memory(memory_dimensions, initial_memory, &mut HashTestChip::new());
+        MemoryNode::tree_from_memory(memory_dimensions, initial_memory, &mut HashTestChip::new());
     let final_tree_check =
-        tree_from_memory(memory_dimensions, final_memory, &mut HashTestChip::new());
+        MemoryNode::tree_from_memory(memory_dimensions, final_memory, &mut HashTestChip::new());
 
     let mut chip = ExpandChip::<CHUNK, _>::new(memory_dimensions, initial_tree.clone());
     for &(address_space, address) in touched_addresses.iter() {
@@ -108,22 +108,7 @@ fn test<const CHUNK: usize>(
         ]);
         dummy_interaction_trace_rows.extend(hash);
     };
-    /*interaction(
-        InteractionType::Receive,
-        false,
-        as_height + address_height,
-        0,
-        0,
-        initial_tree.hash(),
-    );
-    interaction(
-        InteractionType::Receive,
-        true,
-        as_height + address_height,
-        0,
-        0,
-        final_tree_check.hash(),
-    );*/
+
     let touched_leaves: HashSet<_> = touched_addresses
         .iter()
         .map(|(address_space, address)| {
@@ -262,8 +247,11 @@ fn expand_test_no_accesses() {
     };
 
     let memory = HashMap::new();
-    let tree =
-        tree_from_memory::<DEFAULT_CHUNK, _>(memory_dimensions, &memory, &mut HashTestChip::new());
+    let tree = MemoryNode::<DEFAULT_CHUNK, _>::tree_from_memory(
+        memory_dimensions,
+        &memory,
+        &mut HashTestChip::new(),
+    );
 
     let mut chip = ExpandChip::new(memory_dimensions, tree.clone());
 
@@ -293,8 +281,11 @@ fn expand_test_negative() {
     };
 
     let memory = HashMap::new();
-    let tree =
-        tree_from_memory::<DEFAULT_CHUNK, _>(memory_dimensions, &memory, &mut HashTestChip::new());
+    let tree = MemoryNode::<DEFAULT_CHUNK, _>::tree_from_memory(
+        memory_dimensions,
+        &memory,
+        &mut HashTestChip::new(),
+    );
 
     let mut chip = ExpandChip::new(memory_dimensions, tree.clone());
 
