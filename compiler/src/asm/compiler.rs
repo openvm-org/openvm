@@ -610,7 +610,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         is_eq: bool,
         debug_info: Option<DebugInfo>,
     ) {
-        let trap_label = self.trap_label.clone();
+        let trap_label = self.trap_label;
         let if_compiler = IfCompiler {
             compiler: self,
             lhs,
