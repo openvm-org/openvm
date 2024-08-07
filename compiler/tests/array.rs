@@ -1,8 +1,8 @@
 use afs_compiler::{
-    asm::AsmBuilder,
+    asm::{AsmBuilder, AsmCompiler},
     ir::{Array, Config, Ext, ExtConst, Felt, Usize, Var},
     prelude::{Builder, MemIndex, MemVariable, Ptr, Variable},
-    util::execute_program,
+    util::{display_program, execute_program},
 };
 use afs_derive::DslVariable;
 use p3_baby_bear::BabyBear;

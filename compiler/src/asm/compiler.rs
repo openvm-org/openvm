@@ -20,7 +20,7 @@ pub(crate) const STACK_START_OFFSET: i32 = 100;
 /// The heap pointer address.
 pub(crate) const HEAP_PTR: i32 = STACK_TOP - 4;
 
-pub(crate) const HEAP_START_ADDRESS: usize = 0;
+pub(crate) const HEAP_START_ADDRESS: usize = 1;
 
 pub(crate) const A0: i32 = STACK_TOP - 8;
 pub(crate) const A4: i32 = STACK_TOP - 24;
