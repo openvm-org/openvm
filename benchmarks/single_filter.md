@@ -1,6 +1,7 @@
----
+--
 layout: default
 ---
+
 # Benchmark for Predicate
 
 | Total Cells | Total Prove (ms) | Main Trace Gen (ms) | Perm Trace Gen (ms) |
