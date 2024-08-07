@@ -151,6 +151,7 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         metrics: mut vm_metrics,
         mut opcode_counts,
         mut dsl_counts,
+        mut opcode_trace_cells,
         ..
     } = vm.execute().unwrap();
     vm_execute_span.exit();
@@ -220,6 +221,7 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     let vm_metrics = vm_metrics.pop().unwrap(); // only 1 segment
     let opcode_counts = opcode_counts.pop().unwrap();
     let dsl_counts = dsl_counts.pop().unwrap();
+    let opcode_trace_cells = opcode_trace_cells.pop().unwrap();
 
     let vm_metrics = vm_metrics
         .into_iter()
@@ -240,6 +242,13 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         .map(|(k, v)| (k, v.to_string()))
         .collect();
 
+    let sorted_opcode_trace_cells: Vec<(String, String)> = opcode_trace_cells
+        .clone()
+        .into_iter()
+        .sorted_by(|a, b| a.1.cmp(&b.1))
+        .map(|(k, v)| (k, v.to_string()))
+        .collect();
+
     let metrics = BenchmarkMetrics {
         name: benchmark_name.to_string(),
         total_prove_ms,
@@ -251,6 +260,7 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
             vm_metrics,
             opcode_counts: sorted_opcode_counts,
             dsl_counts: sorted_dsl_counts,
+            opcode_trace_cells: sorted_opcode_trace_cells,
         },
     };
 

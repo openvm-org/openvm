@@ -26,6 +26,7 @@ pub struct CustomMetrics {
     pub vm_metrics: BTreeMap<String, String>,
     pub opcode_counts: Vec<(String, String)>,
     pub dsl_counts: Vec<(String, String)>,
+    pub opcode_trace_cells: Vec<(String, String)>,
 }
 
 // Implement the Display trait for BenchmarkMetrics to create a markdown table
@@ -109,6 +110,16 @@ impl fmt::Display for BenchmarkMetrics {
             writeln!(f, "| Name | Count |")?;
             writeln!(f, "|------|-------|")?;
             for (name, value) in self.custom.dsl_counts.iter() {
+                writeln!(f, "| {:<20} | {:<10} |", name, value)?;
+            }
+        }
+
+        if !self.custom.opcode_trace_cells.is_empty() {
+            writeln!(f)?;
+            writeln!(f, "### Opcode trace cells")?;
+            writeln!(f, "| Name | Count |")?;
+            writeln!(f, "|------|-------|")?;
+            for (name, value) in self.custom.opcode_trace_cells.iter() {
                 writeln!(f, "| {:<20} | {:<10} |", name, value)?;
             }
         }

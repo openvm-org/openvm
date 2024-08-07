@@ -5,6 +5,7 @@ pub struct CycleTrackerData {
     pub vm_metrics: BTreeMap<String, usize>,
     pub opcode_counts: BTreeMap<String, usize>,
     pub dsl_counts: BTreeMap<String, usize>,
+    pub opcode_trace_cells: BTreeMap<String, usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -20,21 +21,28 @@ impl CycleTrackerSpan {
         vm_metrics: &BTreeMap<String, usize>,
         opcode_counts: &BTreeMap<String, usize>,
         dsl_counts: &BTreeMap<String, usize>,
+        opcode_trace_cells: &BTreeMap<String, usize>,
     ) -> Self {
         let vm_metrics_zero = vm_metrics.iter().map(|(k, _)| (k.clone(), 0)).collect();
         let opcode_counts_zero = opcode_counts.iter().map(|(k, _)| (k.clone(), 0)).collect();
         let dsl_counts_zero = dsl_counts.iter().map(|(k, _)| (k.clone(), 0)).collect();
+        let opcode_trace_cells_zero = opcode_trace_cells
+            .iter()
+            .map(|(k, _)| (k.clone(), 0))
+            .collect();
         Self {
             is_active: true,
             start: CycleTrackerData {
                 vm_metrics: vm_metrics.clone(),
                 opcode_counts: opcode_counts.clone(),
                 dsl_counts: dsl_counts.clone(),
+                opcode_trace_cells: opcode_trace_cells.clone(),
             },
             end: CycleTrackerData {
                 vm_metrics: vm_metrics_zero,
                 opcode_counts: opcode_counts_zero,
                 dsl_counts: dsl_counts_zero,
+                opcode_trace_cells: opcode_trace_cells_zero,
             },
         }
     }
@@ -45,6 +53,7 @@ impl CycleTrackerSpan {
         vm_metrics: &BTreeMap<String, usize>,
         opcode_counts: &BTreeMap<String, usize>,
         dsl_counts: &BTreeMap<String, usize>,
+        opcode_trace_cells: &BTreeMap<String, usize>,
     ) {
         self.is_active = false;
         for (key, value) in vm_metrics {
@@ -58,6 +67,10 @@ impl CycleTrackerSpan {
         for (key, value) in dsl_counts {
             let diff = value - self.start.dsl_counts.get(key).unwrap_or(&0);
             self.end.dsl_counts.insert(key.clone(), diff);
+        }
+        for (key, value) in opcode_trace_cells {
+            let diff = value - self.start.opcode_trace_cells.get(key).unwrap_or(&0);
+            self.end.opcode_trace_cells.insert(key.clone(), diff);
         }
     }
 }
@@ -86,6 +99,17 @@ impl Display for CycleTrackerSpan {
                 writeln!(f, "  - {}: {}", key, value)?;
             }
         }
+
+        let mut sorted_opcode_trace_cells: Vec<(&String, &usize)> =
+            self.end.opcode_trace_cells.iter().collect();
+        sorted_opcode_trace_cells.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
+
+        for (key, value) in sorted_opcode_trace_cells {
+            if *value > 0 {
+                writeln!(f, "  - {}: {}", key, value)?;
+            }
+        }
+
         Ok(())
     }
 }

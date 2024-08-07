@@ -1,6 +1,7 @@
 use afs_compiler::{
-    asm::AsmBuilder,
-    util::{display_program, execute_program},
+    asm::{AsmBuilder, AsmCompiler},
+    conversion::{convert_program, CompilerOptions},
+    util::execute_program,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
@@ -53,7 +54,11 @@ fn test_io() {
         ],
     ];
 
-    let program = builder.compile_isa::<1>();
-    display_program(&program.instructions);
+    let mut compiler = AsmCompiler::new(WORD_SIZE);
+    compiler.build(builder.operations);
+    let asm_code = compiler.code();
+    println!("{}", asm_code);
+
+    let program = convert_program::<WORD_SIZE, F, EF>(asm_code, CompilerOptions::default());
     execute_program::<WORD_SIZE>(program, witness_stream);
 }
