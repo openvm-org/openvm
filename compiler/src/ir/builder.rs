@@ -580,14 +580,11 @@ enum IfCondition<N> {
 
 impl<'a, C: Config> IfBuilder<'a, C> {
     pub fn then(&mut self, mut f: impl FnMut(&mut Builder<C>)) {
-        let original_disable_break = self.builder.flags.disable_break;
-        self.builder.flags.disable_break = true;
         self.then_may_break(|builder| {
             f(builder);
             Ok(())
         })
         .expect("Use then_may_break if you want to break inside a then closure");
-        self.builder.flags.disable_break = original_disable_break;
     }
 
     pub fn then_may_break(
@@ -652,8 +649,6 @@ impl<'a, C: Config> IfBuilder<'a, C> {
         mut then_f: impl FnMut(&mut Builder<C>),
         mut else_f: impl FnMut(&mut Builder<C>),
     ) {
-        let original_disable_break = self.builder.flags.disable_break;
-        self.builder.flags.disable_break = true;
         self.then_or_else_may_break(
             |builder| {
                 then_f(builder);
@@ -665,7 +660,6 @@ impl<'a, C: Config> IfBuilder<'a, C> {
             },
         )
         .expect("Use then_may_break if you want to break inside the then closure");
-        self.builder.flags.disable_break = original_disable_break;
     }
 
     pub fn then_or_else_may_break(
