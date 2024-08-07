@@ -1,7 +1,12 @@
-## Benchmark for VM Verifier for Fibonacci Air
+---
+layout: default
+---
+
+# Benchmark for VM Verifier for Fibonacci Air
+
 | Total Cells | Total Prove (ms) | Main Trace Gen (ms) | Perm Trace Gen (ms) | Calc Quotient Values (ms) | Rest of Prove (ms) |
-|-----------------------------|-----------------------|--------------------------|--------------------------|-----------------|----------------|
-| 181_092_352 | 46900.00 | 5060.00 | 222.00 | 5050.00 | 36568.00 |
+|-------------|------------------|---------------------|---------------------|---------------------------|---------------------|
+| 181_092_352 | 46900.00         | 5060.00             | 222.00              | 5050.00                   | 36568.00            |
 
 ### AIR metrics
 | Name | Rows | Cells | Prep Cols | Main Cols | Perm Cols |

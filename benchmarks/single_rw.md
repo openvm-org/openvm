@@ -1,7 +1,11 @@
-## Benchmark for ReadWrite
+---
+layout: default
+---
+# Benchmark for ReadWrite
+
 | Total Cells | Total Prove (ms) | Main Trace Gen (ms) | Perm Trace Gen (ms) | Calc Quotient Values (ms) | Rest of Prove (ms) |
-|-----------------------------|-----------------------|--------------------------|--------------------------|-----------------|----------------|
-| 38_764_544 | 1510.00 | 290.00 | 21.10 | 176.00 | 1022.90 |
+|-------------|------------------|---------------------|---------------------|---------------------------|---------------------|
+| 38_764_544  | 1510.00          | 290.00              | 21.10               | 176.00                    | 1022.90             |
 
 ### AIR metrics
 | Name | Rows | Cells | Prep Cols | Main Cols | Perm Cols |
