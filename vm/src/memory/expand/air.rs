@@ -1,11 +1,9 @@
+use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use afs_stark_backend::interaction::InteractionBuilder;
-
-use crate::memory::expand::columns::ExpandCols;
-use crate::memory::expand::MemoryDimensions;
+use crate::memory::expand::{columns::ExpandCols, MemoryDimensions};
 
 pub struct ExpandAir<const CHUNK: usize> {
     pub memory_dimensions: MemoryDimensions,

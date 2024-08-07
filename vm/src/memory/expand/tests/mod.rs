@@ -1,19 +1,18 @@
 use std::collections::{HashMap, HashSet};
 
-use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField64};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use rand::RngCore;
-
 use afs_stark_backend::interaction::InteractionType;
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
 };
+use p3_baby_bear::BabyBear;
+use p3_field::{AbstractField, PrimeField64};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use rand::RngCore;
 
 use crate::memory::{
     expand::{
-        columns::ExpandCols, EXPAND_BUS, ExpandChip, MemoryDimensions, tests::util::HashTestChip,
+        columns::ExpandCols, tests::util::HashTestChip, ExpandChip, MemoryDimensions, EXPAND_BUS,
     },
     tree::MemoryNode,
 };
