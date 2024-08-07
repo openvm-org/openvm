@@ -83,6 +83,7 @@ fn test_flatten_fromslice_roundtrip() {
         compress_poseidon2_enabled: false,
         perm_poseidon2_enabled: false,
         num_public_values: 4,
+        is_less_than_enabled: false,
     };
     let num_cols = CpuCols::<TEST_WORD_SIZE, usize>::get_width(options);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();

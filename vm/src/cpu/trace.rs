@@ -315,6 +315,12 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                         .calculate(opcode, (operand1, operand2));
                     write!(d, a, result);
                 }
+                F_LESS_THAN => {
+                    let operand1 = read!(d, b);
+                    let operand2 = read!(e, c);
+                    let result = vm.is_less_than_chip.compare((operand1, operand2));
+                    write!(d, a, result);
+                }
                 FAIL => panic!("Unreachable code"),
                 PRINTF => {
                     let value = read!(d, a);

@@ -26,6 +26,7 @@ pub const FIELD_EXTENSION_BUS: usize = 3;
 pub const RANGE_CHECKER_BUS: usize = 4;
 pub const POSEIDON2_BUS: usize = 5;
 pub const POSEIDON2_DIRECT_BUS: usize = 6;
+pub const IS_LESS_THAN_BUS: usize = 7;
 
 pub const CPU_MAX_READS_PER_CYCLE: usize = 2;
 pub const CPU_MAX_WRITES_PER_CYCLE: usize = 1;
@@ -48,6 +49,8 @@ pub enum OpCode {
     FSUB = 11,
     FMUL = 12,
     FDIV = 13,
+
+    F_LESS_THAN = 14,
 
     FAIL = 20,
     PRINTF = 21,
@@ -119,6 +122,7 @@ fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         opcode if FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode) => {
             FieldExtensionArithmeticAir::max_accesses_per_instruction(opcode)
         }
+        F_LESS_THAN => 3,
         FAIL => 0,
         PRINTF => 1,
         COMP_POS2 | PERM_POS2 => {
@@ -138,6 +142,7 @@ pub struct CpuOptions {
     pub field_extension_enabled: bool,
     pub compress_poseidon2_enabled: bool,
     pub perm_poseidon2_enabled: bool,
+    pub is_less_than_enabled: bool,
     pub num_public_values: usize,
 }
 
@@ -168,6 +173,9 @@ impl CpuOptions {
         }
         if self.perm_poseidon2_enabled {
             result.push(PERM_POS2);
+        }
+        if self.is_less_than_enabled {
+            result.push(F_LESS_THAN);
         }
         result
     }

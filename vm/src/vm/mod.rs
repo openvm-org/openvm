@@ -53,6 +53,7 @@ pub enum ChipType {
     FieldArithmetic,
     FieldExtension,
     Poseidon2,
+    IsLessThan,
 }
 
 /// Struct that holds the return state of the VM. StarkConfig is hardcoded to BabyBearPoseidon2Config.
