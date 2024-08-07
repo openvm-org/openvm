@@ -8,9 +8,8 @@ use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_symmetric::{CompressionFunctionFromHasher, CryptographicHasher, SerializingHasher32};
 use p3_uni_stark::StarkConfig;
 
-use crate::engine::StarkEngine;
-
 use super::{fri_params::default_fri_params, FriParameters};
+use crate::engine::StarkEngine;
 
 type Val = BabyBear;
 type Challenge = BinomialExtensionField<Val, 4>;

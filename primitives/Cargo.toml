@@ -16,7 +16,7 @@ p3-maybe-rayon = { workspace = true }
 p3-symmetric = { workspace = true }
 p3-util = { workspace = true }
 rand = "0.8"
-derive-new = "0.5"
+derive-new = "0.6.0"
 
 afs-stark-backend = { path = "../stark-backend", default-features = false }
 afs-derive = { path = "../derive" }

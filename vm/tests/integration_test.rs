@@ -1,18 +1,20 @@
+use afs_test_utils::{
+    config::{
+        baby_bear_poseidon2::{engine_from_perm, random_perm, run_simple_test},
+        fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},
+    },
+    engine::StarkEngine,
+};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-
-use afs_test_utils::config::baby_bear_poseidon2::{engine_from_perm, random_perm, run_simple_test};
-use afs_test_utils::config::fri_params::{
-    fri_params_fast_testing, fri_params_with_80_bits_of_security,
+use stark_vm::{
+    cpu::{trace::Instruction, OpCode::*},
+    program::Program,
+    vm::{
+        config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN},
+        ExecutionResult, VirtualMachine,
+    },
 };
-use afs_test_utils::engine::StarkEngine;
-use p3_keccak_air::U64_LIMBS;
-use stark_vm::cpu::trace::Instruction;
-use stark_vm::cpu::OpCode::*;
-use stark_vm::vm::config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN};
-use stark_vm::vm::ExecutionResult;
-use stark_vm::vm::VirtualMachine;
-use tiny_keccak::keccakf;
 
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 30;
@@ -29,8 +31,9 @@ fn vm_config_with_field_arithmetic() -> VmConfig {
 
 // log_blowup = 2 by default
 fn air_test(
-    config: VmConfig,
-    program: Vec<Instruction<BabyBear>>,
+    field_arithmetic_enabled: bool,
+    field_extension_enabled: bool,
+    program: Program<BabyBear>,
     witness_stream: Vec<Vec<BabyBear>>,
     fast_segmentation: bool,
 ) {
@@ -44,7 +47,7 @@ fn air_test(
             } else {
                 DEFAULT_MAX_SEGMENT_LEN
             },
-            ..config
+            ..Default::default()
         },
         program,
         witness_stream,
@@ -66,7 +69,7 @@ fn air_test_with_poseidon2(
     field_arithmetic_enabled: bool,
     field_extension_enabled: bool,
     compress_poseidon2_enabled: bool,
-    program: Vec<Instruction<BabyBear>>,
+    program: Program<BabyBear>,
 ) {
     let vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
@@ -117,7 +120,7 @@ fn test_vm_1() {
     Instruction 2 decrements word[0]_1 (using word[1]_1)
     Instruction 3 uses JAL as a simple jump to go back to instruction 1 (repeating the loop).
      */
-    let program = vec![
+    let instructions = vec![
         // word[0]_1 <- word[n]_0
         Instruction::from_isize(STOREW, n, 0, 0, 0, 1),
         // if word[0]_1 == 0 then pc += 3
@@ -130,7 +133,12 @@ fn test_vm_1() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(vm_config_with_field_arithmetic(), program, vec![], true);
+    let program = Program {
+        instructions,
+        debug_infos: vec![None; 5],
+    };
+
+    air_test(true, false, program, vec![], true);
 }
 
 #[test]
@@ -142,7 +150,7 @@ fn test_vm_without_field_arithmetic() {
     Instruction 3 terminates.
     Instruction 4 checks if word[0]_1 is 5, and if so jumps to instruction 3 to terminate.
      */
-    let program = vec![
+    let instructions = vec![
         // word[0]_1 <- word[5]_0
         Instruction::from_isize(STOREW, 5, 0, 0, 0, 1),
         // if word[0]_1 != 4 then pc += 2
@@ -155,12 +163,23 @@ fn test_vm_without_field_arithmetic() {
         Instruction::from_isize(BEQ, 0, 5, -1, 1, 0),
     ];
 
-    air_test(VmConfig::core(), program, vec![], true);
+    let program = Program {
+        instructions,
+        debug_infos: vec![None; 5],
+    };
+
+    air_test(
+        field_arithmetic_enabled,
+        field_extension_enabled,
+        program,
+        vec![],
+        true,
+    );
 }
 
 #[test]
 fn test_vm_fibonacci_old() {
-    let program = vec![
+    let instructions = vec![
         Instruction::from_isize(STOREW, 9, 0, 0, 0, 1),
         Instruction::from_isize(STOREW, 1, 0, 2, 0, 1),
         Instruction::from_isize(STOREW, 1, 0, 3, 0, 1),
@@ -176,13 +195,20 @@ fn test_vm_fibonacci_old() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(vm_config_with_field_arithmetic(), program, vec![], true);
+    let program_len = instructions.len();
+
+    let program = Program {
+        instructions,
+        debug_infos: vec![None; program_len],
+    };
+
+    air_test(true, false, program.clone(), vec![], true);
 }
 
 #[test]
 fn test_vm_fibonacci_old_cycle_tracker() {
     // NOTE: Instructions commented until cycle tracker instructions are not counted as additional assembly Instructions
-    let program = vec![
+    let instructions = vec![
         Instruction::debug(CT_START, "full program"),
         Instruction::debug(CT_START, "store"),
         Instruction::from_isize(STOREW, 9, 0, 0, 0, 1),
@@ -206,12 +232,22 @@ fn test_vm_fibonacci_old_cycle_tracker() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
-    air_test(vm_config_with_field_arithmetic(), program, vec![], false);
+    let program_len = instructions.len();
+
+    let program = Program {
+        instructions,
+        debug_infos: vec![None; program_len],
+    };
+
+    air_test(true, false, program.clone(), vec![], false);
 }
 
 #[test]
 fn test_vm_field_extension_arithmetic() {
-    let program = vec![
+    let field_arithmetic_enabled = true;
+    let field_extension_enabled = true;
+
+    let instructions = vec![
         Instruction::from_isize(STOREW, 1, 0, 0, 0, 1),
         Instruction::from_isize(STOREW, 2, 1, 0, 0, 1),
         Instruction::from_isize(STOREW, 1, 2, 0, 0, 1),
@@ -224,6 +260,13 @@ fn test_vm_field_extension_arithmetic() {
         Instruction::from_isize(FE4SUB, 12, 0, 4, 1, 1),
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
+
+    let program_len = instructions.len();
+
+    let program = Program {
+        instructions,
+        debug_infos: vec![None; program_len],
+    };
 
     air_test(
         VmConfig {
@@ -239,7 +282,10 @@ fn test_vm_field_extension_arithmetic() {
 
 #[test]
 fn test_vm_hint() {
-    let program = vec![
+    let field_arithmetic_enabled = true;
+    let field_extension_enabled = false;
+
+    let instructions = vec![
         Instruction::from_isize(STOREW, 0, 0, 16, 0, 1),
         Instruction::from_isize(FADD, 20, 16, 16777220, 1, 0),
         Instruction::from_isize(FADD, 32, 20, 0, 1, 0),
@@ -261,6 +307,13 @@ fn test_vm_hint() {
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
+    let program_len = instructions.len();
+
+    let program = Program {
+        instructions,
+        debug_infos: vec![None; program_len],
+    };
+
     type F = BabyBear;
 
     let witness_stream: Vec<Vec<F>> = vec![vec![F::two()]];
@@ -274,45 +327,11 @@ fn test_vm_hint() {
 }
 
 #[test]
-fn test_vm_compress_poseidon2() {
-    let mut program = vec![];
-    let input_a = 37;
-    for i in 0..8 {
-        program.push(Instruction::from_isize(
-            STOREW,
-            43 - (7 * i),
-            input_a + i,
-            0,
-            0,
-            1,
-        ));
-    }
-    let input_b = 108;
-    for i in 0..8 {
-        program.push(Instruction::from_isize(
-            STOREW,
-            2 + (18 * i),
-            input_b + i,
-            0,
-            0,
-            1,
-        ));
-    }
-    let output = 4;
-    program.push(Instruction::from_isize(
-        COMP_POS2, output, input_a, input_b, 0, 1,
-    ));
-    program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
-
-    air_test_with_poseidon2(false, false, true, program);
-}
-
-#[test]
 fn test_vm_compress_poseidon2_as2() {
-    let mut program = vec![];
+    let mut instructions = vec![];
     let input_a = 37;
     for i in 0..8 {
-        program.push(Instruction::from_isize(
+        instructions.push(Instruction::from_isize(
             STOREW,
             43 - (7 * i),
             input_a + i,
@@ -323,7 +342,7 @@ fn test_vm_compress_poseidon2_as2() {
     }
     let input_b = 108;
     for i in 0..8 {
-        program.push(Instruction::from_isize(
+        instructions.push(Instruction::from_isize(
             STOREW,
             2 + (18 * i),
             input_b + i,
@@ -333,12 +352,21 @@ fn test_vm_compress_poseidon2_as2() {
         ));
     }
     let output = 4;
-    program.push(Instruction::from_isize(STOREW, input_a, 0, 0, 0, 1));
-    program.push(Instruction::from_isize(STOREW, input_b, 1, 0, 0, 1));
-    program.push(Instruction::from_isize(STOREW, output, 2, 0, 0, 1));
+    // [0]_1 <- input_a
+    // [1]_1 <- input_b
+    instructions.push(Instruction::from_isize(STOREW, input_a, 0, 0, 0, 1));
+    instructions.push(Instruction::from_isize(STOREW, input_b, 1, 0, 0, 1));
+    instructions.push(Instruction::from_isize(STOREW, output, 2, 0, 0, 1));
 
-    program.push(Instruction::from_isize(COMP_POS2, 2, 0, 1, 1, 2));
-    program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
+    instructions.push(Instruction::from_isize(COMP_POS2, 2, 0, 1, 1, 2));
+    instructions.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
+
+    let program_len = instructions.len();
+
+    let program = Program {
+        instructions,
+        debug_infos: vec![None; program_len],
+    };
 
     air_test_with_poseidon2(false, false, true, program);
 }

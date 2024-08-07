@@ -1,11 +1,11 @@
+use afs_compiler::{
+    asm::AsmBuilder,
+    ir::{Ext, Felt},
+    util::{display_program, display_program_with_pc, execute_program},
+};
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
-use p3_field::{AbstractExtensionField, AbstractField};
+use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField};
 use rand::{thread_rng, Rng};
-
-use afs_compiler::asm::AsmBuilder;
-use afs_compiler::ir::{Ext, Felt};
-use afs_compiler::util::{display_program, display_program_with_pc, execute_program};
 
 #[test]
 fn test_ext2felt() {
@@ -29,7 +29,7 @@ fn test_ext2felt() {
     builder.halt();
 
     let program = builder.compile_isa::<1>();
-    display_program(&program);
+    display_program(&program.instructions);
     execute_program::<1>(program, vec![]);
 }
 
@@ -58,6 +58,6 @@ fn test_ext_from_base_slice() {
     builder.halt();
 
     let program = builder.compile_isa::<1>();
-    display_program_with_pc(&program);
+    display_program_with_pc(&program.instructions);
     execute_program::<1>(program, vec![]);
 }

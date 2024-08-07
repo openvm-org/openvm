@@ -1,5 +1,4 @@
-use std::collections::HashSet;
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use afs_primitives::{offline_checker::OfflineCheckerOperation, range_gate::RangeCheckerGateChip};
 use afs_stark_backend::{
@@ -16,16 +15,16 @@ use afs_stark_backend::{
     verifier::VerificationError,
 };
 use afs_test_utils::engine::StarkEngine;
+use getset::Getters;
 use p3_field::{AbstractField, Field, PrimeField, PrimeField64};
 use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::info_span;
 
-use crate::common::page::Page;
-
 use super::{
     final_page::IndexedPageWriteAir, initial_page::PageReadAir, offline_checker::PageOfflineChecker,
 };
+use crate::common::page::Page;
 
 #[derive(PartialEq, Clone, Debug, Copy)]
 pub enum OpType {
@@ -67,11 +66,11 @@ impl<F: PrimeField64> OfflineCheckerOperation<F> for Operation {
     }
 }
 
-struct PageRWTraces<F> {
-    init_page_trace: RowMajorMatrix<F>,
-    final_page_trace: RowMajorMatrix<F>,
-    final_page_aux_trace: RowMajorMatrix<F>,
-    offline_checker_trace: RowMajorMatrix<F>,
+pub struct PageRWTraces<F> {
+    pub init_page_trace: RowMajorMatrix<F>,
+    pub final_page_trace: RowMajorMatrix<F>,
+    pub final_page_aux_trace: RowMajorMatrix<F>,
+    pub offline_checker_trace: RowMajorMatrix<F>,
 }
 
 #[allow(dead_code)]
@@ -153,14 +152,19 @@ struct PageCommitments<SC: StarkGenericConfig> {
 /// Note that in all of those cases b>0 => a=b and c>0 => d=c as wanted. The above tuples cover exactly all cases we support.
 ///
 /// This proves that the list of operations gets us from the initial page to the final page exactly, which is all we want.
+#[derive(Getters)]
 pub struct PageController<SC: StarkGenericConfig>
 where
     Val<SC>: AbstractField,
 {
+    #[getset(get = "pub")]
     init_chip: PageReadAir,
+    #[getset(get = "pub")]
     offline_checker: PageOfflineChecker,
+    #[getset(get = "pub")]
     final_chip: IndexedPageWriteAir,
 
+    #[getset(get = "pub")]
     traces: Option<PageRWTraces<Val<SC>>>,
     page_commitments: Option<PageCommitments<SC>>,
 
@@ -299,10 +303,10 @@ impl<SC: StarkGenericConfig> PageController<SC> {
     /// Sets up keygen with the different trace partitions for the chips
     /// init_chip, final_chip, offline_checker, range_checker, and the
     /// ops_sender, which is passed in
-    pub fn set_up_keygen_builder(
-        &self,
-        keygen_builder: &mut MultiStarkKeygenBuilder<SC>,
-        ops_sender: &dyn AnyRap<SC>,
+    pub fn set_up_keygen_builder<'a>(
+        &'a self,
+        keygen_builder: &mut MultiStarkKeygenBuilder<'a, SC>,
+        ops_sender: &'a dyn AnyRap<SC>,
     ) where
         Val<SC>: PrimeField,
     {
@@ -311,17 +315,13 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         let final_page_aux_ptr = keygen_builder.add_main_matrix(self.final_chip.aux_width());
 
         keygen_builder.add_partitioned_air(&self.init_chip, 0, vec![init_page_ptr]);
-
         keygen_builder.add_partitioned_air(
             &self.final_chip,
             0,
             vec![final_page_ptr, final_page_aux_ptr],
         );
-
         keygen_builder.add_air(&self.offline_checker, 0);
-
         keygen_builder.add_air(&self.range_checker.air, 0);
-
         keygen_builder.add_air(ops_sender, 0);
     }
 

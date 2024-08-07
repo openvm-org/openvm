@@ -1,14 +1,11 @@
+use std::fmt;
+
 use enum_utils::FromStr;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
-use strum::{EnumIter, FromRepr, IntoEnumIterator};
-
-use crate::{
-    field_extension::FieldExtensionArithmeticAir,
-    hashes::{keccak::permute::KeccakPermuteChip, poseidon2::Poseidon2Chip},
-};
-
 use OpCode::*;
+
+use crate::{field_extension::FieldExtensionArithmeticAir, poseidon2::Poseidon2Chip};
 
 #[cfg(test)]
 pub mod tests;
@@ -77,6 +74,12 @@ pub enum OpCode {
     CT_END = 61,
 
     NOP = 100,
+}
+
+impl fmt::Display for OpCode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 pub const CORE_INSTRUCTIONS: [OpCode; 13] = [

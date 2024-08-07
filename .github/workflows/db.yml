@@ -18,7 +18,7 @@ env:
   AXIOM_FAST_TEST: "1"
 
 jobs:
-  build:
+  tests:
     runs-on: ubuntu-latest
 
     steps:
@@ -32,3 +32,15 @@ jobs:
         working-directory: db/page
         run: |
           cargo t --features parallel
+
+  benchmark-rw:
+    uses: ./.github/workflows/benchmark-call.yml
+    with:
+      benchmark_name: single_rw
+    secrets: inherit
+
+  benchmark-filter:
+    uses: ./.github/workflows/benchmark-call.yml
+    with:
+      benchmark_name: single_filter
+    secrets: inherit

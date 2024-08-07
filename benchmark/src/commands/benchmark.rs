@@ -1,21 +1,33 @@
-use std::{collections::HashMap, fs, path::Path, time::Instant};
+use std::{
+    collections::HashMap,
+    fs::{self, File},
+    io::Write as _,
+    path::Path,
+    time::Instant,
+};
 
-use afs_test_utils::page_config::PageConfig;
+use afs_stark_backend::prover::metrics::TraceMetrics;
+use afs_test_utils::page_config::{MultitierPageConfig, PageConfig};
 use chrono::Local;
 use color_eyre::eyre::Result;
 
+use super::CommonCommands;
 use crate::{
-    config::{benchmark_data::BenchmarkData, config_gen::get_configs},
+    config::{
+        benchmark_data::{BenchmarkData, BACKEND_TIMING_FILTERS},
+        config_gen::{get_configs, get_multitier_configs},
+    },
     utils::{
         output_writer::{
-            default_output_filename, save_afi_to_new_db, write_csv_header, write_csv_line,
+            default_output_filename, multitier_page_config_to_row, page_config_to_row,
+            save_afi_to_new_db, write_csv_header, write_csv_line,
         },
         tracing::{clear_tracing_log, extract_event_data_from_log, extract_timing_data_from_log},
     },
-    AFI_FILE_PATH, DB_FILE_PATH, TABLE_ID, TMP_FOLDER, TMP_TRACING_LOG,
+    workflow::metrics::{BenchmarkMetrics, CustomMetrics},
+    AFI_FILE_PATH, DB_FILE_PATH, MULTITIER_TABLE_ID, TABLE_ID, TMP_FOLDER, TMP_RESULT_MD,
+    TMP_TRACING_LOG,
 };
-
-use super::CommonCommands;
 
 /// Function for setting up the benchmark
 pub fn benchmark_setup(
@@ -58,7 +70,7 @@ pub fn benchmark_execute(
     scenario: String,
     common: CommonCommands,
     extra_data: String,
-    benchmark_fn: fn(&PageConfig, String) -> Result<()>,
+    benchmark_fn: fn(&PageConfig, String) -> Result<TraceMetrics>,
     benchmark_data_fn: fn() -> BenchmarkData,
     afi_gen_fn: fn(&PageConfig, String, String, usize, usize) -> Result<()>,
 ) -> Result<()> {
@@ -113,6 +125,126 @@ pub fn benchmark_execute(
         println!("Setup: save AFI to DB duration: {:?}", save_afi_duration);
 
         // Run the benchmark function
+        let trace_metrics = benchmark_fn(config, extra_data.clone())?;
+
+        let event_data = extract_event_data_from_log(
+            TMP_TRACING_LOG.as_str(),
+            benchmark_data.event_filters.clone(),
+        )?;
+        let timing_data = extract_timing_data_from_log(
+            TMP_TRACING_LOG.as_str(),
+            benchmark_data.timing_filters.clone(),
+        )?;
+
+        // TODO: generalize this
+        let main_trace_gen_ms = timing_data["prove:Load page trace generation"].parse::<f64>()?;
+        let perm_trace_gen_ms = timing_data[BACKEND_TIMING_FILTERS[0]].parse::<f64>()?;
+        let calc_quotient_values_ms = timing_data[BACKEND_TIMING_FILTERS[2]].parse::<f64>()?;
+        let total_prove_ms = timing_data["Benchmark prove: benchmark"].parse::<f64>()?;
+        let metrics = BenchmarkMetrics {
+            name: benchmark_name.clone(),
+            total_prove_ms,
+            main_trace_gen_ms,
+            perm_trace_gen_ms,
+            calc_quotient_values_ms,
+            trace: trace_metrics,
+            custom: CustomMetrics::default(),
+        };
+        write!(File::create(TMP_RESULT_MD.as_str())?, "{}", metrics)?;
+
+        println!("Config: {:?}", config);
+        println!("Output file: {}", output_file.clone());
+
+        let mut log_data: HashMap<String, String> = event_data;
+        log_data.extend(timing_data);
+
+        let init_row = page_config_to_row(benchmark_name.clone(), scenario.clone(), config);
+        write_csv_line(output_file.clone(), init_row, &benchmark_data, &log_data)?;
+    }
+
+    println!("Benchmark [{}: {}] completed.", benchmark_name, scenario);
+
+    Ok(())
+}
+
+/// Function for setting up the benchmark
+pub fn benchmark_multitier_setup(
+    benchmark_name: String,
+    config_folder: Option<String>,
+    output_file: Option<String>,
+    benchmark_data: &BenchmarkData,
+) -> (Vec<MultitierPageConfig>, String) {
+    // Generate/Parse config(s)
+    let configs = get_multitier_configs(config_folder);
+
+    // Create tmp folder
+    let _ = fs::create_dir_all(TMP_FOLDER);
+
+    // Write .csv file
+    let output_file = output_file
+        .clone()
+        .unwrap_or(default_output_filename(benchmark_name.clone()));
+
+    println!("Output file: {}", output_file.clone());
+    write_csv_header(
+        output_file.clone(),
+        benchmark_data.sections.clone(),
+        benchmark_data.headers.clone(),
+    )
+    .unwrap();
+
+    (configs, output_file)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn benchmark_multitier_execute(
+    benchmark_name: String,
+    scenario: String,
+    common: CommonCommands,
+    extra_data: String,
+    start_idx: usize,
+    benchmark_fn: fn(&MultitierPageConfig, String) -> Result<()>,
+    benchmark_data_fn: fn() -> BenchmarkData,
+    afi_gen_fn: fn(&MultitierPageConfig, String, String) -> Result<()>,
+) -> Result<()> {
+    println!("Executing [{}: {}] benchmark...", benchmark_name, scenario);
+    let benchmark_data = benchmark_data_fn();
+    let (configs, output_file) = benchmark_multitier_setup(
+        benchmark_name.clone(),
+        common.config_folder.clone(),
+        common.output_file.clone(),
+        &benchmark_data,
+    );
+    let configs_len = configs.len();
+    println!("Output file: {}", output_file.clone());
+
+    // Run benchmark for each config
+    for (idx, config) in configs.iter().rev().enumerate() {
+        if idx < start_idx {
+            continue;
+        }
+        let timestamp = Local::now().format("%H:%M:%S");
+        println!(
+            "[{}] Running config {:?}: {} of {}",
+            timestamp,
+            config.generate_filename(),
+            idx + 1,
+            configs_len
+        );
+
+        clear_tracing_log(TMP_TRACING_LOG.as_str())?;
+
+        // Generate AFI file
+        let generate_afi_instant = Instant::now();
+        afi_gen_fn(
+            config,
+            MULTITIER_TABLE_ID.to_string(),
+            AFI_FILE_PATH.to_string(),
+        )?;
+        let generate_afi_duration = generate_afi_instant.elapsed();
+        println!("Setup: generate AFI duration: {:?}", generate_afi_duration);
+
+        // Run the benchmark function
         benchmark_fn(config, extra_data.clone()).unwrap();
 
         let event_data = extract_event_data_from_log(
@@ -131,15 +263,9 @@ pub fn benchmark_execute(
 
         let mut log_data: HashMap<String, String> = event_data;
         log_data.extend(timing_data);
-
-        write_csv_line(
-            output_file.clone(),
-            benchmark_name.clone(),
-            scenario.clone(),
-            config,
-            &benchmark_data,
-            &log_data,
-        )?;
+        let init_row =
+            multitier_page_config_to_row(benchmark_name.clone(), scenario.clone(), config);
+        write_csv_line(output_file.clone(), init_row, &benchmark_data, &log_data)?;
     }
 
     println!("Benchmark [{}: {}] completed.", benchmark_name, scenario);

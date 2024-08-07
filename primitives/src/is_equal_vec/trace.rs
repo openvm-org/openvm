@@ -1,11 +1,11 @@
-use p3_field::Field;
-use p3_field::PrimeField;
+use p3_field::{Field, PrimeField};
 use p3_matrix::dense::RowMajorMatrix;
 
+use super::{
+    columns::{IsEqualVecAuxColsMut, IsEqualVecCols},
+    IsEqualVecAir,
+};
 use crate::{is_equal_vec::columns::IsEqualVecColsMut, sub_chip::LocalTraceInstructions};
-
-use super::columns::IsEqualVecAuxColsMut;
-use super::{columns::IsEqualVecCols, IsEqualVecAir};
 
 impl IsEqualVecAir {
     pub fn generate_trace<F: Field>(&self, x: Vec<Vec<F>>, y: Vec<Vec<F>>) -> RowMajorMatrix<F> {

@@ -1,9 +1,9 @@
+use afs_compiler::{
+    asm::AsmBuilder,
+    util::{display_program, execute_program},
+};
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
-use p3_field::AbstractField;
-
-use afs_compiler::asm::AsmBuilder;
-use afs_compiler::util::{display_program, execute_program};
+use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::cpu::WORD_SIZE;
 
 type F = BabyBear;
@@ -54,6 +54,6 @@ fn test_io() {
     ];
 
     let program = builder.compile_isa::<1>();
-    display_program(&program);
+    display_program(&program.instructions);
     execute_program::<WORD_SIZE>(program, witness_stream);
 }

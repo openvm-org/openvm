@@ -4,9 +4,8 @@ use itertools::Itertools;
 use p3_field::Field;
 use p3_matrix::{dense::RowMajorMatrixView, Matrix};
 
-use crate::air_builders::symbolic::symbolic_expression::SymbolicEvaluator;
-
 use super::{trace::Evaluator, InteractionType, SymbolicInteraction};
+use crate::air_builders::symbolic::symbolic_expression::SymbolicEvaluator;
 
 /// The actual interactions that are sent/received during a single run
 /// of trace generation. For debugging purposes only.

@@ -1,10 +1,10 @@
-use afs_compiler::util::{display_program, execute_program};
+use afs_compiler::{
+    asm::AsmBuilder,
+    ir::{Felt, Var},
+    util::{display_program, execute_program},
+};
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
-use p3_field::AbstractField;
-
-use afs_compiler::asm::AsmBuilder;
-use afs_compiler::ir::{Felt, Var};
+use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::cpu::WORD_SIZE;
 
 fn fibonacci(n: u32) -> u32 {
@@ -49,7 +49,7 @@ fn main() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    display_program(&program);
+    display_program(&program.instructions);
     execute_program::<WORD_SIZE>(program, vec![]);
 
     // let program = code.machine_code();

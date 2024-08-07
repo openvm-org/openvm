@@ -1,27 +1,27 @@
-use std::collections::BTreeMap;
-use std::collections::VecDeque;
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, VecDeque},
+    sync::Arc,
+};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
-use afs_stark_backend::config::{StarkGenericConfig, Val};
-use afs_stark_backend::rap::AnyRap;
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    rap::AnyRap,
+};
 use p3_field::PrimeField32;
 use p3_matrix::dense::DenseMatrix;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
+use super::{ChipType, VirtualMachineState, VmConfig, VmMetrics};
 use crate::{
-    cpu::{
-        trace::{ExecutionError, Instruction},
-        CpuChip, CpuOptions, POSEIDON2_BUS, RANGE_CHECKER_BUS,
-    },
+    cpu::{trace::ExecutionError, CpuChip, CpuOptions, POSEIDON2_BUS, RANGE_CHECKER_BUS},
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
     hashes::{keccak::permute::KeccakPermuteChip, poseidon2::Poseidon2Chip},
     memory::offline_checker::MemoryChip,
-    program::ProgramChip,
+    poseidon2::Poseidon2Chip,
+    program::{Program, ProgramChip},
 };
-
-use super::{ChipType, VirtualMachineState, VmConfig};
 
 pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub config: VmConfig,
@@ -37,15 +37,17 @@ pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub hint_stream: VecDeque<F>,
     pub has_generation_happened: bool,
     pub public_values: Vec<Option<F>>,
+    pub opcode_counts: BTreeMap<String, usize>,
+    pub dsl_counts: BTreeMap<String, usize>,
+    pub opcode_trace_cells: BTreeMap<String, usize>,
+    /// Collected metrics for this segment alone.
+    /// Only collected when `config.collect_metrics` is true.
+    pub(crate) collected_metrics: VmMetrics,
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
     /// Creates a new execution segment from a program and initial state, using parent VM config
-    pub fn new(
-        config: VmConfig,
-        program: Vec<Instruction<F>>,
-        state: VirtualMachineState<F>,
-    ) -> Self {
+    pub fn new(config: VmConfig, program: Program<F>, state: VirtualMachineState<F>) -> Self {
         let decomp = config.decomp;
         let limb_bits = config.limb_bits;
 
@@ -62,6 +64,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         );
         let keccak_permute_chip = KeccakPermuteChip::<F>::new();
 
+        let opcode_counts = BTreeMap::new();
+        let dsl_counts = BTreeMap::new();
+        let opcode_trace_cells = BTreeMap::new();
+
         Self {
             config,
             has_generation_happened: false,
@@ -76,6 +82,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             keccak_permute_chip,
             input_stream: state.input_stream,
             hint_stream: state.hint_stream,
+            opcode_counts,
+            dsl_counts,
+            opcode_trace_cells,
+            collected_metrics: Default::default(),
         }
     }
 
@@ -186,8 +196,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         result
     }
 
-    pub fn metrics(&mut self) -> BTreeMap<String, usize> {
+    pub fn metrics(&self) -> BTreeMap<String, usize> {
         let mut metrics = BTreeMap::new();
+        metrics.insert("cpu_cycles".to_string(), self.cpu_chip.rows.len());
+        metrics.insert("cpu_timestamp".to_string(), self.cpu_chip.state.timestamp);
         metrics.insert(
             "memory_chip_accesses".to_string(),
             self.memory_chip.accesses.len(),
@@ -208,11 +220,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             "poseidon2_chip_rows".to_string(),
             self.poseidon2_chip.rows.len(),
         );
-        metrics.insert(
-            "keccak_permute_requests".to_string(), // each request corresponds to NUM_ROUNDS=24 rows
-            self.keccak_permute_chip.requests.len(),
-        );
-        metrics.insert("input_stream_len".to_string(), self.input_stream.len());
         metrics
     }
 }

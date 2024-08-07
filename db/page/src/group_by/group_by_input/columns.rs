@@ -2,9 +2,8 @@ use std::ops::Range;
 
 use afs_primitives::is_equal_vec::columns::IsEqualVecAuxCols;
 
-use crate::common::page_cols::PageCols;
-
 use super::GroupByAir;
+use crate::common::page_cols::PageCols;
 
 /// Since `GroupByChip` contains a `LessThanChip` subchip and an `IsEqualVecChip` subchip, a subset of
 /// the columns are those of the `LessThanChip` and `IsEqualVecChip`.

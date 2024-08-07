@@ -1,31 +1,46 @@
-use std::any::{type_name, Any};
+use std::{
+    any::{type_name, Any},
+    cmp::Reverse,
+};
 
-use itertools::Itertools;
+use afs_compiler::{
+    conversion::CompilerOptions,
+    ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize, Var},
+};
+use afs_stark_backend::{
+    air_builders::symbolic::{SymbolicConstraints, SymbolicRapBuilder},
+    prover::opener::AdjacentOpenedValues,
+    rap::{AnyRap, Rap},
+};
+use afs_test_utils::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
+use itertools::{izip, Itertools};
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
-use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
-use p3_matrix::dense::RowMajorMatrixView;
-use p3_matrix::stack::VerticalPair;
-
-use afs_compiler::ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize, Var};
-use afs_stark_backend::air_builders::symbolic::{SymbolicConstraints, SymbolicRapBuilder};
-use afs_stark_backend::prover::opener::AdjacentOpenedValues;
-use afs_stark_backend::rap::Rap;
-use afs_test_utils::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
-use stark_vm::cpu::trace::Instruction;
-
-use crate::challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger};
-use crate::commit::{PcsVariable, PolynomialSpaceVariable};
-use crate::folder::RecursiveVerifierConstraintFolder;
-use crate::fri::types::{TwoAdicPcsMatsVariable, TwoAdicPcsRoundVariable};
-use crate::fri::{TwoAdicFriPcsVariable, TwoAdicMultiplicativeCosetVariable};
-use crate::hints::Hintable;
-use crate::types::{
-    AdjacentOpenedValuesVariable, CommitmentsVariable, InnerConfig, MultiStarkVerificationAdvice,
-    StarkVerificationAdvice, VerifierInput, VerifierInputVariable, PROOF_MAX_NUM_PVS,
+use p3_field::{AbstractExtensionField, AbstractField, PrimeField32, TwoAdicField};
+use p3_matrix::{
+    dense::{RowMajorMatrix, RowMajorMatrixView},
+    stack::VerticalPair,
+    Matrix,
 };
-use crate::utils::const_fri_config;
+use stark_vm::{program::Program, vm::ExecutionSegment};
+
+use crate::{
+    challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger},
+    commit::{PcsVariable, PolynomialSpaceVariable},
+    folder::RecursiveVerifierConstraintFolder,
+    fri::{
+        types::{TwoAdicPcsMatsVariable, TwoAdicPcsRoundVariable},
+        TwoAdicFriPcsVariable, TwoAdicMultiplicativeCosetVariable,
+    },
+    hints::Hintable,
+    types::{
+        AdjacentOpenedValuesVariable, CommitmentsVariable, InnerConfig,
+        MultiStarkVerificationAdvice, StarkVerificationAdvice, VerifierInput,
+        VerifierInputVariable, PROOF_MAX_NUM_PVS,
+    },
+    utils::const_fri_config,
+};
 
 pub trait DynRapForRecursion<C: Config>:
     Rap<SymbolicRapBuilder<C::F>>
@@ -65,9 +80,10 @@ impl VerifierProgram<InnerConfig> {
         raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
         constants: MultiStarkVerificationAdvice<InnerConfig>,
         fri_params: &FriParameters,
-    ) -> Vec<Instruction<BabyBear>> {
+    ) -> Program<BabyBear> {
         let mut builder = Builder::<InnerConfig>::default();
 
+        builder.cycle_tracker_start("VerifierProgram");
         let input: VerifierInputVariable<_> = builder.uninit();
         VerifierInput::<BabyBearPoseidon2Config>::witness(&input, &mut builder);
 
@@ -76,8 +92,14 @@ impl VerifierProgram<InnerConfig> {
         };
         StarkVerifier::verify(&mut builder, &pcs, raps, constants, &input);
 
+        builder.cycle_tracker_end("VerifierProgram");
+        builder.halt();
+
         const WORD_SIZE: usize = 1;
-        builder.compile_isa::<WORD_SIZE>()
+        builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+            enable_cycle_tracker: true,
+            ..Default::default()
+        })
     }
 }
 
@@ -128,8 +150,6 @@ where
         let mut challenger = DuplexChallengerVariable::new(builder);
 
         Self::verify_raps(builder, pcs, raps, constants, &mut challenger, input);
-
-        builder.halt();
     }
 
     /// Reference: [afs_stark_backend::verifier::MultiTraceStarkVerifier::verify_raps].
@@ -514,6 +534,7 @@ where
                 after_challenge_values,
                 &challenges,
                 &exposed_values_after_challenge,
+                air_const.interaction_chunk_size,
             );
         }
 
@@ -539,6 +560,7 @@ where
         after_challenge_values: AdjacentOpenedValuesVariable<C>,
         challenges: &[Vec<Ext<C::F, C::EF>>],
         exposed_values_after_challenge: &[Vec<Ext<C::F, C::EF>>],
+        interaction_chunk_size: usize,
     ) where
         R: for<'b> Rap<RecursiveVerifierConstraintFolder<'b, C>> + Sync + ?Sized,
     {
@@ -614,6 +636,7 @@ where
             after_challenge,
             challenges,
             exposed_values_after_challenge,
+            interaction_chunk_size,
         );
 
         let num_quotient_chunks = 1 << constants.log_quotient_degree();
@@ -653,6 +676,7 @@ where
         after_challenge: AdjacentOpenedValues<Ext<C::F, C::EF>>,
         challenges: &[Vec<Ext<C::F, C::EF>>],
         exposed_values_after_challenge: &[Vec<Ext<C::F, C::EF>>],
+        interaction_chunk_size: usize,
     ) -> Ext<C::F, C::EF>
     where
         R: for<'b> Rap<RecursiveVerifierConstraintFolder<'b, C>> + Sync + ?Sized,
@@ -709,6 +733,7 @@ where
             exposed_values_after_challenge, // FIXME
 
             symbolic_interactions: &symbolic_constraints.interactions,
+            interaction_chunk_size,
             interactions: vec![],
         };
 
@@ -831,4 +856,51 @@ where
         builder.assert_usize_eq(proof.opening.values.preprocessed.len(), num_preprocessed);
         // FIXME: check if all necessary validation is covered.
     }
+}
+
+#[allow(clippy::type_complexity)]
+pub fn sort_chips<'a>(
+    chips: Vec<&'a dyn AnyRap<BabyBearPoseidon2Config>>,
+    rec_raps: Vec<&'a dyn DynRapForRecursion<InnerConfig>>,
+    traces: Vec<RowMajorMatrix<BabyBear>>,
+    pvs: Vec<Vec<BabyBear>>,
+) -> (
+    Vec<&'a dyn AnyRap<BabyBearPoseidon2Config>>,
+    Vec<&'a dyn DynRapForRecursion<InnerConfig>>,
+    Vec<RowMajorMatrix<BabyBear>>,
+    Vec<Vec<BabyBear>>,
+) {
+    let mut groups = izip!(chips, rec_raps, traces, pvs).collect_vec();
+    groups.sort_by_key(|(_, _, trace, _)| Reverse(trace.height()));
+
+    let chips = groups.iter().map(|(x, _, _, _)| *x).collect_vec();
+    let rec_raps = groups.iter().map(|(_, x, _, _)| *x).collect_vec();
+    let pvs = groups.iter().map(|(_, _, _, x)| x.clone()).collect_vec();
+    let traces = groups.into_iter().map(|(_, _, x, _)| x).collect_vec();
+
+    (chips, rec_raps, traces, pvs)
+}
+
+pub fn get_rec_raps<const WORD_SIZE: usize, C: Config>(
+    vm: &ExecutionSegment<WORD_SIZE, C::F>,
+) -> Vec<&dyn DynRapForRecursion<C>>
+where
+    C::F: PrimeField32,
+{
+    let mut result: Vec<&dyn DynRapForRecursion<C>> = vec![
+        &vm.cpu_chip.air,
+        &vm.program_chip.air,
+        &vm.memory_chip.air,
+        &vm.range_checker.air,
+    ];
+    if vm.options().field_arithmetic_enabled {
+        result.push(&vm.field_arithmetic_chip.air);
+    }
+    if vm.options().field_extension_enabled {
+        result.push(&vm.field_extension_chip.air);
+    }
+    if vm.options().poseidon2_enabled() {
+        result.push(&vm.poseidon2_chip.air);
+    }
+    result
 }

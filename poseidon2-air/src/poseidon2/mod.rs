@@ -7,8 +7,7 @@ pub mod trace;
 pub mod tests;
 
 use lazy_static::lazy_static;
-use p3_baby_bear::BabyBear;
-use p3_baby_bear::POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY;
+use p3_baby_bear::{BabyBear, POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY};
 use p3_field::{AbstractField, PrimeField32};
 
 pub use self::{air::Poseidon2Air, columns::Poseidon2Cols};
@@ -118,10 +117,10 @@ impl Default for Poseidon2Config<16, BabyBear> {
 }
 
 lazy_static! {
-    static ref HL_BABYBEAR_EXT_CONST_16: Vec<[BabyBear; 16]> =
+    pub static ref HL_BABYBEAR_EXT_CONST_16: Vec<[BabyBear; 16]> =
         Poseidon2Air::<16, BabyBear>::horizen_round_consts_16().0;
-    static ref HL_BABYBEAR_INT_CONST_16: Vec<BabyBear> =
+    pub static ref HL_BABYBEAR_INT_CONST_16: Vec<BabyBear> =
         Poseidon2Air::<16, BabyBear>::horizen_round_consts_16().1;
-    static ref HL_BABYBEAR_INT_DIAG_16: [BabyBear; 16] =
+    pub static ref HL_BABYBEAR_INT_DIAG_16: [BabyBear; 16] =
         Poseidon2Air::<16, BabyBear>::horizen_round_consts_16().2;
 }

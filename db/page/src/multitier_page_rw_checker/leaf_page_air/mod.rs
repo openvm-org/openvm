@@ -1,9 +1,8 @@
 use afs_primitives::is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir};
 use getset::Getters;
 
-use crate::page_rw_checker::{final_page::IndexedPageWriteAir, initial_page::PageReadAir};
-
 use super::page_controller::MyLessThanTupleParams;
+use crate::page_rw_checker::{final_page::IndexedPageWriteAir, initial_page::PageReadAir};
 
 pub mod air;
 pub mod bridge;
@@ -39,6 +38,7 @@ pub struct LeafPageAir<const COMMITMENT_LEN: usize> {
     // parameter telling if this is a leaf chip on the init side or the final side.
     is_less_than_tuple_air: Option<LeafPageSubAirs>,
     is_less_than_tuple_param: MyLessThanTupleParams,
+    #[getset(get = "pub")]
     is_init: bool,
     idx_len: usize,
     data_len: usize,
@@ -108,6 +108,20 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
         }
     }
 
+    pub fn clone_with_id(&self, air_id: u32) -> Self {
+        Self {
+            path_bus_index: self.path_bus_index,
+            data_bus_index: self.data_bus_index,
+            page_chip: self.page_chip.clone(),
+            idx_len: self.idx_len,
+            data_len: self.data_len,
+            is_init: self.is_init,
+            is_less_than_tuple_air: self.is_less_than_tuple_air.clone(),
+            is_less_than_tuple_param: self.is_less_than_tuple_param.clone(),
+            air_id,
+        }
+    }
+
     // if self.is_final, we need to include range data to establish sortedness
     // in particular, for each idx, prove the idx lies in the start and end.
     // we then need extra columns that contain results of is_less_than comparisons
@@ -122,5 +136,22 @@ impl<const COMMITMENT_LEN: usize> LeafPageAir<COMMITMENT_LEN> {
                         vec![self.is_less_than_tuple_param.limb_bits; self.idx_len],
                         self.is_less_than_tuple_param.decomp,
                     )))
+    }
+
+    pub fn main_width(&self) -> usize {
+        self.page_chip().air_width()
+            + (1 - self.is_init as usize)
+                * (2 * self.idx_len
+                    + 2
+                    + 2 * IsLessThanTupleAuxCols::<usize>::width(&IsLessThanTupleAir::new(
+                        0,
+                        vec![self.is_less_than_tuple_param.limb_bits; self.idx_len],
+                        self.is_less_than_tuple_param.decomp,
+                    )))
+            - self.cached_width()
+    }
+
+    pub fn cached_width(&self) -> usize {
+        1 + self.idx_len + self.data_len
     }
 }

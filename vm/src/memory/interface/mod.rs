@@ -2,9 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use p3_field::{Field, PrimeField32};
 
-use crate::memory::interface::air::MemoryInterfaceAir;
-use crate::memory::OpType;
-use crate::memory::OpType::Read;
+use crate::memory::{interface::air::MemoryInterfaceAir, OpType, OpType::Read};
 
 pub mod air;
 pub mod bridge;

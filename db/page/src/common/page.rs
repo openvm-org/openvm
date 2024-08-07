@@ -21,7 +21,7 @@ use super::page_cols::PageCols;
 /// - Unallocated rows are all zeros
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Page {
-    rows: Vec<PageCols<u32>>,
+    pub rows: Vec<PageCols<u32>>,
 }
 
 impl Page {
@@ -35,6 +35,10 @@ impl Page {
                 })
                 .collect(),
         }
+    }
+
+    pub fn from_2d_vec_consume(page: Vec<Vec<u32>>, idx_len: usize, data_len: usize) -> Self {
+        Self::from_2d_vec(&page, idx_len, data_len)
     }
 
     pub fn from_trace<F: PrimeField>(

@@ -1,15 +1,14 @@
 use std::sync::Arc;
 
-use p3_air::BaseAir;
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
-
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test_no_pis,
     interaction::dummy_interaction_air::DummyInteractionAir, utils::to_field_vec,
 };
+use p3_air::BaseAir;
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
+use p3_matrix::dense::{DenseMatrix, RowMajorMatrix};
 
 use crate::{
     is_less_than::columns::IsLessThanCols, range_gate::RangeCheckerGateChip,

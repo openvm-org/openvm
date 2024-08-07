@@ -10,3 +10,7 @@ afs-test-utils = { path = "../../test-utils" }
 color-eyre = "0.6.3"
 logical-interface = { path = "../../logical-interface" }
 itertools = "0.13.0"
+
+[features]
+default = []
+parallel = ["afs-page/parallel"]

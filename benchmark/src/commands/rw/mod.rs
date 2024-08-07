@@ -1,7 +1,10 @@
 use afs::commands::{
     cache::CacheCommand, keygen::KeygenCommand, prove::ProveCommand, verify::VerifyCommand,
 };
-use afs_stark_backend::config::{Com, PcsProof, PcsProverData};
+use afs_stark_backend::{
+    config::{Com, PcsProof, PcsProverData},
+    prover::metrics::TraceMetrics,
+};
 use afs_test_utils::{
     config::{
         baby_bear_blake3::BabyBearBlake3Engine,
@@ -24,9 +27,8 @@ use p3_util::log2_strict_usize;
 use serde::{de::DeserializeOwned, Serialize};
 use tracing::info_span;
 
-use crate::{AFI_FILE_PATH, DB_FILE_PATH, TABLE_ID, TMP_FOLDER};
-
 use super::CommonCommands;
+use crate::{AFI_FILE_PATH, DB_FILE_PATH, TABLE_ID, TMP_FOLDER};
 
 #[derive(Debug, Parser)]
 pub struct RwCommand {
@@ -59,7 +61,7 @@ impl RwCommand {
         config: &PageConfig,
         engine: &E,
         _extra_data: String,
-    ) -> Result<()>
+    ) -> Result<TraceMetrics>
     where
         Val<SC>: PrimeField64,
         PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
@@ -89,7 +91,7 @@ impl RwCommand {
 
         // Run prove
         let prove_span = info_span!("Benchmark prove").entered();
-        ProveCommand::execute(
+        let metrics = ProveCommand::execute(
             config,
             engine,
             AFI_FILE_PATH.to_string(),
@@ -111,11 +113,11 @@ impl RwCommand {
         )?;
         verify_span.exit();
 
-        Ok(())
+        Ok(metrics)
     }
 }
 
-pub fn run_bench_rw(config: &PageConfig, extra_data: String) -> Result<()> {
+pub fn run_bench_rw(config: &PageConfig, extra_data: String) -> Result<TraceMetrics> {
     let checker_trace_degree = config.page.max_rw_ops * 4;
     let pcs_log_degree = log2_strict_usize(checker_trace_degree)
         .max(log2_strict_usize(config.page.height))

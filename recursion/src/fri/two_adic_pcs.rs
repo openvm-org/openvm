@@ -1,23 +1,19 @@
+use afs_compiler::prelude::*;
 use p3_commit::TwoAdicMultiplicativeCoset;
-use p3_field::AbstractField;
-use p3_field::TwoAdicField;
+use p3_field::{AbstractField, TwoAdicField};
 use p3_symmetric::Hash;
 
-use afs_compiler::prelude::*;
-
-use crate::challenger::DuplexChallengerVariable;
-use crate::challenger::FeltChallenger;
-use crate::commit::PcsVariable;
-
-use super::types::DigestVariable;
-use super::types::DimensionsVariable;
-use super::types::FriConfigVariable;
-use super::types::TwoAdicPcsMatsVariable;
-use super::types::TwoAdicPcsProofVariable;
-use super::types::TwoAdicPcsRoundVariable;
 use super::{
-    verify_batch, verify_challenges, verify_shape_and_sample_challenges,
+    types::{
+        DigestVariable, DimensionsVariable, FriConfigVariable, TwoAdicPcsMatsVariable,
+        TwoAdicPcsProofVariable, TwoAdicPcsRoundVariable,
+    },
+    verify_batch, verify_challenges, verify_shape_and_sample_challenges, NestedOpenedValues,
     TwoAdicMultiplicativeCosetVariable,
+};
+use crate::{
+    challenger::{DuplexChallengerVariable, FeltChallenger},
+    commit::PcsVariable,
 };
 
 pub fn verify_two_adic_pcs<C: Config>(
@@ -94,19 +90,31 @@ pub fn verify_two_adic_pcs<C: Config>(
                 let bits_reduced: Usize<_> =
                     builder.eval(log_global_max_height - log_batch_max_height);
                 let index_bits_shifted_v1 = index_bits.shift(builder, bits_reduced);
-                verify_batch::<C, 1>(
+
+                let opened_values = NestedOpenedValues::Felt(batch_opening.opened_values);
+
+                builder.cycle_tracker_start("verify-batch");
+                verify_batch::<C>(
                     builder,
                     &batch_commit,
                     batch_dims,
                     index_bits_shifted_v1,
-                    batch_opening.opened_values.clone(),
+                    &opened_values,
                     &batch_opening.opening_proof,
                 );
+                builder.cycle_tracker_end("verify-batch");
 
+                // hack to move batch_opening.opened_values back
+                let opened_values = match opened_values {
+                    NestedOpenedValues::Felt(opened_values) => opened_values,
+                    _ => unreachable!(),
+                };
+
+                builder.cycle_tracker_start("compute-reduced-opening");
                 builder
-                    .range(0, batch_opening.opened_values.len())
+                    .range(0, opened_values.len())
                     .for_each(|k, builder| {
-                        let mat_opening = builder.get(&batch_opening.opened_values, k);
+                        let mat_opening = builder.get(&opened_values, k);
                         let mat = builder.get(&mats, k);
                         let mat_points = mat.points;
                         let mat_values = mat.values;
@@ -114,40 +122,43 @@ pub fn verify_two_adic_pcs<C: Config>(
                         let log2_domain_size = mat.domain.log_n;
                         let log_height: Var<C::N> = builder.eval(log2_domain_size + log_blowup);
 
+                        let cur_ro = builder.get(&ro, log_height);
+                        let cur_alpha_pow = builder.get(&alpha_pow, log_height);
+
                         let bits_reduced: Usize<_> =
                             builder.eval(log_global_max_height - log_height);
                         let index_bits_shifted = index_bits.shift(builder, bits_reduced);
 
                         let two_adic_generator = config.get_two_adic_generator(builder, log_height);
-                        builder.cycle_tracker_start("exp_reverse_bits_len");
+                        builder.cycle_tracker_start("exp-reverse-bits-len");
                         let two_adic_generator_exp = builder.exp_reverse_bits_len(
                             two_adic_generator,
                             &index_bits_shifted,
                             log_height,
                         );
-                        builder.cycle_tracker_end("exp_reverse_bits_len");
+                        builder.cycle_tracker_end("exp-reverse-bits-len");
                         let x: Felt<C::F> = builder.eval(two_adic_generator_exp * g);
 
                         builder.range(0, mat_points.len()).for_each(|l, builder| {
                             let z: Ext<C::F, C::EF> = builder.get(&mat_points, l);
                             let ps_at_z = builder.get(&mat_values, l);
 
+                            builder.cycle_tracker_start("sp1-fri-fold");
                             builder.range(0, ps_at_z.len()).for_each(|t, builder| {
                                 let p_at_x = builder.get(&mat_opening, t);
                                 let p_at_z = builder.get(&ps_at_z, t);
-                                let quotient = (-p_at_z + p_at_x) / (-z + x);
+                                let quotient = (p_at_z - p_at_x) / (z - x);
 
-                                let old_ro = builder.get(&ro, log_height);
-                                let old_alpha_pow = builder.get(&alpha_pow, log_height);
-
-                                let new_ro = builder.eval(old_ro + old_alpha_pow * quotient);
-                                builder.set_value(&mut ro, log_height, new_ro);
-
-                                let new_alpha_pow = builder.eval(old_alpha_pow * alpha);
-                                builder.set_value(&mut alpha_pow, log_height, new_alpha_pow);
+                                builder.assign(cur_ro, cur_ro + cur_alpha_pow * quotient);
+                                builder.assign(cur_alpha_pow, cur_alpha_pow * alpha);
                             });
+                            builder.cycle_tracker_end("sp1-fri-fold");
                         });
+
+                        builder.set_value(&mut ro, log_height, cur_ro);
+                        builder.set_value(&mut alpha_pow, log_height, cur_alpha_pow);
                     });
+                builder.cycle_tracker_end("compute-reduced-opening");
             });
 
             builder.set_value(&mut reduced_openings, i, ro);
@@ -261,29 +272,31 @@ where
 pub mod tests {
     use std::cmp::Reverse;
 
-    use crate::challenger::CanObserveVariable;
-    use crate::challenger::DuplexChallengerVariable;
-    use crate::challenger::FeltChallenger;
-    use crate::commit::PcsVariable;
-    use crate::fri::types::TwoAdicPcsRoundVariable;
-    use crate::fri::TwoAdicFriPcsVariable;
-    use crate::fri::TwoAdicMultiplicativeCosetVariable;
-    use crate::hints::{Hintable, InnerPcsProof, InnerVal};
-    use crate::utils::const_fri_config;
-    use afs_compiler::asm::AsmBuilder;
-    use afs_compiler::ir::{Array, Usize, Var, DIGEST_SIZE};
+    use afs_compiler::{
+        asm::AsmBuilder,
+        ir::{Array, Usize, Var, DIGEST_SIZE},
+    };
     use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
     use itertools::Itertools;
     use p3_baby_bear::BabyBear;
-    use p3_challenger::CanObserve;
-    use p3_challenger::FieldChallenger;
-    use p3_commit::Pcs;
-    use p3_commit::TwoAdicMultiplicativeCoset;
+    use p3_challenger::{CanObserve, FieldChallenger};
+    use p3_commit::{Pcs, TwoAdicMultiplicativeCoset};
     use p3_field::AbstractField;
     use p3_matrix::dense::RowMajorMatrix;
     use p3_uni_stark::{StarkGenericConfig, Val};
     use rand::rngs::OsRng;
-    use stark_vm::cpu::trace::Instruction;
+    use stark_vm::program::Program;
+
+    use crate::{
+        challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger},
+        commit::PcsVariable,
+        fri::{
+            types::TwoAdicPcsRoundVariable, TwoAdicFriPcsVariable,
+            TwoAdicMultiplicativeCosetVariable,
+        },
+        hints::{Hintable, InnerPcsProof, InnerVal},
+        utils::const_fri_config,
+    };
 
     #[allow(dead_code)]
     const WORD_SIZE: usize = 1;
@@ -292,7 +305,7 @@ pub mod tests {
     pub fn build_test_fri_with_cols_and_log2_rows(
         nb_cols: usize,
         nb_log2_rows: usize,
-    ) -> (Vec<Instruction<BabyBear>>, Vec<Vec<BabyBear>>) {
+    ) -> (Program<BabyBear>, Vec<Vec<BabyBear>>) {
         type SC = BabyBearPoseidon2Config;
         type F = Val<SC>;
         type EF = <SC as StarkGenericConfig>::Challenge;

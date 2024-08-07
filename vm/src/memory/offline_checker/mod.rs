@@ -3,10 +3,11 @@ use std::{array::from_fn, collections::HashMap};
 use afs_primitives::offline_checker::OfflineChecker;
 use p3_field::PrimeField32;
 
-use crate::cpu::{MEMORY_BUS, RANGE_CHECKER_BUS};
-use crate::memory::{compose, decompose, OpType};
-
 use super::MemoryAccess;
+use crate::{
+    cpu::{MEMORY_BUS, RANGE_CHECKER_BUS},
+    memory::{compose, decompose, OpType},
+};
 
 mod air;
 mod trace;

@@ -7,7 +7,10 @@ use afs_test_utils::{
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
-use stark_vm::vm::{config::VmConfig, ExecutionResult, VirtualMachine};
+use stark_vm::{
+    program::Program,
+    vm::{config::VmConfig, ExecutionResult, VirtualMachine},
+};
 
 use crate::{
     asm::parse_asm_file,
@@ -61,7 +64,12 @@ impl VerifyCommand {
     pub fn execute_helper(&self, config: VmConfig) -> Result<()> {
         println!("Verifying proof file: {}", self.proof_file);
         let instructions = parse_asm_file(Path::new(&self.asm_file_path))?;
-        let vm = VirtualMachine::<WORD_SIZE, _>::new(config, instructions, vec![]);
+        let program_len = instructions.len();
+        let program = Program {
+            instructions,
+            debug_infos: vec![None; program_len],
+        };
+        let vm = VirtualMachine::<WORD_SIZE, _>::new(config, program, vec![]);
         let encoded_vk = read_from_path(&Path::new(&self.keys_folder).join("vk"))?;
         let vk: MultiStarkVerifyingKey<BabyBearPoseidon2Config> =
             bincode::deserialize(&encoded_vk)?;

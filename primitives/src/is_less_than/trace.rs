@@ -3,12 +3,11 @@ use std::sync::Arc;
 use p3_field::{PrimeField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
-
 use super::{
     columns::{IsLessThanAuxColsMut, IsLessThanCols, IsLessThanColsMut},
     IsLessThanAir, IsLessThanChip,
 };
+use crate::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 
 impl IsLessThanChip {
     pub fn generate_trace<F: PrimeField64>(&self, pairs: Vec<(u32, u32)>) -> RowMajorMatrix<F> {

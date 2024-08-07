@@ -1,7 +1,9 @@
 // Copied from uni-stark/src/symbolic_variable.rs.
 
-use core::marker::PhantomData;
-use core::ops::{Add, Mul, Sub};
+use core::{
+    marker::PhantomData,
+    ops::{Add, Mul, Sub},
+};
 
 use p3_field::Field;
 use serde::{Deserialize, Serialize};

@@ -1,10 +1,10 @@
 [page]
 index_bytes = 32
-data_bytes = 32
+data_bytes = 1024
 bits_per_fe = 16
-height = 256
+height = 1_048_576
 mode = "ReadWrite" # options: "ReadOnly", "ReadWrite"
-max_rw_ops = 256
+max_rw_ops = 65536
 
 [fri_params]
 log_blowup = 2
