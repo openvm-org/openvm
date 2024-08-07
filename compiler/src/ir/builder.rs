@@ -812,6 +812,10 @@ pub struct RangeBuilder<'a, C: Config> {
 }
 
 impl<'a, C: Config> RangeBuilder<'a, C> {
+    pub const fn may_break(self) -> RangeBuilderWithBreaks<'a, C> {
+        RangeBuilderWithBreaks(self)
+    }
+
     pub const fn step_by(mut self, step_size: usize) -> Self {
         self.step_size = step_size;
         self
@@ -827,7 +831,8 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
         self.builder.flags.disable_break = old_disable_break;
     }
 
-    pub fn for_each_may_break(
+    /// Internal function
+    fn for_each_may_break(
         &mut self,
         mut f: impl FnMut(RVar<C::N>, &mut Builder<C>) -> Result<(), BreakLoop>,
     ) {
@@ -873,5 +878,22 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
             loop_instructions,
         );
         self.builder.operations.push(op);
+    }
+}
+
+/// A builder for the DSL that handles for loops with breaks.
+pub struct RangeBuilderWithBreaks<'a, C: Config>(RangeBuilder<'a, C>);
+
+impl<'a, C: Config> RangeBuilderWithBreaks<'a, C> {
+    pub const fn step_by(mut self, step_size: usize) -> Self {
+        self.0 = self.0.step_by(step_size);
+        self
+    }
+
+    pub fn for_each(
+        &mut self,
+        f: impl FnMut(RVar<C::N>, &mut Builder<C>) -> Result<(), BreakLoop>,
+    ) {
+        self.0.for_each_may_break(f)
     }
 }

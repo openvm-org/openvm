@@ -89,23 +89,27 @@ impl<C: Config> Builder<C> {
         let hash_rate: Var<_> = self.eval(C::N::from_canonical_usize(HASH_RATE));
 
         self.range(0, array.len())
+            .may_break()
             .step_by(HASH_RATE)
-            .for_each_may_break(|i, builder| {
+            .for_each(|i, builder| {
                 builder
                     .if_eq(break_flag, C::N::one())
                     .then_may_break(|builder| builder.break_loop())?;
                 // Insert elements of the chunk.
-                builder.range(0, hash_rate).for_each_may_break(|j, builder| {
-                    let index = builder.eval_expr(i + j);
-                    let element = builder.get(array, index);
-                    builder.set_value(&mut state, j, element);
-                    builder
-                        .if_eq(index, last_index.clone())
-                        .then_may_break(|builder| {
-                            builder.assign(&break_flag, C::N::one());
-                            builder.break_loop()
-                        })
-                });
+                builder
+                    .range(0, hash_rate)
+                    .may_break()
+                    .for_each(|j, builder| {
+                        let index = builder.eval_expr(i + j);
+                        let element = builder.get(array, index);
+                        builder.set_value(&mut state, j, element);
+                        builder
+                            .if_eq(index, last_index.clone())
+                            .then_may_break(|builder| {
+                                builder.assign(&break_flag, C::N::one());
+                                builder.break_loop()
+                            })
+                    });
 
                 builder.poseidon2_permute_mut(&state);
                 Ok(())
