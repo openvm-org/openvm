@@ -69,7 +69,7 @@ impl<F: PrimeField32> IsLessThanChip<F> {
                 .iter()
                 .cloned()
                 .cycle()
-                .take(correct_height - current_height),
+                .take((correct_height - current_height) * width),
         );
         RowMajorMatrix::new(traces, width)
     }
