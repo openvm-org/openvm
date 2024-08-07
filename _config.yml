@@ -1,6 +1,6 @@
 # Welcome to Jekyll!
 #
-# This config file is meant for settings that affect your whole blog, values
+# This config file is meant for settings that affect your whole site, values
 # which you are expected to set up once and rarely edit after that. If you find
 # yourself editing this file very often, consider using Jekyll's data files
 # feature for the data you need to update frequently.
@@ -18,16 +18,16 @@
 # You can create any custom variable you would like, and they will be accessible
 # in the templates via {{ site.myvariable }}.
 
-title: null
-email: your-email@example.com
+title: "AFS Prototype"
+email: "contact@axiom.xyz"
 description: >- # this means to ignore newlines until "baseurl:"
-  Write an awesome description for your new site here. You can edit this
-  line in _config.yml. It will appear in your document head meta (for
-  Google search results) and in your feed.xml site description.
+  AFS Prototype is a project by Axiom Crypto exploring advanced cryptographic
+  techniques for scalable and secure blockchain systems. This site contains
+  benchmarks and documentation for the prototype implementation.
 baseurl: "" # the subpath of your site, e.g. /blog
-url: "" # the base hostname & protocol for your site, e.g. http://example.com
-twitter_username: jekyllrb
-github_username: jekyll
+url: "https://axiom-crypto.github.io/afs-prototype" # the base hostname & protocol for your site
+twitter_username: axiom_xyz
+github_username: axiom-crypto
 
 # Build settings
 theme: minima
