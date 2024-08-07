@@ -212,6 +212,31 @@ $$bb' = (b_0 + b_2x^2)(b_0 - b_2x^2) = b_0^2 - 11b_2^2,$$
 
 which is an element of the original field which we define as $c$. So, we may simply invert $c$ and we find $1/a = a'/b = a'b'/c = a'b'c^{-1}$. This will give the correct result except when $c^{-1}$ is undefined, which is when $a = 0$.
 
+### Unsigned 32-bit integer instructions
+
+The following are instructions on unsigned 32-bit integers. The instructions are chosen to be compatible with RV32I.
+When these instructions are enabled, the ISA must have `WORD_SIZE >= 4`.
+For operations besides CASTU, any VM word will be assumed to have the first `4` cells consisting of **bytes** and the remaining cells equal to zero. We convert from word to `u32` via
+
+<!--
+[jpw] I chose bytes instead of u16 here to go with RV32 memory cell alignment. This can be changed as an optimization if needed.
+-->
+
+```
+compose(w: Word) -> u32 {
+    return sum_{i=0}^3 w[i] * 2^{8i}
+}
+```
+
+and let `decompose: u32 -> Word` be the inverse operation.
+
+Immediates are handled as follows: `compose(word[a]_0) = a.as_canonical_u32()`. Note that RV32 immediates never exceed 20-bits, so any immediate bits inside a 31-bit field.
+
+| Mnemonic  | <div style="width:170px">Operands (asm)</div> | Description                                                                                                                                                                                                                                |
+| --------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **CASTU** | `a, b, _`                                     | Set `word[a]_d` to the unique word with 8-bit limbs such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = proj(word[b]_e)`. The limbs of `word[a]_d` must be range checked. If `WORD_SIZE > 4` then all remaining cells in `word[a]_d` must be zero. |
+| **SLTU**  | `a, b, c`                                     | Set `word[a]_d <- compose(word[b]_d) < compose(word[c]_e) ? emb(1) : emb(0)`. The address space `d` is not allowed to be zero.                                                                                                             |
+
 ### Hash function precompiles
 
 We have special opcodes to enable different precompiled hash functions.
