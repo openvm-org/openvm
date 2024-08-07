@@ -3,9 +3,13 @@ use std::fmt;
 use enum_utils::FromStr;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
+use strum::{EnumIter, FromRepr, IntoEnumIterator};
 use OpCode::*;
 
-use crate::{field_extension::FieldExtensionArithmeticAir, poseidon2::Poseidon2Chip};
+use crate::{
+    field_extension::FieldExtensionArithmeticAir,
+    hashes::{keccak::permute::KeccakPermuteChip, poseidon2::Poseidon2Chip},
+};
 
 #[cfg(test)]
 pub mod tests;

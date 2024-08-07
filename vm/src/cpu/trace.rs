@@ -19,8 +19,11 @@ use super::{
 use crate::{
     cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
     field_extension::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticChip},
+    hashes::{
+        keccak::permute::KeccakPermuteChip,
+        poseidon2::{columns::Poseidon2VmCols, Poseidon2Chip},
+    },
     memory::{compose, decompose},
-    poseidon2::{columns::Poseidon2VmCols, Poseidon2Chip},
     program::columns::ProgramPreprocessedCols,
     vm::{cycle_tracker::CycleTracker, ExecutionSegment},
 };

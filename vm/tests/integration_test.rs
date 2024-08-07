@@ -7,6 +7,7 @@ use afs_test_utils::{
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
+use p3_keccak_air::U64_LIMBS;
 use stark_vm::{
     cpu::{trace::Instruction, OpCode::*},
     program::Program,
@@ -15,6 +16,7 @@ use stark_vm::{
         ExecutionResult, VirtualMachine,
     },
 };
+use tiny_keccak::keccakf;
 
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 30;
@@ -31,8 +33,7 @@ fn vm_config_with_field_arithmetic() -> VmConfig {
 
 // log_blowup = 2 by default
 fn air_test(
-    field_arithmetic_enabled: bool,
-    field_extension_enabled: bool,
+    config: VmConfig,
     program: Program<BabyBear>,
     witness_stream: Vec<Vec<BabyBear>>,
     fast_segmentation: bool,
@@ -47,7 +48,7 @@ fn air_test(
             } else {
                 DEFAULT_MAX_SEGMENT_LEN
             },
-            ..Default::default()
+            ..config
         },
         program,
         witness_stream,
@@ -138,7 +139,7 @@ fn test_vm_1() {
         debug_infos: vec![None; 5],
     };
 
-    air_test(true, false, program, vec![], true);
+    air_test(vm_config_with_field_arithmetic(), program, vec![], true);
 }
 
 #[test]
@@ -168,13 +169,7 @@ fn test_vm_without_field_arithmetic() {
         debug_infos: vec![None; 5],
     };
 
-    air_test(
-        field_arithmetic_enabled,
-        field_extension_enabled,
-        program,
-        vec![],
-        true,
-    );
+    air_test(VmConfig::core(), program, vec![], true);
 }
 
 #[test]
@@ -202,7 +197,12 @@ fn test_vm_fibonacci_old() {
         debug_infos: vec![None; program_len],
     };
 
-    air_test(true, false, program.clone(), vec![], true);
+    air_test(
+        vm_config_with_field_arithmetic(),
+        program.clone(),
+        vec![],
+        true,
+    );
 }
 
 #[test]
@@ -239,14 +239,16 @@ fn test_vm_fibonacci_old_cycle_tracker() {
         debug_infos: vec![None; program_len],
     };
 
-    air_test(true, false, program.clone(), vec![], false);
+    air_test(
+        vm_config_with_field_arithmetic(),
+        program.clone(),
+        vec![],
+        false,
+    );
 }
 
 #[test]
 fn test_vm_field_extension_arithmetic() {
-    let field_arithmetic_enabled = true;
-    let field_extension_enabled = true;
-
     let instructions = vec![
         Instruction::from_isize(STOREW, 1, 0, 0, 0, 1),
         Instruction::from_isize(STOREW, 2, 1, 0, 0, 1),
@@ -282,9 +284,6 @@ fn test_vm_field_extension_arithmetic() {
 
 #[test]
 fn test_vm_hint() {
-    let field_arithmetic_enabled = true;
-    let field_extension_enabled = false;
-
     let instructions = vec![
         Instruction::from_isize(STOREW, 0, 0, 16, 0, 1),
         Instruction::from_isize(FADD, 20, 16, 16777220, 1, 0),
@@ -373,20 +372,20 @@ fn test_vm_compress_poseidon2_as2() {
 
 #[test]
 fn test_vm_permute_keccak() {
-    let mut program = vec![];
+    let mut instructions = vec![];
     // src = word[0]_1 <- 0
     let src = 0;
-    program.push(Instruction::from_isize(STOREW, src, 0, 0, 0, 1));
+    instructions.push(Instruction::from_isize(STOREW, src, 0, 0, 0, 1));
     // dst word[1]_1 <- 3 // use weird offset
     let dst = 3;
-    program.push(Instruction::from_isize(STOREW, dst, 0, 1, 0, 1));
+    instructions.push(Instruction::from_isize(STOREW, dst, 0, 1, 0, 1));
     let mut expected = [0u64; 25];
 
     for y in 0..5 {
         for x in 0..5 {
             for limb in 0..U64_LIMBS {
                 let index: usize = (y * 5 + x) * U64_LIMBS + limb;
-                program.push(Instruction::from_isize(
+                instructions.push(Instruction::from_isize(
                     STOREW,
                     ((expected[y * 5] >> (16 * limb)) & 0xFFFF) as isize,
                     0,
@@ -398,7 +397,7 @@ fn test_vm_permute_keccak() {
         }
     }
     // dst = word[1]_1, src = word[0]_1, read and write to address space 2
-    program.push(Instruction::from_isize(PERM_KECCAK, 1, 0, 0, 1, 2));
+    instructions.push(Instruction::from_isize(PERM_KECCAK, 1, 0, 0, 1, 2));
 
     keccakf(&mut expected);
     // read expected result to check correctness
@@ -406,7 +405,7 @@ fn test_vm_permute_keccak() {
         for x in 0..5 {
             for limb in 0..U64_LIMBS {
                 let index: usize = (y * 5 + x) * U64_LIMBS + limb;
-                program.push(Instruction::from_isize(
+                instructions.push(Instruction::from_isize(
                     BNE,
                     dst + index as isize,
                     ((expected[y * 5 + x] >> (16 * limb)) & 0xFFFF) as isize,
@@ -417,8 +416,15 @@ fn test_vm_permute_keccak() {
             }
         }
     }
-    program.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
-    // program.push(Instruction::from_isize(FAIL, 0, 0, 0, 0, 0));
+    instructions.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
+    // instructions.push(Instruction::from_isize(FAIL, 0, 0, 0, 0, 0));
+
+    let program_len = instructions.len();
+
+    let program = Program {
+        instructions,
+        debug_infos: vec![None; program_len],
+    };
 
     air_test(
         VmConfig {

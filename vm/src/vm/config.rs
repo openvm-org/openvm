@@ -61,6 +61,7 @@ impl VmConfig {
             decomp: 4,
             num_public_values: 0,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
+            collect_metrics: false,
         }
     }
 }

@@ -19,7 +19,6 @@ use crate::{
     field_extension::FieldExtensionArithmeticChip,
     hashes::{keccak::permute::KeccakPermuteChip, poseidon2::Poseidon2Chip},
     memory::offline_checker::MemoryChip,
-    poseidon2::Poseidon2Chip,
     program::{Program, ProgramChip},
 };
 
