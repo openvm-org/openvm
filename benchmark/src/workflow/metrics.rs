@@ -98,6 +98,7 @@ impl Display for VmCustomMetrics {
         writeln!(f, "### Custom VM metrics")?;
         writeln!(f)?;
         writeln!(f, "</summary>")?;
+        writeln!(f)?;
 
         writeln!(f, "| Name | Value |")?;
         writeln!(f, "|------|-------|")?;
@@ -108,7 +109,7 @@ impl Display for VmCustomMetrics {
         writeln!(f)?;
         writeln!(f, "#### Opcode metrics")?;
         writeln!(f, "| Name | Frequency | Trace Cells Contributed |")?;
-        writeln!(f, "|------|-------|")?;
+        writeln!(f, "|------|-------|-----|")?;
         for (name, value) in self.opcode_counts.iter() {
             let cell_count = *self
                 .opcode_trace_cells
