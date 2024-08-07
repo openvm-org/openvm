@@ -1,8 +1,4 @@
-use afs_compiler::{
-    asm::AsmBuilder,
-    ir::{Usize, Var},
-    util::execute_program,
-};
+use afs_compiler::{asm::AsmBuilder, ir::Var, util::execute_program};
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::cpu::WORD_SIZE;

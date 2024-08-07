@@ -147,6 +147,11 @@ impl<C: Config> Builder<C> {
         }
     }
 
+    /// Set whether all loops must be static and unrolled
+    pub fn set_static_loops(&mut self, static_loop: bool) {
+        self.flags.static_loop = static_loop;
+    }
+
     /// Pushes an operation to the builder.
     pub fn push(&mut self, op: DslIr<C>) {
         self.operations.push(op);
@@ -821,39 +826,50 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
         self
     }
 
+    /// No breaks allowed.
     pub fn for_each(&mut self, mut f: impl FnMut(RVar<C::N>, &mut Builder<C>)) {
+        // If constant loop, unroll it.
+        if self.start.is_const() && self.end.is_const() {
+            self.for_each_unrolled(|var, builder| {
+                f(var, builder);
+                Ok(())
+            });
+            return;
+        }
+        // Otherwise, dynamic
         let old_disable_break = self.builder.flags.disable_break;
         self.builder.flags.disable_break = true;
-        self.for_each_may_break(|var, builder| {
+        self.for_each_dynamic(|var, builder| {
             f(var, builder);
             Ok(())
         });
         self.builder.flags.disable_break = old_disable_break;
     }
 
-    /// Internal function
-    fn for_each_may_break(
+    /// Compiler unrolls for loops, and currently can only handle breaks
+    /// based on compile-time branching conditions.
+    fn for_each_unrolled(
         &mut self,
         mut f: impl FnMut(RVar<C::N>, &mut Builder<C>) -> Result<(), BreakLoop>,
     ) {
-        if self.start.is_const() && self.end.is_const() {
-            let old_static_loop = self.builder.flags.static_loop;
-            self.builder.flags.static_loop = true;
-            let old_disable_break = self.builder.flags.disable_break;
-            self.builder.flags.disable_break = false;
+        let old_static_loop = self.builder.flags.static_loop;
+        self.builder.flags.static_loop = true;
 
-            let start = self.start.value();
-            let end = self.end.value();
-            for i in (start..end).step_by(self.step_size) {
-                if f(i.into(), self.builder).is_err() {
-                    break;
-                }
+        let start = self.start.value();
+        let end = self.end.value();
+        for i in (start..end).step_by(self.step_size) {
+            if f(i.into(), self.builder).is_err() {
+                break;
             }
-            self.builder.flags.static_loop = old_static_loop;
-            self.builder.flags.disable_break = old_disable_break;
-            return;
         }
+        self.builder.flags.static_loop = old_static_loop;
+    }
 
+    /// Internal function
+    fn for_each_dynamic(
+        &mut self,
+        mut f: impl FnMut(RVar<C::N>, &mut Builder<C>) -> Result<(), BreakLoop>,
+    ) {
         let step_size = C::N::from_canonical_usize(self.step_size);
         let loop_variable: Var<C::N> = self.builder.uninit();
         let mut loop_body_builder = Builder::<C>::new_sub_builder(
@@ -863,7 +879,6 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
             self.builder.nb_public_values,
             self.builder.flags,
         );
-        loop_body_builder.flags.disable_break = false;
 
         f(loop_variable.into(), &mut loop_body_builder)
             .expect("BreakLoop should never be returned in a dynamic loop");
@@ -890,10 +905,18 @@ impl<'a, C: Config> RangeBuilderWithBreaks<'a, C> {
         self
     }
 
+    /// Does not unroll for loops unless builder flag `static_loop` is set.
     pub fn for_each(
         &mut self,
         f: impl FnMut(RVar<C::N>, &mut Builder<C>) -> Result<(), BreakLoop>,
     ) {
-        self.0.for_each_may_break(f)
+        // To handle breaks based on dynamic branching conditions, we do not
+        // unroll constant loops unless the builder is in static_loop mode.
+        if self.0.start.is_const() && self.0.end.is_const() && self.0.builder.flags.static_loop {
+            self.0.for_each_unrolled(f);
+            return;
+        }
+        // Dynamic
+        self.0.for_each_dynamic(f);
     }
 }

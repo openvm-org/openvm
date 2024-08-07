@@ -1,7 +1,6 @@
 use afs_compiler::{
     asm::AsmBuilder,
     ir::{Ext, Felt},
-    prelude::RVar,
     util::{display_program, display_program_with_pc, execute_program},
 };
 use p3_baby_bear::BabyBear;

@@ -1,13 +1,11 @@
 use afs_compiler::{
     asm::AsmBuilder,
-    ir::{Array, Config, Ext, ExtConst, Felt, RVar, Usize, Var},
+    ir::{Config, Ext, Felt, RVar, Usize, Var},
     prelude::{Builder, MemIndex, MemVariable, Ptr, Variable},
-    util::execute_program,
 };
 use afs_derive::DslVariable;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use rand::{thread_rng, Rng};
 
 #[derive(DslVariable, Clone, Debug)]
 pub struct Point<C: Config> {

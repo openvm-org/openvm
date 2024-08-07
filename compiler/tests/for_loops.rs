@@ -93,7 +93,8 @@ fn test_compiler_break() {
 
     builder
         .range(0, array.len())
-        .for_each_may_break(|i, builder| {
+        .may_break()
+        .for_each(|i, builder| {
             builder.set(&mut array, i, i);
 
             builder
@@ -105,7 +106,8 @@ fn test_compiler_break() {
 
     builder
         .range(0, array.len())
-        .for_each_may_break(|i, builder| {
+        .may_break()
+        .for_each(|i, builder| {
             let value = builder.get(&array, i);
             builder
                 .if_eq(i, RVar::from(break_len + 1))
@@ -124,18 +126,22 @@ fn test_compiler_break() {
     // Test the break instructions in a nested loop.
 
     let mut array: Array<C, Var<_>> = builder.array(len);
-    builder.range(0, array.len()).for_each(|i, builder| {
-        let counter: Var<_> = builder.eval(F::zero());
+    builder
+        .range(0, array.len())
+        .may_break()
+        .for_each(|i, builder| {
+            let counter: Var<_> = builder.eval(F::zero());
 
-        builder.range(0, i).for_each_may_break(|_, builder| {
-            builder.assign(&counter, counter + F::one());
-            builder
-                .if_eq(counter, RVar::from(break_len))
-                .then_may_break(|builder| builder.break_loop())
+            builder.range(0, i).may_break().for_each(|_, builder| {
+                builder.assign(&counter, counter + F::one());
+                builder
+                    .if_eq(counter, RVar::from(break_len))
+                    .then_may_break(|builder| builder.break_loop())
+            });
+
+            builder.set(&mut array, i, counter);
+            Ok(())
         });
-
-        builder.set(&mut array, i, counter);
-    });
 
     // Test that the array is correctly initialized.
 
@@ -162,6 +168,7 @@ fn test_compiler_break() {
 #[test]
 fn test_compiler_constant_break() {
     let mut builder = AsmBuilder::<F, EF>::default();
+    builder.set_static_loops(true);
     type C = AsmConfig<F, EF>;
 
     let len = 100;
@@ -170,7 +177,8 @@ fn test_compiler_constant_break() {
     let mut array: Array<C, Var<_>> = builder.uninit_fixed_array(len);
     builder
         .range(0, array.len())
-        .for_each_may_break(|i, builder| {
+        .may_break()
+        .for_each(|i, builder| {
             builder.set(&mut array, i, i);
 
             builder
@@ -195,7 +203,8 @@ fn test_compiler_constant_var_break() {
     let mut array: Array<C, Var<_>> = builder.uninit_fixed_array(len);
     builder
         .range(0, array.len())
-        .for_each_may_break(|i, builder| {
+        .may_break()
+        .for_each(|i, builder| {
             builder.set(&mut array, i, i);
 
             builder
