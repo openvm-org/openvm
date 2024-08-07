@@ -232,10 +232,14 @@ and let `decompose: u32 -> Word` be the inverse operation.
 
 Immediates are handled as follows: `compose(word[a]_0) = a.as_canonical_u32()`. Note that RV32 immediates never exceed 20-bits, so any immediate bits inside a 31-bit field.
 
-| Mnemonic  | <div style="width:170px">Operands (asm)</div> | Description                                                                                                                                                                                                                                |
-| --------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **CASTU** | `a, b, _`                                     | Set `word[a]_d` to the unique word with 8-bit limbs such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = proj(word[b]_e)`. The limbs of `word[a]_d` must be range checked. If `WORD_SIZE > 4` then all remaining cells in `word[a]_d` must be zero. |
-| **SLTU**  | `a, b, c`                                     | Set `word[a]_d <- compose(word[b]_d) < compose(word[c]_e) ? emb(1) : emb(0)`. The address space `d` is not allowed to be zero.                                                                                                             |
+<!--
+A note on CASTU below: support for casting arbitrary field elements can also be supported by doing a big int less than between the word and the byte decomposition of `p`, but this seemed unnecessary and complicates the constraints.
+-->
+
+| Mnemonic  | <div style="width:170px">Operands (asm)</div> | Description                                                                                                                                                                                                                                                                                            |
+| --------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **CASTU** | `a, b, _`                                     | Set `word[a]_d` to the unique word such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = proj(word[b]_e)` where `[a + i]_d < 2^8` for `i = 0..3` and `[a + 3]_d < 2^6`. This opcode enforces `proj(word[b]_e)` must be at most 30-bits. If `WORD_SIZE > 4` then all remaining cells in `word[a]_d` must be zero. |
+| **SLTU**  | `a, b, c`                                     | Set `word[a]_d <- compose(word[b]_d) < compose(word[c]_e) ? emb(1) : emb(0)`. The address space `d` is not allowed to be zero.                                                                                                                                                                         |
 
 ### Hash function precompiles
 
