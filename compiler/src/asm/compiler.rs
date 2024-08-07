@@ -15,7 +15,7 @@ use crate::{
 pub(crate) const ZERO: i32 = 0;
 
 /// The memory location for the top of memory
-pub const MEMORY_TOP: i32 = (1 << 30) - 1;
+pub const MEMORY_TOP: i32 = (1 << 30) - 4;
 
 /// The heap pointer address.
 pub(crate) const HEAP_PTR: i32 = MEMORY_TOP - 4;

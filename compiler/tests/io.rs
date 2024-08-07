@@ -20,18 +20,18 @@ fn test_io() {
         builder.print_v(el);
     });
 
-    // let felts = builder.hint_felts();
-    // builder.range(0, felts.len()).for_each(|i, builder| {
-    //     let el = builder.get(&felts, i);
-    //     builder.print_f(el);
-    // });
-    //
-    // let exts = builder.hint_exts();
-    // builder.range(0, exts.len()).for_each(|i, builder| {
-    //     let el = builder.get(&exts, i);
-    //     builder.print_e(el);
-    // });
-    //
+    let felts = builder.hint_felts();
+    builder.range(0, felts.len()).for_each(|i, builder| {
+        let el = builder.get(&felts, i);
+        builder.print_f(el);
+    });
+
+    let exts = builder.hint_exts();
+    builder.range(0, exts.len()).for_each(|i, builder| {
+        let el = builder.get(&exts, i);
+        builder.print_e(el);
+    });
+
     builder.halt();
 
     let witness_stream: Vec<Vec<F>> = vec![

@@ -335,14 +335,14 @@ fn test_felt_equality() {
 
     let a: Felt<_> = builder.constant(f);
     builder.assert_felt_eq(a, f);
-    // builder.assert_felt_eq(f, a);
-    // builder.assert_felt_eq(a, a);
-    // builder.assert_ext_eq(a, a);
+    builder.assert_felt_eq(f, a);
+    builder.assert_felt_eq(a, a);
+    builder.assert_ext_eq(a, a);
 
-    // builder.assert_felt_ne(a, a + F::one());
-    // builder.assert_felt_ne(a, f + F::one());
-    // builder.assert_felt_ne(a + F::one(), a);
-    // builder.assert_felt_ne(f + F::one(), a);
+    builder.assert_felt_ne(a, a + F::one());
+    builder.assert_felt_ne(a, f + F::one());
+    builder.assert_felt_ne(a + F::one(), a);
+    builder.assert_felt_ne(f + F::one(), a);
 
     builder.halt();
 
