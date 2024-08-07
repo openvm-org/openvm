@@ -1,6 +1,6 @@
 use afs_compiler::{
-    asm::{AsmBuilder, AsmConfig},
-    conversion::CompilerOptions,
+    asm::{AsmBuilder, AsmCompiler, AsmConfig},
+    conversion::{convert_program, CompilerOptions},
     ir::{Builder, Ext, ExtConst, Felt, SymbolicExt, Var},
     util::execute_program,
 };
@@ -346,7 +346,12 @@ fn test_felt_equality() {
 
     builder.halt();
 
-    let program = builder.clone().compile_isa::<WORD_SIZE>();
+    let mut compiler = AsmCompiler::new(WORD_SIZE);
+    compiler.build(builder.operations);
+    let asm_code = compiler.code();
+    println!("{}", asm_code);
+
+    let program = convert_program::<WORD_SIZE, F, EF>(asm_code, CompilerOptions::default());
     execute_program::<WORD_SIZE>(program, vec![]);
 }
 

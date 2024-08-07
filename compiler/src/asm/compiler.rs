@@ -14,17 +14,20 @@ use crate::{
 /// The zero address.
 pub(crate) const ZERO: i32 = 0;
 
-/// The offset which the stack starts.
-pub(crate) const STACK_START_OFFSET: i32 = 100;
+/// The memory location for the top of memory
+pub const MEMORY_TOP: i32 = (1 << 30) - 4;
 
 /// The heap pointer address.
-pub(crate) const HEAP_PTR: i32 = -4;
+pub(crate) const HEAP_PTR: i32 = MEMORY_TOP - 4;
+/// Utility register.
+pub(crate) const A0: i32 = MEMORY_TOP - 8;
+pub(crate) const A4: i32 = MEMORY_TOP - 24;
 
-pub(crate) const A0: i32 = -8;
-pub(crate) const A4: i32 = -24;
+/// The memory location for the top of the stack.
+pub(crate) const STACK_TOP: i32 = MEMORY_TOP - 100;
 
-// sizeof(var) = sizeof(felt) = 1 and sizeof(ext) == 4
-pub const FP_INCREMENT: i32 = 6;
+// The memory location for the start of the heap.
+pub(crate) const HEAP_START_ADDRESS: usize = 4;
 
 /// The assembly compiler.
 // #[derive(Debug, Clone, Default)]
@@ -35,27 +38,28 @@ pub struct AsmCompiler<F, EF> {
     break_counter: usize,
     contains_break: BTreeSet<F>,
     function_labels: BTreeMap<String, F>,
+    trap_label: F,
     word_size: usize,
 }
 
 impl<F> Var<F> {
     /// Gets the frame pointer for a var.
     pub const fn fp(&self) -> i32 {
-        -(self.0 as i32 + STACK_START_OFFSET)
+        STACK_TOP - self.0 as i32
     }
 }
 
 impl<F> Felt<F> {
     /// Gets the frame pointer for a felt.
     pub const fn fp(&self) -> i32 {
-        -(self.0 as i32 + STACK_START_OFFSET)
+        STACK_TOP - self.0 as i32
     }
 }
 
 impl<F, EF> Ext<F, EF> {
     /// Gets the frame pointer for an extension element
     pub const fn fp(&self) -> i32 {
-        -(self.0 as i32 + STACK_START_OFFSET)
+        STACK_TOP - self.0 as i32
     }
 }
 
@@ -76,6 +80,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             contains_break: BTreeSet::new(),
             function_labels: BTreeMap::new(),
             break_counter: 0,
+            trap_label: F::one(),
             word_size,
         }
     }
@@ -91,14 +96,16 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
 
     /// Builds the operations into assembly instructions.
     pub fn build(&mut self, operations: TracedVec<DslIr<AsmConfig<F, EF>>>) {
-        // Initialize the heap pointer value.
         if self.block_label().is_zero() {
-            self.push(AsmInstruction::AddFI(HEAP_PTR, ZERO, F::zero()), None);
-            self.push(AsmInstruction::j(F::from_canonical_u32(2)), None);
-            self.new_break_label();
+            // Initialize the heap pointer value.
+            let heap_start = F::from_canonical_usize(HEAP_START_ADDRESS);
+            self.push(AsmInstruction::AddFI(HEAP_PTR, ZERO, heap_start), None);
+            // Jump over the TRAP instruction we are about to add.
+            self.push(AsmInstruction::j(self.trap_label + F::one()), None);
             self.basic_block();
+            // Add a TRAP instruction used as jump destination for all failed assertions.
+            assert_eq!(self.block_label(), self.trap_label);
             self.push(AsmInstruction::Trap, None);
-            self.new_break_label();
             self.basic_block();
         }
         // For each operation, generate assembly instructions.
@@ -491,7 +498,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     ),
                     _ => unimplemented!(),
                 },
-                DslIr::Error() => self.push(AsmInstruction::j(F::one()), debug_info),
+                DslIr::Error() => self.push(AsmInstruction::j(self.trap_label), debug_info),
                 DslIr::PrintF(dst) => {
                     self.push(AsmInstruction::PrintF(dst.fp()), debug_info);
                 }
@@ -603,13 +610,14 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         is_eq: bool,
         debug_info: Option<DebugInfo>,
     ) {
+        let trap_label = self.trap_label;
         let if_compiler = IfCompiler {
             compiler: self,
             lhs,
             rhs,
             is_eq: !is_eq,
         };
-        if_compiler.then_label(F::one(), debug_info);
+        if_compiler.then_label(trap_label, debug_info);
     }
 
     pub fn code(self) -> AssemblyCode<F, EF> {
@@ -648,7 +656,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             .push(instruction, debug_info);
     }
 
-    // reg[dst] <- reg[src] + c * reg[val]
+    // mem[dst] <- mem[src] + c * mem[val]
     // assumes dst != src
     fn add_scaled(&mut self, dst: i32, src: i32, val: i32, c: F, debug_info: Option<DebugInfo>) {
         if c == F::one() {
@@ -901,7 +909,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         for i in 0..EF::D {
             let j = (i * self.word_size) as i32;
             self.push(
-                AsmInstruction::AddFI(dst - j, ZERO, imm[i]),
+                AsmInstruction::AddFI(dst + j, ZERO, imm[i]),
                 debug_info.clone(),
             );
         }
@@ -911,7 +919,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         for i in 0..EF::D {
             self.push(
                 AsmInstruction::LoadFI(
-                    val.fp() - (i * self.word_size) as i32,
+                    val.fp() + (i * self.word_size) as i32,
                     addr,
                     offset + F::from_canonical_usize(i * self.word_size),
                 ),
@@ -924,7 +932,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         for i in 0..EF::D {
             self.push(
                 AsmInstruction::StoreFI(
-                    val.fp() - (i * self.word_size) as i32,
+                    val.fp() + (i * self.word_size) as i32,
                     addr,
                     offset + F::from_canonical_usize(i * self.word_size),
                 ),
@@ -944,7 +952,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         for i in 0..EF::D {
             let j = (i * self.word_size) as i32;
             self.push(
-                AsmInstruction::AddFI(dst.fp() - j, lhs.fp() - j, rhs[i]),
+                AsmInstruction::AddFI(dst.fp() + j, lhs.fp() + j, rhs[i]),
                 debug_info.clone(),
             );
         }
@@ -964,7 +972,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         for i in 1..EF::D {
             let j = (i * self.word_size) as i32;
             self.push(
-                AsmInstruction::AddFI(dst.fp() - j, lhs.fp() - j, F::zero()),
+                AsmInstruction::AddFI(dst.fp() + j, lhs.fp() + j, F::zero()),
                 debug_info.clone(),
             );
         }
@@ -987,7 +995,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         for i in 1..EF::D {
             let j = (i * self.word_size) as i32;
             self.push(
-                AsmInstruction::AddFI(dst.fp() - j, ZERO, rhs[i]),
+                AsmInstruction::AddFI(dst.fp() + j, ZERO, rhs[i]),
                 debug_info.clone(),
             );
         }
@@ -1003,7 +1011,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         for i in 0..EF::D {
             let j = (i * self.word_size) as i32;
             self.push(
-                AsmInstruction::MulF(dst.fp() - j, lhs.fp() - j, rhs.fp()),
+                AsmInstruction::MulF(dst.fp() + j, lhs.fp() + j, rhs.fp()),
                 debug_info.clone(),
             );
         }
@@ -1019,7 +1027,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         for i in 0..EF::D {
             let j = (i * self.word_size) as i32;
             self.push(
-                AsmInstruction::MulFI(dst.fp() - j, lhs.fp() - j, rhs),
+                AsmInstruction::MulFI(dst.fp() + j, lhs.fp() + j, rhs),
                 debug_info.clone(),
             );
         }
