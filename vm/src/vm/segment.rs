@@ -226,7 +226,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             "poseidon2_chip_rows".to_string(),
             self.poseidon2_chip.rows.len(),
         );
-        // todo: metrics
+        metrics.insert(
+            "is_less_than_ops".to_string(),
+            self.is_less_than_chip.rows.len(),
+        );
         metrics
     }
 }
