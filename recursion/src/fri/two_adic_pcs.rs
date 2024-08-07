@@ -111,50 +111,53 @@ pub fn verify_two_adic_pcs<C: Config>(
                 };
 
                 builder.cycle_tracker_start("compute-reduced-opening");
-                builder.range(0, opened_values.len()).for_each(|k, builder| {
-                    let mat_opening = builder.get(&opened_values, k);
-                    let mat = builder.get(&mats, k);
-                    let mat_points = mat.points;
-                    let mat_values = mat.values;
+                builder
+                    .range(0, opened_values.len())
+                    .for_each(|k, builder| {
+                        let mat_opening = builder.get(&opened_values, k);
+                        let mat = builder.get(&mats, k);
+                        let mat_points = mat.points;
+                        let mat_values = mat.values;
 
-                    let log2_domain_size = mat.domain.log_n;
-                    let log_height: Var<C::N> = builder.eval(log2_domain_size + log_blowup);
+                        let log2_domain_size = mat.domain.log_n;
+                        let log_height: Var<C::N> = builder.eval(log2_domain_size + log_blowup);
 
-                    let cur_ro = builder.get(&ro, log_height);
-                    let cur_alpha_pow = builder.get(&alpha_pow, log_height);
+                        let cur_ro = builder.get(&ro, log_height);
+                        let cur_alpha_pow = builder.get(&alpha_pow, log_height);
 
-                    let bits_reduced: Usize<_> = builder.eval(log_global_max_height - log_height);
-                    let index_bits_shifted = index_bits.shift(builder, bits_reduced);
+                        let bits_reduced: Usize<_> =
+                            builder.eval(log_global_max_height - log_height);
+                        let index_bits_shifted = index_bits.shift(builder, bits_reduced);
 
-                    let two_adic_generator = config.get_two_adic_generator(builder, log_height);
-                    builder.cycle_tracker_start("exp-reverse-bits-len");
-                    let two_adic_generator_exp = builder.exp_reverse_bits_len(
-                        two_adic_generator,
-                        &index_bits_shifted,
-                        log_height,
-                    );
-                    builder.cycle_tracker_end("exp-reverse-bits-len");
-                    let x: Felt<C::F> = builder.eval(two_adic_generator_exp * g);
+                        let two_adic_generator = config.get_two_adic_generator(builder, log_height);
+                        builder.cycle_tracker_start("exp-reverse-bits-len");
+                        let two_adic_generator_exp = builder.exp_reverse_bits_len(
+                            two_adic_generator,
+                            &index_bits_shifted,
+                            log_height,
+                        );
+                        builder.cycle_tracker_end("exp-reverse-bits-len");
+                        let x: Felt<C::F> = builder.eval(two_adic_generator_exp * g);
 
-                    builder.range(0, mat_points.len()).for_each(|l, builder| {
-                        let z: Ext<C::F, C::EF> = builder.get(&mat_points, l);
-                        let ps_at_z = builder.get(&mat_values, l);
+                        builder.range(0, mat_points.len()).for_each(|l, builder| {
+                            let z: Ext<C::F, C::EF> = builder.get(&mat_points, l);
+                            let ps_at_z = builder.get(&mat_values, l);
 
-                        builder.cycle_tracker_start("sp1-fri-fold");
-                        builder.range(0, ps_at_z.len()).for_each(|t, builder| {
-                            let p_at_x = builder.get(&mat_opening, t);
-                            let p_at_z = builder.get(&ps_at_z, t);
-                            let quotient = (p_at_z - p_at_x) / (z - x);
+                            builder.cycle_tracker_start("sp1-fri-fold");
+                            builder.range(0, ps_at_z.len()).for_each(|t, builder| {
+                                let p_at_x = builder.get(&mat_opening, t);
+                                let p_at_z = builder.get(&ps_at_z, t);
+                                let quotient = (p_at_z - p_at_x) / (z - x);
 
-                            builder.assign(&cur_ro, cur_ro + cur_alpha_pow * quotient);
-                            builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha);
+                                builder.assign(&cur_ro, cur_ro + cur_alpha_pow * quotient);
+                                builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha);
+                            });
+                            builder.cycle_tracker_end("sp1-fri-fold");
                         });
-                        builder.cycle_tracker_end("sp1-fri-fold");
-                    });
 
-                    builder.set_value(&mut ro, log_height, cur_ro);
-                    builder.set_value(&mut alpha_pow, log_height, cur_alpha_pow);
-                });
+                        builder.set_value(&mut ro, log_height, cur_ro);
+                        builder.set_value(&mut alpha_pow, log_height, cur_alpha_pow);
+                    });
                 builder.cycle_tracker_end("compute-reduced-opening");
             });
 
