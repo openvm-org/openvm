@@ -372,7 +372,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
             // if mem[lhs + i] != rhs[i] for i = 0..4, pc <- labels[label]
             inst(
                 BNE,
-                i32_f(lhs - ((i * WORD_SIZE) as i32)),
+                i32_f(lhs + ((i * WORD_SIZE) as i32)),
                 rhs.as_base_slice()[i],
                 labels(label) - (pc + F::from_canonical_usize(i)),
                 AS::Memory,

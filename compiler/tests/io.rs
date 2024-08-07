@@ -1,11 +1,10 @@
 use afs_compiler::{
-    asm::AsmBuilder,
-    util::{display_program, execute_program},
+    asm::{AsmBuilder, AsmCompiler},
+    conversion::{convert_program, CompilerOptions},
+    util::execute_program,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use afs_compiler::asm::AsmCompiler;
-use afs_compiler::conversion::{CompilerOptions, convert_program};
 use stark_vm::cpu::WORD_SIZE;
 
 type F = BabyBear;

@@ -1,14 +1,12 @@
 use afs_compiler::{
-    asm::{AsmBuilder, AsmConfig},
-    conversion::CompilerOptions,
+    asm::{AsmBuilder, AsmCompiler, AsmConfig},
+    conversion::{convert_program, CompilerOptions},
     ir::{Builder, Ext, ExtConst, Felt, SymbolicExt, Var},
     util::execute_program,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
 use rand::{thread_rng, Rng};
-use afs_compiler::asm::AsmCompiler;
-use afs_compiler::conversion::convert_program;
 use stark_vm::{
     cpu::trace::ExecutionError::Fail,
     vm::{config::VmConfig, VirtualMachine},
