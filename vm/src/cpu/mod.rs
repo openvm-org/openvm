@@ -24,6 +24,7 @@ pub const FIELD_EXTENSION_BUS: usize = 3;
 pub const RANGE_CHECKER_BUS: usize = 4;
 pub const POSEIDON2_BUS: usize = 5;
 pub const POSEIDON2_DIRECT_BUS: usize = 6;
+pub const NEW_MEMORY_BUS: usize = 7;
 
 pub const CPU_MAX_READS_PER_CYCLE: usize = 2;
 pub const CPU_MAX_WRITES_PER_CYCLE: usize = 1;

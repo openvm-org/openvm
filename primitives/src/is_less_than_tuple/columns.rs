@@ -1,4 +1,5 @@
 use afs_derive::AlignedBorrow;
+use derive_new::new;
 
 use super::IsLessThanTupleAir;
 use crate::{
@@ -6,7 +7,7 @@ use crate::{
     is_less_than::columns::{IsLessThanAuxCols, IsLessThanAuxColsMut},
 };
 
-#[derive(Default, Debug, AlignedBorrow)]
+#[derive(Default, Debug, AlignedBorrow, new)]
 pub struct IsLessThanTupleIoCols<T> {
     pub x: Vec<T>,
     pub y: Vec<T>,
@@ -108,7 +109,7 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, new)]
 pub struct IsLessThanTupleCols<T> {
     pub io: IsLessThanTupleIoCols<T>,
     pub aux: IsLessThanTupleAuxCols<T>,

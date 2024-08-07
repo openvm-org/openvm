@@ -76,7 +76,7 @@ The following notation is used throughout this document:
 
 **Operand values**: `opa`, `opb`, `opc` denote the value encoded in the operand a, b, or c of the current instruction.
 
-**CPU registers**: `pc` denote the value of the current program counter.
+**CPU registers**: `pc` denotes the value of the current program counter.
 
 **Addressing**: we support different address spaces via `as_b, as_c`.
 
