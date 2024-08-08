@@ -1,8 +1,9 @@
 use afs_derive::AlignedBorrow;
+use derive_new::new;
 
 use super::IsLessThanAir;
 
-#[derive(Default, AlignedBorrow)]
+#[derive(Default, AlignedBorrow, new)]
 pub struct IsLessThanIoCols<T> {
     pub x: T,
     pub y: T,
@@ -56,6 +57,7 @@ impl<T> IsLessThanAuxCols<T> {
     }
 }
 
+#[derive(new)]
 pub struct IsLessThanCols<T> {
     pub io: IsLessThanIoCols<T>,
     pub aux: IsLessThanAuxCols<T>,

@@ -10,6 +10,7 @@ use crate::{
 };
 
 mod air;
+mod columns;
 mod trace;
 
 pub struct MemoryOfflineChecker {

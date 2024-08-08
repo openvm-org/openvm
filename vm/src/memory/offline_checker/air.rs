@@ -1,13 +1,64 @@
 use afs_primitives::{
+    is_less_than::{
+        columns::{IsLessThanCols, IsLessThanIoCols},
+        IsLessThanAir,
+    },
     offline_checker::columns::OfflineCheckerCols,
     sub_chip::{AirConfig, SubAir},
+    utils::or,
 };
 use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::Matrix;
 
-use super::{MemoryChip, MemoryOfflineChecker};
+use super::{columns::MemoryOfflineCheckerCols, MemoryChip, MemoryOfflineChecker};
+use crate::memory::manager::eval_memory_interactions;
+
+pub struct NewMemoryOfflineChecker<const WORD_SIZE: usize> {
+    pub clk_lt_air: IsLessThanAir,
+}
+
+impl<const WORD_SIZE: usize> AirConfig for NewMemoryOfflineChecker<WORD_SIZE> {
+    type Cols<T> = MemoryOfflineCheckerCols<WORD_SIZE, T>;
+}
+
+impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for NewMemoryOfflineChecker<WORD_SIZE> {
+    fn width(&self) -> usize {
+        MemoryOfflineCheckerCols::<WORD_SIZE, usize>::width(self)
+    }
+}
+
+impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB>
+    for NewMemoryOfflineChecker<WORD_SIZE>
+{
+    fn eval(&self, builder: &mut AB) {
+        let main = &builder.main();
+        let local = MemoryOfflineCheckerCols::<WORD_SIZE, AB::Var>::from_slice(&main.row_slice(0));
+
+        // Ensuring clk_lt is correct
+        let clk_lt_cols = IsLessThanCols::<AB::Var>::new(
+            IsLessThanIoCols::new(
+                local.op_cols.clk_read,
+                local.op_cols.clk_write,
+                local.clk_lt,
+            ),
+            local.clk_lt_aux,
+        );
+
+        SubAir::eval(&self.clk_lt_air, builder, clk_lt_cols.io, clk_lt_cols.aux);
+
+        // Ensuring clk_read is less than clk_write
+        // TODO[osama]: I think this should be <=
+        builder.assert_one(or::<AB>(local.clk_lt.into(), local.is_extra.into()));
+
+        eval_memory_interactions(
+            builder,
+            local.op_cols,
+            AB::Expr::one() - local.is_extra.into(),
+        );
+    }
+}
 
 impl<const WORD_SIZE: usize, F: PrimeField32> AirConfig for MemoryChip<WORD_SIZE, F> {
     type Cols<T> = OfflineCheckerCols<T>;

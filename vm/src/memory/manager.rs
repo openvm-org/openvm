@@ -1,6 +1,9 @@
 use std::{array::from_fn, iter};
 
+use afs_stark_backend::interaction::InteractionBuilder;
 use derive_new::new;
+
+use crate::cpu::NEW_MEMORY_BUS;
 
 #[derive(new)]
 pub struct MemoryReadWriteOpCols<const WORD_SIZE: usize, T> {
@@ -36,6 +39,34 @@ impl<const WORD_SIZE: usize, T> MemoryReadWriteOpCols<WORD_SIZE, T> {
             .chain(iter::once(self.clk_write))
             .collect()
     }
+
+    pub fn width() -> usize {
+        4 + 2 * WORD_SIZE
+    }
+}
+
+pub fn eval_memory_interactions<const WORD_SIZE: usize, AB: InteractionBuilder>(
+    builder: &mut AB,
+    op_cols: MemoryReadWriteOpCols<WORD_SIZE, AB::Var>,
+    mult: AB::Expr,
+) {
+    builder.push_send(
+        NEW_MEMORY_BUS,
+        iter::once(op_cols.address_space)
+            .chain(iter::once(op_cols.address))
+            .chain(op_cols.data_write)
+            .chain(iter::once(op_cols.clk_write)),
+        mult.clone(),
+    );
+
+    builder.push_receive(
+        NEW_MEMORY_BUS,
+        iter::once(op_cols.address_space)
+            .chain(iter::once(op_cols.address))
+            .chain(op_cols.data_read)
+            .chain(iter::once(op_cols.clk_read)),
+        mult,
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
