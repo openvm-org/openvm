@@ -2,23 +2,23 @@ use super::{Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, Usize, Va
 
 /// A logical array.
 #[derive(Debug, Clone)]
-pub struct RefPtr<C: Config, T> {
+pub struct Ref<C: Config, T> {
     pub ptr: Ptr<C::N>,
     phantom: std::marker::PhantomData<T>,
 }
 
 impl<C: Config> Builder<C> {
     /// Initialize a new instance of type T. The entries will be uninitialized.
-    pub fn new_ref_ptr<V: MemVariable<C>>(&mut self) -> RefPtr<C, V> {
+    pub fn new_ref_ptr<V: MemVariable<C>>(&mut self) -> Ref<C, V> {
         let ptr = self.alloc(Usize::Const(1), V::size_of());
-        RefPtr {
+        Ref {
             ptr,
             phantom: std::marker::PhantomData,
         }
     }
 
     /// Copies the referenced data onto the stack
-    pub fn deref<V: MemVariable<C>>(&mut self, ptr: &RefPtr<C, V>) -> V {
+    pub fn deref<V: MemVariable<C>>(&mut self, ptr: &Ref<C, V>) -> V {
         let index = MemIndex {
             index: Usize::Const(0),
             offset: 0,
@@ -31,7 +31,7 @@ impl<C: Config> Builder<C> {
 
     pub fn set_to_expr<V: MemVariable<C>, Expr: Into<V::Expression>>(
         &mut self,
-        ptr: &mut RefPtr<C, V>,
+        ptr: &mut Ref<C, V>,
         value: Expr,
     ) {
         let index = MemIndex {
@@ -43,7 +43,7 @@ impl<C: Config> Builder<C> {
         self.store(ptr.ptr, index, value);
     }
 
-    pub fn set_to_value<V: MemVariable<C>>(&mut self, ptr: &mut RefPtr<C, V>, value: V) {
+    pub fn set_to_value<V: MemVariable<C>>(&mut self, ptr: &mut Ref<C, V>, value: V) {
         let index = MemIndex {
             index: Usize::Const(0),
             offset: 0,
@@ -53,7 +53,7 @@ impl<C: Config> Builder<C> {
     }
 }
 
-impl<C: Config, T: MemVariable<C>> Variable<C> for RefPtr<C, T> {
+impl<C: Config, T: MemVariable<C>> Variable<C> for Ref<C, T> {
     type Expression = Self;
 
     fn uninit(builder: &mut Builder<C>) -> Self {
@@ -61,7 +61,7 @@ impl<C: Config, T: MemVariable<C>> Variable<C> for RefPtr<C, T> {
     }
 
     fn assign(&self, src: Self::Expression, builder: &mut Builder<C>) {
-        let (RefPtr { ptr: lhs_ptr, .. }, RefPtr { ptr: rhs_ptr, .. }) = (self, src.clone());
+        let (Ref { ptr: lhs_ptr, .. }, Ref { ptr: rhs_ptr, .. }) = (self, src.clone());
         {
             builder.assign(*lhs_ptr, rhs_ptr);
         }
@@ -97,7 +97,7 @@ impl<C: Config, T: MemVariable<C>> Variable<C> for RefPtr<C, T> {
     }
 }
 
-impl<C: Config, T: MemVariable<C>> MemVariable<C> for RefPtr<C, T> {
+impl<C: Config, T: MemVariable<C>> MemVariable<C> for Ref<C, T> {
     fn size_of() -> usize {
         1
     }
@@ -111,7 +111,7 @@ impl<C: Config, T: MemVariable<C>> MemVariable<C> for RefPtr<C, T> {
     }
 }
 
-impl<C: Config, V: FromConstant<C> + MemVariable<C>> FromConstant<C> for RefPtr<C, V> {
+impl<C: Config, V: FromConstant<C> + MemVariable<C>> FromConstant<C> for Ref<C, V> {
     type Constant = V::Constant;
 
     fn constant(value: Self::Constant, builder: &mut Builder<C>) -> Self {
@@ -122,7 +122,7 @@ impl<C: Config, V: FromConstant<C> + MemVariable<C>> FromConstant<C> for RefPtr<
     }
 }
 
-impl<C: Config, V: MemVariable<C>> RefPtr<C, V> {
+impl<C: Config, V: MemVariable<C>> Ref<C, V> {
     pub fn from_ptr(ptr: Ptr<C::N>) -> Self {
         Self {
             ptr,

@@ -198,8 +198,7 @@ where
             builder.dyn_array::<TwoAdicPcsMatsVariable<C>>(domains_and_openings_val.len());
 
         for (i, (domain, openning)) in domains_and_openings_val.into_iter().enumerate() {
-            let domain =
-                RefPtr::<_, TwoAdicMultiplicativeCosetVariable<_>>::constant(domain, builder);
+            let domain = Ref::<_, TwoAdicMultiplicativeCosetVariable<_>>::constant(domain, builder);
 
             let points_val = openning.iter().map(|(p, _)| *p).collect::<Vec<_>>();
             let values_val = openning.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>();

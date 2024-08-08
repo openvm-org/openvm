@@ -1,6 +1,6 @@
 use afs_compiler::{
     asm::AsmBuilder,
-    ir::{Array, Config, Ext, ExtConst, Felt, RefPtr, Var},
+    ir::{Array, Config, Ext, ExtConst, Felt, Ref, Var},
     prelude::{Builder, MemIndex, MemVariable, Ptr, Variable},
     util::execute_program,
 };
@@ -11,9 +11,9 @@ use rand::{thread_rng, Rng};
 
 #[derive(DslVariable, Clone, Debug)]
 pub struct Point<C: Config> {
-    x: RefPtr<C, Var<C::N>>,
-    y: RefPtr<C, Felt<C::F>>,
-    z: RefPtr<C, Ext<C::F, C::EF>>,
+    x: Ref<C, Var<C::N>>,
+    y: Ref<C, Felt<C::F>>,
+    z: Ref<C, Ext<C::F, C::EF>>,
 }
 
 #[test]
@@ -85,13 +85,13 @@ fn test_compiler_array() {
 
     builder.range(0, dyn_len).for_each(|i, builder| {
         let x: Var<_> = builder.eval(F::two());
-        let mut x_ptr: RefPtr<_, Var<_>> = builder.uninit();
+        let mut x_ptr: Ref<_, Var<_>> = builder.uninit();
         builder.set_to_value(&mut x_ptr, x);
         let y: Felt<_> = builder.eval(F::one());
-        let mut y_ptr: RefPtr<_, Felt<_>> = builder.uninit();
+        let mut y_ptr: Ref<_, Felt<_>> = builder.uninit();
         builder.set_to_value(&mut y_ptr, y);
         let z: Ext<_, _> = builder.eval(EF::one().cons());
-        let mut z_ptr: RefPtr<_, Ext<_, _>> = builder.uninit();
+        let mut z_ptr: Ref<_, Ext<_, _>> = builder.uninit();
         builder.set_to_value(&mut z_ptr, z);
         let point = Point {
             x: x_ptr,

@@ -64,7 +64,7 @@ pub struct DimensionsVariable<C: Config> {
 
 #[derive(DslVariable, Clone)]
 pub struct TwoAdicPcsProofVariable<C: Config> {
-    pub fri_proof: RefPtr<C, FriProofVariable<C>>,
+    pub fri_proof: Ref<C, FriProofVariable<C>>,
     pub query_openings: Array<C, Array<C, BatchOpeningVariable<C>>>,
 }
 
@@ -83,7 +83,7 @@ pub struct TwoAdicPcsRoundVariable<C: Config> {
 
 #[derive(DslVariable, Clone)]
 pub struct TwoAdicPcsMatsVariable<C: Config> {
-    pub domain: RefPtr<C, TwoAdicMultiplicativeCosetVariable<C>>,
+    pub domain: Ref<C, TwoAdicMultiplicativeCosetVariable<C>>,
     pub points: Array<C, Ext<C::F, C::EF>>,
     #[allow(clippy::type_complexity)]
     pub values: Array<C, Array<C, Ext<C::F, C::EF>>>,

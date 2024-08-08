@@ -4,9 +4,7 @@ use std::cell::RefCell;
 use itertools::Itertools;
 use p3_field::AbstractField;
 
-use super::{
-    Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, RefPtr, Usize, Var, Variable,
-};
+use super::{Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, Ref, Usize, Var, Variable};
 
 /// A logical array.
 #[derive(Debug, Clone)]
@@ -225,7 +223,7 @@ impl<C: Config> Builder<C> {
         }
     }
 
-    pub fn ptr_at<V: MemVariable<C>, I: Into<Usize<C::N>>>(
+    fn ptr_at<V: MemVariable<C>, I: Into<Usize<C::N>>>(
         &mut self,
         slice: &Array<C, V>,
         index: I,
@@ -243,22 +241,21 @@ impl<C: Config> Builder<C> {
                     let valid = self.lt(index_v, len_v);
                     self.assert_var_eq(valid, C::N::one());
                 }
-                let offset = Ptr {
-                    address: self.eval(index * V::size_of()),
-                };
-                self.eval(*ptr + offset)
+                Ptr {
+                    address: self.eval(ptr.address + index * V::size_of()),
+                }
             }
         }
     }
 
-    pub fn get_ref_ptr<V: MemVariable<C>, I: Into<Usize<C::N>>>(
+    pub fn get_ref<V: MemVariable<C>, I: Into<Usize<C::N>>>(
         &mut self,
         slice: &Array<C, V>,
         index: I,
-    ) -> RefPtr<C, V> {
+    ) -> Ref<C, V> {
         let index = index.into();
         let ptr = self.ptr_at(slice, index);
-        RefPtr::from_ptr(ptr)
+        Ref::from_ptr(ptr)
     }
 
     pub fn set<V: MemVariable<C>, I: Into<Usize<C::N>>, Expr: Into<V::Expression>>(
