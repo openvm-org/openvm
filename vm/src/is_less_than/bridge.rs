@@ -1,15 +1,21 @@
-use afs_primitives::is_less_than::columns::IsLessThanIoCols;
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_field::AbstractField;
 
-use super::IsLessThanVmAir;
+use super::{columns::IsLessThanVmCols, IsLessThanVmAir};
 
 impl IsLessThanVmAir {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        io: IsLessThanIoCols<AB::Var>,
+        cols: IsLessThanVmCols<AB::Var>,
     ) {
-        builder.push_receive(self.bus_index, [io.x, io.y, io.less_than], AB::F::one());
+        builder.push_receive(
+            self.bus_index,
+            [
+                cols.internal.io.x,
+                cols.internal.io.y,
+                cols.internal.io.less_than,
+            ],
+            cols.is_enabled,
+        );
     }
 }

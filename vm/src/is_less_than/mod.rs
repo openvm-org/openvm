@@ -10,6 +10,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 pub mod air;
 pub mod bridge;
+pub mod columns;
 #[cfg(test)]
 pub mod tests;
 
@@ -57,7 +58,7 @@ impl<F: PrimeField32> IsLessThanChip<F> {
     }
 
     pub fn generate_trace(&self) -> RowMajorMatrix<F> {
-        let width = IsLessThanCols::<F>::width(&self.air.inner);
+        let width = IsLessThanCols::<F>::width(&self.air.inner) + 1;
         let mut traces: Vec<F> = self.rows.iter().flat_map(|row| row.flatten()).collect();
         let current_height = self.rows.len();
         let correct_height = current_height.next_power_of_two();

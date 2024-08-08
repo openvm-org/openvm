@@ -6,15 +6,15 @@ use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use super::IsLessThanVmAir;
+use super::{columns::IsLessThanVmCols, IsLessThanVmAir};
 
 impl AirConfig for IsLessThanVmAir {
-    type Cols<T> = IsLessThanCols<T>;
+    type Cols<T> = IsLessThanVmCols<T>;
 }
 
 impl<F: Field> BaseAir<F> for IsLessThanVmAir {
     fn width(&self) -> usize {
-        IsLessThanCols::<F>::width(&self.inner)
+        IsLessThanCols::<F>::width(&self.inner) + 1
     }
 }
 
@@ -24,10 +24,10 @@ impl<AB: InteractionBuilder> Air<AB> for IsLessThanVmAir {
 
         let local = main.row_slice(0);
         let local: &[<AB>::Var] = (*local).borrow();
-        let cols = IsLessThanCols::<AB::Var>::from_slice(local);
+        let cols = IsLessThanVmCols::<AB::Var>::from_slice(local);
 
         self.inner.eval(builder);
 
-        self.eval_interactions(builder, cols.io);
+        self.eval_interactions(builder, cols);
     }
 }
