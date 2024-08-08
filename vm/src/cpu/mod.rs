@@ -15,6 +15,8 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
+pub use air::CpuAir;
+
 pub const INST_WIDTH: usize = 1;
 
 pub const READ_INSTRUCTION_BUS: usize = 0;
@@ -172,18 +174,6 @@ impl CpuOptions {
 
     pub fn num_enabled_instructions(&self) -> usize {
         self.enabled_instructions().len()
-    }
-}
-
-#[derive(Default, Clone)]
-/// Air for the CPU. Carries no state and does not own execution.
-pub struct CpuAir<const WORD_SIZE: usize> {
-    pub options: CpuOptions,
-}
-
-impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
-    pub fn new(options: CpuOptions) -> Self {
-        Self { options }
     }
 }
 
