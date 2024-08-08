@@ -74,14 +74,16 @@ pub fn verify_two_adic_pcs<C: Config>(
                 let mut batch_heights_log2: Array<C, Var<C::N>> = builder.array(mats.len());
                 builder.range(0, mats.len()).for_each(|k, builder| {
                     let mat = builder.get(&mats, k);
-                    let height_log2: Var<_> = builder.eval(mat.domain.log_n + log_blowup);
+                    let domain = builder.deref(&mat.domain);
+                    let height_log2: Var<_> = builder.eval(domain.log_n + log_blowup);
                     builder.set_value(&mut batch_heights_log2, k, height_log2);
                 });
                 let mut batch_dims: Array<C, DimensionsVariable<C>> = builder.array(mats.len());
                 builder.range(0, mats.len()).for_each(|k, builder| {
                     let mat = builder.get(&mats, k);
+                    let domain = builder.deref(&mat.domain);
                     let dim = DimensionsVariable::<C> {
-                        height: builder.eval(mat.domain.size() * blowup),
+                        height: builder.eval(domain.size() * blowup),
                     };
                     builder.set_value(&mut batch_dims, k, dim);
                 });
@@ -118,8 +120,8 @@ pub fn verify_two_adic_pcs<C: Config>(
                         let mat = builder.get(&mats, k);
                         let mat_points = mat.points;
                         let mat_values = mat.values;
-
-                        let log2_domain_size = mat.domain.log_n;
+                        let domain = builder.deref(&mat.domain);
+                        let log2_domain_size = domain.log_n;
                         let log_height: Var<C::N> = builder.eval(log2_domain_size + log_blowup);
 
                         let cur_ro = builder.get(&ro, log_height);
@@ -199,7 +201,8 @@ where
             builder.dyn_array::<TwoAdicPcsMatsVariable<C>>(domains_and_openings_val.len());
 
         for (i, (domain, openning)) in domains_and_openings_val.into_iter().enumerate() {
-            let domain = builder.constant::<TwoAdicMultiplicativeCosetVariable<_>>(domain);
+            let domain =
+                RefPtr::<_, TwoAdicMultiplicativeCosetVariable<_>>::constant(domain, builder);
 
             let points_val = openning.iter().map(|(p, _)| *p).collect::<Vec<_>>();
             let values_val = openning.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>();
@@ -217,7 +220,6 @@ where
                 }
                 builder.set_value(&mut values, j, tmp);
             }
-
             let mat = TwoAdicPcsMatsVariable {
                 domain,
                 points,

@@ -83,7 +83,7 @@ pub struct TwoAdicPcsRoundVariable<C: Config> {
 
 #[derive(DslVariable, Clone)]
 pub struct TwoAdicPcsMatsVariable<C: Config> {
-    pub domain: TwoAdicMultiplicativeCosetVariable<C>,
+    pub domain: RefPtr<C, TwoAdicMultiplicativeCosetVariable<C>>,
     pub points: Array<C, Ext<C::F, C::EF>>,
     #[allow(clippy::type_complexity)]
     pub values: Array<C, Array<C, Ext<C::F, C::EF>>>,
