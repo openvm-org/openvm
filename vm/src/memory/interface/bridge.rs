@@ -15,8 +15,9 @@ impl<const CHUNK: usize> MemoryInterfaceAir<CHUNK> {
             // direction =  1 => is_final = 0
             // direction = -1 => is_final = 1
             (AB::Expr::one() - local.expand_direction) * AB::F::two().inverse(),
-            local.address_space.into(),
             AB::Expr::zero(),
+            (local.address_space - AB::F::from_canonical_usize(self.memory_dimensions.as_offset))
+                * AB::F::from_canonical_usize(1 << self.memory_dimensions.address_height),
             local.leaf_label.into(),
         ];
         expand_fields.extend(local.values.map(AB::Var::into));

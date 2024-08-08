@@ -38,6 +38,7 @@ pub struct AsmCompiler<F, EF> {
     break_counter: usize,
     contains_break: BTreeSet<F>,
     function_labels: BTreeMap<String, F>,
+    trap_label: F,
     word_size: usize,
 }
 
@@ -79,6 +80,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             contains_break: BTreeSet::new(),
             function_labels: BTreeMap::new(),
             break_counter: 0,
+            trap_label: F::one(),
             word_size,
         }
     }
@@ -94,15 +96,16 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
 
     /// Builds the operations into assembly instructions.
     pub fn build(&mut self, operations: TracedVec<DslIr<AsmConfig<F, EF>>>) {
-        // Initialize the heap pointer value.
         if self.block_label().is_zero() {
+            // Initialize the heap pointer value.
             let heap_start = F::from_canonical_usize(HEAP_START_ADDRESS);
             self.push(AsmInstruction::AddFI(HEAP_PTR, ZERO, heap_start), None);
-            self.push(AsmInstruction::j(F::from_canonical_u32(2)), None);
-            self.new_break_label();
+            // Jump over the TRAP instruction we are about to add.
+            self.push(AsmInstruction::j(self.trap_label + F::one()), None);
             self.basic_block();
+            // Add a TRAP instruction used as jump destination for all failed assertions.
+            assert_eq!(self.block_label(), self.trap_label);
             self.push(AsmInstruction::Trap, None);
-            self.new_break_label();
             self.basic_block();
         }
         // For each operation, generate assembly instructions.
@@ -495,7 +498,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     ),
                     _ => unimplemented!(),
                 },
-                DslIr::Error() => self.push(AsmInstruction::j(F::one()), debug_info),
+                DslIr::Error() => self.push(AsmInstruction::j(self.trap_label), debug_info),
                 DslIr::PrintF(dst) => {
                     self.push(AsmInstruction::PrintF(dst.fp()), debug_info);
                 }
@@ -607,13 +610,14 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         is_eq: bool,
         debug_info: Option<DebugInfo>,
     ) {
+        let trap_label = self.trap_label;
         let if_compiler = IfCompiler {
             compiler: self,
             lhs,
             rhs,
             is_eq: !is_eq,
         };
-        if_compiler.then_label(F::one(), debug_info);
+        if_compiler.then_label(trap_label, debug_info);
     }
 
     pub fn code(self) -> AssemblyCode<F, EF> {

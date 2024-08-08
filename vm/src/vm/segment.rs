@@ -12,7 +12,7 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::DenseMatrix;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
-use super::{ChipType, VirtualMachineState, VmConfig, VmMetrics};
+use super::{cycle_tracker::CycleTracker, ChipType, VirtualMachineState, VmConfig, VmMetrics};
 use crate::{
     cpu::{trace::ExecutionError, CpuChip, CpuOptions, POSEIDON2_BUS, RANGE_CHECKER_BUS},
     field_arithmetic::FieldArithmeticChip,
@@ -35,12 +35,11 @@ pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub hint_stream: VecDeque<F>,
     pub has_generation_happened: bool,
     pub public_values: Vec<Option<F>>,
-    pub opcode_counts: BTreeMap<String, usize>,
-    pub dsl_counts: BTreeMap<String, usize>,
-    pub opcode_trace_cells: BTreeMap<String, usize>,
+
+    pub cycle_tracker: CycleTracker,
     /// Collected metrics for this segment alone.
     /// Only collected when `config.collect_metrics` is true.
-    pub(crate) collected_metrics: VmMetrics,
+    pub(crate) metrics: VmMetrics,
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
@@ -61,10 +60,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             POSEIDON2_BUS,
         );
 
-        let opcode_counts = BTreeMap::new();
-        let dsl_counts = BTreeMap::new();
-        let opcode_trace_cells = BTreeMap::new();
-
         Self {
             config,
             has_generation_happened: false,
@@ -78,10 +73,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             poseidon2_chip,
             input_stream: state.input_stream,
             hint_stream: state.hint_stream,
-            opcode_counts,
-            dsl_counts,
-            opcode_trace_cells,
-            collected_metrics: Default::default(),
+            cycle_tracker: CycleTracker::new(),
+            metrics: Default::default(),
         }
     }
 
@@ -183,7 +176,11 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         result
     }
 
-    pub fn metrics(&self) -> BTreeMap<String, usize> {
+    pub fn update_chip_metrics(&mut self) {
+        self.metrics.chip_metrics = self.chip_metrics();
+    }
+
+    pub fn chip_metrics(&self) -> BTreeMap<String, usize> {
         let mut metrics = BTreeMap::new();
         metrics.insert("cpu_cycles".to_string(), self.cpu_chip.rows.len());
         metrics.insert("cpu_timestamp".to_string(), self.cpu_chip.state.timestamp);

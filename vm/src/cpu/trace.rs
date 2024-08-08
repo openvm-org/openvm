@@ -22,7 +22,7 @@ use crate::{
     memory::{compose, decompose},
     poseidon2::{columns::Poseidon2VmCols, Poseidon2Chip},
     program::columns::ProgramPreprocessedCols,
-    vm::{cycle_tracker::CycleTracker, ExecutionSegment},
+    vm::ExecutionSegment,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
@@ -159,7 +159,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
         let mut pc = F::from_canonical_usize(vm.cpu_chip.state.pc);
 
         let mut hint_stream = vm.hint_stream.clone();
-        let mut cycle_tracker = CycleTracker::<F>::new();
+        let mut cycle_tracker = std::mem::take(&mut vm.cycle_tracker);
         let mut is_done = false;
         let mut collect_metrics = vm.config.collect_metrics;
 
@@ -232,22 +232,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     accesses[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
                         memory_access_to_cols(true, $address_space, $address, word);
                 }};
-            }
-
-            if collect_metrics {
-                #[cfg(debug_assertions)]
-                vm.opcode_counts
-                    .entry(opcode.to_string())
-                    .and_modify(|count| *count += 1)
-                    .or_insert(1);
-
-                if !dsl_instr.is_empty() {
-                    #[cfg(debug_assertions)]
-                    vm.dsl_counts
-                        .entry(dsl_instr)
-                        .and_modify(|count| *count += 1)
-                        .or_insert(1);
-                }
             }
 
             if opcode == FAIL {
@@ -370,20 +354,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     let base_pointer = read!(d, a);
                     write!(e, base_pointer + b, hint);
                 }
-                CT_START => cycle_tracker.start(
-                    debug,
-                    &vm.metrics(),
-                    &vm.opcode_counts,
-                    &vm.dsl_counts,
-                    &vm.opcode_trace_cells,
-                ),
-                CT_END => cycle_tracker.end(
-                    debug,
-                    &vm.metrics(),
-                    &vm.opcode_counts,
-                    &vm.dsl_counts,
-                    &vm.opcode_trace_cells,
-                ),
+                CT_START => cycle_tracker.start(debug, vm.metrics.clone()),
+                CT_END => cycle_tracker.end(debug, vm.metrics.clone()),
             };
 
             let final_accesses = vm.memory_chip.accesses.len();
@@ -398,18 +370,36 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let final_poseidon2_rows = vm.poseidon2_chip.rows.len();
             let num_poseidon2_rows = final_poseidon2_rows - initial_poseidon2_rows;
 
-            let trace_cells = CpuCols::<WORD_SIZE, F>::get_width(vm.options())
-                + ProgramPreprocessedCols::<F>::get_width()
-                + num_accesses_memory_rows * vm.memory_chip.air.air_width()
-                + num_field_base_ops * FieldExtensionArithmeticCols::<F>::get_width()
-                + num_field_extension_ops * FieldExtensionArithmeticCols::<F>::get_width()
-                + num_poseidon2_rows * Poseidon2VmCols::<16, F>::get_width(&vm.poseidon2_chip.air);
+            if collect_metrics {
+                vm.update_chip_metrics();
+                vm.metrics
+                    .opcode_counts
+                    .entry(opcode.to_string())
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
 
-            #[cfg(debug_assertions)]
-            vm.opcode_trace_cells
-                .entry(opcode.to_string())
-                .and_modify(|count| *count += trace_cells)
-                .or_insert(trace_cells);
+                if !dsl_instr.is_empty() {
+                    vm.metrics
+                        .dsl_counts
+                        .entry(dsl_instr)
+                        .and_modify(|count| *count += 1)
+                        .or_insert(1);
+                }
+
+                let trace_cells = CpuCols::<WORD_SIZE, F>::get_width(vm.options())
+                    + ProgramPreprocessedCols::<F>::get_width()
+                    + num_accesses_memory_rows * vm.memory_chip.air.air_width()
+                    + num_field_base_ops * FieldExtensionArithmeticCols::<F>::get_width()
+                    + num_field_extension_ops * FieldExtensionArithmeticCols::<F>::get_width()
+                    + num_poseidon2_rows
+                        * Poseidon2VmCols::<16, F>::get_width(&vm.poseidon2_chip.air);
+
+                vm.metrics
+                    .opcode_trace_cells
+                    .entry(opcode.to_string())
+                    .and_modify(|count| *count += trace_cells)
+                    .or_insert(trace_cells);
+            }
 
             let mut operation_flags = BTreeMap::new();
             for other_opcode in vm.options().enabled_instructions() {
@@ -441,10 +431,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             clock_cycle += 1;
             if opcode == TERMINATE {
                 // Due to row padding, the padded rows will all have opcode TERMINATE, so stop metric collection after the first one
-                if collect_metrics {
-                    vm.collected_metrics = vm.metrics();
-                    collect_metrics = false;
-                }
+                collect_metrics = false;
             }
             if opcode == TERMINATE && vm.cpu_chip.current_height().is_power_of_two() {
                 is_done = true;
@@ -455,12 +442,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             }
         }
 
-        cycle_tracker.print();
-        if collect_metrics {
-            // No TERMINATE was encountered, so collect metrics at the end of the segment
-            vm.collected_metrics = vm.metrics();
-        }
-
         // Update CPU chip state with all changes from this segment.
         vm.cpu_chip.set_state(ExecutionState {
             clock_cycle,
@@ -469,6 +450,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             is_done,
         });
         vm.hint_stream = hint_stream;
+        vm.cycle_tracker = cycle_tracker;
         vm.cpu_chip.generate_pvs();
 
         if !is_done {
