@@ -100,6 +100,12 @@ pub enum DslIr<C: Config> {
     /// Inverts an extension field element (ext = 1 / ext).
     InvE(Ext<C::F, C::EF>, Ext<C::F, C::EF>),
 
+    // Comparisons.
+    /// Compares two variables
+    LessThanV(Var<C::N>, Var<C::N>, Var<C::N>),
+    /// Compares a variable and an immediate
+    LessThanVI(Var<C::N>, Var<C::N>, C::N),
+
     // Control flow.
     /// Executes a for loop with the parameters (start step value, end step value, step size, step variable, body).
     For(

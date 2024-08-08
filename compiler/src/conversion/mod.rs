@@ -15,6 +15,7 @@ pub struct CompilerOptions {
     pub enable_cycle_tracker: bool,
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
+    pub field_less_than_enabled: bool,
 }
 
 impl Default for CompilerOptions {
@@ -24,6 +25,7 @@ impl Default for CompilerOptions {
             enable_cycle_tracker: false,
             field_arithmetic_enabled: true,
             field_extension_enabled: true,
+            field_less_than_enabled: true,
         }
     }
 }
@@ -85,6 +87,33 @@ fn i32_f<F: PrimeField32>(x: i32) -> F {
         -F::from_canonical_u32((-x) as u32)
     } else {
         F::from_canonical_u32(x as u32)
+    }
+}
+
+fn convert_comparison_instruction<F: PrimeField32, EF: ExtensionField<F>>(
+    instruction: AsmInstruction<F, EF>,
+) -> Vec<Instruction<F>> {
+    match instruction {
+        AsmInstruction::LessThanF(dst, lhs, rhs) => vec![inst(
+            F_LESS_THAN,
+            i32_f(dst),
+            i32_f(lhs),
+            i32_f(rhs),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::LessThanFI(dst, lhs, rhs) => vec![inst(
+            F_LESS_THAN,
+            i32_f(dst),
+            i32_f(lhs),
+            rhs,
+            AS::Memory,
+            AS::Immediate,
+        )],
+        _ => panic!(
+            "Illegal argument to convert_comparison_instruction: {:?}",
+            instruction
+        ),
     }
 }
 
@@ -477,6 +506,16 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
             } else {
                 panic!(
                     "Unsupported instruction {:?}, field arithmetic is disabled",
+                    instruction
+                )
+            }
+        }
+        AsmInstruction::LessThanF(..) | AsmInstruction::LessThanFI(..) => {
+            if options.field_less_than_enabled {
+                convert_comparison_instruction(instruction)
+            } else {
+                panic!(
+                    "Unsupported instruction {:?}, field less than is disabled",
                     instruction
                 )
             }

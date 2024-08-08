@@ -289,6 +289,18 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::MulEFI(dst, lhs, rhs) => {
                     self.mul_ext_felti(dst, lhs, rhs, debug_info);
                 }
+                DslIr::LessThanV(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::LessThanF(dst.fp(), lhs.fp(), rhs.fp()),
+                        debug_info,
+                    );
+                }
+                DslIr::LessThanVI(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::LessThanFI(dst.fp(), lhs.fp(), rhs),
+                        debug_info,
+                    );
+                }
                 DslIr::IfEq(lhs, rhs, then_block, else_block) => {
                     let if_compiler = IfCompiler {
                         compiler: self,

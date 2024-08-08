@@ -265,9 +265,10 @@ impl<C: Config> Builder<C> {
         self.assert_ne::<Ext<C::F, C::EF>>(lhs, rhs);
     }
 
+    /// Compares two variables.
     pub fn lt(&mut self, lhs: Var<C::N>, rhs: Var<C::N>) -> Var<C::N> {
         let result = self.uninit();
-        self.operations.push(DslIr::LessThan(result, lhs, rhs));
+        self.operations.push(DslIr::LessThanV(result, lhs, rhs));
         result
     }
 

@@ -94,6 +94,7 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
         enable_cycle_tracker: false,
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
+        field_less_than_enabled: true,
     });
     execute_and_prove_program::<WORD_SIZE>(program, input_stream)
 }

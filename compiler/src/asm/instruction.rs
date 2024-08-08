@@ -41,6 +41,12 @@ pub enum AsmInstruction<F, EF> {
     /// Divide immediate, dst = lhs / rhs.
     DivFI(i32, i32, F),
 
+    /// Less than, dst = lhs < rhs.
+    LessThanF(i32, i32, i32),
+
+    /// Less than immediate, dst = lhs < rhs.
+    LessThanFI(i32, i32, F),
+
     /// Add extension, dst = lhs + rhs.
     AddE(i32, i32, i32),
 
@@ -172,6 +178,12 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::DivFI(dst, lhs, rhs) => {
                 write!(f, "divi  ({})fp, ({})fp, {}", dst, lhs, rhs)
+            }
+            AsmInstruction::LessThanF(dst, lhs, rhs) => {
+                write!(f, "lt  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
+            }
+            AsmInstruction::LessThanFI(dst, lhs, rhs) => {
+                write!(f, "lti  ({})fp, ({})fp, {}", dst, lhs, rhs)
             }
             AsmInstruction::AddE(dst, lhs, rhs) => {
                 write!(f, "eadd ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
