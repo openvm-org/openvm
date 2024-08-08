@@ -31,7 +31,7 @@ use tracing::info_span;
 use crate::{
     config::benchmark_data::{BenchmarkSetup, BACKEND_TIMING_FILTERS, BACKEND_TIMING_HEADERS},
     utils::tracing::{clear_tracing_log, extract_timing_data_from_log, setup_benchmark_tracing},
-    workflow::metrics::{BenchmarkMetrics, CustomMetrics},
+    workflow::metrics::{BenchmarkMetrics, VmCustomMetrics},
     TMP_RESULT_MD, TMP_TRACING_LOG,
 };
 
@@ -228,25 +228,19 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         .map(|(k, v)| (k, v.to_string()))
         .collect();
 
-    let sorted_opcode_counts: Vec<(String, String)> = opcode_counts
-        .clone()
+    let opcode_counts: Vec<(String, usize)> = opcode_counts
         .into_iter()
-        .sorted_by(|a, b| a.1.cmp(&b.1))
-        .map(|(k, v)| (k, v.to_string()))
+        .sorted_by(|a, b| b.1.cmp(&a.1))
         .collect();
 
-    let sorted_dsl_counts: Vec<(String, String)> = dsl_counts
-        .clone()
+    let dsl_counts: Vec<(String, usize)> = dsl_counts
         .into_iter()
-        .sorted_by(|a, b| a.1.cmp(&b.1))
-        .map(|(k, v)| (k, v.to_string()))
+        .sorted_by(|a, b| b.1.cmp(&a.1))
         .collect();
 
-    let sorted_opcode_trace_cells: Vec<(String, String)> = opcode_trace_cells
-        .clone()
+    let opcode_trace_cells: Vec<(String, usize)> = opcode_trace_cells
         .into_iter()
-        .sorted_by(|a, b| a.1.cmp(&b.1))
-        .map(|(k, v)| (k, v.to_string()))
+        .sorted_by(|a, b| b.1.cmp(&a.1))
         .collect();
 
     let metrics = BenchmarkMetrics {
@@ -256,11 +250,11 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         perm_trace_gen_ms,
         calc_quotient_values_ms,
         trace: trace_metrics,
-        custom: CustomMetrics {
+        custom: VmCustomMetrics {
             vm_metrics,
-            opcode_counts: sorted_opcode_counts,
-            dsl_counts: sorted_dsl_counts,
-            opcode_trace_cells: sorted_opcode_trace_cells,
+            opcode_counts,
+            dsl_counts,
+            opcode_trace_cells,
         },
     };
 

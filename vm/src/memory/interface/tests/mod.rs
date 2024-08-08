@@ -10,6 +10,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 
 use crate::memory::{
+    expand::MemoryDimensions,
     interface::{
         columns::MemoryInterfaceCols, MemoryInterfaceChip, EXPAND_BUS, MEMORY_INTERFACE_BUS,
     },
@@ -55,7 +56,12 @@ fn random_test<const CHUNK: usize>(
 
     let mut initial_memory = HashMap::new();
     let mut final_memory = HashMap::new();
-    let mut chip = MemoryInterfaceChip::<CHUNK, _>::default();
+    let memory_dimensions = MemoryDimensions {
+        as_height: 1,
+        address_height: height,
+        as_offset: 1,
+    };
+    let mut chip = MemoryInterfaceChip::<CHUNK, _>::new(memory_dimensions);
 
     let mut touched_leaves = HashSet::new();
 
@@ -99,7 +105,7 @@ fn random_test<const CHUNK: usize>(
             if is_touched && num_touched_addresses != 0 {
                 num_touched_addresses -= 1;
                 let leaf_label = (address.1.as_canonical_u64() as usize) / CHUNK;
-                touched_leaves.insert((address.0, leaf_label));
+                touched_leaves.insert((address.0.as_canonical_u64() as usize, leaf_label));
 
                 let initially_read = next_bool!();
                 let new_value = if initially_read {
@@ -143,15 +149,17 @@ fn random_test<const CHUNK: usize>(
 
     let mut dummy_expand_trace_rows = vec![];
     let mut expand_interaction =
-        |is_final: bool, address_space: BabyBear, node_label: usize, hash: [BabyBear; CHUNK]| {
+        |is_final: bool, address_space: usize, node_label: usize, hash: [BabyBear; CHUNK]| {
             dummy_expand_trace_rows.push(if is_final {
                 BabyBear::neg_one()
             } else {
                 BabyBear::one()
             });
             dummy_expand_trace_rows.push(BabyBear::from_bool(is_final));
-            dummy_expand_trace_rows.push(address_space);
             dummy_expand_trace_rows.push(BabyBear::zero());
+            dummy_expand_trace_rows.push(BabyBear::from_canonical_usize(
+                (address_space - memory_dimensions.as_offset) << memory_dimensions.address_height,
+            ));
             dummy_expand_trace_rows.push(BabyBear::from_canonical_usize(node_label));
             dummy_expand_trace_rows.extend(hash);
         };
@@ -161,7 +169,7 @@ fn random_test<const CHUNK: usize>(
             let values = std::array::from_fn(|i| {
                 *memory
                     .get(&(
-                        address_space,
+                        BabyBear::from_canonical_usize(address_space),
                         BabyBear::from_canonical_usize((CHUNK * label) + i),
                     ))
                     .unwrap_or(&BabyBear::zero())
@@ -192,7 +200,7 @@ fn random_test<const CHUNK: usize>(
     let trace = chip.generate_trace(&final_memory, chip.get_trace_height().next_power_of_two());
 
     run_simple_test_no_pis(
-        vec![&chip.air(), &dummy_offline_checker_air, &dummy_expand_air],
+        vec![&chip.air, &dummy_offline_checker_air, &dummy_expand_air],
         vec![trace, dummy_offline_checker_trace, dummy_expand_trace],
     )
     .expect("Verification failed");
@@ -210,9 +218,13 @@ fn memory_interface_test_2() {
 
 #[test]
 #[should_panic]
-fn expand_negative_test() {
-    let mut chip = MemoryInterfaceChip::<DEFAULT_CHUNK, _>::default();
+fn memory_interface_negative_test() {
+    let mut chip = MemoryInterfaceChip::<DEFAULT_CHUNK, _>::new(MemoryDimensions {
+        as_height: 1,
+        address_height: 3,
+        as_offset: 1,
+    });
     chip.touched_leaves.insert((BabyBear::one(), 0));
     let trace = chip.generate_trace(&HashMap::new(), chip.get_trace_height().next_power_of_two());
-    run_simple_test_no_pis(vec![&chip.air()], vec![trace]).expect("This should occur");
+    run_simple_test_no_pis(vec![&chip.air], vec![trace]).expect("This should occur");
 }

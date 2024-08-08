@@ -2,7 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use p3_field::{Field, PrimeField32};
 
-use crate::memory::{interface::air::MemoryInterfaceAir, OpType, OpType::Read};
+use crate::memory::{
+    expand::MemoryDimensions, interface::air::MemoryInterfaceAir, OpType, OpType::Read,
+};
 
 pub mod air;
 pub mod bridge;
@@ -20,15 +22,19 @@ struct Cell<F: Field> {
     initial_value: F,
 }
 
-#[derive(Default)]
 pub struct MemoryInterfaceChip<const CHUNK: usize, F: PrimeField32> {
+    pub air: MemoryInterfaceAir<CHUNK>,
     touched_leaves: HashSet<(F, usize)>,
     touched_addresses: HashMap<(F, F), Cell<F>>,
 }
 
 impl<const CHUNK: usize, F: PrimeField32> MemoryInterfaceChip<CHUNK, F> {
-    pub fn air(&self) -> MemoryInterfaceAir<CHUNK> {
-        MemoryInterfaceAir {}
+    pub fn new(memory_dimensions: MemoryDimensions) -> Self {
+        Self {
+            air: MemoryInterfaceAir { memory_dimensions },
+            touched_leaves: Default::default(),
+            touched_addresses: Default::default(),
+        }
     }
     pub fn touch_address(&mut self, address_space: F, address: F, op_type: OpType, old_value: F) {
         let leaf_label = (address.as_canonical_u64() as usize) / CHUNK;
