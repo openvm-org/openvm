@@ -29,7 +29,7 @@ impl Default for VmConfig {
             perm_poseidon2_enabled: true,
             limb_bits: 30,
             decomp: 16,
-            is_less_than_enabled: true,
+            is_less_than_enabled: false,
             num_public_values: 0,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             collect_metrics: false,

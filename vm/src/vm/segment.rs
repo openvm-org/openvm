@@ -64,13 +64,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
             POSEIDON2_BUS,
         );
-        let is_less_than_chip = IsLessThanChip::new(
-            IS_LESS_THAN_BUS,
-            RANGE_CHECKER_BUS,
-            30,
-            decomp,
-            range_checker.clone(),
-        );
+        let is_less_than_chip =
+            IsLessThanChip::new(IS_LESS_THAN_BUS, 30, decomp, range_checker.clone());
 
         Self {
             config,

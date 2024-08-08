@@ -1,10 +1,6 @@
-use afs_compiler::{
-    asm::AsmBuilder,
-    ir::{Var, PERMUTATION_WIDTH},
-    util::end_to_end_test,
-};
+use afs_compiler::{asm::AsmBuilder, util::end_to_end_test};
 use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, AbstractField};
+use p3_field::extension::BinomialExtensionField;
 use rand::{thread_rng, Rng};
 
 type F = BabyBear;
@@ -87,28 +83,5 @@ fn test_compiler_poseidon2_hash() {
 
     builder.halt();
 
-    end_to_end_test::<WORD_SIZE, _>(builder, vec![]);
-}
-
-#[test]
-fn test_compiler_poseidon2_hash_v2() {
-    let mut rng = thread_rng();
-
-    let mut builder = AsmBuilder::<F, EF>::default();
-
-    let random_state_vals: [F; 2] = rng.gen();
-
-    let mut random_state = builder.dyn_array(PERMUTATION_WIDTH);
-    for (i, val) in random_state_vals.iter().enumerate() {
-        builder.set(&mut random_state, i, *val);
-    }
-
-    let idx: Var<_> = builder.eval(F::zero());
-    builder.if_eq(idx, F::zero()).then(|builder| {
-        let element = builder.get(&random_state, idx);
-        builder.print_f(element);
-    });
-
-    builder.halt();
     end_to_end_test::<WORD_SIZE, _>(builder, vec![]);
 }

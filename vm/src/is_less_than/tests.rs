@@ -20,13 +20,8 @@ const DECOMP: usize = 10;
 fn test_less_than() {
     let mut rng = create_seeded_rng();
     let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECK_BUS, 1 << DECOMP));
-    let mut chip: IsLessThanChip<BabyBear> = IsLessThanChip::new(
-        LESS_THAN_BUS,
-        RANGE_CHECK_BUS,
-        10,
-        DECOMP,
-        range_checker.clone(),
-    );
+    let mut chip: IsLessThanChip<BabyBear> =
+        IsLessThanChip::new(LESS_THAN_BUS, 10, DECOMP, range_checker.clone());
 
     let x = rng.gen_range(1..=100);
     let y = rng.gen_range(1..=100);

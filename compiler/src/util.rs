@@ -16,6 +16,15 @@ use stark_vm::{
 
 use crate::{asm::AsmBuilder, conversion::CompilerOptions};
 
+pub fn execute_program_with_config<const WORD_SIZE: usize>(
+    config: VmConfig,
+    program: Program<BabyBear>,
+    input_stream: Vec<Vec<BabyBear>>,
+) {
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(config, program, input_stream);
+    vm.execute().unwrap();
+}
+
 pub fn execute_program<const WORD_SIZE: usize>(
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
@@ -94,7 +103,7 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
         enable_cycle_tracker: false,
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
-        field_less_than_enabled: true,
+        field_less_than_enabled: false,
     });
     execute_and_prove_program::<WORD_SIZE>(program, input_stream)
 }

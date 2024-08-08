@@ -27,8 +27,7 @@ pub struct IsLessThanChip<F: PrimeField32> {
 
 impl<F: PrimeField32> IsLessThanChip<F> {
     pub fn new(
-        bus_index: usize,               // CPU <> IsLessThanChip
-        range_checker_bus_index: usize, // IsLessThanChip <> RangeChecker
+        bus_index: usize,
         max_bits: usize,
         decomp: usize,
         range_checker: Arc<RangeCheckerGateChip>,
@@ -36,7 +35,7 @@ impl<F: PrimeField32> IsLessThanChip<F> {
         Self {
             air: IsLessThanVmAir {
                 bus_index,
-                inner: IsLessThanAir::new(range_checker_bus_index, max_bits, decomp),
+                inner: IsLessThanAir::new(range_checker.air.bus_index, max_bits, decomp),
             },
             range_checker,
             rows: Vec::new(),
@@ -60,17 +59,9 @@ impl<F: PrimeField32> IsLessThanChip<F> {
     pub fn generate_trace(&self) -> RowMajorMatrix<F> {
         let width = IsLessThanCols::<F>::width(&self.air.inner);
         let mut traces: Vec<F> = self.rows.iter().flat_map(|row| row.flatten()).collect();
-        // Pad empty rows so the height is a power of 2.
-        let empty_row: Vec<F> = vec![F::zero(); width];
         let current_height = self.rows.len();
         let correct_height = current_height.next_power_of_two();
-        traces.extend(
-            empty_row
-                .iter()
-                .cloned()
-                .cycle()
-                .take((correct_height - current_height) * width),
-        );
+        traces.resize(correct_height * width, F::zero());
         RowMajorMatrix::new(traces, width)
     }
 }
