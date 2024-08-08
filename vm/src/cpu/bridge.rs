@@ -95,10 +95,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 accesses[1].data[0],
                 accesses[CPU_MAX_READS_PER_CYCLE].data[0],
             ];
-            let mut count = AB::Expr::zero();
-            if self.options.is_less_than_enabled {
-                count = count + operation_flags[&F_LESS_THAN];
-            }
+            let count = operation_flags[&F_LESS_THAN];
             builder.push_send(IS_LESS_THAN_BUS, fields, count);
         }
     }
