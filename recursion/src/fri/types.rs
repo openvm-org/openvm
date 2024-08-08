@@ -64,7 +64,7 @@ pub struct DimensionsVariable<C: Config> {
 
 #[derive(DslVariable, Clone)]
 pub struct TwoAdicPcsProofVariable<C: Config> {
-    pub fri_proof: FriProofVariable<C>,
+    pub fri_proof: RefPtr<C, FriProofVariable<C>>,
     pub query_openings: Array<C, Array<C, BatchOpeningVariable<C>>>,
 }
 
