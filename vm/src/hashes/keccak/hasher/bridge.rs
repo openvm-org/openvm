@@ -3,15 +3,32 @@ use itertools::Itertools;
 use p3_field::AbstractField;
 use p3_keccak_air::NUM_ROUNDS;
 
-use crate::cpu::{KECCAK_PERMUTE_BUS, MEMORY_BUS};
+use super::{columns::KeccakVmCols, KeccakVmAir, NUM_U64_HASH_ELEMS};
+use crate::cpu::{KECCAK256_BUS, MEMORY_BUS};
 
-use super::{columns::KeccakPermuteCols, KeccakPermuteAir, NUM_U64_HASH_ELEMS};
-
-impl KeccakPermuteAir {
-    pub fn eval_interactions<AB: InteractionBuilder>(
+impl KeccakVmAir {
+    /// Constrain state transition between keccak-f permutations is valid absorb of input bytes.
+    /// The end-state in last round is given by `a_prime_prime_prime()` in `u16` limbs.
+    /// The pre-state is given by `preimage` also in `u16` limbs.
+    /// The input `block_bytes` will be given as **bytes**.
+    ///
+    /// We will XOR `block_bytes` with `a_prime_prime_prime()` and constrain to be `next.preimage`.
+    /// This will be done using 8-bit XOR lookup in a separate AIR via interactions.
+    /// This will require decomposing `u16` into bytes.
+    /// Note that the XOR lookup automatically range checks its inputs to be bytes.
+    pub fn constrain_absorb<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: &KeccakPermuteCols<AB::Var>,
+        local: &KeccakVmCols<AB::Var>,
+        next: &KeccakVmCols<AB::Var>,
+    ) {
+    }
+
+    /*
+    pub fn constrain_memory_accesses<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        local: &KeccakVmCols<AB::Var>,
     ) {
         let is_input = local.io.is_opcode * local.inner.step_flags[0];
         // receive the opcode itself
@@ -85,7 +102,7 @@ impl KeccakPermuteAir {
             let timestamp = local.io.clk + AB::F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
 
-            let address = local.aux.dst + AB::F::from_canonical_usize(i);
+            let address = local.opcode.dst + AB::F::from_canonical_usize(i);
 
             let fields = [
                 timestamp,
@@ -98,4 +115,5 @@ impl KeccakPermuteAir {
             builder.push_send(MEMORY_BUS, fields, is_output.clone());
         }
     }
+    */
 }

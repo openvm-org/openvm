@@ -4,15 +4,14 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 use tiny_keccak::keccakf;
 
+use super::{columns::NUM_KECCAK_PERMUTE_COLS, KeccakPermuteChip};
 use crate::{
     cpu::{trace::Instruction, OpCode},
-    hashes::keccak::permute::columns::{
+    hashes::keccak::hasher::columns::{
         KeccakPermuteAuxCols, KeccakPermuteCols, KeccakPermuteIoCols,
     },
     vm::ExecutionSegment,
 };
-
-use super::{columns::NUM_KECCAK_PERMUTE_COLS, KeccakPermuteChip};
 
 impl<F: PrimeField32> KeccakPermuteChip<F> {
     /// Wrapper function for tiny-keccak's keccak-f permutation.
