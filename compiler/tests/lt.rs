@@ -1,9 +1,11 @@
-use afs_compiler::{asm::AsmBuilder, prelude::*};
+use afs_compiler::{asm::AsmBuilder, prelude::*, util::execute_program};
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
+
+const WORD_SIZE: usize = 1;
 
 #[test]
 fn test_compiler_less_than() {
@@ -19,9 +21,8 @@ fn test_compiler_less_than() {
     let c = builder.lt(a, b);
     builder.assert_var_eq(c, F::zero());
 
-    // let program = builder.compile_program();
+    builder.halt();
 
-    // let config = SC::default();
-    // let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
-    // runtime.run();
+    let program = builder.clone().compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE>(program, vec![]);
 }
