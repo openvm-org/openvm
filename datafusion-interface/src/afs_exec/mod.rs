@@ -1,27 +1,26 @@
-use afs_stark_backend::config::StarkGenericConfig;
-use color_eyre::eyre::Result;
+use std::{collections::VecDeque, sync::Arc};
+
 use datafusion::{
-    arrow::array::RecordBatch,
-    execution::context::{SessionContext, SessionState},
-    logical_expr::{LogicalPlan, TableScan},
+    arrow::array::RecordBatch, error::Result, execution::context::SessionContext,
+    logical_expr::LogicalPlan,
 };
 
-use crate::afs_logical_plan::{plan::PageScan, AfsLogicalPlan};
+use crate::afs_logical_plan::AfsLogicalPlan;
 
 pub struct AfsExec {
+    /// The session context
     pub ctx: SessionContext,
-    // pub plan: LogicalPlan,
-    pub afs_logical_plan: AfsLogicalPlan,
-    pub afs_execution_plan: Vec<AfsLogicalPlan>,
+    /// AfsLogicalPlan tree flattened into a vec to be executed sequentially
+    pub afs_execution_plan: Vec<Arc<AfsLogicalPlan>>,
 }
 
 impl AfsExec {
-    pub fn new(ctx: SessionContext, plan: LogicalPlan) -> Self {
-        let plan = ctx.state().optimize(&plan).unwrap();
-        let afs_logical_plan = Self::create_execution_plan(&plan, &ctx.state());
+    pub fn new(ctx: SessionContext, root: LogicalPlan) -> Self {
+        let root = ctx.state().optimize(&root).unwrap();
+        let afs_logical_plan = Self::convert_logical_tree(&root);
+        let afs_execution_plan = Self::flatten_tree(afs_logical_plan);
         Self {
             ctx,
-            afs_logical_plan,
             afs_execution_plan,
         }
     }
@@ -30,33 +29,32 @@ impl AfsExec {
         unimplemented!()
     }
 
-    pub fn create_execution_plan(root: &LogicalPlan, state: &SessionState) {
-        // Note: below DFS/flatten implementation copied from datafusion/core/src/physical_planner.rs
-        // DFS the tree to flatten it into a Vec.
-        // This will allow us to build the Physical Plan from the leaves up
-        // to avoid recursion, and also to make it easier to build a valid
-        // Physical Plan from the start and not rely on some intermediate
-        // representation (since parents need to know their children at
-        // construction time).
-        let mut flat_tree = vec![];
-        let mut dfs_visit_stack = vec![(None, root)];
-        // Use this to be able to find the leaves to start construction bottom
-        // up concurrently.
-        let mut flat_tree_leaf_indices = vec![];
+    pub fn convert_logical_tree(root: &LogicalPlan) -> Arc<AfsLogicalPlan> {
+        println!("convert_logical_tree Root: {:?}", root);
+        fn dfs(node: &LogicalPlan) -> Arc<AfsLogicalPlan> {
+            let children: Vec<Arc<AfsLogicalPlan>> =
+                node.inputs().iter().map(|child| dfs(child)).collect();
+            let afs_node = AfsLogicalPlan::from(node, children);
+            Arc::new(afs_node)
+        }
+        dfs(root)
     }
 
-    pub fn map_logical_plan_to_afs(
-        node: &LogicalPlan,
-        state: &SessionState,
-    ) -> Result<AfsLogicalPlan> {
-        let afs_node = match node {
-            LogicalPlan::TableScan(table_scan) => {
-                let page_id = table_scan.table_name.to_string();
-                let source = table_scan.source.clone();
-                AfsLogicalPlan::PageScan(PageScan { page_id, source })
+    pub fn flatten_tree(root: Arc<AfsLogicalPlan>) -> Vec<Arc<AfsLogicalPlan>> {
+        println!("flatten_treeRoot: {:?}", root);
+        let mut flat_plan = Vec::new();
+        let mut stack = VecDeque::new();
+        stack.push_back(root);
+
+        while let Some(node) = stack.pop_front() {
+            flat_plan.push(node.clone());
+            for input in node.inputs() {
+                stack.push_back(input.clone());
             }
-            _ => unimplemented!(),
-        };
-        Ok(afs_node)
+        }
+        println!("Flattened plan: {:?}", flat_plan);
+
+        // flat_plan.reverse();
+        flat_plan
     }
 }

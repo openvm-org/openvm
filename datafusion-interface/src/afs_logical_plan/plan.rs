@@ -2,11 +2,19 @@ use std::sync::Arc;
 
 use datafusion::logical_expr::TableSource;
 
+use super::AfsLogicalPlan;
+use crate::afs_expr::AfsExpr;
+
 #[derive(Clone)]
 pub struct PageScan {
     pub page_id: String,
-    pub source: Arc<dyn TableSource>,
+    pub input: Arc<dyn TableSource>,
+    pub output: Option<Arc<dyn TableSource>>,
 }
 
-#[derive(Debug, Clone)]
-pub struct Filter {}
+#[derive(Clone)]
+pub struct Filter {
+    pub predicate: AfsExpr,
+    pub input: Arc<AfsLogicalPlan>,
+    pub output: Option<Arc<dyn TableSource>>,
+}

@@ -104,6 +104,7 @@ dependencies = [
  "bincode",
  "color-eyre",
  "datafusion",
+ "futures",
  "p3-field",
  "protobuf",
  "serde",

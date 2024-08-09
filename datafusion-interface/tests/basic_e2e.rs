@@ -1,44 +1,58 @@
 use std::sync::Arc;
 
-use afs_datafusion_interface::{afs_exec::AfsExec, committed_page::CommittedPage};
+use afs_datafusion_interface::{afs_exec::AfsExec, committed_page, committed_page::CommittedPage};
 use afs_page::common::page::Page;
 use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use datafusion::{
     arrow::datatypes::{DataType, Field, Schema},
     execution::{context::SessionContext, options::CsvReadOptions},
-    logical_expr::LogicalPlan,
+    logical_expr::{col, lit, table_scan, Expr, LogicalPlan},
+    physical_planner::{DefaultPhysicalPlanner, PhysicalPlanner},
 };
 
 #[tokio::test]
 pub async fn test_basic_e2e() {
     let ctx = SessionContext::new();
-    // ctx.register_table(table_ref, provider);
-
-    // let df = ctx
-    //     .read_csv("tests/data/example.csv", CsvReadOptions::new())
-    //     .await
-    //     .unwrap();
-    // let results = df.collect().await.unwrap();
-    // println!("{:?}", results);
 
     // ctx.register_csv("example", "tests/data/example.csv", CsvReadOptions::new())
     //     .await
     //     .unwrap();
 
-    let schema_path = std::fs::read("tests/data/example.schema.bin").unwrap();
-    let schema: Schema = bincode::deserialize(&schema_path).unwrap();
-    let page_path = std::fs::read("tests/data/example.page.bin").unwrap();
-    let page: Page = bincode::deserialize(&page_path).unwrap();
-    let cp =
-        CommittedPage::<BabyBearPoseidon2Config>::new("example".to_string(), schema, page, None);
+    let cp = committed_page!(
+        "example",
+        "tests/data/example.page.bin",
+        "tests/data/example.schema.bin",
+        BabyBearPoseidon2Config
+    );
+    let schema = cp.schema.clone();
     ctx.register_table("example", Arc::new(cp)).unwrap();
 
     // let sql = "SELECT a FROM example WHERE a <= b GROUP BY a";
-    let sql = "SELECT a FROM example";
-    let logical = ctx.state().create_logical_plan(sql).await.unwrap();
+    // let sql = "SELECT a FROM example WHERE a <= 10";
+    // let sql = "SELECT a FROM example";
+    // let logical = ctx.state().create_logical_plan(sql).await.unwrap();
+    let logical = table_scan(Some("example"), &schema, None)
+        .unwrap()
+        .filter(col("a").lt(lit(10)))
+        .unwrap()
+        // .filter(col("b").lt(lit(20)))
+        // .unwrap()
+        .build()
+        .unwrap();
+    println!("{:#?}", logical.clone());
+    // let default_planner = DefaultPhysicalPlanner::default();
+    // let physical = default_planner
+    //     .create_physical_plan(&logical, &ctx.state())
+    //     .await
+    //     .unwrap();
     // let execution = ctx.state().create_physical_plan(&logical).await.unwrap();
-    println!("{:?}", logical);
+    // println!("{:#?}", physical);
+    // let res = physical.execute(0, ctx.task_ctx()).unwrap();
+    // while let Some(batch) = res.as_ref().next().await {
+    //     println!("{:?}", batch);
+    // }
     let afs = AfsExec::new(ctx, logical);
+    println!("{:?}", afs.afs_execution_plan);
     // let output = afs.execute().unwrap();
     // println!("{:?}", output);
 }

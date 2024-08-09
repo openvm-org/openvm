@@ -11,8 +11,9 @@ use datafusion::{
     physical_plan::ExecutionPlan,
 };
 use p3_field::PrimeField64;
+use serde::{de::DeserializeOwned, Serialize};
 
-use super::CommittedPage;
+use super::{execution_plan::CommittedPageExec, CommittedPage};
 
 pub type Result<T, E = DataFusionError> = result::Result<T, E>;
 
@@ -20,10 +21,10 @@ pub type Result<T, E = DataFusionError> = result::Result<T, E>;
 impl<SC: StarkGenericConfig + 'static> TableProvider for CommittedPage<SC>
 where
     Val<SC>: PrimeField64,
-    PcsProverData<SC>: Send + Sync,
+    PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
     PcsProof<SC>: Send + Sync,
     Com<SC>: Send + Sync,
-    SC::Pcs: Sync,
+    SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
     fn as_any(&self) -> &dyn Any {
@@ -45,6 +46,7 @@ where
         _filters: &[Expr],
         _limit: Option<usize>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
-        panic!("CommittedPage does not support generation of a DataFusion ExecutionPlan")
+        let exec = CommittedPageExec::new(self.page.clone(), self.schema.clone());
+        Ok(Arc::new(exec))
     }
 }
