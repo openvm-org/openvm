@@ -5,6 +5,7 @@ use afs_primitives::{
     range_gate::RangeCheckerGateChip,
     sub_chip::LocalTraceInstructions,
 };
+use columns::IsLessThanVmCols;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -23,7 +24,7 @@ pub struct IsLessThanVmAir {
 pub struct IsLessThanChip<F: PrimeField32> {
     pub air: IsLessThanVmAir,
     pub range_checker: Arc<RangeCheckerGateChip>,
-    pub rows: Vec<IsLessThanCols<F>>,
+    pub rows: Vec<IsLessThanVmCols<F>>,
 }
 
 impl<F: PrimeField32> IsLessThanChip<F> {
@@ -52,7 +53,10 @@ impl<F: PrimeField32> IsLessThanChip<F> {
             (x, y, self.range_checker.clone()),
         );
         let result = row.io.less_than;
-        self.rows.push(row);
+        self.rows.push(IsLessThanVmCols {
+            is_enabled: F::one(),
+            internal: row,
+        });
 
         result
     }

@@ -1,6 +1,9 @@
 use std::borrow::Borrow;
 
-use afs_primitives::{is_less_than::columns::IsLessThanCols, sub_chip::AirConfig};
+use afs_primitives::{
+    is_less_than::columns::IsLessThanCols,
+    sub_chip::{AirConfig, SubAir},
+};
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, BaseAir};
 use p3_field::Field;
@@ -26,7 +29,12 @@ impl<AB: InteractionBuilder> Air<AB> for IsLessThanVmAir {
         let local: &[<AB>::Var] = (*local).borrow();
         let cols = IsLessThanVmCols::<AB::Var>::from_slice(local);
 
-        self.inner.eval(builder);
+        SubAir::eval(
+            &self.inner,
+            builder,
+            cols.internal.io.clone(),
+            cols.internal.aux.clone(),
+        );
 
         self.eval_interactions(builder, cols);
     }
