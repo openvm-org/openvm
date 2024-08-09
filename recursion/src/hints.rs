@@ -52,7 +52,7 @@ pub trait Hintable<C: Config> {
 
     fn witness(variable: &Self::HintVariable, builder: &mut Builder<C>) {
         let target = Self::read(builder);
-        builder.assign(variable.clone(), target);
+        builder.assign(variable, target);
     }
 }
 

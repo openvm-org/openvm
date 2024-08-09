@@ -31,7 +31,7 @@ fn test_cycle_tracker() {
 
     for _ in 0..3 {
         let n_plus_m: Var<_> = builder.eval(n + m);
-        builder.assign(total, total + n_plus_m);
+        builder.assign(&total, total + n_plus_m);
     }
 
     builder.cycle_tracker_end("loop");

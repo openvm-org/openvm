@@ -92,13 +92,13 @@ where
     fn split_domains(
         &self,
         builder: &mut Builder<C>,
-        log_num_chunks: impl Into<Usize<C::N>>,
-        num_chunks: impl Into<Usize<C::N>>,
+        log_num_chunks: impl Into<RVar<C::N>>,
+        num_chunks: impl Into<RVar<C::N>>,
     ) -> Array<C, Self> {
         let log_num_chunks = log_num_chunks.into();
         let num_chunks = num_chunks.into();
         let log_n: Var<_> = builder.eval(self.log_n - log_num_chunks);
-        let size = builder.sll(C::N::one(), Usize::Var(log_n));
+        let size = builder.sll(C::N::one(), RVar::Val(log_n));
 
         let g_dom = self.gen();
         let g = builder.exp_power_of_2_v::<Felt<C::F>>(g_dom, log_num_chunks);
@@ -115,7 +115,7 @@ where
                 g,
             };
             builder.set(&mut domains, i, domain);
-            builder.assign(domain_power, domain_power * g_dom);
+            builder.assign(&domain_power, domain_power * g_dom);
         });
 
         domains
@@ -124,7 +124,7 @@ where
     fn split_domains_const(&self, builder: &mut Builder<C>, log_num_chunks: usize) -> Vec<Self> {
         let num_chunks = 1 << log_num_chunks;
         let log_n: Var<_> = builder.eval(self.log_n - C::N::from_canonical_usize(log_num_chunks));
-        let size = builder.sll(C::N::one(), Usize::Var(log_n));
+        let size = builder.sll(C::N::one(), RVar::Val(log_n));
 
         let g_dom = self.gen();
         let g = builder.exp_power_of_2_v::<Felt<C::F>>(g_dom, log_num_chunks);
@@ -139,7 +139,7 @@ where
                 shift: builder.eval(self.shift * domain_power),
                 g,
             });
-            builder.assign(domain_power, domain_power * g_dom);
+            builder.assign(&domain_power, domain_power * g_dom);
         }
         domains
     }
@@ -147,11 +147,11 @@ where
     fn create_disjoint_domain(
         &self,
         builder: &mut Builder<C>,
-        log_degree: Usize<<C as Config>::N>,
+        log_degree: RVar<<C as Config>::N>,
         config: Option<FriConfigVariable<C>>,
     ) -> Self {
         let domain = config.unwrap().get_subgroup(builder, log_degree);
-        builder.assign(domain.shift, self.shift * C::F::generator());
+        builder.assign(&domain.shift, self.shift * C::F::generator());
         domain
     }
 }
@@ -239,9 +239,12 @@ pub(crate) mod tests {
                 zeta_val,
             );
 
-            let log_degree: Usize<_> = builder.eval(Usize::Const(log_d_val) + log_quotient_degree);
-            let disjoint_domain_gen =
-                domain.create_disjoint_domain(&mut builder, log_degree, Some(config_var.clone()));
+            let log_degree = log_d_val + log_quotient_degree;
+            let disjoint_domain_gen = domain.create_disjoint_domain(
+                &mut builder,
+                log_degree.into(),
+                Some(config_var.clone()),
+            );
             domain_assertions(
                 &mut builder,
                 &disjoint_domain_gen,
@@ -257,8 +260,7 @@ pub(crate) mod tests {
             }
 
             // Test the splitting of domains by the builder.
-            let quotient_size: Usize<_> = builder.eval(1 << log_quotient_degree);
-            let log_quotient_degree: Usize<_> = builder.eval(log_quotient_degree);
+            let quotient_size = 1 << log_quotient_degree;
             let qc_domains =
                 disjoint_domain.split_domains(&mut builder, log_quotient_degree, quotient_size);
             for (i, dom_val) in qc_domains_val.iter().enumerate() {

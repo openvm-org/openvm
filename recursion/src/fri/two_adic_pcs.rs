@@ -149,8 +149,8 @@ pub fn verify_two_adic_pcs<C: Config>(
                                 let p_at_z = builder.get(&ps_at_z, t);
                                 let quotient = (p_at_z - p_at_x) / (z - x);
 
-                                builder.assign(cur_ro, cur_ro + cur_alpha_pow * quotient);
-                                builder.assign(cur_alpha_pow, cur_alpha_pow * alpha);
+                                builder.assign(&cur_ro, cur_ro + cur_alpha_pow * quotient);
+                                builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha);
                             });
                             builder.cycle_tracker_end("sp1-fri-fold");
                         });
@@ -195,8 +195,8 @@ where
             builder.set(&mut commit, i, f);
         }
 
-        let mut mats =
-            builder.dyn_array::<TwoAdicPcsMatsVariable<C>>(domains_and_openings_val.len());
+        let mut mats = builder
+            .dyn_array::<TwoAdicPcsMatsVariable<C>>(RVar::from(domains_and_openings_val.len()));
 
         for (i, (domain, openning)) in domains_and_openings_val.into_iter().enumerate() {
             let domain = builder.constant::<TwoAdicMultiplicativeCosetVariable<_>>(domain);
@@ -252,7 +252,7 @@ where
     fn natural_domain_for_log_degree(
         &self,
         builder: &mut Builder<C>,
-        log_degree: Usize<C::N>,
+        log_degree: RVar<C::N>,
     ) -> Self::Domain {
         self.config.get_subgroup(builder, log_degree)
     }
@@ -274,14 +274,13 @@ pub mod tests {
 
     use afs_compiler::{
         asm::AsmBuilder,
-        ir::{Array, Usize, Var, DIGEST_SIZE},
+        ir::{Array, RVar, DIGEST_SIZE},
     };
     use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
     use itertools::Itertools;
     use p3_baby_bear::BabyBear;
     use p3_challenger::{CanObserve, FieldChallenger};
     use p3_commit::{Pcs, TwoAdicMultiplicativeCoset};
-    use p3_field::AbstractField;
     use p3_matrix::dense::RowMajorMatrix;
     use p3_uni_stark::{StarkGenericConfig, Val};
     use rand::rngs::OsRng;
@@ -360,8 +359,8 @@ pub mod tests {
 
         // Test natural domain for degree.
         for log_d_val in log_degrees.iter() {
-            let log_d: Var<_> = builder.eval(F::from_canonical_usize(*log_d_val));
-            let domain = pcs_var.natural_domain_for_log_degree(&mut builder, Usize::Var(log_d));
+            let log_d = *log_d_val;
+            let domain = pcs_var.natural_domain_for_log_degree(&mut builder, RVar::from(log_d));
 
             let domain_val =
                 <ScPcs as Pcs<EF, Challenger>>::natural_domain_for_degree(pcs, 1 << log_d_val);
