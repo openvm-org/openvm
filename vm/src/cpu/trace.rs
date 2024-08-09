@@ -151,9 +151,7 @@ impl Display for ExecutionError {
 impl Error for ExecutionError {}
 
 impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
-    pub fn generate_trace(
-        vm: &mut ExecutionSegment<WORD_SIZE, F>,
-    ) -> Result<RowMajorMatrix<F>, ExecutionError> {
+    pub fn execute(vm: &mut ExecutionSegment<WORD_SIZE, F>) -> Result<(), ExecutionError> {
         let mut clock_cycle: usize = vm.cpu_chip.state.clock_cycle;
         let mut timestamp: usize = vm.cpu_chip.state.timestamp;
         let mut pc = F::from_canonical_usize(vm.cpu_chip.state.pc);
@@ -453,14 +451,18 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
         vm.cycle_tracker = cycle_tracker;
         vm.cpu_chip.generate_pvs();
 
-        if !is_done {
+        Ok(())
+    }
+
+    pub fn generate_trace(vm: &mut ExecutionSegment<WORD_SIZE, F>) -> RowMajorMatrix<F> {
+        if !vm.cpu_chip.state.is_done {
             Self::pad_rows(vm);
         }
 
-        Ok(RowMajorMatrix::new(
+        RowMajorMatrix::new(
             vm.cpu_chip.rows.concat(),
             CpuCols::<WORD_SIZE, F>::get_width(vm.options()),
-        ))
+        )
     }
 
     /// Pad with NOP rows.

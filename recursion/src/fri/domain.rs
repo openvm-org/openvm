@@ -158,7 +158,7 @@ where
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use afs_compiler::{asm::AsmBuilder, util::execute_program};
+    use afs_compiler::{asm::AsmBuilder, util::execute_program_and_generate_traces};
     use afs_test_utils::config::{
         baby_bear_poseidon2::{default_config, default_perm, BabyBearPoseidon2Config},
         fri_params::default_fri_params,
@@ -272,6 +272,6 @@ pub(crate) mod tests {
 
         const WORD_SIZE: usize = 1;
         let program = builder.compile_isa::<WORD_SIZE>();
-        execute_program::<WORD_SIZE>(program, vec![]);
+        execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
     }
 }

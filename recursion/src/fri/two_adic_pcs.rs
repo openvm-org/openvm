@@ -390,9 +390,9 @@ pub mod tests {
     #[test]
     #[ignore = "test takes too long"]
     fn test_two_adic_fri_pcs_single_batch() {
-        use afs_compiler::util::execute_program;
+        use afs_compiler::util::execute_program_and_generate_traces;
 
         let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 16);
-        execute_program::<WORD_SIZE>(program, witness);
+        execute_program_and_generate_traces::<WORD_SIZE>(program, witness);
     }
 }

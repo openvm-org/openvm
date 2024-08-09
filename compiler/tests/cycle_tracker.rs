@@ -2,7 +2,7 @@ use afs_compiler::{
     asm::AsmBuilder,
     conversion::CompilerOptions,
     ir::Var,
-    util::{display_program, execute_program},
+    util::{display_program, execute_program_and_generate_traces},
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
@@ -55,5 +55,5 @@ fn test_cycle_tracker() {
     }
 
     display_program(&program.instructions);
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }

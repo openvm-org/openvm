@@ -11,7 +11,7 @@ use p3_field::{ExtensionField, PrimeField, PrimeField32, TwoAdicField};
 use stark_vm::{
     cpu::trace::Instruction,
     program::Program,
-    vm::{config::VmConfig, ExecutionResult, VirtualMachine},
+    vm::{config::VmConfig, ExecutionAndTraceGenerationResult, VirtualMachine},
 };
 
 use crate::{asm::AsmBuilder, conversion::CompilerOptions};
@@ -46,6 +46,22 @@ pub fn execute_program<const WORD_SIZE: usize>(
     vm.execute().unwrap();
 }
 
+pub fn execute_program_and_generate_traces<const WORD_SIZE: usize>(
+    program: Program<BabyBear>,
+    input_stream: Vec<Vec<BabyBear>>,
+) {
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(
+        VmConfig {
+            num_public_values: 4,
+            max_segment_len: (1 << 25) - 100,
+            ..Default::default()
+        },
+        program,
+        input_stream,
+    );
+    vm.execute_and_generate_traces().unwrap();
+}
+
 pub fn execute_program_with_public_values<const WORD_SIZE: usize>(
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
@@ -62,7 +78,7 @@ pub fn execute_program_with_public_values<const WORD_SIZE: usize>(
     for &(index, value) in public_values {
         vm.segments[0].public_values[index] = Some(value);
     }
-    vm.execute().unwrap();
+    vm.execute_and_generate_traces().unwrap();
 }
 
 pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
@@ -126,13 +142,13 @@ pub fn execute_and_prove_program<const WORD_SIZE: usize>(
         input_stream,
     );
 
-    let ExecutionResult {
+    let ExecutionAndTraceGenerationResult {
         max_log_degree,
         nonempty_chips: chips,
         nonempty_traces: traces,
         nonempty_pis: pis,
         ..
-    } = vm.execute().unwrap();
+    } = vm.execute_and_generate_traces().unwrap();
     let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
 
     let perm = random_perm();

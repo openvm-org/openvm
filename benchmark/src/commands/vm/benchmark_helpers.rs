@@ -23,7 +23,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_strict_usize;
 use stark_vm::{
     program::Program,
-    vm::{config::VmConfig, ExecutionResult, VirtualMachine},
+    vm::{config::VmConfig, ExecutionAndTraceGenerationResult, VirtualMachine},
 };
 use tracing::info_span;
 
@@ -142,14 +142,14 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     vm.enable_metrics_collection();
 
     let vm_execute_span = info_span!("Benchmark vm execute").entered();
-    let ExecutionResult {
+    let ExecutionAndTraceGenerationResult {
         max_log_degree,
         nonempty_chips: chips,
         nonempty_traces: traces,
         nonempty_pis: public_values,
         metrics: mut vm_metrics,
         ..
-    } = vm.execute().unwrap();
+    } = vm.execute_and_generate_traces().unwrap();
     vm_execute_span.exit();
 
     let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);

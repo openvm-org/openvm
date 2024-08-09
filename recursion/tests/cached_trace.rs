@@ -1,4 +1,4 @@
-use afs_compiler::util::execute_program;
+use afs_compiler::util::execute_program_and_generate_traces;
 use afs_stark_backend::{
     air_builders::PartitionedAirBuilder, prover::trace::TraceCommitmentBuilder,
     verifier::VerificationError,
@@ -88,7 +88,7 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
         fri_params: engine.fri_params,
     };
     let (program, input_stream) = common::build_verification_program(vec![&air], pvs, vparams);
-    execute_program::<1>(program, input_stream);
+    execute_program_and_generate_traces::<1>(program, input_stream);
 
     Ok(())
 }

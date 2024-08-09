@@ -2,7 +2,7 @@ use afs_compiler::{
     asm::{AsmBuilder, AsmCompiler, AsmConfig},
     conversion::{convert_program, CompilerOptions},
     ir::{Builder, Ext, ExtConst, Felt, SymbolicExt, Var},
-    util::execute_program,
+    util::execute_program_and_generate_traces,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
@@ -98,7 +98,7 @@ fn test_compiler_arithmetic() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -121,7 +121,7 @@ fn test_compiler_arithmetic_2() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -157,7 +157,7 @@ fn test_in_place_arithmetic() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -182,7 +182,7 @@ fn test_field_immediate() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -254,7 +254,7 @@ fn test_ext_immediate() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 
     let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
         compile_prints: false,
@@ -262,7 +262,7 @@ fn test_ext_immediate() {
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
     });
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -312,7 +312,7 @@ fn test_ext_felt_arithmetic() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 
     let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
         compile_prints: false,
@@ -320,7 +320,7 @@ fn test_ext_felt_arithmetic() {
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
     });
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -352,7 +352,7 @@ fn test_felt_equality() {
     println!("{}", asm_code);
 
     let program = convert_program::<WORD_SIZE, F, EF>(asm_code, CompilerOptions::default());
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -408,7 +408,7 @@ fn test_ext_equality() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -437,6 +437,6 @@ fn assert_failed_assertion(
 ) {
     let program = builder.compile_isa::<WORD_SIZE>();
     let vm = VirtualMachine::<WORD_SIZE, _>::new(VmConfig::default(), program, vec![]);
-    let result = vm.execute();
+    let result = vm.execute_and_generate_traces();
     assert!(matches!(result, Err(Fail(_))));
 }

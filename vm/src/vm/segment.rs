@@ -33,7 +33,7 @@ pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub poseidon2_chip: Poseidon2Chip<16, F>,
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
-    pub has_generation_happened: bool,
+    pub has_execution_happened: bool,
     pub public_values: Vec<Option<F>>,
 
     pub cycle_tracker: CycleTracker,
@@ -62,7 +62,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
 
         Self {
             config,
-            has_generation_happened: false,
+            has_execution_happened: false,
             public_values: vec![None; config.num_public_values],
             cpu_chip,
             program_chip,
@@ -97,11 +97,15 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         max_height >= self.config.max_segment_len
     }
 
+    /// Stopping is triggered by `Self::should_segment`.
+    pub fn execute(&mut self) -> Result<(), ExecutionError> {
+        CpuChip::execute(self)
+    }
+
     /// Called by VM to generate traces for current segment. Includes empty traces.
-    ///
-    /// Execution is handled by CPU trace generation. Stopping is triggered by should_segment()
-    pub fn generate_traces(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
-        let cpu_trace = CpuChip::generate_trace(self)?;
+    /// Should only be called after `Self::execute`.
+    pub fn generate_traces(&mut self) -> Vec<DenseMatrix<F>> {
+        let cpu_trace = CpuChip::generate_trace(self);
         let mut result = vec![
             cpu_trace,
             self.program_chip.generate_trace(),
@@ -121,15 +125,15 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         if self.config.cpu_options().poseidon2_enabled() {
             result.push(self.poseidon2_chip.generate_trace());
         }
-        Ok(result)
+        result
     }
 
     /// Generate Merkle proof/memory diff traces, and publish public values
     ///
     /// For now, only publishes program counter public values
-    pub fn generate_commitments(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
+    pub fn generate_commitments(&mut self) -> Vec<DenseMatrix<F>> {
         // self.cpu_chip.generate_pvs();
-        Ok(vec![])
+        vec![]
     }
 
     pub fn get_num_chips(&self) -> usize {
