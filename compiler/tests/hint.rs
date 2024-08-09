@@ -1,7 +1,7 @@
 use afs_compiler::{
     asm::AsmBuilder,
     ir::{Felt, RVar, Var},
-    util::{display_program, execute_program},
+    util::{display_program, execute_program_and_generate_traces},
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
@@ -33,7 +33,7 @@ fn test_hint_bits_felt() {
 
     let program = builder.compile_isa::<1>();
     display_program(&program.instructions);
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -59,5 +59,5 @@ fn test_hint_bits_var() {
 
     let program = builder.compile_isa::<1>();
     display_program(&program.instructions);
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }

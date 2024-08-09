@@ -1,7 +1,7 @@
 use afs_compiler::{
     asm::AsmBuilder,
     prelude::*,
-    util::{execute_program, execute_program_with_public_values},
+    util::{execute_program_and_generate_traces, execute_program_with_public_values},
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
@@ -58,7 +58,7 @@ fn test_compiler_public_values_no_initial() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]

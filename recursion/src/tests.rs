@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_compiler::util::execute_program;
+use afs_compiler::util::execute_program_and_generate_traces;
 use afs_primitives::{range_gate::RangeCheckerGateChip, sum::SumChip};
 use afs_stark_backend::{
     prover::trace::TraceCommitmentBuilder, rap::AnyRap, verifier::MultiTraceStarkVerifier,
@@ -168,5 +168,5 @@ fn run_recursive_test(
     let mut witness_stream = Vec::new();
     witness_stream.extend(input.write());
 
-    execute_program::<1>(program, witness_stream);
+    execute_program_and_generate_traces::<1>(program, witness_stream);
 }

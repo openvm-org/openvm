@@ -10,7 +10,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
     program::Program,
-    vm::{config::VmConfig, ExecutionResult, VirtualMachine},
+    vm::{config::VmConfig, ExecutionAndTraceGenerationResult, VirtualMachine},
 };
 
 mod common;
@@ -50,12 +50,12 @@ fn test_fibonacci_program_verify() {
     let rec_raps = get_rec_raps(&dummy_vm.segments[0]);
 
     let vm = VirtualMachine::<1, _>::new(vm_config, fib_program, vec![]);
-    let ExecutionResult {
+    let ExecutionAndTraceGenerationResult {
         nonempty_traces: traces,
         nonempty_chips: chips,
         nonempty_pis: pvs,
         ..
-    } = vm.execute().unwrap();
+    } = vm.execute_and_generate_traces().unwrap();
 
     let chips = chips.iter().map(|x| x.deref()).collect();
 

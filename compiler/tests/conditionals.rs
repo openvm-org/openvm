@@ -1,4 +1,4 @@
-use afs_compiler::{asm::AsmBuilder, ir::Var, util::execute_program};
+use afs_compiler::{asm::AsmBuilder, ir::Var, util::execute_program_and_generate_traces};
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::cpu::WORD_SIZE;
@@ -50,7 +50,7 @@ fn test_compiler_conditionals() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -79,7 +79,7 @@ fn test_compiler_conditionals_v2() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]

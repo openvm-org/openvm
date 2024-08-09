@@ -9,7 +9,7 @@ use afs_recursion::{
 use color_eyre::eyre::Result;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use stark_vm::vm::{config::VmConfig, ExecutionResult, VirtualMachine};
+use stark_vm::vm::{config::VmConfig, ExecutionAndTraceGenerationResult, VirtualMachine};
 
 use super::benchmark_helpers::run_recursive_test_benchmark;
 
@@ -48,13 +48,13 @@ pub fn benchmark_fib_verifier_program(n: usize) -> Result<()> {
 
     let vm = VirtualMachine::<1, _>::new(vm_config, fib_program.clone(), vec![]);
 
-    let ExecutionResult {
+    let ExecutionAndTraceGenerationResult {
         max_log_degree: _,
         nonempty_chips: chips,
         nonempty_traces: traces,
         nonempty_pis: pis,
         ..
-    } = vm.execute().unwrap();
+    } = vm.execute_and_generate_traces().unwrap();
     let chips = VirtualMachine::<1, _>::get_chips(&chips);
 
     let dummy_vm = VirtualMachine::<1, _>::new(vm_config, fib_program, vec![]);
