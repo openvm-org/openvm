@@ -1,9 +1,15 @@
-use std::{array::from_fn, collections::HashMap};
+use std::{
+    array::from_fn,
+    collections::{BTreeMap, HashMap},
+};
 
-use afs_primitives::offline_checker::OfflineChecker;
-use p3_field::PrimeField32;
+use afs_primitives::{is_less_than_tuple::IsLessThanTupleAir, offline_checker::OfflineChecker};
+use p3_field::{Field, PrimeField32};
 
-use super::MemoryAccess;
+use super::{
+    audit::air::AuditAir, expand::MemoryDimensions, interface::MemoryInterfaceChip,
+    manager::MemoryReadWriteOpCols, MemoryAccess,
+};
 use crate::{
     cpu::{MEMORY_BUS, RANGE_CHECKER_BUS},
     memory::{compose, decompose, OpType},
@@ -12,6 +18,125 @@ use crate::{
 mod air;
 mod columns;
 mod trace;
+
+// TODO[osama]: move this to another file
+pub struct NewMemoryChip<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
+    pub interface_chip: MemoryInterfaceChip<NUM_WORDS, WORD_SIZE, F>,
+    memory: HashMap<(F, F), F>,
+}
+
+impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
+    NewMemoryChip<NUM_WORDS, WORD_SIZE, F>
+{
+    pub fn new(memory_dimensions: MemoryDimensions, memory: HashMap<(F, F), F>) -> Self {
+        Self {
+            interface_chip: MemoryInterfaceChip::new(memory_dimensions),
+            memory,
+        }
+    }
+
+    pub fn read_word(
+        &mut self,
+        // TODO[osama]: can this be a field element?
+        timestamp: usize,
+        addr_space: F,
+        pointer: F,
+    ) -> MemoryReadWriteOpCols<WORD_SIZE, F> {
+        if addr_space == F::zero() {
+            let data = decompose(pointer);
+            return MemoryReadWriteOpCols::<WORD_SIZE, F>::new(
+                addr_space,
+                pointer,
+                data,
+                F::from_canonical_usize(timestamp),
+                data,
+                F::from_canonical_usize(timestamp),
+            );
+        }
+
+        debug_assert!((pointer.as_canonical_u32() as usize) % WORD_SIZE == 0);
+
+        let data = from_fn(|i| self.memory[&(addr_space, pointer + F::from_canonical_usize(i))]);
+
+        self.interface_chip.touch_address(
+            addr_space,
+            pointer,
+            data,
+            F::from_canonical_usize(timestamp),
+        );
+
+        MemoryReadWriteOpCols::<WORD_SIZE, F>::new(
+            addr_space,
+            pointer,
+            data,
+            F::from_canonical_usize(timestamp),
+            data,
+            F::from_canonical_usize(timestamp + 1),
+        )
+    }
+
+    /// Reads a word directly from memory without updating internal state.
+    ///
+    /// Any value returned is unconstrained.
+    pub fn unsafe_read_word(&self, address_space: F, pointer: F) -> [F; WORD_SIZE] {
+        from_fn(|i| self.memory[&(address_space, pointer + F::from_canonical_usize(i))])
+    }
+
+    pub fn write_word(
+        &mut self,
+        timestamp: usize,
+        addr_space: F,
+        pointer: F,
+        data: [F; WORD_SIZE],
+    ) -> MemoryReadWriteOpCols<WORD_SIZE, F> {
+        assert!(addr_space != F::zero());
+        debug_assert!((pointer.as_canonical_u32() as usize) % WORD_SIZE == 0);
+
+        let old_data =
+            from_fn(|i| self.memory[&(addr_space, pointer + F::from_canonical_usize(i))]);
+        self.interface_chip.touch_address(
+            addr_space,
+            pointer,
+            old_data,
+            F::from_canonical_usize(timestamp),
+        );
+
+        for (i, &datum) in data.iter().enumerate() {
+            self.memory
+                .insert((addr_space, pointer + F::from_canonical_usize(i)), datum);
+        }
+
+        MemoryReadWriteOpCols::<WORD_SIZE, F>::new(
+            addr_space,
+            pointer,
+            data,
+            F::from_canonical_usize(timestamp),
+            data,
+            F::from_canonical_usize(timestamp + 1),
+        )
+    }
+
+    // pub fn memory_clone(&self) -> HashMap<(F, F), F> {
+    //     self.memory.clone()
+    // }
+
+    // pub fn read_elem(&mut self, timestamp: usize, address_space: F, address: F) -> F {
+    //     compose(self.read_word(timestamp, address_space, address))
+    // }
+
+    // /// Reads an element directly from memory without updating internal state.
+    // ///
+    // /// Any value returned is unconstrained.
+    // pub fn unsafe_read_elem(&self, address_space: F, address: F) -> F {
+    //     compose(self.unsafe_read_word(address_space, address))
+    // }
+
+    // pub fn write_elem(&mut self, timestamp: usize, address_space: F, address: F, data: F) {
+    //     self.write_word(timestamp, address_space, address, decompose(data));
+    // }
+}
+
+// ------
 
 pub struct MemoryOfflineChecker {
     pub offline_checker: OfflineChecker,

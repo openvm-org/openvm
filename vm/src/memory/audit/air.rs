@@ -18,6 +18,7 @@ pub struct AuditAir<const WORD_SIZE: usize> {
 }
 
 impl<const WORD_SIZE: usize> AuditAir<WORD_SIZE> {
+    // TODO[osama]: rename to addr_space_max_bits and pointer_max_bits
     pub fn new(address_space_limb_bits: usize, address_limb_bits: usize, decomp: usize) -> Self {
         Self {
             addr_lt_air: IsLessThanTupleAir::new(

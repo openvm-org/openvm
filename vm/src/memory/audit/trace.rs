@@ -11,6 +11,7 @@ impl<const WORD_SIZE: usize> AuditAir<WORD_SIZE> {
     pub fn generate_trace<F: PrimeField32>(
         &self,
         // (address_space, address) -> (clk, data)
+        // TODO[osama]: update this to use AccessCell struct
         first_access: BTreeMap<(F, F), (F, [F; WORD_SIZE])>,
         mut last_access: BTreeMap<(F, F), (F, [F; WORD_SIZE])>,
         trace_height: usize,
