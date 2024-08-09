@@ -2,8 +2,9 @@ use std::ops::Deref;
 
 use afs_compiler::{asm::AsmBuilder, ir::Var};
 use afs_recursion::stark::get_rec_raps;
-use afs_test_utils::config::fri_params::{
-    fri_params_fast_testing, fri_params_with_80_bits_of_security,
+use afs_test_utils::config::{
+    fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},
+    setup_tracing,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
@@ -37,6 +38,7 @@ fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
 
 #[test]
 fn test_fibonacci_program_verify() {
+    setup_tracing();
     let fib_program = fibonacci_program(0, 1, 32);
 
     let vm_config = VmConfig {

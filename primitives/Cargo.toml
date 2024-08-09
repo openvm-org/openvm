@@ -22,7 +22,7 @@ afs-stark-backend = { path = "../stark-backend", default-features = false }
 afs-derive = { path = "../derive" }
 afs-test-utils = { path = "../test-utils" }
 parking_lot = "0.12.2"
-itertools = "0.13.0"
+itertools.workspace = true
 getset = "0.1.2"
 
 [dev-dependencies]

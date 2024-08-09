@@ -14,7 +14,7 @@ pub mod instrument;
 pub fn setup_tracing() {
     // Set up tracing:
     let env_filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::INFO.into())
+        .with_default_directive(LevelFilter::DEBUG.into())
         .from_env_lossy();
     let _ = Registry::default()
         .with(env_filter)

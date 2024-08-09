@@ -3,9 +3,11 @@ use p3_air::{Air, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 
-use crate::memory::interface::columns::MemoryInterfaceCols;
+use crate::memory::{expand::MemoryDimensions, interface::columns::MemoryInterfaceCols};
 
-pub struct MemoryInterfaceAir<const CHUNK: usize> {}
+pub struct MemoryInterfaceAir<const CHUNK: usize> {
+    pub memory_dimensions: MemoryDimensions,
+}
 
 impl<const CHUNK: usize, F: Field> BaseAir<F> for MemoryInterfaceAir<CHUNK> {
     fn width(&self) -> usize {

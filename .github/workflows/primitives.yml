@@ -1,15 +1,14 @@
-name: Default Unit Tests
+name: Primitives Tests
 
 on:
   push:
     branches: ["main"]
   pull_request:
     branches: ["main"]
-    paths-ignore:
+    paths:
       - "stark-backend/**"
-      - "db/**"
-      - "vm/**"
-      - "compiler/**"
+      - "primitives/**"
+      - "poseidon2-air/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -30,6 +29,12 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Run unit tests
+      - name: Run tests for primitives
+        working-directory: primitives
         run: |
-          cargo test --workspace --exclude afs-stark-backend --exclude afs-page --exclude stark-vm --exclude afs-compiler --exclude afs-recursion
+          cargo test --features parallel
+
+      - name: Run tests for poseidon2-air
+        working-directory: poseidon2-air
+        run: |
+          cargo test --features parallel

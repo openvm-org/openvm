@@ -16,16 +16,6 @@ use stark_vm::{
 
 use crate::{asm::AsmBuilder, conversion::CompilerOptions};
 
-pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
-    let modulus = F::ORDER_U32;
-    assert!(x < modulus as i32 && x >= -(modulus as i32));
-    if x < 0 {
-        -F::from_canonical_u32((-x) as u32)
-    } else {
-        F::from_canonical_u32(x as u32)
-    }
-}
-
 /// Converts a prime field element to a usize.
 pub fn prime_field_to_usize<F: PrimeField>(x: F) -> usize {
     let bu = x.as_canonical_biguint();

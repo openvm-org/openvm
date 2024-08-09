@@ -1,75 +1,41 @@
-use std::{collections::BTreeMap, fmt::Display};
+use std::fmt::Display;
 
-#[derive(Debug, Clone)]
-pub struct CycleTrackerData {
-    pub vm_metrics: BTreeMap<String, usize>,
-    pub opcode_counts: BTreeMap<String, usize>,
-    pub dsl_counts: BTreeMap<String, usize>,
-    pub opcode_trace_cells: BTreeMap<String, usize>,
-}
+use crate::vm::metrics::VmMetrics;
 
 #[derive(Debug, Clone)]
 pub struct CycleTrackerSpan {
     pub is_active: bool,
-    pub start: CycleTrackerData,
-    pub end: CycleTrackerData,
+    pub start: VmMetrics,
+    pub end: VmMetrics,
 }
 
 impl CycleTrackerSpan {
     #[allow(clippy::too_many_arguments)]
-    pub fn start(
-        vm_metrics: &BTreeMap<String, usize>,
-        opcode_counts: &BTreeMap<String, usize>,
-        dsl_counts: &BTreeMap<String, usize>,
-        opcode_trace_cells: &BTreeMap<String, usize>,
-    ) -> Self {
-        let vm_metrics_zero = vm_metrics.iter().map(|(k, _)| (k.clone(), 0)).collect();
-        let opcode_counts_zero = opcode_counts.iter().map(|(k, _)| (k.clone(), 0)).collect();
-        let dsl_counts_zero = dsl_counts.iter().map(|(k, _)| (k.clone(), 0)).collect();
-        let opcode_trace_cells_zero = opcode_trace_cells
-            .iter()
-            .map(|(k, _)| (k.clone(), 0))
-            .collect();
+    pub fn start(metrics: VmMetrics) -> Self {
         Self {
             is_active: true,
-            start: CycleTrackerData {
-                vm_metrics: vm_metrics.clone(),
-                opcode_counts: opcode_counts.clone(),
-                dsl_counts: dsl_counts.clone(),
-                opcode_trace_cells: opcode_trace_cells.clone(),
-            },
-            end: CycleTrackerData {
-                vm_metrics: vm_metrics_zero,
-                opcode_counts: opcode_counts_zero,
-                dsl_counts: dsl_counts_zero,
-                opcode_trace_cells: opcode_trace_cells_zero,
-            },
+            start: metrics,
+            end: Default::default(),
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn end(
-        &mut self,
-        vm_metrics: &BTreeMap<String, usize>,
-        opcode_counts: &BTreeMap<String, usize>,
-        dsl_counts: &BTreeMap<String, usize>,
-        opcode_trace_cells: &BTreeMap<String, usize>,
-    ) {
+    pub fn end(&mut self, metrics: VmMetrics) {
         self.is_active = false;
-        for (key, value) in vm_metrics {
-            let diff = value - self.start.vm_metrics.get(key).unwrap();
-            self.end.vm_metrics.insert(key.clone(), diff);
+        for (key, value) in metrics.chip_metrics {
+            let diff = value - self.start.chip_metrics.get(&key).unwrap();
+            self.end.chip_metrics.insert(key, diff);
         }
-        for (key, value) in opcode_counts {
-            let diff = value - self.start.opcode_counts.get(key).unwrap_or(&0);
-            self.end.opcode_counts.insert(key.clone(), diff);
+        for (key, value) in metrics.opcode_counts {
+            let diff = value - self.start.opcode_counts.get(&key).unwrap_or(&0);
+            self.end.opcode_counts.insert(key, diff);
         }
-        for (key, value) in dsl_counts {
-            let diff = value - self.start.dsl_counts.get(key).unwrap_or(&0);
-            self.end.dsl_counts.insert(key.clone(), diff);
+        for (key, value) in metrics.dsl_counts {
+            let diff = value - self.start.dsl_counts.get(&key).unwrap_or(&0);
+            self.end.dsl_counts.insert(key, diff);
         }
-        for (key, value) in opcode_trace_cells {
-            let diff = value - self.start.opcode_trace_cells.get(key).unwrap_or(&0);
+        for (key, value) in metrics.opcode_trace_cells {
+            let diff = value - self.start.opcode_trace_cells.get(&key).unwrap_or(&0);
             self.end.opcode_trace_cells.insert(key.clone(), diff);
         }
     }
@@ -77,7 +43,7 @@ impl CycleTrackerSpan {
 
 impl Display for CycleTrackerSpan {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (key, value) in &self.end.vm_metrics {
+        for (key, value) in &self.end.chip_metrics {
             writeln!(f, "  - {}: {}", key, value)?;
         }
 
