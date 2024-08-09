@@ -19,7 +19,7 @@ pub fn const_fri_config(
     let two_adicity = Val::TWO_ADICITY;
     let mut generators = builder.dyn_array(two_adicity);
     let mut subgroups = builder.dyn_array(two_adicity);
-    for i in 0..two_adicity {
+    for i in 0..Val::TWO_ADICITY {
         let constant_generator = Val::two_adic_generator(i);
         builder.set(&mut generators, i, constant_generator);
 

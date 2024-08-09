@@ -2,7 +2,7 @@ use afs_compiler::{
     asm::AsmBuilder,
     conversion::CompilerOptions,
     ir::Var,
-    util::{display_program, execute_program},
+    util::{display_program, execute_program_and_generate_traces},
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
@@ -31,7 +31,7 @@ fn test_cycle_tracker() {
 
     for _ in 0..3 {
         let n_plus_m: Var<_> = builder.eval(n + m);
-        builder.assign(total, total + n_plus_m);
+        builder.assign(&total, total + n_plus_m);
     }
 
     builder.cycle_tracker_end("loop");
@@ -55,5 +55,5 @@ fn test_cycle_tracker() {
     }
 
     display_program(&program.instructions);
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }

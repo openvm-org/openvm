@@ -1,6 +1,6 @@
 use p3_field::AbstractField;
 
-use super::{Array, Builder, Config, DslIr, Felt, MemIndex, Usize, Var};
+use super::{Array, Builder, Config, DslIr, Felt, MemIndex, RVar, Var};
 
 pub const NUM_BITS: usize = 31;
 
@@ -18,7 +18,7 @@ impl<C: Config> Builder<C> {
         let sum: Var<_> = self.eval(C::N::zero());
         for i in 0..NUM_BITS {
             let index = MemIndex {
-                index: Usize::Const(i),
+                index: i.into(),
                 offset: 0,
                 size: 1,
             };
@@ -26,7 +26,7 @@ impl<C: Config> Builder<C> {
 
             let bit = self.get(&output, i);
             self.assert_var_eq(bit * (bit - C::N::one()), C::N::zero());
-            self.assign(sum, sum + bit * C::N::from_canonical_u32(1 << i));
+            self.assign(&sum, sum + bit * C::N::from_canonical_u32(1 << i));
         }
 
         // TODO: There is an edge case where the witnessed bits may slightly overflow and cause
@@ -61,7 +61,7 @@ impl<C: Config> Builder<C> {
         let sum: Felt<_> = self.eval(C::F::zero());
         for i in 0..NUM_BITS {
             let index = MemIndex {
-                index: Usize::Const(i),
+                index: i.into(),
                 offset: 0,
                 size: 1,
             };
@@ -70,7 +70,7 @@ impl<C: Config> Builder<C> {
             let bit = self.get(&output, i);
             self.assert_var_eq(bit * (bit - C::N::one()), C::N::zero());
             self.if_eq(bit, C::N::one()).then(|builder| {
-                builder.assign(sum, sum + C::F::from_canonical_u32(1 << i));
+                builder.assign(&sum, sum + C::F::from_canonical_u32(1 << i));
             });
         }
 
@@ -99,8 +99,8 @@ impl<C: Config> Builder<C> {
         let power: Var<_> = self.eval(C::N::one());
         self.range(0, bits.len()).for_each(|i, builder| {
             let bit = builder.get(bits, i);
-            builder.assign(num, num + bit * power);
-            builder.assign(power, power * C::N::from_canonical_u32(2));
+            builder.assign(&num, num + bit * power);
+            builder.assign(&power, power * C::N::from_canonical_u32(2));
         });
         num
     }
@@ -109,7 +109,7 @@ impl<C: Config> Builder<C> {
     pub fn bits2num_v_circuit(&mut self, bits: &[Var<C::N>]) -> Var<C::N> {
         let result: Var<_> = self.eval(C::N::zero());
         for i in 0..bits.len() {
-            self.assign(result, result + bits[i] * C::N::from_canonical_u32(1 << i));
+            self.assign(&result, result + bits[i] * C::N::from_canonical_u32(1 << i));
         }
         result
     }
@@ -121,7 +121,7 @@ impl<C: Config> Builder<C> {
             let bit = self.get(bits, i);
             // Add `bit * 2^i` to the sum.
             self.if_eq(bit, C::N::one()).then(|builder| {
-                builder.assign(num, num + C::F::from_canonical_u32(1 << i));
+                builder.assign(&num, num + C::F::from_canonical_u32(1 << i));
             });
         }
         num
@@ -136,19 +136,20 @@ impl<C: Config> Builder<C> {
     pub fn reverse_bits_len(
         &mut self,
         index_bits: &Array<C, Var<C::N>>,
-        bit_len: impl Into<Usize<C::N>>,
+        bit_len: impl Into<RVar<C::N>>,
     ) -> Array<C, Var<C::N>> {
         let bit_len = bit_len.into();
+        let num_bits = NUM_BITS;
 
-        let mut result_bits = self.dyn_array::<Var<_>>(NUM_BITS);
+        let mut result_bits = self.dyn_array::<Var<_>>(num_bits);
         self.range(0, bit_len).for_each(|i, builder| {
-            let index: Usize<_> = builder.eval(bit_len - i - 1);
-            let entry = builder.get(index_bits, index);
+            let idx = builder.eval_expr(bit_len - i - RVar::one());
+            let entry = builder.get(index_bits, idx);
             builder.set_value(&mut result_bits, i, entry);
         });
 
         let zero = self.eval(C::N::zero());
-        self.range(bit_len, NUM_BITS).for_each(|i, builder| {
+        self.range(bit_len, num_bits).for_each(|i, builder| {
             builder.set_value(&mut result_bits, i, zero);
         });
 

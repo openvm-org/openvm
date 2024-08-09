@@ -1,4 +1,4 @@
-use super::{Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, Usize, Variable};
+use super::{Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, RVar, Variable};
 
 /// A logical array.
 #[derive(Debug, Clone)]
@@ -10,7 +10,7 @@ pub struct Ref<C: Config, T> {
 impl<C: Config> Builder<C> {
     /// Initialize a new instance of type T. The entries will be uninitialized.
     pub fn new_ref_ptr<V: MemVariable<C>>(&mut self) -> Ref<C, V> {
-        let ptr = self.alloc(Usize::Const(1), V::size_of());
+        let ptr = self.alloc(RVar::one(), V::size_of());
         Ref {
             ptr,
             phantom: std::marker::PhantomData,
@@ -20,7 +20,7 @@ impl<C: Config> Builder<C> {
     /// Copies the referenced data onto the stack
     pub fn deref<V: MemVariable<C>>(&mut self, ptr: &Ref<C, V>) -> V {
         let index = MemIndex {
-            index: Usize::Const(0),
+            index: RVar::zero(),
             offset: 0,
             size: V::size_of(),
         };
@@ -35,7 +35,7 @@ impl<C: Config> Builder<C> {
         value: Expr,
     ) {
         let index = MemIndex {
-            index: Usize::Const(0),
+            index: RVar::zero(),
             offset: 0,
             size: V::size_of(),
         };
@@ -45,7 +45,7 @@ impl<C: Config> Builder<C> {
 
     pub fn set_to_value<V: MemVariable<C>>(&mut self, ptr: &mut Ref<C, V>, value: V) {
         let index = MemIndex {
-            index: Usize::Const(0),
+            index: RVar::zero(),
             offset: 0,
             size: V::size_of(),
         };
@@ -63,7 +63,7 @@ impl<C: Config, T: MemVariable<C>> Variable<C> for Ref<C, T> {
     fn assign(&self, src: Self::Expression, builder: &mut Builder<C>) {
         let (Ref { ptr: lhs_ptr, .. }, Ref { ptr: rhs_ptr, .. }) = (self, src.clone());
         {
-            builder.assign(*lhs_ptr, rhs_ptr);
+            builder.assign(lhs_ptr, rhs_ptr);
         }
     }
 

@@ -1,8 +1,8 @@
 use core::ops::{Add, Sub};
 
-use p3_field::Field;
+use p3_field::{Field, PrimeField};
 
-use super::{Builder, Config, DslIr, MemIndex, MemVariable, SymbolicVar, Usize, Var, Variable};
+use super::{Builder, Config, DslIr, MemIndex, MemVariable, RVar, SymbolicVar, Var, Variable};
 
 /// A point to a location in memory.
 #[derive(Debug, Clone, Copy)]
@@ -16,9 +16,9 @@ pub struct SymbolicPtr<N: Field> {
 
 impl<C: Config> Builder<C> {
     /// Allocates an array on the heap.
-    pub(crate) fn alloc(&mut self, len: Usize<C::N>, size: usize) -> Ptr<C::N> {
+    pub(crate) fn alloc(&mut self, len: impl Into<RVar<C::N>>, size: usize) -> Ptr<C::N> {
         let ptr = Ptr::uninit(self);
-        self.push(DslIr::Alloc(ptr, len, size));
+        self.push(DslIr::Alloc(ptr, len.into(), size));
         ptr
     }
 
@@ -155,26 +155,6 @@ impl<N: Field> Add<SymbolicPtr<N>> for Ptr<N> {
     }
 }
 
-impl<N: Field> Add<SymbolicVar<N>> for Ptr<N> {
-    type Output = SymbolicPtr<N>;
-
-    fn add(self, rhs: SymbolicVar<N>) -> SymbolicPtr<N> {
-        SymbolicPtr {
-            address: self.address + rhs,
-        }
-    }
-}
-
-impl<N: Field> Sub<SymbolicVar<N>> for Ptr<N> {
-    type Output = SymbolicPtr<N>;
-
-    fn sub(self, rhs: SymbolicVar<N>) -> SymbolicPtr<N> {
-        SymbolicPtr {
-            address: self.address - rhs,
-        }
-    }
-}
-
 impl<N: Field> Sub<SymbolicPtr<N>> for Ptr<N> {
     type Output = SymbolicPtr<N>;
 
@@ -185,62 +165,38 @@ impl<N: Field> Sub<SymbolicPtr<N>> for Ptr<N> {
     }
 }
 
-impl<N: Field> Add<Usize<N>> for Ptr<N> {
+impl<N: Field, RHS: Into<SymbolicVar<N>>> Add<RHS> for Ptr<N> {
     type Output = SymbolicPtr<N>;
 
-    fn add(self, rhs: Usize<N>) -> SymbolicPtr<N> {
-        match rhs {
-            Usize::Const(rhs) => SymbolicPtr {
-                address: self.address + N::from_canonical_usize(rhs),
-            },
-            Usize::Var(rhs) => SymbolicPtr {
-                address: self.address + rhs,
-            },
+    fn add(self, rhs: RHS) -> SymbolicPtr<N> {
+        SymbolicPtr::from(self) + rhs.into()
+    }
+}
+
+impl<N: Field, RHS: Into<SymbolicVar<N>>> Add<RHS> for SymbolicPtr<N> {
+    type Output = SymbolicPtr<N>;
+
+    fn add(self, rhs: RHS) -> SymbolicPtr<N> {
+        SymbolicPtr {
+            address: self.address + rhs.into(),
         }
     }
 }
 
-impl<N: Field> Add<Usize<N>> for SymbolicPtr<N> {
+impl<N: PrimeField, RHS: Into<SymbolicVar<N>>> Sub<RHS> for Ptr<N> {
     type Output = SymbolicPtr<N>;
 
-    fn add(self, rhs: Usize<N>) -> SymbolicPtr<N> {
-        match rhs {
-            Usize::Const(rhs) => SymbolicPtr {
-                address: self.address + N::from_canonical_usize(rhs),
-            },
-            Usize::Var(rhs) => SymbolicPtr {
-                address: self.address + rhs,
-            },
-        }
+    fn sub(self, rhs: RHS) -> SymbolicPtr<N> {
+        SymbolicPtr::from(self) - rhs.into()
     }
 }
 
-impl<N: Field> Sub<Usize<N>> for Ptr<N> {
+impl<N: PrimeField, RHS: Into<SymbolicVar<N>>> Sub<RHS> for SymbolicPtr<N> {
     type Output = SymbolicPtr<N>;
 
-    fn sub(self, rhs: Usize<N>) -> SymbolicPtr<N> {
-        match rhs {
-            Usize::Const(rhs) => SymbolicPtr {
-                address: self.address - N::from_canonical_usize(rhs),
-            },
-            Usize::Var(rhs) => SymbolicPtr {
-                address: self.address - rhs,
-            },
-        }
-    }
-}
-
-impl<N: Field> Sub<Usize<N>> for SymbolicPtr<N> {
-    type Output = SymbolicPtr<N>;
-
-    fn sub(self, rhs: Usize<N>) -> SymbolicPtr<N> {
-        match rhs {
-            Usize::Const(rhs) => SymbolicPtr {
-                address: self.address - N::from_canonical_usize(rhs),
-            },
-            Usize::Var(rhs) => SymbolicPtr {
-                address: self.address - rhs,
-            },
+    fn sub(self, rhs: RHS) -> SymbolicPtr<N> {
+        SymbolicPtr {
+            address: self.address - rhs.into(),
         }
     }
 }

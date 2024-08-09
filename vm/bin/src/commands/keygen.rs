@@ -58,7 +58,7 @@ impl KeygenCommand {
             debug_infos: vec![None; program_len],
         };
         let vm = VirtualMachine::<WORD_SIZE, _>::new(config, program, vec![]);
-        let result = vm.execute()?;
+        let result = vm.execute_and_generate_traces()?;
         let engine = config::baby_bear_poseidon2::default_engine(result.max_log_degree);
         let mut keygen_builder = engine.keygen_builder();
 

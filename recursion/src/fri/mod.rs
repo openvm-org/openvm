@@ -1,5 +1,6 @@
 use afs_compiler::ir::{
-    Array, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, SymbolicVar, Usize, Var, DIGEST_SIZE,
+    Array, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, RVar, SymbolicVar, Usize, Var,
+    DIGEST_SIZE,
 };
 pub use domain::*;
 use p3_field::{AbstractField, Field, TwoAdicField};
@@ -90,7 +91,7 @@ pub fn verify_challenges<C: Config>(
                 &query_proof,
                 &challenges.betas,
                 &ro,
-                Usize::Var(log_max_height),
+                RVar::Val(log_max_height),
             );
 
             builder.assert_ext_eq(folded_eval, proof.final_poly);
@@ -112,7 +113,7 @@ pub fn verify_query<C: Config>(
     proof: &FriQueryProofVariable<C>,
     betas: &Array<C, Ext<C::F, C::EF>>,
     reduced_openings: &Array<C, Ext<C::F, C::EF>>,
-    log_max_height: Usize<C::N>,
+    log_max_height: RVar<C::N>,
 ) -> Ext<C::F, C::EF>
 where
     C::F: TwoAdicField,
@@ -127,32 +128,31 @@ where
 
     let x = builder.exp_reverse_bits_len(two_adic_generator_ef, index_bits, log_max_height);
 
-    let log_max_height = log_max_height.materialize(builder);
     builder
         .range(0, commit_phase_commits.len())
         .for_each(|i, builder| {
-            let log_folded_height: Var<_> = builder.eval(log_max_height - i - C::N::one());
-            let log_folded_height_plus_one: Var<_> = builder.eval(log_folded_height + C::N::one());
+            let log_folded_height = builder.eval_expr(log_max_height - i - C::N::one());
+            let log_folded_height_plus_one = builder.eval_expr(log_folded_height + C::N::one());
             let commit = builder.get(commit_phase_commits, i);
             let step = builder.get(&proof.commit_phase_openings, i);
             let beta = builder.get(betas, i);
 
             let reduced_opening = builder.get(reduced_openings, log_folded_height_plus_one);
-            builder.assign(folded_eval, folded_eval + reduced_opening);
+            builder.assign(&folded_eval, folded_eval + reduced_opening);
 
             let index_bit = builder.get(index_bits, i);
             let index_sibling_mod_2: Var<C::N> =
                 builder.eval(SymbolicVar::from(C::N::one()) - index_bit);
-            let i_plus_one: Usize<_> = builder.eval(i + 1);
+            let i_plus_one = builder.eval_expr(i + RVar::one());
             let index_pair = index_bits.shift(builder, i_plus_one);
 
             let mut evals: Array<C, Ext<C::F, C::EF>> = builder.array(2);
-            builder.set_value(&mut evals, 0, folded_eval);
-            builder.set_value(&mut evals, 1, folded_eval);
+            builder.set_value(&mut evals, RVar::zero(), folded_eval);
+            builder.set_value(&mut evals, RVar::one(), folded_eval);
             builder.set_value(&mut evals, index_sibling_mod_2, step.sibling_value);
 
             let dims = DimensionsVariable::<C> {
-                height: builder.sll(C::N::one(), Usize::Var(log_folded_height)),
+                height: builder.sll(C::N::one(), log_folded_height),
             };
             let mut dims_slice: Array<C, DimensionsVariable<C>> = builder.array(1);
             builder.set_value(&mut dims_slice, 0, dims);
@@ -170,28 +170,28 @@ where
             );
             builder.cycle_tracker_end("verify-batch-ext");
 
-            let two_adic_generator_one = config.get_two_adic_generator(builder, Usize::Const(1));
+            let two_adic_generator_one = config.get_two_adic_generator(builder, Usize::from(1));
             let xs_0: Ext<_, _> = builder.eval(x);
             let xs_1: Ext<_, _> = builder.eval(x);
             builder
                 .if_eq(index_sibling_mod_2, C::N::zero())
                 .then_or_else(
                     |builder| {
-                        builder.assign(xs_0, x * two_adic_generator_one);
+                        builder.assign(&xs_0, x * two_adic_generator_one);
                     },
                     |builder| {
-                        builder.assign(xs_1, x * two_adic_generator_one);
+                        builder.assign(&xs_1, x * two_adic_generator_one);
                     },
                 );
 
             let eval_0 = builder.get(&evals, 0);
             let eval_1 = builder.get(&evals, 1);
             builder.assign(
-                folded_eval,
+                &folded_eval,
                 eval_0 + (beta - xs_0) * (eval_1 - eval_0) / (xs_1 - xs_0),
             );
 
-            builder.assign(x, x * x);
+            builder.assign(&x, x * x);
         });
 
     builder.cycle_tracker_end("verify-query");
@@ -249,21 +249,21 @@ pub fn verify_batch<C: Config>(
 
         builder.if_eq(bit, C::N::one()).then_or_else(
             |builder| {
-                builder.assign(left, sibling);
-                builder.assign(right, root_ptr);
+                builder.assign(&left, sibling);
+                builder.assign(&right, root_ptr);
             },
             |builder| {
-                builder.assign(left, root_ptr);
-                builder.assign(right, sibling);
+                builder.assign(&left, root_ptr);
+                builder.assign(&right, sibling);
             },
         );
 
         builder.poseidon2_compress_x(
-            &mut Array::Dyn(root_ptr, Usize::Const(0)),
-            &Array::Dyn(left, Usize::Const(0)),
-            &Array::Dyn(right, Usize::Const(0)),
+            &mut Array::Dyn(root_ptr, Usize::from(0)),
+            &Array::Dyn(left, Usize::from(0)),
+            &Array::Dyn(right, Usize::from(0)),
         );
-        builder.assign(current_height, current_height * (C::N::two().inverse()));
+        builder.assign(&current_height, current_height * (C::N::two().inverse()));
 
         builder.if_ne(index, dimensions.len()).then(|builder| {
             let next_height = builder.get(&dimensions, index).height;
@@ -321,8 +321,8 @@ pub fn reduce_fast<C: Config>(
                     nb_opened_values,
                     opened_values.clone(),
                 );
-                builder.assign(nb_opened_values, nb_opened_values + C::N::one());
-                builder.assign(dim_idx, dim_idx + C::N::one());
+                builder.assign(&nb_opened_values, nb_opened_values + C::N::one());
+                builder.assign(&dim_idx, dim_idx + C::N::one());
             });
         });
     builder.cycle_tracker_end("verify-batch-reduce-fast-setup");
@@ -357,8 +357,8 @@ pub fn reduce_fast_ext<C: Config>(
                     nb_opened_values,
                     opened_values.clone(),
                 );
-                builder.assign(nb_opened_values, nb_opened_values + C::N::one());
-                builder.assign(dim_idx, dim_idx + C::N::one());
+                builder.assign(&nb_opened_values, nb_opened_values + C::N::one());
+                builder.assign(&dim_idx, dim_idx + C::N::one());
             });
         });
     builder.cycle_tracker_end("verify-batch-reduce-fast-setup-ext");

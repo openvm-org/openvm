@@ -9,7 +9,7 @@ use clap::Parser;
 use color_eyre::eyre::Result;
 use stark_vm::{
     program::Program,
-    vm::{config::VmConfig, ExecutionResult, VirtualMachine},
+    vm::{config::VmConfig, ExecutionAndTraceGenerationResult, VirtualMachine},
 };
 
 use crate::{
@@ -77,12 +77,12 @@ impl VerifyCommand {
         let encoded_proof = read_from_path(Path::new(&self.proof_file))?;
         let proof: Proof<BabyBearPoseidon2Config> = bincode::deserialize(&encoded_proof)?;
 
-        let ExecutionResult {
+        let ExecutionAndTraceGenerationResult {
             max_log_degree,
             nonempty_pis: pis,
             nonempty_chips: chips,
             ..
-        } = vm.execute()?;
+        } = vm.execute_and_generate_traces()?;
         let engine = config::baby_bear_poseidon2::default_engine(max_log_degree);
 
         let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);

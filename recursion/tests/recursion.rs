@@ -10,7 +10,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::{
     program::Program,
-    vm::{config::VmConfig, ExecutionResult, VirtualMachine},
+    vm::{config::VmConfig, ExecutionAndTraceGenerationResult, VirtualMachine},
 };
 
 mod common;
@@ -26,9 +26,9 @@ fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
 
     for _ in 0..n {
         let tmp: Var<_> = builder.uninit();
-        builder.assign(tmp, next);
-        builder.assign(next, prev + next);
-        builder.assign(prev, tmp);
+        builder.assign(&tmp, next);
+        builder.assign(&next, prev + next);
+        builder.assign(&prev, tmp);
     }
 
     builder.halt();
@@ -42,7 +42,7 @@ fn test_fibonacci_program_verify() {
     let fib_program = fibonacci_program(0, 1, 32);
 
     let vm_config = VmConfig {
-        max_segment_len: 2000000,
+        max_segment_len: 20000000,
         ..Default::default()
     };
 
@@ -50,12 +50,12 @@ fn test_fibonacci_program_verify() {
     let rec_raps = get_rec_raps(&dummy_vm.segments[0]);
 
     let vm = VirtualMachine::<1, _>::new(vm_config, fib_program, vec![]);
-    let ExecutionResult {
+    let ExecutionAndTraceGenerationResult {
         nonempty_traces: traces,
         nonempty_chips: chips,
         nonempty_pis: pvs,
         ..
-    } = vm.execute().unwrap();
+    } = vm.execute_and_generate_traces().unwrap();
 
     let chips = chips.iter().map(|x| x.deref()).collect();
 

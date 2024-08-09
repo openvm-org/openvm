@@ -1,6 +1,6 @@
 use p3_field::PrimeField32;
 
-use crate::prelude::{MemIndex, Usize};
+use crate::prelude::{MemIndex, RVar};
 
 /// Represents a memory index triple.
 pub enum IndexTriple<F> {
@@ -10,13 +10,13 @@ pub enum IndexTriple<F> {
 
 impl<F: PrimeField32> MemIndex<F> {
     pub fn fp(&self) -> IndexTriple<F> {
-        match self.index {
-            Usize::Const(index) => IndexTriple::Const(
-                F::from_canonical_usize(index),
+        match &self.index {
+            RVar::Const(index) => IndexTriple::Const(
+                *index,
                 F::from_canonical_usize(self.offset),
                 F::from_canonical_usize(self.size),
             ),
-            Usize::Var(index) => IndexTriple::Var(
+            RVar::Val(index) => IndexTriple::Var(
                 index.fp(),
                 F::from_canonical_usize(self.offset),
                 F::from_canonical_usize(self.size),

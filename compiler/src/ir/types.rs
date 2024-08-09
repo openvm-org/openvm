@@ -1,14 +1,15 @@
-use alloc::format;
+use alloc::{format, rc::Rc};
 use core::marker::PhantomData;
-use std::{collections::HashMap, hash::Hash};
+use std::{cell::RefCell, collections::HashMap, hash::Hash};
 
-use p3_field::{AbstractExtensionField, AbstractField, ExtensionField, Field};
+use p3_field::{AbstractExtensionField, AbstractField, ExtensionField, Field, PrimeField};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    Builder, Config, DslIr, ExtConst, FromConstant, MemIndex, MemVariable, Ptr, SymbolicExt,
-    SymbolicFelt, SymbolicUsize, SymbolicVar, Variable,
+    Builder, Config, DslIr, ExtConst, FromConstant, MemIndex, MemVariable, Ptr, RVar, SymbolicExt,
+    SymbolicFelt, SymbolicVar, Variable,
 };
+use crate::util::prime_field_to_usize;
 
 /// A variable that represents a native field element.
 ///
@@ -29,9 +30,9 @@ pub struct Felt<F>(pub u32, pub PhantomData<F>);
 pub struct Ext<F, EF>(pub u32, pub PhantomData<(F, EF)>);
 
 /// A variable that represents either a constant or variable counter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Usize<N> {
-    Const(usize),
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Usize<N: PrimeField> {
+    Const(Rc<RefCell<N>>),
     Var(Var<N>),
 }
 
@@ -60,31 +61,51 @@ impl<C: Config> Witness<C> {
     }
 }
 
-impl<N: Field> Usize<N> {
+impl<N: PrimeField> Usize<N> {
+    pub fn is_const(&self) -> bool {
+        match self {
+            Usize::Const(_) => true,
+            Usize::Var(_) => false,
+        }
+    }
+
     pub fn value(&self) -> usize {
         match self {
-            Usize::Const(c) => *c,
+            Usize::Const(c) => prime_field_to_usize(*c.borrow()),
             Usize::Var(_) => panic!("Cannot get the value of a variable"),
         }
     }
 
+    pub fn from_field(value: N) -> Self {
+        Usize::Const(Rc::new(RefCell::new(value)))
+    }
+
     pub fn materialize<C: Config<N = N>>(&self, builder: &mut Builder<C>) -> Var<C::N> {
         match self {
-            Usize::Const(c) => builder.eval(C::N::from_canonical_usize(*c)),
+            Usize::Const(c) => builder.eval(*c.borrow()),
             Usize::Var(v) => *v,
         }
     }
 }
 
-impl<N> From<Var<N>> for Usize<N> {
+impl<N: PrimeField> From<Var<N>> for Usize<N> {
     fn from(v: Var<N>) -> Self {
         Usize::Var(v)
     }
 }
 
-impl<N> From<usize> for Usize<N> {
+impl<N: PrimeField> From<usize> for Usize<N> {
     fn from(c: usize) -> Self {
-        Usize::Const(c)
+        Usize::Const(Rc::new(RefCell::new(N::from_canonical_usize(c))))
+    }
+}
+
+impl<N: PrimeField> From<Usize<N>> for RVar<N> {
+    fn from(u: Usize<N>) -> Self {
+        match u {
+            Usize::Const(c) => RVar::Const(*c.borrow()),
+            Usize::Var(v) => RVar::Val(v),
+        }
     }
 }
 
@@ -146,7 +167,7 @@ impl<F, EF> Ext<F, EF> {
 }
 
 impl<C: Config> Variable<C> for Usize<C::N> {
-    type Expression = SymbolicUsize<C::N>;
+    type Expression = SymbolicVar<C::N>;
 
     fn uninit(builder: &mut Builder<C>) -> Self {
         builder.uninit::<Var<C::N>>().into()
@@ -154,17 +175,16 @@ impl<C: Config> Variable<C> for Usize<C::N> {
 
     fn assign(&self, src: Self::Expression, builder: &mut Builder<C>) {
         match self {
-            Usize::Const(_) => {
-                panic!("cannot assign to a constant usize")
+            Usize::Const(c) => {
+                *c.borrow_mut() = if let SymbolicVar::Const(c, _) = src {
+                    c
+                } else {
+                    panic!("cannot assign Usize::Const with a variable")
+                }
             }
-            Usize::Var(v) => match src {
-                SymbolicUsize::Const(src) => {
-                    builder.assign(*v, C::N::from_canonical_usize(src));
-                }
-                SymbolicUsize::Var(src) => {
-                    builder.assign(*v, src);
-                }
-            },
+            Usize::Var(v) => {
+                builder.assign(v, src);
+            }
         }
     }
 
@@ -173,21 +193,7 @@ impl<C: Config> Variable<C> for Usize<C::N> {
         rhs: impl Into<Self::Expression>,
         builder: &mut Builder<C>,
     ) {
-        let lhs = lhs.into();
-        let rhs = rhs.into();
-
-        match (lhs, rhs) {
-            (SymbolicUsize::Const(lhs), SymbolicUsize::Const(rhs)) => {
-                assert_eq!(lhs, rhs, "constant usizes do not match");
-            }
-            (SymbolicUsize::Const(lhs), SymbolicUsize::Var(rhs)) => {
-                builder.assert_var_eq(C::N::from_canonical_usize(lhs), rhs);
-            }
-            (SymbolicUsize::Var(lhs), SymbolicUsize::Const(rhs)) => {
-                builder.assert_var_eq(lhs, C::N::from_canonical_usize(rhs));
-            }
-            (SymbolicUsize::Var(lhs), SymbolicUsize::Var(rhs)) => builder.assert_var_eq(lhs, rhs),
-        }
+        Var::<C::N>::assert_eq(lhs, rhs, builder);
     }
 
     fn assert_ne(
@@ -195,30 +201,14 @@ impl<C: Config> Variable<C> for Usize<C::N> {
         rhs: impl Into<Self::Expression>,
         builder: &mut Builder<C>,
     ) {
-        let lhs = lhs.into();
-        let rhs = rhs.into();
-
-        match (lhs, rhs) {
-            (SymbolicUsize::Const(lhs), SymbolicUsize::Const(rhs)) => {
-                assert_ne!(lhs, rhs, "constant usizes do not match");
-            }
-            (SymbolicUsize::Const(lhs), SymbolicUsize::Var(rhs)) => {
-                builder.assert_var_ne(C::N::from_canonical_usize(lhs), rhs);
-            }
-            (SymbolicUsize::Var(lhs), SymbolicUsize::Const(rhs)) => {
-                builder.assert_var_ne(lhs, C::N::from_canonical_usize(rhs));
-            }
-            (SymbolicUsize::Var(lhs), SymbolicUsize::Var(rhs)) => {
-                builder.assert_var_ne(lhs, rhs);
-            }
-        }
+        Var::<C::N>::assert_eq(lhs, rhs, builder);
     }
 
     fn eval(builder: &mut Builder<C>, expr: impl Into<Self::Expression>) -> Self {
         let expr = expr.into();
         match expr {
-            SymbolicUsize::Const(c) => Usize::Const(c),
-            SymbolicUsize::Var(v) => Usize::Var(builder.eval(v)),
+            SymbolicVar::Const(c, _) => Usize::from_field(c),
+            _ => Usize::Var(builder.eval(expr)),
         }
     }
 }
