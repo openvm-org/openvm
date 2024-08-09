@@ -32,6 +32,11 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakVmAir {
         let local: &KeccakVmCols<AB::Var> = (*local).borrow();
         let next: &KeccakVmCols<AB::Var> = (*next).borrow();
 
+        // Not strictly necessary:
+        builder
+            .when_first_row()
+            .assert_one(local.sponge.is_new_start);
+
         builder.assert_bool(local.io.is_opcode);
         // All rounds of a single permutation must have same is_opcode, clk, dst, e (src, a, c are only read on the 0-th round right now)
         let mut transition_builder = builder.when_transition();

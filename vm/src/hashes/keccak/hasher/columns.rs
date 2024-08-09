@@ -61,18 +61,25 @@ pub struct KeccakSpongeCols<T> {
     /// bytes.
     pub block_bytes: [T; KECCAK_RATE_BYTES],
 
-    /// For each of the first [KECCAK_RATE_U16S] `u16` limbs in the updated state,
+    /// For each of the first [KECCAK_RATE_U16S] `u16` limbs in the state,
     /// the most significant byte of the limb.
-    pub updated_state_hi: [T; KECCAK_RATE_U16S],
+    /// Here `state` is the postimage state if last round and the preimage
+    /// state if first round. It can be junk if not first or last round.
+    pub state_hi: [T; KECCAK_RATE_U16S],
 }
 
-impl<T> KeccakVmCols<T> {
+impl<T: Copy> KeccakVmCols<T> {
     pub const fn remaining_len(&self) -> T {
         self.opcode.len
     }
 
     pub const fn is_new_start(&self) -> T {
         self.sponge.is_new_start
+    }
+
+    pub const fn postimage(&self, y: usize, x: usize, limb: usize) -> T {
+        // WARNING: once plonky3 commit is updated this needs to be changed to y, x
+        self.inner.a_prime_prime_prime(x, y, limb)
     }
 }
 
