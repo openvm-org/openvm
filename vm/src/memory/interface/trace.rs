@@ -3,63 +3,72 @@ use std::collections::HashMap;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
+use super::AccessCell;
 use crate::memory::interface::{columns::MemoryInterfaceCols, MemoryInterfaceChip};
 
-impl<const CHUNK: usize, F: PrimeField32> MemoryInterfaceChip<CHUNK, F> {
+impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
+    MemoryInterfaceChip<NUM_WORDS, WORD_SIZE, F>
+{
     pub fn generate_trace(
         &self,
-        final_memory: &HashMap<(F, F), F>,
+        final_memory: &HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
         trace_degree: usize,
     ) -> RowMajorMatrix<F> {
         let mut rows = vec![];
         for &(address_space, label) in self.touched_leaves.iter() {
-            let mut initial_values = [F::zero(); CHUNK];
-            let mut initial_values_matter = [F::zero(); CHUNK];
-            let mut final_values = [F::zero(); CHUNK];
-            let mut final_values_directly_from_initial = [F::zero(); CHUNK];
-            for i in 0..CHUNK {
-                let full_address = &(address_space, F::from_canonical_usize((CHUNK * label) + i));
-                final_values[i] = *final_memory.get(full_address).unwrap_or(&F::zero());
-                match self.touched_addresses.get(full_address) {
-                    Some(cell) => {
-                        initial_values[i] = cell.initial_value;
-                        initial_values_matter[i] = F::from_bool(cell.read_initially);
-                        final_values_directly_from_initial[i] = F::from_bool(false);
-                    }
-                    None => {
-                        initial_values[i] = final_values[i];
-                        initial_values_matter[i] = F::from_bool(true);
-                        final_values_directly_from_initial[i] = F::from_bool(true);
-                    }
-                }
+            let mut initial_values = [[F::zero(); WORD_SIZE]; NUM_WORDS];
+            let mut initial_clks = [F::zero(); NUM_WORDS];
+            let mut final_values = [[F::zero(); WORD_SIZE]; NUM_WORDS];
+            let mut final_clks = [F::zero(); NUM_WORDS];
+
+            for word_idx in 0..NUM_WORDS {
+                let full_address = &(
+                    address_space,
+                    F::from_canonical_usize((NUM_WORDS * WORD_SIZE * label) + word_idx * WORD_SIZE),
+                );
+
+                let initial_cell = self.initial_memory.get(full_address).unwrap();
+                initial_values[word_idx] = initial_cell.value;
+                initial_clks[word_idx] = initial_cell.timestamp;
+
+                // TODO[osama]: consider making the HAshMap final_memory have [F; WORD_SIZE] key
+                let final_cell = final_memory.get(full_address).unwrap();
+
+                final_values[word_idx] = final_cell.value;
+                final_clks[word_idx] = final_cell.timestamp;
             }
             let initial_cols = MemoryInterfaceCols {
                 expand_direction: F::one(),
                 address_space,
                 leaf_label: F::from_canonical_usize(label),
                 values: initial_values,
-                auxes: initial_values_matter,
+                clks: initial_clks,
             };
             let final_cols = MemoryInterfaceCols {
                 expand_direction: F::neg_one(),
                 address_space,
                 leaf_label: F::from_canonical_usize(label),
                 values: final_values,
-                auxes: final_values_directly_from_initial,
+                clks: final_clks,
             };
             rows.extend(initial_cols.flatten());
             rows.extend(final_cols.flatten());
         }
-        while rows.len() != trace_degree * MemoryInterfaceCols::<CHUNK, F>::get_width() {
+        while rows.len()
+            != trace_degree * MemoryInterfaceCols::<NUM_WORDS, WORD_SIZE, F>::get_width()
+        {
             rows.extend(Self::unused_row().flatten());
         }
-        RowMajorMatrix::new(rows, MemoryInterfaceCols::<CHUNK, F>::get_width())
+        RowMajorMatrix::new(
+            rows,
+            MemoryInterfaceCols::<NUM_WORDS, WORD_SIZE, F>::get_width(),
+        )
     }
 
-    fn unused_row() -> MemoryInterfaceCols<CHUNK, F> {
+    fn unused_row() -> MemoryInterfaceCols<NUM_WORDS, WORD_SIZE, F> {
         MemoryInterfaceCols::from_slice(&vec![
             F::zero();
-            MemoryInterfaceCols::<CHUNK, F>::get_width()
+            MemoryInterfaceCols::<NUM_WORDS, WORD_SIZE, F>::get_width()
         ])
     }
 }
