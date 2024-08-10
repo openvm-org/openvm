@@ -1,7 +1,8 @@
 use afs_compiler::{
     asm::AsmBuilder,
-    ir::{Config, Ext, Felt, RVar, Usize, Var},
+    ir::{Array, Config, Ext, Felt, RVar, Usize, Var},
     prelude::{Builder, MemIndex, MemVariable, Ptr, Variable},
+    util::execute_program,
 };
 use afs_derive::DslVariable;
 use p3_baby_bear::BabyBear;
@@ -13,6 +14,8 @@ pub struct Point<C: Config> {
     y: Felt<C::F>,
     z: Ext<C::F, C::EF>,
 }
+
+const WORD_SIZE: usize = 1;
 
 // #[test]
 // #[ignore = "test too slow"]
@@ -178,4 +181,45 @@ fn test_fixed_array_var() {
         len * 3,
         "No operations should be generated"
     );
+}
+
+#[test]
+fn test_array_eq() {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+
+    let mut builder = AsmBuilder::<F, EF>::default();
+    let mut arr1: Array<_, Var<_>> = builder.array(2);
+    builder.set(&mut arr1, 0, F::one());
+    builder.set(&mut arr1, 1, F::two());
+    let mut arr2: Array<_, Var<_>> = builder.array(2);
+    builder.set(&mut arr2, 0, F::one());
+    builder.set(&mut arr2, 1, F::two());
+    builder.assert_var_array_eq(&arr1, &arr2);
+
+    builder.halt();
+
+    let program = builder.compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE>(program, vec![]);
+}
+
+#[should_panic]
+#[test]
+fn test_array_eq_neg() {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+
+    let mut builder = AsmBuilder::<F, EF>::default();
+    let mut arr1: Array<_, Var<_>> = builder.array(2);
+    builder.set(&mut arr1, 0, F::one());
+    builder.set(&mut arr1, 1, F::two());
+    let mut arr2: Array<_, Var<_>> = builder.array(2);
+    builder.set(&mut arr2, 0, F::one());
+    builder.set(&mut arr2, 1, F::one());
+    builder.assert_var_array_eq(&arr1, &arr2);
+
+    builder.halt();
+
+    let program = builder.compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE>(program, vec![]);
 }

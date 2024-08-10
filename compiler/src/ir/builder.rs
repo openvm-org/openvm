@@ -267,6 +267,16 @@ impl<C: Config> Builder<C> {
         self.assert_ne::<Ext<C::F, C::EF>>(lhs, rhs);
     }
 
+    /// Assert that two arrays are equal.
+    pub fn assert_var_array_eq(&mut self, lhs: &Array<C, Var<C::N>>, rhs: &Array<C, Var<C::N>>) {
+        self.assert_var_eq(lhs.len(), rhs.len());
+        self.range(0, lhs.len()).for_each(|i, builder| {
+            let l = builder.get(lhs, i);
+            let r = builder.get(rhs, i);
+            builder.assert_var_eq(l, r);
+        });
+    }
+
     /// Compares two variables.
     pub fn lt<LhsExpr: Into<SymbolicVar<C::N>>, RhsExpr: Into<SymbolicVar<C::N>>>(
         &mut self,
