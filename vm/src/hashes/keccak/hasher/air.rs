@@ -8,6 +8,7 @@ use p3_keccak_air::{KeccakAir, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS, NUM_ROUN
 use p3_matrix::Matrix;
 
 use super::{
+    bridge::{BLOCK_MEMORY_ACCESSES, TIMESTAMP_OFFSET_FOR_OPCODE},
     columns::{KeccakVmCols, NUM_KECCAK_VM_COLS},
     KECCAK_RATE_BYTES,
 };
@@ -32,24 +33,22 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakVmAir {
         let local: &KeccakVmCols<AB::Var> = (*local).borrow();
         let next: &KeccakVmCols<AB::Var> = (*next).borrow();
 
+        builder.assert_bool(local.sponge.is_new_start);
         // Not strictly necessary:
         builder
             .when_first_row()
             .assert_one(local.sponge.is_new_start);
 
-        builder.assert_bool(local.io.is_opcode);
-        // All rounds of a single permutation must have same is_opcode, clk, dst, e (src, a, c are only read on the 0-th round right now)
-        let mut transition_builder = builder.when_transition();
-        let mut round_builder =
-            transition_builder.when(not::<AB>(local.inner.step_flags[NUM_ROUNDS - 1]));
-        round_builder.assert_eq(local.io.is_opcode, next.io.is_opcode);
-        round_builder.assert_eq(local.io.clk, next.io.clk);
-        round_builder.assert_eq(local.io.e, next.io.e);
-        round_builder.assert_eq(local.aux.dst, next.aux.dst);
-
         self.eval_keccak_f(builder);
+        self.constrain_padding(builder, local, next);
+        self.constrain_consistency_across_rounds(builder, local, next);
+        self.constrain_block_transition(builder, local, next);
 
-        self.eval_interactions(builder, local);
+        // Interactions:
+        self.constrain_absorb(builder, local, next);
+        self.eval_opcode_interactions(builder, local);
+        self.constrain_input_read(builder, local);
+        self.constrain_output_write(builder, local);
     }
 }
 
@@ -69,9 +68,70 @@ impl KeccakVmAir {
         keccak_f_air.eval(&mut sub_builder);
     }
 
+    /// Many columns are expected to be the same between rounds and only change per-block.
+    pub fn constrain_consistency_across_rounds<AB: AirBuilder>(
+        &self,
+        builder: &mut AB,
+        local: &KeccakVmCols<AB::Var>,
+        next: &KeccakVmCols<AB::Var>,
+    ) {
+        let mut transition_builder = builder.when_transition();
+        let mut round_builder =
+            transition_builder.when(not::<AB>(local.inner.step_flags[NUM_ROUNDS - 1]));
+        // Opcode columns
+        local.opcode.assert_eq(&mut round_builder, next.opcode);
+        // Sponge columns
+        round_builder.assert_eq(local.sponge.is_new_start, next.sponge.is_new_start);
+    }
+
+    pub fn constrain_block_transition<AB: AirBuilder>(
+        &self,
+        builder: &mut AB,
+        local: &KeccakVmCols<AB::Var>,
+        next: &KeccakVmCols<AB::Var>,
+    ) {
+        // When we transition between blocks, if the next block isn't a new block
+        // (this means it's not receiving a new opcode or starting a dummy block)
+        // then we want _parts_ of opcode instruction to stay the same
+        // between blocks.
+        let mut block_transition =
+            builder.when(local.is_last_round() * not::<AB>(next.is_new_start()));
+        block_transition.assert_eq(local.opcode.is_enabled, next.opcode.is_enabled);
+        // dst is only going to be used for writes in the last input block
+        block_transition.assert_eq(local.opcode.dst, next.opcode.dst);
+        // needed for memory reads
+        block_transition.assert_eq(local.opcode.e, next.opcode.e);
+        // these are not used and hence not necessary, but putting for safety until performance becomes an issue:
+        block_transition.assert_eq(local.opcode.a, next.opcode.a);
+        block_transition.assert_eq(local.opcode.b, next.opcode.b);
+        block_transition.assert_eq(local.opcode.d, next.opcode.d);
+
+        // Move the src pointer over based on the number of bytes read.
+        // This should always be RATE_BYTES since it's a non-final block.
+        // TODO: depends on WORD_SIZE
+        block_transition.assert_eq(
+            next.opcode.src,
+            local.opcode.src + AB::F::from_canonical_usize(KECCAK_RATE_BYTES),
+        );
+        // Advance timestamp by the number of memory accesses from reading
+        // dst, src and block input bytes.
+        block_transition.assert_eq(
+            next.opcode.start_timestamp,
+            local.opcode.start_timestamp
+                + AB::F::from_canonical_usize(TIMESTAMP_OFFSET_FOR_OPCODE + BLOCK_MEMORY_ACCESSES),
+        );
+        block_transition.assert_eq(
+            next.opcode.len,
+            local.opcode.len - AB::F::from_canonical_usize(KECCAK_RATE_BYTES),
+        );
+    }
+
     /// Keccak follows the 10*1 padding rule.
     /// See Section 5.1 of https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf
     /// Note this is the ONLY difference between Keccak and SHA-3
+    ///
+    /// Constrains padding constraints and length between rounds and
+    /// between blocks. Padding logic is tied to constraints on `is_new_start`.
     pub fn constrain_padding<AB: AirBuilder>(
         &self,
         builder: &mut AB,
@@ -87,23 +147,27 @@ impl KeccakVmAir {
         for &is_padding_byte in is_padding_byte.iter() {
             builder.assert_bool(is_padding_byte);
         }
-        let mut num_padding_bytes = AB::Expr::zero();
         // is_padding_byte should transition from 0 to 1 only once and then stay 1
         for i in 1..KECCAK_RATE_BYTES {
             builder
                 .when(is_padding_byte[i - 1])
                 .assert_one(is_padding_byte[i]);
-            num_padding_bytes = num_padding_bytes + is_padding_byte[i];
         }
         // is_padding_byte must stay the same on all rounds in a block
-        let is_last_round = step_flags.last().unwrap();
-        let is_not_last_round = not(is_last_round);
+        let is_last_round = *step_flags.last().unwrap();
+        let is_not_last_round = not::<AB>(is_last_round);
         for i in 0..KECCAK_RATE_BYTES {
-            builder.when(is_not_last_round).assert_eq(
+            builder.when(is_not_last_round.clone()).assert_eq(
                 local.sponge.is_padding_byte[i],
                 next.sponge.is_padding_byte[i],
             );
         }
+
+        let num_padding_bytes = local
+            .sponge
+            .is_padding_byte
+            .iter()
+            .fold(AB::Expr::zero(), |a, &b| a + b);
 
         // If final rate block of input, then last byte must be padding
         let is_final_block = is_padding_byte[KECCAK_RATE_BYTES - 1];
@@ -111,13 +175,13 @@ impl KeccakVmAir {
         // is_padding_byte must be consistent with remaining_len
         builder.when(is_final_block).assert_eq(
             remaining_len,
-            AB::F::from_canonical_usize(KECCAK_RATE_BYTES) - num_padding_bytes,
+            AB::Expr::from_canonical_usize(KECCAK_RATE_BYTES) - num_padding_bytes,
         );
         // If this block is not final, when transitioning to next block, remaining len
         // must decrease by `KECCAK_RATE_BYTES`.
         builder
             .when(is_last_round)
-            .when(not(is_final_block))
+            .when(not::<AB>(is_final_block))
             .assert_eq(
                 remaining_len - AB::F::from_canonical_usize(KECCAK_RATE_BYTES),
                 next.remaining_len(),
@@ -128,6 +192,11 @@ impl KeccakVmAir {
             .when(is_last_round)
             .when(next.is_new_start())
             .assert_one(is_final_block);
+        // Make sure there are not repeated padding blocks
+        builder
+            .when(is_last_round)
+            .when(is_final_block)
+            .assert_one(next.is_new_start());
         // The chain above enforces that for an input, the remaining length must decrease by RATE
         // block-by-block until it reaches a final block with padding.
 
@@ -145,6 +214,7 @@ impl KeccakVmAir {
             AB::F::from_canonical_u8(0b10000001),
         );
 
+        let has_multiple_padding_bytes = not::<AB>(has_single_padding_byte.clone());
         for i in 0..KECCAK_RATE_BYTES - 1 {
             let is_first_padding_byte: AB::Expr = {
                 if i > 0 {
@@ -155,21 +225,21 @@ impl KeccakVmAir {
             };
             // If the row has multiple padding bytes, the first padding byte must be 0x80
             builder
-                .when(not(has_single_padding_byte.clone()))
+                .when(has_multiple_padding_bytes.clone())
                 .when(is_first_padding_byte.clone())
                 .assert_eq(block_bytes[i], AB::F::from_canonical_u8(0x80));
             // If the row has multiple padding bytes, the other padding bytes
             // except the last one must be 0
             builder
                 .when(is_padding_byte[i])
-                .when(not(is_first_padding_byte)) // hence never when single padding byte
+                .when(not::<AB>(is_first_padding_byte)) // hence never when single padding byte
                 .assert_zero(block_bytes[i]);
         }
 
         // If the row has multiple padding bytes, then the last byte must be 0x01
         builder
             .when(is_final_block)
-            .when(not(has_single_padding_byte))
+            .when(has_multiple_padding_bytes)
             .assert_eq(
                 block_bytes[KECCAK_RATE_BYTES - 1],
                 AB::F::from_canonical_u8(0x01),

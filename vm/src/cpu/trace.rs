@@ -345,8 +345,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 PERM_POS2 | COMP_POS2 => {
                     Poseidon2Chip::<16, _>::calculate(vm, timestamp, instruction);
                 }
-                PERM_KECCAK => {
-                    KeccakPermuteChip::<_>::keccak_permute(vm, timestamp, instruction);
+                KECCAK256 => {
+                    KeccakVmChip::<_>::execute(vm, timestamp, instruction);
                 }
                 HINT_INPUT => {
                     let hint = match vm.input_stream.pop_front() {

@@ -1,14 +1,23 @@
 use std::iter::zip;
 
+use afs_primitives::utils::not;
 use afs_stark_backend::interaction::InteractionBuilder;
-use itertools::{izip, Itertools};
+use itertools::izip;
 use p3_field::AbstractField;
-use p3_keccak_air::{NUM_ROUNDS, U64_LIMBS};
+use p3_keccak_air::U64_LIMBS;
 
 use super::{
     columns::KeccakVmCols, KeccakVmAir, KECCAK_RATE_BYTES, NUM_ABSORB_ROUNDS, NUM_U64_HASH_ELEMS,
 };
 use crate::cpu::{KECCAK256_BUS, MEMORY_BUS};
+
+/// We need two memory accesses to read dst, src from memory.
+/// It seems harmless to just shift timestamp by this even in blocks
+/// where we don't do this memory access.
+/// See `eval_opcode_interactions`.
+pub(super) const TIMESTAMP_OFFSET_FOR_OPCODE: usize = 2;
+// This depends on WORD_SIZE
+pub(super) const BLOCK_MEMORY_ACCESSES: usize = KECCAK_RATE_BYTES;
 
 impl KeccakVmAir {
     /// Add new send interaction to lookup (x, y, x ^ y) where x, y, z
@@ -52,7 +61,7 @@ impl KeccakVmAir {
         let updated_state_bytes = (0..NUM_ABSORB_ROUNDS).flat_map(|i| {
             let y = i / 5;
             let x = i % 5;
-            (0..U64_LIMBS).flat_map(|limb| {
+            (0..U64_LIMBS).flat_map(move |limb| {
                 let state_limb = local.postimage(y, x, limb);
                 let hi = local.sponge.state_hi[i * U64_LIMBS + limb];
                 let lo = state_limb - hi * AB::F::from_canonical_u64(1 << 8);
@@ -65,7 +74,7 @@ impl KeccakVmAir {
         let post_absorb_state_bytes = (0..NUM_ABSORB_ROUNDS).flat_map(|i| {
             let y = i / 5;
             let x = i % 5;
-            (0..U64_LIMBS).flat_map(|limb| {
+            (0..U64_LIMBS).flat_map(move |limb| {
                 let state_limb = next.inner.preimage[y][x][limb];
                 let hi = next.sponge.state_hi[i * U64_LIMBS + limb];
                 let lo = state_limb - hi * AB::F::from_canonical_u64(1 << 8);
@@ -84,96 +93,161 @@ impl KeccakVmAir {
         }
     }
 
-    /*
-    pub fn constrain_memory_accesses<AB: InteractionBuilder>(
+    /// Receive the opcode instruction itself on opcode bus.
+    /// Then does memory read to get `dst` and `src` from memory.
+    pub fn eval_opcode_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         local: &KeccakVmCols<AB::Var>,
     ) {
-        let is_input = local.io.is_opcode * local.inner.step_flags[0];
+        let opcode = &local.opcode;
+        // Only receive opcode if:
+        // - enabled row (not dummy row)
+        // - first round of block
+        // - is_new_start
+        // Note this is degree 3, which results in quotient degree 2 if used
+        // as `count` in interaction
+        let should_receive =
+            local.opcode.is_enabled * local.sponge.is_new_start * local.inner.step_flags[0];
         // receive the opcode itself
         builder.push_receive(
-            KECCAK_PERMUTE_BUS,
+            KECCAK256_BUS,
             [
-                local.io.clk.into(),
-                local.io.a.into(),
-                AB::Expr::zero(),
-                local.io.c.into(),
-                local.io.d.into(),
-                local.io.e.into(),
+                opcode.start_timestamp,
+                opcode.a,
+                opcode.b,
+                opcode.len,
+                opcode.d,
+                opcode.e,
             ],
-            is_input.clone(),
+            should_receive.clone(),
         );
 
-        let mut timestamp_offset = 0;
-
-        // read addresses
-        // dst = word[a]_d, src = word[c]_d
-        for (ptr, value) in [local.io.a, local.io.c]
-            .into_iter()
-            .zip_eq([local.aux.dst, local.aux.src])
+        // Only when it is an input do we want to do memory read for
+        // dst <- word[a]_d, src <- word[b]_d
+        for (t_offset, ptr, value) in izip!([0, 1], [opcode.a, opcode.b], [opcode.dst, opcode.src])
         {
-            let timestamp = local.io.clk + AB::F::from_canonical_usize(timestamp_offset);
-            timestamp_offset += 1;
+            let timestamp = opcode.start_timestamp + AB::F::from_canonical_usize(t_offset);
 
-            let fields = [
+            Self::constrain_memory_read(
+                builder,
                 timestamp,
-                AB::Expr::from_bool(false), // read
-                local.io.d.into(),
-                ptr.into(),
-                value.into(),
-            ];
-            builder.push_send(MEMORY_BUS, fields, is_input.clone());
-        }
-
-        // read `state` into `word[src + ...]_e`
-        // iterator of state as u16:
-        let input = local.inner.preimage.into_iter().flatten().flatten();
-        for (i, input) in input.enumerate() {
-            let timestamp = local.io.clk + AB::F::from_canonical_usize(timestamp_offset);
-            timestamp_offset += 1;
-
-            let address = local.aux.src + AB::F::from_canonical_usize(i);
-
-            let fields = [
-                timestamp,
-                AB::Expr::from_bool(false), // read
-                local.io.e.into(),
-                address,
-                input.into(),
-            ];
-
-            builder.push_send(MEMORY_BUS, fields, is_input.clone());
-        }
-
-        // write `new_state` into `word[dst + ...]_e`
-        let is_output = local.io.is_opcode * local.inner.step_flags[NUM_ROUNDS - 1];
-        // iterator of `new_state` as u16, in y-major order:
-        let output = (0..5).flat_map(move |y| {
-            (0..5).flat_map(move |x| {
-                (0..NUM_U64_HASH_ELEMS).map(move |limb| {
-                    // TODO: after switching to latest p3 commit, this should be y, x
-                    // This is next.a[y][x][limb]
-                    local.inner.a_prime_prime_prime(x, y, limb)
-                })
-            })
-        });
-        for (i, output) in output.enumerate() {
-            let timestamp = local.io.clk + AB::F::from_canonical_usize(timestamp_offset);
-            timestamp_offset += 1;
-
-            let address = local.opcode.dst + AB::F::from_canonical_usize(i);
-
-            let fields = [
-                timestamp,
-                AB::Expr::from_bool(true), // write
-                local.io.e.into(),
-                address,
-                output.into(),
-            ];
-
-            builder.push_send(MEMORY_BUS, fields, is_output.clone());
+                opcode.d,
+                ptr,
+                value,
+                should_receive.clone(),
+            );
         }
     }
-    */
+
+    /// Constrain reading the input as `block_bytes` from memory.
+    /// Reads input based on `is_padding_byte`.
+    /// Constrains timestamp transitions between blocks if input crosses blocks.
+    pub fn constrain_input_read<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        local: &KeccakVmCols<AB::Var>,
+    ) {
+        // Only read input from memory when it is an opcode-related row
+        // and only on the first round of block
+        let is_input = local.opcode.is_enabled * local.inner.step_flags[0];
+        // read `state` into `word[src + ...]_e`
+        // iterator of state as u16:
+        for (i, (input, is_padding)) in
+            zip(local.sponge.block_bytes, local.sponge.is_padding_byte).enumerate()
+        {
+            // reserve two timestamp advances for opcode dst,src reads in
+            // eval_opcode_interactions, even if they don't always happen
+            let timestamp = local.opcode.start_timestamp
+                + AB::F::from_canonical_usize(TIMESTAMP_OFFSET_FOR_OPCODE + i);
+            let ptr = local.opcode.src + AB::F::from_canonical_usize(i);
+            // Only read byte i if it is not padding byte
+            // This is constraint degree 3, which leads to quotient degree 2
+            // if used as `count` in interaction
+            let count = is_input.clone() * not::<AB>(is_padding);
+
+            Self::constrain_memory_read(builder, timestamp, local.opcode.e, ptr, input, count);
+        }
+    }
+
+    pub fn constrain_output_write<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        local: &KeccakVmCols<AB::Var>,
+    ) {
+        let opcode = &local.opcode;
+
+        let is_final_block = *local.sponge.is_padding_byte.last().unwrap();
+        // since keccak-f AIR has this column, we might as well use it
+        builder.assert_eq(
+            local.inner.export,
+            opcode.is_enabled * is_final_block * local.is_last_round(),
+        );
+        let mut timestamp_offset = TIMESTAMP_OFFSET_FOR_OPCODE + BLOCK_MEMORY_ACCESSES;
+        // iterator of `new_state` as u16, in y-major order:
+        for y in 0..5 {
+            for x in 0..5 {
+                for limb in 0..NUM_U64_HASH_ELEMS {
+                    let timestamp = local.opcode.start_timestamp
+                        + AB::F::from_canonical_usize(timestamp_offset);
+                    // TODO: after switching to latest p3 commit, this should be y, x
+                    let value = local.postimage(y, x, limb);
+                    Self::constrain_memory_write(
+                        builder,
+                        timestamp,
+                        local.opcode.e,
+                        local.opcode.dst,
+                        value,
+                        local.inner.export,
+                    );
+
+                    timestamp_offset += 1;
+                }
+            }
+        }
+    }
+
+    // TODO: this should be general interface of Memory
+    fn constrain_memory_read<AB: InteractionBuilder>(
+        builder: &mut AB,
+        timestamp: impl Into<AB::Expr>,
+        address_space: impl Into<AB::Expr>,
+        ptr: impl Into<AB::Expr>,
+        value: impl Into<AB::Expr>,
+        count: impl Into<AB::Expr>,
+    ) {
+        builder.push_send(
+            MEMORY_BUS,
+            [
+                timestamp.into(),
+                AB::Expr::from_bool(false), // read
+                address_space.into(),
+                ptr.into(),
+                value.into(),
+            ],
+            count,
+        );
+    }
+
+    // TODO: this should be general interface of Memory
+    fn constrain_memory_write<AB: InteractionBuilder>(
+        builder: &mut AB,
+        timestamp: impl Into<AB::Expr>,
+        address_space: impl Into<AB::Expr>,
+        ptr: impl Into<AB::Expr>,
+        value: impl Into<AB::Expr>,
+        count: impl Into<AB::Expr>,
+    ) {
+        builder.push_send(
+            MEMORY_BUS,
+            [
+                timestamp.into(),
+                AB::Expr::from_bool(true), // write
+                address_space.into(),
+                ptr.into(),
+                value.into(),
+            ],
+            count,
+        );
+    }
 }

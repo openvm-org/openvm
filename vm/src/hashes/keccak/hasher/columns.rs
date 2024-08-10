@@ -2,13 +2,11 @@ use core::mem::size_of;
 use std::mem::transmute;
 
 use afs_derive::AlignedBorrow;
+use p3_air::AirBuilder;
 use p3_keccak_air::KeccakCols as KeccakPermCols;
 use p3_util::indices_arr;
 
-use super::{
-    KECCAK_CAPACITY_U16S, KECCAK_DIGEST_BYTES, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
-    KECCAK_WIDTH_MINUS_DIGEST_U16S,
-};
+use super::{KECCAK_RATE_BYTES, KECCAK_RATE_U16S};
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
@@ -26,6 +24,9 @@ pub struct KeccakVmCols<T> {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, AlignedBorrow, derive_new::new)]
 pub struct KeccakOpcodeCols<T> {
+    /// True for all rows that are part of opcode execution.
+    /// False on dummy rows only used to pad the height.
+    pub is_enabled: T,
     /// The starting timestamp to use for memory access in this row.
     /// A single row will do multiple memory accesses.
     pub start_timestamp: T,
@@ -42,15 +43,11 @@ pub struct KeccakOpcodeCols<T> {
 }
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(Debug, AlignedBorrow)]
 pub struct KeccakSpongeCols<T> {
     /// Only used on first row of a round to determine whether the preimage state should
     /// be reset to all 0s.
     pub is_new_start: T,
-
-    /// The number of input bytes that have already been absorbed prior to this
-    /// block.
-    pub already_absorbed_bytes: T,
 
     /// Whether the current byte is a padding byte.
     ///
@@ -77,9 +74,30 @@ impl<T: Copy> KeccakVmCols<T> {
         self.sponge.is_new_start
     }
 
-    pub const fn postimage(&self, y: usize, x: usize, limb: usize) -> T {
+    pub fn postimage(&self, y: usize, x: usize, limb: usize) -> T {
         // WARNING: once plonky3 commit is updated this needs to be changed to y, x
         self.inner.a_prime_prime_prime(x, y, limb)
+    }
+
+    pub fn is_last_round(&self) -> T {
+        *self.inner.step_flags.last().unwrap()
+    }
+}
+
+impl<T: Copy> KeccakOpcodeCols<T> {
+    pub fn assert_eq<AB: AirBuilder>(&self, builder: &mut AB, other: Self)
+    where
+        T: Into<AB::Expr>,
+    {
+        builder.assert_eq(self.is_enabled, other.is_enabled);
+        builder.assert_eq(self.start_timestamp, other.start_timestamp);
+        builder.assert_eq(self.a, other.a);
+        builder.assert_eq(self.b, other.b);
+        builder.assert_eq(self.len, other.len);
+        builder.assert_eq(self.d, other.d);
+        builder.assert_eq(self.e, other.e);
+        builder.assert_eq(self.dst, other.dst);
+        builder.assert_eq(self.src, other.src);
     }
 }
 

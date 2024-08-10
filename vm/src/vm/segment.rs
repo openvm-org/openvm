@@ -17,7 +17,7 @@ use crate::{
     cpu::{trace::ExecutionError, CpuChip, CpuOptions, POSEIDON2_BUS, RANGE_CHECKER_BUS},
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
-    hashes::{keccak::permute::KeccakPermuteChip, poseidon2::Poseidon2Chip},
+    hashes::poseidon2::Poseidon2Chip,
     memory::offline_checker::MemoryChip,
     program::{Program, ProgramChip},
 };

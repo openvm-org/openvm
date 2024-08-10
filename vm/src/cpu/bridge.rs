@@ -7,7 +7,7 @@ use super::{
     columns::{CpuIoCols, MemoryAccessCols},
     CpuAir, OpCode, ARITHMETIC_BUS, CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE,
     FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_BUS, FIELD_EXTENSION_INSTRUCTIONS,
-    KECCAK_PERMUTE_BUS, MEMORY_BUS, POSEIDON2_BUS, READ_INSTRUCTION_BUS,
+    KECCAK256_BUS, MEMORY_BUS, POSEIDON2_BUS, READ_INSTRUCTION_BUS,
 };
 use crate::cpu::OpCode::{COMP_POS2, PERM_POS2};
 
@@ -90,11 +90,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
         if self.options.perm_keccak_enabled {
             // This forces op_b to be zero
             let fields = [io.timestamp, io.op_a, io.op_b, io.op_c, io.d, io.e];
-            builder.push_send(
-                KECCAK_PERMUTE_BUS,
-                fields,
-                operation_flags[&OpCode::PERM_KECCAK],
-            );
+            builder.push_send(KECCAK256_BUS, fields, operation_flags[&OpCode::KECCAK256]);
         }
     }
 }

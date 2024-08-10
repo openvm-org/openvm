@@ -62,7 +62,7 @@ pub enum OpCode {
 
     PERM_POS2 = 40,
     COMP_POS2 = 41,
-    PERM_KECCAK = 42,
+    KECCAK256 = 42,
 
     /// Instruction to write the next hint word into memory.
     SHINTW = 50,
@@ -168,7 +168,7 @@ impl CpuOptions {
             result.push(PERM_POS2);
         }
         if self.perm_keccak_enabled {
-            result.push(PERM_KECCAK);
+            result.push(KECCAK256);
         }
         result
     }
