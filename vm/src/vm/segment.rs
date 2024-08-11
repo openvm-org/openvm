@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::{range_gate::RangeCheckerGateChip, xor_lookup::XorLookupChip};
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
     rap::AnyRap,
@@ -14,10 +14,12 @@ use poseidon2_air::poseidon2::Poseidon2Config;
 
 use super::{ChipType, VirtualMachineState, VmConfig, VmMetrics};
 use crate::{
-    cpu::{trace::ExecutionError, CpuChip, CpuOptions, POSEIDON2_BUS, RANGE_CHECKER_BUS},
+    cpu::{
+        trace::ExecutionError, CpuChip, CpuOptions, BYTE_XOR_BUS, POSEIDON2_BUS, RANGE_CHECKER_BUS,
+    },
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
-    hashes::poseidon2::Poseidon2Chip,
+    hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
     memory::offline_checker::MemoryChip,
     program::{Program, ProgramChip},
 };
@@ -31,7 +33,8 @@ pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub field_extension_chip: FieldExtensionArithmeticChip<WORD_SIZE, F>,
     pub range_checker: Arc<RangeCheckerGateChip>,
     pub poseidon2_chip: Poseidon2Chip<16, F>,
-    pub keccak_permute_chip: KeccakPermuteChip<F>,
+    pub keccak_chip: KeccakVmChip<F>,
+
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
     pub has_generation_happened: bool,
@@ -61,7 +64,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
             POSEIDON2_BUS,
         );
-        let keccak_permute_chip = KeccakPermuteChip::<F>::new();
+        let xor_chip = XorLookupChip::<8>::new(BYTE_XOR_BUS);
+        let keccak_permute_chip = KeccakVmChip::<F>::new(BYTE_XOR_BUS);
 
         let opcode_counts = BTreeMap::new();
         let dsl_counts = BTreeMap::new();

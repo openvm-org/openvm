@@ -4,9 +4,10 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 use tiny_keccak::keccakf;
 
-use super::{columns::NUM_KECCAK_PERMUTE_COLS, KeccakPermuteChip, KeccakVmChip};
+use super::KeccakVmChip;
 use crate::{
     cpu::{trace::Instruction, OpCode},
+    hashes::keccak::hasher::columns::{KeccakVmCols, NUM_KECCAK_VM_COLS},
     vm::ExecutionSegment,
 };
 
@@ -24,10 +25,10 @@ impl<F: PrimeField32> KeccakVmChip<F> {
 
         // Use unsafe alignment so we can parallely write to the matrix
         let mut trace = RowMajorMatrix::new(
-            vec![F::zero(); num_rows * NUM_KECCAK_PERMUTE_COLS],
-            NUM_KECCAK_PERMUTE_COLS,
+            vec![F::zero(); num_rows * NUM_KECCAK_VM_COLS],
+            NUM_KECCAK_VM_COLS,
         );
-        let (prefix, rows, suffix) = unsafe { trace.values.align_to_mut::<KeccakPermuteCols<F>>() };
+        let (prefix, rows, suffix) = unsafe { trace.values.align_to_mut::<KeccakVmCols<F>>() };
         assert!(prefix.is_empty(), "Alignment should match");
         assert!(suffix.is_empty(), "Alignment should match");
         assert_eq!(rows.len(), num_rows);

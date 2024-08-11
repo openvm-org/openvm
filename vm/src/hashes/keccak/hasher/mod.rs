@@ -7,6 +7,8 @@ pub mod columns;
 pub mod trace;
 
 pub use air::KeccakVmAir;
+use p3_keccak::Keccak256Hash;
+use tiny_keccak::{Hasher, Keccak};
 
 use crate::{
     cpu::{trace::Instruction, OpCode},
@@ -41,10 +43,7 @@ pub const KECCAK_DIGEST_U16S: usize = KECCAK_DIGEST_BYTES / 2;
 pub struct KeccakVmChip<F: PrimeField32> {
     pub air: KeccakVmAir,
     /// IO and memory data necessary for each opcode call
-    pub requests: Vec<KeccakOpcodeCols<F>>,
-    /// The input state of each keccak-f permutation corresponding to `requests`.
-    /// Must have same length as `requests`.
-    pub inputs: Vec<[u64; 25]>,
+    pub requests: Vec<(KeccakOpcodeCols<F>, Vec<u8>)>,
 }
 
 impl<F: PrimeField32> KeccakVmChip<F> {
@@ -53,35 +52,37 @@ impl<F: PrimeField32> KeccakVmChip<F> {
         Self {
             air: KeccakVmAir::new(xor_bus_index),
             requests: Vec::new(),
-            inputs: Vec::new(),
         }
     }
 
     /// Wrapper function for tiny-keccak's keccak-f permutation.
     /// Returns the new state after permutation.
-    pub fn keccak_f(mut input: [u64; 25]) -> [u64; 25] {
-        tiny_keccak::keccakf(&mut input);
-        input
+    pub fn keccak256(input: &[u8]) -> [u8; 32] {
+        let mut hasher = Keccak::v256();
+        hasher.update(input);
+        let mut output = [0u8; 32];
+        hasher.finalize(&mut output);
+        output
     }
 
+    /// Returns amount to advance timestamp by.
     // TODO: only WORD_SIZE=1 works right now
     pub fn execute<const WORD_SIZE: usize>(
         vm: &mut ExecutionSegment<WORD_SIZE, F>,
         start_timestamp: usize,
         instruction: Instruction<F>,
-    ) {
+    ) -> usize {
         assert_eq!(WORD_SIZE, 1, "Only WORD_SIZE=1 supported for now");
         let Instruction {
             opcode,
             op_a,
             op_b,
-            op_c,
+            op_c: len,
             d,
             e,
             debug: _debug,
         } = instruction;
         debug_assert_eq!(opcode, OpCode::KECCAK256);
-        debug_assert_eq!(op_b, F::zero());
 
         let mut timestamp = start_timestamp;
         let mut read = |address_space, addr| {
@@ -90,18 +91,20 @@ impl<F: PrimeField32> KeccakVmChip<F> {
             val
         };
 
-        let dst = read(d, op_a);
-        let src = read(d, op_c);
+        let dst = vm.memory_chip.read_elem(timestamp, d, op_a);
+        let src = vm.memory_chip.read_elem(timestamp + 1, d, op_b);
 
-        let io = KeccakPermuteIoCols::new(
+        let opcode = KeccakOpcodeCols::new(
             F::from_bool(true),
             F::from_canonical_usize(start_timestamp),
             op_a,
-            op_c,
+            op_b,
+            len,
             d,
             e,
+            dst,
+            src,
         );
-        let aux = KeccakPermuteAuxCols::new(dst, src);
 
         // TODO: unoptimized, many conversions to/from Montgomery form
         let mut offset = 0;
@@ -137,10 +140,5 @@ impl<F: PrimeField32> KeccakVmChip<F> {
         // Add the events to chip state for later trace generation usage
         vm.keccak_permute_chip.requests.push((io, aux));
         vm.keccak_permute_chip.inputs.push(input_u64);
-    }
-
-    /// The offset from `start_timestamp` when output is written to memory
-    fn write_timestamp_offset() -> usize {
-        2 + U64_LIMBS * 25
     }
 }
