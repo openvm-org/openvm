@@ -241,6 +241,49 @@ A note on CASTU below: support for casting arbitrary field elements can also be 
 | **CASTU** | `a, b, _`                                     | Set `word[a]_d` to the unique word such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = proj(word[b]_e)` where `[a + i]_d < 2^8` for `i = 0..3` and `[a + 3]_d < 2^6`. This opcode enforces `proj(word[b]_e)` must be at most 30-bits. If `WORD_SIZE > 4` then all remaining cells in `word[a]_d` must be zero. |
 | **SLTU**  | `a, b, c`                                     | Set `word[a]_d <- compose(word[b]_d) < compose(word[c]_e) ? emb(1) : emb(0)`. The address space `d` is not allowed to be zero.                                                                                                                                                                         |
 
+### U256 Arithmetic and Logical Operations
+
+We name these opcodes `ADD`, etc, below for brevity but in the code they must distinguish between `ADD` for `u32` and `ADD` for `u256`.
+
+Since we work over a 31-bit field, we will represent `u256` as 16-bit limbs. Let `Word256 = [u16; 16]`. For notational purposes we let `w256[a]_d: Word256` denote the array of limbs `w256[a + i]_d` for i = 0..16`. Explicitly, the conversion between the limb representation and the actual unsigned integer is given by
+
+**Note:** we assume 16-bit limbs are the most efficient for cell-saving, but this can be changed if needed.
+
+```
+compose(w: Word256) -> u256 {
+    return sum_{i=0}^15 w[i] * 2^{16i}
+}
+```
+
+(in other words, little-endian).
+
+and let `decompose: u256 -> Word256` be the inverse operation.
+
+To save some notation, we will let `u256[a]_d := compose(w256[a]_d)` below.
+The address spaces `d, e` are not allowed to be zero in any instructions below unless otherwise specified.
+
+#### Arithmetic Operations
+
+| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description |
+| -------- | --------------------------------------------- | ----------- |
+
+| **ADD** | `a, b, c` | Set `w256[a]_d <- decompose(u256[b]_d + u256[c]_e)` where addition is mod `2^256`. |
+| **MUL** | `a, b, c` | Set `w256[a]_d <- decompose(u256[b]_d * u256[c]_e)` where multiplication is mod `2^256`. |
+| **SUB** | `a, b, c` | Set `w256[a]_d <- decompose(u256[b]_d - u256[c]_e)` where subtraction is mod `2^256` with wraparound. |
+
+<!--
+We don't need this yet:
+| **DIV** | `a, b, c` | Set `w256[a]_d <- decompose(u256[b]_d // u256[c]_e)` where subtraction is mod `2^256` with wraparound. |
+-->
+
+#### Comparison Operations
+
+| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description |
+| -------- | --------------------------------------------- | ----------- |
+
+| **LT** | `a, b, c` | Set `word[a]_d <- u256[b]_d < u256[c]_e ? emb(1) : emb(0)`. |
+| **EQ** | `a, b, c` | Set `word[a]_d <- u256[b]_d == u256[c]_e ? emb(1) : emb(0)`. |
+
 ### Hash function precompiles
 
 We have special opcodes to enable different precompiled hash functions.
