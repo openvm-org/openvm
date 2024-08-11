@@ -264,12 +264,11 @@ The address spaces `d, e` are not allowed to be zero in any instructions below u
 
 #### Arithmetic Operations
 
-| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description |
-| -------- | --------------------------------------------- | ----------- |
-
-| **ADD** | `a, b, c` | Set `w256[a]_d <- decompose(u256[b]_d + u256[c]_e)` where addition is mod `2^256`. |
-| **MUL** | `a, b, c` | Set `w256[a]_d <- decompose(u256[b]_d * u256[c]_e)` where multiplication is mod `2^256`. |
-| **SUB** | `a, b, c` | Set `w256[a]_d <- decompose(u256[b]_d - u256[c]_e)` where subtraction is mod `2^256` with wraparound. |
+| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                                                           |
+| -------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| **ADD**  | `a, b, c`                                     | Set `w256[a]_d <- decompose(u256[b]_d + u256[c]_e)` where addition is mod `2^256`.                    |
+| **MUL**  | `a, b, c`                                     | Set `w256[a]_d <- decompose(u256[b]_d * u256[c]_e)` where multiplication is mod `2^256`.              |
+| **SUB**  | `a, b, c`                                     | Set `w256[a]_d <- decompose(u256[b]_d - u256[c]_e)` where subtraction is mod `2^256` with wraparound. |
 
 <!--
 We don't need this yet:
@@ -278,11 +277,10 @@ We don't need this yet:
 
 #### Comparison Operations
 
-| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description |
-| -------- | --------------------------------------------- | ----------- |
-
-| **LT** | `a, b, c` | Set `word[a]_d <- u256[b]_d < u256[c]_e ? emb(1) : emb(0)`. |
-| **EQ** | `a, b, c` | Set `word[a]_d <- u256[b]_d == u256[c]_e ? emb(1) : emb(0)`. |
+| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                  |
+| -------- | --------------------------------------------- | ------------------------------------------------------------ |
+| **LT**   | `a, b, c`                                     | Set `word[a]_d <- u256[b]_d < u256[c]_e ? emb(1) : emb(0)`.  |
+| **EQ**   | `a, b, c`                                     | Set `word[a]_d <- u256[b]_d == u256[c]_e ? emb(1) : emb(0)`. |
 
 ### Hash function precompiles
 
