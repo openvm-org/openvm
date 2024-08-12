@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use afs_compiler::{asm::AsmBuilder, ir::Var};
+use afs_compiler::asm::AsmBuilder;
 use afs_recursion::stark::get_rec_raps;
 use afs_test_utils::config::{
     fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},
@@ -8,6 +8,7 @@ use afs_test_utils::config::{
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
+use afs_compiler::ir::Felt;
 use stark_vm::{
     program::Program,
     vm::{config::VmConfig, ExecutionAndTraceGenerationResult, VirtualMachine},
@@ -21,15 +22,20 @@ fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let prev: Var<_> = builder.constant(F::from_canonical_u32(a));
-    let next: Var<_> = builder.constant(F::from_canonical_u32(b));
+    let prev: Felt<_> = builder.constant(F::from_canonical_u32(a));
+    let next: Felt<_> = builder.constant(F::from_canonical_u32(b));
 
-    for _ in 0..n {
-        let tmp: Var<_> = builder.uninit();
+    builder.commit_public_value(prev);
+    builder.commit_public_value(next);
+
+    for _ in 2..n {
+        let tmp: Felt<_> = builder.uninit();
         builder.assign(&tmp, next);
         builder.assign(&next, prev + next);
         builder.assign(&prev, tmp);
     }
+
+    builder.commit_public_value(next);
 
     builder.halt();
 
@@ -39,17 +45,25 @@ fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
 #[test]
 fn test_fibonacci_program_verify() {
     setup_tracing();
+
     let fib_program = fibonacci_program(0, 1, 32);
 
     let vm_config = VmConfig {
-        max_segment_len: 20000000,
+        max_segment_len: (1 << 25) - 100,
+        num_public_values: 3,
         ..Default::default()
     };
 
     let dummy_vm = VirtualMachine::<1, _>::new(vm_config, fib_program.clone(), vec![]);
     let rec_raps = get_rec_raps(&dummy_vm.segments[0]);
 
-    let vm = VirtualMachine::<1, _>::new(vm_config, fib_program, vec![]);
+    let mut vm = VirtualMachine::<1, _>::new(vm_config, fib_program, vec![]);
+    vm.segments[0].public_values = vec![
+        Some(BabyBear::zero()),
+        Some(BabyBear::one()),
+        Some(BabyBear::from_canonical_u32(1346269)),
+    ];
+
     let ExecutionAndTraceGenerationResult {
         nonempty_traces: traces,
         nonempty_chips: chips,
