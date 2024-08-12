@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use num_bigint::BigUint;
+use num_bigint_dig::BigUint;
 use num_traits::{One, Zero};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;

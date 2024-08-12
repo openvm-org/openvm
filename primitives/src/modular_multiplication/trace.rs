@@ -1,15 +1,15 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-use num_bigint::BigUint;
+use num_bigint_dig::BigUint;
 
+use crate::modular_multiplication::{FullLimbs, LimbDimensions};
 use crate::modular_multiplication::columns::{
     ModularMultiplicationAuxCols, ModularMultiplicationCols, ModularMultiplicationIoCols,
 };
-use crate::modular_multiplication::{FullLimbs, LimbDimensions};
 use crate::range_gate::RangeCheckerGateChip;
 
-fn big_uint_to_bits(x: BigUint) -> VecDeque<usize> {
+pub(super) fn big_uint_to_bits(x: BigUint) -> VecDeque<usize> {
     let mut result = VecDeque::new();
     for byte in x.to_bytes_le() {
         for i in 0..8 {
@@ -19,7 +19,7 @@ fn big_uint_to_bits(x: BigUint) -> VecDeque<usize> {
     result
 }
 
-fn take_limb(deque: &mut VecDeque<usize>, limb_size: usize) -> usize {
+pub(super) fn take_limb(deque: &mut VecDeque<usize>, limb_size: usize) -> usize {
     if limb_size == 0 {
         0
     } else {

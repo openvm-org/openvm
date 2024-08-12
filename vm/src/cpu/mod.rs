@@ -5,6 +5,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 use OpCode::*;
 
+use crate::modular_multiplication::air::ModularMultiplicationVmAir;
 use crate::{field_extension::FieldExtensionArithmeticAir, poseidon2::Poseidon2Chip};
 
 #[cfg(test)]
@@ -76,6 +77,11 @@ pub enum OpCode {
     /// Phantom instruction to end tracing
     CT_END = 61,
 
+    MOD_ADD = 70,
+    MOD_SUB = 71,
+    MOD_MUL = 72,
+    MOD_DIV = 73,
+
     NOP = 100,
 }
 
@@ -91,6 +97,7 @@ pub const CORE_INSTRUCTIONS: [OpCode; 13] = [
 ];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
+pub const MODULAR_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [MOD_ADD, MOD_SUB, MOD_MUL, MOD_DIV];
 
 impl OpCode {
     pub fn all_opcodes() -> Vec<OpCode> {
@@ -122,6 +129,9 @@ fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         opcode if FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode) => {
             FieldExtensionArithmeticAir::max_accesses_per_instruction(opcode)
         }
+        opcode if MODULAR_ARITHMETIC_INSTRUCTIONS.contains(&opcode) => {
+            ModularMultiplicationVmAir::max_accesses_per_instruction(opcode)
+        }
         F_LESS_THAN => 3,
         FAIL => 0,
         PRINTF => 1,
@@ -144,6 +154,7 @@ pub struct CpuOptions {
     pub perm_poseidon2_enabled: bool,
     pub is_less_than_enabled: bool,
     pub num_public_values: usize,
+    pub modular_arithmetic_enabled: bool,
 }
 
 #[derive(Default, Clone, Copy)]
@@ -167,6 +178,9 @@ impl CpuOptions {
         }
         if self.field_arithmetic_enabled {
             result.extend(FIELD_ARITHMETIC_INSTRUCTIONS);
+        }
+        if self.modular_arithmetic_enabled {
+            result.extend(MODULAR_ARITHMETIC_INSTRUCTIONS);
         }
         if self.compress_poseidon2_enabled {
             result.push(COMP_POS2);

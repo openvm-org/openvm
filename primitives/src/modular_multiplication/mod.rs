@@ -1,10 +1,10 @@
 use std::cmp::min;
 
-mod air;
-mod columns;
-mod modular_multiplication_bigint;
-mod modular_multiplication_primes;
-mod trace;
+pub mod air;
+pub mod columns;
+pub mod modular_multiplication_bigint;
+pub mod modular_multiplication_primes;
+pub mod trace;
 
 pub struct LimbDimensions {
     pub io_limb_sizes: Vec<Vec<usize>>,

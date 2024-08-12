@@ -11,27 +11,18 @@ use p3_matrix::{
     Matrix,
 };
 
-use super::{
-    columns::MemoryAccessCols,
-    trace::{isize_to_field, Instruction},
-    OpCode::*,
-    ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS,
-};
-use crate::{
-    cpu::{
-        columns::{CpuCols, CpuIoCols},
-        max_accesses_per_instruction, CpuChip, CpuOptions,
-    },
-    field_arithmetic::ArithmeticOperation,
-    memory::{decompose, MemoryAccess, OpType},
-    program::Program,
-    vm::{
-        config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN},
-        ExecutionSegment, VirtualMachine,
-    },
-};
 
 const TEST_WORD_SIZE: usize = 1;
+use crate::cpu::{ARITHMETIC_BUS, CpuChip, CpuOptions, max_accesses_per_instruction};
+use crate::cpu::columns::{CpuCols, CpuIoCols};
+use crate::cpu::trace::{Instruction, isize_to_field};
+use crate::field_arithmetic::ArithmeticOperation;
+use crate::memory::{decompose, MemoryAccess, OpType};
+use crate::program::Program;
+use crate::vm::config::{DEFAULT_MAX_SEGMENT_LEN, VmConfig};
+use crate::vm::VirtualMachine;
+use crate::cpu::OpCode::*;
+
 const LIMB_BITS: usize = 16;
 const DECOMP: usize = 8;
 
@@ -84,6 +75,7 @@ fn test_flatten_fromslice_roundtrip() {
         perm_poseidon2_enabled: false,
         num_public_values: 4,
         is_less_than_enabled: false,
+        modular_arithmetic_enabled: false,
     };
     let num_cols = CpuCols::<TEST_WORD_SIZE, usize>::get_width(options);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();

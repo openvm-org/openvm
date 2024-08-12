@@ -29,6 +29,8 @@ rand = "0.8"
 serde = "1.0.203"
 toml = "0.8.14"
 enum-utils = "0.1.1"
+num-bigint-dig = "0.8.4"
+num-traits = "0.2.19"
 
 [dev-dependencies]
 p3-uni-stark = { workspace = true }

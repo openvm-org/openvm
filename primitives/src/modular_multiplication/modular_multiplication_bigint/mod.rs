@@ -1,5 +1,5 @@
-mod air;
-mod columns;
+pub mod air;
+pub mod columns;
 #[cfg(test)]
-mod tests;
-mod trace;
+pub mod tests;
+pub mod trace;

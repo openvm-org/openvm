@@ -2,7 +2,7 @@ use std::cmp::min;
 use std::collections::HashSet;
 
 use itertools::Itertools;
-use num_bigint::BigUint;
+use num_bigint_dig::BigUint;
 use num_traits::{One, ToPrimitive};
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField64};
@@ -11,9 +11,9 @@ use prime_factorization::Factorization;
 
 use afs_stark_backend::interaction::InteractionBuilder;
 
+use crate::modular_multiplication::{FullLimbs, LimbDimensions};
 use crate::modular_multiplication::air::constrain_limbs;
 use crate::modular_multiplication::modular_multiplication_primes::columns::ModularMultiplicationPrimesCols;
-use crate::modular_multiplication::{FullLimbs, LimbDimensions};
 use crate::sub_chip::AirConfig;
 
 pub struct SmallModulusSystem<F: Field> {

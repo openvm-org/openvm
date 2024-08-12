@@ -1,7 +1,7 @@
 use std::cmp::min;
 
 use itertools::Itertools;
-use num_bigint::BigUint;
+use num_bigint_dig::BigUint;
 use num_traits::One;
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
@@ -9,9 +9,10 @@ use p3_matrix::Matrix;
 
 use afs_stark_backend::interaction::InteractionBuilder;
 
+use crate::modular_multiplication::{FullLimbs, LimbDimensions};
 use crate::modular_multiplication::air::{constrain_limbs, range_check};
 use crate::modular_multiplication::modular_multiplication_bigint::columns::ModularMultiplicationBigIntCols;
-use crate::modular_multiplication::{FullLimbs, LimbDimensions};
+use crate::modular_multiplication::trace::{big_uint_to_bits, take_limb};
 use crate::sub_chip::AirConfig;
 
 pub struct ModularMultiplicationBigIntAir {
@@ -21,6 +22,7 @@ pub struct ModularMultiplicationBigIntAir {
     pub range_bus: usize,
 
     pub limb_dimensions: LimbDimensions,
+    pub repr_bits: usize,
     pub max_limb_bits: usize,
     pub carry_bits: usize,
     pub carry_min_value_abs: usize,
@@ -71,14 +73,11 @@ impl ModularMultiplicationBigIntAir {
         let limb_dimensions = LimbDimensions::new_same_sizes(limb_sizes, limbs_per_elem);
 
         let total_limbs = (total_bits + max_limb_bits - 1) / max_limb_bits;
+
+        let mut modulus_bits = big_uint_to_bits(modulus.clone());
+
         let modulus_limbs = (0..total_limbs)
-            .map(|i| {
-                let mut limb = 0;
-                for j in 0..max_limb_bits {
-                    limb += (modulus.bit(((max_limb_bits * i) + j) as u64) as usize) << j;
-                }
-                limb
-            })
+            .map(|_| take_limb(&mut modulus_bits, max_limb_bits))
             .collect();
         Self {
             modulus,
@@ -86,12 +85,25 @@ impl ModularMultiplicationBigIntAir {
             decomp,
             range_bus,
             limb_dimensions,
+            repr_bits,
             max_limb_bits,
             carry_bits,
             carry_min_value_abs,
             num_carries,
             modulus_limbs,
         }
+    }
+
+    pub fn secp256k1_prime() -> BigUint {
+        let mut result = BigUint::one() << 256;
+        for power in [32, 9, 8, 7, 6, 4, 1] {
+            result -= BigUint::one() << power;
+        }
+        result
+    }
+
+    pub fn default_for_30_bit() -> Self {
+        Self::new(Self::secp256k1_prime(), 256, 16, 0, 30, 30, 10, 16, 1 << 15)
     }
 }
 
@@ -110,8 +122,17 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationBigIntAir {
         let main = builder.main();
         let local = main.row_slice(0);
         let local = ModularMultiplicationBigIntCols::<AB::Var>::from_slice(&local, &self);
+        self.eval(builder, local);
+    }
+}
 
-        let ModularMultiplicationBigIntCols { general, carries } = local;
+impl ModularMultiplicationBigIntAir {
+    pub fn eval<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        cols: ModularMultiplicationBigIntCols<AB::Var>,
+    ) {
+        let ModularMultiplicationBigIntCols { general, carries } = cols;
 
         let FullLimbs {
             a_limbs,
