@@ -229,7 +229,7 @@ impl<C: Config> Builder<C> {
 
         match slice {
             Array::Fixed(_) => {
-                todo!()
+                panic!();
             }
             Array::Dyn(ptr, len) => {
                 if self.flags.debug {

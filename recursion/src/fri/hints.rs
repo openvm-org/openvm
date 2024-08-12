@@ -273,11 +273,11 @@ impl Hintable<C> for InnerPcsProof {
 
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
         let fri_proof = InnerFriProof::read(builder);
-        let mut ptr = builder.new_ref_ptr();
-        builder.set_to_value(&mut ptr, fri_proof);
+        let mut fri_proof_ref = builder.new_ref();
+        builder.set_to_value(&mut fri_proof_ref, fri_proof);
         let query_openings = Vec::<Vec<InnerBatchOpening>>::read(builder);
         Self::HintVariable {
-            fri_proof: ptr,
+            fri_proof: fri_proof_ref,
             query_openings,
         }
     }

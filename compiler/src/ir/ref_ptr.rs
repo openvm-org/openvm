@@ -9,7 +9,7 @@ pub struct Ref<C: Config, T> {
 
 impl<C: Config> Builder<C> {
     /// Initialize a new instance of type T. The entries will be uninitialized.
-    pub fn new_ref_ptr<V: MemVariable<C>>(&mut self) -> Ref<C, V> {
+    pub fn new_ref<V: MemVariable<C>>(&mut self) -> Ref<C, V> {
         let ptr = self.alloc(RVar::one(), V::size_of());
         Ref {
             ptr,
@@ -57,7 +57,7 @@ impl<C: Config, T: MemVariable<C>> Variable<C> for Ref<C, T> {
     type Expression = Self;
 
     fn uninit(builder: &mut Builder<C>) -> Self {
-        builder.new_ref_ptr::<T>()
+        builder.new_ref::<T>()
     }
 
     fn assign(&self, src: Self::Expression, builder: &mut Builder<C>) {
@@ -115,7 +115,7 @@ impl<C: Config, V: FromConstant<C> + MemVariable<C>> FromConstant<C> for Ref<C, 
     type Constant = V::Constant;
 
     fn constant(value: Self::Constant, builder: &mut Builder<C>) -> Self {
-        let mut ref_ptr = builder.new_ref_ptr();
+        let mut ref_ptr = builder.new_ref();
         let val = V::constant(value, builder);
         builder.set_to_expr(&mut ref_ptr, val);
         ref_ptr
