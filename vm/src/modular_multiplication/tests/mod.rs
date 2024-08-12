@@ -1,19 +1,22 @@
+use afs_primitives::modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir;
+use afs_test_utils::utils::create_seeded_rng;
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::RngCore;
 
-use afs_primitives::modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir;
-use afs_test_utils::utils::create_seeded_rng;
-
-use crate::cpu::OpCode::MOD_MUL;
-use crate::cpu::trace::Instruction;
-use crate::modular_multiplication::{bigint_to_elems, ModularMultiplicationChip};
-use crate::vm::config::{DEFAULT_MAX_SEGMENT_LEN, VmConfig};
-use crate::vm::VirtualMachine;
+use crate::{
+    cpu::{trace::Instruction, OpCode::MOD_MUL},
+    modular_multiplication::{bigint_to_elems, ModularMultiplicationChip},
+    program::Program,
+    vm::{
+        config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN},
+        VirtualMachine,
+    },
+};
 
 fn make_vm<const WORD_SIZE: usize>(
-    program: Vec<Instruction<BabyBear>>,
+    program: Program<BabyBear>,
     field_arithmetic_enabled: bool,
     field_extension_enabled: bool,
 ) -> VirtualMachine<WORD_SIZE, BabyBear> {
@@ -23,10 +26,13 @@ fn make_vm<const WORD_SIZE: usize>(
             field_extension_enabled,
             compress_poseidon2_enabled: false,
             perm_poseidon2_enabled: false,
+            modular_multiplication_enabled: true,
+            is_less_than_enabled: false,
             limb_bits: 16,
             decomp: 16,
             num_public_values: 4,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
+            collect_metrics: false,
         },
         program,
         vec![],
@@ -35,7 +41,14 @@ fn make_vm<const WORD_SIZE: usize>(
 
 #[test]
 fn test_modular_multiplication_runtime() {
-    let mut vm = make_vm::<1>(vec![], true, true);
+    let mut vm = make_vm::<1>(
+        Program {
+            instructions: vec![],
+            debug_infos: vec![],
+        },
+        true,
+        true,
+    );
     assert_eq!(vm.segments.len(), 1);
     let segment = &mut vm.segments[0];
 
@@ -54,7 +67,8 @@ fn test_modular_multiplication_runtime() {
 
     let address1 = 0;
     let address2 = 100;
-    let address3 = 200;
+    let mm_timestamp = 300;
+    let address3 = 4000;
 
     let repr_bits = segment.modular_multiplication_chip.air.air.repr_bits;
     let num_elems = segment
@@ -83,9 +97,9 @@ fn test_modular_multiplication_runtime() {
             elem,
         );
     }
-    ModularMultiplicationChip::modular_multiply(
+    ModularMultiplicationChip::calculate(
         segment,
-        address3 - 1,
+        mm_timestamp,
         Instruction::from_isize(
             MOD_MUL,
             address1 as isize,

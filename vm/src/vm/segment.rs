@@ -1,32 +1,35 @@
-use super::ChipType;
-use super::VirtualMachineState;
-use afs_stark_backend::config::{StarkGenericConfig, Val};
-use afs_stark_backend::rap::AnyRap;
-use std::collections::BTreeMap;
-use std::collections::VecDeque;
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, VecDeque},
+    sync::Arc,
+};
 
+use afs_primitives::{
+    modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir,
+    range_gate::RangeCheckerGateChip,
+};
+use afs_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    rap::AnyRap,
+};
 use p3_field::PrimeField32;
 use p3_matrix::dense::DenseMatrix;
-
-use afs_primitives::modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir;
-use afs_primitives::range_gate::RangeCheckerGateChip;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
+use super::{ChipType, VirtualMachineState, VmConfig};
 use crate::{
+    cpu::{
+        trace::ExecutionError, CpuChip, CpuOptions, IS_LESS_THAN_BUS, POSEIDON2_BUS,
+        RANGE_CHECKER_BUS,
+    },
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
     is_less_than::IsLessThanChip,
     memory::offline_checker::MemoryChip,
+    modular_multiplication::ModularMultiplicationChip,
     poseidon2::Poseidon2Chip,
     program::{Program, ProgramChip},
+    vm::{cycle_tracker::CycleTracker, metrics::VmMetrics},
 };
-use crate::cpu::{CpuChip, CpuOptions, IS_LESS_THAN_BUS, POSEIDON2_BUS};
-use crate::cpu::trace::ExecutionError;
-use crate::modular_multiplication::ModularMultiplicationChip;
-use crate::vm::cycle_tracker::CycleTracker;
-use crate::vm::metrics::VmMetrics;
-use super::VmConfig;
 
 pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub config: VmConfig,

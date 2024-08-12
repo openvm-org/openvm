@@ -11,18 +11,25 @@ use p3_matrix::{
     Matrix,
 };
 
+use crate::{
+    cpu::{
+        columns::{CpuCols, CpuIoCols, MemoryAccessCols},
+        max_accesses_per_instruction,
+        trace::{isize_to_field, Instruction},
+        CpuChip, CpuOptions,
+        OpCode::*,
+        ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS,
+    },
+    field_arithmetic::ArithmeticOperation,
+    memory::{decompose, MemoryAccess, OpType},
+    program::Program,
+    vm::{
+        config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN},
+        ExecutionSegment, VirtualMachine,
+    },
+};
 
 const TEST_WORD_SIZE: usize = 1;
-use crate::cpu::{ARITHMETIC_BUS, CpuChip, CpuOptions, max_accesses_per_instruction};
-use crate::cpu::columns::{CpuCols, CpuIoCols};
-use crate::cpu::trace::{Instruction, isize_to_field};
-use crate::field_arithmetic::ArithmeticOperation;
-use crate::memory::{decompose, MemoryAccess, OpType};
-use crate::program::Program;
-use crate::vm::config::{DEFAULT_MAX_SEGMENT_LEN, VmConfig};
-use crate::vm::VirtualMachine;
-use crate::cpu::OpCode::*;
-
 const LIMB_BITS: usize = 16;
 const DECOMP: usize = 8;
 

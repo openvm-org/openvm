@@ -1,4 +1,3 @@
-pub mod chip;
 pub mod cpu;
 pub mod field_arithmetic;
 pub mod field_extension;

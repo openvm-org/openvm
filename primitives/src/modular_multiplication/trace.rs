@@ -1,13 +1,16 @@
-use std::collections::VecDeque;
-use std::sync::Arc;
+use std::{collections::VecDeque, sync::Arc};
 
 use num_bigint_dig::BigUint;
 
-use crate::modular_multiplication::{FullLimbs, LimbDimensions};
-use crate::modular_multiplication::columns::{
-    ModularMultiplicationAuxCols, ModularMultiplicationCols, ModularMultiplicationIoCols,
+use crate::{
+    modular_multiplication::{
+        columns::{
+            ModularMultiplicationAuxCols, ModularMultiplicationCols, ModularMultiplicationIoCols,
+        },
+        FullLimbs, LimbDimensions,
+    },
+    range_gate::RangeCheckerGateChip,
 };
-use crate::range_gate::RangeCheckerGateChip;
 
 pub(super) fn big_uint_to_bits(x: BigUint) -> VecDeque<usize> {
     let mut result = VecDeque::new();

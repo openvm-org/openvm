@@ -1,6 +1,6 @@
-use std::cmp::min;
-use std::collections::HashSet;
+use std::{cmp::min, collections::HashSet};
 
+use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use num_traits::{One, ToPrimitive};
@@ -9,12 +9,14 @@ use p3_field::{AbstractField, Field, PrimeField64};
 use p3_matrix::Matrix;
 use prime_factorization::Factorization;
 
-use afs_stark_backend::interaction::InteractionBuilder;
-
-use crate::modular_multiplication::{FullLimbs, LimbDimensions};
-use crate::modular_multiplication::air::constrain_limbs;
-use crate::modular_multiplication::modular_multiplication_primes::columns::ModularMultiplicationPrimesCols;
-use crate::sub_chip::AirConfig;
+use crate::{
+    modular_multiplication::{
+        air::constrain_limbs,
+        modular_multiplication_primes::columns::ModularMultiplicationPrimesCols, FullLimbs,
+        LimbDimensions,
+    },
+    sub_chip::AirConfig,
+};
 
 pub struct SmallModulusSystem<F: Field> {
     pub small_modulus: usize,

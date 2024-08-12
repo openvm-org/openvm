@@ -1,18 +1,18 @@
-use std::borrow::Cow;
-
-use num_bigint_dig::algorithms::mod_inverse;
-use num_bigint_dig::BigUint;
-use p3_field::{PrimeField32, PrimeField64};
+use std::{borrow::Cow, collections::VecDeque};
 
 use afs_primitives::modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir;
+use num_bigint_dig::{algorithms::mod_inverse, BigUint};
+use p3_field::{PrimeField32, PrimeField64};
 
-use crate::cpu::OpCode::*;
-use crate::cpu::trace::Instruction;
-use crate::modular_multiplication::air::ModularMultiplicationVmAir;
-use crate::vm::ExecutionSegment;
+use crate::{
+    cpu::{trace::Instruction, OpCode::*},
+    modular_multiplication::air::ModularMultiplicationVmAir,
+    vm::ExecutionSegment,
+};
 
 pub mod air;
 mod columns;
+#[cfg(test)]
 mod tests;
 
 pub fn elems_to_bigint<F: PrimeField64>(elems: Vec<F>, repr_bits: usize) -> BigUint {
@@ -37,19 +37,33 @@ pub fn elems_to_bigint<F: PrimeField64>(elems: Vec<F>, repr_bits: usize) -> BigU
     BigUint::from_bytes_le(&bytes)
 }
 
+fn big_uint_to_bits(x: BigUint) -> VecDeque<usize> {
+    let mut result = VecDeque::new();
+    for byte in x.to_bytes_le() {
+        for i in 0..8 {
+            result.push_back(((byte >> i) as usize) & 1);
+        }
+    }
+    result
+}
+
+fn take_limb(deque: &mut VecDeque<usize>, limb_size: usize) -> usize {
+    if limb_size == 0 {
+        0
+    } else {
+        let bit = deque.pop_front().unwrap_or(0);
+        bit + (2 * take_limb(deque, limb_size - 1))
+    }
+}
+
 pub fn bigint_to_elems<F: PrimeField64>(
     bigint: BigUint,
     repr_bits: usize,
     num_elems: usize,
 ) -> Vec<F> {
+    let mut bits = big_uint_to_bits(bigint);
     (0..num_elems)
-        .map(|i| {
-            F::from_canonical_usize(
-                (0..repr_bits)
-                    .map(|j| (bigint.bit(((i * repr_bits) + j) as u64) as usize) << j)
-                    .sum(),
-            )
-        })
+        .map(|_| F::from_canonical_usize(take_limb(&mut bits, repr_bits)))
         .collect()
 }
 
@@ -72,7 +86,7 @@ impl<F: PrimeField32> ModularMultiplicationChip<F> {
         }
     }
 
-    pub fn modular_multiply<const WORD_SIZE: usize>(
+    pub fn calculate<const WORD_SIZE: usize>(
         vm: &mut ExecutionSegment<WORD_SIZE, F>,
         start_timestamp: usize,
         instruction: Instruction<F>,

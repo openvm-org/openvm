@@ -4,13 +4,18 @@ use std::{
     fmt::Display,
 };
 
-use p3_field::{Field, PrimeField32, PrimeField64};
-use p3_matrix::dense::RowMajorMatrix;
-
 use afs_primitives::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
+use p3_field::{Field, PrimeField32, PrimeField64};
+use p3_matrix::dense::RowMajorMatrix;
 
+use super::{
+    columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
+    max_accesses_per_instruction, CpuChip, ExecutionState,
+    OpCode::{self, *},
+    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
+};
 use crate::{
     cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
     field_extension::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticChip},
@@ -19,13 +24,6 @@ use crate::{
     poseidon2::{columns::Poseidon2VmCols, Poseidon2Chip},
     program::columns::ProgramPreprocessedCols,
     vm::ExecutionSegment,
-};
-
-use super::{
-    columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
-    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE,
-    CpuChip,
-    ExecutionState, INST_WIDTH, max_accesses_per_instruction, OpCode::{self, *},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]

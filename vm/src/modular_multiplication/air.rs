@@ -1,8 +1,12 @@
-use afs_primitives::modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir;
-use afs_primitives::sub_chip::AirConfig;
+use afs_primitives::{
+    modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir,
+    sub_chip::AirConfig,
+};
 
-use crate::cpu::{MODULAR_ARITHMETIC_INSTRUCTIONS, OpCode};
-use crate::modular_multiplication::columns::ModularMultiplicationVmCols;
+use crate::{
+    cpu::{OpCode, MODULAR_ARITHMETIC_INSTRUCTIONS},
+    modular_multiplication::columns::ModularMultiplicationVmCols,
+};
 
 pub struct ModularMultiplicationVmAir {
     pub air: ModularMultiplicationBigIntAir,

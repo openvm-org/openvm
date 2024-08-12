@@ -80,7 +80,7 @@ dependencies = [
  "afs-derive",
  "afs-test-utils",
  "backtrace",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "p3-baby-bear",
  "p3-challenger",
  "p3-dft",
@@ -90,6 +90,7 @@ dependencies = [
  "serde",
  "serde_json",
  "stark-vm",
+ "strum_macros",
 ]
 
 [[package]]
@@ -110,7 +111,7 @@ dependencies = [
  "afs-stark-backend",
  "afs-test-utils",
  "bincode",
- "derive-new",
+ "derive-new 0.5.9",
  "derive_more",
  "getset",
  "hex",
@@ -136,7 +137,7 @@ dependencies = [
  "afs-derive",
  "afs-stark-backend",
  "afs-test-utils",
- "derive-new",
+ "derive-new 0.6.0",
  "getset",
  "itertools 0.13.0",
  "num-bigint-dig",
@@ -171,7 +172,7 @@ dependencies = [
  "afs-primitives",
  "afs-stark-backend",
  "afs-test-utils",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "p3-air",
  "p3-baby-bear",
  "p3-challenger",
@@ -217,6 +218,7 @@ dependencies = [
  "p3-uni-stark",
  "p3-util",
  "rand",
+ "rayon",
  "serde",
  "serde_json",
  "tikv-jemallocator",
@@ -231,7 +233,7 @@ version = "0.1.0"
 dependencies = [
  "afs-stark-backend",
  "derive_more",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "p3-air",
  "p3-baby-bear",
  "p3-blake3",
@@ -597,6 +599,8 @@ dependencies = [
  "p3-air",
  "p3-baby-bear",
  "p3-blake3",
+ "p3-challenger",
+ "p3-commit",
  "p3-field",
  "p3-keccak",
  "p3-matrix",
@@ -607,6 +611,7 @@ dependencies = [
  "rand",
  "regex",
  "serde",
+ "serde_json",
  "stark-vm",
  "tracing",
  "tracing-forest",
@@ -1120,6 +1125,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "derive-new"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d150dea618e920167e5973d70ae6ece4385b7164e0d799fe7c122dd0a5d912ad"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.66",
 ]
 
 [[package]]
@@ -2744,6 +2760,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustversion"
+version = "1.0.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "955d28af4278de8121b7ebeb796b6a45735dc01436d898801014aced2773a3d6"
+
+[[package]]
 name = "rusty-fork"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2847,11 +2869,12 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.117"
+version = "1.0.124"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "455182ea6142b14f93f4bc5320a2b31c1f266b66a4a5c858b013302a5d8cbfc3"
+checksum = "66ad62847a56b3dba58cc891acd13884b9c61138d330c0d7b6181713d4fce38d"
 dependencies = [
  "itoa",
+ "memchr",
  "ryu",
  "serde",
 ]
@@ -2952,7 +2975,8 @@ dependencies = [
  "afs-stark-backend",
  "afs-test-utils",
  "ark-ff 0.4.2",
- "derive-new",
+ "backtrace",
+ "derive-new 0.5.9",
  "enum-utils",
  "getset",
  "itertools 0.13.0",
@@ -2979,6 +3003,7 @@ dependencies = [
  "serde",
  "test-case",
  "toml",
+ "tracing",
  "zkhash",
 ]
 
@@ -2999,6 +3024,19 @@ name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
+
+[[package]]
+name = "strum_macros"
+version = "0.26.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn 2.0.66",
+]
 
 [[package]]
 name = "subtle"
