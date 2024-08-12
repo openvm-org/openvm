@@ -1,0 +1,117 @@
+use std::{array::from_fn, sync::Arc};
+
+use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_test_utils::{
+    config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng,
+};
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
+use p3_matrix::dense::RowMajorMatrix;
+use rand::{seq::SliceRandom, Rng, RngCore};
+
+use crate::{
+    cpu::RANGE_CHECKER_BUS,
+    memory::{
+        expand::MemoryDimensions,
+        manager::{interface::MemoryInterface, MemoryManager},
+        offline_checker::{air::NewMemoryOfflineChecker, columns::MemoryOfflineCheckerCols},
+    },
+};
+
+const TEST_NUM_WORDS: usize = 1;
+const TEST_WORD_SIZE: usize = 4;
+
+type Val = BabyBear;
+
+#[test]
+fn volatile_memory_offline_checker_test() {
+    let mut rng = create_seeded_rng();
+
+    const MAX_VAL: u32 = 1 << 20;
+
+    let memory_dimensions = MemoryDimensions::new(1, 20, 1);
+    let clk_max_bits = 20;
+    let decomp = 8;
+
+    let range_checker = Arc::new(RangeCheckerGateChip::new(
+        RANGE_CHECKER_BUS,
+        (1 << decomp) as u32,
+    ));
+    let mut memory_manager =
+        MemoryManager::<TEST_NUM_WORDS, TEST_WORD_SIZE, Val>::with_volatile_memory(
+            memory_dimensions,
+            decomp,
+            range_checker.clone(),
+        );
+    let offline_checker = NewMemoryOfflineChecker::<TEST_WORD_SIZE>::new(clk_max_bits, decomp);
+
+    let num_addresses = rng.gen_range(1..=10);
+    let mut all_addresses = vec![];
+    for _ in 0..num_addresses {
+        let addr_space = Val::from_canonical_usize(
+            memory_dimensions.as_offset + rng.gen_range(0..(1 << memory_dimensions.as_height)),
+        );
+        let pointer = Val::from_canonical_u32(
+            rng.gen_range(0..(1 << memory_dimensions.address_height)) as u32
+                / TEST_WORD_SIZE as u32
+                * TEST_WORD_SIZE as u32,
+        );
+
+        all_addresses.push((addr_space, pointer));
+    }
+
+    let mut checker_trace = vec![];
+    let mut clk = Val::one();
+    // First, write to all addresses
+    for (addr_space, pointer) in all_addresses.iter() {
+        let word = from_fn(|_| Val::from_canonical_u32(rng.next_u32() % MAX_VAL));
+        let mem_access = memory_manager.write_word(clk, *addr_space, *pointer, word);
+        clk += Val::one();
+        checker_trace.extend(
+            offline_checker
+                .memory_access_to_checker_cols(mem_access, true, range_checker.clone())
+                .flatten(),
+        );
+    }
+
+    // Second, do some random memory accesses
+    let num_accesses = rng.gen_range(1..=10);
+    for _ in 0..num_accesses {
+        let (addr_space, pointer) = *all_addresses.choose(&mut rng).unwrap();
+        let word = from_fn(|_| Val::from_canonical_u32(rng.next_u32() % MAX_VAL));
+
+        let access_cols = if rng.gen_bool(0.5) {
+            memory_manager.write_word(clk, addr_space, pointer, word)
+        } else {
+            memory_manager.read_word(clk, addr_space, pointer)
+        };
+        clk += Val::one();
+        checker_trace.extend(
+            offline_checker
+                .memory_access_to_checker_cols(access_cols, true, range_checker.clone())
+                .flatten(),
+        );
+    }
+
+    let checker_width = MemoryOfflineCheckerCols::<TEST_WORD_SIZE, Val>::width(&offline_checker);
+    while !(checker_trace.len() / checker_width).is_power_of_two() {
+        checker_trace.extend(
+            offline_checker
+                .disabled_memory_checker_cols::<Val>(range_checker.clone())
+                .flatten(),
+        );
+    }
+    let checker_trace = RowMajorMatrix::new(checker_trace, checker_width);
+    let memory_interface_trace = memory_manager.generate_memory_interface_trace();
+    let range_checker_trace = range_checker.generate_trace();
+
+    let MemoryInterface::Volatile(audit_chip) = &memory_manager.interface_chip else {
+        panic!("Expected Volatile memory interface")
+    };
+
+    run_simple_test_no_pis(
+        vec![&range_checker.air, &offline_checker, &audit_chip.air],
+        vec![range_checker_trace, checker_trace, memory_interface_trace],
+    )
+    .expect("Verification failed");
+}
