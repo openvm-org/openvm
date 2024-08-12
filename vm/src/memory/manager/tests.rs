@@ -12,8 +12,7 @@ use rand::{seq::SliceRandom, Rng, RngCore};
 use crate::{
     cpu::RANGE_CHECKER_BUS,
     memory::{
-        expand::MemoryDimensions,
-        manager::{interface::MemoryInterface, MemoryManager},
+        manager::{dimensions::MemoryDimensions, interface::MemoryInterface, MemoryManager},
         offline_checker::{air::NewMemoryOfflineChecker, columns::MemoryOfflineCheckerCols},
     },
 };

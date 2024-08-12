@@ -3,10 +3,8 @@ use std::collections::HashMap;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::memory::{
-    audit::MemoryAuditChip,
-    interface::{AccessCell, MemoryExpandChip},
-};
+use super::AccessCell;
+use crate::memory::{audit::MemoryAuditChip, interface::MemoryExpandChip};
 
 pub enum MemoryInterface<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
     Volatile(MemoryAuditChip<WORD_SIZE, F>),

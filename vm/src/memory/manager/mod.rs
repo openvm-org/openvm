@@ -1,31 +1,28 @@
-use std::{array::from_fn, collections::HashMap, iter, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
-use afs_stark_backend::interaction::InteractionBuilder;
-use derive_new::new;
-use p3_field::PrimeField32;
+use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
-use self::interface::MemoryInterface;
-use super::{
-    audit::MemoryAuditChip,
-    expand::MemoryDimensions,
-    interface::{AccessCell, MemoryExpandChip},
-};
-use crate::{
-    cpu::NEW_MEMORY_BUS,
-    memory::{decompose, OpType},
-};
+use self::{access::NewMemoryAccessCols, dimensions::MemoryDimensions, interface::MemoryInterface};
+use super::{audit::MemoryAuditChip, interface::MemoryExpandChip};
+use crate::memory::{decompose, OpType};
 
+pub mod access;
+pub mod dimensions;
 pub mod interface;
 
 #[cfg(test)]
 mod tests;
 
+#[derive(Copy, Clone)]
+pub struct AccessCell<const WORD_SIZE: usize, F: Field> {
+    pub data: [F; WORD_SIZE],
+    pub clk: F,
+}
+
 pub struct MemoryManager<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
     pub interface_chip: MemoryInterface<NUM_WORDS, WORD_SIZE, F>,
-    // TODO[osama]: revisit -- no need to actually keep track of this
-    pub accesses: Vec<NewMemoryAccessCols<WORD_SIZE, F>>,
     /// Maps (addr_space, pointer) to (data, timestamp)
     // TODO[osama]: this shouldn't always start as empty in the case of continuations
     memory: HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
@@ -40,7 +37,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     ) -> Self {
         Self {
             interface_chip: MemoryInterface::Persistent(MemoryExpandChip::new(memory_dimensions)),
-            accesses: vec![],
             memory,
         }
     }
@@ -57,7 +53,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
                 decomp,
                 range_checker,
             )),
-            accesses: vec![],
             memory: HashMap::new(),
         }
     }
@@ -92,7 +87,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         self.interface_chip
             .touch_address(addr_space, pointer, old_data, clk);
 
-        let access = NewMemoryAccessCols::<WORD_SIZE, F>::new(
+        NewMemoryAccessCols::<WORD_SIZE, F>::new(
             addr_space,
             pointer,
             F::from_canonical_u8(OpType::Read as u8),
@@ -100,11 +95,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             old_clk,
             cell.data,
             cell.clk,
-        );
-
-        self.accesses.push(access.clone());
-        println!("access: {:?}", access);
-        access
+        )
     }
 
     /// Reads a word directly from memory without updating internal state.
@@ -143,7 +134,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         self.interface_chip
             .touch_address(addr_space, pointer, old_data, old_clk);
 
-        let access = NewMemoryAccessCols::<WORD_SIZE, F>::new(
+        NewMemoryAccessCols::<WORD_SIZE, F>::new(
             addr_space,
             pointer,
             F::from_canonical_u8(OpType::Write as u8),
@@ -151,11 +142,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             old_clk,
             data,
             clk,
-        );
-
-        self.accesses.push(access.clone());
-        println!("access: {:?}", access);
-        access
+        )
     }
 
     pub fn generate_memory_interface_trace(&self) -> RowMajorMatrix<F> {
@@ -190,71 +177,4 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     // pub fn write_elem(&mut self, timestamp: usize, address_space: F, address: F, data: F) {
     //     self.write_word(timestamp, address_space, address, decompose(data));
     // }
-}
-
-// TODO[osama]: to be renamed to MemoryAccessCols
-#[derive(Clone, Debug, PartialEq, Eq, new)]
-pub struct NewMemoryAccessCols<const WORD_SIZE: usize, T> {
-    pub addr_space: T,
-    pub pointer: T,
-    pub op_type: T,
-
-    pub data_read: [T; WORD_SIZE],
-    pub clk_read: T,
-    pub data_write: [T; WORD_SIZE],
-    pub clk_write: T,
-}
-
-impl<const WORD_SIZE: usize, T: Clone> NewMemoryAccessCols<WORD_SIZE, T> {
-    pub fn from_slice(slc: &[T]) -> Self {
-        Self {
-            addr_space: slc[0].clone(),
-            pointer: slc[1].clone(),
-            op_type: slc[2].clone(),
-            data_read: from_fn(|i| slc[3 + i].clone()),
-            clk_read: slc[3 + WORD_SIZE].clone(),
-            data_write: from_fn(|i| slc[4 + WORD_SIZE + i].clone()),
-            clk_write: slc[4 + 2 * WORD_SIZE].clone(),
-        }
-    }
-}
-
-impl<const WORD_SIZE: usize, T> NewMemoryAccessCols<WORD_SIZE, T> {
-    pub fn flatten(self) -> Vec<T> {
-        vec![self.addr_space, self.pointer, self.op_type]
-            .into_iter()
-            .chain(self.data_read)
-            .chain(iter::once(self.clk_read))
-            .chain(self.data_write)
-            .chain(iter::once(self.clk_write))
-            .collect()
-    }
-
-    pub fn width() -> usize {
-        5 + 2 * WORD_SIZE
-    }
-}
-
-pub fn eval_memory_interactions<const WORD_SIZE: usize, AB: InteractionBuilder>(
-    builder: &mut AB,
-    op_cols: NewMemoryAccessCols<WORD_SIZE, AB::Var>,
-    mult: AB::Expr,
-) {
-    builder.push_send(
-        NEW_MEMORY_BUS,
-        iter::once(op_cols.addr_space)
-            .chain(iter::once(op_cols.pointer))
-            .chain(op_cols.data_write)
-            .chain(iter::once(op_cols.clk_write)),
-        mult.clone(),
-    );
-
-    builder.push_receive(
-        NEW_MEMORY_BUS,
-        iter::once(op_cols.addr_space)
-            .chain(iter::once(op_cols.pointer))
-            .chain(op_cols.data_read)
-            .chain(iter::once(op_cols.clk_read)),
-        mult,
-    );
 }
