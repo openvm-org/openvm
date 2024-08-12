@@ -1010,6 +1010,18 @@ impl<F: Field, EF: ExtensionField<F>> Ext<F, EF> {
                 (SymbolicExt::Val(lhs, _), SymbolicExt::Val(rhs, _)) => {
                     builder.push(DslIr::MulE(*self, *lhs, *rhs));
                 }
+                (SymbolicExt::Val(lhs, _), SymbolicExt::Base(rhs, _)) => match rhs.as_ref() {
+                    SymbolicFelt::Const(rhs, _) => {
+                        builder.push(DslIr::MulEFI(*self, *lhs, *rhs));
+                    }
+                    SymbolicFelt::Val(rhs, _) => {
+                        builder.push(DslIr::MulEF(*self, *lhs, *rhs));
+                    }
+                    rhs => {
+                        let rhs = builder.eval(rhs.clone());
+                        builder.push(DslIr::MulEF(*self, *lhs, rhs));
+                    }
+                },
                 (SymbolicExt::Val(lhs, _), rhs) => {
                     let rhs_value = Self::uninit(builder);
                     rhs_value.assign_with_caches(rhs.clone(), builder, ext_cache, base_cache);
@@ -1058,6 +1070,18 @@ impl<F: Field, EF: ExtensionField<F>> Ext<F, EF> {
                 (SymbolicExt::Val(lhs, _), SymbolicExt::Val(rhs, _)) => {
                     builder.push(DslIr::SubE(*self, *lhs, *rhs));
                 }
+                (SymbolicExt::Val(lhs, _), SymbolicExt::Base(rhs, _)) => match rhs.as_ref() {
+                    SymbolicFelt::Const(rhs, _) => {
+                        builder.push(DslIr::SubEFI(*self, *lhs, *rhs));
+                    }
+                    SymbolicFelt::Val(rhs, _) => {
+                        builder.push(DslIr::SubEF(*self, *lhs, *rhs));
+                    }
+                    rhs => {
+                        let rhs = builder.eval(rhs.clone());
+                        builder.push(DslIr::SubEF(*self, *lhs, rhs));
+                    }
+                },
                 (SymbolicExt::Val(lhs, _), rhs) => {
                     let rhs_value = Self::uninit(builder);
                     rhs_value.assign_with_caches(rhs.clone(), builder, ext_cache, base_cache);
@@ -1105,6 +1129,18 @@ impl<F: Field, EF: ExtensionField<F>> Ext<F, EF> {
                 (SymbolicExt::Val(lhs, _), SymbolicExt::Val(rhs, _)) => {
                     builder.push(DslIr::DivE(*self, *lhs, *rhs));
                 }
+                (SymbolicExt::Val(lhs, _), SymbolicExt::Base(rhs, _)) => match rhs.as_ref() {
+                    SymbolicFelt::Const(rhs, _) => {
+                        builder.push(DslIr::DivEFI(*self, *lhs, *rhs));
+                    }
+                    SymbolicFelt::Val(rhs, _) => {
+                        builder.push(DslIr::DivEF(*self, *lhs, *rhs));
+                    }
+                    rhs => {
+                        let rhs = builder.eval(rhs.clone());
+                        builder.push(DslIr::DivEF(*self, *lhs, rhs));
+                    }
+                },
                 (SymbolicExt::Val(lhs, _), rhs) => {
                     let rhs_value = Self::uninit(builder);
                     rhs_value.assign_with_caches(rhs.clone(), builder, ext_cache, base_cache);

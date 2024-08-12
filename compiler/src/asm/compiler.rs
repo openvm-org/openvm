@@ -224,14 +224,17 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.assign_exti(A0, rhs.inverse(), debug_info.clone());
                     self.push(AsmInstruction::MulE(dst.fp(), lhs.fp(), A0), debug_info);
                 }
+                DslIr::DivEF(dst, lhs, rhs) => {
+                    self.div_ext_felt(dst, lhs, rhs, debug_info);
+                }
+                DslIr::DivEFI(dst, lhs, rhs) => {
+                    self.mul_ext_felti(dst, lhs, rhs.inverse(), debug_info);
+                }
                 DslIr::InvE(dst, src) => {
                     self.push(AsmInstruction::InvE(dst.fp(), src.fp()), debug_info);
                 }
                 DslIr::SubEF(dst, lhs, rhs) => {
-                    self.push(
-                        AsmInstruction::SubE(dst.fp(), lhs.fp(), rhs.fp()),
-                        debug_info,
-                    );
+                    self.sub_ext_felt(dst, lhs, rhs, debug_info);
                 }
                 DslIr::SubEFI(dst, lhs, rhs) => {
                     self.add_ext_exti(dst, lhs, EF::from_base(rhs.neg()), debug_info);
@@ -964,6 +967,26 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         }
     }
 
+    fn sub_ext_felt(
+        &mut self,
+        dst: Ext<F, EF>,
+        lhs: Ext<F, EF>,
+        rhs: Felt<F>,
+        debug_info: Option<DebugInfo>,
+    ) {
+        self.push(
+            AsmInstruction::SubF(dst.fp(), lhs.fp(), rhs.fp()),
+            debug_info.clone(),
+        );
+        for i in 1..EF::D {
+            let j = (i * self.word_size) as i32;
+            self.push(
+                AsmInstruction::CopyF(dst.fp() + j, lhs.fp() + j),
+                debug_info.clone(),
+            );
+        }
+    }
+
     fn add_felt_exti(
         &mut self,
         dst: Ext<F, EF>,
@@ -1014,6 +1037,22 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             let j = (i * self.word_size) as i32;
             self.push(
                 AsmInstruction::MulFI(dst.fp() + j, lhs.fp() + j, rhs),
+                debug_info.clone(),
+            );
+        }
+    }
+
+    fn div_ext_felt(
+        &mut self,
+        dst: Ext<F, EF>,
+        lhs: Ext<F, EF>,
+        rhs: Felt<F>,
+        debug_info: Option<DebugInfo>,
+    ) {
+        for i in 0..EF::D {
+            let j = (i * self.word_size) as i32;
+            self.push(
+                AsmInstruction::DivF(dst.fp() + j, lhs.fp() + j, rhs.fp()),
                 debug_info.clone(),
             );
         }
