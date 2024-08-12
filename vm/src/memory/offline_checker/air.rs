@@ -3,9 +3,10 @@ use afs_primitives::{
         columns::{IsLessThanCols, IsLessThanIoCols},
         IsLessThanAir,
     },
+    is_zero::{columns::IsZeroCols, IsZeroAir},
     offline_checker::columns::OfflineCheckerCols,
     sub_chip::{AirConfig, SubAir},
-    utils::or,
+    utils::{and, implies},
 };
 use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -13,10 +14,32 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::Matrix;
 
 use super::{columns::MemoryOfflineCheckerCols, MemoryChip, MemoryOfflineChecker};
-use crate::memory::manager::eval_memory_interactions;
+use crate::{cpu::RANGE_CHECKER_BUS, memory::manager::access::eval_memory_interactions};
 
 pub struct NewMemoryOfflineChecker<const WORD_SIZE: usize> {
     pub clk_lt_air: IsLessThanAir,
+    pub is_zero_air: IsZeroAir,
+}
+
+impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
+    pub fn new(clk_max_bits: usize, decomp: usize) -> Self {
+        Self {
+            clk_lt_air: IsLessThanAir::new(RANGE_CHECKER_BUS, clk_max_bits, decomp),
+            is_zero_air: IsZeroAir,
+        }
+    }
+
+    fn assert_compose<AB: AirBuilder>(
+        &self,
+        builder: &mut AB,
+        word: [AB::Var; WORD_SIZE],
+        field_elem: AB::Expr,
+    ) {
+        builder.assert_eq(word[0], field_elem);
+        for &cell in word.iter().take(WORD_SIZE).skip(1) {
+            builder.assert_zero(cell);
+        }
+    }
 }
 
 impl<const WORD_SIZE: usize> AirConfig for NewMemoryOfflineChecker<WORD_SIZE> {
@@ -33,8 +56,51 @@ impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB>
     for NewMemoryOfflineChecker<WORD_SIZE>
 {
     fn eval(&self, builder: &mut AB) {
-        let main = &builder.main();
-        let local = MemoryOfflineCheckerCols::<WORD_SIZE, AB::Var>::from_slice(&main.row_slice(0));
+        let main = builder.main();
+        let local = main.row_slice(0);
+        let local = MemoryOfflineCheckerCols::<WORD_SIZE, AB::Var>::from_slice(&local);
+
+        SubAir::eval(self, builder, local, ());
+    }
+}
+
+impl<const WORD_SIZE: usize, AB: InteractionBuilder> SubAir<AB>
+    for NewMemoryOfflineChecker<WORD_SIZE>
+{
+    type IoView = MemoryOfflineCheckerCols<WORD_SIZE, AB::Var>;
+    type AuxView = ();
+
+    fn eval(
+        &self,
+        builder: &mut AB,
+        local: MemoryOfflineCheckerCols<WORD_SIZE, AB::Var>,
+        _aux: (),
+    ) {
+        builder.assert_bool(local.op_cols.op_type);
+        builder.assert_bool(local.enabled);
+
+        // Ensuring is_immediate is correct
+        let addr_space_is_zero_cols =
+            IsZeroCols::new(local.addr_space(), local.is_immediate, local.is_zero_aux);
+
+        SubAir::eval(
+            &self.is_zero_air,
+            builder,
+            addr_space_is_zero_cols.io,
+            addr_space_is_zero_cols.inv,
+        );
+
+        self.assert_compose(
+            &mut builder.when(local.is_immediate),
+            local.data(),
+            local.pointer().into(),
+        );
+
+        // is_immediate => read
+        builder.assert_one(implies::<AB>(
+            local.is_immediate.into(),
+            AB::Expr::one() - local.op_cols.op_type.into(),
+        ));
 
         // Ensuring clk_lt is correct
         let clk_lt_cols = IsLessThanCols::<AB::Var>::new(
@@ -48,14 +114,28 @@ impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB>
 
         SubAir::eval(&self.clk_lt_air, builder, clk_lt_cols.io, clk_lt_cols.aux);
 
-        // Ensuring clk_read is less than clk_write
-        // TODO[osama]: I think this should be <=
-        builder.assert_one(or::<AB>(local.clk_lt.into(), local.is_extra.into()));
+        // TODO[osama]: make it so that we don't have to call .into() explicitly
+        // TODO[osama]: this should be reduced to degree 2
+        builder.assert_one(implies::<AB>(
+            and::<AB>(
+                local.enabled.into(),
+                AB::Expr::one() - local.is_immediate.into(),
+            ),
+            local.clk_lt.into(),
+        ));
+
+        // Ensuring that if op_type is Read, data_read is the same as data_write
+        for i in 0..WORD_SIZE {
+            builder.assert_zero(
+                (AB::Expr::one() - local.op_cols.op_type.into())
+                    * (local.op_cols.data_read[i] - local.op_cols.data_write[i]),
+            );
+        }
 
         eval_memory_interactions(
             builder,
             local.op_cols,
-            AB::Expr::one() - local.is_extra.into(),
+            local.enabled.into() - local.is_immediate.into(),
         );
     }
 }

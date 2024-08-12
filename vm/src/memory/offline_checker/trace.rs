@@ -1,13 +1,16 @@
 use std::sync::Arc;
 
-use afs_primitives::{offline_checker::OfflineCheckerChip, range_gate::RangeCheckerGateChip};
+use afs_primitives::{
+    offline_checker::OfflineCheckerChip, range_gate::RangeCheckerGateChip,
+    sub_chip::LocalTraceInstructions,
+};
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 #[cfg(feature = "parallel")]
 use p3_maybe_rayon::prelude::*;
 
-use super::MemoryChip;
-use crate::memory::{MemoryAccess, OpType};
+use super::{air::NewMemoryOfflineChecker, columns::MemoryOfflineCheckerCols, MemoryChip};
+use crate::memory::{manager::access::NewMemoryAccessCols, MemoryAccess, OpType};
 
 impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
     /// Each row in the trace follow the same order as the Cols struct:
@@ -43,6 +46,55 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             self.accesses.clone(),
             dummy_op,
             self.accesses.len().next_power_of_two(),
+        )
+    }
+}
+
+impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
+    pub fn memory_access_to_checker_cols<F: PrimeField32>(
+        &self,
+        memory_access: NewMemoryAccessCols<WORD_SIZE, F>,
+        enabled: bool,
+        range_checker: Arc<RangeCheckerGateChip>,
+    ) -> MemoryOfflineCheckerCols<WORD_SIZE, F> {
+        let clk_lt_cols = LocalTraceInstructions::generate_trace_row(
+            &self.clk_lt_air,
+            (
+                memory_access.clk_read.as_canonical_u32(),
+                memory_access.clk_write.as_canonical_u32(),
+                range_checker.clone(),
+            ),
+        );
+
+        let addr_space_is_zero_cols =
+            LocalTraceInstructions::generate_trace_row(&self.is_zero_air, memory_access.addr_space);
+
+        MemoryOfflineCheckerCols::<WORD_SIZE, F>::new(
+            memory_access,
+            addr_space_is_zero_cols.io.is_zero,
+            clk_lt_cols.io.less_than,
+            F::from_bool(enabled),
+            addr_space_is_zero_cols.inv,
+            clk_lt_cols.aux,
+        )
+    }
+
+    pub fn disabled_memory_checker_cols<F: PrimeField32>(
+        &self,
+        range_checker: Arc<RangeCheckerGateChip>,
+    ) -> MemoryOfflineCheckerCols<WORD_SIZE, F> {
+        self.memory_access_to_checker_cols(
+            NewMemoryAccessCols::<WORD_SIZE, F>::new(
+                F::zero(),
+                F::zero(),
+                F::from_canonical_u8(OpType::Read as u8),
+                [F::zero(); WORD_SIZE],
+                F::zero(),
+                [F::zero(); WORD_SIZE],
+                F::zero(),
+            ),
+            false,
+            range_checker,
         )
     }
 }
