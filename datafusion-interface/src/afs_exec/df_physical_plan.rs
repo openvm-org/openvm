@@ -16,7 +16,7 @@ use crate::{
     afs_expr::AfsExpr,
     afs_logical_plan::{
         plan::{Filter, PageScan},
-        AfsLogicalPlan,
+        AfsNode,
     },
 };
 
@@ -49,7 +49,7 @@ impl AfsExec {
     pub async fn create_execution_plan(
         root: &LogicalPlan,
         state: &SessionState,
-    ) -> Result<Vec<AfsLogicalPlan>> {
+    ) -> Result<Vec<AfsNode>> {
         // Note: below DFS/flatten implementation copied with minor adjustments from datafusion/core/src/physical_planner.rs
         // DFS the tree to flatten it into a Vec.
         // This will allow us to build the Physical Plan from the leaves up

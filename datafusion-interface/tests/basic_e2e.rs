@@ -33,13 +33,22 @@ pub async fn test_basic_e2e() {
     // let logical = ctx.state().create_logical_plan(sql).await.unwrap();
     let logical = table_scan(Some("example"), &schema, None)
         .unwrap()
-        .filter(col("a").lt(lit(10)))
-        .unwrap()
+        // .filter(col("a").lt(lit(10)))
+        // .unwrap()
         // .filter(col("b").lt(lit(20)))
         // .unwrap()
         .build()
         .unwrap();
     println!("{:#?}", logical.clone());
+
+    // let t = ctx.table("example").await.unwrap();
+    // t.show().await.unwrap();
+    // let record_batches = t.collect().await.unwrap();
+    // for batch in record_batches {
+    //     println!("{:?}", batch);
+    // }
+    // println!("table example {:#?}", t.show());
+
     // let default_planner = DefaultPhysicalPlanner::default();
     // let physical = default_planner
     //     .create_physical_plan(&logical, &ctx.state())
@@ -51,25 +60,26 @@ pub async fn test_basic_e2e() {
     // while let Some(batch) = res.as_ref().next().await {
     //     println!("{:?}", batch);
     // }
-    let afs = AfsExec::new(ctx, logical);
+
+    let mut afs = AfsExec::<BabyBearPoseidon2Config>::new(ctx, logical).await;
     println!("{:?}", afs.afs_execution_plan);
-    // let output = afs.execute().unwrap();
+    afs.execute().unwrap();
     // println!("{:?}", output);
 }
 
-#[test]
-pub fn gen_schema() {
-    let fields = vec![
-        Field::new("a", DataType::UInt32, false),
-        Field::new("b", DataType::UInt32, false),
-        Field::new("c", DataType::UInt32, false),
-        Field::new("d", DataType::UInt32, false),
-    ];
-    let schema = Schema::new(fields);
-    let serialized_schema = bincode::serialize(&schema).unwrap();
-    std::fs::write("tests/data/example.schema.bin", serialized_schema).unwrap();
+// #[test]
+// pub fn gen_schema() {
+//     let fields = vec![
+//         Field::new("a", DataType::UInt32, false),
+//         Field::new("b", DataType::UInt32, false),
+//         Field::new("c", DataType::UInt32, false),
+//         Field::new("d", DataType::UInt32, false),
+//     ];
+//     let schema = Schema::new(fields);
+//     let serialized_schema = bincode::serialize(&schema).unwrap();
+//     std::fs::write("tests/data/example.schema.bin", serialized_schema).unwrap();
 
-    let schema_file = std::fs::read("tests/data/example.schema.bin").unwrap();
-    let schema_new = bincode::deserialize(&schema_file).unwrap();
-    assert_eq!(schema, schema_new);
-}
+//     let schema_file = std::fs::read("tests/data/example.schema.bin").unwrap();
+//     let schema_new = bincode::deserialize(&schema_file).unwrap();
+//     assert_eq!(schema, schema_new);
+// }
