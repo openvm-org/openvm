@@ -284,7 +284,7 @@ mod tests {
         util::execute_program_and_generate_traces,
     };
     use afs_test_utils::{
-        config::{baby_bear_blake3::default_engine, baby_bear_poseidon2::BabyBearPoseidon2Config},
+        config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
         engine::StarkEngine,
     };
     use p3_challenger::{CanObserve, CanSample};
@@ -311,16 +311,9 @@ mod tests {
         let mut builder = AsmBuilder::<F, EF>::default();
 
         let width: Var<_> = builder.eval(F::from_canonical_usize(PERMUTATION_WIDTH));
-        let mut challenger = DuplexChallengerVariable::<AsmConfig<F, EF>> {
-            sponge_state: builder.array(Usize::Var(width)),
-            nb_inputs: builder.eval(F::zero()),
-            input_buffer: builder.array(Usize::Var(width)),
-            nb_outputs: builder.eval(F::zero()),
-            output_buffer: builder.array(Usize::Var(width)),
-        };
+        let mut challenger = DuplexChallengerVariable::<AsmConfig<F, EF>>::new(&mut builder);
         let one: Felt<_> = builder.eval(F::one());
         let two: Felt<_> = builder.eval(F::two());
-        builder.halt();
         challenger.observe(&mut builder, one);
         challenger.observe(&mut builder, two);
         challenger.observe(&mut builder, two);
@@ -329,6 +322,8 @@ mod tests {
 
         let expected_result: Felt<_> = builder.eval(result);
         builder.assert_felt_eq(expected_result, element);
+
+        builder.halt();
 
         const WORD_SIZE: usize = 1;
         let program = builder.compile_isa::<WORD_SIZE>();
