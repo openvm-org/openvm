@@ -2,14 +2,16 @@ use alloc::{collections::BTreeMap, vec};
 use std::collections::BTreeSet;
 
 use p3_field::{ExtensionField, Field, PrimeField32, TwoAdicField};
+
 use stark_vm::program::DebugInfo;
 
-use super::{config::AsmConfig, AssemblyCode, BasicBlock, IndexTriple, ValueOrConst};
 use crate::{
     asm::AsmInstruction,
     ir::{Array, DslIr, Ext, Felt, Ptr, RVar, Var},
     prelude::TracedVec,
 };
+
+use super::{AssemblyCode, BasicBlock, config::AsmConfig, IndexTriple, ValueOrConst};
 
 /// The memory location for the top of memory
 pub const MEMORY_TOP: i32 = (1 << 30) - 4;
@@ -285,6 +287,30 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 }
                 DslIr::MulEFI(dst, lhs, rhs) => {
                     self.mul_ext_felti(dst, lhs, rhs, debug_info);
+                }
+                DslIr::AddM(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::AddM(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        debug_info,
+                    );
+                }
+                DslIr::SubM(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::SubM(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        debug_info,
+                    );
+                }
+                DslIr::MulM(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::MulM(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        debug_info,
+                    );
+                }
+                DslIr::DivM(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::DivM(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        debug_info,
+                    );
                 }
                 DslIr::LessThanV(dst, lhs, rhs) => {
                     self.push(

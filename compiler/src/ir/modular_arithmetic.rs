@@ -1,0 +1,67 @@
+use num_bigint_dig::BigUint;
+use p3_field::PrimeField64;
+
+use stark_vm::modular_multiplication::bigint_to_elems;
+
+use crate::ir::{Array, Builder, Config, DslIr, Var};
+
+pub type BigIntVar<C: Config> = Array<C, Var<C::N>>;
+
+impl<C: Config> BigIntVar<C> {
+    pub fn ptr_fp(&self) -> i32 {
+        match self {
+            Array::Fixed(_) => panic!(),
+            Array::Dyn(ptr, _) => ptr.fp(),
+        }
+    }
+}
+
+const REPR_BITS: usize = 30;
+const NUM_ELEMS: usize = 9;
+
+impl<C: Config> Builder<C>
+where
+    C::N: PrimeField64,
+{
+    pub fn eval_bigint(&mut self, bigint: BigUint) -> BigIntVar<C> {
+        let mut array = self.dyn_array(NUM_ELEMS);
+
+        let elems: Vec<C::N> = bigint_to_elems(bigint, REPR_BITS, NUM_ELEMS);
+        for (i, &elem) in elems.iter().enumerate() {
+            self.set(&mut array, i, elem);
+        }
+
+        array
+    }
+
+    fn mod_operation(
+        &mut self,
+        left: BigIntVar<C>,
+        right: BigIntVar<C>,
+        operation: impl Fn(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>) -> DslIr<C>,
+    ) -> BigIntVar<C> {
+        let dst = self.dyn_array(NUM_ELEMS);
+        self.operations.push(operation(dst.clone(), left, right));
+        dst
+    }
+
+    pub fn mod_add(&mut self, left: BigIntVar<C>, right: BigIntVar<C>) -> BigIntVar<C> {
+        self.mod_operation(left, right, DslIr::AddM)
+    }
+
+    pub fn mod_sub(&mut self, left: BigIntVar<C>, right: BigIntVar<C>) -> BigIntVar<C> {
+        self.mod_operation(left, right, DslIr::SubM)
+    }
+
+    pub fn mod_mul(&mut self, left: BigIntVar<C>, right: BigIntVar<C>) -> BigIntVar<C> {
+        self.mod_operation(left, right, DslIr::MulM)
+    }
+
+    pub fn mod_div(&mut self, left: BigIntVar<C>, right: BigIntVar<C>) -> BigIntVar<C> {
+        self.mod_operation(left, right, DslIr::DivM)
+    }
+
+    pub fn assert_bigint_eq(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) {
+        self.assert_var_array_eq(left, right);
+    }
+}

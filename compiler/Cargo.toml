@@ -16,7 +16,10 @@ p3-baby-bear = { workspace = true }
 backtrace = "0.3.71"
 afs-test-utils = { path = "../test-utils" }
 stark-vm = { path = "../vm" }
+afs-primitives = { path = "../primitives" }
 strum_macros = "0.26.4"
+num-bigint-dig = "0.8.4"
+num-traits = "0.2.19"
 
 [dev-dependencies]
 p3-challenger = { workspace = true }

@@ -1,12 +1,6 @@
-use afs_primitives::{
-    modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir,
-    sub_chip::AirConfig,
-};
+use afs_primitives::modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir;
 
-use crate::{
-    cpu::{OpCode, MODULAR_ARITHMETIC_INSTRUCTIONS},
-    modular_multiplication::columns::ModularMultiplicationVmCols,
-};
+use crate::cpu::{MODULAR_ARITHMETIC_INSTRUCTIONS, OpCode};
 
 pub struct ModularMultiplicationVmAir {
     pub air: ModularMultiplicationBigIntAir,
@@ -17,8 +11,4 @@ impl ModularMultiplicationVmAir {
         assert!(MODULAR_ARITHMETIC_INSTRUCTIONS.contains(&op_code));
         1000
     }
-}
-
-impl AirConfig for ModularMultiplicationVmAir {
-    type Cols<T> = ModularMultiplicationVmCols<T>;
 }

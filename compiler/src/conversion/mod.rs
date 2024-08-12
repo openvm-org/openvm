@@ -1,8 +1,9 @@
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
+
 use stark_vm::{
     cpu::{
-        trace::Instruction,
         OpCode::{self, *},
+        trace::Instruction,
     },
     program::{DebugInfo, Program},
 };
@@ -562,6 +563,38 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
             i32_f(dst),
             i32_f(src),
             F::zero(),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::AddM(dst, src1, src2) => vec![inst(
+            MOD_ADD,
+            i32_f(src1),
+            i32_f(src2),
+            i32_f(dst),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::SubM(dst, src1, src2) => vec![inst(
+            MOD_SUB,
+            i32_f(src1),
+            i32_f(dst),
+            i32_f(src2),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::MulM(dst, src1, src2) => vec![inst(
+            MOD_MUL,
+            i32_f(src1),
+            i32_f(src2),
+            i32_f(dst),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::DivM(dst, src1, src2) => vec![inst(
+            MOD_DIV,
+            i32_f(src1),
+            i32_f(dst),
+            i32_f(src2),
             AS::Memory,
             AS::Memory,
         )],
