@@ -797,7 +797,6 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         // - Setting the loop range
         // - Executing the loop body and incrementing the loop variable
         // - the loop condition
-        // Set the loop variable to the start of the range.
 
         // Set the loop variable to the start of the range.
         self.set_loop_var(debug_info.clone());

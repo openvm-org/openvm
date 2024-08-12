@@ -83,6 +83,7 @@ impl VerifierProgram<InnerConfig> {
         fri_params: &FriParameters,
     ) -> Program<BabyBear> {
         let mut builder = Builder::<InnerConfig>::default();
+        builder.set_static_loops(true);
 
         builder.cycle_tracker_start("VerifierProgram");
         let input: VerifierInputVariable<_> = builder.uninit();
