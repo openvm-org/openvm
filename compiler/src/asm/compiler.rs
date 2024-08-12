@@ -913,10 +913,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         let imm = imm.as_base_slice();
         for i in 0..EF::D {
             let j = (i * self.word_size) as i32;
-            self.push(
-                AsmInstruction::ImmF(dst + j, imm[i]),
-                debug_info.clone(),
-            );
+            self.push(AsmInstruction::ImmF(dst + j, imm[i]), debug_info.clone());
         }
     }
 
