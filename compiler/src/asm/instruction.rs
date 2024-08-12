@@ -20,6 +20,9 @@ pub enum AsmInstruction<F, EF> {
     /// Set dst = imm.
     ImmF(i32, F),
 
+    /// Copy, dst = src.
+    CopyF(i32, i32),
+
     /// Add, dst = lhs + rhs.
     AddF(i32, i32, i32),
 
@@ -160,6 +163,9 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::ImmF(dst, src) => {
                 write!(f, "imm   ({})fp, ({})", dst, src)
+            }
+            AsmInstruction::CopyF(dst, src) => {
+                write!(f, "copy  ({})fp, ({})", dst, src)
             }
             AsmInstruction::AddF(dst, lhs, rhs) => {
                 write!(f, "add   ({})fp, ({})fp, ({})fp", dst, lhs, rhs)

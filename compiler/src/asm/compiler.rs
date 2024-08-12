@@ -590,7 +590,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         match len {
             RVar::Const(len) => {
                 self.push(
-                    AsmInstruction::AddFI(ptr.fp(), HEAP_PTR, F::zero()),
+                    AsmInstruction::CopyF(ptr.fp(), HEAP_PTR),
                     debug_info.clone(),
                 );
                 self.push(
@@ -600,7 +600,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             }
             RVar::Val(len) => {
                 self.push(
-                    AsmInstruction::AddFI(ptr.fp(), HEAP_PTR, F::zero()),
+                    AsmInstruction::CopyF(ptr.fp(), HEAP_PTR),
                     debug_info.clone(),
                 );
                 self.push(
@@ -886,7 +886,7 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
             }
             RVar::Val(var) => {
                 self.compiler.push(
-                    AsmInstruction::AddFI(self.loop_var.fp(), var.fp(), F::zero()),
+                    AsmInstruction::CopyF(self.loop_var.fp(), var.fp()),
                     debug_info.clone(),
                 );
             }
@@ -974,7 +974,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         for i in 1..EF::D {
             let j = (i * self.word_size) as i32;
             self.push(
-                AsmInstruction::AddFI(dst.fp() + j, lhs.fp() + j, F::zero()),
+                AsmInstruction::CopyF(dst.fp() + j, lhs.fp() + j),
                 debug_info.clone(),
             );
         }
@@ -990,7 +990,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         let rhs = rhs.as_base_slice();
 
         self.push(
-            AsmInstruction::AddFI(dst.fp(), lhs.fp(), rhs[0]),
+            AsmInstruction::CopyF(dst.fp(), lhs.fp()),
             debug_info.clone(),
         );
 

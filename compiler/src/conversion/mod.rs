@@ -121,14 +121,6 @@ fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
 ) -> Vec<Instruction<F>> {
     match instruction {
-        AsmInstruction::ImmF(dst, val) => vec![inst(
-            STOREW,
-            val,
-            F::zero(),
-            i32_f(dst),
-            AS::Immediate,
-            AS::Memory,
-        )],
         AsmInstruction::AddF(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] + mem[rhs]
             inst(
@@ -501,8 +493,23 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
                 vec![]
             }
         }
-        AsmInstruction::ImmF(..)
-        | AsmInstruction::AddF(..)
+        AsmInstruction::ImmF(dst, val) => vec![inst(
+            STOREW,
+            val,
+            F::zero(),
+            i32_f(dst),
+            AS::Immediate,
+            AS::Memory,
+        )],
+        AsmInstruction::CopyF(dst, src) => vec![inst(
+            LOADW,
+            i32_f(dst),
+            F::zero(),
+            i32_f(src),
+            AS::Memory,
+            AS::Immediate,
+        )],
+        AsmInstruction::AddF(..)
         | AsmInstruction::SubF(..)
         | AsmInstruction::MulF(..)
         | AsmInstruction::DivF(..)
