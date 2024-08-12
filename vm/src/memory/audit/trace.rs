@@ -1,24 +1,21 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
 
-use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
+use afs_primitives::sub_chip::LocalTraceInstructions;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::air::AuditAir;
-use crate::memory::{audit::columns::AuditCols, manager::MemoryReadWriteOpCols};
+use super::MemoryAuditChip;
+use crate::memory::{
+    audit::columns::AuditCols, interface::AccessCell, manager::NewMemoryAccessCols, OpType,
+};
 
-impl<const WORD_SIZE: usize> AuditAir<WORD_SIZE> {
-    pub fn generate_trace<F: PrimeField32>(
+impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
+    pub fn generate_trace(
         &self,
-        // (address_space, address) -> (clk, data)
-        // TODO[osama]: update this to use AccessCell struct
-        first_access: BTreeMap<(F, F), (F, [F; WORD_SIZE])>,
-        mut last_access: BTreeMap<(F, F), (F, [F; WORD_SIZE])>,
+        // TODO[osama]: consider making a struct for address
+        final_memory: &BTreeMap<(F, F), AccessCell<WORD_SIZE, F>>,
         trace_height: usize,
-        range_checker: Arc<RangeCheckerGateChip>,
     ) -> RowMajorMatrix<F> {
-        debug_assert_eq!(first_access.len(), last_access.len());
-
         let gen_row = |prev_idx: Vec<u32>,
                        cur_idx: Vec<u32>,
                        data_read: [F; WORD_SIZE],
@@ -27,14 +24,15 @@ impl<const WORD_SIZE: usize> AuditAir<WORD_SIZE> {
                        clk_write: F,
                        is_extra: F| {
             let lt_cols = LocalTraceInstructions::generate_trace_row(
-                &self.addr_lt_air,
-                (prev_idx, cur_idx.clone(), range_checker.clone()),
+                &self.air.addr_lt_air,
+                (prev_idx, cur_idx.clone(), self.range_checker.clone()),
             );
 
             AuditCols::<WORD_SIZE, F>::new(
-                MemoryReadWriteOpCols::<WORD_SIZE, F>::new(
+                NewMemoryAccessCols::<WORD_SIZE, F>::new(
                     F::from_canonical_u32(cur_idx[0]),
                     F::from_canonical_u32(cur_idx[1]),
+                    F::from_canonical_u8(OpType::Write as u8),
                     data_read,
                     clk_read,
                     data_write,
@@ -46,10 +44,20 @@ impl<const WORD_SIZE: usize> AuditAir<WORD_SIZE> {
             )
         };
 
-        let mut rows_concat = Vec::with_capacity(trace_height * self.air_width());
+        let mut rows_concat = Vec::with_capacity(trace_height * self.air.air_width());
         let mut prev_idx = vec![0, 0];
-        for (addr, (clk_write, data_write)) in first_access {
-            let (clk_read, data_read) = last_access.remove(&addr).unwrap();
+        for (
+            addr,
+            AccessCell {
+                clk: clk_write,
+                data: data_write,
+            },
+        ) in self.initial_memory.iter()
+        {
+            let AccessCell {
+                clk: clk_read,
+                data: data_read,
+            } = final_memory.get(addr).unwrap();
 
             // TODO[osama]: add the ability to generate trace with Field elements as inputs
             let cur_idx = vec![addr.0.as_canonical_u32(), addr.1.as_canonical_u32()];
@@ -58,10 +66,10 @@ impl<const WORD_SIZE: usize> AuditAir<WORD_SIZE> {
                 gen_row(
                     prev_idx,
                     cur_idx.clone(),
-                    data_read,
-                    clk_read,
-                    data_write,
-                    clk_write,
+                    *data_read,
+                    *clk_read,
+                    *data_write,
+                    *clk_write,
                     F::zero(),
                 )
                 .flatten(),
@@ -74,7 +82,7 @@ impl<const WORD_SIZE: usize> AuditAir<WORD_SIZE> {
         let dummy_data = [F::zero(); WORD_SIZE];
         let dummy_clk = F::zero();
 
-        while rows_concat.len() < trace_height * self.air_width() {
+        while rows_concat.len() < trace_height * self.air.air_width() {
             rows_concat.extend(
                 gen_row(
                     prev_idx.clone(),
@@ -91,6 +99,6 @@ impl<const WORD_SIZE: usize> AuditAir<WORD_SIZE> {
             prev_idx.clone_from(&dummy_idx);
         }
 
-        RowMajorMatrix::new(rows_concat, self.air_width())
+        RowMajorMatrix::new(rows_concat, self.air.air_width())
     }
 }

@@ -3,13 +3,13 @@ use std::iter;
 use afs_primitives::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 use derive_new::new;
 
-use super::air::AuditAir;
-use crate::memory::manager::MemoryReadWriteOpCols;
+use super::air::MemoryAuditAir;
+use crate::memory::manager::NewMemoryAccessCols;
 
 #[allow(clippy::too_many_arguments)]
 #[derive(new)]
 pub struct AuditCols<const WORD_SIZE: usize, T> {
-    pub op_cols: MemoryReadWriteOpCols<WORD_SIZE, T>,
+    pub op_cols: NewMemoryAccessCols<WORD_SIZE, T>,
 
     pub is_extra: T,
     pub addr_lt: T,
@@ -17,13 +17,15 @@ pub struct AuditCols<const WORD_SIZE: usize, T> {
 }
 
 impl<const WORD_SIZE: usize, T: Clone> AuditCols<WORD_SIZE, T> {
-    pub fn from_slice(slc: &[T], audit_air: &AuditAir<WORD_SIZE>) -> Self {
+    pub fn from_slice(slc: &[T], audit_air: &MemoryAuditAir<WORD_SIZE>) -> Self {
+        let op_cols_width = NewMemoryAccessCols::<WORD_SIZE, T>::width();
+
         Self {
-            op_cols: MemoryReadWriteOpCols::from_slice(&slc[..4 + 2 * WORD_SIZE]),
-            is_extra: slc[4 + 2 * WORD_SIZE].clone(),
-            addr_lt: slc[5 + 2 * WORD_SIZE].clone(),
+            op_cols: NewMemoryAccessCols::from_slice(&slc[..op_cols_width]),
+            is_extra: slc[op_cols_width].clone(),
+            addr_lt: slc[1 + op_cols_width].clone(),
             addr_lt_aux: IsLessThanTupleAuxCols::from_slice(
-                &slc[6 + 2 * WORD_SIZE..],
+                &slc[2 + op_cols_width..],
                 &audit_air.addr_lt_air,
             ),
         }
@@ -39,7 +41,8 @@ impl<const WORD_SIZE: usize, T: Clone> AuditCols<WORD_SIZE, T> {
             .collect()
     }
 
-    pub fn width(audit_air: &AuditAir<WORD_SIZE>) -> usize {
-        6 + 2 * WORD_SIZE + IsLessThanTupleAuxCols::<T>::width(&audit_air.addr_lt_air)
+    pub fn width(audit_air: &MemoryAuditAir<WORD_SIZE>) -> usize {
+        2 + NewMemoryAccessCols::<WORD_SIZE, T>::width()
+            + IsLessThanTupleAuxCols::<T>::width(&audit_air.addr_lt_air)
     }
 }

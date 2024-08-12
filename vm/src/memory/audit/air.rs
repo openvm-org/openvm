@@ -13,17 +13,19 @@ use p3_matrix::Matrix;
 use super::columns::AuditCols;
 use crate::cpu::RANGE_CHECKER_BUS;
 
-pub struct AuditAir<const WORD_SIZE: usize> {
+// TODO[osama]: consider renaming to MemoryAuditAir
+pub struct MemoryAuditAir<const WORD_SIZE: usize> {
     pub addr_lt_air: IsLessThanTupleAir,
 }
 
-impl<const WORD_SIZE: usize> AuditAir<WORD_SIZE> {
+impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
     // TODO[osama]: rename to addr_space_max_bits and pointer_max_bits
-    pub fn new(address_space_limb_bits: usize, address_limb_bits: usize, decomp: usize) -> Self {
+    // TODO[osama]: look for similar renamings thoughout vm/
+    pub fn new(addr_space_max_bits: usize, pointer_max_bits: usize, decomp: usize) -> Self {
         Self {
             addr_lt_air: IsLessThanTupleAir::new(
                 RANGE_CHECKER_BUS,
-                vec![address_space_limb_bits, address_limb_bits],
+                vec![addr_space_max_bits, pointer_max_bits],
                 decomp,
             ),
         }
@@ -34,13 +36,13 @@ impl<const WORD_SIZE: usize> AuditAir<WORD_SIZE> {
     }
 }
 
-impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for AuditAir<WORD_SIZE> {
+impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for MemoryAuditAir<WORD_SIZE> {
     fn width(&self) -> usize {
         self.air_width()
     }
 }
 
-impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB> for AuditAir<WORD_SIZE> {
+impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB> for MemoryAuditAir<WORD_SIZE> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
