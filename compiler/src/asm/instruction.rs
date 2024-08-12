@@ -17,6 +17,9 @@ pub enum AsmInstruction<F, EF> {
     /// Store a value from val(fp) into the address stored at addr(fp) + offset.
     StoreFI(i32, i32, F),
 
+    /// Set dst = imm.
+    ImmF(i32, F),
+
     /// Add, dst = lhs + rhs.
     AddF(i32, i32, i32),
 
@@ -154,6 +157,9 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::StoreFI(dst, src, offset) => {
                 write!(f, "swi   ({})fp, ({})fp, {}", dst, src, offset)
+            }
+            AsmInstruction::ImmF(dst, src) => {
+                write!(f, "imm   ({})fp, ({})", dst, src)
             }
             AsmInstruction::AddF(dst, lhs, rhs) => {
                 write!(f, "add   ({})fp, ({})fp, ({})fp", dst, lhs, rhs)

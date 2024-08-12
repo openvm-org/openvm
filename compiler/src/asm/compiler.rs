@@ -11,9 +11,6 @@ use crate::{
     prelude::TracedVec,
 };
 
-/// The zero address.
-pub(crate) const ZERO: i32 = 0;
-
 /// The memory location for the top of memory
 pub const MEMORY_TOP: i32 = (1 << 30) - 4;
 
@@ -99,7 +96,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         if self.block_label().is_zero() {
             // Initialize the heap pointer value.
             let heap_start = F::from_canonical_usize(HEAP_START_ADDRESS);
-            self.push(AsmInstruction::AddFI(HEAP_PTR, ZERO, heap_start), None);
+            self.push(AsmInstruction::ImmF(HEAP_PTR, heap_start), None);
             // Jump over the TRAP instruction we are about to add.
             self.push(AsmInstruction::j(self.trap_label + F::one()), None);
             self.basic_block();
@@ -113,10 +110,10 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             let debug_info = Some(DebugInfo::new(op.to_string(), trace));
             match op {
                 DslIr::ImmV(dst, src) => {
-                    self.push(AsmInstruction::AddFI(dst.fp(), ZERO, src), debug_info);
+                    self.push(AsmInstruction::ImmF(dst.fp(), src), debug_info);
                 }
                 DslIr::ImmF(dst, src) => {
-                    self.push(AsmInstruction::AddFI(dst.fp(), ZERO, src), debug_info);
+                    self.push(AsmInstruction::ImmF(dst.fp(), src), debug_info);
                 }
                 DslIr::ImmE(dst, src) => {
                     self.assign_exti(dst.fp(), src, debug_info);
@@ -211,7 +208,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::DivFI(dst.fp(), lhs.fp(), rhs), debug_info);
                 }
                 DslIr::DivFIN(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::AddFI(A0, ZERO, lhs), debug_info.clone());
+                    self.push(AsmInstruction::ImmF(A0, lhs), debug_info.clone());
                     self.push(AsmInstruction::DivF(dst.fp(), A0, rhs.fp()), debug_info);
                 }
                 DslIr::DivEIN(dst, lhs, rhs) => {
@@ -883,7 +880,7 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         match self.start {
             RVar::Const(start) => {
                 self.compiler.push(
-                    AsmInstruction::AddFI(self.loop_var.fp(), ZERO, start),
+                    AsmInstruction::ImmF(self.loop_var.fp(), start),
                     debug_info.clone(),
                 );
             }
@@ -917,7 +914,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         for i in 0..EF::D {
             let j = (i * self.word_size) as i32;
             self.push(
-                AsmInstruction::AddFI(dst + j, ZERO, imm[i]),
+                AsmInstruction::ImmF(dst + j, imm[i]),
                 debug_info.clone(),
             );
         }
@@ -1003,7 +1000,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         for i in 1..EF::D {
             let j = (i * self.word_size) as i32;
             self.push(
-                AsmInstruction::AddFI(dst.fp() + j, ZERO, rhs[i]),
+                AsmInstruction::ImmF(dst.fp() + j, rhs[i]),
                 debug_info.clone(),
             );
         }
