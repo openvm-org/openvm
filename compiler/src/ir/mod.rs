@@ -12,6 +12,7 @@ pub use var::*;
 mod bits;
 mod builder;
 mod collections;
+mod elliptic_curve;
 mod instructions;
 mod modular_arithmetic;
 mod poseidon;

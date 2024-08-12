@@ -1,9 +1,9 @@
 use num_bigint_dig::BigUint;
-use p3_field::PrimeField64;
+use p3_field::{AbstractField, PrimeField64};
 
 use stark_vm::modular_multiplication::bigint_to_elems;
 
-use crate::ir::{Array, Builder, Config, DslIr, Var};
+use crate::ir::{Array, Builder, Config, DslIr, IfBuilder, Var};
 
 pub type BigIntVar<C: Config> = Array<C, Var<C::N>>;
 
@@ -36,32 +36,50 @@ where
 
     fn mod_operation(
         &mut self,
-        left: BigIntVar<C>,
-        right: BigIntVar<C>,
+        left: &BigIntVar<C>,
+        right: &BigIntVar<C>,
         operation: impl Fn(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>) -> DslIr<C>,
     ) -> BigIntVar<C> {
         let dst = self.dyn_array(NUM_ELEMS);
-        self.operations.push(operation(dst.clone(), left, right));
+        self.operations
+            .push(operation(dst.clone(), left.clone(), right.clone()));
         dst
     }
 
-    pub fn mod_add(&mut self, left: BigIntVar<C>, right: BigIntVar<C>) -> BigIntVar<C> {
+    pub fn mod_add(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) -> BigIntVar<C> {
         self.mod_operation(left, right, DslIr::AddM)
     }
 
-    pub fn mod_sub(&mut self, left: BigIntVar<C>, right: BigIntVar<C>) -> BigIntVar<C> {
+    pub fn mod_sub(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) -> BigIntVar<C> {
         self.mod_operation(left, right, DslIr::SubM)
     }
 
-    pub fn mod_mul(&mut self, left: BigIntVar<C>, right: BigIntVar<C>) -> BigIntVar<C> {
+    pub fn mod_mul(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) -> BigIntVar<C> {
         self.mod_operation(left, right, DslIr::MulM)
     }
 
-    pub fn mod_div(&mut self, left: BigIntVar<C>, right: BigIntVar<C>) -> BigIntVar<C> {
+    pub fn mod_div(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) -> BigIntVar<C> {
         self.mod_operation(left, right, DslIr::DivM)
     }
 
     pub fn assert_bigint_eq(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) {
         self.assert_var_array_eq(left, right);
+    }
+
+    pub fn bigint_is_zero(&mut self, bigint: BigIntVar<C>) -> Var<C::N> {
+        let result = self.eval(C::N::one());
+        for i in 0..NUM_ELEMS {
+            let elem = self.get(&bigint, i);
+            self.if_ne(elem, C::N::zero()).then(|builder| {
+                builder.assign(&result, C::N::zero());
+            });
+        }
+
+        result
+    }
+
+    pub fn if_bigint_is_zero(&mut self, bigint: BigIntVar<C>) -> IfBuilder<C> {
+        let is_zero = self.bigint_is_zero(bigint);
+        self.if_eq(is_zero, C::N::one())
     }
 }

@@ -138,7 +138,7 @@ impl<F: PrimeField32> ModularMultiplicationChip<F> {
         let argument_2 = elems_to_bigint(argument_2_elems, repr_bits);
         let result = match instruction.opcode {
             MOD_ADD => argument_1.clone() + argument_2.clone(),
-            MOD_SUB => argument_1.clone() - argument_2.clone() + modulus.clone(),
+            MOD_SUB => argument_1.clone() + modulus.clone() - argument_2.clone(),
             MOD_MUL => argument_1.clone() * argument_2.clone(),
             MOD_DIV => {
                 argument_1.clone()
@@ -149,6 +149,10 @@ impl<F: PrimeField32> ModularMultiplicationChip<F> {
             }
             _ => panic!(),
         } % modulus;
+        println!(
+            "{:?} <{:?}> {:?} = {:?}",
+            argument_1, instruction.opcode, argument_2, result
+        );
         let result_elems = bigint_to_elems(result, repr_bits, num_elems);
         for (i, &elem) in result_elems.iter().enumerate() {
             vm.memory_chip.write_elem(

@@ -1,10 +1,10 @@
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, One, Zero};
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
+use p3_field::{AbstractField, extension::BinomialExtensionField};
 use rand::RngCore;
 
-use afs_compiler::{asm::AsmBuilder, util::execute_program};
+use afs_compiler::{asm::AsmBuilder, ir::Var, util::execute_program};
 use afs_primitives::modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir;
 use afs_test_utils::utils::create_seeded_rng;
 
@@ -24,7 +24,7 @@ fn test_compiler_modular_arithmetic_1() {
 
     let a_var = builder.eval_bigint(a);
     let b_var = builder.eval_bigint(b);
-    let r_var = builder.mod_mul(a_var, b_var);
+    let r_var = builder.mod_mul(&a_var, &b_var);
     let r_check_var = builder.eval_bigint(r);
     builder.assert_bigint_eq(&r_var, &r_check_var);
     builder.halt();
@@ -54,9 +54,50 @@ fn test_compiler_modular_arithmetic_2() {
 
     let a_var = builder.eval_bigint(a);
     let b_var = builder.eval_bigint(b);
-    let r_var = builder.mod_mul(a_var, b_var);
+    let r_var = builder.mod_mul(&a_var, &b_var);
     let r_check_var = builder.eval_bigint(r);
     builder.assert_bigint_eq(&r_var, &r_check_var);
+    builder.halt();
+
+    let program = builder.clone().compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE>(program, vec![]);
+}
+
+#[test]
+fn test_compiler_modular_arithmetic_conditional() {
+    let a = BigUint::from_isize(23).unwrap();
+    let b = BigUint::from_isize(41).unwrap();
+
+    let r = BigUint::from_isize(23 * 41).unwrap();
+    let s = BigUint::from_isize(1000).unwrap();
+
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+    let mut builder = AsmBuilder::<F, EF>::default();
+
+    let a_var = builder.eval_bigint(a);
+    let b_var = builder.eval_bigint(b);
+    let product_var = builder.mod_mul(&a_var, &b_var);
+    let r_var = builder.eval_bigint(r);
+    let s_var = builder.eval_bigint(s);
+
+    let should_be_1: Var<F> = builder.uninit();
+    let should_be_2: Var<F> = builder.uninit();
+
+    let diff = builder.mod_sub(&product_var, &r_var);
+    builder.if_bigint_is_zero(diff).then_or_else(
+        |builder| builder.assign(&should_be_1, F::one()),
+        |builder| builder.assign(&should_be_1, F::two()),
+    );
+    let diff = builder.mod_sub(&product_var, &s_var);
+    builder.if_bigint_is_zero(diff).then_or_else(
+        |builder| builder.assign(&should_be_2, F::one()),
+        |builder| builder.assign(&should_be_2, F::two()),
+    );
+
+    builder.assert_var_eq(should_be_1, F::one());
+    builder.assert_var_eq(should_be_2, F::two());
+
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
@@ -71,7 +112,7 @@ fn test_compiler_modular_arithmetic_negative() {
     let mut builder = AsmBuilder::<F, EF>::default();
 
     let one = builder.eval_bigint(BigUint::one());
-    let one_times_one = builder.mod_mul(one.clone(), one);
+    let one_times_one = builder.mod_mul(&one, &one);
     let zero = builder.eval_bigint(BigUint::zero());
     builder.assert_bigint_eq(&one_times_one, &zero);
     builder.halt();
