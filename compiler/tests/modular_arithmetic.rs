@@ -84,13 +84,11 @@ fn test_compiler_modular_arithmetic_conditional() {
     let should_be_1: Var<F> = builder.uninit();
     let should_be_2: Var<F> = builder.uninit();
 
-    let diff = builder.mod_sub(&product_var, &r_var);
-    builder.if_bigint_is_zero(diff).then_or_else(
+    builder.if_bigint_eq(&product_var, &r_var).then_or_else(
         |builder| builder.assign(&should_be_1, F::one()),
         |builder| builder.assign(&should_be_1, F::two()),
     );
-    let diff = builder.mod_sub(&product_var, &s_var);
-    builder.if_bigint_is_zero(diff).then_or_else(
+    builder.if_bigint_eq(&product_var, &s_var).then_or_else(
         |builder| builder.assign(&should_be_2, F::one()),
         |builder| builder.assign(&should_be_2, F::two()),
     );
@@ -115,6 +113,35 @@ fn test_compiler_modular_arithmetic_negative() {
     let one_times_one = builder.mod_mul(&one, &one);
     let zero = builder.eval_bigint(BigUint::zero());
     builder.assert_bigint_eq(&one_times_one, &zero);
+    builder.halt();
+
+    let program = builder.clone().compile_isa::<WORD_SIZE>();
+    execute_program::<WORD_SIZE>(program, vec![]);
+}
+
+#[test]
+fn test_compiler_ec_double() {
+    let x = BigUint::from_isize(2).unwrap();
+    let y = BigUint::from_isize(2).unwrap();
+
+    let x3 = BigUint::from_isize(5).unwrap();
+    let y3 = ModularMultiplicationBigIntAir::secp256k1_prime() - BigUint::from_isize(11).unwrap();
+
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+    let mut builder = AsmBuilder::<F, EF>::default();
+
+    let x_var = builder.eval_bigint(x);
+    let y_var = builder.eval_bigint(y);
+    let point = (x_var, y_var);
+    let x3_check = builder.eval_bigint(x3);
+    let y3_check = builder.eval_bigint(y3);
+
+    let (x3_var, y3_var) = builder.ec_add(&point, &point);
+
+    builder.assert_bigint_eq(&x3_var, &x3_check);
+    builder.assert_bigint_eq(&y3_var, &y3_check);
+
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();

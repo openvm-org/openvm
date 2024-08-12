@@ -1,6 +1,5 @@
 use std::cmp::min;
 
-use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use num_traits::One;
@@ -8,12 +7,14 @@ use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
+use afs_stark_backend::interaction::InteractionBuilder;
+
 use crate::{
     modular_multiplication::{
         air::{constrain_limbs, range_check},
-        modular_multiplication_bigint::columns::ModularMultiplicationBigIntCols,
-        trace::{big_uint_to_bits, take_limb},
-        FullLimbs, LimbDimensions,
+        FullLimbs,
+        LimbDimensions,
+        modular_multiplication_bigint::columns::ModularMultiplicationBigIntCols, trace::{big_uint_to_bits, take_limb},
     },
     sub_chip::AirConfig,
 };
@@ -99,7 +100,7 @@ impl ModularMultiplicationBigIntAir {
 
     pub fn secp256k1_prime() -> BigUint {
         let mut result = BigUint::one() << 256;
-        for power in [32, 9, 8, 7, 6, 4, 1] {
+        for power in [32, 9, 8, 7, 6, 4, 0] {
             result -= BigUint::one() << power;
         }
         result

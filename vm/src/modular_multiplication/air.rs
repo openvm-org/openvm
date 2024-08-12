@@ -1,6 +1,6 @@
 use afs_primitives::modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir;
 
-use crate::cpu::{MODULAR_ARITHMETIC_INSTRUCTIONS, OpCode};
+use crate::cpu::{OpCode, MODULAR_ARITHMETIC_INSTRUCTIONS};
 
 pub struct ModularMultiplicationVmAir {
     pub air: ModularMultiplicationBigIntAir,

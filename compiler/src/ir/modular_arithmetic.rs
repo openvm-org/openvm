@@ -1,6 +1,5 @@
 use num_bigint_dig::BigUint;
 use p3_field::{AbstractField, PrimeField64};
-
 use stark_vm::modular_multiplication::bigint_to_elems;
 
 use crate::ir::{Array, Builder, Config, DslIr, IfBuilder, Var};
@@ -66,7 +65,7 @@ where
         self.assert_var_array_eq(left, right);
     }
 
-    pub fn bigint_is_zero(&mut self, bigint: BigIntVar<C>) -> Var<C::N> {
+    pub fn bigint_is_zero(&mut self, bigint: &BigIntVar<C>) -> Var<C::N> {
         let result = self.eval(C::N::one());
         for i in 0..NUM_ELEMS {
             let elem = self.get(&bigint, i);
@@ -78,8 +77,13 @@ where
         result
     }
 
-    pub fn if_bigint_is_zero(&mut self, bigint: BigIntVar<C>) -> IfBuilder<C> {
-        let is_zero = self.bigint_is_zero(bigint);
-        self.if_eq(is_zero, C::N::one())
+    pub fn bigint_eq(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) -> Var<C::N> {
+        let diff = self.mod_sub(&left, &right);
+        self.bigint_is_zero(&diff)
+    }
+
+    pub fn if_bigint_eq(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) -> IfBuilder<C> {
+        let eq = self.bigint_eq(left, right);
+        self.if_eq(eq, C::N::one())
     }
 }
