@@ -580,7 +580,6 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
             AS::Memory,
             AS::Memory,
         )],
-        _ => panic!("Unsupported instruction {:?}", instruction),
     };
 
     let debug_infos = vec![debug_info; instructions.len()];

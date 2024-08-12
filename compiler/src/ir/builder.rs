@@ -504,11 +504,6 @@ impl<C: Config> Builder<C> {
         }
     }
 
-    /// Register a felt as public value.  This is append to the proof's public values buffer.
-    pub fn register_public_value(&mut self, val: Felt<C::F>) {
-        self.operations.push(DslIr::RegisterPublicValue(val));
-    }
-
     fn get_nb_public_values(&mut self) -> Var<C::N> {
         assert!(
             !self.is_sub_builder,

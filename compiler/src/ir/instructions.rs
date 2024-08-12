@@ -1,4 +1,4 @@
-use super::{Array, Config, Ext, Felt, FriFoldInput, MemIndex, Ptr, RVar, TracedVec, Var};
+use super::{Array, Config, Ext, Felt, MemIndex, Ptr, RVar, TracedVec, Var};
 
 /// An intermeddiate instruction set for implementing programs.
 ///
@@ -222,8 +222,6 @@ pub enum DslIr<C: Config> {
     WitnessExt(Ext<C::F, C::EF>, u32),
     /// Label a field element as the ith public input.
     Publish(Felt<C::F>, Var<C::N>),
-    /// Registers a field element to the public inputs.
-    RegisterPublicValue(Felt<C::F>),
     /// Operation to halt the program. Should be the last instruction in the program.
     Halt,
 
@@ -236,9 +234,6 @@ pub enum DslIr<C: Config> {
     CircuitCommitCommitedValuesDigest(Var<C::N>),
 
     // FRI specific instructions.
-    /// Executes a FRI fold operation. 1st field is the size of the fri fold input array.  2nd field
-    /// is the fri fold input array.  See [`FriFoldInput`] for more details.
-    FriFold(Var<C::N>, Array<C, FriFoldInput<C>>),
     /// Select's a variable based on a condition. (select(cond, true_val, false_val) => output).
     /// Should only be used when target is a gnark circuit.
     CircuitSelectV(Var<C::N>, Var<C::N>, Var<C::N>, Var<C::N>),

@@ -530,13 +530,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         self.push(AsmInstruction::StoreHintWordI(A0, offset), debug_info)
                     }
                 },
-                DslIr::FriFold(m, input_ptr) => {
-                    if let Array::Dyn(ptr, _) = input_ptr {
-                        self.push(AsmInstruction::FriFold(m.fp(), ptr.fp()), debug_info);
-                    } else {
-                        unimplemented!();
-                    }
-                }
                 DslIr::Poseidon2CompressBabyBear(result, left, right) => {
                     match (result, left, right) {
                         (Array::Dyn(result, _), Array::Dyn(left, _), Array::Dyn(right, _)) => self
@@ -553,15 +546,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 }
                 DslIr::Publish(val, index) => {
                     self.push(AsmInstruction::Publish(val.fp(), index.fp()), debug_info);
-                }
-                DslIr::RegisterPublicValue(val) => {
-                    self.push(AsmInstruction::RegisterPublicValue(val.fp()), debug_info);
-                }
-                DslIr::LessThan(dst, left, right) => {
-                    self.push(
-                        AsmInstruction::LessThan(dst.fp(), left.fp(), right.fp()),
-                        debug_info.clone(),
-                    );
                 }
                 DslIr::CycleTrackerStart(name) => {
                     self.push(AsmInstruction::CycleTrackerStart(name.clone()), debug_info);
