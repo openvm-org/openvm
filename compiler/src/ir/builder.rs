@@ -901,13 +901,16 @@ impl<'a, C: Config> RangeBuilderWithBreaks<'a, C> {
         &mut self,
         f: impl FnMut(RVar<C::N>, &mut Builder<C>) -> Result<(), BreakLoop>,
     ) {
+        let old_disable_break = self.0.builder.flags.disable_break;
+        self.0.builder.flags.disable_break = false;
         // To handle breaks based on dynamic branching conditions, we do not
         // unroll constant loops unless the builder is in static_loop mode.
         if self.0.start.is_const() && self.0.end.is_const() && self.0.builder.flags.static_loop {
             self.0.for_each_unrolled(f);
-            return;
+        } else {
+            // Dynamic
+            self.0.for_each_dynamic(f);
         }
-        // Dynamic
-        self.0.for_each_dynamic(f);
+        self.0.builder.flags.disable_break = old_disable_break;
     }
 }
