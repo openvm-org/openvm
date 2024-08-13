@@ -31,7 +31,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     let log_blowup = config.log_blowup;
     let blowup = config.blowup;
     let alpha = challenger.sample_ext(builder);
-    let fri_proof = builder.deref(&proof.fri_proof);
+    let fri_proof = proof.fri_proof;
 
     builder.cycle_tracker_start("stage-d-1-verify-shape-and-sample-challenges");
     let fri_challenges =
@@ -71,14 +71,14 @@ pub fn verify_two_adic_pcs<C: Config>(
                 let mut batch_heights_log2: Array<C, Var<C::N>> = builder.array(mats.len());
                 builder.range(0, mats.len()).for_each(|k, builder| {
                     let mat = builder.get(&mats, k);
-                    let domain = builder.deref(&mat.domain);
+                    let domain = mat.domain;
                     let height_log2: Var<_> = builder.eval(domain.log_n + log_blowup);
                     builder.set_value(&mut batch_heights_log2, k, height_log2);
                 });
                 let mut batch_dims: Array<C, DimensionsVariable<C>> = builder.array(mats.len());
                 builder.range(0, mats.len()).for_each(|k, builder| {
                     let mat = builder.get(&mats, k);
-                    let domain = builder.deref(&mat.domain);
+                    let domain = mat.domain;
                     let dim = DimensionsVariable::<C> {
                         height: builder.eval(domain.size() * blowup),
                     };
@@ -117,7 +117,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                         let mat = builder.get(&mats, k);
                         let mat_points = mat.points;
                         let mat_values = mat.values;
-                        let domain = builder.deref(&mat.domain);
+                        let domain = mat.domain;
                         let log2_domain_size = domain.log_n;
                         let log_height: Var<C::N> = builder.eval(log2_domain_size + log_blowup);
 
@@ -198,7 +198,7 @@ where
             .dyn_array::<TwoAdicPcsMatsVariable<C>>(RVar::from(domains_and_openings_val.len()));
 
         for (i, (domain, openning)) in domains_and_openings_val.into_iter().enumerate() {
-            let domain = Ref::<_, TwoAdicMultiplicativeCosetVariable<_>>::constant(domain, builder);
+            let domain = TwoAdicMultiplicativeCosetVariable::<_>::constant(domain, builder);
 
             let points_val = openning.iter().map(|(p, _)| *p).collect::<Vec<_>>();
             let values_val = openning.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>();

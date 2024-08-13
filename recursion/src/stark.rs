@@ -307,7 +307,7 @@ where
                 builder.assign(&prep_idx, prep_idx + C::N::one());
                 let batch_commit = builder.constant(preprocessed_data.commit.clone());
 
-                let domain = builder.get_ref(&domains, i);
+                let domain = builder.get(&domains, i);
                 let trace_points = builder.get(&trace_points_per_domain, i);
 
                 // Assumption: each AIR with preprocessed trace has its own commitment and opening values
@@ -353,7 +353,7 @@ where
                     .enumerate()
                     .for_each(|(matrix_idx, &air_idx)| {
                         let main = builder.get(&values_per_mat, matrix_idx);
-                        let domain = builder.get_ref(&domains, air_idx);
+                        let domain = builder.get(&domains, air_idx);
                         let trace_points = builder.get(&trace_points_per_domain, air_idx);
                         let mut values = builder.dyn_array::<Array<C, _>>(2);
                         builder.set_value(&mut values, 0, main.local);
@@ -382,7 +382,7 @@ where
 
             let mut mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.dyn_array(num_airs);
             for i in 0..num_airs {
-                let domain = builder.get_ref(&domains, i);
+                let domain = builder.get(&domains, i);
                 let trace_points = builder.get(&trace_points_per_domain, i);
 
                 let after_challenge = builder.get(&values_per_mat, i);
@@ -426,7 +426,7 @@ where
 
             // FIXME: We should use constants. I don't fully understnad this part, so skip it for now.
             builder.range(0, qc_domains.len()).for_each(|j, builder| {
-                let qc_dom = builder.get_ref(&qc_domains, j);
+                let qc_dom = builder.get(&qc_domains, j);
                 let qc_vals_array = builder.get(&opened_quotient, j);
                 let mut qc_values = builder.dyn_array::<Array<C, _>>(1);
                 builder.set_value(&mut qc_values, 0, qc_vals_array);
