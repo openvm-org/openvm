@@ -1,19 +1,16 @@
-use std::sync::Arc;
-
 use afs_page::common::page::Page;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData, StarkGenericConfig, Val},
     prover::trace::ProverTraceData,
 };
 use datafusion::arrow::{
-    array::{ArrayRef, RecordBatch, UInt32Array},
+    array::{RecordBatch, UInt32Array},
     datatypes::Schema,
 };
 use p3_field::PrimeField64;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use self::utils::convert_to_record_batch;
-use crate::BITS_PER_FE;
 
 pub mod column;
 pub mod execution_plan;
@@ -71,6 +68,7 @@ where
 
         // Iterate over columns and fill the rows
         for (col_idx, column) in columns.iter().enumerate() {
+            // TODO: handle other data types
             let array = column.as_any().downcast_ref::<UInt32Array>().unwrap();
             for (row_idx, row) in rows.iter_mut().enumerate() {
                 row[0] = 1;
@@ -104,6 +102,6 @@ macro_rules! committed_page {
         let page: Page = bincode::deserialize(&page_path).unwrap();
         let schema_path = std::fs::read($schema_path).unwrap();
         let schema: Schema = bincode::deserialize(&schema_path).unwrap();
-        CommittedPage::<$config>::new($name.to_string(), schema, page, None)
+        $crate::committed_page::CommittedPage::<$config>::new($name.to_string(), schema, page, None)
     }};
 }

@@ -4,6 +4,7 @@ use std::{
 };
 
 use afs_stark_backend::config::{Com, PcsProof, PcsProverData, StarkGenericConfig, Val};
+use afs_test_utils::engine::StarkEngine;
 use datafusion::{error::Result, execution::context::SessionContext, logical_expr::LogicalPlan};
 use p3_field::PrimeField64;
 use serde::{de::DeserializeOwned, Serialize};
@@ -29,11 +30,11 @@ macro_rules! delegate_to_node {
     };
 }
 
-pub trait AfsNodeExecutable<SC: StarkGenericConfig> {
+pub trait AfsNodeExecutable<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     /// Runs the node's execution logic without any cryptographic operations
     async fn execute(&mut self, ctx: &SessionContext) -> Result<()>;
     /// Generate the proving key for the node
-    async fn keygen(&mut self, ctx: &SessionContext) -> Result<()>;
+    async fn keygen(&mut self, ctx: &SessionContext, engine: &E) -> Result<()>;
     /// Geenrate the STARK proof for the node
     async fn prove(&mut self, ctx: &SessionContext) -> Result<()>;
     /// Verify the STARK proof for the node
@@ -42,12 +43,12 @@ pub trait AfsNodeExecutable<SC: StarkGenericConfig> {
     fn output(&self) -> Option<Arc<CommittedPage<SC>>>;
 }
 
-pub enum AfsNode<SC: StarkGenericConfig> {
-    PageScan(PageScan<SC>),
-    Filter(Filter<SC>),
+pub enum AfsNode<SC: StarkGenericConfig, E: StarkEngine<SC>> {
+    PageScan(PageScan<SC, E>),
+    Filter(Filter<SC, E>),
 }
 
-impl<SC: StarkGenericConfig> AfsNode<SC>
+impl<SC: StarkGenericConfig, E: StarkEngine<SC>> AfsNode<SC, E>
 where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
@@ -56,17 +57,12 @@ where
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
-    pub fn from(logical_plan: &LogicalPlan, children: ChildrenContainer<SC>) -> Self {
+    pub fn from(logical_plan: &LogicalPlan, children: ChildrenContainer<SC, E>) -> Self {
         match logical_plan {
             LogicalPlan::TableScan(table_scan) => {
                 let page_id = table_scan.table_name.to_string();
                 let source = table_scan.source.clone();
-                AfsNode::PageScan(PageScan {
-                    page_id,
-                    pk: None,
-                    input: source,
-                    output: None,
-                })
+                AfsNode::PageScan(PageScan::new(page_id, source))
             }
             LogicalPlan::Filter(filter) => {
                 let afs_expr = AfsExpr::from(&filter.predicate);
@@ -85,7 +81,7 @@ where
         }
     }
 
-    pub fn inputs(&self) -> Vec<&Arc<AfsNode<SC>>> {
+    pub fn inputs(&self) -> Vec<&Arc<AfsNode<SC, E>>> {
         match self {
             AfsNode::PageScan(_) => vec![],
             AfsNode::Filter(filter) => vec![&filter.input],
@@ -96,8 +92,12 @@ where
         delegate_to_node!(self, execute, ctx)
     }
 
-    pub async fn keygen(&mut self, ctx: &SessionContext) -> Result<()> {
-        delegate_to_node!(self, keygen, ctx)
+    pub async fn keygen(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
+        // delegate_to_node!(self, keygen, ctx)
+        match self {
+            AfsNode::PageScan(page_scan) => page_scan.keygen(ctx, engine).await,
+            AfsNode::Filter(filter) => filter.keygen(ctx, engine).await,
+        }
     }
 
     pub async fn prove(&mut self, ctx: &SessionContext) -> Result<()> {
@@ -113,7 +113,7 @@ where
     }
 }
 
-impl<SC: StarkGenericConfig> Debug for AfsNode<SC> {
+impl<SC: StarkGenericConfig, E: StarkEngine<SC>> Debug for AfsNode<SC, E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AfsNode::PageScan(page_scan) => write!(f, "PageScan {:?}", page_scan.page_id),

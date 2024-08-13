@@ -1,24 +1,42 @@
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 
+use afs_page::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData, StarkGenericConfig, Val},
     keygen::types::MultiStarkProvingKey,
 };
+use afs_test_utils::engine::StarkEngine;
 use datafusion::{error::Result, execution::context::SessionContext, logical_expr::TableSource};
 use p3_field::PrimeField64;
 use serde::{de::DeserializeOwned, Serialize};
 
-use super::{AfsNode, AfsNodeExecutable};
-use crate::{afs_expr::AfsExpr, committed_page::CommittedPage};
+use super::AfsNodeExecutable;
+use crate::{
+    committed_page::CommittedPage, BITS_PER_FE, OPS_BUS_IDX, PAGE_BUS_IDX, RANGE_BUS_IDX,
+    RANGE_CHECK_BITS,
+};
 
-pub struct PageScan<SC: StarkGenericConfig> {
+pub struct PageScan<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     pub page_id: String,
     pub pk: Option<MultiStarkProvingKey<SC>>,
     pub input: Arc<dyn TableSource>,
     pub output: Option<Arc<CommittedPage<SC>>>,
+    _marker: PhantomData<E>,
 }
 
-impl<SC: StarkGenericConfig> AfsNodeExecutable<SC> for PageScan<SC>
+impl<SC: StarkGenericConfig, E: StarkEngine<SC>> PageScan<SC, E> {
+    pub fn new(page_id: String, input: Arc<dyn TableSource>) -> Self {
+        Self {
+            page_id,
+            pk: None,
+            input,
+            output: None,
+            _marker: PhantomData::<E>,
+        }
+    }
+}
+
+impl<SC: StarkGenericConfig, E: StarkEngine<SC>> AfsNodeExecutable<SC, E> for PageScan<SC, E>
 where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
@@ -29,9 +47,6 @@ where
 {
     async fn execute(&mut self, ctx: &SessionContext) -> Result<()> {
         let df = ctx.table(&self.page_id).await.unwrap();
-        // let s = self.input as CommittedPage<SC>;
-        // println!("{:#?}", t);
-        // t.show().await.unwrap();
         let record_batches = df.collect().await.unwrap();
         if record_batches.len() != 1 {
             panic!(
@@ -46,7 +61,28 @@ where
         Ok(())
     }
 
-    async fn keygen(&mut self, ctx: &SessionContext) -> Result<()> {
+    async fn keygen(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
+        let schema = self.input.schema();
+        // TODO: this should be (temporarily) 0, but keygen fails w/ idx_len = 0.
+        let idx_len = 1;
+        let data_len = schema.fields().len();
+
+        let page_controller: PageController<SC> = PageController::new(
+            PAGE_BUS_IDX,
+            RANGE_BUS_IDX,
+            OPS_BUS_IDX,
+            idx_len,
+            data_len,
+            BITS_PER_FE,
+            RANGE_CHECK_BITS,
+        );
+        let ops_sender = ExecutionAir::new(OPS_BUS_IDX, idx_len, data_len);
+
+        let mut keygen_builder = engine.keygen_builder();
+        page_controller.set_up_keygen_builder(&mut keygen_builder, &ops_sender);
+        let pk = keygen_builder.generate_pk();
+        self.pk = Some(pk);
+
         Ok(())
     }
 

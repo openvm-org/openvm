@@ -7,6 +7,13 @@ use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData, StarkGenericConfig, Val},
     keygen::types::MultiStarkProvingKey,
 };
+use afs_test_utils::{
+    config::{
+        baby_bear_poseidon2::{self, BabyBearPoseidon2Engine},
+        EngineType, FriParameters,
+    },
+    engine::StarkEngine,
+};
 use datafusion::{
     arrow::array::RecordBatch,
     common::{internal_datafusion_err, internal_err},
@@ -19,49 +26,51 @@ use p3_field::PrimeField64;
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::sync::Mutex;
 
-use crate::{afs_node::AfsNode, committed_page::CommittedPage};
+use crate::{afs_node::AfsNode, committed_page::CommittedPage, PCS_LOG_DEGREE};
 
 #[derive(Debug)]
-enum NodeState<SC: StarkGenericConfig> {
+enum NodeState<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     ZeroOrOneChild,
     /// Nodes with multiple children will have multiple tasks accessing it,
     /// and each task will append their contribution until the last task takes
     /// all the children to build the parent node.
-    TwoOrMoreChildren(Mutex<Vec<ExecutionPlanChild<SC>>>),
+    TwoOrMoreChildren(Mutex<Vec<ExecutionPlanChild<SC, E>>>),
 }
 
 /// To avoid needing to pass single child wrapped in a Vec for nodes
 /// with only one child.
-pub enum ChildrenContainer<SC: StarkGenericConfig> {
+pub enum ChildrenContainer<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     None,
-    One(Arc<AfsNode<SC>>),
-    Multiple(Arc<Vec<AfsNode<SC>>>),
+    One(Arc<AfsNode<SC, E>>),
+    Multiple(Arc<Vec<AfsNode<SC, E>>>),
 }
 
 #[derive(Debug)]
-struct LogicalNode<'a, SC: StarkGenericConfig> {
+struct LogicalNode<'a, SC: StarkGenericConfig, E: StarkEngine<SC>> {
     node: &'a LogicalPlan,
     // None if root
     parent_index: Option<usize>,
-    state: NodeState<SC>,
+    state: NodeState<SC, E>,
 }
 
 #[derive(Debug)]
-struct ExecutionPlanChild<SC: StarkGenericConfig> {
+struct ExecutionPlanChild<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     /// Index needed to order children of parent to ensure consistency with original
     /// `LogicalPlan`
     index: usize,
-    plan: Arc<Vec<AfsNode<SC>>>,
+    plan: Arc<Vec<AfsNode<SC, E>>>,
 }
 
-pub struct AfsExec<SC: StarkGenericConfig> {
+pub struct AfsExec<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     /// The session context
     pub ctx: SessionContext,
+    /// STARK engine used for cryptographic operations
+    pub engine: E,
     /// AfsNode tree flattened into a vec to be executed sequentially
-    pub afs_execution_plan: Vec<AfsNode<SC>>,
+    pub afs_execution_plan: Vec<AfsNode<SC, E>>,
 }
 
-impl<SC: StarkGenericConfig> AfsExec<SC>
+impl<SC: StarkGenericConfig, E: StarkEngine<SC>> AfsExec<SC, E>
 where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
@@ -70,7 +79,7 @@ where
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
-    pub async fn new(ctx: SessionContext, root: LogicalPlan) -> Self {
+    pub async fn new(ctx: SessionContext, root: LogicalPlan, engine: E) -> Self {
         let root = ctx.state().optimize(&root).unwrap();
         // let afs_logical_plan = Self::convert_logical_tree(&root);
         // let afs_execution_plan = Self::flatten_tree(afs_logical_plan);
@@ -79,22 +88,21 @@ where
             .unwrap();
         Self {
             ctx,
+            engine,
             afs_execution_plan,
         }
     }
 
     pub async fn execute(&mut self) -> Result<Arc<CommittedPage<SC>>> {
-        let mut last_result = None;
         for node in &mut self.afs_execution_plan {
             node.execute(&self.ctx).await?;
-            last_result = node.output();
         }
-        Ok(last_result.unwrap())
+        Ok(self.afs_execution_plan.last().unwrap().output().unwrap())
     }
 
     pub async fn keygen(&mut self) -> Result<()> {
         for node in &mut self.afs_execution_plan {
-            node.keygen(&self.ctx).await?;
+            node.keygen(&self.ctx, &self.engine).await?;
         }
         Ok(())
     }
@@ -109,10 +117,10 @@ where
     pub async fn create_execution_plan(
         root: &LogicalPlan,
         state: &SessionState,
-    ) -> Result<Vec<AfsNode<SC>>> {
+    ) -> Result<Vec<AfsNode<SC, E>>> {
         let mut flat_tree = vec![];
         let mut dfs_visit_stack = vec![(root, None)];
-        let mut node_map: HashMap<usize, Arc<&AfsNode<SC>>> = std::collections::HashMap::new();
+        let mut node_map: HashMap<usize, Arc<&AfsNode<SC, E>>> = std::collections::HashMap::new();
 
         while let Some((node, _parent_index)) = dfs_visit_stack.pop() {
             let current_index = flat_tree.len();
