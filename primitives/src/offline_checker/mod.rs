@@ -9,7 +9,7 @@ pub mod columns;
 pub mod trace;
 
 pub trait OfflineCheckerOperation<F> {
-    fn get_timestamp(&self) -> usize;
+    fn get_timestamp(&self) -> F;
     fn get_idx(&self) -> Vec<F>;
     fn get_data(&self) -> Vec<F>;
     fn get_op_type(&self) -> u8;

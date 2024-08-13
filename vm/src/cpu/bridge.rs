@@ -13,6 +13,7 @@ use crate::cpu::{
     OpCode::{COMP_POS2, F_LESS_THAN, PERM_POS2},
     IS_LESS_THAN_BUS,
 };
+use crate::memory::{MemoryAccess, OpType};
 
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -29,19 +30,20 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             AB::Expr::one() - operation_flags[&OpCode::NOP],
         );
 
-        for (i, access) in accesses.into_iter().enumerate() {
+        for (i, access_cols) in accesses.into_iter().enumerate() {
             let memory_cycle = io.timestamp + AB::F::from_canonical_usize(i);
             let is_write = i >= CPU_MAX_READS_PER_CYCLE;
 
-            let fields = [
-                memory_cycle,
-                AB::F::from_bool(is_write).into(),
-                access.address_space.into(),
-                access.address.into(),
-            ]
-            .into_iter()
-            .chain(access.data.into_iter().map(Into::into));
-            builder.push_send(MEMORY_BUS, fields, access.enabled - access.is_immediate);
+            let access = MemoryAccess {
+                timestamp: memory_cycle,
+                op_type: if is_write { OpType::Write } else { OpType::Read },
+                address_space: access_cols.address_space.into(),
+                address: access_cols.address.into(),
+                data: access_cols.data.map(|x| x.into()),
+            };
+
+            let count = access_cols.enabled - access_cols.is_immediate;
+            MEMORY_BUS.send_interaction(builder, access, count);
         }
 
         // Interaction with arithmetic (bus 2)

@@ -29,7 +29,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
             .sort_by_key(|op| (op.address_space, op.address, op.timestamp));
 
         let dummy_op = MemoryAccess {
-            timestamp: 0,
+            timestamp: F::zero(),
             op_type: OpType::Read,
             address_space: F::zero(),
             address: F::zero(),

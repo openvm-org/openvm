@@ -203,7 +203,7 @@ fn run_perm_ops(
     );
 
     // dummy writes to memory
-    let dummy_cpu_memory = DummyInteractionAir::new(5, true, MEMORY_BUS);
+    let dummy_cpu_memory = DummyInteractionAir::new(5, true, MEMORY_BUS.0);
     let width = 5 + 1; // why?
     let dummy_cpu_memory_trace = RowMajorMatrix::new(
         {

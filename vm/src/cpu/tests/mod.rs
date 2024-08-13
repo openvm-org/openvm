@@ -66,7 +66,7 @@ impl<const WORD_SIZE: usize, F: PrimeField64> MemoryAccess<WORD_SIZE, F> {
         data: isize,
     ) -> Self {
         Self {
-            timestamp: timestamp as usize,
+            timestamp: isize_to_field::<F>(timestamp),
             op_type,
             address_space: isize_to_field::<F>(address_space),
             address: isize_to_field::<F>(address),
@@ -275,12 +275,12 @@ fn air_test_change<
     }
     let program_trace = RowMajorMatrix::new(program_rows, 8);
 
-    let memory_air = DummyInteractionAir::new(5, false, MEMORY_BUS);
+    let memory_air = DummyInteractionAir::new(5, false, MEMORY_BUS.0);
     let mut memory_rows = vec![];
     for memory_access in segment.memory_chip.accesses.iter() {
         memory_rows.extend(vec![
             BabyBear::one(),
-            BabyBear::from_canonical_usize(memory_access.timestamp),
+            memory_access.timestamp,
             BabyBear::from_bool(memory_access.op_type == OpType::Write),
             memory_access.address_space,
             memory_access.address,

@@ -16,11 +16,12 @@ pub mod columns;
 pub mod trace;
 
 pub use air::CpuAir;
+use crate::memory::bus::MemoryBus;
 
 pub const INST_WIDTH: usize = 1;
 
 pub const READ_INSTRUCTION_BUS: usize = 0;
-pub const MEMORY_BUS: usize = 1;
+pub const MEMORY_BUS: MemoryBus = MemoryBus(1);
 pub const ARITHMETIC_BUS: usize = 2;
 pub const FIELD_EXTENSION_BUS: usize = 3;
 pub const RANGE_CHECKER_BUS: usize = 4;

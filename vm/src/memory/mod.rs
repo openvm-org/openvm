@@ -2,6 +2,7 @@ use afs_primitives::offline_checker::OfflineCheckerOperation;
 use p3_field::PrimeField64;
 
 pub mod expand;
+pub mod bus;
 pub mod offline_checker;
 
 pub mod interface;
@@ -17,7 +18,7 @@ pub enum OpType {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryAccess<const WORD_SIZE: usize, F> {
-    pub timestamp: usize,
+    pub timestamp: F,
     pub op_type: OpType,
     pub address_space: F,
     pub address: F,
@@ -27,7 +28,7 @@ pub struct MemoryAccess<const WORD_SIZE: usize, F> {
 impl<const WORD_SIZE: usize, F: PrimeField64> OfflineCheckerOperation<F>
     for MemoryAccess<WORD_SIZE, F>
 {
-    fn get_timestamp(&self) -> usize {
+    fn get_timestamp(&self) -> F {
         self.timestamp
     }
 

@@ -3,10 +3,11 @@ use p3_field::AbstractField;
 
 use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
 use crate::cpu::{FIELD_EXTENSION_BUS, MEMORY_BUS, WORD_SIZE};
+use crate::memory::{MemoryAccess, OpType};
 
 fn eval_rw_interactions<AB: InteractionBuilder>(
     builder: &mut AB,
-    is_write: bool,
+    op_type: OpType,
     local: &FieldExtensionArithmeticCols<AB::Var>,
     addr_space: AB::Var,
     address: AB::Var,
@@ -28,20 +29,16 @@ fn eval_rw_interactions<AB: InteractionBuilder>(
 
         let pointer = address + AB::F::from_canonical_usize(i * WORD_SIZE);
 
-        let fields = [
+        let access = MemoryAccess {
             timestamp,
-            AB::Expr::from_bool(is_write),
-            addr_space.into(),
-            pointer,
-        ]
-        .into_iter() // TODO: Handle WORD_SIZE > 1 later
-        .chain([element.into()]);
+            op_type,
+            address_space: addr_space.into(),
+            address: pointer,
+            data: [element.into()],
+        };
 
-        if ext_element_ind == 1 {
-            builder.push_send(MEMORY_BUS, fields, aux.valid_y_read);
-        } else {
-            builder.push_send(MEMORY_BUS, fields, aux.is_valid);
-        }
+        let count = if ext_element_ind == 1 { aux.valid_y_read } else { aux.is_valid };
+        MEMORY_BUS.send_interaction(builder, access, count);
     }
 }
 
@@ -52,11 +49,11 @@ impl FieldExtensionArithmeticAir {
         local: &FieldExtensionArithmeticCols<AB::Var>,
     ) {
         // reads for x
-        eval_rw_interactions(builder, false, local, local.aux.d, local.aux.op_b, 0);
+        eval_rw_interactions(builder, OpType::Read, local, local.aux.d, local.aux.op_b, 0);
         // reads for y
-        eval_rw_interactions(builder, false, local, local.aux.e, local.aux.op_c, 1);
+        eval_rw_interactions(builder, OpType::Read, local, local.aux.e, local.aux.op_c, 1);
         // writes for z
-        eval_rw_interactions(builder, true, local, local.aux.d, local.aux.op_a, 2);
+        eval_rw_interactions(builder, OpType::Write, local, local.aux.d, local.aux.op_a, 2);
 
         // Receives all IO columns from another chip on bus 3 (FIELD_EXTENSION_BUS)
         let fields = [

@@ -7,7 +7,7 @@ use afs_test_utils::{
     interaction::dummy_interaction_air::DummyInteractionAir,
 };
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{offline_checker::MemoryChip, MemoryAccess, OpType};
@@ -35,12 +35,12 @@ fn test_offline_checker() {
     let requester = DummyInteractionAir::new(
         2 + memory_chip.air.offline_checker.idx_data_width(),
         true,
-        MEMORY_BUS,
+        MEMORY_BUS.0,
     );
 
     let ops: Vec<MemoryAccess<WORD_SIZE, BabyBear>> = vec![
         MemoryAccess {
-            timestamp: 1,
+            timestamp: BabyBear::one(),
             op_type: OpType::Write,
             address_space: BabyBear::one(),
             address: BabyBear::one(),
@@ -51,7 +51,7 @@ fn test_offline_checker() {
             ],
         },
         MemoryAccess {
-            timestamp: 0,
+            timestamp: BabyBear::zero(),
             op_type: OpType::Write,
             address_space: BabyBear::one(),
             address: BabyBear::zero(),
@@ -62,7 +62,7 @@ fn test_offline_checker() {
             ],
         },
         MemoryAccess {
-            timestamp: 4,
+            timestamp: BabyBear::from_canonical_usize(4),
             op_type: OpType::Write,
             address_space: BabyBear::one(),
             address: BabyBear::zero(),
@@ -73,7 +73,7 @@ fn test_offline_checker() {
             ],
         },
         MemoryAccess {
-            timestamp: 2,
+            timestamp: BabyBear::two(),
             op_type: OpType::Read,
             address_space: BabyBear::one(),
             address: BabyBear::one(),
@@ -84,7 +84,7 @@ fn test_offline_checker() {
             ],
         },
         MemoryAccess {
-            timestamp: 6,
+            timestamp: BabyBear::from_canonical_usize(6),
             op_type: OpType::Read,
             address_space: BabyBear::two(),
             address: BabyBear::zero(),
@@ -95,7 +95,7 @@ fn test_offline_checker() {
             ],
         },
         MemoryAccess {
-            timestamp: 5,
+            timestamp: BabyBear::from_canonical_usize(5),
             op_type: OpType::Write,
             address_space: BabyBear::two(),
             address: BabyBear::zero(),
@@ -106,7 +106,7 @@ fn test_offline_checker() {
             ],
         },
         MemoryAccess {
-            timestamp: 3,
+            timestamp: BabyBear::from_canonical_usize(3),
             op_type: OpType::Write,
             address_space: BabyBear::one(),
             address: BabyBear::one(),
@@ -124,12 +124,12 @@ fn test_offline_checker() {
         match op.op_type {
             OpType::Read => {
                 assert_eq!(
-                    memory_chip.read_word(op.timestamp, op.address_space, op.address),
+                    memory_chip.read_word(op.timestamp.as_canonical_u64() as usize, op.address_space, op.address),
                     op.data
                 );
             }
             OpType::Write => {
-                memory_chip.write_word(op.timestamp, op.address_space, op.address, op.data);
+                memory_chip.write_word(op.timestamp.as_canonical_u64() as usize, op.address_space, op.address, op.data);
             }
         }
     }
@@ -141,7 +141,7 @@ fn test_offline_checker() {
             .flat_map(|op: &MemoryAccess<WORD_SIZE, BabyBear>| {
                 [
                     BabyBear::one(),
-                    BabyBear::from_canonical_usize(op.timestamp),
+                    op.timestamp,
                     BabyBear::from_canonical_u8(op.op_type as u8),
                     op.address_space,
                     op.address,
@@ -180,7 +180,7 @@ fn test_offline_checker_valid_first_read() {
     let requester = DummyInteractionAir::new(
         2 + memory_chip.air.offline_checker.idx_data_width(),
         true,
-        MEMORY_BUS,
+        MEMORY_BUS.0,
     );
 
     memory_chip.write_word(
@@ -200,7 +200,7 @@ fn test_offline_checker_valid_first_read() {
             .iter()
             .flat_map(|op: &MemoryAccess<WORD_SIZE, BabyBear>| {
                 iter::once(BabyBear::one())
-                    .chain(iter::once(BabyBear::from_canonical_usize(op.timestamp)))
+                    .chain(iter::once(op.timestamp))
                     .chain(iter::once(BabyBear::from_canonical_u8(op.op_type as u8)))
                     .chain(iter::once(op.address_space))
                     .chain(iter::once(op.address))
@@ -237,12 +237,12 @@ fn test_offline_checker_negative_data_mismatch() {
     let requester = DummyInteractionAir::new(
         2 + memory_chip.air.offline_checker.idx_data_width(),
         true,
-        MEMORY_BUS,
+        MEMORY_BUS.0,
     );
 
     let ops: Vec<MemoryAccess<WORD_SIZE, BabyBear>> = vec![
         MemoryAccess {
-            timestamp: 0,
+            timestamp: BabyBear::zero(),
             op_type: OpType::Write,
             address_space: BabyBear::one(),
             address: BabyBear::zero(),
@@ -253,7 +253,7 @@ fn test_offline_checker_negative_data_mismatch() {
             ],
         },
         MemoryAccess {
-            timestamp: 1,
+            timestamp: BabyBear::one(),
             op_type: OpType::Write,
             address_space: BabyBear::one(),
             address: BabyBear::one(),
@@ -265,7 +265,7 @@ fn test_offline_checker_negative_data_mismatch() {
         },
         // data read does not match write from previous operation
         MemoryAccess {
-            timestamp: 2,
+            timestamp: BabyBear::two(),
             op_type: OpType::Read,
             address_space: BabyBear::one(),
             address: BabyBear::one(),
@@ -286,7 +286,7 @@ fn test_offline_checker_negative_data_mismatch() {
         ops.iter()
             .flat_map(|op: &MemoryAccess<WORD_SIZE, BabyBear>| {
                 iter::once(BabyBear::one())
-                    .chain(iter::once(BabyBear::from_canonical_usize(op.timestamp)))
+                    .chain(iter::once(op.timestamp))
                     .chain(iter::once(BabyBear::from_canonical_u8(op.op_type as u8)))
                     .chain(iter::once(op.address_space))
                     .chain(iter::once(op.address))
