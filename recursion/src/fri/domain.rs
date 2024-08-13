@@ -6,17 +6,17 @@ use super::types::FriConfigVariable;
 use crate::commit::PolynomialSpaceVariable;
 
 /// Reference: [p3_commit::TwoAdicMultiplicativeCoset]
-#[derive(DslVariable, Clone, Copy)]
+#[derive(DslVariable, Clone)]
 pub struct TwoAdicMultiplicativeCosetVariable<C: Config> {
-    pub log_n: Var<C::N>,
-    pub size: Var<C::N>,
+    pub log_n: Usize<C::N>,
+    pub size: Usize<C::N>,
     pub shift: Felt<C::F>,
     pub g: Felt<C::F>,
 }
 
 impl<C: Config> TwoAdicMultiplicativeCosetVariable<C> {
-    pub fn size(&self) -> Var<C::N> {
-        self.size
+    pub fn size(&self) -> RVar<C::N> {
+        self.size.clone().into()
     }
 
     pub fn first_point(&self) -> Felt<C::F> {
@@ -35,11 +35,11 @@ where
     type Constant = TwoAdicMultiplicativeCoset<C::F>;
 
     fn constant(value: Self::Constant, builder: &mut Builder<C>) -> Self {
-        let log_d_val = value.log_n as u32;
         let g_val = C::F::two_adic_generator(value.log_n);
         TwoAdicMultiplicativeCosetVariable::<C> {
-            log_n: builder.eval::<Var<_>, _>(C::N::from_canonical_u32(log_d_val)),
-            size: builder.eval::<Var<_>, _>(C::N::from_canonical_u32(1 << (log_d_val))),
+            // builder.eval is necessary to assign a variable in the dynamic mode.
+            log_n: builder.eval(RVar::from(value.log_n)),
+            size: builder.eval(RVar::from(1 << value.log_n)),
             shift: builder.eval(value.shift),
             g: builder.eval(g_val),
         }
@@ -66,8 +66,7 @@ where
         point: Ext<<C as Config>::F, <C as Config>::EF>,
     ) -> LagrangeSelectors<Ext<<C as Config>::F, <C as Config>::EF>> {
         let unshifted_point: Ext<_, _> = builder.eval(point * self.shift.inverse());
-        let z_h_expr = builder
-            .exp_power_of_2_v::<Ext<_, _>>(unshifted_point, Usize::Var(self.log_n))
+        let z_h_expr = builder.exp_power_of_2_v::<Ext<_, _>>(unshifted_point, self.log_n.clone())
             - C::EF::one();
         let z_h: Ext<_, _> = builder.eval(z_h_expr);
 
@@ -84,8 +83,8 @@ where
         builder: &mut Builder<C>,
         point: Ext<<C as Config>::F, <C as Config>::EF>,
     ) -> Ext<<C as Config>::F, <C as Config>::EF> {
-        let unshifted_power = builder
-            .exp_power_of_2_v::<Ext<_, _>>(point * self.shift.inverse(), Usize::Var(self.log_n));
+        let unshifted_power =
+            builder.exp_power_of_2_v::<Ext<_, _>>(point * self.shift.inverse(), self.log_n.clone());
         builder.eval(unshifted_power - C::EF::one())
     }
 
@@ -97,24 +96,27 @@ where
     ) -> Array<C, Self> {
         let log_num_chunks = log_num_chunks.into();
         let num_chunks = num_chunks.into();
-        let log_n: Var<_> = builder.eval(self.log_n - log_num_chunks);
-        let size = builder.sll(C::N::one(), RVar::Val(log_n));
+        let log_n = builder.eval_expr(self.log_n.clone() - log_num_chunks);
+        let size: Usize<_> = builder.sll(RVar::one(), log_n);
 
         let g_dom = self.gen();
         let g = builder.exp_power_of_2_v::<Felt<C::F>>(g_dom, log_num_chunks);
 
         let domain_power: Felt<_> = builder.eval(C::F::one());
 
-        let mut domains = builder.dyn_array(num_chunks);
+        let mut domains = builder.array(num_chunks);
 
         builder.range(0, num_chunks).for_each(|i, builder| {
+            let log_n = builder.eval(log_n);
             let domain = TwoAdicMultiplicativeCosetVariable {
                 log_n,
-                size,
+                size: size.clone(),
                 shift: builder.eval(self.shift * domain_power),
                 g,
             };
-            builder.set(&mut domains, i, domain);
+            // FIXME: here must use `builder.set_value`. `builder.set` will convert `Usize::Const`
+            // to `Usize::Var` because it calls `builder.eval`.
+            builder.set_value(&mut domains, i, domain);
             builder.assign(&domain_power, domain_power * g_dom);
         });
 
@@ -123,8 +125,9 @@ where
 
     fn split_domains_const(&self, builder: &mut Builder<C>, log_num_chunks: usize) -> Vec<Self> {
         let num_chunks = 1 << log_num_chunks;
-        let log_n: Var<_> = builder.eval(self.log_n - C::N::from_canonical_usize(log_num_chunks));
-        let size = builder.sll(C::N::one(), RVar::Val(log_n));
+        let log_n: Usize<_> =
+            builder.eval(self.log_n.clone() - C::N::from_canonical_usize(log_num_chunks));
+        let size: Usize<_> = builder.sll(RVar::one(), RVar::from(log_n.clone()));
 
         let g_dom = self.gen();
         let g = builder.exp_power_of_2_v::<Felt<C::F>>(g_dom, log_num_chunks);
@@ -134,8 +137,8 @@ where
 
         for _ in 0..num_chunks {
             domains.push(TwoAdicMultiplicativeCosetVariable {
-                log_n,
-                size,
+                log_n: log_n.clone(),
+                size: size.clone(),
                 shift: builder.eval(self.shift * domain_power),
                 g,
             });
@@ -164,21 +167,28 @@ pub(crate) mod tests {
         fri_params::default_fri_params,
     };
     use p3_commit::{Pcs, PolynomialSpace};
+    use p3_field::PrimeField;
     use p3_uni_stark::{Domain, StarkGenericConfig, Val};
     use rand::{thread_rng, Rng};
 
     use super::*;
     use crate::utils::const_fri_config;
 
-    pub(crate) fn domain_assertions<F: TwoAdicField, C: Config<N = F, F = F>>(
+    pub(crate) fn domain_assertions<F: TwoAdicField + PrimeField, C: Config<N = F, F = F>>(
         builder: &mut Builder<C>,
         domain: &TwoAdicMultiplicativeCosetVariable<C>,
         domain_val: &TwoAdicMultiplicativeCoset<F>,
         zeta_val: C::EF,
     ) {
         // Assert the domain parameters are the same.
-        builder.assert_var_eq(domain.log_n, F::from_canonical_usize(domain_val.log_n));
-        builder.assert_var_eq(domain.size, F::from_canonical_usize(1 << domain_val.log_n));
+        builder.assert_var_eq(
+            domain.log_n.clone(),
+            F::from_canonical_usize(domain_val.log_n),
+        );
+        builder.assert_var_eq(
+            domain.size.clone(),
+            F::from_canonical_usize(1 << domain_val.log_n),
+        );
         builder.assert_felt_eq(domain.shift, domain_val.shift);
 
         // Get a random point.
@@ -196,8 +206,7 @@ pub(crate) mod tests {
         builder.assert_ext_eq(zp, zp_val.cons());
     }
 
-    #[test]
-    fn test_domain() {
+    fn test_domain_impl(static_only: bool) {
         type SC = BabyBearPoseidon2Config;
         type F = Val<SC>;
         type EF = <SC as StarkGenericConfig>::Challenge;
@@ -213,6 +222,7 @@ pub(crate) mod tests {
 
         // Initialize a builder.
         let mut builder = AsmBuilder::<F, EF>::default();
+        builder.flags.static_only = static_only;
 
         let config_var = const_fri_config(&mut builder, &default_fri_params());
         for i in 0..5 {
@@ -273,5 +283,14 @@ pub(crate) mod tests {
         const WORD_SIZE: usize = 1;
         let program = builder.compile_isa::<WORD_SIZE>();
         execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
+    }
+    #[test]
+    fn test_domain_static() {
+        test_domain_impl(true);
+    }
+
+    #[test]
+    fn test_domain_dynamic() {
+        test_domain_impl(false);
     }
 }

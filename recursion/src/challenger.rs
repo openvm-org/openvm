@@ -1,8 +1,7 @@
 use afs_compiler::{
-    ir::{DIGEST_SIZE, PERMUTATION_WIDTH},
+    ir::{RVar, DIGEST_SIZE, PERMUTATION_WIDTH},
     prelude::{
-        Array, Builder, Config, DslVariable, Ext, Felt, MemIndex, MemVariable, Ptr, Usize, Var,
-        Variable,
+        Array, Builder, Config, DslVariable, Ext, Felt, MemIndex, MemVariable, Ptr, Var, Variable,
     },
 };
 use p3_field::AbstractField;
@@ -29,11 +28,8 @@ pub trait FeltChallenger<C: Config>:
 }
 
 pub trait CanSampleBitsVariable<C: Config> {
-    fn sample_bits(
-        &mut self,
-        builder: &mut Builder<C>,
-        nb_bits: Usize<C::N>,
-    ) -> Array<C, Var<C::N>>;
+    fn sample_bits(&mut self, builder: &mut Builder<C>, nb_bits: RVar<C::N>)
+        -> Array<C, Var<C::N>>;
 }
 
 /// Reference: [p3_challenger::DuplexChallenger]
@@ -204,7 +200,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
     fn sample_bits(
         &mut self,
         builder: &mut Builder<C>,
-        nb_bits: Usize<C::N>,
+        nb_bits: RVar<C::N>,
     ) -> Array<C, Var<C::N>> {
         let rand_f = self.sample(builder);
         let mut bits = builder.num2bits_f(rand_f);
@@ -216,14 +212,9 @@ impl<C: Config> DuplexChallengerVariable<C> {
         bits
     }
 
-    pub fn check_witness(
-        &mut self,
-        builder: &mut Builder<C>,
-        nb_bits: Var<C::N>,
-        witness: Felt<C::F>,
-    ) {
+    pub fn check_witness(&mut self, builder: &mut Builder<C>, nb_bits: usize, witness: Felt<C::F>) {
         self.observe(builder, witness);
-        let element_bits = self.sample_bits(builder, nb_bits.into());
+        let element_bits = self.sample_bits(builder, RVar::from(nb_bits));
         builder.range(0, nb_bits).for_each(|i, builder| {
             let element = builder.get(&element_bits, i);
             builder.assert_var_eq(element, C::N::zero());
@@ -254,7 +245,7 @@ impl<C: Config> CanSampleBitsVariable<C> for DuplexChallengerVariable<C> {
     fn sample_bits(
         &mut self,
         builder: &mut Builder<C>,
-        nb_bits: Usize<C::N>,
+        nb_bits: RVar<C::N>,
     ) -> Array<C, Var<C::N>> {
         DuplexChallengerVariable::sample_bits(self, builder, nb_bits)
     }
@@ -280,7 +271,7 @@ impl<C: Config> FeltChallenger<C> for DuplexChallengerVariable<C> {
 mod tests {
     use afs_compiler::{
         asm::{AsmBuilder, AsmConfig},
-        ir::{Felt, Usize, Var, PERMUTATION_WIDTH},
+        ir::Felt,
         util::execute_program_and_generate_traces,
     };
     use afs_test_utils::{
@@ -310,7 +301,6 @@ mod tests {
 
         let mut builder = AsmBuilder::<F, EF>::default();
 
-        let width: Var<_> = builder.eval(F::from_canonical_usize(PERMUTATION_WIDTH));
         let mut challenger = DuplexChallengerVariable::<AsmConfig<F, EF>>::new(&mut builder);
         let one: Felt<_> = builder.eval(F::one());
         let two: Felt<_> = builder.eval(F::two());

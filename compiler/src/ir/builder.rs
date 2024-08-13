@@ -103,6 +103,8 @@ pub struct BuilderFlags {
     pub(crate) static_loop: bool,
     /// If true, panic when `builder.break_loop` is called.
     pub(crate) disable_break: bool,
+    /// If true, branching/looping/heap memory is disabled.
+    pub static_only: bool,
 }
 
 /// A builder for the DSL.
@@ -116,8 +118,8 @@ pub struct Builder<C: Config> {
     pub(crate) witness_var_count: u32,
     pub(crate) witness_felt_count: u32,
     pub(crate) witness_ext_count: u32,
-    pub(crate) flags: BuilderFlags,
-    pub(crate) is_sub_builder: bool,
+    pub flags: BuilderFlags,
+    pub is_sub_builder: bool,
 }
 
 impl<C: Config> Builder<C> {
@@ -609,6 +611,10 @@ impl<'a, C: Config> IfBuilder<'a, C> {
             }
             _ => (),
         }
+        assert!(
+            !self.builder.flags.static_only,
+            "Cannot use dynamic branch in static mode"
+        );
 
         // Execute the `then` block and collect the instructions.
         let mut f_builder = Builder::<C>::new_sub_builder(
@@ -683,6 +689,10 @@ impl<'a, C: Config> IfBuilder<'a, C> {
             }
             _ => (),
         }
+        assert!(
+            !self.builder.flags.static_only,
+            "Cannot use dynamic branch in static mode"
+        );
         let mut then_builder = Builder::<C>::new_sub_builder(
             self.builder.stack_ptr,
             self.builder.nb_public_values,
@@ -858,6 +868,10 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
         &mut self,
         mut f: impl FnMut(RVar<C::N>, &mut Builder<C>) -> Result<(), BreakLoop>,
     ) {
+        assert!(
+            !self.builder.flags.static_only,
+            "Cannot use dynamic loop in static mode"
+        );
         let step_size = C::N::from_canonical_usize(self.step_size);
         let loop_variable: Var<C::N> = self.builder.uninit();
         let mut loop_body_builder = Builder::<C>::new_sub_builder(
