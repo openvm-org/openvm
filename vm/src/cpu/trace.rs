@@ -170,6 +170,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let pc_usize = pc.as_canonical_u64() as usize;
 
             let (instruction, debug_info) = vm.program_chip.get_instruction(pc_usize)?;
+            tracing::trace!("pc: {pc_usize} | time: {timestamp} | {:?}", instruction);
 
             let dsl_instr = match debug_info {
                 Some(debug_info) => debug_info.dsl_instruction,
@@ -261,6 +262,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             }
 
             let mut public_value_flags = vec![F::zero(); vm.public_values.len()];
+            let mut new_timestamp: Option<usize> = None;
 
             match opcode {
                 // d[a] <- e[d[c] + b]
@@ -346,7 +348,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     Poseidon2Chip::<16, _>::calculate(vm, timestamp, instruction);
                 }
                 KECCAK256 => {
-                    KeccakVmChip::<_>::execute(vm, timestamp, instruction);
+                    let ts = KeccakVmChip::<_>::execute(vm, timestamp, instruction);
+                    new_timestamp = Some(ts);
                 }
                 HINT_INPUT => {
                     let hint = match vm.input_stream.pop_front() {
@@ -442,7 +445,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             vm.cpu_chip.rows.push(cols.flatten(vm.options()));
 
             pc = next_pc;
-            timestamp += max_accesses_per_instruction(opcode);
+            timestamp =
+                new_timestamp.unwrap_or_else(|| timestamp + max_accesses_per_instruction(opcode));
 
             clock_cycle += 1;
             if opcode == TERMINATE {

@@ -1,3 +1,7 @@
+use std::{array::from_fn, sync::Arc};
+
+use afs_primitives::xor_lookup::XorLookupChip;
+use bridge::{BLOCK_MEMORY_ACCESSES, TIMESTAMP_OFFSET_FOR_OPCODE};
 use columns::KeccakOpcodeCols;
 use p3_field::PrimeField32;
 
@@ -5,18 +9,17 @@ pub mod air;
 pub mod bridge;
 pub mod columns;
 pub mod trace;
+pub mod utils;
 
 pub use air::KeccakVmAir;
-use p3_keccak::Keccak256Hash;
 use tiny_keccak::{Hasher, Keccak};
+use utils::num_keccak_f;
 
 use crate::{
     cpu::{trace::Instruction, OpCode},
     vm::ExecutionSegment,
 };
 
-/// Number of u64 elements in a Keccak hash.
-pub const NUM_U64_HASH_ELEMS: usize = 4;
 /// Total number of sponge bytes: number of rate bytes + number of capacity
 /// bytes.
 pub const KECCAK_WIDTH_BYTES: usize = 200;
@@ -42,30 +45,30 @@ pub const KECCAK_DIGEST_U16S: usize = KECCAK_DIGEST_BYTES / 2;
 #[derive(Clone, Debug)]
 pub struct KeccakVmChip<F: PrimeField32> {
     pub air: KeccakVmAir,
+    pub byte_xor_chip: Arc<XorLookupChip<8>>,
     /// IO and memory data necessary for each opcode call
-    pub requests: Vec<(KeccakOpcodeCols<F>, Vec<u8>)>,
+    pub requests: Vec<(KeccakOpcodeCols<F>, Vec<KeccakInputBlock<F>>)>,
+}
+
+#[derive(Clone, Debug)]
+pub struct KeccakInputBlock<F: PrimeField32> {
+    pub padded_bytes: [u8; KECCAK_RATE_BYTES],
+    pub remaining_len: usize,
+    pub is_new_start: bool,
+    pub src: F,
 }
 
 impl<F: PrimeField32> KeccakVmChip<F> {
     #[allow(clippy::new_without_default)]
-    pub fn new(xor_bus_index: usize) -> Self {
+    pub fn new(xor_bus_index: usize, byte_xor_chip: Arc<XorLookupChip<8>>) -> Self {
         Self {
             air: KeccakVmAir::new(xor_bus_index),
+            byte_xor_chip,
             requests: Vec::new(),
         }
     }
 
-    /// Wrapper function for tiny-keccak's keccak-f permutation.
-    /// Returns the new state after permutation.
-    pub fn keccak256(input: &[u8]) -> [u8; 32] {
-        let mut hasher = Keccak::v256();
-        hasher.update(input);
-        let mut output = [0u8; 32];
-        hasher.finalize(&mut output);
-        output
-    }
-
-    /// Returns amount to advance timestamp by.
+    /// Returns the new timestamp after instruction has finished execution
     // TODO: only WORD_SIZE=1 works right now
     pub fn execute<const WORD_SIZE: usize>(
         vm: &mut ExecutionSegment<WORD_SIZE, F>,
@@ -85,14 +88,9 @@ impl<F: PrimeField32> KeccakVmChip<F> {
         debug_assert_eq!(opcode, OpCode::KECCAK256);
 
         let mut timestamp = start_timestamp;
-        let mut read = |address_space, addr| {
-            let val = vm.memory_chip.read_elem(timestamp, address_space, addr);
-            timestamp += 1;
-            val
-        };
 
         let dst = vm.memory_chip.read_elem(timestamp, d, op_a);
-        let src = vm.memory_chip.read_elem(timestamp + 1, d, op_b);
+        let mut src = vm.memory_chip.read_elem(timestamp + 1, d, op_b);
 
         let opcode = KeccakOpcodeCols::new(
             F::from_bool(true),
@@ -105,40 +103,83 @@ impl<F: PrimeField32> KeccakVmChip<F> {
             dst,
             src,
         );
+        let byte_len = len.as_canonical_u32() as usize;
 
-        // TODO: unoptimized, many conversions to/from Montgomery form
-        let mut offset = 0;
-        let input: [[F; U64_LIMBS]; 25] = [(); 25].map(|_| {
-            [(); U64_LIMBS].map(|_| {
-                let val = read(e, src + F::from_canonical_usize(offset));
-                offset += 1;
-                val
-            })
-        });
-        // We need to compute the output to write into memory since runtime is serial
-        let input_u64: [u64; 25] = input.map(|limbs| {
-            let mut val = 0u64;
-            for (i, limb) in limbs.into_iter().enumerate() {
-                val |= limb.as_canonical_u64() << (i * 16);
+        let num_blocks = num_keccak_f(byte_len);
+        let mut input = Vec::with_capacity(num_blocks);
+        let mut remaining_len = byte_len;
+        let mut hasher = Keccak::v256();
+
+        for block_idx in 0..num_blocks {
+            let bytes: [_; KECCAK_RATE_BYTES] = from_fn(|i| {
+                if i < remaining_len {
+                    vm.memory_chip
+                        .read_elem(
+                            timestamp + TIMESTAMP_OFFSET_FOR_OPCODE + i,
+                            e,
+                            src + F::from_canonical_usize(i),
+                        )
+                        .as_canonical_u32() as u8
+                } else {
+                    0u8
+                }
+            });
+            let mut block = KeccakInputBlock {
+                padded_bytes: bytes,
+                remaining_len,
+                is_new_start: block_idx == 0,
+                src,
+            };
+            timestamp += TIMESTAMP_OFFSET_FOR_OPCODE + BLOCK_MEMORY_ACCESSES;
+            if block_idx != num_blocks - 1 {
+                src += F::from_canonical_usize(KECCAK_RATE_BYTES);
+                remaining_len -= KECCAK_RATE_BYTES;
+                hasher.update(&block.padded_bytes);
+            } else {
+                // handle padding here since it is convenient
+                debug_assert!(remaining_len < KECCAK_RATE_BYTES);
+                hasher.update(&block.padded_bytes[..remaining_len]);
+
+                if remaining_len == KECCAK_RATE_BYTES - 1 {
+                    block.padded_bytes[remaining_len] = 0b1000_0001;
+                } else {
+                    block.padded_bytes[remaining_len] = 0x01;
+                    block.padded_bytes[KECCAK_RATE_BYTES - 1] = 0x80;
+                }
             }
-            val
-        });
-        let output_u64 = Self::keccak_f(input_u64);
-        let output: [[F; U64_LIMBS]; 25] = output_u64
-            .map(|val| core::array::from_fn(|i| F::from_canonical_u64((val >> (i * 16)) & 0xFFFF)));
-        debug_assert_eq!(start_timestamp + Self::write_timestamp_offset(), timestamp);
-        // TODO: again very unoptimized
-        let mut write = |address_space, addr, val| {
-            vm.memory_chip
-                .write_elem(timestamp, address_space, addr, val);
-            timestamp += 1;
-        };
-        for (offset, output) in output.into_iter().flatten().enumerate() {
-            write(e, dst + F::from_canonical_usize(offset), output);
+            input.push(block);
         }
+        let mut output = [0u8; 32];
+        hasher.finalize(&mut output);
+        for i in 0..KECCAK_DIGEST_U16S {
+            let limb = output[2 * i] as u16 | (output[2 * i + 1] as u16) << 8;
+            vm.memory_chip.write_elem(
+                timestamp + i,
+                e,
+                dst + F::from_canonical_usize(i),
+                F::from_canonical_u16(limb),
+            );
+        }
+        tracing::trace!("[runtime] keccak256 output: {:?}", output);
 
         // Add the events to chip state for later trace generation usage
-        vm.keccak_permute_chip.requests.push((io, aux));
-        vm.keccak_permute_chip.inputs.push(input_u64);
+        vm.keccak_chip.requests.push((opcode, input));
+
+        timestamp + KECCAK_DIGEST_U16S
+    }
+}
+
+impl<F: PrimeField32> Default for KeccakInputBlock<F> {
+    fn default() -> Self {
+        // Padding for empty byte array so padding constraints still hold
+        let mut padded_bytes = [0u8; KECCAK_RATE_BYTES];
+        padded_bytes[0] = 0x01;
+        *padded_bytes.last_mut().unwrap() = 0x80;
+        Self {
+            padded_bytes,
+            remaining_len: 0,
+            is_new_start: true,
+            src: F::zero(),
+        }
     }
 }

@@ -4,7 +4,7 @@ use afs_primitives::utils::not;
 use afs_stark_backend::{air_builders::sub::SubAirBuilder, interaction::InteractionBuilder};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
-use p3_keccak_air::{KeccakAir, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS, NUM_ROUNDS};
+use p3_keccak_air::{KeccakAir, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS};
 use p3_matrix::Matrix;
 
 use super::{
@@ -34,6 +34,10 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakVmAir {
         let next: &KeccakVmCols<AB::Var> = (*next).borrow();
 
         builder.assert_bool(local.sponge.is_new_start);
+        builder.assert_eq(
+            local.sponge.is_new_start,
+            local.sponge.is_new_start * local.is_first_round(),
+        );
         // Not strictly necessary:
         builder
             .when_first_row()
@@ -76,12 +80,9 @@ impl KeccakVmAir {
         next: &KeccakVmCols<AB::Var>,
     ) {
         let mut transition_builder = builder.when_transition();
-        let mut round_builder =
-            transition_builder.when(not::<AB>(local.inner.step_flags[NUM_ROUNDS - 1]));
+        let mut round_builder = transition_builder.when(not::<AB>(local.is_last_round()));
         // Opcode columns
         local.opcode.assert_eq(&mut round_builder, next.opcode);
-        // Sponge columns
-        round_builder.assert_eq(local.sponge.is_new_start, next.sponge.is_new_start);
     }
 
     pub fn constrain_block_transition<AB: AirBuilder>(
@@ -124,6 +125,7 @@ impl KeccakVmAir {
             next.opcode.len,
             local.opcode.len - AB::F::from_canonical_usize(KECCAK_RATE_BYTES),
         );
+        // Padding transition is constrained in `constrain_padding`.
     }
 
     /// Keccak follows the 10*1 padding rule.
@@ -223,11 +225,12 @@ impl KeccakVmAir {
                     is_padding_byte[i].into()
                 }
             };
-            // If the row has multiple padding bytes, the first padding byte must be 0x80
+            // If the row has multiple padding bytes, the first padding byte must be 0x01
+            // because the padding 1*0 is *little-endian*
             builder
                 .when(has_multiple_padding_bytes.clone())
                 .when(is_first_padding_byte.clone())
-                .assert_eq(block_bytes[i], AB::F::from_canonical_u8(0x80));
+                .assert_eq(block_bytes[i], AB::F::from_canonical_u8(0x01));
             // If the row has multiple padding bytes, the other padding bytes
             // except the last one must be 0
             builder
@@ -236,13 +239,14 @@ impl KeccakVmAir {
                 .assert_zero(block_bytes[i]);
         }
 
-        // If the row has multiple padding bytes, then the last byte must be 0x01
+        // If the row has multiple padding bytes, then the last byte must be 0x80
+        // because the padding *01 is *little-endian*
         builder
             .when(is_final_block)
             .when(has_multiple_padding_bytes)
             .assert_eq(
                 block_bytes[KECCAK_RATE_BYTES - 1],
-                AB::F::from_canonical_u8(0x01),
+                AB::F::from_canonical_u8(0x80),
             );
     }
 }

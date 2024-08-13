@@ -22,14 +22,6 @@ pub enum InteractionType {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Interaction<Expr> {
     pub fields: Vec<Expr>,
-    /// The type of `count` is [Expr] but `count` only allows expressions that refer to
-    /// "local" (current row) variables and **not** "next" row variables. This is because
-    /// the logup constraints involve re-applying the `count` expression on the "next" row.
-    // This functionality is implemented by [InteractionBuilder] in the `all_multiplicities_next`
-    // method.
-    // There is a runtime check during keygen that will panic if this condition is not satisfied:
-    // - in `keygen/mod.rs`, `add_partitioned_air`, L153
-    // - which in turn calls `SymbolicRapBuilder::push_interaction` in `air_builders/symbolic/mod.rs`, L336
     pub count: Expr,
     pub bus_index: usize,
     pub interaction_type: InteractionType,

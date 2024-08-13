@@ -1,10 +1,8 @@
 use core::mem::size_of;
-use std::mem::transmute;
 
 use afs_derive::AlignedBorrow;
 use p3_air::AirBuilder;
 use p3_keccak_air::KeccakCols as KeccakPermCols;
-use p3_util::indices_arr;
 
 use super::{KECCAK_RATE_BYTES, KECCAK_RATE_U16S};
 
@@ -21,6 +19,7 @@ pub struct KeccakVmCols<T> {
 
 /// Columns specific to the KECCAK256 opcode.
 /// The opcode instruction format is (a, b, len, d, e)
+#[allow(clippy::too_many_arguments)]
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, AlignedBorrow, derive_new::new)]
 pub struct KeccakOpcodeCols<T> {
@@ -45,8 +44,9 @@ pub struct KeccakOpcodeCols<T> {
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
 pub struct KeccakSpongeCols<T> {
-    /// Only used on first row of a round to determine whether the preimage state should
-    /// be reset to all 0s.
+    /// Only used on first row of a round to determine whether the state
+    /// prior to absorb should be reset to all 0s.
+    /// Constrained to be zero if not first round.
     pub is_new_start: T,
 
     /// Whether the current byte is a padding byte.
@@ -79,6 +79,10 @@ impl<T: Copy> KeccakVmCols<T> {
         self.inner.a_prime_prime_prime(x, y, limb)
     }
 
+    pub fn is_first_round(&self) -> T {
+        *self.inner.step_flags.first().unwrap()
+    }
+
     pub fn is_last_round(&self) -> T {
         *self.inner.step_flags.last().unwrap()
     }
@@ -102,11 +106,4 @@ impl<T: Copy> KeccakOpcodeCols<T> {
 }
 
 pub const NUM_KECCAK_SPONGE_COLS: usize = size_of::<KeccakSpongeCols<u8>>();
-pub(crate) const KECCAK_SPONGE_COL_MAP: KeccakSpongeCols<usize> = make_col_map();
-
-const fn make_col_map() -> KeccakSpongeCols<usize> {
-    let indices_arr = indices_arr::<NUM_KECCAK_SPONGE_COLS>();
-    unsafe { transmute::<[usize; NUM_KECCAK_SPONGE_COLS], KeccakSpongeCols<usize>>(indices_arr) }
-}
-
 pub const NUM_KECCAK_VM_COLS: usize = size_of::<KeccakVmCols<u8>>();

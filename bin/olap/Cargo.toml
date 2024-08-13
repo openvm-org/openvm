@@ -19,7 +19,7 @@ p3-uni-stark = { workspace = true }
 p3-field = { workspace = true }
 p3-blake3 = { workspace = true }
 p3-keccak = { workspace = true }
-tracing = "0.1.40"
+tracing.workspace = true
 
 [features]
 default = []

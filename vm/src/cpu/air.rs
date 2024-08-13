@@ -12,7 +12,7 @@ use p3_matrix::Matrix;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    max_accesses_per_instruction, CpuAir,
+    CpuAir,
     OpCode::*,
     CPU_MAX_READS_PER_CYCLE, FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH,
 };
@@ -333,14 +333,16 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         );
 
         // update the timestamp correctly
-        for (&opcode, &flag) in operation_flags.iter() {
-            if opcode != TERMINATE && opcode != NOP {
-                builder.when(flag).assert_eq(
-                    next_timestamp,
-                    timestamp + AB::F::from_canonical_usize(max_accesses_per_instruction(opcode)),
-                )
-            }
-        }
+        // TODO: next_timestamp must be variable and then checked to be greater than timestamp
+        // This will be part of no-CPU architecture
+        // for (&opcode, &flag) in operation_flags.iter() {
+        //     if opcode != TERMINATE && opcode != NOP {
+        //         builder.when(flag).assert_eq(
+        //             next_timestamp,
+        //             timestamp + AB::F::from_canonical_usize(max_accesses_per_instruction(opcode)),
+        //         )
+        //     }
+        // }
 
         // make sure program terminates or shards with NOP
         builder.when_last_row().assert_zero(

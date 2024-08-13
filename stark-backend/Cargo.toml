@@ -22,7 +22,7 @@ serde = { version = "1.0", default-features = false, features = [
     "alloc",
     "rc",
 ] }
-tracing = "0.1.37"
+tracing.workspace = true
 derivative = "2.2.0"
 
 [target.'cfg(unix)'.dependencies]

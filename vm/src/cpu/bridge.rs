@@ -87,7 +87,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
         }
 
         // Interaction with keccak permutation
-        if self.options.perm_keccak_enabled {
+        if self.options.keccak_enabled {
             // This forces op_b to be zero
             let fields = [io.timestamp, io.op_a, io.op_b, io.op_c, io.d, io.e];
             builder.push_send(KECCAK256_BUS, fields, operation_flags[&OpCode::KECCAK256]);

@@ -2928,6 +2928,7 @@ dependencies = [
  "test-case",
  "tiny-keccak",
  "toml",
+ "tracing",
  "zkhash",
 ]
 

@@ -3,11 +3,13 @@ use std::iter::zip;
 use afs_primitives::utils::not;
 use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::izip;
+use p3_air::AirBuilder;
 use p3_field::AbstractField;
 use p3_keccak_air::U64_LIMBS;
 
 use super::{
-    columns::KeccakVmCols, KeccakVmAir, KECCAK_RATE_BYTES, NUM_ABSORB_ROUNDS, NUM_U64_HASH_ELEMS,
+    columns::KeccakVmCols, KeccakVmAir, KECCAK_DIGEST_BYTES, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
+    KECCAK_WIDTH_U16S, NUM_ABSORB_ROUNDS,
 };
 use crate::cpu::{KECCAK256_BUS, MEMORY_BUS};
 
@@ -65,11 +67,17 @@ impl KeccakVmAir {
                 let state_limb = local.postimage(y, x, limb);
                 let hi = local.sponge.state_hi[i * U64_LIMBS + limb];
                 let lo = state_limb - hi * AB::F::from_canonical_u64(1 << 8);
-                [hi.into(), lo]
+                // Conversion from bytes to u64 is little-endian
+                [lo, hi.into()]
             })
         });
-        // State should be initialized to 0s if next.is_new_start
-        let pre_absorb_state_bytes = updated_state_bytes.map(|b| next.is_new_start() * b);
+
+        // TODO: for interaction chunking we want to keep interaction `fields`
+        // degree 1 when possible. Currently this makes `fields` degree 2.
+        // [jpw] I wanted to keep the property that input bytes are auto-range
+        // checked via xor lookup
+        let pre_absorb_state_bytes =
+            updated_state_bytes.map(|b| not::<AB>(next.is_new_start()) * b);
 
         let post_absorb_state_bytes = (0..NUM_ABSORB_ROUNDS).flat_map(|i| {
             let y = i / 5;
@@ -78,18 +86,36 @@ impl KeccakVmAir {
                 let state_limb = next.inner.preimage[y][x][limb];
                 let hi = next.sponge.state_hi[i * U64_LIMBS + limb];
                 let lo = state_limb - hi * AB::F::from_canonical_u64(1 << 8);
-                [hi.into(), lo]
+                [lo, hi.into()]
             })
         });
+
+        // only absorb if next is first round and enabled (so don't constrain absorbs on non-enabled rows)
+        let should_absorb = next.is_first_round() * next.opcode.is_enabled;
         for (input, pre, post) in izip!(
             next.sponge.block_bytes,
             pre_absorb_state_bytes,
             post_absorb_state_bytes
         ) {
-            // only absorb if first round
             // this should even work when `local` is the last row since
             // `next` becomes row 0 which `is_new_start`
-            self.send_xor(builder, input, pre, post, next.inner.step_flags[0]);
+            self.send_xor(builder, input, pre, post, should_absorb.clone());
+        }
+        // constrain transition on the state outside rate
+        let mut reset_builder = builder.when(local.is_new_start());
+        for i in KECCAK_RATE_U16S..KECCAK_WIDTH_U16S {
+            let y = i / U64_LIMBS / 5;
+            let x = (i / U64_LIMBS) % 5;
+            let limb = i % U64_LIMBS;
+            reset_builder.assert_zero(local.inner.preimage[y][x][limb]);
+        }
+        let mut absorb_builder =
+            builder.when(local.is_last_round() * not::<AB>(next.is_new_start()));
+        for i in KECCAK_RATE_U16S..KECCAK_WIDTH_U16S {
+            let y = i / U64_LIMBS / 5;
+            let x = (i / U64_LIMBS) % 5;
+            let limb = i % U64_LIMBS;
+            absorb_builder.assert_eq(local.postimage(y, x, limb), next.inner.preimage[y][x][limb]);
         }
     }
 
@@ -107,8 +133,7 @@ impl KeccakVmAir {
         // - is_new_start
         // Note this is degree 3, which results in quotient degree 2 if used
         // as `count` in interaction
-        let should_receive =
-            local.opcode.is_enabled * local.sponge.is_new_start * local.inner.step_flags[0];
+        let should_receive = local.opcode.is_enabled * local.sponge.is_new_start;
         // receive the opcode itself
         builder.push_receive(
             KECCAK256_BUS,
@@ -183,26 +208,22 @@ impl KeccakVmAir {
             local.inner.export,
             opcode.is_enabled * is_final_block * local.is_last_round(),
         );
-        let mut timestamp_offset = TIMESTAMP_OFFSET_FOR_OPCODE + BLOCK_MEMORY_ACCESSES;
-        // iterator of `new_state` as u16, in y-major order:
-        for y in 0..5 {
-            for x in 0..5 {
-                for limb in 0..NUM_U64_HASH_ELEMS {
-                    let timestamp = local.opcode.start_timestamp
-                        + AB::F::from_canonical_usize(timestamp_offset);
-                    // TODO: after switching to latest p3 commit, this should be y, x
-                    let value = local.postimage(y, x, limb);
-                    Self::constrain_memory_write(
-                        builder,
-                        timestamp,
-                        local.opcode.e,
-                        local.opcode.dst,
-                        value,
-                        local.inner.export,
+        for x in 0..KECCAK_DIGEST_BYTES / 8 {
+            for limb in 0..U64_LIMBS {
+                let index = x * U64_LIMBS + limb;
+                let timestamp = local.opcode.start_timestamp
+                    + AB::F::from_canonical_usize(
+                        TIMESTAMP_OFFSET_FOR_OPCODE + BLOCK_MEMORY_ACCESSES + index,
                     );
-
-                    timestamp_offset += 1;
-                }
+                let value = local.postimage(0, x, limb);
+                Self::constrain_memory_write(
+                    builder,
+                    timestamp,
+                    local.opcode.e,
+                    local.opcode.dst + AB::F::from_canonical_usize(index),
+                    value,
+                    local.inner.export,
+                );
             }
         }
     }

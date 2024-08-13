@@ -1,6 +1,7 @@
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
-use tracing_forest::{util::LevelFilter, ForestLayer};
+use tracing::Level;
+use tracing_forest::ForestLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Registry};
 
 pub mod baby_bear_blake3;
@@ -12,9 +13,13 @@ pub mod goldilocks_poseidon;
 pub mod instrument;
 
 pub fn setup_tracing() {
+    setup_tracing_with_log_level(Level::INFO);
+}
+
+pub fn setup_tracing_with_log_level(level: Level) {
     // Set up tracing:
     let env_filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::INFO.into())
+        .with_default_directive(level.into())
         .from_env_lossy();
     let _ = Registry::default()
         .with(env_filter)

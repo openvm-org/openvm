@@ -6,10 +6,7 @@ use p3_field::PrimeField32;
 use strum::{EnumIter, FromRepr, IntoEnumIterator};
 use OpCode::*;
 
-use crate::{
-    field_extension::FieldExtensionArithmeticAir,
-    hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
-};
+use crate::{field_extension::FieldExtensionArithmeticAir, hashes::poseidon2::Poseidon2Chip};
 
 #[cfg(test)]
 pub mod tests;
@@ -126,7 +123,7 @@ fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         HINT_INPUT | HINT_BITS => 0,
         CT_START | CT_END => 0,
         NOP => 0,
-        _ => panic!(),
+        _ => panic!("{:?}", opcode),
     }
 }
 
@@ -136,7 +133,7 @@ pub struct CpuOptions {
     pub field_extension_enabled: bool,
     pub compress_poseidon2_enabled: bool,
     pub perm_poseidon2_enabled: bool,
-    pub perm_keccak_enabled: bool,
+    pub keccak_enabled: bool,
     pub num_public_values: usize,
 }
 
@@ -168,7 +165,7 @@ impl CpuOptions {
         if self.perm_poseidon2_enabled {
             result.push(PERM_POS2);
         }
-        if self.perm_keccak_enabled {
+        if self.keccak_enabled {
             result.push(KECCAK256);
         }
         result

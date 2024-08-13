@@ -1,22 +1,23 @@
 use afs_test_utils::{
     config::{
-        baby_bear_poseidon2::{engine_from_perm, random_perm, run_simple_test},
+        baby_bear_poseidon2::{engine_from_perm, random_perm},
         fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},
+        setup_tracing_with_log_level,
     },
     engine::StarkEngine,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use p3_keccak_air::U64_LIMBS;
 use stark_vm::{
     cpu::{trace::Instruction, OpCode::*},
+    hashes::keccak::hasher::{utils::keccak256, KECCAK_DIGEST_U16S},
     program::Program,
     vm::{
         config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN},
         ExecutionResult, VirtualMachine,
     },
 };
-use tiny_keccak::keccakf;
+use tracing::Level;
 
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 30;
@@ -55,6 +56,7 @@ fn air_test(
     );
 
     let ExecutionResult {
+        max_log_degree,
         nonempty_chips: chips,
         nonempty_traces: traces,
         nonempty_pis: pis,
@@ -62,7 +64,17 @@ fn air_test(
     } = vm.execute().unwrap();
     let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
 
-    run_simple_test(chips, traces, pis).expect("Verification failed");
+    // TODO: using log_blowup = 3 because keccak interaction chunking is not optimal right now
+    let perm = random_perm();
+    let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
+        fri_params_fast_testing()[1]
+    } else {
+        fri_params_with_80_bits_of_security()[1]
+    };
+    let engine = engine_from_perm(perm, max_log_degree, fri_params);
+    engine
+        .run_simple_test(chips, traces, pis)
+        .expect("Verification failed");
 }
 
 // log_blowup = 3 for poseidon2 chip
@@ -370,54 +382,74 @@ fn test_vm_compress_poseidon2_as2() {
     air_test_with_poseidon2(false, false, true, program);
 }
 
-#[test]
-fn test_vm_permute_keccak() {
+/// Add instruction to write input to memory, call KECCAK256 opcode, then check against expected output
+fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     let mut instructions = vec![];
+    instructions.push(Instruction::from_isize(JAL, 0, 2, 0, 1, 1)); // skip fail
+    instructions.push(Instruction::from_isize(FAIL, 0, 0, 0, 0, 0));
+
     // src = word[0]_1 <- 0
     let src = 0;
     instructions.push(Instruction::from_isize(STOREW, src, 0, 0, 0, 1));
     // dst word[1]_1 <- 3 // use weird offset
     let dst = 3;
     instructions.push(Instruction::from_isize(STOREW, dst, 0, 1, 0, 1));
-    let mut expected = [0u64; 25];
 
-    for y in 0..5 {
-        for x in 0..5 {
-            for limb in 0..U64_LIMBS {
-                let index: usize = (y * 5 + x) * U64_LIMBS + limb;
-                instructions.push(Instruction::from_isize(
-                    STOREW,
-                    ((expected[y * 5] >> (16 * limb)) & 0xFFFF) as isize,
-                    0,
-                    src + index as isize,
-                    0,
-                    2,
-                ));
-            }
-        }
+    let expected = keccak256(input);
+    tracing::debug!(?input, ?expected);
+
+    for (i, byte) in input.iter().enumerate() {
+        instructions.push(Instruction::from_isize(
+            STOREW,
+            *byte as isize,
+            0,
+            src + i as isize,
+            0,
+            2,
+        ));
     }
     // dst = word[1]_1, src = word[0]_1, read and write to address space 2
-    instructions.push(Instruction::from_isize(PERM_KECCAK, 1, 0, 0, 1, 2));
+    instructions.push(Instruction::from_isize(
+        KECCAK256,
+        1,
+        0,
+        input.len() as isize,
+        1,
+        2,
+    ));
 
-    keccakf(&mut expected);
     // read expected result to check correctness
-    for y in 0..5 {
-        for x in 0..5 {
-            for limb in 0..U64_LIMBS {
-                let index: usize = (y * 5 + x) * U64_LIMBS + limb;
-                instructions.push(Instruction::from_isize(
-                    BNE,
-                    dst + index as isize,
-                    ((expected[y * 5 + x] >> (16 * limb)) & 0xFFFF) as isize,
-                    (U64_LIMBS * 25 + 1 - index) as isize, // jump to fail
-                    2,
-                    0,
-                ));
-            }
-        }
+    for i in 0..KECCAK_DIGEST_U16S {
+        let mut limb = 0u16;
+        limb |= expected[2 * i] as u16;
+        limb |= (expected[2 * i + 1] as u16) << 8;
+        instructions.push(Instruction::from_isize(
+            BNE,
+            dst + i as isize,
+            limb as isize,
+            -(instructions.len() as isize) + 1, // jump to fail
+            2,
+            0,
+        ));
     }
+    instructions
+}
+
+#[test]
+fn test_vm_keccak() {
+    setup_tracing_with_log_level(Level::TRACE);
+    let inputs = [
+        vec![],
+        (0u8..1).collect::<Vec<_>>(),
+        (0u8..135).collect::<Vec<_>>(),
+        (0u8..136).collect::<Vec<_>>(),
+        (0u8..200).collect::<Vec<_>>(),
+    ];
+    let mut instructions = inputs
+        .iter()
+        .flat_map(|input| instructions_for_keccak256_test(input))
+        .collect::<Vec<_>>();
     instructions.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
-    // instructions.push(Instruction::from_isize(FAIL, 0, 0, 0, 0, 0));
 
     let program_len = instructions.len();
 
@@ -428,7 +460,7 @@ fn test_vm_permute_keccak() {
 
     air_test(
         VmConfig {
-            perm_keccak_enabled: true,
+            keccak_enabled: true,
             ..VmConfig::core()
         },
         program,

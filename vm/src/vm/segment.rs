@@ -34,6 +34,7 @@ pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub range_checker: Arc<RangeCheckerGateChip>,
     pub poseidon2_chip: Poseidon2Chip<16, F>,
     pub keccak_chip: KeccakVmChip<F>,
+    pub byte_xor_chip: Arc<XorLookupChip<8>>,
 
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
@@ -64,8 +65,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
             POSEIDON2_BUS,
         );
-        let xor_chip = XorLookupChip::<8>::new(BYTE_XOR_BUS);
-        let keccak_permute_chip = KeccakVmChip::<F>::new(BYTE_XOR_BUS);
+        let byte_xor_chip = Arc::new(XorLookupChip::<8>::new(BYTE_XOR_BUS));
+        let keccak_chip = KeccakVmChip::<F>::new(BYTE_XOR_BUS, Arc::clone(&byte_xor_chip));
 
         let opcode_counts = BTreeMap::new();
         let dsl_counts = BTreeMap::new();
@@ -82,7 +83,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             field_extension_chip,
             range_checker,
             poseidon2_chip,
-            keccak_permute_chip,
+            keccak_chip,
+            byte_xor_chip,
             input_stream: state.input_stream,
             hint_stream: state.hint_stream,
             opcode_counts,
@@ -135,8 +137,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         if self.config.cpu_options().poseidon2_enabled() {
             result.push(self.poseidon2_chip.generate_trace());
         }
-        if self.config.cpu_options().perm_keccak_enabled {
-            result.push(self.keccak_permute_chip.generate_trace());
+        if self.config.cpu_options().keccak_enabled {
+            result.push(self.keccak_chip.generate_trace());
+            result.push(self.byte_xor_chip.generate_trace());
         }
         Ok(result)
     }
@@ -160,8 +163,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         if self.config.cpu_options().poseidon2_enabled() {
             result += 1;
         }
-        if self.config.cpu_options().perm_keccak_enabled {
-            result += 1;
+        if self.config.cpu_options().keccak_enabled {
+            result += 2; // keccak and xor
         }
         result
     }
@@ -192,8 +195,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         if self.config.cpu_options().poseidon2_enabled() {
             result.push(ChipType::Poseidon2);
         }
-        if self.config.cpu_options().perm_keccak_enabled {
-            result.push(ChipType::KeccakPermute);
+        if self.config.cpu_options().keccak_enabled {
+            result.push(ChipType::Keccak256);
+            result.push(ChipType::ByteXor);
         }
         assert!(result.len() == self.get_num_chips());
         result
@@ -251,8 +255,9 @@ where
     if segment.config.cpu_options().poseidon2_enabled() {
         result.push(Box::new(segment.poseidon2_chip.air));
     }
-    if segment.config.cpu_options().perm_keccak_enabled {
-        result.push(Box::new(segment.keccak_permute_chip.air));
+    if segment.config.cpu_options().keccak_enabled {
+        result.push(Box::new(segment.keccak_chip.air));
+        result.push(Box::new(segment.byte_xor_chip.air));
     }
 
     assert!(result.len() == num_chips);

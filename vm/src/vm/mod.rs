@@ -48,7 +48,8 @@ pub enum ChipType {
     FieldArithmetic,
     FieldExtension,
     Poseidon2,
-    KeccakPermute,
+    Keccak256,
+    ByteXor,
 }
 
 /// Struct that holds the return state of the VM. StarkConfig is hardcoded to BabyBearPoseidon2Config.
