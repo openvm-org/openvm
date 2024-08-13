@@ -1,12 +1,13 @@
-use num_bigint_dig::BigUint;
-use num_traits::{FromPrimitive, One, Zero};
-use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, extension::BinomialExtensionField};
-use rand::RngCore;
+use std::borrow::Cow;
 
 use afs_compiler::{asm::AsmBuilder, ir::Var, util::execute_program};
 use afs_primitives::modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir;
 use afs_test_utils::utils::create_seeded_rng;
+use num_bigint_dig::{algorithms::mod_inverse, BigUint};
+use num_traits::{abs, signum, FromPrimitive, One, Zero};
+use p3_baby_bear::BabyBear;
+use p3_field::{extension::BinomialExtensionField, AbstractField};
+use rand::RngCore;
 
 #[allow(dead_code)]
 const WORD_SIZE: usize = 1;
@@ -119,25 +120,68 @@ fn test_compiler_modular_arithmetic_negative() {
     execute_program::<WORD_SIZE>(program, vec![]);
 }
 
-#[test]
-fn test_compiler_ec_double() {
-    let x = BigUint::from_isize(2).unwrap();
-    let y = BigUint::from_isize(2).unwrap();
+struct Fraction {
+    num: isize,
+    denom: isize,
+}
 
-    let x3 = BigUint::from_isize(5).unwrap();
-    let y3 = ModularMultiplicationBigIntAir::secp256k1_prime() - BigUint::from_isize(11).unwrap();
+impl Fraction {
+    fn new(num: isize, denom: isize) -> Self {
+        Self { num, denom }
+    }
 
+    fn to_bigint(&self) -> BigUint {
+        let sign = signum(self.num) * signum(self.denom);
+        let num = BigUint::from_isize(abs(self.num)).unwrap();
+        let denom = BigUint::from_isize(abs(self.denom)).unwrap();
+        let mut value = num
+            * mod_inverse(
+                Cow::Borrowed(&denom),
+                Cow::Borrowed(&ModularMultiplicationBigIntAir::secp256k1_prime()),
+            )
+            .unwrap()
+            .to_biguint()
+            .unwrap();
+        if sign == -1 {
+            value = ModularMultiplicationBigIntAir::secp256k1_prime() - value;
+        }
+        value
+    }
+}
+
+impl From<isize> for Fraction {
+    fn from(value: isize) -> Self {
+        Self::new(value, 1)
+    }
+}
+
+struct Point {
+    x: Fraction,
+    y: Fraction,
+}
+
+impl Point {
+    fn new(x: impl Into<Fraction>, y: impl Into<Fraction>) -> Self {
+        Self {
+            x: x.into(),
+            y: y.into(),
+        }
+    }
+}
+
+fn test_ec_add(point_1: Point, point_2: Point, point_3: Point) {
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, 4>;
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let x_var = builder.eval_bigint(x);
-    let y_var = builder.eval_bigint(y);
-    let point = (x_var, y_var);
-    let x3_check = builder.eval_bigint(x3);
-    let y3_check = builder.eval_bigint(y3);
+    let x1_var = builder.eval_bigint(point_1.x.to_bigint());
+    let y1_var = builder.eval_bigint(point_1.y.to_bigint());
+    let x2_var = builder.eval_bigint(point_2.x.to_bigint());
+    let y2_var = builder.eval_bigint(point_2.y.to_bigint());
+    let x3_check = builder.eval_bigint(point_3.x.to_bigint());
+    let y3_check = builder.eval_bigint(point_3.y.to_bigint());
 
-    let (x3_var, y3_var) = builder.ec_add(&point, &point);
+    let (x3_var, y3_var) = builder.ec_add(&(x1_var, y1_var), &(x2_var, y2_var));
 
     builder.assert_bigint_eq(&x3_var, &x3_check);
     builder.assert_bigint_eq(&y3_var, &y3_check);
@@ -146,4 +190,36 @@ fn test_compiler_ec_double() {
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
     execute_program::<WORD_SIZE>(program, vec![]);
+}
+
+// tests for x^3 = y^2 + 7
+
+#[test]
+fn test_compiler_ec_double() {
+    test_ec_add(Point::new(2, 1), Point::new(2, 1), Point::new(32, -181));
+}
+
+#[test]
+fn test_compiler_ec_ne_add() {
+    test_ec_add(Point::new(2, 1), Point::new(32, 181), Point::new(2, -1));
+}
+
+#[test]
+fn test_compiler_ec_add_to_zero() {
+    test_ec_add(Point::new(2, 1), Point::new(2, -1), Point::new(0, 0));
+}
+
+#[test]
+fn test_compiler_ec_add_zero_left() {
+    test_ec_add(Point::new(0, 0), Point::new(2, 1), Point::new(2, 1))
+}
+
+#[test]
+fn test_compiler_ec_add_zero_right() {
+    test_ec_add(Point::new(2, 1), Point::new(0, 0), Point::new(2, 1))
+}
+
+#[test]
+fn test_compiler_ec_double_zero() {
+    test_ec_add(Point::new(0, 0), Point::new(0, 0), Point::new(0, 0))
 }

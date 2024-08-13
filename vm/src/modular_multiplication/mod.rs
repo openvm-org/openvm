@@ -1,12 +1,11 @@
 use std::{borrow::Cow, collections::VecDeque};
 
+use afs_primitives::modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir;
 use num_bigint_dig::{algorithms::mod_inverse, BigUint};
 use p3_field::{PrimeField32, PrimeField64};
 
-use afs_primitives::modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir;
-
 use crate::{
-    cpu::{OpCode::*, trace::Instruction},
+    cpu::{trace::Instruction, OpCode::*},
     modular_multiplication::air::ModularMultiplicationVmAir,
     vm::ExecutionSegment,
 };
@@ -136,7 +135,6 @@ impl<F: PrimeField32> ModularMultiplicationChip<F> {
             .collect();
         let argument_1 = elems_to_bigint(argument_1_elems, repr_bits);
         let argument_2 = elems_to_bigint(argument_2_elems, repr_bits);
-        mod_inverse(Cow::Borrowed(&argument_2), Cow::Borrowed(&modulus)).unwrap();
         let result = match instruction.opcode {
             MOD_ADD => argument_1.clone() + argument_2.clone(),
             MOD_SUB => argument_1.clone() + modulus.clone() - argument_2.clone(),
