@@ -234,10 +234,7 @@ pub fn verify_batch<C: Config>(
             reduce_fast_ext::<C>(builder, index, &dimensions, current_height, opened_values)
         }
     };
-    let root_ptr = match root {
-        Array::Fixed(_) => panic!("root is fixed"),
-        Array::Dyn(ptr, _) => ptr,
-    };
+    let root_ptr = root.ptr();
 
     // For each sibling in the proof, reconstruct the root.
     let one: Var<_> = builder.eval(C::N::one());

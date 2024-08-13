@@ -419,10 +419,6 @@ impl<C: Config> Builder<C> {
         self.load(vlen, ptr, index);
 
         let arr = self.dyn_array(vlen);
-        let ptr = match arr {
-            Array::Dyn(ptr, _) => ptr,
-            Array::Fixed(_) => unreachable!(),
-        };
 
         // Write the content hints directly into the array memory.
         self.range(0, vlen).for_each(|i, builder| {
@@ -431,7 +427,7 @@ impl<C: Config> Builder<C> {
                 offset: 0,
                 size: 1,
             };
-            builder.operations.push(DslIr::StoreHintWord(ptr, index));
+            builder.operations.push(DslIr::StoreHintWord(arr.ptr(), index));
         });
 
         arr

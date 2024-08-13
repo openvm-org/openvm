@@ -21,6 +21,13 @@ pub enum Array<C: Config, T> {
 }
 
 impl<C: Config, V: MemVariable<C>> Array<C, V> {
+    pub fn ptr(&self) -> Ptr<C::N> {
+        match *self {
+            Array::Dyn(ptr, _) => ptr,
+            Array::Fixed(_) => panic!("cannot retrieve pointer for a compile-time array")
+        }
+    }
+
     /// Gets the length of the array as a variable inside the DSL.
     pub fn len(&self) -> Usize<C::N> {
         match self {
@@ -192,9 +199,10 @@ impl<C: Config> Builder<C> {
         }
     }
 
+    /// Returns a pointer to the array at the specified `index` within the given `slice`.
     pub fn get_ptr<V: MemVariable<C>, I: Into<RVar<C::N>>>(
         &mut self,
-        slice: &Array<C, V>,
+        slice: &Array<C, Array<C, V>>,
         index: I,
     ) -> Ptr<C::N> {
         let index = index.into();
@@ -208,10 +216,11 @@ impl<C: Config> Builder<C> {
                     let valid = self.lt(index, len.clone());
                     self.assert_var_eq(valid, C::N::one());
                 }
+                // To load the pointer we only need to load the first field element array repr.
                 let index = MemIndex {
                     index,
                     offset: 0,
-                    size: V::size_of(),
+                    size: <Array<C, V> as MemVariable<C>>::size_of(),
                 };
                 let var: Ptr<C::N> = self.uninit();
                 self.load(var, *ptr, index);

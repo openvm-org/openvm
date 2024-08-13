@@ -10,10 +10,6 @@ impl<C: Config> Builder<C> {
         self.push(DslIr::HintBitsV(num));
 
         let output = self.dyn_array::<Var<_>>(NUM_BITS);
-        let ptr = match output {
-            Array::Dyn(ptr, _) => ptr,
-            Array::Fixed(_) => unreachable!(),
-        };
 
         let sum: Var<_> = self.eval(C::N::zero());
         for i in 0..NUM_BITS {
@@ -22,7 +18,7 @@ impl<C: Config> Builder<C> {
                 offset: 0,
                 size: 1,
             };
-            self.push(DslIr::StoreHintWord(ptr, index));
+            self.push(DslIr::StoreHintWord(output.ptr(), index));
 
             let bit = self.get(&output, i);
             self.assert_var_eq(bit * (bit - C::N::one()), C::N::zero());
@@ -53,10 +49,6 @@ impl<C: Config> Builder<C> {
         self.push(DslIr::HintBitsF(num));
 
         let output = self.dyn_array::<Var<_>>(NUM_BITS);
-        let ptr = match output {
-            Array::Dyn(ptr, _) => ptr,
-            Array::Fixed(_) => unreachable!(),
-        };
 
         let sum: Felt<_> = self.eval(C::F::zero());
         for i in 0..NUM_BITS {
@@ -65,7 +57,7 @@ impl<C: Config> Builder<C> {
                 offset: 0,
                 size: 1,
             };
-            self.push(DslIr::StoreHintWord(ptr, index));
+            self.push(DslIr::StoreHintWord(output.ptr(), index));
 
             let bit = self.get(&output, i);
             self.assert_var_eq(bit * (bit - C::N::one()), C::N::zero());
