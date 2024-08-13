@@ -532,6 +532,26 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField64, EF: ExtensionFie
             AS::Register,
             AS::Memory,
         )],
+        AsmInstruction::Keccak256(dst, src, len) => vec![inst(
+            KECCAK256,
+            register(dst),
+            register(src),
+            register(len),
+            AS::Register,
+            AS::Memory,
+        )],
+        AsmInstruction::Keccak256FixLen(_dst, _src, _len) => {
+            todo!("Wait for operand f to be added");
+            //     vec![inst(
+            //     KECCAK256,
+            //     register(dst),
+            //     register(src),
+            //     len,
+            //     AS::Register,
+            //     AS::Memory,
+            //     AS::Immediate
+            // )]
+        }
         AsmInstruction::CycleTrackerStart(name) => {
             if options.enable_cycle_tracker {
                 vec![dbg(CT_START, name)]
