@@ -5,7 +5,10 @@ use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 use OpCode::*;
 
-use crate::{field_extension::FieldExtensionArithmeticAir, poseidon2::Poseidon2Chip};
+use crate::{
+    field_extension::FieldExtensionArithmeticAir,
+    memory::offline_checker::air::NewMemoryOfflineChecker, poseidon2::Poseidon2Chip,
+};
 
 #[cfg(test)]
 pub mod tests;
@@ -24,7 +27,11 @@ pub const FIELD_EXTENSION_BUS: usize = 3;
 pub const RANGE_CHECKER_BUS: usize = 4;
 pub const POSEIDON2_BUS: usize = 5;
 pub const POSEIDON2_DIRECT_BUS: usize = 6;
+// TODO[osama]: to be renamed to MEMORY_BUS
 pub const NEW_MEMORY_BUS: usize = 7;
+pub const EXPAND_BUS: usize = 8;
+pub const POSEIDON2_DIRECT_REQUEST_BUS: usize = 9;
+pub const MEMORY_INTERFACE_BUS: usize = 10;
 
 pub const CPU_MAX_READS_PER_CYCLE: usize = 2;
 pub const CPU_MAX_WRITES_PER_CYCLE: usize = 1;
@@ -176,15 +183,19 @@ impl CpuOptions {
     }
 }
 
-#[derive(Default, Clone)]
+// #[derive(Clone)]
 /// Air for the CPU. Carries no state and does not own execution.
 pub struct CpuAir<const WORD_SIZE: usize> {
     pub options: CpuOptions,
+    pub memory_offline_checker: NewMemoryOfflineChecker<WORD_SIZE>,
 }
 
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
-    pub fn new(options: CpuOptions) -> Self {
-        Self { options }
+    pub fn new(options: CpuOptions, clk_max_bits: usize, decomp: usize) -> Self {
+        Self {
+            options,
+            memory_offline_checker: NewMemoryOfflineChecker::new(clk_max_bits, decomp),
+        }
     }
 }
 
@@ -200,9 +211,9 @@ pub struct CpuChip<const WORD_SIZE: usize, F: Clone> {
 }
 
 impl<const WORD_SIZE: usize, F: Clone> CpuChip<WORD_SIZE, F> {
-    pub fn new(options: CpuOptions) -> Self {
+    pub fn new(options: CpuOptions, clk_max_bits: usize, decomp: usize) -> Self {
         Self {
-            air: CpuAir::new(options),
+            air: CpuAir::new(options, clk_max_bits, decomp),
             rows: vec![],
             state: ExecutionState::default(),
             start_state: ExecutionState::default(),
@@ -220,8 +231,14 @@ impl<const WORD_SIZE: usize, F: Clone> CpuChip<WORD_SIZE, F> {
     }
 
     /// Sets the current state of the CPU.
-    pub fn from_state(options: CpuOptions, state: ExecutionState) -> Self {
-        let mut chip = Self::new(options);
+    // TODO[osama]: move clk_max_bits and decomp somewhere else
+    pub fn from_state(
+        options: CpuOptions,
+        state: ExecutionState,
+        clk_max_bits: usize,
+        decomp: usize,
+    ) -> Self {
+        let mut chip = Self::new(options, clk_max_bits, decomp);
         chip.state = state;
         chip.start_state = state;
         chip

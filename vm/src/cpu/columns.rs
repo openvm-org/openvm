@@ -5,9 +5,10 @@ use afs_primitives::{
     sub_chip::LocalTraceInstructions,
 };
 use itertools::Itertools;
-use p3_field::{Field, PrimeField64};
+use p3_field::{Field, PrimeField32};
 
-use super::{trace::disabled_memory_cols, CpuOptions, OpCode, CPU_MAX_ACCESSES_PER_CYCLE};
+use super::{CpuAir, CpuOptions, OpCode, CPU_MAX_ACCESSES_PER_CYCLE};
+use crate::{memory::offline_checker::columns::MemoryOfflineCheckerCols, vm::ExecutionSegment};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuIoCols<T> {
@@ -114,18 +115,19 @@ impl<const WORD_SIZE: usize, T: Clone> MemoryAccessCols<WORD_SIZE, T> {
 pub struct CpuAuxCols<const WORD_SIZE: usize, T> {
     pub operation_flags: BTreeMap<OpCode, T>,
     pub public_value_flags: Vec<T>,
-    pub accesses: [MemoryAccessCols<WORD_SIZE, T>; CPU_MAX_ACCESSES_PER_CYCLE],
+    pub accesses: [MemoryOfflineCheckerCols<WORD_SIZE, T>; CPU_MAX_ACCESSES_PER_CYCLE],
     pub read0_equals_read1: T,
     pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
 }
 
 impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
-    pub fn from_slice(slc: &[T], options: CpuOptions) -> Self {
+    pub fn from_slice(slc: &[T], cpu_air: &CpuAir<WORD_SIZE>) -> Self {
         let mut start = 0;
-        let mut end = options.num_enabled_instructions();
+        let mut end = cpu_air.options.num_enabled_instructions();
         let operation_flags_vec = slc[start..end].to_vec();
         let mut operation_flags = BTreeMap::new();
-        for (opcode, operation_flag) in options
+        for (opcode, operation_flag) in cpu_air
+            .options
             .enabled_instructions()
             .iter()
             .zip_eq(operation_flags_vec)
@@ -134,13 +136,13 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
         }
 
         start = end;
-        end += options.num_public_values;
+        end += cpu_air.options.num_public_values;
         let public_value_flags = slc[start..end].to_vec();
 
         let accesses = from_fn(|_| {
             start = end;
-            end += MemoryAccessCols::<WORD_SIZE, T>::get_width();
-            MemoryAccessCols::from_slice(&slc[start..end])
+            end += MemoryOfflineCheckerCols::<WORD_SIZE, T>::width(&cpu_air.memory_offline_checker);
+            MemoryOfflineCheckerCols::from_slice(&slc[start..end])
         });
 
         let beq_check = slc[end].clone();
@@ -161,35 +163,49 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
             flattened.push(self.operation_flags.get(&opcode).unwrap().clone());
         }
         flattened.extend(self.public_value_flags.clone());
-        flattened.extend(self.accesses.iter().flat_map(MemoryAccessCols::flatten));
+        flattened.extend(
+            self.accesses
+                .iter()
+                .cloned()
+                .flat_map(MemoryOfflineCheckerCols::<WORD_SIZE, T>::flatten),
+        );
         flattened.push(self.read0_equals_read1.clone());
         flattened.extend(self.is_equal_vec_aux.flatten());
         flattened
     }
 
-    pub fn get_width(options: CpuOptions) -> usize {
-        options.num_enabled_instructions()
-            + options.num_public_values
-            + (CPU_MAX_ACCESSES_PER_CYCLE * MemoryAccessCols::<WORD_SIZE, T>::get_width())
+    pub fn get_width(cpu_air: &CpuAir<WORD_SIZE>) -> usize {
+        cpu_air.options.num_enabled_instructions()
+            + cpu_air.options.num_public_values
+            + (CPU_MAX_ACCESSES_PER_CYCLE
+                * MemoryOfflineCheckerCols::<WORD_SIZE, T>::width(&cpu_air.memory_offline_checker))
             + 1
             + IsEqualVecAuxCols::<T>::width(WORD_SIZE)
     }
 }
 
-impl<const WORD_SIZE: usize, T: PrimeField64> CpuAuxCols<WORD_SIZE, T> {
-    pub fn nop_row(options: CpuOptions) -> Self {
+impl<const WORD_SIZE: usize, T: PrimeField32> CpuAuxCols<WORD_SIZE, T> {
+    pub fn nop_row<const NUM_WORDS: usize>(vm: &ExecutionSegment<NUM_WORDS, WORD_SIZE, T>) -> Self {
         let mut operation_flags = BTreeMap::new();
-        for opcode in options.enabled_instructions() {
+        for opcode in vm.options().enabled_instructions() {
             operation_flags.insert(opcode, T::from_bool(opcode == OpCode::NOP));
         }
-        let accesses = [disabled_memory_cols(); CPU_MAX_ACCESSES_PER_CYCLE];
+        let accesses = from_fn(|_| {
+            vm.cpu_chip
+                .air
+                .memory_offline_checker
+                .disabled_memory_checker_cols(vm.range_checker.clone())
+        });
         let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
             &IsEqualVecAir::new(WORD_SIZE),
-            (accesses[0].data.to_vec(), accesses[1].data.to_vec()),
+            (
+                accesses[0].op_cols.data_read.to_vec(),
+                accesses[1].op_cols.data_read.to_vec(),
+            ),
         );
         Self {
             operation_flags,
-            public_value_flags: vec![T::zero(); options.num_public_values],
+            public_value_flags: vec![T::zero(); vm.options().num_public_values],
             accesses,
             read0_equals_read1: T::one(),
             is_equal_vec_aux: is_equal_vec_cols.aux,
@@ -204,10 +220,10 @@ pub struct CpuCols<const WORD_SIZE: usize, T> {
 }
 
 impl<const WORD_SIZE: usize, T: Clone> CpuCols<WORD_SIZE, T> {
-    pub fn from_slice(slc: &[T], options: CpuOptions) -> Self {
+    pub fn from_slice(slc: &[T], cpu_air: &CpuAir<WORD_SIZE>) -> Self {
         let io = CpuIoCols::<T>::from_slice(&slc[..CpuIoCols::<T>::get_width()]);
         let aux =
-            CpuAuxCols::<WORD_SIZE, T>::from_slice(&slc[CpuIoCols::<T>::get_width()..], options);
+            CpuAuxCols::<WORD_SIZE, T>::from_slice(&slc[CpuIoCols::<T>::get_width()..], cpu_air);
 
         Self { io, aux }
     }
@@ -218,16 +234,20 @@ impl<const WORD_SIZE: usize, T: Clone> CpuCols<WORD_SIZE, T> {
         flattened
     }
 
-    pub fn get_width(options: CpuOptions) -> usize {
-        CpuIoCols::<T>::get_width() + CpuAuxCols::<WORD_SIZE, T>::get_width(options)
+    pub fn get_width(cpu_air: &CpuAir<WORD_SIZE>) -> usize {
+        CpuIoCols::<T>::get_width() + CpuAuxCols::<WORD_SIZE, T>::get_width(cpu_air)
     }
 }
 
-impl<const WORD_SIZE: usize, T: PrimeField64> CpuCols<WORD_SIZE, T> {
-    pub fn nop_row(options: CpuOptions, pc: T, timestamp: T) -> Self {
+impl<const WORD_SIZE: usize, T: PrimeField32> CpuCols<WORD_SIZE, T> {
+    pub fn nop_row<const NUM_WORDS: usize>(
+        vm: &ExecutionSegment<NUM_WORDS, WORD_SIZE, T>,
+        pc: T,
+        timestamp: T,
+    ) -> Self {
         Self {
             io: CpuIoCols::<T>::nop_row(pc, timestamp),
-            aux: CpuAuxCols::<WORD_SIZE, T>::nop_row(options),
+            aux: CpuAuxCols::<WORD_SIZE, T>::nop_row(vm),
         }
     }
 }

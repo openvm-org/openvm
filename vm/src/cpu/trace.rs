@@ -7,7 +7,6 @@ use std::{
 use afs_primitives::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
-use p3_air::BaseAir;
 use p3_field::{Field, PrimeField32, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -20,7 +19,7 @@ use super::{
 use crate::{
     cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
     field_extension::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticChip},
-    memory::{compose, decompose},
+    memory::{compose, decompose, offline_checker::columns::MemoryOfflineCheckerCols},
     poseidon2::{columns::Poseidon2VmCols, Poseidon2Chip},
     program::columns::ProgramPreprocessedCols,
     vm::{cycle_tracker::CycleTracker, ExecutionSegment},
@@ -77,6 +76,7 @@ impl<F: Field> Instruction<F> {
     }
 }
 
+// TODO[osama]: to be deleted
 pub fn disabled_memory_cols<const WORD_SIZE: usize, F: PrimeField64>(
 ) -> MemoryAccessCols<WORD_SIZE, F> {
     memory_access_to_cols(false, F::one(), F::zero(), [F::zero(); WORD_SIZE])
@@ -152,8 +152,9 @@ impl Display for ExecutionError {
 impl Error for ExecutionError {}
 
 impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
-    pub fn generate_trace(
-        vm: &mut ExecutionSegment<WORD_SIZE, F>,
+    // TODO[osama]: Make this an implementation block for ExecutionSegment instead of CpuChip
+    pub fn generate_trace<const NUM_WORDS: usize>(
+        vm: &mut ExecutionSegment<NUM_WORDS, WORD_SIZE, F>,
     ) -> Result<RowMajorMatrix<F>, ExecutionError> {
         let mut clock_cycle: usize = vm.cpu_chip.state.clock_cycle;
         let mut timestamp: usize = vm.cpu_chip.state.timestamp;
@@ -195,7 +196,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
 
             let mut next_pc = pc + F::one();
 
-            let mut accesses = [disabled_memory_cols(); CPU_MAX_ACCESSES_PER_CYCLE];
+            let mut accesses =
+                core::array::from_fn(|_| MemoryOfflineCheckerCols::<WORD_SIZE, F>::default());
             let mut num_reads = 0;
             let mut num_writes = 0;
 
@@ -208,14 +210,21 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 ($address_space: expr, $address: expr) => {{
                     num_reads += 1;
                     assert!(num_reads <= CPU_MAX_READS_PER_CYCLE);
-                    let data = vm.memory_chip.read_word(
-                        timestamp + (num_reads - 1),
+                    let memory_access = vm.memory_manager.read_word(
+                        F::from_canonical_usize(timestamp + (num_reads - 1)),
                         $address_space,
                         $address,
                     );
-                    accesses[num_reads - 1] =
-                        memory_access_to_cols(true, $address_space, $address, data);
-                    compose(data)
+                    accesses[num_reads - 1] = vm
+                        .cpu_chip
+                        .air
+                        .memory_offline_checker
+                        .memory_access_to_checker_cols(
+                            memory_access.clone(),
+                            true,
+                            vm.range_checker.clone(),
+                        );
+                    compose(memory_access.data_write)
                 }};
             }
 
@@ -224,14 +233,23 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     num_writes += 1;
                     assert!(num_writes <= CPU_MAX_WRITES_PER_CYCLE);
                     let word = decompose($data);
-                    vm.memory_chip.write_word(
-                        timestamp + CPU_MAX_READS_PER_CYCLE + (num_writes - 1),
+                    let memory_access = vm.memory_manager.write_word(
+                        F::from_canonical_usize(
+                            timestamp + CPU_MAX_READS_PER_CYCLE + (num_writes - 1),
+                        ),
                         $address_space,
                         $address,
                         word,
                     );
-                    accesses[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
-                        memory_access_to_cols(true, $address_space, $address, word);
+                    accesses[CPU_MAX_READS_PER_CYCLE + num_writes - 1] = vm
+                        .cpu_chip
+                        .air
+                        .memory_offline_checker
+                        .memory_access_to_checker_cols(
+                            memory_access,
+                            true,
+                            vm.range_checker.clone(),
+                        );
                 }};
             }
 
@@ -387,6 +405,24 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 ),
             };
 
+            // Finalizing memory accesses
+            for access in &mut accesses[num_reads..CPU_MAX_READS_PER_CYCLE] {
+                *access = vm
+                    .cpu_chip
+                    .air
+                    .memory_offline_checker
+                    .disabled_memory_checker_cols(vm.range_checker.clone())
+            }
+            for access in
+                &mut accesses[CPU_MAX_READS_PER_CYCLE + num_writes..CPU_MAX_ACCESSES_PER_CYCLE]
+            {
+                *access = vm
+                    .cpu_chip
+                    .air
+                    .memory_offline_checker
+                    .disabled_memory_checker_cols(vm.range_checker.clone());
+            }
+
             let final_accesses = vm.memory_chip.accesses.len();
             let num_accesses_memory_rows = final_accesses - initial_accesses;
 
@@ -399,7 +435,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let final_poseidon2_rows = vm.poseidon2_chip.rows.len();
             let num_poseidon2_rows = final_poseidon2_rows - initial_poseidon2_rows;
 
-            let trace_cells = CpuCols::<WORD_SIZE, F>::get_width(vm.options())
+            let trace_cells = CpuCols::<WORD_SIZE, F>::get_width(&vm.cpu_chip.air)
                 + ProgramPreprocessedCols::<F>::get_width()
                 + num_accesses_memory_rows * vm.memory_chip.air.air_width()
                 + num_field_base_ops * FieldExtensionArithmeticCols::<F>::get_width()
@@ -419,7 +455,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
 
             let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
                 &IsEqualVecAir::new(WORD_SIZE),
-                (accesses[0].data.to_vec(), accesses[1].data.to_vec()),
+                (
+                    accesses[0].op_cols.data_read.to_vec(),
+                    accesses[1].op_cols.data_read.to_vec(),
+                ),
             );
 
             let read0_equals_read1 = is_equal_vec_cols.io.is_equal;
@@ -478,16 +517,15 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
 
         Ok(RowMajorMatrix::new(
             vm.cpu_chip.rows.concat(),
-            CpuCols::<WORD_SIZE, F>::get_width(vm.options()),
+            CpuCols::<WORD_SIZE, F>::get_width(&vm.cpu_chip.air),
         ))
     }
 
     /// Pad with NOP rows.
-    pub fn pad_rows(vm: &mut ExecutionSegment<WORD_SIZE, F>) {
+    pub fn pad_rows<const NUM_WORDS: usize>(vm: &mut ExecutionSegment<NUM_WORDS, WORD_SIZE, F>) {
         let pc = F::from_canonical_usize(vm.cpu_chip.state.pc);
         let timestamp = F::from_canonical_usize(vm.cpu_chip.state.timestamp);
-        let nop_row =
-            CpuCols::<WORD_SIZE, F>::nop_row(vm.options(), pc, timestamp).flatten(vm.options());
+        let nop_row = CpuCols::<WORD_SIZE, F>::nop_row(vm, pc, timestamp).flatten(vm.options());
         let correct_len = (vm.cpu_chip.rows.len() + 1).next_power_of_two();
         vm.cpu_chip.rows.resize(correct_len, nop_row);
     }

@@ -4,19 +4,21 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
 use super::{
-    columns::{CpuIoCols, MemoryAccessCols},
-    CpuAir, OpCode, ARITHMETIC_BUS, CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE,
-    FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_BUS, FIELD_EXTENSION_INSTRUCTIONS, MEMORY_BUS,
-    POSEIDON2_BUS, READ_INSTRUCTION_BUS,
+    columns::CpuIoCols, CpuAir, OpCode, ARITHMETIC_BUS, CPU_MAX_ACCESSES_PER_CYCLE,
+    CPU_MAX_READS_PER_CYCLE, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_BUS,
+    FIELD_EXTENSION_INSTRUCTIONS, POSEIDON2_BUS, READ_INSTRUCTION_BUS,
 };
-use crate::cpu::OpCode::{COMP_POS2, PERM_POS2};
+use crate::{
+    cpu::OpCode::{COMP_POS2, PERM_POS2},
+    memory::offline_checker::columns::MemoryOfflineCheckerCols,
+};
 
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         io: CpuIoCols<AB::Var>,
-        accesses: [MemoryAccessCols<WORD_SIZE, AB::Var>; CPU_MAX_ACCESSES_PER_CYCLE],
+        accesses: [MemoryOfflineCheckerCols<WORD_SIZE, AB::Var>; CPU_MAX_ACCESSES_PER_CYCLE],
         operation_flags: &BTreeMap<OpCode, AB::Var>,
     ) {
         // Interaction with program (bus 0)
@@ -26,28 +28,13 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             AB::Expr::one() - operation_flags[&OpCode::NOP],
         );
 
-        for (i, access) in accesses.into_iter().enumerate() {
-            let memory_cycle = io.timestamp + AB::F::from_canonical_usize(i);
-            let is_write = i >= CPU_MAX_READS_PER_CYCLE;
-
-            let fields = [
-                memory_cycle,
-                AB::F::from_bool(is_write).into(),
-                access.address_space.into(),
-                access.address.into(),
-            ]
-            .into_iter()
-            .chain(access.data.into_iter().map(Into::into));
-            builder.push_send(MEMORY_BUS, fields, access.enabled - access.is_immediate);
-        }
-
         // Interaction with arithmetic (bus 2)
         if self.options.field_arithmetic_enabled {
             let fields = [
                 io.opcode,
-                accesses[0].data[0],
-                accesses[1].data[0],
-                accesses[CPU_MAX_READS_PER_CYCLE].data[0],
+                accesses[0].data()[0],
+                accesses[1].data()[0],
+                accesses[CPU_MAX_READS_PER_CYCLE].data()[0],
             ];
             let count = FIELD_ARITHMETIC_INSTRUCTIONS
                 .iter()
