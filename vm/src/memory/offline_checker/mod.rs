@@ -11,6 +11,9 @@ use crate::{
 
 mod air;
 mod trace;
+mod bridge;
+
+pub use bridge::*;
 
 pub struct MemoryOfflineChecker {
     pub offline_checker: OfflineChecker,
