@@ -34,13 +34,8 @@ impl<C: Config> Builder<C> {
         ptr: &mut Ref<C, V>,
         value: Expr,
     ) {
-        let index = MemIndex {
-            index: RVar::zero(),
-            offset: 0,
-            size: V::size_of(),
-        };
         let value: V = self.eval(value);
-        self.store(ptr.ptr, index, value);
+        self.set_to_value(ptr, value);
     }
 
     pub fn set_to_value<V: MemVariable<C>>(&mut self, ptr: &mut Ref<C, V>, value: V) {
