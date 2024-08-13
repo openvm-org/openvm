@@ -61,6 +61,33 @@ where
         committed_page
     }
 
+    pub fn from_record_batch(rb: RecordBatch) -> Self {
+        let schema = (*rb.schema()).clone();
+        let num_rows = rb.num_rows();
+        let columns = rb.columns();
+
+        // Initialize a vector to hold the rows
+        let mut rows: Vec<Vec<u32>> = vec![vec![0; columns.len() + 1]; num_rows];
+
+        // Iterate over columns and fill the rows
+        for (col_idx, column) in columns.iter().enumerate() {
+            let array = column.as_any().downcast_ref::<UInt32Array>().unwrap();
+            for (row_idx, row) in rows.iter_mut().enumerate() {
+                row[0] = 1;
+                row[col_idx + 1] = array.value(row_idx);
+            }
+        }
+
+        let page = Page::from_2d_vec(&rows, 0, columns.len());
+        Self {
+            // TODO: generate a page_id based on the hash of the Page
+            page_id: "".to_string(),
+            schema,
+            page,
+            cached_trace: None,
+        }
+    }
+
     pub fn write_cached_trace(&mut self, trace: ProverTraceData<SC>) {
         self.cached_trace = Some(trace);
     }

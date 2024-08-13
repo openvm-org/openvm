@@ -3,7 +3,10 @@ use std::{
     sync::Arc,
 };
 
-use afs_stark_backend::{config::StarkGenericConfig, keygen::types::MultiStarkProvingKey};
+use afs_stark_backend::{
+    config::{Com, PcsProof, PcsProverData, StarkGenericConfig, Val},
+    keygen::types::MultiStarkProvingKey,
+};
 use datafusion::{
     arrow::array::RecordBatch,
     common::{internal_datafusion_err, internal_err},
@@ -12,9 +15,11 @@ use datafusion::{
     logical_expr::LogicalPlan,
 };
 use futures::{StreamExt, TryStreamExt};
+use p3_field::PrimeField64;
+use serde::{de::DeserializeOwned, Serialize};
 use tokio::sync::Mutex;
 
-use crate::afs_node::AfsNode;
+use crate::{afs_node::AfsNode, committed_page::CommittedPage};
 
 #[derive(Debug)]
 enum NodeState<SC: StarkGenericConfig> {
@@ -56,7 +61,15 @@ pub struct AfsExec<SC: StarkGenericConfig> {
     pub afs_execution_plan: Vec<AfsNode<SC>>,
 }
 
-impl<SC: StarkGenericConfig> AfsExec<SC> {
+impl<SC: StarkGenericConfig> AfsExec<SC>
+where
+    Val<SC>: PrimeField64,
+    PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
+    PcsProof<SC>: Send + Sync,
+    Com<SC>: Send + Sync,
+    SC::Pcs: Send + Sync,
+    SC::Challenge: Send + Sync,
+{
     pub async fn new(ctx: SessionContext, root: LogicalPlan) -> Self {
         let root = ctx.state().optimize(&root).unwrap();
         // let afs_logical_plan = Self::convert_logical_tree(&root);
@@ -70,16 +83,18 @@ impl<SC: StarkGenericConfig> AfsExec<SC> {
         }
     }
 
-    pub fn execute(&mut self) -> Result<()> {
+    pub async fn execute(&mut self) -> Result<Arc<CommittedPage<SC>>> {
+        let mut last_result = None;
         for node in &mut self.afs_execution_plan {
-            node.execute()?;
+            node.execute(&self.ctx).await?;
+            last_result = node.output();
         }
-        Ok(())
+        Ok(last_result.unwrap())
     }
 
-    pub fn keygen(&mut self) -> Result<()> {
+    pub async fn keygen(&mut self) -> Result<()> {
         for node in &mut self.afs_execution_plan {
-            node.keygen()?;
+            node.keygen(&self.ctx).await?;
         }
         Ok(())
     }
@@ -95,7 +110,6 @@ impl<SC: StarkGenericConfig> AfsExec<SC> {
         root: &LogicalPlan,
         state: &SessionState,
     ) -> Result<Vec<AfsNode<SC>>> {
-        println!("create_execution_plan Root: {:?}", root);
         let mut flat_tree = vec![];
         let mut dfs_visit_stack = vec![(root, None)];
         let mut node_map: HashMap<usize, Arc<&AfsNode<SC>>> = std::collections::HashMap::new();

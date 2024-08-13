@@ -3,33 +3,43 @@ use std::{
     sync::Arc,
 };
 
-use afs_stark_backend::config::StarkGenericConfig;
-use datafusion::{error::Result, logical_expr::LogicalPlan};
+use afs_stark_backend::config::{Com, PcsProof, PcsProverData, StarkGenericConfig, Val};
+use datafusion::{error::Result, execution::context::SessionContext, logical_expr::LogicalPlan};
+use p3_field::PrimeField64;
+use serde::{de::DeserializeOwned, Serialize};
 
 use self::{filter::Filter, page_scan::PageScan};
-use crate::{afs_exec::ChildrenContainer, afs_expr::AfsExpr};
+use crate::{afs_exec::ChildrenContainer, afs_expr::AfsExpr, committed_page::CommittedPage};
 
 pub mod filter;
 pub mod page_scan;
 
 macro_rules! delegate_to_node {
+    ($self:ident, $method:ident, $ctx:expr) => {
+        match $self {
+            AfsNode::PageScan(ref mut page_scan) => page_scan.$method($ctx).await,
+            AfsNode::Filter(ref mut filter) => filter.$method($ctx).await,
+        }
+    };
     ($self:ident, $method:ident) => {
         match $self {
-            AfsNode::PageScan(ref mut page_scan) => page_scan.$method(),
-            AfsNode::Filter(ref mut filter) => filter.$method(),
+            AfsNode::PageScan(page_scan) => page_scan.$method(),
+            AfsNode::Filter(filter) => filter.$method(),
         }
     };
 }
 
 pub trait AfsNodeExecutable<SC: StarkGenericConfig> {
     /// Runs the node's execution logic without any cryptographic operations
-    fn execute(&mut self) -> Result<()>;
+    async fn execute(&mut self, ctx: &SessionContext) -> Result<()>;
     /// Generate the proving key for the node
-    fn keygen(&mut self) -> Result<()>;
+    async fn keygen(&mut self, ctx: &SessionContext) -> Result<()>;
     /// Geenrate the STARK proof for the node
-    fn prove(&mut self) -> Result<()>;
+    async fn prove(&mut self, ctx: &SessionContext) -> Result<()>;
     /// Verify the STARK proof for the node
-    fn verify(&self) -> Result<()>;
+    async fn verify(&self, ctx: &SessionContext) -> Result<()>;
+    /// Get the output of the node
+    fn output(&self) -> Option<Arc<CommittedPage<SC>>>;
 }
 
 pub enum AfsNode<SC: StarkGenericConfig> {
@@ -37,7 +47,15 @@ pub enum AfsNode<SC: StarkGenericConfig> {
     Filter(Filter<SC>),
 }
 
-impl<SC: StarkGenericConfig> AfsNode<SC> {
+impl<SC: StarkGenericConfig> AfsNode<SC>
+where
+    Val<SC>: PrimeField64,
+    PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
+    PcsProof<SC>: Send + Sync,
+    Com<SC>: Send + Sync,
+    SC::Pcs: Send + Sync,
+    SC::Challenge: Send + Sync,
+{
     pub fn from(logical_plan: &LogicalPlan, children: ChildrenContainer<SC>) -> Self {
         match logical_plan {
             LogicalPlan::TableScan(table_scan) => {
@@ -74,28 +92,32 @@ impl<SC: StarkGenericConfig> AfsNode<SC> {
         }
     }
 
-    pub fn execute(&mut self) -> Result<()> {
-        delegate_to_node!(self, execute)
+    pub async fn execute(&mut self, ctx: &SessionContext) -> Result<()> {
+        delegate_to_node!(self, execute, ctx)
     }
 
-    pub fn keygen(&mut self) -> Result<()> {
-        delegate_to_node!(self, keygen)
+    pub async fn keygen(&mut self, ctx: &SessionContext) -> Result<()> {
+        delegate_to_node!(self, keygen, ctx)
     }
 
-    pub fn prove(&mut self) -> Result<()> {
-        delegate_to_node!(self, prove)
+    pub async fn prove(&mut self, ctx: &SessionContext) -> Result<()> {
+        delegate_to_node!(self, prove, ctx)
     }
 
-    pub fn verify(&mut self) -> Result<()> {
-        delegate_to_node!(self, verify)
+    pub async fn verify(&mut self, ctx: &SessionContext) -> Result<()> {
+        delegate_to_node!(self, verify, ctx)
+    }
+
+    pub fn output(&self) -> Option<Arc<CommittedPage<SC>>> {
+        delegate_to_node!(self, output)
     }
 }
 
 impl<SC: StarkGenericConfig> Debug for AfsNode<SC> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AfsNode::PageScan(page_scan) => write!(f, "PageScan {:?}", page_scan.input.schema()),
-            AfsNode::Filter(filter) => write!(f, "Filter {:?}", filter.input),
+            AfsNode::PageScan(page_scan) => write!(f, "PageScan {:?}", page_scan.page_id),
+            AfsNode::Filter(filter) => write!(f, "Filter {:?}", filter.predicate),
         }
     }
 }

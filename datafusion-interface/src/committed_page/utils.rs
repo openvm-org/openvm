@@ -1,11 +1,13 @@
 use std::sync::Arc;
 
 use afs_page::common::page::Page;
+use afs_stark_backend::config::StarkGenericConfig;
 use datafusion::arrow::{
     array::{ArrayRef, RecordBatch, UInt32Array},
     datatypes::Schema,
 };
 
+use super::CommittedPage;
 use crate::BITS_PER_FE;
 
 pub fn convert_to_record_batch(page: Page, schema: Schema) -> RecordBatch {
