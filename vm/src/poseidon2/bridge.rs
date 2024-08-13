@@ -6,8 +6,10 @@ use super::{
     columns::{Poseidon2VmAuxCols, Poseidon2VmIoCols},
     Poseidon2VmAir,
 };
-use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS, POSEIDON2_DIRECT_BUS};
-use crate::memory::{MemoryAccess, OpType};
+use crate::{
+    cpu::{MEMORY_BUS, POSEIDON2_BUS, POSEIDON2_DIRECT_BUS},
+    memory::{MemoryAccess, OpType},
+};
 
 impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
     /// Receives instructions from the CPU on the designated `POSEIDON2_BUS` (opcodes) or `POSEIDON2_DIRECT_BUS` (direct), and sends both read and write requests to the memory chip.

@@ -2,8 +2,10 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
 use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
-use crate::cpu::{FIELD_EXTENSION_BUS, MEMORY_BUS, WORD_SIZE};
-use crate::memory::{MemoryAccess, OpType};
+use crate::{
+    cpu::{FIELD_EXTENSION_BUS, MEMORY_BUS, WORD_SIZE},
+    memory::{MemoryAccess, OpType},
+};
 
 fn eval_rw_interactions<AB: InteractionBuilder>(
     builder: &mut AB,
@@ -37,7 +39,11 @@ fn eval_rw_interactions<AB: InteractionBuilder>(
             data: [element.into()],
         };
 
-        let count = if ext_element_ind == 1 { aux.valid_y_read } else { aux.is_valid };
+        let count = if ext_element_ind == 1 {
+            aux.valid_y_read
+        } else {
+            aux.is_valid
+        };
         MEMORY_BUS.send_interaction(builder, access, count);
     }
 }
@@ -53,7 +59,14 @@ impl FieldExtensionArithmeticAir {
         // reads for y
         eval_rw_interactions(builder, OpType::Read, local, local.aux.e, local.aux.op_c, 1);
         // writes for z
-        eval_rw_interactions(builder, OpType::Write, local, local.aux.d, local.aux.op_a, 2);
+        eval_rw_interactions(
+            builder,
+            OpType::Write,
+            local,
+            local.aux.d,
+            local.aux.op_a,
+            2,
+        );
 
         // Receives all IO columns from another chip on bus 3 (FIELD_EXTENSION_BUS)
         let fields = [

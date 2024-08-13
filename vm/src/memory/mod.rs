@@ -1,8 +1,8 @@
 use afs_primitives::offline_checker::OfflineCheckerOperation;
 use p3_field::PrimeField64;
 
-pub mod expand;
 pub mod bus;
+pub mod expand;
 pub mod offline_checker;
 
 pub mod interface;

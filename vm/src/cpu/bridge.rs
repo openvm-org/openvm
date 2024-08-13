@@ -9,11 +9,13 @@ use super::{
     FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_BUS, FIELD_EXTENSION_INSTRUCTIONS, MEMORY_BUS,
     POSEIDON2_BUS, READ_INSTRUCTION_BUS,
 };
-use crate::cpu::{
-    OpCode::{COMP_POS2, F_LESS_THAN, PERM_POS2},
-    IS_LESS_THAN_BUS,
+use crate::{
+    cpu::{
+        OpCode::{COMP_POS2, F_LESS_THAN, PERM_POS2},
+        IS_LESS_THAN_BUS,
+    },
+    memory::{MemoryAccess, OpType},
 };
-use crate::memory::{MemoryAccess, OpType};
 
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -36,7 +38,11 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
 
             let access = MemoryAccess {
                 timestamp: memory_cycle,
-                op_type: if is_write { OpType::Write } else { OpType::Read },
+                op_type: if is_write {
+                    OpType::Write
+                } else {
+                    OpType::Read
+                },
                 address_space: access_cols.address_space.into(),
                 address: access_cols.address.into(),
                 data: access_cols.data.map(|x| x.into()),

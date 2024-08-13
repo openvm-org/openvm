@@ -124,12 +124,21 @@ fn test_offline_checker() {
         match op.op_type {
             OpType::Read => {
                 assert_eq!(
-                    memory_chip.read_word(op.timestamp.as_canonical_u64() as usize, op.address_space, op.address),
+                    memory_chip.read_word(
+                        op.timestamp.as_canonical_u64() as usize,
+                        op.address_space,
+                        op.address
+                    ),
                     op.data
                 );
             }
             OpType::Write => {
-                memory_chip.write_word(op.timestamp.as_canonical_u64() as usize, op.address_space, op.address, op.data);
+                memory_chip.write_word(
+                    op.timestamp.as_canonical_u64() as usize,
+                    op.address_space,
+                    op.address,
+                    op.data,
+                );
             }
         }
     }
