@@ -193,6 +193,16 @@ pub enum DslIr<C: Config> {
     /// Permutates an array of BabyBear elements in the circuit.
     // CircuitPoseidon2PermuteBabyBear([Felt<C::F>; 16]),
 
+    /// ```ignore
+    /// Keccak256(output, input)
+    /// ```
+    ///
+    /// Computes the keccak256 hash of variable length `input` where `input` does not have the
+    /// keccak padding bits. `input` will be constrained to be bytes. The `output` pointers can
+    /// overwrite the `input` memory. The `output` is in `u16` limbs, with conversion to bytes being
+    /// **little-endian**. The `output` is exactly 16 limbs (32 bytes).
+    Keccak256(Array<C, Var<C::N>>, Array<C, Var<C::N>>),
+
     // Miscellaneous instructions.
     /// Prints a variable.
     PrintV(Var<C::N>),

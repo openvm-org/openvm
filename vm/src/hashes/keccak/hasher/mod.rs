@@ -80,7 +80,7 @@ impl<F: PrimeField32> KeccakVmChip<F> {
             opcode,
             op_a,
             op_b,
-            op_c: len,
+            op_c,
             d,
             e,
             debug: _debug,
@@ -91,17 +91,19 @@ impl<F: PrimeField32> KeccakVmChip<F> {
 
         let dst = vm.memory_chip.read_elem(timestamp, d, op_a);
         let mut src = vm.memory_chip.read_elem(timestamp + 1, d, op_b);
+        let len = vm.memory_chip.read_elem(timestamp + 2, d, op_c);
 
         let opcode = KeccakOpcodeCols::new(
             F::from_bool(true),
             F::from_canonical_usize(start_timestamp),
             op_a,
             op_b,
-            len,
+            op_c,
             d,
             e,
             dst,
             src,
+            len,
         );
         let byte_len = len.as_canonical_u32() as usize;
 

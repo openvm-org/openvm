@@ -491,6 +491,27 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     ),
                     _ => unimplemented!(),
                 },
+                DslIr::Poseidon2CompressBabyBear(result, left, right) => {
+                    match (result, left, right) {
+                        (Array::Dyn(result, _), Array::Dyn(left, _), Array::Dyn(right, _)) => self
+                            .push(
+                                AsmInstruction::Poseidon2Compress(
+                                    result.fp(),
+                                    left.fp(),
+                                    right.fp(),
+                                ),
+                                debug_info.clone(),
+                            ),
+                        _ => unimplemented!(),
+                    }
+                }
+                DslIr::Keccak256(output, input) => match (output, input) {
+                    (Array::Dyn(output, _const_len), Array::Dyn(input, len)) => self.push(
+                        AsmInstruction::Keccak256(output.fp(), input.fp(), len),
+                        debug_info,
+                    ),
+                    _ => unimplemented!(),
+                },
                 DslIr::Error() => self.push(AsmInstruction::j(F::one()), debug_info),
                 DslIr::PrintF(dst) => {
                     self.push(AsmInstruction::PrintF(dst.fp()), debug_info);
@@ -519,20 +540,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         self.push(AsmInstruction::FriFold(m.fp(), ptr.fp()), debug_info);
                     } else {
                         unimplemented!();
-                    }
-                }
-                DslIr::Poseidon2CompressBabyBear(result, left, right) => {
-                    match (result, left, right) {
-                        (Array::Dyn(result, _), Array::Dyn(left, _), Array::Dyn(right, _)) => self
-                            .push(
-                                AsmInstruction::Poseidon2Compress(
-                                    result.fp(),
-                                    left.fp(),
-                                    right.fp(),
-                                ),
-                                debug_info.clone(),
-                            ),
-                        _ => unimplemented!(),
                     }
                 }
                 DslIr::Publish(val, index) => {

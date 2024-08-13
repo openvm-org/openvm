@@ -13,11 +13,11 @@ use super::{
 };
 use crate::cpu::{KECCAK256_BUS, MEMORY_BUS};
 
-/// We need two memory accesses to read dst, src from memory.
+/// We need three memory accesses to read dst, src, len from memory.
 /// It seems harmless to just shift timestamp by this even in blocks
 /// where we don't do this memory access.
 /// See `eval_opcode_interactions`.
-pub(super) const TIMESTAMP_OFFSET_FOR_OPCODE: usize = 2;
+pub(super) const TIMESTAMP_OFFSET_FOR_OPCODE: usize = 3;
 // This depends on WORD_SIZE
 pub(super) const BLOCK_MEMORY_ACCESSES: usize = KECCAK_RATE_BYTES;
 
@@ -141,7 +141,7 @@ impl KeccakVmAir {
                 opcode.start_timestamp,
                 opcode.a,
                 opcode.b,
-                opcode.len,
+                opcode.c,
                 opcode.d,
                 opcode.e,
             ],
@@ -150,14 +150,18 @@ impl KeccakVmAir {
 
         // Only when it is an input do we want to do memory read for
         // dst <- word[a]_d, src <- word[b]_d
-        for (t_offset, ptr, value) in izip!([0, 1], [opcode.a, opcode.b], [opcode.dst, opcode.src])
-        {
+        for (t_offset, ptr, addr_sp, value) in izip!(
+            [0, 1, 2],
+            [opcode.a, opcode.b, opcode.c],
+            [opcode.d, opcode.d, opcode.d], // TODO use addr_sp = f for len
+            [opcode.dst, opcode.src, opcode.len]
+        ) {
             let timestamp = opcode.start_timestamp + AB::F::from_canonical_usize(t_offset);
 
             Self::constrain_memory_read(
                 builder,
                 timestamp,
-                opcode.d,
+                addr_sp,
                 ptr,
                 value,
                 should_receive.clone(),

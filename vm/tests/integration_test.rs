@@ -388,12 +388,22 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     instructions.push(Instruction::from_isize(JAL, 0, 2, 0, 1, 1)); // skip fail
     instructions.push(Instruction::from_isize(FAIL, 0, 0, 0, 0, 0));
 
-    // src = word[0]_1 <- 0
+    let [a, b, c] = [1, 0, (1 << 30) - 1];
+    // src = word[b]_1 <- 0
     let src = 0;
-    instructions.push(Instruction::from_isize(STOREW, src, 0, 0, 0, 1));
-    // dst word[1]_1 <- 3 // use weird offset
+    instructions.push(Instruction::from_isize(STOREW, src, 0, b, 0, 1));
+    // dst word[a]_1 <- 3 // use weird offset
     let dst = 3;
-    instructions.push(Instruction::from_isize(STOREW, dst, 0, 1, 0, 1));
+    instructions.push(Instruction::from_isize(STOREW, dst, 0, a, 0, 1));
+    // word[2^30 - 1]_1 <- len // emulate stack
+    instructions.push(Instruction::from_isize(
+        STOREW,
+        input.len() as isize,
+        0,
+        c,
+        0,
+        1,
+    ));
 
     let expected = keccak256(input);
     tracing::debug!(?input, ?expected);
@@ -409,14 +419,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
         ));
     }
     // dst = word[1]_1, src = word[0]_1, read and write to address space 2
-    instructions.push(Instruction::from_isize(
-        KECCAK256,
-        1,
-        0,
-        input.len() as isize,
-        1,
-        2,
-    ));
+    instructions.push(Instruction::from_isize(KECCAK256, a, b, c, 1, 2));
 
     // read expected result to check correctness
     for i in 0..KECCAK_DIGEST_U16S {

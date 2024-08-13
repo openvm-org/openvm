@@ -14,6 +14,7 @@ mod builder;
 mod collections;
 mod fold;
 mod instructions;
+mod keccak;
 mod poseidon;
 mod ptr;
 mod symbolic;

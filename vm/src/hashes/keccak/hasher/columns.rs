@@ -31,14 +31,17 @@ pub struct KeccakOpcodeCols<T> {
     pub start_timestamp: T,
     pub a: T,
     pub b: T,
-    /// The remaining length of the unpadded input, in bytes.
-    pub len: T,
+    pub c: T,
     pub d: T,
     pub e: T,
     /// dst <- proj(word[a]_d)
     pub dst: T,
     /// src <- proj(word[b]_d)
     pub src: T,
+    /// The remaining length of the unpadded input, in bytes.
+    /// If this row is receiving from opcode bus, then len <- proj(word[c]_d)
+    // TODO: after operand f is added, use len <- proj(word[c]_f) to allow immediate value
+    pub len: T,
 }
 
 #[repr(C)]
@@ -97,11 +100,12 @@ impl<T: Copy> KeccakOpcodeCols<T> {
         builder.assert_eq(self.start_timestamp, other.start_timestamp);
         builder.assert_eq(self.a, other.a);
         builder.assert_eq(self.b, other.b);
-        builder.assert_eq(self.len, other.len);
+        builder.assert_eq(self.c, other.c);
         builder.assert_eq(self.d, other.d);
         builder.assert_eq(self.e, other.e);
         builder.assert_eq(self.dst, other.dst);
         builder.assert_eq(self.src, other.src);
+        builder.assert_eq(self.len, other.len);
     }
 }
 

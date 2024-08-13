@@ -105,6 +105,7 @@ impl KeccakVmAir {
         // these are not used and hence not necessary, but putting for safety until performance becomes an issue:
         block_transition.assert_eq(local.opcode.a, next.opcode.a);
         block_transition.assert_eq(local.opcode.b, next.opcode.b);
+        block_transition.assert_eq(local.opcode.c, next.opcode.c);
         block_transition.assert_eq(local.opcode.d, next.opcode.d);
 
         // Move the src pointer over based on the number of bytes read.
