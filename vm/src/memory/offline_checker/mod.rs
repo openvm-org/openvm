@@ -10,8 +10,8 @@ use crate::{
 };
 
 mod air;
-mod trace;
 mod bridge;
+mod trace;
 
 pub use bridge::*;
 

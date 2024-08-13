@@ -16,6 +16,7 @@ pub mod columns;
 pub mod trace;
 
 pub use air::CpuAir;
+
 use crate::memory::offline_checker::MemoryBus;
 
 pub const INST_WIDTH: usize = 1;
