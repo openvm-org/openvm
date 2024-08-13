@@ -80,6 +80,7 @@ dependencies = [
  "afs-derive",
  "afs-test-utils",
  "backtrace",
+ "hex",
  "itertools 0.12.1",
  "p3-baby-bear",
  "p3-challenger",
@@ -91,6 +92,7 @@ dependencies = [
  "serde_json",
  "stark-vm",
  "strum_macros",
+ "tracing",
 ]
 
 [[package]]

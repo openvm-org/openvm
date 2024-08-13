@@ -105,21 +105,22 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
     });
-    execute_and_prove_program::<WORD_SIZE>(program, input_stream)
+    execute_and_prove_program::<WORD_SIZE>(
+        program,
+        input_stream,
+        VmConfig {
+            num_public_values: 4,
+            ..Default::default()
+        },
+    )
 }
 
 pub fn execute_and_prove_program<const WORD_SIZE: usize>(
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
+    config: VmConfig,
 ) {
-    let vm = VirtualMachine::<WORD_SIZE, _>::new(
-        VmConfig {
-            num_public_values: 4,
-            ..Default::default()
-        },
-        program,
-        input_stream,
-    );
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(config, program, input_stream);
 
     let ExecutionResult {
         max_log_degree,

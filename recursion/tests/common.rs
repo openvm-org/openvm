@@ -21,7 +21,7 @@ use p3_baby_bear::BabyBear;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_strict_usize;
-use stark_vm::program::Program;
+use stark_vm::{program::Program, vm::config::VmConfig};
 
 pub struct VerificationParams<SC: StarkGenericConfig> {
     pub vk: MultiStarkVerifyingKey<SC>,
@@ -126,5 +126,12 @@ pub fn run_recursive_test(
     let vparams = make_verification_params(&any_raps, traces, &pvs, fri_params);
 
     let (program, witness_stream) = build_verification_program(rec_raps, pvs, vparams);
-    execute_and_prove_program::<1>(program, witness_stream);
+    execute_and_prove_program::<1>(
+        program,
+        witness_stream,
+        VmConfig {
+            num_public_values: 4,
+            ..Default::default()
+        },
+    );
 }
