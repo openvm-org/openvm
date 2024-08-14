@@ -71,17 +71,17 @@ fn test_program_1() {
     // see cpu/tests/mod.rs
     let instructions = vec![
         // word[0]_1 <- word[n]_0
-        Instruction::from_isize(STOREW, n, 0, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(STOREW, n, 0, 0, 0, 1, 0, 1),
         // word[1]_1 <- word[1]_1
-        Instruction::from_isize(STOREW, 1, 1, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(STOREW, 1, 1, 0, 0, 1, 0, 1),
         // if word[0]_1 == 0 then pc += 3
-        Instruction::from_isize(BEQ, 0, 0, 3, 1, 0, 0, 0),
+        Instruction::from_isize(BEQ, 0, 0, 3, 1, 0),
         // word[0]_1 <- word[0]_1 - word[1]_1
-        Instruction::from_isize(FSUB, 0, 0, 1, 1, 1, 0, 0),
+        Instruction::from_isize(FSUB, 0, 0, 1, 1, 1),
         // word[2]_1 <- pc + 1, pc -= 2
-        Instruction::from_isize(JAL, 2, -2, 0, 1, 0, 0, 0),
+        Instruction::from_isize(JAL, 2, -2, 0, 1, 0),
         // terminate
-        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0, 0, 0),
+        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
 
     let program = Program {
@@ -97,15 +97,15 @@ fn test_program_without_field_arithmetic() {
     // see cpu/tests/mod.rs
     let instructions = vec![
         // word[0]_1 <- word[5]_0
-        Instruction::from_isize(STOREW, 5, 0, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(STOREW, 5, 0, 0, 0, 1, 0, 1),
         // if word[0]_1 != 4 then pc += 2
-        Instruction::from_isize(BNE, 0, 4, 3, 1, 0, 0, 0),
+        Instruction::from_isize(BNE, 0, 4, 3, 1, 0),
         // word[2]_1 <- pc + 1, pc -= 2
-        Instruction::from_isize(JAL, 2, -2, 0, 1, 0, 0, 0),
+        Instruction::from_isize(JAL, 2, -2, 0, 1, 0),
         // terminate
-        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0, 0, 0),
+        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
         // if word[0]_1 == 5 then pc -= 1
-        Instruction::from_isize(BEQ, 0, 5, -1, 1, 0, 0, 0),
+        Instruction::from_isize(BEQ, 0, 5, -1, 1, 0),
     ];
 
     let program = Program {
@@ -120,9 +120,9 @@ fn test_program_without_field_arithmetic() {
 #[should_panic(expected = "assertion `left == right` failed")]
 fn test_program_negative() {
     let instructions = vec![
-        Instruction::from_isize(STOREW, -1, 0, 0, 0, 1, 0, 1),
-        Instruction::from_isize(LOADW, -1, 0, 0, 1, 1, 0, 1),
-        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0, 0, 0),
+        Instruction::large_from_isize(STOREW, -1, 0, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(LOADW, -1, 0, 0, 1, 1, 0, 1),
+        Instruction::large_from_isize(TERMINATE, 0, 0, 0, 0, 0, 0, 0),
     ];
     let program = Program {
         instructions: instructions.clone(),

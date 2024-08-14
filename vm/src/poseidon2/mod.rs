@@ -75,8 +75,8 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
             op_c,
             d,
             e,
-            op_f,
-            op_g,
+            op_f: _f,
+            op_g: _g,
             debug: _debug,
         } = instruction;
         Poseidon2VmIoCols::<F> {
@@ -119,8 +119,8 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
             op_c,
             d,
             e,
-            op_f,
-            op_g,
+            op_f: _f,
+            op_g: _g,
             debug: _debug,
         } = instruction.clone();
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);

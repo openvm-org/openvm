@@ -46,7 +46,7 @@ fn instruction_from_line<F: PrimeField64>(line: &str) -> Result<Option<Instructi
         );
     }
 
-    Ok(Some(Instruction::from_isize(
+    Ok(Some(Instruction::large_from_isize(
         opcode, ints[0], ints[1], ints[2], ints[3], ints[4], ints[5], ints[6],
     )))
 }

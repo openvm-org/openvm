@@ -55,6 +55,27 @@ impl<F: Field> Instruction<F> {
         op_c: isize,
         d: isize,
         e: isize,
+    ) -> Self {
+        Self {
+            opcode,
+            op_a: isize_to_field::<F>(op_a),
+            op_b: isize_to_field::<F>(op_b),
+            op_c: isize_to_field::<F>(op_c),
+            d: isize_to_field::<F>(d),
+            e: isize_to_field::<F>(e),
+            op_f: isize_to_field::<F>(0),
+            op_g: isize_to_field::<F>(0),
+            debug: String::new(),
+        }
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn large_from_isize(
+        opcode: OpCode,
+        op_a: isize,
+        op_b: isize,
+        op_c: isize,
+        d: isize,
+        e: isize,
         op_f: isize,
         op_g: isize,
     ) -> Self {
@@ -256,18 +277,26 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let mut public_value_flags = vec![F::zero(); vm.public_values.len()];
 
             match opcode {
-                // d[a] <- e[d[c] + b + d[f] * g]
+                // d[a] <- e[d[c] + b + mem[f] * g]
                 LOADW => {
-                    let index = read!(d, f);
                     let base_pointer = read!(d, c);
+                    let index = if f != F::zero() {
+                        read!(F::two(), f)
+                    } else {
+                        read!(F::zero(), f)
+                    };
                     let value = read!(e, base_pointer + b + index * g);
                     write!(d, a, value);
                 }
-                // e[d[c] + b + d[f] * g] <- d[a]
+                // e[d[c] + b + mem[f] * g] <- d[a]
                 STOREW => {
-                    let index = read!(d, f);
                     let base_pointer = read!(d, c);
                     let value = read!(d, a);
+                    let index = if f != F::zero() {
+                        read!(F::two(), f)
+                    } else {
+                        read!(F::zero(), f)
+                    };
                     write!(e, base_pointer + b + index * g, value);
                 }
                 // d[a] <- pc + INST_WIDTH, pc <- pc + b
