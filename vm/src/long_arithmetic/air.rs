@@ -52,7 +52,7 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
                 limb_sum - long_cols.z_limbs[i],
                 long_cols.carry[i] * AB::Expr::from_canonical_u32(1 << LIMB_SIZE),
             );
-            // no need to impose further restrictions on the carry because of the range checks
+            builder.assert_bool(long_cols.carry[i]);
         }
 
         self.eval_interactions(builder, long_cols);
