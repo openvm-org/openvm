@@ -216,7 +216,6 @@ impl<C: Config> Builder<C> {
                     let valid = self.lt(index, len.clone());
                     self.assert_var_eq(valid, C::N::one());
                 }
-                // To load the pointer we only need to load the first field element array repr.
                 let index = MemIndex {
                     index,
                     offset: 0,
