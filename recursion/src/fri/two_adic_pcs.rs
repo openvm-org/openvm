@@ -11,17 +11,14 @@ use super::{
     verify_batch, verify_challenges, verify_shape_and_sample_challenges, NestedOpenedValues,
     TwoAdicMultiplicativeCosetVariable,
 };
-use crate::{
-    challenger::{DuplexChallengerVariable, FeltChallenger},
-    commit::PcsVariable,
-};
+use crate::{challenger::ChallengerVariable, commit::PcsVariable};
 
 pub fn verify_two_adic_pcs<C: Config>(
     builder: &mut Builder<C>,
     config: &FriConfigVariable<C>,
     rounds: Array<C, TwoAdicPcsRoundVariable<C>>,
     proof: TwoAdicPcsProofVariable<C>,
-    challenger: &mut DuplexChallengerVariable<C>,
+    challenger: &mut impl ChallengerVariable<C>,
 ) where
     C::F: TwoAdicField,
     C::EF: TwoAdicField,
@@ -238,7 +235,7 @@ pub struct TwoAdicFriPcsVariable<C: Config> {
     pub config: FriConfigVariable<C>,
 }
 
-impl<C: Config> PcsVariable<C, DuplexChallengerVariable<C>> for TwoAdicFriPcsVariable<C>
+impl<C: Config> PcsVariable<C> for TwoAdicFriPcsVariable<C>
 where
     C::F: TwoAdicField,
     C::EF: TwoAdicField,
@@ -263,7 +260,7 @@ where
         builder: &mut Builder<C>,
         rounds: Array<C, TwoAdicPcsRoundVariable<C>>,
         proof: Self::Proof,
-        challenger: &mut DuplexChallengerVariable<C>,
+        challenger: &mut impl ChallengerVariable<C>,
     ) {
         verify_two_adic_pcs(builder, &self.config, rounds, proof, challenger)
     }
@@ -287,7 +284,7 @@ pub mod tests {
     use stark_vm::program::Program;
 
     use crate::{
-        challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger},
+        challenger::{duplex::DuplexChallengerVariable, CanObserveVariable, FeltChallenger},
         commit::PcsVariable,
         fri::{
             types::TwoAdicPcsRoundVariable, TwoAdicFriPcsVariable,

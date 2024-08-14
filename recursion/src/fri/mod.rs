@@ -10,9 +10,7 @@ use self::types::{
     DigestVariable, DimensionsVariable, FriChallengesVariable, FriConfigVariable, FriProofVariable,
     FriQueryProofVariable,
 };
-use crate::challenger::{
-    CanObserveVariable, CanSampleBitsVariable, DuplexChallengerVariable, FeltChallenger,
-};
+use crate::challenger::ChallengerVariable;
 
 pub mod domain;
 pub mod hints;
@@ -24,7 +22,7 @@ pub fn verify_shape_and_sample_challenges<C: Config>(
     builder: &mut Builder<C>,
     config: &FriConfigVariable<C>,
     proof: &FriProofVariable<C>,
-    challenger: &mut DuplexChallengerVariable<C>,
+    challenger: &mut impl ChallengerVariable<C>,
 ) -> FriChallengesVariable<C> {
     let mut betas: Array<C, Ext<C::F, C::EF>> = builder.array(proof.commit_phase_commits.len());
 

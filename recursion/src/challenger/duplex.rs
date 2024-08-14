@@ -1,39 +1,19 @@
 use afs_compiler::{
     ir::{RVar, DIGEST_SIZE, PERMUTATION_WIDTH},
-    prelude::{
-        Array, Builder, Config, DslVariable, Ext, Felt, MemIndex, MemVariable, Ptr, Var, Variable,
-    },
+    prelude::{Array, Builder, Config, Ext, Felt, Var},
 };
 use p3_field::AbstractField;
 
-use crate::fri::types::DigestVariable;
-
-/// Reference: [p3_challenger::CanObserve].
-pub trait CanObserveVariable<C: Config, V> {
-    fn observe(&mut self, builder: &mut Builder<C>, value: V);
-
-    fn observe_slice(&mut self, builder: &mut Builder<C>, values: Array<C, V>);
-}
-
-pub trait CanSampleVariable<C: Config, V> {
-    #[allow(dead_code)]
-    fn sample(&mut self, builder: &mut Builder<C>) -> V;
-}
-
-/// Reference: [p3_challenger::FieldChallenger].
-pub trait FeltChallenger<C: Config>:
-    CanObserveVariable<C, Felt<C::F>> + CanSampleVariable<C, Felt<C::F>> + CanSampleBitsVariable<C>
-{
-    fn sample_ext(&mut self, builder: &mut Builder<C>) -> Ext<C::F, C::EF>;
-}
-
-pub trait CanSampleBitsVariable<C: Config> {
-    fn sample_bits(&mut self, builder: &mut Builder<C>, nb_bits: RVar<C::N>)
-        -> Array<C, Var<C::N>>;
-}
+use crate::{
+    challenger::{
+        CanCheckWitness, CanObserveVariable, CanSampleBitsVariable, CanSampleVariable, ChallengerVariable,
+        FeltChallenger,
+    },
+    fri::types::DigestVariable,
+};
 
 /// Reference: [p3_challenger::DuplexChallenger]
-#[derive(Clone, DslVariable)]
+#[derive(Clone)]
 pub struct DuplexChallengerVariable<C: Config> {
     pub sponge_state: Array<C, Felt<C::F>>,
     pub nb_inputs: Var<C::N>,
@@ -64,72 +44,71 @@ impl<C: Config> DuplexChallengerVariable<C> {
         }
     }
 
-    /// Creates a new challenger with the same state as an existing challenger.
-    pub fn copy(&self, builder: &mut Builder<C>) -> Self {
-        let mut sponge_state = builder.dyn_array(PERMUTATION_WIDTH);
-        builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
-            let element = builder.get(&self.sponge_state, i);
-            builder.set(&mut sponge_state, i, element);
-        });
-        let nb_inputs = builder.eval(self.nb_inputs);
-        let mut input_buffer = builder.dyn_array(PERMUTATION_WIDTH);
-        builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
-            let element = builder.get(&self.input_buffer, i);
-            builder.set(&mut input_buffer, i, element);
-        });
-        let nb_outputs = builder.eval(self.nb_outputs);
-        let mut output_buffer = builder.dyn_array(PERMUTATION_WIDTH);
-        builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
-            let element = builder.get(&self.output_buffer, i);
-            builder.set(&mut output_buffer, i, element);
-        });
-        DuplexChallengerVariable::<C> {
-            sponge_state,
-            nb_inputs,
-            input_buffer,
-            nb_outputs,
-            output_buffer,
-        }
-    }
+    // /// Creates a new challenger with the same state as an existing challenger.
+    // pub fn copy(&self, builder: &mut Builder<C>) -> Self {
+    //     let mut sponge_state = builder.dyn_array(PERMUTATION_WIDTH);
+    //     builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
+    //         let element = builder.get(&self.sponge_state, i);
+    //         builder.set(&mut sponge_state, i, element);
+    //     });
+    //     let nb_inputs = builder.eval(self.nb_inputs);
+    //     let mut input_buffer = builder.dyn_array(PERMUTATION_WIDTH);
+    //     builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
+    //         let element = builder.get(&self.input_buffer, i);
+    //         builder.set(&mut input_buffer, i, element);
+    //     });
+    //     let nb_outputs = builder.eval(self.nb_outputs);
+    //     let mut output_buffer = builder.dyn_array(PERMUTATION_WIDTH);
+    //     builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
+    //         let element = builder.get(&self.output_buffer, i);
+    //         builder.set(&mut output_buffer, i, element);
+    //     });
+    //     DuplexChallengerVariable::<C> {
+    //         sponge_state,
+    //         nb_inputs,
+    //         input_buffer,
+    //         nb_outputs,
+    //         output_buffer,
+    //     }
+    // }
+    //
+    // /// Asserts that the state of this challenger is equal to the state of another challenger.
+    // pub fn assert_eq(&self, builder: &mut Builder<C>, other: &Self) {
+    //     builder.assert_var_eq(self.nb_inputs, other.nb_inputs);
+    //     builder.assert_var_eq(self.nb_outputs, other.nb_outputs);
+    //     builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
+    //         let element = builder.get(&self.sponge_state, i);
+    //         let other_element = builder.get(&other.sponge_state, i);
+    //         builder.assert_felt_eq(element, other_element);
+    //     });
+    //     builder.range(0, self.nb_inputs).for_each(|i, builder| {
+    //         let element = builder.get(&self.input_buffer, i);
+    //         let other_element = builder.get(&other.input_buffer, i);
+    //         builder.assert_felt_eq(element, other_element);
+    //     });
+    //     builder.range(0, self.nb_outputs).for_each(|i, builder| {
+    //         let element = builder.get(&self.output_buffer, i);
+    //         let other_element = builder.get(&other.output_buffer, i);
+    //         builder.assert_felt_eq(element, other_element);
+    //     });
+    // }
+    //
+    // pub fn reset(&mut self, builder: &mut Builder<C>) {
+    //     let zero: Var<_> = builder.eval(C::N::zero());
+    //     let zero_felt: Felt<_> = builder.eval(C::F::zero());
+    //     builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
+    //         builder.set(&mut self.sponge_state, i, zero_felt);
+    //     });
+    //     builder.assign(&self.nb_inputs, zero);
+    //     builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
+    //         builder.set(&mut self.input_buffer, i, zero_felt);
+    //     });
+    //     builder.assign(&self.nb_outputs, zero);
+    //     builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
+    //         builder.set(&mut self.output_buffer, i, zero_felt);
+    //     });
+    // }
 
-    /// Asserts that the state of this challenger is equal to the state of another challenger.
-    pub fn assert_eq(&self, builder: &mut Builder<C>, other: &Self) {
-        builder.assert_var_eq(self.nb_inputs, other.nb_inputs);
-        builder.assert_var_eq(self.nb_outputs, other.nb_outputs);
-        builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
-            let element = builder.get(&self.sponge_state, i);
-            let other_element = builder.get(&other.sponge_state, i);
-            builder.assert_felt_eq(element, other_element);
-        });
-        builder.range(0, self.nb_inputs).for_each(|i, builder| {
-            let element = builder.get(&self.input_buffer, i);
-            let other_element = builder.get(&other.input_buffer, i);
-            builder.assert_felt_eq(element, other_element);
-        });
-        builder.range(0, self.nb_outputs).for_each(|i, builder| {
-            let element = builder.get(&self.output_buffer, i);
-            let other_element = builder.get(&other.output_buffer, i);
-            builder.assert_felt_eq(element, other_element);
-        });
-    }
-
-    pub fn reset(&mut self, builder: &mut Builder<C>) {
-        let zero: Var<_> = builder.eval(C::N::zero());
-        let zero_felt: Felt<_> = builder.eval(C::F::zero());
-        builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
-            builder.set(&mut self.sponge_state, i, zero_felt);
-        });
-        builder.assign(&self.nb_inputs, zero);
-        builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
-            builder.set(&mut self.input_buffer, i, zero_felt);
-        });
-        builder.assign(&self.nb_outputs, zero);
-        builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
-            builder.set(&mut self.output_buffer, i, zero_felt);
-        });
-    }
-
-    #[allow(dead_code)]
     pub fn duplexing(&mut self, builder: &mut Builder<C>) {
         builder.range(0, self.nb_inputs).for_each(|i, builder| {
             let element = builder.get(&self.input_buffer, i);
@@ -267,6 +246,14 @@ impl<C: Config> FeltChallenger<C> for DuplexChallengerVariable<C> {
     }
 }
 
+impl<C: Config> CanCheckWitness<C> for DuplexChallengerVariable<C> {
+    fn check_witness(&mut self, builder: &mut Builder<C>, nb_bits: usize, witness: Felt<C::F>) {
+        DuplexChallengerVariable::check_witness(self, builder, nb_bits, witness);
+    }
+}
+
+impl<C: Config> ChallengerVariable<C> for DuplexChallengerVariable<C> {}
+
 #[cfg(test)]
 mod tests {
     use afs_compiler::{
@@ -282,8 +269,9 @@ mod tests {
     use p3_field::AbstractField;
     use p3_uni_stark::{StarkGenericConfig, Val};
 
-    use crate::challenger::DuplexChallengerVariable;
+    use super::DuplexChallengerVariable;
 
+    //noinspection RsDetachedFile
     #[test]
     fn test_compiler_challenger() {
         type SC = BabyBearPoseidon2Config;

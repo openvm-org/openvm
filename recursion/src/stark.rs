@@ -27,7 +27,7 @@ use p3_matrix::{
 use stark_vm::{program::Program, vm::ExecutionSegment};
 
 use crate::{
-    challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger},
+    challenger::{duplex::DuplexChallengerVariable, ChallengerVariable},
     commit::{PcsVariable, PolynomialSpaceVariable},
     folder::RecursiveVerifierConstraintFolder,
     fri::{
@@ -159,7 +159,7 @@ where
         pcs: &TwoAdicFriPcsVariable<C>,
         raps: Vec<&dyn DynRapForRecursion<C>>,
         vk: MultiStarkVerificationAdvice<C>,
-        challenger: &mut DuplexChallengerVariable<C>,
+        challenger: &mut impl ChallengerVariable<C>,
         input: &VerifierInputVariable<C>,
     ) where
         C::F: TwoAdicField,
