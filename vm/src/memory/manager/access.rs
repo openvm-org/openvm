@@ -1,11 +1,9 @@
 use std::{array::from_fn, iter};
 
-use afs_stark_backend::interaction::InteractionBuilder;
 use derive_new::new;
 
-use crate::cpu::NEW_MEMORY_BUS;
-
-// TODO[osama]: to be renamed to MemoryAccessCols
+// TODO[osama]: to be deleted
+// TODO[osama]: to be renamed to MemoryAccess
 #[derive(Clone, Debug, PartialEq, Eq, new)]
 pub struct NewMemoryAccessCols<const WORD_SIZE: usize, T> {
     pub addr_space: T,
@@ -16,6 +14,20 @@ pub struct NewMemoryAccessCols<const WORD_SIZE: usize, T> {
     pub clk_read: T,
     pub data_write: [T; WORD_SIZE],
     pub clk_write: T,
+}
+
+impl<const WORD_SIZE: usize, T: Default> Default for NewMemoryAccessCols<WORD_SIZE, T> {
+    fn default() -> Self {
+        Self {
+            addr_space: T::default(),
+            pointer: T::default(),
+            op_type: T::default(),
+            data_read: from_fn(|_| T::default()),
+            clk_read: T::default(),
+            data_write: from_fn(|_| T::default()),
+            clk_write: T::default(),
+        }
+    }
 }
 
 impl<const WORD_SIZE: usize, T: Clone> NewMemoryAccessCols<WORD_SIZE, T> {
@@ -46,28 +58,4 @@ impl<const WORD_SIZE: usize, T> NewMemoryAccessCols<WORD_SIZE, T> {
     pub fn width() -> usize {
         5 + 2 * WORD_SIZE
     }
-}
-
-pub fn eval_memory_interactions<const WORD_SIZE: usize, AB: InteractionBuilder>(
-    builder: &mut AB,
-    op_cols: NewMemoryAccessCols<WORD_SIZE, AB::Var>,
-    mult: AB::Expr,
-) {
-    builder.push_send(
-        NEW_MEMORY_BUS,
-        iter::once(op_cols.addr_space)
-            .chain(iter::once(op_cols.pointer))
-            .chain(op_cols.data_write)
-            .chain(iter::once(op_cols.clk_write)),
-        mult.clone(),
-    );
-
-    builder.push_receive(
-        NEW_MEMORY_BUS,
-        iter::once(op_cols.addr_space)
-            .chain(iter::once(op_cols.pointer))
-            .chain(op_cols.data_read)
-            .chain(iter::once(op_cols.clk_read)),
-        mult,
-    );
 }

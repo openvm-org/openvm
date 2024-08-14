@@ -5,9 +5,7 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::MemoryAuditChip;
-use crate::memory::{
-    audit::columns::AuditCols, interface::AccessCell, manager::NewMemoryAccessCols, OpType,
-};
+use crate::memory::{audit::columns::AuditCols, manager::access_cell::AccessCell};
 
 impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
     pub fn generate_trace(
@@ -29,15 +27,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
             );
 
             AuditCols::<WORD_SIZE, F>::new(
-                NewMemoryAccessCols::<WORD_SIZE, F>::new(
-                    F::from_canonical_u32(cur_idx[0]),
-                    F::from_canonical_u32(cur_idx[1]),
-                    F::from_canonical_u8(OpType::Write as u8),
-                    data_read,
-                    clk_read,
-                    data_write,
-                    clk_write,
-                ),
+                F::from_canonical_u32(cur_idx[0]),
+                F::from_canonical_u32(cur_idx[1]),
+                AccessCell::<WORD_SIZE, F>::new(data_write, clk_write),
+                AccessCell::<WORD_SIZE, F>::new(data_read, clk_read),
                 is_extra,
                 lt_cols.io.tuple_less_than,
                 lt_cols.aux,

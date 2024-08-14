@@ -4,11 +4,11 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::AccessCell;
-use crate::memory::{audit::MemoryAuditChip, interface::MemoryExpandChip};
+use crate::memory::{audit::MemoryAuditChip, expand_interface::MemoryExpandInterfaceChip};
 
 pub enum MemoryInterface<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
     Volatile(MemoryAuditChip<WORD_SIZE, F>),
-    Persistent(MemoryExpandChip<NUM_WORDS, WORD_SIZE, F>),
+    Persistent(MemoryExpandInterfaceChip<NUM_WORDS, WORD_SIZE, F>),
 }
 
 impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>

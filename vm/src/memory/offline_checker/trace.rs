@@ -9,9 +9,17 @@ use p3_matrix::dense::RowMajorMatrix;
 #[cfg(feature = "parallel")]
 use p3_maybe_rayon::prelude::*;
 
-use super::{air::NewMemoryOfflineChecker, columns::MemoryOfflineCheckerCols, MemoryChip};
-use crate::memory::{manager::access::NewMemoryAccessCols, MemoryAccess, OpType};
+use super::{
+    air::NewMemoryOfflineChecker,
+    columns::{MemoryOfflineCheckerAuxCols, MemoryOfflineCheckerCols, NewMemoryAccess},
+    MemoryChip,
+};
+use crate::memory::{
+    manager::{access_cell::AccessCell, operation::MemoryOperation},
+    MemoryAccess, OpType,
+};
 
+// TODO[osama]: to be deleted
 impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
     /// Each row in the trace follow the same order as the Cols struct:
     /// [clk, mem_row, op_type, same_addr_space, same_pointer, same_addr, same_data, lt_bit, is_valid, is_equal_addr_space_aux, is_equal_pointer_aux, is_equal_data_aux, lt_aux]
@@ -51,31 +59,42 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
 }
 
 impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
-    pub fn memory_access_to_checker_cols<F: PrimeField32>(
+    pub fn memory_access_to_checker_aux_cols<F: PrimeField32>(
         &self,
-        memory_access: NewMemoryAccessCols<WORD_SIZE, F>,
-        enabled: bool,
+        memory_access: &NewMemoryAccess<WORD_SIZE, F>,
         range_checker: Arc<RangeCheckerGateChip>,
-    ) -> MemoryOfflineCheckerCols<WORD_SIZE, F> {
+    ) -> MemoryOfflineCheckerAuxCols<WORD_SIZE, F> {
         let clk_lt_cols = LocalTraceInstructions::generate_trace_row(
             &self.clk_lt_air,
             (
-                memory_access.clk_read.as_canonical_u32(),
-                memory_access.clk_write.as_canonical_u32(),
+                memory_access.old_cell.clk.as_canonical_u32(),
+                memory_access.op.cell.clk.as_canonical_u32(),
                 range_checker.clone(),
             ),
         );
 
-        let addr_space_is_zero_cols =
-            LocalTraceInstructions::generate_trace_row(&self.is_zero_air, memory_access.addr_space);
+        let addr_space_is_zero_cols = LocalTraceInstructions::generate_trace_row(
+            &self.is_zero_air,
+            memory_access.op.addr_space,
+        );
 
-        MemoryOfflineCheckerCols::<WORD_SIZE, F>::new(
-            memory_access,
+        MemoryOfflineCheckerAuxCols::new(
+            memory_access.old_cell,
             addr_space_is_zero_cols.io.is_zero,
-            clk_lt_cols.io.less_than,
-            F::from_bool(enabled),
             addr_space_is_zero_cols.inv,
+            clk_lt_cols.io.less_than,
             clk_lt_cols.aux,
+        )
+    }
+
+    pub fn memory_access_to_checker_cols<F: PrimeField32>(
+        &self,
+        memory_access: &NewMemoryAccess<WORD_SIZE, F>,
+        range_checker: Arc<RangeCheckerGateChip>,
+    ) -> MemoryOfflineCheckerCols<WORD_SIZE, F> {
+        MemoryOfflineCheckerCols::<WORD_SIZE, F>::new(
+            memory_access.op.clone(),
+            self.memory_access_to_checker_aux_cols(memory_access, range_checker.clone()),
         )
     }
 
@@ -84,16 +103,16 @@ impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> MemoryOfflineCheckerCols<WORD_SIZE, F> {
         self.memory_access_to_checker_cols(
-            NewMemoryAccessCols::<WORD_SIZE, F>::new(
-                F::zero(),
-                F::zero(),
-                F::from_canonical_u8(OpType::Read as u8),
-                [F::zero(); WORD_SIZE],
-                F::zero(),
-                [F::zero(); WORD_SIZE],
-                F::zero(),
+            &NewMemoryAccess::<WORD_SIZE, F>::new(
+                MemoryOperation::new(
+                    F::zero(),
+                    F::zero(),
+                    F::from_canonical_u8(OpType::Read as u8),
+                    AccessCell::new([F::zero(); WORD_SIZE], F::zero()),
+                    F::zero(),
+                ),
+                AccessCell::new([F::zero(); WORD_SIZE], F::zero()),
             ),
-            false,
             range_checker,
         )
     }

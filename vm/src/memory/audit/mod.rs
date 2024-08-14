@@ -4,7 +4,7 @@ use afs_primitives::range_gate::RangeCheckerGateChip;
 use p3_field::PrimeField32;
 
 use self::air::MemoryAuditAir;
-use super::interface::AccessCell;
+use super::manager::access_cell::AccessCell;
 
 pub mod air;
 pub mod bridge;

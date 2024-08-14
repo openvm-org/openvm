@@ -10,6 +10,7 @@ use crate::{
 };
 
 pub mod air;
+pub mod bridge;
 pub mod columns;
 mod trace;
 
@@ -27,6 +28,7 @@ impl MemoryOfflineChecker {
     }
 }
 
+// TODO[osama]: to be deleted
 pub struct MemoryChip<const WORD_SIZE: usize, F: PrimeField32> {
     pub air: MemoryOfflineChecker,
     pub accesses: Vec<MemoryAccess<WORD_SIZE, F>>,

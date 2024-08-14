@@ -1,30 +1,25 @@
 use std::{collections::HashMap, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
-use p3_field::{Field, PrimeField32};
+use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
-use self::{access::NewMemoryAccessCols, dimensions::MemoryDimensions, interface::MemoryInterface};
-use super::{audit::MemoryAuditChip, interface::MemoryExpandChip};
-use crate::memory::{decompose, OpType};
+use self::{access_cell::AccessCell, dimensions::MemoryDimensions, interface::MemoryInterface};
+use super::{
+    audit::MemoryAuditChip, expand_interface::MemoryExpandInterfaceChip,
+    offline_checker::columns::NewMemoryAccess,
+};
+use crate::memory::{decompose, manager::operation::MemoryOperation, OpType};
 
 pub mod access;
+pub mod access_cell;
 pub mod dimensions;
 pub mod interface;
-
-#[cfg(test)]
-mod tests;
-
-#[derive(Copy, Clone)]
-pub struct AccessCell<const WORD_SIZE: usize, F: Field> {
-    pub data: [F; WORD_SIZE],
-    pub clk: F,
-}
+pub mod operation;
 
 pub struct MemoryManager<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
     pub interface_chip: MemoryInterface<NUM_WORDS, WORD_SIZE, F>,
     /// Maps (addr_space, pointer) to (data, timestamp)
-    // TODO[osama]: this shouldn't always start as empty in the case of continuations
     memory: HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
 }
 
@@ -36,7 +31,9 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         memory: HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
     ) -> Self {
         Self {
-            interface_chip: MemoryInterface::Persistent(MemoryExpandChip::new(memory_dimensions)),
+            interface_chip: MemoryInterface::Persistent(MemoryExpandInterfaceChip::new(
+                memory_dimensions,
+            )),
             memory,
         }
     }
@@ -62,17 +59,18 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         clk: F,
         addr_space: F,
         pointer: F,
-    ) -> NewMemoryAccessCols<WORD_SIZE, F> {
+    ) -> NewMemoryAccess<WORD_SIZE, F> {
         if addr_space == F::zero() {
             let data = decompose(pointer);
-            return NewMemoryAccessCols::<WORD_SIZE, F>::new(
-                addr_space,
-                pointer,
-                F::from_canonical_u8(OpType::Read as u8),
-                data,
-                clk,
-                data,
-                clk,
+            return NewMemoryAccess::<WORD_SIZE, F>::new(
+                MemoryOperation::new(
+                    addr_space,
+                    pointer,
+                    F::from_canonical_u8(OpType::Read as u8),
+                    AccessCell::new(data, clk),
+                    F::one(),
+                ),
+                AccessCell::new(data, clk),
             );
         }
         debug_assert!((pointer.as_canonical_u32() as usize) % WORD_SIZE == 0);
@@ -87,14 +85,15 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         self.interface_chip
             .touch_address(addr_space, pointer, old_data, clk);
 
-        NewMemoryAccessCols::<WORD_SIZE, F>::new(
-            addr_space,
-            pointer,
-            F::from_canonical_u8(OpType::Read as u8),
-            old_data,
-            old_clk,
-            cell.data,
-            cell.clk,
+        NewMemoryAccess::<WORD_SIZE, F>::new(
+            MemoryOperation::new(
+                addr_space,
+                pointer,
+                F::from_canonical_u8(OpType::Read as u8),
+                *cell,
+                F::one(),
+            ),
+            AccessCell::new(old_data, old_clk),
         )
     }
 
@@ -111,8 +110,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         addr_space: F,
         pointer: F,
         data: [F; WORD_SIZE],
-        // TODO[osama]: this should actually return MemoryOfflineCheckerCols
-    ) -> NewMemoryAccessCols<WORD_SIZE, F> {
+    ) -> NewMemoryAccess<WORD_SIZE, F> {
         assert!(addr_space != F::zero());
         println!("writing word pointer: {:?}", pointer.as_canonical_u32());
         debug_assert!((pointer.as_canonical_u32() as usize) % WORD_SIZE == 0);
@@ -134,14 +132,15 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         self.interface_chip
             .touch_address(addr_space, pointer, old_data, old_clk);
 
-        NewMemoryAccessCols::<WORD_SIZE, F>::new(
-            addr_space,
-            pointer,
-            F::from_canonical_u8(OpType::Write as u8),
-            old_data,
-            old_clk,
-            data,
-            clk,
+        NewMemoryAccess::<WORD_SIZE, F>::new(
+            MemoryOperation::new(
+                addr_space,
+                pointer,
+                F::from_canonical_u8(OpType::Write as u8),
+                *cell,
+                F::one(),
+            ),
+            AccessCell::new(old_data, old_clk),
         )
     }
 

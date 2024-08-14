@@ -68,7 +68,7 @@ fn volatile_memory_offline_checker_test() {
         clk += Val::one();
         checker_trace.extend(
             offline_checker
-                .memory_access_to_checker_cols(mem_access, true, range_checker.clone())
+                .memory_access_to_checker_cols(&mem_access, range_checker.clone())
                 .flatten(),
         );
     }
@@ -79,7 +79,7 @@ fn volatile_memory_offline_checker_test() {
         let (addr_space, pointer) = *all_addresses.choose(&mut rng).unwrap();
         let word = from_fn(|_| Val::from_canonical_u32(rng.next_u32() % MAX_VAL));
 
-        let access_cols = if rng.gen_bool(0.5) {
+        let mem_access = if rng.gen_bool(0.5) {
             memory_manager.write_word(clk, addr_space, pointer, word)
         } else {
             memory_manager.read_word(clk, addr_space, pointer)
@@ -87,7 +87,7 @@ fn volatile_memory_offline_checker_test() {
         clk += Val::one();
         checker_trace.extend(
             offline_checker
-                .memory_access_to_checker_cols(access_cols, true, range_checker.clone())
+                .memory_access_to_checker_cols(&mem_access, range_checker.clone())
                 .flatten(),
         );
     }

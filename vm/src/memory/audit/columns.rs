@@ -4,12 +4,16 @@ use afs_primitives::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 use derive_new::new;
 
 use super::air::MemoryAuditAir;
-use crate::memory::manager::NewMemoryAccessCols;
+use crate::memory::manager::access_cell::AccessCell;
 
 #[allow(clippy::too_many_arguments)]
 #[derive(new)]
 pub struct AuditCols<const WORD_SIZE: usize, T> {
-    pub op_cols: NewMemoryAccessCols<WORD_SIZE, T>,
+    pub addr_space: T,
+    pub pointer: T,
+
+    pub initial_cell: AccessCell<WORD_SIZE, T>,
+    pub final_cell: AccessCell<WORD_SIZE, T>,
 
     pub is_extra: T,
     pub addr_lt: T,
@@ -18,23 +22,27 @@ pub struct AuditCols<const WORD_SIZE: usize, T> {
 
 impl<const WORD_SIZE: usize, T: Clone> AuditCols<WORD_SIZE, T> {
     pub fn from_slice(slc: &[T], audit_air: &MemoryAuditAir<WORD_SIZE>) -> Self {
-        let op_cols_width = NewMemoryAccessCols::<WORD_SIZE, T>::width();
+        let ac_width = AccessCell::<WORD_SIZE, T>::width();
 
         Self {
-            op_cols: NewMemoryAccessCols::from_slice(&slc[..op_cols_width]),
-            is_extra: slc[op_cols_width].clone(),
-            addr_lt: slc[1 + op_cols_width].clone(),
+            addr_space: slc[0].clone(),
+            pointer: slc[1].clone(),
+            initial_cell: AccessCell::from_slice(&slc[2..2 + ac_width]),
+            final_cell: AccessCell::from_slice(&slc[2 + ac_width..2 + 2 * ac_width]),
+            is_extra: slc[2 + 2 * ac_width].clone(),
+            addr_lt: slc[3 + 2 * ac_width].clone(),
             addr_lt_aux: IsLessThanTupleAuxCols::from_slice(
-                &slc[2 + op_cols_width..],
+                &slc[4 + 2 * ac_width..],
                 &audit_air.addr_lt_air,
             ),
         }
     }
 
     pub fn flatten(self) -> Vec<T> {
-        self.op_cols
-            .flatten()
-            .into_iter()
+        iter::once(self.addr_space)
+            .chain(iter::once(self.pointer))
+            .chain(self.initial_cell.flatten())
+            .chain(self.final_cell.flatten())
             .chain(iter::once(self.is_extra))
             .chain(iter::once(self.addr_lt))
             .chain(self.addr_lt_aux.flatten())
@@ -42,7 +50,7 @@ impl<const WORD_SIZE: usize, T: Clone> AuditCols<WORD_SIZE, T> {
     }
 
     pub fn width(audit_air: &MemoryAuditAir<WORD_SIZE>) -> usize {
-        2 + NewMemoryAccessCols::<WORD_SIZE, T>::width()
+        4 + 2 * AccessCell::<WORD_SIZE, T>::width()
             + IsLessThanTupleAuxCols::<T>::width(&audit_air.addr_lt_air)
     }
 }

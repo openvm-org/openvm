@@ -13,13 +13,11 @@ use p3_matrix::Matrix;
 use super::columns::AuditCols;
 use crate::cpu::RANGE_CHECKER_BUS;
 
-// TODO[osama]: consider renaming to MemoryAuditAir
 pub struct MemoryAuditAir<const WORD_SIZE: usize> {
     pub addr_lt_air: IsLessThanTupleAir,
 }
 
 impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
-    // TODO[osama]: rename to addr_space_max_bits and pointer_max_bits
     // TODO[osama]: look for similar renamings thoughout vm/
     pub fn new(addr_space_max_bits: usize, pointer_max_bits: usize, decomp: usize) -> Self {
         Self {
@@ -59,8 +57,8 @@ impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB> for MemoryAuditAir<
         // Ensuring addr_lt is correct
         let lt_cols = IsLessThanTupleCols::new(
             IsLessThanTupleIoCols::new(
-                vec![local.op_cols.address_space, local.op_cols.address],
-                vec![next.op_cols.address_space, next.op_cols.address],
+                vec![local.addr_space, local.pointer],
+                vec![next.addr_space, next.pointer],
                 next.addr_lt,
             ),
             next.addr_lt_aux.clone(),

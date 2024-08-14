@@ -18,9 +18,11 @@ impl<T: Clone> IsLessThanIoCols<T> {
             less_than: slc[2].clone(),
         }
     }
+}
 
-    pub fn flatten(&self) -> Vec<T> {
-        vec![self.x.clone(), self.y.clone(), self.less_than.clone()]
+impl<T> IsLessThanIoCols<T> {
+    pub fn flatten(self) -> Vec<T> {
+        vec![self.x, self.y, self.less_than]
     }
 
     pub fn width() -> usize {
@@ -28,12 +30,21 @@ impl<T: Clone> IsLessThanIoCols<T> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IsLessThanAuxCols<T> {
     pub lower: T,
     // lower_decomp consists of lower decomposed into limbs of size decomp where we also shift
     // the final limb and store it as the last element of lower decomp so we can range check
     pub lower_decomp: Vec<T>,
+}
+
+impl<T: Default> Default for IsLessThanAuxCols<T> {
+    fn default() -> Self {
+        Self {
+            lower: T::default(),
+            lower_decomp: vec![],
+        }
+    }
 }
 
 impl<T: Clone> IsLessThanAuxCols<T> {
@@ -43,15 +54,15 @@ impl<T: Clone> IsLessThanAuxCols<T> {
             lower_decomp: slc[1..].to_vec(),
         }
     }
-
-    pub fn flatten(&self) -> Vec<T> {
-        let mut flattened = vec![self.lower.clone()];
-        flattened.extend(self.lower_decomp.iter().cloned());
-        flattened
-    }
 }
 
 impl<T> IsLessThanAuxCols<T> {
+    pub fn flatten(self) -> Vec<T> {
+        let mut flattened = vec![self.lower];
+        flattened.extend(self.lower_decomp);
+        flattened
+    }
+
     pub fn width(lt_air: &IsLessThanAir) -> usize {
         1 + lt_air.num_limbs + (lt_air.max_bits % lt_air.decomp != 0) as usize
     }
@@ -70,8 +81,10 @@ impl<T: Clone> IsLessThanCols<T> {
 
         Self { io, aux }
     }
+}
 
-    pub fn flatten(&self) -> Vec<T> {
+impl<T> IsLessThanCols<T> {
+    pub fn flatten(self) -> Vec<T> {
         let mut flattened = self.io.flatten();
         flattened.extend(self.aux.flatten());
         flattened

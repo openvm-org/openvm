@@ -86,7 +86,7 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
         flattened.extend_from_slice(&self.less_than);
 
         for i in 0..self.less_than_aux.len() {
-            flattened.extend_from_slice(&self.less_than_aux[i].flatten());
+            flattened.extend_from_slice(self.less_than_aux[i].clone().flatten().as_slice());
         }
 
         flattened.extend_from_slice(&self.is_equal_vec_aux.prods);
