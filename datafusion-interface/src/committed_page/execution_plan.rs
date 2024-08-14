@@ -1,22 +1,18 @@
 use std::sync::Arc;
 
 use afs_page::common::page::Page;
-use afs_stark_backend::config::{Com, PcsProof, PcsProverData, StarkGenericConfig, Val};
 use datafusion::{
-    arrow::{array::RecordBatch, datatypes::Schema},
+    arrow::datatypes::Schema,
     physical_expr::EquivalenceProperties,
     physical_plan::{
         memory::MemoryStream, DisplayAs, DisplayFormatType, ExecutionMode, ExecutionPlan,
         Partitioning, PlanProperties,
     },
 };
-use p3_field::PrimeField64;
-use serde::{de::DeserializeOwned, Serialize};
 
-use super::{utils::convert_to_record_batch, CommittedPage};
+use super::utils::convert_to_record_batch;
 
 pub struct CommittedPageExec {
-    // pub committed_page: Arc<CommittedPage<SC>>,
     pub page: Page,
     pub schema: Schema,
     // metrics: ExecutionPlanMetricsSet,
@@ -24,7 +20,6 @@ pub struct CommittedPageExec {
 }
 
 impl CommittedPageExec {
-    // pub fn new(committed_page: Arc<CommittedPage<SC>>) -> Self {
     pub fn new(page: Page, schema: Schema) -> Self {
         Self {
             page,
@@ -57,7 +52,7 @@ impl ExecutionPlan for CommittedPageExec {
 
     fn with_new_children(
         self: std::sync::Arc<Self>,
-        children: Vec<std::sync::Arc<dyn ExecutionPlan>>,
+        _children: Vec<std::sync::Arc<dyn ExecutionPlan>>,
     ) -> datafusion::error::Result<std::sync::Arc<dyn ExecutionPlan>> {
         Ok(self)
     }
@@ -86,32 +81,7 @@ impl std::fmt::Debug for CommittedPageExec {
 }
 
 impl DisplayAs for CommittedPageExec {
-    fn fmt_as(&self, t: DisplayFormatType, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match t {
-            DisplayFormatType::Default | DisplayFormatType::Verbose => {
-                // write!(
-                //     f,
-                //     "StreamingTableExec: partition_sizes={:?}",
-                //     self.partitions.len(),
-                // )?;
-                // if !self.projected_schema.fields().is_empty() {
-                //     write!(
-                //         f,
-                //         ", projection={}",
-                //         ProjectSchemaDisplay(&self.projected_schema)
-                //     )?;
-                // }
-                // if self.infinite {
-                //     write!(f, ", infinite_source=true")?;
-                // }
-                // if let Some(fetch) = self.limit {
-                //     write!(f, ", fetch={fetch}")?;
-                // }
-
-                // display_orderings(f, &self.projected_output_ordering)?;
-
-                Ok(())
-            }
-        }
+    fn fmt_as(&self, _t: DisplayFormatType, _f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Ok(())
     }
 }

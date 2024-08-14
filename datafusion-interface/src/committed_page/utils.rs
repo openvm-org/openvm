@@ -1,42 +1,50 @@
 use std::sync::Arc;
 
 use afs_page::common::page::Page;
-use afs_stark_backend::config::StarkGenericConfig;
 use datafusion::arrow::{
     array::{ArrayRef, RecordBatch, UInt32Array},
     datatypes::Schema,
 };
 
-use super::CommittedPage;
-use crate::BITS_PER_FE;
+use crate::{BITS_PER_FE, NUM_IDX_COLS};
 
 pub fn convert_to_record_batch(page: Page, schema: Schema) -> RecordBatch {
     // Get the size of each data type for each field
-    let mut data_cols: Vec<Vec<_>> = vec![];
-    let mut field_sizes: Vec<usize> = vec![];
-    for field in schema.fields() {
-        let data_type = (**field).data_type();
-        let num_fe = ((data_type.size() as f64 * 8.0) / BITS_PER_FE as f64).ceil() as usize;
-        field_sizes.push(num_fe);
-        data_cols.push(vec![]);
-    }
+    let field_sizes: Vec<usize> = schema
+        .fields()
+        .iter()
+        .map(|field| {
+            let data_type = (**field).data_type();
+            ((data_type.size() as f64 * 8.0) / BITS_PER_FE as f64).ceil() as usize
+        })
+        .collect();
+    let mut idx_cols = vec![vec![]; NUM_IDX_COLS];
+    let mut data_cols = vec![vec![]; field_sizes.len() - NUM_IDX_COLS];
 
     for row in &page.rows {
-        for (i, field_size) in field_sizes.iter().enumerate() {
+        for (i, _field_size) in field_sizes.iter().enumerate() {
             // TODO: account for field_size
-            let field_data = row.data[i];
-            data_cols[i].push(field_data);
+            if i < NUM_IDX_COLS {
+                idx_cols[i].push(row.idx[i]);
+            } else {
+                data_cols[i - NUM_IDX_COLS].push(row.data[i - NUM_IDX_COLS]);
+            }
         }
     }
 
-    let array_refs: Vec<ArrayRef> = data_cols
+    // TODO: support other data types
+    let mut array_refs: Vec<ArrayRef> = idx_cols
         .into_iter()
         .map(|col| {
-            // Assuming the data type is i32 for simplicity. Adjust as needed.
             let array = UInt32Array::from(col);
             Arc::new(array) as ArrayRef
         })
         .collect();
+
+    array_refs.extend(data_cols.into_iter().map(|col| {
+        let array = UInt32Array::from(col);
+        Arc::new(array) as ArrayRef
+    }));
 
     RecordBatch::try_new(Arc::new(schema), array_refs).unwrap()
 }

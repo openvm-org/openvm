@@ -63,9 +63,9 @@ where
 
     async fn keygen(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
         let schema = self.input.schema();
-        // TODO: this should be (temporarily) 0, but keygen fails w/ idx_len = 0.
+        // TODO: we don't have a way to set the index so we will just take the first column as the index
         let idx_len = 1;
-        let data_len = schema.fields().len();
+        let data_len = schema.fields().len() - 1;
 
         let page_controller: PageController<SC> = PageController::new(
             PAGE_BUS_IDX,

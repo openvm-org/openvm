@@ -11,6 +11,7 @@ use p3_field::PrimeField64;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use self::utils::convert_to_record_batch;
+use crate::NUM_IDX_COLS;
 
 pub mod column;
 pub mod execution_plan;
@@ -63,7 +64,7 @@ where
         let num_rows = rb.num_rows();
         let columns = rb.columns();
 
-        // Initialize a vector to hold the rows
+        // Initialize a vector to hold each row, with an extra column for `is_alloc`
         let mut rows: Vec<Vec<u32>> = vec![vec![0; columns.len() + 1]; num_rows];
 
         // Iterate over columns and fill the rows
@@ -76,7 +77,8 @@ where
             }
         }
 
-        let page = Page::from_2d_vec(&rows, 0, columns.len());
+        // TODO: we will temporarily take the first row as the index and all other rows as the data fields
+        let page = Page::from_2d_vec(&rows, NUM_IDX_COLS, columns.len() - NUM_IDX_COLS);
         Self {
             // TODO: generate a page_id based on the hash of the Page
             page_id: "".to_string(),

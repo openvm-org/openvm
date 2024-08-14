@@ -43,6 +43,10 @@ pub trait AfsNodeExecutable<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     fn output(&self) -> Option<Arc<CommittedPage<SC>>>;
 }
 
+/// AfsNode is a wrapper around the node types that conform to the AfsNodeExecutable trait.
+/// It provides conversion from DataFusion's LogicalPlan to the AfsNode type. AfsNodes are
+/// meant to be executed by the AfsExec engine. They store the necessary information to handle
+/// the cryptographic operations for each type of AfsNode operation.
 pub enum AfsNode<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     PageScan(PageScan<SC, E>),
     Filter(Filter<SC, E>),
@@ -57,6 +61,8 @@ where
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
+    /// Converts a LogicalPlan tree to a flat AfsNode vec. Some LogicalPlan nodes may convert to
+    /// multiple AfsNodes.
     pub fn from(logical_plan: &LogicalPlan, children: ChildrenContainer<SC, E>) -> Self {
         match logical_plan {
             LogicalPlan::TableScan(table_scan) => {
@@ -67,7 +73,12 @@ where
             LogicalPlan::Filter(filter) => {
                 let afs_expr = AfsExpr::from(&filter.predicate);
                 let input = match children {
-                    ChildrenContainer::One(child) => child,
+                    ChildrenContainer::One(child) => {
+                        let first_element = Arc::get_mut(&mut Arc::clone(&child))
+                            .expect("No other references exist")
+                            .remove(0);
+                        Arc::new(first_element)
+                    }
                     _ => panic!("Filter node expects exactly one child"),
                 };
                 AfsNode::Filter(Filter {
@@ -81,6 +92,7 @@ where
         }
     }
 
+    /// Get the inputs to the node as a vector from left to right.
     pub fn inputs(&self) -> Vec<&Arc<AfsNode<SC, E>>> {
         match self {
             AfsNode::PageScan(_) => vec![],
