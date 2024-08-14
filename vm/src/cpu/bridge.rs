@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     cpu::OpCode::{COMP_POS2, PERM_POS2},
-    memory::offline_checker::columns::MemoryOfflineCheckerCols,
+    memory::manager::operation::MemoryOperation,
 };
 
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
@@ -18,7 +18,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
         &self,
         builder: &mut AB,
         io: CpuIoCols<AB::Var>,
-        accesses: [MemoryOfflineCheckerCols<WORD_SIZE, AB::Var>; CPU_MAX_ACCESSES_PER_CYCLE],
+        ops: [MemoryOperation<WORD_SIZE, AB::Var>; CPU_MAX_ACCESSES_PER_CYCLE],
         operation_flags: &BTreeMap<OpCode, AB::Var>,
     ) {
         // Interaction with program (bus 0)
@@ -32,9 +32,9 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
         if self.options.field_arithmetic_enabled {
             let fields = [
                 io.opcode,
-                accesses[0].data()[0],
-                accesses[1].data()[0],
-                accesses[CPU_MAX_READS_PER_CYCLE].data()[0],
+                ops[0].cell.data[0],
+                ops[1].cell.data[0],
+                ops[CPU_MAX_READS_PER_CYCLE].cell.data[0],
             ];
             let count = FIELD_ARITHMETIC_INSTRUCTIONS
                 .iter()

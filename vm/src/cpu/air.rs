@@ -13,7 +13,7 @@ use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
     max_accesses_per_instruction, CpuAir,
     OpCode::*,
-    CPU_MAX_READS_PER_CYCLE, FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH,
+    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH,
 };
 
 impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for CpuAir<WORD_SIZE> {
@@ -80,14 +80,15 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         let CpuAuxCols {
             operation_flags,
             public_value_flags,
-            accesses,
+            mem_ops,
             read0_equals_read1,
             is_equal_vec_aux,
+            mem_oc_aux_cols,
         } = aux;
 
-        let read1 = &accesses[0];
-        let read2 = &accesses[1];
-        let write = &accesses[CPU_MAX_READS_PER_CYCLE];
+        let read1 = &mem_ops[0];
+        let read2 = &mem_ops[1];
+        let write = &mem_ops[CPU_MAX_READS_PER_CYCLE];
 
         // assert that the start pc is correct
         builder.when_first_row().assert_eq(pc, start_pc);
@@ -120,16 +121,16 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
 
         let mut when_loadw = builder.when(loadw_flag);
 
-        when_loadw.assert_eq(read1.addr_space(), d);
-        when_loadw.assert_eq(read1.pointer(), c);
+        when_loadw.assert_eq(read1.addr_space, d);
+        when_loadw.assert_eq(read1.pointer, c);
 
-        when_loadw.assert_eq(read2.addr_space(), e);
-        self.assert_compose(&mut when_loadw, read1.data(), read2.pointer() - b);
+        when_loadw.assert_eq(read2.addr_space, e);
+        self.assert_compose(&mut when_loadw, read1.cell.data, read2.pointer - b);
 
-        when_loadw.assert_eq(write.addr_space(), d);
-        when_loadw.assert_eq(write.pointer(), a);
+        when_loadw.assert_eq(write.addr_space, d);
+        when_loadw.assert_eq(write.pointer, a);
         for i in 0..WORD_SIZE {
-            when_loadw.assert_eq(write.data()[i], read2.data()[i]);
+            when_loadw.assert_eq(write.cell.data[i], read2.cell.data[i]);
         }
 
         when_loadw
@@ -143,16 +144,16 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         write_enabled_check = write_enabled_check + storew_flag;
 
         let mut when_storew = builder.when(storew_flag);
-        when_storew.assert_eq(read1.addr_space(), d);
-        when_storew.assert_eq(read1.pointer(), c);
+        when_storew.assert_eq(read1.addr_space, d);
+        when_storew.assert_eq(read1.pointer, c);
 
-        when_storew.assert_eq(read2.addr_space(), d);
-        when_storew.assert_eq(read2.pointer(), a);
+        when_storew.assert_eq(read2.addr_space, d);
+        when_storew.assert_eq(read2.pointer, a);
 
-        when_storew.assert_eq(write.addr_space(), e);
-        self.assert_compose(&mut when_storew, read1.data(), write.pointer() - b);
+        when_storew.assert_eq(write.addr_space, e);
+        self.assert_compose(&mut when_storew, read1.cell.data, write.pointer - b);
         for i in 0..WORD_SIZE {
-            when_storew.assert_eq(write.data()[i], read2.data()[i]);
+            when_storew.assert_eq(write.cell.data[i], read2.cell.data[i]);
         }
 
         when_storew
@@ -165,11 +166,11 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         write_enabled_check = write_enabled_check + shintw_flag;
 
         let mut when_shintw = builder.when(shintw_flag);
-        when_shintw.assert_eq(read1.addr_space(), d);
-        when_shintw.assert_eq(read1.pointer(), a);
+        when_shintw.assert_eq(read1.addr_space, d);
+        when_shintw.assert_eq(read1.pointer, a);
 
-        when_shintw.assert_eq(write.addr_space(), e);
-        self.assert_compose(&mut when_shintw, read1.data(), write.pointer() - b);
+        when_shintw.assert_eq(write.addr_space, e);
+        self.assert_compose(&mut when_shintw, read1.cell.data, write.pointer - b);
 
         when_shintw
             .when_transition()
@@ -181,9 +182,9 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
 
         let mut when_jal = builder.when(jal_flag);
 
-        when_jal.assert_eq(write.addr_space(), d);
-        when_jal.assert_eq(write.pointer(), a);
-        self.assert_compose(&mut when_jal, write.data(), pc + inst_width);
+        when_jal.assert_eq(write.addr_space, d);
+        when_jal.assert_eq(write.pointer, a);
+        self.assert_compose(&mut when_jal, write.cell.data, pc + inst_width);
 
         when_jal.when_transition().assert_eq(next_pc, pc + b);
 
@@ -194,11 +195,11 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
 
         let mut when_beq = builder.when(beq_flag);
 
-        when_beq.assert_eq(read1.addr_space(), d);
-        when_beq.assert_eq(read1.pointer(), a);
+        when_beq.assert_eq(read1.addr_space, d);
+        when_beq.assert_eq(read1.pointer, a);
 
-        when_beq.assert_eq(read2.addr_space(), e);
-        when_beq.assert_eq(read2.pointer(), b);
+        when_beq.assert_eq(read2.addr_space, e);
+        when_beq.assert_eq(read2.pointer, b);
 
         when_beq
             .when_transition()
@@ -216,11 +217,11 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
 
         let mut when_bne = builder.when(bne_flag);
 
-        when_bne.assert_eq(read1.addr_space(), d);
-        when_bne.assert_eq(read1.pointer(), a);
+        when_bne.assert_eq(read1.addr_space, d);
+        when_bne.assert_eq(read1.pointer, a);
 
-        when_bne.assert_eq(read2.addr_space(), e);
-        when_bne.assert_eq(read2.pointer(), b);
+        when_bne.assert_eq(read2.addr_space, e);
+        when_bne.assert_eq(read2.pointer, b);
 
         when_bne
             .when_transition()
@@ -263,14 +264,14 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         let mut when_publish = builder.when(publish_flag);
 
         when_publish.assert_one(sum_flags);
-        self.assert_compose(&mut when_publish, read1.data(), match_public_value_index);
-        self.assert_compose(&mut when_publish, read2.data(), match_public_value);
+        self.assert_compose(&mut when_publish, read1.cell.data, match_public_value_index);
+        self.assert_compose(&mut when_publish, read2.cell.data, match_public_value);
 
-        when_publish.assert_eq(read1.addr_space(), d);
-        when_publish.assert_eq(read1.pointer(), a);
+        when_publish.assert_eq(read1.addr_space, d);
+        when_publish.assert_eq(read1.pointer, a);
 
-        when_publish.assert_eq(read2.addr_space(), e);
-        when_publish.assert_eq(read2.pointer(), b);
+        when_publish.assert_eq(read2.addr_space, e);
+        when_publish.assert_eq(read2.pointer, b);
 
         // arithmetic operations
         if self.options.field_arithmetic_enabled {
@@ -284,34 +285,38 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
             let mut when_arithmetic = builder.when(arithmetic_flags);
 
             // read from d[b] and e[c]
-            when_arithmetic.assert_eq(read1.addr_space(), d);
-            when_arithmetic.assert_eq(read1.pointer(), b);
+            when_arithmetic.assert_eq(read1.addr_space, d);
+            when_arithmetic.assert_eq(read1.pointer, b);
 
-            when_arithmetic.assert_eq(read2.addr_space(), e);
-            when_arithmetic.assert_eq(read2.pointer(), c);
+            when_arithmetic.assert_eq(read2.addr_space, e);
+            when_arithmetic.assert_eq(read2.pointer, c);
 
             // write to d[a]
-            when_arithmetic.assert_eq(write.addr_space(), d);
-            when_arithmetic.assert_eq(write.pointer(), a);
+            when_arithmetic.assert_eq(write.addr_space, d);
+            when_arithmetic.assert_eq(write.pointer, a);
 
             when_arithmetic
                 .when_transition()
                 .assert_eq(next_pc, pc + inst_width);
         }
 
-        // immediate calculation
-
-        for oc_cols in [read1, read2, write] {
-            SubAir::eval(&self.memory_offline_checker, builder, oc_cols.clone(), ());
+        for i in 0..CPU_MAX_ACCESSES_PER_CYCLE {
+            SubAir::eval(
+                &self.memory_offline_checker,
+                builder,
+                mem_ops[i].clone(),
+                mem_oc_aux_cols[i].clone(),
+            );
         }
+
         // maybe writes to immediate address space are ignored instead of disallowed?
         //builder.assert_zero(write.is_immediate);
 
         // evaluate equality between read1 and read2
 
         let is_equal_vec_io_cols = IsEqualVecIoCols {
-            x: read1.data().to_vec(),
-            y: read2.data().to_vec(),
+            x: read1.cell.data.to_vec(),
+            y: read2.cell.data.to_vec(),
             is_equal: read0_equals_read1,
         };
         SubAir::eval(
@@ -343,6 +348,6 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         builder.assert_eq(write.enabled, write_enabled_check);
 
         // Turn on all interactions
-        self.eval_interactions(builder, io, accesses, &operation_flags);
+        self.eval_interactions(builder, io, mem_ops, &operation_flags);
     }
 }

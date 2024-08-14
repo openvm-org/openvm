@@ -1,4 +1,5 @@
 use std::{
+    array::from_fn,
     collections::{BTreeMap, VecDeque},
     error::Error,
     fmt::Display,
@@ -19,7 +20,10 @@ use super::{
 use crate::{
     cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
     field_extension::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticChip},
-    memory::{compose, decompose, offline_checker::columns::MemoryOfflineCheckerCols},
+    memory::{
+        compose, decompose,
+        offline_checker::columns::{MemoryOfflineCheckerAuxCols, NewMemoryAccess},
+    },
     poseidon2::{columns::Poseidon2VmCols, Poseidon2Chip},
     program::columns::ProgramPreprocessedCols,
     vm::{cycle_tracker::CycleTracker, ExecutionSegment},
@@ -196,8 +200,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
 
             let mut next_pc = pc + F::one();
 
-            let mut accesses =
-                core::array::from_fn(|_| MemoryOfflineCheckerCols::<WORD_SIZE, F>::default());
+            let mut accesses: [_; CPU_MAX_ACCESSES_PER_CYCLE] =
+                core::array::from_fn(|_| NewMemoryAccess::<WORD_SIZE, F>::default());
             let mut num_reads = 0;
             let mut num_writes = 0;
 
@@ -210,21 +214,12 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 ($address_space: expr, $address: expr) => {{
                     num_reads += 1;
                     assert!(num_reads <= CPU_MAX_READS_PER_CYCLE);
-                    let memory_access = vm.memory_manager.read_word(
+                    accesses[num_reads - 1] = vm.memory_manager.read_word(
                         F::from_canonical_usize(timestamp + (num_reads - 1)),
                         $address_space,
                         $address,
                     );
-                    accesses[num_reads - 1] = vm
-                        .cpu_chip
-                        .air
-                        .memory_offline_checker
-                        .memory_access_to_checker_cols(
-                            memory_access.clone(),
-                            true,
-                            vm.range_checker.clone(),
-                        );
-                    compose(memory_access.data_write)
+                    compose(accesses[num_reads - 1].op.cell.data)
                 }};
             }
 
@@ -233,22 +228,14 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     num_writes += 1;
                     assert!(num_writes <= CPU_MAX_WRITES_PER_CYCLE);
                     let word = decompose($data);
-                    let memory_access = vm.memory_manager.write_word(
-                        F::from_canonical_usize(
-                            timestamp + CPU_MAX_READS_PER_CYCLE + (num_writes - 1),
-                        ),
-                        $address_space,
-                        $address,
-                        word,
-                    );
-                    accesses[CPU_MAX_READS_PER_CYCLE + num_writes - 1] = vm
-                        .cpu_chip
-                        .air
-                        .memory_offline_checker
-                        .memory_access_to_checker_cols(
-                            memory_access,
-                            true,
-                            vm.range_checker.clone(),
+                    accesses[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
+                        vm.memory_manager.write_word(
+                            F::from_canonical_usize(
+                                timestamp + CPU_MAX_READS_PER_CYCLE + (num_writes - 1),
+                            ),
+                            $address_space,
+                            $address,
+                            word,
                         );
                 }};
             }
@@ -406,21 +393,23 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             };
 
             // Finalizing memory accesses
-            for access in &mut accesses[num_reads..CPU_MAX_READS_PER_CYCLE] {
-                *access = vm
-                    .cpu_chip
-                    .air
-                    .memory_offline_checker
-                    .disabled_memory_checker_cols(vm.range_checker.clone())
-            }
-            for access in
-                &mut accesses[CPU_MAX_READS_PER_CYCLE + num_writes..CPU_MAX_ACCESSES_PER_CYCLE]
-            {
-                *access = vm
-                    .cpu_chip
-                    .air
-                    .memory_offline_checker
-                    .disabled_memory_checker_cols(vm.range_checker.clone());
+            let mem_ops = from_fn(|i| accesses[i].op.clone());
+            let mut mem_oc_aux_cols =
+                from_fn(|_| MemoryOfflineCheckerAuxCols::<WORD_SIZE, F>::default());
+            for i in 0..CPU_MAX_ACCESSES_PER_CYCLE {
+                if accesses[i].op.enabled.as_canonical_u32() == 1 {
+                    mem_oc_aux_cols[i] = vm
+                        .cpu_chip
+                        .air
+                        .memory_offline_checker
+                        .memory_access_to_checker_aux_cols(&accesses[i], vm.range_checker.clone());
+                } else {
+                    mem_oc_aux_cols[i] = vm
+                        .cpu_chip
+                        .air
+                        .memory_offline_checker
+                        .disabled_memory_checker_aux_cols(vm.range_checker.clone());
+                }
             }
 
             let final_accesses = vm.memory_chip.accesses.len();
@@ -456,8 +445,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
                 &IsEqualVecAir::new(WORD_SIZE),
                 (
-                    accesses[0].op_cols.data_read.to_vec(),
-                    accesses[1].op_cols.data_read.to_vec(),
+                    accesses[0].op.cell.data.to_vec(),
+                    accesses[1].op.cell.data.to_vec(),
                 ),
             );
 
@@ -467,9 +456,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let aux = CpuAuxCols {
                 operation_flags,
                 public_value_flags,
-                accesses,
+                mem_ops,
                 read0_equals_read1,
                 is_equal_vec_aux,
+                mem_oc_aux_cols,
             };
 
             let cols = CpuCols { io, aux };

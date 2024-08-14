@@ -8,7 +8,12 @@ use itertools::Itertools;
 use p3_field::{Field, PrimeField32};
 
 use super::{CpuAir, CpuOptions, OpCode, CPU_MAX_ACCESSES_PER_CYCLE};
-use crate::{memory::offline_checker::columns::MemoryOfflineCheckerCols, vm::ExecutionSegment};
+use crate::{
+    memory::{
+        manager::operation::MemoryOperation, offline_checker::columns::MemoryOfflineCheckerAuxCols,
+    },
+    vm::ExecutionSegment,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuIoCols<T> {
@@ -70,6 +75,7 @@ impl<T: Field> CpuIoCols<T> {
     }
 }
 
+// TODO[osama]: to be removed
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MemoryAccessCols<const WORD_SIZE: usize, T> {
     pub enabled: T,
@@ -115,9 +121,10 @@ impl<const WORD_SIZE: usize, T: Clone> MemoryAccessCols<WORD_SIZE, T> {
 pub struct CpuAuxCols<const WORD_SIZE: usize, T> {
     pub operation_flags: BTreeMap<OpCode, T>,
     pub public_value_flags: Vec<T>,
-    pub accesses: [MemoryOfflineCheckerCols<WORD_SIZE, T>; CPU_MAX_ACCESSES_PER_CYCLE],
+    pub mem_ops: [MemoryOperation<WORD_SIZE, T>; CPU_MAX_ACCESSES_PER_CYCLE],
     pub read0_equals_read1: T,
     pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
+    pub mem_oc_aux_cols: [MemoryOfflineCheckerAuxCols<WORD_SIZE, T>; CPU_MAX_ACCESSES_PER_CYCLE],
 }
 
 impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
@@ -139,21 +146,34 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
         end += cpu_air.options.num_public_values;
         let public_value_flags = slc[start..end].to_vec();
 
-        let accesses = from_fn(|_| {
+        let mem_ops = from_fn(|_| {
             start = end;
-            end += MemoryOfflineCheckerCols::<WORD_SIZE, T>::width(&cpu_air.memory_offline_checker);
-            MemoryOfflineCheckerCols::from_slice(&slc[start..end])
+            end += MemoryOperation::<WORD_SIZE, T>::width();
+            MemoryOperation::<WORD_SIZE, T>::from_slice(&slc[start..end])
         });
 
-        let beq_check = slc[end].clone();
-        let is_equal_vec_aux = IsEqualVecAuxCols::from_slice(&slc[end + 1..], WORD_SIZE);
+        start = end;
+        end += 1;
+        let beq_check = slc[start].clone();
+
+        start = end;
+        end += IsEqualVecAuxCols::<T>::width(WORD_SIZE);
+        let is_equal_vec_aux = IsEqualVecAuxCols::from_slice(&slc[start..end], WORD_SIZE);
+
+        let mem_oc_aux_cols = from_fn(|_| {
+            start = end;
+            end +=
+                MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(&cpu_air.memory_offline_checker);
+            MemoryOfflineCheckerAuxCols::from_slice(&slc[start..end])
+        });
 
         Self {
             operation_flags,
             public_value_flags,
-            accesses,
+            mem_ops,
             read0_equals_read1: beq_check,
             is_equal_vec_aux,
+            mem_oc_aux_cols,
         }
     }
 
@@ -164,21 +184,30 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
         }
         flattened.extend(self.public_value_flags.clone());
         flattened.extend(
-            self.accesses
+            self.mem_ops
                 .iter()
                 .cloned()
-                .flat_map(MemoryOfflineCheckerCols::<WORD_SIZE, T>::flatten),
+                .flat_map(MemoryOperation::<WORD_SIZE, T>::flatten),
         );
         flattened.push(self.read0_equals_read1.clone());
         flattened.extend(self.is_equal_vec_aux.flatten());
+        flattened.extend(
+            self.mem_oc_aux_cols
+                .iter()
+                .cloned()
+                .flat_map(MemoryOfflineCheckerAuxCols::flatten),
+        );
         flattened
     }
 
     pub fn get_width(cpu_air: &CpuAir<WORD_SIZE>) -> usize {
         cpu_air.options.num_enabled_instructions()
             + cpu_air.options.num_public_values
-            + (CPU_MAX_ACCESSES_PER_CYCLE
-                * MemoryOfflineCheckerCols::<WORD_SIZE, T>::width(&cpu_air.memory_offline_checker))
+            + CPU_MAX_ACCESSES_PER_CYCLE
+                * (MemoryOperation::<WORD_SIZE, T>::width()
+                    + MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(
+                        &cpu_air.memory_offline_checker,
+                    ))
             + 1
             + IsEqualVecAuxCols::<T>::width(WORD_SIZE)
     }
@@ -190,7 +219,7 @@ impl<const WORD_SIZE: usize, T: PrimeField32> CpuAuxCols<WORD_SIZE, T> {
         for opcode in vm.options().enabled_instructions() {
             operation_flags.insert(opcode, T::from_bool(opcode == OpCode::NOP));
         }
-        let accesses = from_fn(|_| {
+        let oc_cols: [_; CPU_MAX_ACCESSES_PER_CYCLE] = from_fn(|_| {
             vm.cpu_chip
                 .air
                 .memory_offline_checker
@@ -199,16 +228,17 @@ impl<const WORD_SIZE: usize, T: PrimeField32> CpuAuxCols<WORD_SIZE, T> {
         let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
             &IsEqualVecAir::new(WORD_SIZE),
             (
-                accesses[0].op_cols.data_read.to_vec(),
-                accesses[1].op_cols.data_read.to_vec(),
+                oc_cols[0].io.cell.data.to_vec(),
+                oc_cols[1].io.cell.data.to_vec(),
             ),
         );
         Self {
             operation_flags,
             public_value_flags: vec![T::zero(); vm.options().num_public_values],
-            accesses,
+            mem_ops: from_fn(|i| oc_cols[i].io.clone()),
             read0_equals_read1: T::one(),
             is_equal_vec_aux: is_equal_vec_cols.aux,
+            mem_oc_aux_cols: from_fn(|i| oc_cols[i].aux.clone()),
         }
     }
 }
