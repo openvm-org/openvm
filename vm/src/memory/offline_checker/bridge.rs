@@ -70,7 +70,7 @@ impl MemoryBus {
             address.into(),
         ]
         .into_iter()
-            .chain(data);
+        .chain(data);
 
         builder.push_send(self.0, fields, count);
     }
