@@ -7,50 +7,50 @@ use crate::memory::OpType;
 pub struct MemoryBus(pub usize);
 
 impl MemoryBus {
-    /// Send a write operation through the memory bus.
+    /// Prepares a write operation through the memory bus.
     pub fn write<'a, const BLOCK_SIZE: usize, T>(
         &self,
         timestamp: impl Into<T>,
         address_space: impl Into<T>,
         address: impl Into<T>,
         data: [T; BLOCK_SIZE],
-    ) -> MemoryInteraction<BLOCK_SIZE, T> {
+    ) -> MemoryBusInteraction<BLOCK_SIZE, T> {
         self.access(
-            timestamp,
             OpType::Write,
+            timestamp,
             address_space,
             address,
             data,
         )
     }
 
-    /// Send a read operation through the memory bus.
+    /// Prepares a read operation through the memory bus.
     pub fn read<'a, const BLOCK_SIZE: usize, T>(
         &self,
         timestamp: impl Into<T>,
         address_space: impl Into<T>,
         address: impl Into<T>,
         data: [T; BLOCK_SIZE],
-    ) -> MemoryInteraction<BLOCK_SIZE, T> {
+    ) -> MemoryBusInteraction<BLOCK_SIZE, T> {
         self.access(
-            timestamp,
             OpType::Read,
+            timestamp,
             address_space,
             address,
             data,
         )
     }
 
-    /// Sends a memory operation (read or write) through the memory bus.
+    /// Prepares a memory operation (read or write) through the memory bus.
     pub fn access<const BLOCK_SIZE: usize, T>(
         &self,
-        timestamp: impl Into<T>,
         op_type: OpType,
+        timestamp: impl Into<T>,
         address_space: impl Into<T>,
         address: impl Into<T>,
         data: [T; BLOCK_SIZE],
-    ) -> MemoryInteraction<BLOCK_SIZE, T> {
-        MemoryInteraction {
+    ) -> MemoryBusInteraction<BLOCK_SIZE, T> {
+        MemoryBusInteraction {
             bus_index: self.0,
             timestamp: timestamp.into(),
             op_type,
@@ -62,16 +62,17 @@ impl MemoryBus {
 }
 
 
-pub struct MemoryInteraction<const BLOCK_SIZE: usize, F> {
+pub struct MemoryBusInteraction<const BLOCK_SIZE: usize, T> {
     bus_index: usize,
-    timestamp: F,
+    timestamp: T,
     op_type: OpType,
-    address_space: F,
-    address: F,
-    data: [F; BLOCK_SIZE],
+    address_space: T,
+    address: T,
+    data: [T; BLOCK_SIZE],
 }
 
-impl<const BLOCK_SIZE: usize, F: AbstractField> MemoryInteraction<BLOCK_SIZE, F> {
+impl<const BLOCK_SIZE: usize, F: AbstractField> MemoryBusInteraction<BLOCK_SIZE, F> {
+    /// Finalizes and sends the memory operation with the specified count over the bus.
     pub fn send<AB>(self, count: impl Into<AB::Expr>, builder: &mut AB)
     where
         AB: InteractionBuilder<Expr=F>,

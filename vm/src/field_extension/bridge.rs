@@ -36,8 +36,8 @@ fn eval_rw_interactions<AB: InteractionBuilder>(
             aux.is_valid
         };
         MEMORY_BUS.access(
-            timestamp,
             op_type,
+            timestamp,
             addr_space,
             pointer,
             [element.into()],

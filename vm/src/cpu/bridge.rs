@@ -40,7 +40,8 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 OpType::Read
             };
 
-            MEMORY_BUS.write(
+            MEMORY_BUS.access(
+                op_type,
                 memory_cycle,
                 access.address_space,
                 access.address,
