@@ -40,15 +40,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
             let timestamp = io.clk + F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
 
-            let access = MemoryAccess {
-                timestamp,
-                op_type: OpType::Read,
-                address_space: io.d.into(),
-                address: io_addr.into(),
-                data: [aux_addr.into()],
-            };
-
-            MEMORY_BUS.send_interaction(builder, access, count);
+            MEMORY_BUS.send_read(builder, timestamp, io.d, io_addr, [aux_addr.into()], count)
         }
 
         // READ
@@ -59,16 +51,15 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
             let address = if i < chunks { aux.lhs } else { aux.rhs }
                 + F::from_canonical_usize(if i < chunks { i } else { i - chunks });
 
-            let access = MemoryAccess {
-                timestamp,
-                op_type: OpType::Read,
-                address_space: io.e.into(),
-                address,
-                data: [aux.internal.io.input[i].into()],
-            };
-
             let count = io.is_opcode;
-            MEMORY_BUS.send_interaction(builder, access, count);
+            MEMORY_BUS.send_read(
+                builder,
+                timestamp,
+                io.e,
+                address,
+                [aux.internal.io.input[i].into()],
+                count,
+            )
         }
 
         // WRITE
@@ -78,21 +69,20 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
 
             let address = aux.dst + F::from_canonical_usize(i);
 
-            let access = MemoryAccess {
-                timestamp,
-                op_type: OpType::Write,
-                address_space: io.e.into(),
-                address,
-                data: [aux.internal.io.output[i].into()],
-            };
-
             let count = if i < chunks {
                 io.is_opcode.into()
             } else {
                 io.is_opcode - io.cmp
             };
 
-            MEMORY_BUS.send_interaction(builder, access, count);
+            MEMORY_BUS.send_write(
+                builder,
+                timestamp,
+                io.e,
+                address,
+                [aux.internal.io.output[i].into()],
+                count,
+            )
         }
 
         // DIRECT

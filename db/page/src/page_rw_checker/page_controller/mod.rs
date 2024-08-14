@@ -42,8 +42,8 @@ pub struct Operation {
 }
 
 impl<F: PrimeField64> OfflineCheckerOperation<F> for Operation {
-    fn get_timestamp(&self) -> F {
-        F::from_canonical_usize(self.clk)
+    fn get_timestamp(&self) -> usize {
+        self.clk
     }
 
     fn get_idx(&self) -> Vec<F> {

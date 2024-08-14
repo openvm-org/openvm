@@ -4,7 +4,7 @@ use p3_field::AbstractField;
 use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
 use crate::{
     cpu::{FIELD_EXTENSION_BUS, MEMORY_BUS, WORD_SIZE},
-    memory::{MemoryAccess, OpType},
+    memory::OpType,
 };
 
 fn eval_rw_interactions<AB: InteractionBuilder>(
@@ -28,23 +28,22 @@ fn eval_rw_interactions<AB: InteractionBuilder>(
 
     for (i, element) in ext_element.into_iter().enumerate() {
         let timestamp = aux.start_timestamp + AB::F::from_canonical_usize(ext_element_ind * 4 + i);
-
         let pointer = address + AB::F::from_canonical_usize(i * WORD_SIZE);
-
-        let access = MemoryAccess {
-            timestamp,
-            op_type,
-            address_space: addr_space.into(),
-            address: pointer,
-            data: [element.into()],
-        };
 
         let count = if ext_element_ind == 1 {
             aux.valid_y_read
         } else {
             aux.is_valid
         };
-        MEMORY_BUS.send_interaction(builder, access, count);
+        MEMORY_BUS.send(
+            builder,
+            timestamp,
+            op_type,
+            addr_space,
+            pointer,
+            [element.into()],
+            count,
+        );
     }
 }
 

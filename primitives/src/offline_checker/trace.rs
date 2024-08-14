@@ -140,7 +140,7 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> OfflineCheckerChip<
                 .into_iter()
                 .map(|x| x.as_canonical_u64() as u32),
         );
-        prev_idx_clk.push(prev_timestamp.as_canonical_u64() as u32);
+        prev_idx_clk.push(prev_timestamp as u32);
 
         let mut curr_idx_clk = Vec::with_capacity(curr_idx.len() + 1);
         curr_idx_clk.extend(
@@ -149,7 +149,7 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> OfflineCheckerChip<
                 .into_iter()
                 .map(|x| x.as_canonical_u64() as u32),
         );
-        curr_idx_clk.push(curr_timestamp.as_canonical_u64() as u32);
+        curr_idx_clk.push(curr_timestamp as u32);
 
         self.air.lt_tuple_air.generate_trace_row_aux(
             &prev_idx_clk,
@@ -163,7 +163,7 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> OfflineCheckerChip<
             lt_bit = true;
         }
 
-        *oc_cols.clk = curr_timestamp;
+        *oc_cols.clk = F::from_canonical_usize(curr_timestamp);
         oc_cols.idx.clone_from_slice(&curr_idx);
         oc_cols.data.clone_from_slice(&curr_data);
         *oc_cols.op_type = F::from_canonical_u8(op_type);

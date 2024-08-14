@@ -17,7 +17,7 @@ pub enum OpType {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryAccess<const WORD_SIZE: usize, F> {
-    pub timestamp: F,
+    pub timestamp: usize,
     pub op_type: OpType,
     pub address_space: F,
     pub address: F,
@@ -27,7 +27,7 @@ pub struct MemoryAccess<const WORD_SIZE: usize, F> {
 impl<const WORD_SIZE: usize, F: PrimeField64> OfflineCheckerOperation<F>
     for MemoryAccess<WORD_SIZE, F>
 {
-    fn get_timestamp(&self) -> F {
+    fn get_timestamp(&self) -> usize {
         self.timestamp
     }
 

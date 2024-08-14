@@ -69,7 +69,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         self.last_timestamp = Some(timestamp);
         let data = from_fn(|i| self.memory[&(address_space, address + F::from_canonical_usize(i))]);
         self.accesses.push(MemoryAccess {
-            timestamp: F::from_canonical_usize(timestamp),
+            timestamp,
             op_type: OpType::Read,
             address_space,
             address,
@@ -102,7 +102,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
                 .insert((address_space, address + F::from_canonical_usize(i)), datum);
         }
         self.accesses.push(MemoryAccess {
-            timestamp: F::from_canonical_usize(timestamp),
+            timestamp,
             op_type: OpType::Write,
             address_space,
             address,

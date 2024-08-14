@@ -14,7 +14,6 @@ use crate::{
         OpCode::{COMP_POS2, F_LESS_THAN, PERM_POS2},
         IS_LESS_THAN_BUS,
     },
-    memory::{MemoryAccess, OpType},
 };
 
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
@@ -32,24 +31,20 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             AB::Expr::one() - operation_flags[&OpCode::NOP],
         );
 
-        for (i, access_cols) in accesses.into_iter().enumerate() {
+        for (i, access) in accesses.into_iter().enumerate() {
             let memory_cycle = io.timestamp + AB::F::from_canonical_usize(i);
-            let is_write = i >= CPU_MAX_READS_PER_CYCLE;
 
-            let access = MemoryAccess {
-                timestamp: memory_cycle,
-                op_type: if is_write {
-                    OpType::Write
-                } else {
-                    OpType::Read
-                },
-                address_space: access_cols.address_space.into(),
-                address: access_cols.address.into(),
-                data: access_cols.data.map(|x| x.into()),
-            };
-
-            let count = access_cols.enabled - access_cols.is_immediate;
-            MEMORY_BUS.send_interaction(builder, access, count);
+            let count = access.enabled - access.is_immediate;
+            if i >= CPU_MAX_READS_PER_CYCLE {
+                MEMORY_BUS.send_write(
+                    builder,
+                    memory_cycle,
+                    access.address_space,
+                    access.address,
+                    access.data.map(|x| x.into()),
+                    count,
+                );
+            }
         }
 
         // Interaction with arithmetic (bus 2)
