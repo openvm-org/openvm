@@ -427,7 +427,9 @@ impl<C: Config> Builder<C> {
                 offset: 0,
                 size: 1,
             };
-            builder.operations.push(DslIr::StoreHintWord(arr.ptr(), index));
+            builder
+                .operations
+                .push(DslIr::StoreHintWord(arr.ptr(), index));
         });
 
         arr

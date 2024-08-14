@@ -24,7 +24,7 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
     pub fn ptr(&self) -> Ptr<C::N> {
         match *self {
             Array::Dyn(ptr, _) => ptr,
-            Array::Fixed(_) => panic!("cannot retrieve pointer for a compile-time array")
+            Array::Fixed(_) => panic!("cannot retrieve pointer for a compile-time array"),
         }
     }
 
