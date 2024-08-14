@@ -48,11 +48,11 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
                     AB::Expr::zero()
                 };
 
-            let difference = limb_sum - long_cols.z_limbs[i];
-            builder.assert_zero(
-                difference.clone() * (difference - AB::Expr::from_canonical_u64(1 << LIMB_SIZE)),
+            builder.assert_eq(
+                limb_sum - long_cols.z_limbs[i],
+                long_cols.carry[i] * AB::Expr::from_canonical_u32(1 << LIMB_SIZE),
             );
-            builder.assert_bool(long_cols.carry[i]);
+            // no need to impose further restrictions on the carry because of the range checks
         }
 
         self.eval_interactions(builder, long_cols);
