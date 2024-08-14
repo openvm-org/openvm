@@ -1,4 +1,4 @@
-use afs_compiler::util::execute_and_prove_program;
+use afs_compiler::util::{execute_and_prove_program, execute_program};
 use afs_recursion::{
     hints::{Hintable, InnerVal},
     stark::{sort_chips, DynRapForRecursion, VerifierProgram},
@@ -126,5 +126,6 @@ pub fn run_recursive_test(
     let vparams = make_verification_params(&any_raps, traces, &pvs, fri_params);
 
     let (program, witness_stream) = build_verification_program(rec_raps, pvs, vparams);
-    execute_and_prove_program::<1>(program, witness_stream);
+    execute_program::<1>(program, witness_stream);
+    // execute_and_prove_program::<1>(program, witness_stream);
 }

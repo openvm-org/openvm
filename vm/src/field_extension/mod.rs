@@ -129,6 +129,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
             op_c,
             d,
             e,
+            op_f,
+            op_g,
             debug: _debug,
         } = instruction;
         assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));

@@ -28,7 +28,7 @@ pub const POSEIDON2_BUS: usize = 5;
 pub const POSEIDON2_DIRECT_BUS: usize = 6;
 pub const IS_LESS_THAN_BUS: usize = 7;
 
-pub const CPU_MAX_READS_PER_CYCLE: usize = 2;
+pub const CPU_MAX_READS_PER_CYCLE: usize = 3;
 pub const CPU_MAX_WRITES_PER_CYCLE: usize = 1;
 pub const CPU_MAX_ACCESSES_PER_CYCLE: usize = CPU_MAX_READS_PER_CYCLE + CPU_MAX_WRITES_PER_CYCLE;
 
@@ -112,23 +112,23 @@ impl OpCode {
 
 fn max_accesses_per_instruction(opcode: OpCode) -> usize {
     match opcode {
-        LOADW | STOREW => 3,
+        LOADW | STOREW => 4,
         // JAL only does WRITE, but it is done as timestamp + 2
-        JAL => 3,
-        BEQ | BNE => 2,
+        JAL => 4,
+        BEQ | BNE => 3,
         TERMINATE => 0,
-        PUBLISH => 2,
-        opcode if FIELD_ARITHMETIC_INSTRUCTIONS.contains(&opcode) => 3,
+        PUBLISH => 3,
+        opcode if FIELD_ARITHMETIC_INSTRUCTIONS.contains(&opcode) => 4,
         opcode if FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode) => {
             FieldExtensionArithmeticAir::max_accesses_per_instruction(opcode)
         }
-        F_LESS_THAN => 3,
+        F_LESS_THAN => 4,
         FAIL => 0,
         PRINTF => 1,
         COMP_POS2 | PERM_POS2 => {
             Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(opcode)
         }
-        SHINTW => 3,
+        SHINTW => 4,
         HINT_INPUT | HINT_BITS => 0,
         CT_START | CT_END => 0,
         NOP => 0,

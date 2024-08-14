@@ -61,7 +61,7 @@ impl<F: PrimeField64> ProgramChip<F> {
         while !program.len().is_power_of_two() {
             program
                 .instructions
-                .push(Instruction::from_isize(FAIL, 0, 0, 0, 0, 0));
+                .push(Instruction::from_isize(FAIL, 0, 0, 0, 0, 0, 0, 0));
             program.debug_infos.push(None);
         }
         Self {

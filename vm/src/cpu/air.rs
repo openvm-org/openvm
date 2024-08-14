@@ -81,6 +81,8 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
             op_c: c,
             d,
             e,
+            op_f,
+            op_g,
         } = io;
         let CpuIoCols {
             timestamp: next_timestamp,
@@ -98,6 +100,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
 
         let read1 = &accesses[0];
         let read2 = &accesses[1];
+        let read3 = &accesses[2];
         let write = &accesses[CPU_MAX_READS_PER_CYCLE];
 
         // assert that the start pc is correct
@@ -121,12 +124,14 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         // keep track of when memory accesses should be enabled
         let mut read1_enabled_check = AB::Expr::zero();
         let mut read2_enabled_check = AB::Expr::zero();
+        let mut read3_enabled_check = AB::Expr::zero();
         let mut write_enabled_check = AB::Expr::zero();
 
         // LOADW: d[a] <- e[d[c] + b]
         let loadw_flag = operation_flags[&LOADW];
         read1_enabled_check = read1_enabled_check + loadw_flag;
         read2_enabled_check = read2_enabled_check + loadw_flag;
+        read3_enabled_check = read3_enabled_check + loadw_flag;
         write_enabled_check = write_enabled_check + loadw_flag;
 
         let mut when_loadw = builder.when(loadw_flag);
@@ -151,6 +156,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         let storew_flag = operation_flags[&STOREW];
         read1_enabled_check = read1_enabled_check + storew_flag;
         read2_enabled_check = read2_enabled_check + storew_flag;
+        read3_enabled_check = read3_enabled_check + storew_flag;
         write_enabled_check = write_enabled_check + storew_flag;
 
         let mut when_storew = builder.when(storew_flag);
@@ -363,6 +369,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         // check accesses enabled
         builder.assert_eq(read1.enabled, read1_enabled_check);
         builder.assert_eq(read2.enabled, read2_enabled_check);
+        builder.assert_eq(read3.enabled, read3_enabled_check);
         builder.assert_eq(write.enabled, write_enabled_check);
 
         // Turn on all interactions

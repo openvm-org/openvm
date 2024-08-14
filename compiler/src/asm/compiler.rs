@@ -8,7 +8,7 @@ use super::{config::AsmConfig, AssemblyCode, BasicBlock, IndexTriple, ValueOrCon
 use crate::{
     asm::AsmInstruction,
     ir::{Array, DslIr, Ext, Felt, Ptr, RVar, Var},
-    prelude::TracedVec,
+    prelude::{MemIndex, TracedVec},
 };
 
 /// The memory location for the top of memory
@@ -438,62 +438,46 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 }
                 DslIr::LoadV(var, ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
-                        AsmInstruction::LoadFI(var.fp(), ptr.fp(), index * size + offset),
+                        AsmInstruction::LoadFI(var.fp(), ptr.fp(), 0, size, index * size + offset),
                         debug_info.clone(),
                     ),
-                    IndexTriple::Var(index, offset, size) => {
-                        self.add_scaled(A0, ptr.fp(), index, size, debug_info.clone());
-                        self.push(AsmInstruction::LoadFI(var.fp(), A0, offset), debug_info)
-                    }
+                    IndexTriple::Var(index, offset, size) => self.push(
+                        AsmInstruction::LoadFI(var.fp(), ptr.fp(), index, size, offset),
+                        debug_info.clone(),
+                    ),
                 },
                 DslIr::LoadF(var, ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
-                        AsmInstruction::LoadFI(var.fp(), ptr.fp(), index * size + offset),
+                        AsmInstruction::LoadFI(var.fp(), ptr.fp(), 0, size, index * size + offset),
                         debug_info.clone(),
                     ),
-                    IndexTriple::Var(index, offset, size) => {
-                        self.add_scaled(A0, ptr.fp(), index, size, debug_info.clone());
-                        self.push(AsmInstruction::LoadFI(var.fp(), A0, offset), debug_info)
-                    }
+                    IndexTriple::Var(index, offset, size) => self.push(
+                        AsmInstruction::LoadFI(var.fp(), ptr.fp(), index, size, offset),
+                        debug_info.clone(),
+                    ),
                 },
-                DslIr::LoadE(var, ptr, index) => match index.fp() {
-                    IndexTriple::Const(index, offset, size) => {
-                        self.load_ext(var, ptr.fp(), index * size + offset, debug_info)
-                    }
-                    IndexTriple::Var(index, offset, size) => {
-                        self.add_scaled(A0, ptr.fp(), index, size, debug_info.clone());
-                        self.load_ext(var, A0, offset, debug_info)
-                    }
-                },
+                DslIr::LoadE(var, ptr, index) => self.load_ext(var, ptr.fp(), index, debug_info),
                 DslIr::StoreV(var, ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
-                        AsmInstruction::StoreFI(var.fp(), ptr.fp(), index * size + offset),
+                        AsmInstruction::StoreFI(var.fp(), ptr.fp(), 0, size, index * size + offset),
                         debug_info.clone(),
                     ),
-                    IndexTriple::Var(index, offset, size) => {
-                        self.add_scaled(A0, ptr.fp(), index, size, debug_info.clone());
-                        self.push(AsmInstruction::StoreFI(var.fp(), A0, offset), debug_info)
-                    }
+                    IndexTriple::Var(index, offset, size) => self.push(
+                        AsmInstruction::StoreFI(var.fp(), ptr.fp(), index, size, offset),
+                        debug_info.clone(),
+                    ),
                 },
                 DslIr::StoreF(var, ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
-                        AsmInstruction::StoreFI(var.fp(), ptr.fp(), index * size + offset),
+                        AsmInstruction::StoreFI(var.fp(), ptr.fp(), 0, size, index * size + offset),
                         debug_info.clone(),
                     ),
-                    IndexTriple::Var(index, offset, size) => {
-                        self.add_scaled(A0, ptr.fp(), index, size, debug_info.clone());
-                        self.push(AsmInstruction::StoreFI(var.fp(), A0, offset), debug_info)
-                    }
+                    IndexTriple::Var(index, offset, size) => self.push(
+                        AsmInstruction::StoreFI(var.fp(), ptr.fp(), index, size, offset),
+                        debug_info.clone(),
+                    ),
                 },
-                DslIr::StoreE(var, ptr, index) => match index.fp() {
-                    IndexTriple::Const(index, offset, size) => {
-                        self.store_ext(var, ptr.fp(), index * size + offset, debug_info)
-                    }
-                    IndexTriple::Var(index, offset, size) => {
-                        self.add_scaled(A0, ptr.fp(), index, size, debug_info.clone());
-                        self.store_ext(var, A0, offset, debug_info)
-                    }
-                },
+                DslIr::StoreE(var, ptr, index) => self.store_ext(var, ptr.fp(), index, debug_info),
                 DslIr::HintBitsF(var) => {
                     self.push(AsmInstruction::HintBits(var.fp()), debug_info);
                 }
@@ -904,29 +888,81 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         }
     }
 
-    fn load_ext(&mut self, val: Ext<F, EF>, addr: i32, offset: F, debug_info: Option<DebugInfo>) {
-        for i in 0..EF::D {
-            self.push(
-                AsmInstruction::LoadFI(
-                    val.fp() + (i * self.word_size) as i32,
-                    addr,
-                    offset + F::from_canonical_usize(i * self.word_size),
-                ),
-                debug_info.clone(),
-            )
+    fn load_ext(
+        &mut self,
+        val: Ext<F, EF>,
+        addr: i32,
+        index: MemIndex<F>,
+        debug_info: Option<DebugInfo>,
+    ) {
+        match index.fp() {
+            IndexTriple::Const(index, offset, size) => {
+                for i in 0..EF::D {
+                    self.push(
+                        AsmInstruction::LoadFI(
+                            val.fp() + (i * self.word_size) as i32,
+                            addr,
+                            0,
+                            size,
+                            index * size + offset + F::from_canonical_usize(i * self.word_size),
+                        ),
+                        debug_info.clone(),
+                    )
+                }
+            }
+            IndexTriple::Var(index, offset, size) => {
+                for i in 0..EF::D {
+                    self.push(
+                        AsmInstruction::LoadFI(
+                            val.fp() + (i * self.word_size) as i32,
+                            addr,
+                            index,
+                            size,
+                            offset + F::from_canonical_usize(i * self.word_size),
+                        ),
+                        debug_info.clone(),
+                    )
+                }
+            }
         }
     }
 
-    fn store_ext(&mut self, val: Ext<F, EF>, addr: i32, offset: F, debug_info: Option<DebugInfo>) {
-        for i in 0..EF::D {
-            self.push(
-                AsmInstruction::StoreFI(
-                    val.fp() + (i * self.word_size) as i32,
-                    addr,
-                    offset + F::from_canonical_usize(i * self.word_size),
-                ),
-                debug_info.clone(),
-            )
+    fn store_ext(
+        &mut self,
+        val: Ext<F, EF>,
+        addr: i32,
+        index: MemIndex<F>,
+        debug_info: Option<DebugInfo>,
+    ) {
+        match index.fp() {
+            IndexTriple::Const(index, offset, size) => {
+                for i in 0..EF::D {
+                    self.push(
+                        AsmInstruction::StoreFI(
+                            val.fp() + (i * self.word_size) as i32,
+                            addr,
+                            0,
+                            size,
+                            index * size + offset + F::from_canonical_usize(i * self.word_size),
+                        ),
+                        debug_info.clone(),
+                    )
+                }
+            }
+            IndexTriple::Var(index, offset, size) => {
+                for i in 0..EF::D {
+                    self.push(
+                        AsmInstruction::StoreFI(
+                            val.fp() + (i * self.word_size) as i32,
+                            addr,
+                            index,
+                            size,
+                            offset + F::from_canonical_usize(i * self.word_size),
+                        ),
+                        debug_info.clone(),
+                    )
+                }
+            }
         }
     }
 

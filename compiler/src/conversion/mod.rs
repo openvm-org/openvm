@@ -45,6 +45,32 @@ fn inst<F: PrimeField64>(
         op_c,
         d: d.to_field(),
         e: e.to_field(),
+        op_f: F::zero(),
+        op_g: F::zero(),
+        debug: String::new(),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn large_inst<F: PrimeField64>(
+    opcode: OpCode,
+    op_a: F,
+    op_b: F,
+    op_c: F,
+    d: AS,
+    e: AS,
+    op_f: F,
+    op_g: F,
+) -> Instruction<F> {
+    Instruction {
+        opcode,
+        op_a,
+        op_b,
+        op_c,
+        d: d.to_field(),
+        e: e.to_field(),
+        op_f,
+        op_g,
         debug: String::new(),
     }
 }
@@ -57,6 +83,8 @@ fn dbg<F: PrimeField64>(opcode: OpCode, debug: String) -> Instruction<F> {
         op_c: F::zero(),
         d: F::zero(),
         e: F::zero(),
+        op_f: F::zero(),
+        op_g: F::zero(),
         debug,
     }
 }
@@ -303,26 +331,30 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
 ) -> Program<F> {
     let instructions = match instruction {
         AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
-        AsmInstruction::LoadFI(dst, src, offset) => vec![
-            // mem[dst] <- mem[mem[src] + offset]
-            inst(
+        AsmInstruction::LoadFI(dst, src, index, size, offset) => vec![
+            // mem[dst] <- mem[mem[src] + offset + mem[index] * size]
+            large_inst(
                 LOADW,
                 i32_f(dst),
                 offset,
                 i32_f(src),
                 AS::Memory,
                 AS::Memory,
+                i32_f(index),
+                size,
             ),
         ],
-        AsmInstruction::StoreFI(val, addr, offset) => vec![
-            // mem[mem[addr] + offset] <- mem[val]
-            inst(
+        AsmInstruction::StoreFI(val, addr, index, size, offset) => vec![
+            // mem[mem[addr] + offset + mem[index] * size] <- mem[val]
+            large_inst(
                 STOREW,
                 i32_f(val),
                 offset,
                 i32_f(addr),
                 AS::Memory,
                 AS::Memory,
+                i32_f(index),
+                size,
             ),
         ],
         AsmInstruction::Jump(dst, label) => {

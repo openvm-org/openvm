@@ -7,15 +7,15 @@ use super::A0;
 
 #[derive(Debug, Clone)]
 pub enum AsmInstruction<F, EF> {
-    /// Load word (dst, src, offset).
+    /// Load word (dst, src, var_index, size, offset).
     ///
-    /// Load a value from the address stored at src(fp) + offset into dst(fp).
-    LoadFI(i32, i32, F),
+    /// Load a value from the address stored at src(fp) + mem[var_index] * size + offset into dst(fp).
+    LoadFI(i32, i32, i32, F, F),
 
-    /// Store word (val, addr, offset)
+    /// Store word (val, addr, var_index, size, offset)
     ///
-    /// Store a value from val(fp) into the address stored at addr(fp) + offset.
-    StoreFI(i32, i32, F),
+    /// Store a value from val(fp) into the address stored at addr(fp) + mem[var_index] * size + offset.
+    StoreFI(i32, i32, i32, F, F),
 
     /// Set dst = imm.
     ImmF(i32, F),
@@ -144,11 +144,19 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
     pub fn fmt(&self, labels: &BTreeMap<F, String>, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
-            AsmInstruction::LoadFI(dst, src, offset) => {
-                write!(f, "lwi   ({})fp, ({})fp, {}", dst, src, offset)
+            AsmInstruction::LoadFI(dst, src, var_index, size, offset) => {
+                write!(
+                    f,
+                    "lwi   ({})fp, ({})fp, ({})fp, {}, {}",
+                    dst, src, var_index, size, offset
+                )
             }
-            AsmInstruction::StoreFI(dst, src, offset) => {
-                write!(f, "swi   ({})fp, ({})fp, {}", dst, src, offset)
+            AsmInstruction::StoreFI(dst, src, var_index, size, offset) => {
+                write!(
+                    f,
+                    "lwi   ({})fp, ({})fp, ({})fp, {}, {}",
+                    dst, src, var_index, size, offset
+                )
             }
             AsmInstruction::ImmF(dst, src) => {
                 write!(f, "imm   ({})fp, ({})", dst, src)

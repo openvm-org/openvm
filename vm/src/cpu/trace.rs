@@ -25,6 +25,7 @@ use crate::{
     vm::ExecutionSegment,
 };
 
+#[allow(clippy::too_many_arguments)]
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
 pub struct Instruction<F> {
     pub opcode: OpCode,
@@ -33,6 +34,8 @@ pub struct Instruction<F> {
     pub op_c: F,
     pub d: F,
     pub e: F,
+    pub op_f: F,
+    pub op_g: F,
     pub debug: String,
 }
 
@@ -44,6 +47,7 @@ pub fn isize_to_field<F: Field>(value: isize) -> F {
 }
 
 impl<F: Field> Instruction<F> {
+    #[allow(clippy::too_many_arguments)]
     pub fn from_isize(
         opcode: OpCode,
         op_a: isize,
@@ -51,6 +55,8 @@ impl<F: Field> Instruction<F> {
         op_c: isize,
         d: isize,
         e: isize,
+        op_f: isize,
+        op_g: isize,
     ) -> Self {
         Self {
             opcode,
@@ -59,6 +65,8 @@ impl<F: Field> Instruction<F> {
             op_c: isize_to_field::<F>(op_c),
             d: isize_to_field::<F>(d),
             e: isize_to_field::<F>(e),
+            op_f: isize_to_field::<F>(op_f),
+            op_g: isize_to_field::<F>(op_g),
             debug: String::new(),
         }
     }
@@ -71,6 +79,8 @@ impl<F: Field> Instruction<F> {
             op_c: F::zero(),
             d: F::zero(),
             e: F::zero(),
+            op_f: F::zero(),
+            op_g: F::zero(),
             debug: String::from(debug),
         }
     }
@@ -177,6 +187,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let c = instruction.op_c;
             let d = instruction.d;
             let e = instruction.e;
+            let f = instruction.op_f;
+            let g = instruction.op_g;
             let debug = instruction.debug.clone();
 
             let io = CpuIoCols {
@@ -188,6 +200,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 op_c: c,
                 d,
                 e,
+                op_f: f,
+                op_g: g,
             };
 
             let mut next_pc = pc + F::one();
@@ -242,17 +256,19 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let mut public_value_flags = vec![F::zero(); vm.public_values.len()];
 
             match opcode {
-                // d[a] <- e[d[c] + b]
+                // d[a] <- e[d[c] + b + d[f] * g]
                 LOADW => {
+                    let index = read!(d, f);
                     let base_pointer = read!(d, c);
-                    let value = read!(e, base_pointer + b);
+                    let value = read!(e, base_pointer + b + index * g);
                     write!(d, a, value);
                 }
-                // e[d[c] + b] <- d[a]
+                // e[d[c] + b + d[f] * g] <- d[a]
                 STOREW => {
+                    let index = read!(d, f);
                     let base_pointer = read!(d, c);
                     let value = read!(d, a);
-                    write!(e, base_pointer + b, value);
+                    write!(e, base_pointer + b + index * g, value);
                 }
                 // d[a] <- pc + INST_WIDTH, pc <- pc + b
                 JAL => {
