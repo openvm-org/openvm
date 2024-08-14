@@ -162,6 +162,13 @@ impl<C: Config> Builder<C> {
         Array::Dyn(ptr, Usize::Var(len))
     }
 
+    pub fn array_copy<V: MemVariable<C>>(&mut self, src: &Array<C, V>, dst: &mut Array<C, V>) {
+        self.range(0, src.len()).for_each(|i, builder| {
+            let value = builder.get(src, i);
+            builder.set(dst, i, value);
+        });
+    }
+
     pub fn get<V: MemVariable<C>, I: Into<RVar<C::N>>>(
         &mut self,
         slice: &Array<C, V>,
