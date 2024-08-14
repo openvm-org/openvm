@@ -8,13 +8,13 @@ pub struct MemoryBus(pub usize);
 
 impl MemoryBus {
     /// Send a write operation through the memory bus.
-    pub fn send_write<const WORD_SIZE: usize, AB: InteractionBuilder>(
+    pub fn send_write<const BLOCK_SIZE: usize, AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         timestamp: impl Into<AB::Expr>,
         address_space: impl Into<AB::Expr>,
         address: impl Into<AB::Expr>,
-        data: [AB::Expr; WORD_SIZE],
+        data: [AB::Expr; BLOCK_SIZE],
         count: impl Into<AB::Expr>,
     ) {
         self.send(
@@ -23,19 +23,19 @@ impl MemoryBus {
             OpType::Write,
             address_space,
             address,
-            data.into(),
+            data,
             count,
         );
     }
 
     /// Send a read operation through the memory bus.
-    pub fn send_read<const WORD_SIZE: usize, AB: InteractionBuilder>(
+    pub fn send_read<const BLOCK_SIZE: usize, AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         timestamp: impl Into<AB::Expr>,
         address_space: impl Into<AB::Expr>,
         address: impl Into<AB::Expr>,
-        data: [AB::Expr; WORD_SIZE],
+        data: [AB::Expr; BLOCK_SIZE],
         count: impl Into<AB::Expr>,
     ) {
         self.send(
@@ -50,14 +50,14 @@ impl MemoryBus {
     }
 
     /// Sends a memory operation (read or write) through the memory bus.
-    pub fn send<const WORD_SIZE: usize, AB: InteractionBuilder>(
+    pub fn send<const BLOCK_SIZE: usize, AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         timestamp: impl Into<AB::Expr>,
         op_type: OpType,
         address_space: impl Into<AB::Expr>,
         address: impl Into<AB::Expr>,
-        data: [AB::Expr; WORD_SIZE],
+        data: [AB::Expr; BLOCK_SIZE],
         count: impl Into<AB::Expr>,
     ) {
         let fields = [
