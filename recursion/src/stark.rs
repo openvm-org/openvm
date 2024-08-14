@@ -209,7 +209,7 @@ where
         }
 
         let mut challenges = Vec::new();
-        let mut exposed_values_vec = vec![vec![vec![]; num_phases]; num_airs];
+        let mut exposed_values_by_air = vec![vec![vec![]; num_phases]; num_airs];
         for phase_idx in 0..num_phases {
             let num_to_sample: usize = 2;
 
@@ -224,13 +224,14 @@ where
             );
 
             // For each RAP, the exposed values in the current phase
-            for j in 0..num_airs {
+            for (j, exposed_values_after_challenge) in exposed_values_by_air.iter_mut().enumerate()
+            {
                 let exposed_values = builder.get(&proof.exposed_values_after_challenge, j);
                 let values = builder.get(&exposed_values, phase_idx);
                 let values_len = vk.per_air[j].num_exposed_values_after_challenge[phase_idx];
                 for k in 0..values_len {
                     let value = builder.get(&values, k);
-                    exposed_values_vec[j][phase_idx].push(value);
+                    exposed_values_after_challenge[phase_idx].push(value);
                     let felts = builder.ext2felt(value);
                     challenger.observe_slice(builder, felts);
                 }
@@ -511,20 +512,6 @@ where
             // Get the domains from the chip itself.
             let qc_domains = quotient_domain.split_domains_const(builder, log_quotient_degree);
 
-            // Get the exposed values after challenge.
-            // let mut exposed_values_after_challenge = Vec::new();
-
-            // let exposed_values = builder.get(&proof.exposed_values_after_challenge, index);
-            // for j in 0..air_const.num_exposed_values_after_challenge.len() {
-            //     // let values = builder.get(&exposed_values, j);
-            //     let mut values_vec = Vec::new();
-            //     for k in 0..air_const.num_exposed_values_after_challenge[j] {
-            //         let value = builder.get(&values, k);
-            //         values_vec.push(value);
-            //     }
-            //     exposed_values_after_challenge.push(values_vec);
-            // }
-
             let pvs = builder.get(public_values, index);
             Self::verify_single_rap_constraints(
                 builder,
@@ -540,7 +527,7 @@ where
                 alpha,
                 after_challenge_values,
                 &challenges,
-                &exposed_values_vec[index],
+                &exposed_values_by_air[index],
                 air_const.interaction_chunk_size,
             );
         }

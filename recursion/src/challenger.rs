@@ -280,7 +280,7 @@ impl<C: Config> FeltChallenger<C> for DuplexChallengerVariable<C> {
 mod tests {
     use afs_compiler::{
         asm::{AsmBuilder, AsmConfig},
-        ir::{Felt, Usize, Var, PERMUTATION_WIDTH},
+        ir::Felt,
         util::execute_program_and_generate_traces,
     };
     use afs_test_utils::{
@@ -310,7 +310,6 @@ mod tests {
 
         let mut builder = AsmBuilder::<F, EF>::default();
 
-        let width: Var<_> = builder.eval(F::from_canonical_usize(PERMUTATION_WIDTH));
         let mut challenger = DuplexChallengerVariable::<AsmConfig<F, EF>>::new(&mut builder);
         let one: Felt<_> = builder.eval(F::one());
         let two: Felt<_> = builder.eval(F::two());
