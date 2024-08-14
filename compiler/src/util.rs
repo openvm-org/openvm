@@ -7,23 +7,36 @@ use afs_test_utils::{
     engine::StarkEngine,
 };
 use p3_baby_bear::BabyBear;
-use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
+use p3_field::{ExtensionField, PrimeField, PrimeField32, TwoAdicField};
 use stark_vm::{
     cpu::trace::Instruction,
     program::Program,
-    vm::{config::VmConfig, ExecutionResult, VirtualMachine},
+    vm::{config::VmConfig, ExecutionAndTraceGenerationResult, VirtualMachine},
 };
 
 use crate::{asm::AsmBuilder, conversion::CompilerOptions};
 
-pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
-    let modulus = F::ORDER_U32;
-    assert!(x < modulus as i32 && x >= -(modulus as i32));
-    if x < 0 {
-        -F::from_canonical_u32((-x) as u32)
-    } else {
-        F::from_canonical_u32(x as u32)
+pub fn execute_program_with_config<const WORD_SIZE: usize>(
+    config: VmConfig,
+    program: Program<BabyBear>,
+    input_stream: Vec<Vec<BabyBear>>,
+) {
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(config, program, input_stream);
+    vm.execute().unwrap();
+}
+
+/// Converts a prime field element to a usize.
+pub fn prime_field_to_usize<F: PrimeField>(x: F) -> usize {
+    let bu = x.as_canonical_biguint();
+    let digits = bu.to_u64_digits();
+    if digits.is_empty() {
+        return 0;
     }
+    let ret = digits[0] as usize;
+    for i in 1..digits.len() {
+        assert_eq!(digits[i], 0, "Prime field element too large");
+    }
+    ret
 }
 
 pub fn execute_program<const WORD_SIZE: usize>(
@@ -33,12 +46,29 @@ pub fn execute_program<const WORD_SIZE: usize>(
     let vm = VirtualMachine::<WORD_SIZE, _>::new(
         VmConfig {
             num_public_values: 4,
+            max_segment_len: (1 << 25) - 100,
             ..Default::default()
         },
         program,
         input_stream,
     );
     vm.execute().unwrap();
+}
+
+pub fn execute_program_and_generate_traces<const WORD_SIZE: usize>(
+    program: Program<BabyBear>,
+    input_stream: Vec<Vec<BabyBear>>,
+) {
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(
+        VmConfig {
+            num_public_values: 4,
+            max_segment_len: (1 << 25) - 100,
+            ..Default::default()
+        },
+        program,
+        input_stream,
+    );
+    vm.execute_and_generate_traces().unwrap();
 }
 
 pub fn execute_program_with_public_values<const WORD_SIZE: usize>(
@@ -57,7 +87,7 @@ pub fn execute_program_with_public_values<const WORD_SIZE: usize>(
     for &(index, value) in public_values {
         vm.segments[0].public_values[index] = Some(value);
     }
-    vm.execute().unwrap();
+    vm.execute_and_generate_traces().unwrap();
 }
 
 pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
@@ -104,6 +134,7 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
         enable_cycle_tracker: false,
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
+        field_less_than_enabled: false,
     });
     execute_and_prove_program::<WORD_SIZE>(program, input_stream)
 }
@@ -121,13 +152,13 @@ pub fn execute_and_prove_program<const WORD_SIZE: usize>(
         input_stream,
     );
 
-    let ExecutionResult {
+    let ExecutionAndTraceGenerationResult {
         max_log_degree,
         nonempty_chips: chips,
         nonempty_traces: traces,
         nonempty_pis: pis,
         ..
-    } = vm.execute().unwrap();
+    } = vm.execute_and_generate_traces().unwrap();
     let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
 
     let perm = random_perm();

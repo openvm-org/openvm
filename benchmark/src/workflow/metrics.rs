@@ -1,11 +1,11 @@
-use std::{collections::BTreeMap, fmt};
+use std::fmt::{self, Display};
 
 use afs_stark_backend::prover::metrics::{format_number_with_underscores, TraceMetrics};
 use serde::{Deserialize, Serialize};
 
 /// Reusable struct for storing benchmark metrics
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct BenchmarkMetrics {
+#[derive(Clone, Serialize, Deserialize)]
+pub struct BenchmarkMetrics<CustomMetrics> {
     /// Benchmark name
     pub name: String,
     // Timings:
@@ -21,15 +21,8 @@ pub struct BenchmarkMetrics {
     pub custom: CustomMetrics,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct CustomMetrics {
-    pub vm_metrics: BTreeMap<String, String>,
-    pub opcode_counts: Vec<(String, String)>,
-    pub dsl_counts: Vec<(String, String)>,
-}
-
 // Implement the Display trait for BenchmarkMetrics to create a markdown table
-impl fmt::Display for BenchmarkMetrics {
+impl<CustomMetrics: Display> Display for BenchmarkMetrics<CustomMetrics> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "## Benchmark for {}", self.name)?;
         // Write the markdown table header
@@ -80,38 +73,8 @@ impl fmt::Display for BenchmarkMetrics {
             )?;
         }
 
-        if !self.custom.vm_metrics.is_empty() {
-            writeln!(f)?;
-            writeln!(f, "### Custom metrics")?;
-            writeln!(f, "| Name | Value |")?;
-            writeln!(f, "|------|-------|")?;
-            for (name, value) in self.custom.vm_metrics.iter() {
-                writeln!(f, "| {:<20} | {:<10} |", name, value)?;
-            }
-        }
+        self.custom.fmt(f)?;
 
-        if !self.custom.opcode_counts.is_empty() {
-            writeln!(f)?;
-            writeln!(f, "### Opcode counts")?;
-            writeln!(f, "| Name | Count |")?;
-            writeln!(f, "|------|-------|")?;
-            for (name, value) in self.custom.opcode_counts.iter() {
-                writeln!(f, "| {:<20} | {:<10} |", name, value)?;
-            }
-        }
-
-        if !self.custom.dsl_counts.is_empty() {
-            writeln!(f)?;
-            writeln!(
-                f,
-                "### DSL counts - how many isa instructions each DSL instruction generates"
-            )?;
-            writeln!(f, "| Name | Count |")?;
-            writeln!(f, "|------|-------|")?;
-            for (name, value) in self.custom.dsl_counts.iter() {
-                writeln!(f, "| {:<20} | {:<10} |", name, value)?;
-            }
-        }
         Ok(())
     }
 }

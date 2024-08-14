@@ -80,7 +80,7 @@ dependencies = [
  "afs-derive",
  "afs-test-utils",
  "backtrace",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "p3-baby-bear",
  "p3-challenger",
  "p3-dft",
@@ -188,7 +188,7 @@ dependencies = [
  "afs-primitives",
  "afs-stark-backend",
  "afs-test-utils",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "p3-air",
  "p3-baby-bear",
  "p3-challenger",
@@ -249,7 +249,7 @@ version = "0.1.0"
 dependencies = [
  "afs-stark-backend",
  "derive_more",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "p3-air",
  "p3-baby-bear",
  "p3-blake3",
@@ -4227,6 +4227,7 @@ dependencies = [
  "serde",
  "test-case",
  "toml",
+ "tracing",
  "zkhash",
 ]
 

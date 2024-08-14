@@ -9,7 +9,10 @@ use super::{
     FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_BUS, FIELD_EXTENSION_INSTRUCTIONS, MEMORY_BUS,
     POSEIDON2_BUS, READ_INSTRUCTION_BUS,
 };
-use crate::cpu::OpCode::{COMP_POS2, PERM_POS2};
+use crate::cpu::{
+    OpCode::{COMP_POS2, F_LESS_THAN, PERM_POS2},
+    IS_LESS_THAN_BUS,
+};
 
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -84,6 +87,16 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 count = count + operation_flags[&PERM_POS2];
             }
             builder.push_send(POSEIDON2_BUS, fields, count);
+        }
+
+        if self.options.is_less_than_enabled {
+            let fields = [
+                accesses[0].data[0],
+                accesses[1].data[0],
+                accesses[CPU_MAX_READS_PER_CYCLE].data[0],
+            ];
+            let count = operation_flags[&F_LESS_THAN];
+            builder.push_send(IS_LESS_THAN_BUS, fields, count);
         }
     }
 }

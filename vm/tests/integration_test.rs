@@ -12,7 +12,7 @@ use stark_vm::{
     program::Program,
     vm::{
         config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN},
-        ExecutionResult, VirtualMachine,
+        ExecutionAndTraceGenerationResult, VirtualMachine,
     },
 };
 
@@ -48,12 +48,12 @@ fn air_test(
         witness_stream,
     );
 
-    let ExecutionResult {
+    let ExecutionAndTraceGenerationResult {
         nonempty_chips: chips,
         nonempty_traces: traces,
         nonempty_pis: pis,
         ..
-    } = vm.execute().unwrap();
+    } = vm.execute_and_generate_traces().unwrap();
     let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
 
     run_simple_test(chips, traces, pis).expect("Verification failed");
@@ -82,13 +82,13 @@ fn air_test_with_poseidon2(
         vec![],
     );
 
-    let ExecutionResult {
+    let ExecutionAndTraceGenerationResult {
         max_log_degree,
         nonempty_chips: chips,
         nonempty_traces: traces,
         nonempty_pis: pis,
         ..
-    } = vm.execute().unwrap();
+    } = vm.execute_and_generate_traces().unwrap();
 
     let perm = random_perm();
     let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
@@ -102,6 +102,37 @@ fn air_test_with_poseidon2(
     engine
         .run_simple_test(chips, traces, pis)
         .expect("Verification failed");
+}
+
+#[cfg(test)]
+fn execution_test(
+    field_arithmetic_enabled: bool,
+    field_extension_enabled: bool,
+    program: Program<BabyBear>,
+    witness_stream: Vec<Vec<BabyBear>>,
+    fast_segmentation: bool,
+) {
+    let vm = VirtualMachine::<WORD_SIZE, _>::new(
+        VmConfig {
+            field_arithmetic_enabled,
+            field_extension_enabled,
+            compress_poseidon2_enabled: false,
+            perm_poseidon2_enabled: false,
+            limb_bits: LIMB_BITS,
+            decomp: DECOMP,
+            num_public_values: 4,
+            max_segment_len: if fast_segmentation {
+                7
+            } else {
+                DEFAULT_MAX_SEGMENT_LEN
+            },
+            ..Default::default()
+        },
+        program,
+        witness_stream,
+    );
+
+    vm.execute().unwrap();
 }
 
 #[test]
@@ -133,6 +164,7 @@ fn test_vm_1() {
         debug_infos: vec![None; 5],
     };
 
+    execution_test(true, false, program.clone(), vec![], true);
     air_test(true, false, program, vec![], true);
 }
 
@@ -323,47 +355,6 @@ fn test_vm_hint() {
 }
 
 #[test]
-fn test_vm_compress_poseidon2() {
-    let mut instructions = vec![];
-    let input_a = 37;
-    for i in 0..8 {
-        instructions.push(Instruction::from_isize(
-            STOREW,
-            43 - (7 * i),
-            input_a + i,
-            0,
-            0,
-            1,
-        ));
-    }
-    let input_b = 108;
-    for i in 0..8 {
-        instructions.push(Instruction::from_isize(
-            STOREW,
-            2 + (18 * i),
-            input_b + i,
-            0,
-            0,
-            1,
-        ));
-    }
-    let output = 4;
-    instructions.push(Instruction::from_isize(
-        COMP_POS2, output, input_a, input_b, 0, 1,
-    ));
-    instructions.push(Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0));
-
-    let program_len = instructions.len();
-
-    let program = Program {
-        instructions,
-        debug_infos: vec![None; program_len],
-    };
-
-    air_test_with_poseidon2(false, false, true, program);
-}
-
-#[test]
 fn test_vm_compress_poseidon2_as2() {
     let mut instructions = vec![];
     let input_a = 37;
@@ -389,6 +380,8 @@ fn test_vm_compress_poseidon2_as2() {
         ));
     }
     let output = 4;
+    // [0]_1 <- input_a
+    // [1]_1 <- input_b
     instructions.push(Instruction::from_isize(STOREW, input_a, 0, 0, 0, 1));
     instructions.push(Instruction::from_isize(STOREW, input_b, 1, 0, 0, 1));
     instructions.push(Instruction::from_isize(STOREW, output, 2, 0, 0, 1));

@@ -1,6 +1,6 @@
 use std::array;
 
-use afs_primitives::{is_zero::IsZeroAir, sub_chip::LocalTraceInstructions};
+use afs_primitives::sub_chip::LocalTraceInstructions;
 use columns::*;
 use p3_field::PrimeField32;
 use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
@@ -103,7 +103,9 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     /// Called using `vm` and not `&self`. Reads two chunks from memory and generates a trace row for
     /// the given instruction using the subair, storing it in `rows`. Then, writes output to memory,
     /// truncating if the instruction is a compression.
-    pub fn poseidon2_perm<const WORD_SIZE: usize>(
+    ///
+    /// Used for both compression and permutation.
+    pub fn calculate<const WORD_SIZE: usize>(
         vm: &mut ExecutionSegment<WORD_SIZE, F>,
         start_timestamp: usize,
         instruction: Instruction<F>,
@@ -118,22 +120,29 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
             debug: _debug,
         } = instruction.clone();
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
+        debug_assert_eq!(WIDTH, CHUNK * 2);
 
         let mut timestamp = start_timestamp;
-        let mut read = |address_space, addr| {
-            timestamp += 1;
-            vm.memory_chip.read_elem(timestamp - 1, address_space, addr)
+        let mut read = |address_space, addr, ts: &mut usize| {
+            *ts += 1;
+            vm.memory_chip.read_elem(*ts - 1, address_space, addr)
         };
 
-        let dst = read(d, op_a);
-        let lhs = read(d, op_b);
-        let rhs = read(d, op_c);
+        let dst = read(d, op_a, &mut timestamp);
+        let lhs = read(d, op_b, &mut timestamp);
+        let rhs = if opcode == COMP_POS2 {
+            read(d, op_c, &mut timestamp)
+        } else {
+            // We still need to advance the timestamp to match the interaction constraints.
+            timestamp += 1;
+            lhs + F::from_canonical_usize(CHUNK)
+        };
 
         let input_state: [F; WIDTH] = array::from_fn(|i| {
-            if i < WIDTH / 2 {
-                read(e, lhs + F::from_canonical_usize(i))
+            if i < CHUNK {
+                read(e, lhs + F::from_canonical_usize(i), &mut timestamp)
             } else {
-                read(e, rhs + F::from_canonical_usize(i - WIDTH / 2))
+                read(e, rhs + F::from_canonical_usize(i - CHUNK), &mut timestamp)
             }
         });
 
@@ -147,11 +156,7 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
         );
 
         let output = new_row.aux.internal.io.output;
-        let len = if opcode == PERM_POS2 {
-            WIDTH
-        } else {
-            WIDTH / 2
-        };
+        let len = if opcode == PERM_POS2 { WIDTH } else { CHUNK };
 
         for (i, &output_elem) in output.iter().enumerate().take(len) {
             vm.memory_chip
@@ -186,15 +191,12 @@ impl<const WIDTH: usize, F: PrimeField32> Hasher<CHUNK, F> for Poseidon2Chip<WID
         let internal = self.air.inner.generate_trace_row(input_state);
         let output = internal.io.output;
         let io_row = Poseidon2VmIoCols::direct_io_cols();
-        let is_zero_row = IsZeroAir {}.generate_trace_row(io_row.d);
         self.rows.push(Poseidon2VmCols {
             io: io_row,
             aux: Poseidon2VmAuxCols {
                 dst: F::zero(),
                 lhs: F::zero(),
                 rhs: F::zero(),
-                d_is_zero: is_zero_row.io.is_zero,
-                is_zero_inv: is_zero_row.inv,
                 internal,
             },
         });

@@ -18,7 +18,7 @@ impl<C: Config> FriConfigVariable<C> {
     pub fn get_subgroup(
         &self,
         builder: &mut Builder<C>,
-        log_degree: impl Into<Usize<C::N>>,
+        log_degree: impl Into<RVar<C::N>>,
     ) -> TwoAdicMultiplicativeCosetVariable<C> {
         builder.get(&self.subgroups, log_degree)
     }
@@ -26,7 +26,7 @@ impl<C: Config> FriConfigVariable<C> {
     pub fn get_two_adic_generator(
         &self,
         builder: &mut Builder<C>,
-        bits: impl Into<Usize<C::N>>,
+        bits: impl Into<RVar<C::N>>,
     ) -> Felt<C::F> {
         builder.get(&self.generators, bits)
     }

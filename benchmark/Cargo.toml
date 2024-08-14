@@ -29,12 +29,12 @@ p3-baby-bear = { workspace = true }
 p3-matrix = { workspace = true }
 p3-air = { workspace = true }
 lazy_static = "1.5.0"
-tracing = "0.1.40"
+tracing.workspace = true
 hex = "0.4.3"
 tracing-subscriber = "0.3.18"
 tracing-forest = "0.1.6"
 chrono = "0.4.38"
-itertools = "0.13.0"
+itertools.workspace = true
 regex = "1.10.5"
 stark-vm = { path = "../vm", default-features = false }
 p3-maybe-rayon = { workspace = true }

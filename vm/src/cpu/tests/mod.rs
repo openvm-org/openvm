@@ -83,6 +83,7 @@ fn test_flatten_fromslice_roundtrip() {
         compress_poseidon2_enabled: false,
         perm_poseidon2_enabled: false,
         num_public_values: 4,
+        is_less_than_enabled: false,
     };
     let num_cols = CpuCols::<TEST_WORD_SIZE, usize>::get_width(options);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
@@ -140,7 +141,8 @@ fn execution_test<const WORD_SIZE: usize>(
     let options = vm.options();
     assert_eq!(vm.segments.len(), 1);
     let segment = &mut vm.segments[0];
-    let mut trace = CpuChip::generate_trace(segment).unwrap();
+    CpuChip::execute(segment).unwrap();
+    let mut trace = CpuChip::generate_trace(segment);
 
     let mut actual_memory_log = segment.memory_chip.accesses.clone();
     // temporary
@@ -238,7 +240,8 @@ fn air_test_change<
     let options = vm.options();
     assert_eq!(vm.segments.len(), 1);
     let segment = &mut vm.segments[0];
-    let mut trace = CpuChip::generate_trace(segment).unwrap();
+    CpuChip::execute(segment).unwrap();
+    let mut trace = CpuChip::generate_trace(segment);
     let mut rows = vec![];
     for i in 0..trace.height() {
         rows.push(CpuCols::<WORD_SIZE, BabyBear>::from_slice(

@@ -31,17 +31,14 @@ pub fn verify_two_adic_pcs<C: Config>(
     let log_blowup = config.log_blowup;
     let blowup = config.blowup;
     let alpha = challenger.sample_ext(builder);
+    let fri_proof = proof.fri_proof;
 
     builder.cycle_tracker_start("stage-d-1-verify-shape-and-sample-challenges");
     let fri_challenges =
-        verify_shape_and_sample_challenges(builder, config, &proof.fri_proof, challenger);
+        verify_shape_and_sample_challenges(builder, config, &fri_proof, challenger);
     builder.cycle_tracker_end("stage-d-1-verify-shape-and-sample-challenges");
 
-    let commit_phase_commits_len = proof
-        .fri_proof
-        .commit_phase_commits
-        .len()
-        .materialize(builder);
+    let commit_phase_commits_len = fri_proof.commit_phase_commits.len().materialize(builder);
     let log_global_max_height: Var<_> = builder.eval(commit_phase_commits_len + log_blowup);
 
     let mut reduced_openings: Array<_, Array<_, Ext<_, _>>> =
@@ -74,14 +71,16 @@ pub fn verify_two_adic_pcs<C: Config>(
                 let mut batch_heights_log2: Array<C, Var<C::N>> = builder.array(mats.len());
                 builder.range(0, mats.len()).for_each(|k, builder| {
                     let mat = builder.get(&mats, k);
-                    let height_log2: Var<_> = builder.eval(mat.domain.log_n + log_blowup);
+                    let domain = mat.domain;
+                    let height_log2: Var<_> = builder.eval(domain.log_n + log_blowup);
                     builder.set_value(&mut batch_heights_log2, k, height_log2);
                 });
                 let mut batch_dims: Array<C, DimensionsVariable<C>> = builder.array(mats.len());
                 builder.range(0, mats.len()).for_each(|k, builder| {
                     let mat = builder.get(&mats, k);
+                    let domain = mat.domain;
                     let dim = DimensionsVariable::<C> {
-                        height: builder.eval(mat.domain.size() * blowup),
+                        height: builder.eval(domain.size() * blowup),
                     };
                     builder.set_value(&mut batch_dims, k, dim);
                 });
@@ -118,8 +117,8 @@ pub fn verify_two_adic_pcs<C: Config>(
                         let mat = builder.get(&mats, k);
                         let mat_points = mat.points;
                         let mat_values = mat.values;
-
-                        let log2_domain_size = mat.domain.log_n;
+                        let domain = mat.domain;
+                        let log2_domain_size = domain.log_n;
                         let log_height: Var<C::N> = builder.eval(log2_domain_size + log_blowup);
 
                         let cur_ro = builder.get(&ro, log_height);
@@ -149,8 +148,8 @@ pub fn verify_two_adic_pcs<C: Config>(
                                 let p_at_z = builder.get(&ps_at_z, t);
                                 let quotient = (p_at_z - p_at_x) / (z - x);
 
-                                builder.assign(cur_ro, cur_ro + cur_alpha_pow * quotient);
-                                builder.assign(cur_alpha_pow, cur_alpha_pow * alpha);
+                                builder.assign(&cur_ro, cur_ro + cur_alpha_pow * quotient);
+                                builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha);
                             });
                             builder.cycle_tracker_end("sp1-fri-fold");
                         });
@@ -169,7 +168,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     verify_challenges(
         builder,
         config,
-        &proof.fri_proof,
+        &fri_proof,
         &fri_challenges,
         &reduced_openings,
     );
@@ -195,8 +194,8 @@ where
             builder.set(&mut commit, i, f);
         }
 
-        let mut mats =
-            builder.dyn_array::<TwoAdicPcsMatsVariable<C>>(domains_and_openings_val.len());
+        let mut mats = builder
+            .dyn_array::<TwoAdicPcsMatsVariable<C>>(RVar::from(domains_and_openings_val.len()));
 
         for (i, (domain, openning)) in domains_and_openings_val.into_iter().enumerate() {
             let domain = builder.constant::<TwoAdicMultiplicativeCosetVariable<_>>(domain);
@@ -217,7 +216,6 @@ where
                 }
                 builder.set_value(&mut values, j, tmp);
             }
-
             let mat = TwoAdicPcsMatsVariable {
                 domain,
                 points,
@@ -252,7 +250,7 @@ where
     fn natural_domain_for_log_degree(
         &self,
         builder: &mut Builder<C>,
-        log_degree: Usize<C::N>,
+        log_degree: RVar<C::N>,
     ) -> Self::Domain {
         self.config.get_subgroup(builder, log_degree)
     }
@@ -274,14 +272,13 @@ pub mod tests {
 
     use afs_compiler::{
         asm::AsmBuilder,
-        ir::{Array, Usize, Var, DIGEST_SIZE},
+        ir::{Array, RVar, DIGEST_SIZE},
     };
     use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
     use itertools::Itertools;
     use p3_baby_bear::BabyBear;
     use p3_challenger::{CanObserve, FieldChallenger};
     use p3_commit::{Pcs, TwoAdicMultiplicativeCoset};
-    use p3_field::AbstractField;
     use p3_matrix::dense::RowMajorMatrix;
     use p3_uni_stark::{StarkGenericConfig, Val};
     use rand::rngs::OsRng;
@@ -360,8 +357,8 @@ pub mod tests {
 
         // Test natural domain for degree.
         for log_d_val in log_degrees.iter() {
-            let log_d: Var<_> = builder.eval(F::from_canonical_usize(*log_d_val));
-            let domain = pcs_var.natural_domain_for_log_degree(&mut builder, Usize::Var(log_d));
+            let log_d = *log_d_val;
+            let domain = pcs_var.natural_domain_for_log_degree(&mut builder, RVar::from(log_d));
 
             let domain_val =
                 <ScPcs as Pcs<EF, Challenger>>::natural_domain_for_degree(pcs, 1 << log_d_val);
@@ -391,9 +388,9 @@ pub mod tests {
     #[test]
     #[ignore = "test takes too long"]
     fn test_two_adic_fri_pcs_single_batch() {
-        use afs_compiler::util::execute_program;
+        use afs_compiler::util::execute_program_and_generate_traces;
 
         let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 16);
-        execute_program::<WORD_SIZE>(program, witness);
+        execute_program_and_generate_traces::<WORD_SIZE>(program, witness);
     }
 }

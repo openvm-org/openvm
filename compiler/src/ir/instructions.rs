@@ -1,4 +1,4 @@
-use super::{Array, Config, Ext, Felt, FriFoldInput, MemIndex, Ptr, TracedVec, Usize, Var};
+use super::{Array, Config, Ext, Felt, MemIndex, Ptr, RVar, TracedVec, Var};
 
 /// An intermeddiate instruction set for implementing programs.
 ///
@@ -89,6 +89,10 @@ pub enum DslIr<C: Config> {
     DivEI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::EF),
     /// Divides and extension field immediate and an extension field element (ext = ext field imm / ext).
     DivEIN(Ext<C::F, C::EF>, C::EF, Ext<C::F, C::EF>),
+    /// Divides an extension field element and a field immediate (ext = ext / field imm).
+    DivEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
+    /// Divides an extension field element and a field element (ext = ext / felt).
+    DivEF(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Felt<C::F>),
 
     // Negations.
     /// Negates a variable (var = -var).
@@ -100,15 +104,15 @@ pub enum DslIr<C: Config> {
     /// Inverts an extension field element (ext = 1 / ext).
     InvE(Ext<C::F, C::EF>, Ext<C::F, C::EF>),
 
+    // Comparisons.
+    /// Compares two variables
+    LessThanV(Var<C::N>, Var<C::N>, Var<C::N>),
+    /// Compares a variable and an immediate
+    LessThanVI(Var<C::N>, Var<C::N>, C::N),
+
     // Control flow.
     /// Executes a for loop with the parameters (start step value, end step value, step size, step variable, body).
-    For(
-        Usize<C::N>,
-        Usize<C::N>,
-        C::N,
-        Var<C::N>,
-        TracedVec<DslIr<C>>,
-    ),
+    For(RVar<C::N>, RVar<C::N>, C::N, Var<C::N>, TracedVec<DslIr<C>>),
     /// Executes an equal conditional branch with the parameters (lhs var, rhs var, then body, else body).
     IfEq(
         Var<C::N>,
@@ -158,7 +162,7 @@ pub enum DslIr<C: Config> {
 
     // Memory instructions.
     /// Allocate (ptr, len, size) a memory slice of length len
-    Alloc(Ptr<C::N>, Usize<C::N>, usize),
+    Alloc(Ptr<C::N>, RVar<C::N>, usize),
     /// Load variable (var, ptr, index)
     LoadV(Var<C::N>, Ptr<C::N>, MemIndex<C::N>),
     /// Load field element (var, ptr, index)
@@ -206,7 +210,7 @@ pub enum DslIr<C: Config> {
     /// Prepare next input vector (preceded by its length) for hinting.
     HintInputVec(),
     /// Prepare bit decomposition for hinting.
-    HintBitsU(Usize<C::N>),
+    HintBitsU(RVar<C::N>),
     /// Prepare bit decomposition for hinting.
     HintBitsV(Var<C::N>),
     /// Prepare bit decomposition for hinting.
@@ -222,8 +226,6 @@ pub enum DslIr<C: Config> {
     WitnessExt(Ext<C::F, C::EF>, u32),
     /// Label a field element as the ith public input.
     Publish(Felt<C::F>, Var<C::N>),
-    /// Registers a field element to the public inputs.
-    RegisterPublicValue(Felt<C::F>),
     /// Operation to halt the program. Should be the last instruction in the program.
     Halt,
 
@@ -236,9 +238,6 @@ pub enum DslIr<C: Config> {
     CircuitCommitCommitedValuesDigest(Var<C::N>),
 
     // FRI specific instructions.
-    /// Executes a FRI fold operation. 1st field is the size of the fri fold input array.  2nd field
-    /// is the fri fold input array.  See [`FriFoldInput`] for more details.
-    FriFold(Var<C::N>, Array<C, FriFoldInput<C>>),
     /// Select's a variable based on a condition. (select(cond, true_val, false_val) => output).
     /// Should only be used when target is a gnark circuit.
     CircuitSelectV(Var<C::N>, Var<C::N>, Var<C::N>, Var<C::N>),

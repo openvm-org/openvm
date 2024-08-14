@@ -12,10 +12,22 @@ use p3_matrix::Matrix;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    max_accesses_per_instruction, CpuAir,
+    max_accesses_per_instruction, CpuOptions,
     OpCode::*,
     CPU_MAX_READS_PER_CYCLE, FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH,
 };
+
+#[derive(Default, Clone)]
+/// Air for the CPU. Carries no state and does not own execution.
+pub struct CpuAir<const WORD_SIZE: usize> {
+    pub options: CpuOptions,
+}
+
+impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
+    pub fn new(options: CpuOptions) -> Self {
+        Self { options }
+    }
+}
 
 impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for CpuAir<WORD_SIZE> {
     fn width(&self) -> usize {

@@ -13,26 +13,29 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
         builder: &mut AB,
         local: ExpandCols<CHUNK, AB::Var>,
     ) {
+        // interaction does not occur for first two rows;
+        // for those, parent hash value comes from public values
         builder.push_send(
             EXPAND_BUS,
             [
                 local.expand_direction.into(),
-                local.address_space.into(),
                 local.parent_height.into(),
-                local.parent_label.into(),
+                local.parent_as_label.into(),
+                local.parent_address_label.into(),
             ]
             .into_iter()
             .chain(local.parent_hash.into_iter().map(Into::into)),
-            local.expand_direction.into(),
+            // count can probably be made degree 1 if necessary
+            (AB::Expr::one() - local.is_root) * local.expand_direction,
         );
 
         builder.push_receive(
             EXPAND_BUS,
             [
                 local.expand_direction + (local.left_direction_different * AB::F::two()),
-                local.address_space.into(),
                 local.parent_height - AB::F::one(),
-                local.parent_label * AB::F::two(),
+                local.parent_as_label * AB::F::two(),
+                local.parent_address_label * AB::F::two(),
             ]
             .into_iter()
             .chain(local.left_child_hash.into_iter().map(Into::into)),
@@ -43,9 +46,10 @@ impl<const CHUNK: usize> ExpandAir<CHUNK> {
             EXPAND_BUS,
             [
                 local.expand_direction + (local.right_direction_different * AB::F::two()),
-                local.address_space.into(),
                 local.parent_height - AB::F::one(),
-                (local.parent_label * AB::F::two()) + AB::F::one(),
+                (local.parent_as_label * AB::F::two()) + local.height_section,
+                (local.parent_address_label * AB::F::two())
+                    + (AB::Expr::one() - local.height_section),
             ]
             .into_iter()
             .chain(local.right_child_hash.into_iter().map(Into::into)),

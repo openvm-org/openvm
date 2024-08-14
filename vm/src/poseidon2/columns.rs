@@ -40,8 +40,6 @@ pub struct Poseidon2VmAuxCols<const WIDTH: usize, T> {
     pub dst: T,
     pub lhs: T,
     pub rhs: T,
-    pub d_is_zero: T,
-    pub is_zero_inv: T,
     pub internal: Poseidon2Cols<WIDTH, T>,
 }
 
@@ -145,17 +143,11 @@ impl<T: Field> Poseidon2VmIoCols<T> {
 
 impl<const WIDTH: usize, T: Clone> Poseidon2VmAuxCols<WIDTH, T> {
     pub fn get_width(air: &Poseidon2Air<WIDTH, T>) -> usize {
-        3 + 2 + Poseidon2Cols::<WIDTH, T>::get_width(air)
+        3 + Poseidon2Cols::<WIDTH, T>::get_width(air)
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        let mut result = vec![
-            self.dst.clone(),
-            self.lhs.clone(),
-            self.rhs.clone(),
-            self.d_is_zero.clone(),
-            self.is_zero_inv.clone(),
-        ];
+        let mut result = vec![self.dst.clone(), self.lhs.clone(), self.rhs.clone()];
         result.extend(self.internal.flatten());
         result
     }
@@ -165,9 +157,7 @@ impl<const WIDTH: usize, T: Clone> Poseidon2VmAuxCols<WIDTH, T> {
             dst: slice[0].clone(),
             lhs: slice[1].clone(),
             rhs: slice[2].clone(),
-            d_is_zero: slice[3].clone(),
-            is_zero_inv: slice[4].clone(),
-            internal: Poseidon2Cols::from_slice(&slice[5..], index_map),
+            internal: Poseidon2Cols::from_slice(&slice[3..], index_map),
         }
     }
 }
@@ -177,8 +167,6 @@ impl<const WIDTH: usize, T: Field> Poseidon2VmAuxCols<WIDTH, T> {
             dst: T::default(),
             lhs: T::default(),
             rhs: T::default(),
-            d_is_zero: T::zero(),
-            is_zero_inv: T::one(),
             internal: Poseidon2Cols::blank_row(air),
         }
     }

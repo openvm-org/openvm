@@ -17,6 +17,12 @@ pub enum AsmInstruction<F, EF> {
     /// Store a value from val(fp) into the address stored at addr(fp) + offset.
     StoreFI(i32, i32, F),
 
+    /// Set dst = imm.
+    ImmF(i32, F),
+
+    /// Copy, dst = src.
+    CopyF(i32, i32),
+
     /// Add, dst = lhs + rhs.
     AddF(i32, i32, i32),
 
@@ -40,6 +46,12 @@ pub enum AsmInstruction<F, EF> {
 
     /// Divide immediate, dst = lhs / rhs.
     DivFI(i32, i32, F),
+
+    /// Less than, dst = lhs < rhs.
+    LessThanF(i32, i32, i32),
+
+    /// Less than immediate, dst = lhs < rhs.
+    LessThanFI(i32, i32, F),
 
     /// Add extension, dst = lhs + rhs.
     AddE(i32, i32, i32),
@@ -89,8 +101,12 @@ pub enum AsmInstruction<F, EF> {
     /// Break(label)
     Break(F),
 
-    /// Perform a permutation of the Poseidon2 hash function on the array specified by the ptr.
+    /// Perform a Poseidon2 permutation on state starting at address `lhs`
+    /// and store new state at `rhs`.
+    /// (a, b) are pointers to (lhs, rhs).
     Poseidon2Permute(i32, i32),
+    /// Perform 2-to-1 cryptographic compression using Poseidon2.
+    /// (a, b, c) are memory pointers to (dst, lhs, rhs)
     Poseidon2Compress(i32, i32, i32),
 
     /// Print a variable.
@@ -113,16 +129,8 @@ pub enum AsmInstruction<F, EF> {
     /// Stores the next hint stream word into value stored at addr + value.
     StoreHintWordI(i32, F),
 
-    /// FRIFold(m, input).
-    FriFold(i32, i32),
-
     /// Publish(val, index).
     Publish(i32, i32),
-
-    /// RegisterPublicValue(val).
-    RegisterPublicValue(i32),
-
-    LessThan(i32, i32, i32),
 
     CycleTrackerStart(String),
     CycleTrackerEnd(String),
@@ -136,14 +144,17 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
     pub fn fmt(&self, labels: &BTreeMap<F, String>, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
-            AsmInstruction::LessThan(dst, left, right) => {
-                write!(f, "lt  ({})fp, {}, {}", dst, left, right,)
-            }
             AsmInstruction::LoadFI(dst, src, offset) => {
                 write!(f, "lwi   ({})fp, ({})fp, {}", dst, src, offset)
             }
             AsmInstruction::StoreFI(dst, src, offset) => {
                 write!(f, "swi   ({})fp, ({})fp, {}", dst, src, offset)
+            }
+            AsmInstruction::ImmF(dst, src) => {
+                write!(f, "imm   ({})fp, ({})", dst, src)
+            }
+            AsmInstruction::CopyF(dst, src) => {
+                write!(f, "copy  ({})fp, ({})", dst, src)
             }
             AsmInstruction::AddF(dst, lhs, rhs) => {
                 write!(f, "add   ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
@@ -168,6 +179,12 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::DivFI(dst, lhs, rhs) => {
                 write!(f, "divi  ({})fp, ({})fp, {}", dst, lhs, rhs)
+            }
+            AsmInstruction::LessThanF(dst, lhs, rhs) => {
+                write!(f, "lt  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
+            }
+            AsmInstruction::LessThanFI(dst, lhs, rhs) => {
+                write!(f, "lti  ({})fp, ({})fp, {}", dst, lhs, rhs)
             }
             AsmInstruction::AddE(dst, lhs, rhs) => {
                 write!(f, "eadd ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
@@ -264,8 +281,8 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::Trap => write!(f, "trap"),
             AsmInstruction::Halt => write!(f, "halt"),
             AsmInstruction::HintBits(dst) => write!(f, "hint_bits ({})fp", dst),
-            AsmInstruction::Poseidon2Permute(dst, src) => {
-                write!(f, "poseidon2_permute ({})fp, ({})fp", dst, src)
+            AsmInstruction::Poseidon2Permute(dst, lhs) => {
+                write!(f, "poseidon2_permute ({})fp, ({})fp", dst, lhs)
             }
             AsmInstruction::PrintF(dst) => {
                 write!(f, "print_f ({})fp", dst)
@@ -280,9 +297,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::StoreHintWordI(dst, offset) => {
                 write!(f, "shintw ({})fp {}", dst, offset)
             }
-            AsmInstruction::FriFold(m, input_ptr) => {
-                write!(f, "fri_fold ({})fp, ({})fp", m, input_ptr)
-            }
             AsmInstruction::Poseidon2Compress(result, src1, src2) => {
                 write!(
                     f,
@@ -292,9 +306,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::Publish(val, index) => {
                 write!(f, "commit ({})fp ({})fp", val, index)
-            }
-            AsmInstruction::RegisterPublicValue(val) => {
-                write!(f, "register_public_value ({})fp", val)
             }
             AsmInstruction::CycleTrackerStart(name) => {
                 write!(f, "cycle_tracker_start {}", name)
