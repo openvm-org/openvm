@@ -40,13 +40,15 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 OpType::Read
             };
 
-            MEMORY_BUS.access(
-                op_type,
-                memory_cycle,
-                access.address_space,
-                access.address,
-                access.data.map(Into::into),
-            ).send(access.enabled - access.is_immediate, builder);
+            MEMORY_BUS
+                .access(
+                    op_type,
+                    memory_cycle,
+                    access.address_space,
+                    access.address,
+                    access.data.map(Into::into),
+                )
+                .send(access.enabled - access.is_immediate, builder);
         }
 
         // Interaction with arithmetic (bus 2)

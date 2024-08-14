@@ -6,9 +6,7 @@ use super::{
     columns::{Poseidon2VmAuxCols, Poseidon2VmIoCols},
     Poseidon2VmAir,
 };
-use crate::{
-    cpu::{MEMORY_BUS, POSEIDON2_BUS, POSEIDON2_DIRECT_BUS},
-};
+use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS, POSEIDON2_DIRECT_BUS};
 
 impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
     /// Receives instructions from the CPU on the designated `POSEIDON2_BUS` (opcodes) or `POSEIDON2_DIRECT_BUS` (direct), and sends both read and write requests to the memory chip.
@@ -39,7 +37,9 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
             let timestamp = io.clk + F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
 
-            MEMORY_BUS.read(timestamp, io.d, io_addr, [aux_addr.into()]).send(count, builder);
+            MEMORY_BUS
+                .read(timestamp, io.d, io_addr, [aux_addr.into()])
+                .send(count, builder);
         }
 
         // READ
@@ -51,12 +51,9 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
                 + F::from_canonical_usize(if i < chunks { i } else { i - chunks });
 
             let count = io.is_opcode;
-            MEMORY_BUS.read(
-                timestamp,
-                io.e,
-                address,
-                [aux.internal.io.input[i].into()],
-            ).send(count, builder);
+            MEMORY_BUS
+                .read(timestamp, io.e, address, [aux.internal.io.input[i].into()])
+                .send(count, builder);
         }
 
         // WRITE
@@ -72,12 +69,9 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
                 io.is_opcode - io.cmp
             };
 
-            MEMORY_BUS.write(
-                timestamp,
-                io.e,
-                address,
-                [aux.internal.io.output[i].into()],
-            ).send(count, builder);
+            MEMORY_BUS
+                .write(timestamp, io.e, address, [aux.internal.io.output[i].into()])
+                .send(count, builder);
         }
 
         // DIRECT

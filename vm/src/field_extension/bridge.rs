@@ -35,13 +35,9 @@ fn eval_rw_interactions<AB: InteractionBuilder>(
         } else {
             aux.is_valid
         };
-        MEMORY_BUS.access(
-            op_type,
-            timestamp,
-            addr_space,
-            pointer,
-            [element.into()],
-        ).send(count, builder);
+        MEMORY_BUS
+            .access(op_type, timestamp, addr_space, pointer, [element.into()])
+            .send(count, builder);
     }
 }
 
