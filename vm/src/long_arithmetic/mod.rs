@@ -12,7 +12,7 @@ pub mod trace;
 #[derive(Debug)]
 pub struct LongAdditionChip<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
     pub air: LongAdditionAir<ARG_SIZE, LIMB_SIZE>,
-    pub range_checker_gate_chip: RangeCheckerGateChip,
+    pub range_checker_chip: RangeCheckerGateChip,
     operations: Vec<(Vec<u32>, Vec<u32>)>,
 }
 
@@ -20,7 +20,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongAdditionChip<ARG_SIZE, L
     pub fn new(bus_index: usize) -> Self {
         Self {
             air: LongAdditionAir { bus_index },
-            range_checker_gate_chip: RangeCheckerGateChip::new(bus_index, 1 << LIMB_SIZE),
+            range_checker_chip: RangeCheckerGateChip::new(bus_index, 1 << LIMB_SIZE),
             operations: vec![],
         }
     }

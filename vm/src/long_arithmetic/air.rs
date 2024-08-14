@@ -7,9 +7,10 @@ use p3_matrix::Matrix;
 
 use super::columns::LongAdditionCols;
 
+/// AIR for the long addition circuit. ARG_SIZE is the size of the arguments in bits, and LIMB_SIZE is the size of the limbs in bits.
 #[derive(Copy, Clone, Debug)]
 pub struct LongAdditionAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
-    pub bus_index: usize,
+    pub bus_index: usize, // to communicate with the range checker that checks that all limbs are < 2^LIMB_SIZE
 }
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongAdditionAir<ARG_SIZE, LIMB_SIZE> {
@@ -36,11 +37,10 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
         let local: &[AB::Var] = (*local).borrow();
 
         let long_cols = LongAdditionCols::<ARG_SIZE, LIMB_SIZE, AB::Var>::from_slice(local);
-        let num_limbs =
-            LongAdditionCols::<ARG_SIZE, LIMB_SIZE, <AB as p3_air::AirBuilder>::Var>::num_limbs();
+        let num_limbs = LongAdditionCols::<ARG_SIZE, LIMB_SIZE, AB::Var>::num_limbs();
 
         for i in 0..num_limbs {
-            let sum_limbs = long_cols.x_limbs[i]
+            let limb_sum = long_cols.x_limbs[i]
                 + long_cols.y_limbs[i]
                 + if i > 0 {
                     long_cols.carry[i - 1].into()
@@ -48,13 +48,11 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
                     AB::Expr::zero()
                 };
 
-            builder.assert_eq(
-                (sum_limbs.clone()
-                    - long_cols.z_limbs[i]
-                    - AB::Expr::from_canonical_u32(1 << LIMB_SIZE))
-                    * (sum_limbs - long_cols.z_limbs[i]),
-                AB::Expr::zero(),
+            let difference = limb_sum - long_cols.z_limbs[i];
+            builder.assert_zero(
+                difference.clone() * (difference - AB::Expr::from_canonical_u64(1 << LIMB_SIZE)),
             );
+            builder.assert_bool(long_cols.carry[i]);
         }
 
         self.eval_interactions(builder, long_cols);

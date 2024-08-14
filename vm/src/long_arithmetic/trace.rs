@@ -6,7 +6,7 @@ use super::{columns::LongAdditionCols, LongAdditionChip};
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongAdditionChip<ARG_SIZE, LIMB_SIZE> {
     // TODO: move it to the proper place once we add opcodes and stuff
     // return the sum and the carry
-    fn calc_sum(&self, x: &[u32], y: &[u32]) -> (Vec<u32>, Vec<u32>) {
+    fn calc_sum(x: &[u32], y: &[u32]) -> (Vec<u32>, Vec<u32>) {
         let num_limbs = (ARG_SIZE + LIMB_SIZE - 1) / LIMB_SIZE; // TODO: bad duplication, maybe move somewhere else
         let mut result = vec![0u32; num_limbs];
         let mut carry = vec![0u32; num_limbs];
@@ -23,14 +23,11 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongAdditionChip<ARG_SIZE, L
             .operations
             .iter()
             .map(|(x, y)| {
-                let (sum, carry) = self.calc_sum(x, y);
-                // TODO: this check is actually only correct if ARG_SIZE is a multiple of LIMB_SIZE.
-                // We should either:
-                // 1. implement this check properly,
-                // 2. change the parametrization (e.g. to "number of limbs" instead of "argument size"),
-                // 3. assert that ARG_SIZE is a multiple of LIMB_SIZE
-                sum.iter()
-                    .for_each(|z| self.range_checker_gate_chip.add_count(*z));
+                let (sum, carry) = Self::calc_sum(x, y);
+                assert!(ARG_SIZE % LIMB_SIZE == 0);
+                for z in &sum {
+                    self.range_checker_chip.add_count(*z);
+                }
                 [x, y, &sum, &carry]
                     .into_iter()
                     .flatten()
@@ -46,7 +43,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongAdditionChip<ARG_SIZE, L
         for _ in
             0..(padded_height - height) * LongAdditionCols::<ARG_SIZE, LIMB_SIZE, F>::num_limbs()
         {
-            self.range_checker_gate_chip.add_count(0);
+            self.range_checker_chip.add_count(0);
         }
 
         let mut padded_rows = rows;

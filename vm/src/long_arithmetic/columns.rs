@@ -1,4 +1,3 @@
-#[derive(Default)]
 pub struct LongAdditionCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, T> {
     pub x_limbs: Vec<T>,
     pub y_limbs: Vec<T>,
@@ -41,21 +40,5 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
 
     pub const fn get_width() -> usize {
         4 * Self::num_limbs() // TODO: discard the last carry limb
-    }
-
-    pub fn cols_numbered(cols: &[usize]) -> LongAdditionCols<ARG_SIZE, LIMB_SIZE, usize> {
-        let num_limbs = Self::num_limbs();
-
-        let x_limbs = cols[0..num_limbs].to_vec();
-        let y_limbs = cols[num_limbs..2 * num_limbs].to_vec();
-        let z_limbs = cols[2 * num_limbs..3 * num_limbs].to_vec();
-        let carry = cols[3 * num_limbs..4 * num_limbs].to_vec();
-
-        LongAdditionCols {
-            x_limbs,
-            y_limbs,
-            z_limbs,
-            carry,
-        }
     }
 }

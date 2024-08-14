@@ -39,10 +39,10 @@ fn add_rand_air_test() {
     generate_long_add_program(&mut chip, len_ops);
 
     let trace = chip.generate_trace::<BabyBear>();
-    let range_trace = chip.range_checker_gate_chip.generate_trace::<BabyBear>();
+    let range_trace = chip.range_checker_chip.generate_trace::<BabyBear>();
 
     run_simple_test_no_pis(
-        vec![&chip.air, &chip.range_checker_gate_chip.air],
+        vec![&chip.air, &chip.range_checker_chip.air],
         vec![trace, range_trace],
     )
     .expect("Verification failed");
