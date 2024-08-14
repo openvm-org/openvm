@@ -8,7 +8,6 @@ use super::{
 };
 use crate::{
     cpu::{MEMORY_BUS, POSEIDON2_BUS, POSEIDON2_DIRECT_BUS},
-    memory::{MemoryAccess, OpType},
 };
 
 impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
@@ -40,7 +39,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
             let timestamp = io.clk + F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
 
-            MEMORY_BUS.send_read(builder, timestamp, io.d, io_addr, [aux_addr.into()], count)
+            MEMORY_BUS.read(timestamp, io.d, io_addr, [aux_addr.into()]).send(count, builder);
         }
 
         // READ
@@ -52,14 +51,12 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
                 + F::from_canonical_usize(if i < chunks { i } else { i - chunks });
 
             let count = io.is_opcode;
-            MEMORY_BUS.send_read(
-                builder,
+            MEMORY_BUS.read(
                 timestamp,
                 io.e,
                 address,
                 [aux.internal.io.input[i].into()],
-                count,
-            )
+            ).send(count, builder);
         }
 
         // WRITE
@@ -75,14 +72,12 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
                 io.is_opcode - io.cmp
             };
 
-            MEMORY_BUS.send_write(
-                builder,
+            MEMORY_BUS.write(
                 timestamp,
                 io.e,
                 address,
                 [aux.internal.io.output[i].into()],
-                count,
-            )
+            ).send(count, builder);
         }
 
         // DIRECT

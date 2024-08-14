@@ -8,70 +8,86 @@ pub struct MemoryBus(pub usize);
 
 impl MemoryBus {
     /// Send a write operation through the memory bus.
-    pub fn send_write<const BLOCK_SIZE: usize, AB: InteractionBuilder>(
+    pub fn write<'a, const BLOCK_SIZE: usize, T>(
         &self,
-        builder: &mut AB,
-        timestamp: impl Into<AB::Expr>,
-        address_space: impl Into<AB::Expr>,
-        address: impl Into<AB::Expr>,
-        data: [AB::Expr; BLOCK_SIZE],
-        count: impl Into<AB::Expr>,
-    ) {
-        self.send(
-            builder,
+        timestamp: impl Into<T>,
+        address_space: impl Into<T>,
+        address: impl Into<T>,
+        data: [T; BLOCK_SIZE],
+    ) -> MemoryInteraction<BLOCK_SIZE, T> {
+        self.access(
             timestamp,
             OpType::Write,
             address_space,
             address,
             data,
-            count,
-        );
+        )
     }
 
     /// Send a read operation through the memory bus.
-    pub fn send_read<const BLOCK_SIZE: usize, AB: InteractionBuilder>(
+    pub fn read<'a, const BLOCK_SIZE: usize, T>(
         &self,
-        builder: &mut AB,
-        timestamp: impl Into<AB::Expr>,
-        address_space: impl Into<AB::Expr>,
-        address: impl Into<AB::Expr>,
-        data: [AB::Expr; BLOCK_SIZE],
-        count: impl Into<AB::Expr>,
-    ) {
-        self.send(
-            builder,
+        timestamp: impl Into<T>,
+        address_space: impl Into<T>,
+        address: impl Into<T>,
+        data: [T; BLOCK_SIZE],
+    ) -> MemoryInteraction<BLOCK_SIZE, T> {
+        self.access(
             timestamp,
             OpType::Read,
             address_space,
             address,
             data,
-            count,
-        );
+        )
     }
 
     /// Sends a memory operation (read or write) through the memory bus.
-    pub fn send<const BLOCK_SIZE: usize, AB: InteractionBuilder>(
+    pub fn access<const BLOCK_SIZE: usize, T>(
         &self,
-        builder: &mut AB,
-        timestamp: impl Into<AB::Expr>,
+        timestamp: impl Into<T>,
         op_type: OpType,
-        address_space: impl Into<AB::Expr>,
-        address: impl Into<AB::Expr>,
-        data: [AB::Expr; BLOCK_SIZE],
-        count: impl Into<AB::Expr>,
-    ) {
+        address_space: impl Into<T>,
+        address: impl Into<T>,
+        data: [T; BLOCK_SIZE],
+    ) -> MemoryInteraction<BLOCK_SIZE, T> {
+        MemoryInteraction {
+            bus_index: self.0,
+            timestamp: timestamp.into(),
+            op_type,
+            address_space: address_space.into(),
+            address: address.into(),
+            data,
+        }
+    }
+}
+
+
+pub struct MemoryInteraction<const BLOCK_SIZE: usize, F> {
+    bus_index: usize,
+    timestamp: F,
+    op_type: OpType,
+    address_space: F,
+    address: F,
+    data: [F; BLOCK_SIZE],
+}
+
+impl<const BLOCK_SIZE: usize, F: AbstractField> MemoryInteraction<BLOCK_SIZE, F> {
+    pub fn send<AB>(self, count: impl Into<AB::Expr>, builder: &mut AB)
+    where
+        AB: InteractionBuilder<Expr=F>,
+    {
         let fields = [
-            timestamp.into(),
-            match op_type {
+            self.timestamp.into(),
+            match self.op_type {
                 OpType::Read => AB::Expr::zero(),
                 OpType::Write => AB::Expr::one(),
             },
-            address_space.into(),
-            address.into(),
+            self.address_space.into(),
+            self.address.into(),
         ]
-        .into_iter()
-        .chain(data);
+            .into_iter()
+            .chain(self.data);
 
-        builder.push_send(self.0, fields, count);
+        builder.push_send(self.bus_index, fields, count);
     }
 }

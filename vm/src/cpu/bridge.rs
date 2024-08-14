@@ -40,16 +40,12 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 OpType::Read
             };
 
-            let count = access.enabled - access.is_immediate;
-            MEMORY_BUS.send(
-                builder,
+            MEMORY_BUS.write(
                 memory_cycle,
-                op_type,
                 access.address_space,
                 access.address,
-                access.data.map(|x| x.into()),
-                count,
-            );
+                access.data.map(Into::into),
+            ).send(access.enabled - access.is_immediate, builder);
         }
 
         // Interaction with arithmetic (bus 2)
