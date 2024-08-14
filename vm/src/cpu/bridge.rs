@@ -15,6 +15,7 @@ use crate::{
         IS_LESS_THAN_BUS,
     },
 };
+use crate::memory::OpType;
 
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -33,18 +34,18 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
 
         for (i, access) in accesses.into_iter().enumerate() {
             let memory_cycle = io.timestamp + AB::F::from_canonical_usize(i);
+            let op_type = if i >= CPU_MAX_READS_PER_CYCLE { OpType::Write } else { OpType::Read };
 
             let count = access.enabled - access.is_immediate;
-            if i >= CPU_MAX_READS_PER_CYCLE {
-                MEMORY_BUS.send_write(
-                    builder,
-                    memory_cycle,
-                    access.address_space,
-                    access.address,
-                    access.data.map(|x| x.into()),
-                    count,
-                );
-            }
+            MEMORY_BUS.send(
+                builder,
+                memory_cycle,
+                op_type,
+                access.address_space,
+                access.address,
+                access.data.map(|x| x.into()),
+                count,
+            );
         }
 
         // Interaction with arithmetic (bus 2)
