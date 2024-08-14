@@ -62,7 +62,7 @@ impl<const BLOCK_SIZE: usize, T: AbstractField> MemoryBusInteraction<T, BLOCK_SI
     /// Finalizes and sends the memory operation with the specified count over the bus.
     pub fn send<AB>(self, count: impl Into<AB::Expr>, builder: &mut AB)
     where
-        AB: InteractionBuilder<Expr=T>,
+        AB: InteractionBuilder<Expr = T>,
     {
         let fields = [
             self.timestamp,
