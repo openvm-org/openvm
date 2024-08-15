@@ -12,10 +12,10 @@ impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
     ) {
         NewMemoryOfflineChecker::eval_memory_interactions(
             builder,
-            local.addr_space,
-            local.pointer,
-            local.final_cell,
-            local.initial_cell,
+            local.addr_space.into(),
+            local.pointer.into(),
+            local.final_cell.into_expr::<AB>(),
+            local.initial_cell.into_expr::<AB>(),
             AB::Expr::one() - local.is_extra,
         );
     }

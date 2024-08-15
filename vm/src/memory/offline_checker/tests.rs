@@ -15,6 +15,7 @@ use crate::{
         manager::{dimensions::MemoryDimensions, interface::MemoryInterface, MemoryManager},
         offline_checker::{air::NewMemoryOfflineChecker, columns::MemoryOfflineCheckerCols},
     },
+    vm::config::MemoryConfig,
 };
 
 const TEST_NUM_WORDS: usize = 1;
@@ -29,20 +30,19 @@ fn volatile_memory_offline_checker_test() {
     const MAX_VAL: u32 = 1 << 20;
 
     let memory_dimensions = MemoryDimensions::new(1, 20, 1);
-    let clk_max_bits = 20;
-    let decomp = 8;
+    let mem_config = MemoryConfig::new(30, 30, 30, 16);
 
     let range_checker = Arc::new(RangeCheckerGateChip::new(
         RANGE_CHECKER_BUS,
-        (1 << decomp) as u32,
+        (1 << mem_config.decomp) as u32,
     ));
     let mut memory_manager =
         MemoryManager::<TEST_NUM_WORDS, TEST_WORD_SIZE, Val>::with_volatile_memory(
-            memory_dimensions,
-            decomp,
+            mem_config,
             range_checker.clone(),
         );
-    let offline_checker = NewMemoryOfflineChecker::<TEST_WORD_SIZE>::new(clk_max_bits, decomp);
+    let offline_checker =
+        NewMemoryOfflineChecker::<TEST_WORD_SIZE>::new(mem_config.clk_max_bits, mem_config.decomp);
 
     let num_addresses = rng.gen_range(1..=10);
     let mut all_addresses = vec![];

@@ -10,11 +10,12 @@ use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::RngCore;
 
-use crate::memory::{
-    expand::{
-        columns::ExpandCols, tests::util::HashTestChip, ExpandChip, MemoryDimensions, EXPAND_BUS,
+use crate::{
+    cpu::EXPAND_BUS,
+    memory::{
+        expand::{columns::ExpandCols, tests::util::HashTestChip, ExpandChip, MemoryDimensions},
+        tree::MemoryNode,
     },
-    tree::MemoryNode,
 };
 
 mod util;

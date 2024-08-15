@@ -7,19 +7,19 @@ use super::air::NewMemoryOfflineChecker;
 use crate::memory::manager::{access_cell::AccessCell, operation::MemoryOperation};
 
 // TODO[osama]: to be renamed to MemoryAccess
-#[derive(new)]
+#[derive(new, Default)]
 pub struct NewMemoryAccess<const WORD_SIZE: usize, T> {
     pub op: MemoryOperation<WORD_SIZE, T>,
     pub old_cell: AccessCell<WORD_SIZE, T>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, new)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, new)]
 pub struct MemoryOfflineCheckerCols<const WORD_SIZE: usize, T> {
     pub io: MemoryOperation<WORD_SIZE, T>,
     pub aux: MemoryOfflineCheckerAuxCols<WORD_SIZE, T>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, new)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, new)]
 pub struct MemoryOfflineCheckerAuxCols<const WORD_SIZE: usize, T> {
     pub old_cell: AccessCell<WORD_SIZE, T>,
     pub is_immediate: T,
@@ -27,6 +27,8 @@ pub struct MemoryOfflineCheckerAuxCols<const WORD_SIZE: usize, T> {
     pub clk_lt: T,
     pub clk_lt_aux: IsLessThanAuxCols<T>,
 }
+
+// Straightforward implementations for from_slice, flatten, width functions for the above structs below
 
 impl<const WORD_SIZE: usize, T: Clone> MemoryOfflineCheckerCols<WORD_SIZE, T> {
     pub fn from_slice(slc: &[T]) -> Self {

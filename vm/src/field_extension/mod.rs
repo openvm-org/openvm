@@ -117,8 +117,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn calculate(
-        vm: &mut ExecutionSegment<WORD_SIZE, F>,
+    pub fn calculate<const NUM_WORDS: usize>(
+        vm: &mut ExecutionSegment<NUM_WORDS, WORD_SIZE, F>,
         start_timestamp: usize,
         instruction: Instruction<F>,
     ) -> [F; EXTENSION_DEGREE] {
@@ -169,8 +169,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         result
     }
 
-    fn read_extension_element(
-        vm: &mut ExecutionSegment<WORD_SIZE, F>,
+    fn read_extension_element<const NUM_WORDS: usize>(
+        vm: &mut ExecutionSegment<NUM_WORDS, WORD_SIZE, F>,
         timestamp: usize,
         address_space: F,
         address: F,
@@ -192,8 +192,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         result
     }
 
-    fn write_extension_element(
-        vm: &mut ExecutionSegment<WORD_SIZE, F>,
+    fn write_extension_element<const NUM_WORDS: usize>(
+        vm: &mut ExecutionSegment<NUM_WORDS, WORD_SIZE, F>,
         timestamp: usize,
         address_space: F,
         address: F,

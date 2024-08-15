@@ -346,7 +346,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     FieldExtensionArithmeticChip::calculate(vm, timestamp, instruction);
                 }
                 PERM_POS2 | COMP_POS2 => {
-                    Poseidon2Chip::<16, _>::calculate(vm, timestamp, instruction);
+                    Poseidon2Chip::<16, WORD_SIZE, _>::calculate(vm, timestamp, instruction);
                 }
                 HINT_INPUT => {
                     let hint = match vm.input_stream.pop_front() {
@@ -429,7 +429,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 + num_accesses_memory_rows * vm.memory_chip.air.air_width()
                 + num_field_base_ops * FieldExtensionArithmeticCols::<F>::get_width()
                 + num_field_extension_ops * FieldExtensionArithmeticCols::<F>::get_width()
-                + num_poseidon2_rows * Poseidon2VmCols::<16, F>::get_width(&vm.poseidon2_chip.air);
+                + num_poseidon2_rows
+                    * Poseidon2VmCols::<16, WORD_SIZE, F>::width(&vm.poseidon2_chip.air);
 
             #[cfg(debug_assertions)]
             vm.opcode_trace_cells

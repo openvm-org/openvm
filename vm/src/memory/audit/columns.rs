@@ -2,6 +2,7 @@ use std::iter;
 
 use afs_primitives::is_less_than_tuple::columns::IsLessThanTupleAuxCols;
 use derive_new::new;
+use p3_air::AirBuilder;
 
 use super::air::MemoryAuditAir;
 use crate::memory::manager::access_cell::AccessCell;
@@ -52,5 +53,22 @@ impl<const WORD_SIZE: usize, T: Clone> AuditCols<WORD_SIZE, T> {
     pub fn width(audit_air: &MemoryAuditAir<WORD_SIZE>) -> usize {
         4 + 2 * AccessCell::<WORD_SIZE, T>::width()
             + IsLessThanTupleAuxCols::<T>::width(&audit_air.addr_lt_air)
+    }
+}
+
+impl<const WORD_SIZE: usize, T> AuditCols<WORD_SIZE, T> {
+    pub fn into_expr<AB: AirBuilder>(self) -> AuditCols<WORD_SIZE, AB::Expr>
+    where
+        T: Into<AB::Expr>,
+    {
+        AuditCols::new(
+            self.addr_space.into(),
+            self.pointer.into(),
+            self.initial_cell.into_expr::<AB>(),
+            self.final_cell.into_expr::<AB>(),
+            self.is_extra.into(),
+            self.addr_lt.into(),
+            self.addr_lt_aux.into_expr::<AB>(),
+        )
     }
 }

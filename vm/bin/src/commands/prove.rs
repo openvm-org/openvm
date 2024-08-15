@@ -16,7 +16,7 @@ use stark_vm::{
 
 use crate::{
     asm::parse_asm_file,
-    commands::{read_from_path, write_bytes, WORD_SIZE},
+    commands::{read_from_path, write_bytes, NUM_WORDS, WORD_SIZE},
 };
 
 /// `afs prove` command
@@ -62,7 +62,7 @@ impl ProveCommand {
             instructions,
             debug_infos: vec![None; program_len],
         };
-        let vm = VirtualMachine::<WORD_SIZE, _>::new(config, program, vec![]);
+        let vm = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::new(config, program, vec![]);
 
         let result = vm.execute()?;
         let engine = config::baby_bear_poseidon2::default_engine(result.max_log_degree);
@@ -84,7 +84,7 @@ impl ProveCommand {
         }
         trace_builder.commit_current();
 
-        let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
+        let chips = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::get_chips(&chips);
         let num_chips = chips.len();
 
         let main_trace_data = trace_builder.view(&vk, chips);

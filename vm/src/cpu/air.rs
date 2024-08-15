@@ -301,10 +301,9 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         }
 
         for i in 0..CPU_MAX_ACCESSES_PER_CYCLE {
-            SubAir::eval(
-                &self.memory_offline_checker,
+            self.memory_offline_checker.subair_eval(
                 builder,
-                mem_ops[i].clone(),
+                mem_ops[i].clone().into_expr::<AB>(),
                 mem_oc_aux_cols[i].clone(),
             );
         }

@@ -31,10 +31,10 @@ pub mod config;
 ///
 /// Chips, traces, and public values should be retrieved by unpacking the `ExecutionResult` struct.
 /// `VirtualMachine::get_chips()` can be used to convert the boxes of chips to concrete chips.
-pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
+pub struct VirtualMachine<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
     pub config: VmConfig,
     pub program: Program<F>,
-    pub segments: Vec<ExecutionSegment<WORD_SIZE, F>>,
+    pub segments: Vec<ExecutionSegment<NUM_WORDS, WORD_SIZE, F>>,
     pub traces: Vec<DenseMatrix<F>>,
 }
 
@@ -86,7 +86,9 @@ pub struct VirtualMachineState<F: PrimeField32> {
     hint_stream: VecDeque<F>,
 }
 
-impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
+impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
+    VirtualMachine<NUM_WORDS, WORD_SIZE, F>
+{
     /// Create a new VM with a given config, program, and input stream.
     ///
     /// The VM will start with a single segment, which is created from the initial state of the CPU.
@@ -151,7 +153,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
 /// Executes the VM by calling `ExecutionSegment::generate_traces()` until the CPU hits `TERMINATE`
 /// and `cpu_chip.is_done`. Between every segment, the VM will call `generate_commitments()` and then
 /// `next_segment()`.
-impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
+impl<const NUM_WORDS: usize, const WORD_SIZE: usize>
+    VirtualMachine<NUM_WORDS, WORD_SIZE, BabyBear>
+{
     pub fn execute(mut self) -> Result<ExecutionResult<WORD_SIZE>, ExecutionError> {
         let mut traces = vec![];
         let mut metrics = Vec::new();
@@ -186,7 +190,7 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
             debug_infos: vec![],
         };
 
-        let unique_chips = get_chips::<WORD_SIZE, BabyBearPoseidon2Config>(
+        let unique_chips = get_chips::<NUM_WORDS, WORD_SIZE, BabyBearPoseidon2Config>(
             ExecutionSegment::new(self.config, empty_program, self.current_state()),
             &vec![true; num_chips],
         );
@@ -202,7 +206,7 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
 
             let segment_pis = segment.get_pis();
             let segment_types = segment.get_types();
-            chips.extend(get_chips::<WORD_SIZE, BabyBearPoseidon2Config>(
+            chips.extend(get_chips::<NUM_WORDS, WORD_SIZE, BabyBearPoseidon2Config>(
                 segment,
                 &inclusion_mask,
             ));

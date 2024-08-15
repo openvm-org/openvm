@@ -1,8 +1,17 @@
+use derive_new::new;
 use serde::{Deserialize, Serialize};
 
 use crate::cpu::CpuOptions;
 
 pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 20) - 100;
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, new)]
+pub struct MemoryConfig {
+    pub addr_space_max_bits: usize,
+    pub pointer_max_bits: usize,
+    pub clk_max_bits: usize,
+    pub decomp: usize,
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct VmConfig {
@@ -10,8 +19,7 @@ pub struct VmConfig {
     pub field_extension_enabled: bool,
     pub compress_poseidon2_enabled: bool,
     pub perm_poseidon2_enabled: bool,
-    pub limb_bits: usize,
-    pub decomp: usize,
+    pub memory_config: MemoryConfig,
     pub num_public_values: usize,
     pub max_segment_len: usize,
     /*pub max_program_length: usize,
@@ -26,8 +34,7 @@ impl Default for VmConfig {
             field_extension_enabled: true,
             compress_poseidon2_enabled: true,
             perm_poseidon2_enabled: true,
-            limb_bits: 30,
-            decomp: 16,
+            memory_config: MemoryConfig::new(30, 30, 30, 16),
             num_public_values: 0,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             collect_metrics: false,

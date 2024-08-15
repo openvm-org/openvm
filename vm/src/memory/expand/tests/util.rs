@@ -5,7 +5,7 @@ use p3_air::BaseAir;
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::memory::{expand::POSEIDON2_DIRECT_REQUEST_BUS, tree::Hasher};
+use crate::{cpu::POSEIDON2_DIRECT_REQUEST_BUS, memory::tree::Hasher};
 
 pub fn test_hash_sum<const CHUNK: usize, F: Field>(
     left: [F; CHUNK],

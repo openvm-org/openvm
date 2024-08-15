@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, HashMap, VecDeque},
     sync::Arc,
 };
 
@@ -17,20 +17,24 @@ use crate::{
     cpu::{trace::ExecutionError, CpuChip, CpuOptions, POSEIDON2_BUS, RANGE_CHECKER_BUS},
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
-    memory::offline_checker::MemoryChip,
+    memory::{
+        manager::{dimensions::MemoryDimensions, MemoryManager},
+        offline_checker::MemoryChip,
+    },
     poseidon2::Poseidon2Chip,
     program::{Program, ProgramChip},
 };
 
-pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
+pub struct ExecutionSegment<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
     pub config: VmConfig,
     pub cpu_chip: CpuChip<WORD_SIZE, F>,
     pub program_chip: ProgramChip<F>,
+    pub memory_manager: MemoryManager<NUM_WORDS, WORD_SIZE, F>,
     pub memory_chip: MemoryChip<WORD_SIZE, F>,
     pub field_arithmetic_chip: FieldArithmeticChip<F>,
     pub field_extension_chip: FieldExtensionArithmeticChip<WORD_SIZE, F>,
     pub range_checker: Arc<RangeCheckerGateChip>,
-    pub poseidon2_chip: Poseidon2Chip<16, F>,
+    pub poseidon2_chip: Poseidon2Chip<16, WORD_SIZE, F>,
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
     pub has_generation_happened: bool,
@@ -43,21 +47,35 @@ pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub(crate) collected_metrics: VmMetrics,
 }
 
-impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
+impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
+    ExecutionSegment<NUM_WORDS, WORD_SIZE, F>
+{
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(config: VmConfig, program: Program<F>, state: VirtualMachineState<F>) -> Self {
-        let decomp = config.decomp;
-        let limb_bits = config.limb_bits;
+        let range_checker = Arc::new(RangeCheckerGateChip::new(
+            RANGE_CHECKER_BUS,
+            (1 << config.memory_config.decomp) as u32,
+        ));
 
-        let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, 1 << decomp));
+        let cpu_chip = CpuChip::from_state(config.cpu_options(), state.state, config.memory_config);
+        // TODO[osama]: make this configurable
+        let memory_dimensions = MemoryDimensions::new(1, 20, 1);
+        // let memory_manager = NewMemoryChip::new(todo!()
+        //     MemoryDimensions::new(1, 20, 1), // TODO[osama]: make this part of VmConfig and make sure those numbers are correct/configurable
+        //     HashMap::new(),
+        //     config.limb_bits,
+        //     config.decomp,
+        // );
+        let memory_manager =
+            MemoryManager::with_volatile_memory(config.memory_config, range_checker.clone());
 
-        let cpu_chip = CpuChip::from_state(config.cpu_options(), state.state);
         let program_chip = ProgramChip::new(program);
-        let memory_chip = MemoryChip::new(limb_bits, limb_bits, limb_bits, decomp, state.memory);
+        let memory_chip = MemoryChip::new(config.memory_config, state.memory);
         let field_arithmetic_chip = FieldArithmeticChip::new();
         let field_extension_chip = FieldExtensionArithmeticChip::new();
         let poseidon2_chip = Poseidon2Chip::from_poseidon2_config(
             Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
+            config.memory_config,
             POSEIDON2_BUS,
         );
 
@@ -70,6 +88,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             has_generation_happened: false,
             public_values: vec![None; config.num_public_values],
             cpu_chip,
+            memory_manager,
             program_chip,
             memory_chip,
             field_arithmetic_chip,
@@ -139,8 +158,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         Ok(vec![])
     }
 
+    // TODO[osama]: revisit this
     pub fn get_num_chips(&self) -> usize {
-        let mut result: usize = 4;
+        let mut result: usize = 6;
         if self.config.cpu_options().field_arithmetic_enabled {
             result += 1;
         }
@@ -153,13 +173,23 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         result
     }
 
+    pub fn get_cpu_pis(&self) -> Vec<F> {
+        self.cpu_chip
+            .pis
+            .clone()
+            .into_iter()
+            .chain(self.public_values.iter().map(|x| x.unwrap_or(F::zero())))
+            .collect()
+    }
+
+    // TODO[osama]: revisit this
     /// Returns public values for all chips in this segment
     pub fn get_pis(&self) -> Vec<Vec<F>> {
         let len = self.get_num_chips();
         let mut result: Vec<Vec<F>> = vec![vec![]; len];
-        let mut cpu_public_values = self.cpu_chip.pis.clone();
-        cpu_public_values.extend(self.public_values.iter().map(|x| x.unwrap_or(F::zero())));
-        result[0].clone_from(&cpu_public_values);
+        // let mut cpu_public_values = self.cpu_chip.pis.clone();
+        // cpu_public_values.extend(self.public_values.iter().map(|x| x.unwrap_or(F::zero())));
+        result[0] = self.get_cpu_pis();
         result
     }
 
@@ -212,8 +242,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
 }
 
 /// Global function to get chips from a segment
-pub fn get_chips<const WORD_SIZE: usize, SC: StarkGenericConfig>(
-    segment: ExecutionSegment<WORD_SIZE, Val<SC>>,
+pub fn get_chips<const NUM_WORDS: usize, const WORD_SIZE: usize, SC: StarkGenericConfig>(
+    segment: ExecutionSegment<NUM_WORDS, WORD_SIZE, Val<SC>>,
     inclusion_mask: &[bool],
 ) -> Vec<Box<dyn AnyRap<SC>>>
 where

@@ -39,7 +39,7 @@ pub struct Poseidon2ColsIndexMap<const WIDTH: usize> {
 }
 
 impl<const WIDTH: usize, T: Clone> Poseidon2Cols<WIDTH, T> {
-    pub fn get_width(poseidon2_air: &Poseidon2Air<WIDTH, T>) -> usize {
+    pub fn get_width<F: Clone>(poseidon2_air: &Poseidon2Air<WIDTH, F>) -> usize {
         let io_width = Poseidon2IoCols::<WIDTH, T>::get_width();
         let aux_width = Poseidon2AuxCols::<WIDTH, T>::get_width(poseidon2_air);
         io_width + aux_width
@@ -136,7 +136,7 @@ impl<const WIDTH: usize, T: Clone> Poseidon2IoCols<WIDTH, T> {
 }
 
 impl<const WIDTH: usize, T: Clone> Poseidon2AuxCols<WIDTH, T> {
-    pub fn get_width(poseidon2_air: &Poseidon2Air<WIDTH, T>) -> usize {
+    pub fn get_width<F: Clone>(poseidon2_air: &Poseidon2Air<WIDTH, F>) -> usize {
         (poseidon2_air.rounds_f + poseidon2_air.rounds_p) * WIDTH
     }
 

@@ -8,6 +8,7 @@ use OpCode::*;
 use crate::{
     field_extension::FieldExtensionArithmeticAir,
     memory::offline_checker::air::NewMemoryOfflineChecker, poseidon2::Poseidon2Chip,
+    vm::config::MemoryConfig,
 };
 
 #[cfg(test)]
@@ -128,7 +129,7 @@ fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         FAIL => 0,
         PRINTF => 1,
         COMP_POS2 | PERM_POS2 => {
-            Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(opcode)
+            Poseidon2Chip::<16, 1, BabyBear>::max_accesses_per_instruction(opcode)
         }
         SHINTW => 3,
         HINT_INPUT | HINT_BITS => 0,
@@ -231,14 +232,12 @@ impl<const WORD_SIZE: usize, F: Clone> CpuChip<WORD_SIZE, F> {
     }
 
     /// Sets the current state of the CPU.
-    // TODO[osama]: move clk_max_bits and decomp somewhere else
     pub fn from_state(
         options: CpuOptions,
         state: ExecutionState,
-        clk_max_bits: usize,
-        decomp: usize,
+        mem_config: MemoryConfig,
     ) -> Self {
-        let mut chip = Self::new(options, clk_max_bits, decomp);
+        let mut chip = Self::new(options, mem_config.clk_max_bits, mem_config.decomp);
         chip.state = state;
         chip.start_state = state;
         chip

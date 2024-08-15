@@ -1,9 +1,9 @@
 use afs_primitives::{
-    is_less_than::{
-        columns::{IsLessThanCols, IsLessThanIoCols},
-        IsLessThanAir,
+    is_less_than::{columns::IsLessThanIoCols, IsLessThanAir},
+    is_zero::{
+        columns::{IsZeroCols, IsZeroIoCols},
+        IsZeroAir,
     },
-    is_zero::{columns::IsZeroCols, IsZeroAir},
     offline_checker::columns::OfflineCheckerCols,
     sub_chip::{AirConfig, SubAir},
     utils::{and, implies},
@@ -35,11 +35,11 @@ impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
     fn assert_compose<AB: AirBuilder>(
         &self,
         builder: &mut AB,
-        word: [AB::Var; WORD_SIZE],
+        word: [AB::Expr; WORD_SIZE],
         field_elem: AB::Expr,
     ) {
-        builder.assert_eq(word[0], field_elem);
-        for &cell in word.iter().take(WORD_SIZE).skip(1) {
+        builder.assert_eq(word[0].clone(), field_elem);
+        for cell in word.iter().take(WORD_SIZE).skip(1).cloned() {
             builder.assert_zero(cell);
         }
     }
@@ -63,31 +63,27 @@ impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB>
         let local = main.row_slice(0);
         let local = MemoryOfflineCheckerCols::<WORD_SIZE, AB::Var>::from_slice(&local);
 
-        SubAir::eval(self, builder, local.io, local.aux);
+        self.subair_eval(builder, local.io.into_expr::<AB>(), local.aux);
     }
 }
 
-impl<const WORD_SIZE: usize, AB: InteractionBuilder> SubAir<AB>
-    for NewMemoryOfflineChecker<WORD_SIZE>
-{
-    type IoView = MemoryOperation<WORD_SIZE, AB::Var>;
-    type AuxView = MemoryOfflineCheckerAuxCols<WORD_SIZE, AB::Var>;
-
-    fn eval(
+impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
+    pub fn subair_eval<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        op: MemoryOperation<WORD_SIZE, AB::Var>,
+        op: MemoryOperation<WORD_SIZE, AB::Expr>,
         aux: MemoryOfflineCheckerAuxCols<WORD_SIZE, AB::Var>,
     ) {
-        builder.assert_bool(op.op_type);
-        builder.assert_bool(op.enabled);
+        builder.assert_bool(op.op_type.clone());
+        builder.assert_bool(op.enabled.clone());
 
         // Ensuring is_immediate is correct
-        let addr_space_is_zero_cols =
-            IsZeroCols::new(op.addr_space, aux.is_immediate, aux.is_zero_aux);
+        let addr_space_is_zero_cols = IsZeroCols::<AB::Expr>::new(
+            IsZeroIoCols::<AB::Expr>::new(op.addr_space.clone(), aux.is_immediate.into()),
+            aux.is_zero_aux.into(),
+        );
 
-        SubAir::eval(
-            &self.is_zero_air,
+        self.is_zero_air.subair_eval(
             builder,
             addr_space_is_zero_cols.io,
             addr_space_is_zero_cols.inv,
@@ -95,35 +91,39 @@ impl<const WORD_SIZE: usize, AB: InteractionBuilder> SubAir<AB>
 
         self.assert_compose(
             &mut builder.when(aux.is_immediate),
-            op.cell.data,
-            op.pointer.into(),
+            op.cell.data.clone(),
+            op.pointer.clone(),
         );
 
         // is_immediate => read
         builder.assert_one(implies::<AB>(
             aux.is_immediate.into(),
-            AB::Expr::one() - op.op_type.into(),
+            AB::Expr::one() - op.op_type.clone(),
         ));
 
-        // Ensuring clk_lt is correct
-        let clk_lt_cols = IsLessThanCols::<AB::Var>::new(
-            IsLessThanIoCols::new(aux.old_cell.clk, op.cell.clk, aux.clk_lt),
-            aux.clk_lt_aux,
+        let clk_lt_io_cols = IsLessThanIoCols::<AB::Expr>::new(
+            aux.old_cell.clk.into(),
+            op.cell.clk.clone(),
+            aux.clk_lt.into(),
         );
 
-        SubAir::eval(&self.clk_lt_air, builder, clk_lt_cols.io, clk_lt_cols.aux);
+        self.clk_lt_air
+            .subair_eval(builder, clk_lt_io_cols, aux.clk_lt_aux);
 
-        // TODO[osama]: make it so that we don't have to call .into() explicitly
         // TODO[osama]: this should be reduced to degree 2
         builder.assert_one(implies::<AB>(
-            and::<AB>(op.enabled.into(), AB::Expr::one() - aux.is_immediate.into()),
+            and::<AB>(
+                op.enabled.clone(),
+                AB::Expr::one() - aux.is_immediate.into(),
+            ),
             aux.clk_lt.into(),
         ));
 
         // Ensuring that if op_type is Read, data_read is the same as data_write
         for i in 0..WORD_SIZE {
             builder.assert_zero(
-                (AB::Expr::one() - op.op_type.into()) * (op.cell.data[i] - aux.old_cell.data[i]),
+                (AB::Expr::one() - op.op_type.clone())
+                    * (op.cell.data[i].clone() - aux.old_cell.data[i]),
             );
         }
 
@@ -131,9 +131,9 @@ impl<const WORD_SIZE: usize, AB: InteractionBuilder> SubAir<AB>
             builder,
             op.addr_space,
             op.pointer,
-            aux.old_cell,
+            aux.old_cell.into_expr::<AB>(),
             op.cell,
-            op.enabled.into() - aux.is_immediate.into(),
+            op.enabled - aux.is_immediate.into(),
         );
     }
 }

@@ -1,15 +1,13 @@
 use p3_field::Field;
-use poseidon2_air::poseidon2::{
-    columns::{Poseidon2Cols, Poseidon2ColsIndexMap},
-    Poseidon2Air,
-};
+use poseidon2_air::poseidon2::{columns::Poseidon2Cols, Poseidon2Air};
 
-use super::Poseidon2VmAir;
+use super::air::Poseidon2VmAir;
+use crate::memory::offline_checker::columns::MemoryOfflineCheckerAuxCols;
 
 /// Columns for Poseidon2Vm AIR.
-pub struct Poseidon2VmCols<const WIDTH: usize, T> {
+pub struct Poseidon2VmCols<const WIDTH: usize, const WORD_SIZE: usize, T> {
     pub io: Poseidon2VmIoCols<T>,
-    pub aux: Poseidon2VmAuxCols<WIDTH, T>,
+    pub aux: Poseidon2VmAuxCols<WIDTH, WORD_SIZE, T>,
 }
 
 /// IO columns for Poseidon2Chip.
@@ -36,17 +34,19 @@ pub struct Poseidon2VmIoCols<T> {
 /// * `addresses`: addresses where inputs/outputs for Poseidon2 are located
 /// * `internal`: auxiliary columns used by Poseidon2Air for interpreting opcode, evaluating indicators, inverse, and explicit computations.
 #[derive(Clone, Debug)]
-pub struct Poseidon2VmAuxCols<const WIDTH: usize, T> {
+pub struct Poseidon2VmAuxCols<const WIDTH: usize, const WORD_SIZE: usize, T> {
     pub dst: T,
     pub lhs: T,
     pub rhs: T,
     pub internal: Poseidon2Cols<WIDTH, T>,
+    // There should be 3+2*WIDTH memory accesses
+    pub mem_oc_aux_cols: Vec<MemoryOfflineCheckerAuxCols<WORD_SIZE, T>>,
 }
 
-impl<const WIDTH: usize, T: Clone> Poseidon2VmCols<WIDTH, T> {
-    pub fn get_width(poseidon2_chip: &Poseidon2VmAir<WIDTH, T>) -> usize {
+impl<const WIDTH: usize, const WORD_SIZE: usize, T: Clone> Poseidon2VmCols<WIDTH, WORD_SIZE, T> {
+    pub fn width(poseidon2_chip: &Poseidon2VmAir<WIDTH, WORD_SIZE, T>) -> usize {
         Poseidon2VmIoCols::<T>::get_width()
-            + Poseidon2VmAuxCols::<WIDTH, T>::get_width(&poseidon2_chip.inner)
+            + Poseidon2VmAuxCols::<WIDTH, WORD_SIZE, T>::width(poseidon2_chip)
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -55,25 +55,25 @@ impl<const WIDTH: usize, T: Clone> Poseidon2VmCols<WIDTH, T> {
         result
     }
 
-    pub fn from_slice(
+    pub fn from_slice<F: Clone>(
         slice: &[T],
-        index_map: &Poseidon2ColsIndexMap<WIDTH>,
-    ) -> Poseidon2VmCols<WIDTH, T> {
+        air: &Poseidon2VmAir<WIDTH, WORD_SIZE, F>,
+    ) -> Poseidon2VmCols<WIDTH, WORD_SIZE, T> {
         let io_width = Poseidon2VmIoCols::<T>::get_width();
         Self {
             io: Poseidon2VmIoCols::<T>::from_slice(&slice[..io_width]),
-            aux: Poseidon2VmAuxCols::<WIDTH, T>::from_slice(&slice[io_width..], index_map),
+            aux: Poseidon2VmAuxCols::<WIDTH, WORD_SIZE, T>::from_slice(&slice[io_width..], air),
         }
     }
 }
 
-impl<const WIDTH: usize, T: Field> Poseidon2VmCols<WIDTH, T> {
+impl<const WIDTH: usize, const WORD_SIZE: usize, F: Field> Poseidon2VmCols<WIDTH, WORD_SIZE, F> {
     /// Blank row with all zero input (poseidon2 internal hash values are nonzero)
     /// and `is_alloc` set to 0.
-    pub fn blank_row(poseidon2_air: &Poseidon2Air<WIDTH, T>) -> Self {
+    pub fn blank_row(poseidon2_air: &Poseidon2Air<WIDTH, F>) -> Self {
         Self {
-            io: Poseidon2VmIoCols::<T>::blank_row(),
-            aux: Poseidon2VmAuxCols::<WIDTH, T>::blank_row(poseidon2_air),
+            io: Poseidon2VmIoCols::<F>::blank_row(),
+            aux: Poseidon2VmAuxCols::<WIDTH, WORD_SIZE, F>::blank_row(poseidon2_air),
         }
     }
 }
@@ -141,9 +141,9 @@ impl<T: Field> Poseidon2VmIoCols<T> {
     }
 }
 
-impl<const WIDTH: usize, T: Clone> Poseidon2VmAuxCols<WIDTH, T> {
-    pub fn get_width(air: &Poseidon2Air<WIDTH, T>) -> usize {
-        3 + Poseidon2Cols::<WIDTH, T>::get_width(air)
+impl<const WIDTH: usize, const WORD_SIZE: usize, T: Clone> Poseidon2VmAuxCols<WIDTH, WORD_SIZE, T> {
+    pub fn width(air: &Poseidon2VmAir<WIDTH, WORD_SIZE, T>) -> usize {
+        3 + Poseidon2Cols::<WIDTH, T>::get_width(&air.inner)
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -152,22 +152,41 @@ impl<const WIDTH: usize, T: Clone> Poseidon2VmAuxCols<WIDTH, T> {
         result
     }
 
-    pub fn from_slice(slice: &[T], index_map: &Poseidon2ColsIndexMap<WIDTH>) -> Self {
+    pub fn from_slice<F: Clone>(slc: &[T], air: &Poseidon2VmAir<WIDTH, WORD_SIZE, F>) -> Self {
+        let p2_index_map = Poseidon2Cols::index_map(&air.inner);
+
+        let dst = slc[0].clone();
+        let lhs = slc[1].clone();
+        let rhs = slc[2].clone();
+
+        let mut start = 3;
+        let mut end = start + Poseidon2Cols::<WIDTH, T>::get_width(&air.inner);
+        let internal = Poseidon2Cols::from_slice(&slc[start..end], &p2_index_map);
+
+        let mut mem_oc_aux_cols = Vec::with_capacity(3 + 2 * WIDTH);
+        for _ in 0..3 + 2 * WIDTH {
+            start = end;
+            end += MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(&air.mem_oc);
+            mem_oc_aux_cols.push(MemoryOfflineCheckerAuxCols::from_slice(&slc[start..end]));
+        }
+
         Self {
-            dst: slice[0].clone(),
-            lhs: slice[1].clone(),
-            rhs: slice[2].clone(),
-            internal: Poseidon2Cols::from_slice(&slice[3..], index_map),
+            dst,
+            lhs,
+            rhs,
+            internal,
+            mem_oc_aux_cols,
         }
     }
 }
-impl<const WIDTH: usize, T: Field> Poseidon2VmAuxCols<WIDTH, T> {
+impl<const WIDTH: usize, const WORD_SIZE: usize, T: Field> Poseidon2VmAuxCols<WIDTH, WORD_SIZE, T> {
     pub fn blank_row(air: &Poseidon2Air<WIDTH, T>) -> Self {
         Self {
             dst: T::default(),
             lhs: T::default(),
             rhs: T::default(),
             internal: Poseidon2Cols::blank_row(air),
+            mem_oc_aux_cols: todo!(),
         }
     }
 }

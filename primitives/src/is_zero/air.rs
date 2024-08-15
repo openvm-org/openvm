@@ -47,3 +47,15 @@ impl<AB: AirBuilder> SubAir<AB> for IsZeroAir {
         builder.assert_eq(io.is_zero + io.x * inv, AB::F::one());
     }
 }
+
+impl IsZeroAir {
+    pub fn subair_eval<AB: AirBuilder>(
+        &self,
+        builder: &mut AB,
+        io: IsZeroIoCols<AB::Expr>,
+        inv: AB::Expr,
+    ) {
+        builder.assert_eq(io.x.clone() * io.is_zero.clone(), AB::F::zero());
+        builder.assert_eq(io.is_zero + io.x * inv, AB::F::one());
+    }
+}

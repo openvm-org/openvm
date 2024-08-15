@@ -3,8 +3,9 @@ use std::iter;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use crate::memory::expand::{
-    air::ExpandAir, columns::ExpandCols, EXPAND_BUS, POSEIDON2_DIRECT_REQUEST_BUS,
+use crate::{
+    cpu::{EXPAND_BUS, POSEIDON2_DIRECT_REQUEST_BUS},
+    memory::expand::{air::ExpandAir, columns::ExpandCols},
 };
 
 impl<const CHUNK: usize> ExpandAir<CHUNK> {

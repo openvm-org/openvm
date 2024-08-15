@@ -5,10 +5,14 @@ use columns::*;
 use p3_field::PrimeField32;
 use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
 
+use self::air::Poseidon2VmAir;
 use crate::{
-    cpu::{trace::Instruction, OpCode, OpCode::*},
-    memory::tree::Hasher,
-    vm::ExecutionSegment,
+    cpu::{
+        trace::Instruction,
+        OpCode::{self, *},
+    },
+    memory::{offline_checker::air::NewMemoryOfflineChecker, tree::Hasher},
+    vm::{config::MemoryConfig, ExecutionSegment},
 };
 
 #[cfg(test)]
@@ -19,29 +23,30 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
-/// Poseidon2 Air, VM version.
-///
-/// Carries the subair for subtrace generation. Sticking to the conventions, this struct carries no state.
-/// `direct` determines whether direct interactions are enabled. By default they are on.
-pub struct Poseidon2VmAir<const WIDTH: usize, F: Clone> {
-    pub inner: Poseidon2Air<WIDTH, F>,
-    direct: bool, // Whether direct interactions are enabled.
-}
-
 /// Poseidon2 Chip.
 ///
 /// Carries the Poseidon2VmAir for constraints, and cached state for trace generation.
-pub struct Poseidon2Chip<const WIDTH: usize, F: PrimeField32> {
-    pub air: Poseidon2VmAir<WIDTH, F>,
-    pub rows: Vec<Poseidon2VmCols<WIDTH, F>>,
+pub struct Poseidon2Chip<const WIDTH: usize, const WORD_SIZE: usize, F: PrimeField32> {
+    pub air: Poseidon2VmAir<WIDTH, WORD_SIZE, F>,
+    pub rows: Vec<Poseidon2VmCols<WIDTH, WORD_SIZE, F>>,
 }
 
-impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
+impl<const WIDTH: usize, const WORD_SIZE: usize, F: PrimeField32>
+    Poseidon2VmAir<WIDTH, WORD_SIZE, F>
+{
     /// Construct from Poseidon2 config and bus index.
-    pub fn from_poseidon2_config(config: Poseidon2Config<WIDTH, F>, bus_index: usize) -> Self {
+    pub fn from_poseidon2_config(
+        config: Poseidon2Config<WIDTH, F>,
+        mem_config: MemoryConfig,
+        bus_index: usize,
+    ) -> Self {
         let inner = Poseidon2Air::<WIDTH, F>::from_config(config, bus_index);
         Self {
             inner,
+            mem_oc: NewMemoryOfflineChecker::<WORD_SIZE>::new(
+                mem_config.clk_max_bits,
+                mem_config.decomp,
+            ),
             direct: true,
         }
     }
@@ -92,10 +97,16 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
 }
 
 const WIDTH: usize = 16;
-impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
+impl<const WORD_SIZE: usize, F: PrimeField32> Poseidon2Chip<WIDTH, WORD_SIZE, F> {
     /// Construct from Poseidon2 config and bus index.
-    pub fn from_poseidon2_config(config: Poseidon2Config<WIDTH, F>, bus_index: usize) -> Self {
-        let air = Poseidon2VmAir::<WIDTH, F>::from_poseidon2_config(config, bus_index);
+    pub fn from_poseidon2_config(
+        p2_config: Poseidon2Config<WIDTH, F>,
+        mem_config: MemoryConfig,
+        bus_index: usize,
+    ) -> Self {
+        let air = Poseidon2VmAir::<WIDTH, WORD_SIZE, F>::from_poseidon2_config(
+            p2_config, mem_config, bus_index,
+        );
         Self { air, rows: vec![] }
     }
     /// Key method of Poseidon2Chip.
@@ -105,8 +116,8 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     /// truncating if the instruction is a compression.
     ///
     /// Used for both compression and permutation.
-    pub fn calculate<const WORD_SIZE: usize>(
-        vm: &mut ExecutionSegment<WORD_SIZE, F>,
+    pub fn calculate<const NUM_WORDS: usize>(
+        vm: &mut ExecutionSegment<NUM_WORDS, WORD_SIZE, F>,
         start_timestamp: usize,
         instruction: Instruction<F>,
     ) {
@@ -178,7 +189,9 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
 }
 
 const CHUNK: usize = 8;
-impl<const WIDTH: usize, F: PrimeField32> Hasher<CHUNK, F> for Poseidon2Chip<WIDTH, F> {
+impl<const WIDTH: usize, const WORD_SIZE: usize, F: PrimeField32> Hasher<CHUNK, F>
+    for Poseidon2Chip<WIDTH, WORD_SIZE, F>
+{
     /// Key method for Hasher trait.
     ///
     /// Takes two chunks, hashes them, and returns the result. Total with 3 * CHUNK, exposed in `direct_interaction_width()`.
@@ -198,6 +211,7 @@ impl<const WIDTH: usize, F: PrimeField32> Hasher<CHUNK, F> for Poseidon2Chip<WID
                 lhs: F::zero(),
                 rhs: F::zero(),
                 internal,
+                mem_oc_aux_cols: todo!(),
             },
         });
         output[..8].try_into().unwrap()

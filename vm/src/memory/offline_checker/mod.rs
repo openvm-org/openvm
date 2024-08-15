@@ -7,6 +7,7 @@ use super::MemoryAccess;
 use crate::{
     cpu::{MEMORY_BUS, RANGE_CHECKER_BUS},
     memory::{compose, decompose, OpType},
+    vm::config::MemoryConfig,
 };
 
 pub mod air;
@@ -37,18 +38,16 @@ pub struct MemoryChip<const WORD_SIZE: usize, F: PrimeField32> {
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
-    pub fn new(
-        addr_space_limb_bits: usize,
-        pointer_limb_bits: usize,
-        clk_limb_bits: usize,
-        decomp: usize,
-        memory: HashMap<(F, F), F>,
-    ) -> Self {
-        let idx_clk_limb_bits = vec![addr_space_limb_bits, pointer_limb_bits, clk_limb_bits];
+    pub fn new(mem_config: MemoryConfig, memory: HashMap<(F, F), F>) -> Self {
+        let idx_clk_limb_bits = vec![
+            mem_config.addr_space_max_bits,
+            mem_config.pointer_max_bits,
+            mem_config.clk_max_bits,
+        ];
 
         let offline_checker = OfflineChecker::new(
             idx_clk_limb_bits,
-            decomp,
+            mem_config.decomp,
             2,
             WORD_SIZE,
             RANGE_CHECKER_BUS,

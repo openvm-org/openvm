@@ -6,7 +6,9 @@ use p3_matrix::dense::RowMajorMatrix;
 use super::{columns::*, Poseidon2Chip, Poseidon2VmAir};
 use crate::cpu::trace::Instruction;
 
-impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
+impl<const WIDTH: usize, const WORD_SIZE: usize, F: PrimeField32>
+    Poseidon2VmAir<WIDTH, WORD_SIZE, F>
+{
     /// Generates a single row from inputs.
     pub fn generate_row(
         &self,
@@ -16,27 +18,31 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
         lhs: F,
         rhs: F,
         input_state: [F; WIDTH],
-    ) -> Poseidon2VmCols<WIDTH, F> {
+    ) -> Poseidon2VmCols<WIDTH, WORD_SIZE, F> {
         // SAFETY: only allowed because WIDTH constrained to 16 above
         let internal = self.inner.generate_trace_row(input_state);
         Poseidon2VmCols {
-            io: Poseidon2VmAir::<WIDTH, F>::make_io_cols(start_timestamp, instruction),
-            aux: Poseidon2VmAuxCols {
+            io: Poseidon2VmAir::<WIDTH, WORD_SIZE, F>::make_io_cols(start_timestamp, instruction),
+            aux: Poseidon2VmAuxCols::<WIDTH, WORD_SIZE, F> {
                 dst,
                 lhs,
                 rhs,
                 internal,
+                mem_oc_aux_cols: todo!(),
             },
         }
     }
 }
 
-impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
+impl<const WIDTH: usize, const WORD_SIZE: usize, F: PrimeField32>
+    Poseidon2Chip<WIDTH, WORD_SIZE, F>
+{
     /// Generates final Poseidon2VmAir trace from cached rows.
     pub fn generate_trace(&self) -> RowMajorMatrix<F> {
         let row_len = self.rows.len();
         let correct_len = row_len.next_power_of_two();
-        let blank_row = Poseidon2VmCols::<WIDTH, F>::blank_row(&self.air.inner).flatten();
+        let blank_row =
+            Poseidon2VmCols::<WIDTH, WORD_SIZE, F>::blank_row(&self.air.inner).flatten();
         let diff = correct_len - row_len;
         RowMajorMatrix::new(
             self.rows

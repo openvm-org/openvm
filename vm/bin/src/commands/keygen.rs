@@ -15,7 +15,7 @@ use stark_vm::{
     vm::{config::VmConfig, VirtualMachine},
 };
 
-use super::{write_bytes, WORD_SIZE};
+use super::{write_bytes, NUM_WORDS, WORD_SIZE};
 use crate::asm::parse_asm_file;
 
 /// `afs keygen` command
@@ -57,12 +57,12 @@ impl KeygenCommand {
             instructions,
             debug_infos: vec![None; program_len],
         };
-        let vm = VirtualMachine::<WORD_SIZE, _>::new(config, program, vec![]);
+        let vm = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::new(config, program, vec![]);
         let result = vm.execute()?;
         let engine = config::baby_bear_poseidon2::default_engine(result.max_log_degree);
         let mut keygen_builder = engine.keygen_builder();
 
-        let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&result.nonempty_chips);
+        let chips = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::get_chips(&result.nonempty_chips);
 
         for chip in chips {
             keygen_builder.add_air(chip, 0);

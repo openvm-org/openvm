@@ -1,5 +1,6 @@
 use afs_derive::AlignedBorrow;
 use derive_new::new;
+use p3_air::AirBuilder;
 
 use super::IsLessThanAir;
 
@@ -30,7 +31,7 @@ impl<T> IsLessThanIoCols<T> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, new)]
 pub struct IsLessThanAuxCols<T> {
     pub lower: T,
     // lower_decomp consists of lower decomposed into limbs of size decomp where we also shift
@@ -66,6 +67,16 @@ impl<T> IsLessThanAuxCols<T> {
     pub fn width(lt_air: &IsLessThanAir) -> usize {
         1 + lt_air.num_limbs + (lt_air.max_bits % lt_air.decomp != 0) as usize
     }
+
+    pub fn into_expr<AB: AirBuilder>(self) -> IsLessThanAuxCols<AB::Expr>
+    where
+        T: Into<AB::Expr>,
+    {
+        IsLessThanAuxCols::new(
+            self.lower.into(),
+            self.lower_decomp.into_iter().map(|x| x.into()).collect(),
+        )
+    }
 }
 
 #[derive(new)]
@@ -92,6 +103,16 @@ impl<T> IsLessThanCols<T> {
 
     pub fn width(lt_air: &IsLessThanAir) -> usize {
         IsLessThanIoCols::<T>::width() + IsLessThanAuxCols::<T>::width(lt_air)
+    }
+}
+
+impl<T> IsLessThanIoCols<T> {
+    pub fn from(x: impl Into<T>, y: impl Into<T>, less_than: impl Into<T>) -> Self {
+        Self {
+            x: x.into(),
+            y: y.into(),
+            less_than: less_than.into(),
+        }
     }
 }
 

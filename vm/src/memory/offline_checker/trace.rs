@@ -98,6 +98,25 @@ impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
         )
     }
 
+    pub fn disabled_memory_checker_aux_cols<F: PrimeField32>(
+        &self,
+        range_checker: Arc<RangeCheckerGateChip>,
+    ) -> MemoryOfflineCheckerAuxCols<WORD_SIZE, F> {
+        self.memory_access_to_checker_aux_cols(
+            &NewMemoryAccess::<WORD_SIZE, F>::new(
+                MemoryOperation::new(
+                    F::zero(),
+                    F::zero(),
+                    F::from_canonical_u8(OpType::Read as u8),
+                    AccessCell::new([F::zero(); WORD_SIZE], F::zero()),
+                    F::zero(),
+                ),
+                AccessCell::new([F::zero(); WORD_SIZE], F::zero()),
+            ),
+            range_checker,
+        )
+    }
+
     pub fn disabled_memory_checker_cols<F: PrimeField32>(
         &self,
         range_checker: Arc<RangeCheckerGateChip>,

@@ -14,7 +14,7 @@ use stark_vm::{
 
 use crate::{
     asm::parse_asm_file,
-    commands::{read_from_path, WORD_SIZE},
+    commands::{read_from_path, NUM_WORDS, WORD_SIZE},
 };
 
 /// `afs verify` command
@@ -69,7 +69,7 @@ impl VerifyCommand {
             instructions,
             debug_infos: vec![None; program_len],
         };
-        let vm = VirtualMachine::<WORD_SIZE, _>::new(config, program, vec![]);
+        let vm = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::new(config, program, vec![]);
         let encoded_vk = read_from_path(&Path::new(&self.keys_folder).join("vk"))?;
         let vk: MultiStarkVerifyingKey<BabyBearPoseidon2Config> =
             bincode::deserialize(&encoded_vk)?;
@@ -85,7 +85,7 @@ impl VerifyCommand {
         } = vm.execute()?;
         let engine = config::baby_bear_poseidon2::default_engine(max_log_degree);
 
-        let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
+        let chips = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::get_chips(&chips);
 
         let mut challenger = engine.new_challenger();
         let verifier = engine.verifier();

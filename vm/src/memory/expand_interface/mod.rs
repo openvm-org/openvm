@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use p3_field::PrimeField32;
 
 use self::air::MemoryExpandInterfaceAir;
-use super::manager::{dimensions::MemoryDimensions, AccessCell};
+use super::manager::{access_cell::AccessCell, dimensions::MemoryDimensions};
 
 pub mod air;
 pub mod bridge;

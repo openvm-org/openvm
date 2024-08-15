@@ -16,6 +16,7 @@ use stark_vm::{
     },
 };
 
+const NUM_WORDS: usize = 1;
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 30;
 const DECOMP: usize = 5;
@@ -28,14 +29,15 @@ fn air_test(
     witness_stream: Vec<Vec<BabyBear>>,
     fast_segmentation: bool,
 ) {
-    let vm = VirtualMachine::<WORD_SIZE, _>::new(
+    use stark_vm::vm::config::MemoryConfig;
+
+    let vm = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::new(
         VmConfig {
             field_arithmetic_enabled,
             field_extension_enabled,
             compress_poseidon2_enabled: false,
             perm_poseidon2_enabled: false,
-            limb_bits: LIMB_BITS,
-            decomp: DECOMP,
+            memory_config: MemoryConfig::new(LIMB_BITS, LIMB_BITS, LIMB_BITS, DECOMP),
             num_public_values: 4,
             max_segment_len: if fast_segmentation {
                 7
@@ -54,7 +56,7 @@ fn air_test(
         nonempty_pis: pis,
         ..
     } = vm.execute().unwrap();
-    let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
+    let chips = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::get_chips(&chips);
 
     run_simple_test(chips, traces, pis).expect("Verification failed");
 }
@@ -66,14 +68,15 @@ fn air_test_with_poseidon2(
     compress_poseidon2_enabled: bool,
     program: Program<BabyBear>,
 ) {
-    let vm = VirtualMachine::<WORD_SIZE, _>::new(
+    use stark_vm::vm::config::MemoryConfig;
+
+    let vm = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::new(
         VmConfig {
             field_arithmetic_enabled,
             field_extension_enabled,
             compress_poseidon2_enabled,
             perm_poseidon2_enabled: false,
-            limb_bits: LIMB_BITS,
-            decomp: DECOMP,
+            memory_config: MemoryConfig::new(LIMB_BITS, LIMB_BITS, LIMB_BITS, DECOMP),
             num_public_values: 4,
             max_segment_len: 6,
             ..Default::default()
@@ -98,7 +101,7 @@ fn air_test_with_poseidon2(
     };
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
 
-    let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
+    let chips = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::get_chips(&chips);
     engine
         .run_simple_test(chips, traces, pis)
         .expect("Verification failed");

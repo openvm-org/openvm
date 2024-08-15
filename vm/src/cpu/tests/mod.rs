@@ -24,7 +24,7 @@ use crate::{
     memory::{decompose, manager::interface::MemoryInterface, MemoryAccess, OpType},
     program::Program,
     vm::{
-        config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN},
+        config::{MemoryConfig, VmConfig, DEFAULT_MAX_SEGMENT_LEN},
         ExecutionSegment, VirtualMachine,
     },
 };
@@ -45,8 +45,7 @@ fn make_vm<const NUM_WORDS: usize, const WORD_SIZE: usize>(
             field_extension_enabled,
             compress_poseidon2_enabled: false,
             perm_poseidon2_enabled: false,
-            limb_bits: LIMB_BITS,
-            decomp: DECOMP,
+            memory_config: MemoryConfig::new(LIMB_BITS, LIMB_BITS, LIMB_BITS, DECOMP),
             num_public_values: 4,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             ..Default::default()

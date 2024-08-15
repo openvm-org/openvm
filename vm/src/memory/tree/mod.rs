@@ -6,7 +6,7 @@ use std::{
 use p3_field::PrimeField32;
 use MemoryNode::*;
 
-use crate::memory::expand::MemoryDimensions;
+use super::manager::dimensions::MemoryDimensions;
 
 pub trait Hasher<const CHUNK: usize, F> {
     fn hash(&mut self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK];

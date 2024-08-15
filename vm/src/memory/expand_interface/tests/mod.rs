@@ -13,7 +13,7 @@ use crate::{
     cpu::{EXPAND_BUS, NEW_MEMORY_BUS, WORD_SIZE},
     memory::{
         expand_interface::{columns::MemoryExpandInterfaceCols, MemoryExpandInterfaceChip},
-        manager::{dimensions::MemoryDimensions, AccessCell},
+        manager::{access_cell::AccessCell, dimensions::MemoryDimensions},
     },
 };
 

@@ -1,5 +1,6 @@
 use afs_derive::AlignedBorrow;
 use derive_new::new;
+use p3_air::AirBuilder;
 
 use super::IsLessThanTupleAir;
 use crate::{
@@ -12,6 +13,16 @@ pub struct IsLessThanTupleIoCols<T> {
     pub x: Vec<T>,
     pub y: Vec<T>,
     pub tuple_less_than: T,
+}
+
+impl<T> IsLessThanTupleIoCols<T> {
+    pub fn from(lt_cols: IsLessThanTupleIoCols<impl Into<T>>) -> Self {
+        Self {
+            x: lt_cols.x.into_iter().map(|x| x.into()).collect(),
+            y: lt_cols.y.into_iter().map(|y| y.into()).collect(),
+            tuple_less_than: lt_cols.tuple_less_than.into(),
+        }
+    }
 }
 
 impl<T: Clone> IsLessThanTupleIoCols<T> {
@@ -36,7 +47,7 @@ impl<T: Clone> IsLessThanTupleIoCols<T> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, new)]
 pub struct IsLessThanTupleAuxCols<T> {
     pub less_than: Vec<T>,
     pub less_than_aux: Vec<IsLessThanAuxCols<T>>,
@@ -106,6 +117,27 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
         width += IsEqualVecAuxCols::<T>::width(lt_air.tuple_len()) + 1;
 
         width
+    }
+}
+
+impl<T> IsLessThanTupleAuxCols<T> {
+    pub fn into_expr<AB: AirBuilder>(self) -> IsLessThanTupleAuxCols<AB::Expr>
+    where
+        T: Into<AB::Expr>,
+    {
+        IsLessThanTupleAuxCols::new(
+            self.less_than.into_iter().map(|x| x.into()).collect(),
+            self.less_than_aux
+                .into_iter()
+                .map(|x| x.into_expr::<AB>())
+                .collect(),
+            self.is_equal_vec_aux.into_expr::<AB>(),
+            self.is_equal_out.into(),
+            self.less_than_cumulative
+                .into_iter()
+                .map(|x| x.into())
+                .collect(),
+        )
     }
 }
 

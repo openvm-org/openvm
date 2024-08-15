@@ -9,7 +9,10 @@ use super::{
     audit::MemoryAuditChip, expand_interface::MemoryExpandInterfaceChip,
     offline_checker::columns::NewMemoryAccess,
 };
-use crate::memory::{decompose, manager::operation::MemoryOperation, OpType};
+use crate::{
+    memory::{decompose, manager::operation::MemoryOperation, OpType},
+    vm::config::MemoryConfig,
+};
 
 pub mod access;
 pub mod access_cell;
@@ -39,15 +42,14 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     }
 
     pub fn with_volatile_memory(
-        memory_dimensions: MemoryDimensions,
-        decomp: usize,
+        mem_config: MemoryConfig,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
         Self {
             interface_chip: MemoryInterface::Volatile(MemoryAuditChip::new(
-                memory_dimensions.as_max_bits(),
-                memory_dimensions.address_height,
-                decomp,
+                mem_config.addr_space_max_bits,
+                mem_config.pointer_max_bits,
+                mem_config.decomp,
                 range_checker,
             )),
             memory: HashMap::new(),
