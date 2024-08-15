@@ -1,32 +1,30 @@
-use std::borrow::Borrow;
-
 use afs_primitives::sub_chip::AirConfig;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
+use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmetic, FieldExtensionArithmeticAir};
 use crate::field_extension::{BETA, EXTENSION_DEGREE};
 
-impl AirConfig for FieldExtensionArithmeticAir {
-    type Cols<T> = FieldExtensionArithmeticCols<T>;
+impl<const WORD_SIZE: usize> AirConfig for FieldExtensionArithmeticAir<WORD_SIZE> {
+    type Cols<T> = FieldExtensionArithmeticCols<WORD_SIZE, T>;
 }
 
-impl<F: Field> BaseAir<F> for FieldExtensionArithmeticAir {
+impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for FieldExtensionArithmeticAir<WORD_SIZE> {
     fn width(&self) -> usize {
-        FieldExtensionArithmeticCols::<F>::get_width()
+        FieldExtensionArithmeticCols::<WORD_SIZE, F>::get_width()
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for FieldExtensionArithmeticAir {
+impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB> for FieldExtensionArithmeticAir<WORD_SIZE> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
         let beta_f = AB::Expr::from_canonical_usize(BETA);
 
         let local = main.row_slice(0);
-        let local_cols: &FieldExtensionArithmeticCols<AB::Var> = (*local).borrow();
+        let local_cols = FieldExtensionArithmeticCols::<WORD_SIZE, AB::Var>::from_iter(&mut local.iter().copied(), &self.mem_oc.clk_lt_air);
 
         let FieldExtensionArithmeticCols { io, aux } = local_cols;
 
@@ -45,7 +43,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExtensionArithmeticAir {
             io.opcode,
             aux.opcode_lo
                 + aux.opcode_hi * AB::Expr::two()
-                + AB::F::from_canonical_u8(FieldExtensionArithmeticAir::BASE_OP),
+                + AB::F::from_canonical_u8(FieldExtensionArithmetic::BASE_OP),
         );
 
         builder.assert_eq(
@@ -123,6 +121,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExtensionArithmeticAir {
             );
         }
 
+        let local_cols = FieldExtensionArithmeticCols { aux, io };
         self.eval_interactions(builder, local_cols);
     }
 }

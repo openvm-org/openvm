@@ -55,6 +55,7 @@ impl<T: Clone> IsLessThanAuxCols<T> {
             lower_decomp: slc[1..].to_vec(),
         }
     }
+
 }
 
 impl<T> IsLessThanAuxCols<T> {
@@ -62,6 +63,13 @@ impl<T> IsLessThanAuxCols<T> {
         let mut flattened = vec![self.lower];
         flattened.extend(self.lower_decomp);
         flattened
+    }
+
+    pub fn from_iter<I: Iterator<Item=T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
+        Self {
+            lower: iter.next().unwrap(),
+            lower_decomp: (1..Self::width(lt_air)).map(|_| iter.next().unwrap()).collect(),
+        }
     }
 
     pub fn width(lt_air: &IsLessThanAir) -> usize {

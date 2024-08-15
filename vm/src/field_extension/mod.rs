@@ -4,6 +4,8 @@ use crate::{
     cpu::{trace::Instruction, OpCode, FIELD_EXTENSION_INSTRUCTIONS},
     vm::ExecutionSegment,
 };
+use crate::memory::offline_checker::air::NewMemoryOfflineChecker;
+use crate::vm::config::MemoryConfig;
 
 pub mod air;
 pub mod bridge;
@@ -31,10 +33,13 @@ pub struct FieldExtensionArithmeticOperation<F> {
 }
 
 /// Field extension arithmetic chip. The irreducible polynomial is x^4 - 11.
-#[derive(Default, Clone, Copy)]
-pub struct FieldExtensionArithmeticAir {}
+pub struct FieldExtensionArithmeticAir<const WORD_SIZE: usize> {
+    mem_oc: NewMemoryOfflineChecker<WORD_SIZE>,
+}
 
-impl FieldExtensionArithmeticAir {
+pub struct FieldExtensionArithmetic;
+
+impl FieldExtensionArithmetic {
     pub const BASE_OP: u8 = OpCode::FE4ADD as u8;
 
     pub fn max_accesses_per_instruction(opcode: OpCode) -> usize {
@@ -103,15 +108,20 @@ impl FieldExtensionArithmeticAir {
 }
 
 pub struct FieldExtensionArithmeticChip<const WORD_SIZE: usize, F: PrimeField32> {
-    pub air: FieldExtensionArithmeticAir,
+    pub air: FieldExtensionArithmeticAir<WORD_SIZE>,
     pub operations: Vec<FieldExtensionArithmeticOperation<F>>,
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_SIZE, F> {
     #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
+    pub fn new(mem_config: MemoryConfig) -> Self {
         Self {
-            air: FieldExtensionArithmeticAir {},
+            air: FieldExtensionArithmeticAir {
+                mem_oc: NewMemoryOfflineChecker::<WORD_SIZE>::new(
+                    mem_config.clk_max_bits,
+                    mem_config.decomp,
+                ),
+            },
             operations: vec![],
         }
     }
@@ -141,7 +151,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
             FieldExtensionArithmeticChip::read_extension_element(vm, start_timestamp + 4, e, op_c)
         };
 
-        let result = FieldExtensionArithmeticAir::solve::<F>(opcode, operand1, operand2).unwrap();
+        let result = FieldExtensionArithmetic::solve(opcode, operand1, operand2).unwrap();
 
         FieldExtensionArithmeticChip::write_extension_element(
             vm,

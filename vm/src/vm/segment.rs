@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
+    collections::{BTreeMap, VecDeque},
     sync::Arc,
 };
 
@@ -75,7 +75,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         let program_chip = ProgramChip::new(program);
         let memory_chip = MemoryChip::new(config.memory_config, state.memory);
         let field_arithmetic_chip = FieldArithmeticChip::new();
-        let field_extension_chip = FieldExtensionArithmeticChip::new();
+        let field_extension_chip = FieldExtensionArithmeticChip::new(config.memory_config);
         let poseidon2_chip = Poseidon2Chip::from_poseidon2_config(
             Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
             config.memory_config,

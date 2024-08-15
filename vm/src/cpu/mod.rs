@@ -6,10 +6,10 @@ use p3_field::PrimeField32;
 use OpCode::*;
 
 use crate::{
-    field_extension::FieldExtensionArithmeticAir,
     memory::offline_checker::air::NewMemoryOfflineChecker, poseidon2::Poseidon2Chip,
     vm::config::MemoryConfig,
 };
+use crate::field_extension::FieldExtensionArithmetic;
 
 #[cfg(test)]
 pub mod tests;
@@ -51,6 +51,8 @@ pub enum OpCode {
     BNE = 4,
     TERMINATE = 5,
     PUBLISH = 6,
+
+    // Field arithmetic operations must have consecutive opcodes in the order below.
     FADD = 10,
     FSUB = 11,
     FMUL = 12,
@@ -59,6 +61,7 @@ pub enum OpCode {
     FAIL = 20,
     PRINTF = 21,
 
+    // Field extension arithmetic operations must have consecutive opcodes in the order below.
     FE4ADD = 30,
     FE4SUB = 31,
     BBE4MUL = 32,
@@ -124,7 +127,7 @@ fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         PUBLISH => 2,
         opcode if FIELD_ARITHMETIC_INSTRUCTIONS.contains(&opcode) => 3,
         opcode if FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode) => {
-            FieldExtensionArithmeticAir::max_accesses_per_instruction(opcode)
+            FieldExtensionArithmetic::max_accesses_per_instruction(opcode)
         }
         FAIL => 0,
         PRINTF => 1,
