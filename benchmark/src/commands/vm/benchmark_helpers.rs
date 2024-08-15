@@ -3,7 +3,7 @@ use std::{collections::HashMap, fs::File, io::Write as _};
 use afs_recursion::{
     hints::Hintable,
     stark::{DynRapForRecursion, VerifierProgram},
-    types::{new_from_multi_vk, InnerConfig, VerifierInput},
+    types::{new_from_inner_multi_vk, InnerConfig, VerifierInput},
 };
 use afs_stark_backend::{
     prover::{metrics::trace_metrics, trace::TraceCommitmentBuilder},
@@ -110,7 +110,7 @@ pub fn run_recursive_test_benchmark(
         .collect();
 
     // Build verification program in eDSL.
-    let advice = new_from_multi_vk(&vk);
+    let advice = new_from_inner_multi_vk(&vk);
 
     let program = VerifierProgram::build(rec_raps, advice, &engine.fri_params);
 
