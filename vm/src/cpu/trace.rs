@@ -354,7 +354,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     }
                 }
                 opcode @ (FADD | FSUB | FMUL | FDIV) => {
-                    // read from d[b] and e[c]
+                    // read from e[b] and f[c]
                     let operand1 = read!(e, b);
                     let operand2 = read!(f, c);
                     // write to d[a]

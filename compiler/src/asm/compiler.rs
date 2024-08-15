@@ -237,7 +237,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.add_ext_exti(dst, lhs, EF::from_base(rhs.neg()), debug_info);
                 }
                 DslIr::SubEIN(dst, lhs, rhs) => {
-                    self.sub_ext_exti(dst, lhs, rhs, debug_info.clone());
+                    self.sub_exti_ext(dst, lhs, rhs, debug_info.clone());
                 }
                 DslIr::SubE(dst, lhs, rhs) => {
                     self.push(
@@ -979,7 +979,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         }
     }
 
-    fn sub_ext_exti(
+    fn sub_exti_ext(
         &mut self,
         dst: Ext<F, EF>,
         lhs: EF,
