@@ -6,7 +6,6 @@ use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test,
     interaction::dummy_interaction_air::DummyInteractionAir,
 };
-use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::{
@@ -27,7 +26,7 @@ use crate::{
     },
     field_arithmetic::ArithmeticOperation,
     memory::{decompose, MemoryAccess, OpType},
-    program::{columns::ProgramPreprocessedCols, Program},
+    program::Program,
     vm::{
         config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN},
         ExecutionSegment, VirtualMachine,
@@ -279,8 +278,7 @@ fn air_test_change<
     }
 
     // Pad program cells with zeroes to make height a power of two.
-    let width = <DummyInteractionAir as BaseAir<BabyBear>>::width(&program_air)
-        + ProgramPreprocessedCols::<BabyBear>::get_width();
+    let width = 10;
     let desired_height = program.instructions.len().next_power_of_two();
     let cells_to_add = desired_height * width - program.instructions.len() * width;
     program_cells.extend(iter::repeat(BabyBear::zero()).take(cells_to_add));
