@@ -164,7 +164,10 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::SubFI(dst.fp(), lhs.fp(), rhs), debug_info);
                 }
                 DslIr::SubVIN(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::SubFIN(dst.fp(), lhs, rhs.fp()), debug_info.clone());
+                    self.push(
+                        AsmInstruction::SubFIN(dst.fp(), lhs, rhs.fp()),
+                        debug_info.clone(),
+                    );
                 }
                 DslIr::SubF(dst, lhs, rhs) => {
                     self.push(
@@ -176,7 +179,10 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::SubFI(dst.fp(), lhs.fp(), rhs), debug_info);
                 }
                 DslIr::SubFIN(dst, lhs, rhs) => {
-                    self.push(AsmInstruction::SubFIN(dst.fp(), lhs, rhs.fp()), debug_info.clone());
+                    self.push(
+                        AsmInstruction::SubFIN(dst.fp(), lhs, rhs.fp()),
+                        debug_info.clone(),
+                    );
                 }
                 DslIr::NegV(dst, src) => {
                     self.push(

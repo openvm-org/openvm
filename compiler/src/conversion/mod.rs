@@ -186,19 +186,51 @@ fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         ],
         AsmInstruction::AddFI(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] + rhs
-            inst_med(FADD, i32_f(dst), i32_f(lhs), rhs, AS::Memory, AS::Memory, AS::Immediate),
+            inst_med(
+                FADD,
+                i32_f(dst),
+                i32_f(lhs),
+                rhs,
+                AS::Memory,
+                AS::Memory,
+                AS::Immediate,
+            ),
         ],
         AsmInstruction::SubF(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] - mem[rhs]
-            inst_med(FSUB, i32_f(dst), i32_f(lhs), i32_f(rhs), AS::Memory, AS::Memory, AS::Memory),
+            inst_med(
+                FSUB,
+                i32_f(dst),
+                i32_f(lhs),
+                i32_f(rhs),
+                AS::Memory,
+                AS::Memory,
+                AS::Memory,
+            ),
         ],
         AsmInstruction::SubFI(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] - rhs
-            inst_med(FSUB, i32_f(dst), i32_f(lhs), rhs, AS::Memory, AS::Memory, AS::Immediate),
+            inst_med(
+                FSUB,
+                i32_f(dst),
+                i32_f(lhs),
+                rhs,
+                AS::Memory,
+                AS::Memory,
+                AS::Immediate,
+            ),
         ],
         AsmInstruction::SubFIN(dst, lhs, rhs) => vec![
             // mem[dst] <- lhs - mem[rhs]
-            inst_med(FSUB, i32_f(dst), lhs, i32_f(rhs), AS::Memory, AS::Immediate, AS::Memory),
+            inst_med(
+                FSUB,
+                i32_f(dst),
+                lhs,
+                i32_f(rhs),
+                AS::Memory,
+                AS::Immediate,
+                AS::Memory,
+            ),
         ],
         AsmInstruction::MulF(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] * mem[rhs]
@@ -214,7 +246,15 @@ fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         ],
         AsmInstruction::MulFI(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] * rhs
-            inst_med(FMUL, i32_f(dst), i32_f(lhs), rhs, AS::Memory, AS::Memory, AS::Immediate),
+            inst_med(
+                FMUL,
+                i32_f(dst),
+                i32_f(lhs),
+                rhs,
+                AS::Memory,
+                AS::Memory,
+                AS::Immediate,
+            ),
         ],
         AsmInstruction::DivF(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] / mem[rhs]
@@ -230,11 +270,27 @@ fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         ],
         AsmInstruction::DivFI(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] / rhs
-            inst_med(FDIV, i32_f(dst), i32_f(lhs), rhs, AS::Memory, AS::Memory, AS::Immediate),
+            inst_med(
+                FDIV,
+                i32_f(dst),
+                i32_f(lhs),
+                rhs,
+                AS::Memory,
+                AS::Memory,
+                AS::Immediate,
+            ),
         ],
         AsmInstruction::DivFIN(dst, lhs, rhs) => vec![
             // mem[dst] <- lhs / mem[rhs]
-            inst_med(FDIV, i32_f(dst), lhs, i32_f(rhs), AS::Memory, AS::Immediate, AS::Memory),
+            inst_med(
+                FDIV,
+                i32_f(dst),
+                lhs,
+                i32_f(rhs),
+                AS::Memory,
+                AS::Immediate,
+                AS::Memory,
+            ),
         ],
         _ => panic!(
             "Illegal argument to convert_field_arithmetic_instruction: {:?}",
