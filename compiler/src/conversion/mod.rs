@@ -333,29 +333,51 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
         AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
         AsmInstruction::LoadFI(dst, src, index, size, offset) => vec![
             // mem[dst] <- mem[mem[src] + offset + mem[index] * size]
-            large_inst(
-                LOADW,
-                i32_f(dst),
-                offset,
-                i32_f(src),
-                AS::Memory,
-                AS::Memory,
-                i32_f(index),
-                size,
-            ),
+            if index == 0 {
+                inst(
+                    LOADW,
+                    i32_f(dst),
+                    offset,
+                    i32_f(src),
+                    AS::Memory,
+                    AS::Memory,
+                )
+            } else {
+                large_inst(
+                    LOADW2,
+                    i32_f(dst),
+                    offset,
+                    i32_f(src),
+                    AS::Memory,
+                    AS::Memory,
+                    i32_f(index),
+                    size,
+                )
+            },
         ],
         AsmInstruction::StoreFI(val, addr, index, size, offset) => vec![
             // mem[mem[addr] + offset + mem[index] * size] <- mem[val]
-            large_inst(
-                STOREW,
-                i32_f(val),
-                offset,
-                i32_f(addr),
-                AS::Memory,
-                AS::Memory,
-                i32_f(index),
-                size,
-            ),
+            if index == 0 {
+                inst(
+                    STOREW,
+                    i32_f(val),
+                    offset,
+                    i32_f(addr),
+                    AS::Memory,
+                    AS::Memory,
+                )
+            } else {
+                large_inst(
+                    STOREW2,
+                    i32_f(val),
+                    offset,
+                    i32_f(addr),
+                    AS::Memory,
+                    AS::Memory,
+                    i32_f(index),
+                    size,
+                )
+            },
         ],
         AsmInstruction::Jump(dst, label) => {
             vec![

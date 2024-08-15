@@ -143,7 +143,6 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         let loadw_flag = operation_flags[&LOADW];
         read1_enabled_check = read1_enabled_check + loadw_flag;
         read2_enabled_check = read2_enabled_check + loadw_flag;
-        read3_enabled_check = read3_enabled_check + loadw_flag;
         write_enabled_check = write_enabled_check + loadw_flag;
 
         let mut when_loadw = builder.when(loadw_flag);
@@ -151,14 +150,62 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         when_loadw.assert_eq(read1.address_space, d);
         when_loadw.assert_eq(read1.address, c);
 
+        when_loadw.assert_eq(read2.address_space, e);
+        self.assert_compose(&mut when_loadw, read1.data, read2.address - b);
+
+        when_loadw.assert_eq(write.address_space, d);
+        when_loadw.assert_eq(write.address, a);
+
+        for i in 0..WORD_SIZE {
+            when_loadw.assert_eq(write.data[i], read3.data[i]);
+        }
+
+        when_loadw
+            .when_transition()
+            .assert_eq(next_pc, pc + inst_width);
+
+        // STOREW: e[d[c] + b] <- d[a]
+        let storew_flag = operation_flags[&STOREW];
+        read1_enabled_check = read1_enabled_check + storew_flag;
+        read2_enabled_check = read2_enabled_check + storew_flag;
+        write_enabled_check = write_enabled_check + storew_flag;
+
+        let mut when_storew = builder.when(storew_flag);
+        when_storew.assert_eq(read1.address_space, d);
+        when_storew.assert_eq(read1.address, c);
+
+        when_storew.assert_eq(read2.address_space, d);
+        when_storew.assert_eq(read2.address, a);
+
+        when_storew.assert_eq(write.address_space, e);
+        self.assert_compose(&mut when_storew, read1.data, write.address - b);
+        for i in 0..WORD_SIZE {
+            when_storew.assert_eq(write.data[i], read2.data[i]);
+        }
+
+        when_storew
+            .when_transition()
+            .assert_eq(next_pc, pc + inst_width);
+
+        // LOADW2: d[a] <- e[d[c] + b + mem[f] * g]
+        let loadw2_flag = operation_flags[&LOADW2];
+        read1_enabled_check = read1_enabled_check + loadw2_flag;
+        read2_enabled_check = read2_enabled_check + loadw2_flag;
+        read3_enabled_check = read3_enabled_check + loadw2_flag;
+        write_enabled_check = write_enabled_check + loadw2_flag;
+
+        let mut when_loadw = builder.when(loadw2_flag);
+
+        when_loadw.assert_eq(read1.address_space, d);
+        when_loadw.assert_eq(read1.address, c);
+
         when_loadw.assert_eq(read3.address_space, e);
-        // self.assert_compose(&mut when_loadw, read1.data, read2.address - b);
         let addr_diff = from_fn::<AB::Expr, WORD_SIZE, _>(|i| read1.data[i] + g * read2.data[i]);
         self.assert_compose_expr_word(&mut when_loadw, addr_diff, read3.address - b);
         when_loadw.assert_eq(write.address_space, d);
         when_loadw.assert_eq(write.address, a);
 
-        when_loadw.assert_zero((read2.address_space - AB::Expr::two()) * f);
+        when_loadw.assert_eq(read2.address_space, AB::Expr::two());
         when_loadw.assert_eq(read2.address, f);
 
         for i in 0..WORD_SIZE {
@@ -169,21 +216,21 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
             .when_transition()
             .assert_eq(next_pc, pc + inst_width);
 
-        // STOREW: e[d[c] + b + d[f] * g] <- d[a]
-        let storew_flag = operation_flags[&STOREW];
-        read1_enabled_check = read1_enabled_check + storew_flag;
-        read2_enabled_check = read2_enabled_check + storew_flag;
-        read3_enabled_check = read3_enabled_check + storew_flag;
-        write_enabled_check = write_enabled_check + storew_flag;
+        // STOREW2: e[d[c] + b + mem[f] * g] <- d[a]
+        let storew2_flag = operation_flags[&STOREW2];
+        read1_enabled_check = read1_enabled_check + storew2_flag;
+        read2_enabled_check = read2_enabled_check + storew2_flag;
+        read3_enabled_check = read3_enabled_check + storew2_flag;
+        write_enabled_check = write_enabled_check + storew2_flag;
 
-        let mut when_storew = builder.when(storew_flag);
+        let mut when_storew = builder.when(storew2_flag);
         when_storew.assert_eq(read1.address_space, d);
         when_storew.assert_eq(read1.address, c);
 
         when_storew.assert_eq(read2.address_space, d);
         when_storew.assert_eq(read2.address, a);
 
-        when_storew.assert_zero((read3.address_space - AB::Expr::two()) * f);
+        when_storew.assert_eq(read3.address_space, AB::Expr::two());
         when_storew.assert_eq(read3.address, f);
 
         when_storew.assert_eq(write.address_space, e);
