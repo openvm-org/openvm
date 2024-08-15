@@ -1314,29 +1314,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ethbloom"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c22d4b5885b6aa2fe5e8b9329fb8d232bf739e434e6b87347c63bdd00c120f60"
-dependencies = [
- "crunchy",
- "fixed-hash",
- "tiny-keccak",
-]
-
-[[package]]
-name = "ethereum-types"
-version = "0.14.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02d215cbf040552efcbe99a38372fe80ab9d00268e20012b79fcd0f073edd8ee"
-dependencies = [
- "ethbloom",
- "fixed-hash",
- "primitive-types",
- "uint",
-]
-
-[[package]]
 name = "eyre"
 version = "0.6.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3163,9 +3140,7 @@ dependencies = [
  "num-traits",
  "pairing 0.23.0",
  "rand",
- "ruint",
  "serde",
- "sha3",
 ]
 
 [[package]]
@@ -3175,7 +3150,6 @@ source = "git+https://github.com/axiom-crypto/snark-verifier?branch=chore/ruint-
 dependencies = [
  "ark-std 0.3.0",
  "bincode",
- "ethereum-types",
  "getset",
  "halo2-base",
  "hex",

@@ -149,14 +149,13 @@ mod tests {
     use afs_compiler::ir::{Builder, Witness};
     use p3_baby_bear::BabyBear;
     use p3_bn254_fr::Bn254Fr;
-    use p3_field::{
-        reduce_32 as reduce_32_gt, split_32 as split_32_gt,
-        AbstractField,
-    };
+    use p3_field::{reduce_32 as reduce_32_gt, split_32 as split_32_gt, AbstractField};
 
-    use crate::config::outer::OuterConfig;
-    use crate::halo2::Halo2Prover;
-    use crate::utils::{reduce_32, split_32};
+    use crate::{
+        config::outer::OuterConfig,
+        halo2::Halo2Prover,
+        utils::{reduce_32, split_32},
+    };
 
     #[test]
     fn test_num2bits_v() {
