@@ -1,5 +1,6 @@
-use crate::modular_multiplication::bigint::air::ModularMultiplicationBigIntAir;
-use crate::modular_multiplication::columns::ModularMultiplicationCols;
+use crate::modular_multiplication::{
+    bigint::air::ModularMultiplicationBigIntAir, columns::ModularMultiplicationCols,
+};
 
 // a * b = (p * q) + r
 

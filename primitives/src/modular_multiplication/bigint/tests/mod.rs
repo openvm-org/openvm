@@ -1,17 +1,18 @@
 use std::sync::Arc;
 
+use afs_test_utils::{config::baby_bear_blake3::run_simple_test_no_pis, utils::create_seeded_rng};
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::RngCore;
 
-use afs_test_utils::config::baby_bear_blake3::run_simple_test_no_pis;
-use afs_test_utils::utils::create_seeded_rng;
-
-use crate::modular_multiplication::bigint::air::ModularMultiplicationBigIntAir;
-use crate::modular_multiplication::bigint::columns::ModularMultiplicationBigIntCols;
-use crate::range_gate::RangeCheckerGateChip;
+use crate::{
+    modular_multiplication::bigint::{
+        air::ModularMultiplicationBigIntAir, columns::ModularMultiplicationBigIntCols,
+    },
+    range_gate::RangeCheckerGateChip,
+};
 
 fn secp256k1_prime() -> BigUint {
     let mut result = BigUint::one() << 256;

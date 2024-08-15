@@ -1,5 +1,6 @@
 use std::cmp::min;
 
+use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::One;
@@ -7,12 +8,14 @@ use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use afs_stark_backend::interaction::InteractionBuilder;
-
-use crate::modular_multiplication::air::{constrain_limbs, range_check};
-use crate::modular_multiplication::bigint::columns::ModularMultiplicationBigIntCols;
-use crate::modular_multiplication::{FullLimbs, LimbDimensions};
-use crate::sub_chip::AirConfig;
+use crate::{
+    modular_multiplication::{
+        air::{constrain_limbs, range_check},
+        bigint::columns::ModularMultiplicationBigIntCols,
+        FullLimbs, LimbDimensions,
+    },
+    sub_chip::AirConfig,
+};
 
 pub struct ModularMultiplicationBigIntAir {
     pub modulus: BigUint,

@@ -6,13 +6,16 @@ use p3_air::BaseAir;
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::modular_multiplication::bigint::air::ModularMultiplicationBigIntAir;
-use crate::modular_multiplication::bigint::columns::ModularMultiplicationBigIntCols;
-use crate::modular_multiplication::columns::ModularMultiplicationCols;
-use crate::modular_multiplication::trace::generate_modular_multiplication_trace_row;
-use crate::modular_multiplication::FullLimbs;
-use crate::range_gate::RangeCheckerGateChip;
-use crate::sub_chip::LocalTraceInstructions;
+use crate::{
+    modular_multiplication::{
+        bigint::{air::ModularMultiplicationBigIntAir, columns::ModularMultiplicationBigIntCols},
+        columns::ModularMultiplicationCols,
+        trace::generate_modular_multiplication_trace_row,
+        FullLimbs,
+    },
+    range_gate::RangeCheckerGateChip,
+    sub_chip::LocalTraceInstructions,
+};
 
 impl ModularMultiplicationBigIntAir {
     pub fn generate_trace<F: PrimeField64>(

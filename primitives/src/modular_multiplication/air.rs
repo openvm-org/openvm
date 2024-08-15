@@ -1,10 +1,10 @@
+use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::Itertools;
 use p3_field::AbstractField;
 
-use afs_stark_backend::interaction::InteractionBuilder;
-
-use crate::modular_multiplication::columns::ModularMultiplicationCols;
-use crate::modular_multiplication::{FullLimbs, LimbDimensions};
+use crate::modular_multiplication::{
+    columns::ModularMultiplicationCols, FullLimbs, LimbDimensions,
+};
 
 pub fn range_check<AB: InteractionBuilder>(
     builder: &mut AB,

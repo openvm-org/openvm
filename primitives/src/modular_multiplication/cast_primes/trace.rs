@@ -7,14 +7,18 @@ use p3_air::BaseAir;
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::modular_multiplication::cast_primes::air::ModularMultiplicationPrimesAir;
-use crate::modular_multiplication::cast_primes::columns::{
-    ModularMultiplicationPrimesCols, SmallModulusSystemCols,
+use crate::{
+    modular_multiplication::{
+        cast_primes::{
+            air::ModularMultiplicationPrimesAir,
+            columns::{ModularMultiplicationPrimesCols, SmallModulusSystemCols},
+        },
+        trace::generate_modular_multiplication_trace_row,
+        FullLimbs,
+    },
+    range_gate::RangeCheckerGateChip,
+    sub_chip::LocalTraceInstructions,
 };
-use crate::modular_multiplication::trace::generate_modular_multiplication_trace_row;
-use crate::modular_multiplication::FullLimbs;
-use crate::range_gate::RangeCheckerGateChip;
-use crate::sub_chip::LocalTraceInstructions;
 
 impl<F: PrimeField64> ModularMultiplicationPrimesAir<F> {
     pub fn generate_trace(
