@@ -1,9 +1,9 @@
 use std::iter;
 
-use afs_stark_backend::interaction::InteractionBuilder;
+use afs_stark_backend::interaction::{InteractionBuilder, InteractionType};
 use p3_field::AbstractField;
 
-use crate::memory::{MemoryAddress, OpType};
+use crate::memory::MemoryAddress;
 
 /// Represents a memory bus identified by a unique bus index (`usize`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -11,53 +11,53 @@ pub struct MemoryBus(pub usize);
 
 impl MemoryBus {
     /// Prepares a write operation through the memory bus.
-    pub fn write<T, const BLOCK_SIZE: usize>(
+    pub fn send<T: Clone>(
         &self,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
-        data: [impl Into<T>; BLOCK_SIZE],
+        data: Vec<impl Into<T>>,
         timestamp: impl Into<T>,
-    ) -> MemoryBusInteraction<T, BLOCK_SIZE> {
-        self.access(OpType::Write, address, data, timestamp)
+    ) -> MemoryBusInteraction<T> {
+        self.send_or_receive(InteractionType::Send, address, data, timestamp)
     }
 
     /// Prepares a read operation through the memory bus.
-    pub fn read<T, const BLOCK_SIZE: usize>(
+    pub fn receive<T: Clone>(
         &self,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
-        data: [impl Into<T>; BLOCK_SIZE],
+        data: Vec<impl Into<T>>,
         timestamp: impl Into<T>,
-    ) -> MemoryBusInteraction<T, BLOCK_SIZE> {
-        self.access(OpType::Read, address, data, timestamp)
+    ) -> MemoryBusInteraction<T> {
+        self.send_or_receive(InteractionType::Receive, address, data, timestamp)
     }
 
     /// Prepares a memory operation (read or write) through the memory bus.
-    pub fn access<T, const BLOCK_SIZE: usize>(
+    fn send_or_receive<T: Clone>(
         &self,
-        op_type: OpType,
+        interaction_type: InteractionType,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
-        data: [impl Into<T>; BLOCK_SIZE],
+        data: Vec<impl Into<T>>,
         timestamp: impl Into<T>,
-    ) -> MemoryBusInteraction<T, BLOCK_SIZE> {
+    ) -> MemoryBusInteraction<T> {
         MemoryBusInteraction {
             bus_index: self.0,
-            op_type,
+            interaction_type,
             address: MemoryAddress::new(address.address_space.into(), address.pointer.into()),
-            data: data.map(Into::into),
+            data: data.into_iter().map(|item| item.into()).collect(),
             timestamp: timestamp.into(),
         }
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct MemoryBusInteraction<T, const BLOCK_SIZE: usize> {
+#[derive(Clone, Debug)]
+pub struct MemoryBusInteraction<T> {
     pub bus_index: usize,
-    pub op_type: OpType,
+    pub interaction_type: InteractionType,
     pub address: MemoryAddress<T, T>,
-    pub data: [T; BLOCK_SIZE],
+    pub data: Vec<T>,
     pub timestamp: T,
 }
 
-impl<const BLOCK_SIZE: usize, T: AbstractField> MemoryBusInteraction<T, BLOCK_SIZE> {
+impl<T: AbstractField> MemoryBusInteraction<T> {
     /// Finalizes and sends/receives the memory operation with the specified count over the bus.
     ///
     /// A read corresponds to a receive, and a write corresponds to a send.
@@ -65,18 +65,13 @@ impl<const BLOCK_SIZE: usize, T: AbstractField> MemoryBusInteraction<T, BLOCK_SI
     where
         AB: InteractionBuilder<Expr = T>,
     {
+        // Chain 1 at the end to ensure that different length interactions are always distinct.
         let fields = iter::empty()
             .chain([self.address.address_space, self.address.pointer])
             .chain(self.data)
-            .chain([self.timestamp]);
+            .chain([self.timestamp])
+            .chain(iter::once(AB::Expr::one()));
 
-        match self.op_type {
-            OpType::Read => {
-                builder.push_receive(self.bus_index, fields, count);
-            }
-            OpType::Write => {
-                builder.push_send(self.bus_index, fields, count);
-            }
-        }
+        builder.push_interaction(self.bus_index, fields, count, self.interaction_type);
     }
 }

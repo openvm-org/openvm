@@ -35,7 +35,7 @@ impl<const BLOCK_SIZE: usize, AB: InteractionBuilder> Air<AB> for MemoryDummyAir
         let local: &DummyMemoryInteractionCols<AB::Var, BLOCK_SIZE> = (*local).borrow();
 
         self.bus
-            .write(local.address, local.data, local.timestamp)
+            .send(local.address, local.data.to_vec(), local.timestamp)
             .eval(builder, local.count);
     }
 }

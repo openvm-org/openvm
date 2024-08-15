@@ -65,8 +65,8 @@ fn audit_air_test() {
 
     let diff_height = num_addresses.next_power_of_two() - num_addresses;
 
-    let init_memory_dummy_air = DummyInteractionAir::new(4, false, MEMORY_BUS);
-    let final_memory_dummy_air = DummyInteractionAir::new(4, true, MEMORY_BUS);
+    let init_memory_dummy_air = DummyInteractionAir::new(5, false, MEMORY_BUS);
+    let final_memory_dummy_air = DummyInteractionAir::new(5, true, MEMORY_BUS);
 
     let init_memory_trace = RowMajorMatrix::new(
         distinct_addresses
@@ -76,11 +76,12 @@ fn audit_air_test() {
                     .into_iter()
                     .chain(iter::once(Val::zero()))
                     .chain(iter::once(Val::zero()))
+                    .chain(iter::once(Val::one()))
                     .collect::<Vec<_>>()
             })
-            .chain(iter::repeat(Val::zero()).take(5 * diff_height))
+            .chain(iter::repeat(Val::zero()).take(6 * diff_height))
             .collect(),
-        5,
+        6,
     );
 
     let final_memory_trace = RowMajorMatrix::new(
@@ -93,11 +94,12 @@ fn audit_air_test() {
                     .into_iter()
                     .chain(iter::once(timestamped_value.value))
                     .chain(iter::once(timestamped_value.timestamp))
+                    .chain(iter::once(Val::one()))
                     .collect::<Vec<_>>()
             })
-            .chain(iter::repeat(Val::zero()).take(5 * diff_height))
+            .chain(iter::repeat(Val::zero()).take(6 * diff_height))
             .collect(),
-        5,
+        6,
     );
 
     let audit_trace = audit_chip.generate_trace(&final_memory);

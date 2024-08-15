@@ -27,11 +27,11 @@ use stark_vm::{
 use tracing::Level;
 
 const LIMB_BITS: usize = 29;
-const DECOMP: usize = 16;
 
 fn vm_config_with_field_arithmetic() -> VmConfig {
     VmConfig {
         field_arithmetic_enabled: true,
+        memory_config: MemoryConfig::short(),
         ..VmConfig::core()
     }
 }
@@ -39,11 +39,7 @@ fn vm_config_with_field_arithmetic() -> VmConfig {
 // log_blowup = 2 by default
 fn air_test(config: VmConfig, program: Program<BabyBear>, witness_stream: Vec<Vec<BabyBear>>) {
     let vm = VirtualMachine::new(
-        VmConfig {
-            memory_config: MemoryConfig::new(LIMB_BITS, LIMB_BITS, LIMB_BITS, DECOMP),
-            num_public_values: 4,
-            ..config
-        },
+        config,
         program,
         witness_stream,
     );
@@ -78,9 +74,9 @@ fn air_test_with_compress_poseidon2(
             field_extension_enabled: false,
             compress_poseidon2_enabled: true,
             perm_poseidon2_enabled: false,
-            memory_config: MemoryConfig::new(LIMB_BITS, LIMB_BITS, LIMB_BITS, DECOMP),
             num_public_values: 4,
             poseidon2_max_constraint_degree: Some(poseidon2_max_constraint_degree),
+            memory_config: MemoryConfig::short(),
             ..Default::default()
         },
         program,
@@ -121,7 +117,7 @@ fn air_test_with_compress_poseidon2(
 fn test_vm_1() {
     setup_tracing_with_log_level(Level::TRACE);
 
-    let n = 2;
+    let n = 6;
     /*
     Instruction 0 assigns word[0]_1 to n.
     Instruction 4 terminates
@@ -276,6 +272,7 @@ fn test_vm_field_extension_arithmetic() {
         VmConfig {
             field_arithmetic_enabled: true,
             field_extension_enabled: true,
+            memory_config: MemoryConfig::short(),
             ..VmConfig::core()
         },
         program,
@@ -327,7 +324,7 @@ fn test_vm_compress_poseidon2_as2() {
 
     let mut instructions = vec![];
 
-    let lhs_ptr = rng.gen_range(1..1 << 20);
+    let lhs_ptr = rng.gen_range(1..1 << 20) / 8 * 8;
     for i in 0..8 {
         // [lhs_ptr + i]_2 <- rnd()
         instructions.push(Instruction::from_isize(
@@ -339,7 +336,7 @@ fn test_vm_compress_poseidon2_as2() {
             2,
         ));
     }
-    let rhs_ptr = rng.gen_range(1..1 << 20);
+    let rhs_ptr = rng.gen_range(1..1 << 20) / 8 * 8;
     for i in 0..8 {
         // [rhs_ptr + i]_2 <- rnd()
         instructions.push(Instruction::from_isize(
@@ -351,7 +348,7 @@ fn test_vm_compress_poseidon2_as2() {
             2,
         ));
     }
-    let dst_ptr = rng.gen_range(1..1 << 20);
+    let dst_ptr = rng.gen_range(1..1 << 20) / 8 * 8;
 
     // [11]_1 <- lhs_ptr
     instructions.push(Instruction::from_isize(STOREW, lhs_ptr, 0, 11, 0, 1));
@@ -456,6 +453,7 @@ fn test_vm_keccak() {
     air_test(
         VmConfig {
             keccak_enabled: true,
+            memory_config: MemoryConfig::short(),
             ..VmConfig::core()
         },
         program,
@@ -484,6 +482,7 @@ fn test_vm_keccak_non_full_round() {
     air_test(
         VmConfig {
             keccak_enabled: true,
+            memory_config: MemoryConfig::short(),
             ..VmConfig::core()
         },
         program,

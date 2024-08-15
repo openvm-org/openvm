@@ -99,23 +99,45 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
         }
     }
 
+    fn generate_traces(self) -> Vec<RowMajorMatrix<F>> {
+        match Rc::try_unwrap(self) {
+            Ok(ref_cell) => ref_cell.into_inner().generate_traces(),
+            Err(_) => panic!("cannot generate trace while other chips still hold a reference"),
+        }
+    }
+
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         self.borrow().air()
     }
+    fn airs<SC: StarkGenericConfig>(&self) -> Vec<Box<dyn AnyRap<SC>>>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        self.borrow().airs()
+    }
 
     fn generate_public_values(&mut self) -> Vec<F> {
         self.borrow_mut().generate_public_values()
+    }
+    fn generate_public_values_per_air(&mut self) -> Vec<Vec<F>> {
+        self.borrow_mut().generate_public_values_per_air()
     }
 
     fn current_trace_height(&self) -> usize {
         self.borrow().current_trace_height()
     }
+    fn current_trace_heights(&self) -> Vec<usize> {
+        self.borrow().current_trace_heights()
+    }
 
     fn trace_width(&self) -> usize {
         self.borrow().trace_width()
+    }
+    fn trace_widths(&self) -> Vec<usize> {
+        self.borrow().trace_widths()
     }
 }
 

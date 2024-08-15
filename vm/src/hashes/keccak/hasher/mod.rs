@@ -211,7 +211,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
 
         let timestamp_change = KeccakVmAir::timestamp_change::<F>(len).as_canonical_u32() as usize;
         let to_timestamp = from_state.timestamp + timestamp_change;
-        memory.jump_timestamp(F::from_canonical_usize(to_timestamp));
+        memory.increase_timestamp_to(F::from_canonical_usize(to_timestamp));
 
         Ok(ExecutionState {
             pc: from_state.pc + 1,
