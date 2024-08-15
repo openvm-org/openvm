@@ -5,6 +5,7 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
+use super::columns::{IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupleIoCols};
 use crate::{
     is_equal_vec::IsEqualVecAir,
     is_less_than::{
@@ -13,8 +14,6 @@ use crate::{
     },
     sub_chip::{AirConfig, SubAir},
 };
-
-use super::columns::{IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupleIoCols};
 
 #[derive(Clone, Debug)]
 pub struct IsLessThanTupleAir {

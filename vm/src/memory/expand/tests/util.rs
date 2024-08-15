@@ -1,13 +1,11 @@
 use std::array::from_fn;
 
+use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_air::BaseAir;
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
-use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
-
-use crate::memory::expand::POSEIDON2_DIRECT_REQUEST_BUS;
-use crate::memory::tree::Hasher;
+use crate::memory::{expand::POSEIDON2_DIRECT_REQUEST_BUS, tree::Hasher};
 
 pub fn test_hash_sum<const CHUNK: usize, F: Field>(
     left: [F; CHUNK],

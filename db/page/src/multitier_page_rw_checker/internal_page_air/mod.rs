@@ -1,9 +1,8 @@
-use getset::Getters;
-
 use afs_primitives::{
     is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
     is_zero::IsZeroAir,
 };
+use getset::Getters;
 
 use super::page_controller::MyLessThanTupleParams;
 
@@ -70,6 +69,18 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
             is_init,
             is_less_than_tuple_param,
             is_less_than_tuple_air: subairs,
+            air_id,
+        }
+    }
+
+    pub fn clone_with_id(&self, air_id: u32) -> Self {
+        Self {
+            path_bus_index: self.path_bus_index,
+            data_bus_index: self.data_bus_index,
+            is_less_than_tuple_air: self.is_less_than_tuple_air.clone(),
+            is_less_than_tuple_param: self.is_less_than_tuple_param.clone(),
+            is_init: self.is_init,
+            idx_len: self.idx_len,
             air_id,
         }
     }

@@ -1,15 +1,13 @@
 use std::sync::Arc;
 
-use afs_primitives::offline_checker::OfflineCheckerChip;
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::{offline_checker::OfflineCheckerChip, range_gate::RangeCheckerGateChip};
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 #[cfg(feature = "parallel")]
 use p3_maybe_rayon::prelude::*;
 
-use crate::memory::{MemoryAccess, OpType};
-
 use super::MemoryChip;
+use crate::memory::{MemoryAccess, OpType};
 
 impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
     /// Each row in the trace follow the same order as the Cols struct:

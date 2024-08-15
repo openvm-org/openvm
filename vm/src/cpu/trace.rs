@@ -1,26 +1,31 @@
-use std::collections::VecDeque;
-use std::{collections::BTreeMap, error::Error, fmt::Display};
-
-use p3_field::{Field, PrimeField32, PrimeField64};
-use p3_matrix::dense::RowMajorMatrix;
+use std::{
+    collections::{BTreeMap, VecDeque},
+    error::Error,
+    fmt::Display,
+};
 
 use afs_primitives::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
-
-use crate::cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual};
-use crate::memory::{compose, decompose};
-use crate::poseidon2::Poseidon2Chip;
-use crate::vm::cycle_tracker::CycleTracker;
-use crate::{field_extension::FieldExtensionArithmeticChip, vm::ExecutionSegment};
+use p3_field::{Field, PrimeField32, PrimeField64};
+use p3_matrix::dense::RowMajorMatrix;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
-    max_accesses_per_instruction, CpuChip, ExecutionState,
+    timestamp_delta, CpuChip, ExecutionState,
     OpCode::{self, *},
     CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
 };
+use crate::{
+    cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
+    field_extension::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticChip},
+    memory::{compose, decompose},
+    poseidon2::{columns::Poseidon2VmCols, Poseidon2Chip},
+    program::columns::ProgramPreprocessedCols,
+    vm::ExecutionSegment,
+};
 
+#[allow(clippy::too_many_arguments)]
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
 pub struct Instruction<F> {
     pub opcode: OpCode,
@@ -29,6 +34,8 @@ pub struct Instruction<F> {
     pub op_c: F,
     pub d: F,
     pub e: F,
+    pub op_f: F,
+    pub op_g: F,
     pub debug: String,
 }
 
@@ -40,6 +47,7 @@ pub fn isize_to_field<F: Field>(value: isize) -> F {
 }
 
 impl<F: Field> Instruction<F> {
+    #[allow(clippy::too_many_arguments)]
     pub fn from_isize(
         opcode: OpCode,
         op_a: isize,
@@ -55,6 +63,32 @@ impl<F: Field> Instruction<F> {
             op_c: isize_to_field::<F>(op_c),
             d: isize_to_field::<F>(d),
             e: isize_to_field::<F>(e),
+            op_f: isize_to_field::<F>(0),
+            op_g: isize_to_field::<F>(0),
+            debug: String::new(),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn large_from_isize(
+        opcode: OpCode,
+        op_a: isize,
+        op_b: isize,
+        op_c: isize,
+        d: isize,
+        e: isize,
+        op_f: isize,
+        op_g: isize,
+    ) -> Self {
+        Self {
+            opcode,
+            op_a: isize_to_field::<F>(op_a),
+            op_b: isize_to_field::<F>(op_b),
+            op_c: isize_to_field::<F>(op_c),
+            d: isize_to_field::<F>(d),
+            e: isize_to_field::<F>(e),
+            op_f: isize_to_field::<F>(op_f),
+            op_g: isize_to_field::<F>(op_g),
             debug: String::new(),
         }
     }
@@ -67,6 +101,8 @@ impl<F: Field> Instruction<F> {
             op_c: F::zero(),
             d: F::zero(),
             e: F::zero(),
+            op_f: F::zero(),
+            op_g: F::zero(),
             debug: String::from(debug),
         }
     }
@@ -147,21 +183,25 @@ impl Display for ExecutionError {
 impl Error for ExecutionError {}
 
 impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
-    pub fn generate_trace(
-        vm: &mut ExecutionSegment<WORD_SIZE, F>,
-    ) -> Result<RowMajorMatrix<F>, ExecutionError> {
+    pub fn execute(vm: &mut ExecutionSegment<WORD_SIZE, F>) -> Result<(), ExecutionError> {
         let mut clock_cycle: usize = vm.cpu_chip.state.clock_cycle;
         let mut timestamp: usize = vm.cpu_chip.state.timestamp;
         let mut pc = F::from_canonical_usize(vm.cpu_chip.state.pc);
 
         let mut hint_stream = vm.hint_stream.clone();
-        let mut cycle_tracker = CycleTracker::new();
+        let mut cycle_tracker = std::mem::take(&mut vm.cycle_tracker);
         let mut is_done = false;
+        let mut collect_metrics = vm.config.collect_metrics;
 
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
 
-            let instruction = vm.program_chip.get_instruction(pc_usize)?;
+            let (instruction, debug_info) = vm.program_chip.get_instruction(pc_usize)?;
+
+            let dsl_instr = match debug_info {
+                Some(debug_info) => debug_info.dsl_instruction,
+                None => String::new(),
+            };
 
             let opcode = instruction.opcode;
             let a = instruction.op_a;
@@ -169,6 +209,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let c = instruction.op_c;
             let d = instruction.d;
             let e = instruction.e;
+            let f = instruction.op_f;
+            let g = instruction.op_g;
             let debug = instruction.debug.clone();
 
             let io = CpuIoCols {
@@ -180,6 +222,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 op_c: c,
                 d,
                 e,
+                op_f: f,
+                op_g: g,
             };
 
             let mut next_pc = pc + F::one();
@@ -187,6 +231,11 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let mut accesses = [disabled_memory_cols(); CPU_MAX_ACCESSES_PER_CYCLE];
             let mut num_reads = 0;
             let mut num_writes = 0;
+
+            let initial_accesses = vm.memory_chip.accesses.len();
+            let initial_field_base_ops = vm.field_arithmetic_chip.operations.len();
+            let initial_field_extension_ops = vm.field_extension_chip.operations.len();
+            let initial_poseidon2_rows = vm.poseidon2_chip.rows.len();
 
             macro_rules! read {
                 ($address_space: expr, $address: expr) => {{
@@ -241,6 +290,20 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     let value = read!(d, a);
                     write!(e, base_pointer + b, value);
                 }
+                // d[a] <- e[d[c] + b + d[f] * g]
+                LOADW2 => {
+                    let base_pointer = read!(d, c);
+                    let index = read!(d, f);
+                    let value = read!(e, base_pointer + b + index * g);
+                    write!(d, a, value);
+                }
+                // e[d[c] + b + mem[f] * g] <- d[a]
+                STOREW2 => {
+                    let base_pointer = read!(d, c);
+                    let value = read!(d, a);
+                    let index = read!(d, f);
+                    write!(e, base_pointer + b + index * g, value);
+                }
                 // d[a] <- pc + INST_WIDTH, pc <- pc + b
                 JAL => {
                     write!(d, a, pc + F::from_canonical_usize(INST_WIDTH));
@@ -291,13 +354,19 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     }
                 }
                 opcode @ (FADD | FSUB | FMUL | FDIV) => {
-                    // read from d[b] and e[c]
-                    let operand1 = read!(d, b);
-                    let operand2 = read!(e, c);
+                    // read from e[b] and f[c]
+                    let operand1 = read!(e, b);
+                    let operand2 = read!(f, c);
                     // write to d[a]
                     let result = vm
                         .field_arithmetic_chip
                         .calculate(opcode, (operand1, operand2));
+                    write!(d, a, result);
+                }
+                F_LESS_THAN => {
+                    let operand1 = read!(d, b);
+                    let operand2 = read!(e, c);
+                    let result = vm.is_less_than_chip.compare((operand1, operand2));
                     write!(d, a, result);
                 }
                 FAIL => panic!("Unreachable code"),
@@ -309,7 +378,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     FieldExtensionArithmeticChip::calculate(vm, timestamp, instruction);
                 }
                 PERM_POS2 | COMP_POS2 => {
-                    Poseidon2Chip::<16, _>::poseidon2_perm(vm, timestamp, instruction);
+                    Poseidon2Chip::<16, _>::calculate(vm, timestamp, instruction);
                 }
                 HINT_INPUT => {
                     let hint = match vm.input_stream.pop_front() {
@@ -339,21 +408,52 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     let base_pointer = read!(d, a);
                     write!(e, base_pointer + b, hint);
                 }
-                CT_START => cycle_tracker.start(
-                    debug,
-                    &vm.cpu_chip.rows.concat(),
-                    clock_cycle,
-                    timestamp,
-                    &vm.metrics(),
-                ),
-                CT_END => cycle_tracker.end(
-                    debug,
-                    &vm.cpu_chip.rows.concat(),
-                    clock_cycle,
-                    timestamp,
-                    &vm.metrics(),
-                ),
+                CT_START => cycle_tracker.start(debug, vm.metrics.clone()),
+                CT_END => cycle_tracker.end(debug, vm.metrics.clone()),
             };
+
+            let final_accesses = vm.memory_chip.accesses.len();
+            let num_accesses_memory_rows = final_accesses - initial_accesses;
+
+            let final_field_base_ops = vm.field_arithmetic_chip.operations.len();
+            let num_field_base_ops = final_field_base_ops - initial_field_base_ops;
+
+            let final_field_extension_ops = vm.field_extension_chip.operations.len();
+            let num_field_extension_ops = final_field_extension_ops - initial_field_extension_ops;
+
+            let final_poseidon2_rows = vm.poseidon2_chip.rows.len();
+            let num_poseidon2_rows = final_poseidon2_rows - initial_poseidon2_rows;
+
+            if collect_metrics {
+                vm.update_chip_metrics();
+                vm.metrics
+                    .opcode_counts
+                    .entry(opcode.to_string())
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
+
+                if !dsl_instr.is_empty() {
+                    vm.metrics
+                        .dsl_counts
+                        .entry(dsl_instr)
+                        .and_modify(|count| *count += 1)
+                        .or_insert(1);
+                }
+
+                let trace_cells = CpuCols::<WORD_SIZE, F>::get_width(vm.options())
+                    + ProgramPreprocessedCols::<F>::get_width()
+                    + num_accesses_memory_rows * vm.memory_chip.air.air_width()
+                    + num_field_base_ops * FieldExtensionArithmeticCols::<F>::get_width()
+                    + num_field_extension_ops * FieldExtensionArithmeticCols::<F>::get_width()
+                    + num_poseidon2_rows
+                        * Poseidon2VmCols::<16, F>::get_width(&vm.poseidon2_chip.air);
+
+                vm.metrics
+                    .opcode_trace_cells
+                    .entry(opcode.to_string())
+                    .and_modify(|count| *count += trace_cells)
+                    .or_insert(trace_cells);
+            }
 
             let mut operation_flags = BTreeMap::new();
             for other_opcode in vm.options().enabled_instructions() {
@@ -380,9 +480,13 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             vm.cpu_chip.rows.push(cols.flatten(vm.options()));
 
             pc = next_pc;
-            timestamp += max_accesses_per_instruction(opcode);
+            timestamp += timestamp_delta(opcode);
 
             clock_cycle += 1;
+            if opcode == TERMINATE {
+                // Due to row padding, the padded rows will all have opcode TERMINATE, so stop metric collection after the first one
+                collect_metrics = false;
+            }
             if opcode == TERMINATE && vm.cpu_chip.current_height().is_power_of_two() {
                 is_done = true;
                 break;
@@ -392,8 +496,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             }
         }
 
-        cycle_tracker.print();
-
         // Update CPU chip state with all changes from this segment.
         vm.cpu_chip.set_state(ExecutionState {
             clock_cycle,
@@ -402,16 +504,21 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             is_done,
         });
         vm.hint_stream = hint_stream;
+        vm.cycle_tracker = cycle_tracker;
         vm.cpu_chip.generate_pvs();
 
-        if !is_done {
+        Ok(())
+    }
+
+    pub fn generate_trace(vm: &mut ExecutionSegment<WORD_SIZE, F>) -> RowMajorMatrix<F> {
+        if !vm.cpu_chip.state.is_done {
             Self::pad_rows(vm);
         }
 
-        Ok(RowMajorMatrix::new(
+        RowMajorMatrix::new(
             vm.cpu_chip.rows.concat(),
             CpuCols::<WORD_SIZE, F>::get_width(vm.options()),
-        ))
+        )
     }
 
     /// Pad with NOP rows.

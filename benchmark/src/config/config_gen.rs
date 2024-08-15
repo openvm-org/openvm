@@ -2,8 +2,6 @@
 use std::fs::create_dir_all;
 
 use afs_test_utils::config::FriParameters;
-use itertools::iproduct;
-
 #[allow(unused_imports)]
 use afs_test_utils::{
     config::{
@@ -15,6 +13,7 @@ use afs_test_utils::{
         StarkEngineConfig, TreeParamsConfig,
     },
 };
+use itertools::iproduct;
 
 use crate::commands::{parse_config_folder, parse_multitier_config_folder};
 

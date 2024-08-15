@@ -111,9 +111,9 @@ impl Cli {
                 )
                 .unwrap();
             }
-            Commands::VmFibProgram(vm) => benchmark_fib_program(vm.n),
-            Commands::VmVerifyFibAir(vm) => benchmark_verify_fibair(vm.n),
-            Commands::VmFibVerifierProgram(vm) => benchmark_fib_verifier_program(vm.n),
+            Commands::VmFibProgram(vm) => benchmark_fib_program(vm.n).unwrap(),
+            Commands::VmVerifyFibAir(vm) => benchmark_verify_fibair(vm.n).unwrap(),
+            Commands::VmFibVerifierProgram(vm) => benchmark_fib_verifier_program(vm.n).unwrap(),
         }
     }
 }

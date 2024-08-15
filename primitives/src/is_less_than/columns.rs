@@ -2,7 +2,7 @@ use afs_derive::AlignedBorrow;
 
 use super::IsLessThanAir;
 
-#[derive(Default, AlignedBorrow)]
+#[derive(Default, AlignedBorrow, Clone)]
 pub struct IsLessThanIoCols<T> {
     pub x: T,
     pub y: T,

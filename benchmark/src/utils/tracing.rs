@@ -5,13 +5,12 @@ use std::{
     sync::Mutex,
 };
 
+use color_eyre::eyre::{eyre, Result};
 use regex::Regex;
 use tracing::Level;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{fmt::format::FmtSpan, layer::SubscriberExt};
-use tracing_subscriber::{EnvFilter, Layer};
-
-use color_eyre::eyre::{eyre, Result};
+use tracing_subscriber::{
+    fmt::format::FmtSpan, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer,
+};
 
 use crate::TMP_TRACING_LOG;
 
@@ -35,10 +34,10 @@ pub fn setup_benchmark_tracing() {
         .from_env_lossy();
     let stdio_layer = tracing_forest::ForestLayer::default().with_filter(env_filter2);
 
-    tracing_subscriber::registry()
+    let _ = tracing_subscriber::registry()
         .with(file_layer)
         .with(stdio_layer)
-        .init();
+        .try_init();
 }
 
 pub fn clear_tracing_log(file_path: &str) -> Result<()> {

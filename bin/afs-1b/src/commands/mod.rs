@@ -1,3 +1,9 @@
+use std::{
+    fs::File,
+    io::{BufReader, BufWriter, Read, Write},
+    sync::Arc,
+};
+
 use afs_page::{
     execution_air::ExecutionAir,
     multitier_page_rw_checker::page_controller::{
@@ -16,11 +22,6 @@ use logical_interface::{
 use p3_field::{AbstractField, PrimeField64};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{de::DeserializeOwned, Serialize};
-use std::{
-    fs::File,
-    io::{BufReader, BufWriter, Read, Write},
-    sync::Arc,
-};
 
 pub mod keygen;
 pub mod mock;
@@ -141,15 +142,15 @@ where
         data_len,
         PageTreeParams {
             path_bus_index: INIT_PATH_BUS,
-            leaf_cap: config.tree.init_leaf_cap,
-            internal_cap: config.tree.init_internal_cap,
+            leaf_cap: Some(config.tree.init_leaf_cap),
+            internal_cap: Some(config.tree.init_internal_cap),
             leaf_page_height: config.page.leaf_height,
             internal_page_height: config.page.internal_height,
         },
         PageTreeParams {
             path_bus_index: FINAL_PATH_BUS,
-            leaf_cap: config.tree.final_leaf_cap,
-            internal_cap: config.tree.final_internal_cap,
+            leaf_cap: Some(config.tree.final_leaf_cap),
+            internal_cap: Some(config.tree.final_internal_cap),
             leaf_page_height: config.page.leaf_height,
             internal_page_height: config.page.internal_height,
         },

@@ -1,14 +1,11 @@
 use std::borrow::Borrow;
 
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::AbstractField;
-use p3_field::Field;
+use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
+use super::columns::{IsEqualAuxCols, IsEqualCols, IsEqualIoCols, NUM_COLS};
 use crate::sub_chip::{AirConfig, SubAir};
-
-use super::columns::IsEqualAuxCols;
-use super::columns::{IsEqualCols, IsEqualIoCols, NUM_COLS};
 
 #[derive(Default)]
 pub struct IsEqualAir;

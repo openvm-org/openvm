@@ -1,18 +1,19 @@
+use afs_compiler::util::execute_program_and_generate_traces;
+use afs_stark_backend::{
+    air_builders::PartitionedAirBuilder, prover::trace::TraceCommitmentBuilder,
+    verifier::VerificationError,
+};
+use afs_test_utils::{
+    config::baby_bear_poseidon2::default_engine, engine::StarkEngine, utils::generate_random_matrix,
+};
 use common::VerificationParams;
 use itertools::Itertools;
 use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrix;
-use p3_matrix::Matrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_ceil_usize;
 use rand::{rngs::StdRng, SeedableRng};
-
-use afs_compiler::util::execute_program;
-use afs_stark_backend::air_builders::PartitionedAirBuilder;
-use afs_stark_backend::{prover::trace::TraceCommitmentBuilder, verifier::VerificationError};
-use afs_test_utils::config::baby_bear_poseidon2::default_engine;
-use afs_test_utils::{engine::StarkEngine, utils::generate_random_matrix};
 
 mod common;
 
@@ -87,7 +88,7 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
         fri_params: engine.fri_params,
     };
     let (program, input_stream) = common::build_verification_program(vec![&air], pvs, vparams);
-    execute_program::<1>(program, input_stream);
+    execute_program_and_generate_traces::<1>(program, input_stream);
 
     Ok(())
 }

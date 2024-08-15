@@ -1,5 +1,4 @@
-use std::collections::HashSet;
-use std::panic;
+use std::{collections::HashSet, panic};
 
 use afs_stark_backend::{
     keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
@@ -15,11 +14,13 @@ use afs_test_utils::{
 };
 use rand::Rng;
 
-use crate::common::{page::Page, page_cols::PageCols};
-use crate::execution_air::ExecutionAir;
-use crate::page_rw_checker::{
-    self,
-    page_controller::{self, OpType, Operation},
+use crate::{
+    common::{page::Page, page_cols::PageCols},
+    execution_air::ExecutionAir,
+    page_rw_checker::{
+        self,
+        page_controller::{self, OpType, Operation},
+    },
 };
 
 #[allow(clippy::too_many_arguments)]

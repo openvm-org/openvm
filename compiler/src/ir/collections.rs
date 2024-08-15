@@ -1,9 +1,13 @@
 use alloc::rc::Rc;
-use itertools::Itertools;
-use p3_field::AbstractField;
 use std::cell::RefCell;
 
-use super::{Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, Usize, Var, Variable};
+use itertools::Itertools;
+use p3_field::AbstractField;
+
+use super::{
+    Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, RVar, Ref, SymbolicVar, Usize, Var,
+    Variable,
+};
 
 /// A logical array.
 #[derive(Debug, Clone)]
@@ -17,11 +21,18 @@ pub enum Array<C: Config, T> {
 }
 
 impl<C: Config, V: MemVariable<C>> Array<C, V> {
+    pub fn ptr(&self) -> Ptr<C::N> {
+        match *self {
+            Array::Dyn(ptr, _) => ptr,
+            Array::Fixed(_) => panic!("cannot retrieve pointer for a compile-time array"),
+        }
+    }
+
     /// Gets the length of the array as a variable inside the DSL.
     pub fn len(&self) -> Usize<C::N> {
         match self {
             Self::Fixed(vec) => Usize::from(vec.borrow().len()),
-            Self::Dyn(_, len) => *len,
+            Self::Dyn(_, len) => len.clone(),
         }
     }
 
@@ -32,11 +43,11 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
                 assert_eq!(vec.borrow().len(), len);
             }
             Self::Dyn(_, c_len) => match c_len {
-                Usize::Const(c_len) => {
-                    assert_eq!(*c_len, len);
+                Usize::Const(_) => {
+                    assert_eq!(c_len.value(), len);
                 }
                 Usize::Var(c_len) => {
-                    builder.assert_usize_eq(*c_len, len);
+                    builder.assert_eq::<Var<_>>(*c_len, C::N::from_canonical_usize(len));
                 }
             },
         }
@@ -46,23 +57,23 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
     /// !Attention!: the behavior of `Fixed` and `Dyn` is different. For Dyn, the shift is a view
     /// and shares memory with the original. For `Fixed`, `set`/`set_value` on slices won't impact
     /// the original array.
-    pub fn shift(&self, builder: &mut Builder<C>, shift: Usize<C::N>) -> Array<C, V> {
+    pub fn shift(&self, builder: &mut Builder<C>, shift: impl Into<RVar<C::N>>) -> Array<C, V> {
         match self {
             Self::Fixed(v) => {
-                if let Usize::Const(shift) = shift {
+                let shift = shift.into();
+                if let RVar::Const(_) = shift {
+                    let shift = shift.value();
                     Array::Fixed(Rc::new(RefCell::new(v.borrow()[shift..].to_vec())))
                 } else {
                     panic!("Cannot shift a fixed array with a variable shift");
                 }
             }
             Self::Dyn(ptr, len) => {
-                assert!(V::size_of() == 1, "only support variables of size 1");
-                let new_address = builder.eval(ptr.address + shift);
-                let new_ptr = Ptr::<C::N> {
-                    address: new_address,
-                };
-                let len_var = len.materialize(builder);
-                let new_length = builder.eval(len_var - shift);
+                assert_eq!(V::size_of(), 1, "only support variables of size 1");
+                let len = RVar::from(len.clone());
+                let shift = shift.into();
+                let new_ptr = builder.eval(*ptr + shift);
+                let new_length = builder.eval(len - shift);
                 Array::Dyn(new_ptr, Usize::Var(new_length))
             }
         }
@@ -75,7 +86,7 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
                 todo!()
             }
             Self::Dyn(_, old_len) => {
-                builder.assign(*old_len, len);
+                builder.assign(old_len, len);
             }
         };
     }
@@ -87,34 +98,35 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
     pub fn slice(
         &self,
         builder: &mut Builder<C>,
-        start: Usize<C::N>,
-        end: Usize<C::N>,
+        start: impl Into<RVar<C::N>>,
+        end: impl Into<RVar<C::N>>,
     ) -> Array<C, V> {
+        let start = start.into();
+        let end = end.into();
         match self {
             Self::Fixed(v) => {
-                if let (Usize::Const(start), Usize::Const(end)) = (start, end) {
-                    Array::Fixed(Rc::new(RefCell::new(v.borrow()[start..end].to_vec())))
+                if let (RVar::Const(_), RVar::Const(_)) = (&start, &end) {
+                    Array::Fixed(Rc::new(RefCell::new(
+                        v.borrow()[start.value()..end.value()].to_vec(),
+                    )))
                 } else {
                     panic!("Cannot slice a fixed array with a variable start or end");
                 }
             }
             Self::Dyn(_, len) => {
                 if builder.flags.debug {
-                    let start_v = start.materialize(builder);
-                    let end_v = end.materialize(builder);
-                    let valid = builder.lt(start_v, end_v);
+                    let valid = builder.lt(start, end);
                     builder.assert_var_eq(valid, C::N::one());
 
-                    let len_v = len.materialize(builder);
-                    let len_plus_1_v = builder.eval(len_v + C::N::one());
-                    let valid = builder.lt(end_v, len_plus_1_v);
+                    let len_plus_1_v = SymbolicVar::from(len.clone()) + C::N::one();
+                    let valid = builder.lt(end, len_plus_1_v);
                     builder.assert_var_eq(valid, C::N::one());
                 }
 
-                let slice_len: Usize<_> = builder.eval(end - start);
+                let slice_len = builder.eval_expr(end - start);
                 let mut slice = builder.dyn_array(slice_len);
                 builder.range(0, slice_len).for_each(|i, builder| {
-                    let idx: Usize<_> = builder.eval(start + i);
+                    let idx = builder.eval_expr(start + i);
                     let value = builder.get(self, idx);
                     builder.set(&mut slice, i, value);
                 });
@@ -127,8 +139,13 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
 
 impl<C: Config> Builder<C> {
     /// Initialize an array of fixed length `len`. The entries will be uninitialized.
-    pub fn array<V: MemVariable<C>>(&mut self, len: impl Into<Usize<C::N>>) -> Array<C, V> {
-        self.dyn_array(len)
+    pub fn array<V: MemVariable<C>>(&mut self, len: impl Into<RVar<C::N>>) -> Array<C, V> {
+        let len = len.into();
+        if self.flags.static_only {
+            self.uninit_fixed_array(len.value())
+        } else {
+            self.dyn_array(len)
+        }
     }
 
     /// Creates an array from a vector.
@@ -144,17 +161,13 @@ impl<C: Config> Builder<C> {
     }
 
     /// Creates a dynamic array for a length.
-    pub fn dyn_array<V: MemVariable<C>>(&mut self, len: impl Into<Usize<C::N>>) -> Array<C, V> {
-        let len = match len.into() {
-            Usize::Const(len) => self.eval(C::N::from_canonical_usize(len)),
-            Usize::Var(len) => len,
-        };
-        let len = Usize::Var(len);
+    pub fn dyn_array<V: MemVariable<C>>(&mut self, len: impl Into<RVar<C::N>>) -> Array<C, V> {
+        let len: Var<_> = self.eval(len.into());
         let ptr = self.alloc(len, V::size_of());
-        Array::Dyn(ptr, len)
+        Array::Dyn(ptr, Usize::Var(len))
     }
 
-    pub fn get<V: MemVariable<C>, I: Into<Usize<C::N>>>(
+    pub fn get<V: MemVariable<C>, I: Into<RVar<C::N>>>(
         &mut self,
         slice: &Array<C, V>,
         index: I,
@@ -163,7 +176,8 @@ impl<C: Config> Builder<C> {
 
         match slice {
             Array::Fixed(slice) => {
-                if let Usize::Const(idx) = index {
+                if let RVar::Const(_) = index {
+                    let idx = index.value();
                     if let Some(ele) = &slice.borrow()[idx] {
                         ele.clone()
                     } else {
@@ -175,9 +189,7 @@ impl<C: Config> Builder<C> {
             }
             Array::Dyn(ptr, len) => {
                 if self.flags.debug {
-                    let index_v = index.materialize(self);
-                    let len_v = len.materialize(self);
-                    let valid = self.lt(index_v, len_v);
+                    let valid = self.lt(index, len.clone());
                     self.assert_var_eq(valid, C::N::one());
                 }
                 let index = MemIndex {
@@ -192,9 +204,10 @@ impl<C: Config> Builder<C> {
         }
     }
 
-    pub fn get_ptr<V: MemVariable<C>, I: Into<Usize<C::N>>>(
+    /// Returns a pointer to the array at the specified `index` within the given `slice`.
+    pub fn get_ptr<V: MemVariable<C>, I: Into<RVar<C::N>>>(
         &mut self,
-        slice: &Array<C, V>,
+        slice: &Array<C, Array<C, V>>,
         index: I,
     ) -> Ptr<C::N> {
         let index = index.into();
@@ -205,15 +218,13 @@ impl<C: Config> Builder<C> {
             }
             Array::Dyn(ptr, len) => {
                 if self.flags.debug {
-                    let index_v = index.materialize(self);
-                    let len_v = len.materialize(self);
-                    let valid = self.lt(index_v, len_v);
+                    let valid = self.lt(index, len.clone());
                     self.assert_var_eq(valid, C::N::one());
                 }
                 let index = MemIndex {
                     index,
                     offset: 0,
-                    size: V::size_of(),
+                    size: <Array<C, V> as MemVariable<C>>::size_of(),
                 };
                 let var: Ptr<C::N> = self.uninit();
                 self.load(var, *ptr, index);
@@ -222,7 +233,43 @@ impl<C: Config> Builder<C> {
         }
     }
 
-    pub fn set<V: MemVariable<C>, I: Into<Usize<C::N>>, Expr: Into<V::Expression>>(
+    fn ptr_at<V: MemVariable<C>, I: Into<RVar<C::N>>>(
+        &mut self,
+        slice: &Array<C, V>,
+        index: I,
+    ) -> Ptr<C::N> {
+        let index = index.into();
+
+        match slice {
+            Array::Fixed(_) => {
+                panic!();
+            }
+            Array::Dyn(ptr, len) => {
+                if self.flags.debug {
+                    let valid = self.lt(index, len.clone());
+                    self.assert_var_eq(valid, C::N::one());
+                }
+                Ptr {
+                    address: self.eval(
+                        ptr.address
+                            + index * RVar::from_field(C::N::from_canonical_usize(V::size_of())),
+                    ),
+                }
+            }
+        }
+    }
+
+    pub fn get_ref<V: MemVariable<C>, I: Into<RVar<C::N>>>(
+        &mut self,
+        slice: &Array<C, V>,
+        index: I,
+    ) -> Ref<C, V> {
+        let index = index.into();
+        let ptr = self.ptr_at(slice, index);
+        Ref::from_ptr(ptr)
+    }
+
+    pub fn set<V: MemVariable<C>, I: Into<RVar<C::N>>, Expr: Into<V::Expression>>(
         &mut self,
         slice: &mut Array<C, V>,
         index: I,
@@ -232,7 +279,8 @@ impl<C: Config> Builder<C> {
 
         match slice {
             Array::Fixed(v) => {
-                if let Usize::Const(idx) = index {
+                if let RVar::Const(_) = index {
+                    let idx = index.value();
                     let value = self.eval(value);
                     v.borrow_mut()[idx] = Some(value);
                 } else {
@@ -241,9 +289,7 @@ impl<C: Config> Builder<C> {
             }
             Array::Dyn(ptr, len) => {
                 if self.flags.debug {
-                    let index_v = index.materialize(self);
-                    let len_v = len.materialize(self);
-                    let valid = self.lt(index_v, len_v);
+                    let valid = self.lt(index, len.clone());
                     self.assert_var_eq(valid, C::N::one());
                 }
                 let index = MemIndex {
@@ -257,7 +303,7 @@ impl<C: Config> Builder<C> {
         }
     }
 
-    pub fn set_value<V: MemVariable<C>, I: Into<Usize<C::N>>>(
+    pub fn set_value<V: MemVariable<C>, I: Into<RVar<C::N>>>(
         &mut self,
         slice: &mut Array<C, V>,
         index: I,
@@ -267,7 +313,8 @@ impl<C: Config> Builder<C> {
 
         match slice {
             Array::Fixed(v) => {
-                if let Usize::Const(idx) = index {
+                if let RVar::Const(_) = index {
+                    let idx = index.value();
                     v.borrow_mut()[idx] = Some(value);
                 } else {
                     panic!("Cannot index into a fixed slice with a variable size")
@@ -295,8 +342,8 @@ impl<C: Config, T: MemVariable<C>> Variable<C> for Array<C, T> {
     fn assign(&self, src: Self::Expression, builder: &mut Builder<C>) {
         match (self, src.clone()) {
             (Array::Dyn(lhs_ptr, lhs_len), Array::Dyn(rhs_ptr, rhs_len)) => {
-                builder.assign(*lhs_ptr, rhs_ptr);
-                builder.assign(*lhs_len, rhs_len);
+                builder.assign(lhs_ptr, rhs_ptr);
+                builder.assign(lhs_len, rhs_len);
             }
             _ => unreachable!(),
         }
@@ -328,13 +375,9 @@ impl<C: Config, T: MemVariable<C>> Variable<C> for Array<C, T> {
                 }
             }
             (Array::Dyn(_, lhs_len), Array::Dyn(_, rhs_len)) => {
-                let lhs_len_var = builder.materialize(lhs_len);
-                let rhs_len_var = builder.materialize(rhs_len);
-                builder.assert_eq::<Var<_>>(lhs_len_var, rhs_len_var);
+                builder.assert_eq::<Usize<_>>(lhs_len.clone(), rhs_len);
 
-                let start = Usize::Const(0);
-                let end = lhs_len;
-                builder.range(start, end).for_each(|i, builder| {
+                builder.range(0, lhs_len).for_each(|i, builder| {
                     let a = builder.get(&lhs, i);
                     let b = builder.get(&rhs, i);
                     builder.assert_eq::<T>(a, b);
@@ -370,10 +413,9 @@ impl<C: Config, T: MemVariable<C>> Variable<C> for Array<C, T> {
                 }
             }
             (Array::Dyn(_, lhs_len), Array::Dyn(_, rhs_len)) => {
-                builder.assert_usize_eq(lhs_len, rhs_len);
+                builder.assert_eq::<Usize<_>>(lhs_len.clone(), rhs_len);
 
-                let end = lhs_len;
-                builder.range(0, end).for_each(|i, builder| {
+                builder.range(0, lhs_len).for_each(|i, builder| {
                     let a = builder.get(&lhs, i);
                     let b = builder.get(&rhs, i);
                     builder.assert_ne::<T>(a, b);

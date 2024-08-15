@@ -1,12 +1,13 @@
 use std::{array::from_fn, collections::BTreeMap};
 
-use super::trace::disabled_memory_cols;
-use afs_primitives::is_equal_vec::{columns::IsEqualVecAuxCols, IsEqualVecAir};
-use afs_primitives::sub_chip::LocalTraceInstructions;
+use afs_primitives::{
+    is_equal_vec::{columns::IsEqualVecAuxCols, IsEqualVecAir},
+    sub_chip::LocalTraceInstructions,
+};
 use itertools::Itertools;
 use p3_field::{Field, PrimeField64};
 
-use super::{CpuOptions, OpCode, CPU_MAX_ACCESSES_PER_CYCLE};
+use super::{trace::disabled_memory_cols, CpuOptions, OpCode, CPU_MAX_ACCESSES_PER_CYCLE};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuIoCols<T> {
@@ -19,6 +20,8 @@ pub struct CpuIoCols<T> {
     pub op_c: T,
     pub d: T,
     pub e: T,
+    pub op_f: T,
+    pub op_g: T,
 }
 
 impl<T: Clone> CpuIoCols<T> {
@@ -32,6 +35,8 @@ impl<T: Clone> CpuIoCols<T> {
             op_c: slc[5].clone(),
             d: slc[6].clone(),
             e: slc[7].clone(),
+            op_f: slc[8].clone(),
+            op_g: slc[9].clone(),
         }
     }
 
@@ -45,11 +50,13 @@ impl<T: Clone> CpuIoCols<T> {
             self.op_c.clone(),
             self.d.clone(),
             self.e.clone(),
+            self.op_f.clone(),
+            self.op_g.clone(),
         ]
     }
 
     pub fn get_width() -> usize {
-        8
+        10
     }
 }
 
@@ -64,6 +71,8 @@ impl<T: Field> CpuIoCols<T> {
             op_c: T::default(),
             d: T::default(),
             e: T::default(),
+            op_f: T::default(),
+            op_g: T::default(),
         }
     }
 }

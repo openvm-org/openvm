@@ -2,17 +2,18 @@ use afs_compiler::{
     asm::AsmBuilder,
     ir::{Felt, Var},
 };
-
-use super::benchmark_helpers::run_recursive_test_benchmark;
 use afs_recursion::{
     stark::{get_rec_raps, sort_chips},
     types::InnerConfig,
 };
+use color_eyre::eyre::Result;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use stark_vm::vm::{config::VmConfig, ExecutionResult, VirtualMachine};
+use stark_vm::vm::{config::VmConfig, ExecutionAndTraceGenerationResult, VirtualMachine};
 
-pub fn benchmark_fib_verifier_program(n: usize) {
+use super::benchmark_helpers::run_recursive_test_benchmark;
+
+pub fn benchmark_fib_verifier_program(n: usize) -> Result<()> {
     println!(
         "Running verifier program of VM STARK benchmark with n = {}",
         n
@@ -31,9 +32,9 @@ pub fn benchmark_fib_verifier_program(n: usize) {
 
     builder.range(start, end).for_each(|_, builder| {
         let temp: Felt<_> = builder.uninit();
-        builder.assign(temp, b);
-        builder.assign(b, a + b);
-        builder.assign(a, temp);
+        builder.assign(&temp, b);
+        builder.assign(&b, a + b);
+        builder.assign(&a, temp);
     });
 
     builder.halt();
@@ -47,16 +48,16 @@ pub fn benchmark_fib_verifier_program(n: usize) {
 
     let vm = VirtualMachine::<1, _>::new(vm_config, fib_program.clone(), vec![]);
 
-    let ExecutionResult {
+    let ExecutionAndTraceGenerationResult {
         max_log_degree: _,
         nonempty_chips: chips,
         nonempty_traces: traces,
         nonempty_pis: pis,
         ..
-    } = vm.execute().unwrap();
+    } = vm.execute_and_generate_traces().unwrap();
     let chips = VirtualMachine::<1, _>::get_chips(&chips);
 
-    let dummy_vm = VirtualMachine::<1, _>::new(vm_config, fib_program.clone(), vec![]);
+    let dummy_vm = VirtualMachine::<1, _>::new(vm_config, fib_program, vec![]);
     let rec_raps = get_rec_raps::<1, InnerConfig>(&dummy_vm.segments[0]);
 
     assert!(chips.len() == rec_raps.len());
@@ -64,5 +65,11 @@ pub fn benchmark_fib_verifier_program(n: usize) {
     let pvs = pis;
     let (chips, rec_raps, traces, pvs) = sort_chips(chips, rec_raps, traces, pvs);
 
-    run_recursive_test_benchmark(chips, rec_raps, traces, pvs);
+    run_recursive_test_benchmark(
+        chips,
+        rec_raps,
+        traces,
+        pvs,
+        "VM Verifier of VM Fibonacci Program",
+    )
 }

@@ -1,6 +1,5 @@
-use crate::utils::uint_to_be_vec;
-
 use super::fixed_bytes::FixedBytesCodec;
+use crate::utils::uint_to_be_vec;
 
 #[test]
 pub fn test_convert_to_db() {

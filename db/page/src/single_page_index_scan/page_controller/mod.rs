@@ -19,12 +19,11 @@ use p3_matrix::dense::DenseMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::info_span;
 
-use crate::common::page::Page;
-
 use super::{
     page_index_scan_input::{Comp, PageIndexScanInputChip},
     page_index_scan_output::PageIndexScanOutputChip,
 };
+use crate::common::page::Page;
 
 pub struct PageController<SC: StarkGenericConfig>
 where
@@ -276,9 +275,9 @@ where
         Page::from_2d_vec(&output, page.idx_len(), page.data_len())
     }
 
-    pub fn set_up_keygen_builder(
-        &self,
-        keygen_builder: &mut MultiStarkKeygenBuilder<SC>,
+    pub fn set_up_keygen_builder<'a>(
+        &'a self,
+        keygen_builder: &mut MultiStarkKeygenBuilder<'a, SC>,
         page_width: usize,
         idx_len: usize,
     ) {

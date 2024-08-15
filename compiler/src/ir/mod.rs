@@ -1,11 +1,10 @@
-use p3_field::{ExtensionField, PrimeField, TwoAdicField};
-
 pub use builder::*;
 pub use collections::*;
-pub use fold::*;
 pub use instructions::*;
+use p3_field::{ExtensionField, PrimeField, TwoAdicField};
 pub use poseidon::{DIGEST_SIZE, PERMUTATION_WIDTH};
 pub use ptr::*;
+pub use ref_ptr::*;
 pub use symbolic::*;
 pub use types::*;
 pub use var::*;
@@ -13,10 +12,10 @@ pub use var::*;
 mod bits;
 mod builder;
 mod collections;
-mod fold;
 mod instructions;
 mod poseidon;
 mod ptr;
+mod ref_ptr;
 mod symbolic;
 mod types;
 mod utils;

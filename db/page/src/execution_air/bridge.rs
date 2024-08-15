@@ -2,8 +2,7 @@ use std::iter;
 
 use afs_stark_backend::interaction::InteractionBuilder;
 
-use super::columns::ExecutionCols;
-use super::ExecutionAir;
+use super::{columns::ExecutionCols, ExecutionAir};
 
 impl ExecutionAir {
     pub fn eval_interactions<AB: InteractionBuilder>(

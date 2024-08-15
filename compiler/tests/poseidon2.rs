@@ -1,14 +1,7 @@
+use afs_compiler::{asm::AsmBuilder, prelude::RVar, util::end_to_end_test};
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
-use p3_field::AbstractField;
-use rand::thread_rng;
-use rand::Rng;
-
-use afs_compiler::{
-    asm::AsmBuilder,
-    ir::{Var, PERMUTATION_WIDTH},
-    util::end_to_end_test,
-};
+use rand::{thread_rng, Rng};
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
@@ -60,58 +53,39 @@ const WORD_SIZE: usize = 1;
 // }
 
 #[test]
-fn test_compiler_poseidon2_hash() {
+fn test_compiler_poseidon2_hash_1() {
     let mut rng = thread_rng();
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
     let random_state_vals: [F; 42] = rng.gen();
     println!("{:?}", random_state_vals);
-
-    let mut random_state_v1 = builder.dyn_array(random_state_vals.len());
+    let rlen = random_state_vals.len();
+    let mut random_state_v1 = builder.dyn_array(rlen);
     for (i, val) in random_state_vals.iter().enumerate() {
         builder.set(&mut random_state_v1, i, *val);
     }
-    let mut random_state_v2 = builder.dyn_array(random_state_vals.len());
+    let mut random_state_v2 = builder.dyn_array(rlen);
     for (i, val) in random_state_vals.iter().enumerate() {
         builder.set(&mut random_state_v2, i, *val);
     }
-    let mut nested_random_state = builder.dyn_array(1);
-    builder.set(&mut nested_random_state, 0, random_state_v2.clone());
+    let mut nested_random_state = builder.dyn_array(RVar::one());
+    builder.set(&mut nested_random_state, RVar::zero(), random_state_v2);
 
     let result = builder.poseidon2_hash(&random_state_v1);
     let result_x = builder.poseidon2_hash_x(&nested_random_state);
 
     builder.range(0, result.len()).for_each(|i, builder| {
+        let ei = builder.eval(i);
+        builder.print_v(ei);
         let el = builder.get(&result, i);
+        builder.print_f(el);
         let el_x = builder.get(&result_x, i);
+        builder.print_f(el_x);
         builder.assert_felt_eq(el, el_x);
     });
 
     builder.halt();
 
-    end_to_end_test::<WORD_SIZE, _>(builder, vec![]);
-}
-
-#[test]
-fn test_compiler_poseidon2_hash_v2() {
-    let mut rng = thread_rng();
-
-    let mut builder = AsmBuilder::<F, EF>::default();
-
-    let random_state_vals: [F; 2] = rng.gen();
-
-    let mut random_state = builder.dyn_array(PERMUTATION_WIDTH);
-    for (i, val) in random_state_vals.iter().enumerate() {
-        builder.set(&mut random_state, i, *val);
-    }
-
-    let idx: Var<_> = builder.eval(F::zero());
-    builder.if_eq(idx, F::zero()).then(|builder| {
-        let element = builder.get(&random_state, idx);
-        builder.print_f(element);
-    });
-
-    builder.halt();
     end_to_end_test::<WORD_SIZE, _>(builder, vec![]);
 }

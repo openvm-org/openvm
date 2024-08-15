@@ -2,14 +2,15 @@
 pub mod tests;
 pub mod utils;
 
+use color_eyre::eyre::{eyre, Result};
+use utils::string_to_table_id;
+
 use crate::{
     afs_input::{types::InputFileOp, AfsInputFile},
     mock_db::MockDb,
     table::{codec::fixed_bytes::FixedBytesCodec, types::TableMetadata, Table},
     utils::string_to_u8_vec,
 };
-use color_eyre::eyre::{eyre, Result};
-use utils::string_to_table_id;
 
 pub struct AfsInterface<'a> {
     /// Number of bytes for the index

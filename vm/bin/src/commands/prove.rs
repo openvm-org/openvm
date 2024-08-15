@@ -9,7 +9,10 @@ use afs_test_utils::{
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
-use stark_vm::vm::{config::VmConfig, ExecutionResult, VirtualMachine};
+use stark_vm::{
+    program::Program,
+    vm::{config::VmConfig, ExecutionAndTraceGenerationResult, VirtualMachine},
+};
 
 use crate::{
     asm::parse_asm_file,
@@ -54,9 +57,14 @@ impl ProveCommand {
     pub fn execute_helper(&self, config: VmConfig) -> Result<()> {
         println!("Proving program: {}", self.asm_file_path);
         let instructions = parse_asm_file(Path::new(&self.asm_file_path.clone()))?;
-        let vm = VirtualMachine::<WORD_SIZE, _>::new(config, instructions, vec![]);
+        let program_len = instructions.len();
+        let program = Program {
+            instructions,
+            debug_infos: vec![None; program_len],
+        };
+        let vm = VirtualMachine::<WORD_SIZE, _>::new(config, program, vec![]);
 
-        let result = vm.execute()?;
+        let result = vm.execute_and_generate_traces()?;
         let engine = config::baby_bear_poseidon2::default_engine(result.max_log_degree);
         let encoded_pk = read_from_path(&Path::new(&self.keys_folder.clone()).join("pk"))?;
         let pk: MultiStarkProvingKey<BabyBearPoseidon2Config> = bincode::deserialize(&encoded_pk)?;
@@ -66,7 +74,7 @@ impl ProveCommand {
         let prover = engine.prover();
         let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
-        let ExecutionResult {
+        let ExecutionAndTraceGenerationResult {
             nonempty_traces: traces,
             nonempty_chips: chips,
             ..

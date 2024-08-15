@@ -7,6 +7,7 @@ on:
     branches: ["main"]
     paths:
       - "stark-backend/**"
+      - "primitives/**"
       - "vm/**"
       - "compiler/**"
 
@@ -19,8 +20,8 @@ env:
   AXIOM_FAST_TEST: "1"
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  tests:
+    runs-on: ubuntu-latest-64core-256ram
 
     steps:
       - uses: actions/checkout@v4

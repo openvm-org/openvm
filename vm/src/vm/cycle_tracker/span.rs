@@ -1,74 +1,81 @@
-use std::collections::BTreeMap;
 use std::fmt::Display;
 
-#[derive(Debug, Clone)]
-pub struct CycleTrackerData {
-    pub cpu_rows: usize,
-    pub clock_cycles: usize,
-    pub time_elapsed: usize,
-    pub vm_metrics: BTreeMap<String, usize>,
-}
+use crate::vm::metrics::VmMetrics;
 
 #[derive(Debug, Clone)]
 pub struct CycleTrackerSpan {
     pub is_active: bool,
-    pub start: CycleTrackerData,
-    pub end: CycleTrackerData,
+    pub start: VmMetrics,
+    pub end: VmMetrics,
 }
 
 impl CycleTrackerSpan {
     #[allow(clippy::too_many_arguments)]
-    pub fn start(
-        start_cpu_rows: usize,
-        start_clock_cycle: usize,
-        start_timestamp: usize,
-        vm_metrics: &BTreeMap<String, usize>,
-    ) -> Self {
-        let vm_metrics_zero = vm_metrics.iter().map(|(k, _)| (k.clone(), 0)).collect();
+    pub fn start(metrics: VmMetrics) -> Self {
         Self {
             is_active: true,
-            start: CycleTrackerData {
-                cpu_rows: start_cpu_rows,
-                clock_cycles: start_clock_cycle,
-                time_elapsed: start_timestamp,
-                vm_metrics: vm_metrics.clone(),
-            },
-            end: CycleTrackerData {
-                cpu_rows: 0,
-                clock_cycles: 0,
-                time_elapsed: 0,
-                vm_metrics: vm_metrics_zero,
-            },
+            start: metrics,
+            end: Default::default(),
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn end(
-        &mut self,
-        end_cpu_rows: usize,
-        end_clock_cycle: usize,
-        end_timestamp: usize,
-        vm_metrics: &BTreeMap<String, usize>,
-    ) {
+    pub fn end(&mut self, metrics: VmMetrics) {
         self.is_active = false;
-        self.end.cpu_rows = end_cpu_rows - self.start.cpu_rows;
-        self.end.clock_cycles = end_clock_cycle - self.start.clock_cycles;
-        self.end.time_elapsed = end_timestamp - self.start.time_elapsed;
-        for (key, value) in vm_metrics {
-            let diff = value - self.start.vm_metrics.get(key).unwrap();
-            self.end.vm_metrics.insert(key.clone(), diff);
+        for (key, value) in metrics.chip_metrics {
+            let diff = value - self.start.chip_metrics.get(&key).unwrap();
+            self.end.chip_metrics.insert(key, diff);
+        }
+        for (key, value) in metrics.opcode_counts {
+            let diff = value - self.start.opcode_counts.get(&key).unwrap_or(&0);
+            self.end.opcode_counts.insert(key, diff);
+        }
+        for (key, value) in metrics.dsl_counts {
+            let diff = value - self.start.dsl_counts.get(&key).unwrap_or(&0);
+            self.end.dsl_counts.insert(key, diff);
+        }
+        for (key, value) in metrics.opcode_trace_cells {
+            let diff = value - self.start.opcode_trace_cells.get(&key).unwrap_or(&0);
+            self.end.opcode_trace_cells.insert(key.clone(), diff);
         }
     }
 }
 
 impl Display for CycleTrackerSpan {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "  - cpu_rows: {}", self.end.cpu_rows)?;
-        writeln!(f, "  - clock_cycles: {}", self.end.clock_cycles)?;
-        writeln!(f, "  - time_elapsed: {}", self.end.time_elapsed)?;
-        for (key, value) in &self.end.vm_metrics {
+        for (key, value) in &self.end.chip_metrics {
             writeln!(f, "  - {}: {}", key, value)?;
         }
+
+        let mut sorted_opcode_counts: Vec<(&String, &usize)> =
+            self.end.opcode_counts.iter().collect();
+        sorted_opcode_counts.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
+
+        for (key, value) in sorted_opcode_counts {
+            if *value > 0 {
+                writeln!(f, "  - {}: {}", key, value)?;
+            }
+        }
+
+        let mut sorted_dsl_counts: Vec<(&String, &usize)> = self.end.dsl_counts.iter().collect();
+        sorted_dsl_counts.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
+
+        for (key, value) in sorted_dsl_counts {
+            if *value > 0 {
+                writeln!(f, "  - {}: {}", key, value)?;
+            }
+        }
+
+        let mut sorted_opcode_trace_cells: Vec<(&String, &usize)> =
+            self.end.opcode_trace_cells.iter().collect();
+        sorted_opcode_trace_cells.sort_by(|a, b| a.1.cmp(b.1)); // Sort ascending by value
+
+        for (key, value) in sorted_opcode_trace_cells {
+            if *value > 0 {
+                writeln!(f, "  - {}: {}", key, value)?;
+            }
+        }
+
         Ok(())
     }
 }

@@ -1,8 +1,9 @@
 use std::borrow::Borrow;
 
-use super::columns::{FibonacciCols, NUM_FIBONACCI_COLS};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_matrix::Matrix;
+
+use super::columns::{FibonacciCols, NUM_FIBONACCI_COLS};
 
 pub struct FibonacciAir;
 

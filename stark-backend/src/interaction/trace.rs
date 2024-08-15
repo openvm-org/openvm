@@ -1,6 +1,4 @@
-use std::iter;
-
-use itertools::Itertools;
+use itertools::izip;
 use p3_field::{ExtensionField, Field};
 use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
@@ -8,6 +6,7 @@ use p3_matrix::{
 };
 use p3_maybe_rayon::prelude::*;
 
+use super::{utils::generate_rlc_elements, Interaction, InteractionType};
 use crate::{
     air_builders::symbolic::{
         symbolic_expression::{SymbolicEvaluator, SymbolicExpression},
@@ -15,8 +14,6 @@ use crate::{
     },
     interaction::utils::generate_betas,
 };
-
-use super::{utils::generate_rlc_elements, Interaction, InteractionType};
 
 // Copied from valida/machine/src/chip.rs, modified to allow partitioned main trace
 /// Generate the permutation trace for a chip given the main trace.
@@ -35,6 +32,7 @@ pub fn generate_permutation_trace<F, EF>(
     partitioned_main: &[RowMajorMatrixView<F>],
     public_values: &[F],
     permutation_randomness: Option<[EF; 2]>,
+    interaction_chunk_size: usize,
 ) -> Option<RowMajorMatrix<EF>>
 where
     F: Field,
@@ -50,96 +48,125 @@ where
 
     // Compute the reciprocal columns
     //
-    // Row: | q_1 | q_2 | q_3 | ... | q_n | \phi |
-    // * q_i = \frac{1}{\alpha^i + \sum_j \beta^j * f_{i,j}}
-    // * f_{i,j} is the jth main trace column for the ith interaction
-    // * \phi is the running sum
+    // For every row we do the following
+    // We first compute the reciprocals: r_1, r_2, ..., r_n, where
+    // r_i = \frac{1}{\alpha^i + \sum_j \beta^j * f_{i, j}}, where
+    // f_{i, j} is the jth main trace column for the ith interaction
     //
-    // Note: We can optimize this by combining several reciprocal columns into one (the
-    // number is subject to a target constraint degree).
-    let perm_width = all_interactions.len() + 1;
+    // We then bundle every interaction_chunk_size interactions together
+    // to get the value perm_i = \sum_{i \in bundle} r_i * m_i, where m_i
+    // is the signed count for the interaction.
+    //
+    // Finally, the last column, \phi, of every row is the running sum of
+    // all the previous perm values
+    //
+    // Row: | perm_1 | perm_2 | perm_3 | ... | perm_s | phi |, where s
+    // is the number of bundles
+    let num_interactions = all_interactions.len();
     let height = partitioned_main[0].height();
-    assert!(
+    // To optimize memory and parallelism, we split the trace rows into chunks
+    // based on the number of cpu threads available, and then do all
+    // computations necessary for that chunk within a single thread.
+    let perm_width = (num_interactions + interaction_chunk_size - 1) / interaction_chunk_size + 1;
+    let mut perm_values = vec![EF::zero(); height * perm_width];
+    debug_assert!(
         partitioned_main.iter().all(|m| m.height() == height),
         "All main trace parts must have same height"
     );
 
-    // reciprocals is height x all_interactions.len()
-    let reciprocals: Vec<EF> = (0..height)
-        .into_par_iter()
-        .flat_map(|n| -> Vec<_> {
-            let evaluator = Evaluator {
-                preprocessed,
-                partitioned_main,
-                public_values,
-                height,
-                local_index: n,
-            };
-            all_interactions
-                .iter()
-                .map(|interaction| {
+    #[cfg(feature = "parallel")]
+    let num_threads = rayon::current_num_threads();
+    #[cfg(not(feature = "parallel"))]
+    let num_threads = 1;
+
+    let height_chunk_size = (height + num_threads - 1) / num_threads;
+    perm_values
+        .par_chunks_mut(height_chunk_size * perm_width)
+        .enumerate()
+        .for_each(|(chunk_idx, perm_values)| {
+            // perm_values is now local_height x perm_width row-major matrix
+            let num_rows = perm_values.len() / perm_width;
+            // the interaction chunking requires more memory because we must
+            // allocate separate memory for the denominators and reciprocals
+            let mut denoms = vec![EF::zero(); num_rows * num_interactions];
+            let row_offset = chunk_idx * height_chunk_size;
+            // compute the denominators to be inverted:
+            for (n, denom_row) in denoms.chunks_exact_mut(num_interactions).enumerate() {
+                let evaluator = Evaluator {
+                    preprocessed,
+                    partitioned_main,
+                    public_values,
+                    height,
+                    local_index: row_offset + n,
+                };
+                for (denom, interaction) in denom_row.iter_mut().zip(all_interactions.iter()) {
                     let alpha = alphas[interaction.bus_index];
                     debug_assert!(interaction.fields.len() <= betas.len());
                     let mut fields = interaction.fields.iter();
-                    let mut rlc = alpha
+                    *denom = alpha
                         + evaluator.eval_expr(fields.next().expect("fields should not be empty"));
                     for (expr, &beta) in fields.zip(betas.iter().skip(1)) {
-                        rlc += beta * evaluator.eval_expr(expr);
+                        *denom += beta * evaluator.eval_expr(expr);
                     }
-                    rlc
-                })
-                .collect()
-        })
-        .collect();
-    // Zero should be vanishingly unlikely if alpha, beta are properly pseudo-randomized
-    // The logup reciprocals should never be zero, so trace generation should panic if
-    // trying to divide by zero.
-    let perm_values = p3_field::batch_multiplicative_inverse(&reciprocals);
-    drop(reciprocals);
-    // Need to add the `phi` column to perm_values as a RowMajorMatrix
-    // TODO[jpw]: is there a more memory efficient way to do this?
-    let perm_values = perm_values
-        .into_iter()
-        .chunks(all_interactions.len())
-        .into_iter()
-        .flat_map(|row| row.chain(iter::once(EF::zero())))
-        .collect();
-    let mut perm = RowMajorMatrix::new(perm_values, perm_width);
-
-    let _span = tracing::info_span!("compute logup partial sums").entered();
-    // Compute the running sum column
-    let mut phi = vec![EF::zero(); perm.height()];
-    for n in 0..height {
-        let evaluator = Evaluator {
-            preprocessed,
-            partitioned_main,
-            public_values,
-            height,
-            local_index: n,
-        };
-        if n > 0 {
-            phi[n] = phi[n - 1];
-        }
-        let perm_row = perm.row_slice(n);
-        for (i, interaction) in all_interactions.iter().enumerate() {
-            let mult = evaluator.eval_expr(&interaction.count);
-            match interaction.interaction_type {
-                InteractionType::Send => {
-                    phi[n] += perm_row[i] * mult;
-                }
-                InteractionType::Receive => {
-                    phi[n] -= perm_row[i] * mult;
                 }
             }
+
+            // Zero should be vanishingly unlikely if alpha, beta are properly pseudo-randomized
+            // The logup reciprocals should never be zero, so trace generation should panic if
+            // trying to divide by zero.
+            let reciprocals = p3_field::batch_multiplicative_inverse(&denoms);
+            drop(denoms);
+            // This block should already be in a single thread, but rayon is able
+            // to do more magic sometimes
+            perm_values
+                .par_chunks_exact_mut(perm_width)
+                .zip(reciprocals.par_chunks_exact(num_interactions))
+                .enumerate()
+                .for_each(|(n, (perm_row, reciprocal_chunk))| {
+                    debug_assert_eq!(perm_row.len(), perm_width);
+                    debug_assert_eq!(reciprocal_chunk.len(), num_interactions);
+
+                    let evaluator = Evaluator {
+                        preprocessed,
+                        partitioned_main,
+                        public_values,
+                        height,
+                        local_index: row_offset + n,
+                    };
+
+                    let mut row_sum = EF::zero();
+                    for (perm_val, reciprocal_chunk, interaction_chunk) in izip!(
+                        perm_row.iter_mut(),
+                        reciprocal_chunk.chunks(interaction_chunk_size),
+                        all_interactions.chunks(interaction_chunk_size)
+                    ) {
+                        for (reciprocal, interaction) in izip!(reciprocal_chunk, interaction_chunk)
+                        {
+                            let mut interaction_val =
+                                *reciprocal * evaluator.eval_expr(&interaction.count);
+                            if interaction.interaction_type == InteractionType::Receive {
+                                interaction_val = -interaction_val;
+                            }
+                            *perm_val += interaction_val;
+                        }
+                        row_sum += *perm_val;
+                    }
+
+                    perm_row[perm_width - 1] = row_sum;
+                });
+        });
+
+    // At this point, the trace matrix is complete except that the last column
+    // has the row sum but not the partial sum
+    tracing::info_span!("compute logup partial sums").in_scope(|| {
+        let mut phi = EF::zero();
+        for perm_chunk in perm_values.chunks_exact_mut(perm_width) {
+            phi += *perm_chunk.last().unwrap();
+            *perm_chunk.last_mut().unwrap() = phi;
         }
-    }
+    });
 
-    for (n, row) in perm.as_view_mut().rows_mut().enumerate() {
-        *row.last_mut().unwrap() = phi[n];
-    }
-    _span.exit();
-
-    Some(perm)
+    Some(RowMajorMatrix::new(perm_values, perm_width))
 }
 
 pub(super) struct Evaluator<'a, F: Field> {

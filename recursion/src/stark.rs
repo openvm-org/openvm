@@ -1,34 +1,47 @@
-use std::any::{type_name, Any};
-use std::cmp::Reverse;
+use std::{
+    any::{type_name, Any},
+    cmp::Reverse,
+};
 
+use afs_compiler::{
+    conversion::CompilerOptions,
+    ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize, Var},
+    prelude::RVar,
+};
+use afs_stark_backend::{
+    air_builders::symbolic::{SymbolicConstraints, SymbolicRapBuilder},
+    prover::opener::AdjacentOpenedValues,
+    rap::{AnyRap, Rap},
+};
+use afs_test_utils::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
 use itertools::{izip, Itertools};
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
 use p3_field::{AbstractExtensionField, AbstractField, PrimeField32, TwoAdicField};
-use p3_matrix::dense::{RowMajorMatrix, RowMajorMatrixView};
-use p3_matrix::stack::VerticalPair;
-
-use afs_compiler::ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize, Var};
-use afs_stark_backend::air_builders::symbolic::{SymbolicConstraints, SymbolicRapBuilder};
-use afs_stark_backend::prover::opener::AdjacentOpenedValues;
-use afs_stark_backend::rap::{AnyRap, Rap};
-use afs_test_utils::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
-use p3_matrix::Matrix;
-use stark_vm::cpu::trace::Instruction;
-use stark_vm::vm::ExecutionSegment;
-
-use crate::challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger};
-use crate::commit::{PcsVariable, PolynomialSpaceVariable};
-use crate::folder::RecursiveVerifierConstraintFolder;
-use crate::fri::types::{TwoAdicPcsMatsVariable, TwoAdicPcsRoundVariable};
-use crate::fri::{TwoAdicFriPcsVariable, TwoAdicMultiplicativeCosetVariable};
-use crate::hints::Hintable;
-use crate::types::{
-    AdjacentOpenedValuesVariable, CommitmentsVariable, InnerConfig, MultiStarkVerificationAdvice,
-    StarkVerificationAdvice, VerifierInput, VerifierInputVariable, PROOF_MAX_NUM_PVS,
+use p3_matrix::{
+    dense::{RowMajorMatrix, RowMajorMatrixView},
+    stack::VerticalPair,
+    Matrix,
 };
-use crate::utils::const_fri_config;
+use stark_vm::{program::Program, vm::ExecutionSegment};
+
+use crate::{
+    challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger},
+    commit::{PcsVariable, PolynomialSpaceVariable},
+    folder::RecursiveVerifierConstraintFolder,
+    fri::{
+        types::{TwoAdicPcsMatsVariable, TwoAdicPcsRoundVariable},
+        TwoAdicFriPcsVariable, TwoAdicMultiplicativeCosetVariable,
+    },
+    hints::Hintable,
+    types::{
+        AdjacentOpenedValuesVariable, CommitmentsVariable, InnerConfig,
+        MultiStarkVerificationAdvice, StarkVerificationAdvice, VerifierInput,
+        VerifierInputVariable, PROOF_MAX_NUM_PVS,
+    },
+    utils::const_fri_config,
+};
 
 pub trait DynRapForRecursion<C: Config>:
     Rap<SymbolicRapBuilder<C::F>>
@@ -68,9 +81,10 @@ impl VerifierProgram<InnerConfig> {
         raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
         constants: MultiStarkVerificationAdvice<InnerConfig>,
         fri_params: &FriParameters,
-    ) -> Vec<Instruction<BabyBear>> {
+    ) -> Program<BabyBear> {
         let mut builder = Builder::<InnerConfig>::default();
 
+        builder.cycle_tracker_start("VerifierProgram");
         let input: VerifierInputVariable<_> = builder.uninit();
         VerifierInput::<BabyBearPoseidon2Config>::witness(&input, &mut builder);
 
@@ -79,8 +93,14 @@ impl VerifierProgram<InnerConfig> {
         };
         StarkVerifier::verify(&mut builder, &pcs, raps, constants, &input);
 
+        builder.cycle_tracker_end("VerifierProgram");
+        builder.halt();
+
         const WORD_SIZE: usize = 1;
-        builder.compile_isa::<WORD_SIZE>()
+        builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+            enable_cycle_tracker: true,
+            ..Default::default()
+        })
     }
 }
 
@@ -115,15 +135,15 @@ where
                     let exposed_values = builder.get(&proof.exposed_values_after_challenge, i);
 
                     // Verifier does not support more than 1 challenge phase
-                    builder.assert_usize_eq(exposed_values.len(), 1);
+                    builder.assert_eq::<Usize<_>>(exposed_values.len(), RVar::one());
 
-                    let values = builder.get(&exposed_values, 0);
+                    let values = builder.get(&exposed_values, RVar::zero());
 
                     // Only exposed value should be cumulative sum
-                    builder.assert_usize_eq(values.len(), 1);
+                    builder.assert_eq::<Usize<_>>(values.len(), RVar::one());
 
-                    let summand = builder.get(&values, 0);
-                    builder.assign(cumulative_sum, cumulative_sum + summand);
+                    let summand = builder.get(&values, RVar::zero());
+                    builder.assign(&cumulative_sum, cumulative_sum + summand);
                 });
         }
         builder.assert_ext_eq(cumulative_sum, C::EF::zero().cons());
@@ -131,8 +151,6 @@ where
         let mut challenger = DuplexChallengerVariable::new(builder);
 
         Self::verify_raps(builder, pcs, raps, constants, &mut challenger, input);
-
-        builder.halt();
     }
 
     /// Reference: [afs_stark_backend::verifier::MultiTraceStarkVerifier::verify_raps].
@@ -156,13 +174,14 @@ where
         } = input;
 
         let num_airs = raps.len();
+        let r_num_airs = num_airs;
         let num_phases = vk.num_challenges_to_sample.len();
         // Currently only support 0 or 1 phase is supported.
         assert!(num_phases <= 1);
 
         for k in 0..num_airs {
             let pvs = builder.get(public_values, k);
-            for j in 0..(vk.per_air[k].num_public_values) {
+            for j in 0..vk.per_air[k].num_public_values {
                 let element = builder.get(&pvs, j);
                 challenger.observe(builder, element);
             }
@@ -190,11 +209,12 @@ where
         }
 
         let mut challenges = Vec::new();
+        let mut exposed_values_by_air = vec![vec![vec![]; num_phases]; num_airs];
         for phase_idx in 0..num_phases {
             let num_to_sample: usize = 2;
 
             let provided_num_to_sample = vk.num_challenges_to_sample[phase_idx];
-            builder.assert_usize_eq(provided_num_to_sample, num_to_sample);
+            assert_eq!(provided_num_to_sample, num_to_sample);
 
             // Sample challenges needed in this phase.
             challenges.push(
@@ -204,12 +224,14 @@ where
             );
 
             // For each RAP, the exposed values in the current phase
-            for j in 0..num_airs {
+            for (j, exposed_values_after_challenge) in exposed_values_by_air.iter_mut().enumerate()
+            {
                 let exposed_values = builder.get(&proof.exposed_values_after_challenge, j);
                 let values = builder.get(&exposed_values, phase_idx);
                 let values_len = vk.per_air[j].num_exposed_values_after_challenge[phase_idx];
                 for k in 0..values_len {
                     let value = builder.get(&values, k);
+                    exposed_values_after_challenge[phase_idx].push(value);
                     let felts = builder.ext2felt(value);
                     challenger.observe_slice(builder, felts);
                 }
@@ -229,29 +251,29 @@ where
         // builder.print_e(zeta);
 
         let mut trace_domains =
-            builder.dyn_array::<TwoAdicMultiplicativeCosetVariable<_>>(num_airs);
+            builder.dyn_array::<TwoAdicMultiplicativeCosetVariable<_>>(r_num_airs);
 
         let mut num_prep_rounds = 0;
 
         // Build domains
-        let mut domains = builder.dyn_array(num_airs);
-        let mut quotient_domains = builder.dyn_array(num_airs);
-        let mut trace_points_per_domain = builder.dyn_array(num_airs);
-        let mut quotient_chunk_domains = builder.dyn_array(num_airs);
+        let mut domains = builder.dyn_array(r_num_airs);
+        let mut quotient_domains = builder.dyn_array(r_num_airs);
+        let mut trace_points_per_domain = builder.dyn_array(r_num_airs);
+        let mut quotient_chunk_domains = builder.dyn_array(r_num_airs);
         for i in 0..num_airs {
-            let log_degree = builder.get(log_degree_per_air, i);
+            let log_degree: RVar<_> = builder.get(log_degree_per_air, i).into();
 
             let domain = pcs.natural_domain_for_log_degree(builder, log_degree);
             builder.set_value(&mut trace_domains, i, domain.clone());
 
             let mut trace_points = builder.dyn_array::<Ext<_, _>>(2);
             let zeta_next = domain.next_point(builder, zeta);
-            builder.set_value(&mut trace_points, 0, zeta);
-            builder.set_value(&mut trace_points, 1, zeta_next);
+            builder.set_value(&mut trace_points, RVar::zero(), zeta);
+            builder.set_value(&mut trace_points, RVar::one(), zeta_next);
 
-            let log_quotient_degree = Usize::Const(vk.per_air[i].log_quotient_degree());
-            let quotient_degree = Usize::Const(vk.per_air[i].quotient_degree);
-            let log_quotient_size: Usize<_> = builder.eval(log_degree + log_quotient_degree);
+            let log_quotient_degree = RVar::from(vk.per_air[i].log_quotient_degree());
+            let quotient_degree = vk.per_air[i].quotient_degree;
+            let log_quotient_size = builder.eval_expr(log_degree + log_quotient_degree);
             let quotient_domain =
                 domain.create_disjoint_domain(builder, log_quotient_size, Some(pcs.config.clone()));
             builder.set_value(&mut quotient_domains, i, quotient_domain.clone());
@@ -285,7 +307,7 @@ where
         for i in 0..num_airs {
             if let Some(preprocessed_data) = vk.per_air[i].preprocessed_data.as_ref() {
                 let prep = builder.get(&proof.opening.values.preprocessed, prep_idx);
-                builder.assign(prep_idx, prep_idx + C::N::one());
+                builder.assign(&prep_idx, prep_idx + C::N::one());
                 let batch_commit = builder.constant(preprocessed_data.commit.clone());
 
                 let domain = builder.get(&domains, i);
@@ -322,7 +344,10 @@ where
                 let values_per_mat = builder.get(&proof.opening.values.main, commit_idx);
                 let batch_commit = builder.get(main_trace_commits, commit_idx);
 
-                builder.assert_usize_eq(values_per_mat.len(), matrix_to_air_index.len());
+                builder.assert_eq::<Usize<_>>(
+                    values_per_mat.len(),
+                    RVar::from(matrix_to_air_index.len()),
+                );
                 let mut mats: Array<_, TwoAdicPcsMatsVariable<_>> =
                     builder.dyn_array(matrix_to_air_index.len());
 
@@ -356,7 +381,7 @@ where
             let values_per_mat = builder.get(&proof.opening.values.after_challenge, phase_idx);
             let batch_commit = builder.get(after_challenge_commits, phase_idx);
 
-            builder.assert_usize_eq(values_per_mat.len(), num_airs);
+            builder.assert_eq::<Usize<_>>(values_per_mat.len(), RVar::from(num_airs));
 
             let mut mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.dyn_array(num_airs);
             for i in 0..num_airs {
@@ -414,7 +439,7 @@ where
                     points: qc_points.clone(),
                 };
                 builder.set_value(&mut quotient_mats, qc_index, qc_mat);
-                builder.assign(qc_index, qc_index + C::N::one());
+                builder.assign(&qc_index, qc_index + C::N::one());
             });
         }
         let quotient_round = TwoAdicPcsRoundVariable {
@@ -472,7 +497,7 @@ where
                 let after_challenge_values = builder.get(&proof.opening.values.after_challenge, 0);
                 let after_challenge_values =
                     builder.get(&after_challenge_values, after_challenge_idx);
-                builder.assign(after_challenge_idx, after_challenge_idx + C::N::one());
+                builder.assign(&after_challenge_idx, after_challenge_idx + C::N::one());
                 after_challenge_values
             };
 
@@ -486,20 +511,6 @@ where
 
             // Get the domains from the chip itself.
             let qc_domains = quotient_domain.split_domains_const(builder, log_quotient_degree);
-
-            // Get the exposed values after challenge.
-            let mut exposed_values_after_challenge = Vec::new();
-
-            let exposed_values = builder.get(&proof.exposed_values_after_challenge, index);
-            for j in 0..air_const.num_exposed_values_after_challenge.len() {
-                let values = builder.get(&exposed_values, j);
-                let mut values_vec = Vec::new();
-                for k in 0..air_const.num_exposed_values_after_challenge[j] {
-                    let value = builder.get(&values, k);
-                    values_vec.push(value);
-                }
-                exposed_values_after_challenge.push(values_vec);
-            }
 
             let pvs = builder.get(public_values, index);
             Self::verify_single_rap_constraints(
@@ -516,7 +527,8 @@ where
                 alpha,
                 after_challenge_values,
                 &challenges,
-                &exposed_values_after_challenge,
+                &exposed_values_by_air[index],
+                air_const.interaction_chunk_size,
             );
         }
 
@@ -542,6 +554,7 @@ where
         after_challenge_values: AdjacentOpenedValuesVariable<C>,
         challenges: &[Vec<Ext<C::F, C::EF>>],
         exposed_values_after_challenge: &[Vec<Ext<C::F, C::EF>>],
+        interaction_chunk_size: usize,
     ) where
         R: for<'b> Rap<RecursiveVerifierConstraintFolder<'b, C>> + Sync + ?Sized,
     {
@@ -570,8 +583,8 @@ where
             .iter()
             .zip_eq(constants.width.partitioned_main.iter())
             .map(|(main_values, &width)| {
-                builder.assert_usize_eq(main_values.local.len(), width);
-                builder.assert_usize_eq(main_values.next.len(), width);
+                builder.assert_eq::<Usize<_>>(main_values.local.len(), RVar::from(width));
+                builder.assert_eq::<Usize<_>>(main_values.next.len(), RVar::from(width));
                 let mut main = AdjacentOpenedValues {
                     local: vec![],
                     next: vec![],
@@ -594,8 +607,14 @@ where
         } else {
             C::EF::D * constants.width.after_challenge[0]
         };
-        builder.assert_usize_eq(after_challenge_values.local.len(), after_challenge_width);
-        builder.assert_usize_eq(after_challenge_values.next.len(), after_challenge_width);
+        builder.assert_eq::<Usize<_>>(
+            after_challenge_values.local.len(),
+            RVar::from(after_challenge_width),
+        );
+        builder.assert_eq::<Usize<_>>(
+            after_challenge_values.next.len(),
+            RVar::from(after_challenge_width),
+        );
         for i in 0..after_challenge_width {
             after_challenge
                 .local
@@ -617,17 +636,18 @@ where
             after_challenge,
             challenges,
             exposed_values_after_challenge,
+            interaction_chunk_size,
         );
 
         let num_quotient_chunks = 1 << constants.log_quotient_degree();
         let mut quotient = vec![];
         // Assert that the length of the quotient chunk arrays match the expected length.
-        builder.assert_usize_eq(quotient_chunks.len(), num_quotient_chunks);
+        builder.assert_eq::<Usize<_>>(quotient_chunks.len(), RVar::from(num_quotient_chunks));
         // Collect the quotient values into vectors.
         for i in 0..num_quotient_chunks {
             let chunk = builder.get(&quotient_chunks, i);
             // Assert that the chunk length matches the expected length.
-            builder.assert_usize_eq(C::EF::D, chunk.len());
+            builder.assert_eq::<Usize<_>>(RVar::from(C::EF::D), RVar::from(chunk.len()));
             // Collect the quotient values into vectors.
             let mut quotient_vals = vec![];
             for j in 0..C::EF::D {
@@ -656,6 +676,7 @@ where
         after_challenge: AdjacentOpenedValues<Ext<C::F, C::EF>>,
         challenges: &[Vec<Ext<C::F, C::EF>>],
         exposed_values_after_challenge: &[Vec<Ext<C::F, C::EF>>],
+        interaction_chunk_size: usize,
     ) -> Ext<C::F, C::EF>
     where
         R: for<'b> Rap<RecursiveVerifierConstraintFolder<'b, C>> + Sync + ?Sized,
@@ -712,6 +733,7 @@ where
             exposed_values_after_challenge, // FIXME
 
             symbolic_interactions: &symbolic_constraints.interactions,
+            interaction_chunk_size,
             interactions: vec![],
         };
 
@@ -778,42 +800,57 @@ where
             public_values,
         } = input;
 
-        builder.assert_usize_eq(log_degree_per_air.len(), num_airs);
+        builder.assert_eq::<Usize<_>>(log_degree_per_air.len(), RVar::from(num_airs));
         // Challenger must observe public values
-        builder.assert_usize_eq(public_values.len(), num_airs);
+        builder.assert_eq::<Usize<_>>(public_values.len(), RVar::from(num_airs));
 
-        builder.assert_usize_eq(
+        builder.assert_eq::<Usize<_>>(
             proof.commitments.main_trace.len(),
-            vk.num_main_trace_commitments,
+            RVar::from(vk.num_main_trace_commitments),
         );
         for commit_idx in 0..vk.num_main_trace_commitments {
             let values_per_mat = builder.get(&proof.opening.values.main, commit_idx);
-            builder.assert_usize_eq(values_per_mat.len(), num_airs);
+            builder.assert_eq::<Usize<_>>(values_per_mat.len(), RVar::from(num_airs));
         }
 
-        builder.assert_usize_eq(proof.opening.values.after_challenge.len(), num_phases);
-        builder.assert_usize_eq(proof.commitments.after_challenge.len(), num_phases);
+        builder.assert_eq::<Usize<_>>(
+            proof.opening.values.after_challenge.len(),
+            RVar::from(num_phases),
+        );
+        builder.assert_eq::<Usize<_>>(
+            proof.commitments.after_challenge.len(),
+            RVar::from(num_phases),
+        );
 
-        builder.assert_usize_eq(proof.exposed_values_after_challenge.len(), num_airs);
-        builder.assert_usize_eq(proof.opening.values.quotient.len(), num_airs);
+        builder.assert_eq::<Usize<_>>(
+            proof.exposed_values_after_challenge.len(),
+            RVar::from(num_airs),
+        );
+        builder.assert_eq::<Usize<_>>(proof.opening.values.quotient.len(), RVar::from(num_airs));
         let mut num_preprocessed = 0;
         vk.per_air.iter().enumerate().for_each(|(i, air_const)| {
             let pvs = builder.get(public_values, i);
-            builder.assert_usize_eq(pvs.len(), air_const.num_public_values);
+            builder.assert_eq::<Usize<_>>(pvs.len(), RVar::from(air_const.num_public_values));
 
             if air_const.preprocessed_data.is_some() {
                 let preprocessed_width = air_const.width.preprocessed.unwrap();
                 let preprocessed_value =
                     builder.get(&proof.opening.values.preprocessed, num_preprocessed);
-                builder.assert_usize_eq(preprocessed_value.local.len(), preprocessed_width);
-                builder.assert_usize_eq(preprocessed_value.next.len(), preprocessed_width);
+                builder.assert_eq::<Usize<_>>(
+                    preprocessed_value.local.len(),
+                    RVar::from(preprocessed_width),
+                );
+                builder.assert_eq::<Usize<_>>(
+                    preprocessed_value.next.len(),
+                    RVar::from(preprocessed_width),
+                );
                 num_preprocessed += 1;
             }
 
             let exposed_values = builder.get(&proof.exposed_values_after_challenge, i);
-            builder.assert_usize_eq(
+            builder.assert_eq::<Usize<_>>(
                 exposed_values.len(),
-                air_const.num_exposed_values_after_challenge.len(),
+                RVar::from(air_const.num_exposed_values_after_challenge.len()),
             );
             air_const
                 .num_exposed_values_after_challenge
@@ -821,17 +858,20 @@ where
                 .enumerate()
                 .for_each(|(phase_idx, &value_len)| {
                     let values = builder.get(&exposed_values, phase_idx);
-                    builder.assert_usize_eq(values.len(), value_len);
+                    builder.assert_eq::<Usize<_>>(values.len(), RVar::from(value_len));
                 });
 
             for i in 0..(air_const.num_exposed_values_after_challenge.len()) {
                 let num_exposed_values = air_const.num_exposed_values_after_challenge[i];
                 let values = builder.get(&exposed_values, i);
-                builder.assert_usize_eq(values.len(), num_exposed_values);
+                builder.assert_eq::<Usize<_>>(values.len(), RVar::from(num_exposed_values));
             }
         });
 
-        builder.assert_usize_eq(proof.opening.values.preprocessed.len(), num_preprocessed);
+        builder.assert_eq::<Usize<_>>(
+            proof.opening.values.preprocessed.len(),
+            RVar::from(num_preprocessed),
+        );
         // FIXME: check if all necessary validation is covered.
     }
 }

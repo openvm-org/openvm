@@ -1,32 +1,35 @@
-use std::collections::HashMap;
-use std::iter;
-use std::sync::Arc;
+use std::{collections::HashMap, iter, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
-use afs_stark_backend::prover::trace::TraceCommitter;
-use afs_stark_backend::verifier::VerificationError;
 use afs_stark_backend::{
-    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
-    prover::{trace::TraceCommitmentBuilder, MultiTraceStarkProver},
+    keygen::MultiStarkKeygenBuilder,
+    prover::{
+        trace::{TraceCommitmentBuilder, TraceCommitter},
+        MultiTraceStarkProver,
+    },
+    verifier::VerificationError,
 };
-use afs_test_utils::config::{
-    self,
-    baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+use afs_test_utils::{
+    config::{
+        self,
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+    },
+    interaction::dummy_interaction_air::DummyInteractionAir,
+    utils::create_seeded_rng,
 };
-use afs_test_utils::interaction::dummy_interaction_air::DummyInteractionAir;
-use afs_test_utils::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 use rand::Rng;
 
-use crate::multitier_page_rw_checker::page_controller::{
-    MyLessThanTupleParams, PageController, PageTreeParams,
-};
-use crate::page_btree::{PageBTree, PageBTreePages};
-use crate::page_rw_checker::page_controller::{OpType, Operation};
-
 use super::page_controller;
+use crate::{
+    multitier_page_rw_checker::page_controller::{
+        MyLessThanTupleParams, PageController, PageTreeParams,
+    },
+    page_btree::{PageBTree, PageBTreePages},
+    page_rw_checker::page_controller::{OpType, Operation},
+};
 
 pub const BABYBEAR_COMMITMENT_LEN: usize = 8;
 pub const DECOMP_BITS: usize = 6;
@@ -109,16 +112,16 @@ where
 
     let init_param = PageTreeParams {
         path_bus_index: init_path_bus,
-        leaf_cap: 8,
-        internal_cap: 24,
+        leaf_cap: Some(8),
+        internal_cap: Some(24),
         leaf_page_height: page_height,
         internal_page_height: page_height,
     };
 
     let final_param = PageTreeParams {
         path_bus_index: final_path_bus,
-        leaf_cap: 8,
-        internal_cap: 24,
+        leaf_cap: None,
+        internal_cap: None,
         leaf_page_height: page_height,
         internal_page_height: page_height,
     };
@@ -144,11 +147,7 @@ where
             range_checker,
         );
     let ops_sender = DummyInteractionAir::new(idx_len + data_len + 2, true, ops_bus_index);
-    let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-    page_controller.set_up_keygen_builder(&mut keygen_builder, &ops_sender);
-
-    let pk = keygen_builder.generate_pk();
     let (init_pages, init_root_is_leaf, final_pages, final_root_is_leaf, ops) = generate_inputs(
         idx_len,
         data_len,
@@ -172,7 +171,6 @@ where
         &ops_sender,
         &mut page_controller,
         &mut trace_builder,
-        &pk,
         trace_degree,
     );
     assert!(should_fail == res.is_err());
@@ -200,7 +198,6 @@ fn load_page_test(
         BABYBEAR_COMMITMENT_LEN,
     >,
     trace_builder: &mut TraceCommitmentBuilder<BabyBearPoseidon2Config>,
-    pk: &MultiStarkProvingKey<BabyBearPoseidon2Config>,
     trace_degree: usize,
 ) -> Result<(), VerificationError> {
     page_controller.range_checker.clear();
@@ -236,9 +233,14 @@ fn load_page_test(
             .collect(),
         1 + ops_sender.field_width(),
     );
+    let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
+
+    page_controller.set_up_keygen_builder(&mut keygen_builder, ops_sender);
+
+    let pk = keygen_builder.generate_pk();
     let (proof, pis) = page_controller.prove(
         engine,
-        pk,
+        &pk,
         trace_builder,
         prover_data,
         ops_sender,

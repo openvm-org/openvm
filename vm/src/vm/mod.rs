@@ -1,27 +1,30 @@
-use crate::cpu::ExecutionState;
+use std::{
+    collections::{HashMap, VecDeque},
+    mem::take,
+    ops::Deref,
+};
+
 use afs_stark_backend::rap::AnyRap;
 use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use cycle_tracker::CycleTracker;
+use metrics::VmMetrics;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_util::log2_strict_usize;
-use std::collections::HashMap;
-use std::collections::VecDeque;
-use std::ops::Deref;
-
-mod segment;
 pub use segment::{get_chips, ExecutionSegment};
 
-use crate::cpu::{
-    trace::{ExecutionError, Instruction},
-    CpuOptions,
+use self::config::VmConfig;
+use crate::{
+    cpu::{trace::ExecutionError, CpuOptions, ExecutionState},
+    program::Program,
 };
 
-pub mod cycle_tracker;
-
-use self::config::VmConfig;
-
 pub mod config;
+pub mod cycle_tracker;
+/// Instrumentation metrics for performance analysis and debugging
+pub mod metrics;
+mod segment;
 
 /// Parent struct that holds all execution segments, program, config.
 ///
@@ -33,7 +36,7 @@ pub mod config;
 /// `VirtualMachine::get_chips()` can be used to convert the boxes of chips to concrete chips.
 pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub config: VmConfig,
-    pub program: Vec<Instruction<F>>,
+    pub program: Program<F>,
     pub segments: Vec<ExecutionSegment<WORD_SIZE, F>>,
     pub traces: Vec<DenseMatrix<F>>,
 }
@@ -48,10 +51,18 @@ pub enum ChipType {
     FieldArithmetic,
     FieldExtension,
     Poseidon2,
+    IsLessThan,
+}
+
+pub struct ExecutionResult<const WORD_SIZE: usize> {
+    /// VM metrics per segment, only collected if enabled
+    pub metrics: Vec<VmMetrics>,
+    /// Cycle tracker for the entire execution
+    pub cycle_tracker: CycleTracker,
 }
 
 /// Struct that holds the return state of the VM. StarkConfig is hardcoded to BabyBearPoseidon2Config.
-pub struct ExecutionResult<const WORD_SIZE: usize> {
+pub struct ExecutionAndTraceGenerationResult<const WORD_SIZE: usize> {
     /// Traces of the VM
     pub nonempty_traces: Vec<DenseMatrix<BabyBear>>,
     pub all_traces: Vec<DenseMatrix<BabyBear>>,
@@ -64,6 +75,10 @@ pub struct ExecutionResult<const WORD_SIZE: usize> {
     pub chip_types: Vec<ChipType>,
     /// Maximum log degree of the VM
     pub max_log_degree: usize,
+    /// VM metrics per segment, only collected if enabled
+    pub metrics: Vec<VmMetrics>,
+    /// Cycle tracker for the entire execution
+    pub cycle_tracker: CycleTracker,
 }
 
 /// Struct that holds the current state of the VM. For now, includes memory, input stream, and hint stream.
@@ -83,28 +98,36 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
     /// Create a new VM with a given config, program, and input stream.
     ///
     /// The VM will start with a single segment, which is created from the initial state of the CPU.
-    pub fn new(config: VmConfig, program: Vec<Instruction<F>>, input_stream: Vec<Vec<F>>) -> Self {
+    pub fn new(config: VmConfig, program: Program<F>, input_stream: Vec<Vec<F>>) -> Self {
         let mut vm = Self {
             config,
             program,
             segments: vec![],
             traces: vec![],
         };
-        vm.segment(VirtualMachineState {
-            state: ExecutionState::default(),
-            memory: HashMap::new(),
-            input_stream: VecDeque::from(input_stream),
-            hint_stream: VecDeque::new(),
-        });
+        vm.segment(
+            VirtualMachineState {
+                state: ExecutionState::default(),
+                memory: HashMap::new(),
+                input_stream: VecDeque::from(input_stream),
+                hint_stream: VecDeque::new(),
+            },
+            CycleTracker::new(),
+        );
         vm
     }
 
     /// Create a new segment with a given state.
     ///
     /// The segment will be created from the given state and the program.
-    pub fn segment(&mut self, state: VirtualMachineState<F>) {
+    pub fn segment(&mut self, state: VirtualMachineState<F>, cycle_tracker: CycleTracker) {
+        tracing::debug!(
+            "Creating new continuation segment for {} total segments",
+            self.segments.len() + 1
+        );
         let program = self.program.clone();
-        let segment = ExecutionSegment::new(self.config, program, state);
+        let mut segment = ExecutionSegment::new(self.config, program, state);
+        segment.cycle_tracker = cycle_tracker;
         self.segments.push(segment);
     }
 
@@ -123,32 +146,95 @@ impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
     pub fn options(&self) -> CpuOptions {
         self.config.cpu_options()
     }
+
+    /// Enable metrics collection on all segments
+    pub fn enable_metrics_collection(&mut self) {
+        self.config.collect_metrics = true;
+        for segment in &mut self.segments {
+            segment.config.collect_metrics = true;
+        }
+    }
+
+    /// Disable metrics collection on all segments
+    pub fn disable_metrics_collection(&mut self) {
+        self.config.collect_metrics = false;
+        for segment in &mut self.segments {
+            segment.config.collect_metrics = false;
+        }
+    }
 }
 
-/// Executes the VM by calling `ExecutionSegment::generate_traces()` until the CPU hits `TERMINATE`
-/// and `cpu_chip.is_done`. Between every segment, the VM will call `generate_commitments()` and then
-/// `next_segment()`.
 impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
+    /// Executes the VM by calling `ExecutionSegment::execute()` until the CPU hits `TERMINATE`
+    /// and `cpu_chip.is_done`. Between every segment, the VM will call `next_segment()`.
     pub fn execute(mut self) -> Result<ExecutionResult<WORD_SIZE>, ExecutionError> {
-        let mut traces = vec![];
+        let mut metrics = Vec::new();
+
         loop {
             let last_seg = self.segments.last_mut().unwrap();
-            last_seg.has_generation_happened = true;
-            traces.extend(last_seg.generate_traces()?);
-            traces.extend(last_seg.generate_commitments()?);
+            last_seg.cycle_tracker.print();
+            last_seg.execute()?;
+            last_seg.has_execution_happened = true;
+            if self.config.collect_metrics {
+                metrics.push(last_seg.metrics.clone());
+            }
             if last_seg.cpu_chip.state.is_done {
                 break;
             }
-            self.segment(self.current_state());
+            let cycle_tracker = take(&mut last_seg.cycle_tracker);
+            self.segment(self.current_state(), cycle_tracker);
         }
+        tracing::debug!("Number of continuation segments: {}", self.segments.len());
+        let cycle_tracker = take(&mut self.segments.last_mut().unwrap().cycle_tracker);
+        cycle_tracker.print();
 
-        let mut pis = vec![];
-        let mut chips = vec![];
-        let mut types = vec![];
+        Ok(ExecutionResult {
+            metrics,
+            cycle_tracker,
+        })
+    }
+
+    /// Executes the VM by calling `ExecutionSegment::execute()` until the CPU hits `TERMINATE`
+    /// and `cpu_chip.is_done`. Between every segment, the VM will call `generate_traces()`, `generate_commitments()` and then
+    /// `next_segment()`.
+    pub fn execute_and_generate_traces(
+        mut self,
+    ) -> Result<ExecutionAndTraceGenerationResult<WORD_SIZE>, ExecutionError> {
+        let mut traces = vec![];
+        let mut metrics = Vec::new();
+
+        loop {
+            let last_seg = self.segments.last_mut().unwrap();
+            last_seg.cycle_tracker.print();
+            last_seg.execute()?;
+            last_seg.has_execution_happened = true;
+            traces.extend(last_seg.generate_traces());
+            traces.extend(last_seg.generate_commitments());
+            if self.config.collect_metrics {
+                metrics.push(last_seg.metrics.clone());
+            }
+            if last_seg.cpu_chip.state.is_done {
+                break;
+            }
+            let cycle_tracker = take(&mut last_seg.cycle_tracker);
+            self.segment(self.current_state(), cycle_tracker);
+        }
+        tracing::debug!("Number of continuation segments: {}", self.segments.len());
+        let cycle_tracker = take(&mut self.segments.last_mut().unwrap().cycle_tracker);
+        cycle_tracker.print();
+
+        let mut pis = Vec::with_capacity(self.segments.len());
+        let mut chips = Vec::with_capacity(self.segments.len());
+        let mut types = Vec::with_capacity(self.segments.len());
         let num_chips = self.segments[0].get_num_chips();
 
+        let empty_program = Program {
+            instructions: vec![],
+            debug_infos: vec![],
+        };
+
         let unique_chips = get_chips::<WORD_SIZE, BabyBearPoseidon2Config>(
-            ExecutionSegment::new(self.config, vec![], self.current_state()),
+            ExecutionSegment::new(self.config, empty_program, self.current_state()),
             &vec![true; num_chips],
         );
 
@@ -202,7 +288,7 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
                 );
             });
 
-        let chip_data = ExecutionResult {
+        let chip_data = ExecutionAndTraceGenerationResult {
             nonempty_traces,
             all_traces: traces,
             nonempty_pis: pis,
@@ -210,6 +296,8 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
             unique_chips,
             chip_types: types,
             max_log_degree,
+            metrics,
+            cycle_tracker,
         };
 
         Ok(chip_data)
@@ -223,7 +311,7 @@ impl<const WORD_SIZE: usize> VirtualMachine<WORD_SIZE, BabyBear> {
     }
 }
 
-impl<const WORD_SIZE: usize> ExecutionResult<WORD_SIZE> {
+impl<const WORD_SIZE: usize> ExecutionAndTraceGenerationResult<WORD_SIZE> {
     pub fn get_chips(&self) -> Vec<&dyn AnyRap<BabyBearPoseidon2Config>> {
         self.nonempty_chips.iter().map(|x| x.deref()).collect()
     }

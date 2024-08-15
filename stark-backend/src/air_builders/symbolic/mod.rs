@@ -5,22 +5,24 @@ use p3_air::{
     AirBuilder, AirBuilderWithPublicValues, ExtensionBuilder, PairBuilder, PermutationAirBuilder,
 };
 use p3_field::Field;
-use p3_matrix::dense::RowMajorMatrix;
-use p3_matrix::Matrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_ceil_usize;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::interaction::{
-    Interaction, InteractionBuilder, InteractionType, NUM_PERM_CHALLENGES, NUM_PERM_EXPOSED_VALUES,
+use self::{
+    symbolic_expression::SymbolicExpression,
+    symbolic_variable::{Entry, SymbolicVariable},
 };
-use crate::keygen::types::{StarkVerifyingParams, TraceWidth};
-use crate::rap::{PermutationAirBuilderWithExposedValues, Rap};
-
 use super::PartitionedAirBuilder;
-
-use self::symbolic_expression::SymbolicExpression;
-use self::symbolic_variable::{Entry, SymbolicVariable};
+use crate::{
+    interaction::{
+        Interaction, InteractionBuilder, InteractionType, NUM_PERM_CHALLENGES,
+        NUM_PERM_EXPOSED_VALUES,
+    },
+    keygen::types::{StarkVerifyingParams, TraceWidth},
+    rap::{PermutationAirBuilderWithExposedValues, Rap},
+};
 
 pub mod symbolic_expression;
 pub mod symbolic_variable;
@@ -48,12 +50,6 @@ impl<F: Field> SymbolicConstraints<F> {
         // But we pad it to a power of two so that we can efficiently decompose the quotient.
         log2_ceil_usize(constraint_degree - 1)
     }
-
-    /// Number of columns in the trace matrix after challenge phase 0 for logup permutation.
-    pub fn perm_width(&self) -> Option<usize> {
-        let num_interactions = self.interactions.len();
-        (num_interactions != 0).then(|| num_interactions + 1)
-    }
 }
 
 #[instrument(name = "evaluate constraints symbolically", skip_all, level = "debug")]
@@ -63,6 +59,7 @@ pub fn get_symbolic_builder<F, R>(
     num_public_values: usize,
     num_challenges_to_sample: &[usize],
     num_exposed_values_after_challenge: &[usize],
+    interaction_chunk_size: usize,
 ) -> SymbolicRapBuilder<F>
 where
     F: Field,
@@ -73,6 +70,7 @@ where
         num_public_values,
         num_challenges_to_sample,
         num_exposed_values_after_challenge,
+        interaction_chunk_size,
     );
     Rap::eval(rap, &mut builder);
     builder
@@ -89,6 +87,7 @@ pub struct SymbolicRapBuilder<F: Field> {
     exposed_values_after_challenge: Vec<Vec<SymbolicVariable<F>>>,
     constraints: Vec<SymbolicExpression<F>>,
     interactions: Vec<Interaction<SymbolicExpression<F>>>,
+    interaction_chunk_size: usize,
 }
 
 impl<F: Field> SymbolicRapBuilder<F> {
@@ -99,6 +98,7 @@ impl<F: Field> SymbolicRapBuilder<F> {
         num_public_values: usize,
         num_challenges_to_sample: &[usize],
         num_exposed_values_after_challenge: &[usize],
+        interaction_chunk_size: usize,
     ) -> Self {
         let preprocessed_width = width.preprocessed.unwrap_or(0);
         let prep_values = [0, 1]
@@ -146,6 +146,7 @@ impl<F: Field> SymbolicRapBuilder<F> {
             exposed_values_after_challenge,
             constraints: vec![],
             interactions: vec![],
+            interaction_chunk_size,
         }
     }
 
@@ -363,7 +364,9 @@ impl<F: Field> InteractionBuilder for SymbolicRapBuilder<F> {
             assert!(self.challenges.is_empty());
             assert!(self.exposed_values_after_challenge.is_empty());
 
-            let perm_width = num_interactions + 1;
+            let perm_width = (num_interactions + self.interaction_chunk_size - 1)
+                / self.interaction_chunk_size
+                + 1;
             self.after_challenge = Self::new_after_challenge(&[perm_width]);
             self.challenges = Self::new_challenges(&[NUM_PERM_CHALLENGES]);
             self.exposed_values_after_challenge =
@@ -371,11 +374,8 @@ impl<F: Field> InteractionBuilder for SymbolicRapBuilder<F> {
         }
     }
 
-    fn all_multiplicities_next(&self) -> Vec<Self::Expr> {
-        self.interactions
-            .iter()
-            .map(|interaction| interaction.count.next())
-            .collect()
+    fn interaction_chunk_size(&self) -> usize {
+        self.interaction_chunk_size
     }
 }
 

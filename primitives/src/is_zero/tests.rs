@@ -1,13 +1,11 @@
-use super::IsZeroAir;
-
-use afs_stark_backend::prover::USE_DEBUG_BUILDER;
-use afs_stark_backend::verifier::VerificationError;
+use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::config::baby_bear_poseidon2::run_simple_test_no_pis;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-
 use p3_matrix::Matrix;
 use test_case::test_case;
+
+use super::IsZeroAir;
 
 #[test_case(97 ; "97 => 0")]
 #[test_case(0 ; "0 => 1")]

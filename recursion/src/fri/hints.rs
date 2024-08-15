@@ -1,22 +1,20 @@
-use p3_field::AbstractExtensionField;
-use p3_field::AbstractField;
-
-use afs_compiler::ir::DIGEST_SIZE;
 use afs_compiler::{
     asm::AsmConfig,
-    ir::{Array, Builder, Config},
+    ir::{Array, Builder, Config, DIGEST_SIZE},
 };
-
-use crate::fri::types::{
-    DigestVariable, FriCommitPhaseProofStepVariable, FriProofVariable, FriQueryProofVariable,
-};
-use crate::hints::{
-    Hintable, InnerBatchOpening, InnerChallenge, InnerCommitPhaseStep, InnerDigest, InnerFriProof,
-    InnerPcsProof, InnerQueryProof, InnerVal,
-};
-use crate::types::InnerConfig;
+use p3_field::AbstractField;
 
 use super::types::{BatchOpeningVariable, TwoAdicPcsProofVariable};
+use crate::{
+    fri::types::{
+        DigestVariable, FriCommitPhaseProofStepVariable, FriProofVariable, FriQueryProofVariable,
+    },
+    hints::{
+        Hintable, InnerBatchOpening, InnerChallenge, InnerCommitPhaseStep, InnerDigest,
+        InnerFriProof, InnerPcsProof, InnerQueryProof, InnerVal,
+    },
+    types::InnerConfig,
+};
 
 type C = InnerConfig;
 
@@ -198,7 +196,7 @@ impl Hintable<C> for InnerBatchOpening {
     type HintVariable = BatchOpeningVariable<C>;
 
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
-        let opened_values = Vec::<Vec<InnerChallenge>>::read(builder);
+        let opened_values = Vec::<Vec<InnerVal>>::read(builder);
         let opening_proof = Vec::<InnerDigest>::read(builder);
         Self::HintVariable {
             opened_values,
@@ -208,13 +206,7 @@ impl Hintable<C> for InnerBatchOpening {
 
     fn write(&self) -> Vec<Vec<<C as Config>::F>> {
         let mut stream = Vec::new();
-        stream.extend(Vec::<Vec<InnerChallenge>>::write(
-            &self
-                .opened_values
-                .iter()
-                .map(|v| v.iter().map(|x| InnerChallenge::from_base(*x)).collect())
-                .collect(),
-        ));
+        stream.extend(Vec::<Vec<InnerVal>>::write(&self.opened_values));
         stream.extend(Vec::<InnerDigest>::write(&self.opening_proof));
         stream
     }

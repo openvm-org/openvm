@@ -14,14 +14,15 @@ p3-matrix = { workspace = true }
 p3-maybe-rayon = { workspace = true }
 p3-uni-stark = { workspace = true }
 p3-util = { workspace = true }
+rayon = { workspace = true, optional = true }
+itertools.workspace = true
+tracing.workspace = true
 
-itertools = "0.13.0"
 serde = { version = "1.0", default-features = false, features = [
     "derive",
     "alloc",
     "rc",
 ] }
-tracing = "0.1.37"
 derivative = "2.2.0"
 
 [target.'cfg(unix)'.dependencies]
@@ -52,6 +53,6 @@ eyre = "0.6.12"
 
 [features]
 default = []
-parallel = ["p3-maybe-rayon/parallel"]
+parallel = ["p3-maybe-rayon/parallel", "dep:rayon"]
 jemalloc = ["dep:tikv-jemallocator"]
 jemalloc-prof = ["jemalloc", "tikv-jemallocator?/profiling"]

@@ -336,7 +336,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
 
     /// Sets up keygen with the different trace partitions for all the
     /// chips the struct owns (t1_chip, t2_chip, output_chip, intersector_chip)
-    pub fn set_up_keygen_builder(&self, keygen_builder: &mut MultiStarkKeygenBuilder<SC>)
+    pub fn set_up_keygen_builder<'a>(&'a self, keygen_builder: &mut MultiStarkKeygenBuilder<'a, SC>)
     where
         Val<SC>: PrimeField,
     {

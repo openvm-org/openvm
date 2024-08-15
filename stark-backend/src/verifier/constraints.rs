@@ -1,19 +1,15 @@
 use itertools::Itertools;
 use p3_commit::PolynomialSpace;
 use p3_field::{AbstractExtensionField, AbstractField, Field};
-use p3_matrix::dense::RowMajorMatrixView;
-use p3_matrix::stack::VerticalPair;
-use p3_uni_stark::Domain;
-use p3_uni_stark::StarkGenericConfig;
-use p3_uni_stark::Val;
+use p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair};
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::instrument;
 
-use crate::air_builders::verifier::VerifierConstraintFolder;
-use crate::keygen::types::StarkVerifyingKey;
-use crate::prover::opener::AdjacentOpenedValues;
-use crate::rap::Rap;
-
 use super::error::VerificationError;
+use crate::{
+    air_builders::verifier::VerifierConstraintFolder, keygen::types::StarkVerifyingKey,
+    prover::opener::AdjacentOpenedValues, rap::Rap,
+};
 
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
@@ -129,6 +125,7 @@ where
 
         symbolic_interactions: &vk.symbolic_constraints.interactions,
         interactions: vec![],
+        interaction_chunk_size: vk.interaction_chunk_size,
     };
     rap.eval(&mut folder);
 

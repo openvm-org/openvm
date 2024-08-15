@@ -1,6 +1,7 @@
-use super::FieldArithmeticAir;
 use afs_derive::AlignedBorrow;
 use p3_field::Field;
+
+use super::FieldArithmeticAir;
 /// Columns for field arithmetic chip.
 ///
 /// Five IO columns for rcv_count, opcode, x, y, result.

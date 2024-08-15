@@ -6,17 +6,16 @@ use p3_field::AbstractField;
 use p3_matrix::Matrix;
 use p3_uni_stark::{PackedChallenge, PackedVal, StarkGenericConfig, Val};
 
-use crate::{
-    interaction::{Interaction, InteractionBuilder, InteractionType, SymbolicInteraction},
-    rap::PermutationAirBuilderWithExposedValues,
-};
-
 use super::{
     symbolic::{
         symbolic_expression::SymbolicEvaluator,
         symbolic_variable::{Entry, SymbolicVariable},
     },
     PartitionedAirBuilder, ViewPair,
+};
+use crate::{
+    interaction::{Interaction, InteractionBuilder, InteractionType, SymbolicInteraction},
+    rap::PermutationAirBuilderWithExposedValues,
 };
 
 /// A folder for prover constraints.
@@ -36,6 +35,8 @@ pub struct ProverConstraintFolder<'a, SC: StarkGenericConfig> {
     /// Symbolic interactions, gotten from vkey. Needed for multiplicity in next row calculation.
     pub symbolic_interactions: &'a [SymbolicInteraction<Val<SC>>],
     pub interactions: Vec<Interaction<PackedVal<SC>>>,
+    /// Number of interactions to bundle in permutation trace
+    pub interaction_chunk_size: usize,
 }
 
 impl<'a, SC> AirBuilder for ProverConstraintFolder<'a, SC>
@@ -195,14 +196,8 @@ where
         );
     }
 
-    fn all_multiplicities_next(&self) -> Vec<Self::Expr> {
-        // TODO: `i.count.next()` can be cached in the vkey
-        // we expect this to only be called once per construction of Self,
-        // so we don't cache the computation
-        self.symbolic_interactions
-            .iter()
-            .map(|i| self.eval_expr(&i.count.next()))
-            .collect()
+    fn interaction_chunk_size(&self) -> usize {
+        self.interaction_chunk_size
     }
 }
 

@@ -1,10 +1,10 @@
+use afs_compiler::{
+    asm::AsmBuilder,
+    prelude::*,
+    util::{execute_program_and_generate_traces, execute_program_with_public_values},
+};
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
-use p3_field::AbstractField;
-
-use afs_compiler::asm::AsmBuilder;
-use afs_compiler::prelude::*;
-use afs_compiler::util::{execute_program, execute_program_with_public_values};
+use p3_field::{extension::BinomialExtensionField, AbstractField};
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
@@ -23,8 +23,8 @@ fn test_compiler_public_values() {
 
     let dyn_len: Var<_> = builder.eval(F::from_canonical_usize(2));
     let mut var_array = builder.dyn_array::<Felt<_>>(dyn_len);
-    builder.set(&mut var_array, 0, a);
-    builder.set(&mut var_array, 1, b);
+    builder.set(&mut var_array, RVar::zero(), a);
+    builder.set(&mut var_array, RVar::one(), b);
 
     builder.commit_public_values(&var_array);
 
@@ -50,15 +50,15 @@ fn test_compiler_public_values_no_initial() {
 
     let dyn_len: Var<_> = builder.eval(F::from_canonical_usize(2));
     let mut var_array = builder.dyn_array::<Felt<_>>(dyn_len);
-    builder.set(&mut var_array, 0, a);
-    builder.set(&mut var_array, 1, b);
+    builder.set(&mut var_array, RVar::zero(), a);
+    builder.set(&mut var_array, RVar::one(), b);
 
     builder.commit_public_values(&var_array);
 
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -75,8 +75,8 @@ fn test_compiler_public_values_negative() {
 
     let dyn_len: Var<_> = builder.eval(F::from_canonical_usize(2));
     let mut var_array = builder.dyn_array::<Felt<_>>(dyn_len);
-    builder.set(&mut var_array, 0, a);
-    builder.set(&mut var_array, 1, b);
+    builder.set(&mut var_array, RVar::zero(), a);
+    builder.set(&mut var_array, RVar::one(), b);
 
     builder.commit_public_values(&var_array);
 

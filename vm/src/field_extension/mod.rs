@@ -1,9 +1,9 @@
 use p3_field::{Field, PrimeField32};
 
-use crate::cpu::trace::Instruction;
-use crate::cpu::OpCode;
-use crate::cpu::FIELD_EXTENSION_INSTRUCTIONS;
-use crate::vm::ExecutionSegment;
+use crate::{
+    cpu::{trace::Instruction, OpCode, FIELD_EXTENSION_INSTRUCTIONS},
+    vm::ExecutionSegment,
+};
 
 pub mod air;
 pub mod bridge;
@@ -129,6 +129,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
             op_c,
             d,
             e,
+            op_f: _f,
+            op_g: _g,
             debug: _debug,
         } = instruction;
         assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));

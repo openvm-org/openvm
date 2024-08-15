@@ -45,7 +45,8 @@ jobs:
 
       - name: Run benchmark
         run: |
-          RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- rw -r 90 -w 10
+          # RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- rw -r 90 -w 10
+          RUSTFLAGS="-Ctarget-cpu=native" cargo run --release --bin benchmark --features parallel -- predicate -f benchmark/config/olap/filter_0xfade.afo
 
       - name: Copy output CSVs to S3
         run: |

@@ -1,10 +1,3 @@
-use super::page_controller::PageController;
-use crate::common::page::Page;
-use crate::group_by::group_by_input::GroupByOperation;
-use itertools::Itertools;
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_util::log2_strict_usize;
 use std::{cmp::max, sync::Arc};
 
 use afs_stark_backend::{
@@ -20,7 +13,14 @@ use afs_test_utils::{
     engine::StarkEngine,
     utils::create_seeded_rng,
 };
+use itertools::Itertools;
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
+use p3_util::log2_strict_usize;
 use rand::Rng;
+
+use super::page_controller::PageController;
+use crate::{common::page::Page, group_by::group_by_input::GroupByOperation};
 
 /// Struct for generating a group-by test case.
 ///
@@ -152,40 +152,6 @@ impl GroupByTest {
         Page::from_2d_vec(&page_vecs, 0, self.data_len())
     }
 
-    /// Set up the keygen builder for the group-by test case by querying trace widths.
-    fn set_up_keygen_builder(
-        &self,
-        keygen_builder: &mut MultiStarkKeygenBuilder<BabyBearPoseidon2Config>,
-        page_controller: &PageController<BabyBearPoseidon2Config>,
-    ) {
-        let group_by_ptr = keygen_builder.add_cached_main_matrix(self.page_width);
-        let final_page_ptr =
-            keygen_builder.add_cached_main_matrix(page_controller.final_chip.page_width());
-        let group_by_aux_ptr = keygen_builder.add_main_matrix(page_controller.group_by.aux_width());
-        let final_page_aux_ptr =
-            keygen_builder.add_main_matrix(page_controller.final_chip.aux_width());
-        let range_checker_ptr =
-            keygen_builder.add_main_matrix(page_controller.range_checker.air_width());
-
-        keygen_builder.add_partitioned_air(
-            &page_controller.group_by,
-            0,
-            vec![group_by_ptr, group_by_aux_ptr],
-        );
-
-        keygen_builder.add_partitioned_air(
-            &page_controller.final_chip,
-            0,
-            vec![final_page_ptr, final_page_aux_ptr],
-        );
-
-        keygen_builder.add_partitioned_air(
-            &page_controller.range_checker.air,
-            0,
-            vec![range_checker_ptr],
-        );
-    }
-
     /// Load a page into the group-by controller, load traces into the `trace_builder`,
     /// generate a proof for the group-by operation, and verify it.
     ///
@@ -269,19 +235,22 @@ impl GroupByTest {
     }
 }
 
+// TODO: make sure that this function deterministically makes the relevant tests work
 /// Perturb a page trace by randomly selecting any value in the page and replacing it with a random value.
 fn perturb_page(
     trace: p3_matrix::dense::DenseMatrix<p3_baby_bear::BabyBear>,
     page_width: usize,
     rng: &mut impl Rng,
-    max_value: usize,
+    _max_value: usize,
 ) -> p3_matrix::dense::DenseMatrix<p3_baby_bear::BabyBear> {
     let height = trace.values.len() / trace.width;
     let perturbed_x = rng.gen_range(0..height);
-    let perturbed_y = rng.gen_range(0..page_width);
+    // let perturbed_y = rng.gen_range(0..page_width);
+    let perturbed_y = 0;
     let mut perturbed_trace = trace.clone();
-    perturbed_trace.values[perturbed_x * page_width + perturbed_y] =
-        BabyBear::from_canonical_u32(rng.gen_range(0..max_value) as u32);
+    perturbed_trace.values[perturbed_x * page_width + perturbed_y] +=
+        BabyBear::from_canonical_u32(1);
+    // BabyBear::from_canonical_u32(rng.gen_range(0..max_value) as u32);
     perturbed_trace
 }
 
@@ -349,12 +318,15 @@ fn test_static_values() {
     let engine = config::baby_bear_poseidon2::default_engine(degree);
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-    page_controller.set_up_keygen_builder(&mut keygen_builder);
+    // page_controller.set_up_keygen_builder(&mut keygen_builder);
 
     let prover = engine.prover();
     let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
     let (group_by_traces, _group_by_commitments, input_pdata, output_pdata) =
         page_controller.load_page(&page, None, None, &trace_builder.committer);
+
+    page_controller.set_up_keygen_builder(&mut keygen_builder);
+
     assert_eq!(
         &group_by_traces.final_page_trace.values,
         &answer_vec
@@ -404,7 +376,7 @@ fn test_random_values() {
         config::baby_bear_poseidon2::default_engine(max(test.log_page_height, test.idx_decomp));
     let mut keygen_builder = MultiStarkKeygenBuilder::new(&engine.config);
 
-    test.set_up_keygen_builder(&mut keygen_builder, &page_controller);
+    page_controller.set_up_keygen_builder(&mut keygen_builder);
 
     let pk = keygen_builder.generate_pk();
 

@@ -1,10 +1,10 @@
-use afs_compiler::util::{display_program, execute_program};
+use afs_compiler::{
+    asm::AsmBuilder,
+    ir::{Felt, Var},
+    util::{display_program, execute_program_and_generate_traces},
+};
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
-use p3_field::AbstractField;
-
-use afs_compiler::asm::AsmBuilder;
-use afs_compiler::ir::{Felt, Var};
+use p3_field::{extension::BinomialExtensionField, AbstractField};
 use stark_vm::cpu::WORD_SIZE;
 
 fn fibonacci(n: u32) -> u32 {
@@ -37,9 +37,9 @@ fn main() {
 
     builder.range(start, end).for_each(|_, builder| {
         let temp: Felt<_> = builder.uninit();
-        builder.assign(temp, b);
-        builder.assign(b, a + b);
-        builder.assign(a, temp);
+        builder.assign(&temp, b);
+        builder.assign(&b, a + b);
+        builder.assign(&a, temp);
     });
 
     let expected_value = F::from_canonical_u32(fibonacci(n_val));
@@ -49,8 +49,8 @@ fn main() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    display_program(&program);
-    execute_program::<WORD_SIZE>(program, vec![]);
+    display_program(&program.instructions);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 
     // let program = code.machine_code();
     // println!("Program size = {}", program.instructions.len());

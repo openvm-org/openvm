@@ -1,11 +1,12 @@
 use std::borrow::Borrow;
 
-use super::columns::FibonacciSelectorCols;
-use crate::fib_air::columns::{FibonacciCols, NUM_FIBONACCI_COLS};
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder};
 use p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
+
+use super::columns::FibonacciSelectorCols;
+use crate::fib_air::columns::{FibonacciCols, NUM_FIBONACCI_COLS};
 
 pub struct FibonacciSelectorAir {
     sels: Vec<bool>,
