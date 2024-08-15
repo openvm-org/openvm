@@ -135,16 +135,18 @@ Listed below are the instructions offered in each configuration.
 
 This instruction set is always enabled.
 
-| Mnemonic            | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                            |
-| ------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| **LW** / **LOADW**  | `a, offset, c`                                | Set `word[a]_d <- word[proj(word[c]_d) + offset]_e`. Loads words from one address space to another. |
-| **SW** / **STOREW** | `a, offset, c`                                | Set `word[proj(word[c]_d) + offset]_e <- word[a]_d`.                                                |
-| **JAL**             | `a, offset, c`                                | Jump to address and link: set `word[a]_d <- emb(pc + INST_WIDTH)` and `pc <- pc + offset`.          |
-| **BEQ**             | `a, b, offset`                                | If `word[a]_d == word[b]_e`, then set `pc <- pc + offset`                                           |
-| **BNE**             | `a, b, offset`                                | If `word[a]_d != word[b]_e`, then set `pc <- pc + offset`                                           |
-| **TERMINATE**       | `_, _, _`                                     | Terminates execution.                                                                               |
-| **SHINTW**          | `a, b, _`                                     | Pops the next word off of the `hint_stream` into `word[proj(word[a]_d) + b]_e`.                     |
-| **PUBLISH**         | `a, b, _`                                     | Constrains the public value at index `proj(word[a]_d)` to be equal to `proj(word[b]_e)`.            |
+| Mnemonic              | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                                                                                      |
+|-----------------------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **LW** / **LOADW**    | `a, offset, c`                                | Set `word[a]_d <- word[proj(word[c]_d) + offset]_e`. Loads a word from one address space to another.                                                          |
+| **SW** / **STOREW**   | `a, offset, c`                                | Set `word[proj(word[c]_d) + offset]_e <- word[a]_d`.                                                                                                          |
+| **LW2** / **LOADW2**  | `a, offset, c, size`                          | Set `word[a]_d <- word[proj(word[c]_d) + (proj[f]_g) * size + offset]_e`. Loads word a from one address space to another using a variable multiple of `size`. |
+| **SW2** / **STOREW2** | `a, offset, c, size`                          | Set `word[proj(word[c]_d) + (proj[f]_g) * size + offset]_e <- word[a]_d`.                                                                                     |
+| **JAL**               | `a, offset, c`                                | Jump to address and link: set `word[a]_d <- emb(pc + INST_WIDTH)` and `pc <- pc + offset`.                                                                    |
+| **BEQ**               | `a, b, offset`                                | If `word[a]_d == word[b]_e`, then set `pc <- pc + offset`                                                                                                     |
+| **BNE**               | `a, b, offset`                                | If `word[a]_d != word[b]_e`, then set `pc <- pc + offset`                                                                                                     |
+| **TERMINATE**         | `_, _, _`                                     | Terminates execution.                                                                                                                                         |
+| **SHINTW**            | `a, b, _`                                     | Pops the next word off of the `hint_stream` into `word[proj(word[a]_d) + b]_e`.                                                                               |
+| **PUBLISH**           | `a, b, _`                                     | Constrains the public value at index `proj(word[a]_d)` to be equal to `proj(word[b]_e)`.                                                                      |
 
 #### Notes about hints
 
