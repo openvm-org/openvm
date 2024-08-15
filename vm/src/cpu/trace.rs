@@ -280,6 +280,18 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 // d[a] <- e[d[c] + b + mem[f] * g]
                 LOADW => {
                     let base_pointer = read!(d, c);
+                    let value = read!(e, base_pointer + b);
+                    write!(d, a, value);
+                }
+                // e[d[c] + b + mem[f] * g] <- d[a]
+                STOREW => {
+                    let base_pointer = read!(d, c);
+                    let value = read!(d, a);
+                    write!(e, base_pointer + b, value);
+                }
+                // d[a] <- e[d[c] + b + mem[f] * g]
+                LOADW2 => {
+                    let base_pointer = read!(d, c);
                     let index = if f != F::zero() {
                         read!(F::two(), f)
                     } else {
@@ -289,7 +301,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     write!(d, a, value);
                 }
                 // e[d[c] + b + mem[f] * g] <- d[a]
-                STOREW => {
+                STOREW2 => {
                     let base_pointer = read!(d, c);
                     let value = read!(d, a);
                     let index = if f != F::zero() {

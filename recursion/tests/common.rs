@@ -1,4 +1,4 @@
-use afs_compiler::util::{execute_and_prove_program, execute_program};
+use afs_compiler::util::execute_and_prove_program;
 use afs_recursion::{
     hints::{Hintable, InnerVal},
     stark::{sort_chips, DynRapForRecursion, VerifierProgram},

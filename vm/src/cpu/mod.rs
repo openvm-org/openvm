@@ -1,3 +1,4 @@
+use core::panic;
 use std::fmt;
 
 use enum_utils::FromStr;
@@ -76,6 +77,9 @@ pub enum OpCode {
     /// Phantom instruction to end tracing
     CT_END = 61,
 
+    LOADW2 = 70,
+    STOREW2 = 71,
+
     NOP = 100,
 }
 
@@ -85,9 +89,9 @@ impl fmt::Display for OpCode {
     }
 }
 
-pub const CORE_INSTRUCTIONS: [OpCode; 13] = [
+pub const CORE_INSTRUCTIONS: [OpCode; 15] = [
     LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, SHINTW, HINT_INPUT, HINT_BITS, PUBLISH, CT_START,
-    CT_END, NOP,
+    CT_END, NOP, LOADW2, STOREW2,
 ];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
@@ -112,7 +116,7 @@ impl OpCode {
 
 fn max_accesses_per_instruction(opcode: OpCode) -> usize {
     match opcode {
-        LOADW | STOREW => 4,
+        LOADW | STOREW | LOADW2 | STOREW2 => 4,
         // JAL only does WRITE, but it is done as timestamp + 2
         JAL => 4,
         BEQ | BNE => 3,
@@ -132,7 +136,7 @@ fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         HINT_INPUT | HINT_BITS => 0,
         CT_START | CT_END => 0,
         NOP => 0,
-        _ => panic!(),
+        _ => panic!("Unknown opcode: {:?}", opcode),
     }
 }
 

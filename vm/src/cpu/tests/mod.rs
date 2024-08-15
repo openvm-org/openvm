@@ -372,7 +372,7 @@ fn test_cpu_1() {
      */
     let instructions = vec![
         // word[0]_1 <- word[n]_0
-        Instruction::large_from_isize(STOREW, n, 0, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(STOREW2, n, 0, 0, 0, 1, 0, 1),
         // if word[0]_1 == 0 then pc += 3
         Instruction::from_isize(BEQ, 0, 0, 3, 1, 0),
         // word[0]_1 <- word[0]_1 - word[1]_0
@@ -462,7 +462,7 @@ fn test_cpu_without_field_arithmetic() {
      */
     let instructions = vec![
         // word[0]_1 <- word[5]_0
-        Instruction::large_from_isize(STOREW, 5, 0, 0, 0, 1, 0, 1),
+        Instruction::from_isize(STOREW, 5, 0, 0, 0, 1),
         // if word[0]_1 != 4 then pc += 2
         Instruction::from_isize(BNE, 0, 4, 3, 1, 0),
         // word[2]_1 <- pc + 1, pc -= 2
@@ -636,7 +636,7 @@ fn test_cpu_negative_secret_write() {
 fn test_cpu_negative_disable_write() {
     let instructions = vec![
         // if word[0]_0 == word[0]_[0] then pc += 1
-        Instruction::large_from_isize(STOREW, 113, 0, 0, 0, 1, 0, 1),
+        Instruction::from_isize(STOREW, 113, 0, 0, 0, 1),
         // terminate
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
@@ -652,7 +652,7 @@ fn test_cpu_negative_disable_write() {
         program,
         true,
         |rows, segment: &mut ExecutionSegment<TEST_WORD_SIZE, BabyBear>| {
-            rows[0].aux.accesses[2].enabled = AbstractField::zero();
+            rows[0].aux.accesses[CPU_MAX_READS_PER_CYCLE].enabled = AbstractField::zero();
             segment.memory_chip.accesses.remove(0);
         },
     );
