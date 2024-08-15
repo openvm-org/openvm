@@ -12,8 +12,9 @@ use serde::{de::DeserializeOwned, Serialize};
 
 use super::AfsNodeExecutable;
 use crate::{
-    committed_page::CommittedPage, BITS_PER_FE, NUM_IDX_COLS, OPS_BUS_IDX, PAGE_BUS_IDX,
-    RANGE_BUS_IDX, RANGE_CHECK_BITS,
+    committed_page::CommittedPage,
+    utils::table::{convert_to_ops, get_record_batches},
+    BITS_PER_FE, NUM_IDX_COLS, OPS_BUS_IDX, PAGE_BUS_IDX, RANGE_BUS_IDX, RANGE_CHECK_BITS,
 };
 
 pub struct PageScan<SC: StarkGenericConfig, E: StarkEngine<SC>> {
@@ -47,8 +48,7 @@ where
 {
     async fn execute(&mut self, ctx: &SessionContext) -> Result<()> {
         println!("execute PageScan");
-        let df = ctx.table(&self.page_id).await.unwrap();
-        let record_batches = df.collect().await.unwrap();
+        let record_batches = get_record_batches(ctx, &self.page_id).await.unwrap();
         if record_batches.len() != 1 {
             panic!(
                 "Unexpected number of record batches in PageScan: {}",
@@ -90,6 +90,18 @@ where
         let schema = self.input.schema();
         let idx_len = NUM_IDX_COLS;
         let data_len = schema.fields().len() - NUM_IDX_COLS;
+
+        let record_batches = get_record_batches(ctx, &self.page_id).await.unwrap();
+        if record_batches.len() != 1 {
+            panic!(
+                "Unexpected number of record batches in PageScan: {}",
+                record_batches.len()
+            );
+        }
+        let rb = record_batches[0];
+
+        let zk_ops = convert_to_ops(rb);
+
         let mut page_controller: PageController<SC> = PageController::new(
             PAGE_BUS_IDX,
             RANGE_BUS_IDX,
@@ -99,6 +111,17 @@ where
             BITS_PER_FE,
             RANGE_CHECK_BITS,
         );
+
+        let (init_page_pdata, final_page_pdata) = page_controller.load_page_and_ops(
+            &page_init,
+            Some(Arc::new(init_prover_data)),
+            None,
+            &zk_ops,
+            checker_trace_degree,
+            &mut trace_builder.committer,
+        );
+
+        let ops_sender_trace = ops_sender.generate_trace(&zk_ops, config.page.max_rw_ops);
         Ok(())
     }
 

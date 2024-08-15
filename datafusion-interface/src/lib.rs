@@ -2,6 +2,7 @@ pub mod afs_exec;
 pub mod afs_expr;
 pub mod afs_node;
 pub mod committed_page;
+pub mod utils;
 
 /// Number of columns, from the left side of the Schema, that are index columns. Keep in mind that you
 /// will also need to change the underlying `Page` data's idx cols to match this.
