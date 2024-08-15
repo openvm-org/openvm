@@ -5,13 +5,14 @@ use p3_symmetric::Hash;
 
 use super::{
     types::{
-        DigestVariable, DimensionsVariable, FriConfigVariable, TwoAdicPcsMatsVariable,
+        DimensionsVariable, FriConfigVariable, TwoAdicPcsMatsVariable,
         TwoAdicPcsProofVariable, TwoAdicPcsRoundVariable,
     },
     verify_batch, verify_challenges, verify_shape_and_sample_challenges, NestedOpenedValues,
     TwoAdicMultiplicativeCosetVariable,
 };
 use crate::{challenger::ChallengerVariable, commit::PcsVariable};
+use crate::digest::DigestVariable;
 
 pub fn verify_two_adic_pcs<C: Config>(
     builder: &mut Builder<C>,
@@ -224,7 +225,7 @@ where
         }
 
         Self {
-            batch_commit: commit,
+            batch_commit: DigestVariable::Felt(commit),
             mats,
         }
     }
@@ -284,7 +285,7 @@ pub mod tests {
     use stark_vm::program::Program;
 
     use crate::{
-        challenger::{duplex::DuplexChallengerVariable, CanObserveVariable, FeltChallenger},
+        challenger::{duplex::DuplexChallengerVariable, FeltChallenger},
         commit::PcsVariable,
         fri::{
             types::TwoAdicPcsRoundVariable, TwoAdicFriPcsVariable,
@@ -293,6 +294,8 @@ pub mod tests {
         hints::{Hintable, InnerPcsProof, InnerVal},
         utils::const_fri_config,
     };
+    use crate::challenger::CanObserveDigest;
+    use crate::digest::DigestVariable;
 
     #[allow(dead_code)]
     const WORD_SIZE: usize = 1;
@@ -372,8 +375,8 @@ pub mod tests {
         let proofvar = InnerPcsProof::read(&mut builder);
         let mut challenger = DuplexChallengerVariable::new(&mut builder);
         let commit = <[InnerVal; DIGEST_SIZE]>::from(commit).to_vec();
-        let commit = builder.constant::<Array<_, _>>(commit);
-        challenger.observe(&mut builder, commit);
+        let commit = DigestVariable::Felt(builder.constant::<Array<_, _>>(commit));
+        challenger.observe_digest(&mut builder, commit);
         challenger.sample_ext(&mut builder);
         pcs_var.verify(&mut builder, rounds, proofvar, &mut challenger);
         builder.halt();

@@ -2,8 +2,7 @@ use afs_compiler::{
     ir::RVar,
     prelude::{Array, Builder, Config, Ext, Felt, Var},
 };
-
-use crate::fri::types::DigestVariable;
+use crate::digest::DigestVariable;
 
 pub mod duplex;
 pub mod multi_field32;
@@ -13,6 +12,11 @@ pub trait CanObserveVariable<C: Config, V> {
     fn observe(&mut self, builder: &mut Builder<C>, value: V);
 
     fn observe_slice(&mut self, builder: &mut Builder<C>, values: Array<C, V>);
+}
+
+/// Reference: [p3_challenger::CanObserve].
+pub trait CanObserveDigest<C: Config> {
+    fn observe_digest(&mut self, builder: &mut Builder<C>, value: DigestVariable<C>);
 }
 
 pub trait CanSampleVariable<C: Config, V> {
@@ -38,10 +42,7 @@ pub trait CanCheckWitness<C: Config> {
 
 pub trait ChallengerVariable<C: Config>:
     FeltChallenger<C>
-    + CanObserveVariable<C, Felt<C::F>>
-    + CanSampleVariable<C, Felt<C::F>>
-    + CanSampleBitsVariable<C>
-    + CanObserveVariable<C, DigestVariable<C>>
+    + CanObserveDigest<C>
     + CanCheckWitness<C>
 {
 }

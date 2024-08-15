@@ -9,8 +9,9 @@ use crate::{
         CanCheckWitness, CanObserveVariable, CanSampleBitsVariable, CanSampleVariable,
         ChallengerVariable, FeltChallenger,
     },
-    fri::types::DigestVariable,
 };
+use crate::challenger::CanObserveDigest;
+use crate::digest::DigestVariable;
 
 /// Reference: [p3_challenger::DuplexChallenger]
 #[derive(Clone)]
@@ -24,6 +25,7 @@ pub struct DuplexChallengerVariable<C: Config> {
 
 impl<C: Config> DuplexChallengerVariable<C> {
     /// Creates a new duplex challenger with the default state.
+    #[allow(dead_code)]
     pub fn new(builder: &mut Builder<C>) -> Self {
         let mut sponge_state = builder.dyn_array(PERMUTATION_WIDTH);
         let mut input_buffer = builder.dyn_array(PERMUTATION_WIDTH);
@@ -45,6 +47,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
     }
 
     /// Creates a new challenger with the same state as an existing challenger.
+    #[allow(dead_code)]
     pub fn copy(&self, builder: &mut Builder<C>) -> Self {
         let mut sponge_state = builder.dyn_array(PERMUTATION_WIDTH);
         builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
@@ -73,6 +76,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
     }
 
     /// Asserts that the state of this challenger is equal to the state of another challenger.
+    #[allow(dead_code)]
     pub fn assert_eq(&self, builder: &mut Builder<C>, other: &Self) {
         builder.assert_var_eq(self.nb_inputs, other.nb_inputs);
         builder.assert_var_eq(self.nb_outputs, other.nb_outputs);
@@ -93,6 +97,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
         });
     }
 
+    #[allow(dead_code)]
     pub fn reset(&mut self, builder: &mut Builder<C>) {
         let zero: Var<_> = builder.eval(C::N::zero());
         let zero_felt: Felt<_> = builder.eval(C::F::zero());
@@ -143,9 +148,9 @@ impl<C: Config> DuplexChallengerVariable<C> {
             })
     }
 
-    fn observe_commitment(&mut self, builder: &mut Builder<C>, commitment: DigestVariable<C>) {
+    fn observe_commitment(&mut self, builder: &mut Builder<C>, commitment: &Array<C,Felt<C::F>>) {
         for i in 0..DIGEST_SIZE {
-            let element = builder.get(&commitment, i);
+            let element = builder.get(commitment, i);
             self.observe(builder, element);
         }
     }
@@ -230,13 +235,13 @@ impl<C: Config> CanSampleBitsVariable<C> for DuplexChallengerVariable<C> {
     }
 }
 
-impl<C: Config> CanObserveVariable<C, DigestVariable<C>> for DuplexChallengerVariable<C> {
-    fn observe(&mut self, builder: &mut Builder<C>, commitment: DigestVariable<C>) {
-        DuplexChallengerVariable::observe_commitment(self, builder, commitment);
-    }
-
-    fn observe_slice(&mut self, _builder: &mut Builder<C>, _values: Array<C, DigestVariable<C>>) {
-        todo!()
+impl<C: Config> CanObserveDigest<C> for DuplexChallengerVariable<C> {
+    fn observe_digest(&mut self, builder: &mut Builder<C>, commitment: DigestVariable<C>) {
+        if let DigestVariable::Felt(commitment) = commitment {
+            self.observe_commitment(builder, &commitment);
+        } else {
+            panic!("Expected a felt digest");
+        }
     }
 }
 

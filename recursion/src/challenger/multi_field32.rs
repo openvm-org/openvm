@@ -1,19 +1,18 @@
 use afs_compiler::{
     ir::{Array, Builder, Config, Ext, Felt, RVar, Var},
-    prelude::DslIr,
 };
 use p3_field::{AbstractField, Field};
 
 use crate::{
     challenger::{
-        CanCheckWitness, CanObserveVariable, CanSampleBitsVariable, CanSampleVariable,
-        ChallengerVariable, FeltChallenger,
+        CanCheckWitness, CanObserveDigest, CanObserveVariable, CanSampleBitsVariable,
+        CanSampleVariable, ChallengerVariable, FeltChallenger,
     },
-    fri::types::DigestVariable,
     poseidon2::{Poseidon2CircuitBuilder, SPONGE_SIZE},
     types::OuterDigestVariable,
     utils::{reduce_32, split_32},
 };
+use crate::digest::DigestVariable;
 
 #[derive(Clone)]
 pub struct MultiField32ChallengerVariable<C: Config> {
@@ -137,18 +136,17 @@ impl<C: Config> CanSampleBitsVariable<C> for MultiField32ChallengerVariable<C> {
     }
 }
 
-impl<C: Config> CanObserveVariable<C, DigestVariable<C>> for MultiField32ChallengerVariable<C> {
-    fn observe(&mut self, builder: &mut Builder<C>, commitment: DigestVariable<C>) {
-        let v_commit = builder.uninit();
-        builder.push(DslIr::CircuitFelts2Var(
-            commitment.vec().try_into().unwrap(),
-            v_commit,
-        ));
-        MultiField32ChallengerVariable::observe_commitment(self, builder, [v_commit]);
-    }
-
-    fn observe_slice(&mut self, _builder: &mut Builder<C>, _values: Array<C, DigestVariable<C>>) {
-        todo!()
+impl<C: Config> CanObserveDigest<C> for MultiField32ChallengerVariable<C> {
+    fn observe_digest(&mut self, builder: &mut Builder<C>, commitment: DigestVariable<C>) {
+        if let DigestVariable::Var(v_commit) = commitment {
+            MultiField32ChallengerVariable::observe_commitment(
+                self,
+                builder,
+                v_commit.vec().try_into().unwrap(),
+            );
+        } else {
+            panic!("MultiField32ChallengerVariable expects Var commitment");
+        }
     }
 }
 
