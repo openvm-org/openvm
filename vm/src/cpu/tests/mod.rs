@@ -372,7 +372,7 @@ fn test_cpu_1() {
      */
     let instructions = vec![
         // word[0]_1 <- word[n]_0
-        Instruction::large_from_isize(STOREW2, n, 0, 0, 0, 1, 0, 1),
+        Instruction::from_isize(STOREW, n, 0, 0, 0, 1),
         // if word[0]_1 == 0 then pc += 3
         Instruction::from_isize(BEQ, 0, 0, 3, 1, 0),
         // word[0]_1 <- word[0]_1 - word[1]_0
