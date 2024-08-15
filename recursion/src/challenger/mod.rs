@@ -2,6 +2,7 @@ use afs_compiler::{
     ir::RVar,
     prelude::{Array, Builder, Config, Ext, Felt, Var},
 };
+
 use crate::digest::DigestVariable;
 
 pub mod duplex;
@@ -41,8 +42,6 @@ pub trait CanCheckWitness<C: Config> {
 }
 
 pub trait ChallengerVariable<C: Config>:
-    FeltChallenger<C>
-    + CanObserveDigest<C>
-    + CanCheckWitness<C>
+    FeltChallenger<C> + CanObserveDigest<C> + CanCheckWitness<C>
 {
 }

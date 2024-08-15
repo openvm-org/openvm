@@ -1,7 +1,6 @@
 use afs_compiler::prelude::*;
-use crate::digest::DigestVariable;
-use crate::fri::TwoAdicMultiplicativeCosetVariable;
 
+use crate::{digest::DigestVariable, fri::TwoAdicMultiplicativeCosetVariable};
 
 #[derive(Clone)]
 pub struct FriConfigVariable<C: Config> {

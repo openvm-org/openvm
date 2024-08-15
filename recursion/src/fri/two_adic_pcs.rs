@@ -5,14 +5,13 @@ use p3_symmetric::Hash;
 
 use super::{
     types::{
-        DimensionsVariable, FriConfigVariable, TwoAdicPcsMatsVariable,
-        TwoAdicPcsProofVariable, TwoAdicPcsRoundVariable,
+        DimensionsVariable, FriConfigVariable, TwoAdicPcsMatsVariable, TwoAdicPcsProofVariable,
+        TwoAdicPcsRoundVariable,
     },
     verify_batch, verify_challenges, verify_shape_and_sample_challenges, NestedOpenedValues,
     TwoAdicMultiplicativeCosetVariable,
 };
-use crate::{challenger::ChallengerVariable, commit::PcsVariable};
-use crate::digest::DigestVariable;
+use crate::{challenger::ChallengerVariable, commit::PcsVariable, digest::DigestVariable};
 
 pub fn verify_two_adic_pcs<C: Config>(
     builder: &mut Builder<C>,
@@ -285,8 +284,9 @@ pub mod tests {
     use stark_vm::program::Program;
 
     use crate::{
-        challenger::{duplex::DuplexChallengerVariable, FeltChallenger},
+        challenger::{duplex::DuplexChallengerVariable, CanObserveDigest, FeltChallenger},
         commit::PcsVariable,
+        digest::DigestVariable,
         fri::{
             types::TwoAdicPcsRoundVariable, TwoAdicFriPcsVariable,
             TwoAdicMultiplicativeCosetVariable,
@@ -294,8 +294,6 @@ pub mod tests {
         hints::{Hintable, InnerPcsProof, InnerVal},
         utils::const_fri_config,
     };
-    use crate::challenger::CanObserveDigest;
-    use crate::digest::DigestVariable;
 
     #[allow(dead_code)]
     const WORD_SIZE: usize = 1;
