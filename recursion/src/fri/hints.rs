@@ -6,6 +6,7 @@ use p3_field::AbstractField;
 
 use super::types::{BatchOpeningVariable, TwoAdicPcsProofVariable};
 use crate::{
+    digest::DigestVariable,
     fri::types::{FriCommitPhaseProofStepVariable, FriProofVariable, FriQueryProofVariable},
     hints::{
         Hintable, InnerBatchOpening, InnerChallenge, InnerCommitPhaseStep, InnerDigest,
@@ -13,7 +14,6 @@ use crate::{
     },
     types::InnerConfig,
 };
-use crate::digest::DigestVariable;
 
 type C = InnerConfig;
 

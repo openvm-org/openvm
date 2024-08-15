@@ -1,4 +1,7 @@
-use afs_compiler::ir::{Array, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, RVar, SymbolicVar, Usize, Var, DIGEST_SIZE};
+use afs_compiler::ir::{
+    Array, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, RVar, SymbolicVar, Usize, Var,
+    DIGEST_SIZE,
+};
 pub use domain::*;
 use p3_field::{AbstractField, Field, TwoAdicField};
 pub use two_adic_pcs::*;
@@ -7,8 +10,7 @@ use self::types::{
     DimensionsVariable, FriChallengesVariable, FriConfigVariable, FriProofVariable,
     FriQueryProofVariable,
 };
-use crate::challenger::ChallengerVariable;
-use crate::digest::DigestVariable;
+use crate::{challenger::ChallengerVariable, digest::DigestVariable};
 
 pub mod domain;
 pub mod hints;

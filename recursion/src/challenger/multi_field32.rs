@@ -1,6 +1,4 @@
-use afs_compiler::{
-    ir::{Array, Builder, Config, Ext, Felt, RVar, Var},
-};
+use afs_compiler::ir::{Array, Builder, Config, Ext, Felt, RVar, Var};
 use p3_field::{AbstractField, Field};
 
 use crate::{
@@ -8,11 +6,11 @@ use crate::{
         CanCheckWitness, CanObserveDigest, CanObserveVariable, CanSampleBitsVariable,
         CanSampleVariable, ChallengerVariable, FeltChallenger,
     },
-    poseidon2::{Poseidon2CircuitBuilder, SPONGE_SIZE},
+    digest::DigestVariable,
+    outer_poseidon2::{Poseidon2CircuitBuilder, SPONGE_SIZE},
     types::OuterDigestVariable,
     utils::{reduce_32, split_32},
 };
-use crate::digest::DigestVariable;
 
 #[derive(Clone)]
 pub struct MultiField32ChallengerVariable<C: Config> {

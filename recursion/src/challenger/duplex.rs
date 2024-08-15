@@ -6,12 +6,11 @@ use p3_field::AbstractField;
 
 use crate::{
     challenger::{
-        CanCheckWitness, CanObserveVariable, CanSampleBitsVariable, CanSampleVariable,
-        ChallengerVariable, FeltChallenger,
+        CanCheckWitness, CanObserveDigest, CanObserveVariable, CanSampleBitsVariable,
+        CanSampleVariable, ChallengerVariable, FeltChallenger,
     },
+    digest::DigestVariable,
 };
-use crate::challenger::CanObserveDigest;
-use crate::digest::DigestVariable;
 
 /// Reference: [p3_challenger::DuplexChallenger]
 #[derive(Clone)]
@@ -148,7 +147,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
             })
     }
 
-    fn observe_commitment(&mut self, builder: &mut Builder<C>, commitment: &Array<C,Felt<C::F>>) {
+    fn observe_commitment(&mut self, builder: &mut Builder<C>, commitment: &Array<C, Felt<C::F>>) {
         for i in 0..DIGEST_SIZE {
             let element = builder.get(commitment, i);
             self.observe(builder, element);
