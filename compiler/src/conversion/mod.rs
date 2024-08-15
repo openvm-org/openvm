@@ -331,53 +331,53 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
 ) -> Program<F> {
     let instructions = match instruction {
         AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
+        AsmInstruction::LoadF(dst, src, index, size, offset) => vec![
+            // mem[dst] <- mem[mem[src] + mem[index] * size + offset]
+            large_inst(
+                LOADW2,
+                i32_f(dst),
+                offset,
+                i32_f(src),
+                AS::Memory,
+                AS::Memory,
+                i32_f(index),
+                size,
+            ),
+        ],
         AsmInstruction::LoadFI(dst, src, index, size, offset) => vec![
-            // mem[dst] <- mem[mem[src] + offset + mem[index] * size]
-            if index == 0 {
-                inst(
-                    LOADW,
-                    i32_f(dst),
-                    offset,
-                    i32_f(src),
-                    AS::Memory,
-                    AS::Memory,
-                )
-            } else {
-                large_inst(
-                    LOADW2,
-                    i32_f(dst),
-                    offset,
-                    i32_f(src),
-                    AS::Memory,
-                    AS::Memory,
-                    i32_f(index),
-                    size,
-                )
-            },
+            // mem[dst] <- mem[mem[src] + index * size + offset]
+            inst(
+                LOADW,
+                i32_f(dst),
+                index * size + offset,
+                i32_f(src),
+                AS::Memory,
+                AS::Memory,
+            ),
+        ],
+        AsmInstruction::StoreF(val, addr, index, size, offset) => vec![
+            // mem[mem[addr] + mem[index] * size + offset] <- mem[val]
+            large_inst(
+                STOREW2,
+                i32_f(val),
+                offset,
+                i32_f(addr),
+                AS::Memory,
+                AS::Memory,
+                i32_f(index),
+                size,
+            ),
         ],
         AsmInstruction::StoreFI(val, addr, index, size, offset) => vec![
-            // mem[mem[addr] + offset + mem[index] * size] <- mem[val]
-            if index == 0 {
-                inst(
-                    STOREW,
-                    i32_f(val),
-                    offset,
-                    i32_f(addr),
-                    AS::Memory,
-                    AS::Memory,
-                )
-            } else {
-                large_inst(
-                    STOREW2,
-                    i32_f(val),
-                    offset,
-                    i32_f(addr),
-                    AS::Memory,
-                    AS::Memory,
-                    i32_f(index),
-                    size,
-                )
-            },
+            // mem[mem[addr] + index * size + offset] <- mem[val]
+            inst(
+                STOREW,
+                i32_f(val),
+                index * size + offset,
+                i32_f(addr),
+                AS::Memory,
+                AS::Memory,
+            ),
         ],
         AsmInstruction::Jump(dst, label) => {
             vec![

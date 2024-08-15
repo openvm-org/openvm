@@ -1,9 +1,12 @@
+use std::iter;
+
 use afs_primitives::is_zero::IsZeroAir;
 use afs_stark_backend::verifier::VerificationError;
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test,
     interaction::dummy_interaction_air::DummyInteractionAir,
 };
+use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::{
@@ -20,11 +23,11 @@ use super::{
 use crate::{
     cpu::{
         columns::{CpuCols, CpuIoCols},
-        max_accesses_per_instruction, CpuChip, CpuOptions,
+        timestamp_delta, CpuChip, CpuOptions,
     },
     field_arithmetic::ArithmeticOperation,
     memory::{decompose, MemoryAccess, OpType},
-    program::Program,
+    program::{columns::ProgramPreprocessedCols, Program},
     vm::{
         config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN},
         ExecutionSegment, VirtualMachine,
@@ -259,9 +262,9 @@ fn air_test_change<
     let trace = DenseMatrix::new(flattened, trace.width());
 
     let program_air = DummyInteractionAir::new(9, false, READ_INSTRUCTION_BUS);
-    let mut program_rows = vec![];
+    let mut program_cells = vec![];
     for (pc, instruction) in program.instructions.iter().enumerate() {
-        program_rows.extend(vec![
+        program_cells.extend(vec![
             BabyBear::from_canonical_usize(segment.program_chip.execution_frequencies[pc]),
             BabyBear::from_canonical_usize(pc),
             BabyBear::from_canonical_usize(instruction.opcode as usize),
@@ -274,10 +277,15 @@ fn air_test_change<
             instruction.op_g,
         ]);
     }
-    while !(program_rows.len() % 10 == 0 && (program_rows.len() / 10).is_power_of_two()) {
-        program_rows.push(BabyBear::zero());
-    }
-    let program_trace = RowMajorMatrix::new(program_rows, 10);
+
+    // Pad program cells with zeroes to make height a power of two.
+    let width = <DummyInteractionAir as BaseAir<BabyBear>>::width(&program_air)
+        + ProgramPreprocessedCols::<BabyBear>::get_width();
+    let desired_height = program.instructions.len().next_power_of_two();
+    let cells_to_add = desired_height * width - program.instructions.len() * width;
+    program_cells.extend(iter::repeat(BabyBear::zero()).take(cells_to_add));
+
+    let program_trace = RowMajorMatrix::new(program_cells, width);
 
     let memory_air = DummyInteractionAir::new(5, false, MEMORY_BUS);
     let mut memory_rows = vec![];
@@ -396,10 +404,10 @@ fn test_cpu_1() {
     }
     expected_execution.push(4);
 
-    let storew_time = max_accesses_per_instruction(STOREW) as isize;
-    let beq_time = max_accesses_per_instruction(BEQ) as isize;
-    let fsub_time = max_accesses_per_instruction(FSUB) as isize;
-    let jal_time = max_accesses_per_instruction(JAL) as isize;
+    let storew_time = timestamp_delta(STOREW) as isize;
+    let beq_time = timestamp_delta(BEQ) as isize;
+    let fsub_time = timestamp_delta(FSUB) as isize;
+    let jal_time = timestamp_delta(JAL) as isize;
 
     let mut expected_memory_log = vec![
         MemoryAccess::from_isize(CPU_MAX_READS_PER_CYCLE as isize, OpType::Write, 1, 0, n),
@@ -480,8 +488,8 @@ fn test_cpu_without_field_arithmetic() {
 
     let expected_execution: Vec<usize> = vec![0, 1, 4, 3];
 
-    let storew_time = max_accesses_per_instruction(STOREW) as isize;
-    let bne_time = max_accesses_per_instruction(BNE) as isize;
+    let storew_time = timestamp_delta(STOREW) as isize;
+    let bne_time = timestamp_delta(BNE) as isize;
 
     let expected_memory_log = vec![
         MemoryAccess::from_isize(CPU_MAX_READS_PER_CYCLE as isize, OpType::Write, 1, 0, 5),

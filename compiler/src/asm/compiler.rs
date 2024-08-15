@@ -438,42 +438,42 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 }
                 DslIr::LoadV(var, ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
-                        AsmInstruction::LoadFI(var.fp(), ptr.fp(), 0, size, index * size + offset),
+                        AsmInstruction::LoadFI(var.fp(), ptr.fp(), index, size, offset),
                         debug_info.clone(),
                     ),
                     IndexTriple::Var(index, offset, size) => self.push(
-                        AsmInstruction::LoadFI(var.fp(), ptr.fp(), index, size, offset),
+                        AsmInstruction::LoadF(var.fp(), ptr.fp(), index, size, offset),
                         debug_info.clone(),
                     ),
                 },
                 DslIr::LoadF(var, ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
-                        AsmInstruction::LoadFI(var.fp(), ptr.fp(), 0, size, index * size + offset),
+                        AsmInstruction::LoadFI(var.fp(), ptr.fp(), index, size, offset),
                         debug_info.clone(),
                     ),
                     IndexTriple::Var(index, offset, size) => self.push(
-                        AsmInstruction::LoadFI(var.fp(), ptr.fp(), index, size, offset),
+                        AsmInstruction::LoadF(var.fp(), ptr.fp(), index, size, offset),
                         debug_info.clone(),
                     ),
                 },
                 DslIr::LoadE(var, ptr, index) => self.load_ext(var, ptr.fp(), index, debug_info),
                 DslIr::StoreV(var, ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
-                        AsmInstruction::StoreFI(var.fp(), ptr.fp(), 0, size, index * size + offset),
+                        AsmInstruction::StoreFI(var.fp(), ptr.fp(), index, size, offset),
                         debug_info.clone(),
                     ),
                     IndexTriple::Var(index, offset, size) => self.push(
-                        AsmInstruction::StoreFI(var.fp(), ptr.fp(), index, size, offset),
+                        AsmInstruction::StoreF(var.fp(), ptr.fp(), index, size, offset),
                         debug_info.clone(),
                     ),
                 },
                 DslIr::StoreF(var, ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
-                        AsmInstruction::StoreFI(var.fp(), ptr.fp(), 0, size, index * size + offset),
+                        AsmInstruction::StoreFI(var.fp(), ptr.fp(), index, size, offset),
                         debug_info.clone(),
                     ),
                     IndexTriple::Var(index, offset, size) => self.push(
-                        AsmInstruction::StoreFI(var.fp(), ptr.fp(), index, size, offset),
+                        AsmInstruction::StoreF(var.fp(), ptr.fp(), index, size, offset),
                         debug_info.clone(),
                     ),
                 },
@@ -902,9 +902,9 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         AsmInstruction::LoadFI(
                             val.fp() + (i * self.word_size) as i32,
                             addr,
-                            0,
+                            index,
                             size,
-                            index * size + offset + F::from_canonical_usize(i * self.word_size),
+                            offset + F::from_canonical_usize(i * self.word_size),
                         ),
                         debug_info.clone(),
                     )
@@ -913,7 +913,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             IndexTriple::Var(index, offset, size) => {
                 for i in 0..EF::D {
                     self.push(
-                        AsmInstruction::LoadFI(
+                        AsmInstruction::LoadF(
                             val.fp() + (i * self.word_size) as i32,
                             addr,
                             index,
@@ -941,9 +941,9 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         AsmInstruction::StoreFI(
                             val.fp() + (i * self.word_size) as i32,
                             addr,
-                            0,
+                            index,
                             size,
-                            index * size + offset + F::from_canonical_usize(i * self.word_size),
+                            offset + F::from_canonical_usize(i * self.word_size),
                         ),
                         debug_info.clone(),
                     )
@@ -952,7 +952,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             IndexTriple::Var(index, offset, size) => {
                 for i in 0..EF::D {
                     self.push(
-                        AsmInstruction::StoreFI(
+                        AsmInstruction::StoreF(
                             val.fp() + (i * self.word_size) as i32,
                             addr,
                             index,

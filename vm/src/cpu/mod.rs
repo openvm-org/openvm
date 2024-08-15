@@ -114,25 +114,27 @@ impl OpCode {
     }
 }
 
-fn max_accesses_per_instruction(opcode: OpCode) -> usize {
+fn timestamp_delta(opcode: OpCode) -> usize {
+    // If an instruction performs a writes, it must change timestamp by WRITE_DELTA.
+    const WRITE_DELTA: usize = CPU_MAX_READS_PER_CYCLE + 1;
     match opcode {
-        LOADW | STOREW | LOADW2 | STOREW2 => 4,
+        LOADW | STOREW | LOADW2 | STOREW2 => WRITE_DELTA,
         // JAL only does WRITE, but it is done as timestamp + 2
-        JAL => 4,
-        BEQ | BNE => 3,
+        JAL => WRITE_DELTA,
+        BEQ | BNE => 2,
         TERMINATE => 0,
-        PUBLISH => 3,
-        opcode if FIELD_ARITHMETIC_INSTRUCTIONS.contains(&opcode) => 4,
+        PUBLISH => 2,
+        opcode if FIELD_ARITHMETIC_INSTRUCTIONS.contains(&opcode) => WRITE_DELTA,
         opcode if FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode) => {
             FieldExtensionArithmeticAir::max_accesses_per_instruction(opcode)
         }
-        F_LESS_THAN => 4,
+        F_LESS_THAN => WRITE_DELTA,
         FAIL => 0,
         PRINTF => 1,
         COMP_POS2 | PERM_POS2 => {
             Poseidon2Chip::<16, BabyBear>::max_accesses_per_instruction(opcode)
         }
-        SHINTW => 4,
+        SHINTW => WRITE_DELTA,
         HINT_INPUT | HINT_BITS => 0,
         CT_START | CT_END => 0,
         NOP => 0,

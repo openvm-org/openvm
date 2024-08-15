@@ -1,7 +1,10 @@
+use std::iter;
+
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test_no_pis,
     interaction::dummy_interaction_air::DummyInteractionAir,
 };
+use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -38,9 +41,9 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
     let trace = chip.generate_trace();
 
     let counter_air = DummyInteractionAir::new(9, true, READ_INSTRUCTION_BUS);
-    let mut program_rows = vec![];
+    let mut program_cells = vec![];
     for (pc, instruction) in instructions.iter().enumerate() {
-        program_rows.extend(vec![
+        program_cells.extend(vec![
             BabyBear::from_canonical_usize(execution_frequencies[pc]),
             BabyBear::from_canonical_usize(pc),
             BabyBear::from_canonical_usize(instruction.opcode as usize),
@@ -53,10 +56,14 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
             instruction.op_g,
         ]);
     }
-    while !(program_rows.len() % 10 == 0 && (program_rows.len() / 10).is_power_of_two()) {
-        program_rows.push(BabyBear::zero());
-    }
-    let counter_trace = RowMajorMatrix::new(program_rows, 10);
+
+    // Pad program cells with zeroes to make height a power of two.
+    let width = chip.air.width() + ProgramPreprocessedCols::<BabyBear>::get_width();
+    let desired_height = instructions.len().next_power_of_two();
+    let cells_to_add = desired_height * width - instructions.len() * width;
+    program_cells.extend(iter::repeat(BabyBear::zero()).take(cells_to_add));
+
+    let counter_trace = RowMajorMatrix::new(program_cells, 10);
     println!("trace height = {}", trace.height());
     println!("counter trace height = {}", counter_trace.height());
 

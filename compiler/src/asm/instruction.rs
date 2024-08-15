@@ -9,13 +9,15 @@ use super::A0;
 pub enum AsmInstruction<F, EF> {
     /// Load word (dst, src, var_index, size, offset).
     ///
-    /// Load a value from the address stored at src(fp) + mem[var_index] * size + offset into dst(fp).
-    LoadFI(i32, i32, i32, F, F),
+    /// Load a value from the address stored at src(fp) into dst(fp) with given index and offset.
+    LoadF(i32, i32, i32, F, F),
+    LoadFI(i32, i32, F, F, F),
 
     /// Store word (val, addr, var_index, size, offset)
     ///
-    /// Store a value from val(fp) into the address stored at addr(fp) + mem[var_index] * size + offset.
-    StoreFI(i32, i32, i32, F, F),
+    /// Store a value from val(fp) into the address stored at addr(fp) with given index and offset.
+    StoreF(i32, i32, i32, F, F),
+    StoreFI(i32, i32, F, F, F),
 
     /// Set dst = imm.
     ImmF(i32, F),
@@ -144,17 +146,31 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
     pub fn fmt(&self, labels: &BTreeMap<F, String>, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
+            AsmInstruction::LoadF(dst, src, var_index, size, offset) => {
+                write!(
+                    f,
+                    "lw    ({})fp, ({})fp, ({})fp, {}, {}",
+                    dst, src, var_index, size, offset
+                )
+            }
             AsmInstruction::LoadFI(dst, src, var_index, size, offset) => {
                 write!(
                     f,
-                    "lwi   ({})fp, ({})fp, ({})fp, {}, {}",
+                    "lwi   ({})fp, ({})fp, {}, {}, {}",
+                    dst, src, var_index, size, offset
+                )
+            }
+            AsmInstruction::StoreF(dst, src, var_index, size, offset) => {
+                write!(
+                    f,
+                    "sw    ({})fp, ({})fp, ({})fp, {}, {}",
                     dst, src, var_index, size, offset
                 )
             }
             AsmInstruction::StoreFI(dst, src, var_index, size, offset) => {
                 write!(
                     f,
-                    "lwi   ({})fp, ({})fp, ({})fp, {}, {}",
+                    "swi   ({})fp, ({})fp, {}, {}, {}",
                     dst, src, var_index, size, offset
                 )
             }

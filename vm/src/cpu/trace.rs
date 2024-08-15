@@ -12,7 +12,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
-    max_accesses_per_instruction, CpuChip, ExecutionState,
+    timestamp_delta, CpuChip, ExecutionState,
     OpCode::{self, *},
     CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
 };
@@ -68,6 +68,7 @@ impl<F: Field> Instruction<F> {
             debug: String::new(),
         }
     }
+
     #[allow(clippy::too_many_arguments)]
     pub fn large_from_isize(
         opcode: OpCode,
@@ -277,26 +278,22 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let mut public_value_flags = vec![F::zero(); vm.public_values.len()];
 
             match opcode {
-                // d[a] <- e[d[c] + b + mem[f] * g]
+                // d[a] <- e[d[c] + b]
                 LOADW => {
                     let base_pointer = read!(d, c);
                     let value = read!(e, base_pointer + b);
                     write!(d, a, value);
                 }
-                // e[d[c] + b + mem[f] * g] <- d[a]
+                // e[d[c] + b] <- d[a]
                 STOREW => {
                     let base_pointer = read!(d, c);
                     let value = read!(d, a);
                     write!(e, base_pointer + b, value);
                 }
-                // d[a] <- e[d[c] + b + mem[f] * g]
+                // d[a] <- e[d[c] + b + d[f] * g]
                 LOADW2 => {
                     let base_pointer = read!(d, c);
-                    let index = if f != F::zero() {
-                        read!(F::two(), f)
-                    } else {
-                        read!(F::zero(), f)
-                    };
+                    let index = read!(d, f);
                     let value = read!(e, base_pointer + b + index * g);
                     write!(d, a, value);
                 }
@@ -304,11 +301,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 STOREW2 => {
                     let base_pointer = read!(d, c);
                     let value = read!(d, a);
-                    let index = if f != F::zero() {
-                        read!(F::two(), f)
-                    } else {
-                        read!(F::zero(), f)
-                    };
+                    let index = read!(d, f);
                     write!(e, base_pointer + b + index * g, value);
                 }
                 // d[a] <- pc + INST_WIDTH, pc <- pc + b
@@ -487,7 +480,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             vm.cpu_chip.rows.push(cols.flatten(vm.options()));
 
             pc = next_pc;
-            timestamp += max_accesses_per_instruction(opcode);
+            timestamp += timestamp_delta(opcode);
 
             clock_cycle += 1;
             if opcode == TERMINATE {
