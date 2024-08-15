@@ -157,7 +157,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         when_loadw.assert_eq(write.address, a);
 
         for i in 0..WORD_SIZE {
-            when_loadw.assert_eq(write.data[i], read3.data[i]);
+            when_loadw.assert_eq(write.data[i], read2.data[i]);
         }
 
         when_loadw
