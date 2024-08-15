@@ -6,9 +6,9 @@ use p3_air::BaseAir;
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
+use crate::modular_multiplication::bigint::air::ModularMultiplicationBigIntAir;
+use crate::modular_multiplication::bigint::columns::ModularMultiplicationBigIntCols;
 use crate::modular_multiplication::columns::ModularMultiplicationCols;
-use crate::modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir;
-use crate::modular_multiplication::modular_multiplication_bigint::columns::ModularMultiplicationBigIntCols;
 use crate::modular_multiplication::trace::generate_modular_multiplication_trace_row;
 use crate::modular_multiplication::FullLimbs;
 use crate::range_gate::RangeCheckerGateChip;
@@ -95,7 +95,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationBigIntA
                     self.carry_bits,
                     (carry + (self.carry_min_value_abs as isize)) as usize,
                 );
-                F::from_canonical_usize(carry.abs() as usize)
+                F::from_canonical_usize(carry.unsigned_abs())
                     * if carry >= 0 { F::one() } else { F::neg_one() }
             })
             .collect();

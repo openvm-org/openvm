@@ -12,7 +12,7 @@ use prime_factorization::Factorization;
 use afs_stark_backend::interaction::InteractionBuilder;
 
 use crate::modular_multiplication::air::constrain_limbs;
-use crate::modular_multiplication::modular_multiplication_primes::columns::ModularMultiplicationPrimesCols;
+use crate::modular_multiplication::cast_primes::columns::ModularMultiplicationPrimesCols;
 use crate::modular_multiplication::{FullLimbs, LimbDimensions};
 use crate::sub_chip::AirConfig;
 
@@ -44,6 +44,7 @@ pub struct ModularMultiplicationPrimesAir<F: Field> {
 /// If a * b == r (mod `modulus`) but one of a, b, r is >= `modulus`, then (a, b, r) may not be verifiable
 impl<F: PrimeField64> ModularMultiplicationPrimesAir<F> {
     // `F` should have size at least 2^`bits_per_elem`
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         modulus: BigUint,
         total_bits: usize,
@@ -224,7 +225,7 @@ impl<F: Field> AirConfig for ModularMultiplicationPrimesAir<F> {
 
 impl<F: Field> BaseAir<F> for ModularMultiplicationPrimesAir<F> {
     fn width(&self) -> usize {
-        ModularMultiplicationPrimesCols::<F>::get_width(&self)
+        ModularMultiplicationPrimesCols::<F>::get_width(self)
     }
 }
 
@@ -254,7 +255,7 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationPrimesAir<AB::F> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let local = ModularMultiplicationPrimesCols::<AB::Var>::from_slice(&local, &self);
+        let local = ModularMultiplicationPrimesCols::<AB::Var>::from_slice(&local, self);
 
         let ModularMultiplicationPrimesCols {
             general,

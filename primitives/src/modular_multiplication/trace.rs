@@ -28,7 +28,7 @@ fn take_limb(deque: &mut VecDeque<usize>, limb_size: usize) -> usize {
     }
 }
 
-fn without_first_limbs<T: Clone>(limbs: &Vec<Vec<T>>) -> Vec<Vec<T>> {
+fn without_first_limbs<T: Clone>(limbs: &[Vec<T>]) -> Vec<Vec<T>> {
     limbs
         .iter()
         .map(|limbs_here| limbs_here[1..].to_vec())
@@ -64,7 +64,7 @@ pub fn generate_modular_multiplication_trace_row(
 
     let [(a_elems, a_limbs), (b_elems, b_limbs), (r_elems, r_limbs)] =
         [&mut a_bits, &mut b_bits, &mut r_bits].map(|bits| {
-            let elems = limb_dimensions
+            let elems: (Vec<_>, Vec<_>) = limb_dimensions
                 .io_limb_sizes
                 .iter()
                 .map(|limb_sizes_here| {

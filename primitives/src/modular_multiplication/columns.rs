@@ -116,12 +116,12 @@ impl<T: Clone> ModularMultiplicationCols<T> {
         let mut start = 0;
         let mut end = 0;
 
-        end += ModularMultiplicationIoCols::<T>::get_width(&limb_dimensions);
-        let io = ModularMultiplicationIoCols::from_slice(&slc[start..end], &limb_dimensions);
+        end += ModularMultiplicationIoCols::<T>::get_width(limb_dimensions);
+        let io = ModularMultiplicationIoCols::from_slice(&slc[start..end], limb_dimensions);
         start = end;
 
-        end += ModularMultiplicationAuxCols::<T>::get_width(&limb_dimensions);
-        let aux = ModularMultiplicationAuxCols::from_slice(&slc[start..end], &limb_dimensions);
+        end += ModularMultiplicationAuxCols::<T>::get_width(limb_dimensions);
+        let aux = ModularMultiplicationAuxCols::from_slice(&slc[start..end], limb_dimensions);
 
         Self { io, aux }
     }
@@ -134,7 +134,7 @@ impl<T: Clone> ModularMultiplicationCols<T> {
     }
 
     pub fn get_width(limb_dimensions: &LimbDimensions) -> usize {
-        ModularMultiplicationIoCols::<T>::get_width(&limb_dimensions)
-            + ModularMultiplicationAuxCols::<T>::get_width(&limb_dimensions)
+        ModularMultiplicationIoCols::<T>::get_width(limb_dimensions)
+            + ModularMultiplicationAuxCols::<T>::get_width(limb_dimensions)
     }
 }

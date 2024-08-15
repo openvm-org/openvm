@@ -1,10 +1,12 @@
 use std::cmp::min;
 
-mod air;
-mod columns;
-mod modular_multiplication_bigint;
-mod modular_multiplication_primes;
-mod trace;
+pub mod air;
+/// Approach representing big field elements as big integers with limbs
+pub mod bigint;
+/// Casting out Primes approach following <https://eprint.iacr.org/2022/1470>
+mod cast_primes;
+pub mod columns;
+pub mod trace;
 
 pub struct LimbDimensions {
     pub io_limb_sizes: Vec<Vec<usize>>,
@@ -22,6 +24,7 @@ impl LimbDimensions {
         }
     }
 
+    #[allow(dead_code)]
     fn new_same_sizes(limb_sizes: Vec<usize>, limbs_per_elem: usize) -> Self {
         let mut io_limb_sizes = vec![];
         for i in (0..limb_sizes.len()).step_by(limbs_per_elem) {

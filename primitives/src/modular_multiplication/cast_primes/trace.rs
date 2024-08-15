@@ -7,8 +7,8 @@ use p3_air::BaseAir;
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::modular_multiplication::modular_multiplication_primes::air::ModularMultiplicationPrimesAir;
-use crate::modular_multiplication::modular_multiplication_primes::columns::{
+use crate::modular_multiplication::cast_primes::air::ModularMultiplicationPrimesAir;
+use crate::modular_multiplication::cast_primes::columns::{
     ModularMultiplicationPrimesCols, SmallModulusSystemCols,
 };
 use crate::modular_multiplication::trace::generate_modular_multiplication_trace_row;
