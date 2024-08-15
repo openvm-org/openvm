@@ -113,6 +113,8 @@ pub enum DslIr<C: Config> {
     // Control flow.
     /// Executes a for loop with the parameters (start step value, end step value, step size, step variable, body).
     For(RVar<C::N>, RVar<C::N>, C::N, Var<C::N>, TracedVec<DslIr<C>>),
+    /// Executes an indefinite loop.
+    Loop(TracedVec<DslIr<C>>),
     /// Executes an equal conditional branch with the parameters (lhs var, rhs var, then body, else body).
     IfEq(
         Var<C::N>,
@@ -131,7 +133,7 @@ pub enum DslIr<C: Config> {
     IfEqI(Var<C::N>, C::N, TracedVec<DslIr<C>>, TracedVec<DslIr<C>>),
     /// Executes a not equal conditional branch with the parameters (lhs var, rhs imm, then body, else body).
     IfNeI(Var<C::N>, C::N, TracedVec<DslIr<C>>, TracedVec<DslIr<C>>),
-    /// Break out of a for loop.
+    /// Break out of a loop.
     Break,
 
     // Assertions.

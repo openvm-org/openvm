@@ -385,6 +385,10 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     };
                     for_compiler.for_each(move |_, builder| builder.build(block), debug_info);
                 }
+                DslIr::Loop(block) => {
+                    let loop_compiler = LoopCompiler { compiler: self };
+                    loop_compiler.compile(move |builder| builder.build(block), debug_info);
+                }
                 DslIr::AssertEqV(lhs, rhs) => {
                     // If lhs != rhs, execute TRAP
                     self.assert(lhs.fp(), ValueOrConst::Val(rhs.fp()), false, debug_info)
@@ -784,7 +788,6 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
         // - Setting the loop range
         // - Executing the loop body and incrementing the loop variable
         // - the loop condition
-        // Set the loop variable to the start of the range.
 
         // Set the loop variable to the start of the range.
         self.set_loop_var(debug_info.clone());
@@ -873,6 +876,53 @@ impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
             RVar::Val(end) => {
                 let instr = AsmInstruction::Bne(loop_label, self.loop_var.fp(), end.fp());
                 self.compiler.push(instr, debug_info.clone());
+            }
+        }
+    }
+}
+
+struct LoopCompiler<'a, F: Field, EF> {
+    compiler: &'a mut AsmCompiler<F, EF>,
+}
+
+impl<'a, F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
+    LoopCompiler<'a, F, EF>
+{
+    fn compile(
+        self,
+        compile_body: impl FnOnce(&mut AsmCompiler<F, EF>),
+        debug_info: Option<DebugInfo>,
+    ) {
+        // Initialize a break label for this loop.
+        let break_label = self.compiler.new_break_label();
+        self.compiler.break_label = Some(break_label);
+
+        // Loop block.
+        self.compiler.basic_block();
+        let loop_label = self.compiler.block_label();
+
+        compile_body(self.compiler);
+        self.compiler
+            .push(AsmInstruction::j(loop_label), debug_info.clone());
+
+        // After loop block.
+        self.compiler.basic_block();
+        let after_loop_label = self.compiler.block_label();
+        self.compiler
+            .break_label_map
+            .insert(break_label, after_loop_label);
+
+        // Replace break instructions with a jump to the after loop block.
+        for block in self.compiler.contains_break.iter() {
+            for instruction in self.compiler.basic_blocks[block.as_canonical_u32() as usize]
+                .0
+                .iter_mut()
+            {
+                if let AsmInstruction::Break(l) = instruction {
+                    if *l == break_label {
+                        *instruction = AsmInstruction::j(after_loop_label);
+                    }
+                }
             }
         }
     }
