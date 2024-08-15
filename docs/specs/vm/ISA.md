@@ -164,11 +164,11 @@ This instruction set does native field operations. Some operations may be infeas
 This instruction set should only be enabled when `Word` type represents `[F; WORD_SIZE]` without bit size constraints. In this case the field operations are automatically vectorized.
 
 | Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                                                         |
-| -------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| **FADD** | `a, b, c`                                     | Set `word[a]_d <- word[b]_d + word[c]_e`. This opcode presumes `a,b` are in the same address space. |
-| **FSUB** | `a, b, c`                                     | Set `word[a]_d <- word[b]_d - word[c]_e`.                                                           |
-| **FMUL** | `a, b, c`                                     | Set `[a + i]_d <- [b + i]_d * [c + i]_e` for `i = 0..WORD_SIZE`.                                    |
-| **FDIV** | `a, b, c`                                     | Set `[a + i]_d <- [b + i]_d / [c + i]_e` for `i = 0..WORD_SIZE`.                                    |
+|----------|-----------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| **FADD** | `a, b, c`                                     | Set `word[a]_d <- word[b]_e + word[c]_f`. This opcode presumes `a,b` are in the same address space. |
+| **FSUB** | `a, b, c`                                     | Set `word[a]_d <- word[b]_e - word[c]_f`.                                                           |
+| **FMUL** | `a, b, c`                                     | Set `[a + i]_d <- [b + i]_e * [c + i]_f` for `i = 0..WORD_SIZE`.                                    |
+| **FDIV** | `a, b, c`                                     | Set `[a + i]_d <- [b + i]_e / [c + i]_f` for `i = 0..WORD_SIZE`.                                    |
 
 ### Extension field arithmetic
 
