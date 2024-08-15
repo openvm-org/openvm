@@ -37,6 +37,9 @@ pub enum AsmInstruction<F, EF> {
     /// Subtract immediate, dst = lhs - rhs.
     SubFI(i32, i32, F),
 
+    /// Subtract value from immediate, dst = lhs - rhs.
+    SubFIN(i32, F, i32),
+
     /// Multiply, dst = lhs * rhs.
     MulF(i32, i32, i32),
 
@@ -48,6 +51,9 @@ pub enum AsmInstruction<F, EF> {
 
     /// Divide immediate, dst = lhs / rhs.
     DivFI(i32, i32, F),
+
+    /// Divide value from immediate, dst = lhs / rhs.
+    DivFIN(i32, F, i32),
 
     /// Less than, dst = lhs < rhs.
     LessThanF(i32, i32, i32),
@@ -192,6 +198,9 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::SubFI(dst, lhs, rhs) => {
                 write!(f, "subi  ({})fp, ({})fp, {}", dst, lhs, rhs)
             }
+            AsmInstruction::SubFIN(dst, lhs, rhs) => {
+                write!(f, "subin ({})fp, {}, ({})fp", dst, lhs, rhs)
+            }
             AsmInstruction::MulF(dst, lhs, rhs) => {
                 write!(f, "mul   ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
             }
@@ -203,6 +212,9 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::DivFI(dst, lhs, rhs) => {
                 write!(f, "divi  ({})fp, ({})fp, {}", dst, lhs, rhs)
+            }
+            AsmInstruction::DivFIN(dst, lhs, rhs) => {
+                write!(f, "divi  ({})fp, {}, ({})fp", dst, lhs, rhs)
             }
             AsmInstruction::LessThanF(dst, lhs, rhs) => {
                 write!(f, "lt  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)

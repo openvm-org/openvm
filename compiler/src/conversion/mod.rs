@@ -52,7 +52,30 @@ fn inst<F: PrimeField64>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn large_inst<F: PrimeField64>(
+fn inst_med<F: PrimeField64>(
+    opcode: OpCode,
+    op_a: F,
+    op_b: F,
+    op_c: F,
+    d: AS,
+    e: AS,
+    f: AS,
+) -> Instruction<F> {
+    Instruction {
+        opcode,
+        op_a,
+        op_b,
+        op_c,
+        d: d.to_field(),
+        e: e.to_field(),
+        op_f: f.to_field(),
+        op_g: F::zero(),
+        debug: String::new(),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn inst_large<F: PrimeField64>(
     opcode: OpCode,
     op_a: F,
     op_b: F,
@@ -151,63 +174,67 @@ fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     match instruction {
         AsmInstruction::AddF(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] + mem[rhs]
-            inst(
+            inst_med(
                 FADD,
                 i32_f(dst),
                 i32_f(lhs),
                 i32_f(rhs),
                 AS::Memory,
                 AS::Memory,
+                AS::Memory,
             ),
         ],
         AsmInstruction::AddFI(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] + rhs
-            inst(FADD, i32_f(dst), i32_f(lhs), rhs, AS::Memory, AS::Immediate),
+            inst_med(FADD, i32_f(dst), i32_f(lhs), rhs, AS::Memory, AS::Memory, AS::Immediate),
         ],
         AsmInstruction::SubF(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] - mem[rhs]
-            inst(
-                FSUB,
-                i32_f(dst),
-                i32_f(lhs),
-                i32_f(rhs),
-                AS::Memory,
-                AS::Memory,
-            ),
+            inst_med(FSUB, i32_f(dst), i32_f(lhs), i32_f(rhs), AS::Memory, AS::Memory, AS::Memory),
         ],
         AsmInstruction::SubFI(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] - rhs
-            inst(FSUB, i32_f(dst), i32_f(lhs), rhs, AS::Memory, AS::Immediate),
+            inst_med(FSUB, i32_f(dst), i32_f(lhs), rhs, AS::Memory, AS::Memory, AS::Immediate),
+        ],
+        AsmInstruction::SubFIN(dst, lhs, rhs) => vec![
+            // mem[dst] <- lhs - mem[rhs]
+            inst_med(FSUB, i32_f(dst), lhs, i32_f(rhs), AS::Memory, AS::Immediate, AS::Memory),
         ],
         AsmInstruction::MulF(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] * mem[rhs]
-            inst(
+            inst_med(
                 FMUL,
                 i32_f(dst),
                 i32_f(lhs),
                 i32_f(rhs),
                 AS::Memory,
                 AS::Memory,
+                AS::Memory,
             ),
         ],
         AsmInstruction::MulFI(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] * rhs
-            inst(FMUL, i32_f(dst), i32_f(lhs), rhs, AS::Memory, AS::Immediate),
+            inst_med(FMUL, i32_f(dst), i32_f(lhs), rhs, AS::Memory, AS::Memory, AS::Immediate),
         ],
         AsmInstruction::DivF(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] / mem[rhs]
-            inst(
+            inst_med(
                 FDIV,
                 i32_f(dst),
                 i32_f(lhs),
                 i32_f(rhs),
                 AS::Memory,
                 AS::Memory,
+                AS::Memory,
             ),
         ],
         AsmInstruction::DivFI(dst, lhs, rhs) => vec![
             // mem[dst] <- mem[lhs] / rhs
-            inst(FDIV, i32_f(dst), i32_f(lhs), rhs, AS::Memory, AS::Immediate),
+            inst_med(FDIV, i32_f(dst), i32_f(lhs), rhs, AS::Memory, AS::Memory, AS::Immediate),
+        ],
+        AsmInstruction::DivFIN(dst, lhs, rhs) => vec![
+            // mem[dst] <- lhs / mem[rhs]
+            inst_med(FDIV, i32_f(dst), lhs, i32_f(rhs), AS::Memory, AS::Immediate, AS::Memory),
         ],
         _ => panic!(
             "Illegal argument to convert_field_arithmetic_instruction: {:?}",
@@ -333,7 +360,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
         AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
         AsmInstruction::LoadF(dst, src, index, size, offset) => vec![
             // mem[dst] <- mem[mem[src] + mem[index] * size + offset]
-            large_inst(
+            inst_large(
                 LOADW2,
                 i32_f(dst),
                 offset,
@@ -357,7 +384,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
         ],
         AsmInstruction::StoreF(val, addr, index, size, offset) => vec![
             // mem[mem[addr] + mem[index] * size + offset] <- mem[val]
-            large_inst(
+            inst_large(
                 STOREW2,
                 i32_f(val),
                 offset,
@@ -570,7 +597,9 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
         | AsmInstruction::AddFI(..)
         | AsmInstruction::SubFI(..)
         | AsmInstruction::MulFI(..)
-        | AsmInstruction::DivFI(..) => {
+        | AsmInstruction::DivFI(..)
+        | AsmInstruction::SubFIN(..)
+        | AsmInstruction::DivFIN(..) => {
             if options.field_arithmetic_enabled {
                 convert_base_arithmetic_instruction(instruction)
             } else {

@@ -358,11 +358,11 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
             write_enabled_check += arithmetic_flags.clone();
             let mut when_arithmetic = builder.when(arithmetic_flags);
 
-            // read from d[b] and e[c]
-            when_arithmetic.assert_eq(read1.address_space, d);
+            // read from e[b] and f[c]
+            when_arithmetic.assert_eq(read1.address_space, e);
             when_arithmetic.assert_eq(read1.address, b);
 
-            when_arithmetic.assert_eq(read2.address_space, e);
+            when_arithmetic.assert_eq(read2.address_space, f);
             when_arithmetic.assert_eq(read2.address, c);
 
             // write to d[a]

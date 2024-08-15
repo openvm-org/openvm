@@ -83,6 +83,12 @@ pub enum OpCode {
     NOP = 100,
 }
 
+impl Default for OpCode {
+    fn default() -> Self {
+        NOP
+    }
+}
+
 impl fmt::Display for OpCode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)

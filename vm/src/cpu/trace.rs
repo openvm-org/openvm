@@ -26,7 +26,7 @@ use crate::{
 };
 
 #[allow(clippy::too_many_arguments)]
-#[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, derive_new::new)]
 pub struct Instruction<F> {
     pub opcode: OpCode,
     pub op_a: F,
@@ -355,8 +355,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 }
                 opcode @ (FADD | FSUB | FMUL | FDIV) => {
                     // read from d[b] and e[c]
-                    let operand1 = read!(d, b);
-                    let operand2 = read!(e, c);
+                    let operand1 = read!(e, b);
+                    let operand2 = read!(f, c);
                     // write to d[a]
                     let result = vm
                         .field_arithmetic_chip
