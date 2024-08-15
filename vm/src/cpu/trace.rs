@@ -26,7 +26,7 @@ use crate::{
 };
 
 #[allow(clippy::too_many_arguments)]
-#[derive(Clone, Debug, PartialEq, Eq, Default, derive_new::new)]
+#[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
 pub struct Instruction<F> {
     pub opcode: OpCode,
     pub op_a: F,
