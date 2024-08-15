@@ -6,6 +6,7 @@ use afs_compiler::{
 use crate::fri::types::DigestVariable;
 
 pub mod duplex;
+pub mod multi_field32;
 
 /// Reference: [p3_challenger::CanObserve].
 pub trait CanObserveVariable<C: Config, V> {

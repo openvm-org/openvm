@@ -16,7 +16,10 @@ use p3_util::log2_strict_usize;
 use crate::{
     fri::types::{DigestVariable, TwoAdicPcsProofVariable},
     hints::{InnerChallenge, InnerVal},
+    OUTER_DIGEST_SIZE,
 };
+
+pub type OuterDigestVariable<C> = [Var<<C as Config>::N>; OUTER_DIGEST_SIZE];
 
 pub type InnerConfig = AsmConfig<InnerVal, InnerChallenge>;
 

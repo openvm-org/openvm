@@ -1,4 +1,7 @@
-use afs_compiler::{asm::AsmConfig, ir::Builder};
+use afs_compiler::{
+    asm::AsmConfig,
+    ir::{Builder, Config, Felt, Var},
+};
 use afs_test_utils::config::FriParameters;
 use p3_baby_bear::BabyBear;
 use p3_commit::TwoAdicMultiplicativeCoset;
@@ -39,4 +42,34 @@ pub fn const_fri_config(
         subgroups,
         generators,
     }
+}
+
+/// Reference: https://github.com/Plonky3/Plonky3/blob/622375885320ac6bf3c338001760ed8f2230e3cb/field/src/helpers.rs#L136
+pub fn reduce_32<C: Config>(builder: &mut Builder<C>, vals: &[Felt<C::F>]) -> Var<C::N> {
+    let mut power = C::N::one();
+    let result: Var<C::N> = builder.eval(C::N::zero());
+    for val in vals.iter() {
+        let bits = builder.num2bits_f_circuit(*val);
+        let val = builder.bits2num_v_circuit(&bits);
+        builder.assign(&result, result + val * power);
+        power *= C::N::from_canonical_usize(1usize << 32);
+    }
+    result
+}
+
+/// Reference: https://github.com/Plonky3/Plonky3/blob/622375885320ac6bf3c338001760ed8f2230e3cb/field/src/helpers.rs#L149
+pub fn split_32<C: Config>(builder: &mut Builder<C>, val: Var<C::N>, n: usize) -> Vec<Felt<C::F>> {
+    let bits = builder.num2bits_v_circuit(val, 256);
+    let mut results = Vec::new();
+    for i in 0..n {
+        let result: Felt<C::F> = builder.eval(C::F::zero());
+        for j in 0..64 {
+            let bit = bits[i * 64 + j];
+            let t = builder.eval(result + C::F::from_wrapped_u64(1 << j));
+            let z = builder.select_f(bit, t, result);
+            builder.assign(&result, z);
+        }
+        results.push(result);
+    }
+    results
 }
