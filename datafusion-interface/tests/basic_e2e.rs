@@ -77,36 +77,37 @@ pub async fn test_basic_e2e() {
     ctx.register_table("example", Arc::new(cp)).unwrap();
 
     // let sql = "SELECT a FROM example WHERE a <= b GROUP BY a";
-    // let sql = "SELECT a FROM example WHERE a <= 10";
+    let sql = "SELECT a FROM example WHERE a <= 10";
     // let sql = "SELECT a FROM example";
-    // let logical = ctx.state().create_logical_plan(sql).await.unwrap();
-    let logical = table_scan(Some("example"), &schema, None)
-        .unwrap()
-        // .filter(col("a").lt(lit(10)))
-        // .unwrap()
-        // .filter(col("b").lt(lit(20)))
-        // .unwrap()
-        .build()
-        .unwrap();
+    let logical = ctx.state().create_logical_plan(sql).await.unwrap();
+    // let logical = table_scan(Some("example"), &schema, None)
+    //     .unwrap()
+    //     .filter(col("a").lt(lit(10)))
+    //     .unwrap()
+    //     .filter(col("b").lt(lit(20)))
+    //     .unwrap()
+    //     .build()
+    //     .unwrap();
     println!("{:#?}", logical.clone());
 
     let engine = default_engine(PCS_LOG_DEGREE);
     let mut afs = AfsExec::new(ctx, logical, engine).await;
     println!("Flattened AFS execution plan: {:?}", afs.afs_execution_plan);
 
-    let output = afs.execute().await.unwrap();
+    afs.execute().await.unwrap();
+    let last_node = afs.last_node().await.unwrap();
+    let output = last_node.lock().await.output().clone().unwrap();
     println!("Output page: {:?}", output.page);
 
     afs.keygen().await.unwrap();
-    let end_node = afs.afs_execution_plan.last().unwrap();
-    match end_node {
-        AfsNode::PageScan(page_scan) => {
-            let pk = page_scan.pk.as_ref().unwrap();
-            println!(
-                "Proving key interaction chunk size: {:?}",
-                pk.interaction_chunk_size
-            );
-        }
-        _ => unreachable!(),
-    }
+    // match end_node {
+    //     AfsNode::PageScan(page_scan) => {
+    //         let pk = page_scan.pk.as_ref().unwrap();
+    //         println!(
+    //             "Proving key interaction chunk size: {:?}",
+    //             pk.interaction_chunk_size
+    //         );
+    //     }
+    //     _ => unreachable!(),
+    // }
 }

@@ -7,6 +7,7 @@ use datafusion::arrow::{
     array::{RecordBatch, UInt32Array},
     datatypes::Schema,
 };
+use derivative::Derivative;
 use p3_field::PrimeField64;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -18,7 +19,8 @@ pub mod execution_plan;
 pub mod table_provider;
 pub mod utils;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Derivative, Serialize, Deserialize)]
+#[derivative(Clone(bound = "ProverTraceData<SC>: Clone"))]
 #[serde(bound(
     serialize = "ProverTraceData<SC>: Serialize",
     deserialize = "ProverTraceData<SC>: Deserialize<'de>"
@@ -88,12 +90,22 @@ where
         }
     }
 
+    pub fn to_record_batch(&self) -> RecordBatch {
+        convert_to_record_batch(self.page.clone(), self.schema.clone())
+    }
+
     pub fn write_cached_trace(&mut self, trace: ProverTraceData<SC>) {
         self.cached_trace = Some(trace);
     }
+}
 
-    pub fn to_record_batch(&self) -> RecordBatch {
-        convert_to_record_batch(self.page.clone(), self.schema.clone())
+impl<SC: StarkGenericConfig> std::fmt::Debug for CommittedPage<SC> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "CommittedPage {{ page_id: {}, schema: {:?}, page: {:?} }}",
+            self.page_id, self.schema, self.page
+        )
     }
 }
 

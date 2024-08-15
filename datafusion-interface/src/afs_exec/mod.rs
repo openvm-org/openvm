@@ -21,45 +21,44 @@ use datafusion::{
     execution::context::{SessionContext, SessionState},
     logical_expr::LogicalPlan,
 };
-use futures::{StreamExt, TryStreamExt};
+use futures::{lock::Mutex, StreamExt, TryStreamExt};
 use p3_field::PrimeField64;
 use serde::{de::DeserializeOwned, Serialize};
-use tokio::sync::Mutex;
 
 use crate::{afs_node::AfsNode, committed_page::CommittedPage, PCS_LOG_DEGREE};
 
-#[derive(Debug)]
-enum NodeState<SC: StarkGenericConfig, E: StarkEngine<SC>> {
-    ZeroOrOneChild,
-    /// Nodes with multiple children will have multiple tasks accessing it,
-    /// and each task will append their contribution until the last task takes
-    /// all the children to build the parent node.
-    TwoOrMoreChildren(Mutex<Vec<ExecutionPlanChild<SC, E>>>),
-}
-
 /// To avoid needing to pass single child wrapped in a Vec for nodes
 /// with only one child.
-pub enum ChildrenContainer<SC: StarkGenericConfig, E: StarkEngine<SC>> {
-    None,
-    One(Arc<Vec<AfsNode<SC, E>>>),
-    Multiple(Arc<Vec<AfsNode<SC, E>>>),
-}
+// pub enum ChildrenContainer<SC: StarkGenericConfig, E: StarkEngine<SC>> {
+//     None,
+//     One(Arc<AfsNode<SC, E>>),
+//     Multiple(Arc<Vec<AfsNode<SC, E>>>),
+// }
 
-#[derive(Debug)]
-struct LogicalNode<'a, SC: StarkGenericConfig, E: StarkEngine<SC>> {
-    node: &'a LogicalPlan,
-    // None if root
-    parent_index: Option<usize>,
-    state: NodeState<SC, E>,
-}
+// #[derive(Debug)]
+// enum NodeState<SC: StarkGenericConfig, E: StarkEngine<SC>> {
+//     ZeroOrOneChild,
+//     /// Nodes with multiple children will have multiple tasks accessing it,
+//     /// and each task will append their contribution until the last task takes
+//     /// all the children to build the parent node.
+//     TwoOrMoreChildren(Mutex<Vec<ExecutionPlanChild<SC, E>>>),
+// }
 
-#[derive(Debug)]
-struct ExecutionPlanChild<SC: StarkGenericConfig, E: StarkEngine<SC>> {
-    /// Index needed to order children of parent to ensure consistency with original
-    /// `LogicalPlan`
-    index: usize,
-    plan: Arc<Vec<AfsNode<SC, E>>>,
-}
+// #[derive(Debug)]
+// struct LogicalNode<'a, SC: StarkGenericConfig, E: StarkEngine<SC>> {
+//     node: &'a LogicalPlan,
+//     // None if root
+//     parent_index: Option<usize>,
+//     state: NodeState<SC, E>,
+// }
+
+// #[derive(Debug)]
+// struct ExecutionPlanChild<SC: StarkGenericConfig, E: StarkEngine<SC>> {
+//     /// Index needed to order children of parent to ensure consistency with original
+//     /// `LogicalPlan`
+//     index: usize,
+//     plan: Arc<Vec<AfsNode<SC, E>>>,
+// }
 
 pub struct AfsExec<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     /// The session context from DataFusion
@@ -67,7 +66,7 @@ pub struct AfsExec<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     /// STARK engine used for cryptographic operations
     pub engine: E,
     /// AfsNode tree flattened into a vec to be executed sequentially
-    pub afs_execution_plan: Vec<AfsNode<SC, E>>,
+    pub afs_execution_plan: Vec<Arc<Mutex<AfsNode<SC, E>>>>,
 }
 
 impl<SC: StarkGenericConfig, E: StarkEngine<SC>> AfsExec<SC, E>
@@ -81,10 +80,7 @@ where
 {
     pub async fn new(ctx: SessionContext, root: LogicalPlan, engine: E) -> Self {
         let root = ctx.state().optimize(&root).unwrap();
-        let mut afs_execution_plan = vec![];
-        Self::create_execution_plan(&mut afs_execution_plan, &root)
-            .await
-            .unwrap();
+        let afs_execution_plan = Self::create_execution_plan(root).await.unwrap();
         Self {
             ctx,
             engine,
@@ -92,16 +88,23 @@ where
         }
     }
 
-    pub async fn execute(&mut self) -> Result<Arc<CommittedPage<SC>>> {
+    pub async fn last_node(&self) -> Result<Arc<Mutex<AfsNode<SC, E>>>> {
+        let last_node = self.afs_execution_plan.last().unwrap().to_owned();
+        Ok(last_node)
+    }
+
+    pub async fn execute(&mut self) -> Result<()> {
         for node in &mut self.afs_execution_plan {
+            let mut node = node.lock().await;
             node.execute(&self.ctx).await?;
         }
-        Ok(self.afs_execution_plan.last().unwrap().output().unwrap())
+        Ok(())
     }
 
     pub async fn keygen(&mut self) -> Result<()> {
         for node in &mut self.afs_execution_plan {
-            node.keygen(&self.ctx, &self.engine).await?;
+            let mut node = node.lock().await;
+            node.execute(&self.ctx).await?;
         }
         Ok(())
     }
@@ -113,41 +116,93 @@ where
         // }
     }
 
+    /// Creates the flattened execution plan from a LogicalPlan tree root node.
+    async fn create_execution_plan(root: LogicalPlan) -> Result<Vec<Arc<Mutex<AfsNode<SC, E>>>>> {
+        let mut flattened = vec![];
+        Self::flatten_logical_plan_tree(&mut flattened, &root).await?;
+        Ok(flattened)
+    }
+
     /// Converts a LogicalPlan tree to a flat AfsNode vec. Starts from the root (output) node and works backwards until it reaches the input(s).
-    pub async fn create_execution_plan(
-        flattened: &mut Vec<AfsNode<SC, E>>,
+    async fn flatten_logical_plan_tree(
+        flattened: &mut Vec<Arc<Mutex<AfsNode<SC, E>>>>,
         root: &LogicalPlan,
-    ) -> Result<()> {
-        let mut dfs_visit_stack = vec![(root, None)];
+    ) -> Result<usize> {
+        println!("flatten_logical_plan_tree {:?}", root);
+        let current_index = flattened.len();
 
-        while let Some((node, _parent_index)) = dfs_visit_stack.pop() {
-            let inputs = node.inputs();
+        let inputs = root.inputs();
 
-            if inputs.is_empty() {
-                let afs_node = AfsNode::from(node, ChildrenContainer::None);
-                flattened.push(afs_node);
-            } else {
-                let mut child_afs_nodes: Vec<AfsNode<SC, E>> = vec![];
-
-                for &input in inputs.iter().rev() {
-                    dfs_visit_stack.push((input, Some(flattened.len())));
-                }
-
-                for &child in inputs.iter() {
-                    Box::pin(Self::create_execution_plan(&mut child_afs_nodes, child)).await?;
-                }
-
-                let children_container = if child_afs_nodes.len() == 1 {
-                    ChildrenContainer::One(Arc::new(child_afs_nodes))
-                } else {
-                    ChildrenContainer::Multiple(Arc::new(child_afs_nodes))
-                };
-
-                let afs_node = AfsNode::from(node, children_container);
-                flattened.push(afs_node);
+        if inputs.is_empty() {
+            let afs_node = Arc::new(Mutex::new(AfsNode::from(root, vec![])));
+            flattened.push(afs_node);
+        } else {
+            let mut input_indexes = vec![];
+            for &input in inputs.iter() {
+                let input_index =
+                    Box::pin(Self::flatten_logical_plan_tree(flattened, input)).await?;
+                input_indexes.push(input_index);
             }
+
+            let input_pointers = input_indexes
+                .iter()
+                .map(|i| Arc::clone(&flattened[*i]))
+                .collect::<Vec<Arc<Mutex<AfsNode<SC, E>>>>>();
+            let afs_node = Arc::new(Mutex::new(AfsNode::from(root, input_pointers)));
+            flattened.push(afs_node);
         }
 
-        Ok(())
+        Ok(current_index)
     }
+    // async fn flatten_logical_plan_tree(
+    //     flattened: &mut Vec<AfsNode<SC, E>>,
+    //     root: &LogicalPlan,
+    // ) -> Result<usize> {
+    //     println!("flatten_logical_plan_tree {:?}", root);
+    //     let mut dfs_visit_stack = vec![(root, None)];
+    //     let current_index = flattened.len();
+
+    //     while let Some((node, parent_index)) = dfs_visit_stack.pop() {
+    //         let inputs = node.inputs();
+
+    //         if inputs.is_empty() {
+    //             let afs_node = AfsNode::from(node, vec![]);
+    //             flattened.push(afs_node);
+    //         } else {
+    //             // let mut child_afs_nodes: Vec<AfsNode<SC, E>> = vec![];
+
+    //             for &input in inputs.iter().rev() {
+    //                 dfs_visit_stack.push((input, Some(current_index)));
+    //             }
+
+    //             let mut child_indexes = vec![];
+    //             for &child in inputs.iter() {
+    //                 let child_index =
+    //                     Box::pin(Self::flatten_logical_plan_tree(flattened, child)).await?;
+    //                 child_indexes.push(child_index);
+    //             }
+
+    //             // let children_container = if child_afs_nodes.len() == 1 {
+    //             //     let n = child_afs_nodes.remove(0);
+    //             //     ChildrenContainer::One(Arc::new(n))
+    //             // } else {
+    //             //     ChildrenContainer::Multiple(Arc::new(child_afs_nodes))
+    //             // };
+    //             let child_pointers = child_indexes
+    //                 .iter()
+    //                 .map(|i| Arc::new(&flattened.get))
+    //                 .collect::<Vec<Arc<AfsNode<SC, E>>>>();
+    //             let afs_node = AfsNode::from(node, child_pointers);
+    //             flattened.push(afs_node);
+
+    //             // if let Some(parent_idx) = parent_index {
+    //             //     if let Some(parent_node) = flattened.get_mut(parent_idx) {
+    //             //         parent_node.add_child(Arc::new(afs_node));
+    //             //     }
+    //             // }
+    //         }
+    //     }
+
+    //     Ok(current_index)
+    // }
 }
