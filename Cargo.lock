@@ -3,6 +3,17 @@
 version = 3
 
 [[package]]
+name = "addchain"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b2e69442aa5628ea6951fa33e24efe8313f4321a91bd729fc2f75bdfc858570"
+dependencies = [
+ "num-bigint 0.3.3",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "addr2line"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -172,6 +183,7 @@ dependencies = [
  "itertools 0.13.0",
  "p3-air",
  "p3-baby-bear",
+ "p3-bn254-fr",
  "p3-challenger",
  "p3-commit",
  "p3-field",
@@ -402,7 +414,7 @@ dependencies = [
  "ark-serialize 0.3.0",
  "ark-std 0.3.0",
  "derivative",
- "num-bigint",
+ "num-bigint 0.4.5",
  "num-traits",
  "paste",
  "rustc_version 0.3.3",
@@ -422,7 +434,7 @@ dependencies = [
  "derivative",
  "digest 0.10.7",
  "itertools 0.10.5",
- "num-bigint",
+ "num-bigint 0.4.5",
  "num-traits",
  "paste",
  "rustc_version 0.4.0",
@@ -455,7 +467,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db2fd794a08ccb318058009eefdf15bcaaaaf6f8161eb3345f907222bac38b20"
 dependencies = [
- "num-bigint",
+ "num-bigint 0.4.5",
  "num-traits",
  "quote",
  "syn 1.0.109",
@@ -467,7 +479,7 @@ version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7abe79b0e4288889c4574159ab790824d0033b9fdcb2a112a3182fac2e514565"
 dependencies = [
- "num-bigint",
+ "num-bigint 0.4.5",
  "num-traits",
  "proc-macro2",
  "quote",
@@ -492,7 +504,7 @@ checksum = "adb7b85a02b83d2f22f89bd5cac66c9c89474240cb6207cb1efc16d098e822a5"
 dependencies = [
  "ark-std 0.4.0",
  "digest 0.10.7",
- "num-bigint",
+ "num-bigint 0.4.5",
 ]
 
 [[package]]
@@ -1302,8 +1314,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ded41244b729663b1e574f1b4fb731469f69f79c17667b5d776b16cda0479449"
 dependencies = [
  "bitvec",
+ "byteorder",
+ "ff_derive",
  "rand_core",
  "subtle",
+]
+
+[[package]]
+name = "ff_derive"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9f54704be45ed286151c5e11531316eaef5b8f5af7d597b806fdb8af108d84a"
+dependencies = [
+ "addchain",
+ "cfg-if",
+ "num-bigint 0.3.3",
+ "num-integer",
+ "num-traits",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -1804,6 +1834,17 @@ dependencies = [
 
 [[package]]
 name = "num-bigint"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f6f7833f2cbf2360a6cfd58cd41a53aa7a90bd4c202f5b1c7dd2ed73c57b2c3"
+dependencies = [
+ "autocfg",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-bigint"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c165a9ab64cf766f73521c0dd2cfdff64f488b8f0b3e621face3462d3db536d7"
@@ -1909,7 +1950,7 @@ name = "p3-baby-bear"
 version = "0.1.0"
 source = "git+https://github.com/Plonky3/Plonky3.git?rev=95e56fa#95e56fa996cf1ff15511a7d14cec9b4cfbe83931"
 dependencies = [
- "num-bigint",
+ "num-bigint 0.4.5",
  "p3-field",
  "p3-mds",
  "p3-poseidon2",
@@ -1925,6 +1966,20 @@ source = "git+https://github.com/Plonky3/Plonky3.git?rev=95e56fa#95e56fa996cf1ff
 dependencies = [
  "blake3",
  "p3-symmetric",
+]
+
+[[package]]
+name = "p3-bn254-fr"
+version = "0.1.0"
+source = "git+https://github.com/Plonky3/Plonky3.git?rev=95e56fa#95e56fa996cf1ff15511a7d14cec9b4cfbe83931"
+dependencies = [
+ "ff 0.13.0",
+ "num-bigint 0.4.5",
+ "p3-field",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "rand",
+ "serde",
 ]
 
 [[package]]
@@ -1970,7 +2025,7 @@ version = "0.1.0"
 source = "git+https://github.com/Plonky3/Plonky3.git?rev=95e56fa#95e56fa996cf1ff15511a7d14cec9b4cfbe83931"
 dependencies = [
  "itertools 0.12.1",
- "num-bigint",
+ "num-bigint 0.4.5",
  "num-traits",
  "p3-util",
  "rand",
@@ -2000,7 +2055,7 @@ name = "p3-goldilocks"
 version = "0.1.0"
 source = "git+https://github.com/Plonky3/Plonky3.git?rev=95e56fa#95e56fa996cf1ff15511a7d14cec9b4cfbe83931"
 dependencies = [
- "num-bigint",
+ "num-bigint 0.4.5",
  "p3-dft",
  "p3-field",
  "p3-mds",
@@ -2621,7 +2676,7 @@ dependencies = [
  "ark-ff 0.4.2",
  "bytes",
  "fastrlp",
- "num-bigint",
+ "num-bigint 0.4.5",
  "num-traits",
  "parity-scale-codec",
  "primitive-types",

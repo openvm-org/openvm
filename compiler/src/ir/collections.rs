@@ -21,6 +21,16 @@ pub enum Array<C: Config, T> {
 }
 
 impl<C: Config, V: MemVariable<C>> Array<C, V> {
+    /// Gets a right value of the array.
+    pub fn vec(&self) -> Vec<V> {
+        match self {
+            Self::Fixed(vec) => {
+                vec.borrow().iter().map(|x| x.clone().unwrap()).collect()
+            },
+            _ => panic!("array is dynamic, not fixed"),
+        }
+    }
+
     pub fn ptr(&self) -> Ptr<C::N> {
         match *self {
             Array::Dyn(ptr, _) => ptr,
