@@ -95,8 +95,9 @@ impl<F: PrimeField32> MemoryTester<F> {
     pub fn check(&mut self) {
         assert_eq!(self.memory_chip.borrow().memory, self.memory);
         self.accesses
-            .extend(self.memory_chip.borrow_mut().accesses.drain(..));
+            .append(&mut self.memory_chip.borrow_mut().accesses);
         self.memory_chip.borrow_mut().last_timestamp = None;
+        self.memory_chip.borrow_mut().memory.clear();
         self.memory.clear();
     }
 }
@@ -122,7 +123,12 @@ impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
             ]);
         }
 
-        RowMajorMatrix::new(rows, BaseAir::<F>::width(&self.dummy_interaction_air))
+        let width = BaseAir::<F>::width(&self.dummy_interaction_air);
+        while !(rows.len() / width).is_power_of_two() {
+            rows.push(F::zero());
+        }
+
+        RowMajorMatrix::new(rows, width)
     }
 
     fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC> {

@@ -1,10 +1,14 @@
 use enum_dispatch::enum_dispatch;
+use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::StarkGenericConfig;
 
 use afs_stark_backend::rap::AnyRap;
 
-use crate::{arch::columns::ExecutionState, cpu::trace::Instruction};
+use crate::{
+    arch::columns::ExecutionState, cpu::trace::Instruction,
+    field_extension::FieldExtensionArithmeticChip,
+};
 
 #[enum_dispatch]
 pub trait OpCodeExecutor<F> {
@@ -25,11 +29,11 @@ pub trait MachineChip<F> {
 }
 
 #[enum_dispatch(OpCodeExecutor<F>)]
-pub enum OpCodeExecutorVariant<F> {
-    A(A),
+pub enum OpCodeExecutorVariant<F: PrimeField32> {
+    FieldExtension(FieldExtensionArithmeticChip<F>),
 }
 
 #[enum_dispatch(MachineChip<F>)]
-pub enum MachineChipVariant<F> {
-    A(A),
+pub enum MachineChipVariant<F: PrimeField32> {
+    FieldExtension(FieldExtensionArithmeticChip<F>),
 }

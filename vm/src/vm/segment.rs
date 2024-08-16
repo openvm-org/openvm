@@ -3,20 +3,21 @@ use std::{
     sync::Arc,
 };
 
+use p3_field::PrimeField32;
+use p3_matrix::dense::DenseMatrix;
+
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
     rap::AnyRap,
 };
-use p3_field::PrimeField32;
-use p3_matrix::dense::DenseMatrix;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
-use super::{cycle_tracker::CycleTracker, ChipType, VirtualMachineState, VmConfig, VmMetrics};
 use crate::{
+    arch::chips::MachineChip,
     cpu::{
-        trace::ExecutionError, CpuChip, CpuOptions, IS_LESS_THAN_BUS, POSEIDON2_BUS,
-        RANGE_CHECKER_BUS,
+        CpuChip, CpuOptions, IS_LESS_THAN_BUS, POSEIDON2_BUS, RANGE_CHECKER_BUS,
+        trace::ExecutionError,
     },
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
@@ -26,13 +27,15 @@ use crate::{
     program::{Program, ProgramChip},
 };
 
+use super::{ChipType, cycle_tracker::CycleTracker, VirtualMachineState, VmConfig, VmMetrics};
+
 pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub config: VmConfig,
     pub cpu_chip: CpuChip<WORD_SIZE, F>,
     pub program_chip: ProgramChip<F>,
     pub memory_chip: MemoryChip<WORD_SIZE, F>,
     pub field_arithmetic_chip: FieldArithmeticChip<F>,
-    pub field_extension_chip: FieldExtensionArithmeticChip<WORD_SIZE, F>,
+    pub field_extension_chip: FieldExtensionArithmeticChip<F>,
     pub range_checker: Arc<RangeCheckerGateChip>,
     pub poseidon2_chip: Poseidon2Chip<16, F>,
     pub is_less_than_chip: IsLessThanChip<F>,
@@ -59,7 +62,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         let program_chip = ProgramChip::new(program);
         let memory_chip = MemoryChip::new(limb_bits, limb_bits, limb_bits, decomp, state.memory);
         let field_arithmetic_chip = FieldArithmeticChip::new();
-        let field_extension_chip = FieldExtensionArithmeticChip::new();
+        let field_extension_chip = todo!(); //FieldExtensionArithmeticChip::new();
         let poseidon2_chip = Poseidon2Chip::from_poseidon2_config(
             Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
             POSEIDON2_BUS,

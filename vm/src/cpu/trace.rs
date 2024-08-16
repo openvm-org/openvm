@@ -12,8 +12,9 @@ use afs_primitives::{
 };
 
 use crate::{
+    arch::chips::OpCodeExecutor,
     cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
-    field_extension::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticChip},
+    field_extension::columns::FieldExtensionArithmeticCols,
     memory::{compose, decompose},
     poseidon2::{columns::Poseidon2VmCols, Poseidon2Chip},
     program::columns::ProgramPreprocessedCols,
@@ -398,7 +399,13 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     println!("{}", value);
                 }
                 FE4ADD | FE4SUB | BBE4MUL | BBE4INV => {
-                    FieldExtensionArithmeticChip::calculate(vm, timestamp, instruction);
+                    vm.field_extension_chip.execute(
+                        &instruction,
+                        crate::arch::columns::ExecutionState {
+                            pc: pc_usize,
+                            timestamp,
+                        },
+                    );
                 }
                 PERM_POS2 | COMP_POS2 => {
                     Poseidon2Chip::<16, _>::calculate(vm, timestamp, instruction);

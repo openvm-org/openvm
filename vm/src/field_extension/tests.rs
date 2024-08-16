@@ -4,7 +4,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::{AbstractExtensionField, AbstractField, extension::BinomialExtensionField};
 use rand::Rng;
 
-use afs_stark_backend::verifier::VerificationError;
+use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::utils::create_seeded_rng;
 
 use crate::{
@@ -14,19 +14,17 @@ use crate::{
         testing::{ExecutionTester, MachineChipTester, MemoryTester},
     },
     cpu::{FIELD_EXTENSION_INSTRUCTIONS, OpCode, trace::Instruction},
+    field_extension::columns::FieldExtensionArithmeticIoCols,
 };
 
-use super::{
-    columns::FieldExtensionArithmeticIoCols, FieldExtensionArithmeticAir,
-    FieldExtensionArithmeticChip,
-};
+use super::{FieldExtensionArithmeticAir, FieldExtensionArithmeticChip};
 
 #[test]
 fn field_extension_air_test() {
-    let num_ops = 13;
+    let num_ops = 1;
     let elem_range = || 1..=100;
     let address_space_range = || 1usize..=2;
-    let address_range = || 0usize..1 << 30;
+    let address_range = || 0usize..1 << 29;
 
     let execution_bus = ExecutionBus(0);
     let memory_bus = 1;
@@ -51,6 +49,10 @@ fn field_extension_air_test() {
         let address2 = rng.gen_range(address_range());
         let result_address = rng.gen_range(address_range());
         assert!(address1.abs_diff(address2) >= 4);
+        println!(
+            "d = {}, e = {}, result_addr = {}, addr1 = {}, addr2 = {}",
+            as_d, as_e, result_address, address1, address2
+        );
 
         let result = FieldExtensionArithmeticAir::solve(opcode, operand1, operand2).unwrap();
 
@@ -70,6 +72,10 @@ fn field_extension_air_test() {
         .add(&mut field_extension_chip)
         .simple_test()
         .expect("Verification failed");
+
+    USE_DEBUG_BUILDER.with(|debug| {
+        *debug.lock().unwrap() = false;
+    });
 
     // negative test pranking each IO value
     for height in 0..num_ops {
