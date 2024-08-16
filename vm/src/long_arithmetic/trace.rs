@@ -60,9 +60,12 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticChip<ARG_SIZE,
         let mut result = vec![0u32; num_limbs];
         let mut carry = vec![0u32; num_limbs];
         for i in 0..num_limbs {
-            result[i] = x[i] - y[i] - if i > 0 { carry[i - 1] } else { 0 };
-            if result[i] >= (1 << LIMB_SIZE) {
-                result[i] += 1 << LIMB_SIZE;
+            let rhs = y[i] + if i > 0 { carry[i - 1] } else { 0 };
+            if x[i] >= rhs {
+                result[i] = x[i] - rhs;
+                carry[i] = 0;
+            } else {
+                result[i] = x[i] + (1 << LIMB_SIZE) - rhs;
                 carry[i] = 1;
             }
         }
