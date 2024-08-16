@@ -1,12 +1,11 @@
 use std::{borrow::Cow, collections::VecDeque};
 
+use afs_primitives::modular_multiplication::bigint::air::ModularMultiplicationBigIntAir;
 use num_bigint_dig::{algorithms::mod_inverse, BigUint};
 use p3_field::{PrimeField32, PrimeField64};
 
-use afs_primitives::modular_multiplication::bigint::air::ModularMultiplicationBigIntAir;
-
 use crate::{
-    cpu::{OpCode::*, trace::Instruction},
+    cpu::{trace::Instruction, OpCode::*},
     modular_multiplication::air::ModularMultiplicationVmAir,
     vm::ExecutionSegment,
 };

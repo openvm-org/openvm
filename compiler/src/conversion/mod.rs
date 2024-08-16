@@ -1,9 +1,8 @@
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
-
 use stark_vm::{
     cpu::{
-        OpCode::{self, *},
         trace::Instruction,
+        OpCode::{self, *},
     },
     program::{DebugInfo, Program},
 };

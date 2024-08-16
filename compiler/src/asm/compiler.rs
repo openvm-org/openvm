@@ -2,16 +2,14 @@ use alloc::{collections::BTreeMap, vec};
 use std::collections::BTreeSet;
 
 use p3_field::{ExtensionField, Field, PrimeField32, TwoAdicField};
-
 use stark_vm::program::DebugInfo;
 
+use super::{config::AsmConfig, AssemblyCode, BasicBlock, IndexTriple, ValueOrConst};
 use crate::{
     asm::AsmInstruction,
     ir::{Array, DslIr, Ext, Felt, Ptr, RVar, Var},
     prelude::{MemIndex, TracedVec},
 };
-
-use super::{AssemblyCode, BasicBlock, config::AsmConfig, IndexTriple, ValueOrConst};
 
 /// The memory location for the top of memory
 pub const MEMORY_TOP: i32 = (1 << 30) - 4;
