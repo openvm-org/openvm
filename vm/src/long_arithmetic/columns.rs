@@ -16,6 +16,12 @@ pub struct LongArithmeticIoCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, T
 pub struct LongArithmeticAuxCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, T> {
     pub opcode_lo: T,
     pub opcode_hi: T,
+    // Note: this "carry" vector may serve as a "borrow" vector in the case of
+    // subtraction. However, I decided to call it just "carry", because:
+    // 1. "borrow" may cause confusion in rust,
+    // 2. it is more often carry than borrow among [ADD, SUB, MUL],
+    // 3. even in case of subtraction, this is technically a "carry" of the
+    //    expression x = y + z.
     pub carry: Vec<T>,
 }
 

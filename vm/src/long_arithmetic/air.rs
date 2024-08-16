@@ -63,6 +63,11 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
             // z[i] = x[i] - y[i] - carry[i - 1] + carry[i] * 2^LIMB_SIZE
             // Separating the summands with the same sign from the others, we get:
             // z[i] - x[i] = \pm (y[i] + carry[i - 1] - carry[i] * 2^LIMB_SIZE)
+
+            // Or another way to think about it: we essentially either check that
+            // z = x + y, or that x = z + y; and "carry" is always the carry of
+            // the addition. So it is natural that x and z are separated from
+            // everything else.
             let lhs = io.y_limbs[i]
                 + if i > 0 {
                     aux.carry[i - 1].into()
