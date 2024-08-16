@@ -34,11 +34,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        let mut flattened = vec![];
-        flattened.extend(self.io.flatten());
-        flattened.extend(self.aux.flatten());
-
-        flattened
+        [self.io.flatten(), self.aux.flatten()].concat()
     }
 
     pub const fn get_width() -> usize {
@@ -73,14 +69,13 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        let mut flattened = vec![];
-        flattened.push(self.rcv_count.clone());
-        flattened.push(self.opcode.clone());
-        flattened.extend(self.x_limbs.clone());
-        flattened.extend(self.y_limbs.clone());
-        flattened.extend(self.z_limbs.clone());
-
-        flattened
+        [
+            vec![self.rcv_count.clone(), self.opcode.clone()],
+            self.x_limbs.clone(),
+            self.y_limbs.clone(),
+            self.z_limbs.clone(),
+        ]
+        .concat()
     }
 }
 
@@ -106,11 +101,10 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        let mut flattened = vec![];
-        flattened.push(self.opcode_lo.clone());
-        flattened.push(self.opcode_hi.clone());
-        flattened.extend(self.carry.clone());
-
-        flattened
+        [
+            vec![self.opcode_lo.clone(), self.opcode_hi.clone()],
+            self.carry.clone(),
+        ]
+        .concat()
     }
 }

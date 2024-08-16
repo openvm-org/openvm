@@ -15,7 +15,7 @@ pub struct LongArithmeticAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
 }
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticAir<ARG_SIZE, LIMB_SIZE> {
-    pub const BASE_OP: u8 = OpCode::ADD as u8;
+    pub const BASE_OP: OpCode = OpCode::ADD;
 
     pub fn new(bus_index: usize) -> Self {
         Self { bus_index }
@@ -49,7 +49,7 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
         builder.assert_eq(
             aux.opcode_hi * AB::Expr::two()
                 + aux.opcode_lo
-                + AB::Expr::from_canonical_u8(Self::BASE_OP),
+                + AB::Expr::from_canonical_u8(Self::BASE_OP as u8),
             io.opcode,
         );
 

@@ -15,7 +15,7 @@ pub fn create_row_from_values<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: 
     sum: &[u32],
     carry: &[u32],
 ) -> Vec<T> {
-    let base_op = LongArithmeticAir::<ARG_SIZE, LIMB_SIZE>::BASE_OP;
+    let base_op_u8 = LongArithmeticAir::<ARG_SIZE, LIMB_SIZE>::BASE_OP as u8;
     LongArithmeticCols::<ARG_SIZE, LIMB_SIZE, T> {
         io: LongArithmeticIoCols {
             rcv_count: T::one(),
@@ -25,8 +25,8 @@ pub fn create_row_from_values<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: 
             z_limbs: sum.iter().map(|x| T::from_canonical_u32(*x)).collect(),
         },
         aux: LongArithmeticAuxCols {
-            opcode_lo: T::from_canonical_u8((opcode as u8 - base_op) & 1u8),
-            opcode_hi: T::from_canonical_u8((opcode as u8 - base_op) >> 1),
+            opcode_lo: T::from_canonical_u8((opcode as u8 - base_op_u8) & 1u8),
+            opcode_hi: T::from_canonical_u8((opcode as u8 - base_op_u8) >> 1),
             carry: carry.iter().map(|x| T::from_canonical_u32(*x)).collect(),
         },
     }
@@ -90,7 +90,7 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticChip<ARG_SIZE,
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
 
         let blank_row = create_row_from_values::<ARG_SIZE, LIMB_SIZE, F>(
-            OpCode::ADD, // TODO: why we have BASE_OP then
+            LongArithmeticAir::<ARG_SIZE, LIMB_SIZE>::BASE_OP,
             &vec![0u32; num_limbs],
             &vec![0u32; num_limbs],
             &vec![0u32; num_limbs],

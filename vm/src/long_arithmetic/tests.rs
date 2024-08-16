@@ -162,3 +162,5 @@ fn long_add_invalid_carry_air_test() {
 
     run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
 }
+
+// TODO: test subtraction
