@@ -163,4 +163,43 @@ fn long_add_invalid_carry_air_test() {
     run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
 }
 
-// TODO: test subtraction
+#[test]
+fn long_sub_out_of_range_air_test() {
+    let (chip, trace) =
+        setup_bad_long_arithmetic_test(OpCode::SUB, 1, 2, (-F::one()).as_canonical_u32(), 0, 1);
+    run_bad_long_arithmetic_test(&chip, trace, VerificationError::NonZeroCumulativeSum);
+}
+
+#[test]
+fn long_sub_wrong_subtraction_air_test() {
+    let (chip, trace) = setup_bad_long_arithmetic_test(OpCode::SUB, 1, 2, (1 << 16) - 1, 0, 1);
+    run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
+}
+
+#[test]
+fn long_sub_invalid_carry_air_test() {
+    let bad_carry = F::from_canonical_u32(1 << 16).inverse().as_canonical_u32();
+    let bus_index: usize = 0;
+    let chip = LongArithmeticChip::<256, 16>::new(bus_index);
+
+    let mut x = [0u32; 16];
+    let mut y = [0u32; 16];
+    let mut sum = vec![0u32; 16];
+    let mut carry = [0u32; 16];
+
+    x[15] = 1;
+    y[15] = 1;
+    sum[15] = 1;
+    carry[15] = bad_carry;
+
+    for z in &sum {
+        chip.range_checker_chip.add_count(*z);
+    }
+
+    let op = OpCode::SUB;
+    let trace = create_row_from_values::<256, 16, F>(op, &x, &y, &sum, &carry);
+    let width = trace.len();
+    let trace = RowMajorMatrix::new(trace, width);
+
+    run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
+}
