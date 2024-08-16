@@ -91,6 +91,7 @@ fn test_flatten_fromslice_roundtrip() {
     let cols_numbered = CpuCols::<TEST_WORD_SIZE, usize>::from_slice(&all_cols, &cpu_air);
     let flattened = cols_numbered.flatten(options);
 
+    // TODO[osama]: remove all println!
     println!("num_cols: {}", num_cols);
     println!("flattened.len(): {}", flattened.len());
     println!("flattened: {:?}", flattened);
@@ -283,7 +284,10 @@ fn air_test_change<
         program_rows.push(BabyBear::zero());
     }
     let program_trace = RowMajorMatrix::new(program_rows, 8);
-    let memory_interface_trace = segment.memory_manager.generate_memory_interface_trace();
+    let memory_interface_trace = segment
+        .memory_manager
+        .lock()
+        .generate_memory_interface_trace();
     let range_checker_trace = segment.range_checker.generate_trace();
 
     let arithmetic_air = DummyInteractionAir::new(4, false, ARITHMETIC_BUS);
@@ -305,7 +309,8 @@ fn air_test_change<
     segment.cpu_chip.generate_pvs();
     let mut all_public_values = vec![segment.get_cpu_pis(), vec![], vec![], vec![], vec![]];
 
-    let MemoryInterface::Volatile(memory_audit_chip) = &segment.memory_manager.interface_chip
+    let MemoryInterface::Volatile(memory_audit_chip) =
+        &segment.memory_manager.lock().interface_chip
     else {
         panic!("Memory interface chip is not Volatile");
     };

@@ -40,6 +40,20 @@ pub struct Instruction<F> {
     pub debug: String,
 }
 
+impl<T: Default> Default for Instruction<T> {
+    fn default() -> Self {
+        Self {
+            opcode: NOP,
+            op_a: T::default(),
+            op_b: T::default(),
+            op_c: T::default(),
+            d: T::default(),
+            e: T::default(),
+            debug: String::new(),
+        }
+    }
+}
+
 pub fn isize_to_field<F: Field>(value: isize) -> F {
     if value < 0 {
         return F::neg_one() * F::from_canonical_usize(value.unsigned_abs());
@@ -214,7 +228,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 ($address_space: expr, $address: expr) => {{
                     num_reads += 1;
                     assert!(num_reads <= CPU_MAX_READS_PER_CYCLE);
-                    accesses[num_reads - 1] = vm.memory_manager.read_word(
+                    accesses[num_reads - 1] = vm.memory_manager.lock().read_word(
                         F::from_canonical_usize(timestamp + (num_reads - 1)),
                         $address_space,
                         $address,
@@ -229,7 +243,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     assert!(num_writes <= CPU_MAX_WRITES_PER_CYCLE);
                     let word = decompose($data);
                     accesses[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
-                        vm.memory_manager.write_word(
+                        vm.memory_manager.lock().write_word(
                             F::from_canonical_usize(
                                 timestamp + CPU_MAX_READS_PER_CYCLE + (num_writes - 1),
                             ),
@@ -346,7 +360,11 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     FieldExtensionArithmeticChip::calculate(vm, timestamp, instruction);
                 }
                 PERM_POS2 | COMP_POS2 => {
-                    Poseidon2Chip::<16, WORD_SIZE, _>::calculate(vm, timestamp, instruction);
+                    vm.poseidon2_chip.calculate(
+                        F::from_canonical_usize(timestamp),
+                        instruction,
+                        false,
+                    );
                 }
                 HINT_INPUT => {
                     let hint = match vm.input_stream.pop_front() {

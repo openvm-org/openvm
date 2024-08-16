@@ -10,6 +10,7 @@ use afs_stark_backend::{
 };
 use p3_field::PrimeField32;
 use p3_matrix::dense::DenseMatrix;
+use parking_lot::Mutex;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
 use super::{ChipType, VirtualMachineState, VmConfig, VmMetrics};
@@ -29,12 +30,12 @@ pub struct ExecutionSegment<const NUM_WORDS: usize, const WORD_SIZE: usize, F: P
     pub config: VmConfig,
     pub cpu_chip: CpuChip<WORD_SIZE, F>,
     pub program_chip: ProgramChip<F>,
-    pub memory_manager: MemoryManager<NUM_WORDS, WORD_SIZE, F>,
+    pub memory_manager: Arc<Mutex<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
     pub memory_chip: MemoryChip<WORD_SIZE, F>,
     pub field_arithmetic_chip: FieldArithmeticChip<F>,
     pub field_extension_chip: FieldExtensionArithmeticChip<WORD_SIZE, F>,
     pub range_checker: Arc<RangeCheckerGateChip>,
-    pub poseidon2_chip: Poseidon2Chip<16, WORD_SIZE, F>,
+    pub poseidon2_chip: Poseidon2Chip<16, NUM_WORDS, WORD_SIZE, F>,
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
     pub has_generation_happened: bool,
@@ -66,8 +67,10 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         //     config.limb_bits,
         //     config.decomp,
         // );
-        let memory_manager =
-            MemoryManager::with_volatile_memory(config.memory_config, range_checker.clone());
+        let memory_manager = Arc::new(Mutex::new(MemoryManager::with_volatile_memory(
+            config.memory_config,
+            range_checker.clone(),
+        )));
 
         let program_chip = ProgramChip::new(program);
         let memory_chip = MemoryChip::new(config.memory_config, state.memory);
@@ -76,6 +79,8 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         let poseidon2_chip = Poseidon2Chip::from_poseidon2_config(
             Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
             config.memory_config,
+            memory_manager.clone(),
+            range_checker.clone(),
             POSEIDON2_BUS,
         );
 

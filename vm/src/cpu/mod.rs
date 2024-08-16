@@ -129,7 +129,7 @@ fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         FAIL => 0,
         PRINTF => 1,
         COMP_POS2 | PERM_POS2 => {
-            Poseidon2Chip::<16, 1, BabyBear>::max_accesses_per_instruction(opcode)
+            Poseidon2Chip::<16, 16, 1, BabyBear>::max_accesses_per_instruction(opcode)
         }
         SHINTW => 3,
         HINT_INPUT | HINT_BITS => 0,

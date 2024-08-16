@@ -89,15 +89,20 @@ impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
             addr_space_is_zero_cols.inv,
         );
 
+        // // immediate => enabled
+        // builder.assert_one(implies::<AB>(aux.is_immediate.into(), op.enabled.clone()));
+
+        // TODO[osama]: make this degree 2
         self.assert_compose(
-            &mut builder.when(aux.is_immediate),
+            &mut builder.when(aux.is_immediate).when(op.enabled.clone()),
             op.cell.data.clone(),
             op.pointer.clone(),
         );
 
+        // TODO[osama]: make this degree 2
         // is_immediate => read
         builder.assert_one(implies::<AB>(
-            aux.is_immediate.into(),
+            and::<AB>(op.enabled.clone(), aux.is_immediate.into()),
             AB::Expr::one() - op.op_type.clone(),
         ));
 
@@ -122,18 +127,20 @@ impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
         // Ensuring that if op_type is Read, data_read is the same as data_write
         for i in 0..WORD_SIZE {
             builder.assert_zero(
-                (AB::Expr::one() - op.op_type.clone())
+                op.enabled.clone()
+                    * (AB::Expr::one() - op.op_type.clone())
                     * (op.cell.data[i].clone() - aux.old_cell.data[i]),
             );
         }
 
+        // TODO[osama]: resolve is_immediate stuff
         Self::eval_memory_interactions(
             builder,
             op.addr_space,
             op.pointer,
             aux.old_cell.into_expr::<AB>(),
             op.cell,
-            op.enabled - aux.is_immediate.into(),
+            op.enabled * (AB::Expr::one() - aux.is_immediate.into()),
         );
     }
 }

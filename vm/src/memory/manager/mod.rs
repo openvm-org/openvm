@@ -114,7 +114,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         data: [F; WORD_SIZE],
     ) -> NewMemoryAccess<WORD_SIZE, F> {
         assert!(addr_space != F::zero());
-        println!("writing word pointer: {:?}", pointer.as_canonical_u32());
         debug_assert!((pointer.as_canonical_u32() as usize) % WORD_SIZE == 0);
 
         let cell = self
@@ -125,6 +124,10 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
                 clk: F::zero(),
             });
         let (old_clk, old_data) = (cell.clk, cell.data);
+        if old_clk >= clk {
+            println!("interesting");
+            println!("old_clk: {:?}, clk: {:?}", old_clk, clk);
+        }
         assert!(old_clk < clk);
 
         // Updating AccessCell

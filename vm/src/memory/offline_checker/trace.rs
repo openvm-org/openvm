@@ -98,6 +98,28 @@ impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
         )
     }
 
+    pub fn disabled_memory_checker_aux_cols_from_op<F: PrimeField32>(
+        &self,
+        addr_space: F,
+        clk: F,
+        range_checker: Arc<RangeCheckerGateChip>,
+    ) -> MemoryOfflineCheckerAuxCols<WORD_SIZE, F> {
+        self.memory_access_to_checker_aux_cols(
+            &NewMemoryAccess::<WORD_SIZE, F>::new(
+                MemoryOperation::new(
+                    addr_space,
+                    F::zero(),
+                    F::zero(),
+                    AccessCell::new([F::zero(); WORD_SIZE], clk),
+                    F::zero(),
+                ),
+                AccessCell::new([F::zero(); WORD_SIZE], F::zero()),
+            ),
+            range_checker,
+        )
+    }
+
+    /// Assumes that addr_space in memory operation is zero
     pub fn disabled_memory_checker_aux_cols<F: PrimeField32>(
         &self,
         range_checker: Arc<RangeCheckerGateChip>,
@@ -117,6 +139,7 @@ impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
         )
     }
 
+    /// Assumes that IO memory operation is all zeros
     pub fn disabled_memory_checker_cols<F: PrimeField32>(
         &self,
         range_checker: Arc<RangeCheckerGateChip>,

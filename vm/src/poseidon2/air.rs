@@ -2,6 +2,7 @@ use std::{array::from_fn, borrow::Borrow};
 
 use afs_primitives::sub_chip::AirConfig;
 use afs_stark_backend::interaction::InteractionBuilder;
+use derive_new::new;
 use itertools::izip;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
@@ -9,15 +10,19 @@ use p3_matrix::Matrix;
 use poseidon2_air::poseidon2::Poseidon2Air;
 
 use super::{columns::Poseidon2VmCols, CHUNK};
-use crate::memory::{
-    manager::{access_cell::AccessCell, operation::MemoryOperation},
-    offline_checker::air::NewMemoryOfflineChecker,
+use crate::{
+    cpu::OpCode,
+    memory::{
+        manager::{access_cell::AccessCell, operation::MemoryOperation},
+        offline_checker::air::NewMemoryOfflineChecker,
+    },
 };
 
 /// Poseidon2 Air, VM version.
 ///
 /// Carries the subair for subtrace generation. Sticking to the conventions, this struct carries no state.
 /// `direct` determines whether direct interactions are enabled. By default they are on.
+#[derive(new)]
 pub struct Poseidon2VmAir<const WIDTH: usize, const WORD_SIZE: usize, F: Clone> {
     pub inner: Poseidon2Air<WIDTH, F>,
     pub mem_oc: NewMemoryOfflineChecker<WORD_SIZE>,
@@ -76,7 +81,7 @@ impl<AB: InteractionBuilder, const WIDTH: usize, const WORD_SIZE: usize> Air<AB>
         for (io_addr, aux_addr, count) in izip!(
             [cols.io.a, cols.io.b, cols.io.c],
             [cols.aux.dst, cols.aux.lhs, cols.aux.rhs],
-            [cols.io.is_opcode, cols.io.is_opcode, cols.io.cmp]
+            [cols.io.is_opcode, cols.io.is_opcode, cols.io.cmp,]
         ) {
             let clk = cols.io.clk + AB::F::from_canonical_usize(clk_offset);
             clk_offset += 1;

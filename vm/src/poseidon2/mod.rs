@@ -1,8 +1,12 @@
-use std::array;
+use std::{
+    array::{self, from_fn},
+    sync::Arc,
+};
 
-use afs_primitives::sub_chip::LocalTraceInstructions;
+use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 use columns::*;
 use p3_field::PrimeField32;
+use parking_lot::Mutex;
 use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
 
 use self::air::Poseidon2VmAir;
@@ -11,7 +15,15 @@ use crate::{
         trace::Instruction,
         OpCode::{self, *},
     },
-    memory::{offline_checker::air::NewMemoryOfflineChecker, tree::Hasher},
+    memory::{
+        compose,
+        manager::{operation::MemoryOperation, MemoryManager},
+        offline_checker::{
+            air::NewMemoryOfflineChecker,
+            columns::{MemoryOfflineCheckerAuxCols, NewMemoryAccess},
+        },
+        tree::Hasher,
+    },
     vm::{config::MemoryConfig, ExecutionSegment},
 };
 
@@ -26,9 +38,16 @@ pub mod trace;
 /// Poseidon2 Chip.
 ///
 /// Carries the Poseidon2VmAir for constraints, and cached state for trace generation.
-pub struct Poseidon2Chip<const WIDTH: usize, const WORD_SIZE: usize, F: PrimeField32> {
+pub struct Poseidon2Chip<
+    const WIDTH: usize,
+    const NUM_WORDS: usize,
+    const WORD_SIZE: usize,
+    F: PrimeField32,
+> {
     pub air: Poseidon2VmAir<WIDTH, WORD_SIZE, F>,
     pub rows: Vec<Poseidon2VmCols<WIDTH, WORD_SIZE, F>>,
+    pub memory_manager: Arc<Mutex<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
+    pub range_checker: Arc<RangeCheckerGateChip>,
 }
 
 impl<const WIDTH: usize, const WORD_SIZE: usize, F: PrimeField32>
@@ -72,7 +91,7 @@ impl<const WIDTH: usize, const WORD_SIZE: usize, F: PrimeField32>
     }
 
     /// Map VM instructions to Poseidon2IO columns, for opcodes.
-    fn make_io_cols(start_timestamp: usize, instruction: Instruction<F>) -> Poseidon2VmIoCols<F> {
+    fn make_io_cols(start_clk: F, instruction: Instruction<F>) -> Poseidon2VmIoCols<F> {
         let Instruction {
             opcode,
             op_a,
@@ -85,7 +104,7 @@ impl<const WIDTH: usize, const WORD_SIZE: usize, F: PrimeField32>
         Poseidon2VmIoCols::<F> {
             is_opcode: F::one(),
             is_direct: F::zero(),
-            clk: F::from_canonical_usize(start_timestamp),
+            clk: start_clk,
             a: op_a,
             b: op_b,
             c: op_c,
@@ -97,17 +116,26 @@ impl<const WIDTH: usize, const WORD_SIZE: usize, F: PrimeField32>
 }
 
 const WIDTH: usize = 16;
-impl<const WORD_SIZE: usize, F: PrimeField32> Poseidon2Chip<WIDTH, WORD_SIZE, F> {
+impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
+    Poseidon2Chip<WIDTH, NUM_WORDS, WORD_SIZE, F>
+{
     /// Construct from Poseidon2 config and bus index.
     pub fn from_poseidon2_config(
         p2_config: Poseidon2Config<WIDTH, F>,
         mem_config: MemoryConfig,
+        memory_manager: Arc<Mutex<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
+        range_checker: Arc<RangeCheckerGateChip>,
         bus_index: usize,
     ) -> Self {
         let air = Poseidon2VmAir::<WIDTH, WORD_SIZE, F>::from_poseidon2_config(
             p2_config, mem_config, bus_index,
         );
-        Self { air, rows: vec![] }
+        Self {
+            air,
+            rows: vec![],
+            memory_manager,
+            range_checker,
+        }
     }
     /// Key method of Poseidon2Chip.
     ///
@@ -116,11 +144,27 @@ impl<const WORD_SIZE: usize, F: PrimeField32> Poseidon2Chip<WIDTH, WORD_SIZE, F>
     /// truncating if the instruction is a compression.
     ///
     /// Used for both compression and permutation.
-    pub fn calculate<const NUM_WORDS: usize>(
-        vm: &mut ExecutionSegment<NUM_WORDS, WORD_SIZE, F>,
-        start_timestamp: usize,
-        instruction: Instruction<F>,
-    ) {
+    pub fn calculate(&mut self, start_clk: F, instruction: Instruction<F>, is_direct: bool) {
+        println!("calculating row: {}", self.rows.len());
+
+        let mut mem_oc_aux_cols = Vec::with_capacity(3 + 2 * WIDTH);
+        let push_oc_cols = |mem_oc_aux_cols: &mut Vec<_>,
+                            mem_access: &NewMemoryAccess<WORD_SIZE, F>| {
+            if !is_direct {
+                mem_oc_aux_cols.push(
+                    self.air
+                        .mem_oc
+                        .memory_access_to_checker_aux_cols(mem_access, self.range_checker.clone()),
+                )
+            } else {
+                mem_oc_aux_cols.push(
+                    self.air
+                        .mem_oc
+                        .disabled_memory_checker_aux_cols(self.range_checker.clone()),
+                )
+            }
+        };
+
         let Instruction {
             opcode,
             op_a,
@@ -133,54 +177,110 @@ impl<const WORD_SIZE: usize, F: PrimeField32> Poseidon2Chip<WIDTH, WORD_SIZE, F>
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
         debug_assert_eq!(WIDTH, CHUNK * 2);
 
-        let mut timestamp = start_timestamp;
-        let mut read = |address_space, addr, ts: &mut usize| {
-            *ts += 1;
-            vm.memory_chip.read_elem(*ts - 1, address_space, addr)
+        let mut clk = start_clk;
+        let read = |mem_oc_aux_cols: &mut Vec<_>, address_space, pointer, clk: &mut F| {
+            let mem_access = self
+                .memory_manager
+                .lock()
+                .read_word(*clk, address_space, pointer);
+            *clk += F::one();
+
+            push_oc_cols(mem_oc_aux_cols, &mem_access);
+            compose(mem_access.op.cell.data)
         };
 
-        let dst = read(d, op_a, &mut timestamp);
-        let lhs = read(d, op_b, &mut timestamp);
+        let dst = read(&mut mem_oc_aux_cols, d, op_a, &mut clk);
+        let lhs = read(&mut mem_oc_aux_cols, d, op_b, &mut clk);
         let rhs = if opcode == COMP_POS2 {
-            read(d, op_c, &mut timestamp)
+            println!("third read is enabled");
+
+            read(&mut mem_oc_aux_cols, d, op_c, &mut clk)
         } else {
+            println!("third read is disabled");
+
             // We still need to advance the timestamp to match the interaction constraints.
-            timestamp += 1;
+            mem_oc_aux_cols.push(self.air.mem_oc.disabled_memory_checker_aux_cols_from_op(
+                d,
+                clk,
+                self.range_checker.clone(),
+            ));
+
+            clk += F::one();
             lhs + F::from_canonical_usize(CHUNK)
         };
 
         let input_state: [F; WIDTH] = array::from_fn(|i| {
             if i < CHUNK {
-                read(e, lhs + F::from_canonical_usize(i), &mut timestamp)
+                read(
+                    &mut mem_oc_aux_cols,
+                    e,
+                    lhs + F::from_canonical_usize(i),
+                    &mut clk,
+                )
             } else {
-                read(e, rhs + F::from_canonical_usize(i - CHUNK), &mut timestamp)
+                read(
+                    &mut mem_oc_aux_cols,
+                    e,
+                    rhs + F::from_canonical_usize(i - CHUNK),
+                    &mut clk,
+                )
             }
         });
 
-        let new_row = vm.poseidon2_chip.air.generate_row(
-            start_timestamp,
-            instruction,
-            dst,
-            lhs,
-            rhs,
-            input_state,
-        );
-
-        let output = new_row.aux.internal.io.output;
+        let internal = self.air.inner.generate_trace_row(input_state);
+        let output = internal.io.output;
         let len = if opcode == PERM_POS2 { WIDTH } else { CHUNK };
 
         for (i, &output_elem) in output.iter().enumerate().take(len) {
-            vm.memory_chip
-                .write_elem(timestamp, e, dst + F::from_canonical_usize(i), output_elem);
-            timestamp += 1;
+            let mem_access = self.memory_manager.lock().write_word(
+                clk,
+                e,
+                dst + F::from_canonical_usize(i),
+                from_fn(|_| output_elem),
+            );
+            clk += F::one();
+
+            push_oc_cols(&mut mem_oc_aux_cols, &mem_access);
         }
 
-        vm.poseidon2_chip.rows.push(new_row);
+        // Generate disabled MemoryOfflineCheckerAuxCols in case len != WIDTH
+        for i in len..WIDTH {
+            mem_oc_aux_cols.push(self.air.mem_oc.disabled_memory_checker_aux_cols_from_op(
+                e,
+                clk,
+                self.range_checker.clone(),
+            ));
+
+            clk += F::one();
+        }
+
+        let io = if is_direct {
+            Poseidon2VmIoCols::direct_io_cols()
+        } else {
+            Poseidon2VmAir::<WIDTH, WORD_SIZE, F>::make_io_cols(start_clk, instruction)
+        };
+
+        let row = Poseidon2VmCols {
+            io,
+            aux: Poseidon2VmAuxCols::<WIDTH, WORD_SIZE, F> {
+                dst,
+                lhs,
+                rhs,
+                internal,
+                mem_oc_aux_cols,
+            },
+        };
+
+        if self.rows.len() == 1 {
+            println!("row:\n {:?}", row);
+        }
+
+        self.rows.push(row);
     }
 
     pub fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
-        3 + (2 * WIDTH)
+        3 + 2 * WIDTH
     }
 
     pub fn current_height(&self) -> usize {
@@ -189,31 +289,23 @@ impl<const WORD_SIZE: usize, F: PrimeField32> Poseidon2Chip<WIDTH, WORD_SIZE, F>
 }
 
 const CHUNK: usize = 8;
-impl<const WIDTH: usize, const WORD_SIZE: usize, F: PrimeField32> Hasher<CHUNK, F>
-    for Poseidon2Chip<WIDTH, WORD_SIZE, F>
+impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> Hasher<CHUNK, F>
+    for Poseidon2Chip<WIDTH, NUM_WORDS, WORD_SIZE, F>
 {
     /// Key method for Hasher trait.
     ///
-    /// Takes two chunks, hashes them, and returns the result. Total with 3 * CHUNK, exposed in `direct_interaction_width()`.
+    /// Takes two chunks, hashes them, and returns the result. Total width 3 * CHUNK, exposed in `direct_interaction_width()`.
     ///
     /// No interactions with other chips.
     fn hash(&mut self, left: [F; CHUNK], right: [F; CHUNK]) -> [F; CHUNK] {
         let mut input_state = [F::zero(); WIDTH];
         input_state[..8].copy_from_slice(&left);
         input_state[8..16].copy_from_slice(&right);
-        let internal = self.air.inner.generate_trace_row(input_state);
-        let output = internal.io.output;
-        let io_row = Poseidon2VmIoCols::direct_io_cols();
-        self.rows.push(Poseidon2VmCols {
-            io: io_row,
-            aux: Poseidon2VmAuxCols {
-                dst: F::zero(),
-                lhs: F::zero(),
-                rhs: F::zero(),
-                internal,
-                mem_oc_aux_cols: todo!(),
-            },
-        });
-        output[..8].try_into().unwrap()
+
+        self.calculate(F::one(), Instruction::default(), true);
+
+        self.rows.last().unwrap().aux.internal.io.output[..8]
+            .try_into()
+            .unwrap()
     }
 }

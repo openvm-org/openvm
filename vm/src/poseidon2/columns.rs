@@ -5,6 +5,7 @@ use super::air::Poseidon2VmAir;
 use crate::memory::offline_checker::columns::MemoryOfflineCheckerAuxCols;
 
 /// Columns for Poseidon2Vm AIR.
+#[derive(Clone, Debug)]
 pub struct Poseidon2VmCols<const WIDTH: usize, const WORD_SIZE: usize, T> {
     pub io: Poseidon2VmIoCols<T>,
     pub aux: Poseidon2VmAuxCols<WIDTH, WORD_SIZE, T>,
@@ -39,14 +40,14 @@ pub struct Poseidon2VmAuxCols<const WIDTH: usize, const WORD_SIZE: usize, T> {
     pub lhs: T,
     pub rhs: T,
     pub internal: Poseidon2Cols<WIDTH, T>,
-    // There should be 3+2*WIDTH memory accesses
+    // There are 3+2*WIDTH memory accesses
     pub mem_oc_aux_cols: Vec<MemoryOfflineCheckerAuxCols<WORD_SIZE, T>>,
 }
 
 impl<const WIDTH: usize, const WORD_SIZE: usize, T: Clone> Poseidon2VmCols<WIDTH, WORD_SIZE, T> {
-    pub fn width(poseidon2_chip: &Poseidon2VmAir<WIDTH, WORD_SIZE, T>) -> usize {
+    pub fn width(p2_air: &Poseidon2VmAir<WIDTH, WORD_SIZE, T>) -> usize {
         Poseidon2VmIoCols::<T>::get_width()
-            + Poseidon2VmAuxCols::<WIDTH, WORD_SIZE, T>::width(poseidon2_chip)
+            + Poseidon2VmAuxCols::<WIDTH, WORD_SIZE, T>::width(p2_air)
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -144,11 +145,17 @@ impl<T: Field> Poseidon2VmIoCols<T> {
 impl<const WIDTH: usize, const WORD_SIZE: usize, T: Clone> Poseidon2VmAuxCols<WIDTH, WORD_SIZE, T> {
     pub fn width(air: &Poseidon2VmAir<WIDTH, WORD_SIZE, T>) -> usize {
         3 + Poseidon2Cols::<WIDTH, T>::get_width(&air.inner)
+            + (3 + 2 * WIDTH) * MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(&air.mem_oc)
     }
 
     pub fn flatten(&self) -> Vec<T> {
         let mut result = vec![self.dst.clone(), self.lhs.clone(), self.rhs.clone()];
         result.extend(self.internal.flatten());
+        result.extend(
+            self.mem_oc_aux_cols
+                .iter()
+                .flat_map(|col| col.clone().flatten()),
+        );
         result
     }
 
@@ -186,7 +193,7 @@ impl<const WIDTH: usize, const WORD_SIZE: usize, T: Field> Poseidon2VmAuxCols<WI
             lhs: T::default(),
             rhs: T::default(),
             internal: Poseidon2Cols::blank_row(air),
-            mem_oc_aux_cols: todo!(),
+            mem_oc_aux_cols: Vec::with_capacity(3 + 2 * WIDTH),
         }
     }
 }
