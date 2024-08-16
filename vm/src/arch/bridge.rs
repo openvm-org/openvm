@@ -8,14 +8,27 @@ use crate::arch::columns::{ExecutionState, InstructionCols};
 pub struct ExecutionBus(pub usize);
 
 impl ExecutionBus {
-    pub fn interact_execute<AB: InteractionBuilder>(
+    pub fn execute_simple<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        prev_state: ExecutionState<AB::Expr>,
+        timestamp_change: impl Into<AB::Expr>,
+        instruction: InstructionCols<AB::Expr>,
+    ) {
+        let next_state = ExecutionState {
+            pc: prev_state.pc.clone() + AB::F::one(),
+            timestamp: prev_state.timestamp.clone() + timestamp_change.into(),
+        };
+        self.execute(builder, prev_state, next_state, instruction);
+    }
+    pub fn execute<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         prev_state: ExecutionState<AB::Expr>,
         next_state: ExecutionState<AB::Expr>,
         instruction: InstructionCols<AB::Expr>,
     ) {
-        self.interact_execute_with_multiplicity(
+        self.execute_with_multiplicity(
             builder,
             AB::Expr::one(),
             prev_state,
@@ -23,16 +36,21 @@ impl ExecutionBus {
             instruction,
         );
     }
-    pub fn interact_execute_with_multiplicity<AB: InteractionBuilder>(
+    pub fn execute_with_multiplicity<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        multiplicity: AB::Expr,
+        multiplicity: impl Into<AB::Expr>,
         prev_state: ExecutionState<AB::Expr>,
         next_state: ExecutionState<AB::Expr>,
         instruction: InstructionCols<AB::Expr>,
     ) {
+        let mut fields = vec![];
+        fields.extend(prev_state.flatten());
+        fields.extend(next_state.flatten());
+        fields.extend(instruction.flatten());
+        builder.push_receive(self.0, fields, multiplicity);
     }
-    pub fn interact_initial_final<AB: InteractionBuilder>(
+    pub fn initial_final<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         prev_state: ExecutionState<AB::Expr>,

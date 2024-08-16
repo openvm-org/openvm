@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use p3_field::Field;
+use p3_field::{AbstractField, Field};
 
 use crate::cpu::trace::Instruction;
 
@@ -22,6 +22,12 @@ pub struct InstructionCols<T> {
 }
 
 impl<T: Clone> ExecutionState<T> {
+    pub fn new(pc: impl Into<T>, timestamp: impl Into<T>) -> Self {
+        Self {
+            pc: pc.into(),
+            timestamp: timestamp.into(),
+        }
+    }
     pub fn from_slice(slice: &[T]) -> Self {
         Self {
             pc: slice[0].clone(),
@@ -37,6 +43,28 @@ impl<T: Clone> ExecutionState<T> {
 
     pub fn map<U: Clone, F: Fn(T) -> U>(&self, function: F) -> ExecutionState<U> {
         ExecutionState::from_slice(&self.flatten().into_iter().map(function).collect_vec())
+    }
+}
+
+impl<F: AbstractField> InstructionCols<F> {
+    pub fn new(
+        opcode: impl Into<F>,
+        a: impl Into<F>,
+        b: impl Into<F>,
+        c: impl Into<F>,
+        d: impl Into<F>,
+        e: impl Into<F>,
+    ) -> Self {
+        Self {
+            opcode: opcode.into(),
+            a: a.into(),
+            b: b.into(),
+            c: c.into(),
+            d: d.into(),
+            e: e.into(),
+            f: F::zero(),
+            g: F::zero(),
+        }
     }
 }
 

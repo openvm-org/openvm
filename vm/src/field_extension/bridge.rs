@@ -63,27 +63,18 @@ impl FieldExtensionArithmeticAir {
         // writes for z
         eval_rw_interactions(builder, true, local, local.aux.d, local.aux.op_a, 2);
 
-        self.execution_bus.interact_execute(
+        self.execution_bus.execute_simple(
             builder,
-            ExecutionState {
-                pc: local.aux.pc.into(),
-                timestamp: local.aux.start_timestamp.into(),
-            },
-            ExecutionState {
-                pc: local.aux.pc + AB::F::one(),
-                timestamp: local.aux.start_timestamp
-                    + AB::F::from_canonical_usize(3 * EXTENSION_DEGREE),
-            },
-            InstructionCols {
-                opcode: local.io.opcode.into(),
-                a: local.aux.op_a.into(),
-                b: local.aux.op_b.into(),
-                c: local.aux.op_c.into(),
-                d: local.aux.d.into(),
-                e: local.aux.e.into(),
-                f: AB::Expr::zero(),
-                g: AB::Expr::zero(),
-            },
+            ExecutionState::new(local.aux.pc, local.aux.start_timestamp),
+            AB::F::from_canonical_usize(3 * EXTENSION_DEGREE),
+            InstructionCols::new(
+                local.io.opcode,
+                local.aux.op_a,
+                local.aux.op_b,
+                local.aux.op_c,
+                local.aux.d,
+                local.aux.e,
+            ),
         );
     }
 }

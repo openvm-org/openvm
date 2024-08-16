@@ -1,17 +1,19 @@
-use afs_primitives::sub_chip::LocalTraceInstructions;
 use p3_air::BaseAir;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
+use afs_primitives::sub_chip::LocalTraceInstructions;
+
+use crate::{arch::columns::ExecutionState, cpu::trace::Instruction};
+
 use super::{columns::*, Poseidon2Chip, Poseidon2VmAir};
-use crate::cpu::trace::Instruction;
 
 impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
     /// Generates a single row from inputs.
     pub fn generate_row(
         &self,
-        start_timestamp: usize,
-        instruction: Instruction<F>,
+        execution_state: ExecutionState<usize>,
+        instruction: &Instruction<F>,
         dst: F,
         lhs: F,
         rhs: F,
@@ -20,7 +22,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
         // SAFETY: only allowed because WIDTH constrained to 16 above
         let internal = self.inner.generate_trace_row(input_state);
         Poseidon2VmCols {
-            io: Poseidon2VmAir::<WIDTH, F>::make_io_cols(start_timestamp, instruction),
+            io: Poseidon2VmAir::<WIDTH, F>::make_io_cols(execution_state, instruction),
             aux: Poseidon2VmAuxCols {
                 dst,
                 lhs,

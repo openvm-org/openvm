@@ -16,7 +16,7 @@ use crate::{
     cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
     field_extension::columns::FieldExtensionArithmeticCols,
     memory::{compose, decompose},
-    poseidon2::{columns::Poseidon2VmCols, Poseidon2Chip},
+    poseidon2::columns::Poseidon2VmCols,
     program::columns::ProgramPreprocessedCols,
     vm::ExecutionSegment,
 };
@@ -408,7 +408,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     );
                 }
                 PERM_POS2 | COMP_POS2 => {
-                    Poseidon2Chip::<16, _>::calculate(vm, timestamp, instruction);
+                    vm.poseidon2_chip.execute(
+                        &instruction,
+                        crate::arch::columns::ExecutionState::new(pc_usize, timestamp),
+                    );
                 }
                 HINT_INPUT => {
                     let hint = match vm.input_stream.pop_front() {

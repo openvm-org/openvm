@@ -1,12 +1,20 @@
-use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::izip;
 use p3_field::{AbstractField, Field};
+
+use afs_stark_backend::interaction::InteractionBuilder;
+
+use crate::{
+    arch::{
+        columns::{ExecutionState, InstructionCols},
+        instructions::OpCode::PERM_POS2,
+    },
+    cpu::{MEMORY_BUS, POSEIDON2_DIRECT_BUS},
+};
 
 use super::{
     columns::{Poseidon2VmAuxCols, Poseidon2VmIoCols},
     Poseidon2VmAir,
 };
-use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS, POSEIDON2_DIRECT_BUS};
 
 impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
     /// Receives instructions from the CPU on the designated `POSEIDON2_BUS` (opcodes) or `POSEIDON2_DIRECT_BUS` (direct), and sends both read and write requests to the memory chip.
@@ -20,8 +28,13 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
         io: Poseidon2VmIoCols<AB::Var>,
         aux: &Poseidon2VmAuxCols<WIDTH, AB::Var>,
     ) {
-        let fields = io.flatten().into_iter().skip(2);
-        builder.push_receive(POSEIDON2_BUS, fields, io.is_opcode);
+        let opcode = AB::Expr::from_canonical_usize(PERM_POS2 as usize) + io.cmp;
+        self.execution_bus.execute_simple(
+            builder,
+            ExecutionState::new(io.pc, io.start_timestamp),
+            AB::Expr::from_canonical_usize(3 + (2 * WIDTH)),
+            InstructionCols::new(opcode, io.a, io.b, io.c, io.d, io.e),
+        );
 
         let chunks: usize = WIDTH / 2;
 
@@ -34,7 +47,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
             [aux.dst, aux.lhs, aux.rhs],
             [io.is_opcode, io.is_opcode, io.cmp]
         ) {
-            let timestamp = io.clk + AB::F::from_canonical_usize(timestamp_offset);
+            let timestamp = io.start_timestamp + AB::F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
 
             let fields = [
@@ -49,7 +62,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
 
         // READ
         for i in 0..WIDTH {
-            let timestamp = io.clk + AB::F::from_canonical_usize(timestamp_offset);
+            let timestamp = io.start_timestamp + AB::F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
 
             let address = if i < chunks { aux.lhs } else { aux.rhs }
@@ -68,7 +81,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
 
         // WRITE
         for i in 0..WIDTH {
-            let timestamp = io.clk + AB::F::from_canonical_usize(timestamp_offset);
+            let timestamp = io.start_timestamp + AB::F::from_canonical_usize(timestamp_offset);
             timestamp_offset += 1;
 
             let address = aux.dst + AB::F::from_canonical_usize(i);

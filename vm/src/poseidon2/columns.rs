@@ -1,4 +1,5 @@
 use p3_field::Field;
+
 use poseidon2_air::poseidon2::{
     columns::{Poseidon2Cols, Poseidon2ColsIndexMap},
     Poseidon2Air,
@@ -23,7 +24,8 @@ pub struct Poseidon2VmCols<const WIDTH: usize, T> {
 pub struct Poseidon2VmIoCols<T> {
     pub is_opcode: T,
     pub is_direct: T,
-    pub clk: T,
+    pub pc: T,
+    pub start_timestamp: T,
     pub a: T,
     pub b: T,
     pub c: T,
@@ -80,14 +82,15 @@ impl<const WIDTH: usize, T: Field> Poseidon2VmCols<WIDTH, T> {
 
 impl<T: Clone> Poseidon2VmIoCols<T> {
     pub fn get_width() -> usize {
-        9
+        10
     }
 
     pub fn flatten(&self) -> Vec<T> {
         vec![
             self.is_opcode.clone(),
             self.is_direct.clone(),
-            self.clk.clone(),
+            self.pc.clone(),
+            self.start_timestamp.clone(),
             self.a.clone(),
             self.b.clone(),
             self.c.clone(),
@@ -101,13 +104,14 @@ impl<T: Clone> Poseidon2VmIoCols<T> {
         Self {
             is_opcode: slice[0].clone(),
             is_direct: slice[1].clone(),
-            clk: slice[2].clone(),
-            a: slice[3].clone(),
-            b: slice[4].clone(),
-            c: slice[5].clone(),
-            d: slice[6].clone(),
-            e: slice[7].clone(),
-            cmp: slice[8].clone(),
+            pc: slice[2].clone(),
+            start_timestamp: slice[3].clone(),
+            a: slice[4].clone(),
+            b: slice[5].clone(),
+            c: slice[6].clone(),
+            d: slice[7].clone(),
+            e: slice[8].clone(),
+            cmp: slice[9].clone(),
         }
     }
 }
@@ -116,7 +120,8 @@ impl<T: Field> Poseidon2VmIoCols<T> {
         Self {
             is_opcode: T::zero(),
             is_direct: T::zero(),
-            clk: T::zero(),
+            pc: T::zero(),
+            start_timestamp: T::zero(),
             a: T::zero(),
             b: T::zero(),
             c: T::zero(),
@@ -130,7 +135,8 @@ impl<T: Field> Poseidon2VmIoCols<T> {
         Self {
             is_opcode: T::zero(),
             is_direct: T::one(),
-            clk: T::zero(),
+            pc: T::zero(),
+            start_timestamp: T::zero(),
             a: T::zero(),
             b: T::zero(),
             c: T::zero(),

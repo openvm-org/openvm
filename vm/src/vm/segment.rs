@@ -11,13 +11,12 @@ use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
     rap::AnyRap,
 };
-use poseidon2_air::poseidon2::Poseidon2Config;
 
 use crate::{
     arch::chips::MachineChip,
     cpu::{
-        CpuChip, CpuOptions, IS_LESS_THAN_BUS, POSEIDON2_BUS, RANGE_CHECKER_BUS,
-        trace::ExecutionError,
+        CpuChip, CpuOptions, trace::ExecutionError
+        ,
     },
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
@@ -53,7 +52,8 @@ pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
 impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(config: VmConfig, program: Program<F>, state: VirtualMachineState<F>) -> Self {
-        let decomp = config.decomp;
+        todo!()
+        /*let decomp = config.decomp;
         let limb_bits = config.limb_bits;
 
         let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, 1 << decomp));
@@ -62,7 +62,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
         let program_chip = ProgramChip::new(program);
         let memory_chip = MemoryChip::new(limb_bits, limb_bits, limb_bits, decomp, state.memory);
         let field_arithmetic_chip = FieldArithmeticChip::new();
-        let field_extension_chip = todo!(); //FieldExtensionArithmeticChip::new();
+        let field_extension_chip = FieldExtensionArithmeticChip::new();
         let poseidon2_chip = Poseidon2Chip::from_poseidon2_config(
             Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
             POSEIDON2_BUS,
@@ -86,7 +86,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
             hint_stream: state.hint_stream,
             cycle_tracker: CycleTracker::new(),
             metrics: Default::default(),
-        }
+        }*/
     }
 
     pub fn options(&self) -> CpuOptions {
