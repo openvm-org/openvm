@@ -78,7 +78,6 @@ name = "afs-compiler"
 version = "0.1.0"
 dependencies = [
  "afs-derive",
- "afs-primitives",
  "afs-test-utils",
  "backtrace",
  "itertools 0.13.0",

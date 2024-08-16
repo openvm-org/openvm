@@ -1,16 +1,24 @@
 use std::borrow::Cow;
 
-use afs_compiler::{asm::AsmBuilder, ir::Var, util::execute_program};
-use afs_primitives::modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir;
-use afs_test_utils::utils::create_seeded_rng;
 use num_bigint_dig::{algorithms::mod_inverse, BigUint};
-use num_traits::{abs, signum, FromPrimitive, One, Zero};
+use num_traits::{abs, FromPrimitive, One, signum, Zero};
 use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, AbstractField};
+use p3_field::{AbstractField, extension::BinomialExtensionField};
 use rand::RngCore;
+
+use afs_compiler::{asm::AsmBuilder, ir::Var, util::execute_program};
+use afs_test_utils::utils::create_seeded_rng;
 
 #[allow(dead_code)]
 const WORD_SIZE: usize = 1;
+
+fn secp256k1_prime() -> BigUint {
+    let mut result = BigUint::one() << 256;
+    for power in [32, 9, 8, 7, 6, 4, 0] {
+        result -= BigUint::one() << power;
+    }
+    result
+}
 
 #[test]
 fn test_compiler_modular_arithmetic_1() {
@@ -44,10 +52,10 @@ fn test_compiler_modular_arithmetic_2() {
     let b_digits = (0..num_digits).map(|_| rng.next_u32()).collect();
     let b = BigUint::new(b_digits);
     // if these are not true then trace is not guaranteed to be verifiable
-    assert!(a < ModularMultiplicationBigIntAir::secp256k1_prime());
-    assert!(b < ModularMultiplicationBigIntAir::secp256k1_prime());
+    assert!(a < secp256k1_prime());
+    assert!(b < secp256k1_prime());
 
-    let r = (a.clone() * b.clone()) % ModularMultiplicationBigIntAir::secp256k1_prime();
+    let r = (a.clone() * b.clone()) % secp256k1_prime();
 
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, 4>;
@@ -135,15 +143,12 @@ impl Fraction {
         let num = BigUint::from_isize(abs(self.num)).unwrap();
         let denom = BigUint::from_isize(abs(self.denom)).unwrap();
         let mut value = num
-            * mod_inverse(
-                Cow::Borrowed(&denom),
-                Cow::Borrowed(&ModularMultiplicationBigIntAir::secp256k1_prime()),
-            )
-            .unwrap()
-            .to_biguint()
-            .unwrap();
+            * mod_inverse(Cow::Borrowed(&denom), Cow::Borrowed(&secp256k1_prime()))
+                .unwrap()
+                .to_biguint()
+                .unwrap();
         if sign == -1 {
-            value = ModularMultiplicationBigIntAir::secp256k1_prime() - value;
+            value = secp256k1_prime() - value;
         }
         value
     }
