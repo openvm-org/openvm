@@ -11,7 +11,7 @@ use p3_matrix::Matrix;
 use crate::{
     modular_multiplication::{
         air::{constrain_limbs, range_check},
-        modular_multiplication_bigint::columns::ModularMultiplicationBigIntCols,
+        bigint::columns::ModularMultiplicationBigIntCols,
         trace::{big_uint_to_bits, take_limb},
         FullLimbs, LimbDimensions,
     },

@@ -1,9 +1,9 @@
 use std::cmp::min;
 
 pub mod air;
+pub mod bigint;
 pub mod columns;
-pub mod modular_multiplication_bigint;
-//pub mod modular_multiplication_primes;
+//pub mod cast_primes;
 pub mod trace;
 
 pub struct LimbDimensions {

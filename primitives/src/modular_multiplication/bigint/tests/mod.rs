@@ -8,7 +8,7 @@ use p3_field::AbstractField;
 use rand::RngCore;
 
 use crate::{
-    modular_multiplication::modular_multiplication_bigint::{
+    modular_multiplication::bigint::{
         air::ModularMultiplicationBigIntAir, columns::ModularMultiplicationBigIntCols,
     },
     range_gate::RangeCheckerGateChip,

@@ -8,10 +8,8 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
     modular_multiplication::{
+        bigint::{air::ModularMultiplicationBigIntAir, columns::ModularMultiplicationBigIntCols},
         columns::ModularMultiplicationCols,
-        modular_multiplication_bigint::{
-            air::ModularMultiplicationBigIntAir, columns::ModularMultiplicationBigIntCols,
-        },
         trace::generate_modular_multiplication_trace_row,
         FullLimbs,
     },
