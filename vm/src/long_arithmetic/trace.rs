@@ -1,13 +1,50 @@
-use p3_field::PrimeField64;
+use p3_field::{Field, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::{columns::LongAdditionCols, LongAdditionChip};
+use super::{
+    air::LongArithmeticAir,
+    columns::{LongArithmeticAuxCols, LongArithmeticCols, LongArithmeticIoCols},
+    num_limbs, LongArithmeticChip, LongArithmeticOperation,
+};
+use crate::cpu::OpCode;
 
-impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongAdditionChip<ARG_SIZE, LIMB_SIZE> {
-    // TODO: move it to the proper place once we add opcodes and stuff
+pub fn create_row_from_values<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Field>(
+    opcode: OpCode,
+    x: &[u32],
+    y: &[u32],
+    sum: &[u32],
+    carry: &[u32],
+) -> Vec<T> {
+    let base_op = LongArithmeticAir::<ARG_SIZE, LIMB_SIZE>::BASE_OP;
+    LongArithmeticCols::<ARG_SIZE, LIMB_SIZE, T> {
+        io: LongArithmeticIoCols {
+            rcv_count: T::one(),
+            opcode: T::from_canonical_u8(opcode as u8),
+            x_limbs: x.iter().map(|x| T::from_canonical_u32(*x)).collect(),
+            y_limbs: y.iter().map(|x| T::from_canonical_u32(*x)).collect(),
+            z_limbs: sum.iter().map(|x| T::from_canonical_u32(*x)).collect(),
+        },
+        aux: LongArithmeticAuxCols {
+            opcode_lo: T::from_canonical_u8((opcode as u8 - base_op) & 1u8),
+            opcode_hi: T::from_canonical_u8((opcode as u8 - base_op) >> 1),
+            carry: carry.iter().map(|x| T::from_canonical_u32(*x)).collect(),
+        },
+    }
+    .flatten()
+}
+
+impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticChip<ARG_SIZE, LIMB_SIZE> {
     // return the sum and the carry
+    fn calculate(opcode: OpCode, x: &[u32], y: &[u32]) -> (Vec<u32>, Vec<u32>) {
+        match opcode {
+            OpCode::ADD => Self::calc_sum(x, y),
+            OpCode::SUB => Self::calc_diff(x, y),
+            _ => unreachable!(),
+        }
+    }
+
     fn calc_sum(x: &[u32], y: &[u32]) -> (Vec<u32>, Vec<u32>) {
-        let num_limbs = (ARG_SIZE + LIMB_SIZE - 1) / LIMB_SIZE; // TODO: bad duplication, maybe move somewhere else
+        let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
         let mut result = vec![0u32; num_limbs];
         let mut carry = vec![0u32; num_limbs];
         for i in 0..num_limbs {
@@ -18,36 +55,52 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongAdditionChip<ARG_SIZE, L
         (result, carry)
     }
 
+    fn calc_diff(x: &[u32], y: &[u32]) -> (Vec<u32>, Vec<u32>) {
+        let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
+        let mut result = vec![0u32; num_limbs];
+        let mut carry = vec![0u32; num_limbs];
+        for i in 0..num_limbs {
+            result[i] = x[i] - y[i] - if i > 0 { carry[i - 1] } else { 0 };
+            if result[i] >= (1 << LIMB_SIZE) {
+                result[i] += 1 << LIMB_SIZE;
+                carry[i] = 1;
+            }
+        }
+        (result, carry)
+    }
+
     pub fn generate_trace<F: PrimeField64>(&self) -> RowMajorMatrix<F> {
         let rows = self
             .operations
             .iter()
-            .map(|(x, y)| {
-                let (sum, carry) = Self::calc_sum(x, y);
+            .map(|operation: &LongArithmeticOperation| {
+                let (opcode, x, y) = (operation.opcode, &operation.operand1, &operation.operand2);
+                let (sum, carry) = Self::calculate(opcode, x, y);
                 assert!(ARG_SIZE % LIMB_SIZE == 0);
                 for z in &sum {
                     self.range_checker_chip.add_count(*z);
                 }
-                [x, y, &sum, &carry]
-                    .into_iter()
-                    .flatten()
-                    .map(|x| F::from_canonical_u32(*x))
-                    .collect::<Vec<_>>()
+                create_row_from_values::<ARG_SIZE, LIMB_SIZE, F>(opcode, x, y, &sum, &carry)
             })
             .collect::<Vec<_>>();
 
-        let width = LongAdditionCols::<ARG_SIZE, LIMB_SIZE, F>::get_width();
         let height = rows.len();
         let padded_height = height.next_power_of_two();
 
-        for _ in
-            0..(padded_height - height) * LongAdditionCols::<ARG_SIZE, LIMB_SIZE, F>::num_limbs()
-        {
-            self.range_checker_chip.add_count(0);
-        }
+        let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
+
+        let blank_row = create_row_from_values::<ARG_SIZE, LIMB_SIZE, F>(
+            OpCode::ADD, // TODO: why we have BASE_OP then
+            &vec![0u32; num_limbs],
+            &vec![0u32; num_limbs],
+            &vec![0u32; num_limbs],
+            &vec![0u32; num_limbs],
+        );
+        // set rcv_count to 0
+        let blank_row = [vec![F::zero()], blank_row[1..].to_vec()].concat();
+        let width = blank_row.len();
 
         let mut padded_rows = rows;
-        let blank_row = vec![F::zero(); width];
         padded_rows.extend(std::iter::repeat(blank_row).take(padded_height - height));
 
         RowMajorMatrix::new(padded_rows.concat(), width)

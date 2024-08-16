@@ -7,7 +7,12 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use rand::{rngs::StdRng, Rng};
 
-use super::LongAdditionChip;
+use super::{trace::create_row_from_values, LongArithmeticChip};
+use crate::cpu::OpCode;
+
+type F = BabyBear;
+
+const OPCODES: [OpCode; 2] = [OpCode::ADD, OpCode::SUB];
 
 fn generate_long_number<const ARG_SIZE: usize, const LIMB_SIZE: usize>(
     rng: &mut StdRng,
@@ -17,11 +22,15 @@ fn generate_long_number<const ARG_SIZE: usize, const LIMB_SIZE: usize>(
         .map(|_| rng.gen_range(0..1 << LIMB_SIZE))
         .collect()
 }
-fn generate_long_add_program<const ARG_SIZE: usize, const LIMB_SIZE: usize>(
-    chip: &mut LongAdditionChip<ARG_SIZE, LIMB_SIZE>,
+
+fn generate_long_program<const ARG_SIZE: usize, const LIMB_SIZE: usize>(
+    chip: &mut LongArithmeticChip<ARG_SIZE, LIMB_SIZE>,
     len_ops: usize,
 ) {
     let mut rng = create_seeded_rng();
+    let opcodes = (0..len_ops)
+        .map(|_| OPCODES[rng.gen_range(0..OPCODES.len())])
+        .collect();
     let operands = (0..len_ops)
         .map(|_| {
             (
@@ -30,19 +39,19 @@ fn generate_long_add_program<const ARG_SIZE: usize, const LIMB_SIZE: usize>(
             )
         })
         .collect();
-    chip.request(operands);
+    chip.request(opcodes, operands);
 }
 
 #[test]
-fn add_long_rand_air_test() {
+fn long_add_rand_air_test() {
     let len_ops: usize = 15;
     let bus_index: usize = 0;
-    let mut chip = LongAdditionChip::<256, 16>::new(bus_index);
+    let mut chip = LongArithmeticChip::<256, 16>::new(bus_index);
 
-    generate_long_add_program(&mut chip, len_ops);
+    generate_long_program(&mut chip, len_ops);
 
-    let trace = chip.generate_trace::<BabyBear>();
-    let range_trace = chip.range_checker_chip.generate_trace::<BabyBear>();
+    let trace = chip.generate_trace::<F>();
+    let range_trace = chip.range_checker_chip.generate_trace::<F>();
 
     run_simple_test_no_pis(
         vec![&chip.air, &chip.range_checker_chip.air],
@@ -55,45 +64,43 @@ fn add_long_rand_air_test() {
 // except for a single position, setup a chip and provide this trace for it.
 // The chip will do what it would normally do for this addition query,
 // except the generated trace will be what we provide.
-fn setup_bad_long_addition_test(
+fn setup_bad_long_arithmetic_test(
+    op: OpCode,
     x1: u32,
     y1: u32,
     sum1: u32,
     carry1: u32,
     pos: usize,
-) -> (LongAdditionChip<256, 16>, RowMajorMatrix<BabyBear>) {
+) -> (LongArithmeticChip<256, 16>, RowMajorMatrix<F>) {
     let bus_index: usize = 0;
-    let mut chip = LongAdditionChip::<256, 16>::new(bus_index);
+    let mut chip = LongArithmeticChip::<256, 16>::new(bus_index);
 
     let mut x = vec![0u32; 16];
     let mut y = vec![0u32; 16];
-    let mut sum = vec![0u32; 16];
-    let mut carry = vec![0u32; 16];
+    let mut sum = [0u32; 16];
+    let mut carry = [0u32; 16];
 
     x[pos] = x1;
     y[pos] = y1;
     sum[pos] = sum1;
     carry[pos] = carry1;
 
-    chip.request(vec![(x.clone(), y.clone())]);
+    chip.request(vec![op], vec![(x.clone(), y.clone())]);
 
-    chip.generate_trace::<BabyBear>();
-    let trace = [&x, &y, &sum, &carry]
-        .into_iter()
-        .flatten()
-        .map(|&x| BabyBear::from_canonical_u32(x))
-        .collect::<Vec<_>>();
-    let trace = RowMajorMatrix::new(trace, 64);
+    chip.generate_trace::<F>();
+    let trace = create_row_from_values::<256, 16, F>(op, &x, &y, &sum, &carry);
+    let width = trace.len();
+    let trace = RowMajorMatrix::new(trace, width);
 
     (chip, trace)
 }
 
-fn run_bad_long_addition_test(
-    chip: &LongAdditionChip<256, 16>,
-    trace: RowMajorMatrix<BabyBear>,
+fn run_bad_long_arithmetic_test(
+    chip: &LongArithmeticChip<256, 16>,
+    trace: RowMajorMatrix<F>,
     expected_error: VerificationError,
 ) {
-    let range_trace = chip.range_checker_chip.generate_trace::<BabyBear>();
+    let range_trace = chip.range_checker_chip.generate_trace::<F>();
 
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
@@ -109,36 +116,35 @@ fn run_bad_long_addition_test(
 }
 
 #[test]
-fn add_long_wrong_carry_air_test() {
-    let (chip, trace) = setup_bad_long_addition_test(1, 1, 3, 1, 1);
-    run_bad_long_addition_test(&chip, trace, VerificationError::OodEvaluationMismatch);
+fn long_add_wrong_carry_air_test() {
+    let (chip, trace) = setup_bad_long_arithmetic_test(OpCode::ADD, 1, 1, 3, 1, 1);
+    run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
 }
 
 #[test]
-fn add_long_out_of_range_air_test() {
-    let (chip, trace) = setup_bad_long_addition_test(65_000, 65_000, 130_000, 0, 1);
-    run_bad_long_addition_test(&chip, trace, VerificationError::NonZeroCumulativeSum);
+fn long_add_out_of_range_air_test() {
+    let (chip, trace) = setup_bad_long_arithmetic_test(OpCode::ADD, 65_000, 65_000, 130_000, 0, 1);
+    run_bad_long_arithmetic_test(&chip, trace, VerificationError::NonZeroCumulativeSum);
 }
 
 #[test]
-fn add_long_wrong_addition_air_test() {
-    let (chip, trace) = setup_bad_long_addition_test(65_000, 65_000, 130_000 - (1 << 16), 0, 1);
-    run_bad_long_addition_test(&chip, trace, VerificationError::OodEvaluationMismatch);
+fn long_add_wrong_addition_air_test() {
+    let (chip, trace) =
+        setup_bad_long_arithmetic_test(OpCode::ADD, 65_000, 65_000, 130_000 - (1 << 16), 0, 1);
+    run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
 }
 
 // We NEED to check that the carry is 0 or 1
 #[test]
-fn add_long_invalid_carry_air_test() {
-    let bad_carry = BabyBear::from_canonical_u32(1 << 16)
-        .inverse()
-        .as_canonical_u32();
+fn long_add_invalid_carry_air_test() {
+    let bad_carry = F::from_canonical_u32(1 << 16).inverse().as_canonical_u32();
     let bus_index: usize = 0;
-    let chip = LongAdditionChip::<256, 16>::new(bus_index);
+    let chip = LongArithmeticChip::<256, 16>::new(bus_index);
 
-    let mut x = vec![0u32; 16];
-    let mut y = vec![0u32; 16];
+    let mut x = [0u32; 16];
+    let mut y = [0u32; 16];
     let mut sum = vec![0u32; 16];
-    let mut carry = vec![0u32; 16];
+    let mut carry = [0u32; 16];
 
     x[15] = 1;
     y[15] = 1;
@@ -149,12 +155,10 @@ fn add_long_invalid_carry_air_test() {
         chip.range_checker_chip.add_count(*z);
     }
 
-    let trace = [&x, &y, &sum, &carry]
-        .into_iter()
-        .flatten()
-        .map(|&x| BabyBear::from_canonical_u32(x))
-        .collect::<Vec<_>>();
-    let trace = RowMajorMatrix::new(trace, 64);
+    let op = OpCode::ADD;
+    let trace = create_row_from_values::<256, 16, F>(op, &x, &y, &sum, &carry);
+    let width = trace.len();
+    let trace = RowMajorMatrix::new(trace, width);
 
-    run_bad_long_addition_test(&chip, trace, VerificationError::OodEvaluationMismatch);
+    run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
 }
