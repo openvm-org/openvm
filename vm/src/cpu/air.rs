@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::{array::from_fn, borrow::Borrow};
 
 use afs_primitives::{
     is_equal_vec::{columns::IsEqualVecIoCols, IsEqualVecAir},
@@ -12,7 +12,7 @@ use p3_matrix::Matrix;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    max_accesses_per_instruction, CpuOptions,
+    timestamp_delta, CpuOptions,
     OpCode::*,
     CPU_MAX_READS_PER_CYCLE, FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH,
 };
@@ -39,11 +39,12 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
     fn assert_compose<AB: AirBuilder>(
         &self,
         builder: &mut AB,
-        word: [AB::Var; WORD_SIZE],
+        word: [impl Into<AB::Expr>; WORD_SIZE],
         field_elem: AB::Expr,
     ) {
-        builder.assert_eq(word[0], field_elem);
-        for &cell in word.iter().take(WORD_SIZE).skip(1) {
+        let mut iter = word.into_iter();
+        builder.assert_eq(iter.next().unwrap(), field_elem);
+        for cell in iter.take(WORD_SIZE - 1) {
             builder.assert_zero(cell);
         }
     }
@@ -81,6 +82,8 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
             op_c: c,
             d,
             e,
+            op_f: f,
+            op_g: g,
         } = io;
         let CpuIoCols {
             timestamp: next_timestamp,
@@ -98,6 +101,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
 
         let read1 = &accesses[0];
         let read2 = &accesses[1];
+        let read3 = &accesses[2];
         let write = &accesses[CPU_MAX_READS_PER_CYCLE];
 
         // assert that the start pc is correct
@@ -121,9 +125,10 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         // keep track of when memory accesses should be enabled
         let mut read1_enabled_check = AB::Expr::zero();
         let mut read2_enabled_check = AB::Expr::zero();
+        let mut read3_enabled_check = AB::Expr::zero();
         let mut write_enabled_check = AB::Expr::zero();
 
-        // LOADW: d[a] <- e[d[c] + b]
+        // LOADW: d[a] <- e[d[c] + b + d[f] * g]
         let loadw_flag = operation_flags[&LOADW];
         read1_enabled_check = read1_enabled_check + loadw_flag;
         read2_enabled_check = read2_enabled_check + loadw_flag;
@@ -139,6 +144,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
 
         when_loadw.assert_eq(write.address_space, d);
         when_loadw.assert_eq(write.address, a);
+
         for i in 0..WORD_SIZE {
             when_loadw.assert_eq(write.data[i], read2.data[i]);
         }
@@ -162,6 +168,64 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
 
         when_storew.assert_eq(write.address_space, e);
         self.assert_compose(&mut when_storew, read1.data, write.address - b);
+        for i in 0..WORD_SIZE {
+            when_storew.assert_eq(write.data[i], read2.data[i]);
+        }
+
+        when_storew
+            .when_transition()
+            .assert_eq(next_pc, pc + inst_width);
+
+        // LOADW2: d[a] <- e[d[c] + b + mem[f] * g]
+        let loadw2_flag = operation_flags[&LOADW2];
+        read1_enabled_check = read1_enabled_check + loadw2_flag;
+        read2_enabled_check = read2_enabled_check + loadw2_flag;
+        read3_enabled_check = read3_enabled_check + loadw2_flag;
+        write_enabled_check = write_enabled_check + loadw2_flag;
+
+        let mut when_loadw = builder.when(loadw2_flag);
+
+        when_loadw.assert_eq(read1.address_space, d);
+        when_loadw.assert_eq(read1.address, c);
+
+        when_loadw.assert_eq(read2.address_space, d);
+        when_loadw.assert_eq(read2.address, f);
+
+        when_loadw.assert_eq(read3.address_space, e);
+        let addr_diff = from_fn::<AB::Expr, WORD_SIZE, _>(|i| read1.data[i] + g * read2.data[i]);
+        self.assert_compose(&mut when_loadw, addr_diff, read3.address - b);
+
+        when_loadw.assert_eq(write.address_space, d);
+        when_loadw.assert_eq(write.address, a);
+
+        for i in 0..WORD_SIZE {
+            when_loadw.assert_eq(write.data[i], read3.data[i]);
+        }
+
+        when_loadw
+            .when_transition()
+            .assert_eq(next_pc, pc + inst_width);
+
+        // STOREW2: e[d[c] + b + mem[f] * g] <- d[a]
+        let storew2_flag = operation_flags[&STOREW2];
+        read1_enabled_check = read1_enabled_check + storew2_flag;
+        read2_enabled_check = read2_enabled_check + storew2_flag;
+        read3_enabled_check = read3_enabled_check + storew2_flag;
+        write_enabled_check = write_enabled_check + storew2_flag;
+
+        let mut when_storew = builder.when(storew2_flag);
+        when_storew.assert_eq(read1.address_space, d);
+        when_storew.assert_eq(read1.address, c);
+
+        when_storew.assert_eq(read2.address_space, d);
+        when_storew.assert_eq(read2.address, a);
+
+        when_storew.assert_eq(read3.address_space, d);
+        when_storew.assert_eq(read3.address, f);
+
+        when_storew.assert_eq(write.address_space, e);
+        let addr_diff = from_fn::<AB::Expr, WORD_SIZE, _>(|i| read1.data[i] + g * read3.data[i]);
+        self.assert_compose(&mut when_storew, addr_diff, write.address - b);
         for i in 0..WORD_SIZE {
             when_storew.assert_eq(write.data[i], read2.data[i]);
         }
@@ -294,11 +358,11 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
             write_enabled_check += arithmetic_flags.clone();
             let mut when_arithmetic = builder.when(arithmetic_flags);
 
-            // read from d[b] and e[c]
-            when_arithmetic.assert_eq(read1.address_space, d);
+            // read from e[b] and f[c]
+            when_arithmetic.assert_eq(read1.address_space, e);
             when_arithmetic.assert_eq(read1.address, b);
 
-            when_arithmetic.assert_eq(read2.address_space, e);
+            when_arithmetic.assert_eq(read2.address_space, f);
             when_arithmetic.assert_eq(read2.address, c);
 
             // write to d[a]
@@ -349,7 +413,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
             if opcode != TERMINATE && opcode != NOP {
                 builder.when(flag).assert_eq(
                     next_timestamp,
-                    timestamp + AB::F::from_canonical_usize(max_accesses_per_instruction(opcode)),
+                    timestamp + AB::F::from_canonical_usize(timestamp_delta(opcode)),
                 )
             }
         }
@@ -363,6 +427,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         // check accesses enabled
         builder.assert_eq(read1.enabled, read1_enabled_check);
         builder.assert_eq(read2.enabled, read2_enabled_check);
+        builder.assert_eq(read3.enabled, read3_enabled_check);
         builder.assert_eq(write.enabled, write_enabled_check);
 
         // Turn on all interactions

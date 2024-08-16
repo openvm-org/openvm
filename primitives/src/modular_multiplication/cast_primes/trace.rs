@@ -9,7 +9,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
     modular_multiplication::{
-        modular_multiplication_primes::{
+        cast_primes::{
             air::ModularMultiplicationPrimesAir,
             columns::{ModularMultiplicationPrimesCols, SmallModulusSystemCols},
         },

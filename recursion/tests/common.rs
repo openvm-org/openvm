@@ -2,7 +2,7 @@ use afs_compiler::util::execute_and_prove_program;
 use afs_recursion::{
     hints::{Hintable, InnerVal},
     stark::{sort_chips, DynRapForRecursion, VerifierProgram},
-    types::{new_from_multi_vk, InnerConfig, VerifierInput},
+    types::{new_from_inner_multi_vk, InnerConfig, VerifierInput},
 };
 use afs_stark_backend::{
     keygen::types::MultiStarkVerifyingKey,
@@ -91,7 +91,7 @@ pub fn build_verification_program(
         fri_params,
     } = vparams;
 
-    let advice = new_from_multi_vk(&vk);
+    let advice = new_from_inner_multi_vk(&vk);
     let program = VerifierProgram::build(rec_raps, advice, &fri_params);
 
     let log_degree_per_air = proof
@@ -126,5 +126,6 @@ pub fn run_recursive_test(
     let vparams = make_verification_params(&any_raps, traces, &pvs, fri_params);
 
     let (program, witness_stream) = build_verification_program(rec_raps, pvs, vparams);
+    // execute_program::<1>(program, witness_stream);
     execute_and_prove_program::<1>(program, witness_stream);
 }

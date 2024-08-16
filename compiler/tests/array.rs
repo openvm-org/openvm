@@ -189,10 +189,10 @@ fn test_array_eq() {
     type EF = BinomialExtensionField<BabyBear, 4>;
 
     let mut builder = AsmBuilder::<F, EF>::default();
-    let mut arr1: Array<_, Var<_>> = builder.array(2);
+    let mut arr1: Array<_, Var<_>> = builder.dyn_array(2);
     builder.set(&mut arr1, 0, F::one());
     builder.set(&mut arr1, 1, F::two());
-    let mut arr2: Array<_, Var<_>> = builder.array(2);
+    let mut arr2: Array<_, Var<_>> = builder.dyn_array(2);
     builder.set(&mut arr2, 0, F::one());
     builder.set(&mut arr2, 1, F::two());
     builder.assert_var_array_eq(&arr1, &arr2);
@@ -210,10 +210,10 @@ fn test_array_eq_neg() {
     type EF = BinomialExtensionField<BabyBear, 4>;
 
     let mut builder = AsmBuilder::<F, EF>::default();
-    let mut arr1: Array<_, Var<_>> = builder.array(2);
+    let mut arr1: Array<_, Var<_>> = builder.dyn_array(2);
     builder.set(&mut arr1, 0, F::one());
     builder.set(&mut arr1, 1, F::two());
-    let mut arr2: Array<_, Var<_>> = builder.array(2);
+    let mut arr2: Array<_, Var<_>> = builder.dyn_array(2);
     builder.set(&mut arr2, 0, F::one());
     builder.set(&mut arr2, 1, F::one());
     builder.assert_var_array_eq(&arr1, &arr2);

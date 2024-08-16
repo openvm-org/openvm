@@ -9,7 +9,7 @@ use rand::RngCore;
 use afs_test_utils::{config::baby_bear_blake3::run_simple_test_no_pis, utils::create_seeded_rng};
 
 use crate::{
-    modular_multiplication::modular_multiplication_bigint::{
+    modular_multiplication::bigint::{
         air::ModularMultiplicationBigIntAir, columns::ModularMultiplicationBigIntCols,
     },
     range_gate::RangeCheckerGateChip,

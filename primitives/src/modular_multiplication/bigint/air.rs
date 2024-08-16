@@ -11,7 +11,7 @@ use p3_matrix::Matrix;
 use crate::{
     modular_multiplication::{
         air::{constrain_limbs, range_check},
-        modular_multiplication_bigint::columns::ModularMultiplicationBigIntCols,
+        bigint::columns::ModularMultiplicationBigIntCols,
         trace::{big_uint_to_bits, take_limb},
         FullLimbs, LimbDimensions,
     },
@@ -34,6 +34,7 @@ pub struct ModularMultiplicationBigIntAir {
 }
 
 impl ModularMultiplicationBigIntAir {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         modulus: BigUint,
         total_bits: usize,
@@ -47,7 +48,7 @@ impl ModularMultiplicationBigIntAir {
     ) -> Self {
         assert_eq!(repr_bits % max_limb_bits, 0);
         // `total_bits` should be sufficient to represent numbers 0..`modulus`
-        assert!(total_bits >= (modulus.clone() - BigUint::one()).bits() as usize);
+        assert!(total_bits >= (modulus.clone() - BigUint::one()).bits());
         assert!(max_limb_bits <= decomp);
         assert!(carry_bits <= decomp);
 
@@ -116,7 +117,7 @@ impl AirConfig for ModularMultiplicationBigIntAir {
 
 impl<F: Field> BaseAir<F> for ModularMultiplicationBigIntAir {
     fn width(&self) -> usize {
-        ModularMultiplicationBigIntCols::<F>::get_width(&self)
+        ModularMultiplicationBigIntCols::<F>::get_width(self)
     }
 }
 
@@ -124,7 +125,7 @@ impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationBigIntAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let local = ModularMultiplicationBigIntCols::<AB::Var>::from_slice(&local, &self);
+        let local = ModularMultiplicationBigIntCols::<AB::Var>::from_slice(&local, self);
         self.eval(builder, local);
     }
 }

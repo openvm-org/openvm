@@ -83,10 +83,14 @@ p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa"
 p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" } # the "parallel" feature is NOT on by default to allow single-threaded benchmarking
 p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
+
+snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier", branch = "chore/ruint-pin", default-features = false, features = ["loader_halo2", "halo2-axiom", "display"] }
 zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
 
 itertools = "0.13.0"
 rayon = "1.10"
+serde = { version = "1.0.201", features = ["derive"] }
+serde_json = "1.0.117"
 tracing = "0.1.37"
 
 # For local development. Add to your `.cargo/config.toml`

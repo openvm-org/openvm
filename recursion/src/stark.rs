@@ -27,7 +27,7 @@ use p3_matrix::{
 use stark_vm::{program::Program, vm::ExecutionSegment};
 
 use crate::{
-    challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger},
+    challenger::{duplex::DuplexChallengerVariable, ChallengerVariable},
     commit::{PcsVariable, PolynomialSpaceVariable},
     folder::RecursiveVerifierConstraintFolder,
     fri::{
@@ -159,7 +159,7 @@ where
         pcs: &TwoAdicFriPcsVariable<C>,
         raps: Vec<&dyn DynRapForRecursion<C>>,
         vk: MultiStarkVerificationAdvice<C>,
-        challenger: &mut DuplexChallengerVariable<C>,
+        challenger: &mut impl ChallengerVariable<C>,
         input: &VerifierInputVariable<C>,
     ) where
         C::F: TwoAdicField,
@@ -191,8 +191,8 @@ where
 
         for i in 0..num_airs {
             if let Some(preprocessed_data) = vk.per_air[i].preprocessed_data.as_ref() {
-                let commit: Array<C, Felt<_>> = builder.constant(preprocessed_data.commit.clone());
-                challenger.observe(builder, commit);
+                let commit = builder.constant(preprocessed_data.commit.clone());
+                challenger.observe_digest(builder, commit);
             }
         }
 
@@ -205,10 +205,11 @@ where
         // Observe main trace commitments
         for i in 0..vk.num_main_trace_commitments {
             let main_commit = builder.get(main_trace_commits, i);
-            challenger.observe(builder, main_commit.clone());
+            challenger.observe_digest(builder, main_commit.clone());
         }
 
         let mut challenges = Vec::new();
+        let mut exposed_values_by_air = vec![vec![vec![]; num_phases]; num_airs];
         for phase_idx in 0..num_phases {
             let num_to_sample: usize = 2;
 
@@ -223,12 +224,14 @@ where
             );
 
             // For each RAP, the exposed values in the current phase
-            for j in 0..num_airs {
+            for (j, exposed_values_after_challenge) in exposed_values_by_air.iter_mut().enumerate()
+            {
                 let exposed_values = builder.get(&proof.exposed_values_after_challenge, j);
                 let values = builder.get(&exposed_values, phase_idx);
                 let values_len = vk.per_air[j].num_exposed_values_after_challenge[phase_idx];
                 for k in 0..values_len {
                     let value = builder.get(&values, k);
+                    exposed_values_after_challenge[phase_idx].push(value);
                     let felts = builder.ext2felt(value);
                     challenger.observe_slice(builder, felts);
                 }
@@ -236,13 +239,13 @@ where
 
             // Observe single commitment to all trace matrices in this phase.
             let commit = builder.get(after_challenge_commits, phase_idx);
-            challenger.observe(builder, commit);
+            challenger.observe_digest(builder, commit);
         }
 
         let alpha = challenger.sample_ext(builder);
         // builder.print_e(alpha);
 
-        challenger.observe(builder, quotient_commit.clone());
+        challenger.observe_digest(builder, quotient_commit.clone());
 
         let zeta = challenger.sample_ext(builder);
         // builder.print_e(zeta);
@@ -509,20 +512,6 @@ where
             // Get the domains from the chip itself.
             let qc_domains = quotient_domain.split_domains_const(builder, log_quotient_degree);
 
-            // Get the exposed values after challenge.
-            let mut exposed_values_after_challenge = Vec::new();
-
-            let exposed_values = builder.get(&proof.exposed_values_after_challenge, index);
-            for j in 0..air_const.num_exposed_values_after_challenge.len() {
-                let values = builder.get(&exposed_values, j);
-                let mut values_vec = Vec::new();
-                for k in 0..air_const.num_exposed_values_after_challenge[j] {
-                    let value = builder.get(&values, k);
-                    values_vec.push(value);
-                }
-                exposed_values_after_challenge.push(values_vec);
-            }
-
             let pvs = builder.get(public_values, index);
             Self::verify_single_rap_constraints(
                 builder,
@@ -538,7 +527,7 @@ where
                 alpha,
                 after_challenge_values,
                 &challenges,
-                &exposed_values_after_challenge,
+                &exposed_values_by_air[index],
                 air_const.interaction_chunk_size,
             );
         }

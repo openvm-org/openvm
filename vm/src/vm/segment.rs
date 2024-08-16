@@ -4,7 +4,7 @@ use std::{
 };
 
 use afs_primitives::{
-    modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir,
+    modular_multiplication::bigint::air::ModularMultiplicationBigIntAir,
     range_gate::RangeCheckerGateChip,
 };
 use afs_stark_backend::{

@@ -8,10 +8,8 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
     modular_multiplication::{
+        bigint::{air::ModularMultiplicationBigIntAir, columns::ModularMultiplicationBigIntCols},
         columns::ModularMultiplicationCols,
-        modular_multiplication_bigint::{
-            air::ModularMultiplicationBigIntAir, columns::ModularMultiplicationBigIntCols,
-        },
         trace::generate_modular_multiplication_trace_row,
         FullLimbs,
     },
@@ -100,7 +98,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationBigIntA
                     self.carry_bits,
                     (carry + (self.carry_min_value_abs as isize)) as usize,
                 );
-                F::from_canonical_usize(carry.abs() as usize)
+                F::from_canonical_usize(carry.unsigned_abs())
                     * if carry >= 0 { F::one() } else { F::neg_one() }
             })
             .collect();

@@ -103,6 +103,8 @@ pub struct BuilderFlags {
     pub(crate) static_loop: bool,
     /// If true, panic when `builder.break_loop` is called.
     pub(crate) disable_break: bool,
+    /// If true, branching/looping/heap memory is disabled.
+    pub static_only: bool,
 }
 
 /// A builder for the DSL.
@@ -116,8 +118,8 @@ pub struct Builder<C: Config> {
     pub(crate) witness_var_count: u32,
     pub(crate) witness_felt_count: u32,
     pub(crate) witness_ext_count: u32,
-    pub(crate) flags: BuilderFlags,
-    pub(crate) is_sub_builder: bool,
+    pub flags: BuilderFlags,
+    pub is_sub_builder: bool,
 }
 
 impl<C: Config> Builder<C> {
@@ -337,6 +339,19 @@ impl<C: Config> Builder<C> {
         }
     }
 
+    /// Evaluate a block of operations repeatedly (until a break).
+    pub fn do_loop(&mut self, mut f: impl FnMut(&mut Builder<C>) -> Result<(), BreakLoop>) {
+        let mut loop_body_builder =
+            Builder::<C>::new_sub_builder(self.stack_ptr, self.nb_public_values, self.flags);
+
+        f(&mut loop_body_builder).expect("should not be break issues in dynamic loop");
+
+        let loop_instructions = loop_body_builder.operations;
+
+        let op = DslIr::Loop(loop_instructions);
+        self.operations.push(op);
+    }
+
     /// Break out of a loop.
     pub fn break_loop(&mut self) -> Result<(), BreakLoop> {
         if self.flags.disable_break {
@@ -419,10 +434,6 @@ impl<C: Config> Builder<C> {
         self.load(vlen, ptr, index);
 
         let arr = self.dyn_array(vlen);
-        let ptr = match arr {
-            Array::Dyn(ptr, _) => ptr,
-            Array::Fixed(_) => unreachable!(),
-        };
 
         // Write the content hints directly into the array memory.
         self.range(0, vlen).for_each(|i, builder| {
@@ -431,7 +442,9 @@ impl<C: Config> Builder<C> {
                 offset: 0,
                 size: 1,
             };
-            builder.operations.push(DslIr::StoreHintWord(ptr, index));
+            builder
+                .operations
+                .push(DslIr::StoreHintWord(arr.ptr(), index));
         });
 
         arr
@@ -609,6 +622,10 @@ impl<'a, C: Config> IfBuilder<'a, C> {
             }
             _ => (),
         }
+        assert!(
+            !self.builder.flags.static_only,
+            "Cannot use dynamic branch in static mode"
+        );
 
         // Execute the `then` block and collect the instructions.
         let mut f_builder = Builder::<C>::new_sub_builder(
@@ -683,6 +700,10 @@ impl<'a, C: Config> IfBuilder<'a, C> {
             }
             _ => (),
         }
+        assert!(
+            !self.builder.flags.static_only,
+            "Cannot use dynamic branch in static mode"
+        );
         let mut then_builder = Builder::<C>::new_sub_builder(
             self.builder.stack_ptr,
             self.builder.nb_public_values,
@@ -858,6 +879,10 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
         &mut self,
         mut f: impl FnMut(RVar<C::N>, &mut Builder<C>) -> Result<(), BreakLoop>,
     ) {
+        assert!(
+            !self.builder.flags.static_only,
+            "Cannot use dynamic loop in static mode"
+        );
         let step_size = C::N::from_canonical_usize(self.step_size);
         let loop_variable: Var<C::N> = self.builder.uninit();
         let mut loop_body_builder = Builder::<C>::new_sub_builder(

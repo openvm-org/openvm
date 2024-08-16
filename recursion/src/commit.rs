@@ -1,7 +1,10 @@
 use afs_compiler::ir::{Array, Builder, Config, Ext, FromConstant, RVar};
 use p3_commit::{LagrangeSelectors, PolynomialSpace};
 
-use crate::fri::types::{FriConfigVariable, TwoAdicPcsRoundVariable};
+use crate::{
+    challenger::ChallengerVariable,
+    fri::types::{FriConfigVariable, TwoAdicPcsRoundVariable},
+};
 
 pub trait PolynomialSpaceVariable<C: Config>: Sized + FromConstant<C> {
     type Constant: PolynomialSpace<Val = C::F>;
@@ -33,7 +36,7 @@ pub trait PolynomialSpaceVariable<C: Config>: Sized + FromConstant<C> {
     ) -> Self;
 }
 
-pub trait PcsVariable<C: Config, Challenger> {
+pub trait PcsVariable<C: Config> {
     type Domain: PolynomialSpaceVariable<C>;
 
     type Commitment;
@@ -51,6 +54,6 @@ pub trait PcsVariable<C: Config, Challenger> {
         builder: &mut Builder<C>,
         rounds: Array<C, TwoAdicPcsRoundVariable<C>>,
         proof: Self::Proof,
-        challenger: &mut Challenger,
+        challenger: &mut impl ChallengerVariable<C>,
     );
 }

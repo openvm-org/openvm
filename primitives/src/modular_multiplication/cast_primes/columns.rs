@@ -1,8 +1,7 @@
 use p3_field::Field;
 
 use crate::modular_multiplication::{
-    columns::ModularMultiplicationCols,
-    modular_multiplication_primes::air::ModularMultiplicationPrimesAir,
+    cast_primes::air::ModularMultiplicationPrimesAir, columns::ModularMultiplicationCols,
 };
 
 // a * b = (p * q) + r
