@@ -4,18 +4,13 @@ use std::{
     fmt::Display,
 };
 
-use afs_primitives::{
-    is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
-};
 use p3_field::{Field, PrimeField32, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::{
-    columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
-    timestamp_delta, CpuChip, ExecutionState,
-    OpCode::{self, *},
-    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
+use afs_primitives::{
+    is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
+
 use crate::{
     cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
     field_extension::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticChip},
@@ -24,6 +19,13 @@ use crate::{
     poseidon2::{columns::Poseidon2VmCols, Poseidon2Chip},
     program::columns::ProgramPreprocessedCols,
     vm::ExecutionSegment,
+};
+
+use super::{
+    columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
+    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE,
+    CpuChip,
+    ExecutionState, INST_WIDTH, OpCode::{self, *}, timestamp_delta,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -378,7 +380,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 FE4ADD | FE4SUB | BBE4MUL | BBE4INV => {
                     FieldExtensionArithmeticChip::calculate(vm, timestamp, instruction);
                 }
-                MOD_ADD | MOD_SUB | MOD_MUL | MOD_DIV => {
+                MOD_SECP256K1_ADD | MOD_SECP256K1_SUB | MOD_SECP256K1_MUL | MOD_SECP256K1_DIV => {
                     ModularMultiplicationChip::calculate(vm, timestamp, instruction);
                 }
                 PERM_POS2 | COMP_POS2 => {

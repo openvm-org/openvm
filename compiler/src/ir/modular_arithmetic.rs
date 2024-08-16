@@ -35,7 +35,7 @@ where
         array
     }
 
-    fn mod_operation(
+    fn mod_secp256k1_operation(
         &mut self,
         left: &BigIntVar<C>,
         right: &BigIntVar<C>,
@@ -47,27 +47,27 @@ where
         dst
     }
 
-    pub fn mod_add(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) -> BigIntVar<C> {
-        self.mod_operation(left, right, DslIr::AddM)
+    pub fn mod_secp256k1_add(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) -> BigIntVar<C> {
+        self.mod_secp256k1_operation(left, right, DslIr::AddM)
     }
 
-    pub fn mod_sub(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) -> BigIntVar<C> {
-        self.mod_operation(left, right, DslIr::SubM)
+    pub fn mod_secp256k1_sub(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) -> BigIntVar<C> {
+        self.mod_secp256k1_operation(left, right, DslIr::SubM)
     }
 
-    pub fn mod_mul(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) -> BigIntVar<C> {
-        self.mod_operation(left, right, DslIr::MulM)
+    pub fn mod_secp256k1_mul(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) -> BigIntVar<C> {
+        self.mod_secp256k1_operation(left, right, DslIr::MulM)
     }
 
-    pub fn mod_div(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) -> BigIntVar<C> {
-        self.mod_operation(left, right, DslIr::DivM)
+    pub fn mod_secp256k1_div(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) -> BigIntVar<C> {
+        self.mod_secp256k1_operation(left, right, DslIr::DivM)
     }
 
-    pub fn assert_bigint_eq(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) {
+    pub fn assert_mod_secp256k1_eq(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) {
         self.assert_var_array_eq(left, right);
     }
 
-    pub fn bigint_is_zero(&mut self, bigint: &BigIntVar<C>) -> Var<C::N> {
+    pub fn mod_secp256k1_is_zero(&mut self, bigint: &BigIntVar<C>) -> Var<C::N> {
         let result = self.eval(C::N::one());
         for i in 0..NUM_ELEMS {
             let elem = self.get(bigint, i);
@@ -79,13 +79,17 @@ where
         result
     }
 
-    pub fn bigint_eq(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) -> Var<C::N> {
-        let diff = self.mod_sub(left, right);
-        self.bigint_is_zero(&diff)
+    pub fn mod_secp256k1_eq(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) -> Var<C::N> {
+        let diff = self.mod_secp256k1_sub(left, right);
+        self.mod_secp256k1_is_zero(&diff)
     }
 
-    pub fn if_bigint_eq(&mut self, left: &BigIntVar<C>, right: &BigIntVar<C>) -> IfBuilder<C> {
-        let eq = self.bigint_eq(left, right);
+    pub fn if_mod_secp256k1_eq(
+        &mut self,
+        left: &BigIntVar<C>,
+        right: &BigIntVar<C>,
+    ) -> IfBuilder<C> {
+        let eq = self.mod_secp256k1_eq(left, right);
         self.if_eq(eq, C::N::one())
     }
 }

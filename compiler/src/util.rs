@@ -1,6 +1,3 @@
-use p3_baby_bear::BabyBear;
-use p3_field::{ExtensionField, PrimeField, PrimeField32, TwoAdicField};
-
 use afs_test_utils::{
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},
@@ -9,6 +6,8 @@ use afs_test_utils::{
     },
     engine::StarkEngine,
 };
+use p3_baby_bear::BabyBear;
+use p3_field::{ExtensionField, PrimeField, PrimeField32, TwoAdicField};
 use stark_vm::{
     cpu::trace::Instruction,
     program::Program,

@@ -32,9 +32,9 @@ fn test_compiler_modular_arithmetic_1() {
 
     let a_var = builder.eval_bigint(a);
     let b_var = builder.eval_bigint(b);
-    let r_var = builder.mod_mul(&a_var, &b_var);
+    let r_var = builder.mod_secp256k1_mul(&a_var, &b_var);
     let r_check_var = builder.eval_bigint(r);
-    builder.assert_bigint_eq(&r_var, &r_check_var);
+    builder.assert_mod_secp256k1_eq(&r_var, &r_check_var);
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
@@ -62,9 +62,9 @@ fn test_compiler_modular_arithmetic_2() {
 
     let a_var = builder.eval_bigint(a);
     let b_var = builder.eval_bigint(b);
-    let r_var = builder.mod_mul(&a_var, &b_var);
+    let r_var = builder.mod_secp256k1_mul(&a_var, &b_var);
     let r_check_var = builder.eval_bigint(r);
-    builder.assert_bigint_eq(&r_var, &r_check_var);
+    builder.assert_mod_secp256k1_eq(&r_var, &r_check_var);
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
@@ -85,21 +85,25 @@ fn test_compiler_modular_arithmetic_conditional() {
 
     let a_var = builder.eval_bigint(a);
     let b_var = builder.eval_bigint(b);
-    let product_var = builder.mod_mul(&a_var, &b_var);
+    let product_var = builder.mod_secp256k1_mul(&a_var, &b_var);
     let r_var = builder.eval_bigint(r);
     let s_var = builder.eval_bigint(s);
 
     let should_be_1: Var<F> = builder.uninit();
     let should_be_2: Var<F> = builder.uninit();
 
-    builder.if_bigint_eq(&product_var, &r_var).then_or_else(
-        |builder| builder.assign(&should_be_1, F::one()),
-        |builder| builder.assign(&should_be_1, F::two()),
-    );
-    builder.if_bigint_eq(&product_var, &s_var).then_or_else(
-        |builder| builder.assign(&should_be_2, F::one()),
-        |builder| builder.assign(&should_be_2, F::two()),
-    );
+    builder
+        .if_mod_secp256k1_eq(&product_var, &r_var)
+        .then_or_else(
+            |builder| builder.assign(&should_be_1, F::one()),
+            |builder| builder.assign(&should_be_1, F::two()),
+        );
+    builder
+        .if_mod_secp256k1_eq(&product_var, &s_var)
+        .then_or_else(
+            |builder| builder.assign(&should_be_2, F::one()),
+            |builder| builder.assign(&should_be_2, F::two()),
+        );
 
     builder.assert_var_eq(should_be_1, F::one());
     builder.assert_var_eq(should_be_2, F::two());
@@ -118,9 +122,9 @@ fn test_compiler_modular_arithmetic_negative() {
     let mut builder = AsmBuilder::<F, EF>::default();
 
     let one = builder.eval_bigint(BigUint::one());
-    let one_times_one = builder.mod_mul(&one, &one);
+    let one_times_one = builder.mod_secp256k1_mul(&one, &one);
     let zero = builder.eval_bigint(BigUint::zero());
-    builder.assert_bigint_eq(&one_times_one, &zero);
+    builder.assert_mod_secp256k1_eq(&one_times_one, &zero);
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
@@ -187,8 +191,8 @@ fn test_ec_add(point_1: Point, point_2: Point, point_3: Point) {
 
     let (x3_var, y3_var) = builder.ec_add(&(x1_var, y1_var), &(x2_var, y2_var));
 
-    builder.assert_bigint_eq(&x3_var, &x3_check);
-    builder.assert_bigint_eq(&y3_var, &y3_check);
+    builder.assert_mod_secp256k1_eq(&x3_var, &x3_check);
+    builder.assert_mod_secp256k1_eq(&y3_var, &y3_check);
 
     builder.halt();
 

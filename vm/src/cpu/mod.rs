@@ -1,6 +1,7 @@
 use core::panic;
 use std::fmt;
 
+pub use air::CpuAir;
 use enum_utils::FromStr;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
@@ -18,8 +19,6 @@ pub mod air;
 pub mod bridge;
 pub mod columns;
 pub mod trace;
-
-pub use air::CpuAir;
 
 pub const INST_WIDTH: usize = 1;
 
@@ -83,10 +82,10 @@ pub enum OpCode {
     /// Phantom instruction to end tracing
     CT_END = 61,
 
-    MOD_ADD = 70,
-    MOD_SUB = 71,
-    MOD_MUL = 72,
-    MOD_DIV = 73,
+    MOD_SECP256K1_ADD = 70,
+    MOD_SECP256K1_SUB = 71,
+    MOD_SECP256K1_MUL = 72,
+    MOD_SECP256K1_DIV = 73,
 
     NOP = 100,
 }
@@ -103,7 +102,12 @@ pub const CORE_INSTRUCTIONS: [OpCode; 15] = [
 ];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
-pub const MODULAR_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [MOD_ADD, MOD_SUB, MOD_MUL, MOD_DIV];
+pub const MODULAR_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [
+    MOD_SECP256K1_ADD,
+    MOD_SECP256K1_SUB,
+    MOD_SECP256K1_MUL,
+    MOD_SECP256K1_DIV,
+];
 
 impl OpCode {
     pub fn all_opcodes() -> Vec<OpCode> {

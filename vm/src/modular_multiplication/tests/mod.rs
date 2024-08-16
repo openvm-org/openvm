@@ -1,16 +1,17 @@
-use afs_primitives::modular_multiplication::bigint::air::ModularMultiplicationBigIntAir;
-use afs_test_utils::utils::create_seeded_rng;
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::RngCore;
 
+use afs_primitives::modular_multiplication::bigint::air::ModularMultiplicationBigIntAir;
+use afs_test_utils::utils::create_seeded_rng;
+
 use crate::{
-    cpu::{trace::Instruction, OpCode::MOD_MUL},
+    cpu::{OpCode::MOD_SECP256K1_MUL, trace::Instruction},
     modular_multiplication::{bigint_to_elems, ModularMultiplicationChip},
     program::Program,
     vm::{
-        config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN},
+        config::{DEFAULT_MAX_SEGMENT_LEN, VmConfig},
         VirtualMachine,
     },
 };
@@ -101,7 +102,7 @@ fn test_modular_multiplication_runtime() {
         segment,
         mm_timestamp,
         Instruction::from_isize(
-            MOD_MUL,
+            MOD_SECP256K1_MUL,
             address1 as isize,
             address2 as isize,
             address3 as isize,

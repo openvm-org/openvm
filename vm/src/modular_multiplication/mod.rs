@@ -1,11 +1,12 @@
 use std::{borrow::Cow, collections::VecDeque};
 
-use afs_primitives::modular_multiplication::bigint::air::ModularMultiplicationBigIntAir;
 use num_bigint_dig::{algorithms::mod_inverse, BigUint};
 use p3_field::{PrimeField32, PrimeField64};
 
+use afs_primitives::modular_multiplication::bigint::air::ModularMultiplicationBigIntAir;
+
 use crate::{
-    cpu::{trace::Instruction, OpCode::*},
+    cpu::{OpCode::*, trace::Instruction},
     modular_multiplication::air::ModularMultiplicationVmAir,
     vm::ExecutionSegment,
 };
@@ -97,8 +98,8 @@ impl<F: PrimeField32> ModularMultiplicationChip<F> {
             timestamp - 1
         };
         let (op_input_2, op_result) = match instruction.opcode {
-            MOD_ADD | MOD_MUL => (instruction.op_b, instruction.op_c),
-            MOD_SUB | MOD_DIV => (instruction.op_c, instruction.op_b),
+            MOD_SECP256K1_ADD | MOD_SECP256K1_MUL => (instruction.op_b, instruction.op_c),
+            MOD_SECP256K1_SUB | MOD_SECP256K1_DIV => (instruction.op_c, instruction.op_b),
             _ => panic!(),
         };
         let address1 = vm
@@ -136,10 +137,10 @@ impl<F: PrimeField32> ModularMultiplicationChip<F> {
         let argument_1 = elems_to_bigint(argument_1_elems, repr_bits);
         let argument_2 = elems_to_bigint(argument_2_elems, repr_bits);
         let result = match instruction.opcode {
-            MOD_ADD => argument_1.clone() + argument_2.clone(),
-            MOD_SUB => argument_1.clone() + modulus.clone() - argument_2.clone(),
-            MOD_MUL => argument_1.clone() * argument_2.clone(),
-            MOD_DIV => {
+            MOD_SECP256K1_ADD => argument_1.clone() + argument_2.clone(),
+            MOD_SECP256K1_SUB => argument_1.clone() + modulus.clone() - argument_2.clone(),
+            MOD_SECP256K1_MUL => argument_1.clone() * argument_2.clone(),
+            MOD_SECP256K1_DIV => {
                 argument_1.clone()
                     * mod_inverse(Cow::Borrowed(&argument_2), Cow::Borrowed(&modulus))
                         .unwrap()
