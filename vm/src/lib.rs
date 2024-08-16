@@ -1,3 +1,4 @@
+pub mod arch;
 pub mod cpu;
 pub mod field_arithmetic;
 pub mod field_extension;

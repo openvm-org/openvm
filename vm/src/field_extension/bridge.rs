@@ -1,8 +1,13 @@
-use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
-use crate::cpu::{FIELD_EXTENSION_BUS, MEMORY_BUS, WORD_SIZE};
+use afs_stark_backend::interaction::InteractionBuilder;
+
+use crate::{
+    arch::columns::{ExecutionState, InstructionCols},
+    cpu::{MEMORY_BUS, WORD_SIZE},
+};
+
+use super::{columns::FieldExtensionArithmeticCols, EXTENSION_DEGREE, FieldExtensionArithmeticAir};
 
 fn eval_rw_interactions<AB: InteractionBuilder>(
     builder: &mut AB,
@@ -58,15 +63,27 @@ impl FieldExtensionArithmeticAir {
         // writes for z
         eval_rw_interactions(builder, true, local, local.aux.d, local.aux.op_a, 2);
 
-        // Receives all IO columns from another chip on bus 3 (FIELD_EXTENSION_BUS)
-        let fields = [
-            local.io.opcode,
-            local.aux.op_a,
-            local.aux.op_b,
-            local.aux.op_c,
-            local.aux.d,
-            local.aux.e,
-        ];
-        builder.push_receive(FIELD_EXTENSION_BUS, fields, local.aux.is_valid);
+        self.execution_bus.interact_execute(
+            builder,
+            ExecutionState {
+                pc: local.aux.pc.into(),
+                timestamp: local.aux.start_timestamp.into(),
+            },
+            ExecutionState {
+                pc: local.aux.pc + AB::F::one(),
+                timestamp: local.aux.start_timestamp
+                    + AB::F::from_canonical_usize(3 * EXTENSION_DEGREE),
+            },
+            InstructionCols {
+                opcode: local.io.opcode.into(),
+                a: local.aux.op_a.into(),
+                b: local.aux.op_b.into(),
+                c: local.aux.op_c.into(),
+                d: local.aux.d.into(),
+                e: local.aux.e.into(),
+                f: AB::Expr::zero(),
+                g: AB::Expr::zero(),
+            },
+        );
     }
 }

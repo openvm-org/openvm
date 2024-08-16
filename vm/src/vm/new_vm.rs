@@ -11,24 +11,12 @@ use p3_util::log2_strict_usize;
 
 use afs_stark_backend::rap::AnyRap;
 use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use cycle_tracker::CycleTracker;
-use metrics::VmMetrics;
-pub use segment::{ExecutionSegment, get_chips};
 
 use crate::{
     cpu::{CpuOptions, ExecutionState, trace::ExecutionError},
     program::Program,
+    vm::{config::VmConfig, new_segment::ExecutionSegment},
 };
-
-use self::config::VmConfig;
-
-pub mod config;
-pub mod cycle_tracker;
-/// Instrumentation metrics for performance analysis and debugging
-pub mod metrics;
-mod new_segment;
-mod new_vm;
-mod segment;
 
 /// Parent struct that holds all execution segments, program, config.
 ///
@@ -43,19 +31,6 @@ pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
     pub program: Program<F>,
     pub segments: Vec<ExecutionSegment<WORD_SIZE, F>>,
     pub traces: Vec<DenseMatrix<F>>,
-}
-
-/// Enum representing the different types of chips used in the VM
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChipType {
-    Cpu,
-    Program,
-    Memory,
-    RangeChecker,
-    FieldArithmetic,
-    FieldExtension,
-    Poseidon2,
-    IsLessThan,
 }
 
 pub struct ExecutionResult<const WORD_SIZE: usize> {

@@ -1,5 +1,10 @@
 use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
+use p3_uni_stark::StarkGenericConfig;
+
+use afs_stark_backend::rap::AnyRap;
+
+use crate::{arch::chips::MachineChip, cpu::OpCode};
 
 use super::{
     columns::{
@@ -8,7 +13,6 @@ use super::{
     },
     FieldExtensionArithmeticAir, FieldExtensionArithmeticChip, FieldExtensionArithmeticOperation,
 };
-use crate::cpu::OpCode;
 
 /// Constructs a new set of columns (including auxiliary columns) given inputs.
 fn generate_cols<T: Field>(
@@ -50,6 +54,7 @@ fn generate_cols<T: Field>(
         aux: FieldExtensionArithmeticAuxCols {
             is_valid: T::one(),
             valid_y_read: T::one() - is_inv,
+            pc: T::from_canonical_usize(op.pc),
             start_timestamp: T::from_canonical_usize(op.start_timestamp),
             op_a: op.op_a,
             op_b: op.op_b,
@@ -67,9 +72,9 @@ fn generate_cols<T: Field>(
     }
 }
 
-impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_SIZE, F> {
+impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
     /// Generates trace for field arithmetic chip.
-    pub fn generate_trace(&self) -> RowMajorMatrix<F> {
+    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         let mut trace: Vec<F> = self
             .operations
             .iter()
@@ -86,5 +91,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         );
 
         RowMajorMatrix::new(trace, FieldExtensionArithmeticCols::<F>::get_width())
+    }
+
+    fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC> {
+        &self.air
     }
 }

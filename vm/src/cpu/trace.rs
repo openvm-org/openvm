@@ -4,18 +4,13 @@ use std::{
     fmt::Display,
 };
 
-use afs_primitives::{
-    is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
-};
 use p3_field::{Field, PrimeField32, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::{
-    columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
-    timestamp_delta, CpuChip, ExecutionState,
-    OpCode::{self, *},
-    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
+use afs_primitives::{
+    is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
+
 use crate::{
     cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
     field_extension::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticChip},
@@ -23,6 +18,13 @@ use crate::{
     poseidon2::{columns::Poseidon2VmCols, Poseidon2Chip},
     program::columns::ProgramPreprocessedCols,
     vm::ExecutionSegment,
+};
+
+use super::{
+    columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
+    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE,
+    CpuChip,
+    ExecutionState, INST_WIDTH, OpCode::{self, *}, timestamp_delta,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -63,6 +65,27 @@ impl<F: Field> Instruction<F> {
             op_c: isize_to_field::<F>(op_c),
             d: isize_to_field::<F>(d),
             e: isize_to_field::<F>(e),
+            op_f: isize_to_field::<F>(0),
+            op_g: isize_to_field::<F>(0),
+            debug: String::new(),
+        }
+    }
+
+    pub fn from_usize(
+        opcode: OpCode,
+        op_a: usize,
+        op_b: usize,
+        op_c: usize,
+        d: usize,
+        e: usize,
+    ) -> Self {
+        Self {
+            opcode,
+            op_a: F::from_canonical_usize(op_a),
+            op_b: F::from_canonical_usize(op_b),
+            op_c: F::from_canonical_usize(op_c),
+            d: F::from_canonical_usize(d),
+            e: F::from_canonical_usize(e),
             op_f: isize_to_field::<F>(0),
             op_g: isize_to_field::<F>(0),
             debug: String::new(),

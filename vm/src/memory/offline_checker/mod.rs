@@ -1,13 +1,15 @@
 use std::{array::from_fn, collections::HashMap};
 
-use afs_primitives::offline_checker::OfflineChecker;
 use p3_field::PrimeField32;
 
-use super::MemoryAccess;
+use afs_primitives::offline_checker::OfflineChecker;
+
 use crate::{
     cpu::{MEMORY_BUS, RANGE_CHECKER_BUS},
     memory::{compose, decompose, OpType},
 };
+
+use super::MemoryAccess;
 
 mod air;
 mod trace;
@@ -25,8 +27,8 @@ impl MemoryOfflineChecker {
 pub struct MemoryChip<const WORD_SIZE: usize, F: PrimeField32> {
     pub air: MemoryOfflineChecker,
     pub accesses: Vec<MemoryAccess<WORD_SIZE, F>>,
-    memory: HashMap<(F, F), F>,
-    last_timestamp: Option<usize>,
+    pub memory: HashMap<(F, F), F>,
+    pub last_timestamp: Option<usize>,
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {

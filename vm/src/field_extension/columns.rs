@@ -1,7 +1,8 @@
-use afs_derive::AlignedBorrow;
 use p3_field::Field;
 
-use super::{FieldExtensionArithmeticAir, EXTENSION_DEGREE};
+use afs_derive::AlignedBorrow;
+
+use super::{EXTENSION_DEGREE, FieldExtensionArithmeticAir};
 
 /// Columns for field extension chip.
 ///
@@ -28,6 +29,7 @@ pub struct FieldExtensionArithmeticAuxCols<T> {
     pub is_valid: T,
     // whether the y read occurs: is_valid * (1 - is_inv)
     pub valid_y_read: T,
+    pub pc: T,
     pub start_timestamp: T,
     pub op_a: T,
     pub op_b: T,
@@ -80,6 +82,7 @@ where
             aux: FieldExtensionArithmeticAuxCols {
                 is_valid: T::zero(),
                 valid_y_read: T::zero(),
+                pc: T::zero(),
                 start_timestamp: T::zero(),
                 op_a: T::zero(),
                 op_b: T::zero(),
@@ -116,13 +119,14 @@ impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
 
 impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
     pub fn get_width() -> usize {
-        3 * EXTENSION_DEGREE + 12
+        3 * EXTENSION_DEGREE + 13
     }
 
     pub fn flatten(&self) -> Vec<T> {
         let mut result = vec![
             self.is_valid.clone(),
             self.valid_y_read.clone(),
+            self.pc.clone(),
             self.start_timestamp.clone(),
             self.op_a.clone(),
             self.op_b.clone(),

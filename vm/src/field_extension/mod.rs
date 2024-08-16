@@ -1,8 +1,11 @@
+use std::{cell::RefCell, rc::Rc};
+
 use p3_field::{Field, PrimeField32};
 
 use crate::{
-    cpu::{trace::Instruction, OpCode, FIELD_EXTENSION_INSTRUCTIONS},
-    vm::ExecutionSegment,
+    arch::{bridge::ExecutionBus, chips::OpCodeExecutor, columns::ExecutionState},
+    cpu::{FIELD_EXTENSION_INSTRUCTIONS, OpCode, trace::Instruction},
+    memory::offline_checker::MemoryChip,
 };
 
 pub mod air;
@@ -18,6 +21,7 @@ pub const EXTENSION_DEGREE: usize = 4;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct FieldExtensionArithmeticOperation<F> {
+    pub pc: usize,
     pub start_timestamp: usize,
     pub opcode: OpCode,
     pub op_a: F,
@@ -31,8 +35,10 @@ pub struct FieldExtensionArithmeticOperation<F> {
 }
 
 /// Field extension arithmetic chip. The irreducible polynomial is x^4 - 11.
-#[derive(Default, Clone, Copy)]
-pub struct FieldExtensionArithmeticAir {}
+#[derive(Clone, Copy)]
+pub struct FieldExtensionArithmeticAir {
+    execution_bus: ExecutionBus,
+}
 
 impl FieldExtensionArithmeticAir {
     pub const BASE_OP: u8 = OpCode::FE4ADD as u8;
@@ -102,26 +108,74 @@ impl FieldExtensionArithmeticAir {
     }
 }
 
-pub struct FieldExtensionArithmeticChip<const WORD_SIZE: usize, F: PrimeField32> {
+pub struct FieldExtensionArithmeticChip<F: PrimeField32> {
     pub air: FieldExtensionArithmeticAir,
+    pub memory_chip: Rc<RefCell<MemoryChip<1, F>>>,
     pub operations: Vec<FieldExtensionArithmeticOperation<F>>,
 }
 
-impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_SIZE, F> {
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
+impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
+    pub fn new(execution_bus: ExecutionBus, memory_chip: Rc<RefCell<MemoryChip<1, F>>>) -> Self {
         Self {
-            air: FieldExtensionArithmeticAir {},
+            air: FieldExtensionArithmeticAir { execution_bus },
+            memory_chip,
             operations: vec![],
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn calculate(
-        vm: &mut ExecutionSegment<WORD_SIZE, F>,
-        start_timestamp: usize,
-        instruction: Instruction<F>,
+    fn read_extension_element(
+        &mut self,
+        timestamp: usize,
+        address_space: F,
+        address: F,
     ) -> [F; EXTENSION_DEGREE] {
+        assert!(address_space != F::zero());
+
+        let mut result = [F::zero(); EXTENSION_DEGREE];
+
+        for (i, result_elem) in result.iter_mut().enumerate() {
+            let data = self.memory_chip.borrow_mut().read_elem(
+                timestamp + i,
+                address_space,
+                address + F::from_canonical_usize(i),
+            );
+
+            *result_elem = data;
+        }
+
+        result
+    }
+
+    fn write_extension_element(
+        &mut self,
+        timestamp: usize,
+        address_space: F,
+        address: F,
+        result: [F; EXTENSION_DEGREE],
+    ) {
+        assert!(address_space != F::zero());
+
+        for (i, row) in result.iter().enumerate() {
+            self.memory_chip.borrow_mut().write_elem(
+                timestamp + i,
+                address_space,
+                address + F::from_canonical_usize(i),
+                *row,
+            );
+        }
+    }
+
+    pub fn current_height(&self) -> usize {
+        self.operations.len()
+    }
+}
+
+impl<F: PrimeField32> OpCodeExecutor<F> for FieldExtensionArithmeticChip<F> {
+    fn execute(
+        &mut self,
+        instruction: &Instruction<F>,
+        prev_state: ExecutionState<usize>,
+    ) -> ExecutionState<usize> {
         let Instruction {
             opcode,
             op_a,
@@ -132,88 +186,42 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
             op_f: _f,
             op_g: _g,
             debug: _debug,
-        } = instruction;
+        } = instruction.clone();
         assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
+        let mut timestamp = prev_state.timestamp;
 
-        let operand1 =
-            FieldExtensionArithmeticChip::read_extension_element(vm, start_timestamp, d, op_b);
+        let operand1 = self.read_extension_element(timestamp, d, op_b);
+        timestamp += EXTENSION_DEGREE;
+
         let operand2 = if opcode == OpCode::BBE4INV {
             [F::zero(); EXTENSION_DEGREE]
         } else {
-            FieldExtensionArithmeticChip::read_extension_element(vm, start_timestamp + 4, e, op_c)
+            self.read_extension_element(timestamp, e, op_c)
         };
+        timestamp += EXTENSION_DEGREE;
 
         let result = FieldExtensionArithmeticAir::solve::<F>(opcode, operand1, operand2).unwrap();
 
-        FieldExtensionArithmeticChip::write_extension_element(
-            vm,
-            start_timestamp + 8,
-            d,
+        self.write_extension_element(timestamp, d, op_a, result);
+        timestamp += EXTENSION_DEGREE;
+
+        self.operations.push(FieldExtensionArithmeticOperation {
+            pc: prev_state.pc,
+            start_timestamp: prev_state.timestamp,
+            opcode,
             op_a,
+            op_b,
+            op_c,
+            d,
+            e,
+            operand1,
+            operand2,
             result,
-        );
+        });
 
-        vm.field_extension_chip
-            .operations
-            .push(FieldExtensionArithmeticOperation {
-                start_timestamp,
-                opcode,
-                op_a,
-                op_b,
-                op_c,
-                d,
-                e,
-                operand1,
-                operand2,
-                result,
-            });
-
-        result
-    }
-
-    fn read_extension_element(
-        vm: &mut ExecutionSegment<WORD_SIZE, F>,
-        timestamp: usize,
-        address_space: F,
-        address: F,
-    ) -> [F; EXTENSION_DEGREE] {
-        assert!(address_space != F::zero());
-
-        let mut result = [F::zero(); EXTENSION_DEGREE];
-
-        for (i, result_elem) in result.iter_mut().enumerate() {
-            let data = vm.memory_chip.read_elem(
-                timestamp + i,
-                address_space,
-                address + F::from_canonical_usize(i * WORD_SIZE),
-            );
-
-            *result_elem = data;
+        ExecutionState {
+            timestamp,
+            pc: prev_state.pc + 1,
         }
-
-        result
-    }
-
-    fn write_extension_element(
-        vm: &mut ExecutionSegment<WORD_SIZE, F>,
-        timestamp: usize,
-        address_space: F,
-        address: F,
-        result: [F; EXTENSION_DEGREE],
-    ) {
-        assert!(address_space != F::zero());
-
-        for (i, row) in result.iter().enumerate() {
-            vm.memory_chip.write_elem(
-                timestamp + i,
-                address_space,
-                address + F::from_canonical_usize(i * WORD_SIZE),
-                *row,
-            );
-        }
-    }
-
-    pub fn current_height(&self) -> usize {
-        self.operations.len()
     }
 }
