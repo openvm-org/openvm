@@ -2,7 +2,7 @@ use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use p3_field::{AbstractField, PrimeField64};
 
-use crate::ir::{modular_arithmetic::BigIntVar, Builder, Config};
+use crate::ir::{Builder, Config, modular_arithmetic::BigIntVar};
 
 impl<C: Config> Builder<C>
 where
@@ -81,9 +81,9 @@ where
                                     let x_sum = builder.mod_add(x1, x2);
                                     let x3 = builder.mod_sub(&lambda_squared, &x_sum);
                                     let x1_minus_x3 = builder.mod_sub(x1, &x3);
-                                    let code_is_self_documenting =
+                                    let lambda_times_x1_minus_x3 =
                                         builder.mod_mul(&lambda, &x1_minus_x3);
-                                    let y3 = builder.mod_sub(&code_is_self_documenting, y1);
+                                    let y3 = builder.mod_sub(&lambda_times_x1_minus_x3, y1);
                                     builder.assign(&result_x, x3);
                                     builder.assign(&result_y, y3);
                                 },

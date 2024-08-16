@@ -1,13 +1,12 @@
 use std::borrow::Cow;
 
-use num_bigint_dig::{algorithms::mod_inverse, BigUint};
-use num_traits::{abs, FromPrimitive, One, signum, Zero};
-use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, extension::BinomialExtensionField};
-use rand::RngCore;
-
 use afs_compiler::{asm::AsmBuilder, ir::Var, util::execute_program};
 use afs_test_utils::utils::create_seeded_rng;
+use num_bigint_dig::{algorithms::mod_inverse, BigUint};
+use num_traits::{abs, signum, FromPrimitive, One, Zero};
+use p3_baby_bear::BabyBear;
+use p3_field::{extension::BinomialExtensionField, AbstractField};
+use rand::RngCore;
 
 #[allow(dead_code)]
 const WORD_SIZE: usize = 1;
