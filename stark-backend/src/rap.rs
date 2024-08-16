@@ -69,10 +69,15 @@ where
 
     fn name(&self) -> String {
         let full_name = type_name::<Self>().to_string();
-        full_name
-            .split("::")
-            .last()
-            .map(String::from)
-            .unwrap_or(full_name)
+        let base_name = full_name
+            .split('<')
+            .next()
+            .unwrap_or(&full_name)
+            .rsplit("::")
+            .next()
+            .unwrap_or(&full_name)
+            .to_string();
+
+        base_name
     }
 }
