@@ -6,9 +6,8 @@ use p3_field::AbstractField;
 
 use super::types::{BatchOpeningVariable, TwoAdicPcsProofVariable};
 use crate::{
-    fri::types::{
-        DigestVariable, FriCommitPhaseProofStepVariable, FriProofVariable, FriQueryProofVariable,
-    },
+    digest::DigestVariable,
+    fri::types::{FriCommitPhaseProofStepVariable, FriProofVariable, FriQueryProofVariable},
     hints::{
         Hintable, InnerBatchOpening, InnerChallenge, InnerCommitPhaseStep, InnerDigest,
         InnerFriProof, InnerPcsProof, InnerQueryProof, InnerVal,
@@ -22,7 +21,7 @@ impl Hintable<C> for InnerDigest {
     type HintVariable = DigestVariable<C>;
 
     fn read(builder: &mut Builder<AsmConfig<InnerVal, InnerChallenge>>) -> Self::HintVariable {
-        builder.hint_felts()
+        DigestVariable::Felt(builder.hint_felts())
     }
 
     fn write(&self) -> Vec<Vec<InnerVal>> {

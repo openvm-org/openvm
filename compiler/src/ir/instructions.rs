@@ -1,6 +1,5 @@
-use crate::ir::modular_arithmetic::BigIntVar;
-
 use super::{Array, Config, Ext, Felt, MemIndex, Ptr, RVar, TracedVec, Var};
+use crate::ir::modular_arithmetic::BigIntVar;
 
 /// An intermeddiate instruction set for implementing programs.
 ///
@@ -97,6 +96,11 @@ pub enum DslIr<C: Config> {
     DivEI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::EF),
     /// Divides and extension field immediate and an extension field element (ext = ext field imm / ext).
     DivEIN(Ext<C::F, C::EF>, C::EF, Ext<C::F, C::EF>),
+    /// Divides an extension field element and a field immediate (ext = ext / field imm).
+    DivEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
+    /// Divides an extension field element and a field element (ext = ext / felt).
+    DivEF(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Felt<C::F>),
+
     /// Subtracts two modular BigInts.
     DivM(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>),
 
@@ -119,6 +123,8 @@ pub enum DslIr<C: Config> {
     // Control flow.
     /// Executes a for loop with the parameters (start step value, end step value, step size, step variable, body).
     For(RVar<C::N>, RVar<C::N>, C::N, Var<C::N>, TracedVec<DslIr<C>>),
+    /// Executes an indefinite loop.
+    Loop(TracedVec<DslIr<C>>),
     /// Executes an equal conditional branch with the parameters (lhs var, rhs var, then body, else body).
     IfEq(
         Var<C::N>,
@@ -137,7 +143,7 @@ pub enum DslIr<C: Config> {
     IfEqI(Var<C::N>, C::N, TracedVec<DslIr<C>>, TracedVec<DslIr<C>>),
     /// Executes a not equal conditional branch with the parameters (lhs var, rhs imm, then body, else body).
     IfNeI(Var<C::N>, C::N, TracedVec<DslIr<C>>, TracedVec<DslIr<C>>),
-    /// Break out of a for loop.
+    /// Break out of a loop.
     Break,
 
     // Assertions.

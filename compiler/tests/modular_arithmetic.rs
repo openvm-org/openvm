@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use afs_compiler::{asm::AsmBuilder, ir::Var, util::execute_program};
-use afs_primitives::modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir;
+use afs_primitives::modular_multiplication::bigint::air::ModularMultiplicationBigIntAir;
 use afs_test_utils::utils::create_seeded_rng;
 use num_bigint_dig::{algorithms::mod_inverse, BigUint};
 use num_traits::{abs, signum, FromPrimitive, One, Zero};

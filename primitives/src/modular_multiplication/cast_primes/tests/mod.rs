@@ -10,7 +10,7 @@ use p3_field::{AbstractField, PrimeField64};
 use rand::RngCore;
 
 use crate::{
-    modular_multiplication::modular_multiplication_primes::{
+    modular_multiplication::cast_primes::{
         air::ModularMultiplicationPrimesAir, columns::ModularMultiplicationPrimesCols,
     },
     range_gate::RangeCheckerGateChip,

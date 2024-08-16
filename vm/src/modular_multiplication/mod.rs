@@ -1,6 +1,6 @@
 use std::{borrow::Cow, collections::VecDeque};
 
-use afs_primitives::modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir;
+use afs_primitives::modular_multiplication::bigint::air::ModularMultiplicationBigIntAir;
 use num_bigint_dig::{algorithms::mod_inverse, BigUint};
 use p3_field::{PrimeField32, PrimeField64};
 

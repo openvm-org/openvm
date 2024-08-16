@@ -10,6 +10,7 @@ use crate::{
     prelude::TracedVec,
 };
 
+pub mod halo2;
 pub mod opcodes;
 
 /// A constraint is an operation and a list of nested arguments.

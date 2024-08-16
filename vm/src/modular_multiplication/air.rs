@@ -1,4 +1,4 @@
-use afs_primitives::modular_multiplication::modular_multiplication_bigint::air::ModularMultiplicationBigIntAir;
+use afs_primitives::modular_multiplication::bigint::air::ModularMultiplicationBigIntAir;
 
 use crate::cpu::{OpCode, MODULAR_ARITHMETIC_INSTRUCTIONS};
 

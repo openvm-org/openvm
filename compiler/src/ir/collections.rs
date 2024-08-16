@@ -5,7 +5,7 @@ use itertools::Itertools;
 use p3_field::AbstractField;
 
 use super::{
-    Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, RVar, SymbolicVar, Usize, Var,
+    Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, RVar, Ref, SymbolicVar, Usize, Var,
     Variable,
 };
 
@@ -21,6 +21,21 @@ pub enum Array<C: Config, T> {
 }
 
 impl<C: Config, V: MemVariable<C>> Array<C, V> {
+    /// Gets a right value of the array.
+    pub fn vec(&self) -> Vec<V> {
+        match self {
+            Self::Fixed(vec) => vec.borrow().iter().map(|x| x.clone().unwrap()).collect(),
+            _ => panic!("array is dynamic, not fixed"),
+        }
+    }
+
+    pub fn ptr(&self) -> Ptr<C::N> {
+        match *self {
+            Array::Dyn(ptr, _) => ptr,
+            Array::Fixed(_) => panic!("cannot retrieve pointer for a compile-time array"),
+        }
+    }
+
     /// Gets the length of the array as a variable inside the DSL.
     pub fn len(&self) -> Usize<C::N> {
         match self {
@@ -133,7 +148,12 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
 impl<C: Config> Builder<C> {
     /// Initialize an array of fixed length `len`. The entries will be uninitialized.
     pub fn array<V: MemVariable<C>>(&mut self, len: impl Into<RVar<C::N>>) -> Array<C, V> {
-        self.dyn_array(len)
+        let len = len.into();
+        if self.flags.static_only {
+            self.uninit_fixed_array(len.value())
+        } else {
+            self.dyn_array(len)
+        }
     }
 
     /// Creates an array from a vector.
@@ -192,9 +212,10 @@ impl<C: Config> Builder<C> {
         }
     }
 
+    /// Returns a pointer to the array at the specified `index` within the given `slice`.
     pub fn get_ptr<V: MemVariable<C>, I: Into<RVar<C::N>>>(
         &mut self,
-        slice: &Array<C, V>,
+        slice: &Array<C, Array<C, V>>,
         index: I,
     ) -> Ptr<C::N> {
         let index = index.into();
@@ -211,13 +232,49 @@ impl<C: Config> Builder<C> {
                 let index = MemIndex {
                     index,
                     offset: 0,
-                    size: V::size_of(),
+                    size: <Array<C, V> as MemVariable<C>>::size_of(),
                 };
                 let var: Ptr<C::N> = self.uninit();
                 self.load(var, *ptr, index);
                 var
             }
         }
+    }
+
+    fn ptr_at<V: MemVariable<C>, I: Into<RVar<C::N>>>(
+        &mut self,
+        slice: &Array<C, V>,
+        index: I,
+    ) -> Ptr<C::N> {
+        let index = index.into();
+
+        match slice {
+            Array::Fixed(_) => {
+                panic!();
+            }
+            Array::Dyn(ptr, len) => {
+                if self.flags.debug {
+                    let valid = self.lt(index, len.clone());
+                    self.assert_var_eq(valid, C::N::one());
+                }
+                Ptr {
+                    address: self.eval(
+                        ptr.address
+                            + index * RVar::from_field(C::N::from_canonical_usize(V::size_of())),
+                    ),
+                }
+            }
+        }
+    }
+
+    pub fn get_ref<V: MemVariable<C>, I: Into<RVar<C::N>>>(
+        &mut self,
+        slice: &Array<C, V>,
+        index: I,
+    ) -> Ref<C, V> {
+        let index = index.into();
+        let ptr = self.ptr_at(slice, index);
+        Ref::from_ptr(ptr)
     }
 
     pub fn set<V: MemVariable<C>, I: Into<RVar<C::N>>, Expr: Into<V::Expression>>(

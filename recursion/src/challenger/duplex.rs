@@ -1,43 +1,19 @@
 use afs_compiler::{
-    ir::{DIGEST_SIZE, PERMUTATION_WIDTH},
-    prelude::{
-        Array, Builder, Config, DslVariable, Ext, Felt, MemIndex, MemVariable, Ptr, Usize, Var,
-        Variable,
-    },
+    ir::{RVar, DIGEST_SIZE, PERMUTATION_WIDTH},
+    prelude::{Array, Builder, Config, Ext, Felt, Var},
 };
 use p3_field::AbstractField;
 
-use crate::fri::types::DigestVariable;
-
-/// Reference: [p3_challenger::CanObserve].
-pub trait CanObserveVariable<C: Config, V> {
-    fn observe(&mut self, builder: &mut Builder<C>, value: V);
-
-    fn observe_slice(&mut self, builder: &mut Builder<C>, values: Array<C, V>);
-}
-
-pub trait CanSampleVariable<C: Config, V> {
-    #[allow(dead_code)]
-    fn sample(&mut self, builder: &mut Builder<C>) -> V;
-}
-
-/// Reference: [p3_challenger::FieldChallenger].
-pub trait FeltChallenger<C: Config>:
-    CanObserveVariable<C, Felt<C::F>> + CanSampleVariable<C, Felt<C::F>> + CanSampleBitsVariable<C>
-{
-    fn sample_ext(&mut self, builder: &mut Builder<C>) -> Ext<C::F, C::EF>;
-}
-
-pub trait CanSampleBitsVariable<C: Config> {
-    fn sample_bits(
-        &mut self,
-        builder: &mut Builder<C>,
-        nb_bits: Usize<C::N>,
-    ) -> Array<C, Var<C::N>>;
-}
+use crate::{
+    challenger::{
+        CanCheckWitness, CanObserveDigest, CanObserveVariable, CanSampleBitsVariable,
+        CanSampleVariable, ChallengerVariable, FeltChallenger,
+    },
+    digest::DigestVariable,
+};
 
 /// Reference: [p3_challenger::DuplexChallenger]
-#[derive(Clone, DslVariable)]
+#[derive(Clone)]
 pub struct DuplexChallengerVariable<C: Config> {
     pub sponge_state: Array<C, Felt<C::F>>,
     pub nb_inputs: Var<C::N>,
@@ -48,6 +24,7 @@ pub struct DuplexChallengerVariable<C: Config> {
 
 impl<C: Config> DuplexChallengerVariable<C> {
     /// Creates a new duplex challenger with the default state.
+    #[allow(dead_code)]
     pub fn new(builder: &mut Builder<C>) -> Self {
         let mut sponge_state = builder.dyn_array(PERMUTATION_WIDTH);
         let mut input_buffer = builder.dyn_array(PERMUTATION_WIDTH);
@@ -69,6 +46,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
     }
 
     /// Creates a new challenger with the same state as an existing challenger.
+    #[allow(dead_code)]
     pub fn copy(&self, builder: &mut Builder<C>) -> Self {
         let mut sponge_state = builder.dyn_array(PERMUTATION_WIDTH);
         builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
@@ -97,6 +75,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
     }
 
     /// Asserts that the state of this challenger is equal to the state of another challenger.
+    #[allow(dead_code)]
     pub fn assert_eq(&self, builder: &mut Builder<C>, other: &Self) {
         builder.assert_var_eq(self.nb_inputs, other.nb_inputs);
         builder.assert_var_eq(self.nb_outputs, other.nb_outputs);
@@ -117,6 +96,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
         });
     }
 
+    #[allow(dead_code)]
     pub fn reset(&mut self, builder: &mut Builder<C>) {
         let zero: Var<_> = builder.eval(C::N::zero());
         let zero_felt: Felt<_> = builder.eval(C::F::zero());
@@ -133,7 +113,6 @@ impl<C: Config> DuplexChallengerVariable<C> {
         });
     }
 
-    #[allow(dead_code)]
     pub fn duplexing(&mut self, builder: &mut Builder<C>) {
         builder.range(0, self.nb_inputs).for_each(|i, builder| {
             let element = builder.get(&self.input_buffer, i);
@@ -168,9 +147,9 @@ impl<C: Config> DuplexChallengerVariable<C> {
             })
     }
 
-    fn observe_commitment(&mut self, builder: &mut Builder<C>, commitment: DigestVariable<C>) {
+    fn observe_commitment(&mut self, builder: &mut Builder<C>, commitment: &Array<C, Felt<C::F>>) {
         for i in 0..DIGEST_SIZE {
-            let element = builder.get(&commitment, i);
+            let element = builder.get(commitment, i);
             self.observe(builder, element);
         }
     }
@@ -204,7 +183,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
     fn sample_bits(
         &mut self,
         builder: &mut Builder<C>,
-        nb_bits: Usize<C::N>,
+        nb_bits: RVar<C::N>,
     ) -> Array<C, Var<C::N>> {
         let rand_f = self.sample(builder);
         let mut bits = builder.num2bits_f(rand_f);
@@ -216,14 +195,9 @@ impl<C: Config> DuplexChallengerVariable<C> {
         bits
     }
 
-    pub fn check_witness(
-        &mut self,
-        builder: &mut Builder<C>,
-        nb_bits: Var<C::N>,
-        witness: Felt<C::F>,
-    ) {
+    pub fn check_witness(&mut self, builder: &mut Builder<C>, nb_bits: usize, witness: Felt<C::F>) {
         self.observe(builder, witness);
-        let element_bits = self.sample_bits(builder, nb_bits.into());
+        let element_bits = self.sample_bits(builder, RVar::from(nb_bits));
         builder.range(0, nb_bits).for_each(|i, builder| {
             let element = builder.get(&element_bits, i);
             builder.assert_var_eq(element, C::N::zero());
@@ -254,19 +228,19 @@ impl<C: Config> CanSampleBitsVariable<C> for DuplexChallengerVariable<C> {
     fn sample_bits(
         &mut self,
         builder: &mut Builder<C>,
-        nb_bits: Usize<C::N>,
+        nb_bits: RVar<C::N>,
     ) -> Array<C, Var<C::N>> {
         DuplexChallengerVariable::sample_bits(self, builder, nb_bits)
     }
 }
 
-impl<C: Config> CanObserveVariable<C, DigestVariable<C>> for DuplexChallengerVariable<C> {
-    fn observe(&mut self, builder: &mut Builder<C>, commitment: DigestVariable<C>) {
-        DuplexChallengerVariable::observe_commitment(self, builder, commitment);
-    }
-
-    fn observe_slice(&mut self, _builder: &mut Builder<C>, _values: Array<C, DigestVariable<C>>) {
-        todo!()
+impl<C: Config> CanObserveDigest<C> for DuplexChallengerVariable<C> {
+    fn observe_digest(&mut self, builder: &mut Builder<C>, commitment: DigestVariable<C>) {
+        if let DigestVariable::Felt(commitment) = commitment {
+            self.observe_commitment(builder, &commitment);
+        } else {
+            panic!("Expected a felt digest");
+        }
     }
 }
 
@@ -276,11 +250,19 @@ impl<C: Config> FeltChallenger<C> for DuplexChallengerVariable<C> {
     }
 }
 
+impl<C: Config> CanCheckWitness<C> for DuplexChallengerVariable<C> {
+    fn check_witness(&mut self, builder: &mut Builder<C>, nb_bits: usize, witness: Felt<C::F>) {
+        DuplexChallengerVariable::check_witness(self, builder, nb_bits, witness);
+    }
+}
+
+impl<C: Config> ChallengerVariable<C> for DuplexChallengerVariable<C> {}
+
 #[cfg(test)]
 mod tests {
     use afs_compiler::{
         asm::{AsmBuilder, AsmConfig},
-        ir::{Felt, Usize, Var, PERMUTATION_WIDTH},
+        ir::Felt,
         util::execute_program_and_generate_traces,
     };
     use afs_test_utils::{
@@ -291,8 +273,9 @@ mod tests {
     use p3_field::AbstractField;
     use p3_uni_stark::{StarkGenericConfig, Val};
 
-    use crate::challenger::DuplexChallengerVariable;
+    use super::DuplexChallengerVariable;
 
+    //noinspection RsDetachedFile
     #[test]
     fn test_compiler_challenger() {
         type SC = BabyBearPoseidon2Config;
@@ -310,7 +293,6 @@ mod tests {
 
         let mut builder = AsmBuilder::<F, EF>::default();
 
-        let width: Var<_> = builder.eval(F::from_canonical_usize(PERMUTATION_WIDTH));
         let mut challenger = DuplexChallengerVariable::<AsmConfig<F, EF>>::new(&mut builder);
         let one: Felt<_> = builder.eval(F::one());
         let two: Felt<_> = builder.eval(F::two());

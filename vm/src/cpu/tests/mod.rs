@@ -1,3 +1,5 @@
+use std::iter;
+
 use afs_primitives::is_zero::IsZeroAir;
 use afs_stark_backend::verifier::VerificationError;
 use afs_test_utils::{
@@ -11,10 +13,10 @@ use p3_matrix::{
     Matrix,
 };
 
+use super::{timestamp_delta, CPU_MAX_READS_PER_CYCLE};
 use crate::{
     cpu::{
         columns::{CpuCols, CpuIoCols, MemoryAccessCols},
-        max_accesses_per_instruction,
         trace::{isize_to_field, Instruction},
         CpuChip, CpuOptions,
         OpCode::*,
@@ -172,6 +174,8 @@ fn execution_test<const WORD_SIZE: usize>(
             op_c: program.instructions[pc].op_c,
             d: program.instructions[pc].d,
             e: program.instructions[pc].e,
+            op_f: program.instructions[pc].op_f,
+            op_g: program.instructions[pc].op_g,
         };
         assert_eq!(cols.io, expected_io);
     }
@@ -255,10 +259,10 @@ fn air_test_change<
     }
     let trace = DenseMatrix::new(flattened, trace.width());
 
-    let program_air = DummyInteractionAir::new(7, false, READ_INSTRUCTION_BUS);
-    let mut program_rows = vec![];
+    let program_air = DummyInteractionAir::new(9, false, READ_INSTRUCTION_BUS);
+    let mut program_cells = vec![];
     for (pc, instruction) in program.instructions.iter().enumerate() {
-        program_rows.extend(vec![
+        program_cells.extend(vec![
             BabyBear::from_canonical_usize(segment.program_chip.execution_frequencies[pc]),
             BabyBear::from_canonical_usize(pc),
             BabyBear::from_canonical_usize(instruction.opcode as usize),
@@ -267,12 +271,18 @@ fn air_test_change<
             instruction.op_c,
             instruction.d,
             instruction.e,
+            instruction.op_f,
+            instruction.op_g,
         ]);
     }
-    while !(program_rows.len() / 8).is_power_of_two() {
-        program_rows.push(BabyBear::zero());
-    }
-    let program_trace = RowMajorMatrix::new(program_rows, 8);
+
+    // Pad program cells with zeroes to make height a power of two.
+    let width = 10;
+    let desired_height = program.instructions.len().next_power_of_two();
+    let cells_to_add = desired_height * width - program.instructions.len() * width;
+    program_cells.extend(iter::repeat(BabyBear::zero()).take(cells_to_add));
+
+    let program_trace = RowMajorMatrix::new(program_cells, width);
 
     let memory_air = DummyInteractionAir::new(5, false, MEMORY_BUS);
     let mut memory_rows = vec![];
@@ -371,7 +381,7 @@ fn test_cpu_1() {
         // if word[0]_1 == 0 then pc += 3
         Instruction::from_isize(BEQ, 0, 0, 3, 1, 0),
         // word[0]_1 <- word[0]_1 - word[1]_0
-        Instruction::from_isize(FSUB, 0, 0, 1, 1, 0),
+        Instruction::large_from_isize(FSUB, 0, 0, 1, 1, 1, 0, 0),
         // word[2]_1 <- pc + 1, pc -= 2
         Instruction::from_isize(JAL, 2, -2, 0, 1, 0),
         // terminate
@@ -391,21 +401,33 @@ fn test_cpu_1() {
     }
     expected_execution.push(4);
 
-    let storew_time = max_accesses_per_instruction(STOREW) as isize;
-    let beq_time = max_accesses_per_instruction(BEQ) as isize;
-    let fsub_time = max_accesses_per_instruction(FSUB) as isize;
-    let jal_time = max_accesses_per_instruction(JAL) as isize;
+    let storew_time = timestamp_delta(STOREW) as isize;
+    let beq_time = timestamp_delta(BEQ) as isize;
+    let fsub_time = timestamp_delta(FSUB) as isize;
+    let jal_time = timestamp_delta(JAL) as isize;
 
     let mut expected_memory_log = vec![
-        MemoryAccess::from_isize(2, OpType::Write, 1, 0, n),
+        MemoryAccess::from_isize(CPU_MAX_READS_PER_CYCLE as isize, OpType::Write, 1, 0, n),
         MemoryAccess::from_isize(storew_time, OpType::Read, 1, 0, n),
     ];
     for t in 0..n {
         let base = storew_time + beq_time + ((fsub_time + jal_time + beq_time) * t);
         expected_memory_log.extend(vec![
             MemoryAccess::from_isize(base, OpType::Read, 1, 0, n - t),
-            MemoryAccess::from_isize(base + 2, OpType::Write, 1, 0, n - t - 1),
-            MemoryAccess::from_isize(base + fsub_time + 2, OpType::Write, 1, 2, 4),
+            MemoryAccess::from_isize(
+                base + CPU_MAX_READS_PER_CYCLE as isize,
+                OpType::Write,
+                1,
+                0,
+                n - t - 1,
+            ),
+            MemoryAccess::from_isize(
+                base + fsub_time + CPU_MAX_READS_PER_CYCLE as isize,
+                OpType::Write,
+                1,
+                2,
+                4,
+            ),
             MemoryAccess::from_isize(base + fsub_time + jal_time, OpType::Read, 1, 0, n - t - 1),
         ]);
     }
@@ -463,11 +485,11 @@ fn test_cpu_without_field_arithmetic() {
 
     let expected_execution: Vec<usize> = vec![0, 1, 4, 3];
 
-    let storew_time = max_accesses_per_instruction(STOREW) as isize;
-    let bne_time = max_accesses_per_instruction(BNE) as isize;
+    let storew_time = timestamp_delta(STOREW) as isize;
+    let bne_time = timestamp_delta(BNE) as isize;
 
     let expected_memory_log = vec![
-        MemoryAccess::from_isize(2, OpType::Write, 1, 0, 5),
+        MemoryAccess::from_isize(CPU_MAX_READS_PER_CYCLE as isize, OpType::Write, 1, 0, 5),
         MemoryAccess::from_isize(storew_time, OpType::Read, 1, 0, 5),
         MemoryAccess::from_isize(storew_time + bne_time, OpType::Read, 1, 0, 5),
     ];
@@ -495,7 +517,7 @@ fn test_cpu_negative_wrong_pc() {
      */
     let instructions = vec![
         // word[0]_1 <- word[6]_0
-        Instruction::from_isize(STOREW, 6, 0, 0, 0, 1),
+        Instruction::large_from_isize(STOREW, 6, 0, 0, 0, 1, 0, 1),
         // if word[0]_1 != 4 then pc += 2
         Instruction::from_isize(BEQ, 0, 4, 2, 1, 0),
         // if word[0]_1 != 0 then pc += 2
@@ -519,7 +541,7 @@ fn test_cpu_negative_wrong_pc_check() {
     //Same program as test_cpu_negative.
     let instructions = vec![
         // word[0]_1 <- word[6]_0
-        Instruction::from_isize(STOREW, 6, 0, 0, 0, 1),
+        Instruction::large_from_isize(STOREW, 6, 0, 0, 0, 1, 0, 1),
         // if word[0]_1 != 4 then pc += 2
         Instruction::from_isize(BEQ, 0, 4, 2, 1, 0),
         // if word[0]_1 != 0 then pc += 2
@@ -545,7 +567,7 @@ fn test_cpu_negative_wrong_pc_check() {
 fn test_cpu_negative_hasnt_terminated() {
     let instructions = vec![
         // word[0]_1 <- word[6]_0
-        Instruction::from_isize(STOREW, 6, 0, 0, 0, 1),
+        Instruction::large_from_isize(STOREW, 6, 0, 0, 0, 1, 0, 1),
         // terminate
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
@@ -635,7 +657,7 @@ fn test_cpu_negative_disable_write() {
         program,
         true,
         |rows, segment: &mut ExecutionSegment<TEST_WORD_SIZE, BabyBear>| {
-            rows[0].aux.accesses[2].enabled = AbstractField::zero();
+            rows[0].aux.accesses[CPU_MAX_READS_PER_CYCLE].enabled = AbstractField::zero();
             segment.memory_chip.accesses.remove(0);
         },
     );
@@ -646,9 +668,9 @@ fn test_cpu_negative_disable_write() {
 fn test_cpu_negative_disable_read0() {
     let instructions = vec![
         // word[0]_1 <- 0
-        Instruction::from_isize(STOREW, 0, 0, 0, 0, 1),
+        Instruction::large_from_isize(STOREW, 0, 0, 0, 0, 1, 0, 1),
         // if word[0]_0 == word[0]_[0] then pc += 1
-        Instruction::from_isize(LOADW, 0, 0, 0, 1, 1),
+        Instruction::large_from_isize(LOADW, 0, 0, 0, 1, 1, 0, 1),
         // terminate
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
@@ -675,9 +697,9 @@ fn test_cpu_negative_disable_read0() {
 fn test_cpu_negative_disable_read1() {
     let instructions = vec![
         // word[0]_1 <- 0
-        Instruction::from_isize(STOREW, 0, 0, 0, 0, 1),
+        Instruction::large_from_isize(STOREW, 0, 0, 0, 0, 1, 0, 1),
         // if word[0]_0 == word[0]_[0] then pc += 1
-        Instruction::from_isize(LOADW, 0, 0, 0, 1, 1),
+        Instruction::large_from_isize(LOADW, 0, 0, 0, 1, 1, 0, 1),
         // terminate
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
     ];
@@ -706,9 +728,9 @@ fn test_cpu_publish() {
 
     let instructions = vec![
         // word[0]_1 <- word[index]_0
-        Instruction::from_isize(STOREW, index, 0, 0, 0, 1),
+        Instruction::large_from_isize(STOREW, index, 0, 0, 0, 1, 0, 1),
         // word[1]_1 <- word[value]_0
-        Instruction::from_isize(STOREW, value, 0, 1, 0, 1),
+        Instruction::large_from_isize(STOREW, value, 0, 1, 0, 1, 0, 1),
         // public_values[word[0]_1] === word[1]_1
         Instruction::from_isize(PUBLISH, 0, 1, 0, 1, 1),
         // terminate

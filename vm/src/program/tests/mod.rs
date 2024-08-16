@@ -1,7 +1,10 @@
+use std::iter;
+
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test_no_pis,
     interaction::dummy_interaction_air::DummyInteractionAir,
 };
+use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -37,10 +40,10 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
     }
     let trace = chip.generate_trace();
 
-    let counter_air = DummyInteractionAir::new(7, true, READ_INSTRUCTION_BUS);
-    let mut program_rows = vec![];
+    let counter_air = DummyInteractionAir::new(9, true, READ_INSTRUCTION_BUS);
+    let mut program_cells = vec![];
     for (pc, instruction) in instructions.iter().enumerate() {
-        program_rows.extend(vec![
+        program_cells.extend(vec![
             BabyBear::from_canonical_usize(execution_frequencies[pc]),
             BabyBear::from_canonical_usize(pc),
             BabyBear::from_canonical_usize(instruction.opcode as usize),
@@ -49,12 +52,18 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<usize>) {
             instruction.op_c,
             instruction.d,
             instruction.e,
+            instruction.op_f,
+            instruction.op_g,
         ]);
     }
-    while !program_rows.len().is_power_of_two() {
-        program_rows.push(BabyBear::zero());
-    }
-    let counter_trace = RowMajorMatrix::new(program_rows, 8);
+
+    // Pad program cells with zeroes to make height a power of two.
+    let width = chip.air.width() + ProgramPreprocessedCols::<BabyBear>::get_width();
+    let desired_height = instructions.len().next_power_of_two();
+    let cells_to_add = desired_height * width - instructions.len() * width;
+    program_cells.extend(iter::repeat(BabyBear::zero()).take(cells_to_add));
+
+    let counter_trace = RowMajorMatrix::new(program_cells, 10);
     println!("trace height = {}", trace.height());
     println!("counter trace height = {}", counter_trace.height());
 
@@ -69,9 +78,9 @@ fn test_program_1() {
     // see cpu/tests/mod.rs
     let instructions = vec![
         // word[0]_1 <- word[n]_0
-        Instruction::from_isize(STOREW, n, 0, 0, 0, 1),
+        Instruction::large_from_isize(STOREW, n, 0, 0, 0, 1, 0, 1),
         // word[1]_1 <- word[1]_1
-        Instruction::from_isize(STOREW, 1, 1, 0, 0, 1),
+        Instruction::large_from_isize(STOREW, 1, 1, 0, 0, 1, 0, 1),
         // if word[0]_1 == 0 then pc += 3
         Instruction::from_isize(BEQ, 0, 0, 3, 1, 0),
         // word[0]_1 <- word[0]_1 - word[1]_1
@@ -95,7 +104,7 @@ fn test_program_without_field_arithmetic() {
     // see cpu/tests/mod.rs
     let instructions = vec![
         // word[0]_1 <- word[5]_0
-        Instruction::from_isize(STOREW, 5, 0, 0, 0, 1),
+        Instruction::large_from_isize(STOREW, 5, 0, 0, 0, 1, 0, 1),
         // if word[0]_1 != 4 then pc += 2
         Instruction::from_isize(BNE, 0, 4, 3, 1, 0),
         // word[2]_1 <- pc + 1, pc -= 2
@@ -118,9 +127,9 @@ fn test_program_without_field_arithmetic() {
 #[should_panic(expected = "assertion `left == right` failed")]
 fn test_program_negative() {
     let instructions = vec![
-        Instruction::from_isize(STOREW, -1, 0, 0, 0, 1),
-        Instruction::from_isize(LOADW, -1, 0, 0, 1, 1),
-        Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
+        Instruction::large_from_isize(STOREW, -1, 0, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(LOADW, -1, 0, 0, 1, 1, 0, 1),
+        Instruction::large_from_isize(TERMINATE, 0, 0, 0, 0, 0, 0, 0),
     ];
     let program = Program {
         instructions: instructions.clone(),

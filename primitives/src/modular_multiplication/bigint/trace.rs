@@ -98,7 +98,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for ModularMultiplicationBigIntA
                     self.carry_bits,
                     (carry + (self.carry_min_value_abs as isize)) as usize,
                 );
-                F::from_canonical_usize(carry.abs() as usize)
+                F::from_canonical_usize(carry.unsigned_abs())
                     * if carry >= 0 { F::one() } else { F::neg_one() }
             })
             .collect();
