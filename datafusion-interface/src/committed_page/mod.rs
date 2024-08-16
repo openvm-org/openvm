@@ -9,6 +9,7 @@ use datafusion::arrow::{
 };
 use derivative::Derivative;
 use p3_field::PrimeField64;
+use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use self::utils::convert_to_record_batch;
@@ -37,6 +38,7 @@ where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
     PcsProof<SC>: Send + Sync,
+    Domain<SC>: Send + Sync,
     Com<SC>: Send + Sync,
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
@@ -61,13 +63,14 @@ where
         committed_page
     }
 
-    pub fn from_record_batch(rb: RecordBatch) -> Self {
+    pub fn from_record_batch(rb: RecordBatch, height: usize) -> Self {
         let schema = (*rb.schema()).clone();
         let num_rows = rb.num_rows();
         let columns = rb.columns();
 
         // Initialize a vector to hold each row, with an extra column for `is_alloc`
         let mut rows: Vec<Vec<u32>> = vec![vec![0; columns.len() + 1]; num_rows];
+        let zero_rows: Vec<Vec<u32>> = vec![vec![0; columns.len() + 1]; height - num_rows];
 
         // Iterate over columns and fill the rows
         for (col_idx, column) in columns.iter().enumerate() {
@@ -78,6 +81,7 @@ where
                 row[col_idx + 1] = array.value(row_idx);
             }
         }
+        rows.extend(zero_rows);
 
         // TODO: we will temporarily take the first row as the index and all other rows as the data fields
         let page = Page::from_2d_vec(&rows, NUM_IDX_COLS, columns.len() - NUM_IDX_COLS);

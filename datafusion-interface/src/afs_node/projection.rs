@@ -11,16 +11,17 @@ use datafusion::{
 };
 use futures::lock::Mutex;
 use p3_field::PrimeField64;
+use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
 
 use super::{AfsNode, AfsNodeExecutable};
 use crate::{afs_expr::AfsExpr, committed_page::CommittedPage};
 
 pub struct Projection<SC: StarkGenericConfig, E: StarkEngine<SC>> {
-    pub schema: Schema,
-    pub pk: Option<MultiStarkProvingKey<SC>>,
     pub input: Arc<Mutex<AfsNode<SC, E>>>,
     pub output: Option<CommittedPage<SC>>,
+    pub schema: Schema,
+    pub pk: Option<MultiStarkProvingKey<SC>>,
 }
 
 impl<SC: StarkGenericConfig, E: StarkEngine<SC>> AfsNodeExecutable<SC, E> for Projection<SC, E>
@@ -28,11 +29,12 @@ where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
     PcsProof<SC>: Send + Sync,
+    Domain<SC>: Send + Sync,
     Com<SC>: Send + Sync,
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
-    async fn execute(&mut self, ctx: &SessionContext) -> Result<()> {
+    async fn execute(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
         let input_page = self.input.lock().await.output().as_ref().unwrap();
         Ok(())
     }
@@ -41,11 +43,11 @@ where
         Ok(())
     }
 
-    async fn prove(&mut self, ctx: &SessionContext) -> Result<()> {
+    async fn prove(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
         Ok(())
     }
 
-    async fn verify(&self, ctx: &SessionContext) -> Result<()> {
+    async fn verify(&self, ctx: &SessionContext, engine: &E) -> Result<()> {
         Ok(())
     }
 

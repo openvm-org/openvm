@@ -100,14 +100,5 @@ pub async fn test_basic_e2e() {
     println!("Output page: {:?}", output.page);
 
     afs.keygen().await.unwrap();
-    // match end_node {
-    //     AfsNode::PageScan(page_scan) => {
-    //         let pk = page_scan.pk.as_ref().unwrap();
-    //         println!(
-    //             "Proving key interaction chunk size: {:?}",
-    //             pk.interaction_chunk_size
-    //         );
-    //     }
-    //     _ => unreachable!(),
-    // }
+    afs.prove().await.unwrap();
 }

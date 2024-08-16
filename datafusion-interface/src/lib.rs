@@ -9,8 +9,8 @@ pub mod utils;
 pub static NUM_IDX_COLS: usize = 1;
 
 pub static BITS_PER_FE: usize = 16;
-pub static MAX_ROWS: usize = 16;
-pub static PCS_LOG_DEGREE: usize = 4;
+pub static MAX_ROWS: usize = 64;
+pub static PCS_LOG_DEGREE: usize = 16;
 pub static RANGE_CHECK_BITS: usize = 16;
 
 pub static PAGE_BUS_IDX: usize = 0;

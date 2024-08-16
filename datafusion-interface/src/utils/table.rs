@@ -2,9 +2,10 @@ use afs_page::page_rw_checker::page_controller::{OpType, Operation};
 use afs_stark_backend::config::{Com, PcsProof, PcsProverData, StarkGenericConfig, Val};
 use datafusion::{arrow::array::RecordBatch, error::Result, execution::context::SessionContext};
 use p3_field::PrimeField64;
+use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::committed_page::CommittedPage;
+use crate::{committed_page::CommittedPage, MAX_ROWS};
 
 pub async fn get_record_batches(ctx: &SessionContext, name: &str) -> Result<Vec<RecordBatch>> {
     let df = ctx.table(name).await.unwrap();
@@ -18,11 +19,12 @@ where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
     PcsProof<SC>: Send + Sync,
+    Domain<SC>: Send + Sync,
     Com<SC>: Send + Sync,
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
-    let cp: CommittedPage<SC> = CommittedPage::from_record_batch(rb);
+    let cp: CommittedPage<SC> = CommittedPage::from_record_batch(rb, MAX_ROWS);
     let page = cp.page;
     let ops = page
         .rows

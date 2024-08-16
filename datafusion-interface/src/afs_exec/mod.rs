@@ -23,6 +23,7 @@ use datafusion::{
 };
 use futures::{lock::Mutex, StreamExt, TryStreamExt};
 use p3_field::PrimeField64;
+use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{afs_node::AfsNode, committed_page::CommittedPage, PCS_LOG_DEGREE};
@@ -74,6 +75,7 @@ where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
     PcsProof<SC>: Send + Sync,
+    Domain<SC>: Send + Sync,
     Com<SC>: Send + Sync,
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
@@ -96,7 +98,7 @@ where
     pub async fn execute(&mut self) -> Result<()> {
         for node in &mut self.afs_execution_plan {
             let mut node = node.lock().await;
-            node.execute(&self.ctx).await?;
+            node.execute(&self.ctx, &self.engine).await?;
         }
         Ok(())
     }
@@ -104,16 +106,17 @@ where
     pub async fn keygen(&mut self) -> Result<()> {
         for node in &mut self.afs_execution_plan {
             let mut node = node.lock().await;
-            node.execute(&self.ctx).await?;
+            node.keygen(&self.ctx, &self.engine).await?;
         }
         Ok(())
     }
 
-    pub fn prove(&mut self) -> Result<RecordBatch> {
-        unimplemented!();
-        // for node in &self.afs_execution_plan {
-        //     node.prove()?;
-        // }
+    pub async fn prove(&mut self) -> Result<()> {
+        for node in &mut self.afs_execution_plan {
+            let mut node = node.lock().await;
+            node.prove(&self.ctx, &self.engine).await?;
+        }
+        Ok(())
     }
 
     /// Creates the flattened execution plan from a LogicalPlan tree root node.
