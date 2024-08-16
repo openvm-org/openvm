@@ -16,6 +16,7 @@ pub mod domain;
 pub mod hints;
 pub mod two_adic_pcs;
 pub mod types;
+pub mod witness;
 
 /// Reference: https://github.com/Plonky3/Plonky3/blob/4809fa7bedd9ba8f6f5d3267b1592618e3776c57/fri/src/verifier.rs#L27
 pub fn verify_shape_and_sample_challenges<C: Config>(
