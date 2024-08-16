@@ -446,7 +446,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 + ProgramPreprocessedCols::<F>::get_width()
                 + num_accesses_memory_rows * vm.memory_chip.air.air_width()
                 + num_field_base_ops * FieldExtensionArithmeticCols::<WORD_SIZE, F>::get_width()
-                + num_field_extension_ops * FieldExtensionArithmeticCols::<WORD_SIZE, F>::get_width()
+                + num_field_extension_ops
+                    * FieldExtensionArithmeticCols::<WORD_SIZE, F>::get_width()
                 + num_poseidon2_rows
                     * Poseidon2VmCols::<16, WORD_SIZE, F>::width(&vm.poseidon2_chip.air);
 

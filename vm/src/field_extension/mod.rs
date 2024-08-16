@@ -2,10 +2,9 @@ use p3_field::{Field, PrimeField32};
 
 use crate::{
     cpu::{trace::Instruction, OpCode, FIELD_EXTENSION_INSTRUCTIONS},
-    vm::ExecutionSegment,
+    memory::offline_checker::air::NewMemoryOfflineChecker,
+    vm::{config::MemoryConfig, ExecutionSegment},
 };
-use crate::memory::offline_checker::air::NewMemoryOfflineChecker;
-use crate::vm::config::MemoryConfig;
 
 pub mod air;
 pub mod bridge;

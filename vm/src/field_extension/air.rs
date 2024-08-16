@@ -4,7 +4,9 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmetic, FieldExtensionArithmeticAir};
+use super::{
+    columns::FieldExtensionArithmeticCols, FieldExtensionArithmetic, FieldExtensionArithmeticAir,
+};
 use crate::field_extension::{BETA, EXTENSION_DEGREE};
 
 impl<const WORD_SIZE: usize> AirConfig for FieldExtensionArithmeticAir<WORD_SIZE> {
@@ -17,14 +19,19 @@ impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for FieldExtensionArithmeticAi
     }
 }
 
-impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB> for FieldExtensionArithmeticAir<WORD_SIZE> {
+impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB>
+    for FieldExtensionArithmeticAir<WORD_SIZE>
+{
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
         let beta_f = AB::Expr::from_canonical_usize(BETA);
 
         let local = main.row_slice(0);
-        let local_cols = FieldExtensionArithmeticCols::<WORD_SIZE, AB::Var>::from_iter(&mut local.iter().copied(), &self.mem_oc.clk_lt_air);
+        let local_cols = FieldExtensionArithmeticCols::<WORD_SIZE, AB::Var>::from_iter(
+            &mut local.iter().copied(),
+            &self.mem_oc.clk_lt_air,
+        );
 
         let FieldExtensionArithmeticCols { io, aux } = local_cols;
 

@@ -6,10 +6,10 @@ use p3_field::PrimeField32;
 use OpCode::*;
 
 use crate::{
+    field_extension::FieldExtensionArithmetic,
     memory::offline_checker::air::NewMemoryOfflineChecker, poseidon2::Poseidon2Chip,
     vm::config::MemoryConfig,
 };
-use crate::field_extension::FieldExtensionArithmetic;
 
 #[cfg(test)]
 pub mod tests;

@@ -1,8 +1,8 @@
 use std::iter;
 
-use afs_primitives::is_less_than::columns::IsLessThanAuxCols;
+use afs_primitives::is_less_than::{columns::IsLessThanAuxCols, IsLessThanAir};
 use derive_new::new;
-use afs_primitives::is_less_than::IsLessThanAir;
+
 use super::air::NewMemoryOfflineChecker;
 use crate::memory::manager::{access_cell::AccessCell, operation::MemoryOperation};
 
@@ -79,7 +79,7 @@ impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerAuxCols<WORD_SIZE, T> {
             .collect()
     }
 
-    pub fn from_iter<I: Iterator<Item=T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
+    pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
         Self {
             old_cell: AccessCell::from_iter(iter),
             is_immediate: iter.next().unwrap(),

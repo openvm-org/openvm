@@ -1,9 +1,11 @@
 use std::array;
+
 use afs_derive::AlignedBorrow;
-use p3_field::Field;
 use afs_primitives::is_less_than::IsLessThanAir;
+use p3_field::Field;
+
+use super::{FieldExtensionArithmetic, EXTENSION_DEGREE};
 use crate::memory::offline_checker::columns::MemoryOfflineCheckerAuxCols;
-use super::{EXTENSION_DEGREE, FieldExtensionArithmetic};
 
 /// Columns for field extension chip.
 ///
@@ -66,7 +68,7 @@ impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T
             .collect()
     }
 
-    pub fn from_iter<I: Iterator<Item=T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
+    pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
         let mut next = || iter.next().unwrap();
 
         Self {
@@ -92,7 +94,9 @@ impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T
                 sum_or_diff: array::from_fn(|_| next()),
                 product: array::from_fn(|_| next()),
                 inv: array::from_fn(|_| next()),
-                mem_oc_aux_cols: array::from_fn(|_| MemoryOfflineCheckerAuxCols::from_iter(iter, lt_air)),
+                mem_oc_aux_cols: array::from_fn(|_| {
+                    MemoryOfflineCheckerAuxCols::from_iter(iter, lt_air)
+                }),
             },
         }
     }

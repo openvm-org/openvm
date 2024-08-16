@@ -1,10 +1,13 @@
 use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::{columns::{
-    FieldExtensionArithmeticAuxCols, FieldExtensionArithmeticCols,
-    FieldExtensionArithmeticIoCols,
-}, FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticOperation};
+use super::{
+    columns::{
+        FieldExtensionArithmeticAuxCols, FieldExtensionArithmeticCols,
+        FieldExtensionArithmeticIoCols,
+    },
+    FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticOperation,
+};
 use crate::cpu::OpCode;
 
 /// Constructs a new set of columns (including auxiliary columns) given inputs.
@@ -77,12 +80,14 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         let empty_row: Vec<F> = FieldExtensionArithmeticCols::<WORD_SIZE, _>::blank_row().flatten();
         let curr_height = self.operations.len();
         let correct_height = curr_height.next_power_of_two();
-        trace.extend(
-            empty_row.iter().cloned().cycle().take(
-                (correct_height - curr_height) * FieldExtensionArithmeticCols::<WORD_SIZE, F>::get_width(),
-            ),
-        );
+        trace.extend(empty_row.iter().cloned().cycle().take(
+            (correct_height - curr_height)
+                * FieldExtensionArithmeticCols::<WORD_SIZE, F>::get_width(),
+        ));
 
-        RowMajorMatrix::new(trace, FieldExtensionArithmeticCols::<WORD_SIZE, F>::get_width())
+        RowMajorMatrix::new(
+            trace,
+            FieldExtensionArithmeticCols::<WORD_SIZE, F>::get_width(),
+        )
     }
 }

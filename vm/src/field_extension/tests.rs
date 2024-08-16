@@ -8,9 +8,14 @@ use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField};
 use rand::Rng;
 
-use super::{columns::FieldExtensionArithmeticIoCols, FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticOperation};
-use crate::cpu::{OpCode, FIELD_EXTENSION_INSTRUCTIONS, WORD_SIZE};
-use crate::vm::config::MemoryConfig;
+use super::{
+    columns::FieldExtensionArithmeticIoCols, FieldExtensionArithmetic,
+    FieldExtensionArithmeticChip, FieldExtensionArithmeticOperation,
+};
+use crate::{
+    cpu::{OpCode, FIELD_EXTENSION_INSTRUCTIONS, WORD_SIZE},
+    vm::config::MemoryConfig,
+};
 
 /// Function for testing that generates a random program consisting only of field arithmetic operations.
 fn generate_field_extension_operations(
