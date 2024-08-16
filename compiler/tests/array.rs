@@ -132,7 +132,7 @@ fn test_fixed_array_const() {
 
     // Put values statically
     builder.range(0, fixed_array.len()).for_each(|i, builder| {
-        builder.set(&mut fixed_array, i, Usize::from(2));
+        builder.set_value(&mut fixed_array, i, Usize::from(2));
     });
     // Assert values set.
     builder.range(0, fixed_array.len()).for_each(|i, builder| {
