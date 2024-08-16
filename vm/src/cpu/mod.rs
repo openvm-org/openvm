@@ -80,8 +80,8 @@ pub enum OpCode {
     LOADW2 = 70,
     STOREW2 = 71,
 
-    ADD = 80,
-    SUB = 81,
+    ADD256 = 80,
+    SUB256 = 81,
 
     NOP = 100,
 }

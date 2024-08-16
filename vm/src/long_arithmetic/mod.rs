@@ -31,7 +31,10 @@ pub struct LongArithmeticChip<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticChip<ARG_SIZE, LIMB_SIZE> {
     pub fn new(bus_index: usize) -> Self {
         Self {
-            air: LongArithmeticAir { bus_index },
+            air: LongArithmeticAir {
+                bus_index,
+                base_op: OpCode::ADD256,
+            },
             range_checker_chip: RangeCheckerGateChip::new(bus_index, 1 << LIMB_SIZE),
             operations: vec![],
         }

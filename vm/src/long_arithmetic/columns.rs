@@ -14,8 +14,10 @@ pub struct LongArithmeticIoCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, T
 }
 
 pub struct LongArithmeticAuxCols<const ARG_SIZE: usize, const LIMB_SIZE: usize, T> {
-    pub opcode_lo: T,
-    pub opcode_hi: T,
+    // This flag is 1 if the opcode is SUB, and 0 otherwise (if ADD).
+    // Will probably evolve into an array of indicators for all supported
+    // opcodes by the chip.
+    pub opcode_sub_flag: T,
     // Note: this "carry" vector may serve as a "borrow" vector in the case of
     // subtraction. However, I decided to call it just "carry", because:
     // 1. "borrow" may cause confusion in rust,
@@ -89,28 +91,22 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Clone>
     LongArithmeticAuxCols<ARG_SIZE, LIMB_SIZE, T>
 {
     pub const fn get_width() -> usize {
-        2 + num_limbs::<ARG_SIZE, LIMB_SIZE>()
+        1 + num_limbs::<ARG_SIZE, LIMB_SIZE>()
     }
 
     pub fn from_slice(slc: &[T]) -> Self {
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
 
-        let opcode_lo = slc[0].clone();
-        let opcode_hi = slc[1].clone();
-        let carry = slc[2..2 + num_limbs].to_vec();
+        let opcode_sub_flag = slc[0].clone();
+        let carry = slc[1..1 + num_limbs].to_vec();
 
         Self {
-            opcode_lo,
-            opcode_hi,
+            opcode_sub_flag,
             carry,
         }
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        [
-            vec![self.opcode_lo.clone(), self.opcode_hi.clone()],
-            self.carry.clone(),
-        ]
-        .concat()
+        [vec![self.opcode_sub_flag.clone()], self.carry.clone()].concat()
     }
 }

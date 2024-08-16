@@ -12,13 +12,12 @@ use crate::cpu::OpCode;
 #[derive(Copy, Clone, Debug)]
 pub struct LongArithmeticAir<const ARG_SIZE: usize, const LIMB_SIZE: usize> {
     pub bus_index: usize, // to communicate with the range checker that checks that all limbs are < 2^LIMB_SIZE
+    pub base_op: OpCode,
 }
 
 impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticAir<ARG_SIZE, LIMB_SIZE> {
-    pub const BASE_OP: OpCode = OpCode::ADD;
-
-    pub fn new(bus_index: usize) -> Self {
-        Self { bus_index }
+    pub fn new(bus_index: usize, base_op: OpCode) -> Self {
+        Self { bus_index, base_op }
     }
 }
 
@@ -44,17 +43,13 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
 
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
 
-        builder.assert_bool(aux.opcode_lo);
-        builder.assert_bool(aux.opcode_hi);
+        builder.assert_bool(aux.opcode_sub_flag);
         builder.assert_eq(
-            aux.opcode_hi * AB::Expr::two()
-                + aux.opcode_lo
-                + AB::Expr::from_canonical_u8(Self::BASE_OP as u8),
+            aux.opcode_sub_flag + AB::Expr::from_canonical_u8(self.base_op as u8),
             io.opcode,
         );
 
-        builder.assert_zero(aux.opcode_hi);
-        let sign = AB::Expr::one() - AB::Expr::two() * aux.opcode_lo;
+        let sign = AB::Expr::one() - AB::Expr::two() * aux.opcode_sub_flag;
 
         for i in 0..num_limbs {
             // For addition, we have the following:
