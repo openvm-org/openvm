@@ -6,6 +6,7 @@ members = [
     "bin/olap",
     "benchmark",
     "db/page",
+    "db/interface",
     "primitives",
     "compiler",
     "derive",
@@ -15,7 +16,7 @@ members = [
     "stark-backend",
     "test-utils",
     "vm",
-    "vm/bin", "datafusion-interface",
+    "vm/bin",
 ]
 resolver = "2"
 

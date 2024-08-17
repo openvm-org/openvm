@@ -1,5 +1,5 @@
 [package]
-name = "afs-datafusion-interface"
+name = "axiomdb-interface"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -8,9 +8,9 @@ edition.workspace = true
 color-eyre = "0.6.3"
 datafusion = { version = "40.0.0", features = ["serde"] }
 tokio = "1.39.2"
-afs-page = { path = "../db/page" }
-afs-stark-backend = { path = "../stark-backend" }
-afs-test-utils = { path = "../test-utils" }
+afs-page = { path = "../page" }
+afs-stark-backend = { path = "../../stark-backend" }
+afs-test-utils = { path = "../../test-utils" }
 async-trait = "0.1.81"
 p3-field = { workspace = true }
 p3-matrix = { workspace = true }

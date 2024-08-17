@@ -1,7 +1,7 @@
-pub mod afs_exec;
-pub mod afs_expr;
-pub mod afs_node;
 pub mod committed_page;
+pub mod exec;
+pub mod expr;
+pub mod node;
 pub mod utils;
 
 /// Number of columns, from the left side of the Schema, that are index columns. Keep in mind that you

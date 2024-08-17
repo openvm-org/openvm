@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use afs_datafusion_interface::{afs_exec::AfsExec, committed_page, PCS_LOG_DEGREE};
 use afs_page::common::page::Page;
 use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
+use axiomdb_interface::{committed_page, exec::AxiomDbExec, PCS_LOG_DEGREE};
 use datafusion::{arrow::datatypes::Schema, execution::context::SessionContext};
 
 // #[test]
@@ -82,7 +82,7 @@ pub async fn test_basic_e2e() {
     println!("{:#?}", logical.clone());
 
     let engine = default_engine(PCS_LOG_DEGREE);
-    let mut afs = AfsExec::new(ctx, logical, engine).await;
+    let mut afs = AxiomDbExec::new(ctx, logical, engine).await;
     println!("Flattened AFS execution plan: {:?}", afs.afs_execution_plan);
 
     afs.execute().await.unwrap();

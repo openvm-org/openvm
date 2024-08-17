@@ -12,7 +12,7 @@ use p3_field::PrimeField64;
 use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
 
-use super::AfsNodeExecutable;
+use super::AxiomDbNodeExecutable;
 use crate::{
     committed_page::CommittedPage,
     utils::table::{convert_to_ops, get_record_batches},
@@ -72,7 +72,7 @@ where
     }
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC>> AfsNodeExecutable<SC, E> for PageScan<SC, E>
+impl<SC: StarkGenericConfig, E: StarkEngine<SC>> AxiomDbNodeExecutable<SC, E> for PageScan<SC, E>
 where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,

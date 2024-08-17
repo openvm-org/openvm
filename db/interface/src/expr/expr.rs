@@ -1,16 +1,16 @@
 use afs_page::single_page_index_scan::page_index_scan_input::Comp;
 use datafusion::logical_expr::Operator;
 
-use super::AfsExpr;
+use super::AxiomDbExpr;
 
 #[derive(Debug, Clone)]
 pub struct BinaryExpr {
     /// The left operand of the binary expression.
-    pub left: Box<AfsExpr>,
+    pub left: Box<AxiomDbExpr>,
     /// The comparison operator
     pub op: Comp,
     /// The side right operand of the binary expression.
-    pub right: Box<AfsExpr>,
+    pub right: Box<AxiomDbExpr>,
 }
 
 impl BinaryExpr {

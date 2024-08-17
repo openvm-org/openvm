@@ -15,7 +15,7 @@ use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
 
 use self::{filter::Filter, page_scan::PageScan, projection::Projection};
-use crate::{afs_expr::AfsExpr, committed_page::CommittedPage};
+use crate::{committed_page::CommittedPage, expr::AxiomDbExpr};
 
 pub mod filter;
 pub mod page_scan;
@@ -24,21 +24,21 @@ pub mod projection;
 macro_rules! delegate_to_node {
     ($self:ident, $method:ident, $ctx:expr, $engine:expr) => {
         match $self {
-            AfsNode::PageScan(ref mut page_scan) => page_scan.$method($ctx, $engine).await,
-            AfsNode::Projection(ref mut projection) => projection.$method($ctx, $engine).await,
-            AfsNode::Filter(ref mut filter) => filter.$method($ctx, $engine).await,
+            AxiomDbNode::PageScan(ref mut page_scan) => page_scan.$method($ctx, $engine).await,
+            AxiomDbNode::Projection(ref mut projection) => projection.$method($ctx, $engine).await,
+            AxiomDbNode::Filter(ref mut filter) => filter.$method($ctx, $engine).await,
         }
     };
     ($self:ident, $method:ident) => {
         match $self {
-            AfsNode::PageScan(page_scan) => page_scan.$method(),
-            AfsNode::Projection(projection) => projection.$method(),
-            AfsNode::Filter(filter) => filter.$method(),
+            AxiomDbNode::PageScan(page_scan) => page_scan.$method(),
+            AxiomDbNode::Projection(projection) => projection.$method(),
+            AxiomDbNode::Filter(filter) => filter.$method(),
         }
     };
 }
 
-pub trait AfsNodeExecutable<SC: StarkGenericConfig, E: StarkEngine<SC>> {
+pub trait AxiomDbNodeExecutable<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     /// Runs the node's execution logic without any cryptographic operations
     async fn execute(&mut self, ctx: &SessionContext, engine: &E) -> Result<()>;
     /// Generate the proving key for the node
@@ -53,17 +53,17 @@ pub trait AfsNodeExecutable<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     fn proof(&self) -> &Option<Proof<SC>>;
 }
 
-/// AfsNode is a wrapper around the node types that conform to the AfsNodeExecutable trait.
-/// It provides conversion from DataFusion's LogicalPlan to the AfsNode type. AfsNodes are
-/// meant to be executed by the AfsExec engine. They store the necessary information to handle
-/// the cryptographic operations for each type of AfsNode operation.
-pub enum AfsNode<SC: StarkGenericConfig, E: StarkEngine<SC>> {
+/// AxiomDbNode is a wrapper around the node types that conform to the AxiomDbNodeExecutable trait.
+/// It provides conversion from DataFusion's LogicalPlan to the AxiomDbNode type. AxiomDbNodes are
+/// meant to be executed by the AxiomDbExec engine. They store the necessary information to handle
+/// the cryptographic operations for each type of AxiomDbNode operation.
+pub enum AxiomDbNode<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     PageScan(PageScan<SC, E>),
     Projection(Projection<SC, E>),
     Filter(Filter<SC, E>),
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC>> AfsNode<SC, E>
+impl<SC: StarkGenericConfig, E: StarkEngine<SC>> AxiomDbNode<SC, E>
 where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
@@ -73,22 +73,22 @@ where
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
-    /// Converts a LogicalPlan tree to a flat AfsNode vec. Some LogicalPlan nodes may convert to
-    /// multiple AfsNodes.
-    pub fn from(logical_plan: &LogicalPlan, inputs: Vec<Arc<Mutex<AfsNode<SC, E>>>>) -> Self {
+    /// Converts a LogicalPlan tree to a flat AxiomDbNode vec. Some LogicalPlan nodes may convert to
+    /// multiple AxiomDbNodes.
+    pub fn from(logical_plan: &LogicalPlan, inputs: Vec<Arc<Mutex<AxiomDbNode<SC, E>>>>) -> Self {
         match logical_plan {
             LogicalPlan::TableScan(table_scan) => {
                 let page_id = table_scan.table_name.to_string();
                 let source = table_scan.source.clone();
-                AfsNode::PageScan(PageScan::new(page_id, source))
+                AxiomDbNode::PageScan(PageScan::new(page_id, source))
             }
             LogicalPlan::Filter(filter) => {
                 if inputs.len() != 1 {
                     panic!("Filter node expects exactly one input");
                 }
-                let afs_expr = AfsExpr::from(&filter.predicate);
+                let afs_expr = AxiomDbExpr::from(&filter.predicate);
                 let input = inputs[0].clone();
-                AfsNode::Filter(Filter {
+                AxiomDbNode::Filter(Filter {
                     input,
                     output: None,
                     predicate: afs_expr,
@@ -101,11 +101,11 @@ where
     }
 
     /// Get the inputs to the node as a vector from left to right.
-    pub fn inputs(&self) -> Vec<&Arc<Mutex<AfsNode<SC, E>>>> {
+    pub fn inputs(&self) -> Vec<&Arc<Mutex<AxiomDbNode<SC, E>>>> {
         match self {
-            AfsNode::PageScan(_) => vec![],
-            AfsNode::Projection(projection) => vec![&projection.input],
-            AfsNode::Filter(filter) => vec![&filter.input],
+            AxiomDbNode::PageScan(_) => vec![],
+            AxiomDbNode::Projection(projection) => vec![&projection.input],
+            AxiomDbNode::Filter(filter) => vec![&filter.input],
         }
     }
 
@@ -130,20 +130,20 @@ where
     }
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC>> Debug for AfsNode<SC, E> {
+impl<SC: StarkGenericConfig, E: StarkEngine<SC>> Debug for AxiomDbNode<SC, E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AfsNode::PageScan(page_scan) => {
+            AxiomDbNode::PageScan(page_scan) => {
                 write!(f, "PageScan {:?} {:?}", page_scan.page_id, page_scan.output)
             }
-            AfsNode::Projection(projection) => {
+            AxiomDbNode::Projection(projection) => {
                 write!(
                     f,
                     "Projection {:?} {:?}",
                     projection.schema, projection.output
                 )
             }
-            AfsNode::Filter(filter) => {
+            AxiomDbNode::Filter(filter) => {
                 write!(f, "Filter {:?} {:?}", filter.predicate, filter.output)
             }
         }

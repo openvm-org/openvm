@@ -13,10 +13,10 @@ use datafusion::{
 use tokio::sync::Mutex;
 
 use crate::{
-    afs_expr::AfsExpr,
+    expr::AxiomDbExpr,
     afs_logical_plan::{
         plan::{Filter, PageScan},
-        AfsNode,
+        AxiomDbNode,
     },
 };
 
@@ -45,11 +45,11 @@ struct LogicalNode<'a> {
     state: NodeState,
 }
 
-impl AfsExec {
+impl AxiomDbExec {
     pub async fn create_execution_plan(
         root: &LogicalPlan,
         state: &SessionState,
-    ) -> Result<Vec<AfsNode>> {
+    ) -> Result<Vec<AxiomDbNode>> {
         // Note: below DFS/flatten implementation copied with minor adjustments from datafusion/core/src/physical_planner.rs
         // DFS the tree to flatten it into a Vec.
         // This will allow us to build the Physical Plan from the leaves up

@@ -12,18 +12,18 @@ use p3_field::PrimeField64;
 use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
 
-use super::{AfsNode, AfsNodeExecutable};
+use super::{AxiomDbNode, AxiomDbNodeExecutable};
 use crate::committed_page::CommittedPage;
 
 pub struct Projection<SC: StarkGenericConfig, E: StarkEngine<SC>> {
-    pub input: Arc<Mutex<AfsNode<SC, E>>>,
+    pub input: Arc<Mutex<AxiomDbNode<SC, E>>>,
     pub output: Option<CommittedPage<SC>>,
     pub schema: Schema,
     pub pk: Option<MultiStarkProvingKey<SC>>,
     pub proof: Option<Proof<SC>>,
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC>> AfsNodeExecutable<SC, E> for Projection<SC, E>
+impl<SC: StarkGenericConfig, E: StarkEngine<SC>> AxiomDbNodeExecutable<SC, E> for Projection<SC, E>
 where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,

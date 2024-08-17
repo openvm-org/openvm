@@ -15,16 +15,16 @@ use p3_field::PrimeField64;
 use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
 
-use super::{AfsNode, AfsNodeExecutable};
+use super::{AxiomDbNode, AxiomDbNodeExecutable};
 use crate::{
-    afs_expr::AfsExpr, committed_page::CommittedPage, BITS_PER_FE, PAGE_BUS_IDX, RANGE_BUS_IDX,
+    committed_page::CommittedPage, expr::AxiomDbExpr, BITS_PER_FE, PAGE_BUS_IDX, RANGE_BUS_IDX,
     RANGE_CHECK_BITS,
 };
 
 pub struct Filter<SC: StarkGenericConfig, E: StarkEngine<SC>> {
-    pub input: Arc<Mutex<AfsNode<SC, E>>>,
+    pub input: Arc<Mutex<AxiomDbNode<SC, E>>>,
     pub output: Option<CommittedPage<SC>>,
-    pub predicate: AfsExpr,
+    pub predicate: AxiomDbExpr,
     pub pk: Option<MultiStarkProvingKey<SC>>,
     pub proof: Option<Proof<SC>>,
 }
@@ -54,10 +54,10 @@ where
 
     fn decompose_predicate(&self) -> (Comp, u32) {
         match &self.predicate {
-            AfsExpr::BinaryExpr(expr) => {
+            AxiomDbExpr::BinaryExpr(expr) => {
                 let op = &expr.op;
                 let right = match *expr.right {
-                    AfsExpr::Literal(x) => x,
+                    AxiomDbExpr::Literal(x) => x,
                     _ => panic!("Unsupported right side expression type"),
                 };
                 (op.clone(), right)
@@ -80,7 +80,7 @@ where
     }
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC>> AfsNodeExecutable<SC, E> for Filter<SC, E>
+impl<SC: StarkGenericConfig, E: StarkEngine<SC>> AxiomDbNodeExecutable<SC, E> for Filter<SC, E>
 where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
@@ -90,7 +90,7 @@ where
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
-    async fn execute(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
+    async fn execute(&mut self, _ctx: &SessionContext, _engine: &E) -> Result<()> {
         println!("execute Filter");
 
         let (comp, right_value) = self.decompose_predicate();
@@ -103,6 +103,7 @@ where
             page_controller.gen_output(page_input.clone(), vec![right_value], page_width, comp);
 
         let page_output = CommittedPage {
+            // TODO: use a generated page_id
             page_id: "".to_string(),
             schema: input.schema,
             page: filter_output,
@@ -112,7 +113,7 @@ where
         Ok(())
     }
 
-    async fn keygen(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
+    async fn keygen(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
         println!("keygen Filter");
 
         let (comp, _right_value) = self.decompose_predicate();
@@ -129,7 +130,7 @@ where
         Ok(())
     }
 
-    async fn prove(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
+    async fn prove(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
         println!("prove Filter");
 
         let (comp, right_value) = self.decompose_predicate();
@@ -162,7 +163,7 @@ where
 
         let proof = page_controller.prove(
             engine,
-            &pk,
+            pk,
             &mut trace_builder,
             input_prover_data,
             output_prover_data,
@@ -175,7 +176,7 @@ where
         Ok(())
     }
 
-    async fn verify(&self, ctx: &SessionContext, engine: &E) -> Result<()> {
+    async fn verify(&self, _ctx: &SessionContext, engine: &E) -> Result<()> {
         println!("verify Filter");
 
         let (comp, right_value) = self.decompose_predicate();
