@@ -3,6 +3,7 @@ use std::sync::Arc;
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData, StarkGenericConfig, Val},
     keygen::types::MultiStarkProvingKey,
+    prover::types::Proof,
 };
 use afs_test_utils::engine::StarkEngine;
 use datafusion::{error::Result, execution::context::SessionContext, logical_expr::TableSource};
@@ -19,6 +20,7 @@ pub struct Filter<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     pub output: Option<CommittedPage<SC>>,
     pub predicate: AfsExpr,
     pub pk: Option<MultiStarkProvingKey<SC>>,
+    pub proof: Option<Proof<SC>>,
 }
 
 impl<SC: StarkGenericConfig, E: StarkEngine<SC>> AfsNodeExecutable<SC, E> for Filter<SC, E>

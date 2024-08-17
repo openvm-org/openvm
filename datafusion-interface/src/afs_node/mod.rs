@@ -84,38 +84,16 @@ where
                 let afs_expr = AfsExpr::from(&filter.predicate);
                 let input = inputs[0].clone();
                 AfsNode::Filter(Filter {
-                    predicate: afs_expr,
-                    pk: None,
                     input,
                     output: None,
+                    predicate: afs_expr,
+                    pk: None,
+                    proof: None,
                 })
             }
             _ => panic!("Invalid node type: {:?}", logical_plan),
         }
     }
-    // pub fn from(logical_plan: &LogicalPlan, children: ChildrenContainer<SC, E>) -> Self {
-    //     match logical_plan {
-    //         LogicalPlan::TableScan(table_scan) => {
-    //             let page_id = table_scan.table_name.to_string();
-    //             let source = table_scan.source.clone();
-    //             AfsNode::PageScan(PageScan::new(page_id, source))
-    //         }
-    //         LogicalPlan::Filter(filter) => {
-    //             let afs_expr = AfsExpr::from(&filter.predicate);
-    //             let input = match children {
-    //                 ChildrenContainer::One(child) => child,
-    //                 _ => panic!("Filter node expects exactly one child"),
-    //             };
-    //             AfsNode::Filter(Filter {
-    //                 predicate: afs_expr,
-    //                 pk: None,
-    //                 input,
-    //                 output: None,
-    //             })
-    //         }
-    //         _ => panic!("Invalid node type: {:?}", logical_plan),
-    //     }
-    // }
 
     /// Get the inputs to the node as a vector from left to right.
     pub fn inputs(&self) -> Vec<&Arc<Mutex<AfsNode<SC, E>>>> {

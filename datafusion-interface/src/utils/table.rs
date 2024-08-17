@@ -31,7 +31,7 @@ where
         .iter()
         .enumerate()
         .map(|(i, row)| Operation {
-            clk: i,
+            clk: i + 1,
             idx: row.idx.to_vec(),
             data: row.data.to_vec(),
             op_type: OpType::Write,

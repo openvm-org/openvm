@@ -4,7 +4,7 @@ use afs_page::{execution_air::ExecutionAir, page_rw_checker::page_controller::Pa
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData, StarkGenericConfig, Val},
     keygen::types::MultiStarkProvingKey,
-    prover::trace::TraceCommitmentBuilder,
+    prover::{trace::TraceCommitmentBuilder, types::Proof},
 };
 use afs_test_utils::engine::StarkEngine;
 use datafusion::{error::Result, execution::context::SessionContext, logical_expr::TableSource};
@@ -27,6 +27,7 @@ pub struct PageScan<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     pub output: Option<CommittedPage<SC>>,
     pub page_id: String,
     pub pk: Option<MultiStarkProvingKey<SC>>,
+    pub proof: Option<Proof<SC>>,
     _marker: PhantomData<E>,
 }
 
@@ -37,6 +38,7 @@ impl<SC: StarkGenericConfig, E: StarkEngine<SC>> PageScan<SC, E> {
             pk: None,
             input,
             output: None,
+            proof: None,
             _marker: PhantomData::<E>,
         }
     }
