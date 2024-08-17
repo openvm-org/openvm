@@ -121,7 +121,7 @@ where
             idx_decomp,
         );
         let ops_sender = ExecutionAir::new(ops_bus_index, idx_len, data_len);
-        let result = page_controller.verify(engine, vk, proof, &ops_sender);
+        let result = page_controller.verify(engine, vk, &proof, &ops_sender);
         if result.is_err() {
             println!("Verification Unsuccessful");
         } else {

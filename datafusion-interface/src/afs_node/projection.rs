@@ -6,17 +6,14 @@ use afs_stark_backend::{
     prover::types::Proof,
 };
 use afs_test_utils::engine::StarkEngine;
-use datafusion::{
-    arrow::datatypes::Schema, error::Result, execution::context::SessionContext,
-    logical_expr::TableSource,
-};
+use datafusion::{arrow::datatypes::Schema, error::Result, execution::context::SessionContext};
 use futures::lock::Mutex;
 use p3_field::PrimeField64;
 use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
 
 use super::{AfsNode, AfsNodeExecutable};
-use crate::{afs_expr::AfsExpr, committed_page::CommittedPage};
+use crate::committed_page::CommittedPage;
 
 pub struct Projection<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     pub input: Arc<Mutex<AfsNode<SC, E>>>,
@@ -55,5 +52,9 @@ where
 
     fn output(&self) -> &Option<CommittedPage<SC>> {
         &self.output
+    }
+
+    fn proof(&self) -> &Option<Proof<SC>> {
+        &self.proof
     }
 }

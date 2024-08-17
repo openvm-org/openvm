@@ -6,7 +6,7 @@ use afs_stark_backend::{
     prover::types::Proof,
 };
 use afs_test_utils::engine::StarkEngine;
-use datafusion::{error::Result, execution::context::SessionContext, logical_expr::TableSource};
+use datafusion::{error::Result, execution::context::SessionContext};
 use futures::lock::Mutex;
 use p3_field::PrimeField64;
 use p3_uni_stark::Domain;
@@ -59,5 +59,9 @@ where
 
     fn output(&self) -> &Option<CommittedPage<SC>> {
         &self.output
+    }
+
+    fn proof(&self) -> &Option<Proof<SC>> {
+        &self.proof
     }
 }

@@ -400,7 +400,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         &self,
         engine: &impl StarkEngine<SC>,
         vk: MultiStarkVerifyingKey<SC>,
-        proof: Proof<SC>,
+        proof: &Proof<SC>,
         ops_sender: &dyn AnyRap<SC>,
     ) -> Result<(), VerificationError>
     where
@@ -421,7 +421,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
                 &self.range_checker.air,
                 ops_sender,
             ],
-            &proof,
+            proof,
             &pis,
         )
     }

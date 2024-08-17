@@ -63,24 +63,22 @@ use datafusion::{
 pub async fn test_basic_e2e() {
     let ctx = SessionContext::new();
 
-    // ctx.register_csv("example", "tests/data/example.csv", CsvReadOptions::new())
-    //     .await
-    //     .unwrap();
-
     let cp = committed_page!(
         "example",
         "tests/data/example.page.bin",
         "tests/data/example.schema.bin",
         BabyBearPoseidon2Config
     );
-    let schema = cp.schema.clone();
-    ctx.register_table("example", Arc::new(cp)).unwrap();
+    let page_id = cp.page_id.clone();
+    ctx.register_table(page_id.clone(), Arc::new(cp)).unwrap();
 
-    // let sql = "SELECT a FROM example WHERE a <= b GROUP BY a";
-    let sql = "SELECT a FROM example WHERE a <= 10";
-    // let sql = "SELECT a FROM example";
-    let logical = ctx.state().create_logical_plan(sql).await.unwrap();
-    // let logical = table_scan(Some("example"), &schema, None)
+    // let sql = format!("SELECT a FROM {} WHERE a <= b GROUP BY a", page_id);
+    let sql = format!("SELECT a FROM {} WHERE a <= 10", page_id);
+    // let sql = format!("SELECT a FROM {}", page_id);
+    let logical = ctx.state().create_logical_plan(sql.as_str()).await.unwrap();
+
+    // let schema = cp.schema.clone();
+    // let logical = table_scan(Some(page_id), &schema, None)
     //     .unwrap()
     //     .filter(col("a").lt(lit(10)))
     //     .unwrap()
@@ -101,4 +99,5 @@ pub async fn test_basic_e2e() {
 
     afs.keygen().await.unwrap();
     afs.prove().await.unwrap();
+    afs.verify().await.unwrap();
 }

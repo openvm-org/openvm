@@ -3,7 +3,10 @@ use std::{
     sync::Arc,
 };
 
-use afs_stark_backend::config::{Com, PcsProof, PcsProverData, StarkGenericConfig, Val};
+use afs_stark_backend::{
+    config::{Com, PcsProof, PcsProverData, StarkGenericConfig, Val},
+    prover::types::Proof,
+};
 use afs_test_utils::engine::StarkEngine;
 use datafusion::{error::Result, execution::context::SessionContext, logical_expr::LogicalPlan};
 use futures::lock::Mutex;
@@ -46,6 +49,8 @@ pub trait AfsNodeExecutable<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     async fn verify(&self, ctx: &SessionContext, engine: &E) -> Result<()>;
     /// Get the output of the node
     fn output(&self) -> &Option<CommittedPage<SC>>;
+    /// Get the proof of the node
+    fn proof(&self) -> &Option<Proof<SC>>;
 }
 
 /// AfsNode is a wrapper around the node types that conform to the AfsNodeExecutable trait.
