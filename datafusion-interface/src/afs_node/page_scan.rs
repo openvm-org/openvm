@@ -52,7 +52,7 @@ where
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
-    fn page_len_vals(&self) -> (usize, usize) {
+    fn page_stats(&self) -> (usize, usize) {
         let schema = self.input.schema();
         let idx_len = NUM_IDX_COLS;
         let data_len = schema.fields().len() - NUM_IDX_COLS;
@@ -100,7 +100,7 @@ where
 
     async fn keygen(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
         println!("keygen PageScan");
-        let (idx_len, data_len) = self.page_len_vals();
+        let (idx_len, data_len) = self.page_stats();
 
         let page_controller = self.page_controller(idx_len, data_len);
         let ops_sender = ExecutionAir::new(OPS_BUS_IDX, idx_len, data_len);
@@ -115,7 +115,7 @@ where
 
     async fn prove(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
         println!("prove PageScan");
-        let (idx_len, data_len) = self.page_len_vals();
+        let (idx_len, data_len) = self.page_stats();
 
         let record_batches = get_record_batches(ctx, &self.page_id).await.unwrap();
         if record_batches.len() != 1 {
@@ -164,7 +164,7 @@ where
 
     async fn verify(&self, _ctx: &SessionContext, engine: &E) -> Result<()> {
         println!("verify PageScan");
-        let (idx_len, data_len) = self.page_len_vals();
+        let (idx_len, data_len) = self.page_stats();
 
         let page_controller = self.page_controller(idx_len, data_len);
 

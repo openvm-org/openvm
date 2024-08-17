@@ -384,7 +384,7 @@ where
         &self,
         engine: &dyn StarkEngine<SC>,
         vk: MultiStarkVerifyingKey<SC>,
-        proof: Proof<SC>,
+        proof: &Proof<SC>,
         x: Vec<u32>,
     ) -> Result<(), VerificationError>
     where
@@ -409,7 +409,7 @@ where
                 &self.output_chip.air,
                 &self.range_checker.air,
             ],
-            &proof,
+            proof,
             &pis,
         )
     }

@@ -86,7 +86,7 @@ where
         let proof: Proof<SC> = bincode::deserialize(&encoded_proof).unwrap();
 
         // Verify proof
-        page_controller.verify(engine, vk, proof, value).unwrap();
+        page_controller.verify(engine, vk, &proof, value).unwrap();
 
         if !common.silent {
             println!("Proof verified in {:?}", start.elapsed());

@@ -115,11 +115,6 @@ where
 
     pub async fn keygen(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
         delegate_to_node!(self, keygen, ctx, engine)
-        // match self {
-        //     AfsNode::PageScan(page_scan) => page_scan.keygen(ctx, engine).await,
-        //     AfsNode::Projection(projection) => projection.keygen(ctx, engine).await,
-        //     AfsNode::Filter(filter) => filter.keygen(ctx, engine).await,
-        // }
     }
 
     pub async fn prove(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {

@@ -69,7 +69,7 @@ fn index_scan_test(
     );
     let vk = pk.vk();
 
-    page_controller.verify(engine, vk, proof, x.clone())
+    page_controller.verify(engine, vk, &proof, x.clone())
 }
 
 #[test]

@@ -1,6 +1,6 @@
 use datafusion::{logical_expr::Expr, scalar::ScalarValue};
 
-use self::expr::{AfsOperator, BinaryExpr};
+use self::expr::BinaryExpr;
 use crate::committed_page::column::Column;
 
 pub mod expr;
@@ -31,7 +31,7 @@ impl AfsExpr {
                 let right = Self::from(&binary_expr.right);
                 AfsExpr::BinaryExpr(BinaryExpr {
                     left: Box::new(left),
-                    op: AfsOperator::from(binary_expr.op),
+                    op: BinaryExpr::op_to_comp(binary_expr.op),
                     right: Box::new(right),
                 })
             }

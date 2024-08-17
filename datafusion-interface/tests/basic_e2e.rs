@@ -1,21 +1,13 @@
 use std::sync::Arc;
 
-use afs_datafusion_interface::{
-    afs_exec::AfsExec, afs_node::AfsNode, committed_page, PCS_LOG_DEGREE,
-};
-use afs_page::common::{page::Page, page_cols::PageCols};
-use afs_test_utils::config::baby_bear_poseidon2::{
-    default_engine, BabyBearPoseidon2Config, BabyBearPoseidon2Engine,
-};
-use datafusion::{
-    arrow::datatypes::{DataType, Field, Schema},
-    execution::{context::SessionContext, options::CsvReadOptions},
-    logical_expr::{col, lit, table_scan, Expr, LogicalPlan},
-    physical_planner::{DefaultPhysicalPlanner, PhysicalPlanner},
-};
+use afs_datafusion_interface::{afs_exec::AfsExec, committed_page, PCS_LOG_DEGREE};
+use afs_page::common::page::Page;
+use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
+use datafusion::{arrow::datatypes::Schema, execution::context::SessionContext};
 
 // #[test]
 // pub fn gen_schema() {
+//     use datafusion::arrow::datatypes::{DataType, Field};
 //     let fields = vec![
 //         Field::new("a", DataType::UInt32, false),
 //         Field::new("b", DataType::UInt32, false),
@@ -33,6 +25,7 @@ use datafusion::{
 
 // #[test]
 // pub fn gen_page() {
+//     use afs_page::common::page_cols::PageCols;
 //     let page = Page::from_page_cols(vec![
 //         PageCols::<u32> {
 //             is_alloc: 1,
