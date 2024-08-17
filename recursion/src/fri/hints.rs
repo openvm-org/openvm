@@ -1,8 +1,7 @@
 use afs_compiler::{
     asm::AsmConfig,
-    ir::{Array, Builder, Config, DIGEST_SIZE},
+    ir::{Builder, Config, DIGEST_SIZE},
 };
-use p3_field::AbstractField;
 
 use super::types::{BatchOpeningVariable, TwoAdicPcsProofVariable};
 use crate::{
@@ -10,7 +9,7 @@ use crate::{
     fri::types::{FriCommitPhaseProofStepVariable, FriProofVariable, FriQueryProofVariable},
     hints::{
         Hintable, InnerBatchOpening, InnerChallenge, InnerCommitPhaseStep, InnerDigest,
-        InnerFriProof, InnerPcsProof, InnerQueryProof, InnerVal,
+        InnerFriProof, InnerPcsProof, InnerQueryProof, InnerVal, VecAutoHintable,
     },
     types::InnerConfig,
 };
@@ -30,33 +29,7 @@ impl Hintable<C> for InnerDigest {
     }
 }
 
-impl Hintable<C> for Vec<InnerDigest> {
-    type HintVariable = Array<C, DigestVariable<C>>;
-
-    fn read(builder: &mut Builder<AsmConfig<InnerVal, InnerChallenge>>) -> Self::HintVariable {
-        let len = builder.hint_var();
-        let mut arr = builder.dyn_array(len);
-        builder.range(0, len).for_each(|i, builder| {
-            let hint = InnerDigest::read(builder);
-            builder.set(&mut arr, i, hint);
-        });
-        arr
-    }
-
-    fn write(&self) -> Vec<Vec<InnerVal>> {
-        let mut stream = Vec::new();
-
-        let len = InnerVal::from_canonical_usize(self.len());
-        stream.push(vec![len]);
-
-        self.iter().for_each(|arr| {
-            let comm = InnerDigest::write(arr);
-            stream.extend(comm);
-        });
-
-        stream
-    }
-}
+impl VecAutoHintable<C> for InnerDigest {}
 
 impl Hintable<C> for InnerCommitPhaseStep {
     type HintVariable = FriCommitPhaseProofStepVariable<C>;
@@ -80,33 +53,7 @@ impl Hintable<C> for InnerCommitPhaseStep {
     }
 }
 
-impl Hintable<C> for Vec<InnerCommitPhaseStep> {
-    type HintVariable = Array<C, FriCommitPhaseProofStepVariable<C>>;
-
-    fn read(builder: &mut Builder<C>) -> Self::HintVariable {
-        let len = builder.hint_var();
-        let mut arr = builder.dyn_array(len);
-        builder.range(0, len).for_each(|i, builder| {
-            let hint = InnerCommitPhaseStep::read(builder);
-            builder.set(&mut arr, i, hint);
-        });
-        arr
-    }
-
-    fn write(&self) -> Vec<Vec<<C as Config>::F>> {
-        let mut stream = Vec::new();
-
-        let len = InnerVal::from_canonical_usize(self.len());
-        stream.push(vec![len]);
-
-        self.iter().for_each(|arr| {
-            let comm = InnerCommitPhaseStep::write(arr);
-            stream.extend(comm);
-        });
-
-        stream
-    }
-}
+impl VecAutoHintable<C> for InnerCommitPhaseStep {}
 
 impl Hintable<C> for InnerQueryProof {
     type HintVariable = FriQueryProofVariable<C>;
@@ -129,33 +76,7 @@ impl Hintable<C> for InnerQueryProof {
     }
 }
 
-impl Hintable<C> for Vec<InnerQueryProof> {
-    type HintVariable = Array<C, FriQueryProofVariable<C>>;
-
-    fn read(builder: &mut Builder<C>) -> Self::HintVariable {
-        let len = builder.hint_var();
-        let mut arr = builder.dyn_array(len);
-        builder.range(0, len).for_each(|i, builder| {
-            let hint = InnerQueryProof::read(builder);
-            builder.set(&mut arr, i, hint);
-        });
-        arr
-    }
-
-    fn write(&self) -> Vec<Vec<<C as Config>::F>> {
-        let mut stream = Vec::new();
-
-        let len = InnerVal::from_canonical_usize(self.len());
-        stream.push(vec![len]);
-
-        self.iter().for_each(|arr| {
-            let comm = InnerQueryProof::write(arr);
-            stream.extend(comm);
-        });
-
-        stream
-    }
-}
+impl VecAutoHintable<C> for InnerQueryProof {}
 
 impl Hintable<C> for InnerFriProof {
     type HintVariable = FriProofVariable<C>;
@@ -211,61 +132,8 @@ impl Hintable<C> for InnerBatchOpening {
     }
 }
 
-impl Hintable<C> for Vec<InnerBatchOpening> {
-    type HintVariable = Array<C, BatchOpeningVariable<C>>;
-
-    fn read(builder: &mut Builder<C>) -> Self::HintVariable {
-        let len = builder.hint_var();
-        let mut arr = builder.dyn_array(len);
-        builder.range(0, len).for_each(|i, builder| {
-            let hint = InnerBatchOpening::read(builder);
-            builder.set(&mut arr, i, hint);
-        });
-        arr
-    }
-
-    fn write(&self) -> Vec<Vec<<C as Config>::F>> {
-        let mut stream = Vec::new();
-
-        let len = InnerVal::from_canonical_usize(self.len());
-        stream.push(vec![len]);
-
-        self.iter().for_each(|arr| {
-            let comm = InnerBatchOpening::write(arr);
-            stream.extend(comm);
-        });
-
-        stream
-    }
-}
-
-impl Hintable<C> for Vec<Vec<InnerBatchOpening>> {
-    type HintVariable = Array<C, Array<C, BatchOpeningVariable<C>>>;
-
-    fn read(builder: &mut Builder<C>) -> Self::HintVariable {
-        let len = builder.hint_var();
-        let mut arr = builder.dyn_array(len);
-        builder.range(0, len).for_each(|i, builder| {
-            let hint = Vec::<InnerBatchOpening>::read(builder);
-            builder.set(&mut arr, i, hint);
-        });
-        arr
-    }
-
-    fn write(&self) -> Vec<Vec<<C as Config>::F>> {
-        let mut stream = Vec::new();
-
-        let len = InnerVal::from_canonical_usize(self.len());
-        stream.push(vec![len]);
-
-        self.iter().for_each(|arr| {
-            let comm = Vec::<InnerBatchOpening>::write(arr);
-            stream.extend(comm);
-        });
-
-        stream
-    }
-}
+impl VecAutoHintable<C> for InnerBatchOpening {}
+impl VecAutoHintable<C> for Vec<InnerBatchOpening> {}
 
 impl Hintable<C> for InnerPcsProof {
     type HintVariable = TwoAdicPcsProofVariable<C>;
