@@ -142,6 +142,7 @@ fn run_perm_ops(
 
     let mut write_ops: Vec<WriteOps> = Vec::new();
 
+    // TODO[osama]: to be removed
     let mut timestamp = 1;
     for i in 0..num_ops {
         // CAUTION: we assume there will be no collisions between lhs..lhs+CHUNK and rhs..rhs+CHUNK
@@ -205,12 +206,10 @@ fn run_perm_ops(
 
     // TODO[osama]: just access memory directly above
     write_ops.iter().for_each(|op| {
-        segment.memory_manager.lock().write_word(
-            BabyBear::from_canonical_usize(op.clk),
-            op.ad_s,
-            op.address,
-            op.data,
-        );
+        segment
+            .memory_manager
+            .lock()
+            .write_word(op.ad_s, op.address, op.data);
     });
 
     let time_per =

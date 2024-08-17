@@ -19,9 +19,11 @@ pub mod access_cell;
 pub mod dimensions;
 pub mod interface;
 pub mod operation;
+pub mod trace_builder;
 
 pub struct MemoryManager<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
     pub interface_chip: MemoryInterface<NUM_WORDS, WORD_SIZE, F>,
+    clk: F,
     /// Maps (addr_space, pointer) to (data, timestamp)
     memory: HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
 }
@@ -37,6 +39,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             interface_chip: MemoryInterface::Persistent(MemoryExpandInterfaceChip::new(
                 memory_dimensions,
             )),
+            clk: F::one(),
             memory,
         }
     }
@@ -52,16 +55,15 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
                 mem_config.decomp,
                 range_checker,
             )),
+            clk: F::one(),
             memory: HashMap::new(),
         }
     }
 
-    pub fn read_word(
-        &mut self,
-        clk: F,
-        addr_space: F,
-        pointer: F,
-    ) -> NewMemoryAccess<WORD_SIZE, F> {
+    pub fn read_word(&mut self, addr_space: F, pointer: F) -> NewMemoryAccess<WORD_SIZE, F> {
+        let cur_clk = self.clk;
+        self.clk += F::one();
+
         if addr_space == F::zero() {
             let data = decompose(pointer);
             return NewMemoryAccess::<WORD_SIZE, F>::new(
@@ -69,23 +71,24 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
                     addr_space,
                     pointer,
                     F::from_canonical_u8(OpType::Read as u8),
-                    AccessCell::new(data, clk),
+                    AccessCell::new(data, cur_clk),
                     F::one(),
                 ),
-                AccessCell::new(data, clk),
+                AccessCell::new(data, cur_clk),
             );
         }
         debug_assert!((pointer.as_canonical_u32() as usize) % WORD_SIZE == 0);
 
         let cell = self.memory.get_mut(&(addr_space, pointer)).unwrap();
         let (old_clk, old_data) = (cell.clk, cell.data);
-        assert!(old_clk < clk);
+        // TODO[osama]: remove
+        assert!(old_clk < cur_clk);
 
         // Updating AccessCell
-        cell.clk = clk;
+        cell.clk = cur_clk;
 
         self.interface_chip
-            .touch_address(addr_space, pointer, old_data, clk);
+            .touch_address(addr_space, pointer, old_data, cur_clk);
 
         NewMemoryAccess::<WORD_SIZE, F>::new(
             MemoryOperation::new(
@@ -108,13 +111,15 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
 
     pub fn write_word(
         &mut self,
-        clk: F,
         addr_space: F,
         pointer: F,
         data: [F; WORD_SIZE],
     ) -> NewMemoryAccess<WORD_SIZE, F> {
         assert!(addr_space != F::zero());
         debug_assert!((pointer.as_canonical_u32() as usize) % WORD_SIZE == 0);
+
+        let cur_clk = self.clk;
+        self.clk += F::one();
 
         let cell = self
             .memory
@@ -124,14 +129,14 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
                 clk: F::zero(),
             });
         let (old_clk, old_data) = (cell.clk, cell.data);
-        if old_clk >= clk {
+        if old_clk >= cur_clk {
             println!("interesting");
-            println!("old_clk: {:?}, clk: {:?}", old_clk, clk);
+            println!("old_clk: {:?}, clk: {:?}", old_clk, cur_clk);
         }
-        assert!(old_clk < clk);
+        assert!(old_clk < cur_clk);
 
         // Updating AccessCell
-        cell.clk = clk;
+        cell.clk = cur_clk;
         cell.data = data;
 
         self.interface_chip
@@ -161,6 +166,22 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
 
         self.interface_chip
             .generate_trace(final_memory, (2 * self.memory.len()).next_power_of_two())
+    }
+
+    pub fn disabled_op(&mut self, addr_space: F, op_type: OpType) -> NewMemoryAccess<WORD_SIZE, F> {
+        let cur_clk = self.clk;
+        self.clk += F::one();
+
+        NewMemoryAccess::<WORD_SIZE, F>::new(
+            MemoryOperation::new(
+                addr_space,
+                F::zero(),
+                F::from_canonical_u8(op_type as u8),
+                AccessCell::new([F::zero(); WORD_SIZE], cur_clk),
+                F::zero(),
+            ),
+            AccessCell::new([F::zero(); WORD_SIZE], cur_clk),
+        )
     }
 
     // pub fn memory_clone(&self) -> HashMap<(F, F), F> {

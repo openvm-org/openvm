@@ -1,5 +1,4 @@
 use std::{
-    array::from_fn,
     collections::{BTreeMap, VecDeque},
     error::Error,
     fmt::Display,
@@ -22,9 +21,10 @@ use crate::{
     field_extension::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticChip},
     memory::{
         compose, decompose,
-        offline_checker::columns::{MemoryOfflineCheckerAuxCols, NewMemoryAccess},
+        manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
+        OpType,
     },
-    poseidon2::{columns::Poseidon2VmCols, Poseidon2Chip},
+    poseidon2::columns::Poseidon2VmCols,
     program::columns::ProgramPreprocessedCols,
     vm::{cycle_tracker::CycleTracker, ExecutionSegment},
 };
@@ -201,6 +201,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let e = instruction.e;
             let debug = instruction.debug.clone();
 
+            // TODO[osama]: here, make sure that timestamp actually relates to memory clks
             let io = CpuIoCols {
                 timestamp: F::from_canonical_usize(timestamp),
                 pc,
@@ -214,8 +215,19 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
 
             let mut next_pc = pc + F::one();
 
-            let mut accesses: [_; CPU_MAX_ACCESSES_PER_CYCLE] =
-                core::array::from_fn(|_| NewMemoryAccess::<WORD_SIZE, F>::default());
+            let mut mem_ops: [_; CPU_MAX_ACCESSES_PER_CYCLE] =
+                core::array::from_fn(|_| MemoryOperation::<WORD_SIZE, F>::default());
+            let mut mem_read_trace_builder = MemoryTraceBuilder::new(
+                vm.memory_manager.clone(),
+                vm.range_checker.clone(),
+                vm.cpu_chip.air.memory_offline_checker.clone(),
+            );
+            let mut mem_write_trace_builder = MemoryTraceBuilder::new(
+                vm.memory_manager.clone(),
+                vm.range_checker.clone(),
+                vm.cpu_chip.air.memory_offline_checker.clone(),
+            );
+
             let mut num_reads = 0;
             let mut num_writes = 0;
 
@@ -225,32 +237,23 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let initial_poseidon2_rows = vm.poseidon2_chip.rows.len();
 
             macro_rules! read {
-                ($address_space: expr, $address: expr) => {{
+                ($addr_space: expr, $pointer: expr) => {{
                     num_reads += 1;
                     assert!(num_reads <= CPU_MAX_READS_PER_CYCLE);
-                    accesses[num_reads - 1] = vm.memory_manager.lock().read_word(
-                        F::from_canonical_usize(timestamp + (num_reads - 1)),
-                        $address_space,
-                        $address,
-                    );
-                    compose(accesses[num_reads - 1].op.cell.data)
+
+                    mem_ops[num_reads - 1] =
+                        mem_read_trace_builder.read_word($addr_space, $pointer);
+                    compose(mem_ops[num_reads - 1].cell.data)
                 }};
             }
 
             macro_rules! write {
-                ($address_space: expr, $address: expr, $data: expr) => {{
+                ($addr_space: expr, $pointer: expr, $data: expr) => {{
                     num_writes += 1;
                     assert!(num_writes <= CPU_MAX_WRITES_PER_CYCLE);
                     let word = decompose($data);
-                    accesses[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
-                        vm.memory_manager.lock().write_word(
-                            F::from_canonical_usize(
-                                timestamp + CPU_MAX_READS_PER_CYCLE + (num_writes - 1),
-                            ),
-                            $address_space,
-                            $address,
-                            word,
-                        );
+                    mem_ops[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
+                        mem_write_trace_builder.write_word($addr_space, $pointer, word);
                 }};
             }
 
@@ -411,24 +414,21 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             };
 
             // Finalizing memory accesses
-            let mem_ops = from_fn(|i| accesses[i].op.clone());
-            let mut mem_oc_aux_cols =
-                from_fn(|_| MemoryOfflineCheckerAuxCols::<WORD_SIZE, F>::default());
-            for i in 0..CPU_MAX_ACCESSES_PER_CYCLE {
-                if accesses[i].op.enabled.as_canonical_u32() == 1 {
-                    mem_oc_aux_cols[i] = vm
-                        .cpu_chip
-                        .air
-                        .memory_offline_checker
-                        .memory_access_to_checker_aux_cols(&accesses[i], vm.range_checker.clone());
-                } else {
-                    mem_oc_aux_cols[i] = vm
-                        .cpu_chip
-                        .air
-                        .memory_offline_checker
-                        .disabled_memory_checker_aux_cols(vm.range_checker.clone());
-                }
+            for mem_op in &mut mem_ops[num_reads..CPU_MAX_READS_PER_CYCLE] {
+                *mem_op = mem_read_trace_builder.disabled_op(F::zero(), OpType::Read);
             }
+            for mem_op in
+                &mut mem_ops[CPU_MAX_READS_PER_CYCLE + num_writes..CPU_MAX_ACCESSES_PER_CYCLE]
+            {
+                *mem_op = mem_write_trace_builder.disabled_op(F::zero(), OpType::Write);
+            }
+
+            let mem_oc_aux_cols: Vec<_> = mem_read_trace_builder
+                .take_accesses_buffer()
+                .into_iter()
+                .chain(mem_write_trace_builder.take_accesses_buffer())
+                .collect();
+            let mem_oc_aux_cols = mem_oc_aux_cols.try_into().unwrap();
 
             let final_accesses = vm.memory_chip.accesses.len();
             let num_accesses_memory_rows = final_accesses - initial_accesses;
@@ -464,10 +464,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
 
             let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
                 &IsEqualVecAir::new(WORD_SIZE),
-                (
-                    accesses[0].op.cell.data.to_vec(),
-                    accesses[1].op.cell.data.to_vec(),
-                ),
+                (mem_ops[0].cell.data.to_vec(), mem_ops[1].cell.data.to_vec()),
             );
 
             let read0_equals_read1 = is_equal_vec_cols.io.is_equal;

@@ -19,6 +19,7 @@ use super::{
 };
 use crate::{cpu::RANGE_CHECKER_BUS, memory::manager::operation::MemoryOperation};
 
+#[derive(Clone)]
 pub struct NewMemoryOfflineChecker<const WORD_SIZE: usize> {
     pub clk_lt_air: IsLessThanAir,
     pub is_zero_air: IsZeroAir,

@@ -17,12 +17,13 @@ use crate::{
     },
     memory::{
         compose,
-        manager::{operation::MemoryOperation, MemoryManager},
+        manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder, MemoryManager},
         offline_checker::{
             air::NewMemoryOfflineChecker,
             columns::{MemoryOfflineCheckerAuxCols, NewMemoryAccess},
         },
         tree::Hasher,
+        OpType,
     },
     vm::{config::MemoryConfig, ExecutionSegment},
 };
@@ -147,23 +148,31 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
     pub fn calculate(&mut self, start_clk: F, instruction: Instruction<F>, is_direct: bool) {
         println!("calculating row: {}", self.rows.len());
 
-        let mut mem_oc_aux_cols = Vec::with_capacity(3 + 2 * WIDTH);
-        let push_oc_cols = |mem_oc_aux_cols: &mut Vec<_>,
-                            mem_access: &NewMemoryAccess<WORD_SIZE, F>| {
-            if !is_direct {
-                mem_oc_aux_cols.push(
-                    self.air
-                        .mem_oc
-                        .memory_access_to_checker_aux_cols(mem_access, self.range_checker.clone()),
-                )
-            } else {
-                mem_oc_aux_cols.push(
-                    self.air
-                        .mem_oc
-                        .disabled_memory_checker_aux_cols(self.range_checker.clone()),
-                )
-            }
-        };
+        let mut mem_trace_builder = MemoryTraceBuilder::<NUM_WORDS, WORD_SIZE, F>::new(
+            self.memory_manager.clone(),
+            self.range_checker.clone(),
+            self.air.mem_oc.clone(),
+        );
+
+        // TODO[osama]: remember to handle is_direct
+
+        // let mut mem_oc_aux_cols = Vec::with_capacity(3 + 2 * WIDTH);
+        // let push_oc_cols = |mem_oc_aux_cols: &mut Vec<_>,
+        //                     mem_access: &NewMemoryAccess<WORD_SIZE, F>| {
+        //     if !is_direct {
+        //         mem_oc_aux_cols.push(
+        //             self.air
+        //                 .mem_oc
+        //                 .memory_access_to_checker_aux_cols(mem_access, self.range_checker.clone()),
+        //         )
+        //     } else {
+        //         mem_oc_aux_cols.push(
+        //             self.air
+        //                 .mem_oc
+        //                 .disabled_memory_checker_aux_cols(self.range_checker.clone()),
+        //         )
+        //     }
+        // };
 
         let Instruction {
             opcode,
@@ -178,52 +187,31 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
         debug_assert_eq!(WIDTH, CHUNK * 2);
 
         let mut clk = start_clk;
-        let read = |mem_oc_aux_cols: &mut Vec<_>, address_space, pointer, clk: &mut F| {
-            let mem_access = self
-                .memory_manager
-                .lock()
-                .read_word(*clk, address_space, pointer);
-            *clk += F::one();
+        // let read = |mem_oc_aux_cols: &mut Vec<_>, address_space, pointer, clk: &mut F| {
+        //     let mem_access = self
+        //         .memory_manager
+        //         .lock()
+        //         .read_word(*clk, address_space, pointer);
+        //     *clk += F::one();
 
-            push_oc_cols(mem_oc_aux_cols, &mem_access);
-            compose(mem_access.op.cell.data)
-        };
+        //     push_oc_cols(mem_oc_aux_cols, &mem_access);
+        //     compose(mem_access.op.cell.data)
+        // };
 
-        let dst = read(&mut mem_oc_aux_cols, d, op_a, &mut clk);
-        let lhs = read(&mut mem_oc_aux_cols, d, op_b, &mut clk);
+        let dst = mem_trace_builder.read_elem(d, op_a);
+        let lhs = mem_trace_builder.read_elem(d, op_b);
         let rhs = if opcode == COMP_POS2 {
-            println!("third read is enabled");
-
-            read(&mut mem_oc_aux_cols, d, op_c, &mut clk)
+            mem_trace_builder.read_elem(d, op_c)
         } else {
-            println!("third read is disabled");
-
-            // We still need to advance the timestamp to match the interaction constraints.
-            mem_oc_aux_cols.push(self.air.mem_oc.disabled_memory_checker_aux_cols_from_op(
-                d,
-                clk,
-                self.range_checker.clone(),
-            ));
-
-            clk += F::one();
+            mem_trace_builder.disabled_op(d, OpType::Read);
             lhs + F::from_canonical_usize(CHUNK)
         };
 
         let input_state: [F; WIDTH] = array::from_fn(|i| {
             if i < CHUNK {
-                read(
-                    &mut mem_oc_aux_cols,
-                    e,
-                    lhs + F::from_canonical_usize(i),
-                    &mut clk,
-                )
+                mem_trace_builder.read_elem(e, lhs + F::from_canonical_usize(i))
             } else {
-                read(
-                    &mut mem_oc_aux_cols,
-                    e,
-                    rhs + F::from_canonical_usize(i - CHUNK),
-                    &mut clk,
-                )
+                mem_trace_builder.read_elem(e, rhs + F::from_canonical_usize(i - CHUNK))
             }
         });
 
@@ -232,26 +220,12 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
         let len = if opcode == PERM_POS2 { WIDTH } else { CHUNK };
 
         for (i, &output_elem) in output.iter().enumerate().take(len) {
-            let mem_access = self.memory_manager.lock().write_word(
-                clk,
-                e,
-                dst + F::from_canonical_usize(i),
-                from_fn(|_| output_elem),
-            );
-            clk += F::one();
-
-            push_oc_cols(&mut mem_oc_aux_cols, &mem_access);
+            mem_trace_builder.write_elem(e, dst + F::from_canonical_usize(i), output_elem);
         }
 
         // Generate disabled MemoryOfflineCheckerAuxCols in case len != WIDTH
         for i in len..WIDTH {
-            mem_oc_aux_cols.push(self.air.mem_oc.disabled_memory_checker_aux_cols_from_op(
-                e,
-                clk,
-                self.range_checker.clone(),
-            ));
-
-            clk += F::one();
+            mem_trace_builder.disabled_op(e, OpType::Write);
         }
 
         let io = if is_direct {
@@ -267,7 +241,7 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
                 lhs,
                 rhs,
                 internal,
-                mem_oc_aux_cols,
+                mem_oc_aux_cols: mem_trace_builder.take_accesses_buffer(),
             },
         };
 

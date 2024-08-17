@@ -60,12 +60,10 @@ fn volatile_memory_offline_checker_test() {
     }
 
     let mut checker_trace = vec![];
-    let mut clk = Val::one();
     // First, write to all addresses
     for (addr_space, pointer) in all_addresses.iter() {
         let word = from_fn(|_| Val::from_canonical_u32(rng.next_u32() % MAX_VAL));
-        let mem_access = memory_manager.write_word(clk, *addr_space, *pointer, word);
-        clk += Val::one();
+        let mem_access = memory_manager.write_word(*addr_space, *pointer, word);
         checker_trace.extend(
             offline_checker
                 .memory_access_to_checker_cols(&mem_access, range_checker.clone())
@@ -80,11 +78,10 @@ fn volatile_memory_offline_checker_test() {
         let word = from_fn(|_| Val::from_canonical_u32(rng.next_u32() % MAX_VAL));
 
         let mem_access = if rng.gen_bool(0.5) {
-            memory_manager.write_word(clk, addr_space, pointer, word)
+            memory_manager.write_word(addr_space, pointer, word)
         } else {
-            memory_manager.read_word(clk, addr_space, pointer)
+            memory_manager.read_word(addr_space, pointer)
         };
-        clk += Val::one();
         checker_trace.extend(
             offline_checker
                 .memory_access_to_checker_cols(&mem_access, range_checker.clone())
