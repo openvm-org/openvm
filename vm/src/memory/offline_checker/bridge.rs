@@ -1,9 +1,10 @@
-use std::iter;
-
 use afs_stark_backend::interaction::InteractionBuilder;
 
 use super::air::NewMemoryOfflineChecker;
-use crate::{cpu::NEW_MEMORY_BUS, memory::manager::access_cell::AccessCell};
+use crate::{
+    cpu::NEW_MEMORY_BUS,
+    memory::{manager::access_cell::AccessCell, MemoryAddress},
+};
 
 impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
     pub fn eval_memory_interactions<AB: InteractionBuilder>(
@@ -14,22 +15,19 @@ impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
         new_cell: AccessCell<WORD_SIZE, AB::Expr>,
         mult: AB::Expr,
     ) {
-        builder.push_receive(
-            NEW_MEMORY_BUS,
-            iter::once(addr_space.clone())
-                .chain(iter::once(pointer.clone()))
-                .chain(old_cell.data)
-                .chain(iter::once(old_cell.clk)),
-            mult.clone(),
-        );
-
-        builder.push_send(
-            NEW_MEMORY_BUS,
-            iter::once(addr_space)
-                .chain(iter::once(pointer))
-                .chain(new_cell.data)
-                .chain(iter::once(new_cell.clk)),
-            mult,
-        );
+        NEW_MEMORY_BUS
+            .read(
+                old_cell.clk,
+                MemoryAddress::new(addr_space.clone(), pointer.clone()),
+                old_cell.data,
+            )
+            .push(builder, mult.clone());
+        NEW_MEMORY_BUS
+            .write(
+                new_cell.clk,
+                MemoryAddress::new(addr_space, pointer),
+                new_cell.data,
+            )
+            .push(builder, mult);
     }
 }

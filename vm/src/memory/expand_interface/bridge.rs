@@ -38,7 +38,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize>
             let word = local.values[word_idx];
 
             builder.push_send(
-                NEW_MEMORY_BUS,
+                NEW_MEMORY_BUS.0,
                 iter::once(local.address_space.into())
                     .chain(iter::once(
                         AB::Expr::from_canonical_usize(NUM_WORDS * WORD_SIZE) * local.leaf_label

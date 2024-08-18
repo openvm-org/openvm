@@ -16,6 +16,14 @@ pub enum OpType {
     Write = 1,
 }
 
+/// The full pointer to a location in memory consists of an address space and a pointer within
+/// the address space.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MemoryAddress<S, T> {
+    pub address_space: S,
+    pub pointer: T,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryAccess<const WORD_SIZE: usize, F> {
     pub timestamp: usize,
@@ -23,6 +31,15 @@ pub struct MemoryAccess<const WORD_SIZE: usize, F> {
     pub address_space: F,
     pub address: F,
     pub data: [F; WORD_SIZE],
+}
+
+impl<S, T> MemoryAddress<S, T> {
+    pub fn new(address_space: S, pointer: T) -> Self {
+        Self {
+            address_space,
+            pointer,
+        }
+    }
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField64> OfflineCheckerOperation<F>

@@ -14,13 +14,18 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::Matrix;
 
 use super::{
+    bus::MemoryBus,
     columns::{MemoryOfflineCheckerAuxCols, MemoryOfflineCheckerCols},
     MemoryChip, MemoryOfflineChecker,
 };
-use crate::{cpu::RANGE_CHECKER_BUS, memory::manager::operation::MemoryOperation};
+use crate::{
+    cpu::{NEW_MEMORY_BUS, RANGE_CHECKER_BUS},
+    memory::manager::operation::MemoryOperation,
+};
 
 #[derive(Clone)]
 pub struct NewMemoryOfflineChecker<const WORD_SIZE: usize> {
+    pub memory_bus: MemoryBus,
     pub clk_lt_air: IsLessThanAir,
     pub is_zero_air: IsZeroAir,
 }
@@ -28,6 +33,7 @@ pub struct NewMemoryOfflineChecker<const WORD_SIZE: usize> {
 impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
     pub fn new(clk_max_bits: usize, decomp: usize) -> Self {
         Self {
+            memory_bus: NEW_MEMORY_BUS,
             clk_lt_air: IsLessThanAir::new(RANGE_CHECKER_BUS, clk_max_bits, decomp),
             is_zero_air: IsZeroAir,
         }

@@ -182,7 +182,7 @@ fn random_test<const CHUNK: usize, const NUM_WORDS: usize>(
         }
     }
 
-    let dummy_offline_checker_air = DummyInteractionAir::new(4, true, NEW_MEMORY_BUS);
+    let dummy_offline_checker_air = DummyInteractionAir::new(4, true, NEW_MEMORY_BUS.0);
     while !(dummy_offline_checker_trace_rows.len() / (dummy_offline_checker_air.field_width() + 1))
         .is_power_of_two()
     {
