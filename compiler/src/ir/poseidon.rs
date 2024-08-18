@@ -14,9 +14,9 @@ impl<C: Config> Builder<C> {
         let output = match array {
             Array::Fixed(values) => {
                 assert_eq!(values.borrow().len(), PERMUTATION_WIDTH);
-                self.array::<Felt<C::F>>(Usize::from(PERMUTATION_WIDTH))
+                self.dyn_array::<Felt<C::F>>(Usize::from(PERMUTATION_WIDTH))
             }
-            Array::Dyn(_, len) => self.array::<Felt<C::F>>(len.clone()),
+            Array::Dyn(_, len) => self.dyn_array::<Felt<C::F>>(len.clone()),
         };
         self.operations.push(DslIr::Poseidon2PermuteBabyBear(
             output.clone(),

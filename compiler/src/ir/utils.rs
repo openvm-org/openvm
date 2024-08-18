@@ -167,11 +167,11 @@ impl<C: Config> Builder<C> {
     /// Multiplies `base` by `2^{log_power}`.
     pub fn sll<V>(&mut self, base: impl Into<V::Expression>, shift: RVar<C::N>) -> V
     where
-        V: Variable<C> + Copy + Add<Output = V::Expression>,
+        V: Variable<C> + Clone + Add<Output = V::Expression>,
     {
         let result: V = self.eval(base);
         self.range(0, shift)
-            .for_each(|_, builder| builder.assign(&result, result + result));
+            .for_each(|_, builder| builder.assign(&result, result.clone() + result.clone()));
         result
     }
 

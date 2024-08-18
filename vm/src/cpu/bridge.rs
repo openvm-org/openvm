@@ -25,7 +25,9 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
         // Interaction with program (bus 0)
         builder.push_send(
             READ_INSTRUCTION_BUS,
-            [io.pc, io.opcode, io.op_a, io.op_b, io.op_c, io.d, io.e],
+            [
+                io.pc, io.opcode, io.op_a, io.op_b, io.op_c, io.d, io.e, io.op_f, io.op_g,
+            ],
             AB::Expr::one() - operation_flags[&OpCode::NOP],
         );
 

@@ -24,6 +24,9 @@ afs-test-utils = { path = "../test-utils" }
 parking_lot = "0.12.2"
 itertools.workspace = true
 getset = "0.1.2"
+num-bigint-dig = "0.8.4"
+num-traits = "0.2.19"
+prime_factorization = "1.0.4"
 
 [dev-dependencies]
 p3-uni-stark = { workspace = true }

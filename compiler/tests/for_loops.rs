@@ -56,10 +56,10 @@ fn test_compiler_nested_array_loop() {
     let outer_len = 100;
     let inner_len = 10;
 
-    let mut array: Array<C, Array<C, Var<_>>> = builder.array(outer_len);
+    let mut array: Array<C, Array<C, Var<_>>> = builder.dyn_array(outer_len);
 
     builder.range(0, array.len()).for_each(|i, builder| {
-        let mut inner_array = builder.array::<Var<_>>(inner_len);
+        let mut inner_array = builder.dyn_array::<Var<_>>(inner_len);
         builder.range(0, inner_array.len()).for_each(|j, builder| {
             builder.set(&mut inner_array, j, i + j); //(j * F::from_canonical_u16(300)));
         });
@@ -90,7 +90,7 @@ fn test_compiler_break() {
     let len = 100;
     let break_len = 10;
 
-    let mut array: Array<C, Var<_>> = builder.array(len);
+    let mut array: Array<C, Var<_>> = builder.dyn_array(len);
 
     builder
         .range(0, array.len())
@@ -126,7 +126,7 @@ fn test_compiler_break() {
 
     // Test the break instructions in a nested loop.
 
-    let mut array: Array<C, Var<_>> = builder.array(len);
+    let mut array: Array<C, Var<_>> = builder.dyn_array(len);
     builder
         .range(0, array.len())
         .may_break()

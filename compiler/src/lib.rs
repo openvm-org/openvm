@@ -2,6 +2,7 @@
 #![allow(clippy::needless_range_loop)]
 
 extern crate alloc;
+extern crate core;
 
 pub mod asm;
 pub mod constraints;

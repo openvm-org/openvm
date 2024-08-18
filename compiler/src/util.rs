@@ -47,6 +47,7 @@ pub fn execute_program<const WORD_SIZE: usize>(
         VmConfig {
             num_public_values: 4,
             max_segment_len: (1 << 25) - 100,
+            modular_multiplication_enabled: true,
             ..Default::default()
         },
         program,
@@ -99,11 +100,13 @@ pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
             op_c,
             d,
             e,
+            op_f,
+            op_g,
             debug,
         } = instruction;
         println!(
-            "{:?} {} {} {} {} {} {}",
-            opcode, op_a, op_b, op_c, d, e, debug
+            "{:?} {} {} {} {} {} {} {} {}",
+            opcode, op_a, op_b, op_c, d, e, op_f, op_g, debug
         );
     }
 }
@@ -117,11 +120,13 @@ pub fn display_program_with_pc<F: PrimeField32>(program: &[Instruction<F>]) {
             op_c,
             d,
             e,
+            op_f,
+            op_g,
             debug,
         } = instruction;
         println!(
-            "{} | {:?} {} {} {} {} {} {}",
-            pc, opcode, op_a, op_b, op_c, d, e, debug
+            "{} | {:?} {} {} {} {} {} {} {} {}",
+            pc, opcode, op_a, op_b, op_c, d, e, op_f, op_g, debug
         );
     }
 }

@@ -116,7 +116,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn calculate(
         vm: &mut ExecutionSegment<WORD_SIZE, F>,
         start_timestamp: usize,
@@ -129,6 +128,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
             op_c,
             d,
             e,
+            op_f: _f,
+            op_g: _g,
             debug: _debug,
         } = instruction;
         assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));

@@ -27,7 +27,7 @@ use p3_matrix::{
 use stark_vm::{program::Program, vm::ExecutionSegment};
 
 use crate::{
-    challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger},
+    challenger::{duplex::DuplexChallengerVariable, ChallengerVariable},
     commit::{PcsVariable, PolynomialSpaceVariable},
     folder::RecursiveVerifierConstraintFolder,
     fri::{
@@ -159,7 +159,7 @@ where
         pcs: &TwoAdicFriPcsVariable<C>,
         raps: Vec<&dyn DynRapForRecursion<C>>,
         vk: MultiStarkVerificationAdvice<C>,
-        challenger: &mut DuplexChallengerVariable<C>,
+        challenger: &mut impl ChallengerVariable<C>,
         input: &VerifierInputVariable<C>,
     ) where
         C::F: TwoAdicField,
@@ -191,8 +191,8 @@ where
 
         for i in 0..num_airs {
             if let Some(preprocessed_data) = vk.per_air[i].preprocessed_data.as_ref() {
-                let commit: Array<C, Felt<_>> = builder.constant(preprocessed_data.commit.clone());
-                challenger.observe(builder, commit);
+                let commit = builder.constant(preprocessed_data.commit.clone());
+                challenger.observe_digest(builder, commit);
             }
         }
 
@@ -205,7 +205,7 @@ where
         // Observe main trace commitments
         for i in 0..vk.num_main_trace_commitments {
             let main_commit = builder.get(main_trace_commits, i);
-            challenger.observe(builder, main_commit.clone());
+            challenger.observe_digest(builder, main_commit.clone());
         }
 
         let mut challenges = Vec::new();
@@ -239,13 +239,13 @@ where
 
             // Observe single commitment to all trace matrices in this phase.
             let commit = builder.get(after_challenge_commits, phase_idx);
-            challenger.observe(builder, commit);
+            challenger.observe_digest(builder, commit);
         }
 
         let alpha = challenger.sample_ext(builder);
         // builder.print_e(alpha);
 
-        challenger.observe(builder, quotient_commit.clone());
+        challenger.observe_digest(builder, quotient_commit.clone());
 
         let zeta = challenger.sample_ext(builder);
         // builder.print_e(zeta);

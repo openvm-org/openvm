@@ -34,20 +34,19 @@ where
     SC::Challenge: Send + Sync,
 {
     async fn execute(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
-        let input_page = self.input.lock().await.output().as_ref().unwrap();
-        Ok(())
+        unimplemented!()
     }
 
     async fn keygen(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
-        Ok(())
+        unimplemented!()
     }
 
     async fn prove(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
-        Ok(())
+        unimplemented!()
     }
 
     async fn verify(&self, ctx: &SessionContext, engine: &E) -> Result<()> {
-        Ok(())
+        unimplemented!()
     }
 
     fn output(&self) -> &Option<CommittedPage<SC>> {

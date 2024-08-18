@@ -21,6 +21,14 @@ pub enum Array<C: Config, T> {
 }
 
 impl<C: Config, V: MemVariable<C>> Array<C, V> {
+    /// Gets a right value of the array.
+    pub fn vec(&self) -> Vec<V> {
+        match self {
+            Self::Fixed(vec) => vec.borrow().iter().map(|x| x.clone().unwrap()).collect(),
+            _ => panic!("array is dynamic, not fixed"),
+        }
+    }
+
     pub fn ptr(&self) -> Ptr<C::N> {
         match *self {
             Array::Dyn(ptr, _) => ptr,
@@ -140,7 +148,12 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
 impl<C: Config> Builder<C> {
     /// Initialize an array of fixed length `len`. The entries will be uninitialized.
     pub fn array<V: MemVariable<C>>(&mut self, len: impl Into<RVar<C::N>>) -> Array<C, V> {
-        self.dyn_array(len)
+        let len = len.into();
+        if self.flags.static_only {
+            self.uninit_fixed_array(len.value())
+        } else {
+            self.dyn_array(len)
+        }
     }
 
     /// Creates an array from a vector.

@@ -32,6 +32,7 @@ pub struct Ext<F, EF>(pub u32, pub PhantomData<(F, EF)>);
 /// A variable that represents either a constant or variable counter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Usize<N: PrimeField> {
+    /// A compile time variable. It should only be used in static mode.
     Const(Rc<RefCell<N>>),
     Var(Var<N>),
 }
@@ -177,7 +178,11 @@ impl<C: Config> Variable<C> for Usize<C::N> {
         match self {
             Usize::Const(c) => {
                 *c.borrow_mut() = if let SymbolicVar::Const(c, _) = src {
-                    c
+                    if !builder.is_sub_builder {
+                        c
+                    } else {
+                        panic!("cannot assign Usize::Const inside a closure")
+                    }
                 } else {
                     panic!("cannot assign Usize::Const with a variable")
                 }
@@ -207,7 +212,14 @@ impl<C: Config> Variable<C> for Usize<C::N> {
     fn eval(builder: &mut Builder<C>, expr: impl Into<Self::Expression>) -> Self {
         let expr = expr.into();
         match expr {
-            SymbolicVar::Const(c, _) => Usize::from_field(c),
+            SymbolicVar::Const(c, _) => {
+                // Usize::Const should only be used in static mode.
+                if builder.flags.static_only {
+                    Usize::from_field(c)
+                } else {
+                    Usize::Var(builder.eval(c))
+                }
+            }
             _ => Usize::Var(builder.eval(expr)),
         }
     }

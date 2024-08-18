@@ -11,6 +11,8 @@ pub struct ProgramPreprocessedCols<T> {
     pub op_c: T,
     pub as_b: T,
     pub as_c: T,
+    pub op_f: T,
+    pub op_g: T,
 }
 
 impl<T: Clone> ProgramPreprocessedCols<T> {
@@ -23,6 +25,8 @@ impl<T: Clone> ProgramPreprocessedCols<T> {
             op_c: slc[4].clone(),
             as_b: slc[5].clone(),
             as_c: slc[6].clone(),
+            op_f: slc[7].clone(),
+            op_g: slc[8].clone(),
         }
     }
 
@@ -35,10 +39,12 @@ impl<T: Clone> ProgramPreprocessedCols<T> {
             self.op_c.clone(),
             self.as_b.clone(),
             self.as_c.clone(),
+            self.op_f.clone(),
+            self.op_g.clone(),
         ]
     }
 
     pub fn get_width() -> usize {
-        7
+        9
     }
 }

@@ -1,4 +1,5 @@
 use super::{Array, Config, Ext, Felt, MemIndex, Ptr, RVar, TracedVec, Var};
+use crate::ir::modular_arithmetic::BigIntVar;
 
 /// An intermeddiate instruction set for implementing programs.
 ///
@@ -33,6 +34,8 @@ pub enum DslIr<C: Config> {
     AddEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
     /// Add a field element and an ext field immediate (ext = felt + ext field imm).
     AddEFFI(Ext<C::F, C::EF>, Felt<C::F>, C::EF),
+    /// Add two modular BigInts.
+    AddM(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>),
 
     // Subtractions.
     /// Subtracts two variables (var = var - var).
@@ -57,6 +60,8 @@ pub enum DslIr<C: Config> {
     SubEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
     /// Subtracts an extension field element and a field element (ext = ext - felt).
     SubEF(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Felt<C::F>),
+    /// Subtracts two modular BigInts.
+    SubM(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>),
 
     // Multiplications.
     /// Multiplies two variables (var = var * var).
@@ -75,6 +80,8 @@ pub enum DslIr<C: Config> {
     MulEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
     /// Multiplies an extension field element and a field element (ext = ext * felt).
     MulEF(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Felt<C::F>),
+    /// Multiplies two modular BigInts.
+    MulM(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>),
 
     // Divisions.
     /// Divides two variables (var = var / var).
@@ -93,6 +100,9 @@ pub enum DslIr<C: Config> {
     DivEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
     /// Divides an extension field element and a field element (ext = ext / felt).
     DivEF(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Felt<C::F>),
+
+    /// Subtracts two modular BigInts.
+    DivM(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>),
 
     // Negations.
     /// Negates a variable (var = -var).
@@ -113,6 +123,8 @@ pub enum DslIr<C: Config> {
     // Control flow.
     /// Executes a for loop with the parameters (start step value, end step value, step size, step variable, body).
     For(RVar<C::N>, RVar<C::N>, C::N, Var<C::N>, TracedVec<DslIr<C>>),
+    /// Executes an indefinite loop.
+    Loop(TracedVec<DslIr<C>>),
     /// Executes an equal conditional branch with the parameters (lhs var, rhs var, then body, else body).
     IfEq(
         Var<C::N>,
@@ -131,7 +143,7 @@ pub enum DslIr<C: Config> {
     IfEqI(Var<C::N>, C::N, TracedVec<DslIr<C>>, TracedVec<DslIr<C>>),
     /// Executes a not equal conditional branch with the parameters (lhs var, rhs imm, then body, else body).
     IfNeI(Var<C::N>, C::N, TracedVec<DslIr<C>>, TracedVec<DslIr<C>>),
-    /// Break out of a for loop.
+    /// Break out of a loop.
     Break,
 
     // Assertions.

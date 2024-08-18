@@ -1,15 +1,13 @@
 use afs_compiler::prelude::*;
 
-use crate::fri::TwoAdicMultiplicativeCosetVariable;
+use crate::{digest::DigestVariable, fri::TwoAdicMultiplicativeCosetVariable};
 
-pub type DigestVariable<C> = Array<C, Felt<<C as Config>::F>>;
-
-#[derive(DslVariable, Clone)]
+#[derive(Clone)]
 pub struct FriConfigVariable<C: Config> {
-    pub log_blowup: Var<C::N>,
-    pub blowup: Var<C::N>,
-    pub num_queries: Var<C::N>,
-    pub proof_of_work_bits: Var<C::N>,
+    pub log_blowup: usize,
+    pub blowup: usize,
+    pub num_queries: usize,
+    pub proof_of_work_bits: usize,
     pub generators: Array<C, Felt<C::F>>,
     pub subgroups: Array<C, TwoAdicMultiplicativeCosetVariable<C>>,
 }
@@ -72,7 +70,7 @@ pub struct TwoAdicPcsProofVariable<C: Config> {
 pub struct BatchOpeningVariable<C: Config> {
     #[allow(clippy::type_complexity)]
     pub opened_values: Array<C, Array<C, Felt<C::F>>>,
-    pub opening_proof: Array<C, Array<C, Felt<C::F>>>,
+    pub opening_proof: Array<C, DigestVariable<C>>,
 }
 
 #[derive(DslVariable, Clone)]

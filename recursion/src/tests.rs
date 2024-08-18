@@ -23,7 +23,7 @@ use p3_util::log2_strict_usize;
 use crate::{
     hints::Hintable,
     stark::{DynRapForRecursion, VerifierProgram},
-    types::{new_from_multi_vk, InnerConfig, VerifierInput},
+    types::{new_from_inner_multi_vk, InnerConfig, VerifierInput},
 };
 
 #[test]
@@ -155,7 +155,7 @@ fn run_recursive_test(
         .expect("afs proof should verify");
 
     // Build verification program in eDSL.
-    let advice = new_from_multi_vk(&vk);
+    let advice = new_from_inner_multi_vk(&vk);
 
     let program = VerifierProgram::build(rec_raps, advice, &engine.fri_params);
 

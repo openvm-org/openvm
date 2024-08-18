@@ -17,6 +17,10 @@ pub struct SymbolicPtr<N: Field> {
 impl<C: Config> Builder<C> {
     /// Allocates an array on the heap.
     pub(crate) fn alloc(&mut self, len: impl Into<RVar<C::N>>, size: usize) -> Ptr<C::N> {
+        assert!(
+            !self.flags.static_only,
+            "Cannot allocate memory in static mode"
+        );
         let ptr = Ptr::uninit(self);
         self.push(DslIr::Alloc(ptr, len.into(), size));
         ptr

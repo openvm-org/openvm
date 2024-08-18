@@ -7,12 +7,10 @@ use p3_field::{AbstractField, Field, TwoAdicField};
 pub use two_adic_pcs::*;
 
 use self::types::{
-    DigestVariable, DimensionsVariable, FriChallengesVariable, FriConfigVariable, FriProofVariable,
+    DimensionsVariable, FriChallengesVariable, FriConfigVariable, FriProofVariable,
     FriQueryProofVariable,
 };
-use crate::challenger::{
-    CanObserveVariable, CanSampleBitsVariable, DuplexChallengerVariable, FeltChallenger,
-};
+use crate::{challenger::ChallengerVariable, digest::DigestVariable};
 
 pub mod domain;
 pub mod hints;
@@ -24,33 +22,33 @@ pub fn verify_shape_and_sample_challenges<C: Config>(
     builder: &mut Builder<C>,
     config: &FriConfigVariable<C>,
     proof: &FriProofVariable<C>,
-    challenger: &mut DuplexChallengerVariable<C>,
+    challenger: &mut impl ChallengerVariable<C>,
 ) -> FriChallengesVariable<C> {
-    let mut betas: Array<C, Ext<C::F, C::EF>> = builder.dyn_array(proof.commit_phase_commits.len());
+    let mut betas: Array<C, Ext<C::F, C::EF>> = builder.array(proof.commit_phase_commits.len());
 
     builder
         .range(0, proof.commit_phase_commits.len())
         .for_each(|i, builder| {
             let comm = builder.get(&proof.commit_phase_commits, i);
-            challenger.observe(builder, comm);
+            challenger.observe_digest(builder, comm);
             let sample = challenger.sample_ext(builder);
             builder.set(&mut betas, i, sample);
         });
 
-    let num_query_proofs = proof.query_proofs.len().materialize(builder);
+    let num_query_proofs = proof.query_proofs.len().clone();
     builder
-        .if_ne(num_query_proofs, config.num_queries)
+        .if_ne(num_query_proofs, RVar::from(config.num_queries))
         .then(|builder| {
             builder.error();
         });
 
     challenger.check_witness(builder, config.proof_of_work_bits, proof.pow_witness);
 
-    let num_commit_phase_commits = proof.commit_phase_commits.len().materialize(builder);
-    let log_max_height: Var<_> = builder.eval(num_commit_phase_commits + config.log_blowup);
+    let log_max_height =
+        builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(config.log_blowup));
     let mut query_indices = builder.array(config.num_queries);
     builder.range(0, config.num_queries).for_each(|i, builder| {
-        let index_bits = challenger.sample_bits(builder, Usize::Var(log_max_height));
+        let index_bits = challenger.sample_bits(builder, log_max_height);
         builder.set(&mut query_indices, i, index_bits);
     });
 
@@ -74,8 +72,8 @@ pub fn verify_challenges<C: Config>(
     C::F: TwoAdicField,
     C::EF: TwoAdicField,
 {
-    let nb_commit_phase_commits = proof.commit_phase_commits.len().materialize(builder);
-    let log_max_height = builder.eval(nb_commit_phase_commits + config.log_blowup);
+    let log_max_height =
+        builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(config.log_blowup));
     builder
         .range(0, challenges.query_indices.len())
         .for_each(|i, builder| {
@@ -91,7 +89,7 @@ pub fn verify_challenges<C: Config>(
                 &query_proof,
                 &challenges.betas,
                 &ro,
-                RVar::Val(log_max_height),
+                log_max_height,
             );
 
             builder.assert_ext_eq(folded_eval, proof.final_poly);
@@ -219,11 +217,23 @@ pub fn verify_batch<C: Config>(
     opened_values: &NestedOpenedValues<C>,
     proof: &Array<C, DigestVariable<C>>,
 ) {
+    let commit = if let DigestVariable::Felt(commit) = commit {
+        commit
+    } else {
+        panic!("Expected a Felt commitment");
+    };
+    // Cast DigestVariable into the concrete type.
+    let proof: Array<C, Array<C, Felt<C::F>>> = if let Array::Dyn(ptr, len) = proof {
+        Array::Dyn(*ptr, len.clone())
+    } else {
+        panic!("Expected a dynamic array of Felt commitments");
+    };
     // The index of which table to process next.
     let index: Var<C::N> = builder.eval(C::N::zero());
 
     // The height of the current layer (padded).
     let current_height = builder.get(&dimensions, index).height;
+    let current_height = builder.materialize(current_height.into());
 
     // Reduce all the tables that have the same height to a single root.
     let root = match opened_values {
@@ -241,7 +251,7 @@ pub fn verify_batch<C: Config>(
     let left: Ptr<C::N> = builder.uninit();
     let right: Ptr<C::N> = builder.uninit();
     builder.range(0, proof.len()).for_each(|i, builder| {
-        let sibling = builder.get_ptr(proof, i);
+        let sibling = builder.get_ptr(&proof, i);
         let bit = builder.get(&index_bits, i);
 
         builder.if_eq(bit, C::N::one()).then_or_else(
@@ -302,6 +312,10 @@ pub fn reduce_fast<C: Config>(
     curr_height_padded: Var<C::N>,
     opened_values: &Array<C, Array<C, Felt<C::F>>>,
 ) -> Array<C, Felt<C::F>> {
+    assert!(
+        !builder.flags.static_only,
+        "reduce_fast cannot be used in static mode"
+    );
     builder.cycle_tracker_start("verify-batch-reduce-fast");
     let nb_opened_values: Var<_> = builder.eval(C::N::zero());
     let mut nested_opened_values = builder.dyn_array(8192);
@@ -338,6 +352,10 @@ pub fn reduce_fast_ext<C: Config>(
     curr_height_padded: Var<C::N>,
     opened_values: &Array<C, Array<C, Ext<C::F, C::EF>>>,
 ) -> Array<C, Felt<C::F>> {
+    assert!(
+        !builder.flags.static_only,
+        "reduce_fast_ext cannot be used in static mode"
+    );
     builder.cycle_tracker_start("verify-batch-reduce-fast-ext");
     let nb_opened_values: Var<_> = builder.eval(C::N::zero());
     let mut nested_opened_values = builder.dyn_array(8192);

@@ -12,7 +12,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
-    max_accesses_per_instruction, CpuChip, ExecutionState,
+    timestamp_delta, CpuChip, ExecutionState,
     OpCode::{self, *},
     CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
 };
@@ -20,11 +20,13 @@ use crate::{
     cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
     field_extension::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticChip},
     memory::{compose, decompose},
+    modular_multiplication::ModularMultiplicationChip,
     poseidon2::{columns::Poseidon2VmCols, Poseidon2Chip},
     program::columns::ProgramPreprocessedCols,
     vm::ExecutionSegment,
 };
 
+#[allow(clippy::too_many_arguments)]
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
 pub struct Instruction<F> {
     pub opcode: OpCode,
@@ -33,6 +35,8 @@ pub struct Instruction<F> {
     pub op_c: F,
     pub d: F,
     pub e: F,
+    pub op_f: F,
+    pub op_g: F,
     pub debug: String,
 }
 
@@ -44,6 +48,7 @@ pub fn isize_to_field<F: Field>(value: isize) -> F {
 }
 
 impl<F: Field> Instruction<F> {
+    #[allow(clippy::too_many_arguments)]
     pub fn from_isize(
         opcode: OpCode,
         op_a: isize,
@@ -59,6 +64,32 @@ impl<F: Field> Instruction<F> {
             op_c: isize_to_field::<F>(op_c),
             d: isize_to_field::<F>(d),
             e: isize_to_field::<F>(e),
+            op_f: isize_to_field::<F>(0),
+            op_g: isize_to_field::<F>(0),
+            debug: String::new(),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn large_from_isize(
+        opcode: OpCode,
+        op_a: isize,
+        op_b: isize,
+        op_c: isize,
+        d: isize,
+        e: isize,
+        op_f: isize,
+        op_g: isize,
+    ) -> Self {
+        Self {
+            opcode,
+            op_a: isize_to_field::<F>(op_a),
+            op_b: isize_to_field::<F>(op_b),
+            op_c: isize_to_field::<F>(op_c),
+            d: isize_to_field::<F>(d),
+            e: isize_to_field::<F>(e),
+            op_f: isize_to_field::<F>(op_f),
+            op_g: isize_to_field::<F>(op_g),
             debug: String::new(),
         }
     }
@@ -71,6 +102,8 @@ impl<F: Field> Instruction<F> {
             op_c: F::zero(),
             d: F::zero(),
             e: F::zero(),
+            op_f: F::zero(),
+            op_g: F::zero(),
             debug: String::from(debug),
         }
     }
@@ -177,6 +210,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let c = instruction.op_c;
             let d = instruction.d;
             let e = instruction.e;
+            let f = instruction.op_f;
+            let g = instruction.op_g;
             let debug = instruction.debug.clone();
 
             let io = CpuIoCols {
@@ -188,6 +223,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 op_c: c,
                 d,
                 e,
+                op_f: f,
+                op_g: g,
             };
 
             let mut next_pc = pc + F::one();
@@ -254,6 +291,20 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     let value = read!(d, a);
                     write!(e, base_pointer + b, value);
                 }
+                // d[a] <- e[d[c] + b + d[f] * g]
+                LOADW2 => {
+                    let base_pointer = read!(d, c);
+                    let index = read!(d, f);
+                    let value = read!(e, base_pointer + b + index * g);
+                    write!(d, a, value);
+                }
+                // e[d[c] + b + mem[f] * g] <- d[a]
+                STOREW2 => {
+                    let base_pointer = read!(d, c);
+                    let value = read!(d, a);
+                    let index = read!(d, f);
+                    write!(e, base_pointer + b + index * g, value);
+                }
                 // d[a] <- pc + INST_WIDTH, pc <- pc + b
                 JAL => {
                     write!(d, a, pc + F::from_canonical_usize(INST_WIDTH));
@@ -304,9 +355,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     }
                 }
                 opcode @ (FADD | FSUB | FMUL | FDIV) => {
-                    // read from d[b] and e[c]
-                    let operand1 = read!(d, b);
-                    let operand2 = read!(e, c);
+                    // read from e[b] and f[c]
+                    let operand1 = read!(e, b);
+                    let operand2 = read!(f, c);
                     // write to d[a]
                     let result = vm
                         .field_arithmetic_chip
@@ -326,6 +377,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 }
                 FE4ADD | FE4SUB | BBE4MUL | BBE4INV => {
                     FieldExtensionArithmeticChip::calculate(vm, timestamp, instruction);
+                }
+                MOD_SECP256K1_ADD | MOD_SECP256K1_SUB | MOD_SECP256K1_MUL | MOD_SECP256K1_DIV => {
+                    ModularMultiplicationChip::calculate(vm, timestamp, instruction);
                 }
                 PERM_POS2 | COMP_POS2 => {
                     Poseidon2Chip::<16, _>::calculate(vm, timestamp, instruction);
@@ -360,6 +414,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 }
                 CT_START => cycle_tracker.start(debug, vm.metrics.clone()),
                 CT_END => cycle_tracker.end(debug, vm.metrics.clone()),
+                ADD256 | SUB256 => unreachable!(), // TODO: wait for the no-cpu model
             };
 
             let final_accesses = vm.memory_chip.accesses.len();
@@ -430,7 +485,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             vm.cpu_chip.rows.push(cols.flatten(vm.options()));
 
             pc = next_pc;
-            timestamp += max_accesses_per_instruction(opcode);
+            timestamp += timestamp_delta(opcode);
 
             clock_cycle += 1;
             if opcode == TERMINATE {

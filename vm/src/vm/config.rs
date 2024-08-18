@@ -10,6 +10,7 @@ pub struct VmConfig {
     pub field_extension_enabled: bool,
     pub compress_poseidon2_enabled: bool,
     pub perm_poseidon2_enabled: bool,
+    pub modular_multiplication_enabled: bool,
     pub is_less_than_enabled: bool,
     pub limb_bits: usize,
     pub decomp: usize,
@@ -27,6 +28,7 @@ impl Default for VmConfig {
             field_extension_enabled: true,
             compress_poseidon2_enabled: true,
             perm_poseidon2_enabled: true,
+            modular_multiplication_enabled: false,
             limb_bits: 30,
             decomp: 16,
             is_less_than_enabled: false,
@@ -46,6 +48,7 @@ impl VmConfig {
             perm_poseidon2_enabled: self.perm_poseidon2_enabled,
             num_public_values: self.num_public_values,
             is_less_than_enabled: self.is_less_than_enabled,
+            modular_arithmetic_enabled: self.modular_multiplication_enabled,
         }
     }
 }
