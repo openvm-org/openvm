@@ -7,7 +7,8 @@ use OpCode::*;
 
 use crate::{
     field_extension::FieldExtensionArithmetic,
-    memory::offline_checker::air::NewMemoryOfflineChecker, poseidon2::Poseidon2Chip,
+    memory::offline_checker::{air::NewMemoryOfflineChecker, bus::MemoryBus},
+    poseidon2::Poseidon2Chip,
     vm::config::MemoryConfig,
 };
 
@@ -29,7 +30,7 @@ pub const RANGE_CHECKER_BUS: usize = 4;
 pub const POSEIDON2_BUS: usize = 5;
 pub const POSEIDON2_DIRECT_BUS: usize = 6;
 // TODO[osama]: to be renamed to MEMORY_BUS
-pub const NEW_MEMORY_BUS: usize = 7;
+pub const NEW_MEMORY_BUS: MemoryBus = MemoryBus(1);
 pub const EXPAND_BUS: usize = 8;
 pub const POSEIDON2_DIRECT_REQUEST_BUS: usize = 9;
 pub const MEMORY_INTERFACE_BUS: usize = 10;

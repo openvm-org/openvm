@@ -24,6 +24,7 @@ pub struct MemoryOfflineCheckerAuxCols<const WORD_SIZE: usize, T> {
     pub old_cell: AccessCell<WORD_SIZE, T>,
     pub is_immediate: T,
     pub is_zero_aux: T,
+    // TODO[jpw]: IsLessThan should be optimized to AssertLessThan
     pub clk_lt: T,
     pub clk_lt_aux: IsLessThanAuxCols<T>,
 }
