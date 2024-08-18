@@ -19,7 +19,7 @@ macro_rules! run_execution_plan {
     };
 }
 
-pub struct AxiomDbExec<SC: StarkGenericConfig, E: StarkEngine<SC>> {
+pub struct AxiomDbExec<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
     /// The session context from DataFusion
     pub ctx: SessionContext,
     /// STARK engine used for cryptographic operations
@@ -28,7 +28,7 @@ pub struct AxiomDbExec<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     pub afs_execution_plan: Vec<Arc<Mutex<AxiomDbNode<SC, E>>>>,
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC>> AxiomDbExec<SC, E>
+impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> AxiomDbExec<SC, E>
 where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,

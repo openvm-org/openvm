@@ -9,6 +9,7 @@ use afs_stark_backend::{
     prover::{trace::TraceCommitmentBuilder, types::Proof},
 };
 use afs_test_utils::engine::StarkEngine;
+use async_trait::async_trait;
 use datafusion::{error::Result, execution::context::SessionContext};
 use futures::lock::Mutex;
 use p3_field::PrimeField64;
@@ -21,7 +22,7 @@ use crate::{
     RANGE_CHECK_BITS,
 };
 
-pub struct Filter<SC: StarkGenericConfig, E: StarkEngine<SC>> {
+pub struct Filter<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
     pub input: Arc<Mutex<AxiomDbNode<SC, E>>>,
     pub output: Option<CommittedPage<SC>>,
     pub predicate: AxiomDbExpr,
@@ -29,7 +30,7 @@ pub struct Filter<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     pub proof: Option<Proof<SC>>,
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC>> Filter<SC, E>
+impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> Filter<SC, E>
 where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
@@ -80,7 +81,9 @@ where
     }
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC>> AxiomDbNodeExecutable<SC, E> for Filter<SC, E>
+#[async_trait]
+impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> AxiomDbNodeExecutable<SC, E>
+    for Filter<SC, E>
 where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,

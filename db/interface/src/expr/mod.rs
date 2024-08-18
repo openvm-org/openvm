@@ -1,9 +1,9 @@
 use datafusion::{logical_expr::Expr, scalar::ScalarValue};
 
-use self::expr::BinaryExpr;
+use self::expressions::BinaryExpr;
 use crate::committed_page::column::Column;
 
-pub mod expr;
+pub mod expressions;
 
 #[derive(Debug, Clone)]
 pub enum AxiomDbExpr {

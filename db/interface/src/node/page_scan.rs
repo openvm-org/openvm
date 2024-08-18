@@ -7,6 +7,7 @@ use afs_stark_backend::{
     prover::{trace::TraceCommitmentBuilder, types::Proof},
 };
 use afs_test_utils::engine::StarkEngine;
+use async_trait::async_trait;
 use datafusion::{error::Result, execution::context::SessionContext, logical_expr::TableSource};
 use p3_field::PrimeField64;
 use p3_uni_stark::Domain;
@@ -20,7 +21,7 @@ use crate::{
     RANGE_CHECK_BITS,
 };
 
-pub struct PageScan<SC: StarkGenericConfig, E: StarkEngine<SC>> {
+pub struct PageScan<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
     pub input: Arc<dyn TableSource>,
     pub output: Option<CommittedPage<SC>>,
     pub page_id: String,
@@ -29,7 +30,7 @@ pub struct PageScan<SC: StarkGenericConfig, E: StarkEngine<SC>> {
     _marker: PhantomData<E>,
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC>> PageScan<SC, E> {
+impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> PageScan<SC, E> {
     pub fn new(page_id: String, input: Arc<dyn TableSource>) -> Self {
         Self {
             page_id,
@@ -42,7 +43,7 @@ impl<SC: StarkGenericConfig, E: StarkEngine<SC>> PageScan<SC, E> {
     }
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC>> PageScan<SC, E>
+impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> PageScan<SC, E>
 where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
@@ -72,7 +73,9 @@ where
     }
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC>> AxiomDbNodeExecutable<SC, E> for PageScan<SC, E>
+#[async_trait]
+impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> AxiomDbNodeExecutable<SC, E>
+    for PageScan<SC, E>
 where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,

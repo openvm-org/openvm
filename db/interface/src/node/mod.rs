@@ -8,6 +8,7 @@ use afs_stark_backend::{
     prover::types::Proof,
 };
 use afs_test_utils::engine::StarkEngine;
+use async_trait::async_trait;
 use datafusion::{error::Result, execution::context::SessionContext, logical_expr::LogicalPlan};
 use futures::lock::Mutex;
 use p3_field::PrimeField64;
@@ -38,7 +39,8 @@ macro_rules! delegate_to_node {
     };
 }
 
-pub trait AxiomDbNodeExecutable<SC: StarkGenericConfig, E: StarkEngine<SC>> {
+#[async_trait]
+pub trait AxiomDbNodeExecutable<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
     /// Runs the node's execution logic without any cryptographic operations
     async fn execute(&mut self, ctx: &SessionContext, engine: &E) -> Result<()>;
     /// Generate the proving key for the node
@@ -57,13 +59,13 @@ pub trait AxiomDbNodeExecutable<SC: StarkGenericConfig, E: StarkEngine<SC>> {
 /// It provides conversion from DataFusion's LogicalPlan to the AxiomDbNode type. AxiomDbNodes are
 /// meant to be executed by the AxiomDbExec engine. They store the necessary information to handle
 /// the cryptographic operations for each type of AxiomDbNode operation.
-pub enum AxiomDbNode<SC: StarkGenericConfig, E: StarkEngine<SC>> {
+pub enum AxiomDbNode<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
     PageScan(PageScan<SC, E>),
     Projection(Projection<SC, E>),
     Filter(Filter<SC, E>),
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC>> AxiomDbNode<SC, E>
+impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> AxiomDbNode<SC, E>
 where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
@@ -130,7 +132,7 @@ where
     }
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC>> Debug for AxiomDbNode<SC, E> {
+impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> Debug for AxiomDbNode<SC, E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AxiomDbNode::PageScan(page_scan) => {
