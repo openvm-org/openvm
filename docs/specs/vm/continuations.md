@@ -20,7 +20,7 @@ Thus the primary goal is to design an efficient commitment and verification form
 
 The basic design is to store memory as a key-value store using a binary Merkle trie. A verification of an access requires a merkle proof, which is logarithmic in the total size of the tree. Previous optimizations assume locality of memory accesses and use higher-arity Merkle tries to emulate page tables.
 
-We present a design, introduced by D. Mittal, which does not assume any memory access patterns while still amortizing the Merkle proof cost across multiple accesses.
+We present a design which does not assume any memory access patterns while still amortizing the Merkle proof cost across multiple accesses.
 
 ### Design
 
@@ -28,7 +28,7 @@ We have three chips — the ExpandChip, the MemoryInterfaceChip, and the Compres
 
 We define the following interactions:
 
-# Diagram
+<!--TODO: make a new diagram-->
 
 On the <span style="color:green">EXPAND_BUS</span>, we have the interaction
 <span style="color:green">**(expand_direction: {-1, 1}, height: F, labels: (F, F), hash: [F; C])**</span>

@@ -33,8 +33,6 @@ The main motivation is that the existence of a CPU forces the existence of a tra
 
 Traditionally, the CPU is in charge of reading/writing from memory and forwarding that information to the appropriate chip. We are changing to a model where each chip directly accesses memory itself. Traditionally this is also inefficient because the CPU uses physical general purpose registers for instruction execution, whereas in our architecture, registers are emulated as memory in a dedicated address space.
 
-This design was introduced by D. Mittal.
-
 Each chip has IO columns `(timestamp, pc, instruction)` where `instruction` is `(opcode, operands)`.
 The chip would receive `(pc, instruction)` on the PROGRAM_BUS to ensure it is reading the correct line of the program code.
 There is a maximum length to `operands` defined by the PROGRAM_BUS, but each chip can receive only a subset of the operands (setting the rest to zero) without paying the cost for the unused operands.
@@ -88,17 +86,16 @@ This word size then governs all memory load/store operations.
 This model was governed by the constraints of physical hardware, and
 we now discuss why it is unnecessary in the STARK architecture.
 
-This design was introduced by D. Mittal.
-
 For efficient vectorization of memory accesses, we allow each
 chip to perform "batch" read/writes of $\{(a + i, v_i, t)\}_{i \in [0,w)}$ where $w$ is any multiple of a fixed `WORD_BLOCK_SIZE` (set to `4` in practice).
 
 The main idea is that in the offline checking memory argument [above](#offline-memory), the MEMORY_BUS can hold $(a, v, t)$ where the length of $v$ is variable. The difference in word sizes only needs to be resolved when there is a sequence of read+write or write+read involving different word sizes.
 
-We introduce chips MemoryPackChip[$w$] and MemoryUnpackChip[$w$] where
+We introduce chips MemoryConverterChip[$w$] and MemoryPackChip[$w$] where
 
-- MemoryUnpackChip: read $(a, v_0 || ... || v_{B-1}, t)$ and write $(a + B \cdot i, v_i, t + 1 + i)$ for $i \in [0,B)$ where $B$ is `WORD_BLOCK_SIZE`, or
-- MemoryPackChip: read $(a + B \cdot i, v_i, t_{prev,i})$ for $i \in [0,B)$ and write $(a, v_0 || ... || v_{w-1}, t)$ to the memory. It must constrain $t_{prev,i} < t$.
+- MemoryConverterChip: read $(a, v_0 || ... || v_{B-1}, t)$ and write $(a + B \cdot i, v_i, t + 1)$ for $i \in [0,B)$ where $B$ is `WORD_BLOCK_SIZE`, or
+- MemoryConverterChip: read $(a + B \cdot i, v_i, t - 1)$ for $i \in [0,B)$ and write $(a, v_0 || ... || v_{w-1}, t)$ to the memory.
+- MemoryPackChip: read $(a + B \cdot i, v_i, t_{prev,i})$ for $i \in [0,B)$ and write $(a, v_0 || ... || v_{w-1}, t)$ to the memory. It must constrain $t_{prev,i} < t$. The difference between this and MemoryConverterChip is that it allows packing smaller words that may have been modified at different previous times. This packing is more expensive.
 
 Here the length of $v_i$ is $w$.
 

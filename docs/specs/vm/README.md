@@ -1,4 +1,4 @@
-# Modular Virtual Machine
+# Modular Virtual Machines
 
 This section describes our modular framework that allows to build STARK virtual machines with customizable opcodes.
 
