@@ -9,6 +9,7 @@ use super::{
     FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticOperation,
 };
 use crate::cpu::OpCode;
+use crate::memory::manager::trace_builder::MemoryTraceBuilder;
 
 /// Constructs a new set of columns (including auxiliary columns) given inputs.
 fn generate_cols<const WORD_SIZE: usize, T: Field>(
@@ -71,6 +72,14 @@ fn generate_cols<const WORD_SIZE: usize, T: Field>(
 impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_SIZE, F> {
     /// Generates trace for field arithmetic chip.
     pub fn generate_trace(&self) -> RowMajorMatrix<F> {
+        let mut mem_trace_builder = MemoryTraceBuilder::<1, WORD_SIZE, F>::new(
+            self.memory_manager.clone(),
+            self.range_checker.clone(),
+            self.air.mem_oc.clone(),
+        );
+
+        mem_trace_builder.read_word()
+
         let mut trace: Vec<F> = self
             .operations
             .iter()

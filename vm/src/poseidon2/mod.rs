@@ -1,5 +1,5 @@
 use std::{
-    array::{self, from_fn},
+    array,
     sync::Arc,
 };
 

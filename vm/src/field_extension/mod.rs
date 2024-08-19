@@ -1,10 +1,14 @@
+use std::rc::Rc;
+use std::sync::Arc;
 use p3_field::{Field, PrimeField32};
-
+use parking_lot::Mutex;
+use afs_primitives::range_gate::RangeCheckerGateChip;
 use crate::{
     cpu::{trace::Instruction, OpCode, FIELD_EXTENSION_INSTRUCTIONS},
     memory::offline_checker::bridge::NewMemoryOfflineChecker,
     vm::{config::MemoryConfig, ExecutionSegment},
 };
+use crate::memory::manager::MemoryManager;
 
 pub mod air;
 pub mod bridge;
@@ -109,16 +113,25 @@ impl FieldExtensionArithmetic {
 pub struct FieldExtensionArithmeticChip<const WORD_SIZE: usize, F: PrimeField32> {
     pub air: FieldExtensionArithmeticAir<WORD_SIZE>,
     pub operations: Vec<FieldExtensionArithmeticOperation<F>>,
+
+    pub memory_manager: Arc<Mutex<MemoryManager<1, WORD_SIZE, F>>>,
+    pub range_checker: Arc<RangeCheckerGateChip>,
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_SIZE, F> {
     #[allow(clippy::new_without_default)]
-    pub fn new(mem_config: MemoryConfig) -> Self {
+    pub fn new(
+        mem_config: MemoryConfig,
+        memory_manager: Arc<Mutex<MemoryManager<1, WORD_SIZE, F>>>,
+        range_checker: Arc<RangeCheckerGateChip>,
+    ) -> Self {
         Self {
             air: FieldExtensionArithmeticAir {
                 mem_oc: NewMemoryOfflineChecker::new(mem_config.clk_max_bits, mem_config.decomp),
             },
             operations: vec![],
+            memory_manager,
+            range_checker,
         }
     }
 
@@ -181,7 +194,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         address_space: F,
         address: F,
     ) -> [F; EXTENSION_DEGREE] {
-        assert!(address_space != F::zero());
+        assert_ne!(address_space, F::zero());
 
         let mut result = [F::zero(); EXTENSION_DEGREE];
 
@@ -205,7 +218,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         address: F,
         result: [F; EXTENSION_DEGREE],
     ) {
-        assert!(address_space != F::zero());
+        assert_ne!(address_space, F::zero());
 
         for (i, row) in result.iter().enumerate() {
             vm.memory_chip.write_elem(
