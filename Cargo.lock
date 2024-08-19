@@ -2920,6 +2920,7 @@ dependencies = [
  "p3-air",
  "p3-baby-bear",
  "p3-challenger",
+ "p3-commit",
  "p3-dft",
  "p3-field",
  "p3-fri",

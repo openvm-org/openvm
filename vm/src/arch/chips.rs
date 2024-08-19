@@ -4,6 +4,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};
+use p3_commit::{Pcs, PolynomialSpace};
 
 use afs_stark_backend::{interaction::InteractionBuilder, rap::AnyRap};
 use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
@@ -27,9 +28,11 @@ pub trait MachineAir<AB: AirBuilder>: Air<AB> + BaseAir<AB::F> {}
 #[enum_dispatch]
 pub trait MachineChip<F> {
     fn generate_trace(&mut self) -> RowMajorMatrix<F>;
-    fn air<AB: AirBuilder<F = F> + InteractionBuilder + AirBuilderWithPublicValues>(
-        &self,
-    ) -> &dyn MachineAir<AB>;
+
+    fn air<SC>(&self) -> &dyn AnyRap<SC>
+    where
+        SC: StarkGenericConfig,
+        <SC::Pcs as Pcs<SC::Challenge, SC::Challenger>>::Domain: PolynomialSpace<Val=F>;
     fn get_public_values(&mut self) -> Vec<F> {
         vec![]
     }
@@ -49,28 +52,29 @@ fn bing<C: MachineChip<BabyBear>>(chip: &C) -> &dyn AnyRap<BabyBearPoseidon2Conf
     chip.air() as &dyn AnyRap<BabyBearPoseidon2Config>
 }
 
-struct RandomAir<F: Field> {}
-
-impl<F: Field> BaseAir<F> for RandomAir<F> {
-    fn width(&self) -> usize {
-        todo!()
-    }
-}
-
-impl<F: Field, AB: AirBuilder<F = F>> Air<AB> for RandomAir<F> {
-    fn eval(&self, builder: &mut AB) {
-        todo!()
-    }
-}
-
-fn bong0<SC: StarkGenericConfig, C: MachineChip<Val<SC>>>(chip: &C) {
-    let sh = chip.air() as &dyn AnyRap<SC>;
-
-    todo!()
-}
-
-fn bong<SC: StarkGenericConfig>(chip: &RandomAir<Val<SC>>) -> &dyn AnyRap<SC> {
-    let sh = chip as &dyn AnyRap<SC>;
-
-    todo!()
-}
+// struct RandomAir<F: Field> {
+// }
+//
+// impl<F: Field> BaseAir<F> for RandomAir<F> {
+//     fn width(&self) -> usize {
+//         todo!()
+//     }
+// }
+//
+// impl<F: Field, AB: AirBuilder<F = F>> Air<AB> for RandomAir<F> {
+//     fn eval(&self, builder: &mut AB) {
+//         todo!()
+//     }
+// }
+//
+// fn bong0<SC: StarkGenericConfig, C: MachineChip<Val<SC>>>(chip: &C) {
+//     let sh = chip.air() as &dyn AnyRap<SC>;
+//
+//     todo!()
+// }
+//
+// fn bong<SC: StarkGenericConfig>(chip: &RandomAir<Val<SC>>) -> &dyn AnyRap<SC> {
+//     let sh = chip as &dyn AnyRap<SC>;
+//
+//     todo!()
+// }

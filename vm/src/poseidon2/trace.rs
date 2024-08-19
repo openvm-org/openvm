@@ -1,4 +1,5 @@
 use p3_air::BaseAir;
+use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::StarkGenericConfig;
@@ -40,7 +41,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
 
 impl<const WIDTH: usize, F: PrimeField32> MachineChip<F> for Poseidon2Chip<WIDTH, F> {
     /// Generates final Poseidon2VmAir trace from cached rows.
-    pub fn generate_trace(&self) -> RowMajorMatrix<F> {
+    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         let row_len = self.rows.len();
         let correct_len = row_len.next_power_of_two();
         let blank_row = Poseidon2VmCols::<WIDTH, F>::blank_row(&self.air.inner).flatten();
@@ -55,7 +56,10 @@ impl<const WIDTH: usize, F: PrimeField32> MachineChip<F> for Poseidon2Chip<WIDTH
         )
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC> {
+    fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC>
+    where
+        <SC::Pcs as Pcs<SC::Challenge, SC::Challenger>>::Domain: PolynomialSpace<Val=F>,
+    {
         &self.air
     }
 }
