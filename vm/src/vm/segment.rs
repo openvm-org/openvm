@@ -2,7 +2,6 @@ use std::{
     collections::{BTreeMap, VecDeque},
     sync::Arc,
 };
-
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -33,7 +32,7 @@ pub struct ExecutionSegment<const NUM_WORDS: usize, const WORD_SIZE: usize, F: P
     pub memory_manager: Arc<Mutex<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
     pub memory_chip: MemoryChip<WORD_SIZE, F>,
     pub field_arithmetic_chip: FieldArithmeticChip<F>,
-    pub field_extension_chip: FieldExtensionArithmeticChip<WORD_SIZE, F>,
+    pub field_extension_chip: FieldExtensionArithmeticChip<NUM_WORDS, WORD_SIZE, F>,
     pub range_checker: Arc<RangeCheckerGateChip>,
     pub poseidon2_chip: Poseidon2Chip<16, NUM_WORDS, WORD_SIZE, F>,
     pub input_stream: VecDeque<Vec<F>>,
@@ -75,7 +74,8 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         let program_chip = ProgramChip::new(program);
         let memory_chip = MemoryChip::new(config.memory_config, state.memory);
         let field_arithmetic_chip = FieldArithmeticChip::new();
-        let field_extension_chip = FieldExtensionArithmeticChip::new(config.memory_config);
+
+        let field_extension_chip = FieldExtensionArithmeticChip::new(config.memory_config, memory_manager.clone(), range_checker.clone());
         let poseidon2_chip = Poseidon2Chip::from_poseidon2_config(
             Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
             config.memory_config,

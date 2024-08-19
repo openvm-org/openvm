@@ -360,7 +360,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     println!("{}", value);
                 }
                 FE4ADD | FE4SUB | BBE4MUL | BBE4INV => {
-                    FieldExtensionArithmeticChip::calculate(vm, timestamp, instruction);
+                    vm.field_extension_chip.calculate(timestamp, instruction);
                 }
                 PERM_POS2 | COMP_POS2 => {
                     vm.poseidon2_chip.calculate(

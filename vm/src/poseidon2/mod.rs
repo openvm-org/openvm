@@ -135,6 +135,7 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
             range_checker,
         }
     }
+
     /// Key method of Poseidon2Chip.
     ///
     /// Called using `vm` and not `&self`. Reads two chunks from memory and generates a trace row for

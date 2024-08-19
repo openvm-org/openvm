@@ -9,11 +9,10 @@ use super::{
     FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticOperation,
 };
 use crate::cpu::OpCode;
-use crate::memory::manager::trace_builder::MemoryTraceBuilder;
 
 /// Constructs a new set of columns (including auxiliary columns) given inputs.
 fn generate_cols<const WORD_SIZE: usize, T: Field>(
-    op: FieldExtensionArithmeticOperation<T>,
+    op: FieldExtensionArithmeticOperation<WORD_SIZE, T>,
 ) -> FieldExtensionArithmeticCols<WORD_SIZE, T> {
     let opcode_value = op.opcode as u32 - FieldExtensionArithmetic::BASE_OP as u32;
     let opcode_lo_u32 = opcode_value % 2;
@@ -69,21 +68,14 @@ fn generate_cols<const WORD_SIZE: usize, T: Field>(
     }
 }
 
-impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_SIZE, F> {
+impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<NUM_WORDS, WORD_SIZE, F> {
     /// Generates trace for field arithmetic chip.
     pub fn generate_trace(&self) -> RowMajorMatrix<F> {
-        let mut mem_trace_builder = MemoryTraceBuilder::<1, WORD_SIZE, F>::new(
-            self.memory_manager.clone(),
-            self.range_checker.clone(),
-            self.air.mem_oc.clone(),
-        );
-
-        mem_trace_builder.read_word()
-
         let mut trace: Vec<F> = self
             .operations
             .iter()
-            .flat_map(|op| generate_cols::<WORD_SIZE, F>(*op).flatten())
+            .cloned()
+            .flat_map(|op| generate_cols::<WORD_SIZE, F>(op).flatten())
             .collect();
 
         let empty_row: Vec<F> = FieldExtensionArithmeticCols::<WORD_SIZE, _>::blank_row().flatten();

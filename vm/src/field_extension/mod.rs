@@ -1,14 +1,16 @@
-use std::rc::Rc;
-use std::sync::Arc;
+use std::array;
+use std::sync::{Arc};
 use p3_field::{Field, PrimeField32};
 use parking_lot::Mutex;
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use crate::{
     cpu::{trace::Instruction, OpCode, FIELD_EXTENSION_INSTRUCTIONS},
     memory::offline_checker::bridge::NewMemoryOfflineChecker,
-    vm::{config::MemoryConfig, ExecutionSegment},
+    vm::{config::MemoryConfig},
 };
 use crate::memory::manager::MemoryManager;
+use crate::memory::manager::trace_builder::MemoryTraceBuilder;
+use crate::memory::offline_checker::columns::MemoryOfflineCheckerAuxCols;
 
 pub mod air;
 pub mod bridge;
@@ -21,8 +23,8 @@ pub mod tests;
 pub const BETA: usize = 11;
 pub const EXTENSION_DEGREE: usize = 4;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct FieldExtensionArithmeticOperation<F> {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FieldExtensionArithmeticOperation<const WORD_SIZE: usize, F> {
     pub start_timestamp: usize,
     pub opcode: OpCode,
     pub op_a: F,
@@ -33,6 +35,9 @@ pub struct FieldExtensionArithmeticOperation<F> {
     pub operand1: [F; EXTENSION_DEGREE],
     pub operand2: [F; EXTENSION_DEGREE],
     pub result: [F; EXTENSION_DEGREE],
+
+    // TODO[zach]: should not have such trace-specific stuff here
+    pub mem_oc_aux_cols: [MemoryOfflineCheckerAuxCols<WORD_SIZE, F>; 12],
 }
 
 /// Field extension arithmetic chip. The irreducible polynomial is x^4 - 11.
@@ -110,19 +115,19 @@ impl FieldExtensionArithmetic {
     }
 }
 
-pub struct FieldExtensionArithmeticChip<const WORD_SIZE: usize, F: PrimeField32> {
+pub struct FieldExtensionArithmeticChip<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
     pub air: FieldExtensionArithmeticAir<WORD_SIZE>,
-    pub operations: Vec<FieldExtensionArithmeticOperation<F>>,
+    pub operations: Vec<FieldExtensionArithmeticOperation<WORD_SIZE, F>>,
 
-    pub memory_manager: Arc<Mutex<MemoryManager<1, WORD_SIZE, F>>>,
+    pub memory_manager: Arc<Mutex<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
     pub range_checker: Arc<RangeCheckerGateChip>,
 }
 
-impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_SIZE, F> {
+impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<NUM_WORDS, WORD_SIZE, F> {
     #[allow(clippy::new_without_default)]
     pub fn new(
         mem_config: MemoryConfig,
-        memory_manager: Arc<Mutex<MemoryManager<1, WORD_SIZE, F>>>,
+        memory_manager: Arc<Mutex<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
         Self {
@@ -136,8 +141,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn calculate<const NUM_WORDS: usize>(
-        vm: &mut ExecutionSegment<NUM_WORDS, WORD_SIZE, F>,
+    pub fn calculate(
+        &mut self,
         start_timestamp: usize,
         instruction: Instruction<F>,
     ) -> [F; EXTENSION_DEGREE] {
@@ -152,25 +157,34 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         } = instruction;
         assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
 
-        let operand1 =
-            FieldExtensionArithmeticChip::read_extension_element(vm, start_timestamp, d, op_b);
+        let mut memory = MemoryTraceBuilder::<NUM_WORDS, WORD_SIZE, F>::new(
+            self.memory_manager.clone(),
+            self.range_checker.clone(),
+            self.air.mem_oc.clone(),
+        );
+
+        let operand1 = self.read_extension_element(&mut memory, d, op_b);
         let operand2 = if opcode == OpCode::BBE4INV {
             [F::zero(); EXTENSION_DEGREE]
         } else {
-            FieldExtensionArithmeticChip::read_extension_element(vm, start_timestamp + 4, e, op_c)
+            self.read_extension_element(&mut memory, e, op_c)
         };
 
         let result = FieldExtensionArithmetic::solve(opcode, operand1, operand2).unwrap();
 
-        FieldExtensionArithmeticChip::write_extension_element(
-            vm,
-            start_timestamp + 8,
+        self.write_extension_element(
+            &mut memory,
             d,
             op_a,
             result,
         );
 
-        vm.field_extension_chip
+        let accesses = memory.take_accesses_buffer();
+        debug_assert_eq!(accesses.len(), 12);
+        let mut iter = accesses.into_iter();
+        let mem_oc_aux_cols = array::from_fn(|_| iter.next().unwrap());
+
+        self
             .operations
             .push(FieldExtensionArithmeticOperation {
                 start_timestamp,
@@ -183,14 +197,15 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
                 operand1,
                 operand2,
                 result,
+                mem_oc_aux_cols,
             });
 
         result
     }
 
-    fn read_extension_element<const NUM_WORDS: usize>(
-        vm: &mut ExecutionSegment<NUM_WORDS, WORD_SIZE, F>,
-        timestamp: usize,
+    fn read_extension_element(
+        &mut self,
+        memory: &mut MemoryTraceBuilder<NUM_WORDS, WORD_SIZE, F>,
         address_space: F,
         address: F,
     ) -> [F; EXTENSION_DEGREE] {
@@ -199,8 +214,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         let mut result = [F::zero(); EXTENSION_DEGREE];
 
         for (i, result_elem) in result.iter_mut().enumerate() {
-            let data = vm.memory_chip.read_elem(
-                timestamp + i,
+            let data = memory.read_elem(
                 address_space,
                 address + F::from_canonical_usize(i * WORD_SIZE),
             );
@@ -211,9 +225,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         result
     }
 
-    fn write_extension_element<const NUM_WORDS: usize>(
-        vm: &mut ExecutionSegment<NUM_WORDS, WORD_SIZE, F>,
-        timestamp: usize,
+    fn write_extension_element(
+        &mut self,
+        memory: &mut MemoryTraceBuilder<NUM_WORDS, WORD_SIZE, F>,
         address_space: F,
         address: F,
         result: [F; EXTENSION_DEGREE],
@@ -221,8 +235,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<WORD_
         assert_ne!(address_space, F::zero());
 
         for (i, row) in result.iter().enumerate() {
-            vm.memory_chip.write_elem(
-                timestamp + i,
+            memory.write_elem(
                 address_space,
                 address + F::from_canonical_usize(i * WORD_SIZE),
                 *row,
