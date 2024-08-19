@@ -2,8 +2,8 @@ use afs_primitives::offline_checker::OfflineCheckerOperation;
 use p3_field::PrimeField64;
 
 pub mod audit;
-pub mod expand;
-pub mod expand_interface;
+// pub mod expand;
+// pub mod expand_interface;
 pub mod manager;
 pub mod offline_checker;
 #[cfg(test)]

@@ -4,11 +4,8 @@ use afs_primitives::range_gate::RangeCheckerGateChip;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
-use self::{access_cell::AccessCell, dimensions::MemoryDimensions, interface::MemoryInterface};
-use super::{
-    audit::MemoryAuditChip, expand_interface::MemoryExpandInterfaceChip,
-    offline_checker::columns::NewMemoryAccess,
-};
+use self::{access_cell::AccessCell, interface::MemoryInterface};
+use super::{audit::MemoryAuditChip, offline_checker::columns::NewMemoryAccess};
 use crate::{
     memory::{decompose, manager::operation::MemoryOperation, OpType},
     vm::config::MemoryConfig,
@@ -31,18 +28,18 @@ pub struct MemoryManager<const NUM_WORDS: usize, const WORD_SIZE: usize, F: Prim
 impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     MemoryManager<NUM_WORDS, WORD_SIZE, F>
 {
-    pub fn with_persistent_memory(
-        memory_dimensions: MemoryDimensions,
-        memory: HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
-    ) -> Self {
-        Self {
-            interface_chip: MemoryInterface::Persistent(MemoryExpandInterfaceChip::new(
-                memory_dimensions,
-            )),
-            clk: F::one(),
-            memory,
-        }
-    }
+    // pub fn with_persistent_memory(
+    //     memory_dimensions: MemoryDimensions,
+    //     memory: HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
+    // ) -> Self {
+    //     Self {
+    //         interface_chip: MemoryInterface::Persistent(MemoryExpandInterfaceChip::new(
+    //             memory_dimensions,
+    //         )),
+    //         clk: F::one(),
+    //         memory,
+    //     }
+    // }
 
     pub fn with_volatile_memory(
         mem_config: MemoryConfig,
