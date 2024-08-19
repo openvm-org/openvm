@@ -14,7 +14,7 @@ use crate::{
     cpu::OpCode,
     memory::{
         manager::{access_cell::AccessCell, operation::MemoryOperation},
-        offline_checker::air::NewMemoryOfflineChecker,
+        offline_checker::bridge::NewMemoryOfflineChecker,
     },
 };
 
@@ -25,7 +25,7 @@ use crate::{
 #[derive(new)]
 pub struct Poseidon2VmAir<const WIDTH: usize, const WORD_SIZE: usize, F: Clone> {
     pub inner: Poseidon2Air<WIDTH, F>,
-    pub mem_oc: NewMemoryOfflineChecker<WORD_SIZE>,
+    pub mem_oc: NewMemoryOfflineChecker,
     pub direct: bool, // Whether direct interactions are enabled.
 }
 

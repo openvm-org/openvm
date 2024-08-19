@@ -40,6 +40,17 @@ impl<S, T> MemoryAddress<S, T> {
             pointer,
         }
     }
+
+    pub fn from<T1, T2>(a: MemoryAddress<T1, T2>) -> Self
+    where
+        T1: Into<S>,
+        T2: Into<T>,
+    {
+        Self {
+            address_space: a.address_space.into(),
+            pointer: a.pointer.into(),
+        }
+    }
 }
 
 impl<const WORD_SIZE: usize, F: PrimeField64> OfflineCheckerOperation<F>

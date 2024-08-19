@@ -18,7 +18,7 @@ impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
                 local.initial_cell.data,
                 local.initial_cell.clk,
             )
-            .push(builder, mult.clone());
+            .eval(builder, mult.clone());
 
         // Read the final memory values at last timestamps when written to
         NEW_MEMORY_BUS
@@ -27,6 +27,6 @@ impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
                 local.final_cell.data,
                 local.final_cell.clk,
             )
-            .push(builder, mult);
+            .eval(builder, mult);
     }
 }

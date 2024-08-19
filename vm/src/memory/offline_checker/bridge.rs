@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use afs_primitives::{
     is_less_than::{columns::IsLessThanIoCols, IsLessThanAir},
     is_zero::{
@@ -14,68 +16,175 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::Matrix;
 
 use super::{
-    bus::MemoryBus,
-    columns::{MemoryOfflineCheckerAuxCols, MemoryOfflineCheckerCols},
-    MemoryChip, MemoryOfflineChecker,
+    bus::MemoryBus, columns::MemoryOfflineCheckerAuxCols, MemoryChip, MemoryOfflineChecker,
 };
 use crate::{
     cpu::{NEW_MEMORY_BUS, RANGE_CHECKER_BUS},
-    memory::manager::operation::MemoryOperation,
+    memory::{
+        manager::{access_cell::AccessCell, operation::MemoryOperation},
+        MemoryAddress,
+    },
 };
 
-#[derive(Clone)]
-pub struct NewMemoryOfflineChecker<const WORD_SIZE: usize> {
+/// The [MemoryBridge] can be created within any AIR evaluation function to be used as the
+/// interface for constraining logical memory read or write operations. The bridge will add
+/// all necessary constraints and interactions.
+///
+/// ## Usage
+/// [MemoryBridge] must be initialized with the correct number of auxiliary columns to match the
+/// max number of memory operations to be constrained.
+#[derive(Clone, Debug)]
+// TODO: WORD_SIZE should not be here, refactor
+pub struct MemoryBridge<V, const WORD_SIZE: usize> {
+    offline_checker: NewMemoryOfflineChecker,
+    // TODO[jpw]:
+    // Need separate VecDeque for writes to keep track of data_prev (since reads don't need)
+    // TODO[jpw]: MemoryOfflineCheckerAuxCols needs to be refactored to deal with variable word size
+    pub aux: VecDeque<MemoryOfflineCheckerAuxCols<WORD_SIZE, V>>,
+    // @dev: do not let MemoryBridge own &mut builder. The mutable borrow will not allow builder to be
+    // used again elsewhere while MemoryBridge is in scope.
+}
+
+impl<V, const WORD_SIZE: usize> MemoryBridge<V, WORD_SIZE> {
+    /// Create a new [MemoryBridge] with the given number of auxiliary columns.
+    pub fn new(
+        offline_checker: NewMemoryOfflineChecker,
+        aux: impl IntoIterator<Item = MemoryOfflineCheckerAuxCols<WORD_SIZE, V>>,
+    ) -> Self {
+        Self {
+            offline_checker,
+            aux: VecDeque::from_iter(aux),
+        }
+    }
+
+    /// Prepare a logical memory read operation.
+    pub fn read<T>(
+        // , const WORD_SIZE: usize>(
+        &mut self,
+        address: MemoryAddress<impl Into<T>, impl Into<T>>,
+        data: [impl Into<T>; WORD_SIZE],
+        timestamp: impl Into<T>,
+    ) -> MemoryReadOperation<T, V, WORD_SIZE> {
+        let aux = self
+            .aux
+            .pop_front()
+            .expect("Exceeded max capacity of memory accesses");
+        MemoryReadOperation {
+            offline_checker: self.offline_checker,
+            address: MemoryAddress::from(address),
+            data: data.map(Into::into),
+            timestamp: timestamp.into(),
+            aux,
+        }
+    }
+
+    /// Prepare a logical memory write operation.
+    pub fn write<T>(
+        // , const WORD_SIZE: usize>(
+        &mut self,
+        address: MemoryAddress<impl Into<T>, impl Into<T>>,
+        data: [impl Into<T>; WORD_SIZE],
+        timestamp: impl Into<T>,
+    ) -> MemoryWriteOperation<T, V, WORD_SIZE> {
+        let aux = self
+            .aux
+            .pop_front()
+            .expect("Exceeded max capacity of memory accesses");
+        MemoryWriteOperation {
+            offline_checker: self.offline_checker,
+            address: MemoryAddress::from(address),
+            data: data.map(Into::into),
+            timestamp: timestamp.into(),
+            aux,
+        }
+    }
+}
+
+// **TODO[jpw]**: Read does not need duplicate trace cells for old_data and data since they are the same.
+// **Move old_cell out of AuxCols**
+/// Constraints and interactions for a logical memory read of `(address, data)` at time `timestamp`.
+/// This reads `(address, data, timestamp_prev)` from the memory bus and writes
+/// `(address, data, timestamp)` to the memory bus.
+/// Includes constraints for `timestamp_prev < timestamp`.
+pub struct MemoryReadOperation<T, V, const WORD_SIZE: usize> {
+    offline_checker: NewMemoryOfflineChecker,
+    address: MemoryAddress<T, T>,
+    data: [T; WORD_SIZE],
+    /// The timestamp of the last write to this address
+    // timestamp_prev: T,
+    /// The timestamp of the current read
+    timestamp: T,
+    aux: MemoryOfflineCheckerAuxCols<WORD_SIZE, V>,
+}
+
+impl<T: AbstractField, V, const WORD_SIZE: usize> MemoryReadOperation<T, V, WORD_SIZE> {
+    /// Evaluate constraints and send/receive interactions.
+    pub fn eval<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
+    where
+        AB: InteractionBuilder<Var = V, Expr = T>,
+    {
+        let op = MemoryOperation {
+            addr_space: self.address.address_space,
+            pointer: self.address.pointer,
+            op_type: AB::Expr::from_bool(false),
+            cell: AccessCell::new(self.data, self.timestamp),
+            enabled: count.into(),
+        };
+        self.offline_checker.subair_eval(builder, op, self.aux);
+    }
+}
+
+/// Constraints and interactions for a logical memory write of `(address, data)` at time `timestamp`.
+/// This reads `(address, data_prev, timestamp_prev)` from the memory bus and writes
+/// `(address, data, timestamp)` to the memory bus.
+/// Includes constraints for `timestamp_prev < timestamp`.
+///
+/// **Note:** This can be used as a logical read operation by setting `data_prev = data`.
+pub struct MemoryWriteOperation<T, V, const WORD_SIZE: usize> {
+    offline_checker: NewMemoryOfflineChecker,
+    address: MemoryAddress<T, T>,
+    data: [T; WORD_SIZE],
+    /// The timestamp of the current read
+    timestamp: T,
+    aux: MemoryOfflineCheckerAuxCols<WORD_SIZE, V>,
+}
+
+impl<T: AbstractField, V, const WORD_SIZE: usize> MemoryWriteOperation<T, V, WORD_SIZE> {
+    /// Evaluate constraints and send/receive interactions.
+    pub fn eval<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
+    where
+        AB: InteractionBuilder<Var = V, Expr = T>,
+    {
+        let op = MemoryOperation {
+            addr_space: self.address.address_space,
+            pointer: self.address.pointer,
+            op_type: AB::Expr::from_bool(false),
+            cell: AccessCell::new(self.data, self.timestamp),
+            enabled: count.into(),
+        };
+        self.offline_checker.subair_eval(builder, op, self.aux);
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct NewMemoryOfflineChecker {
     pub memory_bus: MemoryBus,
-    pub clk_lt_air: IsLessThanAir,
+    pub timestamp_lt_air: IsLessThanAir,
     pub is_zero_air: IsZeroAir,
 }
 
-impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
+impl NewMemoryOfflineChecker {
     pub fn new(clk_max_bits: usize, decomp: usize) -> Self {
         Self {
             memory_bus: NEW_MEMORY_BUS,
-            clk_lt_air: IsLessThanAir::new(RANGE_CHECKER_BUS, clk_max_bits, decomp),
+            timestamp_lt_air: IsLessThanAir::new(RANGE_CHECKER_BUS, clk_max_bits, decomp),
             is_zero_air: IsZeroAir,
         }
     }
-
-    fn assert_compose<AB: AirBuilder>(
-        &self,
-        builder: &mut AB,
-        word: [AB::Expr; WORD_SIZE],
-        field_elem: AB::Expr,
-    ) {
-        builder.assert_eq(word[0].clone(), field_elem);
-        for cell in word.iter().take(WORD_SIZE).skip(1).cloned() {
-            builder.assert_zero(cell);
-        }
-    }
 }
 
-impl<const WORD_SIZE: usize> AirConfig for NewMemoryOfflineChecker<WORD_SIZE> {
-    type Cols<T> = MemoryOfflineCheckerCols<WORD_SIZE, T>;
-}
-
-impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for NewMemoryOfflineChecker<WORD_SIZE> {
-    fn width(&self) -> usize {
-        MemoryOfflineCheckerCols::<WORD_SIZE, usize>::width(self)
-    }
-}
-
-impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB>
-    for NewMemoryOfflineChecker<WORD_SIZE>
-{
-    fn eval(&self, builder: &mut AB) {
-        let main = builder.main();
-        let local = main.row_slice(0);
-        let local = MemoryOfflineCheckerCols::<WORD_SIZE, AB::Var>::from_slice(&local);
-
-        self.subair_eval(builder, local.io.into_expr::<AB>(), local.aux);
-    }
-}
-
-impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
-    pub fn subair_eval<AB: InteractionBuilder>(
+impl NewMemoryOfflineChecker {
+    pub fn subair_eval<AB: InteractionBuilder, const WORD_SIZE: usize>(
         &self,
         builder: &mut AB,
         op: MemoryOperation<WORD_SIZE, AB::Expr>,
@@ -100,13 +209,6 @@ impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
         // builder.assert_one(implies::<AB>(aux.is_immediate.into(), op.enabled.clone()));
 
         // TODO[osama]: make this degree 2
-        self.assert_compose(
-            &mut builder.when(aux.is_immediate).when(op.enabled.clone()),
-            op.cell.data.clone(),
-            op.pointer.clone(),
-        );
-
-        // TODO[osama]: make this degree 2
         // is_immediate => read
         builder.assert_one(implies::<AB>(
             and::<AB>(op.enabled.clone(), aux.is_immediate.into()),
@@ -119,7 +221,7 @@ impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
             aux.clk_lt.into(),
         );
 
-        self.clk_lt_air
+        self.timestamp_lt_air
             .subair_eval(builder, clk_lt_io_cols, aux.clk_lt_aux);
 
         // TODO[osama]: this should be reduced to degree 2
@@ -141,17 +243,18 @@ impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
         }
 
         // TODO[osama]: resolve is_immediate stuff
-        // Self::eval_memory_interactions(
-        //     builder,
-        //     op.addr_space,
-        //     op.pointer,
-        //     aux.old_cell.into_expr::<AB>(),
-        //     op.cell,
-        //     op.enabled * (AB::Expr::one() - aux.is_immediate.into()),
-        // );
+        let count = op.enabled * (AB::Expr::one() - aux.is_immediate.into());
+        let address = MemoryAddress::new(op.addr_space, op.pointer);
+        self.memory_bus
+            .read(address.clone(), aux.old_cell.data, aux.old_cell.clk)
+            .eval(builder, count.clone());
+        self.memory_bus
+            .write(address, op.cell.data, op.cell.clk)
+            .eval(builder, count);
     }
 }
 
+// TODO: delete all below
 impl<const WORD_SIZE: usize, F: PrimeField32> AirConfig for MemoryChip<WORD_SIZE, F> {
     type Cols<T> = OfflineCheckerCols<T>;
 }

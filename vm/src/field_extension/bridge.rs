@@ -10,13 +10,13 @@ use crate::{
     field_extension::columns::FieldExtensionArithmeticAuxCols,
     memory::{
         manager::{access_cell::AccessCell, operation::MemoryOperation},
-        offline_checker::{air::NewMemoryOfflineChecker, columns::MemoryOfflineCheckerAuxCols},
+        offline_checker::{bridge::NewMemoryOfflineChecker, columns::MemoryOfflineCheckerAuxCols},
     },
 };
 
 fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
     builder: &mut AB,
-    mem_oc: &NewMemoryOfflineChecker<WORD_SIZE>,
+    mem_oc: &NewMemoryOfflineChecker,
     clk_offset: &mut usize,
     is_write: bool,
     start_timestamp: AB::Var,

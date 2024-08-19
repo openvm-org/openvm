@@ -3,6 +3,7 @@ use std::{array::from_fn, iter};
 use derive_new::new;
 use p3_air::AirBuilder;
 
+// TODO[jpw]: delete this. Cell should refer to a single trace cell, Word refers to multiple cells
 #[derive(Copy, Clone, Debug, PartialEq, Eq, new)]
 pub struct AccessCell<const WORD_SIZE: usize, T> {
     pub data: [T; WORD_SIZE],

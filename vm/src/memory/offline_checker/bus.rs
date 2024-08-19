@@ -61,7 +61,7 @@ impl<const BLOCK_SIZE: usize, T: AbstractField> MemoryBusInteraction<T, BLOCK_SI
     /// Finalizes and sends/receives the memory operation with the specified count over the bus.
     ///
     /// A read corresponds to a receive, and a write corresponds to a send.
-    pub fn push<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
+    pub fn eval<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
     where
         AB: InteractionBuilder<Expr = T>,
     {

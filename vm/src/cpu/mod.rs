@@ -7,7 +7,7 @@ use OpCode::*;
 
 use crate::{
     field_extension::FieldExtensionArithmetic,
-    memory::offline_checker::{air::NewMemoryOfflineChecker, bus::MemoryBus},
+    memory::offline_checker::{bridge::NewMemoryOfflineChecker, bus::MemoryBus},
     poseidon2::Poseidon2Chip,
     vm::config::MemoryConfig,
 };
@@ -192,7 +192,7 @@ impl CpuOptions {
 /// Air for the CPU. Carries no state and does not own execution.
 pub struct CpuAir<const WORD_SIZE: usize> {
     pub options: CpuOptions,
-    pub memory_offline_checker: NewMemoryOfflineChecker<WORD_SIZE>,
+    pub memory_offline_checker: NewMemoryOfflineChecker,
 }
 
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {

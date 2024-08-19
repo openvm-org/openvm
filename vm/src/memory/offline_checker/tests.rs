@@ -13,7 +13,7 @@ use crate::{
     cpu::RANGE_CHECKER_BUS,
     memory::{
         manager::{dimensions::MemoryDimensions, interface::MemoryInterface, MemoryManager},
-        offline_checker::{air::NewMemoryOfflineChecker, columns::MemoryOfflineCheckerCols},
+        offline_checker::{bridge::NewMemoryOfflineChecker, columns::MemoryOfflineCheckerCols},
     },
     vm::config::MemoryConfig,
 };
@@ -41,8 +41,7 @@ fn volatile_memory_offline_checker_test() {
             mem_config,
             range_checker.clone(),
         );
-    let offline_checker =
-        NewMemoryOfflineChecker::<TEST_WORD_SIZE>::new(mem_config.clk_max_bits, mem_config.decomp);
+    let offline_checker = NewMemoryOfflineChecker::new(mem_config.clk_max_bits, mem_config.decomp);
 
     let num_addresses = rng.gen_range(1..=10);
     let mut all_addresses = vec![];
@@ -93,7 +92,7 @@ fn volatile_memory_offline_checker_test() {
     while !(checker_trace.len() / checker_width).is_power_of_two() {
         checker_trace.extend(
             offline_checker
-                .disabled_memory_checker_cols::<Val>(range_checker.clone())
+                .disabled_memory_checker_cols::<Val, TEST_WORD_SIZE>(range_checker.clone())
                 .flatten(),
         );
     }
