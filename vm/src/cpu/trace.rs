@@ -414,7 +414,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 }
                 CT_START => cycle_tracker.start(debug, vm.metrics.clone()),
                 CT_END => cycle_tracker.end(debug, vm.metrics.clone()),
-                ADD256 | SUB256 => unreachable!(), // TODO: wait for the no-cpu model
+                ADD256 | SUB256 | LT256 | EQ256 => unreachable!(), // TODO: wait for the no-cpu model
             };
 
             let final_accesses = vm.memory_chip.accesses.len();
