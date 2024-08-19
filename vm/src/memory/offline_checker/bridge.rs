@@ -162,7 +162,7 @@ impl<T: AbstractField, V, const WORD_SIZE: usize> MemoryWriteOperation<T, V, WOR
         let op = MemoryOperation {
             addr_space: self.address.address_space,
             pointer: self.address.pointer,
-            op_type: AB::Expr::from_bool(false),
+            op_type: AB::Expr::from_bool(true),
             cell: AccessCell::new(self.data, self.timestamp),
             enabled: count.into(),
         };
