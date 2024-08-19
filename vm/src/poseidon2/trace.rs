@@ -1,10 +1,15 @@
 use p3_air::BaseAir;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
+use p3_uni_stark::StarkGenericConfig;
 
 use afs_primitives::sub_chip::LocalTraceInstructions;
+use afs_stark_backend::rap::AnyRap;
 
-use crate::{arch::columns::ExecutionState, cpu::trace::Instruction};
+use crate::{
+    arch::{chips::MachineChip, columns::ExecutionState},
+    cpu::trace::Instruction,
+};
 
 use super::{columns::*, Poseidon2Chip, Poseidon2VmAir};
 
@@ -33,7 +38,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
     }
 }
 
-impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
+impl<const WIDTH: usize, F: PrimeField32> MachineChip<F> for Poseidon2Chip<WIDTH, F> {
     /// Generates final Poseidon2VmAir trace from cached rows.
     pub fn generate_trace(&self) -> RowMajorMatrix<F> {
         let row_len = self.rows.len();
@@ -48,5 +53,9 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
                 .collect(),
             self.air.width(),
         )
+    }
+
+    fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC> {
+        &self.air
     }
 }

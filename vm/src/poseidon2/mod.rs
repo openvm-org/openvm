@@ -12,8 +12,8 @@ use crate::{
     memory::{offline_checker::MemoryChip, tree::Hasher},
 };
 
-//#[cfg(test)]
-//pub mod tests;
+#[cfg(test)]
+pub mod tests;
 
 pub mod air;
 pub mod bridge;

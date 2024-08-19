@@ -63,7 +63,7 @@ impl FieldExtensionArithmeticAir {
         // writes for z
         eval_rw_interactions(builder, true, local, local.aux.d, local.aux.op_a, 2);
 
-        self.execution_bus.execute_simple(
+        self.execution_bus.execute_increment_pc(
             builder,
             ExecutionState::new(local.aux.pc, local.aux.start_timestamp),
             AB::F::from_canonical_usize(3 * EXTENSION_DEGREE),

@@ -66,6 +66,7 @@ fn field_extension_air_test() {
         memory_tester.check();
     }
 
+    // positive test
     MachineChipTester::default()
         .add(&mut execution_tester)
         .add(&mut memory_tester)

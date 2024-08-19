@@ -1,5 +1,3 @@
-use core::array::from_fn;
-
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::{
     config::{
@@ -12,11 +10,13 @@ use afs_test_utils::{
 };
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_strict_usize;
 use poseidon2_air::poseidon2::Poseidon2Config;
 use rand::{Rng, RngCore};
+use afs_primitives::sub_chip::LocalTraceInstructions;
+
 
 use super::{Poseidon2Chip, Poseidon2VmAir, CHUNK, WIDTH};
 use crate::{
@@ -32,6 +32,10 @@ use crate::{
         VirtualMachine,
     },
 };
+use crate::arch::bridge::ExecutionBus;
+use crate::arch::testing::{ExecutionTester, MachineChipTester, MemoryTester};
+use crate::cpu::FIELD_EXTENSION_INSTRUCTIONS;
+use crate::field_extension::{FieldExtensionArithmeticAir, FieldExtensionArithmeticChip};
 
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 24;
@@ -108,6 +112,7 @@ fn run_perm_ops(
         let dst = BabyBear::from_wrapped_u32(rng.next_u32() % ADDR_MAX);
         let lhs = BabyBear::from_wrapped_u32(rng.next_u32() % (ADDR_MAX / 2));
         let rhs = lhs + BabyBear::from_wrapped_u32(rng.next_u32() % (ADDR_MAX / 2));
+        assert!()
 
         let instr = &instructions[i];
         write_ops.push(WriteOps {
@@ -247,12 +252,15 @@ fn run_perm_ops(
 }
 
 /// Create random instructions for the poseidon2 chip.
+
+
+/// Create random instructions for the poseidon2 chip.
 fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
     let mut rng = create_seeded_rng();
     (0..num_ops)
         .map(|_| {
             let [a, b, c] =
-                from_fn(|_| BabyBear::from_wrapped_u32(rng.next_u32() % (1 << LIMB_BITS)));
+                std::array::from_fn(|_| BabyBear::from_wrapped_u32(rng.next_u32() % (1 << LIMB_BITS)));
             Instruction {
                 opcode: if rng.gen_bool(0.5) {
                     PERM_POS2
@@ -279,7 +287,7 @@ fn poseidon2_chip_random_50_test() {
     const NUM_OPS: usize = 50;
     let instructions = random_instructions(NUM_OPS);
     let data = (0..NUM_OPS)
-        .map(|_| from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))))
+        .map(|_| std::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))))
         .collect_vec();
 
     let (vm, engine, dummy_cpu_memory, dummy_cpu_poseidon2, traces) =
@@ -301,6 +309,81 @@ fn poseidon2_chip_random_50_test() {
         .expect("Verification failed");
 }
 
+/// Checking that 50 random instructions pass.
+#[test]
+fn poseidon2_chip_random_50_test_new() {
+    let num_ops = 50;
+    let elem_range = || 1..=100;
+    let address_space_range = || 1usize..=2;
+    let address_range = || 0usize..1 << 29;
+
+    let execution_bus = ExecutionBus(0);
+    let memory_bus = 1;
+    let mut execution_tester = ExecutionTester::new(execution_bus, create_seeded_rng());
+    let mut memory_tester = MemoryTester::new(memory_bus);
+    let mut poseidon2_chip = Poseidon2Chip::from_poseidon2_config(
+        Poseidon2Config::<16, _>::new_p3_baby_bear_16(),
+        POSEIDON2_BUS,
+        execution_bus,
+        memory_tester.get_memory_chip(),
+    );
+
+    let mut rng = create_seeded_rng();
+
+    for instruction in random_instructions(num_ops) {
+        let opcode = instruction.opcode;
+        let [a, b, c, d, e] = [instruction.op_a, instruction.op_b, instruction.op_c, instruction.d, instruction.e].map(|elem| elem.as_canonical_u64() as usize);
+        
+        let dst = rng.gen_range(address_range());
+        let lhs = rng.gen_range(address_range());
+        let rhs = rng.gen_range(address_range());
+        
+        let data: [_; WIDTH] = std::array::from_fn(|_| BabyBear::from_canonical_usize(rng.gen_range(elem_range())));
+        let hash = LocalTraceInstructions::generate_trace_row(&poseidon2_chip.air.inner, data).io.output;
+        
+        memory_tester.install(d, a, [BabyBear::from_canonical_usize(dst)]);
+        memory_tester.install(d, b, [BabyBear::from_canonical_usize(lhs)]);
+        if opcode == COMP_POS2 {
+            memory_tester.install(d, c, [BabyBear::from_canonical_usize(rhs)]);
+        }
+        
+        match opcode {
+            COMP_POS2 => {
+                let data_left: [_; CHUNK] = std::array::from_fn(|i| data[i]);
+                let data_right: [_; CHUNK] = std::array::from_fn(|i| data[CHUNK + i]);
+                memory_tester.install(e, lhs, data_left);
+                memory_tester.install(e, rhs, data_right);
+            }
+            PERM_POS2 => {
+                memory_tester.install(e, lhs, data);
+            }
+            _ => panic!()
+        }
+
+        execution_tester.execute(&mut poseidon2_chip, instruction);
+        
+        match opcode {
+            COMP_POS2 => {
+                let data_partial: [_; CHUNK] = std::array::from_fn(|i| data[i]);
+                memory_tester.expect(e, dst, data_partial);
+            }
+            PERM_POS2 => {
+                memory_tester.expect(e, dst, data);
+            }
+            _ => panic!()
+        }
+        memory_tester.check();
+    }
+
+    // positive test
+    MachineChipTester::default()
+        .add(&mut execution_tester)
+        .add(&mut memory_tester)
+        .add(&mut poseidon2_chip)
+        .simple_test()
+        .expect("Verification failed");
+}
+
 /// Negative test, pranking internal poseidon2 trace values.
 #[test]
 fn poseidon2_negative_test() {
@@ -308,7 +391,7 @@ fn poseidon2_negative_test() {
     const NUM_OPS: usize = 1;
     let instructions = random_instructions(NUM_OPS);
     let data = (0..NUM_OPS)
-        .map(|_| from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))))
+        .map(|_| std::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))))
         .collect_vec();
 
     let (vm, engine, dummy_cpu_memory, dummy_cpu_poseidon2, mut traces) =
@@ -350,10 +433,10 @@ fn poseidon2_direct_test() {
     const NUM_OPS: usize = 50;
     const CHUNKS: usize = 8;
     let correct_height = NUM_OPS.next_power_of_two();
-    let hashes: [([BabyBear; CHUNKS], [BabyBear; CHUNKS]); NUM_OPS] = from_fn(|_| {
+    let hashes: [([BabyBear; CHUNKS], [BabyBear; CHUNKS]); NUM_OPS] = std::array::from_fn(|_| {
         (
-            from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
-            from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
+            std::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
+            std::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
         )
     });
     let mut chip = Poseidon2Chip::<16, BabyBear>::from_poseidon2_config(
@@ -361,7 +444,7 @@ fn poseidon2_direct_test() {
         POSEIDON2_BUS,
     );
 
-    let outs: [[BabyBear; CHUNKS]; NUM_OPS] = from_fn(|i| chip.hash(hashes[i].0, hashes[i].1));
+    let outs: [[BabyBear; CHUNKS]; NUM_OPS] = std::array::from_fn(|i| chip.hash(hashes[i].0, hashes[i].1));
 
     let width = Poseidon2VmAir::<16, BabyBear>::direct_interaction_width();
 

@@ -8,7 +8,7 @@ use crate::arch::columns::{ExecutionState, InstructionCols};
 pub struct ExecutionBus(pub usize);
 
 impl ExecutionBus {
-    pub fn execute_simple<AB: InteractionBuilder>(
+    pub fn execute_increment_pc<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         prev_state: ExecutionState<AB::Expr>,

@@ -29,7 +29,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
         aux: &Poseidon2VmAuxCols<WIDTH, AB::Var>,
     ) {
         let opcode = AB::Expr::from_canonical_usize(PERM_POS2 as usize) + io.cmp;
-        self.execution_bus.execute_simple(
+        self.execution_bus.execute_increment_pc(
             builder,
             ExecutionState::new(io.pc, io.start_timestamp),
             AB::Expr::from_canonical_usize(3 + (2 * WIDTH)),
