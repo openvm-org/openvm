@@ -2,11 +2,12 @@ use std::borrow::Borrow;
 
 use afs_primitives::sub_chip::AirConfig;
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{Air, BaseAir};
+use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::{columns::FieldArithmeticCols, FieldArithmeticAir};
+use crate::cpu::OpCode::{FADD, FDIV, FMUL, FSUB};
 
 impl AirConfig for FieldArithmeticAir {
     type Cols<T> = FieldArithmeticCols<T>;
@@ -14,7 +15,7 @@ impl AirConfig for FieldArithmeticAir {
 
 impl<F: Field> BaseAir<F> for FieldArithmeticAir {
     fn width(&self) -> usize {
-        FieldArithmeticCols::<F>::NUM_COLS
+        FieldArithmeticCols::<F>::get_width()
     }
 }
 
@@ -23,41 +24,34 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
         let main = builder.main();
 
         let local = main.row_slice(0);
-        let au_cols: &FieldArithmeticCols<_> = (*local).borrow();
+        let local: &FieldArithmeticCols<_> = (*local).borrow();
 
-        let FieldArithmeticCols { io, aux } = au_cols;
+        let FieldArithmeticCols { io, aux } = local;
 
-        builder.assert_bool(aux.opcode_lo);
-        builder.assert_bool(aux.opcode_hi);
+        let mut indicator_sum = AB::Expr::zero();
+        indicator_sum += aux.is_sub.into();
+        indicator_sum += aux.is_mul.into();
+        indicator_sum += aux.is_div.into();
+        builder.assert_bool(indicator_sum.clone());
+
+        let is_add = AB::Expr::one() - indicator_sum;
 
         builder.assert_eq(
             io.opcode,
-            aux.opcode_lo
-                + aux.opcode_hi * AB::Expr::two()
-                + AB::F::from_canonical_u8(FieldArithmeticAir::BASE_OP),
+            is_add.clone() * AB::F::from_canonical_u32(FADD as u32)
+                + aux.is_sub * AB::F::from_canonical_u32(FSUB as u32)
+                + aux.is_mul * AB::F::from_canonical_u32(FMUL as u32)
+                + aux.is_div * AB::F::from_canonical_u32(FDIV as u32),
         );
 
-        builder.assert_eq(
-            aux.is_mul,
-            aux.opcode_hi * (AB::Expr::one() - aux.opcode_lo),
-        );
-        builder.assert_eq(aux.is_div, aux.opcode_hi * aux.opcode_lo);
+        builder.when(is_add).assert_eq(io.z, io.x + io.y);
+        builder.when(aux.is_sub).assert_eq(io.z, io.x - io.y);
+        builder.when(aux.is_mul).assert_eq(io.z, aux.product);
+        builder.assert_eq(io.x * io.y, aux.product);
 
-        builder.assert_eq(aux.product, io.x * io.y);
-        builder.assert_eq(aux.quotient * io.y, io.x * aux.is_div);
-        builder.assert_eq(
-            au_cols.aux.sum_or_diff,
-            io.x + io.y - AB::Expr::two() * aux.opcode_lo * io.y,
-        );
-
-        builder.assert_eq(
-            io.z,
-            aux.is_mul * aux.product
-                + aux.is_div * aux.quotient
-                + aux.sum_or_diff * (AB::Expr::one() - aux.opcode_hi),
-        );
-
-        builder.assert_eq(aux.divisor_inv * io.y, aux.is_div);
+        // y_inv = y^{-1} if is_div, else y_inv = 0
+        builder.assert_eq(io.y * aux.y_inv, aux.is_div);
+        builder.assert_eq(io.z * aux.is_div, io.x * aux.y_inv);
 
         self.eval_interactions(builder, *io);
     }

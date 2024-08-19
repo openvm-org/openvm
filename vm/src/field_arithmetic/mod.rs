@@ -47,9 +47,6 @@ impl<F: Field> ArithmeticOperation<F> {
 pub struct FieldArithmeticAir {}
 
 impl FieldArithmeticAir {
-    pub const BASE_OP: u8 = OpCode::FADD as u8;
-    pub const BUS_INDEX: usize = 2;
-
     /// Evaluates given opcode using given operands.
     ///
     /// Returns None for non-arithmetic operations.
@@ -58,7 +55,13 @@ impl FieldArithmeticAir {
             OpCode::FADD => Some(operands.0 + operands.1),
             OpCode::FSUB => Some(operands.0 - operands.1),
             OpCode::FMUL => Some(operands.0 * operands.1),
-            OpCode::FDIV => Some(operands.0 / operands.1),
+            OpCode::FDIV => {
+                if operands.1 == T::zero() {
+                    None
+                } else {
+                    Some(operands.0 / operands.1)
+                }
+            }
             _ => unreachable!(),
         }
     }

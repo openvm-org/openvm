@@ -1,14 +1,15 @@
 use afs_stark_backend::interaction::InteractionBuilder;
 
 use super::{columns::FieldArithmeticIoCols, FieldArithmeticAir};
+use crate::cpu::ARITHMETIC_BUS;
 
-/// Receives all IO columns from another chip on bus 2 (FieldArithmeticAir::BUS_INDEX).
+/// Receives all IO columns from another chip.
 impl FieldArithmeticAir {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         io: FieldArithmeticIoCols<AB::Var>,
     ) {
-        builder.push_receive(Self::BUS_INDEX, [io.opcode, io.x, io.y, io.z], io.rcv_count);
+        builder.push_receive(ARITHMETIC_BUS, [io.opcode, io.x, io.y, io.z], io.rcv_count);
     }
 }
