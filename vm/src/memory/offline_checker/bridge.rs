@@ -106,6 +106,10 @@ impl<V, const WORD_SIZE: usize> MemoryBridge<V, WORD_SIZE> {
 /// This reads `(address, data, timestamp_prev)` from the memory bus and writes
 /// `(address, data, timestamp)` to the memory bus.
 /// Includes constraints for `timestamp_prev < timestamp`.
+///
+/// The generic `T` type is intended to be `AB::Expr` where `AB` is the [AirBuilder].
+/// The auxiliary columns are not expected to be expressions, so the generic `V` type is intended
+/// to be `AB::Var`.
 pub struct MemoryReadOperation<T, V, const WORD_SIZE: usize> {
     offline_checker: NewMemoryOfflineChecker,
     address: MemoryAddress<T, T>,
