@@ -15,11 +15,27 @@ impl ExecutionBus {
         timestamp_change: impl Into<AB::Expr>,
         instruction: InstructionCols<AB::Expr>,
     ) {
+        self.execute_increment_pc_with_multiplicity(
+            builder,
+            AB::F::one(),
+            prev_state,
+            timestamp_change,
+            instruction,
+        );
+    }
+    pub fn execute_increment_pc_with_multiplicity<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        multiplicity: impl Into<AB::Expr>,
+        prev_state: ExecutionState<AB::Expr>,
+        timestamp_change: impl Into<AB::Expr>,
+        instruction: InstructionCols<AB::Expr>,
+    ) {
         let next_state = ExecutionState {
             pc: prev_state.pc.clone() + AB::F::one(),
             timestamp: prev_state.timestamp.clone() + timestamp_change.into(),
         };
-        self.execute(builder, prev_state, next_state, instruction);
+        self.execute_with_multiplicity(builder, multiplicity, prev_state, next_state, instruction);
     }
     pub fn execute<AB: InteractionBuilder>(
         &self,

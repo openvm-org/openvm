@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field, PrimeField32, PrimeField64};
-use p3_matrix::dense::RowMajorMatrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::StarkGenericConfig;
 use rand::{RngCore, rngs::StdRng};
 
@@ -12,6 +12,7 @@ use afs_stark_backend::{
 };
 use afs_test_utils::{
     config::baby_bear_poseidon2::{BabyBearPoseidon2Config, run_simple_test},
+    engine::StarkEngine,
     interaction::dummy_interaction_air::DummyInteractionAir,
 };
 
@@ -266,6 +267,25 @@ impl<'a> MachineChipTester<'a> {
     }
     pub fn simple_test(&mut self) -> Result<(), VerificationError> {
         run_simple_test(
+            self.airs.clone(),
+            self.traces.clone(),
+            self.public_values.clone(),
+        )
+    }
+    fn max_trace_height(&self) -> usize {
+        self.traces
+            .iter()
+            .map(RowMajorMatrix::height)
+            .max()
+            .unwrap()
+    }
+    /// Given a function to produce an engine from the max trace height,
+    /// runs a simple test on that engine
+    pub fn engine_test<E: StarkEngine<BabyBearPoseidon2Config>, P: Fn(usize) -> E>(
+        &mut self,
+        engine_provider: P,
+    ) -> Result<(), VerificationError> {
+        engine_provider(self.max_trace_height()).run_simple_test(
             self.airs.clone(),
             self.traces.clone(),
             self.public_values.clone(),
