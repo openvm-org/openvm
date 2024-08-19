@@ -21,6 +21,7 @@ pub struct MemoryOfflineCheckerCols<const WORD_SIZE: usize, T> {
 
 #[derive(Clone, Debug, PartialEq, Eq, Default, new)]
 pub struct MemoryOfflineCheckerAuxCols<const WORD_SIZE: usize, T> {
+    // TODO[jpw]: Remove this; read does not need old_data
     pub old_cell: AccessCell<WORD_SIZE, T>,
     pub is_immediate: T,
     pub is_zero_aux: T,
