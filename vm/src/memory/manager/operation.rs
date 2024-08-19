@@ -9,6 +9,7 @@ use super::access_cell::AccessCell;
 pub struct MemoryOperation<const WORD_SIZE: usize, T> {
     pub addr_space: T,
     pub pointer: T,
+    // TODO[jpw]: remove this
     pub op_type: T,
     pub cell: AccessCell<WORD_SIZE, T>,
     pub enabled: T,

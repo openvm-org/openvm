@@ -3,7 +3,7 @@ use std::iter;
 use afs_primitives::is_less_than::{columns::IsLessThanAuxCols, IsLessThanAir};
 use derive_new::new;
 
-use super::air::NewMemoryOfflineChecker;
+use super::bridge::NewMemoryOfflineChecker;
 use crate::memory::manager::{access_cell::AccessCell, operation::MemoryOperation};
 
 // TODO[osama]: to be renamed to MemoryAccess
@@ -21,6 +21,7 @@ pub struct MemoryOfflineCheckerCols<const WORD_SIZE: usize, T> {
 
 #[derive(Clone, Debug, PartialEq, Eq, Default, new)]
 pub struct MemoryOfflineCheckerAuxCols<const WORD_SIZE: usize, T> {
+    // TODO[jpw]: Remove this; read does not need old_data
     pub old_cell: AccessCell<WORD_SIZE, T>,
     pub is_immediate: T,
     pub is_zero_aux: T,
@@ -50,7 +51,7 @@ impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerCols<WORD_SIZE, T> {
             .collect()
     }
 
-    pub fn width(oc: &NewMemoryOfflineChecker<WORD_SIZE>) -> usize {
+    pub fn width(oc: &NewMemoryOfflineChecker) -> usize {
         MemoryOperation::<WORD_SIZE, T>::width()
             + MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(oc)
     }
@@ -90,8 +91,10 @@ impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerAuxCols<WORD_SIZE, T> {
         }
     }
 
-    pub fn width(oc: &NewMemoryOfflineChecker<WORD_SIZE>) -> usize {
-        AccessCell::<WORD_SIZE, T>::width() + 3 + IsLessThanAuxCols::<T>::width(&oc.clk_lt_air)
+    pub fn width(oc: &NewMemoryOfflineChecker) -> usize {
+        AccessCell::<WORD_SIZE, T>::width()
+            + 3
+            + IsLessThanAuxCols::<T>::width(&oc.timestamp_lt_air)
     }
 }
 

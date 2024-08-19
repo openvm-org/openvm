@@ -8,7 +8,7 @@ use super::{operation::MemoryOperation, MemoryManager};
 use crate::memory::{
     compose, decompose,
     offline_checker::{
-        air::NewMemoryOfflineChecker,
+        bridge::NewMemoryOfflineChecker,
         columns::{MemoryOfflineCheckerAuxCols, NewMemoryAccess},
     },
     OpType,
@@ -17,7 +17,7 @@ use crate::memory::{
 pub struct MemoryTraceBuilder<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
     memory_manager: Arc<Mutex<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
     range_checker: Arc<RangeCheckerGateChip>,
-    offline_checker: NewMemoryOfflineChecker<WORD_SIZE>,
+    offline_checker: NewMemoryOfflineChecker,
 
     accesses_buffer: Vec<MemoryOfflineCheckerAuxCols<WORD_SIZE, F>>,
 }
@@ -28,7 +28,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     pub fn new(
         memory_manager: Arc<Mutex<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
         range_checker: Arc<RangeCheckerGateChip>,
-        offline_checker: NewMemoryOfflineChecker<WORD_SIZE>,
+        offline_checker: NewMemoryOfflineChecker,
     ) -> Self {
         Self {
             memory_manager,
@@ -91,7 +91,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         memory_access: &NewMemoryAccess<WORD_SIZE, F>,
     ) -> MemoryOfflineCheckerAuxCols<WORD_SIZE, F> {
         let clk_lt_cols = LocalTraceInstructions::generate_trace_row(
-            &self.offline_checker.clk_lt_air,
+            &self.offline_checker.timestamp_lt_air,
             (
                 memory_access.old_cell.clk.as_canonical_u32(),
                 memory_access.op.cell.clk.as_canonical_u32(),

@@ -15,6 +15,7 @@ use super::{
     OpCode::*,
     CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH,
 };
+use crate::memory::{offline_checker::bridge::MemoryBridge, MemoryAccess, MemoryAddress};
 
 impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for CpuAir<WORD_SIZE> {
     fn width(&self) -> usize {
@@ -300,12 +301,24 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
                 .assert_eq(next_pc, pc + inst_width);
         }
 
-        for i in 0..CPU_MAX_ACCESSES_PER_CYCLE {
-            self.memory_offline_checker.subair_eval(
-                builder,
-                mem_ops[i].clone().into_expr::<AB>(),
-                mem_oc_aux_cols[i].clone(),
-            );
+        let mut memory_bridge = MemoryBridge::new(self.memory_offline_checker, mem_oc_aux_cols);
+        for op in &mem_ops[0..CPU_MAX_READS_PER_CYCLE] {
+            memory_bridge
+                .read(
+                    MemoryAddress::new(op.addr_space, op.pointer),
+                    op.cell.data,
+                    op.cell.clk,
+                )
+                .eval(builder, op.enabled);
+        }
+        for op in &mem_ops[CPU_MAX_READS_PER_CYCLE..CPU_MAX_ACCESSES_PER_CYCLE] {
+            memory_bridge
+                .write(
+                    MemoryAddress::new(op.addr_space, op.pointer),
+                    op.cell.data,
+                    op.cell.clk,
+                )
+                .eval(builder, op.enabled);
         }
 
         // maybe writes to immediate address space are ignored instead of disallowed?

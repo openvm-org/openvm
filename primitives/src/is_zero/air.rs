@@ -7,7 +7,7 @@ use p3_matrix::Matrix;
 use super::columns::{IsZeroCols, IsZeroIoCols, NUM_COLS};
 use crate::sub_chip::{AirConfig, SubAir};
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Debug, Default)]
 /// A chip that checks if a number equals 0
 pub struct IsZeroAir;
 

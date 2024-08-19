@@ -30,7 +30,7 @@ impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB>
         let local = main.row_slice(0);
         let local_cols = FieldExtensionArithmeticCols::<WORD_SIZE, AB::Var>::from_iter(
             &mut local.iter().copied(),
-            &self.mem_oc.clk_lt_air,
+            &self.mem_oc.timestamp_lt_air,
         );
 
         let FieldExtensionArithmeticCols { io, aux } = local_cols;

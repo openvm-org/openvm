@@ -10,7 +10,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 
 use super::{
-    air::NewMemoryOfflineChecker,
+    bridge::NewMemoryOfflineChecker,
     columns::{MemoryOfflineCheckerAuxCols, MemoryOfflineCheckerCols, NewMemoryAccess},
     MemoryChip,
 };
@@ -58,14 +58,14 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
     }
 }
 
-impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
-    pub fn memory_access_to_checker_aux_cols<F: PrimeField32>(
+impl NewMemoryOfflineChecker {
+    pub fn memory_access_to_checker_aux_cols<F: PrimeField32, const WORD_SIZE: usize>(
         &self,
         memory_access: &NewMemoryAccess<WORD_SIZE, F>,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> MemoryOfflineCheckerAuxCols<WORD_SIZE, F> {
         let clk_lt_cols = LocalTraceInstructions::generate_trace_row(
-            &self.clk_lt_air,
+            &self.timestamp_lt_air,
             (
                 memory_access.old_cell.clk.as_canonical_u32(),
                 memory_access.op.cell.clk.as_canonical_u32(),
@@ -87,7 +87,7 @@ impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
         )
     }
 
-    pub fn memory_access_to_checker_cols<F: PrimeField32>(
+    pub fn memory_access_to_checker_cols<F: PrimeField32, const WORD_SIZE: usize>(
         &self,
         memory_access: &NewMemoryAccess<WORD_SIZE, F>,
         range_checker: Arc<RangeCheckerGateChip>,
@@ -98,7 +98,7 @@ impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
         )
     }
 
-    pub fn disabled_memory_checker_aux_cols_from_op<F: PrimeField32>(
+    pub fn disabled_memory_checker_aux_cols_from_op<F: PrimeField32, const WORD_SIZE: usize>(
         &self,
         addr_space: F,
         clk: F,
@@ -120,7 +120,7 @@ impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
     }
 
     /// Assumes that addr_space in memory operation is zero
-    pub fn disabled_memory_checker_aux_cols<F: PrimeField32>(
+    pub fn disabled_memory_checker_aux_cols<F: PrimeField32, const WORD_SIZE: usize>(
         &self,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> MemoryOfflineCheckerAuxCols<WORD_SIZE, F> {
@@ -140,7 +140,7 @@ impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
     }
 
     /// Assumes that IO memory operation is all zeros
-    pub fn disabled_memory_checker_cols<F: PrimeField32>(
+    pub fn disabled_memory_checker_cols<F: PrimeField32, const WORD_SIZE: usize>(
         &self,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> MemoryOfflineCheckerCols<WORD_SIZE, F> {

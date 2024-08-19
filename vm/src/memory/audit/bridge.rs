@@ -2,7 +2,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
 use super::{air::MemoryAuditAir, columns::AuditCols};
-use crate::memory::offline_checker::air::NewMemoryOfflineChecker;
+use crate::{cpu::NEW_MEMORY_BUS, memory::MemoryAddress};
 
 impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -10,13 +10,23 @@ impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
         builder: &mut AB,
         local: AuditCols<WORD_SIZE, AB::Var>,
     ) {
-        NewMemoryOfflineChecker::eval_memory_interactions(
-            builder,
-            local.addr_space.into(),
-            local.pointer.into(),
-            local.final_cell.into_expr::<AB>(),
-            local.initial_cell.into_expr::<AB>(),
-            AB::Expr::one() - local.is_extra,
-        );
+        let mult = AB::Expr::one() - local.is_extra;
+        // Write the initial memory values at initial timestamps
+        NEW_MEMORY_BUS
+            .write(
+                MemoryAddress::new(local.addr_space, local.pointer),
+                local.initial_cell.data,
+                local.initial_cell.clk,
+            )
+            .eval(builder, mult.clone());
+
+        // Read the final memory values at last timestamps when written to
+        NEW_MEMORY_BUS
+            .read(
+                MemoryAddress::new(local.addr_space, local.pointer),
+                local.final_cell.data,
+                local.final_cell.clk,
+            )
+            .eval(builder, mult);
     }
 }
