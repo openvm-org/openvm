@@ -1,12 +1,14 @@
 use std::{array::from_fn, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_stark_backend::interaction::InteractionBuilder;
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng,
 };
+use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrix;
+use p3_field::{AbstractField, Field};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{seq::SliceRandom, Rng, RngCore};
 
 use crate::{
@@ -22,6 +24,28 @@ const TEST_NUM_WORDS: usize = 1;
 const TEST_WORD_SIZE: usize = 4;
 
 type Val = BabyBear;
+
+struct OfflineCheckerDummyAir {
+    offline_checker: NewMemoryOfflineChecker,
+}
+
+impl<F: Field> BaseAir<F> for OfflineCheckerDummyAir {
+    fn width(&self) -> usize {
+        MemoryOfflineCheckerCols::<TEST_WORD_SIZE, usize>::width(&self.offline_checker)
+    }
+}
+
+impl<AB: InteractionBuilder> Air<AB> for OfflineCheckerDummyAir {
+    fn eval(&self, builder: &mut AB) {
+        let main = &builder.main();
+
+        let local = main.row_slice(0);
+        let local = MemoryOfflineCheckerCols::<TEST_WORD_SIZE, AB::Var>::from_slice(&local);
+
+        self.offline_checker
+            .subair_eval(builder, local.io.into_expr::<AB>(), local.aux);
+    }
+}
 
 #[test]
 fn volatile_memory_offline_checker_test() {
@@ -104,8 +128,10 @@ fn volatile_memory_offline_checker_test() {
         panic!("Expected Volatile memory interface")
     };
 
+    let offline_checker_air = OfflineCheckerDummyAir { offline_checker };
+
     run_simple_test_no_pis(
-        vec![&range_checker.air, &offline_checker, &audit_chip.air],
+        vec![&range_checker.air, &offline_checker_air, &audit_chip.air],
         vec![range_checker_trace, checker_trace, memory_interface_trace],
     )
     .expect("Verification failed");
