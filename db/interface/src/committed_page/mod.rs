@@ -4,8 +4,8 @@ use afs_stark_backend::{
     prover::trace::ProverTraceData,
 };
 use datafusion::arrow::{
-    array::{RecordBatch, UInt32Array},
-    datatypes::Schema,
+    array::{Int64Array, RecordBatch, UInt32Array},
+    datatypes::{DataType, Schema},
 };
 use derivative::Derivative;
 use p3_field::PrimeField64;
@@ -75,7 +75,19 @@ where
         // Iterate over columns and fill the rows
         for (col_idx, column) in columns.iter().enumerate() {
             // TODO: handle other data types
-            let array = column.as_any().downcast_ref::<UInt32Array>().unwrap();
+            let array = match column.data_type() {
+                DataType::UInt32 => column.as_any().downcast_ref::<UInt32Array>().unwrap(),
+                DataType::Int64 => {
+                    let array = column.as_any().downcast_ref::<Int64Array>().unwrap();
+                    let array = array
+                        .values()
+                        .iter()
+                        .map(|&v| v as u32)
+                        .collect::<Vec<u32>>();
+                    &UInt32Array::from(array)
+                }
+                _ => panic!("Unsupported data type: {}", column.data_type()),
+            };
             for (row_idx, row) in rows.iter_mut().enumerate() {
                 row[0] = 1;
                 row[col_idx + 1] = array.value(row_idx);

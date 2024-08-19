@@ -24,16 +24,16 @@ use crate::{
 pub struct PageScan<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
     pub input: Arc<dyn TableSource>,
     pub output: Option<CommittedPage<SC>>,
-    pub page_id: String,
+    pub table_name: String,
     pub pk: Option<MultiStarkProvingKey<SC>>,
     pub proof: Option<Proof<SC>>,
     _marker: PhantomData<E>,
 }
 
 impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> PageScan<SC, E> {
-    pub fn new(page_id: String, input: Arc<dyn TableSource>) -> Self {
+    pub fn new(table_name: String, input: Arc<dyn TableSource>) -> Self {
         Self {
-            page_id,
+            table_name,
             pk: None,
             input,
             output: None,
@@ -87,7 +87,7 @@ where
 {
     async fn execute(&mut self, ctx: &SessionContext, _engine: &E) -> Result<()> {
         println!("execute PageScan");
-        let record_batches = get_record_batches(ctx, &self.page_id).await.unwrap();
+        let record_batches = get_record_batches(ctx, &self.table_name).await.unwrap();
         if record_batches.len() != 1 {
             panic!(
                 "Unexpected number of record batches in PageScan: {}",
@@ -120,7 +120,7 @@ where
         println!("prove PageScan");
         let (idx_len, data_len) = self.page_stats();
 
-        let record_batches = get_record_batches(ctx, &self.page_id).await.unwrap();
+        let record_batches = get_record_batches(ctx, &self.table_name).await.unwrap();
         if record_batches.len() != 1 {
             panic!(
                 "Unexpected number of record batches in PageScan: {}",
