@@ -3,13 +3,13 @@ use p3_field::{AbstractField, Field};
 
 use crate::cpu::trace::Instruction;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct ExecutionState<T> {
     pub pc: T,
     pub timestamp: T,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct InstructionCols<T> {
     pub opcode: T,
     pub a: T,

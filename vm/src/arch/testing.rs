@@ -221,7 +221,7 @@ impl<AB: InteractionBuilder> Air<AB> for ExecutionTester {
                 .map(Into::into);
             let final_state = final_state.map(AB::F::from_canonical_usize).map(Into::into);
             let instruction_cols = instruction.map(AB::F::from_canonical_usize).map(Into::into);
-            self.execution_bus.execute_with_multiplicity(
+            self.execution_bus.execute(
                 builder,
                 AB::Expr::neg_one(),
                 initial_state,

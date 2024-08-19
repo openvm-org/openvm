@@ -21,7 +21,7 @@ use super::{FieldExtensionArithmeticAir, FieldExtensionArithmeticChip};
 
 #[test]
 fn field_extension_air_test() {
-    let num_ops = 1;
+    let num_ops = 13;
     let elem_range = || 1..=100;
     let address_space_range = || 1usize..=2;
     let address_range = || 0usize..1 << 29;

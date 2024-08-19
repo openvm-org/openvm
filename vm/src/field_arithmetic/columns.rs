@@ -1,7 +1,11 @@
-use afs_derive::AlignedBorrow;
 use p3_field::Field;
 
+use afs_derive::AlignedBorrow;
+
+use crate::arch::columns::ExecutionState;
+
 use super::FieldArithmeticAir;
+
 /// Columns for field arithmetic chip.
 ///
 /// Five IO columns for rcv_count, opcode, x, y, result.
@@ -19,9 +23,15 @@ pub struct FieldArithmeticIoCols<T> {
     /// Number of times to receive
     pub rcv_count: T,
     pub opcode: T,
+    pub z_address: T,
+    pub x_address: T,
+    pub y_address: T,
+    pub xz_as: T,
+    pub y_as: T,
     pub x: T,
     pub y: T,
     pub z: T,
+    pub prev_state: ExecutionState<T>,
 }
 
 #[derive(Copy, Clone, Debug, AlignedBorrow)]
@@ -41,10 +51,6 @@ impl<T> FieldArithmeticCols<T>
 where
     T: Field,
 {
-    pub const NUM_COLS: usize = 13;
-    pub const NUM_IO_COLS: usize = 5;
-    pub const NUM_AUX_COLS: usize = 8;
-
     pub fn get_width() -> usize {
         FieldArithmeticIoCols::<T>::get_width() + FieldArithmeticAuxCols::<T>::get_width()
     }
@@ -60,9 +66,15 @@ where
             io: FieldArithmeticIoCols::<T> {
                 rcv_count: T::zero(),
                 opcode: T::from_canonical_u8(FieldArithmeticAir::BASE_OP),
+                z_address: T::zero(),
+                x_address: T::zero(),
+                y_address: T::zero(),
+                xz_as: T::zero(),
+                y_as: T::zero(),
                 x: T::zero(),
                 y: T::zero(),
                 z: T::zero(),
+                prev_state: Default::default(),
             },
             aux: FieldArithmeticAuxCols::<T> {
                 opcode_lo: T::zero(),
@@ -80,11 +92,24 @@ where
 
 impl<T: Field> FieldArithmeticIoCols<T> {
     pub fn get_width() -> usize {
-        5
+        10 + ExecutionState::<T>::get_width()
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        vec![self.rcv_count, self.opcode, self.x, self.y, self.z]
+        let mut result = vec![
+            self.rcv_count,
+            self.opcode,
+            self.z_address,
+            self.x_address,
+            self.y_address,
+            self.xz_as,
+            self.y_as,
+            self.x,
+            self.y,
+            self.z,
+        ];
+        result.extend(self.prev_state.flatten());
+        result
     }
 }
 

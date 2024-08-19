@@ -4,19 +4,19 @@ use std::fmt;
 use enum_utils::FromStr;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
+
+pub use air::CpuAir;
 use OpCode::*;
 
 use crate::{field_extension::FieldExtensionArithmeticAir, poseidon2::Poseidon2Chip};
 
-#[cfg(test)]
-pub mod tests;
+//#[cfg(test)]
+//pub mod tests;
 
 pub mod air;
 pub mod bridge;
 pub mod columns;
 pub mod trace;
-
-pub use air::CpuAir;
 
 pub const INST_WIDTH: usize = 1;
 

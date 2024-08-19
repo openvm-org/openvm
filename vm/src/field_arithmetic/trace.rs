@@ -1,43 +1,57 @@
-use p3_field::Field;
+use p3_commit::PolynomialSpace;
+use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
+use p3_uni_stark::{Domain, StarkGenericConfig};
+
+use afs_stark_backend::rap::AnyRap;
+
+use crate::{arch::chips::MachineChip, cpu::OpCode};
 
 use super::{
-    columns::{FieldArithmeticAuxCols, FieldArithmeticCols, FieldArithmeticIoCols},
-    FieldArithmeticAir, FieldArithmeticChip,
+    ArithmeticOperation,
+    columns::{FieldArithmeticAuxCols, FieldArithmeticCols, FieldArithmeticIoCols}, FieldArithmeticAir, FieldArithmeticChip,
 };
-use crate::cpu::OpCode;
 
 /// Constructs a new set of columns (including auxiliary columns) given inputs.
-fn generate_cols<T: Field>(op: OpCode, x: T, y: T) -> FieldArithmeticCols<T> {
-    let opcode = op as u32;
-    let opcode_value = opcode - FieldArithmeticAir::BASE_OP as u32;
+fn generate_cols<T: PrimeField32>(operation: &ArithmeticOperation<T>) -> FieldArithmeticCols<T> {
+    let opcode_u32 = operation.instruction.opcode.as_canonical_u32();
+    let opcode = OpCode::from_u8(opcode_u32 as u8).unwrap();
+    let opcode_value = opcode_u32 - FieldArithmeticAir::BASE_OP as u32;
     let opcode_lo_u32 = opcode_value % 2;
     let opcode_hi_u32 = opcode_value / 2;
     let opcode_lo = T::from_canonical_u32(opcode_lo_u32);
     let opcode_hi = T::from_canonical_u32(opcode_hi_u32);
-    let is_div = T::from_bool(op == OpCode::FDIV);
-    let is_mul = T::from_bool(op == OpCode::FMUL);
+    let is_div = T::from_bool(opcode == OpCode::FDIV);
+    let is_mul = T::from_bool(opcode == OpCode::FMUL);
+
+    let x = operation.operand1;
+    let y = operation.operand2;
     let sum_or_diff = x + y - T::two() * opcode_lo * y;
     let product = x * y;
-    let quotient = if y == T::zero() || op != OpCode::FDIV {
-        T::zero()
-    } else {
-        x * y.inverse()
-    };
-    let divisor_inv = if op != OpCode::FDIV {
-        T::zero()
-    } else {
+
+    let divisor_inv = if opcode == OpCode::FDIV {
         y.inverse()
+    } else {
+        T::zero()
     };
-    let z = is_mul * product + is_div * quotient + (T::one() - opcode_hi) * sum_or_diff;
+    let quotient = x * divisor_inv;
+    let z = operation.result;
+
+    let instruction = operation.instruction;
 
     FieldArithmeticCols {
         io: FieldArithmeticIoCols {
             rcv_count: T::one(),
-            opcode: T::from_canonical_u32(opcode),
+            opcode: instruction.opcode,
+            z_address: instruction.a,
+            x_address: instruction.b,
+            y_address: instruction.c,
+            xz_as: instruction.d,
+            y_as: instruction.e,
             x,
             y,
             z,
+            prev_state: operation.prev_state.map(T::from_canonical_usize),
         },
         aux: FieldArithmeticAuxCols {
             opcode_lo,
@@ -52,16 +66,13 @@ fn generate_cols<T: Field>(op: OpCode, x: T, y: T) -> FieldArithmeticCols<T> {
     }
 }
 
-impl<F: Field> FieldArithmeticChip<F> {
+impl<F: PrimeField32> MachineChip<F> for FieldArithmeticChip<F> {
     /// Generates trace for field arithmetic chip.
-    pub fn generate_trace(&self) -> RowMajorMatrix<F> {
+    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         let mut trace: Vec<F> = self
             .operations
             .iter()
-            .flat_map(|op| {
-                let cols = generate_cols(op.opcode, op.operand1, op.operand2);
-                cols.flatten()
-            })
+            .flat_map(|operation| generate_cols(operation).flatten())
             .collect();
 
         let empty_row: Vec<F> = FieldArithmeticCols::blank_row().flatten();
@@ -72,9 +83,16 @@ impl<F: Field> FieldArithmeticChip<F> {
                 .iter()
                 .cloned()
                 .cycle()
-                .take((correct_height - curr_height) * FieldArithmeticCols::<F>::NUM_COLS),
+                .take((correct_height - curr_height) * FieldArithmeticCols::<F>::get_width()),
         );
 
-        RowMajorMatrix::new(trace, FieldArithmeticCols::<F>::NUM_COLS)
+        RowMajorMatrix::new(trace, FieldArithmeticCols::<F>::get_width())
+    }
+
+    fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        &self.air
     }
 }

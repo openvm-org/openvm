@@ -1,10 +1,11 @@
 use std::borrow::Borrow;
 
-use afs_primitives::sub_chip::AirConfig;
-use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
+
+use afs_primitives::sub_chip::AirConfig;
+use afs_stark_backend::interaction::InteractionBuilder;
 
 use super::{columns::FieldArithmeticCols, FieldArithmeticAir};
 
@@ -14,7 +15,7 @@ impl AirConfig for FieldArithmeticAir {
 
 impl<F: Field> BaseAir<F> for FieldArithmeticAir {
     fn width(&self) -> usize {
-        FieldArithmeticCols::<F>::NUM_COLS
+        FieldArithmeticCols::<F>::get_width()
     }
 }
 

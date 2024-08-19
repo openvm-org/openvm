@@ -377,7 +377,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                         }
                     }
                 }
-                opcode @ (FADD | FSUB | FMUL | FDIV) => {
+                opcode @ (FADD | FSUB | FMUL | FDIV) => todo!(),
+                /*opcode @ (FADD | FSUB | FMUL | FDIV) => {
                     // read from d[b] and e[c]
                     let operand1 = read!(d, b);
                     let operand2 = read!(e, c);
@@ -386,7 +387,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                         .field_arithmetic_chip
                         .calculate(opcode, (operand1, operand2));
                     write!(d, a, result);
-                }
+                }*/
                 F_LESS_THAN => {
                     let operand1 = read!(d, b);
                     let operand2 = read!(e, c);

@@ -65,6 +65,7 @@ impl FieldExtensionArithmeticAir {
 
         self.execution_bus.execute_increment_pc(
             builder,
+            local.aux.is_valid,
             ExecutionState::new(local.aux.pc, local.aux.start_timestamp),
             AB::F::from_canonical_usize(3 * EXTENSION_DEGREE),
             InstructionCols::new(
