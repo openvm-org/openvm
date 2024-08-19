@@ -11,8 +11,8 @@ use poseidon2_air::poseidon2::Poseidon2Air;
 
 use super::{columns::Poseidon2VmCols, CHUNK};
 use crate::memory::{
-    manager::{access_cell::AccessCell, operation::MemoryOperation},
-    offline_checker::bridge::NewMemoryOfflineChecker,
+    offline_checker::bridge::{MemoryBridge, NewMemoryOfflineChecker},
+    MemoryAddress,
 };
 
 /// Poseidon2 Air, VM version.
@@ -49,7 +49,7 @@ impl<AB: InteractionBuilder, const WIDTH: usize, const WORD_SIZE: usize> Air<AB>
         let local = main.row_slice(0);
         let local: &[<AB>::Var] = (*local).borrow();
 
-        let mut cols = Poseidon2VmCols::<WIDTH, WORD_SIZE, AB::Var>::from_slice(local, self);
+        let cols = Poseidon2VmCols::<WIDTH, WORD_SIZE, AB::Var>::from_slice(local, self);
 
         self.eval_interactions(builder, cols.io, &cols.aux);
         self.inner
@@ -71,6 +71,7 @@ impl<AB: InteractionBuilder, const WIDTH: usize, const WORD_SIZE: usize> Air<AB>
         // Memory access constraints
         let chunks: usize = WIDTH / 2;
 
+        let mut memory_bridge = MemoryBridge::new(self.mem_oc, cols.aux.mem_oc_aux_cols);
         let mut clk_offset = 0;
         // read addresses when is_opcode:
         // dst <- [a]_d, lhs <- [b]_d
@@ -83,16 +84,14 @@ impl<AB: InteractionBuilder, const WIDTH: usize, const WORD_SIZE: usize> Air<AB>
             let clk = cols.io.clk + AB::F::from_canonical_usize(clk_offset);
             clk_offset += 1;
 
-            let mem_op = MemoryOperation::<WORD_SIZE, AB::Expr>::new(
-                cols.io.d.into(),
-                io_addr.into(),
-                AB::Expr::zero(),
-                AccessCell::new(from_fn(|_| aux_addr.into()), clk),
-                count.into(),
-            );
-
-            self.mem_oc
-                .subair_eval(builder, mem_op, cols.aux.mem_oc_aux_cols.remove(0));
+            memory_bridge
+                .read(
+                    MemoryAddress::new(cols.io.d, io_addr),
+                    // FIXME[jpw]: only works for WORD_SIZE = 1 right now
+                    from_fn(|_| aux_addr),
+                    clk,
+                )
+                .eval(builder, count);
         }
 
         // READ
@@ -106,16 +105,14 @@ impl<AB: InteractionBuilder, const WIDTH: usize, const WORD_SIZE: usize> Air<AB>
                 cols.aux.rhs
             } + AB::F::from_canonical_usize(if i < chunks { i } else { i - chunks });
 
-            let mem_op = MemoryOperation::<WORD_SIZE, AB::Expr>::new(
-                cols.io.e.into(),
-                pointer,
-                AB::Expr::zero(),
-                AccessCell::new(from_fn(|_| cols.aux.internal.io.input[i].into()), clk),
-                cols.io.is_opcode.into(),
-            );
-
-            self.mem_oc
-                .subair_eval(builder, mem_op, cols.aux.mem_oc_aux_cols.remove(0));
+            memory_bridge
+                .read(
+                    MemoryAddress::new(cols.io.e, pointer),
+                    // FIXME[jpw]: only works for WORD_SIZE = 1 right now
+                    from_fn(|_| cols.aux.internal.io.input[i]),
+                    clk,
+                )
+                .eval(builder, cols.io.is_opcode);
         }
 
         // WRITE
@@ -131,16 +128,14 @@ impl<AB: InteractionBuilder, const WIDTH: usize, const WORD_SIZE: usize> Air<AB>
                 cols.io.is_opcode - cols.io.cmp
             };
 
-            let mem_op = MemoryOperation::<WORD_SIZE, AB::Expr>::new(
-                cols.io.e.into(),
-                pointer,
-                AB::Expr::one(),
-                AccessCell::new(from_fn(|_| cols.aux.internal.io.output[i].into()), clk),
-                count,
-            );
-
-            self.mem_oc
-                .subair_eval(builder, mem_op, cols.aux.mem_oc_aux_cols.remove(0));
+            memory_bridge
+                .write(
+                    MemoryAddress::new(cols.io.e, pointer),
+                    // FIXME[jpw]: only works for WORD_SIZE = 1 right now
+                    from_fn(|_| cols.aux.internal.io.output[i]),
+                    clk,
+                )
+                .eval(builder, count);
         }
     }
 }

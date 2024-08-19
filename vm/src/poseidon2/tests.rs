@@ -323,7 +323,7 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
 fn poseidon2_chip_random_50_test() {
     let mut rng = create_seeded_rng();
     // TODO[osama]: raise this back to 50
-    const NUM_OPS: usize = 8;
+    const NUM_OPS: usize = 50;
     let instructions = random_instructions(NUM_OPS);
     let data = (0..NUM_OPS)
         .map(|_| from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))))
