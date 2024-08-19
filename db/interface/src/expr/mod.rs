@@ -19,13 +19,16 @@ impl AxiomDbExpr {
                 page_id: column.flat_name(),
                 name: column.name().to_string(),
             }),
-            Expr::Literal(literal) => {
-                if let ScalarValue::UInt32(Some(value)) = literal {
-                    AxiomDbExpr::Literal(*value)
-                } else {
-                    panic!("Expected a UInt32 literal")
+            Expr::Literal(literal) => match literal {
+                ScalarValue::UInt32(Some(value)) => AxiomDbExpr::Literal(*value as u16 as u32),
+                ScalarValue::Utf8(Some(value)) => {
+                    let parsed_value = value.parse::<u16>().expect("Expected a valid u16 string");
+                    AxiomDbExpr::Literal(parsed_value as u32)
                 }
-            }
+                // Handles CSV files where the numeric values are interpreted as Int64 by default
+                ScalarValue::Int64(Some(value)) => AxiomDbExpr::Literal(*value as u16 as u32),
+                _ => panic!("Unsupported literal type: {:?}", literal),
+            },
             Expr::BinaryExpr(binary_expr) => {
                 let left = Self::from(&binary_expr.left);
                 let right = Self::from(&binary_expr.right);

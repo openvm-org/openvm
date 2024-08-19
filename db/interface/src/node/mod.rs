@@ -80,9 +80,9 @@ where
     pub fn from(logical_plan: &LogicalPlan, inputs: Vec<Arc<Mutex<AxiomDbNode<SC, E>>>>) -> Self {
         match logical_plan {
             LogicalPlan::TableScan(table_scan) => {
-                let page_id = table_scan.table_name.to_string();
+                let table_name = table_scan.table_name.to_string();
                 let source = table_scan.source.clone();
-                AxiomDbNode::PageScan(PageScan::new(page_id, source))
+                AxiomDbNode::PageScan(PageScan::new(table_name, source))
             }
             LogicalPlan::Filter(filter) => {
                 if inputs.len() != 1 {
@@ -136,7 +136,11 @@ impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> Debug for AxiomDb
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AxiomDbNode::PageScan(page_scan) => {
-                write!(f, "PageScan {:?} {:?}", page_scan.page_id, page_scan.output)
+                write!(
+                    f,
+                    "PageScan {:?} {:?}",
+                    page_scan.table_name, page_scan.output
+                )
             }
             AxiomDbNode::Projection(projection) => {
                 write!(
