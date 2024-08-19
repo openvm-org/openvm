@@ -13,47 +13,48 @@ impl MemoryBus {
     /// Prepares a write operation through the memory bus.
     pub fn write<T, const BLOCK_SIZE: usize>(
         &self,
-        timestamp: impl Into<T>,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
         data: [impl Into<T>; BLOCK_SIZE],
+        timestamp: impl Into<T>,
     ) -> MemoryBusInteraction<T, BLOCK_SIZE> {
-        self.access(OpType::Write, timestamp, address, data)
+        self.access(OpType::Write, address, data, timestamp)
     }
 
     /// Prepares a read operation through the memory bus.
     pub fn read<T, const BLOCK_SIZE: usize>(
         &self,
-        timestamp: impl Into<T>,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
         data: [impl Into<T>; BLOCK_SIZE],
+        timestamp: impl Into<T>,
     ) -> MemoryBusInteraction<T, BLOCK_SIZE> {
-        self.access(OpType::Read, timestamp, address, data)
+        self.access(OpType::Read, address, data, timestamp)
     }
 
     /// Prepares a memory operation (read or write) through the memory bus.
     pub fn access<T, const BLOCK_SIZE: usize>(
         &self,
         op_type: OpType,
-        timestamp: impl Into<T>,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
         data: [impl Into<T>; BLOCK_SIZE],
+        timestamp: impl Into<T>,
     ) -> MemoryBusInteraction<T, BLOCK_SIZE> {
         MemoryBusInteraction {
             bus_index: self.0,
-            timestamp: timestamp.into(),
             op_type,
             address: MemoryAddress::new(address.address_space.into(), address.pointer.into()),
             data: data.map(Into::into),
+            timestamp: timestamp.into(),
         }
     }
 }
 
+#[derive(Clone, Copy, Debug)]
 pub struct MemoryBusInteraction<T, const BLOCK_SIZE: usize> {
     bus_index: usize,
     op_type: OpType,
-    timestamp: T,
     address: MemoryAddress<T, T>,
     data: [T; BLOCK_SIZE],
+    timestamp: T,
 }
 
 impl<const BLOCK_SIZE: usize, T: AbstractField> MemoryBusInteraction<T, BLOCK_SIZE> {

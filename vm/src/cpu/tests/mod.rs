@@ -310,10 +310,7 @@ fn air_test_change<
     let mut all_public_values = vec![segment.get_cpu_pis(), vec![], vec![], vec![], vec![]];
 
     let MemoryInterface::Volatile(memory_audit_chip) =
-        &segment.memory_manager.lock().interface_chip
-    else {
-        panic!("Memory interface chip is not Volatile");
-    };
+        &segment.memory_manager.lock().interface_chip;
 
     let test_result = if field_arithmetic_enabled {
         run_simple_test(

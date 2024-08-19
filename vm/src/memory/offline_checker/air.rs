@@ -141,14 +141,14 @@ impl<const WORD_SIZE: usize> NewMemoryOfflineChecker<WORD_SIZE> {
         }
 
         // TODO[osama]: resolve is_immediate stuff
-        Self::eval_memory_interactions(
-            builder,
-            op.addr_space,
-            op.pointer,
-            aux.old_cell.into_expr::<AB>(),
-            op.cell,
-            op.enabled * (AB::Expr::one() - aux.is_immediate.into()),
-        );
+        // Self::eval_memory_interactions(
+        //     builder,
+        //     op.addr_space,
+        //     op.pointer,
+        //     aux.old_cell.into_expr::<AB>(),
+        //     op.cell,
+        //     op.enabled * (AB::Expr::one() - aux.is_immediate.into()),
+        // );
     }
 }
 

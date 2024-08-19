@@ -11,7 +11,6 @@ use crate::{
 };
 
 pub mod air;
-pub mod bridge;
 pub mod bus;
 pub mod columns;
 mod trace;
