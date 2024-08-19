@@ -3,7 +3,7 @@ use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_baby_bear::BabyBear;
 use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{StarkGenericConfig, Val};
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use p3_commit::{Pcs, PolynomialSpace};
 
 use afs_stark_backend::{interaction::InteractionBuilder, rap::AnyRap};
@@ -29,10 +29,10 @@ pub trait MachineAir<AB: AirBuilder>: Air<AB> + BaseAir<AB::F> {}
 pub trait MachineChip<F> {
     fn generate_trace(&mut self) -> RowMajorMatrix<F>;
 
-    fn air<SC>(&self) -> &dyn AnyRap<SC>
+    fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC>
     where
-        SC: StarkGenericConfig,
-        <SC::Pcs as Pcs<SC::Challenge, SC::Challenger>>::Domain: PolynomialSpace<Val=F>;
+        Domain<SC>: PolynomialSpace<Val=F>;
+
     fn get_public_values(&mut self) -> Vec<F> {
         vec![]
     }

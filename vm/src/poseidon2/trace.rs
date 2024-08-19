@@ -2,7 +2,7 @@ use p3_air::BaseAir;
 use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::StarkGenericConfig;
+use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use afs_primitives::sub_chip::LocalTraceInstructions;
 use afs_stark_backend::rap::AnyRap;
@@ -58,7 +58,7 @@ impl<const WIDTH: usize, F: PrimeField32> MachineChip<F> for Poseidon2Chip<WIDTH
 
     fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC>
     where
-        <SC::Pcs as Pcs<SC::Challenge, SC::Challenger>>::Domain: PolynomialSpace<Val=F>,
+        Domain<SC>: PolynomialSpace<Val=F>,
     {
         &self.air
     }
