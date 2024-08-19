@@ -18,7 +18,7 @@ use stark_vm::{
 
 const NUM_WORDS: usize = 1;
 const WORD_SIZE: usize = 1;
-const LIMB_BITS: usize = 30;
+const LIMB_BITS: usize = 29;
 const DECOMP: usize = 5;
 
 #[cfg(test)]

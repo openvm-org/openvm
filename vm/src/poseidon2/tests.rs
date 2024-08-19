@@ -1,4 +1,5 @@
 use core::array::from_fn;
+use std::collections::HashMap;
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::{
@@ -12,10 +13,9 @@ use afs_test_utils::{
 };
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_strict_usize;
-use poseidon2_air::poseidon2::Poseidon2Air;
 use rand::{Rng, RngCore};
 
 use super::{Poseidon2Chip, Poseidon2VmAir, CHUNK, WIDTH};
@@ -23,7 +23,7 @@ use crate::{
     cpu::{
         trace::Instruction,
         OpCode::{COMP_POS2, PERM_POS2},
-        MEMORY_BUS, POSEIDON2_BUS, POSEIDON2_DIRECT_BUS,
+        POSEIDON2_BUS,
     },
     memory::manager::interface::MemoryInterface,
     poseidon2::Poseidon2VmCols,
@@ -204,19 +204,34 @@ fn run_perm_ops(
         println!("{:?}", op);
     }
 
-    // TODO[osama]: just access memory directly above
+    let mut initial_memory = HashMap::new();
     write_ops.iter().for_each(|op| {
+        initial_memory.insert((op.ad_s, op.address), op.data);
+    });
+
+    for ((addr_space, pointer), data) in initial_memory {
         segment
             .memory_manager
             .lock()
-            .write_word(op.ad_s, op.address, op.data);
-    });
+            .unsafe_write_word(addr_space, pointer, data);
+
+        segment.memory_manager.lock().interface_chip.touch_address(
+            addr_space,
+            pointer,
+            data,
+            BabyBear::zero(),
+        );
+    }
 
     let time_per =
         Poseidon2Chip::<16, 16, WORD_SIZE, BabyBear>::max_accesses_per_instruction(COMP_POS2);
 
+    timestamp = 1;
+
     let start_timestamp = timestamp;
     (0..num_ops).for_each(|i| {
+        let timestamp_check = segment.memory_manager.lock().get_clk();
+        assert_eq!(timestamp_check, BabyBear::from_canonical_usize(timestamp));
         segment.poseidon2_chip.calculate(
             BabyBear::from_canonical_usize(timestamp),
             instructions[i].clone(),
@@ -259,8 +274,8 @@ fn run_perm_ops(
         .memory_manager
         .lock()
         .generate_memory_interface_trace();
-    let range_checker_trace = segment.range_checker.generate_trace();
     let poseidon2_trace = segment.poseidon2_chip.generate_trace();
+    let range_checker_trace = segment.range_checker.generate_trace();
 
     let traces = vec![
         range_checker_trace,
@@ -308,7 +323,7 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
 fn poseidon2_chip_random_50_test() {
     let mut rng = create_seeded_rng();
     // TODO[osama]: raise this back to 50
-    const NUM_OPS: usize = 1;
+    const NUM_OPS: usize = 8;
     let instructions = random_instructions(NUM_OPS);
     let data = (0..NUM_OPS)
         .map(|_| from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))))
@@ -318,10 +333,7 @@ fn poseidon2_chip_random_50_test() {
 
     // TODO[osama]: consider making a dummy interface air
     let MemoryInterface::Volatile(memory_audit_chip) =
-        &vm.segments[0].memory_manager.lock().interface_chip
-    else {
-        panic!("Memory interface chip is not Volatile");
-    };
+        &vm.segments[0].memory_manager.lock().interface_chip;
     // positive test
     engine
         .run_simple_test(

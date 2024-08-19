@@ -10,12 +10,9 @@ use p3_matrix::Matrix;
 use poseidon2_air::poseidon2::Poseidon2Air;
 
 use super::{columns::Poseidon2VmCols, CHUNK};
-use crate::{
-    cpu::OpCode,
-    memory::{
-        manager::{access_cell::AccessCell, operation::MemoryOperation},
-        offline_checker::bridge::NewMemoryOfflineChecker,
-    },
+use crate::memory::{
+    manager::{access_cell::AccessCell, operation::MemoryOperation},
+    offline_checker::bridge::NewMemoryOfflineChecker,
 };
 
 /// Poseidon2 Air, VM version.

@@ -33,15 +33,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
             range_checker,
         }
     }
-    pub fn touch_address(
-        &mut self,
-        address_space: F,
-        address: F,
-        old_data: [F; WORD_SIZE],
-        clk: F,
-    ) {
+
+    pub fn touch_address(&mut self, addr_space: F, pointer: F, old_data: [F; WORD_SIZE], clk: F) {
         self.initial_memory
-            .entry((address_space, address))
+            .entry((addr_space, pointer))
             .or_insert_with(|| AccessCell {
                 data: old_data,
                 clk,

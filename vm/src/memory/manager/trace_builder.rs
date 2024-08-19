@@ -63,10 +63,25 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     }
 
     pub fn read_elem(&mut self, addr_space: F, pointer: F) -> F {
-        compose(self.read_word(addr_space, pointer).cell.data)
+        let ret = compose(self.read_word(addr_space, pointer).cell.data);
+        println!(
+            "read: {} {} {} at {}",
+            addr_space,
+            pointer,
+            ret,
+            self.memory_manager.lock().get_clk()
+        );
+        ret
     }
 
     pub fn write_elem(&mut self, addr_space: F, pointer: F, data: F) {
+        println!(
+            "write: {} {} {} at {}",
+            addr_space,
+            pointer,
+            data,
+            self.memory_manager.lock().get_clk()
+        );
         self.write_word(addr_space, pointer, decompose(data));
     }
 
@@ -75,6 +90,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     // }
 
     pub fn disabled_op(&mut self, addr_space: F, op_type: OpType) -> MemoryOperation<WORD_SIZE, F> {
+        println!("generating disabled op");
         let mem_access = self.memory_manager.lock().disabled_op(addr_space, op_type);
         self.accesses_buffer
             .push(self.memory_access_to_checker_aux_cols(&mem_access));

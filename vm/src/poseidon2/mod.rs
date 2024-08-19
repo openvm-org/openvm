@@ -1,7 +1,4 @@
-use std::{
-    array,
-    sync::Arc,
-};
+use std::{array, sync::Arc};
 
 use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 use columns::*;
@@ -16,16 +13,12 @@ use crate::{
         OpCode::{self, *},
     },
     memory::{
-        compose,
-        manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder, MemoryManager},
-        offline_checker::{
-            bridge::NewMemoryOfflineChecker,
-            columns::{MemoryOfflineCheckerAuxCols, NewMemoryAccess},
-        },
+        manager::{trace_builder::MemoryTraceBuilder, MemoryManager},
+        offline_checker::bridge::NewMemoryOfflineChecker,
         tree::Hasher,
         OpType,
     },
-    vm::{config::MemoryConfig, ExecutionSegment},
+    vm::config::MemoryConfig,
 };
 
 #[cfg(test)]
@@ -149,7 +142,7 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
         let mut mem_trace_builder = MemoryTraceBuilder::<NUM_WORDS, WORD_SIZE, F>::new(
             self.memory_manager.clone(),
             self.range_checker.clone(),
-            self.air.mem_oc.clone(),
+            self.air.mem_oc,
         );
 
         // TODO[osama]: remember to handle is_direct
@@ -184,7 +177,7 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
         debug_assert_eq!(WIDTH, CHUNK * 2);
 
-        let mut clk = start_clk;
+        // let mut clk = start_clk;
         // let read = |mem_oc_aux_cols: &mut Vec<_>, address_space, pointer, clk: &mut F| {
         //     let mem_access = self
         //         .memory_manager
@@ -222,7 +215,7 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
         }
 
         // Generate disabled MemoryOfflineCheckerAuxCols in case len != WIDTH
-        for i in len..WIDTH {
+        for _ in len..WIDTH {
             mem_trace_builder.disabled_op(e, OpType::Write);
         }
 
@@ -243,9 +236,11 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
             },
         };
 
-        if self.rows.len() == 1 {
-            println!("row:\n {:?}", row);
-        }
+        // if self.rows.len() == 1 {
+        //     println!("row:\n {:?}", row);
+        // }
+
+        println!("row: {:?}", row);
 
         self.rows.push(row);
     }

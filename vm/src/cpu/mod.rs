@@ -30,7 +30,7 @@ pub const RANGE_CHECKER_BUS: usize = 4;
 pub const POSEIDON2_BUS: usize = 5;
 pub const POSEIDON2_DIRECT_BUS: usize = 6;
 // TODO[osama]: to be renamed to MEMORY_BUS
-pub const NEW_MEMORY_BUS: MemoryBus = MemoryBus(1);
+pub const NEW_MEMORY_BUS: MemoryBus = MemoryBus(7);
 pub const EXPAND_BUS: usize = 8;
 pub const POSEIDON2_DIRECT_REQUEST_BUS: usize = 9;
 pub const MEMORY_INTERFACE_BUS: usize = 10;

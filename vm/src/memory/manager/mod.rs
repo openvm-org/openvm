@@ -28,6 +28,11 @@ pub struct MemoryManager<const NUM_WORDS: usize, const WORD_SIZE: usize, F: Prim
 impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     MemoryManager<NUM_WORDS, WORD_SIZE, F>
 {
+    // TODO[osama]: move to the bottom
+    pub fn get_clk(&self) -> F {
+        self.clk
+    }
+
     // pub fn with_persistent_memory(
     //     memory_dimensions: MemoryDimensions,
     //     memory: HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
@@ -151,6 +156,19 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         )
     }
 
+    pub fn unsafe_write_word(&mut self, addr_space: F, pointer: F, data: [F; WORD_SIZE]) {
+        assert!(addr_space != F::zero());
+        debug_assert!((pointer.as_canonical_u32() as usize) % WORD_SIZE == 0);
+
+        self.memory
+            .entry((addr_space, pointer))
+            .and_modify(|cell| cell.data = data)
+            .or_insert(AccessCell {
+                data,
+                clk: F::zero(),
+            });
+    }
+
     pub fn generate_memory_interface_trace(&self) -> RowMajorMatrix<F> {
         let all_addresses = self.interface_chip.all_addresses();
         let mut final_memory = HashMap::new();
@@ -177,7 +195,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
                 AccessCell::new([F::zero(); WORD_SIZE], cur_clk),
                 F::zero(),
             ),
-            AccessCell::new([F::zero(); WORD_SIZE], cur_clk),
+            AccessCell::new([F::zero(); WORD_SIZE], F::zero()),
         )
     }
 

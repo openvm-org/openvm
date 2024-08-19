@@ -54,7 +54,7 @@ fn volatile_memory_offline_checker_test() {
     const MAX_VAL: u32 = 1 << 20;
 
     let memory_dimensions = MemoryDimensions::new(1, 20, 1);
-    let mem_config = MemoryConfig::new(30, 30, 30, 16);
+    let mem_config = MemoryConfig::new(29, 29, 29, 16);
 
     let range_checker = Arc::new(RangeCheckerGateChip::new(
         RANGE_CHECKER_BUS,
@@ -124,9 +124,7 @@ fn volatile_memory_offline_checker_test() {
     let memory_interface_trace = memory_manager.generate_memory_interface_trace();
     let range_checker_trace = range_checker.generate_trace();
 
-    let MemoryInterface::Volatile(audit_chip) = &memory_manager.interface_chip else {
-        panic!("Expected Volatile memory interface")
-    };
+    let MemoryInterface::Volatile(audit_chip) = &memory_manager.interface_chip;
 
     let offline_checker_air = OfflineCheckerDummyAir { offline_checker };
 

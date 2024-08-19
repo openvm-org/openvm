@@ -34,7 +34,7 @@ impl Default for VmConfig {
             field_extension_enabled: true,
             compress_poseidon2_enabled: true,
             perm_poseidon2_enabled: true,
-            memory_config: MemoryConfig::new(30, 30, 30, 16),
+            memory_config: MemoryConfig::new(29, 29, 29, 16),
             num_public_values: 0,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             collect_metrics: false,
