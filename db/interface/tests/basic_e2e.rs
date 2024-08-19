@@ -54,22 +54,22 @@ use datafusion::{arrow::datatypes::Schema, execution::context::SessionContext};
 
 #[tokio::test]
 pub async fn test_basic_e2e() {
-    use datafusion::execution::options::CsvReadOptions;
-
     let ctx = SessionContext::new();
-    let page_id = "example";
-    ctx.register_csv(page_id, "tests/data/example.csv", CsvReadOptions::new())
-        .await
-        .unwrap();
 
-    // let cp = committed_page!(
-    //     "example",
-    //     "tests/data/example.page.bin",
-    //     "tests/data/example.schema.bin",
-    //     BabyBearPoseidon2Config
-    // );
-    // let page_id = cp.page_id.clone();
-    // ctx.register_table(page_id.clone(), Arc::new(cp)).unwrap();
+    // use datafusion::execution::options::CsvReadOptions;
+    // let page_id = "example";
+    // ctx.register_csv(page_id, "tests/data/example.csv", CsvReadOptions::new())
+    //     .await
+    //     .unwrap();
+
+    let cp = committed_page!(
+        "example",
+        "tests/data/example.page.bin",
+        "tests/data/example.schema.bin",
+        BabyBearPoseidon2Config
+    );
+    let page_id = cp.page_id.clone();
+    ctx.register_table(page_id.clone(), Arc::new(cp)).unwrap();
 
     // let sql = format!("SELECT a FROM {} WHERE a <= b GROUP BY a", page_id);
     let sql = format!("SELECT a FROM {} WHERE a <= 10", page_id);
