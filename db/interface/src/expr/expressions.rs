@@ -25,31 +25,3 @@ impl BinaryExpr {
         }
     }
 }
-
-// /// Operators supported by AFS
-// #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Hash)]
-// pub enum AfsOperator {
-//     /// Expressions are equal
-//     Eq,
-//     /// Left side is smaller than right side
-//     Lt,
-//     /// Left side is smaller or equal to right side
-//     LtEq,
-//     /// Left side is greater than right side
-//     Gt,
-//     /// Left side is greater or equal to right side
-//     GtEq,
-// }
-
-// impl AfsOperator {
-//     pub fn from(op: Operator) -> Self {
-//         match op {
-//             Operator::Eq => AfsOperator::Eq,
-//             Operator::Lt => AfsOperator::Lt,
-//             Operator::LtEq => AfsOperator::LtEq,
-//             Operator::Gt => AfsOperator::Gt,
-//             Operator::GtEq => AfsOperator::GtEq,
-//             _ => panic!("Unsupported operator: {}", op),
-//         }
-//     }
-// }

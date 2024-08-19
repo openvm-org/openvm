@@ -83,7 +83,10 @@ pub async fn test_basic_e2e() {
 
     let engine = default_engine(PCS_LOG_DEGREE);
     let mut afs = AxiomDbExec::new(ctx, logical, engine).await;
-    println!("Flattened AFS execution plan: {:?}", afs.afs_execution_plan);
+    println!(
+        "Flattened AxiomDB execution plan: {:?}",
+        afs.afs_execution_plan
+    );
 
     afs.execute().await.unwrap();
     let last_node = afs.last_node().await.unwrap();
