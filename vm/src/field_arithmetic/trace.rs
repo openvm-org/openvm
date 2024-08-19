@@ -12,8 +12,7 @@ fn generate_cols<T: Field>(op: OpCode, x: T, y: T) -> FieldArithmeticCols<T> {
     let is_sub = T::from_bool(op == OpCode::FSUB);
     let is_div = T::from_bool(op == OpCode::FDIV);
     let is_mul = T::from_bool(op == OpCode::FMUL);
-    let product = x * y;
-    let y_inv = if op == OpCode::FDIV {
+    let divisor_inv = if op == OpCode::FDIV {
         y.inverse()
     } else {
         T::zero()
@@ -23,7 +22,7 @@ fn generate_cols<T: Field>(op: OpCode, x: T, y: T) -> FieldArithmeticCols<T> {
         OpCode::FADD => x + y,
         OpCode::FSUB => x - y,
         OpCode::FMUL => x * y,
-        OpCode::FDIV => x * y_inv,
+        OpCode::FDIV => x * divisor_inv,
         _ => panic!("unexpected opcode {}", op),
     };
 
@@ -39,8 +38,7 @@ fn generate_cols<T: Field>(op: OpCode, x: T, y: T) -> FieldArithmeticCols<T> {
             is_sub,
             is_mul,
             is_div,
-            product,
-            y_inv,
+            divisor_inv,
         },
     }
 }

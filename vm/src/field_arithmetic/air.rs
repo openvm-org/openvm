@@ -46,12 +46,10 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
 
         builder.when(is_add).assert_eq(io.z, io.x + io.y);
         builder.when(aux.is_sub).assert_eq(io.z, io.x - io.y);
-        builder.when(aux.is_mul).assert_eq(io.z, aux.product);
-        builder.assert_eq(io.x * io.y, aux.product);
+        builder.when(aux.is_mul).assert_eq(io.z, io.x * io.y); // deg 3
 
-        // y_inv = y^{-1} if is_div, else y_inv = 0
-        builder.assert_eq(io.y * aux.y_inv, aux.is_div);
-        builder.assert_eq(io.z * aux.is_div, io.x * aux.y_inv);
+        builder.assert_eq(io.y * aux.divisor_inv, aux.is_div);
+        builder.assert_eq(io.z * aux.is_div, io.x * aux.divisor_inv);
 
         self.eval_interactions(builder, *io);
     }

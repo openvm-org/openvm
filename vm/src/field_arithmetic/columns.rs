@@ -31,8 +31,8 @@ pub struct FieldArithmeticAuxCols<T> {
     pub is_sub: T,
     pub is_mul: T,
     pub is_div: T,
-    pub product: T, // needed to keep degree <= 2
-    pub y_inv: T,
+    /// `divisor_inv` is y.inverse() when opcode is FDIV and zero otherwise.
+    pub divisor_inv: T,
 }
 
 impl<T> FieldArithmeticCols<T>
@@ -62,8 +62,7 @@ where
                 is_sub: T::zero(),
                 is_mul: T::zero(),
                 is_div: T::zero(),
-                product: T::zero(),
-                y_inv: T::zero(),
+                divisor_inv: T::zero(),
             },
         }
     }
@@ -81,16 +80,10 @@ impl<T: Field> FieldArithmeticIoCols<T> {
 
 impl<T: Field> FieldArithmeticAuxCols<T> {
     pub fn get_width() -> usize {
-        5
+        4
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        vec![
-            self.is_sub,
-            self.is_mul,
-            self.is_div,
-            self.product,
-            self.y_inv,
-        ]
+        vec![self.is_sub, self.is_mul, self.is_div, self.divisor_inv]
     }
 }
