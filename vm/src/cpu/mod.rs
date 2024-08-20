@@ -138,8 +138,6 @@ impl OpCode {
 }
 
 fn timestamp_delta(opcode: OpCode) -> usize {
-    // If an instruction performs a writes, it must change timestamp by WRITE_DELTA.
-    const WRITE_DELTA: usize = CPU_MAX_READS_PER_CYCLE + 1;
     match opcode {
         LOADW | STOREW => 3,
         LOADW2 | STOREW2 => 4,
@@ -163,7 +161,7 @@ fn timestamp_delta(opcode: OpCode) -> usize {
         COMP_POS2 | PERM_POS2 => {
             Poseidon2Chip::<16, 16, 1, BabyBear>::max_accesses_per_instruction(opcode)
         }
-        SHINTW => WRITE_DELTA,
+        SHINTW => 2,
         HINT_INPUT | HINT_BITS => 0,
         CT_START | CT_END => 0,
         NOP => 0,
