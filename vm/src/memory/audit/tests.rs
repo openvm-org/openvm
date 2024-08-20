@@ -27,7 +27,6 @@ fn audit_air_test() {
     const MAX_VAL: usize = 1 << LIMB_BITS;
     const WORD_SIZE: usize = 2;
     const DECOMP: usize = 8;
-    const TRACE_HEIGHT: usize = 16;
 
     let mut random_f = |range: usize| Val::from_canonical_usize(rng.gen_range(0..range));
 
@@ -78,8 +77,8 @@ fn audit_air_test() {
     }
 
     let traces = vec![
-        audit_chips[0].generate_trace(&memory[0].clone(), TRACE_HEIGHT),
-        audit_chips[1].generate_trace(&memory[1].clone(), TRACE_HEIGHT),
+        audit_chips[0].generate_trace(&memory[0].clone()),
+        audit_chips[1].generate_trace(&memory[1].clone()),
         range_checker.generate_trace(),
     ];
 

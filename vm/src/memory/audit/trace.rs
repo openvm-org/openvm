@@ -12,8 +12,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
         &self,
         // TODO[osama]: consider making a struct for address
         final_memory: &BTreeMap<(F, F), AccessCell<WORD_SIZE, F>>,
-        trace_height: usize,
     ) -> RowMajorMatrix<F> {
+        let trace_height = self.initial_memory.len().next_power_of_two();
+
         let gen_row = |prev_idx: Vec<u32>,
                        cur_idx: Vec<u32>,
                        data_read: [F; WORD_SIZE],

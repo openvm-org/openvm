@@ -34,15 +34,20 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     pub fn generate_trace(
         &self,
         final_memory: HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
-        trace_height: usize,
     ) -> RowMajorMatrix<F> {
         match self {
             MemoryInterface::Volatile(ref audit_chip) => {
                 let final_memory_btree = final_memory.into_iter().collect();
-                audit_chip.generate_trace(&final_memory_btree, trace_height)
+                audit_chip.generate_trace(&final_memory_btree)
             } // MemoryInterface::Persistent(ref expand_chip) => {
               //     expand_chip.generate_trace(&final_memory, trace_height)
               // }
+        }
+    }
+
+    pub fn current_height(&self) -> usize {
+        match self {
+            MemoryInterface::Volatile(ref audit_chip) => audit_chip.current_height(),
         }
     }
 }

@@ -122,6 +122,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     pub fn should_segment(&mut self) -> bool {
         let heights = [
             self.cpu_chip.current_height(),
+            self.memory_manager.borrow().interface_chip.current_height(),
             self.field_arithmetic_chip.current_height(),
             self.field_extension_chip.current_height(),
             self.poseidon2_chip.current_height(),

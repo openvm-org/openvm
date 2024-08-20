@@ -47,4 +47,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
     pub fn all_addresses(&self) -> Vec<(F, F)> {
         self.initial_memory.keys().cloned().collect()
     }
+
+    pub fn current_height(&self) -> usize {
+        self.initial_memory.len()
+    }
 }

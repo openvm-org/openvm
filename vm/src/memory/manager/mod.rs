@@ -173,8 +173,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             );
         }
 
-        self.interface_chip
-            .generate_trace(final_memory, (2 * self.memory.len()).next_power_of_two())
+        self.interface_chip.generate_trace(final_memory)
     }
 
     /// Trace generation for dummy values when a memory operation should be selectively disabled.
