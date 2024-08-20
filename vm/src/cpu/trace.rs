@@ -18,6 +18,7 @@ use super::{
 };
 use crate::{
     cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
+    field_arithmetic::columns::FieldArithmeticCols,
     field_extension::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticChip},
     memory::{compose, decompose},
     modular_multiplication::ModularMultiplicationChip,
@@ -25,7 +26,6 @@ use crate::{
     program::columns::ProgramPreprocessedCols,
     vm::ExecutionSegment,
 };
-use crate::field_arithmetic::columns::FieldArithmeticCols;
 
 #[allow(clippy::too_many_arguments)]
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
