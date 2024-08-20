@@ -1,12 +1,11 @@
 use std::{
-    array,
     cell::RefCell,
     ops::{Add, Div, Mul, Sub},
     rc::Rc,
     sync::Arc,
 };
 
-use afs_primitives::{is_less_than::columns::IsLessThanAuxCols, range_gate::RangeCheckerGateChip};
+use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng,
@@ -14,7 +13,6 @@ use afs_test_utils::{
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField};
 use p3_matrix::Matrix;
-use parking_lot::Mutex;
 use rand::Rng;
 
 use super::{
@@ -23,11 +21,8 @@ use super::{
 };
 use crate::{
     cpu::{OpCode, FIELD_EXTENSION_INSTRUCTIONS, RANGE_CHECKER_BUS, WORD_SIZE},
-    memory::{
-        manager::{access_cell::AccessCell, trace_builder::MemoryTraceBuilder, MemoryManager},
-        offline_checker::columns::MemoryOfflineCheckerAuxCols,
-    },
-    vm::{config::MemoryConfig, ChipType::RangeChecker},
+    memory::manager::MemoryManager,
+    vm::config::MemoryConfig,
 };
 
 /// Function for testing that generates a random program consisting only of field arithmetic operations.

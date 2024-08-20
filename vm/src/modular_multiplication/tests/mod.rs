@@ -71,7 +71,6 @@ fn test_modular_multiplication_runtime() {
 
     let address1 = 0;
     let address2 = 100;
-    let mm_timestamp = 300;
     let address3 = 4000;
 
     let repr_bits = segment.modular_multiplication_chip.air.air.repr_bits;

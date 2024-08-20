@@ -7,7 +7,7 @@ use p3_maybe_rayon::prelude::*;
 
 use super::{
     bridge::MemoryOfflineChecker,
-    columns::{MemoryOfflineCheckerAuxCols, MemoryOfflineCheckerCols, MemoryAccess},
+    columns::{MemoryAccess, MemoryOfflineCheckerAuxCols, MemoryOfflineCheckerCols},
 };
 use crate::memory::{
     manager::{access_cell::AccessCell, operation::MemoryOperation},
