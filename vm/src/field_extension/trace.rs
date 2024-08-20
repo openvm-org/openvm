@@ -1,3 +1,6 @@
+use std::array;
+use std::slice::Iter;
+use std::vec::IntoIter;
 use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -9,10 +12,12 @@ use super::{
     FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticOperation,
 };
 use crate::cpu::OpCode;
+use crate::memory::offline_checker::columns::MemoryOfflineCheckerAuxCols;
 
 /// Constructs a new set of columns (including auxiliary columns) given inputs.
 fn generate_cols<const WORD_SIZE: usize, T: Field>(
     op: FieldExtensionArithmeticOperation<WORD_SIZE, T>,
+    oc_aux_iter: &mut IntoIter<MemoryOfflineCheckerAuxCols<WORD_SIZE, T>>,
 ) -> FieldExtensionArithmeticCols<WORD_SIZE, T> {
     let opcode_value = op.opcode as u32 - FieldExtensionArithmetic::BASE_OP as u32;
     let opcode_lo_u32 = opcode_value % 2;
@@ -63,19 +68,23 @@ fn generate_cols<const WORD_SIZE: usize, T: Field>(
             sum_or_diff,
             product,
             inv,
-            mem_oc_aux_cols: todo!(),
+            mem_oc_aux_cols: array::from_fn(|_| oc_aux_iter.next().unwrap()),
         },
     }
 }
 
 impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<NUM_WORDS, WORD_SIZE, F> {
     /// Generates trace for field arithmetic chip.
-    pub fn generate_trace(&self) -> RowMajorMatrix<F> {
+    pub fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+        // todo[zach]: it's weird that `generate_trace` mutates the receiver
+        let accesses = self.memory.take_accesses_buffer();
+        let mut accesses_iter = accesses.into_iter();
+
         let mut trace: Vec<F> = self
             .operations
             .iter()
             .cloned()
-            .flat_map(|op| generate_cols::<WORD_SIZE, F>(op).flatten())
+            .flat_map(|op| generate_cols::<WORD_SIZE, F>(op, &mut accesses_iter).flatten())
             .collect();
 
         let empty_row: Vec<F> = FieldExtensionArithmeticCols::<WORD_SIZE, _>::blank_row().flatten();

@@ -98,8 +98,8 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         mem_access.op
     }
 
-    pub fn take_accesses_buffer(self) -> Vec<MemoryOfflineCheckerAuxCols<WORD_SIZE, F>> {
-        self.accesses_buffer
+    pub fn take_accesses_buffer(&mut self) -> Vec<MemoryOfflineCheckerAuxCols<WORD_SIZE, F>> {
+        std::mem::take(&mut self.accesses_buffer)
     }
 
     fn memory_access_to_checker_aux_cols(

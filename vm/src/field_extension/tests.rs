@@ -7,6 +7,7 @@ use afs_test_utils::{
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField};
+use p3_matrix::Matrix;
 use parking_lot::Mutex;
 use rand::Rng;
 use afs_primitives::is_less_than::columns::IsLessThanAuxCols;
@@ -22,6 +23,7 @@ use crate::{
 use crate::cpu::RANGE_CHECKER_BUS;
 use crate::memory::manager::access_cell::AccessCell;
 use crate::memory::manager::MemoryManager;
+use crate::memory::manager::trace_builder::MemoryTraceBuilder;
 use crate::memory::offline_checker::columns::MemoryOfflineCheckerAuxCols;
 use crate::vm::ChipType::RangeChecker;
 
@@ -70,16 +72,6 @@ fn generate_field_extension_operations(
             operand1,
             operand2,
             result,
-            mem_oc_aux_cols: array::from_fn(|_| MemoryOfflineCheckerAuxCols {
-                old_cell: AccessCell { data: [BabyBear::zero()], clk: BabyBear::zero() },
-                is_immediate: BabyBear::zero(),
-                is_zero_aux: BabyBear::zero(),
-                clk_lt: BabyBear::zero(),
-                clk_lt_aux: IsLessThanAuxCols {
-                    lower: BabyBear::zero(),
-                    lower_decomp: vec![],
-                },
-            }),
         });
     }
     requests
@@ -123,7 +115,7 @@ fn field_extension_air_test() {
     );
 
     // negative test pranking each IO value
-    for height in 0..(chip.operations.len()) {
+    for height in 0..extension_trace.height() {
         for width in 0..FieldExtensionArithmeticIoCols::<BabyBear>::get_width() {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
             extension_trace.row_mut(height)[width] = prank_value;

@@ -35,9 +35,6 @@ pub struct FieldExtensionArithmeticOperation<const WORD_SIZE: usize, F> {
     pub operand1: [F; EXTENSION_DEGREE],
     pub operand2: [F; EXTENSION_DEGREE],
     pub result: [F; EXTENSION_DEGREE],
-
-    // TODO[zach]: should not have such trace-specific stuff here
-    pub mem_oc_aux_cols: [MemoryOfflineCheckerAuxCols<WORD_SIZE, F>; 12],
 }
 
 /// Field extension arithmetic chip. The irreducible polynomial is x^4 - 11.
@@ -119,8 +116,7 @@ pub struct FieldExtensionArithmeticChip<const NUM_WORDS: usize, const WORD_SIZE:
     pub air: FieldExtensionArithmeticAir<WORD_SIZE>,
     pub operations: Vec<FieldExtensionArithmeticOperation<WORD_SIZE, F>>,
 
-    pub memory_manager: Arc<Mutex<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
-    pub range_checker: Arc<RangeCheckerGateChip>,
+    pub memory: MemoryTraceBuilder<NUM_WORDS, WORD_SIZE, F>,
 }
 
 impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<NUM_WORDS, WORD_SIZE, F> {
@@ -130,13 +126,18 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> FieldExten
         memory_manager: Arc<Mutex<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
-        Self {
-            air: FieldExtensionArithmeticAir {
-                mem_oc: NewMemoryOfflineChecker::new(mem_config.clk_max_bits, mem_config.decomp),
-            },
-            operations: vec![],
+        let air = FieldExtensionArithmeticAir {
+            mem_oc: NewMemoryOfflineChecker::new(mem_config.clk_max_bits, mem_config.decomp),
+        };
+        let memory = MemoryTraceBuilder::<NUM_WORDS, WORD_SIZE, F>::new(
             memory_manager,
             range_checker,
+            air.mem_oc.clone(),
+        );
+        Self {
+            air,
+            operations: vec![],
+            memory,
         }
     }
 
@@ -157,32 +158,20 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> FieldExten
         } = instruction;
         assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
 
-        let mut memory = MemoryTraceBuilder::<NUM_WORDS, WORD_SIZE, F>::new(
-            self.memory_manager.clone(),
-            self.range_checker.clone(),
-            self.air.mem_oc.clone(),
-        );
-
-        let operand1 = self.read_extension_element(&mut memory, d, op_b);
+        let operand1 = self.read_extension_element(d, op_b);
         let operand2 = if opcode == OpCode::BBE4INV {
             [F::zero(); EXTENSION_DEGREE]
         } else {
-            self.read_extension_element(&mut memory, e, op_c)
+            self.read_extension_element(e, op_c)
         };
 
         let result = FieldExtensionArithmetic::solve(opcode, operand1, operand2).unwrap();
 
         self.write_extension_element(
-            &mut memory,
             d,
             op_a,
             result,
         );
-
-        let accesses = memory.take_accesses_buffer();
-        debug_assert_eq!(accesses.len(), 12);
-        let mut iter = accesses.into_iter();
-        let mem_oc_aux_cols = array::from_fn(|_| iter.next().unwrap());
 
         self
             .operations
@@ -197,7 +186,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> FieldExten
                 operand1,
                 operand2,
                 result,
-                mem_oc_aux_cols,
             });
 
         result
@@ -205,7 +193,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> FieldExten
 
     fn read_extension_element(
         &mut self,
-        memory: &mut MemoryTraceBuilder<NUM_WORDS, WORD_SIZE, F>,
         address_space: F,
         address: F,
     ) -> [F; EXTENSION_DEGREE] {
@@ -214,7 +201,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> FieldExten
         let mut result = [F::zero(); EXTENSION_DEGREE];
 
         for (i, result_elem) in result.iter_mut().enumerate() {
-            let data = memory.read_elem(
+            let data = self.memory.read_elem(
                 address_space,
                 address + F::from_canonical_usize(i * WORD_SIZE),
             );
@@ -227,7 +214,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> FieldExten
 
     fn write_extension_element(
         &mut self,
-        memory: &mut MemoryTraceBuilder<NUM_WORDS, WORD_SIZE, F>,
         address_space: F,
         address: F,
         result: [F; EXTENSION_DEGREE],
@@ -235,7 +221,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> FieldExten
         assert_ne!(address_space, F::zero());
 
         for (i, row) in result.iter().enumerate() {
-            memory.write_elem(
+            self.memory.write_elem(
                 address_space,
                 address + F::from_canonical_usize(i * WORD_SIZE),
                 *row,
