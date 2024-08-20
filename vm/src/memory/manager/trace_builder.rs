@@ -7,7 +7,7 @@ use super::{operation::MemoryOperation, MemoryManager};
 use crate::memory::{
     compose, decompose,
     offline_checker::{
-        bridge::NewMemoryOfflineChecker,
+        bridge::MemoryOfflineChecker,
         columns::{MemoryOfflineCheckerAuxCols, NewMemoryAccess},
     },
     OpType,
@@ -16,7 +16,7 @@ use crate::memory::{
 pub struct MemoryTraceBuilder<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
     memory_manager: Rc<RefCell<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
     range_checker: Arc<RangeCheckerGateChip>,
-    offline_checker: NewMemoryOfflineChecker,
+    offline_checker: MemoryOfflineChecker,
 
     accesses_buffer: Vec<MemoryOfflineCheckerAuxCols<WORD_SIZE, F>>,
 }
@@ -27,7 +27,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     pub fn new(
         memory_manager: Rc<RefCell<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
         range_checker: Arc<RangeCheckerGateChip>,
-        offline_checker: NewMemoryOfflineChecker,
+        offline_checker: MemoryOfflineChecker,
     ) -> Self {
         Self {
             memory_manager,

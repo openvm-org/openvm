@@ -15,7 +15,7 @@ use crate::{
     cpu::RANGE_CHECKER_BUS,
     memory::{
         manager::{dimensions::MemoryDimensions, interface::MemoryInterface, MemoryManager},
-        offline_checker::{bridge::NewMemoryOfflineChecker, columns::MemoryOfflineCheckerCols},
+        offline_checker::{bridge::MemoryOfflineChecker, columns::MemoryOfflineCheckerCols},
     },
     vm::config::MemoryConfig,
 };
@@ -26,7 +26,7 @@ const TEST_WORD_SIZE: usize = 4;
 type Val = BabyBear;
 
 struct OfflineCheckerDummyAir {
-    offline_checker: NewMemoryOfflineChecker,
+    offline_checker: MemoryOfflineChecker,
 }
 
 impl<F: Field> BaseAir<F> for OfflineCheckerDummyAir {
@@ -65,7 +65,7 @@ fn volatile_memory_offline_checker_test() {
             mem_config,
             range_checker.clone(),
         );
-    let offline_checker = NewMemoryOfflineChecker::new(mem_config.clk_max_bits, mem_config.decomp);
+    let offline_checker = MemoryOfflineChecker::new(mem_config.clk_max_bits, mem_config.decomp);
 
     let num_addresses = rng.gen_range(1..=10);
     let mut all_addresses = vec![];

@@ -6,7 +6,7 @@ use p3_field::PrimeField32;
 use p3_maybe_rayon::prelude::*;
 
 use super::{
-    bridge::NewMemoryOfflineChecker,
+    bridge::MemoryOfflineChecker,
     columns::{MemoryOfflineCheckerAuxCols, MemoryOfflineCheckerCols, NewMemoryAccess},
 };
 use crate::memory::{
@@ -14,7 +14,7 @@ use crate::memory::{
     OpType,
 };
 
-impl NewMemoryOfflineChecker {
+impl MemoryOfflineChecker {
     pub fn memory_access_to_checker_aux_cols<F: PrimeField32, const WORD_SIZE: usize>(
         &self,
         memory_access: &NewMemoryAccess<WORD_SIZE, F>,

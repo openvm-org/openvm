@@ -13,7 +13,7 @@ use crate::{
     },
     memory::{
         manager::{trace_builder::MemoryTraceBuilder, MemoryManager},
-        offline_checker::bridge::NewMemoryOfflineChecker,
+        offline_checker::bridge::MemoryOfflineChecker,
         tree::Hasher,
         OpType,
     },
@@ -55,7 +55,7 @@ impl<const WIDTH: usize, const WORD_SIZE: usize, F: PrimeField32>
         let inner = Poseidon2Air::<WIDTH, F>::from_config(config, bus_index);
         Self {
             inner,
-            mem_oc: NewMemoryOfflineChecker::new(mem_config.clk_max_bits, mem_config.decomp),
+            mem_oc: MemoryOfflineChecker::new(mem_config.clk_max_bits, mem_config.decomp),
             direct: true,
         }
     }

@@ -11,7 +11,7 @@ use poseidon2_air::poseidon2::Poseidon2Air;
 
 use super::{columns::Poseidon2VmCols, CHUNK};
 use crate::memory::{
-    offline_checker::bridge::{MemoryBridge, NewMemoryOfflineChecker},
+    offline_checker::bridge::{MemoryBridge, MemoryOfflineChecker},
     MemoryAddress,
 };
 
@@ -22,7 +22,7 @@ use crate::memory::{
 #[derive(new)]
 pub struct Poseidon2VmAir<const WIDTH: usize, const WORD_SIZE: usize, F: Clone> {
     pub inner: Poseidon2Air<WIDTH, F>,
-    pub mem_oc: NewMemoryOfflineChecker,
+    pub mem_oc: MemoryOfflineChecker,
     pub direct: bool, // Whether direct interactions are enabled.
 }
 

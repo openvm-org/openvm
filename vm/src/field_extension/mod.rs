@@ -7,7 +7,7 @@ use crate::{
     cpu::{trace::Instruction, OpCode, FIELD_EXTENSION_INSTRUCTIONS},
     memory::{
         manager::{trace_builder::MemoryTraceBuilder, MemoryManager},
-        offline_checker::bridge::NewMemoryOfflineChecker,
+        offline_checker::bridge::MemoryOfflineChecker,
     },
     vm::config::MemoryConfig,
 };
@@ -39,7 +39,7 @@ pub struct FieldExtensionArithmeticOperation<const WORD_SIZE: usize, F> {
 
 /// Field extension arithmetic chip. The irreducible polynomial is x^4 - 11.
 pub struct FieldExtensionArithmeticAir<const WORD_SIZE: usize> {
-    mem_oc: NewMemoryOfflineChecker,
+    mem_oc: MemoryOfflineChecker,
 }
 
 pub struct FieldExtensionArithmetic;
@@ -133,7 +133,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
         let air = FieldExtensionArithmeticAir {
-            mem_oc: NewMemoryOfflineChecker::new(mem_config.clk_max_bits, mem_config.decomp),
+            mem_oc: MemoryOfflineChecker::new(mem_config.clk_max_bits, mem_config.decomp),
         };
         let memory = MemoryTraceBuilder::<NUM_WORDS, WORD_SIZE, F>::new(
             memory_manager,

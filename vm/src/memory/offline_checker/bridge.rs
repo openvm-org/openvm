@@ -30,7 +30,7 @@ use crate::{
 #[derive(Clone, Debug)]
 // TODO: WORD_SIZE should not be here, refactor
 pub struct MemoryBridge<V, const WORD_SIZE: usize> {
-    offline_checker: NewMemoryOfflineChecker,
+    offline_checker: MemoryOfflineChecker,
     // TODO[jpw]:
     // Need separate VecDeque for writes to keep track of data_prev (since reads don't need)
     // TODO[jpw]: MemoryOfflineCheckerAuxCols needs to be refactored to deal with variable word size
@@ -42,7 +42,7 @@ pub struct MemoryBridge<V, const WORD_SIZE: usize> {
 impl<V, const WORD_SIZE: usize> MemoryBridge<V, WORD_SIZE> {
     /// Create a new [MemoryBridge] with the given number of auxiliary columns.
     pub fn new(
-        offline_checker: NewMemoryOfflineChecker,
+        offline_checker: MemoryOfflineChecker,
         aux: impl IntoIterator<Item = MemoryOfflineCheckerAuxCols<WORD_SIZE, V>>,
     ) -> Self {
         Self {
@@ -107,7 +107,7 @@ impl<V, const WORD_SIZE: usize> MemoryBridge<V, WORD_SIZE> {
 /// The auxiliary columns are not expected to be expressions, so the generic `V` type is intended
 /// to be `AB::Var`.
 pub struct MemoryReadOperation<T, V, const WORD_SIZE: usize> {
-    offline_checker: NewMemoryOfflineChecker,
+    offline_checker: MemoryOfflineChecker,
     address: MemoryAddress<T, T>,
     data: [T; WORD_SIZE],
     /// The timestamp of the last write to this address
@@ -141,7 +141,7 @@ impl<T: AbstractField, V, const WORD_SIZE: usize> MemoryReadOperation<T, V, WORD
 ///
 /// **Note:** This can be used as a logical read operation by setting `data_prev = data`.
 pub struct MemoryWriteOperation<T, V, const WORD_SIZE: usize> {
-    offline_checker: NewMemoryOfflineChecker,
+    offline_checker: MemoryOfflineChecker,
     address: MemoryAddress<T, T>,
     data: [T; WORD_SIZE],
     /// The timestamp of the current read
@@ -167,13 +167,13 @@ impl<T: AbstractField, V, const WORD_SIZE: usize> MemoryWriteOperation<T, V, WOR
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct NewMemoryOfflineChecker {
+pub struct MemoryOfflineChecker {
     pub memory_bus: MemoryBus,
     pub timestamp_lt_air: IsLessThanAir,
     pub is_zero_air: IsZeroAir,
 }
 
-impl NewMemoryOfflineChecker {
+impl MemoryOfflineChecker {
     pub fn new(clk_max_bits: usize, decomp: usize) -> Self {
         Self {
             memory_bus: NEW_MEMORY_BUS,
@@ -183,7 +183,7 @@ impl NewMemoryOfflineChecker {
     }
 }
 
-impl NewMemoryOfflineChecker {
+impl MemoryOfflineChecker {
     pub fn subair_eval<AB: InteractionBuilder, const WORD_SIZE: usize>(
         &self,
         builder: &mut AB,

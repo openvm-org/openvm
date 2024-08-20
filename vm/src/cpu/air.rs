@@ -16,7 +16,7 @@ use super::{
     CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH,
 };
 use crate::memory::{
-    offline_checker::bridge::{MemoryBridge, NewMemoryOfflineChecker},
+    offline_checker::bridge::{MemoryBridge, MemoryOfflineChecker},
     MemoryAddress,
 };
 
@@ -25,14 +25,14 @@ use crate::memory::{
 /// Air for the CPU. Carries no state and does not own execution.
 pub struct CpuAir<const WORD_SIZE: usize> {
     pub options: CpuOptions,
-    pub memory_offline_checker: NewMemoryOfflineChecker,
+    pub memory_offline_checker: MemoryOfflineChecker,
 }
 
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
     pub fn new(options: CpuOptions, clk_max_bits: usize, decomp: usize) -> Self {
         Self {
             options,
-            memory_offline_checker: NewMemoryOfflineChecker::new(clk_max_bits, decomp),
+            memory_offline_checker: MemoryOfflineChecker::new(clk_max_bits, decomp),
         }
     }
 }
