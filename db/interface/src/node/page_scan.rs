@@ -1,6 +1,9 @@
 use std::{marker::PhantomData, sync::Arc};
 
-use afs_page::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
+use afs_page::{
+    execution_air::ExecutionAir,
+    page_rw_checker::page_controller::{Operation, PageController},
+};
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData, StarkGenericConfig, Val},
     keygen::types::MultiStarkProvingKey,
@@ -25,6 +28,7 @@ pub struct PageScan<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
     pub input: Arc<dyn TableSource>,
     pub output: Option<CommittedPage<SC>>,
     pub table_name: String,
+    pub zk_ops: Option<Vec<Operation>>,
     pub pk: Option<MultiStarkProvingKey<SC>>,
     pub proof: Option<Proof<SC>>,
     _marker: PhantomData<E>,
@@ -33,10 +37,11 @@ pub struct PageScan<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
 impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> PageScan<SC, E> {
     pub fn new(table_name: String, input: Arc<dyn TableSource>) -> Self {
         Self {
-            table_name,
-            pk: None,
             input,
             output: None,
+            table_name,
+            zk_ops: None,
+            pk: None,
             proof: None,
             _marker: PhantomData::<E>,
         }
@@ -85,7 +90,7 @@ where
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
-    async fn execute(&mut self, ctx: &SessionContext, _engine: &E) -> Result<()> {
+    async fn execute(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
         println!("execute PageScan");
         let record_batches = get_record_batches(ctx, &self.table_name).await.unwrap();
         if record_batches.len() != 1 {
@@ -95,9 +100,18 @@ where
             );
         }
         let rb = &record_batches[0];
-        let page = CommittedPage::from_record_batch(rb.clone(), MAX_ROWS);
-        self.output = Some(page);
+        let mut page = CommittedPage::from_record_batch(rb.clone(), MAX_ROWS);
 
+        let zk_ops = convert_to_ops::<SC>(rb.clone());
+
+        let prover = engine.prover();
+        let trace = page.page.gen_trace::<Val<SC>>();
+        let trace_builder = TraceCommitmentBuilder::<SC>::new(prover.pcs());
+        let prover_trace_data = trace_builder.committer.commit(vec![trace]);
+        page.write_cached_trace(prover_trace_data);
+
+        self.output = Some(page);
+        self.zk_ops = Some(zk_ops);
         Ok(())
     }
 
@@ -116,39 +130,30 @@ where
         Ok(())
     }
 
-    async fn prove(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
+    async fn prove(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
         println!("prove PageScan");
         let (idx_len, data_len) = self.page_stats();
 
-        let record_batches = get_record_batches(ctx, &self.table_name).await.unwrap();
-        if record_batches.len() != 1 {
-            panic!(
-                "Unexpected number of record batches in PageScan: {}",
-                record_batches.len()
-            );
-        }
-        let rb = &record_batches[0];
-        let committed_page: CommittedPage<SC> =
-            CommittedPage::from_record_batch(rb.clone(), MAX_ROWS);
-        let zk_ops = convert_to_ops::<SC>(rb.clone());
-
+        let committed_page = self.output.as_ref().unwrap();
+        let zk_ops = self.zk_ops.as_ref().unwrap();
         let mut page_controller = self.page_controller(idx_len, data_len);
 
         let ops_sender = ExecutionAir::new(OPS_BUS_IDX, idx_len, data_len);
         let prover = engine.prover();
         let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
-        let page_init = committed_page.page;
+        let page_init = &committed_page.page;
+        let init_prover_data = committed_page.cached_trace.as_ref().unwrap();
 
         let (init_page_pdata, final_page_pdata) = page_controller.load_page_and_ops(
-            &page_init,
-            None, //Some(Arc::new(init_prover_data)),
+            page_init,
+            Some(Arc::new(init_prover_data.clone())),
             None,
-            &zk_ops,
+            zk_ops,
             MAX_ROWS * 2,
             &mut trace_builder.committer,
         );
 
-        let ops_sender_trace = ops_sender.generate_trace(&zk_ops, MAX_ROWS);
+        let ops_sender_trace = ops_sender.generate_trace(zk_ops, MAX_ROWS);
         let pk = self.pk.as_ref().unwrap();
 
         let proof = page_controller.prove(

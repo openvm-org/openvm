@@ -93,7 +93,7 @@ where
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
-    async fn execute(&mut self, _ctx: &SessionContext, _engine: &E) -> Result<()> {
+    async fn execute(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
         println!("execute Filter");
 
         let (comp, right_value) = self.decompose_predicate();
@@ -105,12 +105,17 @@ where
         let filter_output =
             page_controller.gen_output(page_input.clone(), vec![right_value], page_width, comp);
 
+        let trace = filter_output.gen_trace::<Val<SC>>();
+        let prover = engine.prover();
+        let trace_builder = TraceCommitmentBuilder::<SC>::new(prover.pcs());
+        let prover_trace_data = trace_builder.committer.commit(vec![trace]);
+
         let page_output = CommittedPage {
             // TODO: use a generated page_id
             page_id: "".to_string(),
             schema: input.schema,
             page: filter_output,
-            cached_trace: None,
+            cached_trace: Some(prover_trace_data),
         };
         self.output = Some(page_output);
         Ok(())
@@ -146,14 +151,16 @@ where
         let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
 
         let page_input = input.page;
-        let page_output = self.output.as_ref().unwrap();
-        let page_output = page_output.page.clone();
+        let input_trace_data = input.cached_trace.clone().unwrap();
+        let output_committed_page = self.output.as_ref().unwrap();
+        let page_output = output_committed_page.page.clone();
+        let output_trace_data = output_committed_page.cached_trace.clone().unwrap();
 
         let (input_prover_data, output_prover_data) = page_controller.load_page(
-            page_input.clone(),
-            page_output.clone(),
-            None, // Some(Arc::new(input_trace_file)),
-            None,
+            page_input,
+            page_output,
+            Some(Arc::new(input_trace_data)),
+            Some(Arc::new(output_trace_data)),
             vec![right_value],
             idx_len,
             data_len,
