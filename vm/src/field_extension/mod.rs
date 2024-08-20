@@ -1,13 +1,18 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{array, cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use p3_field::{Field, PrimeField32};
 
 use crate::{
     cpu::{trace::Instruction, OpCode, FIELD_EXTENSION_INSTRUCTIONS},
+    field_extension::columns::{
+        FieldExtensionArithmeticAuxCols, FieldExtensionArithmeticCols,
+        FieldExtensionArithmeticIoCols,
+    },
     memory::{
         manager::{trace_builder::MemoryTraceBuilder, MemoryManager},
         offline_checker::bridge::MemoryOfflineChecker,
+        OpType,
     },
     vm::config::MemoryConfig,
 };
@@ -120,7 +125,9 @@ pub struct FieldExtensionArithmeticChip<
     pub air: FieldExtensionArithmeticAir<WORD_SIZE>,
     pub operations: Vec<FieldExtensionArithmeticOperation<WORD_SIZE, F>>,
 
+    pub memory_manager: Rc<RefCell<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
     pub memory: MemoryTraceBuilder<NUM_WORDS, WORD_SIZE, F>,
+    pub range_checker: Arc<RangeCheckerGateChip>,
 }
 
 impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
@@ -136,14 +143,16 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             mem_oc: MemoryOfflineChecker::new(mem_config.clk_max_bits, mem_config.decomp),
         };
         let memory = MemoryTraceBuilder::<NUM_WORDS, WORD_SIZE, F>::new(
-            memory_manager,
-            range_checker,
+            memory_manager.clone(),
+            range_checker.clone(),
             air.mem_oc,
         );
         Self {
             air,
             operations: vec![],
+            memory_manager,
             memory,
+            range_checker,
         }
     }
 
@@ -167,6 +176,10 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
 
         let operand1 = self.read_extension_element(d, op_b);
         let operand2 = if opcode == OpCode::BBE4INV {
+            // 4 disabled reads
+            for _ in 0..4 {
+                self.memory.disabled_op(e, OpType::Read);
+            }
             [F::zero(); EXTENSION_DEGREE]
         } else {
             self.read_extension_element(e, op_c)
@@ -228,5 +241,49 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
 
     pub fn current_height(&self) -> usize {
         self.operations.len()
+    }
+
+    pub fn make_blank_row(&self) -> FieldExtensionArithmeticCols<WORD_SIZE, F> {
+        let mut trace_builder = MemoryTraceBuilder::<NUM_WORDS, WORD_SIZE, F>::new(
+            self.memory_manager.clone(),
+            self.range_checker.clone(),
+            self.air.mem_oc,
+        );
+
+        for _ in 0..8 {
+            trace_builder.disabled_op(F::one(), OpType::Read);
+        }
+        for _ in 0..4 {
+            trace_builder.disabled_op(F::one(), OpType::Write);
+        }
+        let mut mem_oc_aux_iter = trace_builder.take_accesses_buffer().into_iter();
+
+        FieldExtensionArithmeticCols {
+            io: FieldExtensionArithmeticIoCols {
+                opcode: F::from_canonical_u8(FieldExtensionArithmetic::BASE_OP),
+                x: [F::zero(); EXTENSION_DEGREE],
+                y: [F::zero(); EXTENSION_DEGREE],
+                z: [F::zero(); EXTENSION_DEGREE],
+            },
+            aux: FieldExtensionArithmeticAuxCols {
+                is_valid: F::zero(),
+                valid_y_read: F::zero(),
+                start_timestamp: F::zero(),
+                op_a: F::zero(),
+                op_b: F::zero(),
+                op_c: F::zero(),
+                d: F::zero(),
+                e: F::zero(),
+
+                opcode_lo: F::zero(),
+                opcode_hi: F::zero(),
+                is_mul: F::zero(),
+                is_inv: F::zero(),
+                sum_or_diff: [F::zero(); EXTENSION_DEGREE],
+                product: [F::zero(); EXTENSION_DEGREE],
+                inv: [F::zero(); EXTENSION_DEGREE],
+                mem_oc_aux_cols: array::from_fn(|_| mem_oc_aux_iter.next().unwrap()),
+            },
+        }
     }
 }

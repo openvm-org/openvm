@@ -15,7 +15,7 @@ impl<const WORD_SIZE: usize> AirConfig for FieldExtensionArithmeticAir<WORD_SIZE
 
 impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for FieldExtensionArithmeticAir<WORD_SIZE> {
     fn width(&self) -> usize {
-        FieldExtensionArithmeticCols::<WORD_SIZE, F>::get_width()
+        FieldExtensionArithmeticCols::<WORD_SIZE, F>::get_width(&self)
     }
 }
 

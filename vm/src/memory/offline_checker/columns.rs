@@ -12,13 +12,22 @@ pub struct MemoryAccess<const WORD_SIZE: usize, T> {
     pub old_cell: AccessCell<WORD_SIZE, T>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Default, new)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryOfflineCheckerCols<const WORD_SIZE: usize, T> {
     pub io: MemoryOperation<WORD_SIZE, T>,
     pub aux: MemoryOfflineCheckerAuxCols<WORD_SIZE, T>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Default, new)]
+impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerCols<WORD_SIZE, T> {
+    pub fn new(
+        io: MemoryOperation<WORD_SIZE, T>,
+        aux: MemoryOfflineCheckerAuxCols<WORD_SIZE, T>,
+    ) -> Self {
+        Self { io, aux }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryOfflineCheckerAuxCols<const WORD_SIZE: usize, T> {
     // TODO[jpw]: Remove this; read does not need old_data
     pub old_cell: AccessCell<WORD_SIZE, T>,
@@ -27,6 +36,24 @@ pub struct MemoryOfflineCheckerAuxCols<const WORD_SIZE: usize, T> {
     // TODO[jpw]: IsLessThan should be optimized to AssertLessThan
     pub clk_lt: T,
     pub clk_lt_aux: IsLessThanAuxCols<T>,
+}
+
+impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerAuxCols<WORD_SIZE, T> {
+    pub fn new(
+        old_cell: AccessCell<WORD_SIZE, T>,
+        is_immediate: T,
+        is_zero_aux: T,
+        clk_lt: T,
+        clk_lt_aux: IsLessThanAuxCols<T>,
+    ) -> Self {
+        Self {
+            old_cell,
+            is_immediate,
+            is_zero_aux,
+            clk_lt,
+            clk_lt_aux,
+        }
+    }
 }
 
 // Straightforward implementations for from_slice, flatten, width functions for the above structs below

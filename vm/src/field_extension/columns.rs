@@ -4,8 +4,10 @@ use afs_derive::AlignedBorrow;
 use afs_primitives::is_less_than::IsLessThanAir;
 use p3_field::Field;
 
-use super::{FieldExtensionArithmetic, EXTENSION_DEGREE};
-use crate::memory::offline_checker::columns::MemoryOfflineCheckerAuxCols;
+use super::{FieldExtensionArithmeticAir, EXTENSION_DEGREE};
+use crate::memory::offline_checker::{
+    bridge::MemoryOfflineChecker, columns::MemoryOfflineCheckerAuxCols,
+};
 
 /// Columns for field extension chip.
 ///
@@ -55,9 +57,9 @@ pub struct FieldExtensionArithmeticAuxCols<const WORD_SIZE: usize, T> {
 }
 
 impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T> {
-    pub fn get_width() -> usize {
+    pub fn get_width(air: &FieldExtensionArithmeticAir<WORD_SIZE>) -> usize {
         FieldExtensionArithmeticIoCols::<T>::get_width()
-            + FieldExtensionArithmeticAuxCols::<WORD_SIZE, T>::get_width()
+            + FieldExtensionArithmeticAuxCols::<WORD_SIZE, T>::get_width(&air.mem_oc)
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -102,40 +104,7 @@ impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T
     }
 }
 
-impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T>
-where
-    T: Field,
-{
-    pub fn blank_row() -> Self {
-        Self {
-            io: FieldExtensionArithmeticIoCols {
-                opcode: T::from_canonical_u8(FieldExtensionArithmetic::BASE_OP),
-                x: [T::zero(); EXTENSION_DEGREE],
-                y: [T::zero(); EXTENSION_DEGREE],
-                z: [T::zero(); EXTENSION_DEGREE],
-            },
-            aux: FieldExtensionArithmeticAuxCols {
-                is_valid: T::zero(),
-                valid_y_read: T::zero(),
-                start_timestamp: T::zero(),
-                op_a: T::zero(),
-                op_b: T::zero(),
-                op_c: T::zero(),
-                d: T::zero(),
-                e: T::zero(),
-
-                opcode_lo: T::zero(),
-                opcode_hi: T::zero(),
-                is_mul: T::zero(),
-                is_inv: T::zero(),
-                sum_or_diff: [T::zero(); EXTENSION_DEGREE],
-                product: [T::zero(); EXTENSION_DEGREE],
-                inv: [T::zero(); EXTENSION_DEGREE],
-                mem_oc_aux_cols: array::from_fn(|_| MemoryOfflineCheckerAuxCols::default()),
-            },
-        }
-    }
-}
+impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T> where T: Field {}
 
 impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
     pub fn get_width() -> usize {
@@ -153,8 +122,8 @@ impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
 }
 
 impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticAuxCols<WORD_SIZE, T> {
-    pub fn get_width() -> usize {
-        3 * EXTENSION_DEGREE + 12
+    pub fn get_width(oc: &MemoryOfflineChecker) -> usize {
+        3 * EXTENSION_DEGREE + 12 + 12 * MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(oc)
     }
 
     pub fn flatten(&self) -> Vec<T> {
