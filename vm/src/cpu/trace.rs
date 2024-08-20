@@ -4,15 +4,18 @@ use std::{
     fmt::Display,
 };
 
+use p3_commit::PolynomialSpace;
 use p3_field::{Field, PrimeField32, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
+use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use afs_primitives::{
     is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
 };
+use afs_stark_backend::rap::AnyRap;
 
 use crate::{
-    arch::chips::OpCodeExecutor,
+    arch::chips::{MachineChip, OpCodeExecutor},
     cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
     field_extension::columns::FieldExtensionArithmeticCols,
     memory::{compose, decompose},
@@ -544,24 +547,33 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
         Ok(())
     }
 
-    pub fn generate_trace(vm: &mut ExecutionSegment<WORD_SIZE, F>) -> RowMajorMatrix<F> {
-        if !vm.cpu_chip.state.is_done {
-            Self::pad_rows(vm);
+    /// Pad with NOP rows.
+    pub fn pad_rows(&mut self) {
+        let pc = F::from_canonical_usize(self.state.pc);
+        let timestamp = F::from_canonical_usize(self.state.timestamp);
+        let nop_row = CpuCols::<WORD_SIZE, F>::nop_row(self.air.options, pc, timestamp)
+            .flatten(self.air.options);
+        let correct_len = (self.rows.len() + 1).next_power_of_two();
+        self.rows.resize(correct_len, nop_row);
+    }
+}
+
+impl<const WORD_SIZE: usize, F: PrimeField32> MachineChip<F> for CpuChip<WORD_SIZE, F> {
+    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+        if !self.state.is_done {
+            self.pad_rows();
         }
 
         RowMajorMatrix::new(
-            vm.cpu_chip.rows.concat(),
-            CpuCols::<WORD_SIZE, F>::get_width(vm.options()),
+            self.rows.concat(),
+            CpuCols::<WORD_SIZE, F>::get_width(self.air.options),
         )
     }
 
-    /// Pad with NOP rows.
-    pub fn pad_rows(vm: &mut ExecutionSegment<WORD_SIZE, F>) {
-        let pc = F::from_canonical_usize(vm.cpu_chip.state.pc);
-        let timestamp = F::from_canonical_usize(vm.cpu_chip.state.timestamp);
-        let nop_row =
-            CpuCols::<WORD_SIZE, F>::nop_row(vm.options(), pc, timestamp).flatten(vm.options());
-        let correct_len = (vm.cpu_chip.rows.len() + 1).next_power_of_two();
-        vm.cpu_chip.rows.resize(correct_len, nop_row);
+    fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        &self.air
     }
 }

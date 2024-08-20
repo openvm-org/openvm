@@ -15,7 +15,10 @@ use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use crate::{
     cpu::{CpuOptions, ExecutionState, trace::ExecutionError},
     program::Program,
-    vm::{config::VmConfig, new_segment::ExecutionSegment},
+    vm::{
+        config::VmConfig, cycle_tracker::CycleTracker, metrics::VmMetrics,
+        new_segment::ExecutionSegment,
+    },
 };
 
 /// Parent struct that holds all execution segments, program, config.
@@ -26,14 +29,14 @@ use crate::{
 ///
 /// Chips, traces, and public values should be retrieved by unpacking the `ExecutionResult` struct.
 /// `VirtualMachine::get_chips()` can be used to convert the boxes of chips to concrete chips.
-pub struct VirtualMachine<const WORD_SIZE: usize, F: PrimeField32> {
+pub struct VirtualMachine<F: PrimeField32> {
     pub config: VmConfig,
     pub program: Program<F>,
-    pub segments: Vec<ExecutionSegment<WORD_SIZE, F>>,
+    pub segments: Vec<ExecutionSegment<F>>,
     pub traces: Vec<DenseMatrix<F>>,
 }
 
-pub struct ExecutionResult<const WORD_SIZE: usize> {
+pub struct ExecutionResult {
     /// VM metrics per segment, only collected if enabled
     pub metrics: Vec<VmMetrics>,
     /// Cycle tracker for the entire execution
@@ -41,7 +44,7 @@ pub struct ExecutionResult<const WORD_SIZE: usize> {
 }
 
 /// Struct that holds the return state of the VM. StarkConfig is hardcoded to BabyBearPoseidon2Config.
-pub struct ExecutionAndTraceGenerationResult<const WORD_SIZE: usize> {
+pub struct ExecutionAndTraceGenerationResult {
     /// Traces of the VM
     pub nonempty_traces: Vec<DenseMatrix<BabyBear>>,
     pub all_traces: Vec<DenseMatrix<BabyBear>>,
@@ -50,8 +53,6 @@ pub struct ExecutionAndTraceGenerationResult<const WORD_SIZE: usize> {
     /// Boxed chips of the VM
     pub nonempty_chips: Vec<Box<dyn AnyRap<BabyBearPoseidon2Config>>>,
     pub unique_chips: Vec<Box<dyn AnyRap<BabyBearPoseidon2Config>>>,
-    /// Types of the chips
-    pub chip_types: Vec<ChipType>,
     /// Maximum log degree of the VM
     pub max_log_degree: usize,
     /// VM metrics per segment, only collected if enabled
@@ -73,7 +74,7 @@ pub struct VirtualMachineState<F: PrimeField32> {
     hint_stream: VecDeque<F>,
 }
 
-impl<const WORD_SIZE: usize, F: PrimeField32> VirtualMachine<WORD_SIZE, F> {
+impl<F: PrimeField32> VirtualMachine<F> {
     /// Create a new VM with a given config, program, and input stream.
     ///
     /// The VM will start with a single segment, which is created from the initial state of the CPU.

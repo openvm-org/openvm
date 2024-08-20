@@ -26,8 +26,8 @@ pub mod config;
 pub mod cycle_tracker;
 /// Instrumentation metrics for performance analysis and debugging
 pub mod metrics;
-//mod new_segment;
-//mod new_vm;
+pub mod new_segment;
+pub mod new_vm;
 mod segment;
 
 /// Parent struct that holds all execution segments, program, config.

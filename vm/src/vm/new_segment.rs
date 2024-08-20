@@ -1,22 +1,35 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, VecDeque},
+    rc::Rc,
+};
 
 use p3_field::PrimeField32;
 use p3_matrix::dense::DenseMatrix;
 
+use poseidon2_air::poseidon2::Poseidon2Config;
+
 use crate::{
-    arch::chips::{MachineChip, MachineChipVariant, OpCodeExecutor, OpCodeExecutorVariant},
-    cpu::{CpuChip, CpuOptions, trace::ExecutionError},
-    program::ProgramChip,
+    arch::{
+        bridge::ExecutionBus,
+        chips::{MachineChip, MachineChipVariant, OpCodeExecutorVariant},
+    },
+    cpu::{CpuChip, CpuOptions, POSEIDON2_BUS, trace::ExecutionError},
+    field_arithmetic::FieldArithmeticChip,
+    field_extension::FieldExtensionArithmeticChip,
+    memory::offline_checker::MemoryChip,
+    poseidon2::Poseidon2Chip,
+    program::{Program, ProgramChip},
 };
 
 use super::{VirtualMachineState, VmConfig, VmMetrics};
 
-pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
+pub struct ExecutionSegment<F: PrimeField32> {
     pub config: VmConfig,
 
     pub executors: Vec<OpCodeExecutorVariant<F>>,
     pub chips: Vec<MachineChipVariant<F>>,
-    pub cpu_chip: CpuChip<WORD_SIZE, F>,
+    pub cpu_chip: CpuChip<1, F>,
     pub program_chip: ProgramChip<F>,
 
     pub input_stream: VecDeque<Vec<F>>,
@@ -31,19 +44,42 @@ pub struct ExecutionSegment<const WORD_SIZE: usize, F: PrimeField32> {
     pub(crate) collected_metrics: VmMetrics,
 }
 
-impl<const WORD_SIZE: usize, F: PrimeField32> ExecutionSegment<WORD_SIZE, F> {
+impl<F: PrimeField32> ExecutionSegment<F> {
     /// Creates a new execution segment from a program and initial state, using parent VM config
-    pub fn new(
-        config: VmConfig,
-        state: VirtualMachineState<F>,
-        executors: Vec<OpCodeExecutorVariant<F>>,
-        chips: Vec<MachineChipVariant<F>>,
-        cpu_chip: CpuChip<WORD_SIZE, F>,
-        program_chip: ProgramChip<F>,
-    ) -> Self {
+    pub fn new(config: VmConfig, state: VirtualMachineState<F>, program: Program<F>) -> Self {
         let opcode_counts = BTreeMap::new();
         let dsl_counts = BTreeMap::new();
         let opcode_trace_cells = BTreeMap::new();
+
+        let execution_bus = ExecutionBus(0);
+
+        let cpu_chip = CpuChip::from_state(config.cpu_options(), state.state);
+        let program_chip = ProgramChip::new(program);
+        let limb_bits = config.limb_bits;
+        let decomp = config.decomp;
+        let memory_chip = MemoryChip::new(limb_bits, limb_bits, limb_bits, decomp, state.memory);
+        let memory_chip_ref = Rc::new(RefCell::new(memory_chip));
+        let field_arithmetic_chip =
+            FieldArithmeticChip::new(execution_bus, memory_chip_ref.clone());
+        let field_extension_chip =
+            FieldExtensionArithmeticChip::new(execution_bus, memory_chip_ref.clone());
+        let poseidon2_chip = Poseidon2Chip::from_poseidon2_config(
+            Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
+            POSEIDON2_BUS,
+            execution_bus,
+            memory_chip_ref,
+        );
+        let chips = vec![
+            MachineChipVariant::Cpu(cpu_chip),
+            MachineChipVariant::Program(program_chip),
+            MachineChipVariant::Memory(memory_chip),
+            MachineChipVariant::FieldArithmetic(field_arithmetic_chip),
+            MachineChipVariant::FieldExtension(field_extension_chip),
+            MachineChipVariant::Poseidon2(poseidon2_chip),
+        ];
+        let executors = vec![OpCodeExecutorVariant::FieldArithmetic(
+            field_arithmetic_chip,
+        )];
 
         Self {
             config,
