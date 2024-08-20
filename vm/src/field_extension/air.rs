@@ -7,7 +7,10 @@ use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
-use crate::field_extension::{BETA, EXTENSION_DEGREE};
+use crate::{
+    cpu::OpCode::{BBE4INV, BBE4MUL, FE4ADD, FE4SUB},
+    field_extension::{BETA, EXTENSION_DEGREE},
+};
 
 impl AirConfig for FieldExtensionArithmeticAir {
     type Cols<T> = FieldExtensionArithmeticCols<T>;
@@ -30,6 +33,26 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExtensionArithmeticAir {
 
         let FieldExtensionArithmeticCols { io, aux } = local_cols;
 
+        builder.assert_bool(aux.is_add);
+        builder.assert_bool(aux.is_sub);
+        builder.assert_bool(aux.is_mul);
+        builder.assert_bool(aux.is_inv);
+
+        let mut indicator_sum = AB::Expr::zero();
+        indicator_sum += aux.is_add.into();
+        indicator_sum += aux.is_sub.into();
+        indicator_sum += aux.is_mul.into();
+        indicator_sum += aux.is_inv.into();
+        builder.assert_one(indicator_sum);
+
+        builder.assert_eq(
+            io.opcode,
+            aux.is_add * AB::F::from_canonical_u32(FE4ADD as u32)
+                + aux.is_sub * AB::F::from_canonical_u32(FE4SUB as u32)
+                + aux.is_mul * AB::F::from_canonical_u32(BBE4MUL as u32)
+                + aux.is_inv * AB::F::from_canonical_u32(BBE4INV as u32),
+        );
+
         builder.assert_bool(aux.is_valid);
         // valid_y_read is 1 iff is_valid and not is_inv
         // the previous constraint along with this one imply valid_y_read is boolean
@@ -37,32 +60,6 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExtensionArithmeticAir {
             aux.valid_y_read,
             aux.is_valid * (AB::Expr::one() - aux.is_inv),
         );
-
-        builder.assert_bool(aux.opcode_lo);
-        builder.assert_bool(aux.opcode_hi);
-
-        builder.assert_eq(
-            io.opcode,
-            aux.opcode_lo
-                + aux.opcode_hi * AB::Expr::two()
-                + AB::F::from_canonical_u8(FieldExtensionArithmeticAir::BASE_OP),
-        );
-
-        builder.assert_eq(
-            aux.is_mul,
-            aux.opcode_hi * (AB::Expr::one() - aux.opcode_lo),
-        );
-
-        builder.assert_eq(aux.is_inv, aux.opcode_hi * aux.opcode_lo);
-
-        let add_sub_coeff = AB::Expr::one() - AB::Expr::two() * aux.opcode_lo;
-
-        for i in 0..EXTENSION_DEGREE {
-            builder.assert_eq(
-                io.x[i] + add_sub_coeff.clone() * io.y[i],
-                aux.sum_or_diff[i],
-            );
-        }
 
         // constrain multiplication
         builder.assert_eq(
@@ -117,9 +114,10 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExtensionArithmeticAir {
         for i in 0..EXTENSION_DEGREE {
             builder.assert_eq(
                 io.z[i],
-                aux.product[i] * aux.is_mul
-                    + aux.sum_or_diff[i] * (AB::Expr::one() - aux.opcode_hi)
-                    + aux.inv[i] * aux.is_inv,
+                aux.is_add * (io.x[i] + io.y[i])
+                    + aux.is_sub * (io.x[i] - io.y[i])
+                    + aux.is_mul * aux.product[i]
+                    + aux.is_inv * aux.inv[i],
             );
         }
 

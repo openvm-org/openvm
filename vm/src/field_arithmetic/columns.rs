@@ -28,6 +28,7 @@ pub struct FieldArithmeticIoCols<T> {
 #[derive(Copy, Clone, Debug, AlignedBorrow)]
 #[repr(C)]
 pub struct FieldArithmeticAuxCols<T> {
+    pub is_add: T,
     pub is_sub: T,
     pub is_mul: T,
     pub is_div: T,
@@ -59,6 +60,7 @@ where
                 z: T::zero(),
             },
             aux: FieldArithmeticAuxCols::<T> {
+                is_add: T::one(),
                 is_sub: T::zero(),
                 is_mul: T::zero(),
                 is_div: T::zero(),
@@ -80,10 +82,16 @@ impl<T: Field> FieldArithmeticIoCols<T> {
 
 impl<T: Field> FieldArithmeticAuxCols<T> {
     pub fn get_width() -> usize {
-        4
+        5
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        vec![self.is_sub, self.is_mul, self.is_div, self.divisor_inv]
+        vec![
+            self.is_add,
+            self.is_sub,
+            self.is_mul,
+            self.is_div,
+            self.divisor_inv,
+        ]
     }
 }

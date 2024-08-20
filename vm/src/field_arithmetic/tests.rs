@@ -10,7 +10,7 @@ use rand::Rng;
 
 use super::{
     columns::{FieldArithmeticCols, FieldArithmeticIoCols},
-    FieldArithmeticAir, FieldArithmeticChip,
+    FieldArithmeticChip,
 };
 use crate::cpu::{OpCode, OpCode::FDIV, ARITHMETIC_BUS, FIELD_ARITHMETIC_INSTRUCTIONS};
 

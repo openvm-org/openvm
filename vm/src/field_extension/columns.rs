@@ -34,16 +34,14 @@ pub struct FieldExtensionArithmeticAuxCols<T> {
     pub op_c: T,
     pub d: T,
     pub e: T,
-    // the lower bit of the opcode - BASE_OP
-    pub opcode_lo: T,
-    // the upper bit of the opcode - BASE_OP
-    pub opcode_hi: T,
+    // whether the opcode is FE4ADD
+    pub is_add: T,
+    // whether the opcode is FE4SUB
+    pub is_sub: T,
     // whether the opcode is BBE4MUL
     pub is_mul: T,
     // whether the opcode is BBE4INV
     pub is_inv: T,
-    // the sum x + y if opcode_lo is 0, or the difference x - y if opcode_lo is 1
-    pub sum_or_diff: [T; EXTENSION_DEGREE],
     // the product of x and y
     pub product: [T; EXTENSION_DEGREE],
     // the field extension inverse of x
@@ -86,12 +84,10 @@ where
                 op_c: T::zero(),
                 d: T::zero(),
                 e: T::zero(),
-
-                opcode_lo: T::zero(),
-                opcode_hi: T::zero(),
+                is_add: T::one(),
+                is_sub: T::zero(),
                 is_mul: T::zero(),
                 is_inv: T::zero(),
-                sum_or_diff: [T::zero(); EXTENSION_DEGREE],
                 product: [T::zero(); EXTENSION_DEGREE],
                 inv: [T::zero(); EXTENSION_DEGREE],
             },
@@ -116,7 +112,7 @@ impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
 
 impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
     pub fn get_width() -> usize {
-        3 * EXTENSION_DEGREE + 12
+        2 * EXTENSION_DEGREE + 12
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -129,12 +125,11 @@ impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
             self.op_c.clone(),
             self.d.clone(),
             self.e.clone(),
-            self.opcode_lo.clone(),
-            self.opcode_hi.clone(),
+            self.is_add.clone(),
+            self.is_sub.clone(),
             self.is_mul.clone(),
             self.is_inv.clone(),
         ];
-        result.extend_from_slice(&self.sum_or_diff);
         result.extend_from_slice(&self.product);
         result.extend_from_slice(&self.inv);
         result

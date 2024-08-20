@@ -28,23 +28,27 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
 
         let FieldArithmeticCols { io, aux } = local;
 
+        builder.assert_bool(aux.is_add);
+        builder.assert_bool(aux.is_sub);
+        builder.assert_bool(aux.is_mul);
+        builder.assert_bool(aux.is_div);
+
         let mut indicator_sum = AB::Expr::zero();
+        indicator_sum += aux.is_add.into();
         indicator_sum += aux.is_sub.into();
         indicator_sum += aux.is_mul.into();
         indicator_sum += aux.is_div.into();
-        builder.assert_bool(indicator_sum.clone());
-
-        let is_add = AB::Expr::one() - indicator_sum;
+        builder.assert_one(indicator_sum);
 
         builder.assert_eq(
             io.opcode,
-            is_add.clone() * AB::F::from_canonical_u32(FADD as u32)
+            aux.is_add * AB::F::from_canonical_u32(FADD as u32)
                 + aux.is_sub * AB::F::from_canonical_u32(FSUB as u32)
                 + aux.is_mul * AB::F::from_canonical_u32(FMUL as u32)
                 + aux.is_div * AB::F::from_canonical_u32(FDIV as u32),
         );
 
-        builder.when(is_add).assert_eq(io.z, io.x + io.y);
+        builder.when(aux.is_add).assert_eq(io.z, io.x + io.y);
         builder.when(aux.is_sub).assert_eq(io.z, io.x - io.y);
         builder.when(aux.is_mul).assert_eq(io.z, io.x * io.y); // deg 3
 

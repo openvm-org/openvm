@@ -9,6 +9,7 @@ use crate::cpu::OpCode;
 
 /// Constructs a new set of columns (including auxiliary columns) given inputs.
 fn generate_cols<T: Field>(op: OpCode, x: T, y: T) -> FieldArithmeticCols<T> {
+    let is_add = T::from_bool(op == OpCode::FADD);
     let is_sub = T::from_bool(op == OpCode::FSUB);
     let is_div = T::from_bool(op == OpCode::FDIV);
     let is_mul = T::from_bool(op == OpCode::FMUL);
@@ -35,6 +36,7 @@ fn generate_cols<T: Field>(op: OpCode, x: T, y: T) -> FieldArithmeticCols<T> {
             z,
         },
         aux: FieldArithmeticAuxCols {
+            is_add,
             is_sub,
             is_mul,
             is_div,
