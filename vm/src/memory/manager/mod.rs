@@ -73,7 +73,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
                     addr_space,
                     pointer,
                     F::from_canonical_u8(OpType::Read as u8),
-                    AccessCell::new(data, cur_clk),
+                    AccessCell::new(data, self.clk),
                     F::one(),
                 ),
                 AccessCell::new(data, cur_clk),
