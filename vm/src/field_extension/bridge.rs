@@ -13,6 +13,7 @@ use crate::memory::offline_checker::bridge::MemoryBridge;
 
 #[allow(clippy::too_many_arguments)]
 fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
+    builder: &mut AB,
     memory_bridge: &mut MemoryBridge<AB::Var, WORD_SIZE>,
     clk_offset: &mut usize,
     is_write: bool,
@@ -32,13 +33,13 @@ fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
                 MemoryAddress::new(addr_space, pointer),
                 emb(element.into()),
                 clk,
-            );
+            ).eval(builder, AB::F::one());
         } else {
             memory_bridge.read(
                 MemoryAddress::new(addr_space, pointer),
                 emb(element.into()),
                 clk,
-            );
+            ).eval(builder, AB::F::one());
         }
     }
 }
@@ -79,6 +80,7 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
 
         // Reads for x
         eval_rw_interactions::<AB, WORD_SIZE>(
+            builder,
             &mut memory_bridge,
             &mut clk_offset,
             false,
@@ -90,6 +92,7 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
 
         // Reads for y
         eval_rw_interactions::<AB, WORD_SIZE>(
+            builder,
             &mut memory_bridge,
             &mut clk_offset,
             false,
@@ -101,6 +104,7 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
 
         // Writes for z
         eval_rw_interactions::<AB, WORD_SIZE>(
+            builder,
             &mut memory_bridge,
             &mut clk_offset,
             true,
