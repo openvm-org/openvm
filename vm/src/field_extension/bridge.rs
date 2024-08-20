@@ -7,9 +7,8 @@ use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir, 
 use crate::{
     cpu::FIELD_EXTENSION_BUS,
     field_extension::columns::FieldExtensionArithmeticAuxCols,
+    memory::{offline_checker::bridge::MemoryBridge, MemoryAddress},
 };
-use crate::memory::MemoryAddress;
-use crate::memory::offline_checker::bridge::MemoryBridge;
 
 #[allow(clippy::too_many_arguments)]
 fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
@@ -29,29 +28,27 @@ fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
         *clk_offset += 1;
 
         if is_write {
-            memory_bridge.write(
-                MemoryAddress::new(addr_space, pointer),
-                emb(element.into()),
-                clk,
-            ).eval(builder, AB::F::one());
+            memory_bridge
+                .write(
+                    MemoryAddress::new(addr_space, pointer),
+                    emb(element.into()),
+                    clk,
+                )
+                .eval(builder, AB::F::one());
         } else {
-            memory_bridge.read(
-                MemoryAddress::new(addr_space, pointer),
-                emb(element.into()),
-                clk,
-            ).eval(builder, AB::F::one());
+            memory_bridge
+                .read(
+                    MemoryAddress::new(addr_space, pointer),
+                    emb(element.into()),
+                    clk,
+                )
+                .eval(builder, AB::F::one());
         }
     }
 }
 
 fn emb<F: AbstractField, const WORD_SIZE: usize>(element: F) -> [F; WORD_SIZE] {
-    array::from_fn(|j| {
-        if j == 0 {
-            element.clone()
-        } else {
-            F::zero()
-        }
-    })
+    array::from_fn(|j| if j == 0 { element.clone() } else { F::zero() })
 }
 
 impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
