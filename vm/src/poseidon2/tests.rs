@@ -362,6 +362,9 @@ fn poseidon2_negative_test() {
     let (vm, engine, dummy_cpu_poseidon2, mut traces) = run_perm_ops(instructions, data);
     let poseidon2_trace_index = 2;
 
+    // TODO[osama]: consider making a dummy interface air
+    let MemoryInterface::Volatile(memory_audit_chip) =
+        &vm.segments[0].memory_manager.lock().interface_chip;
     // negative test
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
@@ -375,7 +378,7 @@ fn poseidon2_negative_test() {
             engine.run_simple_test(
                 vec![
                     &vm.segments[0].range_checker.air,
-                    &vm.segments[0].memory_chip.air,
+                    &memory_audit_chip.air,
                     &vm.segments[0].poseidon2_chip.air,
                     &dummy_cpu_poseidon2,
                 ],
