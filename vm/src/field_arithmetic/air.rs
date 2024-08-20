@@ -40,8 +40,8 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
         // Imposing the following constraints:
         // - Each flag in `flags` is a boolean.
         // - Exactly one flag in `flags` is true.
-        // - The inner product of the `flags` and corresponding `opcodes` equals `io.opcode`.
-        // - The inner product of the `flags` and corresponding `results` equals `io.z`.
+        // - The inner product of the `flags` and `opcodes` equals `io.opcode`.
+        // - The inner product of the `flags` and `results` equals `io.z`.
         // - If `is_div` is true, then `aux.divisor_inv` correctly represents the multiplicative inverse of `io.y`.
 
         let mut flag_sum = AB::Expr::zero();
