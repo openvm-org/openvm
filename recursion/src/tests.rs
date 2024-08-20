@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use afs_compiler::util::execute_program;
+use afs_compiler::util::execute_program_and_generate_traces;
 use afs_primitives::{range_gate::RangeCheckerGateChip, sum::SumChip};
 use afs_stark_backend::{
     prover::trace::TraceCommitmentBuilder, rap::AnyRap, verifier::MultiTraceStarkVerifier,
@@ -23,7 +23,7 @@ use p3_util::log2_strict_usize;
 use crate::{
     hints::Hintable,
     stark::{DynRapForRecursion, VerifierProgram},
-    types::{new_from_multi_vk, InnerConfig, VerifierInput},
+    types::{new_from_inner_multi_vk, InnerConfig, VerifierInput},
 };
 
 #[test]
@@ -155,7 +155,7 @@ fn run_recursive_test(
         .expect("afs proof should verify");
 
     // Build verification program in eDSL.
-    let advice = new_from_multi_vk(&vk);
+    let advice = new_from_inner_multi_vk(&vk);
 
     let program = VerifierProgram::build(rec_raps, advice, &engine.fri_params);
 
@@ -168,5 +168,5 @@ fn run_recursive_test(
     let mut witness_stream = Vec::new();
     witness_stream.extend(input.write());
 
-    execute_program::<1>(program, witness_stream);
+    execute_program_and_generate_traces::<1>(program, witness_stream);
 }

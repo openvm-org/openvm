@@ -1,7 +1,4 @@
-use std::{
-    collections::BTreeMap,
-    fmt::{self, Display},
-};
+use std::fmt::{self, Display};
 
 use afs_stark_backend::prover::metrics::{format_number_with_underscores, TraceMetrics};
 use serde::{Deserialize, Serialize};
@@ -78,63 +75,6 @@ impl<CustomMetrics: Display> Display for BenchmarkMetrics<CustomMetrics> {
 
         self.custom.fmt(f)?;
 
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct VmCustomMetrics {
-    pub vm_metrics: BTreeMap<String, String>,
-    pub opcode_counts: Vec<(String, usize)>,
-    pub dsl_counts: Vec<(String, usize)>,
-    pub opcode_trace_cells: Vec<(String, usize)>,
-}
-
-impl Display for VmCustomMetrics {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "<details>")?;
-        writeln!(f, "<summary>")?;
-        writeln!(f)?;
-        writeln!(f, "### Custom VM metrics")?;
-        writeln!(f)?;
-        writeln!(f, "</summary>")?;
-        writeln!(f)?;
-
-        writeln!(f, "| Name | Value |")?;
-        writeln!(f, "|------|-------|")?;
-        for (name, value) in self.vm_metrics.iter() {
-            writeln!(f, "| {:<20} | {:<10} |", name, value)?;
-        }
-
-        writeln!(f)?;
-        writeln!(f, "#### Opcode metrics")?;
-        writeln!(f, "| Name | Frequency | Trace Cells Contributed |")?;
-        writeln!(f, "|------|-------|-----|")?;
-        for (name, value) in self.opcode_counts.iter() {
-            let cell_count = *self
-                .opcode_trace_cells
-                .iter()
-                .find_map(|(k, v)| if k == name { Some(v) } else { None })
-                .unwrap_or(&0);
-            writeln!(f, "| {:<20} | {:<10} | {:<10} |", name, value, cell_count)?;
-        }
-        for (name, value) in self.opcode_trace_cells.iter() {
-            if !self.opcode_counts.iter().any(|(k, _)| k == name) {
-                // this should never happen
-                writeln!(f, "| {:<20} | 0 | {:<10} |", name, value)?;
-            }
-        }
-
-        writeln!(f)?;
-        writeln!(f, "### DSL counts")?;
-        writeln!(f, "How many opcodes each DSL instruction generates:")?;
-        writeln!(f, "| Name | Count |")?;
-        writeln!(f, "|------|-------|")?;
-        for (name, value) in self.dsl_counts.iter() {
-            writeln!(f, "| {:<20} | {:<10} |", name, value)?;
-        }
-
-        writeln!(f, "</details>")?;
         Ok(())
     }
 }

@@ -2,7 +2,7 @@ use afs_compiler::{
     asm::{AsmBuilder, AsmCompiler, AsmConfig},
     conversion::{convert_program, CompilerOptions},
     ir::{Builder, Ext, ExtConst, Felt, SymbolicExt, Var},
-    util::execute_program,
+    util::execute_program_and_generate_traces,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
@@ -98,7 +98,7 @@ fn test_compiler_arithmetic() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -121,7 +121,7 @@ fn test_compiler_arithmetic_2() {
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -139,25 +139,25 @@ fn test_in_place_arithmetic() {
     ]);
 
     let x: Ext<_, _> = builder.constant(ef);
-    builder.assign(x, x + x);
+    builder.assign(&x, x + x);
     builder.assert_ext_eq(x, (ef + ef).cons());
 
     let x: Ext<_, _> = builder.constant(ef);
-    builder.assign(x, x - x);
+    builder.assign(&x, x - x);
     builder.assert_ext_eq(x, EF::zero().cons());
 
     let x: Ext<_, _> = builder.constant(ef);
-    builder.assign(x, x * x);
+    builder.assign(&x, x * x);
     builder.assert_ext_eq(x, (ef * ef).cons());
 
     let x: Ext<_, _> = builder.constant(ef);
-    builder.assign(x, x / x);
+    builder.assign(&x, x / x);
     builder.assert_ext_eq(x, EF::one().cons());
 
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -182,7 +182,7 @@ fn test_field_immediate() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -204,65 +204,66 @@ fn test_ext_immediate() {
     let ext: Ext<_, _> = builder.constant(ef);
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ext + ef);
+    builder.assign(&x, ext + ef);
     builder.assert_ext_eq(x, (ef + ef).cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ef.cons() + ext);
+    builder.assign(&x, ef.cons() + ext);
     builder.assert_ext_eq(x, (ef + ef).cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ext + f);
+    builder.assign(&x, ext + f);
     builder.assert_ext_eq(x, (ef + f).cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ext - ef);
+    builder.assign(&x, ext - ef);
     builder.assert_ext_eq(x, EF::zero().cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ef.cons() - ext);
+    builder.assign(&x, ef.cons() - ext);
     builder.assert_ext_eq(x, EF::zero().cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ext - f);
+    builder.assign(&x, ext - f);
     builder.assert_ext_eq(x, (ef - f).cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ext * ef);
+    builder.assign(&x, ext * ef);
     builder.assert_ext_eq(x, (ef * ef).cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ef.cons() * ext);
+    builder.assign(&x, ef.cons() * ext);
     builder.assert_ext_eq(x, (ef * ef).cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ext * f);
+    builder.assign(&x, ext * f);
     builder.assert_ext_eq(x, (ef * f).cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ext / ef);
+    builder.assign(&x, ext / ef);
     builder.assert_ext_eq(x, EF::one().cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ef.cons() / ext);
+    builder.assign(&x, ef.cons() / ext);
     builder.assert_ext_eq(x, EF::one().cons());
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ext / f);
+    builder.assign(&x, ext / f);
     builder.assert_ext_eq(x, (ef / f.into()).cons());
 
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 
     let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
         compile_prints: false,
         enable_cycle_tracker: false,
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
+        field_less_than_enabled: false,
     });
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -285,42 +286,43 @@ fn test_ext_felt_arithmetic() {
     let ext: Ext<_, _> = builder.constant(ef);
 
     let x: Ext<_, _> = builder.uninit();
-    builder.assign(x, ext + felt);
+    builder.assign(&x, ext + felt);
     builder.assert_ext_eq(x, (ef + f).cons());
 
-    builder.assign(x, ext + f);
+    builder.assign(&x, ext + f);
     builder.assert_ext_eq(x, (ef + f).cons());
 
-    builder.assign(x, ext - felt);
+    builder.assign(&x, ext - felt);
     builder.assert_ext_eq(x, (ef - f).cons());
 
-    builder.assign(x, ext - f);
+    builder.assign(&x, ext - f);
     builder.assert_ext_eq(x, (ef - f).cons());
 
-    builder.assign(x, ext * felt);
+    builder.assign(&x, ext * felt);
     builder.assert_ext_eq(x, (ef * f).cons());
 
-    builder.assign(x, ext * f);
+    builder.assign(&x, ext * f);
     builder.assert_ext_eq(x, (ef * f).cons());
 
-    builder.assign(x, ext / felt);
+    builder.assign(&x, ext / felt);
     builder.assert_ext_eq(x, (ef / EF::from_base(f)).cons());
 
-    builder.assign(x, ext / f);
+    builder.assign(&x, ext / f);
     builder.assert_ext_eq(x, (ef / EF::from_base(f)).cons());
 
     builder.halt();
 
     let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 
     let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
         compile_prints: false,
         enable_cycle_tracker: false,
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
+        field_less_than_enabled: false,
     });
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -352,7 +354,7 @@ fn test_felt_equality() {
     println!("{}", asm_code);
 
     let program = convert_program::<WORD_SIZE, F, EF>(asm_code, CompilerOptions::default());
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -408,7 +410,7 @@ fn test_ext_equality() {
     builder.halt();
 
     let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
 }
 
 #[test]
@@ -436,7 +438,7 @@ fn assert_failed_assertion(
     builder: Builder<AsmConfig<BabyBear, BinomialExtensionField<BabyBear, 4>>>,
 ) {
     let program = builder.compile_isa::<WORD_SIZE>();
-    let vm = VirtualMachine::<WORD_SIZE, _>::new(VmConfig::default(), program, vec![]);
-    let result = vm.execute();
+    let vm = VirtualMachine::<1, WORD_SIZE, _>::new(VmConfig::default(), program, vec![]);
+    let result = vm.execute_and_generate_traces();
     assert!(matches!(result, Err(Fail(_))));
 }

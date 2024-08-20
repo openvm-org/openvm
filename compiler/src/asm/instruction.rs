@@ -7,15 +7,23 @@ use super::A0;
 
 #[derive(Debug, Clone)]
 pub enum AsmInstruction<F, EF> {
-    /// Load word (dst, src, offset).
+    /// Load word (dst, src, var_index, size, offset).
     ///
-    /// Load a value from the address stored at src(fp) + offset into dst(fp).
-    LoadFI(i32, i32, F),
+    /// Load a value from the address stored at src(fp) into dst(fp) with given index and offset.
+    LoadF(i32, i32, i32, F, F),
+    LoadFI(i32, i32, F, F, F),
 
-    /// Store word (val, addr, offset)
+    /// Store word (val, addr, var_index, size, offset)
     ///
-    /// Store a value from val(fp) into the address stored at addr(fp) + offset.
-    StoreFI(i32, i32, F),
+    /// Store a value from val(fp) into the address stored at addr(fp) with given index and offset.
+    StoreF(i32, i32, i32, F, F),
+    StoreFI(i32, i32, F, F, F),
+
+    /// Set dst = imm.
+    ImmF(i32, F),
+
+    /// Copy, dst = src.
+    CopyF(i32, i32),
 
     /// Add, dst = lhs + rhs.
     AddF(i32, i32, i32),
@@ -29,6 +37,9 @@ pub enum AsmInstruction<F, EF> {
     /// Subtract immediate, dst = lhs - rhs.
     SubFI(i32, i32, F),
 
+    /// Subtract value from immediate, dst = lhs - rhs.
+    SubFIN(i32, F, i32),
+
     /// Multiply, dst = lhs * rhs.
     MulF(i32, i32, i32),
 
@@ -41,6 +52,15 @@ pub enum AsmInstruction<F, EF> {
     /// Divide immediate, dst = lhs / rhs.
     DivFI(i32, i32, F),
 
+    /// Divide value from immediate, dst = lhs / rhs.
+    DivFIN(i32, F, i32),
+
+    /// Less than, dst = lhs < rhs.
+    LessThanF(i32, i32, i32),
+
+    /// Less than immediate, dst = lhs < rhs.
+    LessThanFI(i32, i32, F),
+
     /// Add extension, dst = lhs + rhs.
     AddE(i32, i32, i32),
 
@@ -52,6 +72,18 @@ pub enum AsmInstruction<F, EF> {
 
     /// Extension inverse, dst = 1 / src.
     InvE(i32, i32),
+
+    /// Modular add, dst = lhs + rhs.
+    AddMSecp256k1(i32, i32, i32),
+
+    /// Modular subtract, dst = lhs - rhs.
+    SubMSecp256k1(i32, i32, i32),
+
+    /// Modular multiply, dst = lhs * rhs.
+    MulMSecp256k1(i32, i32, i32),
+
+    /// Modular divide, dst = lhs / rhs.
+    DivMSecp256k1(i32, i32, i32),
 
     /// Jump.
     Jump(i32, F),
@@ -117,16 +149,8 @@ pub enum AsmInstruction<F, EF> {
     /// Stores the next hint stream word into value stored at addr + value.
     StoreHintWordI(i32, F),
 
-    /// FRIFold(m, input).
-    FriFold(i32, i32),
-
     /// Publish(val, index).
     Publish(i32, i32),
-
-    /// RegisterPublicValue(val).
-    RegisterPublicValue(i32),
-
-    LessThan(i32, i32, i32),
 
     CycleTrackerStart(String),
     CycleTrackerEnd(String),
@@ -140,14 +164,39 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
     pub fn fmt(&self, labels: &BTreeMap<F, String>, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             AsmInstruction::Break(_) => panic!("Unresolved break instruction"),
-            AsmInstruction::LessThan(dst, left, right) => {
-                write!(f, "lt  ({})fp, {}, {}", dst, left, right,)
+            AsmInstruction::LoadF(dst, src, var_index, size, offset) => {
+                write!(
+                    f,
+                    "lw    ({})fp, ({})fp, ({})fp, {}, {}",
+                    dst, src, var_index, size, offset
+                )
             }
-            AsmInstruction::LoadFI(dst, src, offset) => {
-                write!(f, "lwi   ({})fp, ({})fp, {}", dst, src, offset)
+            AsmInstruction::LoadFI(dst, src, var_index, size, offset) => {
+                write!(
+                    f,
+                    "lwi   ({})fp, ({})fp, {}, {}, {}",
+                    dst, src, var_index, size, offset
+                )
             }
-            AsmInstruction::StoreFI(dst, src, offset) => {
-                write!(f, "swi   ({})fp, ({})fp, {}", dst, src, offset)
+            AsmInstruction::StoreF(dst, src, var_index, size, offset) => {
+                write!(
+                    f,
+                    "sw    ({})fp, ({})fp, ({})fp, {}, {}",
+                    dst, src, var_index, size, offset
+                )
+            }
+            AsmInstruction::StoreFI(dst, src, var_index, size, offset) => {
+                write!(
+                    f,
+                    "swi   ({})fp, ({})fp, {}, {}, {}",
+                    dst, src, var_index, size, offset
+                )
+            }
+            AsmInstruction::ImmF(dst, src) => {
+                write!(f, "imm   ({})fp, ({})", dst, src)
+            }
+            AsmInstruction::CopyF(dst, src) => {
+                write!(f, "copy  ({})fp, ({})", dst, src)
             }
             AsmInstruction::AddF(dst, lhs, rhs) => {
                 write!(f, "add   ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
@@ -161,6 +210,9 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::SubFI(dst, lhs, rhs) => {
                 write!(f, "subi  ({})fp, ({})fp, {}", dst, lhs, rhs)
             }
+            AsmInstruction::SubFIN(dst, lhs, rhs) => {
+                write!(f, "subin ({})fp, {}, ({})fp", dst, lhs, rhs)
+            }
             AsmInstruction::MulF(dst, lhs, rhs) => {
                 write!(f, "mul   ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
             }
@@ -172,6 +224,15 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::DivFI(dst, lhs, rhs) => {
                 write!(f, "divi  ({})fp, ({})fp, {}", dst, lhs, rhs)
+            }
+            AsmInstruction::DivFIN(dst, lhs, rhs) => {
+                write!(f, "divi  ({})fp, {}, ({})fp", dst, lhs, rhs)
+            }
+            AsmInstruction::LessThanF(dst, lhs, rhs) => {
+                write!(f, "lt  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
+            }
+            AsmInstruction::LessThanFI(dst, lhs, rhs) => {
+                write!(f, "lti  ({})fp, ({})fp, {}", dst, lhs, rhs)
             }
             AsmInstruction::AddE(dst, lhs, rhs) => {
                 write!(f, "eadd ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
@@ -284,9 +345,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::StoreHintWordI(dst, offset) => {
                 write!(f, "shintw ({})fp {}", dst, offset)
             }
-            AsmInstruction::FriFold(m, input_ptr) => {
-                write!(f, "fri_fold ({})fp, ({})fp", m, input_ptr)
-            }
             AsmInstruction::Poseidon2Compress(result, src1, src2) => {
                 write!(
                     f,
@@ -297,14 +355,23 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::Publish(val, index) => {
                 write!(f, "commit ({})fp ({})fp", val, index)
             }
-            AsmInstruction::RegisterPublicValue(val) => {
-                write!(f, "register_public_value ({})fp", val)
-            }
             AsmInstruction::CycleTrackerStart(name) => {
                 write!(f, "cycle_tracker_start {}", name)
             }
             AsmInstruction::CycleTrackerEnd(name) => {
                 write!(f, "cycle_tracker_end {}", name)
+            }
+            AsmInstruction::AddMSecp256k1(dst, src1, src2) => {
+                write!(f, "modular_add ({})fp ({})fp ({})fp", dst, src1, src2)
+            }
+            AsmInstruction::SubMSecp256k1(dst, src1, src2) => {
+                write!(f, "modular_subtract ({})fp ({})fp ({})fp", dst, src1, src2)
+            }
+            AsmInstruction::MulMSecp256k1(dst, src1, src2) => {
+                write!(f, "modular_multiply ({})fp ({})fp ({})fp", dst, src1, src2)
+            }
+            AsmInstruction::DivMSecp256k1(dst, src1, src2) => {
+                write!(f, "modular_divide ({})fp ({})fp ({})fp", dst, src1, src2)
             }
         }
     }

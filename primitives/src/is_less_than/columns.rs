@@ -4,7 +4,7 @@ use p3_air::AirBuilder;
 
 use super::IsLessThanAir;
 
-#[derive(Default, AlignedBorrow, new)]
+#[derive(Default, AlignedBorrow, Clone, new)]
 pub struct IsLessThanIoCols<T> {
     pub x: T,
     pub y: T,
@@ -88,7 +88,7 @@ impl<T> IsLessThanAuxCols<T> {
     }
 }
 
-#[derive(new)]
+#[derive(Clone, new)]
 pub struct IsLessThanCols<T> {
     pub io: IsLessThanIoCols<T>,
     pub aux: IsLessThanAuxCols<T>,

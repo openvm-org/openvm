@@ -9,7 +9,10 @@ use super::{
     FIELD_EXTENSION_INSTRUCTIONS, POSEIDON2_BUS, READ_INSTRUCTION_BUS,
 };
 use crate::{
-    cpu::OpCode::{COMP_POS2, PERM_POS2},
+    cpu::{
+        OpCode::{COMP_POS2, F_LESS_THAN, PERM_POS2},
+        IS_LESS_THAN_BUS,
+    },
     memory::manager::operation::MemoryOperation,
 };
 
@@ -24,7 +27,9 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
         // Interaction with program (bus 0)
         builder.push_send(
             READ_INSTRUCTION_BUS,
-            [io.pc, io.opcode, io.op_a, io.op_b, io.op_c, io.d, io.e],
+            [
+                io.pc, io.opcode, io.op_a, io.op_b, io.op_c, io.d, io.e, io.op_f, io.op_g,
+            ],
             AB::Expr::one() - operation_flags[&OpCode::NOP],
         );
 
@@ -71,6 +76,16 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 count = count + operation_flags[&PERM_POS2];
             }
             builder.push_send(POSEIDON2_BUS, fields, count);
+        }
+
+        if self.options.is_less_than_enabled {
+            let fields = [
+                ops[0].cell.data[0],
+                ops[1].cell.data[0],
+                ops[CPU_MAX_READS_PER_CYCLE].cell.data[0],
+            ];
+            let count = operation_flags[&F_LESS_THAN];
+            builder.push_send(IS_LESS_THAN_BUS, fields, count);
         }
     }
 }

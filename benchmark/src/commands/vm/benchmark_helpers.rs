@@ -3,7 +3,7 @@ use std::{collections::HashMap, fs::File, io::Write as _};
 use afs_recursion::{
     hints::Hintable,
     stark::{DynRapForRecursion, VerifierProgram},
-    types::{new_from_multi_vk, InnerConfig, VerifierInput},
+    types::{new_from_inner_multi_vk, InnerConfig, VerifierInput},
 };
 use afs_stark_backend::{
     prover::{metrics::trace_metrics, trace::TraceCommitmentBuilder},
@@ -18,20 +18,19 @@ use afs_test_utils::{
     engine::StarkEngine,
 };
 use color_eyre::eyre;
-use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_strict_usize;
 use stark_vm::{
     program::Program,
-    vm::{config::VmConfig, ExecutionResult, VirtualMachine},
+    vm::{config::VmConfig, ExecutionAndTraceGenerationResult, VirtualMachine},
 };
 use tracing::info_span;
 
 use crate::{
     config::benchmark_data::{BenchmarkSetup, BACKEND_TIMING_FILTERS, BACKEND_TIMING_HEADERS},
     utils::tracing::{clear_tracing_log, extract_timing_data_from_log, setup_benchmark_tracing},
-    workflow::metrics::{BenchmarkMetrics, VmCustomMetrics},
+    workflow::metrics::BenchmarkMetrics,
     TMP_RESULT_MD, TMP_TRACING_LOG,
 };
 
@@ -111,7 +110,7 @@ pub fn run_recursive_test_benchmark(
         .collect();
 
     // Build verification program in eDSL.
-    let advice = new_from_multi_vk(&vk);
+    let advice = new_from_inner_multi_vk(&vk);
 
     let program = VerifierProgram::build(rec_raps, advice, &engine.fri_params);
 
@@ -139,24 +138,21 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         ..Default::default()
     };
 
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(vm_config, program, input_stream);
+    let mut vm = VirtualMachine::<1, WORD_SIZE, _>::new(vm_config, program, input_stream);
     vm.enable_metrics_collection();
 
     let vm_execute_span = info_span!("Benchmark vm execute").entered();
-    let ExecutionResult {
+    let ExecutionAndTraceGenerationResult {
         max_log_degree,
         nonempty_chips: chips,
         nonempty_traces: traces,
         nonempty_pis: public_values,
         metrics: mut vm_metrics,
-        mut opcode_counts,
-        mut dsl_counts,
-        mut opcode_trace_cells,
         ..
-    } = vm.execute().unwrap();
+    } = vm.execute_and_generate_traces().unwrap();
     vm_execute_span.exit();
 
-    let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
+    let chips = VirtualMachine::<1, WORD_SIZE, _>::get_chips(&chips);
 
     let perm = default_perm();
     // blowup factor 8 for poseidon2 chip
@@ -219,29 +215,6 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     let calc_quotient_values_ms = timing_data[BACKEND_TIMING_FILTERS[2]];
     let total_prove_ms = timing_data["Benchmark prove: benchmark"];
     let vm_metrics = vm_metrics.pop().unwrap(); // only 1 segment
-    let opcode_counts = opcode_counts.pop().unwrap();
-    let dsl_counts = dsl_counts.pop().unwrap();
-    let opcode_trace_cells = opcode_trace_cells.pop().unwrap();
-
-    let vm_metrics = vm_metrics
-        .into_iter()
-        .map(|(k, v)| (k, v.to_string()))
-        .collect();
-
-    let opcode_counts: Vec<(String, usize)> = opcode_counts
-        .into_iter()
-        .sorted_by(|a, b| b.1.cmp(&a.1))
-        .collect();
-
-    let dsl_counts: Vec<(String, usize)> = dsl_counts
-        .into_iter()
-        .sorted_by(|a, b| b.1.cmp(&a.1))
-        .collect();
-
-    let opcode_trace_cells: Vec<(String, usize)> = opcode_trace_cells
-        .into_iter()
-        .sorted_by(|a, b| b.1.cmp(&a.1))
-        .collect();
 
     let metrics = BenchmarkMetrics {
         name: benchmark_name.to_string(),
@@ -250,12 +223,7 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         perm_trace_gen_ms,
         calc_quotient_values_ms,
         trace: trace_metrics,
-        custom: VmCustomMetrics {
-            vm_metrics,
-            opcode_counts,
-            dsl_counts,
-            opcode_trace_cells,
-        },
+        custom: vm_metrics,
     };
 
     write!(File::create(TMP_RESULT_MD.as_str())?, "{}", metrics)?;

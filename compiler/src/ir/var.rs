@@ -1,4 +1,6 @@
-use super::{Builder, Config, Ptr, Usize};
+use p3_field::PrimeField;
+
+use super::{Builder, Config, Ptr, RVar};
 
 pub trait Variable<C: Config>: Clone {
     type Expression: From<Self>;
@@ -27,8 +29,8 @@ pub trait Variable<C: Config>: Clone {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct MemIndex<N> {
-    pub index: Usize<N>,
+pub struct MemIndex<N: PrimeField> {
+    pub index: RVar<N>,
     pub offset: usize,
     pub size: usize,
 }

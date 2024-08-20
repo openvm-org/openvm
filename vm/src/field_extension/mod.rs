@@ -148,7 +148,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn calculate(
         &mut self,
         start_timestamp: usize,
@@ -161,6 +160,8 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             op_c,
             d,
             e,
+            op_f: _f,
+            op_g: _g,
             debug: _debug,
         } = instruction;
         assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));

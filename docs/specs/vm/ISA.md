@@ -135,16 +135,18 @@ Listed below are the instructions offered in each configuration.
 
 This instruction set is always enabled.
 
-| Mnemonic            | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                            |
-| ------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| **LW** / **LOADW**  | `a, offset, c`                                | Set `word[a]_d <- word[proj(word[c]_d) + offset]_e`. Loads words from one address space to another. |
-| **SW** / **STOREW** | `a, offset, c`                                | Set `word[proj(word[c]_d) + offset]_e <- word[a]_d`.                                                |
-| **JAL**             | `a, offset, c`                                | Jump to address and link: set `word[a]_d <- emb(pc + INST_WIDTH)` and `pc <- pc + offset`.          |
-| **BEQ**             | `a, b, offset`                                | If `word[a]_d == word[b]_e`, then set `pc <- pc + offset`                                           |
-| **BNE**             | `a, b, offset`                                | If `word[a]_d != word[b]_e`, then set `pc <- pc + offset`                                           |
-| **TERMINATE**       | `_, _, _`                                     | Terminates execution.                                                                               |
-| **SHINTW**          | `a, b, _`                                     | Pops the next word off of the `hint_stream` into `word[proj(word[a]_d) + b]_e`.                     |
-| **PUBLISH**         | `a, b, _`                                     | Constrains the public value at index `proj(word[a]_d)` to be equal to `proj(word[b]_e)`.            |
+| Mnemonic              | <div style="width:140px">Operands (asm)</div> | Description / Pseudocode                                                                                                                                      |
+|-----------------------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **LW** / **LOADW**    | `a, offset, c`                                | Set `word[a]_d <- word[proj(word[c]_d) + offset]_e`. Loads a word from one address space to another.                                                          |
+| **SW** / **STOREW**   | `a, offset, c`                                | Set `word[proj(word[c]_d) + offset]_e <- word[a]_d`.                                                                                                          |
+| **LW2** / **LOADW2**  | `a, offset, c, size`                          | Set `word[a]_d <- word[proj(word[c]_d) + (proj[f]_g) * size + offset]_e`. Loads word a from one address space to another using a variable multiple of `size`. |
+| **SW2** / **STOREW2** | `a, offset, c, size`                          | Set `word[proj(word[c]_d) + (proj[f]_g) * size + offset]_e <- word[a]_d`.                                                                                     |
+| **JAL**               | `a, offset, c`                                | Jump to address and link: set `word[a]_d <- emb(pc + INST_WIDTH)` and `pc <- pc + offset`.                                                                    |
+| **BEQ**               | `a, b, offset`                                | If `word[a]_d == word[b]_e`, then set `pc <- pc + offset`                                                                                                     |
+| **BNE**               | `a, b, offset`                                | If `word[a]_d != word[b]_e`, then set `pc <- pc + offset`                                                                                                     |
+| **TERMINATE**         | `_, _, _`                                     | Terminates execution.                                                                                                                                         |
+| **SHINTW**            | `a, b, _`                                     | Pops the next word off of the `hint_stream` into `word[proj(word[a]_d) + b]_e`.                                                                               |
+| **PUBLISH**           | `a, b, _`                                     | Constrains the public value at index `proj(word[a]_d)` to be equal to `proj(word[b]_e)`.                                                                      |
 
 #### Notes about hints
 
@@ -164,11 +166,11 @@ This instruction set does native field operations. Some operations may be infeas
 This instruction set should only be enabled when `Word` type represents `[F; WORD_SIZE]` without bit size constraints. In this case the field operations are automatically vectorized.
 
 | Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                                                         |
-| -------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| **FADD** | `a, b, c`                                     | Set `word[a]_d <- word[b]_d + word[c]_e`. This opcode presumes `a,b` are in the same address space. |
-| **FSUB** | `a, b, c`                                     | Set `word[a]_d <- word[b]_d - word[c]_e`.                                                           |
-| **FMUL** | `a, b, c`                                     | Set `[a + i]_d <- [b + i]_d * [c + i]_e` for `i = 0..WORD_SIZE`.                                    |
-| **FDIV** | `a, b, c`                                     | Set `[a + i]_d <- [b + i]_d / [c + i]_e` for `i = 0..WORD_SIZE`.                                    |
+|----------|-----------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| **FADD** | `a, b, c`                                     | Set `word[a]_d <- word[b]_e + word[c]_f`. This opcode presumes `a,b` are in the same address space. |
+| **FSUB** | `a, b, c`                                     | Set `word[a]_d <- word[b]_e - word[c]_f`.                                                           |
+| **FMUL** | `a, b, c`                                     | Set `[a + i]_d <- [b + i]_e * [c + i]_f` for `i = 0..WORD_SIZE`.                                    |
+| **FDIV** | `a, b, c`                                     | Set `[a + i]_d <- [b + i]_e / [c + i]_f` for `i = 0..WORD_SIZE`.                                    |
 
 ### Extension field arithmetic
 
@@ -211,6 +213,76 @@ Let $b_0 = a_0^2 - 11(2a_1a_3 - a_2^2)$ and $b_2 = (2a_0a_2 - a_1^2 - 11a_3^2)$,
 $$bb' = (b_0 + b_2x^2)(b_0 - b_2x^2) = b_0^2 - 11b_2^2,$$
 
 which is an element of the original field which we define as $c$. So, we may simply invert $c$ and we find $1/a = a'/b = a'b'/c = a'b'c^{-1}$. This will give the correct result except when $c^{-1}$ is undefined, which is when $a = 0$.
+
+### Unsigned 32-bit integer instructions
+
+The following are instructions on unsigned 32-bit integers. The instructions are chosen to be compatible with RV32I.
+When these instructions are enabled, the ISA must have `WORD_SIZE >= 4`.
+For operations besides CASTU, any VM word will be assumed to have the first `4` cells consisting of **bytes** and the remaining cells equal to zero. We convert from word to `u32` via
+
+<!--
+[jpw] I chose bytes instead of u16 here to go with RV32 memory cell alignment. This can be changed as an optimization if needed.
+-->
+
+```
+compose(w: Word) -> u32 {
+    return sum_{i=0}^3 w[i] * 2^{8i}
+}
+```
+
+and let `decompose: u32 -> Word` be the inverse operation.
+
+Immediates are handled as follows: `compose(word[a]_0) = a.as_canonical_u32()`. Note that RV32 immediates never exceed 20-bits, so any immediate bits inside a 31-bit field.
+
+<!--
+A note on CASTU below: support for casting arbitrary field elements can also be supported by doing a big int less than between the word and the byte decomposition of `p`, but this seemed unnecessary and complicates the constraints.
+-->
+
+| Mnemonic  | <div style="width:170px">Operands (asm)</div> | Description                                                                                                                                                                                                                                                                                            |
+| --------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **CASTU** | `a, b, _`                                     | Set `word[a]_d` to the unique word such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = proj(word[b]_e)` where `[a + i]_d < 2^8` for `i = 0..3` and `[a + 3]_d < 2^6`. This opcode enforces `proj(word[b]_e)` must be at most 30-bits. If `WORD_SIZE > 4` then all remaining cells in `word[a]_d` must be zero. |
+| **SLTU**  | `a, b, c`                                     | Set `word[a]_d <- compose(word[b]_d) < compose(word[c]_e) ? emb(1) : emb(0)`. The address space `d` is not allowed to be zero.                                                                                                                                                                         |
+
+### U256 Arithmetic and Logical Operations
+
+We name these opcodes `ADD`, etc, below for brevity but in the code they must distinguish between `ADD` for `u32` and `ADD` for `u256`.
+
+Since we work over a 31-bit field, we will represent `u256` as 16-bit limbs. Let `Word256 = [u16; 16]`. For notational purposes we let `w256[a]_d: Word256` denote the array of limbs `w256[a + i]_d` for i = 0..16`. Explicitly, the conversion between the limb representation and the actual unsigned integer is given by
+
+**Note:** we assume 16-bit limbs are the most efficient for cell-saving, but this can be changed if needed.
+
+```
+compose(w: Word256) -> u256 {
+    return sum_{i=0}^15 w[i] * 2^{16i}
+}
+```
+
+(in other words, little-endian).
+
+and let `decompose: u256 -> Word256` be the inverse operation.
+
+To save some notation, we will let `u256[a]_d := compose(w256[a]_d)` below.
+The address spaces `d, e` are not allowed to be zero in any instructions below unless otherwise specified.
+
+#### Arithmetic Operations
+
+| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                                                           |
+| -------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| **ADD**  | `a, b, c`                                     | Set `w256[a]_d <- decompose(u256[b]_d + u256[c]_e)` where addition is mod `2^256`.                    |
+| **MUL**  | `a, b, c`                                     | Set `w256[a]_d <- decompose(u256[b]_d * u256[c]_e)` where multiplication is mod `2^256`.              |
+| **SUB**  | `a, b, c`                                     | Set `w256[a]_d <- decompose(u256[b]_d - u256[c]_e)` where subtraction is mod `2^256` with wraparound. |
+
+<!--
+We don't need this yet:
+| **DIV** | `a, b, c` | Set `w256[a]_d <- decompose(u256[b]_d // u256[c]_e)` where subtraction is mod `2^256` with wraparound. |
+-->
+
+#### Comparison Operations
+
+| Mnemonic | <div style="width:170px">Operands (asm)</div> | Description                                                  |
+| -------- | --------------------------------------------- | ------------------------------------------------------------ |
+| **LT**   | `a, b, c`                                     | Set `word[a]_d <- u256[b]_d < u256[c]_e ? emb(1) : emb(0)`.  |
+| **EQ**   | `a, b, c`                                     | Set `word[a]_d <- u256[b]_d == u256[c]_e ? emb(1) : emb(0)`. |
 
 ### Hash function precompiles
 

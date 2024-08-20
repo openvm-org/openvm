@@ -19,6 +19,8 @@ pub struct VmConfig {
     pub field_extension_enabled: bool,
     pub compress_poseidon2_enabled: bool,
     pub perm_poseidon2_enabled: bool,
+    pub modular_multiplication_enabled: bool,
+    pub is_less_than_enabled: bool,
     pub memory_config: MemoryConfig,
     pub num_public_values: usize,
     pub max_segment_len: usize,
@@ -34,6 +36,8 @@ impl Default for VmConfig {
             field_extension_enabled: true,
             compress_poseidon2_enabled: true,
             perm_poseidon2_enabled: true,
+            modular_multiplication_enabled: false,
+            is_less_than_enabled: false,
             memory_config: MemoryConfig::new(29, 29, 29, 16),
             num_public_values: 0,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
@@ -50,6 +54,8 @@ impl VmConfig {
             compress_poseidon2_enabled: self.compress_poseidon2_enabled,
             perm_poseidon2_enabled: self.perm_poseidon2_enabled,
             num_public_values: self.num_public_values,
+            is_less_than_enabled: self.is_less_than_enabled,
+            modular_arithmetic_enabled: self.modular_multiplication_enabled,
         }
     }
 }

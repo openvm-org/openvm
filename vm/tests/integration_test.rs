@@ -11,8 +11,8 @@ use stark_vm::{
     cpu::{trace::Instruction, OpCode::*},
     program::Program,
     vm::{
-        config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN},
-        ExecutionResult, VirtualMachine,
+        config::{MemoryConfig, VmConfig, DEFAULT_MAX_SEGMENT_LEN},
+        ExecutionAndTraceGenerationResult, VirtualMachine,
     },
 };
 
@@ -50,12 +50,12 @@ fn air_test(
         witness_stream,
     );
 
-    let ExecutionResult {
+    let ExecutionAndTraceGenerationResult {
         nonempty_chips: chips,
         nonempty_traces: traces,
         nonempty_pis: pis,
         ..
-    } = vm.execute().unwrap();
+    } = vm.execute_and_generate_traces().unwrap();
     let chips = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::get_chips(&chips);
 
     run_simple_test(chips, traces, pis).expect("Verification failed");
@@ -85,13 +85,13 @@ fn air_test_with_poseidon2(
         vec![],
     );
 
-    let ExecutionResult {
+    let ExecutionAndTraceGenerationResult {
         max_log_degree,
         nonempty_chips: chips,
         nonempty_traces: traces,
         nonempty_pis: pis,
         ..
-    } = vm.execute().unwrap();
+    } = vm.execute_and_generate_traces().unwrap();
 
     let perm = random_perm();
     let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
@@ -105,6 +105,41 @@ fn air_test_with_poseidon2(
     engine
         .run_simple_test(chips, traces, pis)
         .expect("Verification failed");
+}
+
+#[cfg(test)]
+fn execution_test(
+    field_arithmetic_enabled: bool,
+    field_extension_enabled: bool,
+    program: Program<BabyBear>,
+    witness_stream: Vec<Vec<BabyBear>>,
+    fast_segmentation: bool,
+) {
+    let vm = VirtualMachine::<1, WORD_SIZE, _>::new(
+        VmConfig {
+            field_arithmetic_enabled,
+            field_extension_enabled,
+            compress_poseidon2_enabled: false,
+            perm_poseidon2_enabled: false,
+            memory_config: MemoryConfig {
+                addr_space_max_bits: LIMB_BITS,
+                pointer_max_bits: LIMB_BITS,
+                clk_max_bits: LIMB_BITS,
+                decomp: DECOMP,
+            },
+            num_public_values: 4,
+            max_segment_len: if fast_segmentation {
+                7
+            } else {
+                DEFAULT_MAX_SEGMENT_LEN
+            },
+            ..Default::default()
+        },
+        program,
+        witness_stream,
+    );
+
+    vm.execute().unwrap();
 }
 
 #[test]
@@ -124,7 +159,7 @@ fn test_vm_1() {
         // if word[0]_1 == 0 then pc += 3
         Instruction::from_isize(BEQ, 0, 0, 3, 1, 0),
         // word[0]_1 <- word[0]_1 - word[1]_0
-        Instruction::from_isize(FSUB, 0, 0, 1, 1, 0),
+        Instruction::large_from_isize(FSUB, 0, 0, 1, 1, 1, 0, 0),
         // word[2]_1 <- pc + 1, pc -= 2
         Instruction::from_isize(JAL, 2, -2, 0, 1, 0),
         // terminate
@@ -136,6 +171,7 @@ fn test_vm_1() {
         debug_infos: vec![None; 5],
     };
 
+    execution_test(true, false, program.clone(), vec![], true);
     air_test(true, false, program, vec![], true);
 }
 
@@ -187,10 +223,10 @@ fn test_vm_fibonacci_old() {
         Instruction::from_isize(STOREW, 0, 0, 0, 0, 2),
         Instruction::from_isize(STOREW, 1, 0, 1, 0, 2),
         Instruction::from_isize(BEQ, 2, 0, 7, 1, 1),
-        Instruction::from_isize(FADD, 2, 2, 3, 1, 1),
+        Instruction::large_from_isize(FADD, 2, 2, 3, 1, 1, 1, 0),
         Instruction::from_isize(LOADW, 4, -2, 2, 1, 2),
         Instruction::from_isize(LOADW, 5, -1, 2, 1, 2),
-        Instruction::from_isize(FADD, 6, 4, 5, 1, 1),
+        Instruction::large_from_isize(FADD, 6, 4, 5, 1, 1, 1, 0),
         Instruction::from_isize(STOREW, 6, 0, 2, 1, 2),
         Instruction::from_isize(JAL, 7, -6, 0, 1, 0),
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),
@@ -220,11 +256,11 @@ fn test_vm_fibonacci_old_cycle_tracker() {
         Instruction::debug(CT_END, "store"),
         Instruction::debug(CT_START, "total loop"),
         Instruction::from_isize(BEQ, 2, 0, 9, 1, 1), // Instruction::from_isize(BEQ, 2, 0, 7, 1, 1),
-        Instruction::from_isize(FADD, 2, 2, 3, 1, 1),
+        Instruction::large_from_isize(FADD, 2, 2, 3, 1, 1, 1, 0),
         Instruction::debug(CT_START, "inner loop"),
         Instruction::from_isize(LOADW, 4, -2, 2, 1, 2),
         Instruction::from_isize(LOADW, 5, -1, 2, 1, 2),
-        Instruction::from_isize(FADD, 6, 4, 5, 1, 1),
+        Instruction::large_from_isize(FADD, 6, 4, 5, 1, 1, 1, 0),
         Instruction::from_isize(STOREW, 6, 0, 2, 1, 2),
         Instruction::debug(CT_END, "inner loop"),
         Instruction::from_isize(JAL, 7, -8, 0, 1, 0), // Instruction::from_isize(JAL, 7, -6, 0, 1, 0),
@@ -285,21 +321,21 @@ fn test_vm_hint() {
 
     let instructions = vec![
         Instruction::from_isize(STOREW, 0, 0, 16, 0, 1),
-        Instruction::from_isize(FADD, 20, 16, 16777220, 1, 0),
-        Instruction::from_isize(FADD, 32, 20, 0, 1, 0),
-        Instruction::from_isize(FADD, 20, 20, 1, 1, 0),
+        Instruction::large_from_isize(FADD, 20, 16, 16777220, 1, 1, 0, 0),
+        Instruction::large_from_isize(FADD, 32, 20, 0, 1, 1, 0, 0),
+        Instruction::large_from_isize(FADD, 20, 20, 1, 1, 1, 0, 0),
         Instruction::from_isize(HINT_INPUT, 0, 0, 0, 1, 2),
         Instruction::from_isize(SHINTW, 32, 0, 0, 1, 2),
         Instruction::from_isize(LOADW, 38, 0, 32, 1, 2),
-        Instruction::from_isize(FADD, 44, 20, 0, 1, 0),
+        Instruction::large_from_isize(FADD, 44, 20, 0, 1, 1, 0, 0),
         Instruction::from_isize(FMUL, 24, 38, 1, 1, 0),
-        Instruction::from_isize(FADD, 20, 20, 24, 1, 1),
-        Instruction::from_isize(FADD, 50, 16, 0, 1, 0),
+        Instruction::large_from_isize(FADD, 20, 20, 24, 1, 1, 1, 0),
+        Instruction::large_from_isize(FADD, 50, 16, 0, 1, 1, 0, 0),
         Instruction::from_isize(JAL, 24, 6, 0, 1, 0),
         Instruction::from_isize(FMUL, 0, 50, 1, 1, 0),
-        Instruction::from_isize(FADD, 0, 44, 0, 1, 1),
+        Instruction::large_from_isize(FADD, 0, 44, 0, 1, 1, 1, 0),
         Instruction::from_isize(SHINTW, 0, 0, 0, 1, 2),
-        Instruction::from_isize(FADD, 50, 50, 1, 1, 0),
+        Instruction::large_from_isize(FADD, 50, 50, 1, 1, 1, 0, 0),
         Instruction::from_isize(BNE, 50, 38, 2013265917, 1, 1),
         Instruction::from_isize(BNE, 50, 38, 2013265916, 1, 1),
         Instruction::from_isize(TERMINATE, 0, 0, 0, 0, 0),

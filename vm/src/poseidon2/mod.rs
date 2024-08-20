@@ -90,6 +90,8 @@ impl<const WIDTH: usize, const WORD_SIZE: usize, F: PrimeField32>
             op_c,
             d,
             e,
+            op_f: _f,
+            op_g: _g,
             debug: _debug,
         } = instruction;
         Poseidon2VmIoCols::<F> {
@@ -172,6 +174,8 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
             op_c,
             d,
             e,
+            op_f: _f,
+            op_g: _g,
             debug: _debug,
         } = instruction.clone();
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);

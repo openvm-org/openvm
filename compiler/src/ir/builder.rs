@@ -4,8 +4,8 @@ use backtrace::Backtrace;
 use p3_field::AbstractField;
 
 use super::{
-    Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, SymbolicExt,
-    SymbolicFelt, SymbolicUsize, SymbolicVar, Usize, Var, Variable,
+    Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, RVar, SymbolicExt,
+    SymbolicFelt, SymbolicVar, Usize, Var, Variable,
 };
 
 /// TracedVec is a Vec wrapper that records a trace whenever an element is pushed. When extending
@@ -87,11 +87,24 @@ impl<T> IntoIterator for TracedVec<T> {
     }
 }
 
+#[derive(Debug)]
+pub struct BreakLoop;
+impl std::fmt::Display for BreakLoop {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Break Loop")
+    }
+}
+impl std::error::Error for BreakLoop {}
+
 #[derive(Debug, Copy, Clone, Default)]
 pub struct BuilderFlags {
     pub(crate) debug: bool,
-    /// If true, the loop with constant start and end will be unrolled.
-    pub(crate) unroll_loop: bool,
+    /// If true, `builder.break_loop` will take control flow instead of pushing an instruction.
+    pub(crate) static_loop: bool,
+    /// If true, panic when `builder.break_loop` is called.
+    pub(crate) disable_break: bool,
+    /// If true, branching/looping/heap memory is disabled.
+    pub static_only: bool,
 }
 
 /// A builder for the DSL.
@@ -105,8 +118,8 @@ pub struct Builder<C: Config> {
     pub(crate) witness_var_count: u32,
     pub(crate) witness_felt_count: u32,
     pub(crate) witness_ext_count: u32,
-    pub(crate) flags: BuilderFlags,
-    pub(crate) is_sub_builder: bool,
+    pub flags: BuilderFlags,
+    pub is_sub_builder: bool,
 }
 
 impl<C: Config> Builder<C> {
@@ -130,10 +143,9 @@ impl<C: Config> Builder<C> {
         }
     }
 
-    /// Enable `unroll_loop` flag for the builder.
-    pub fn unroll_loop(mut self, enable: bool) -> Self {
-        self.flags.unroll_loop = enable;
-        self
+    /// Set whether all loops must be static and unrolled
+    pub fn set_static_loops(&mut self, static_loop: bool) {
+        self.flags.static_loop = static_loop;
     }
 
     /// Pushes an operation to the builder.
@@ -156,13 +168,26 @@ impl<C: Config> Builder<C> {
         V::eval(self, expr)
     }
 
+    /// Evaluates an expression and returns a right value.
+    pub fn eval_expr(&mut self, expr: impl Into<SymbolicVar<C::N>>) -> RVar<C::N> {
+        let expr = expr.into();
+        match expr {
+            SymbolicVar::Const(c, _) => RVar::Const(c),
+            SymbolicVar::Val(val, _) => RVar::Val(val),
+            _ => {
+                let ret: Var<_> = self.eval(expr);
+                RVar::Val(ret)
+            }
+        }
+    }
+
     /// Evaluates a constant expression and returns a variable.
     pub fn constant<V: FromConstant<C>>(&mut self, value: V::Constant) -> V {
         V::constant(value, self)
     }
 
     /// Assigns an expression to a variable.
-    pub fn assign<V: Variable<C>, E: Into<V::Expression>>(&mut self, dst: V, expr: E) {
+    pub fn assign<V: Variable<C>, E: Into<V::Expression>>(&mut self, dst: &V, expr: E) {
         dst.assign(expr.into(), self);
     }
 
@@ -220,27 +245,6 @@ impl<C: Config> Builder<C> {
         self.assert_ne::<Felt<C::F>>(lhs, rhs);
     }
 
-    /// Assert that two usizes are equal.
-    pub fn assert_usize_eq<
-        LhsExpr: Into<SymbolicUsize<C::N>>,
-        RhsExpr: Into<SymbolicUsize<C::N>>,
-    >(
-        &mut self,
-        lhs: LhsExpr,
-        rhs: RhsExpr,
-    ) {
-        self.assert_eq::<Usize<C::N>>(lhs, rhs);
-    }
-
-    /// Assert that two usizes are not equal.
-    pub fn assert_usize_ne(
-        &mut self,
-        lhs: impl Into<SymbolicUsize<C::N>>,
-        rhs: impl Into<SymbolicUsize<C::N>>,
-    ) {
-        self.assert_ne::<Usize<C::N>>(lhs, rhs);
-    }
-
     /// Assert that two exts are equal.
     pub fn assert_ext_eq<
         LhsExpr: Into<SymbolicExt<C::F, C::EF>>,
@@ -265,9 +269,29 @@ impl<C: Config> Builder<C> {
         self.assert_ne::<Ext<C::F, C::EF>>(lhs, rhs);
     }
 
-    pub fn lt(&mut self, lhs: Var<C::N>, rhs: Var<C::N>) -> Var<C::N> {
+    /// Assert that two arrays are equal.
+    pub fn assert_var_array_eq(&mut self, lhs: &Array<C, Var<C::N>>, rhs: &Array<C, Var<C::N>>) {
+        self.assert_var_eq(lhs.len(), rhs.len());
+        self.range(0, lhs.len()).for_each(|i, builder| {
+            let l = builder.get(lhs, i);
+            let r = builder.get(rhs, i);
+            builder.assert_var_eq(l, r);
+        });
+    }
+
+    /// Compares two variables.
+    pub fn lt<LhsExpr: Into<SymbolicVar<C::N>>, RhsExpr: Into<SymbolicVar<C::N>>>(
+        &mut self,
+        lhs: LhsExpr,
+        rhs: RhsExpr,
+    ) -> Var<C::N> {
+        let lhs = lhs.into();
+        let rhs = rhs.into();
+
         let result = self.uninit();
-        self.operations.push(DslIr::LessThan(result, lhs, rhs));
+        let lhs = self.eval(lhs);
+        let rhs = self.eval(rhs);
+        self.operations.push(DslIr::LessThanV(result, lhs, rhs));
         result
     }
 
@@ -302,20 +326,42 @@ impl<C: Config> Builder<C> {
     /// Evaluate a block of operations over a range from start to end.
     pub fn range(
         &mut self,
-        start: impl Into<Usize<C::N>>,
-        end: impl Into<Usize<C::N>>,
+        start: impl Into<RVar<C::N>>,
+        end: impl Into<RVar<C::N>>,
     ) -> RangeBuilder<C> {
+        let start = start.into();
+        let end = end.into();
         RangeBuilder {
-            start: start.into(),
-            end: end.into(),
+            start,
+            end,
             builder: self,
             step_size: 1,
         }
     }
 
+    /// Evaluate a block of operations repeatedly (until a break).
+    pub fn do_loop(&mut self, mut f: impl FnMut(&mut Builder<C>) -> Result<(), BreakLoop>) {
+        let mut loop_body_builder =
+            Builder::<C>::new_sub_builder(self.stack_ptr, self.nb_public_values, self.flags);
+
+        f(&mut loop_body_builder).expect("should not be break issues in dynamic loop");
+
+        let loop_instructions = loop_body_builder.operations;
+
+        let op = DslIr::Loop(loop_instructions);
+        self.operations.push(op);
+    }
+
     /// Break out of a loop.
-    pub fn break_loop(&mut self) {
+    pub fn break_loop(&mut self) -> Result<(), BreakLoop> {
+        if self.flags.disable_break {
+            panic!("BreakLoop was called but it was disabled")
+        }
+        if self.flags.static_loop {
+            return Err(BreakLoop);
+        }
         self.operations.push(DslIr::Break);
+        Ok(())
     }
 
     pub fn print_debug(&mut self, val: usize) {
@@ -340,17 +386,17 @@ impl<C: Config> Builder<C> {
 
     pub fn hint_var(&mut self) -> Var<C::N> {
         let arr = self.hint_vars();
-        self.get(&arr, 0)
+        self.get(&arr, RVar::zero())
     }
 
     pub fn hint_felt(&mut self) -> Felt<C::F> {
         let arr = self.hint_felts();
-        self.get(&arr, 0)
+        self.get(&arr, RVar::zero())
     }
 
     pub fn hint_ext(&mut self) -> Ext<C::F, C::EF> {
         let arr = self.hint_exts();
-        self.get(&arr, 0)
+        self.get(&arr, RVar::zero())
     }
 
     /// Hint a vector of variables.
@@ -370,27 +416,24 @@ impl<C: Config> Builder<C> {
         assert_eq!(V::size_of(), 1);
 
         // Allocate space for the length variable. We assume that mem[ptr..] is empty.
-        let ptr = self.alloc(Usize::Const(1), 1);
+        let ptr = self.alloc(RVar::one(), 1);
 
         // Prepare length + data for hinting.
         self.operations.push(DslIr::HintInputVec());
 
         // Write and retrieve length hint.
         let index = MemIndex {
-            index: Usize::Const(0),
+            index: RVar::zero(),
             offset: 0,
             size: 1,
         };
+        // MemIndex.index share the same pointer, but it doesn't matter.
         self.operations.push(DslIr::StoreHintWord(ptr, index));
 
         let vlen: Var<C::N> = self.uninit();
         self.load(vlen, ptr, index);
 
         let arr = self.dyn_array(vlen);
-        let ptr = match arr {
-            Array::Dyn(ptr, _) => ptr,
-            Array::Fixed(_) => unreachable!(),
-        };
 
         // Write the content hints directly into the array memory.
         self.range(0, vlen).for_each(|i, builder| {
@@ -399,7 +442,9 @@ impl<C: Config> Builder<C> {
                 offset: 0,
                 size: 1,
             };
-            builder.operations.push(DslIr::StoreHintWord(ptr, index));
+            builder
+                .operations
+                .push(DslIr::StoreHintWord(arr.ptr(), index));
         });
 
         arr
@@ -414,7 +459,7 @@ impl<C: Config> Builder<C> {
         let flattened = self.hint_felts();
 
         let size = <Ext<C::F, C::EF> as MemVariable<C>>::size_of();
-        self.assert_usize_eq(flattened.len(), len * C::N::from_canonical_usize(size));
+        self.assert_eq::<Usize<_>>(flattened.len(), len * C::N::from_canonical_usize(size));
 
         // Simply recast memory as Array<Ext>.
         match flattened {
@@ -465,16 +510,11 @@ impl<C: Config> Builder<C> {
     }
 
     /// Materializes a usize into a variable.
-    pub fn materialize(&mut self, num: Usize<C::N>) -> Var<C::N> {
+    pub fn materialize(&mut self, num: RVar<C::N>) -> Var<C::N> {
         match num {
-            Usize::Const(num) => self.eval(C::N::from_canonical_usize(num)),
-            Usize::Var(num) => num,
+            RVar::Const(num) => self.eval(num),
+            RVar::Val(num) => num,
         }
-    }
-
-    /// Register a felt as public value.  This is append to the proof's public values buffer.
-    pub fn register_public_value(&mut self, val: Felt<C::F>) {
-        self.operations.push(DslIr::RegisterPublicValue(val));
     }
 
     fn get_nb_public_values(&mut self) -> Var<C::N> {
@@ -490,7 +530,7 @@ impl<C: Config> Builder<C> {
 
     fn commit_public_value_and_increment(&mut self, val: Felt<C::F>, nb_public_values: Var<C::N>) {
         self.operations.push(DslIr::Publish(val, nb_public_values));
-        self.assign(nb_public_values, nb_public_values + C::N::one());
+        self.assign(&nb_public_values, nb_public_values + C::N::one());
     }
 
     /// Register and commits a felt as public value.  This value will be constrained when verified.
@@ -552,9 +592,40 @@ enum IfCondition<N> {
 }
 
 impl<'a, C: Config> IfBuilder<'a, C> {
-    pub fn then(mut self, mut f: impl FnMut(&mut Builder<C>)) {
+    pub fn then(&mut self, mut f: impl FnMut(&mut Builder<C>)) {
+        self.then_may_break(|builder| {
+            f(builder);
+            Ok(())
+        })
+        .expect("Use then_may_break if you want to break inside a then closure");
+    }
+
+    pub fn then_may_break(
+        &mut self,
+        mut f: impl FnMut(&mut Builder<C>) -> Result<(), BreakLoop>,
+    ) -> Result<(), BreakLoop> {
         // Get the condition reduced from the expressions for lhs and rhs.
         let condition = self.condition();
+        // Early return for const branches.
+        match condition {
+            IfCondition::EqConst(lhs, rhs) => {
+                if lhs == rhs {
+                    return f(self.builder);
+                }
+                return Ok(());
+            }
+            IfCondition::NeConst(lhs, rhs) => {
+                if lhs != rhs {
+                    return f(self.builder);
+                }
+                return Ok(());
+            }
+            _ => (),
+        }
+        assert!(
+            !self.builder.flags.static_only,
+            "Cannot use dynamic branch in static mode"
+        );
 
         // Execute the `then` block and collect the instructions.
         let mut f_builder = Builder::<C>::new_sub_builder(
@@ -562,21 +633,11 @@ impl<'a, C: Config> IfBuilder<'a, C> {
             self.builder.nb_public_values,
             self.builder.flags,
         );
-        f(&mut f_builder);
+        f(&mut f_builder).expect("BreakLoop should never be returned in a dynamic if");
         let then_instructions = f_builder.operations;
 
         // Dispatch instructions to the correct conditional block.
         match condition {
-            IfCondition::EqConst(lhs, rhs) => {
-                if lhs == rhs {
-                    self.builder.operations.extend(then_instructions);
-                }
-            }
-            IfCondition::NeConst(lhs, rhs) => {
-                if lhs != rhs {
-                    self.builder.operations.extend(then_instructions);
-                }
-            }
             IfCondition::Eq(lhs, rhs) => {
                 let op = DslIr::IfEq(lhs, rhs, then_instructions, Default::default());
                 self.builder.operations.push(op);
@@ -593,16 +654,56 @@ impl<'a, C: Config> IfBuilder<'a, C> {
                 let op = DslIr::IfNeI(lhs, rhs, then_instructions, Default::default());
                 self.builder.operations.push(op);
             }
+            _ => unreachable!("Const if should have returned early"),
         }
+        Ok(())
     }
 
     pub fn then_or_else(
-        mut self,
+        &mut self,
         mut then_f: impl FnMut(&mut Builder<C>),
         mut else_f: impl FnMut(&mut Builder<C>),
     ) {
+        self.then_or_else_may_break(
+            |builder| {
+                then_f(builder);
+                Ok(())
+            },
+            |builder| {
+                else_f(builder);
+                Ok(())
+            },
+        )
+        .expect("Use then_may_break if you want to break inside the then closure");
+    }
+
+    pub fn then_or_else_may_break(
+        &mut self,
+        mut then_f: impl FnMut(&mut Builder<C>) -> Result<(), BreakLoop>,
+        mut else_f: impl FnMut(&mut Builder<C>) -> Result<(), BreakLoop>,
+    ) -> Result<(), BreakLoop> {
         // Get the condition reduced from the expressions for lhs and rhs.
         let condition = self.condition();
+        // Early return for const branches.
+        match condition {
+            IfCondition::EqConst(lhs, rhs) => {
+                if lhs == rhs {
+                    return then_f(self.builder);
+                }
+                return else_f(self.builder);
+            }
+            IfCondition::NeConst(lhs, rhs) => {
+                if lhs != rhs {
+                    return then_f(self.builder);
+                }
+                return else_f(self.builder);
+            }
+            _ => (),
+        }
+        assert!(
+            !self.builder.flags.static_only,
+            "Cannot use dynamic branch in static mode"
+        );
         let mut then_builder = Builder::<C>::new_sub_builder(
             self.builder.stack_ptr,
             self.builder.nb_public_values,
@@ -610,7 +711,7 @@ impl<'a, C: Config> IfBuilder<'a, C> {
         );
 
         // Execute the `then` and `else_then` blocks and collect the instructions.
-        then_f(&mut then_builder);
+        then_f(&mut then_builder).expect("BreakLoop should never be returned in a dynamic if");
         let then_instructions = then_builder.operations;
 
         let mut else_builder = Builder::<C>::new_sub_builder(
@@ -618,25 +719,11 @@ impl<'a, C: Config> IfBuilder<'a, C> {
             self.builder.nb_public_values,
             self.builder.flags,
         );
-        else_f(&mut else_builder);
+        else_f(&mut else_builder).expect("BreakLoop should never be returned in a dynamic if");
         let else_instructions = else_builder.operations;
 
         // Dispatch instructions to the correct conditional block.
         match condition {
-            IfCondition::EqConst(lhs, rhs) => {
-                if lhs == rhs {
-                    self.builder.operations.extend(then_instructions);
-                } else {
-                    self.builder.operations.extend(else_instructions);
-                }
-            }
-            IfCondition::NeConst(lhs, rhs) => {
-                if lhs != rhs {
-                    self.builder.operations.extend(then_instructions);
-                } else {
-                    self.builder.operations.extend(else_instructions);
-                }
-            }
             IfCondition::Eq(lhs, rhs) => {
                 let op = DslIr::IfEq(lhs, rhs, then_instructions, else_instructions);
                 self.builder.operations.push(op);
@@ -653,7 +740,9 @@ impl<'a, C: Config> IfBuilder<'a, C> {
                 let op = DslIr::IfNeI(lhs, rhs, then_instructions, else_instructions);
                 self.builder.operations.push(op);
             }
+            _ => unreachable!("Const if should have returned early"),
         }
+        Ok(())
     }
 
     fn condition(&mut self) -> IfCondition<C::N> {
@@ -730,28 +819,70 @@ impl<'a, C: Config> IfBuilder<'a, C> {
 
 /// A builder for the DSL that handles for loops.
 pub struct RangeBuilder<'a, C: Config> {
-    start: Usize<C::N>,
-    end: Usize<C::N>,
+    start: RVar<C::N>,
+    end: RVar<C::N>,
     step_size: usize,
     builder: &'a mut Builder<C>,
 }
 
 impl<'a, C: Config> RangeBuilder<'a, C> {
+    pub const fn may_break(self) -> RangeBuilderWithBreaks<'a, C> {
+        RangeBuilderWithBreaks(self)
+    }
+
     pub const fn step_by(mut self, step_size: usize) -> Self {
         self.step_size = step_size;
         self
     }
 
-    pub fn for_each(self, mut f: impl FnMut(Usize<C::N>, &mut Builder<C>)) {
-        if self.builder.flags.unroll_loop {
-            if let (Usize::Const(start), Usize::Const(end)) = (self.start, self.end) {
-                for i in (start..end).step_by(self.step_size) {
-                    f(Usize::Const(i), self.builder)
-                }
-                return;
+    /// No breaks allowed.
+    pub fn for_each(&mut self, mut f: impl FnMut(RVar<C::N>, &mut Builder<C>)) {
+        // If constant loop, unroll it.
+        if self.start.is_const() && self.end.is_const() {
+            self.for_each_unrolled(|var, builder| {
+                f(var, builder);
+                Ok(())
+            });
+            return;
+        }
+        // Otherwise, dynamic
+        let old_disable_break = self.builder.flags.disable_break;
+        self.builder.flags.disable_break = true;
+        self.for_each_dynamic(|var, builder| {
+            f(var, builder);
+            Ok(())
+        });
+        self.builder.flags.disable_break = old_disable_break;
+    }
+
+    /// Compiler unrolls for loops, and currently can only handle breaks
+    /// based on compile-time branching conditions.
+    fn for_each_unrolled(
+        &mut self,
+        mut f: impl FnMut(RVar<C::N>, &mut Builder<C>) -> Result<(), BreakLoop>,
+    ) {
+        let old_static_loop = self.builder.flags.static_loop;
+        self.builder.flags.static_loop = true;
+
+        let start = self.start.value();
+        let end = self.end.value();
+        for i in (start..end).step_by(self.step_size) {
+            if f(i.into(), self.builder).is_err() {
+                break;
             }
         }
+        self.builder.flags.static_loop = old_static_loop;
+    }
 
+    /// Internal function
+    fn for_each_dynamic(
+        &mut self,
+        mut f: impl FnMut(RVar<C::N>, &mut Builder<C>) -> Result<(), BreakLoop>,
+    ) {
+        assert!(
+            !self.builder.flags.static_only,
+            "Cannot use dynamic loop in static mode"
+        );
         let step_size = C::N::from_canonical_usize(self.step_size);
         let loop_variable: Var<C::N> = self.builder.uninit();
         let mut loop_body_builder = Builder::<C>::new_sub_builder(
@@ -760,7 +891,8 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
             self.builder.flags,
         );
 
-        f(Usize::Var(loop_variable), &mut loop_body_builder);
+        f(loop_variable.into(), &mut loop_body_builder)
+            .expect("BreakLoop should never be returned in a dynamic loop");
 
         let loop_instructions = loop_body_builder.operations;
 
@@ -772,5 +904,33 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
             loop_instructions,
         );
         self.builder.operations.push(op);
+    }
+}
+
+/// A builder for the DSL that handles for loops with breaks.
+pub struct RangeBuilderWithBreaks<'a, C: Config>(RangeBuilder<'a, C>);
+
+impl<'a, C: Config> RangeBuilderWithBreaks<'a, C> {
+    pub const fn step_by(mut self, step_size: usize) -> Self {
+        self.0 = self.0.step_by(step_size);
+        self
+    }
+
+    /// Does not unroll for loops unless builder flag `static_loop` is set.
+    pub fn for_each(
+        &mut self,
+        f: impl FnMut(RVar<C::N>, &mut Builder<C>) -> Result<(), BreakLoop>,
+    ) {
+        let old_disable_break = self.0.builder.flags.disable_break;
+        self.0.builder.flags.disable_break = false;
+        // To handle breaks based on dynamic branching conditions, we do not
+        // unroll constant loops unless the builder is in static_loop mode.
+        if self.0.start.is_const() && self.0.end.is_const() && self.0.builder.flags.static_loop {
+            self.0.for_each_unrolled(f);
+        } else {
+            // Dynamic
+            self.0.for_each_dynamic(f);
+        }
+        self.0.builder.flags.disable_break = old_disable_break;
     }
 }

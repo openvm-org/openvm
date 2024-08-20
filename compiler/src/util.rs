@@ -7,22 +7,47 @@ use afs_test_utils::{
     engine::StarkEngine,
 };
 use p3_baby_bear::BabyBear;
-use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
+use p3_field::{ExtensionField, PrimeField, PrimeField32, TwoAdicField};
 use stark_vm::{
     cpu::trace::Instruction,
     program::Program,
-    vm::{config::VmConfig, ExecutionResult, VirtualMachine},
+    vm::{config::VmConfig, ExecutionAndTraceGenerationResult, VirtualMachine},
 };
 
 use crate::{asm::AsmBuilder, conversion::CompilerOptions};
+
+pub fn execute_program_with_config<const WORD_SIZE: usize>(
+    config: VmConfig,
+    program: Program<BabyBear>,
+    input_stream: Vec<Vec<BabyBear>>,
+) {
+    let vm = VirtualMachine::<1, WORD_SIZE, _>::new(config, program, input_stream);
+    vm.execute().unwrap();
+}
+
+/// Converts a prime field element to a usize.
+pub fn prime_field_to_usize<F: PrimeField>(x: F) -> usize {
+    let bu = x.as_canonical_biguint();
+    let digits = bu.to_u64_digits();
+    if digits.is_empty() {
+        return 0;
+    }
+    let ret = digits[0] as usize;
+    for i in 1..digits.len() {
+        assert_eq!(digits[i], 0, "Prime field element too large");
+    }
+    ret
+}
 
 pub fn execute_program<const WORD_SIZE: usize>(
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
 ) {
-    let vm = VirtualMachine::<WORD_SIZE, _>::new(
+    let vm = VirtualMachine::<1, WORD_SIZE, _>::new(
         VmConfig {
             num_public_values: 4,
+            max_segment_len: (1 << 25) - 100,
+            modular_multiplication_enabled: true,
             ..Default::default()
         },
         program,
@@ -31,12 +56,28 @@ pub fn execute_program<const WORD_SIZE: usize>(
     vm.execute().unwrap();
 }
 
+pub fn execute_program_and_generate_traces<const WORD_SIZE: usize>(
+    program: Program<BabyBear>,
+    input_stream: Vec<Vec<BabyBear>>,
+) {
+    let vm = VirtualMachine::<1, WORD_SIZE, _>::new(
+        VmConfig {
+            num_public_values: 4,
+            max_segment_len: (1 << 25) - 100,
+            ..Default::default()
+        },
+        program,
+        input_stream,
+    );
+    vm.execute_and_generate_traces().unwrap();
+}
+
 pub fn execute_program_with_public_values<const WORD_SIZE: usize>(
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
     public_values: &[(usize, BabyBear)],
 ) {
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
+    let mut vm = VirtualMachine::<1, WORD_SIZE, _>::new(
         VmConfig {
             num_public_values: 4,
             ..Default::default()
@@ -47,7 +88,7 @@ pub fn execute_program_with_public_values<const WORD_SIZE: usize>(
     for &(index, value) in public_values {
         vm.segments[0].public_values[index] = Some(value);
     }
-    vm.execute().unwrap();
+    vm.execute_and_generate_traces().unwrap();
 }
 
 pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
@@ -59,11 +100,13 @@ pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
             op_c,
             d,
             e,
+            op_f,
+            op_g,
             debug,
         } = instruction;
         println!(
-            "{:?} {} {} {} {} {} {}",
-            opcode, op_a, op_b, op_c, d, e, debug
+            "{:?} {} {} {} {} {} {} {} {}",
+            opcode, op_a, op_b, op_c, d, e, op_f, op_g, debug
         );
     }
 }
@@ -77,11 +120,13 @@ pub fn display_program_with_pc<F: PrimeField32>(program: &[Instruction<F>]) {
             op_c,
             d,
             e,
+            op_f,
+            op_g,
             debug,
         } = instruction;
         println!(
-            "{} | {:?} {} {} {} {} {} {}",
-            pc, opcode, op_a, op_b, op_c, d, e, debug
+            "{} | {:?} {} {} {} {} {} {} {} {}",
+            pc, opcode, op_a, op_b, op_c, d, e, op_f, op_g, debug
         );
     }
 }
@@ -94,6 +139,7 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
         enable_cycle_tracker: false,
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
+        field_less_than_enabled: false,
     });
     execute_and_prove_program::<WORD_SIZE>(program, input_stream)
 }
@@ -102,7 +148,7 @@ pub fn execute_and_prove_program<const WORD_SIZE: usize>(
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
 ) {
-    let vm = VirtualMachine::<WORD_SIZE, _>::new(
+    let vm = VirtualMachine::<1, WORD_SIZE, _>::new(
         VmConfig {
             num_public_values: 4,
             ..Default::default()
@@ -111,14 +157,14 @@ pub fn execute_and_prove_program<const WORD_SIZE: usize>(
         input_stream,
     );
 
-    let ExecutionResult {
+    let ExecutionAndTraceGenerationResult {
         max_log_degree,
         nonempty_chips: chips,
         nonempty_traces: traces,
         nonempty_pis: pis,
         ..
-    } = vm.execute().unwrap();
-    let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
+    } = vm.execute_and_generate_traces().unwrap();
+    let chips = VirtualMachine::<1, WORD_SIZE, _>::get_chips(&chips);
 
     let perm = random_perm();
     // blowup factor 8 for poseidon2 chip

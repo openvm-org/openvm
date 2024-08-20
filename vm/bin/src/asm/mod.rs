@@ -30,9 +30,9 @@ fn instruction_from_line<F: PrimeField64>(line: &str) -> Result<Option<Instructi
     if parts[0].starts_with('#') {
         return Ok(None);
     }
-    if parts.len() != 6 {
+    if parts.len() != 8 {
         return Err(Report::msg(
-            "Instruction should have opcode followed by 5 arguments",
+            "Instruction should have opcode followed by 7 arguments",
         ));
     }
     let opcode = parts[0]
@@ -46,7 +46,7 @@ fn instruction_from_line<F: PrimeField64>(line: &str) -> Result<Option<Instructi
         );
     }
 
-    Ok(Some(Instruction::from_isize(
-        opcode, ints[0], ints[1], ints[2], ints[3], ints[4],
+    Ok(Some(Instruction::large_from_isize(
+        opcode, ints[0], ints[1], ints[2], ints[3], ints[4], ints[5], ints[6],
     )))
 }

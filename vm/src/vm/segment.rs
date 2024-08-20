@@ -3,7 +3,10 @@ use std::{
     sync::Arc,
 };
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::{
+    modular_multiplication::bigint::air::ModularMultiplicationBigIntAir,
+    range_gate::RangeCheckerGateChip,
+};
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
     rap::AnyRap,
@@ -13,17 +16,23 @@ use p3_matrix::dense::DenseMatrix;
 use parking_lot::Mutex;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
-use super::{ChipType, VirtualMachineState, VmConfig, VmMetrics};
+use super::{ChipType, VirtualMachineState, VmConfig};
 use crate::{
-    cpu::{trace::ExecutionError, CpuChip, CpuOptions, POSEIDON2_BUS, RANGE_CHECKER_BUS},
+    cpu::{
+        trace::ExecutionError, CpuChip, CpuOptions, IS_LESS_THAN_BUS, POSEIDON2_BUS,
+        RANGE_CHECKER_BUS,
+    },
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
+    is_less_than::IsLessThanChip,
     memory::{
         manager::{dimensions::MemoryDimensions, MemoryManager},
         offline_checker::MemoryChip,
     },
+    modular_multiplication::ModularMultiplicationChip,
     poseidon2::Poseidon2Chip,
     program::{Program, ProgramChip},
+    vm::{cycle_tracker::CycleTracker, metrics::VmMetrics},
 };
 
 pub struct ExecutionSegment<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
@@ -36,16 +45,17 @@ pub struct ExecutionSegment<const NUM_WORDS: usize, const WORD_SIZE: usize, F: P
     pub field_extension_chip: FieldExtensionArithmeticChip<NUM_WORDS, WORD_SIZE, F>,
     pub range_checker: Arc<RangeCheckerGateChip>,
     pub poseidon2_chip: Poseidon2Chip<16, NUM_WORDS, WORD_SIZE, F>,
+    pub is_less_than_chip: IsLessThanChip<F>,
+    pub modular_multiplication_chip: ModularMultiplicationChip<F>,
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
-    pub has_generation_happened: bool,
+    pub has_execution_happened: bool,
     pub public_values: Vec<Option<F>>,
-    pub opcode_counts: BTreeMap<String, usize>,
-    pub dsl_counts: BTreeMap<String, usize>,
-    pub opcode_trace_cells: BTreeMap<String, usize>,
+
+    pub cycle_tracker: CycleTracker,
     /// Collected metrics for this segment alone.
     /// Only collected when `config.collect_metrics` is true.
-    pub(crate) collected_metrics: VmMetrics,
+    pub(crate) metrics: VmMetrics,
 }
 
 impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
@@ -88,14 +98,18 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             range_checker.clone(),
             POSEIDON2_BUS,
         );
-
-        let opcode_counts = BTreeMap::new();
-        let dsl_counts = BTreeMap::new();
-        let opcode_trace_cells = BTreeMap::new();
+        let modular_multiplication_chip =
+            ModularMultiplicationChip::new(ModularMultiplicationBigIntAir::default_for_30_bit());
+        let is_less_than_chip = IsLessThanChip::new(
+            IS_LESS_THAN_BUS,
+            30,
+            config.memory_config.decomp,
+            range_checker.clone(),
+        );
 
         Self {
             config,
-            has_generation_happened: false,
+            has_execution_happened: false,
             public_values: vec![None; config.num_public_values],
             cpu_chip,
             memory_manager,
@@ -105,12 +119,12 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             field_extension_chip,
             range_checker,
             poseidon2_chip,
+            modular_multiplication_chip,
+            is_less_than_chip,
             input_stream: state.input_stream,
             hint_stream: state.hint_stream,
-            opcode_counts,
-            dsl_counts,
-            opcode_trace_cells,
-            collected_metrics: Default::default(),
+            cycle_tracker: CycleTracker::new(),
+            metrics: Default::default(),
         }
     }
 
@@ -133,11 +147,15 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         max_height >= self.config.max_segment_len
     }
 
+    /// Stopping is triggered by `Self::should_segment`.
+    pub fn execute(&mut self) -> Result<(), ExecutionError> {
+        CpuChip::execute(self)
+    }
+
     /// Called by VM to generate traces for current segment. Includes empty traces.
-    ///
-    /// Execution is handled by CPU trace generation. Stopping is triggered by should_segment()
-    pub fn generate_traces(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
-        let cpu_trace = CpuChip::generate_trace(self)?;
+    /// Should only be called after `Self::execute`.
+    pub fn generate_traces(&mut self) -> Vec<DenseMatrix<F>> {
+        let cpu_trace = CpuChip::generate_trace(self);
         let mut result = vec![
             cpu_trace,
             self.program_chip.generate_trace(),
@@ -157,15 +175,19 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         if self.config.cpu_options().poseidon2_enabled() {
             result.push(self.poseidon2_chip.generate_trace());
         }
-        Ok(result)
+        if self.config.cpu_options().is_less_than_enabled {
+            result.push(self.is_less_than_chip.generate_trace());
+        }
+
+        result
     }
 
     /// Generate Merkle proof/memory diff traces, and publish public values
     ///
     /// For now, only publishes program counter public values
-    pub fn generate_commitments(&mut self) -> Result<Vec<DenseMatrix<F>>, ExecutionError> {
+    pub fn generate_commitments(&mut self) -> Vec<DenseMatrix<F>> {
         // self.cpu_chip.generate_pvs();
-        Ok(vec![])
+        vec![]
     }
 
     // TODO[osama]: revisit this
@@ -178,6 +200,9 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             result += 1;
         }
         if self.config.cpu_options().poseidon2_enabled() {
+            result += 1;
+        }
+        if self.config.cpu_options().is_less_than_enabled {
             result += 1;
         }
         result
@@ -219,11 +244,18 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         if self.config.cpu_options().poseidon2_enabled() {
             result.push(ChipType::Poseidon2);
         }
+        if self.config.cpu_options().is_less_than_enabled {
+            result.push(ChipType::IsLessThan);
+        }
         assert!(result.len() == self.get_num_chips());
         result
     }
 
-    pub fn metrics(&self) -> BTreeMap<String, usize> {
+    pub fn update_chip_metrics(&mut self) {
+        self.metrics.chip_metrics = self.chip_metrics();
+    }
+
+    pub fn chip_metrics(&self) -> BTreeMap<String, usize> {
         let mut metrics = BTreeMap::new();
         metrics.insert("cpu_cycles".to_string(), self.cpu_chip.rows.len());
         metrics.insert("cpu_timestamp".to_string(), self.cpu_chip.state.timestamp);
@@ -246,6 +278,10 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         metrics.insert(
             "poseidon2_chip_rows".to_string(),
             self.poseidon2_chip.rows.len(),
+        );
+        metrics.insert(
+            "is_less_than_ops".to_string(),
+            self.is_less_than_chip.rows.len(),
         );
         metrics
     }
@@ -274,6 +310,9 @@ where
     }
     if segment.config.cpu_options().poseidon2_enabled() {
         result.push(Box::new(segment.poseidon2_chip.air));
+    }
+    if segment.config.cpu_options().is_less_than_enabled {
+        result.push(Box::new(segment.is_less_than_chip.air));
     }
 
     assert!(result.len() == num_chips);

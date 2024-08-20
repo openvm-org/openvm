@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::{array::from_fn, borrow::Borrow};
 
 use afs_primitives::{
     is_equal_vec::{columns::IsEqualVecIoCols, IsEqualVecAir},
@@ -11,11 +11,31 @@ use p3_matrix::Matrix;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    max_accesses_per_instruction, CpuAir,
+    timestamp_delta, CpuOptions,
     OpCode::*,
     CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH,
 };
-use crate::memory::{offline_checker::bridge::MemoryBridge, MemoryAddress};
+use crate::memory::{
+    offline_checker::bridge::{MemoryBridge, NewMemoryOfflineChecker},
+    MemoryAddress,
+};
+
+#[derive(Clone)]
+// #[derive(Clone)]
+/// Air for the CPU. Carries no state and does not own execution.
+pub struct CpuAir<const WORD_SIZE: usize> {
+    pub options: CpuOptions,
+    pub memory_offline_checker: NewMemoryOfflineChecker,
+}
+
+impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
+    pub fn new(options: CpuOptions, clk_max_bits: usize, decomp: usize) -> Self {
+        Self {
+            options,
+            memory_offline_checker: NewMemoryOfflineChecker::new(clk_max_bits, decomp),
+        }
+    }
+}
 
 impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for CpuAir<WORD_SIZE> {
     fn width(&self) -> usize {
@@ -27,11 +47,12 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
     fn assert_compose<AB: AirBuilder>(
         &self,
         builder: &mut AB,
-        word: [AB::Var; WORD_SIZE],
+        word: [impl Into<AB::Expr>; WORD_SIZE],
         field_elem: AB::Expr,
     ) {
-        builder.assert_eq(word[0], field_elem);
-        for &cell in word.iter().take(WORD_SIZE).skip(1) {
+        let mut iter = word.into_iter();
+        builder.assert_eq(iter.next().unwrap(), field_elem);
+        for cell in iter.take(WORD_SIZE - 1) {
             builder.assert_zero(cell);
         }
     }
@@ -71,6 +92,8 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
             op_c: c,
             d,
             e,
+            op_f: f,
+            op_g: g,
         } = io;
         let CpuIoCols {
             timestamp: next_timestamp,
@@ -89,6 +112,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
 
         let read1 = &mem_ops[0];
         let read2 = &mem_ops[1];
+        let read3 = &mem_ops[2];
         let write = &mem_ops[CPU_MAX_READS_PER_CYCLE];
 
         // assert that the start pc is correct
@@ -112,9 +136,10 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         // keep track of when memory accesses should be enabled
         let mut read1_enabled_check = AB::Expr::zero();
         let mut read2_enabled_check = AB::Expr::zero();
+        let mut read3_enabled_check = AB::Expr::zero();
         let mut write_enabled_check = AB::Expr::zero();
 
-        // LOADW: d[a] <- e[d[c] + b]
+        // LOADW: d[a] <- e[d[c] + b + d[f] * g]
         let loadw_flag = operation_flags[&LOADW];
         read1_enabled_check = read1_enabled_check + loadw_flag;
         read2_enabled_check = read2_enabled_check + loadw_flag;
@@ -130,6 +155,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
 
         when_loadw.assert_eq(write.addr_space, d);
         when_loadw.assert_eq(write.pointer, a);
+
         for i in 0..WORD_SIZE {
             when_loadw.assert_eq(write.cell.data[i], read2.cell.data[i]);
         }
@@ -158,6 +184,66 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         }
 
         when_storew
+            .when_transition()
+            .assert_eq(next_pc, pc + inst_width);
+
+        // LOADW2: d[a] <- e[d[c] + b + mem[f] * g]
+        let loadw2_flag = operation_flags[&LOADW2];
+        read1_enabled_check = read1_enabled_check + loadw2_flag;
+        read2_enabled_check = read2_enabled_check + loadw2_flag;
+        read3_enabled_check = read3_enabled_check + loadw2_flag;
+        write_enabled_check = write_enabled_check + loadw2_flag;
+
+        let mut when_loadw2 = builder.when(loadw2_flag);
+
+        when_loadw2.assert_eq(read1.addr_space, d);
+        when_loadw2.assert_eq(read1.pointer, c);
+
+        when_loadw2.assert_eq(read2.addr_space, d);
+        when_loadw2.assert_eq(read2.pointer, f);
+
+        when_loadw2.assert_eq(read3.addr_space, e);
+        let addr_diff =
+            from_fn::<AB::Expr, WORD_SIZE, _>(|i| read1.cell.data[i] + g * read2.cell.data[i]);
+        self.assert_compose(&mut when_loadw2, addr_diff, read3.pointer - b);
+
+        when_loadw2.assert_eq(write.addr_space, d);
+        when_loadw2.assert_eq(write.pointer, a);
+
+        for i in 0..WORD_SIZE {
+            when_loadw2.assert_eq(write.cell.data[i], read3.cell.data[i]);
+        }
+
+        when_loadw2
+            .when_transition()
+            .assert_eq(next_pc, pc + inst_width);
+
+        // STOREW2: e[d[c] + b + mem[f] * g] <- d[a]
+        let storew2_flag = operation_flags[&STOREW2];
+        read1_enabled_check = read1_enabled_check + storew2_flag;
+        read2_enabled_check = read2_enabled_check + storew2_flag;
+        read3_enabled_check = read3_enabled_check + storew2_flag;
+        write_enabled_check = write_enabled_check + storew2_flag;
+
+        let mut when_storew2 = builder.when(storew2_flag);
+        when_storew2.assert_eq(read1.addr_space, d);
+        when_storew2.assert_eq(read1.pointer, c);
+
+        when_storew2.assert_eq(read2.addr_space, d);
+        when_storew2.assert_eq(read2.pointer, a);
+
+        when_storew2.assert_eq(read3.addr_space, d);
+        when_storew2.assert_eq(read3.pointer, f);
+
+        when_storew2.assert_eq(write.addr_space, e);
+        let addr_diff =
+            from_fn::<AB::Expr, WORD_SIZE, _>(|i| read1.cell.data[i] + g * read3.cell.data[i]);
+        self.assert_compose(&mut when_storew2, addr_diff, write.pointer - b);
+        for i in 0..WORD_SIZE {
+            when_storew2.assert_eq(write.cell.data[i], read2.cell.data[i]);
+        }
+
+        when_storew2
             .when_transition()
             .assert_eq(next_pc, pc + inst_width);
 
@@ -285,11 +371,11 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
             write_enabled_check += arithmetic_flags.clone();
             let mut when_arithmetic = builder.when(arithmetic_flags);
 
-            // read from d[b] and e[c]
-            when_arithmetic.assert_eq(read1.addr_space, d);
+            // read from e[b] and f[c]
+            when_arithmetic.assert_eq(read1.addr_space, e);
             when_arithmetic.assert_eq(read1.pointer, b);
 
-            when_arithmetic.assert_eq(read2.addr_space, e);
+            when_arithmetic.assert_eq(read2.addr_space, f);
             when_arithmetic.assert_eq(read2.pointer, c);
 
             // write to d[a]
@@ -343,7 +429,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
             if opcode != TERMINATE && opcode != NOP {
                 builder.when(flag).assert_eq(
                     next_timestamp,
-                    timestamp + AB::F::from_canonical_usize(max_accesses_per_instruction(opcode)),
+                    timestamp + AB::F::from_canonical_usize(timestamp_delta(opcode)),
                 )
             }
         }
@@ -357,6 +443,7 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         // check accesses enabled
         builder.assert_eq(read1.enabled, read1_enabled_check);
         builder.assert_eq(read2.enabled, read2_enabled_check);
+        builder.assert_eq(read3.enabled, read3_enabled_check);
         builder.assert_eq(write.enabled, write_enabled_check);
 
         // Turn on all interactions
