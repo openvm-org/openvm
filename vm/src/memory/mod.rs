@@ -1,4 +1,3 @@
-use afs_primitives::offline_checker::OfflineCheckerOperation;
 use p3_field::PrimeField64;
 
 pub mod audit;
@@ -24,15 +23,6 @@ pub struct MemoryAddress<S, T> {
     pub pointer: T,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MemoryAccess<const WORD_SIZE: usize, F> {
-    pub timestamp: usize,
-    pub op_type: OpType,
-    pub address_space: F,
-    pub address: F,
-    pub data: [F; WORD_SIZE],
-}
-
 impl<S, T> MemoryAddress<S, T> {
     pub fn new(address_space: S, pointer: T) -> Self {
         Self {
@@ -50,25 +40,6 @@ impl<S, T> MemoryAddress<S, T> {
             address_space: a.address_space.into(),
             pointer: a.pointer.into(),
         }
-    }
-}
-
-impl<const WORD_SIZE: usize, F: PrimeField64> OfflineCheckerOperation<F>
-    for MemoryAccess<WORD_SIZE, F>
-{
-    fn get_timestamp(&self) -> usize {
-        self.timestamp
-    }
-
-    fn get_idx(&self) -> Vec<F> {
-        vec![self.address_space, self.address]
-    }
-
-    fn get_data(&self) -> Vec<F> {
-        self.data.to_vec()
-    }
-    fn get_op_type(&self) -> u8 {
-        self.op_type as u8
     }
 }
 

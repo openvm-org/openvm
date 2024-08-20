@@ -16,11 +16,11 @@ use super::{CpuAir, OpCode::*};
 use crate::{
     cpu::{
         columns::{CpuCols, CpuIoCols},
-        trace::{isize_to_field, Instruction},
+        trace::Instruction,
         CpuChip, CpuOptions, ARITHMETIC_BUS, READ_INSTRUCTION_BUS,
     },
     field_arithmetic::ArithmeticOperation,
-    memory::{decompose, manager::interface::MemoryInterface, MemoryAccess, OpType},
+    memory::manager::interface::MemoryInterface,
     program::Program,
     vm::{
         config::{MemoryConfig, VmConfig, DEFAULT_MAX_SEGMENT_LEN},
@@ -52,24 +52,6 @@ fn make_vm<const NUM_WORDS: usize, const WORD_SIZE: usize>(
         program,
         vec![],
     )
-}
-
-impl<const WORD_SIZE: usize, F: PrimeField64> MemoryAccess<WORD_SIZE, F> {
-    pub fn from_isize(
-        timestamp: isize,
-        op_type: OpType,
-        address_space: isize,
-        address: isize,
-        data: isize,
-    ) -> Self {
-        Self {
-            timestamp: timestamp as usize,
-            op_type,
-            address_space: isize_to_field::<F>(address_space),
-            address: isize_to_field::<F>(address),
-            data: decompose::<WORD_SIZE, F>(isize_to_field::<F>(data)),
-        }
-    }
 }
 
 #[test]

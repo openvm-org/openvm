@@ -4,14 +4,12 @@ use std::{
     fmt::Display,
 };
 
-use afs_primitives::{
-    is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
-};
-use p3_field::{Field, PrimeField32, PrimeField64};
+use afs_primitives::{is_equal_vec::IsEqualVecAir, sub_chip::LocalTraceInstructions};
+use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{
-    columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
+    columns::{CpuAuxCols, CpuCols, CpuIoCols},
     timestamp_delta, CpuChip, ExecutionState,
     OpCode::{self, *},
     CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
@@ -126,31 +124,6 @@ impl<F: Field> Instruction<F> {
             op_g: F::zero(),
             debug: String::from(debug),
         }
-    }
-}
-
-// TODO[osama]: to be deleted
-pub fn disabled_memory_cols<const WORD_SIZE: usize, F: PrimeField64>(
-) -> MemoryAccessCols<WORD_SIZE, F> {
-    memory_access_to_cols(false, F::one(), F::zero(), [F::zero(); WORD_SIZE])
-}
-
-fn memory_access_to_cols<const WORD_SIZE: usize, F: PrimeField64>(
-    enabled: bool,
-    address_space: F,
-    address: F,
-    data: [F; WORD_SIZE],
-) -> MemoryAccessCols<WORD_SIZE, F> {
-    let is_zero_cols = LocalTraceInstructions::generate_trace_row(&IsZeroAir {}, address_space);
-    let is_immediate = is_zero_cols.io.is_zero;
-    let is_zero_aux = is_zero_cols.inv;
-    MemoryAccessCols {
-        enabled: F::from_bool(enabled),
-        address_space,
-        is_immediate,
-        is_zero_aux,
-        address,
-        data,
     }
 }
 

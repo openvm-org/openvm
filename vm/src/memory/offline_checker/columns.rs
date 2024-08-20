@@ -6,9 +6,8 @@ use derive_new::new;
 use super::bridge::MemoryOfflineChecker;
 use crate::memory::manager::{access_cell::AccessCell, operation::MemoryOperation};
 
-// TODO[osama]: to be renamed to MemoryAccess
 #[derive(new, Default)]
-pub struct NewMemoryAccess<const WORD_SIZE: usize, T> {
+pub struct MemoryAccess<const WORD_SIZE: usize, T> {
     pub op: MemoryOperation<WORD_SIZE, T>,
     pub old_cell: AccessCell<WORD_SIZE, T>,
 }

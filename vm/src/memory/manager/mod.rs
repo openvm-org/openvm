@@ -7,14 +7,13 @@ use p3_matrix::dense::RowMajorMatrix;
 use self::{access_cell::AccessCell, interface::MemoryInterface};
 use super::{
     audit::{air::MemoryAuditAir, MemoryAuditChip},
-    offline_checker::columns::NewMemoryAccess,
+    offline_checker::columns::MemoryAccess,
 };
 use crate::{
     memory::{decompose, manager::operation::MemoryOperation, OpType},
     vm::config::MemoryConfig,
 };
 
-pub mod access;
 pub mod access_cell;
 pub mod dimensions;
 pub mod interface;
@@ -60,13 +59,13 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         }
     }
 
-    pub fn read_word(&mut self, addr_space: F, pointer: F) -> NewMemoryAccess<WORD_SIZE, F> {
+    pub fn read_word(&mut self, addr_space: F, pointer: F) -> MemoryAccess<WORD_SIZE, F> {
         let cur_clk = self.clk;
         self.clk += F::one();
 
         if addr_space == F::zero() {
             let data = decompose(pointer);
-            return NewMemoryAccess::<WORD_SIZE, F>::new(
+            return MemoryAccess::<WORD_SIZE, F>::new(
                 MemoryOperation::new(
                     addr_space,
                     pointer,
@@ -90,7 +89,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         self.interface_chip
             .touch_address(addr_space, pointer, old_data, cur_clk);
 
-        NewMemoryAccess::<WORD_SIZE, F>::new(
+        MemoryAccess::<WORD_SIZE, F>::new(
             MemoryOperation::new(
                 addr_space,
                 pointer,
@@ -114,7 +113,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         addr_space: F,
         pointer: F,
         data: [F; WORD_SIZE],
-    ) -> NewMemoryAccess<WORD_SIZE, F> {
+    ) -> MemoryAccess<WORD_SIZE, F> {
         assert!(addr_space != F::zero());
         debug_assert!((pointer.as_canonical_u32() as usize) % WORD_SIZE == 0);
 
@@ -138,7 +137,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         self.interface_chip
             .touch_address(addr_space, pointer, old_data, old_clk);
 
-        NewMemoryAccess::<WORD_SIZE, F>::new(
+        MemoryAccess::<WORD_SIZE, F>::new(
             MemoryOperation::new(
                 addr_space,
                 pointer,
@@ -179,11 +178,11 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     /// Trace generation for dummy values when a memory operation should be selectively disabled.
     ///
     /// Warning: `self.clk` must be > 0 for less than constraints to pass.
-    pub fn disabled_op(&mut self, addr_space: F, op_type: OpType) -> NewMemoryAccess<WORD_SIZE, F> {
+    pub fn disabled_op(&mut self, addr_space: F, op_type: OpType) -> MemoryAccess<WORD_SIZE, F> {
         let timestamp = self.clk;
         self.clk += F::one();
         // Below, we set timestamp = 1 and timestamp_prev = 0 to ensure the less than constrain passes
-        NewMemoryAccess::<WORD_SIZE, F>::new(
+        MemoryAccess::<WORD_SIZE, F>::new(
             MemoryOperation::new(
                 addr_space,
                 F::zero(),

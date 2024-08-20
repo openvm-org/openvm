@@ -8,7 +8,7 @@ use crate::memory::{
     compose, decompose,
     offline_checker::{
         bridge::MemoryOfflineChecker,
-        columns::{MemoryOfflineCheckerAuxCols, NewMemoryAccess},
+        columns::{MemoryAccess, MemoryOfflineCheckerAuxCols},
     },
     OpType,
 };
@@ -93,7 +93,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
 
     fn memory_access_to_checker_aux_cols(
         &self,
-        memory_access: &NewMemoryAccess<WORD_SIZE, F>,
+        memory_access: &MemoryAccess<WORD_SIZE, F>,
     ) -> MemoryOfflineCheckerAuxCols<WORD_SIZE, F> {
         let timestamp_prev = memory_access.old_cell.clk.as_canonical_u32();
         let timestamp = memory_access.op.cell.clk.as_canonical_u32();

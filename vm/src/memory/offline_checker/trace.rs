@@ -7,7 +7,7 @@ use p3_maybe_rayon::prelude::*;
 
 use super::{
     bridge::MemoryOfflineChecker,
-    columns::{MemoryOfflineCheckerAuxCols, MemoryOfflineCheckerCols, NewMemoryAccess},
+    columns::{MemoryOfflineCheckerAuxCols, MemoryOfflineCheckerCols, MemoryAccess},
 };
 use crate::memory::{
     manager::{access_cell::AccessCell, operation::MemoryOperation},
@@ -17,7 +17,7 @@ use crate::memory::{
 impl MemoryOfflineChecker {
     pub fn memory_access_to_checker_aux_cols<F: PrimeField32, const WORD_SIZE: usize>(
         &self,
-        memory_access: &NewMemoryAccess<WORD_SIZE, F>,
+        memory_access: &MemoryAccess<WORD_SIZE, F>,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> MemoryOfflineCheckerAuxCols<WORD_SIZE, F> {
         let clk_lt_cols = LocalTraceInstructions::generate_trace_row(
@@ -45,7 +45,7 @@ impl MemoryOfflineChecker {
 
     pub fn memory_access_to_checker_cols<F: PrimeField32, const WORD_SIZE: usize>(
         &self,
-        memory_access: &NewMemoryAccess<WORD_SIZE, F>,
+        memory_access: &MemoryAccess<WORD_SIZE, F>,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> MemoryOfflineCheckerCols<WORD_SIZE, F> {
         MemoryOfflineCheckerCols::<WORD_SIZE, F>::new(
@@ -61,7 +61,7 @@ impl MemoryOfflineChecker {
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> MemoryOfflineCheckerAuxCols<WORD_SIZE, F> {
         self.memory_access_to_checker_aux_cols(
-            &NewMemoryAccess::<WORD_SIZE, F>::new(
+            &MemoryAccess::<WORD_SIZE, F>::new(
                 MemoryOperation::new(
                     addr_space,
                     F::zero(),
@@ -81,7 +81,7 @@ impl MemoryOfflineChecker {
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> MemoryOfflineCheckerAuxCols<WORD_SIZE, F> {
         self.memory_access_to_checker_aux_cols(
-            &NewMemoryAccess::<WORD_SIZE, F>::new(
+            &MemoryAccess::<WORD_SIZE, F>::new(
                 MemoryOperation::new(
                     F::zero(),
                     F::zero(),
@@ -101,7 +101,7 @@ impl MemoryOfflineChecker {
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> MemoryOfflineCheckerCols<WORD_SIZE, F> {
         self.memory_access_to_checker_cols(
-            &NewMemoryAccess::<WORD_SIZE, F>::new(
+            &MemoryAccess::<WORD_SIZE, F>::new(
                 MemoryOperation::new(
                     F::zero(),
                     F::zero(),

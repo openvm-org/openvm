@@ -83,48 +83,6 @@ impl<T: Field> CpuIoCols<T> {
     }
 }
 
-// TODO[osama]: to be removed
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct MemoryAccessCols<const WORD_SIZE: usize, T> {
-    pub enabled: T,
-
-    pub address_space: T,
-    pub is_immediate: T,
-    pub is_zero_aux: T,
-
-    pub address: T,
-
-    pub data: [T; WORD_SIZE],
-}
-
-impl<const WORD_SIZE: usize, T: Clone> MemoryAccessCols<WORD_SIZE, T> {
-    pub fn from_slice(slc: &[T]) -> Self {
-        Self {
-            enabled: slc[0].clone(),
-            address_space: slc[1].clone(),
-            is_immediate: slc[2].clone(),
-            is_zero_aux: slc[3].clone(),
-            address: slc[4].clone(),
-            data: from_fn(|i| slc[5 + i].clone()),
-        }
-    }
-    pub fn flatten(&self) -> Vec<T> {
-        let mut flattened = vec![
-            self.enabled.clone(),
-            self.address_space.clone(),
-            self.is_immediate.clone(),
-            self.is_zero_aux.clone(),
-            self.address.clone(),
-        ];
-        flattened.extend(self.data.to_vec());
-        flattened
-    }
-
-    pub fn get_width() -> usize {
-        5 + WORD_SIZE
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuAuxCols<const WORD_SIZE: usize, T> {
     pub operation_flags: BTreeMap<OpCode, T>,
