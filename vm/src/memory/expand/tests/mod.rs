@@ -48,8 +48,6 @@ fn test<const CHUNK: usize>(
         address_height,
         as_offset,
     } = memory_dimensions;
-    println!("initial_memory = {:?}", initial_memory);
-    println!("final_memory = {:?}", final_memory);
     // checking validity of test data
     for (address, value) in final_memory {
         assert!((address.0.as_canonical_u64() as usize) - as_offset < (1 << as_height));

@@ -63,25 +63,10 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     }
 
     pub fn read_elem(&mut self, addr_space: F, pointer: F) -> F {
-        let ret = compose(self.read_word(addr_space, pointer).cell.data);
-        println!(
-            "read: {} {} {} at {}",
-            addr_space,
-            pointer,
-            ret,
-            self.memory_manager.lock().get_clk()
-        );
-        ret
+        compose(self.read_word(addr_space, pointer).cell.data)
     }
 
     pub fn write_elem(&mut self, addr_space: F, pointer: F, data: F) {
-        println!(
-            "write: {} {} {} at {}",
-            addr_space,
-            pointer,
-            data,
-            self.memory_manager.lock().get_clk()
-        );
         self.write_word(addr_space, pointer, decompose(data));
     }
 

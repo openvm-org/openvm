@@ -25,7 +25,6 @@ use crate::{
         OpCode::{COMP_POS2, PERM_POS2},
         POSEIDON2_BUS,
     },
-    memory::manager::interface::MemoryInterface,
     poseidon2::Poseidon2VmCols,
     program::Program,
     vm::{
@@ -303,15 +302,13 @@ fn poseidon2_chip_random_50_test() {
 
     let (vm, engine, dummy_cpu_poseidon2, traces) = run_perm_ops(instructions.to_vec(), data);
 
-    // TODO[osama]: consider making a dummy interface air
-    let MemoryInterface::Volatile(memory_audit_chip) =
-        &vm.segments[0].memory_manager.lock().interface_chip;
     // positive test
     engine
         .run_simple_test(
             vec![
                 &vm.segments[0].range_checker.air,
-                &memory_audit_chip.air,
+                // TODO[osama]: consider making a dummy interface air
+                &vm.segments[0].memory_manager.lock().get_audit_air(),
                 &vm.segments[0].poseidon2_chip.air,
                 &dummy_cpu_poseidon2,
             ],
@@ -334,9 +331,6 @@ fn poseidon2_negative_test() {
     let (vm, engine, dummy_cpu_poseidon2, mut traces) = run_perm_ops(instructions, data);
     let poseidon2_trace_index = 2;
 
-    // TODO[osama]: consider making a dummy interface air
-    let MemoryInterface::Volatile(memory_audit_chip) =
-        &vm.segments[0].memory_manager.lock().interface_chip;
     // negative test
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
@@ -350,7 +344,8 @@ fn poseidon2_negative_test() {
             engine.run_simple_test(
                 vec![
                     &vm.segments[0].range_checker.air,
-                    &memory_audit_chip.air,
+                    // TODO[osama]: consider making a dummy interface air
+                    &vm.segments[0].memory_manager.lock().get_audit_air(),
                     &vm.segments[0].poseidon2_chip.air,
                     &dummy_cpu_poseidon2,
                 ],

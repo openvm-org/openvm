@@ -5,7 +5,10 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use self::{access_cell::AccessCell, interface::MemoryInterface};
-use super::{audit::MemoryAuditChip, offline_checker::columns::NewMemoryAccess};
+use super::{
+    audit::{air::MemoryAuditAir, MemoryAuditChip},
+    offline_checker::columns::NewMemoryAccess,
+};
 use crate::{
     memory::{decompose, manager::operation::MemoryOperation, OpType},
     vm::config::MemoryConfig,
@@ -28,11 +31,6 @@ pub struct MemoryManager<const NUM_WORDS: usize, const WORD_SIZE: usize, F: Prim
 impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     MemoryManager<NUM_WORDS, WORD_SIZE, F>
 {
-    // TODO[osama]: move to the bottom
-    pub fn get_clk(&self) -> F {
-        self.clk
-    }
-
     // pub fn with_persistent_memory(
     //     memory_dimensions: MemoryDimensions,
     //     memory: HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
@@ -131,10 +129,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
                 clk: F::zero(),
             });
         let (old_clk, old_data) = (cell.clk, cell.data);
-        if old_clk >= cur_clk {
-            println!("interesting");
-            println!("old_clk: {:?}, clk: {:?}", old_clk, cur_clk);
-        }
         assert!(old_clk < cur_clk);
 
         // Updating AccessCell
@@ -202,13 +196,15 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         )
     }
 
-    // pub fn memory_clone(&self) -> HashMap<(F, F), F> {
-    //     self.memory.clone()
-    // }
+    pub fn get_clk(&self) -> F {
+        self.clk
+    }
 
-    // pub fn read_elem(&mut self, timestamp: usize, address_space: F, address: F) -> F {
-    //     compose(self.read_word(timestamp, address_space, address))
-    // }
+    pub fn get_audit_air(&self) -> MemoryAuditAir<WORD_SIZE> {
+        match &self.interface_chip {
+            MemoryInterface::Volatile(chip) => chip.air.clone(),
+        }
+    }
 
     // /// Reads an element directly from memory without updating internal state.
     // ///

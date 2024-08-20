@@ -14,6 +14,7 @@ pub mod trace;
 #[cfg(test)]
 mod tests;
 
+#[derive(Clone)]
 pub struct MemoryAuditChip<const WORD_SIZE: usize, F: PrimeField32> {
     pub air: MemoryAuditAir<WORD_SIZE>,
     initial_memory: BTreeMap<(F, F), AccessCell<WORD_SIZE, F>>,

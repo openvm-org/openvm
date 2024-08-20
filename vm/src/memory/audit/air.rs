@@ -13,6 +13,7 @@ use p3_matrix::Matrix;
 use super::columns::AuditCols;
 use crate::cpu::RANGE_CHECKER_BUS;
 
+#[derive(Clone)]
 pub struct MemoryAuditAir<const WORD_SIZE: usize> {
     pub addr_lt_air: IsLessThanTupleAir,
 }

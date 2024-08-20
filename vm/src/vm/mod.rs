@@ -46,7 +46,7 @@ pub struct VirtualMachine<const NUM_WORDS: usize, const WORD_SIZE: usize, F: Pri
 pub enum ChipType {
     Cpu,
     Program,
-    Memory,
+    MemoryInterface,
     RangeChecker,
     FieldArithmetic,
     FieldExtension,

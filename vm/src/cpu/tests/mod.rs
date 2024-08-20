@@ -92,12 +92,6 @@ fn test_flatten_fromslice_roundtrip() {
     let cols_numbered = CpuCols::<TEST_WORD_SIZE, usize>::from_slice(&all_cols, &cpu_air);
     let flattened = cols_numbered.flatten(options);
 
-    // TODO[osama]: remove all println!
-    println!("num_cols: {}", num_cols);
-    println!("flattened.len(): {}", flattened.len());
-    println!("flattened: {:?}", flattened);
-    assert_eq!(num_cols, flattened.len());
-
     for (i, col) in flattened.iter().enumerate() {
         assert_eq!(*col, all_cols[i]);
     }

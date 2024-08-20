@@ -145,11 +145,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         let mut result = vec![
             cpu_trace,
             self.program_chip.generate_trace(),
-            if self.memory_chip.accesses.is_empty() {
-                DenseMatrix::default(0, 0)
-            } else {
-                self.memory_chip.generate_trace(self.range_checker.clone())
-            },
+            self.memory_manager.lock().generate_memory_interface_trace(),
             self.range_checker.generate_trace(),
         ];
         if self.config.cpu_options().field_arithmetic_enabled {
@@ -178,7 +174,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
 
     // TODO[osama]: revisit this
     pub fn get_num_chips(&self) -> usize {
-        let mut result: usize = 6;
+        let mut result: usize = 4; // cpu, program, memory_interface, range_checker
         if self.config.cpu_options().field_arithmetic_enabled {
             result += 1;
         }
@@ -218,7 +214,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         let mut result: Vec<ChipType> = vec![
             ChipType::Cpu,
             ChipType::Program,
-            ChipType::Memory,
+            ChipType::MemoryInterface,
             ChipType::RangeChecker,
         ];
         if self.config.cpu_options().field_arithmetic_enabled {
@@ -285,7 +281,7 @@ where
     let mut result: Vec<Box<dyn AnyRap<SC>>> = vec![
         Box::new(segment.cpu_chip.air),
         Box::new(segment.program_chip.air),
-        Box::new(segment.memory_chip.air),
+        Box::new(segment.memory_manager.lock().get_audit_air()),
         Box::new(segment.range_checker.air),
     ];
     if segment.config.cpu_options().field_arithmetic_enabled {
