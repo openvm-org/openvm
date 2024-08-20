@@ -220,7 +220,7 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
         }
 
         let io = if is_direct {
-            Poseidon2VmIoCols::direct_io_cols()
+            Poseidon2VmIoCols::direct_io_cols(start_clk)
         } else {
             Poseidon2VmAir::<WIDTH, WORD_SIZE, F>::make_io_cols(start_clk, instruction)
         };

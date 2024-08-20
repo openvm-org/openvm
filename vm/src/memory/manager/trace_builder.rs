@@ -90,7 +90,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     // }
 
     pub fn disabled_op(&mut self, addr_space: F, op_type: OpType) -> MemoryOperation<WORD_SIZE, F> {
-        println!("generating disabled op");
         let mem_access = self.memory_manager.lock().disabled_op(addr_space, op_type);
         self.accesses_buffer
             .push(self.memory_access_to_checker_aux_cols(&mem_access));
@@ -106,13 +105,13 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         &self,
         memory_access: &NewMemoryAccess<WORD_SIZE, F>,
     ) -> MemoryOfflineCheckerAuxCols<WORD_SIZE, F> {
+        let timestamp_prev = memory_access.old_cell.clk.as_canonical_u32();
+        let timestamp = memory_access.op.cell.clk.as_canonical_u32();
+
+        debug_assert!(timestamp_prev < timestamp);
         let clk_lt_cols = LocalTraceInstructions::generate_trace_row(
             &self.offline_checker.timestamp_lt_air,
-            (
-                memory_access.old_cell.clk.as_canonical_u32(),
-                memory_access.op.cell.clk.as_canonical_u32(),
-                self.range_checker.clone(),
-            ),
+            (timestamp_prev, timestamp, self.range_checker.clone()),
         );
 
         let addr_space_is_zero_cols = LocalTraceInstructions::generate_trace_row(

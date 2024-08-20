@@ -71,9 +71,13 @@ impl<const WIDTH: usize, const WORD_SIZE: usize, T: Clone> Poseidon2VmCols<WIDTH
 impl<const WIDTH: usize, const WORD_SIZE: usize, F: Field> Poseidon2VmCols<WIDTH, WORD_SIZE, F> {
     /// Blank row with all zero input (poseidon2 internal hash values are nonzero)
     /// and `is_alloc` set to 0.
-    pub fn blank_row(poseidon2_air: &Poseidon2Air<WIDTH, F>) -> Self {
+    ///
+    /// Due to how memory timestamps are currently managed, even blank rows must have consistent timestamps.
+    ///
+    /// Warning: the aux memory columns have capacity reserved but are not initialized.
+    pub fn blank_row(poseidon2_air: &Poseidon2Air<WIDTH, F>, timestamp: F) -> Self {
         Self {
-            io: Poseidon2VmIoCols::<F>::blank_row(),
+            io: Poseidon2VmIoCols::<F>::blank_row(timestamp),
             aux: Poseidon2VmAuxCols::<WIDTH, WORD_SIZE, F>::blank_row(poseidon2_air),
         }
     }
@@ -113,11 +117,11 @@ impl<T: Clone> Poseidon2VmIoCols<T> {
     }
 }
 impl<T: Field> Poseidon2VmIoCols<T> {
-    pub fn blank_row() -> Self {
+    pub fn blank_row(timestamp: T) -> Self {
         Self {
             is_opcode: T::zero(),
             is_direct: T::zero(),
-            clk: T::zero(),
+            clk: timestamp,
             a: T::zero(),
             b: T::zero(),
             c: T::zero(),
@@ -127,11 +131,11 @@ impl<T: Field> Poseidon2VmIoCols<T> {
         }
     }
 
-    pub fn direct_io_cols() -> Self {
+    pub fn direct_io_cols(timestamp: T) -> Self {
         Self {
             is_opcode: T::zero(),
             is_direct: T::one(),
-            clk: T::zero(),
+            clk: timestamp,
             a: T::zero(),
             b: T::zero(),
             c: T::zero(),

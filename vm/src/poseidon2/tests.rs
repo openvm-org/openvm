@@ -13,7 +13,7 @@ use afs_test_utils::{
 };
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, Field, PrimeField32};
+use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_strict_usize;
 use rand::{Rng, RngCore};
@@ -176,7 +176,7 @@ fn run_perm_ops(
         }
 
         for j in 0..WIDTH {
-            write_ops.push(if j < 8 {
+            write_ops.push(if j < CHUNK {
                 WriteOps {
                     clk: timestamp,
                     ad_s: instr.e,
@@ -224,7 +224,7 @@ fn run_perm_ops(
     }
 
     let time_per =
-        Poseidon2Chip::<16, 16, WORD_SIZE, BabyBear>::max_accesses_per_instruction(COMP_POS2);
+        Poseidon2Chip::<16, 16, WORD_SIZE, BabyBear>::max_accesses_per_instruction(PERM_POS2);
 
     timestamp = 1;
 

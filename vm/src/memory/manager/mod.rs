@@ -183,16 +183,19 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             .generate_trace(final_memory, (2 * self.memory.len()).next_power_of_two())
     }
 
+    /// Trace generation for dummy values when a memory operation should be selectively disabled.
+    ///
+    /// Warning: `self.clk` must be > 0 for less than constraints to pass.
     pub fn disabled_op(&mut self, addr_space: F, op_type: OpType) -> NewMemoryAccess<WORD_SIZE, F> {
-        let cur_clk = self.clk;
+        let timestamp = self.clk;
         self.clk += F::one();
-
+        // Below, we set timestamp = 1 and timestamp_prev = 0 to ensure the less than constrain passes
         NewMemoryAccess::<WORD_SIZE, F>::new(
             MemoryOperation::new(
                 addr_space,
                 F::zero(),
                 F::from_canonical_u8(op_type as u8),
-                AccessCell::new([F::zero(); WORD_SIZE], cur_clk),
+                AccessCell::new([F::zero(); WORD_SIZE], timestamp),
                 F::zero(),
             ),
             AccessCell::new([F::zero(); WORD_SIZE], F::zero()),

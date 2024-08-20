@@ -140,11 +140,9 @@ impl IsLessThanAir {
         let io_exprs = IsLessThanIoCols::<AB::Expr>::from(io.x, io.y, io.less_than);
 
         self.eval_interactions(builder, aux.lower_decomp.clone());
-        self.eval_without_interactions(&mut builder.when_transition(), io_exprs, aux);
+        self.eval_without_interactions(builder, io_exprs, aux);
     }
-}
 
-impl IsLessThanAir {
     /// Imposes the non-interaction constraints on all except the last row. This is
     /// intended for use when the comparators `x, y` are on adjacent rows.
     ///
