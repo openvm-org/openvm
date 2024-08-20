@@ -1,7 +1,8 @@
 use std::borrow::Borrow;
 
+use afs_primitives::utils;
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{Air, BaseAir};
+use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
@@ -43,20 +44,24 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
 
         let num_limbs = num_limbs::<ARG_SIZE, LIMB_SIZE>();
 
-        builder.assert_bool(aux.opcode_add_flag);
-        builder.assert_bool(aux.opcode_sub_flag);
-        builder.assert_bool(aux.opcode_lt_flag);
-        builder.assert_bool(aux.opcode_eq_flag);
+        let flags = [
+            aux.opcode_add_flag,
+            aux.opcode_sub_flag,
+            aux.opcode_lt_flag,
+            aux.opcode_eq_flag,
+        ];
+        for flag in flags {
+            builder.assert_bool(flag);
+        }
         builder.assert_eq(
-            aux.opcode_add_flag * AB::Expr::from_canonical_u8(OpCode::ADD256 as u8)
-                + aux.opcode_sub_flag * AB::Expr::from_canonical_u8(OpCode::SUB256 as u8)
-                + aux.opcode_lt_flag * AB::Expr::from_canonical_u8(OpCode::LT256 as u8)
-                + aux.opcode_eq_flag * AB::Expr::from_canonical_u8(OpCode::EQ256 as u8),
+            [OpCode::ADD256, OpCode::SUB256, OpCode::LT256, OpCode::EQ256]
+                .map(|op| AB::Expr::from_canonical_u8(op as u8))
+                .iter()
+                .zip(flags)
+                .fold(AB::Expr::zero(), |acc, (op, flag)| acc + op.clone() * flag),
             io.opcode,
         );
-        builder.assert_one(
-            aux.opcode_add_flag + aux.opcode_sub_flag + aux.opcode_lt_flag + aux.opcode_eq_flag,
-        );
+        builder.assert_one(flags.iter().fold(AB::Expr::zero(), |acc, flag| acc + *flag));
 
         for i in 0..num_limbs {
             // If we need to perform an arithmetic operation, we will use "buffer"
@@ -75,7 +80,7 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
             // everything else.
 
             // lhs = +rhs if opcode_add_flag = 1,
-            // lhs = -rhs if opcode_sub_flag = 1.
+            // lhs = -rhs if opcode_sub_flag = 1 or opcode_lt_flag = 1.
             let lhs = io.y_limbs[i]
                 + if i > 0 {
                     aux.buffer[i - 1].into()
@@ -84,20 +89,22 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
                 }
                 - aux.buffer[i] * AB::Expr::from_canonical_u32(1 << LIMB_SIZE);
             let rhs = io.z_limbs[i] - io.x_limbs[i];
-            builder.assert_zero((lhs.clone() - rhs.clone()) * aux.opcode_add_flag);
-            builder.assert_zero(
-                (lhs.clone() + rhs.clone()) * (aux.opcode_sub_flag + aux.opcode_lt_flag),
-            );
-            // TODO: degree < 3?
-            builder.assert_zero(
-                (AB::Expr::one() - aux.opcode_eq_flag)
-                    * aux.buffer[i]
-                    * (AB::Expr::one() - aux.buffer[i]),
-            );
+            builder
+                .when(aux.opcode_add_flag)
+                .assert_eq(lhs.clone(), rhs.clone());
+            builder
+                .when(aux.opcode_sub_flag + aux.opcode_lt_flag)
+                .assert_eq(lhs.clone(), -rhs.clone());
+
+            builder
+                .when(utils::not::<AB>(aux.opcode_eq_flag.into()))
+                .assert_bool(aux.buffer[i]);
         }
 
         // If we wanted LT, then cmp_result must equal the last carry.
-        builder.assert_zero((io.cmp_result - aux.buffer[num_limbs - 1]) * aux.opcode_lt_flag);
+        builder
+            .when(aux.opcode_lt_flag)
+            .assert_zero(io.cmp_result - aux.buffer[num_limbs - 1]);
         // If we wanted EQ, we will do as we would do for checking a single number,
         // but we will use "buffer" vector for inverses.
         // Namely, we check that:
@@ -106,11 +113,14 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
         let mut sum_eq: AB::Expr = io.cmp_result.into();
         for i in 0..num_limbs {
             sum_eq += (io.x_limbs[i] - io.y_limbs[i]) * aux.buffer[i];
-            // TODO: degree < 3?
+
             builder
-                .assert_zero(aux.opcode_eq_flag * io.cmp_result * (io.x_limbs[i] - io.y_limbs[i]));
+                .when(aux.opcode_eq_flag)
+                .assert_zero(io.cmp_result * (io.x_limbs[i] - io.y_limbs[i]));
         }
-        builder.assert_zero((sum_eq - AB::Expr::one()) * aux.opcode_eq_flag);
+        builder
+            .when(aux.opcode_eq_flag)
+            .assert_zero(sum_eq - AB::Expr::one());
 
         self.eval_interactions(builder, cols);
     }
