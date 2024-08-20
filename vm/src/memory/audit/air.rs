@@ -19,7 +19,6 @@ pub struct MemoryAuditAir<const WORD_SIZE: usize> {
 }
 
 impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
-    // TODO[osama]: look for similar renamings thoughout vm/
     pub fn new(addr_space_max_bits: usize, pointer_max_bits: usize, decomp: usize) -> Self {
         Self {
             addr_lt_air: IsLessThanTupleAir::new(

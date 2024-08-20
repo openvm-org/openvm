@@ -53,7 +53,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
                 data: data_read,
             } = final_memory.get(addr).unwrap();
 
-            // TODO[osama]: add the ability to generate trace with Field elements as inputs
             let cur_idx = vec![addr.0.as_canonical_u32(), addr.1.as_canonical_u32()];
 
             rows_concat.extend(

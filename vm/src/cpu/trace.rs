@@ -179,12 +179,11 @@ impl Display for ExecutionError {
 impl Error for ExecutionError {}
 
 impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
-    // TODO[osama]: Make this an implementation block for ExecutionSegment instead of CpuChip
     pub fn execute<const NUM_WORDS: usize>(
         vm: &mut ExecutionSegment<NUM_WORDS, WORD_SIZE, F>,
     ) -> Result<(), ExecutionError> {
         let mut clock_cycle: usize = vm.cpu_chip.state.clock_cycle;
-        let mut timestamp: usize = vm.cpu_chip.state.timestamp;
+        // let mut timestamp: usize = vm.memory_manager.borrow().get_clk().as_canonical_u32() as usize;
         let mut pc = F::from_canonical_usize(vm.cpu_chip.state.pc);
 
         let mut hint_stream = vm.hint_stream.clone();
@@ -214,7 +213,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
 
             // TODO[osama]: here, make sure that timestamp actually relates to memory clks
             let io = CpuIoCols {
-                timestamp: F::from_canonical_usize(timestamp),
+                timestamp: vm.memory_manager.borrow().get_clk(),
                 pc,
                 opcode: F::from_canonical_usize(opcode as usize),
                 op_a: a,
@@ -259,10 +258,26 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 }};
             }
 
+            macro_rules! disabled_read {
+                () => {{
+                    num_reads += 1;
+                    assert!(num_reads <= CPU_MAX_READS_PER_CYCLE);
+
+                    mem_ops[num_reads - 1] =
+                        mem_read_trace_builder.disabled_op(F::zero(), OpType::Read);
+                }};
+            }
+
             macro_rules! write {
                 ($addr_space: expr, $pointer: expr, $data: expr) => {{
+                    // First, finalize the read accesses
+                    while num_reads < CPU_MAX_READS_PER_CYCLE {
+                        disabled_read!();
+                    }
+
                     num_writes += 1;
                     assert!(num_writes <= CPU_MAX_WRITES_PER_CYCLE);
+
                     let word = decompose($data);
                     mem_ops[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
                         mem_write_trace_builder.write_word($addr_space, $pointer, word);
@@ -376,7 +391,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     println!("{}", value);
                 }
                 FE4ADD | FE4SUB | BBE4MUL | BBE4INV => {
-                    vm.field_extension_chip.calculate(timestamp, instruction);
+                    vm.field_extension_chip.calculate(
+                        vm.memory_manager.borrow().get_clk().as_canonical_u32() as usize,
+                        instruction,
+                    );
                 }
                 MOD_SECP256K1_ADD | MOD_SECP256K1_SUB | MOD_SECP256K1_MUL | MOD_SECP256K1_DIV => {
                     ModularMultiplicationChip::calculate(vm, instruction);
@@ -503,7 +521,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             vm.cpu_chip.rows.push(cols.flatten(vm.options()));
 
             pc = next_pc;
-            timestamp += timestamp_delta(opcode);
 
             clock_cycle += 1;
             if opcode == TERMINATE {
@@ -522,7 +539,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
         // Update CPU chip state with all changes from this segment.
         vm.cpu_chip.set_state(ExecutionState {
             clock_cycle,
-            timestamp,
+            timestamp: vm.memory_manager.borrow().get_clk().as_canonical_u32() as usize,
             pc: pc.as_canonical_u64() as usize,
             is_done,
         });

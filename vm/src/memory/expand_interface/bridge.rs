@@ -46,7 +46,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize>
                     ))
                     .chain(word.into_iter().map(Into::into))
                     .chain(iter::once(local.clks[word_idx].into())),
-                // TODO[osama]: add timestamp to this interaction
                 local.expand_direction,
             );
         }

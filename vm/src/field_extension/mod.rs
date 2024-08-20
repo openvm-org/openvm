@@ -50,9 +50,14 @@ pub struct FieldExtensionArithmeticAir<const WORD_SIZE: usize> {
 pub struct FieldExtensionArithmetic;
 
 impl FieldExtensionArithmetic {
-    pub fn max_accesses_per_instruction(opcode: OpCode) -> usize {
+    pub const BASE_OP: u8 = OpCode::FE4ADD as u8;
+
+    pub fn accesses_per_instruction(opcode: OpCode) -> usize {
         assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
-        12
+        match opcode {
+            OpCode::BBE4INV => 8,
+            _ => 12,
+        }
     }
 
     /// Evaluates given opcode using given operands.

@@ -137,33 +137,18 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
     /// truncating if the instruction is a compression.
     ///
     /// Used for both compression and permutation.
+    ///
+    /// TODO[osama]: finish this comment
+    /// When is_direct is true, this function does not do any
     pub fn calculate(&mut self, instruction: Instruction<F>, is_direct: bool) {
+        assert!(!is_direct);
+
         let start_clk = self.memory_manager.borrow().get_clk();
         let mut mem_trace_builder = MemoryTraceBuilder::<NUM_WORDS, WORD_SIZE, F>::new(
             self.memory_manager.clone(),
             self.range_checker.clone(),
             self.air.mem_oc,
         );
-
-        // TODO[osama]: remember to handle is_direct
-
-        // let mut mem_oc_aux_cols = Vec::with_capacity(3 + 2 * WIDTH);
-        // let push_oc_cols = |mem_oc_aux_cols: &mut Vec<_>,
-        //                     mem_access: &NewMemoryAccess<WORD_SIZE, F>| {
-        //     if !is_direct {
-        //         mem_oc_aux_cols.push(
-        //             self.air
-        //                 .mem_oc
-        //                 .memory_access_to_checker_aux_cols(mem_access, self.range_checker.clone()),
-        //         )
-        //     } else {
-        //         mem_oc_aux_cols.push(
-        //             self.air
-        //                 .mem_oc
-        //                 .disabled_memory_checker_aux_cols(self.range_checker.clone()),
-        //         )
-        //     }
-        // };
 
         let Instruction {
             opcode,
@@ -185,6 +170,7 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
             mem_trace_builder.read_elem(d, op_c)
         } else {
             mem_trace_builder.disabled_op(d, OpType::Read);
+            mem_trace_builder.increment_clk();
             lhs + F::from_canonical_usize(CHUNK)
         };
 
@@ -207,6 +193,7 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
         // Generate disabled MemoryOfflineCheckerAuxCols in case len != WIDTH
         for _ in len..WIDTH {
             mem_trace_builder.disabled_op(e, OpType::Write);
+            mem_trace_builder.increment_clk();
         }
 
         let io = if is_direct {
@@ -253,10 +240,12 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> Hasher<CHU
         input_state[..8].copy_from_slice(&left);
         input_state[8..16].copy_from_slice(&right);
 
-        self.calculate(Instruction::default(), true);
+        // This is not currently supported
+        todo!();
 
-        self.rows.last().unwrap().aux.internal.io.output[..8]
-            .try_into()
-            .unwrap()
+        // self.calculate(Instruction::default(), true);
+        // self.rows.last().unwrap().aux.internal.io.output[..8]
+        //     .try_into()
+        //     .unwrap()
     }
 }

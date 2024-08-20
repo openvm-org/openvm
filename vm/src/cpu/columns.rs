@@ -185,6 +185,7 @@ impl<const WORD_SIZE: usize, T: PrimeField32> CpuAuxCols<WORD_SIZE, T> {
         for opcode in vm.options().enabled_instructions() {
             operation_flags.insert(opcode, T::from_bool(opcode == OpCode::NOP));
         }
+        // TODO[osama]: consider using MemoryTraceBuilder here
         let oc_cols: [_; CPU_MAX_ACCESSES_PER_CYCLE] = from_fn(|_| {
             vm.cpu_chip
                 .air

@@ -70,18 +70,17 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
                     addr_space,
                     pointer,
                     F::from_canonical_u8(OpType::Read as u8),
-                    AccessCell::new(data, self.clk),
+                    AccessCell::new(data, cur_clk),
                     F::one(),
                 ),
-                AccessCell::new(data, cur_clk),
+                AccessCell::new(data, F::zero()),
             );
         }
         debug_assert!((pointer.as_canonical_u32() as usize) % WORD_SIZE == 0);
 
         let cell = self.memory.get_mut(&(addr_space, pointer)).unwrap();
         let (old_clk, old_data) = (cell.clk, cell.data);
-        // TODO[osama]: remove
-        assert!(old_clk < cur_clk);
+        debug_assert!(old_clk < cur_clk);
 
         // Updating AccessCell
         cell.clk = cur_clk;
@@ -104,8 +103,8 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     /// Reads a word directly from memory without updating internal state.
     ///
     /// Any value returned is unconstrained.
-    pub fn unsafe_read_word(&self, address_space: F, pointer: F) -> [F; WORD_SIZE] {
-        self.memory.get(&(address_space, pointer)).unwrap().data
+    pub fn unsafe_read_word(&self, addr_space: F, pointer: F) -> [F; WORD_SIZE] {
+        self.memory.get(&(addr_space, pointer)).unwrap().data
     }
 
     pub fn write_word(
@@ -180,8 +179,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     /// Warning: `self.clk` must be > 0 for less than constraints to pass.
     pub fn disabled_op(&mut self, addr_space: F, op_type: OpType) -> MemoryAccess<WORD_SIZE, F> {
         let timestamp = self.clk;
-        self.clk += F::one();
-        // Below, we set timestamp = 1 and timestamp_prev = 0 to ensure the less than constrain passes
+        // Below, we set timestamp_prev = 0
         MemoryAccess::<WORD_SIZE, F>::new(
             MemoryOperation::new(
                 addr_space,
@@ -192,6 +190,10 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             ),
             AccessCell::new([F::zero(); WORD_SIZE], F::zero()),
         )
+    }
+
+    pub fn increment_clk(&mut self) {
+        self.clk += F::one();
     }
 
     pub fn get_clk(&self) -> F {

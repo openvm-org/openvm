@@ -387,28 +387,28 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
                 .assert_eq(next_pc, pc + inst_width);
         }
 
+        let mut op_timestamp: AB::Expr = io.timestamp.into();
         let mut memory_bridge = MemoryBridge::new(self.memory_offline_checker, mem_oc_aux_cols);
         for op in &mem_ops[0..CPU_MAX_READS_PER_CYCLE] {
             memory_bridge
-                .read(
+                .read::<AB::Expr>(
                     MemoryAddress::new(op.addr_space, op.pointer),
                     op.cell.data,
-                    op.cell.clk,
+                    op_timestamp.clone(),
                 )
                 .eval(builder, op.enabled);
+            op_timestamp += op.enabled.into();
         }
         for op in &mem_ops[CPU_MAX_READS_PER_CYCLE..CPU_MAX_ACCESSES_PER_CYCLE] {
             memory_bridge
                 .write(
                     MemoryAddress::new(op.addr_space, op.pointer),
                     op.cell.data,
-                    op.cell.clk,
+                    op_timestamp.clone(),
                 )
                 .eval(builder, op.enabled);
+            op_timestamp += op.enabled.into();
         }
-
-        // maybe writes to immediate address space are ignored instead of disallowed?
-        //builder.assert_zero(write.is_immediate);
 
         // evaluate equality between read1 and read2
 

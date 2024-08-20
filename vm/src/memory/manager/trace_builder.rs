@@ -87,6 +87,10 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         mem_access.op
     }
 
+    pub fn increment_clk(&mut self) {
+        self.memory_manager.borrow_mut().increment_clk();
+    }
+
     pub fn take_accesses_buffer(&mut self) -> Vec<MemoryOfflineCheckerAuxCols<WORD_SIZE, F>> {
         std::mem::take(&mut self.accesses_buffer)
     }

@@ -23,8 +23,8 @@ pub mod trace;
 
 pub const INST_WIDTH: usize = 1;
 
-pub const NEW_MEMORY_BUS: MemoryBus = MemoryBus(1);
 pub const READ_INSTRUCTION_BUS: usize = 0;
+pub const NEW_MEMORY_BUS: MemoryBus = MemoryBus(1);
 pub const ARITHMETIC_BUS: usize = 2;
 pub const FIELD_EXTENSION_BUS: usize = 3;
 pub const RANGE_CHECKER_BUS: usize = 4;
@@ -141,20 +141,23 @@ fn timestamp_delta(opcode: OpCode) -> usize {
     // If an instruction performs a writes, it must change timestamp by WRITE_DELTA.
     const WRITE_DELTA: usize = CPU_MAX_READS_PER_CYCLE + 1;
     match opcode {
-        LOADW | STOREW | LOADW2 | STOREW2 => WRITE_DELTA,
-        // JAL only does WRITE, but it is done as timestamp + 2
-        JAL => WRITE_DELTA,
+        LOADW | STOREW => 3,
+        LOADW2 | STOREW2 => 4,
+        JAL => 1,
         BEQ | BNE => 2,
         TERMINATE => 0,
         PUBLISH => 2,
-        opcode if FIELD_ARITHMETIC_INSTRUCTIONS.contains(&opcode) => WRITE_DELTA,
+        opcode if FIELD_ARITHMETIC_INSTRUCTIONS.contains(&opcode) => 3,
         opcode if FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode) => {
-            FieldExtensionArithmetic::max_accesses_per_instruction(opcode)
+            FieldExtensionArithmetic::accesses_per_instruction(opcode)
         }
         opcode if MODULAR_ARITHMETIC_INSTRUCTIONS.contains(&opcode) => {
+            // TODO: note that in this chip's trace generation, we need to make sure
+            // that the timestamp in MemoryManager increases by exactly what this function
+            // returns.
             ModularMultiplicationVmAir::max_accesses_per_instruction(opcode)
         }
-        F_LESS_THAN => WRITE_DELTA,
+        F_LESS_THAN => 3,
         FAIL => 0,
         PRINTF => 1,
         COMP_POS2 | PERM_POS2 => {

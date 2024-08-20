@@ -36,12 +36,15 @@ impl<const WIDTH: usize, const NUM_WORDS: usize, const WORD_SIZE: usize, F: Prim
         );
         for _ in 0..3 {
             mem_trace_builder.disabled_op(blank.io.d, OpType::Read);
+            mem_trace_builder.increment_clk();
         }
         for _ in 0..WIDTH {
             mem_trace_builder.disabled_op(blank.io.e, OpType::Read);
+            mem_trace_builder.increment_clk();
         }
         for _ in 0..WIDTH {
             mem_trace_builder.disabled_op(blank.io.e, OpType::Write);
+            mem_trace_builder.increment_clk();
         }
         blank
             .aux
