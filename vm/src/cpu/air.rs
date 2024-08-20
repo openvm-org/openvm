@@ -15,7 +15,7 @@ use super::{
     OpCode::*,
     CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH,
 };
-use crate::memory::{offline_checker::bridge::MemoryBridge, MemoryAccess, MemoryAddress};
+use crate::memory::{offline_checker::bridge::MemoryBridge, MemoryAddress};
 
 impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for CpuAir<WORD_SIZE> {
     fn width(&self) -> usize {

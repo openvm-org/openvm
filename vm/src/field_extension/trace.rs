@@ -1,6 +1,5 @@
-use std::array;
-use std::slice::Iter;
-use std::vec::IntoIter;
+use std::{array, vec::IntoIter};
+
 use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -11,8 +10,7 @@ use super::{
     },
     FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticOperation,
 };
-use crate::cpu::OpCode;
-use crate::memory::offline_checker::columns::MemoryOfflineCheckerAuxCols;
+use crate::{cpu::OpCode, memory::offline_checker::columns::MemoryOfflineCheckerAuxCols};
 
 /// Constructs a new set of columns (including auxiliary columns) given inputs.
 fn generate_cols<const WORD_SIZE: usize, T: Field>(
@@ -73,7 +71,9 @@ fn generate_cols<const WORD_SIZE: usize, T: Field>(
     }
 }
 
-impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<NUM_WORDS, WORD_SIZE, F> {
+impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
+    FieldExtensionArithmeticChip<NUM_WORDS, WORD_SIZE, F>
+{
     /// Generates trace for field arithmetic chip.
     pub fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         // todo[zach]: it's weird that `generate_trace` mutates the receiver

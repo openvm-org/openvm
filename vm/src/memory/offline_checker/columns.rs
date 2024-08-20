@@ -81,13 +81,13 @@ impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerAuxCols<WORD_SIZE, T> {
             .collect()
     }
 
-    pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
+    pub fn try_from_iter<I: Iterator<Item = T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
         Self {
-            old_cell: AccessCell::from_iter(iter),
+            old_cell: AccessCell::try_from_iter(iter),
             is_immediate: iter.next().unwrap(),
             is_zero_aux: iter.next().unwrap(),
             clk_lt: iter.next().unwrap(),
-            clk_lt_aux: IsLessThanAuxCols::from_iter(iter, lt_air),
+            clk_lt_aux: IsLessThanAuxCols::try_from_iter(iter, lt_air),
         }
     }
 

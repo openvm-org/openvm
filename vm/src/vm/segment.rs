@@ -2,6 +2,7 @@ use std::{
     collections::{BTreeMap, VecDeque},
     sync::Arc,
 };
+
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -75,7 +76,11 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         let memory_chip = MemoryChip::new(config.memory_config, state.memory);
         let field_arithmetic_chip = FieldArithmeticChip::new();
 
-        let field_extension_chip = FieldExtensionArithmeticChip::new(config.memory_config, memory_manager.clone(), range_checker.clone());
+        let field_extension_chip = FieldExtensionArithmeticChip::new(
+            config.memory_config,
+            memory_manager.clone(),
+            range_checker.clone(),
+        );
         let poseidon2_chip = Poseidon2Chip::from_poseidon2_config(
             Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
             config.memory_config,

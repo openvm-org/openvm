@@ -14,6 +14,7 @@ use crate::{
     },
 };
 
+#[allow(clippy::too_many_arguments)]
 fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
     builder: &mut AB,
     mem_oc: &NewMemoryOfflineChecker,
@@ -113,7 +114,7 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
             array::from_fn(|_| mem_aux_cols_iter.next().unwrap()),
         );
 
-        debug_assert!(matches!(mem_aux_cols_iter.next(), None));
+        debug_assert!(mem_aux_cols_iter.next().is_none());
 
         // Receives all IO columns from another chip on bus 3 (FIELD_EXTENSION_BUS)
         builder.push_receive(

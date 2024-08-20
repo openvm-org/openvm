@@ -24,7 +24,7 @@ impl<const WORD_SIZE: usize, T> AccessCell<WORD_SIZE, T> {
         self.data.into_iter().chain(iter::once(self.clk)).collect()
     }
 
-    pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> Self {
+    pub fn try_from_iter<I: Iterator<Item = T>>(iter: &mut I) -> Self {
         Self {
             data: from_fn(|_| iter.next().unwrap()),
             clk: iter.next().unwrap(),

@@ -1,6 +1,10 @@
-use std::array;
-use std::ops::{Add, Div, Mul, Sub};
-use std::sync::{Arc};
+use std::{
+    array,
+    ops::{Add, Div, Mul, Sub},
+    sync::Arc,
+};
+
+use afs_primitives::{is_less_than::columns::IsLessThanAuxCols, range_gate::RangeCheckerGateChip};
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng,
@@ -10,22 +14,19 @@ use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, Abstra
 use p3_matrix::Matrix;
 use parking_lot::Mutex;
 use rand::Rng;
-use afs_primitives::is_less_than::columns::IsLessThanAuxCols;
-use afs_primitives::range_gate::RangeCheckerGateChip;
+
 use super::{
     columns::FieldExtensionArithmeticIoCols, FieldExtensionArithmetic,
     FieldExtensionArithmeticChip, FieldExtensionArithmeticOperation,
 };
 use crate::{
-    cpu::{OpCode, FIELD_EXTENSION_INSTRUCTIONS, WORD_SIZE},
-    vm::config::MemoryConfig,
+    cpu::{OpCode, FIELD_EXTENSION_INSTRUCTIONS, RANGE_CHECKER_BUS, WORD_SIZE},
+    memory::{
+        manager::{access_cell::AccessCell, trace_builder::MemoryTraceBuilder, MemoryManager},
+        offline_checker::columns::MemoryOfflineCheckerAuxCols,
+    },
+    vm::{config::MemoryConfig, ChipType::RangeChecker},
 };
-use crate::cpu::RANGE_CHECKER_BUS;
-use crate::memory::manager::access_cell::AccessCell;
-use crate::memory::manager::MemoryManager;
-use crate::memory::manager::trace_builder::MemoryTraceBuilder;
-use crate::memory::offline_checker::columns::MemoryOfflineCheckerAuxCols;
-use crate::vm::ChipType::RangeChecker;
 
 /// Function for testing that generates a random program consisting only of field arithmetic operations.
 fn generate_field_extension_operations(

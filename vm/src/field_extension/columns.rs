@@ -95,7 +95,7 @@ impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T
                 product: array::from_fn(|_| next()),
                 inv: array::from_fn(|_| next()),
                 mem_oc_aux_cols: array::from_fn(|_| {
-                    MemoryOfflineCheckerAuxCols::from_iter(iter, lt_air)
+                    MemoryOfflineCheckerAuxCols::try_from_iter(iter, lt_air)
                 }),
             },
         }

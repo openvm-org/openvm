@@ -18,7 +18,7 @@ use super::{
 };
 use crate::{
     cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
-    field_extension::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticChip},
+    field_extension::columns::FieldExtensionArithmeticCols,
     memory::{
         compose, decompose,
         manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
@@ -220,12 +220,12 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let mut mem_read_trace_builder = MemoryTraceBuilder::new(
                 vm.memory_manager.clone(),
                 vm.range_checker.clone(),
-                vm.cpu_chip.air.memory_offline_checker.clone(),
+                vm.cpu_chip.air.memory_offline_checker,
             );
             let mut mem_write_trace_builder = MemoryTraceBuilder::new(
                 vm.memory_manager.clone(),
                 vm.range_checker.clone(),
-                vm.cpu_chip.air.memory_offline_checker.clone(),
+                vm.cpu_chip.air.memory_offline_checker,
             );
 
             let mut num_reads = 0;

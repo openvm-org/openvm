@@ -1,16 +1,17 @@
-use std::array;
-use std::sync::{Arc};
+use std::sync::Arc;
+
+use afs_primitives::range_gate::RangeCheckerGateChip;
 use p3_field::{Field, PrimeField32};
 use parking_lot::Mutex;
-use afs_primitives::range_gate::RangeCheckerGateChip;
+
 use crate::{
     cpu::{trace::Instruction, OpCode, FIELD_EXTENSION_INSTRUCTIONS},
-    memory::offline_checker::bridge::NewMemoryOfflineChecker,
-    vm::{config::MemoryConfig},
+    memory::{
+        manager::{trace_builder::MemoryTraceBuilder, MemoryManager},
+        offline_checker::bridge::NewMemoryOfflineChecker,
+    },
+    vm::config::MemoryConfig,
 };
-use crate::memory::manager::MemoryManager;
-use crate::memory::manager::trace_builder::MemoryTraceBuilder;
-use crate::memory::offline_checker::columns::MemoryOfflineCheckerAuxCols;
 
 pub mod air;
 pub mod bridge;
@@ -112,14 +113,20 @@ impl FieldExtensionArithmetic {
     }
 }
 
-pub struct FieldExtensionArithmeticChip<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
+pub struct FieldExtensionArithmeticChip<
+    const NUM_WORDS: usize,
+    const WORD_SIZE: usize,
+    F: PrimeField32,
+> {
     pub air: FieldExtensionArithmeticAir<WORD_SIZE>,
     pub operations: Vec<FieldExtensionArithmeticOperation<WORD_SIZE, F>>,
 
     pub memory: MemoryTraceBuilder<NUM_WORDS, WORD_SIZE, F>,
 }
 
-impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> FieldExtensionArithmeticChip<NUM_WORDS, WORD_SIZE, F> {
+impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
+    FieldExtensionArithmeticChip<NUM_WORDS, WORD_SIZE, F>
+{
     #[allow(clippy::new_without_default)]
     pub fn new(
         mem_config: MemoryConfig,
@@ -132,7 +139,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> FieldExten
         let memory = MemoryTraceBuilder::<NUM_WORDS, WORD_SIZE, F>::new(
             memory_manager,
             range_checker,
-            air.mem_oc.clone(),
+            air.mem_oc,
         );
         Self {
             air,
@@ -167,35 +174,25 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> FieldExten
 
         let result = FieldExtensionArithmetic::solve(opcode, operand1, operand2).unwrap();
 
-        self.write_extension_element(
-            d,
-            op_a,
-            result,
-        );
+        self.write_extension_element(d, op_a, result);
 
-        self
-            .operations
-            .push(FieldExtensionArithmeticOperation {
-                start_timestamp,
-                opcode,
-                op_a,
-                op_b,
-                op_c,
-                d,
-                e,
-                operand1,
-                operand2,
-                result,
-            });
+        self.operations.push(FieldExtensionArithmeticOperation {
+            start_timestamp,
+            opcode,
+            op_a,
+            op_b,
+            op_c,
+            d,
+            e,
+            operand1,
+            operand2,
+            result,
+        });
 
         result
     }
 
-    fn read_extension_element(
-        &mut self,
-        address_space: F,
-        address: F,
-    ) -> [F; EXTENSION_DEGREE] {
+    fn read_extension_element(&mut self, address_space: F, address: F) -> [F; EXTENSION_DEGREE] {
         assert_ne!(address_space, F::zero());
 
         let mut result = [F::zero(); EXTENSION_DEGREE];
