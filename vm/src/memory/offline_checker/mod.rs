@@ -1,8 +1,8 @@
-use std::{array::from_fn, collections::HashMap};
+use std::{array::from_fn, collections::HashMap, sync::Arc};
 
 use p3_field::PrimeField32;
 
-use afs_primitives::offline_checker::OfflineChecker;
+use afs_primitives::{offline_checker::OfflineChecker, range_gate::RangeCheckerGateChip};
 
 use crate::{
     cpu::{MEMORY_BUS, RANGE_CHECKER_BUS},
@@ -26,6 +26,7 @@ impl MemoryOfflineChecker {
 
 pub struct MemoryChip<const WORD_SIZE: usize, F: PrimeField32> {
     pub air: MemoryOfflineChecker,
+    pub range_checker: Arc<RangeCheckerGateChip>,
     pub accesses: Vec<MemoryAccess<WORD_SIZE, F>>,
     pub memory: HashMap<(F, F), F>,
     pub last_timestamp: Option<usize>,
@@ -38,6 +39,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
         clk_limb_bits: usize,
         decomp: usize,
         memory: HashMap<(F, F), F>,
+        range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
         let idx_clk_limb_bits = vec![addr_space_limb_bits, pointer_limb_bits, clk_limb_bits];
 
@@ -52,6 +54,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryChip<WORD_SIZE, F> {
 
         Self {
             air: MemoryOfflineChecker { offline_checker },
+            range_checker,
             accesses: vec![],
             memory,
             last_timestamp: None,

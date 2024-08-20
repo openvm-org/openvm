@@ -9,7 +9,7 @@ use crate::arch::chips::MachineChip;
 
 use super::ProgramChip;
 
-impl<F: PrimeField64> MachineChip<F> for ProgramChip<F> {
+impl<'a, F: PrimeField64> MachineChip<'a, F> for ProgramChip<F> {
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         RowMajorMatrix::new_col(
             self.execution_frequencies
@@ -24,5 +24,9 @@ impl<F: PrimeField64> MachineChip<F> for ProgramChip<F> {
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         &self.air
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.true_program_length
     }
 }

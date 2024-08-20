@@ -40,12 +40,7 @@ impl Default for VmConfig {
 impl VmConfig {
     pub fn cpu_options(&self) -> CpuOptions {
         CpuOptions {
-            field_arithmetic_enabled: self.field_arithmetic_enabled,
-            field_extension_enabled: self.field_extension_enabled,
-            compress_poseidon2_enabled: self.compress_poseidon2_enabled,
-            perm_poseidon2_enabled: self.perm_poseidon2_enabled,
             num_public_values: self.num_public_values,
-            is_less_than_enabled: self.is_less_than_enabled,
         }
     }
 }

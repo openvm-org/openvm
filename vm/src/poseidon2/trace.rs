@@ -39,7 +39,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
     }
 }
 
-impl<const WIDTH: usize, F: PrimeField32> MachineChip<F> for Poseidon2Chip<WIDTH, F> {
+impl<'a, const WIDTH: usize, F: PrimeField32> MachineChip<'a, F> for Poseidon2Chip<WIDTH, F> {
     /// Generates final Poseidon2VmAir trace from cached rows.
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         let row_len = self.rows.len();
@@ -61,5 +61,9 @@ impl<const WIDTH: usize, F: PrimeField32> MachineChip<F> for Poseidon2Chip<WIDTH
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         &self.air
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.rows.len()
     }
 }

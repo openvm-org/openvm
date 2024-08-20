@@ -1,3 +1,6 @@
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
+
 use afs_test_utils::{
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm, run_simple_test},
@@ -5,14 +8,12 @@ use afs_test_utils::{
     },
     engine::StarkEngine,
 };
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
 use stark_vm::{
-    cpu::{trace::Instruction, OpCode::*},
+    cpu::{OpCode::*, trace::Instruction},
     program::Program,
     vm::{
-        config::{VmConfig, DEFAULT_MAX_SEGMENT_LEN},
-        ExecutionAndTraceGenerationResult, VirtualMachine,
+        config::{DEFAULT_MAX_SEGMENT_LEN, VmConfig},
+        VirtualMachine,
     },
 };
 

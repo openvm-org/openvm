@@ -15,7 +15,7 @@ use crate::{
 
 use super::MemoryChip;
 
-impl<const WORD_SIZE: usize, F: PrimeField32> MachineChip<F> for MemoryChip<WORD_SIZE, F> {
+impl<'a, const WORD_SIZE: usize, F: PrimeField32> MachineChip<'a, F> for MemoryChip<WORD_SIZE, F> {
     /// Each row in the trace follow the same order as the Cols struct:
     /// [clk, mem_row, op_type, same_addr_space, same_pointer, same_addr, same_data, lt_bit, is_valid, is_equal_addr_space_aux, is_equal_pointer_aux, is_equal_data_aux, lt_aux]
     ///
@@ -42,7 +42,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MachineChip<F> for MemoryChip<WORD
         let mut offline_checker_chip = OfflineCheckerChip::new(self.air.offline_checker.clone());
 
         offline_checker_chip.generate_trace(
-            range_checker,
+            self.range_checker.clone(),
             self.accesses.clone(),
             dummy_op,
             self.accesses.len().next_power_of_two(),
@@ -54,5 +54,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MachineChip<F> for MemoryChip<WORD
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         &self.air
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.accesses.len()
     }
 }

@@ -66,6 +66,27 @@ impl<F: AbstractField> InstructionCols<F> {
             g: F::zero(),
         }
     }
+    pub fn new_large(
+        opcode: impl Into<F>,
+        a: impl Into<F>,
+        b: impl Into<F>,
+        c: impl Into<F>,
+        d: impl Into<F>,
+        e: impl Into<F>,
+        f: impl Into<F>,
+        g: impl Into<F>,
+    ) -> Self {
+        Self {
+            opcode: opcode.into(),
+            a: a.into(),
+            b: b.into(),
+            c: c.into(),
+            d: d.into(),
+            e: e.into(),
+            f: f.into(),
+            g: g.into(),
+        }
+    }
 }
 
 impl<T: Clone> InstructionCols<T> {

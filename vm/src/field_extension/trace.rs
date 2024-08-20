@@ -72,7 +72,7 @@ fn generate_cols<T: Field>(
     }
 }
 
-impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
+impl<'a, F: PrimeField32> MachineChip<'a, F> for FieldExtensionArithmeticChip<F> {
     /// Generates trace for field arithmetic chip.
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         let mut trace: Vec<F> = self
@@ -95,5 +95,9 @@ impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
 
     fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC> {
         &self.air
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.operations.len()
     }
 }

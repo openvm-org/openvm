@@ -66,7 +66,7 @@ fn generate_cols<T: PrimeField32>(operation: &ArithmeticOperation<T>) -> FieldAr
     }
 }
 
-impl<F: PrimeField32> MachineChip<F> for FieldArithmeticChip<F> {
+impl<'a, F: PrimeField32> MachineChip<'a, F> for FieldArithmeticChip<F> {
     /// Generates trace for field arithmetic chip.
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         let mut trace: Vec<F> = self
@@ -94,5 +94,9 @@ impl<F: PrimeField32> MachineChip<F> for FieldArithmeticChip<F> {
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         &self.air
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.operations.len()
     }
 }

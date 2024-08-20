@@ -1,13 +1,16 @@
 use std::{array::from_fn, collections::BTreeMap};
 
+use itertools::Itertools;
+use p3_field::{Field, PrimeField64};
+
 use afs_primitives::{
     is_equal_vec::{columns::IsEqualVecAuxCols, IsEqualVecAir},
     sub_chip::LocalTraceInstructions,
 };
-use itertools::Itertools;
-use p3_field::{Field, PrimeField64};
 
-use super::{trace::disabled_memory_cols, CpuOptions, OpCode, CPU_MAX_ACCESSES_PER_CYCLE};
+use crate::arch::instructions::CORE_INSTRUCTIONS;
+
+use super::{CPU_MAX_ACCESSES_PER_CYCLE, CpuOptions, OpCode, trace::disabled_memory_cols};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuIoCols<T> {
@@ -130,14 +133,10 @@ pub struct CpuAuxCols<const WORD_SIZE: usize, T> {
 impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
     pub fn from_slice(slc: &[T], options: CpuOptions) -> Self {
         let mut start = 0;
-        let mut end = options.num_enabled_instructions();
+        let mut end = CORE_INSTRUCTIONS.len();
         let operation_flags_vec = slc[start..end].to_vec();
         let mut operation_flags = BTreeMap::new();
-        for (opcode, operation_flag) in options
-            .enabled_instructions()
-            .iter()
-            .zip_eq(operation_flags_vec)
-        {
+        for (opcode, operation_flag) in CORE_INSTRUCTIONS.iter().zip_eq(operation_flags_vec) {
             operation_flags.insert(*opcode, operation_flag);
         }
 
@@ -165,7 +164,7 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
 
     pub fn flatten(&self, options: CpuOptions) -> Vec<T> {
         let mut flattened = vec![];
-        for opcode in options.enabled_instructions() {
+        for opcode in CORE_INSTRUCTIONS {
             flattened.push(self.operation_flags.get(&opcode).unwrap().clone());
         }
         flattened.extend(self.public_value_flags.clone());
@@ -176,7 +175,7 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
     }
 
     pub fn get_width(options: CpuOptions) -> usize {
-        options.num_enabled_instructions()
+        CORE_INSTRUCTIONS.len()
             + options.num_public_values
             + (CPU_MAX_ACCESSES_PER_CYCLE * MemoryAccessCols::<WORD_SIZE, T>::get_width())
             + 1
@@ -187,7 +186,7 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
 impl<const WORD_SIZE: usize, T: PrimeField64> CpuAuxCols<WORD_SIZE, T> {
     pub fn nop_row(options: CpuOptions) -> Self {
         let mut operation_flags = BTreeMap::new();
-        for opcode in options.enabled_instructions() {
+        for opcode in CORE_INSTRUCTIONS {
             operation_flags.insert(opcode, T::from_bool(opcode == OpCode::NOP));
         }
         let accesses = [disabled_memory_cols(); CPU_MAX_ACCESSES_PER_CYCLE];

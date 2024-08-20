@@ -1,32 +1,30 @@
 use std::{array::from_fn, borrow::Borrow};
 
+use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
+use p3_field::{AbstractField, Field};
+use p3_matrix::Matrix;
+
 use afs_primitives::{
     is_equal_vec::{columns::IsEqualVecIoCols, IsEqualVecAir},
     is_zero::{columns::IsZeroIoCols, IsZeroAir},
     sub_chip::SubAir,
 };
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use p3_field::{AbstractField, Field};
-use p3_matrix::Matrix;
+
+use crate::arch::bridge::ExecutionBus;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    timestamp_delta, CpuOptions,
-    OpCode::*,
-    CPU_MAX_READS_PER_CYCLE, FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH,
+    CPU_MAX_READS_PER_CYCLE, CpuOptions,
+    INST_WIDTH,
+    OpCode::*, timestamp_delta,
 };
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 /// Air for the CPU. Carries no state and does not own execution.
 pub struct CpuAir<const WORD_SIZE: usize> {
     pub options: CpuOptions,
-}
-
-impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
-    pub fn new(options: CpuOptions) -> Self {
-        Self { options }
-    }
+    pub execution_bus: ExecutionBus,
 }
 
 impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for CpuAir<WORD_SIZE> {
@@ -113,14 +111,16 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
             builder.assert_bool(flag);
         }
 
-        let mut sum_flags = AB::Expr::zero();
+        let mut is_cpu_opcode = AB::Expr::zero();
         let mut match_opcode = AB::Expr::zero();
         for (&opcode, &flag) in operation_flags.iter() {
-            sum_flags = sum_flags + flag;
+            is_cpu_opcode = is_cpu_opcode + flag;
             match_opcode += flag * AB::F::from_canonical_usize(opcode as usize);
         }
-        builder.assert_one(sum_flags);
-        builder.assert_eq(opcode, match_opcode);
+        builder.assert_bool(is_cpu_opcode.clone());
+        builder
+            .when(is_cpu_opcode.clone())
+            .assert_eq(opcode, match_opcode);
 
         // keep track of when memory accesses should be enabled
         let mut read1_enabled_check = AB::Expr::zero();
@@ -347,33 +347,6 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         when_publish.assert_eq(read2.address_space, e);
         when_publish.assert_eq(read2.address, b);
 
-        // arithmetic operations
-        if self.options.field_arithmetic_enabled {
-            let mut arithmetic_flags = AB::Expr::zero();
-            for opcode in FIELD_ARITHMETIC_INSTRUCTIONS {
-                arithmetic_flags += operation_flags[&opcode].into();
-            }
-            read1_enabled_check += arithmetic_flags.clone();
-            read2_enabled_check += arithmetic_flags.clone();
-            write_enabled_check += arithmetic_flags.clone();
-            let mut when_arithmetic = builder.when(arithmetic_flags);
-
-            // read from d[b] and e[c]
-            when_arithmetic.assert_eq(read1.address_space, d);
-            when_arithmetic.assert_eq(read1.address, b);
-
-            when_arithmetic.assert_eq(read2.address_space, e);
-            when_arithmetic.assert_eq(read2.address, c);
-
-            // write to d[a]
-            when_arithmetic.assert_eq(write.address_space, d);
-            when_arithmetic.assert_eq(write.address, a);
-
-            when_arithmetic
-                .when_transition()
-                .assert_eq(next_pc, pc + inst_width);
-        }
-
         // immediate calculation
 
         for access in [&read1, &read2, &write] {
@@ -431,6 +404,13 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         builder.assert_eq(write.enabled, write_enabled_check);
 
         // Turn on all interactions
-        self.eval_interactions(builder, io, accesses, &operation_flags);
+        self.eval_interactions(
+            builder,
+            io,
+            next_io,
+            accesses,
+            &operation_flags,
+            AB::Expr::one() - is_cpu_opcode,
+        );
     }
 }

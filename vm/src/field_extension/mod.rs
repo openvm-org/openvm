@@ -43,11 +43,6 @@ pub struct FieldExtensionArithmeticAir {
 impl FieldExtensionArithmeticAir {
     pub const BASE_OP: u8 = OpCode::FE4ADD as u8;
 
-    pub fn max_accesses_per_instruction(opcode: OpCode) -> usize {
-        assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
-        12
-    }
-
     /// Evaluates given opcode using given operands.
     ///
     /// Returns None for opcodes not in cpu::FIELD_EXTENSION_INSTRUCTIONS.

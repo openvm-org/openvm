@@ -103,7 +103,7 @@ impl<F: PrimeField32> MemoryTester<F> {
     }
 }
 
-impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
+impl<'a, F: PrimeField32> MachineChip<'a, F> for MemoryTester<F> {
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         let mut rows = vec![];
         for &MemoryAccess {
