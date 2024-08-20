@@ -97,18 +97,3 @@ impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerAuxCols<WORD_SIZE, T> {
             + IsLessThanAuxCols::<T>::width(&oc.timestamp_lt_air)
     }
 }
-
-// impl<const WORD_SIZE: usize, T: Copy> MemoryOfflineCheckerCols<WORD_SIZE, T> {
-//     // TODO[osama]: make sure this is used in all relevant parts
-//     pub fn data(&self) -> [T; WORD_SIZE] {
-//         self.io.op_cols.data_write
-//     }
-
-//     pub fn addr_space(&self) -> T {
-//         self.io.op_cols.addr_space
-//     }
-
-//     pub fn pointer(&self) -> T {
-//         self.io.op_cols.pointer
-//     }
-// }

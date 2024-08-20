@@ -34,6 +34,7 @@ use crate::{
     },
 };
 
+const NUM_WORDS: usize = 8;
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 24;
 const DECOMP: usize = 8;
@@ -60,6 +61,7 @@ impl WriteOps {
 
 #[test]
 fn p2_flatten_fromslice_roundtrip() {
+    const NUM_WORDS: usize = 8;
     const WORD_SIZE: usize = 1;
 
     let program = Program {
@@ -67,7 +69,7 @@ fn p2_flatten_fromslice_roundtrip() {
         debug_infos: vec![],
     };
 
-    let mut vm = VirtualMachine::<1, 1, BabyBear>::new(
+    let mut vm = VirtualMachine::<NUM_WORDS, WORD_SIZE, BabyBear>::new(
         VmConfig {
             field_arithmetic_enabled: true,
             field_extension_enabled: false,
@@ -103,11 +105,14 @@ fn run_perm_ops(
     instructions: Vec<Instruction<BabyBear>>,
     data: Vec<[BabyBear; WIDTH]>,
 ) -> (
-    VirtualMachine<1, 1, BabyBear>,
+    VirtualMachine<NUM_WORDS, WORD_SIZE, BabyBear>,
     BabyBearPoseidon2Engine,
     DummyInteractionAir,
     Vec<RowMajorMatrix<BabyBear>>,
 ) {
+    const NUM_WORDS: usize = 8;
+    const WORD_SIZE: usize = 1;
+
     let num_ops = instructions.len();
     assert_eq!(data.len(), num_ops);
     let mut rng = create_seeded_rng();
@@ -118,7 +123,7 @@ fn run_perm_ops(
     };
 
     // default VM with poseidon2 enabled
-    let mut vm = VirtualMachine::<1, 1, BabyBear>::new(
+    let mut vm = VirtualMachine::<NUM_WORDS, WORD_SIZE, BabyBear>::new(
         VmConfig {
             field_arithmetic_enabled: true,
             field_extension_enabled: false,

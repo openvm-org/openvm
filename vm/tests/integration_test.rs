@@ -16,7 +16,7 @@ use stark_vm::{
     },
 };
 
-const NUM_WORDS: usize = 1;
+const NUM_WORDS: usize = 8;
 const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 29;
 const DECOMP: usize = 5;
@@ -115,7 +115,7 @@ fn execution_test(
     witness_stream: Vec<Vec<BabyBear>>,
     fast_segmentation: bool,
 ) {
-    let vm = VirtualMachine::<1, WORD_SIZE, _>::new(
+    let vm = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::new(
         VmConfig {
             field_arithmetic_enabled,
             field_extension_enabled,
