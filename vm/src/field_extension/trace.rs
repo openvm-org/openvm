@@ -22,7 +22,6 @@ fn generate_cols<T: Field>(
     let x = op.operand1;
     let y = op.operand2;
 
-    let product = FieldExtensionArithmeticAir::solve(OpCode::BBE4MUL, x, y).unwrap();
     let inv = if x[0] == T::zero() && x[1] == T::zero() && x[2] == T::zero() && x[3] == T::zero() {
         [T::zero(), T::zero(), T::zero(), T::zero()]
     } else {
@@ -49,7 +48,6 @@ fn generate_cols<T: Field>(
             is_sub,
             is_mul,
             is_inv,
-            product,
             inv,
         },
     }

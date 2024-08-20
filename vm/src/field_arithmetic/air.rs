@@ -29,10 +29,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
         let FieldArithmeticCols { io, aux } = local;
 
         let flags = [aux.is_add, aux.is_sub, aux.is_mul, aux.is_div];
-
-        let opcodes =
-            [FADD, FSUB, FMUL, FDIV].map(|opcode| AB::Expr::from_canonical_u32(opcode as u32));
-
+        let opcodes = [FADD, FSUB, FMUL, FDIV];
         let results = [
             io.x + io.y,
             io.x - io.y,
@@ -54,7 +51,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
             builder.assert_bool(flag);
 
             flag_sum += flag.into();
-            expected_opcode += flag * opcode;
+            expected_opcode += flag * AB::Expr::from_canonical_u32(opcode as u32);
             expected_result += flag * result;
         }
         builder.assert_one(flag_sum);

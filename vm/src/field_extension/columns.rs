@@ -42,8 +42,6 @@ pub struct FieldExtensionArithmeticAuxCols<T> {
     pub is_mul: T,
     // whether the opcode is BBE4INV
     pub is_inv: T,
-    // the product of x and y
-    pub product: [T; EXTENSION_DEGREE],
     // the field extension inverse of x
     pub inv: [T; EXTENSION_DEGREE],
 }
@@ -88,7 +86,6 @@ where
                 is_sub: T::zero(),
                 is_mul: T::zero(),
                 is_inv: T::zero(),
-                product: [T::zero(); EXTENSION_DEGREE],
                 inv: [T::zero(); EXTENSION_DEGREE],
             },
         }
@@ -112,7 +109,7 @@ impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
 
 impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
     pub fn get_width() -> usize {
-        2 * EXTENSION_DEGREE + 12
+        EXTENSION_DEGREE + 12
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -130,7 +127,6 @@ impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
             self.is_mul.clone(),
             self.is_inv.clone(),
         ];
-        result.extend_from_slice(&self.product);
         result.extend_from_slice(&self.inv);
         result
     }
