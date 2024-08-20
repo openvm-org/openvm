@@ -36,12 +36,14 @@ jobs:
 
   benchmark-rw:
     uses: ./.github/workflows/benchmark-call.yml
+    if: github.event.pull_request.draft == false
     with:
       benchmark_name: single_rw
     secrets: inherit
 
   benchmark-filter:
     uses: ./.github/workflows/benchmark-call.yml
+    if: github.event.pull_request.draft == false
     with:
       benchmark_name: single_filter
     secrets: inherit
