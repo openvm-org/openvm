@@ -58,6 +58,7 @@ impl<V, const WORD_SIZE: usize> MemoryBridge<V, WORD_SIZE> {
     }
 
     /// Prepare a logical memory read operation.
+    #[must_use]
     pub fn read<T>(
         // , const WORD_SIZE: usize>(
         &mut self,
@@ -79,6 +80,7 @@ impl<V, const WORD_SIZE: usize> MemoryBridge<V, WORD_SIZE> {
     }
 
     /// Prepare a logical memory write operation.
+    #[must_use]
     pub fn write<T>(
         // , const WORD_SIZE: usize>(
         &mut self,
