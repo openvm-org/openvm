@@ -1,8 +1,7 @@
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use p3_field::{Field, PrimeField32};
-use parking_lot::Mutex;
 
 use crate::{
     cpu::{trace::Instruction, OpCode, FIELD_EXTENSION_INSTRUCTIONS},
@@ -130,7 +129,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     #[allow(clippy::new_without_default)]
     pub fn new(
         mem_config: MemoryConfig,
-        memory_manager: Arc<Mutex<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
+        memory_manager: Rc<RefCell<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
         let air = FieldExtensionArithmeticAir {

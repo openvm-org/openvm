@@ -908,7 +908,6 @@ where
     let mut result: Vec<&dyn DynRapForRecursion<C>> = vec![
         &vm.cpu_chip.air,
         &vm.program_chip.air,
-        &vm.memory_chip.air,
         &vm.range_checker.air,
     ];
     if vm.options().field_arithmetic_enabled {

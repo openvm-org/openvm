@@ -1,8 +1,4 @@
-use std::{
-    collections::{HashMap, VecDeque},
-    mem::take,
-    ops::Deref,
-};
+use std::{collections::VecDeque, mem::take, ops::Deref};
 
 use afs_stark_backend::rap::AnyRap;
 use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
@@ -83,11 +79,11 @@ pub struct ExecutionAndTraceGenerationResult<const WORD_SIZE: usize> {
 
 /// Struct that holds the current state of the VM. For now, includes memory, input stream, and hint stream.
 /// Hint stream cannot be added to during execution, but must be copied because it is popped from.
+///
+/// TODO[zach]: Capture memory in VM state for continuations.
 pub struct VirtualMachineState<F: PrimeField32> {
     /// Current state of the CPU
     state: ExecutionState,
-    /// Current memory of the CPU
-    memory: HashMap<(F, F), F>,
     /// Input stream of the CPU
     input_stream: VecDeque<Vec<F>>,
     /// Hint stream of the CPU
@@ -110,7 +106,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         vm.segment(
             VirtualMachineState {
                 state: ExecutionState::default(),
-                memory: HashMap::new(),
                 input_stream: VecDeque::from(input_stream),
                 hint_stream: VecDeque::new(),
             },
@@ -138,7 +133,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         let last_seg = self.segments.last().unwrap();
         VirtualMachineState {
             state: last_seg.cpu_chip.state,
-            memory: last_seg.memory_chip.memory_clone(),
             input_stream: last_seg.input_stream.clone(),
             hint_stream: last_seg.hint_stream.clone(),
         }

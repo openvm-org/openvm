@@ -26,7 +26,7 @@ impl<const WIDTH: usize, const NUM_WORDS: usize, const WORD_SIZE: usize, F: Prim
     }
 
     pub fn blank_row(&self) -> Poseidon2VmCols<WIDTH, WORD_SIZE, F> {
-        let timestamp = self.memory_manager.lock().get_clk();
+        let timestamp = self.memory_manager.borrow().get_clk();
         let mut blank =
             Poseidon2VmCols::<WIDTH, WORD_SIZE, F>::blank_row(&self.air.inner, timestamp);
         let mut mem_trace_builder = MemoryTraceBuilder::new(

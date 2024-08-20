@@ -1,9 +1,8 @@
-use std::{array, sync::Arc};
+use std::{array, cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 use columns::*;
 use p3_field::PrimeField32;
-use parking_lot::Mutex;
 use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
 
 use self::air::Poseidon2VmAir;
@@ -40,7 +39,7 @@ pub struct Poseidon2Chip<
 > {
     pub air: Poseidon2VmAir<WIDTH, WORD_SIZE, F>,
     pub rows: Vec<Poseidon2VmCols<WIDTH, WORD_SIZE, F>>,
-    pub memory_manager: Arc<Mutex<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
+    pub memory_manager: Rc<RefCell<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
     pub range_checker: Arc<RangeCheckerGateChip>,
 }
 
@@ -116,7 +115,7 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
     pub fn from_poseidon2_config(
         p2_config: Poseidon2Config<WIDTH, F>,
         mem_config: MemoryConfig,
-        memory_manager: Arc<Mutex<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
+        memory_manager: Rc<RefCell<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
         range_checker: Arc<RangeCheckerGateChip>,
         bus_index: usize,
     ) -> Self {
@@ -139,7 +138,7 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
     ///
     /// Used for both compression and permutation.
     pub fn calculate(&mut self, instruction: Instruction<F>, is_direct: bool) {
-        let start_clk = self.memory_manager.lock().get_clk();
+        let start_clk = self.memory_manager.borrow().get_clk();
         let mut mem_trace_builder = MemoryTraceBuilder::<NUM_WORDS, WORD_SIZE, F>::new(
             self.memory_manager.clone(),
             self.range_checker.clone(),

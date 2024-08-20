@@ -1,5 +1,7 @@
 use std::{
+    cell::RefCell,
     collections::{BTreeMap, VecDeque},
+    rc::Rc,
     sync::Arc,
 };
 
@@ -13,7 +15,6 @@ use afs_stark_backend::{
 };
 use p3_field::PrimeField32;
 use p3_matrix::dense::DenseMatrix;
-use parking_lot::Mutex;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
 use super::{ChipType, VirtualMachineState, VmConfig};
@@ -25,7 +26,7 @@ use crate::{
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
     is_less_than::IsLessThanChip,
-    memory::{manager::MemoryManager, offline_checker::MemoryChip},
+    memory::manager::MemoryManager,
     modular_multiplication::ModularMultiplicationChip,
     poseidon2::Poseidon2Chip,
     program::{Program, ProgramChip},
@@ -36,8 +37,7 @@ pub struct ExecutionSegment<const NUM_WORDS: usize, const WORD_SIZE: usize, F: P
     pub config: VmConfig,
     pub cpu_chip: CpuChip<WORD_SIZE, F>,
     pub program_chip: ProgramChip<F>,
-    pub memory_manager: Arc<Mutex<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
-    pub memory_chip: MemoryChip<WORD_SIZE, F>,
+    pub memory_manager: Rc<RefCell<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
     pub field_arithmetic_chip: FieldArithmeticChip<F>,
     pub field_extension_chip: FieldExtensionArithmeticChip<NUM_WORDS, WORD_SIZE, F>,
     pub range_checker: Arc<RangeCheckerGateChip>,
@@ -65,12 +65,11 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             (1 << config.memory_config.decomp) as u32,
         ));
         let cpu_chip = CpuChip::from_state(config.cpu_options(), state.state, config.memory_config);
-        let memory_manager = Arc::new(Mutex::new(MemoryManager::with_volatile_memory(
+        let memory_manager = Rc::new(RefCell::new(MemoryManager::with_volatile_memory(
             config.memory_config,
             range_checker.clone(),
         )));
         let program_chip = ProgramChip::new(program);
-        let memory_chip = MemoryChip::new(config.memory_config, state.memory);
         let field_arithmetic_chip = FieldArithmeticChip::new();
         let field_extension_chip = FieldExtensionArithmeticChip::new(
             config.memory_config,
@@ -100,7 +99,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             cpu_chip,
             memory_manager,
             program_chip,
-            memory_chip,
             field_arithmetic_chip,
             field_extension_chip,
             range_checker,
@@ -124,7 +122,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     pub fn should_segment(&mut self) -> bool {
         let heights = [
             self.cpu_chip.current_height(),
-            self.memory_chip.current_height(),
             self.field_arithmetic_chip.current_height(),
             self.field_extension_chip.current_height(),
             self.poseidon2_chip.current_height(),
@@ -145,7 +142,9 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         let mut result = vec![
             cpu_trace,
             self.program_chip.generate_trace(),
-            self.memory_manager.lock().generate_memory_interface_trace(),
+            self.memory_manager
+                .borrow()
+                .generate_memory_interface_trace(),
             self.range_checker.generate_trace(),
         ];
         if self.config.cpu_options().field_arithmetic_enabled {
@@ -242,10 +241,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         metrics.insert("cpu_cycles".to_string(), self.cpu_chip.rows.len());
         metrics.insert("cpu_timestamp".to_string(), self.cpu_chip.state.timestamp);
         metrics.insert(
-            "memory_chip_accesses".to_string(),
-            self.memory_chip.accesses.len(),
-        );
-        metrics.insert(
             "field_arithmetic_ops".to_string(),
             self.field_arithmetic_chip.operations.len(),
         );
@@ -281,7 +276,7 @@ where
     let mut result: Vec<Box<dyn AnyRap<SC>>> = vec![
         Box::new(segment.cpu_chip.air),
         Box::new(segment.program_chip.air),
-        Box::new(segment.memory_manager.lock().get_audit_air()),
+        Box::new(segment.memory_manager.borrow().get_audit_air()),
         Box::new(segment.range_checker.air),
     ];
     if segment.config.cpu_options().field_arithmetic_enabled {

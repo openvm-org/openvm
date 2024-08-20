@@ -270,7 +270,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let mut num_reads = 0;
             let mut num_writes = 0;
 
-            let initial_accesses = vm.memory_chip.accesses.len();
             let initial_field_base_ops = vm.field_arithmetic_chip.operations.len();
             let initial_field_extension_ops = vm.field_extension_chip.operations.len();
             let initial_poseidon2_rows = vm.poseidon2_chip.rows.len();
@@ -406,7 +405,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     vm.field_extension_chip.calculate(timestamp, instruction);
                 }
                 MOD_SECP256K1_ADD | MOD_SECP256K1_SUB | MOD_SECP256K1_MUL | MOD_SECP256K1_DIV => {
-                    ModularMultiplicationChip::calculate(vm, timestamp, instruction);
+                    ModularMultiplicationChip::calculate(vm, instruction);
                 }
                 PERM_POS2 | COMP_POS2 => {
                     vm.poseidon2_chip.calculate(instruction, false);
@@ -421,7 +420,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     hint_stream.extend(hint);
                 }
                 HINT_BITS => {
-                    let val = vm.memory_chip.unsafe_read_elem(d, a);
+                    let word = vm.memory_manager.borrow().unsafe_read_word(d, a);
+                    let val = compose(word);
                     let mut val = val.as_canonical_u32();
 
                     hint_stream = VecDeque::new();
@@ -461,9 +461,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 .collect();
             let mem_oc_aux_cols = mem_oc_aux_cols.try_into().unwrap();
 
-            let final_accesses = vm.memory_chip.accesses.len();
-            let num_accesses_memory_rows = final_accesses - initial_accesses;
-
             let final_field_base_ops = vm.field_arithmetic_chip.operations.len();
             let num_field_base_ops = final_field_base_ops - initial_field_base_ops;
 
@@ -491,7 +488,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
 
                 let trace_cells = CpuCols::<WORD_SIZE, F>::get_width(&vm.cpu_chip.air)
                     + ProgramPreprocessedCols::<F>::get_width()
-                    + num_accesses_memory_rows * vm.memory_chip.air.air_width()
                     + num_field_base_ops
                         * FieldExtensionArithmeticCols::<WORD_SIZE, F>::get_width()
                     + num_field_extension_ops

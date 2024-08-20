@@ -1,6 +1,8 @@
 use std::{
     array,
+    cell::RefCell,
     ops::{Add, Div, Mul, Sub},
+    rc::Rc,
     sync::Arc,
 };
 
@@ -89,7 +91,7 @@ fn field_extension_air_test() {
         RANGE_CHECKER_BUS,
         (1 << mem_config.decomp) as u32,
     ));
-    let memory_manager = Arc::new(Mutex::new(MemoryManager::with_volatile_memory(
+    let memory_manager = Rc::new(RefCell::new(MemoryManager::with_volatile_memory(
         mem_config,
         range_checker.clone(),
     )));

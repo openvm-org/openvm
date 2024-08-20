@@ -293,26 +293,9 @@ fn air_test_change<
 
     let memory_interface_trace = segment
         .memory_manager
-        .lock()
+        .borrow()
         .generate_memory_interface_trace();
     let range_checker_trace = segment.range_checker.generate_trace();
-
-    let memory_air = DummyInteractionAir::new(5, false, MEMORY_BUS);
-    let mut memory_rows = vec![];
-    for memory_access in segment.memory_chip.accesses.iter() {
-        memory_rows.extend(vec![
-            BabyBear::one(),
-            BabyBear::from_canonical_usize(memory_access.timestamp),
-            BabyBear::from_bool(memory_access.op_type == OpType::Write),
-            memory_access.address_space,
-            memory_access.address,
-        ]);
-        memory_rows.extend(memory_access.data);
-    }
-    while !(memory_rows.len() / (5 + WORD_SIZE)).is_power_of_two() {
-        memory_rows.push(BabyBear::zero());
-    }
-    let memory_trace = RowMajorMatrix::new(memory_rows, 5 + WORD_SIZE);
 
     let arithmetic_air = DummyInteractionAir::new(4, false, ARITHMETIC_BUS);
     let mut arithmetic_rows = vec![];
@@ -334,7 +317,7 @@ fn air_test_change<
     let mut all_public_values = vec![segment.get_cpu_pis(), vec![], vec![], vec![], vec![]];
 
     let MemoryInterface::Volatile(memory_audit_chip) =
-        &segment.memory_manager.lock().interface_chip;
+        &segment.memory_manager.borrow().interface_chip;
 
     let test_result = if field_arithmetic_enabled {
         run_simple_test(

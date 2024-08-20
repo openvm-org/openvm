@@ -190,15 +190,14 @@ fn run_perm_ops(
     for ((addr_space, pointer), data) in initial_memory {
         segment
             .memory_manager
-            .lock()
+            .borrow_mut()
             .unsafe_write_word(addr_space, pointer, data);
 
-        segment.memory_manager.lock().interface_chip.touch_address(
-            addr_space,
-            pointer,
-            data,
-            BabyBear::zero(),
-        );
+        segment
+            .memory_manager
+            .borrow_mut()
+            .interface_chip
+            .touch_address(addr_space, pointer, data, BabyBear::zero());
     }
 
     let time_per =
@@ -242,7 +241,7 @@ fn run_perm_ops(
 
     let memory_interface_trace = segment
         .memory_manager
-        .lock()
+        .borrow()
         .generate_memory_interface_trace();
     let poseidon2_trace = segment.poseidon2_chip.generate_trace();
     let range_checker_trace = segment.range_checker.generate_trace();
@@ -308,7 +307,7 @@ fn poseidon2_chip_random_50_test() {
             vec![
                 &vm.segments[0].range_checker.air,
                 // TODO[osama]: consider making a dummy interface air
-                &vm.segments[0].memory_manager.lock().get_audit_air(),
+                &vm.segments[0].memory_manager.borrow().get_audit_air(),
                 &vm.segments[0].poseidon2_chip.air,
                 &dummy_cpu_poseidon2,
             ],
@@ -345,7 +344,7 @@ fn poseidon2_negative_test() {
                 vec![
                     &vm.segments[0].range_checker.air,
                     // TODO[osama]: consider making a dummy interface air
-                    &vm.segments[0].memory_manager.lock().get_audit_air(),
+                    &vm.segments[0].memory_manager.borrow().get_audit_air(),
                     &vm.segments[0].poseidon2_chip.air,
                     &dummy_cpu_poseidon2,
                 ],

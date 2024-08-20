@@ -1,8 +1,7 @@
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 use p3_field::PrimeField32;
-use parking_lot::Mutex;
 
 use super::{operation::MemoryOperation, MemoryManager};
 use crate::memory::{
@@ -15,7 +14,7 @@ use crate::memory::{
 };
 
 pub struct MemoryTraceBuilder<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
-    memory_manager: Arc<Mutex<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
+    memory_manager: Rc<RefCell<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
     range_checker: Arc<RangeCheckerGateChip>,
     offline_checker: NewMemoryOfflineChecker,
 
@@ -26,7 +25,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     MemoryTraceBuilder<NUM_WORDS, WORD_SIZE, F>
 {
     pub fn new(
-        memory_manager: Arc<Mutex<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
+        memory_manager: Rc<RefCell<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
         range_checker: Arc<RangeCheckerGateChip>,
         offline_checker: NewMemoryOfflineChecker,
     ) -> Self {
@@ -39,7 +38,10 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     }
 
     pub fn read_word(&mut self, addr_space: F, pointer: F) -> MemoryOperation<WORD_SIZE, F> {
-        let mem_access = self.memory_manager.lock().read_word(addr_space, pointer);
+        let mem_access = self
+            .memory_manager
+            .borrow_mut()
+            .read_word(addr_space, pointer);
         self.accesses_buffer
             .push(self.memory_access_to_checker_aux_cols(&mem_access));
 
@@ -54,7 +56,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     ) -> MemoryOperation<WORD_SIZE, F> {
         let mem_access = self
             .memory_manager
-            .lock()
+            .borrow_mut()
             .write_word(addr_space, pointer, data);
         self.accesses_buffer
             .push(self.memory_access_to_checker_aux_cols(&mem_access));
@@ -75,7 +77,10 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     // }
 
     pub fn disabled_op(&mut self, addr_space: F, op_type: OpType) -> MemoryOperation<WORD_SIZE, F> {
-        let mem_access = self.memory_manager.lock().disabled_op(addr_space, op_type);
+        let mem_access = self
+            .memory_manager
+            .borrow_mut()
+            .disabled_op(addr_space, op_type);
         self.accesses_buffer
             .push(self.memory_access_to_checker_aux_cols(&mem_access));
 

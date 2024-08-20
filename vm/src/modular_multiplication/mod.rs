@@ -88,28 +88,35 @@ impl<F: PrimeField32> ModularMultiplicationChip<F> {
 
     pub fn calculate<const NUM_WORDS: usize, const WORD_SIZE: usize>(
         vm: &mut ExecutionSegment<NUM_WORDS, WORD_SIZE, F>,
-        start_timestamp: usize,
         instruction: Instruction<F>,
     ) {
-        let mut timestamp = start_timestamp;
-        let mut next_timestamp = || {
-            timestamp += 1;
-            timestamp - 1
-        };
         let (op_input_2, op_result) = match instruction.opcode {
             MOD_SECP256K1_ADD | MOD_SECP256K1_MUL => (instruction.op_b, instruction.op_c),
             MOD_SECP256K1_SUB | MOD_SECP256K1_DIV => (instruction.op_c, instruction.op_b),
             _ => panic!(),
         };
+        // TODO[zach]: update for word size
         let address1 = vm
-            .memory_chip
-            .read_elem(next_timestamp(), instruction.d, instruction.op_a);
+            .memory_manager
+            .borrow_mut()
+            .read_word(instruction.d, instruction.op_a)
+            .op
+            .cell
+            .data[0];
         let address2 = vm
-            .memory_chip
-            .read_elem(next_timestamp(), instruction.d, op_input_2);
+            .memory_manager
+            .borrow_mut()
+            .read_word(instruction.d, op_input_2)
+            .op
+            .cell
+            .data[0];
         let output_address = vm
-            .memory_chip
-            .read_elem(next_timestamp(), instruction.d, op_result);
+            .memory_manager
+            .borrow_mut()
+            .read_word(instruction.d, op_result)
+            .op
+            .cell
+            .data[0];
 
         let air = &vm.modular_multiplication_chip.air.air;
         let modulus = air.modulus.clone();
@@ -117,20 +124,22 @@ impl<F: PrimeField32> ModularMultiplicationChip<F> {
         let repr_bits = air.repr_bits;
         let argument_1_elems = (0..num_elems)
             .map(|i| {
-                vm.memory_chip.read_elem(
-                    next_timestamp(),
-                    instruction.e,
-                    address1 + F::from_canonical_usize(i),
-                )
+                vm.memory_manager
+                    .borrow_mut()
+                    .read_word(instruction.e, address1 + F::from_canonical_usize(i))
+                    .op
+                    .cell
+                    .data[0]
             })
             .collect();
         let argument_2_elems = (0..num_elems)
             .map(|i| {
-                vm.memory_chip.read_elem(
-                    next_timestamp(),
-                    instruction.e,
-                    address2 + F::from_canonical_usize(i),
-                )
+                vm.memory_manager
+                    .borrow_mut()
+                    .read_word(instruction.e, address2 + F::from_canonical_usize(i))
+                    .op
+                    .cell
+                    .data[0]
             })
             .collect();
         let argument_1 = elems_to_bigint(argument_1_elems, repr_bits);
@@ -150,11 +159,13 @@ impl<F: PrimeField32> ModularMultiplicationChip<F> {
         } % modulus;
         let result_elems = bigint_to_elems(result, repr_bits, num_elems);
         for (i, &elem) in result_elems.iter().enumerate() {
-            vm.memory_chip.write_elem(
-                next_timestamp(),
+            let mut word = [F::zero(); WORD_SIZE];
+            word[0] = elem;
+
+            vm.memory_manager.borrow_mut().write_word(
                 instruction.e,
                 output_address + F::from_canonical_usize(i),
-                elem,
+                word,
             );
         }
         vm.modular_multiplication_chip
