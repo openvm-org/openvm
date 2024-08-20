@@ -9,6 +9,9 @@ use p3_field::{extension::BinomialExtensionField, AbstractField};
 use super::benchmark_helpers::vm_benchmark_execute_and_prove;
 
 pub fn benchmark_fib_program(n: usize) -> Result<()> {
+    const NUM_WORDS: usize = 8;
+    const WORD_SIZE: usize = 1;
+
     println!("Running Fibonacci program benchmark with n = {}", n);
 
     type F = BabyBear;
@@ -33,5 +36,9 @@ pub fn benchmark_fib_program(n: usize) -> Result<()> {
 
     let fib_program = builder.compile_isa::<1>();
 
-    vm_benchmark_execute_and_prove::<1>(fib_program, vec![], "VM Fibonacci Program")
+    vm_benchmark_execute_and_prove::<NUM_WORDS, WORD_SIZE>(
+        fib_program,
+        vec![],
+        "VM Fibonacci Program",
+    )
 }

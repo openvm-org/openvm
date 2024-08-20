@@ -899,8 +899,8 @@ pub fn sort_chips<'a>(
     (chips, rec_raps, traces, pvs)
 }
 
-pub fn get_rec_raps<const WORD_SIZE: usize, C: Config>(
-    vm: &ExecutionSegment<1, WORD_SIZE, C::F>,
+pub fn get_rec_raps<const NUM_WORDS: usize, const WORD_SIZE: usize, C: Config>(
+    vm: &ExecutionSegment<NUM_WORDS, WORD_SIZE, C::F>,
 ) -> Vec<&dyn DynRapForRecursion<C>>
 where
     C::F: PrimeField32,

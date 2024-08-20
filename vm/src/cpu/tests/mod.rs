@@ -1,6 +1,5 @@
 use std::iter;
 
-use afs_primitives::is_zero::IsZeroAir;
 use afs_stark_backend::verifier::VerificationError;
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test,
@@ -16,11 +15,9 @@ use p3_matrix::{
 use super::{timestamp_delta, CpuAir, OpCode::*, CPU_MAX_READS_PER_CYCLE};
 use crate::{
     cpu::{
-        columns::{CpuCols, CpuIoCols, MemoryAccessCols},
+        columns::{CpuCols, CpuIoCols},
         trace::{isize_to_field, Instruction},
-        CpuChip, CpuOptions,
-        OpCode::*,
-        ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS,
+        CpuChip, CpuOptions, ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS,
     },
     field_arithmetic::ArithmeticOperation,
     memory::{decompose, manager::interface::MemoryInterface, MemoryAccess, OpType},

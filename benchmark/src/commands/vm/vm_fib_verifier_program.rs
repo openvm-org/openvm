@@ -14,6 +14,9 @@ use stark_vm::vm::{config::VmConfig, ExecutionAndTraceGenerationResult, VirtualM
 use super::benchmark_helpers::run_recursive_test_benchmark;
 
 pub fn benchmark_fib_verifier_program(n: usize) -> Result<()> {
+    const NUM_WORDS: usize = 8;
+    const WORD_SIZE: usize = 1;
+
     println!(
         "Running verifier program of VM STARK benchmark with n = {}",
         n
@@ -46,7 +49,7 @@ pub fn benchmark_fib_verifier_program(n: usize) -> Result<()> {
         ..Default::default()
     };
 
-    let vm = VirtualMachine::<1, 1, _>::new(vm_config, fib_program.clone(), vec![]);
+    let vm = VirtualMachine::<8, 1, _>::new(vm_config, fib_program.clone(), vec![]);
 
     let ExecutionAndTraceGenerationResult {
         max_log_degree: _,
@@ -55,10 +58,10 @@ pub fn benchmark_fib_verifier_program(n: usize) -> Result<()> {
         nonempty_pis: pis,
         ..
     } = vm.execute_and_generate_traces().unwrap();
-    let chips = VirtualMachine::<1, 1, _>::get_chips(&chips);
+    let chips = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::get_chips(&chips);
 
-    let dummy_vm = VirtualMachine::<1, 1, _>::new(vm_config, fib_program, vec![]);
-    let rec_raps = get_rec_raps::<1, InnerConfig>(&dummy_vm.segments[0]);
+    let dummy_vm = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::new(vm_config, fib_program, vec![]);
+    let rec_raps = get_rec_raps::<NUM_WORDS, WORD_SIZE, InnerConfig>(&dummy_vm.segments[0]);
 
     assert!(chips.len() == rec_raps.len());
 

@@ -25,10 +25,7 @@ use crate::{
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
     is_less_than::IsLessThanChip,
-    memory::{
-        manager::{dimensions::MemoryDimensions, MemoryManager},
-        offline_checker::MemoryChip,
-    },
+    memory::{manager::MemoryManager, offline_checker::MemoryChip},
     modular_multiplication::ModularMultiplicationChip,
     poseidon2::Poseidon2Chip,
     program::{Program, ProgramChip},
@@ -67,25 +64,14 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             RANGE_CHECKER_BUS,
             (1 << config.memory_config.decomp) as u32,
         ));
-
         let cpu_chip = CpuChip::from_state(config.cpu_options(), state.state, config.memory_config);
-        // TODO[osama]: make this configurable
-        let memory_dimensions = MemoryDimensions::new(1, 20, 1);
-        // let memory_manager = NewMemoryChip::new(todo!()
-        //     MemoryDimensions::new(1, 20, 1), // TODO[osama]: make this part of VmConfig and make sure those numbers are correct/configurable
-        //     HashMap::new(),
-        //     config.limb_bits,
-        //     config.decomp,
-        // );
         let memory_manager = Arc::new(Mutex::new(MemoryManager::with_volatile_memory(
             config.memory_config,
             range_checker.clone(),
         )));
-
         let program_chip = ProgramChip::new(program);
         let memory_chip = MemoryChip::new(config.memory_config, state.memory);
         let field_arithmetic_chip = FieldArithmeticChip::new();
-
         let field_extension_chip = FieldExtensionArithmeticChip::new(
             config.memory_config,
             memory_manager.clone(),

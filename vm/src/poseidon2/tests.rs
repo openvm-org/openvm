@@ -13,7 +13,7 @@ use afs_test_utils::{
 };
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_strict_usize;
 use rand::{Rng, RngCore};
@@ -41,22 +41,9 @@ const DECOMP: usize = 8;
 
 #[derive(Debug)]
 struct WriteOps {
-    clk: usize,
     ad_s: BabyBear,
     address: BabyBear,
     data: [BabyBear; WORD_SIZE],
-}
-
-impl WriteOps {
-    fn flatten(&self) -> Vec<BabyBear> {
-        vec![
-            BabyBear::from_canonical_usize(self.clk),
-            BabyBear::from_bool(true),
-            self.ad_s,
-            self.address,
-            self.data[0],
-        ]
-    }
 }
 
 #[test]
@@ -147,43 +134,36 @@ fn run_perm_ops(
 
     let mut write_ops: Vec<WriteOps> = Vec::new();
 
-    // TODO[osama]: to be removed
-    let mut timestamp = 1;
     for i in 0..num_ops {
         // CAUTION: we assume there will be no collisions between lhs..lhs+CHUNK and rhs..rhs+CHUNK
         const ADDR_MAX: u32 = (1 << LIMB_BITS) - WIDTH as u32;
         let dst = BabyBear::from_wrapped_u32(rng.next_u32() % ADDR_MAX);
         let lhs = BabyBear::from_wrapped_u32(rng.next_u32() % (ADDR_MAX / 2));
         let rhs = lhs + BabyBear::from_wrapped_u32(rng.next_u32() % (ADDR_MAX / 2));
+        assert!((lhs.as_canonical_u32() + CHUNK as u32) < rhs.as_canonical_u32());
 
         let instr = &instructions[i];
         write_ops.push(WriteOps {
-            clk: timestamp,
             ad_s: instr.d,
             address: instr.op_a,
             data: emb(dst),
         });
         write_ops.push(WriteOps {
-            clk: timestamp + 1,
             ad_s: instr.d,
             address: instr.op_b,
             data: emb(lhs),
         });
-        timestamp += 2;
         if instr.opcode == COMP_POS2 {
             write_ops.push(WriteOps {
-                clk: timestamp,
                 ad_s: instr.d,
                 address: instr.op_c,
                 data: emb(rhs),
             });
-            timestamp += 1;
         }
 
         for j in 0..WIDTH {
             write_ops.push(if j < CHUNK {
                 WriteOps {
-                    clk: timestamp,
                     ad_s: instr.e,
                     address: lhs + BabyBear::from_canonical_usize(j),
                     data: emb(data[i][j]),
@@ -195,18 +175,12 @@ fn run_perm_ops(
                     lhs + BabyBear::from_canonical_usize(j)
                 };
                 WriteOps {
-                    clk: timestamp,
                     ad_s: instr.e,
                     address,
                     data: emb(data[i][j]),
                 }
             });
-            timestamp += 1;
         }
-    }
-
-    for op in &write_ops {
-        println!("{:?}", op);
     }
 
     let mut initial_memory = HashMap::new();
@@ -231,21 +205,13 @@ fn run_perm_ops(
     let time_per =
         Poseidon2Chip::<16, 16, WORD_SIZE, BabyBear>::max_accesses_per_instruction(PERM_POS2);
 
-    timestamp = 1;
-
-    let start_timestamp = timestamp;
     (0..num_ops).for_each(|i| {
-        let timestamp_check = segment.memory_manager.lock().get_clk();
-        assert_eq!(timestamp_check, BabyBear::from_canonical_usize(timestamp));
-        segment.poseidon2_chip.calculate(
-            BabyBear::from_canonical_usize(timestamp),
-            instructions[i].clone(),
-            false,
-        );
-        timestamp += time_per;
+        segment
+            .poseidon2_chip
+            .calculate(instructions[i].clone(), false);
     });
 
-    timestamp = start_timestamp;
+    let mut timestamp = 1;
     // dummy air to send poseidon2 opcodes (pretending to be like cpu)
     let dummy_cpu_poseidon2 = DummyInteractionAir::new(
         Poseidon2VmAir::<16, WORD_SIZE, BabyBear>::opcode_interaction_width(),
@@ -329,7 +295,6 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
 #[test]
 fn poseidon2_chip_random_50_test() {
     let mut rng = create_seeded_rng();
-    // TODO[osama]: raise this back to 50
     const NUM_OPS: usize = 50;
     let instructions = random_instructions(NUM_OPS);
     let data = (0..NUM_OPS)

@@ -138,9 +138,8 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
     /// truncating if the instruction is a compression.
     ///
     /// Used for both compression and permutation.
-    pub fn calculate(&mut self, start_clk: F, instruction: Instruction<F>, is_direct: bool) {
-        println!("calculating row: {}", self.rows.len());
-
+    pub fn calculate(&mut self, instruction: Instruction<F>, is_direct: bool) {
+        let start_clk = self.memory_manager.lock().get_clk();
         let mut mem_trace_builder = MemoryTraceBuilder::<NUM_WORDS, WORD_SIZE, F>::new(
             self.memory_manager.clone(),
             self.range_checker.clone(),
@@ -180,18 +179,6 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
         } = instruction.clone();
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
         debug_assert_eq!(WIDTH, CHUNK * 2);
-
-        // let mut clk = start_clk;
-        // let read = |mem_oc_aux_cols: &mut Vec<_>, address_space, pointer, clk: &mut F| {
-        //     let mem_access = self
-        //         .memory_manager
-        //         .lock()
-        //         .read_word(*clk, address_space, pointer);
-        //     *clk += F::one();
-
-        //     push_oc_cols(mem_oc_aux_cols, &mem_access);
-        //     compose(mem_access.op.cell.data)
-        // };
 
         let dst = mem_trace_builder.read_elem(d, op_a);
         let lhs = mem_trace_builder.read_elem(d, op_b);
@@ -240,12 +227,6 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
             },
         };
 
-        // if self.rows.len() == 1 {
-        //     println!("row:\n {:?}", row);
-        // }
-
-        println!("row: {:?}", row);
-
         self.rows.push(row);
     }
 
@@ -273,7 +254,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> Hasher<CHU
         input_state[..8].copy_from_slice(&left);
         input_state[8..16].copy_from_slice(&right);
 
-        self.calculate(F::one(), Instruction::default(), true);
+        self.calculate(Instruction::default(), true);
 
         self.rows.last().unwrap().aux.internal.io.output[..8]
             .try_into()

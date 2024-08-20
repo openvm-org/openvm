@@ -409,11 +409,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     ModularMultiplicationChip::calculate(vm, timestamp, instruction);
                 }
                 PERM_POS2 | COMP_POS2 => {
-                    vm.poseidon2_chip.calculate(
-                        F::from_canonical_usize(timestamp),
-                        instruction,
-                        false,
-                    );
+                    vm.poseidon2_chip.calculate(instruction, false);
                 }
                 HINT_INPUT => {
                     let hint = match vm.input_stream.pop_front() {

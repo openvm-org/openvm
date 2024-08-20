@@ -123,10 +123,10 @@ pub fn run_recursive_test_benchmark(
     let mut witness_stream = Vec::new();
     witness_stream.extend(input.write());
 
-    vm_benchmark_execute_and_prove::<1>(program, witness_stream, benchmark_name)
+    vm_benchmark_execute_and_prove::<8, 1>(program, witness_stream, benchmark_name)
 }
 
-pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
+pub fn vm_benchmark_execute_and_prove<const NUM_WORDS: usize, const WORD_SIZE: usize>(
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
     benchmark_name: &str,
@@ -138,7 +138,7 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         ..Default::default()
     };
 
-    let mut vm = VirtualMachine::<1, WORD_SIZE, _>::new(vm_config, program, input_stream);
+    let mut vm = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::new(vm_config, program, input_stream);
     vm.enable_metrics_collection();
 
     let vm_execute_span = info_span!("Benchmark vm execute").entered();
@@ -152,7 +152,7 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     } = vm.execute_and_generate_traces().unwrap();
     vm_execute_span.exit();
 
-    let chips = VirtualMachine::<1, WORD_SIZE, _>::get_chips(&chips);
+    let chips = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::get_chips(&chips);
 
     let perm = default_perm();
     // blowup factor 8 for poseidon2 chip
