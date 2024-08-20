@@ -2,7 +2,8 @@ use std::borrow::Borrow;
 
 use afs_primitives::sub_chip::AirConfig;
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{Air, AirBuilder, BaseAir};
+use itertools::izip;
+use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
@@ -22,38 +23,45 @@ impl<F: Field> BaseAir<F> for FieldArithmeticAir {
 impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-
         let local = main.row_slice(0);
         let local: &FieldArithmeticCols<_> = (*local).borrow();
 
         let FieldArithmeticCols { io, aux } = local;
 
-        builder.assert_bool(aux.is_add);
-        builder.assert_bool(aux.is_sub);
-        builder.assert_bool(aux.is_mul);
-        builder.assert_bool(aux.is_div);
+        let flags = [aux.is_add, aux.is_sub, aux.is_mul, aux.is_div];
 
-        let mut indicator_sum = AB::Expr::zero();
-        indicator_sum += aux.is_add.into();
-        indicator_sum += aux.is_sub.into();
-        indicator_sum += aux.is_mul.into();
-        indicator_sum += aux.is_div.into();
-        builder.assert_one(indicator_sum);
+        let opcodes =
+            [FADD, FSUB, FMUL, FDIV].map(|opcode| AB::Expr::from_canonical_u32(opcode as u32));
 
-        builder.assert_eq(
-            io.opcode,
-            aux.is_add * AB::F::from_canonical_u32(FADD as u32)
-                + aux.is_sub * AB::F::from_canonical_u32(FSUB as u32)
-                + aux.is_mul * AB::F::from_canonical_u32(FMUL as u32)
-                + aux.is_div * AB::F::from_canonical_u32(FDIV as u32),
-        );
+        let results = [
+            io.x + io.y,
+            io.x - io.y,
+            io.x * io.y,
+            io.x * aux.divisor_inv,
+        ];
 
-        builder.when(aux.is_add).assert_eq(io.z, io.x + io.y);
-        builder.when(aux.is_sub).assert_eq(io.z, io.x - io.y);
-        builder.when(aux.is_mul).assert_eq(io.z, io.x * io.y); // deg 3
+        // Imposing the following constraints:
+        // - Each flag in `flags` is a boolean.
+        // - Exactly one flag in `flags` is true.
+        // - The inner product of the `flags` and corresponding `opcodes` equals `io.opcode`.
+        // - The inner product of the `flags` and corresponding `results` equals `io.z`.
+        // - If `is_div` is true, then `aux.divisor_inv` correctly represents the multiplicative inverse of `io.y`.
 
-        builder.assert_eq(io.y * aux.divisor_inv, aux.is_div);
-        builder.assert_eq(io.z * aux.is_div, io.x * aux.divisor_inv);
+        let mut flag_sum = AB::Expr::zero();
+        let mut expected_opcode = AB::Expr::zero();
+        let mut expected_result = AB::Expr::zero();
+        for (flag, opcode, result) in izip!(flags, opcodes, results) {
+            builder.assert_bool(flag);
+
+            flag_sum += flag.into();
+            expected_opcode += flag * opcode;
+            expected_result += flag * result;
+        }
+        builder.assert_one(flag_sum);
+        builder.assert_eq(io.opcode, expected_opcode);
+        builder.assert_eq(io.z, expected_result);
+
+        builder.assert_eq(aux.is_div, io.y * aux.divisor_inv);
 
         self.eval_interactions(builder, *io);
     }

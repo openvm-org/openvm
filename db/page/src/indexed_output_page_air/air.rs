@@ -58,10 +58,6 @@ impl<AB: InteractionBuilder> SubAir<AB> for IndexedOutputPageAir {
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux_next: Self::AuxView) {
         let (page_local, page_next) = (&io[0], &io[1]);
 
-        // Helpers
-        let or = or::<AB>;
-        let implies = implies::<AB>;
-
         // Ensuring that is_alloc is always bool
         builder.assert_bool(page_local.is_alloc);
 

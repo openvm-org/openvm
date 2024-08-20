@@ -1,6 +1,9 @@
 use std::borrow::Borrow;
 
-use afs_primitives::sub_chip::AirConfig;
+use afs_primitives::{
+    sub_chip::AirConfig,
+    utils::{and, not},
+};
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
@@ -58,7 +61,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExtensionArithmeticAir {
         // the previous constraint along with this one imply valid_y_read is boolean
         builder.assert_eq(
             aux.valid_y_read,
-            aux.is_valid * (AB::Expr::one() - aux.is_inv),
+            and(aux.is_valid.into(), not(aux.is_inv.into())),
         );
 
         // constrain multiplication

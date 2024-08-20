@@ -92,8 +92,7 @@ impl<const COMMITMENT_LEN: usize> InternalPageAir<COMMITMENT_LEN> {
             // will do the allocated rows are at the top check later probably
             // Ensuring that all unallocated rows are at the bottom
             builder.when_transition().assert_one({
-                let x: AB::Expr =
-                    implies::<AB>(next_data.is_alloc.into(), cached_data.is_alloc.into());
+                let x: AB::Expr = implies(next_data.is_alloc.into(), cached_data.is_alloc.into());
                 x
             });
             let prove_sort_cols = metadata.prove_sort_cols.unwrap();

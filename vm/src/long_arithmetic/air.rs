@@ -97,7 +97,7 @@ impl<AB: InteractionBuilder, const ARG_SIZE: usize, const LIMB_SIZE: usize> Air<
                 .assert_eq(lhs.clone(), -rhs.clone());
 
             builder
-                .when(utils::not::<AB>(aux.opcode_eq_flag.into()))
+                .when(utils::not(aux.opcode_eq_flag.into()))
                 .assert_bool(aux.buffer[i]);
         }
 
