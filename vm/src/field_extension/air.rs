@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::{array, borrow::Borrow};
 
 use afs_primitives::{
     sub_chip::AirConfig,
@@ -40,8 +40,8 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExtensionArithmeticAir {
         let flags = [aux.is_add, aux.is_sub, aux.is_mul, aux.is_inv];
         let opcodes = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
         let results = [
-            [io.x[0] + io.y[0], io.x[1] + io.y[1], io.x[2] + io.y[2], io.x[3] + io.y[3]],
-            [io.x[0] - io.y[0], io.x[1] - io.y[1], io.x[2] - io.y[2], io.x[3] - io.y[3]],
+            array::from_fn(|i| io.x[i] + io.y[i]),
+            array::from_fn(|i| io.x[i] - io.y[i]),
             multiply::<AB>(io.x, io.y),
             aux.inv.map(Into::into),
         ];
@@ -54,7 +54,12 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExtensionArithmeticAir {
 
         let mut flag_sum = AB::Expr::zero();
         let mut expected_opcode = AB::Expr::zero();
-        let mut expected_result = [AB::Expr::zero(), AB::Expr::zero(), AB::Expr::zero(), AB::Expr::zero()];
+        let mut expected_result = [
+            AB::Expr::zero(),
+            AB::Expr::zero(),
+            AB::Expr::zero(),
+            AB::Expr::zero(),
+        ];
         for (flag, opcode, result) in izip!(flags, opcodes, results) {
             builder.assert_bool(flag);
 
