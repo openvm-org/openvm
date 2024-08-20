@@ -172,7 +172,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         vec![]
     }
 
-    // TODO[osama]: revisit this
     pub fn get_num_chips(&self) -> usize {
         let mut result: usize = 4; // cpu, program, memory_interface, range_checker
         if self.config.cpu_options().field_arithmetic_enabled {
@@ -199,13 +198,10 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             .collect()
     }
 
-    // TODO[osama]: revisit this
     /// Returns public values for all chips in this segment
     pub fn get_pis(&self) -> Vec<Vec<F>> {
         let len = self.get_num_chips();
         let mut result: Vec<Vec<F>> = vec![vec![]; len];
-        // let mut cpu_public_values = self.cpu_chip.pis.clone();
-        // cpu_public_values.extend(self.public_values.iter().map(|x| x.unwrap_or(F::zero())));
         result[0] = self.get_cpu_pis();
         result
     }

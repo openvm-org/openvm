@@ -12,12 +12,12 @@ use p3_matrix::{
     Matrix,
 };
 
-use super::{timestamp_delta, CpuAir, OpCode::*, CPU_MAX_READS_PER_CYCLE};
+use super::{CpuAir, OpCode::*};
 use crate::{
     cpu::{
         columns::{CpuCols, CpuIoCols},
         trace::{isize_to_field, Instruction},
-        CpuChip, CpuOptions, ARITHMETIC_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS,
+        CpuChip, CpuOptions, ARITHMETIC_BUS, READ_INSTRUCTION_BUS,
     },
     field_arithmetic::ArithmeticOperation,
     memory::{decompose, manager::interface::MemoryInterface, MemoryAccess, OpType},
@@ -129,7 +129,6 @@ fn execution_test<const NUM_WORDS: usize, const WORD_SIZE: usize>(
     field_extension_enabled: bool,
     program: Program<BabyBear>,
     mut expected_execution: Vec<usize>,
-    expected_memory_log: Vec<MemoryAccess<WORD_SIZE, BabyBear>>,
     expected_arithmetic_operations: Vec<ArithmeticOperation<BabyBear>>,
 ) {
     let mut vm = make_vm::<NUM_WORDS, WORD_SIZE>(
@@ -137,20 +136,11 @@ fn execution_test<const NUM_WORDS: usize, const WORD_SIZE: usize>(
         field_arithmetic_enabled,
         field_extension_enabled,
     );
-    let options = vm.options();
     assert_eq!(vm.segments.len(), 1);
     let segment = &mut vm.segments[0];
     CpuChip::execute(segment).unwrap();
     let mut trace = CpuChip::generate_trace(segment);
 
-    // let mut actual_memory_log = segment.memory_manager.accesses.clone();
-    // // temporary
-    // for access in actual_memory_log.iter_mut() {
-    //     access.pointer = access.pointer / BabyBear::from_canonical_usize(WORD_SIZE);
-    // }
-
-    // TODO[osama]: I commented this
-    // assert_eq!(actual_memory_log, expected_memory_log);
     assert_eq!(
         segment.field_arithmetic_chip.operations,
         expected_arithmetic_operations
@@ -405,43 +395,6 @@ fn test_cpu_1() {
     }
     expected_execution.push(4);
 
-    let storew_time = timestamp_delta(STOREW) as isize;
-    let beq_time = timestamp_delta(BEQ) as isize;
-    let fsub_time = timestamp_delta(FSUB) as isize;
-    let jal_time = timestamp_delta(JAL) as isize;
-
-    let mut expected_memory_log = vec![
-        MemoryAccess::<TEST_WORD_SIZE, BabyBear>::from_isize(
-            CPU_MAX_READS_PER_CYCLE as isize,
-            OpType::Write,
-            1,
-            0,
-            n,
-        ),
-        MemoryAccess::<TEST_WORD_SIZE, BabyBear>::from_isize(storew_time, OpType::Read, 1, 0, n),
-    ];
-    // for t in 0..n {
-    //     let base = storew_time + beq_time + ((fsub_time + jal_time + beq_time) * t);
-    //     expected_memory_log.extend(vec![
-    //         MemoryAccess::from_isize(base, OpType::Read, 1, 0, n - t),
-    //         MemoryAccess::from_isize(
-    //             base + CPU_MAX_READS_PER_CYCLE as isize,
-    //             OpType::Write,
-    //             1,
-    //             0,
-    //             n - t - 1,
-    //         ),
-    //         MemoryAccess::from_isize(
-    //             base + fsub_time + CPU_MAX_READS_PER_CYCLE as isize,
-    //             OpType::Write,
-    //             1,
-    //             2,
-    //             4,
-    //         ),
-    //         MemoryAccess::from_isize(base + fsub_time + jal_time, OpType::Read, 1, 0, n - t - 1),
-    //     ]);
-    // }
-
     let mut expected_arithmetic_operations = vec![];
     for t in 0..n {
         expected_arithmetic_operations.push(ArithmeticOperation::<BabyBear>::from_isize(
@@ -457,7 +410,6 @@ fn test_cpu_1() {
         false,
         program.clone(),
         expected_execution,
-        expected_memory_log,
         expected_arithmetic_operations,
     );
     air_test::<TEST_NUM_WORDS, TEST_WORD_SIZE>(true, false, program);
@@ -495,21 +447,11 @@ fn test_cpu_without_field_arithmetic() {
 
     let expected_execution: Vec<usize> = vec![0, 1, 4, 3];
 
-    let storew_time = timestamp_delta(STOREW) as isize;
-    let bne_time = timestamp_delta(BNE) as isize;
-
-    let expected_memory_log = vec![
-        MemoryAccess::from_isize(CPU_MAX_READS_PER_CYCLE as isize, OpType::Write, 1, 0, 5),
-        MemoryAccess::from_isize(storew_time, OpType::Read, 1, 0, 5),
-        MemoryAccess::from_isize(storew_time + bne_time, OpType::Read, 1, 0, 5),
-    ];
-
     execution_test::<TEST_NUM_WORDS, TEST_WORD_SIZE>(
         field_arithmetic_enabled,
         field_extension_enabled,
         program.clone(),
         expected_execution,
-        expected_memory_log,
         vec![],
     );
     air_test::<TEST_NUM_WORDS, TEST_WORD_SIZE>(
