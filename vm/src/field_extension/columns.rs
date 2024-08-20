@@ -38,18 +38,14 @@ pub struct FieldExtensionArithmeticAuxCols<const WORD_SIZE: usize, T> {
     pub op_c: T,
     pub d: T,
     pub e: T,
-    // the lower bit of the opcode - BASE_OP
-    pub opcode_lo: T,
-    // the upper bit of the opcode - BASE_OP
-    pub opcode_hi: T,
+    // whether the opcode is FE4ADD
+    pub is_add: T,
+    // whether the opcode is FE4SUB
+    pub is_sub: T,
     // whether the opcode is BBE4MUL
     pub is_mul: T,
     // whether the opcode is BBE4INV
     pub is_inv: T,
-    // the sum x + y if opcode_lo is 0, or the difference x - y if opcode_lo is 1
-    pub sum_or_diff: [T; EXTENSION_DEGREE],
-    // the product of x and y
-    pub product: [T; EXTENSION_DEGREE],
     // the field extension inverse of x
     pub inv: [T; EXTENSION_DEGREE],
     // There should be 3 * EXTENSION_DEGREE memory accesses (WORD_SIZE=1)
@@ -80,7 +76,7 @@ impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T
                 y: array::from_fn(|_| next()),
                 z: array::from_fn(|_| next()),
             },
-            aux: FieldExtensionArithmeticAuxCols::<WORD_SIZE, _> {
+            aux: FieldExtensionArithmeticAuxCols {
                 is_valid: next(),
                 valid_y_read: next(),
                 start_timestamp: next(),
@@ -89,12 +85,10 @@ impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T
                 op_c: next(),
                 d: next(),
                 e: next(),
-                opcode_lo: next(),
-                opcode_hi: next(),
+                is_add: next(),
+                is_sub: next(),
                 is_mul: next(),
                 is_inv: next(),
-                sum_or_diff: array::from_fn(|_| next()),
-                product: array::from_fn(|_| next()),
                 inv: array::from_fn(|_| next()),
                 mem_oc_aux_cols: array::from_fn(|_| {
                     MemoryOfflineCheckerAuxCols::try_from_iter(iter, lt_air)
@@ -123,7 +117,7 @@ impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
 
 impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticAuxCols<WORD_SIZE, T> {
     pub fn get_width(oc: &MemoryOfflineChecker) -> usize {
-        3 * EXTENSION_DEGREE + 12 + 12 * MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(oc)
+        EXTENSION_DEGREE + 12 + 12 * MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(oc)
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -136,13 +130,11 @@ impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticAuxCols<WORD_SIZE
             self.op_c.clone(),
             self.d.clone(),
             self.e.clone(),
-            self.opcode_lo.clone(),
-            self.opcode_hi.clone(),
+            self.is_add.clone(),
+            self.is_sub.clone(),
             self.is_mul.clone(),
             self.is_inv.clone(),
         ];
-        result.extend_from_slice(&self.sum_or_diff);
-        result.extend_from_slice(&self.product);
         result.extend_from_slice(&self.inv);
         for mem_oc_aux_cols in self.mem_oc_aux_cols.iter().cloned() {
             result.extend(mem_oc_aux_cols.flatten());

@@ -50,8 +50,6 @@ pub struct FieldExtensionArithmeticAir<const WORD_SIZE: usize> {
 pub struct FieldExtensionArithmetic;
 
 impl FieldExtensionArithmetic {
-    pub const BASE_OP: u8 = OpCode::FE4ADD as u8;
-
     pub fn max_accesses_per_instruction(opcode: OpCode) -> usize {
         assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
         12
@@ -260,7 +258,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
 
         FieldExtensionArithmeticCols {
             io: FieldExtensionArithmeticIoCols {
-                opcode: F::from_canonical_u8(FieldExtensionArithmetic::BASE_OP),
+                opcode: F::from_canonical_u32(OpCode::FE4ADD as u32),
                 x: [F::zero(); EXTENSION_DEGREE],
                 y: [F::zero(); EXTENSION_DEGREE],
                 z: [F::zero(); EXTENSION_DEGREE],
@@ -274,13 +272,10 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
                 op_c: F::zero(),
                 d: F::zero(),
                 e: F::zero(),
-
-                opcode_lo: F::zero(),
-                opcode_hi: F::zero(),
+                is_add: F::one(),
+                is_sub: F::zero(),
                 is_mul: F::zero(),
                 is_inv: F::zero(),
-                sum_or_diff: [F::zero(); EXTENSION_DEGREE],
-                product: [F::zero(); EXTENSION_DEGREE],
                 inv: [F::zero(); EXTENSION_DEGREE],
                 mem_oc_aux_cols: array::from_fn(|_| mem_oc_aux_iter.next().unwrap()),
             },

@@ -210,8 +210,8 @@ impl MemoryOfflineChecker {
 
         // TODO[osama]: make this degree 2
         // is_immediate => read
-        builder.assert_one(implies::<AB>(
-            and::<AB>(op.enabled.clone(), aux.is_immediate.into()),
+        builder.assert_one(implies(
+            and(op.enabled.clone(), aux.is_immediate.into()),
             AB::Expr::one() - op.op_type.clone(),
         ));
 
@@ -225,8 +225,8 @@ impl MemoryOfflineChecker {
             .subair_eval(builder, clk_lt_io_cols, aux.clk_lt_aux);
 
         // TODO[osama]: this should be reduced to degree 2
-        builder.assert_one(implies::<AB>(
-            and::<AB>(
+        builder.assert_one(implies(
+            and(
                 op.enabled.clone(),
                 AB::Expr::one() - aux.is_immediate.into(),
             ),

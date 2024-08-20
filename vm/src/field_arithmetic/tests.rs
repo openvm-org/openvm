@@ -10,9 +10,9 @@ use rand::Rng;
 
 use super::{
     columns::{FieldArithmeticCols, FieldArithmeticIoCols},
-    FieldArithmeticAir, FieldArithmeticChip,
+    FieldArithmeticChip,
 };
-use crate::cpu::{OpCode, OpCode::FDIV, FIELD_ARITHMETIC_INSTRUCTIONS};
+use crate::cpu::{OpCode, OpCode::FDIV, ARITHMETIC_BUS, FIELD_ARITHMETIC_INSTRUCTIONS};
 
 /// Function for testing that generates a random program consisting only of field arithmetic operations.
 fn generate_arith_program(chip: &mut FieldArithmeticChip<BabyBear>, len_ops: usize) {
@@ -60,7 +60,7 @@ fn au_air_test() {
     let page_requester = DummyInteractionAir::new(
         FieldArithmeticIoCols::<BabyBear>::get_width() - 1,
         true,
-        FieldArithmeticAir::BUS_INDEX,
+        ARITHMETIC_BUS,
     );
 
     // positive test
@@ -102,7 +102,7 @@ fn au_air_zero_div_zero() {
     let page_requester = DummyInteractionAir::new(
         FieldArithmeticIoCols::<BabyBear>::get_width() - 1,
         true,
-        FieldArithmeticAir::BUS_INDEX,
+        ARITHMETIC_BUS,
     );
     let dummy_trace = RowMajorMatrix::new(
         vec![

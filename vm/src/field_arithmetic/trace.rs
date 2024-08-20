@@ -3,50 +3,43 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use super::{
     columns::{FieldArithmeticAuxCols, FieldArithmeticCols, FieldArithmeticIoCols},
-    FieldArithmeticAir, FieldArithmeticChip,
+    FieldArithmeticChip,
 };
 use crate::cpu::OpCode;
 
 /// Constructs a new set of columns (including auxiliary columns) given inputs.
 fn generate_cols<T: Field>(op: OpCode, x: T, y: T) -> FieldArithmeticCols<T> {
-    let opcode = op as u32;
-    let opcode_value = opcode - FieldArithmeticAir::BASE_OP as u32;
-    let opcode_lo_u32 = opcode_value % 2;
-    let opcode_hi_u32 = opcode_value / 2;
-    let opcode_lo = T::from_canonical_u32(opcode_lo_u32);
-    let opcode_hi = T::from_canonical_u32(opcode_hi_u32);
+    let is_add = T::from_bool(op == OpCode::FADD);
+    let is_sub = T::from_bool(op == OpCode::FSUB);
     let is_div = T::from_bool(op == OpCode::FDIV);
     let is_mul = T::from_bool(op == OpCode::FMUL);
-    let sum_or_diff = x + y - T::two() * opcode_lo * y;
-    let product = x * y;
-    let quotient = if y == T::zero() || op != OpCode::FDIV {
-        T::zero()
-    } else {
-        x * y.inverse()
-    };
-    let divisor_inv = if op != OpCode::FDIV {
-        T::zero()
-    } else {
+    let divisor_inv = if op == OpCode::FDIV {
         y.inverse()
+    } else {
+        T::zero()
     };
-    let z = is_mul * product + is_div * quotient + (T::one() - opcode_hi) * sum_or_diff;
+
+    let z = match op {
+        OpCode::FADD => x + y,
+        OpCode::FSUB => x - y,
+        OpCode::FMUL => x * y,
+        OpCode::FDIV => x * divisor_inv,
+        _ => panic!("unexpected opcode {}", op),
+    };
 
     FieldArithmeticCols {
         io: FieldArithmeticIoCols {
             rcv_count: T::one(),
-            opcode: T::from_canonical_u32(opcode),
+            opcode: T::from_canonical_u32(op as u32),
             x,
             y,
             z,
         },
         aux: FieldArithmeticAuxCols {
-            opcode_lo,
-            opcode_hi,
+            is_add,
+            is_sub,
             is_mul,
             is_div,
-            sum_or_diff,
-            product,
-            quotient,
             divisor_inv,
         },
     }
@@ -72,9 +65,9 @@ impl<F: Field> FieldArithmeticChip<F> {
                 .iter()
                 .cloned()
                 .cycle()
-                .take((correct_height - curr_height) * FieldArithmeticCols::<F>::NUM_COLS),
+                .take((correct_height - curr_height) * FieldArithmeticCols::<F>::get_width()),
         );
 
-        RowMajorMatrix::new(trace, FieldArithmeticCols::<F>::NUM_COLS)
+        RowMajorMatrix::new(trace, FieldArithmeticCols::<F>::get_width())
     }
 }

@@ -54,7 +54,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for IntersectorAir {
         self.lt_chip
             .eval_when_transition(builder, lt_io_cols, next_aux_cols.lt_aux);
 
-        builder.when_transition().assert_one(or::<AB>(
+        builder.when_transition().assert_one(or(
             next_io_cols.is_extra.into(),
             next_aux_cols.lt_out.into(),
         ));

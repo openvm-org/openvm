@@ -1,7 +1,8 @@
 use afs_derive::AlignedBorrow;
 use p3_field::Field;
 
-use super::FieldArithmeticAir;
+use crate::cpu::OpCode;
+
 /// Columns for field arithmetic chip.
 ///
 /// Five IO columns for rcv_count, opcode, x, y, result.
@@ -27,13 +28,11 @@ pub struct FieldArithmeticIoCols<T> {
 #[derive(Copy, Clone, Debug, AlignedBorrow)]
 #[repr(C)]
 pub struct FieldArithmeticAuxCols<T> {
-    pub opcode_lo: T,
-    pub opcode_hi: T,
+    pub is_add: T,
+    pub is_sub: T,
     pub is_mul: T,
     pub is_div: T,
-    pub sum_or_diff: T,
-    pub product: T,
-    pub quotient: T,
+    /// `divisor_inv` is y.inverse() when opcode is FDIV and zero otherwise.
     pub divisor_inv: T,
 }
 
@@ -41,10 +40,6 @@ impl<T> FieldArithmeticCols<T>
 where
     T: Field,
 {
-    pub const NUM_COLS: usize = 13;
-    pub const NUM_IO_COLS: usize = 5;
-    pub const NUM_AUX_COLS: usize = 8;
-
     pub fn get_width() -> usize {
         FieldArithmeticIoCols::<T>::get_width() + FieldArithmeticAuxCols::<T>::get_width()
     }
@@ -59,19 +54,16 @@ where
         Self {
             io: FieldArithmeticIoCols::<T> {
                 rcv_count: T::zero(),
-                opcode: T::from_canonical_u8(FieldArithmeticAir::BASE_OP),
+                opcode: T::from_canonical_u32(OpCode::FADD as u32),
                 x: T::zero(),
                 y: T::zero(),
                 z: T::zero(),
             },
             aux: FieldArithmeticAuxCols::<T> {
-                opcode_lo: T::zero(),
-                opcode_hi: T::zero(),
+                is_add: T::one(),
+                is_sub: T::zero(),
                 is_mul: T::zero(),
                 is_div: T::zero(),
-                sum_or_diff: T::zero(),
-                product: T::zero(),
-                quotient: T::zero(),
                 divisor_inv: T::zero(),
             },
         }
@@ -90,18 +82,15 @@ impl<T: Field> FieldArithmeticIoCols<T> {
 
 impl<T: Field> FieldArithmeticAuxCols<T> {
     pub fn get_width() -> usize {
-        8
+        5
     }
 
     pub fn flatten(&self) -> Vec<T> {
         vec![
-            self.opcode_lo,
-            self.opcode_hi,
+            self.is_add,
+            self.is_sub,
             self.is_mul,
             self.is_div,
-            self.sum_or_diff,
-            self.product,
-            self.quotient,
             self.divisor_inv,
         ]
     }
