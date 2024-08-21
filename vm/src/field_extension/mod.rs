@@ -182,7 +182,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             // 4 disabled reads
             for _ in 0..4 {
                 self.memory.disabled_op(e, OpType::Read);
-                self.memory.increment_clk();
             }
             [F::zero(); EXTENSION_DEGREE]
         } else {
@@ -275,7 +274,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
                 z: [F::zero(); EXTENSION_DEGREE],
             },
             aux: FieldExtensionArithmeticAuxCols {
-                is_valid: F::zero(),
+                is_valid: F::one(),
                 valid_y_read: F::one(),
                 op_a: F::zero(),
                 op_b: F::zero(),
