@@ -145,7 +145,7 @@ fn execution_test(
 
 #[test]
 fn test_vm_1() {
-    let n = 2;
+    let n = 6;
     /*
     Instruction 0 assigns word[0]_1 to n.
     Instruction 4 terminates

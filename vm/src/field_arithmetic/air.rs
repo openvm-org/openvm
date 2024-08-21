@@ -1,10 +1,14 @@
 use std::borrow::Borrow;
 
-use afs_primitives::sub_chip::AirConfig;
-use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
+
+use afs_primitives::{
+    is_zero::{columns::IsZeroIoCols, IsZeroAir},
+    sub_chip::{AirConfig, SubAir},
+};
+use afs_stark_backend::interaction::InteractionBuilder;
 
 use super::{columns::FieldArithmeticCols, FieldArithmeticAir};
 
@@ -59,6 +63,16 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
 
         builder.assert_eq(aux.divisor_inv * io.y, aux.is_div);
 
-        self.eval_interactions(builder, *io);
+        SubAir::eval(
+            &IsZeroAir {},
+            builder,
+            IsZeroIoCols {
+                x: io.y_as,
+                is_zero: aux.y_is_immediate,
+            },
+            aux.is_zero_aux,
+        );
+
+        self.eval_interactions(builder, *io, *aux);
     }
 }

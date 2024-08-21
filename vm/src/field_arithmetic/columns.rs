@@ -1,8 +1,10 @@
-use afs_derive::AlignedBorrow;
 use p3_field::Field;
 
-use super::FieldArithmeticAir;
+use afs_derive::AlignedBorrow;
+
 use crate::arch::columns::ExecutionState;
+
+use super::FieldArithmeticAir;
 
 /// Columns for field arithmetic chip.
 ///
@@ -43,6 +45,8 @@ pub struct FieldArithmeticAuxCols<T> {
     pub product: T,
     pub quotient: T,
     pub divisor_inv: T,
+    pub y_is_immediate: T,
+    pub is_zero_aux: T,
 }
 
 impl<T> FieldArithmeticCols<T>
@@ -83,6 +87,8 @@ where
                 product: T::zero(),
                 quotient: T::zero(),
                 divisor_inv: T::zero(),
+                y_is_immediate: T::one(),
+                is_zero_aux: T::zero(),
             },
         }
     }
@@ -113,7 +119,7 @@ impl<T: Field> FieldArithmeticIoCols<T> {
 
 impl<T: Field> FieldArithmeticAuxCols<T> {
     pub fn get_width() -> usize {
-        8
+        10
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -126,6 +132,8 @@ impl<T: Field> FieldArithmeticAuxCols<T> {
             self.product,
             self.quotient,
             self.divisor_inv,
+            self.y_is_immediate,
+            self.is_zero_aux,
         ]
     }
 }

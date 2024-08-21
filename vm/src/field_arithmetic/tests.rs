@@ -1,32 +1,35 @@
 use core::borrow::Borrow;
 use std::ops::Deref;
 
+use p3_baby_bear::BabyBear;
+use p3_field::{AbstractField, PrimeField32};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use rand::Rng;
+
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng,
 };
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use rand::Rng;
 
-use super::{FieldArithmeticAir, FieldArithmeticChip};
 use crate::{
     arch::{
         bridge::ExecutionBus,
         chips::MachineChip,
-        instructions::{OpCode::*, FIELD_ARITHMETIC_INSTRUCTIONS},
+        instructions::{FIELD_ARITHMETIC_INSTRUCTIONS, OpCode::*},
         testing::{ExecutionTester, MachineChipTester, MemoryTester},
     },
     cpu::trace::Instruction,
-    field_arithmetic::columns::FieldArithmeticCols,
+    field_arithmetic::columns::{FieldArithmeticCols, FieldArithmeticIoCols},
 };
+
+use super::{FieldArithmeticAir, FieldArithmeticChip};
 
 #[test]
 fn field_arithmetic_air_test() {
     let num_ops = 19;
     let elem_range = || 1..=100;
-    let address_space_range = || 1usize..=2;
+    let xz_address_space_range = || 1usize..=2;
+    let y_address_space_range = || 0usize..=2;
     let address_range = || 0usize..1 << 29;
 
     let execution_bus = ExecutionBus(0);
@@ -44,10 +47,14 @@ fn field_arithmetic_air_test() {
         let operand1 = BabyBear::from_canonical_u32(rng.gen_range(elem_range()));
         let operand2 = BabyBear::from_canonical_u32(rng.gen_range(elem_range()));
 
-        let as_d = rng.gen_range(address_space_range());
-        let as_e = rng.gen_range(address_space_range());
+        let as_d = rng.gen_range(xz_address_space_range());
+        let as_e = rng.gen_range(y_address_space_range());
         let address1 = rng.gen_range(address_range());
-        let address2 = rng.gen_range(address_range());
+        let address2 = if as_e == 0 {
+            operand2.as_canonical_u32() as usize
+        } else {
+            rng.gen_range(address_range())
+        };
         let result_address = rng.gen_range(address_range());
         assert!(address1.abs_diff(address2) >= 4);
         println!(
@@ -58,7 +65,9 @@ fn field_arithmetic_air_test() {
         let result = FieldArithmeticAir::solve(opcode, (operand1, operand2));
 
         memory_tester.install(as_d, address1, [operand1]);
-        memory_tester.install(as_e, address2, [operand2]);
+        if as_e != 0 {
+            memory_tester.install(as_e, address2, [operand2]);
+        }
         execution_tester.execute(
             &mut field_arithmetic_chip,
             Instruction::from_usize(opcode, result_address, address1, address2, as_d, as_e),
@@ -75,7 +84,9 @@ fn field_arithmetic_air_test() {
         .simple_test()
         .expect("Verification failed");
 
-    /*USE_DEBUG_BUILDER.with(|debug| {
+    return;
+
+    USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
     });
 
@@ -99,7 +110,7 @@ fn field_arithmetic_air_test() {
             Err(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         )
-    }*/
+    }
 }
 
 #[test]

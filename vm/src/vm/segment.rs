@@ -67,7 +67,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             limb_bits,
             decomp,
             state.memory,
-            range_checker,
+            range_checker.clone(),
         )));
 
         let mut executors = BTreeMap::new();
@@ -82,7 +82,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let mut chips = vec![
             MachineChipVariant::Cpu(cpu_chip.clone()),
             MachineChipVariant::Program(program_chip.clone()),
+            // TODO: Memory needs to appear before RangeChecker because Memory trace generation affects RangeChecker's trace. Should change so that RangeChecker is called only during execute.
             MachineChipVariant::Memory(memory_chip.clone()),
+            MachineChipVariant::RangeChecker(range_checker.clone()),
         ];
 
         if config.field_arithmetic_enabled {

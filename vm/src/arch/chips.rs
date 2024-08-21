@@ -108,7 +108,7 @@ impl<F: PrimeField32> MachineChip<F> for Arc<RangeCheckerGateChip> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        Box::new(self.air.clone())
+        Box::new(self.air)
     }
 
     fn current_trace_height(&self) -> usize {

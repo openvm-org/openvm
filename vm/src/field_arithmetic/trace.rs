@@ -4,6 +4,10 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
+use afs_primitives::{
+    is_zero::IsZeroAir,
+    sub_chip::LocalTraceInstructions,
+};
 use afs_stark_backend::rap::AnyRap;
 
 use crate::arch::{chips::MachineChip, instructions::OpCode};
@@ -40,6 +44,8 @@ fn generate_cols<T: PrimeField32>(operation: &ArithmeticOperation<T>) -> FieldAr
 
     let instruction = operation.instruction;
 
+    let is_zero_cols = IsZeroAir::generate_trace_row(&IsZeroAir {}, instruction.e);
+
     FieldArithmeticCols {
         io: FieldArithmeticIoCols {
             rcv_count: T::one(),
@@ -63,6 +69,8 @@ fn generate_cols<T: PrimeField32>(operation: &ArithmeticOperation<T>) -> FieldAr
             product,
             quotient,
             divisor_inv,
+            y_is_immediate: is_zero_cols.io.is_zero,
+            is_zero_aux: is_zero_cols.inv,
         },
     }
 }
