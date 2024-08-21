@@ -13,9 +13,8 @@ use p3_matrix::{dense::DenseMatrix, Matrix};
 use p3_merkle_tree::FieldMerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{CryptographicPermutation, MultiField32PaddingFreeSponge, TruncatedPermutation};
-use p3_uni_stark::{StarkConfig, StarkGenericConfig};
+use p3_uni_stark::StarkConfig;
 use p3_util::log2_strict_usize;
-use serde::{Deserialize, Serialize};
 use zkhash::{
     ark_ff::{BigInteger, PrimeField as _},
     fields::bn256::FpBN256 as ark_FpBN256,
@@ -30,6 +29,7 @@ use super::{
 use crate::engine::{StarkEngine, StarkEngineWithHashInstrumentation};
 
 const WIDTH: usize = 3;
+/// Poseidon rate in F. <Poseidon RATE>(2) * <# of F in a N>(8) = 16
 const RATE: usize = 16;
 const DIGEST_WIDTH: usize = 1;
 
@@ -173,81 +173,6 @@ pub fn outer_perm() -> Perm {
         internal_round_constants,
         DiffusionMatrixBN254,
     )
-}
-
-/// The FRI config for outer recursion.
-pub fn outer_fri_config() -> FriConfig<ChallengeMmcs<Perm>> {
-    let perm = outer_perm();
-    let hash = Hash::new(perm.clone()).unwrap();
-    let compress = Compress::new(perm.clone());
-    let challenge_mmcs = ChallengeMmcs::new(ValMmcs::new(hash, compress));
-    let num_queries = match std::env::var("FRI_QUERIES") {
-        Ok(value) => value.parse().unwrap(),
-        Err(_) => 25,
-    };
-    FriConfig {
-        log_blowup: 4,
-        num_queries,
-        proof_of_work_bits: 16,
-        mmcs: challenge_mmcs,
-    }
-}
-
-#[derive(Deserialize)]
-#[serde(from = "std::marker::PhantomData<BabyBearPoseidon2Outer>")]
-pub struct BabyBearPoseidon2Outer {
-    pub perm: Perm,
-    pub pcs: Pcs<Perm>,
-}
-
-impl Clone for BabyBearPoseidon2Outer {
-    fn clone(&self) -> Self {
-        Self::new()
-    }
-}
-
-impl Serialize for BabyBearPoseidon2Outer {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        std::marker::PhantomData::<BabyBearPoseidon2Outer>.serialize(serializer)
-    }
-}
-
-impl From<std::marker::PhantomData<BabyBearPoseidon2Outer>> for BabyBearPoseidon2Outer {
-    fn from(_: std::marker::PhantomData<BabyBearPoseidon2Outer>) -> Self {
-        Self::new()
-    }
-}
-
-impl BabyBearPoseidon2Outer {
-    pub fn new() -> Self {
-        let perm = outer_perm();
-        let hash = Hash::new(perm.clone()).unwrap();
-        let compress = Compress::new(perm.clone());
-        let val_mmcs = ValMmcs::new(hash, compress);
-        let dft = Dft {};
-        let fri_config = outer_fri_config();
-        let pcs = Pcs::new(27, dft, val_mmcs, fri_config);
-        Self { pcs, perm }
-    }
-}
-
-impl Default for BabyBearPoseidon2Outer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl StarkGenericConfig for BabyBearPoseidon2Outer {
-    type Pcs = Pcs<Perm>;
-    type Challenge = Challenge;
-    type Challenger = Challenger<Perm>;
-
-    fn pcs(&self) -> &Self::Pcs {
-        &self.pcs
-    }
 }
 
 fn bn254_from_ark_ff(input: ark_FpBN256) -> Bn254Fr {
