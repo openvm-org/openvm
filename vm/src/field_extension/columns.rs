@@ -4,9 +4,9 @@ use afs_derive::AlignedBorrow;
 use afs_primitives::is_less_than::IsLessThanAir;
 use p3_field::Field;
 
-use super::{FieldExtensionArithmeticAir, EXTENSION_DEGREE};
-use crate::memory::offline_checker::{
-    bridge::MemoryOfflineChecker, columns::MemoryOfflineCheckerAuxCols,
+use crate::{
+    field_extension::{air::FieldExtensionArithmeticAir, chip::EXTENSION_DEGREE},
+    memory::offline_checker::{bridge::MemoryOfflineChecker, columns::MemoryOfflineCheckerAuxCols},
 };
 
 /// Columns for field extension chip.

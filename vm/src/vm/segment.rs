@@ -25,7 +25,7 @@ use crate::{
         RANGE_CHECKER_BUS,
     },
     field_arithmetic::FieldArithmeticChip,
-    field_extension::FieldExtensionArithmeticChip,
+    field_extension::chip::FieldExtensionArithmeticChip,
     is_less_than::IsLessThanChip,
     memory::manager::MemoryManager,
     modular_multiplication::{air::ModularArithmeticVmAir, ModularArithmeticChip},

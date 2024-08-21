@@ -4,14 +4,16 @@ use itertools::Itertools;
 use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::{
-    columns::{
-        FieldExtensionArithmeticAuxCols, FieldExtensionArithmeticCols,
-        FieldExtensionArithmeticIoCols,
-    },
-    FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticOperation,
+use super::columns::{
+    FieldExtensionArithmeticAuxCols, FieldExtensionArithmeticCols, FieldExtensionArithmeticIoCols,
 };
-use crate::{cpu::OpCode, memory::offline_checker::columns::MemoryOfflineCheckerAuxCols};
+use crate::{
+    cpu::OpCode,
+    field_extension::chip::{
+        FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticOperation,
+    },
+    memory::offline_checker::columns::MemoryOfflineCheckerAuxCols,
+};
 
 /// Constructs a new set of columns (including auxiliary columns) given inputs.
 fn generate_cols<const WORD_SIZE: usize, T: Field>(

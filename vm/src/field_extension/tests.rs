@@ -15,12 +15,12 @@ use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, Abstra
 use p3_matrix::Matrix;
 use rand::Rng;
 
-use super::{
-    columns::FieldExtensionArithmeticIoCols, FieldExtensionArithmetic,
-    FieldExtensionArithmeticChip, FieldExtensionArithmeticOperation,
-};
+use super::columns::FieldExtensionArithmeticIoCols;
 use crate::{
     cpu::{OpCode, FIELD_EXTENSION_INSTRUCTIONS, RANGE_CHECKER_BUS, WORD_SIZE},
+    field_extension::chip::{
+        FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticOperation,
+    },
     memory::manager::MemoryManager,
     vm::config::MemoryConfig,
 };

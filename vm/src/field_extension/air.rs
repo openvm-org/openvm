@@ -1,5 +1,3 @@
-use std::array;
-
 use afs_primitives::{
     sub_chip::AirConfig,
     utils::{and, not},
@@ -10,11 +8,20 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
+use super::columns::FieldExtensionArithmeticCols;
 use crate::{
     cpu::OpCode::{BBE4INV, BBE4MUL, FE4ADD, FE4SUB},
-    field_extension::BETA,
+    field_extension::chip::FieldExtensionArithmetic,
+    memory::offline_checker::bridge::MemoryOfflineChecker,
 };
+
+/// Field extension arithmetic chip.
+///
+/// Handles arithmetic opcodes over the extension field defined by the irreducible polynomial x^4 - 11.
+#[derive(Clone)]
+pub struct FieldExtensionArithmeticAir<const WORD_SIZE: usize> {
+    pub(crate) mem_oc: MemoryOfflineChecker,
+}
 
 impl<const WORD_SIZE: usize> AirConfig for FieldExtensionArithmeticAir<WORD_SIZE> {
     type Cols<T> = FieldExtensionArithmeticCols<WORD_SIZE, T>;
@@ -45,9 +52,9 @@ impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB>
         let flags = [aux.is_add, aux.is_sub, aux.is_mul, aux.is_inv];
         let opcodes = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
         let results = [
-            array::from_fn(|i| io.x[i] + io.y[i]),
-            array::from_fn(|i| io.x[i] - io.y[i]),
-            multiply::<AB>(io.x, io.y),
+            FieldExtensionArithmetic::add(io.x, io.y),
+            FieldExtensionArithmetic::subtract(io.x, io.y),
+            FieldExtensionArithmetic::multiply(io.x, io.y),
             aux.inv.map(Into::into),
         ];
 
@@ -91,7 +98,7 @@ impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB>
 
         // constrain inverse using multiplication: x * x^(-1) = 1
         // ignores when not inv compute (will fail if x = 0 and try to compute inv)
-        let x_times_x_inv = multiply::<AB>(io.x, aux.inv);
+        let x_times_x_inv = FieldExtensionArithmetic::multiply(io.x, aux.inv);
         for (i, prod_i) in x_times_x_inv.into_iter().enumerate() {
             if i == 0 {
                 builder.when(aux.is_inv).assert_one(prod_i);
@@ -103,16 +110,4 @@ impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB>
         let local_cols = FieldExtensionArithmeticCols { aux, io };
         self.eval_interactions(builder, local_cols);
     }
-}
-
-fn multiply<AB: AirBuilder>(x: [AB::Var; 4], y: [AB::Var; 4]) -> [AB::Expr; 4] {
-    let beta_f = AB::F::from_canonical_usize(BETA);
-    let [x0, x1, x2, x3] = x;
-    let [y0, y1, y2, y3] = y;
-    [
-        x0 * y0 + (x1 * y3 + x2 * y2 + x3 * y1) * beta_f,
-        x0 * y1 + x1 * y0 + (x2 * y3 + x3 * y2) * beta_f,
-        x0 * y2 + x1 * y1 + x2 * y0 + (x3 * y3) * beta_f,
-        x0 * y3 + x1 * y2 + x2 * y1 + x3 * y0,
-    ]
 }

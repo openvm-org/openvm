@@ -3,10 +3,13 @@ use std::array;
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir, EXTENSION_DEGREE};
+use super::columns::FieldExtensionArithmeticCols;
 use crate::{
     cpu::FIELD_EXTENSION_BUS,
-    field_extension::columns::FieldExtensionArithmeticAuxCols,
+    field_extension::{
+        air::FieldExtensionArithmeticAir, chip::EXTENSION_DEGREE,
+        columns::FieldExtensionArithmeticAuxCols,
+    },
     memory::{offline_checker::bridge::MemoryBridge, MemoryAddress},
 };
 
