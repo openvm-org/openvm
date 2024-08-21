@@ -3,8 +3,7 @@ use std::{borrow::Borrow, sync::Arc};
 use afs_stark_backend::interaction::InteractionBuilder;
 use afs_test_utils::{config::baby_bear_blake3::run_simple_test_no_pis, utils::create_seeded_rng};
 use num_bigint_dig::BigUint;
-use num_traits::FromPrimitive;
-use p3_air::{Air, AirBuilder, BaseAir};
+use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field, PrimeField64};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -20,11 +19,9 @@ use crate::{
     sub_chip::{AirConfig, LocalTraceInstructions},
 };
 
-// number of limbs of X and Y (256bits).
-const N: usize = 26;
 // Testing AIR:
 // Two bigint variables, x and y, each with N limbs.
-// Constrain: 4x^2 - y^2 = 0
+// Constrain: x^2 - y^2 = 0
 #[derive(Clone)]
 pub struct TestCarryCols<const N: usize, T> {
     // limbs of x and y, length N.
@@ -88,10 +85,10 @@ impl<AB: InteractionBuilder, const N: usize> Air<AB> for TestCarryAir<N> {
         // make the expr OverflowInt:
         let mut expr_limbs = vec![AB::Expr::zero(); 2 * N - 1];
 
-        // Expr = 4x^2 - y^2
+        // Expr = x^2 - y^2
         for i in 0..N {
             for j in 0..N {
-                expr_limbs[i + j] += x[i] * x[j] * AB::Expr::from_canonical_usize(4);
+                expr_limbs[i + j] += x[i] * x[j];
                 expr_limbs[i + j] -= y[i] * y[j];
             }
         }
@@ -135,7 +132,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
         let mut sums = vec![0isize; self.num_limbs * 2];
         for i in 0..self.num_limbs {
             for j in 0..self.num_limbs {
-                sums[i + j] += (x_limbs[i] * x_limbs[j] * 4) as isize;
+                sums[i + j] += (x_limbs[i] * x_limbs[j]) as isize;
                 sums[i + j] -= (y_limbs[i] * y_limbs[j]) as isize;
             }
         }
@@ -151,7 +148,8 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
             carries[i] = F::from_canonical_usize(carry.unsigned_abs())
                 * if carry >= 0 { F::one() } else { F::neg_one() };
         }
-        // last sums should be 0?
+        // Highest carry should be 0.
+        assert_eq!(sums[2 * self.num_limbs - 1], 0);
 
         TestCarryCols {
             x: x_limbs
@@ -167,28 +165,35 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
     }
 }
 
+// number of limbs of X and Y (128bits).
+const N: usize = 13;
+
 #[test]
 fn test_check_carry_to_zero() {
     let limb_bits = 10;
     let num_limbs = N;
+    // Computing overflow bits and carry bits:
+    // The equation: x^2 - y^2
+    // Abs of each limb of the equation can be as much as 2^10 * 2^10 * N * 2
+    // overflow bits: limb_bits * 2 + log2(2N) => 25
+    // carry (pos or neg) is thus at most 15 bits.
+    let carry_min_value_abs = (1 << 15) - 1;
+    // carry bits is the max bits of carry + max_carry_min_abs
+    let carry_bits = 16;
+
     let range_bus = 1;
-    let range_decomp = 19;
+    let range_decomp = 16;
 
     let mut rng = create_seeded_rng();
-    let x_len = 8; // in bytes -> 256 bits.
+    let x_len = 4; // in bytes -> 128 bits.
     let x_bytes = (0..x_len).map(|_| rng.next_u32()).collect();
     let x = BigUint::new(x_bytes);
-    // y = 2x so that 4x^2 - y^2 = 0
-    let y = x.clone() * BigUint::from_i16(2).unwrap();
-    println!("x: {:?}", x);
-    // why?
-    let carry_min_value_abs = (1 << 18) - 1;
-    let carry_bits = 19;
-
+    // y := x so that x^2 - y^2 = 0
+    let y = x.clone();
     let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus, 1 << range_decomp));
     let check_carry_sub_air = CheckCarryToZeroSubAir::new(
         limb_bits,
-        num_limbs,
+        // num_limbs * 2 - 1,
         range_bus,
         range_decomp,
         carry_min_value_abs,
@@ -209,7 +214,6 @@ fn test_check_carry_to_zero() {
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&test_air));
     let range_trace = range_checker.generate_trace();
 
-    println!("yo");
     run_simple_test_no_pis(
         vec![&test_air, &range_checker.air],
         vec![trace, range_trace],
