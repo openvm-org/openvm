@@ -1,16 +1,14 @@
 use std::collections::BTreeMap;
 
-use p3_field::AbstractField;
-
 use afs_stark_backend::interaction::InteractionBuilder;
-
-use crate::arch::columns::{ExecutionState, InstructionCols};
+use p3_field::AbstractField;
 
 use super::{
     columns::{CpuIoCols, MemoryAccessCols},
-    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CpuAir, MEMORY_BUS
-    , OpCode, READ_INSTRUCTION_BUS,
+    CpuAir, OpCode, CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, MEMORY_BUS,
+    READ_INSTRUCTION_BUS,
 };
+use crate::arch::columns::{ExecutionState, InstructionCols};
 
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
     pub fn eval_interactions<AB: InteractionBuilder>(

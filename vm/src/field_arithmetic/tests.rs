@@ -1,27 +1,26 @@
 use core::borrow::Borrow;
-
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use rand::Rng;
+use std::ops::Deref;
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng,
 };
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use rand::Rng;
 
+use super::{FieldArithmeticAir, FieldArithmeticChip};
 use crate::{
     arch::{
         bridge::ExecutionBus,
         chips::MachineChip,
-        instructions::{FIELD_ARITHMETIC_INSTRUCTIONS, OpCode::*},
+        instructions::{OpCode::*, FIELD_ARITHMETIC_INSTRUCTIONS},
         testing::{ExecutionTester, MachineChipTester, MemoryTester},
     },
     cpu::trace::Instruction,
     field_arithmetic::columns::FieldArithmeticCols,
 };
-
-use super::{FieldArithmeticAir, FieldArithmeticChip};
 
 #[test]
 fn field_arithmetic_air_test() {
@@ -130,7 +129,7 @@ fn au_air_zero_div_zero() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        run_simple_test_no_pis(vec![field_arithmetic_chip.air()], vec![trace],),
+        run_simple_test_no_pis(vec![field_arithmetic_chip.air().deref()], vec![trace],),
         Err(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
     );

@@ -1,24 +1,24 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
-use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField64};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_util::log2_strict_usize;
-use rand::{Rng, RngCore};
-
 use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::{
     config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Engine, engine_from_perm, random_perm},
+        baby_bear_poseidon2::{engine_from_perm, random_perm, BabyBearPoseidon2Engine},
         fri_params::fri_params_with_80_bits_of_security,
     },
     engine::StarkEngine,
     interaction::dummy_interaction_air::DummyInteractionAir,
     utils::create_seeded_rng,
 };
+use p3_baby_bear::BabyBear;
+use p3_field::{AbstractField, PrimeField64};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_util::log2_strict_usize;
 use poseidon2_air::poseidon2::Poseidon2Config;
+use rand::{Rng, RngCore};
 
+use super::{Poseidon2Chip, Poseidon2VmAir, CHUNK, WIDTH};
 use crate::{
     arch::{
         bridge::ExecutionBus,
@@ -26,11 +26,9 @@ use crate::{
         instructions::OpCode::*,
         testing::{ExecutionTester, MachineChipTester, MemoryTester},
     },
-    cpu::{POSEIDON2_DIRECT_BUS, trace::Instruction},
+    cpu::{trace::Instruction, POSEIDON2_DIRECT_BUS},
     memory::{offline_checker::MemoryChip, tree::Hasher},
 };
-
-use super::{CHUNK, Poseidon2Chip, Poseidon2VmAir, WIDTH};
 
 const ADDRESS_BITS: usize = 29;
 

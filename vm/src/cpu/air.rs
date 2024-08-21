@@ -20,7 +20,7 @@ use super::{
     OpCode::*, timestamp_delta,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 /// Air for the CPU. Carries no state and does not own execution.
 pub struct CpuAir<const WORD_SIZE: usize> {
     pub options: CpuOptions,

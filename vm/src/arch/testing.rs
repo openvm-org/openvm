@@ -1,22 +1,21 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
-
-use p3_air::{Air, BaseAir};
-use p3_baby_bear::BabyBear;
-use p3_commit::PolynomialSpace;
-use p3_field::{AbstractField, Field, PrimeField32, PrimeField64};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_uni_stark::{Domain, StarkGenericConfig};
-use rand::{RngCore, rngs::StdRng};
+use std::{cell::RefCell, collections::HashMap, ops::Deref, rc::Rc, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{
     interaction::InteractionBuilder, rap::AnyRap, verifier::VerificationError,
 };
 use afs_test_utils::{
-    config::baby_bear_poseidon2::{BabyBearPoseidon2Config, run_simple_test},
+    config::baby_bear_poseidon2::{run_simple_test, BabyBearPoseidon2Config},
     engine::StarkEngine,
     interaction::dummy_interaction_air::DummyInteractionAir,
 };
+use p3_air::{Air, BaseAir};
+use p3_baby_bear::BabyBear;
+use p3_commit::PolynomialSpace;
+use p3_field::{AbstractField, Field, PrimeField32, PrimeField64};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_uni_stark::{Domain, StarkGenericConfig};
+use rand::{rngs::StdRng, RngCore};
 
 use crate::{
     arch::{
@@ -25,11 +24,11 @@ use crate::{
         columns::{ExecutionState, InstructionCols},
     },
     cpu::trace::Instruction,
-    memory::{MemoryAccess, offline_checker::MemoryChip, OpType::Write},
+    memory::{offline_checker::MemoryChip, MemoryAccess, OpType::Write},
 };
 
 pub struct MemoryTester<F: PrimeField32> {
-    dummy_interaction_air: DummyInteractionAir,
+    memory_bus: usize,
     memory: HashMap<(F, F), F>,
     memory_chip: Rc<RefCell<MemoryChip<1, F>>>,
     accesses: Vec<MemoryAccess<1, F>>,
@@ -38,7 +37,7 @@ pub struct MemoryTester<F: PrimeField32> {
 impl<F: PrimeField32> MemoryTester<F> {
     pub fn new(memory_bus: usize) -> Self {
         Self {
-            dummy_interaction_air: DummyInteractionAir::new(5, false, memory_bus),
+            memory_bus,
             memory: HashMap::new(),
             memory_chip: Rc::new(RefCell::new(MemoryChip::new(
                 30,
@@ -104,9 +103,13 @@ impl<F: PrimeField32> MemoryTester<F> {
         self.memory_chip.borrow_mut().memory.clear();
         self.memory.clear();
     }
+
+    fn dummy_air(&self) -> DummyInteractionAir {
+        DummyInteractionAir::new(5, false, self.memory_bus)
+    }
 }
 
-impl<'a, F: PrimeField32> MachineChip<'a, F> for MemoryTester<F> {
+impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         let mut rows = vec![];
         for &MemoryAccess {
@@ -127,29 +130,37 @@ impl<'a, F: PrimeField32> MachineChip<'a, F> for MemoryTester<F> {
             ]);
         }
 
-        let width = BaseAir::<F>::width(&self.dummy_interaction_air);
-        while !(rows.len() / width).is_power_of_two() {
+        while !(rows.len() / self.width()).is_power_of_two() {
             rows.push(F::zero());
         }
 
-        RowMajorMatrix::new(rows, width)
+        RowMajorMatrix::new(rows, self.width())
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC> {
-        &self.dummy_interaction_air
+    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        Box::new(self.dummy_air())
     }
 
     fn current_trace_height(&self) -> usize {
         self.accesses.len()
     }
+
+    fn width(&self) -> usize {
+        BaseAir::<F>::width(&self.dummy_air())
+    }
 }
 
+#[derive(Clone)]
 struct Execution {
     initial_state: ExecutionState<usize>,
     final_state: ExecutionState<usize>,
     instruction: InstructionCols<usize>,
 }
 
+#[derive(Clone)]
 pub struct ExecutionTester {
     execution_bus: ExecutionBus,
     rng: StdRng,
@@ -239,40 +250,44 @@ impl<AB: InteractionBuilder> Air<AB> for ExecutionTester {
     }
 }
 
-impl<'a, F: Field> MachineChip<'a, F> for ExecutionTester {
+impl<F: Field> MachineChip<F> for ExecutionTester {
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         RowMajorMatrix::new(vec![F::zero()], 1)
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC>
+    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        self
+        Box::new(self.clone())
     }
 
     fn current_trace_height(&self) -> usize {
         1
     }
+
+    fn width(&self) -> usize {
+        1
+    }
 }
 
 #[derive(Default)]
-pub struct MachineChipTester<'a> {
-    airs: Vec<&'a dyn AnyRap<BabyBearPoseidon2Config>>,
+pub struct MachineChipTester {
+    airs: Vec<Box<dyn AnyRap<BabyBearPoseidon2Config>>>,
     traces: Vec<RowMajorMatrix<BabyBear>>,
     public_values: Vec<Vec<BabyBear>>,
 }
 
-impl<'a> MachineChipTester<'a> {
-    pub fn add<C: MachineChip<'a, BabyBear>>(&mut self, chip: &'a mut C) -> &mut Self {
+impl MachineChipTester {
+    pub fn add<C: MachineChip<BabyBear>>(&mut self, chip: &mut C) -> &mut Self {
         self.traces.push(chip.generate_trace());
         self.public_values.push(chip.get_public_values());
         self.airs.push(chip.air());
         self
     }
-    pub fn add_with_custom_trace<C: MachineChip<'a, BabyBear>>(
+    pub fn add_with_custom_trace<C: MachineChip<BabyBear>>(
         &mut self,
-        chip: &'a mut C,
+        chip: &mut C,
         trace: RowMajorMatrix<BabyBear>,
     ) -> &mut Self {
         self.traces.push(trace);
@@ -282,7 +297,7 @@ impl<'a> MachineChipTester<'a> {
     }
     pub fn simple_test(&mut self) -> Result<(), VerificationError> {
         run_simple_test(
-            self.airs.clone(),
+            self.airs.iter().map(|x| x.deref()).collect(),
             self.traces.clone(),
             self.public_values.clone(),
         )
@@ -301,7 +316,7 @@ impl<'a> MachineChipTester<'a> {
         engine_provider: P,
     ) -> Result<(), VerificationError> {
         engine_provider(self.max_trace_height()).run_simple_test(
-            self.airs.clone(),
+            self.airs.iter().map(|x| x.deref()).collect(),
             self.traces.clone(),
             self.public_values.clone(),
         )

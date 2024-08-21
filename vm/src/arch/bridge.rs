@@ -1,6 +1,5 @@
-use p3_field::AbstractField;
-
 use afs_stark_backend::interaction::InteractionBuilder;
+use p3_field::AbstractField;
 
 use crate::arch::columns::{ExecutionState, InstructionCols};
 

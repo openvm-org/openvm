@@ -1,3 +1,6 @@
+use std::ops::Deref;
+
+use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -11,8 +14,8 @@ use afs_test_utils::{
     engine::StarkEngine,
 };
 use stark_vm::{
-    arch::chips::MachineChip,
-    cpu::{OpCode::*, trace::Instruction},
+    arch::{chips::MachineChip, instructions::OpCode::*},
+    cpu::trace::Instruction,
     program::Program,
     vm::{
         config::{DEFAULT_MAX_SEGMENT_LEN, VmConfig},
@@ -20,7 +23,6 @@ use stark_vm::{
     },
 };
 
-const WORD_SIZE: usize = 1;
 const LIMB_BITS: usize = 30;
 const DECOMP: usize = 5;
 
@@ -55,7 +57,8 @@ fn air_test(
     vm.execute().unwrap();
 
     for segment in vm.segments.iter_mut() {
-        let airs = segment.chips.iter().map(|chip| chip.air()).collect();
+        let boxed_airs = segment.chips.iter().map(MachineChip::air).collect_vec();
+        let airs = boxed_airs.iter().map(Box::deref).collect();
         let traces = segment.generate_traces();
         let public_values = segment.get_public_values();
         run_simple_test(airs, traces, public_values).expect("Verification failed");
@@ -95,7 +98,8 @@ fn air_test_with_poseidon2(
     };
 
     for segment in vm.segments.iter_mut() {
-        let airs = segment.chips.iter().map(|chip| chip.air()).collect();
+        let boxed_airs = segment.chips.iter().map(MachineChip::air).collect_vec();
+        let airs = boxed_airs.iter().map(Box::deref).collect();
         let traces = segment.generate_traces();
         let public_values = segment.get_public_values();
 

@@ -40,7 +40,7 @@ pub struct FieldExtensionArithmeticOperation<F> {
 }
 
 /// Field extension arithmetic chip. The irreducible polynomial is x^4 - 11.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct FieldExtensionArithmeticAir {
     execution_bus: ExecutionBus,
 }
@@ -108,6 +108,7 @@ impl FieldExtensionArithmeticAir {
     }
 }
 
+#[derive(Debug)]
 pub struct FieldExtensionArithmeticChip<F: PrimeField32> {
     pub air: FieldExtensionArithmeticAir,
     pub memory_chip: Rc<RefCell<MemoryChip<1, F>>>,

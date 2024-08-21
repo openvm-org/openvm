@@ -1,6 +1,8 @@
+use p3_air::BaseAir;
+use p3_commit::PolynomialSpace;
 use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::StarkGenericConfig;
+use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use afs_stark_backend::rap::AnyRap;
 
@@ -72,7 +74,7 @@ fn generate_cols<T: Field>(
     }
 }
 
-impl<'a, F: PrimeField32> MachineChip<'a, F> for FieldExtensionArithmeticChip<F> {
+impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
     /// Generates trace for field arithmetic chip.
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         let mut trace: Vec<F> = self
@@ -93,11 +95,18 @@ impl<'a, F: PrimeField32> MachineChip<'a, F> for FieldExtensionArithmeticChip<F>
         RowMajorMatrix::new(trace, FieldExtensionArithmeticCols::<F>::get_width())
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC> {
-        &self.air
+    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        Box::new(self.air)
     }
 
     fn current_trace_height(&self) -> usize {
         self.operations.len()
+    }
+
+    fn width(&self) -> usize {
+        BaseAir::<F>::width(&self.air)
     }
 }

@@ -4,6 +4,7 @@ use std::{
     fmt::Display,
 };
 
+use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::{Field, PrimeField32, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
@@ -298,7 +299,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 return Err(ExecutionError::Fail(pc_usize));
             }
 
-            let mut public_value_flags = vec![F::zero(); vm.public_values.len()];
+            let mut public_value_flags = vec![F::zero(); vm.options().num_public_values];
 
             if vm.executors.contains_key(&opcode) {
                 let thing = vm.executors.get_mut(&opcode).unwrap();
@@ -310,6 +311,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 next_pc = F::from_canonical_usize(next_state.pc);
                 timestamp = next_state.timestamp;
             } else {
+                if !CORE_INSTRUCTIONS.contains(&opcode) {
+                    return Err(ExecutionError::DisabledOperation(pc_usize, opcode));
+                }
                 match opcode {
                     // d[a] <- e[d[c] + b]
                     LOADW => {
@@ -364,16 +368,19 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     PUBLISH => {
                         let public_value_index = read!(d, a).as_canonical_u64() as usize;
                         let value = read!(e, b);
-                        if public_value_index >= vm.public_values.len() {
+                        if public_value_index >= vm.options().num_public_values {
                             return Err(PublicValueIndexOutOfBounds(
                                 pc_usize,
-                                vm.public_values.len(),
+                                vm.options().num_public_values,
                                 public_value_index,
                             ));
                         }
                         public_value_flags[public_value_index] = F::one();
-                        match vm.public_values[public_value_index] {
-                            None => vm.public_values[public_value_index] = Some(value),
+                        match vm.cpu_chip.borrow().public_values[public_value_index] {
+                            None => {
+                                vm.cpu_chip.borrow_mut().public_values[public_value_index] =
+                                    Some(value)
+                            }
                             Some(exising_value) => {
                                 if value != exising_value {
                                     return Err(PublicValueNotEqual(
@@ -426,8 +433,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     }
                     CT_START => cycle_tracker.start(debug, vm.collected_metrics.clone()),
                     CT_END => cycle_tracker.end(debug, vm.collected_metrics.clone()),
-                    _ => return Err(ExecutionError::DisabledOperation(pc_usize, opcode)),
+                    _ => panic!("Unhandled CPU instruction"),
                 };
+                timestamp += timestamp_delta(opcode);
             }
 
             let now_trace_cells = vm.current_trace_cells();
@@ -484,7 +492,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 .push(cols.flatten(vm.options()));
 
             pc = next_pc;
-            timestamp += timestamp_delta(opcode);
 
             clock_cycle += 1;
             if opcode == TERMINATE {
@@ -515,7 +522,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
         });
         vm.hint_stream = hint_stream;
         vm.cycle_tracker = cycle_tracker;
-        vm.cpu_chip.borrow_mut().generate_pvs();
 
         Ok(())
     }
@@ -531,7 +537,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
     }
 }
 
-impl<'a, const WORD_SIZE: usize, F: PrimeField32> MachineChip<'a, F> for CpuChip<WORD_SIZE, F> {
+impl<const WORD_SIZE: usize, F: PrimeField32> MachineChip<F> for CpuChip<WORD_SIZE, F> {
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         if !self.state.is_done {
             self.pad_rows();
@@ -543,14 +549,29 @@ impl<'a, const WORD_SIZE: usize, F: PrimeField32> MachineChip<'a, F> for CpuChip
         )
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC>
+    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        &self.air
+        Box::new(self.air.clone())
+    }
+
+    fn get_public_values(&mut self) -> Vec<F> {
+        let first_row_pc = self.start_state.pc;
+        let last_row_pc = self.state.pc;
+        let mut result = vec![
+            F::from_canonical_usize(first_row_pc),
+            F::from_canonical_usize(last_row_pc),
+        ];
+        result.extend(self.public_values.iter().map(|pv| pv.unwrap_or(F::zero())));
+        result
     }
 
     fn current_trace_height(&self) -> usize {
         self.rows.len()
+    }
+
+    fn width(&self) -> usize {
+        BaseAir::<F>::width(&self.air)
     }
 }

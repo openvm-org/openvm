@@ -1,10 +1,8 @@
+use afs_derive::AlignedBorrow;
 use p3_field::Field;
 
-use afs_derive::AlignedBorrow;
-
-use crate::arch::columns::ExecutionState;
-
 use super::FieldArithmeticAir;
+use crate::arch::columns::ExecutionState;
 
 /// Columns for field arithmetic chip.
 ///

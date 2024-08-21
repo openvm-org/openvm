@@ -14,6 +14,7 @@ use super::MemoryAccess;
 mod air;
 mod trace;
 
+#[derive(Clone, Debug)]
 pub struct MemoryOfflineChecker {
     pub offline_checker: OfflineChecker,
 }
@@ -24,6 +25,7 @@ impl MemoryOfflineChecker {
     }
 }
 
+#[derive(Debug)]
 pub struct MemoryChip<const WORD_SIZE: usize, F: PrimeField32> {
     pub air: MemoryOfflineChecker,
     pub range_checker: Arc<RangeCheckerGateChip>,

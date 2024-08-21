@@ -3,14 +3,13 @@ use std::{
     mem::take,
 };
 
-use p3_field::PrimeField32;
-
 use cycle_tracker::CycleTracker;
 use metrics::VmMetrics;
+use p3_field::PrimeField32;
 pub use segment::ExecutionSegment;
 
 use crate::{
-    cpu::{CpuOptions, CpuState, trace::ExecutionError},
+    cpu::{trace::ExecutionError, CpuOptions, CpuState},
     program::Program,
     vm::config::VmConfig,
 };

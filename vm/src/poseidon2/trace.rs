@@ -1,18 +1,16 @@
+use afs_primitives::sub_chip::LocalTraceInstructions;
+use afs_stark_backend::rap::AnyRap;
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use afs_primitives::sub_chip::LocalTraceInstructions;
-use afs_stark_backend::rap::AnyRap;
-
+use super::{columns::*, Poseidon2Chip, Poseidon2VmAir};
 use crate::{
     arch::{chips::MachineChip, columns::ExecutionState},
     cpu::trace::Instruction,
 };
-
-use super::{columns::*, Poseidon2Chip, Poseidon2VmAir};
 
 impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
     /// Generates a single row from inputs.
@@ -39,7 +37,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
     }
 }
 
-impl<'a, const WIDTH: usize, F: PrimeField32> MachineChip<'a, F> for Poseidon2Chip<WIDTH, F> {
+impl<const WIDTH: usize, F: PrimeField32> MachineChip<F> for Poseidon2Chip<WIDTH, F> {
     /// Generates final Poseidon2VmAir trace from cached rows.
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         let row_len = self.rows.len();
@@ -56,14 +54,18 @@ impl<'a, const WIDTH: usize, F: PrimeField32> MachineChip<'a, F> for Poseidon2Ch
         )
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC>
+    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        &self.air
+        Box::new(self.air.clone())
     }
 
     fn current_trace_height(&self) -> usize {
         self.rows.len()
+    }
+
+    fn width(&self) -> usize {
+        self.air.width()
     }
 }

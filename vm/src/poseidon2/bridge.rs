@@ -1,19 +1,17 @@
+use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::izip;
 use p3_field::{AbstractField, Field};
 
-use afs_stark_backend::interaction::InteractionBuilder;
-
+use super::{
+    columns::{Poseidon2VmAuxCols, Poseidon2VmIoCols},
+    Poseidon2VmAir,
+};
 use crate::{
     arch::{
         columns::{ExecutionState, InstructionCols},
         instructions::OpCode::PERM_POS2,
     },
     cpu::{MEMORY_BUS, POSEIDON2_DIRECT_BUS},
-};
-
-use super::{
-    columns::{Poseidon2VmAuxCols, Poseidon2VmIoCols},
-    Poseidon2VmAir,
 };
 
 impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {

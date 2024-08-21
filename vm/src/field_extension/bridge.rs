@@ -1,13 +1,11 @@
+use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use afs_stark_backend::interaction::InteractionBuilder;
-
+use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir, EXTENSION_DEGREE};
 use crate::{
     arch::columns::{ExecutionState, InstructionCols},
-    cpu::{MEMORY_BUS, WORD_SIZE},
+    cpu::MEMORY_BUS,
 };
-
-use super::{columns::FieldExtensionArithmeticCols, EXTENSION_DEGREE, FieldExtensionArithmeticAir};
 
 fn eval_rw_interactions<AB: InteractionBuilder>(
     builder: &mut AB,
@@ -31,7 +29,7 @@ fn eval_rw_interactions<AB: InteractionBuilder>(
     for (i, element) in ext_element.into_iter().enumerate() {
         let timestamp = aux.start_timestamp + AB::F::from_canonical_usize(ext_element_ind * 4 + i);
 
-        let pointer = address + AB::F::from_canonical_usize(i * WORD_SIZE);
+        let pointer = address + AB::F::from_canonical_usize(i);
 
         let fields = [
             timestamp,

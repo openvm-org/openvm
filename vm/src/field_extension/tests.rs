@@ -1,24 +1,22 @@
 use std::ops::{Add, Div, Mul, Sub};
 
-use p3_baby_bear::BabyBear;
-use p3_field::{AbstractExtensionField, AbstractField, extension::BinomialExtensionField};
-use rand::Rng;
-
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::utils::create_seeded_rng;
+use p3_baby_bear::BabyBear;
+use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField};
+use rand::Rng;
 
+use super::{FieldExtensionArithmeticAir, FieldExtensionArithmeticChip};
 use crate::{
     arch::{
         bridge::ExecutionBus,
         chips::MachineChip,
-        instructions::{FIELD_EXTENSION_INSTRUCTIONS, OpCode},
+        instructions::{OpCode, FIELD_EXTENSION_INSTRUCTIONS},
         testing::{ExecutionTester, MachineChipTester, MemoryTester},
     },
     cpu::trace::Instruction,
     field_extension::columns::FieldExtensionArithmeticIoCols,
 };
-
-use super::{FieldExtensionArithmeticAir, FieldExtensionArithmeticChip};
 
 #[test]
 fn field_extension_air_test() {

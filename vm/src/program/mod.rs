@@ -29,7 +29,7 @@ impl DebugInfo {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Program<F> {
     pub instructions: Vec<Instruction<F>>,
     pub debug_infos: Vec<Option<DebugInfo>>,
@@ -45,10 +45,12 @@ impl<F> Program<F> {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct ProgramAir<F> {
     pub program: Program<F>,
 }
 
+#[derive(Debug)]
 pub struct ProgramChip<F> {
     pub air: ProgramAir<F>,
     pub true_program_length: usize,

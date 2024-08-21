@@ -29,6 +29,7 @@ pub mod trace;
 ///
 /// Carries the subair for subtrace generation. Sticking to the conventions, this struct carries no state.
 /// `direct` determines whether direct interactions are enabled. By default they are on.
+#[derive(Clone, Debug)]
 pub struct Poseidon2VmAir<const WIDTH: usize, F: Clone> {
     pub inner: Poseidon2Air<WIDTH, F>,
     direct: bool, // Whether direct interactions are enabled.
@@ -38,6 +39,7 @@ pub struct Poseidon2VmAir<const WIDTH: usize, F: Clone> {
 /// Poseidon2 Chip.
 ///
 /// Carries the Poseidon2VmAir for constraints, and cached state for trace generation.
+#[derive(Debug)]
 pub struct Poseidon2Chip<const WIDTH: usize, F: PrimeField32> {
     pub air: Poseidon2VmAir<WIDTH, F>,
     pub rows: Vec<Poseidon2VmCols<WIDTH, F>>,

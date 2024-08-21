@@ -1,6 +1,7 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use enum_dispatch::enum_dispatch;
+use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
@@ -28,17 +29,19 @@ pub trait OpCodeExecutor<F> {
     ) -> ExecutionState<usize>;
 }
 
+#[enum_dispatch]
 pub trait MachineChip<F> {
     fn generate_trace(&mut self) -> RowMajorMatrix<F>;
-    fn air<'a, SC: StarkGenericConfig>(&'a self) -> &'a dyn AnyRap<SC>
+    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>;
     fn get_public_values(&mut self) -> Vec<F> {
         vec![]
     }
     fn current_trace_height(&self) -> usize;
+    fn width(&self) -> usize;
     fn current_trace_cells(&self) -> usize {
-        self.current_trace_height() * self.air().width()
+        self.current_trace_height() * self.width()
     }
 }
 
@@ -52,6 +55,31 @@ impl<F, C: OpCodeExecutor<F>> OpCodeExecutor<F> for Rc<RefCell<C>> {
     }
 }
 
+impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
+    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+        self.borrow_mut().generate_trace()
+    }
+
+    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        self.borrow().air()
+    }
+
+    fn get_public_values(&mut self) -> Vec<F> {
+        self.borrow_mut().get_public_values()
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.borrow().current_trace_height()
+    }
+
+    fn width(&self) -> usize {
+        self.borrow().width()
+    }
+}
+
 #[enum_dispatch(OpCodeExecutor<F>)]
 pub enum OpCodeExecutorVariant<F: PrimeField32> {
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
@@ -59,6 +87,8 @@ pub enum OpCodeExecutorVariant<F: PrimeField32> {
     Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
 }
 
+#[derive(Debug)]
+#[enum_dispatch(MachineChip<F>)]
 pub enum MachineChipVariant<F: PrimeField32> {
     Cpu(Rc<RefCell<CpuChip<1, F>>>),
     Program(Rc<RefCell<ProgramChip<F>>>),
@@ -69,55 +99,23 @@ pub enum MachineChipVariant<F: PrimeField32> {
     RangeChecker(Arc<RangeCheckerGateChip>),
 }
 
-impl<F: PrimeField32> MachineChip<F> for MachineChipVariant<F> {
+impl<F: PrimeField32> MachineChip<F> for Arc<RangeCheckerGateChip> {
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
-        match self {
-            MachineChipVariant::Cpu(chip) => chip.borrow_mut().generate_trace(),
-            MachineChipVariant::Program(chip) => chip.borrow_mut().generate_trace(),
-            MachineChipVariant::Memory(chip) => chip.borrow_mut().generate_trace(),
-            MachineChipVariant::FieldArithmetic(chip) => chip.borrow_mut().generate_trace(),
-            MachineChipVariant::FieldExtension(chip) => chip.borrow_mut().generate_trace(),
-            MachineChipVariant::Poseidon2(chip) => chip.borrow_mut().generate_trace(),
-            MachineChipVariant::RangeChecker(chip) => chip.generate_trace(),
-        }
+        RangeCheckerGateChip::generate_trace(self)
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC>
+    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        match self {
-            MachineChipVariant::Cpu(chip) => chip.borrow().air(),
-            MachineChipVariant::Program(chip) => chip.borrow().air(),
-            MachineChipVariant::Memory(chip) => chip.borrow().air(),
-            MachineChipVariant::FieldArithmetic(chip) => chip.borrow().air(),
-            MachineChipVariant::FieldExtension(chip) => chip.borrow().air(),
-            MachineChipVariant::Poseidon2(chip) => chip.borrow().air(),
-            MachineChipVariant::RangeChecker(chip) => &chip.air,
-        }
-    }
-
-    fn get_public_values(&mut self) -> Vec<F> {
-        match self {
-            MachineChipVariant::Cpu(chip) => chip.borrow_mut().get_public_values(),
-            MachineChipVariant::Program(chip) => chip.borrow_mut().get_public_values(),
-            MachineChipVariant::Memory(chip) => chip.borrow_mut().get_public_values(),
-            MachineChipVariant::FieldArithmetic(chip) => chip.borrow_mut().get_public_values(),
-            MachineChipVariant::FieldExtension(chip) => chip.borrow_mut().get_public_values(),
-            MachineChipVariant::Poseidon2(chip) => chip.borrow_mut().get_public_values(),
-            MachineChipVariant::RangeChecker(_) => vec![],
-        }
+        Box::new(self.air.clone())
     }
 
     fn current_trace_height(&self) -> usize {
-        match self {
-            MachineChipVariant::Cpu(chip) => chip.borrow().current_trace_height(),
-            MachineChipVariant::Program(chip) => chip.borrow().current_trace_height(),
-            MachineChipVariant::Memory(chip) => chip.borrow().current_trace_height(),
-            MachineChipVariant::FieldArithmetic(chip) => chip.borrow().current_trace_height(),
-            MachineChipVariant::FieldExtension(chip) => chip.borrow().current_trace_height(),
-            MachineChipVariant::Poseidon2(chip) => chip.borrow().current_trace_height(),
-            MachineChipVariant::RangeChecker(chip) => chip.count.len(),
-        }
+        self.air.range_max as usize
+    }
+
+    fn width(&self) -> usize {
+        BaseAir::<F>::width(&self.air)
     }
 }

@@ -1,22 +1,20 @@
 use std::{collections::HashMap, iter, sync::Arc};
 
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrix;
-
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test_no_pis,
     interaction::dummy_interaction_air::DummyInteractionAir,
 };
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
+use p3_matrix::dense::RowMajorMatrix;
 
+use super::{offline_checker::MemoryChip, MemoryAccess, OpType};
 use crate::{
     arch::chips::MachineChip,
     cpu::{MEMORY_BUS, RANGE_CHECKER_BUS},
 };
-
-use super::{MemoryAccess, offline_checker::MemoryChip, OpType};
 
 const WORD_SIZE: usize = 3;
 const ADDR_SPACE_LIMB_BITS: usize = 8;
@@ -29,7 +27,7 @@ const TRACE_DEGREE: usize = 16;
 
 #[test]
 fn test_offline_checker() {
-    let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
+    let mut range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
     let mut memory_chip = MemoryChip::new(
         ADDR_SPACE_LIMB_BITS,
         POINTER_LIMB_BITS,
@@ -175,7 +173,7 @@ fn test_offline_checker() {
 
 #[test]
 fn test_offline_checker_valid_first_read() {
-    let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
+    let mut range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
     let mut memory_chip = MemoryChip::new(
         ADDR_SPACE_LIMB_BITS,
         POINTER_LIMB_BITS,
@@ -233,7 +231,7 @@ fn test_offline_checker_valid_first_read() {
 
 #[test]
 fn test_offline_checker_negative_data_mismatch() {
-    let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
+    let mut range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, RANGE_MAX));
     let mut memory_chip = MemoryChip::new(
         ADDR_SPACE_LIMB_BITS,
         POINTER_LIMB_BITS,

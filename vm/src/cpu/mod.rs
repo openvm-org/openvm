@@ -1,17 +1,13 @@
 use core::panic;
 
 use p3_baby_bear::BabyBear;
-use p3_field::PrimeField32;
 
 pub use air::CpuAir;
-use OpCode::*;
 
 use crate::{
     arch::{
         bridge::ExecutionBus,
-        instructions::{
-            FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS, OpCode, OpCode::*,
-        },
+        instructions::{OpCode, OpCode::*},
     },
     poseidon2::Poseidon2Chip,
 };
@@ -42,6 +38,7 @@ fn timestamp_delta(opcode: OpCode) -> usize {
         LOADW | STOREW | LOADW2 | STOREW2 => WRITE_DELTA,
         // JAL only does WRITE, but it is done as timestamp + 2
         JAL => WRITE_DELTA,
+        BEQ | BNE => 2,
         TERMINATE => 0,
         PUBLISH => 2,
         F_LESS_THAN => WRITE_DELTA,
@@ -58,12 +55,12 @@ fn timestamp_delta(opcode: OpCode) -> usize {
     }
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Debug)]
 pub struct CpuOptions {
     pub num_public_values: usize,
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Debug)]
 pub struct CpuState {
     pub clock_cycle: usize,
     pub timestamp: usize,
@@ -72,14 +69,15 @@ pub struct CpuState {
 }
 
 /// Chip for the CPU. Carries all state and owns execution.
+#[derive(Debug)]
 pub struct CpuChip<const WORD_SIZE: usize, F: Clone> {
     pub air: CpuAir<WORD_SIZE>,
     pub rows: Vec<Vec<F>>,
     pub state: CpuState,
     /// Program counter at the start of the current segment.
     pub start_state: CpuState,
-    /// Public inputs for the current segment.
-    pub pis: Vec<F>,
+
+    pub public_values: Vec<Option<F>>,
 }
 
 impl<const WORD_SIZE: usize, F: Clone> CpuChip<WORD_SIZE, F> {
@@ -102,21 +100,7 @@ impl<const WORD_SIZE: usize, F: Clone> CpuChip<WORD_SIZE, F> {
             rows: vec![],
             state,
             start_state: state,
-            pis: vec![],
+            public_values: vec![None; options.num_public_values],
         }
-    }
-}
-
-impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
-    /// Writes the public inputs for the current segment (beginning and end program counters).
-    ///
-    /// Should only be called after segment end.
-    fn generate_pvs(&mut self) {
-        let first_row_pc = self.start_state.pc;
-        let last_row_pc = self.state.pc;
-        self.pis = vec![
-            F::from_canonical_usize(first_row_pc),
-            F::from_canonical_usize(last_row_pc),
-        ];
     }
 }

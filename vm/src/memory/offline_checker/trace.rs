@@ -1,3 +1,6 @@
+use afs_primitives::offline_checker::OfflineCheckerChip;
+use afs_stark_backend::rap::AnyRap;
+use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
@@ -5,17 +8,13 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use afs_primitives::offline_checker::OfflineCheckerChip;
-use afs_stark_backend::rap::AnyRap;
-
+use super::MemoryChip;
 use crate::{
     arch::chips::MachineChip,
     memory::{MemoryAccess, OpType},
 };
 
-use super::MemoryChip;
-
-impl<'a, const WORD_SIZE: usize, F: PrimeField32> MachineChip<'a, F> for MemoryChip<WORD_SIZE, F> {
+impl<const WORD_SIZE: usize, F: PrimeField32> MachineChip<F> for MemoryChip<WORD_SIZE, F> {
     /// Each row in the trace follow the same order as the Cols struct:
     /// [clk, mem_row, op_type, same_addr_space, same_pointer, same_addr, same_data, lt_bit, is_valid, is_equal_addr_space_aux, is_equal_pointer_aux, is_equal_data_aux, lt_aux]
     ///
@@ -49,14 +48,18 @@ impl<'a, const WORD_SIZE: usize, F: PrimeField32> MachineChip<'a, F> for MemoryC
         )
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC>
+    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        &self.air
+        Box::new(self.air.clone())
     }
 
     fn current_trace_height(&self) -> usize {
         self.accesses.len()
+    }
+
+    fn width(&self) -> usize {
+        BaseAir::<F>::width(&self.air)
     }
 }

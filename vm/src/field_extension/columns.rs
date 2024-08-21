@@ -1,8 +1,7 @@
+use afs_derive::AlignedBorrow;
 use p3_field::Field;
 
-use afs_derive::AlignedBorrow;
-
-use super::{EXTENSION_DEGREE, FieldExtensionArithmeticAir};
+use super::{FieldExtensionArithmeticAir, EXTENSION_DEGREE};
 
 /// Columns for field extension chip.
 ///

@@ -1,11 +1,10 @@
 use std::borrow::Borrow;
 
+use afs_primitives::sub_chip::AirConfig;
+use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
-
-use afs_primitives::sub_chip::AirConfig;
-use afs_stark_backend::interaction::InteractionBuilder;
 
 use super::{columns::FieldArithmeticCols, FieldArithmeticAir};
 

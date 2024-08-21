@@ -32,7 +32,7 @@ pub struct ArithmeticOperation<F> {
     pub result: F,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct FieldArithmeticAir {
     execution_bus: ExecutionBus,
 }
@@ -55,6 +55,7 @@ impl FieldArithmeticAir {
     }
 }
 
+#[derive(Debug)]
 pub struct FieldArithmeticChip<F: PrimeField32> {
     pub air: FieldArithmeticAir,
     pub operations: Vec<ArithmeticOperation<F>>,

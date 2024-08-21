@@ -40,8 +40,6 @@ pub struct ExecutionSegment<F: PrimeField32> {
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
 
-    pub public_values: Vec<Option<F>>,
-
     pub cycle_tracker: CycleTracker,
     /// Collected metrics for this segment alone.
     /// Only collected when `config.collect_metrics` is true.
@@ -121,7 +119,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
         Self {
             config,
-            public_values: vec![None; config.num_public_values],
             executors,
             chips,
             cpu_chip,

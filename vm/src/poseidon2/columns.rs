@@ -8,6 +8,7 @@ use poseidon2_air::poseidon2::{
 use super::Poseidon2VmAir;
 
 /// Columns for Poseidon2Vm AIR.
+#[derive(Debug)]
 pub struct Poseidon2VmCols<const WIDTH: usize, T> {
     pub io: Poseidon2VmIoCols<T>,
     pub aux: Poseidon2VmAuxCols<WIDTH, T>,
