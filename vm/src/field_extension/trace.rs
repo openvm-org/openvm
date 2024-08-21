@@ -73,16 +73,15 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             .flat_map(|op| generate_cols::<WORD_SIZE, F>(op, &mut accesses_iter).flatten())
             .collect();
 
-        let empty_row: Vec<F> = self.make_blank_row().flatten();
+        assert!(accesses_iter.next().is_none());
+
         let curr_height = self.operations.len();
         let correct_height = curr_height.next_power_of_two();
         let width = FieldExtensionArithmeticCols::<WORD_SIZE, F>::get_width(&self.air);
         trace.extend(
-            empty_row
-                .iter()
-                .cloned()
-                .cycle()
-                .take((correct_height - curr_height) * width),
+            (0..correct_height - curr_height).flat_map(|_| {
+                self.make_blank_row().flatten()
+            }).collect_vec()
         );
 
         RowMajorMatrix::new(trace, width)
