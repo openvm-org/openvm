@@ -1,4 +1,5 @@
 use std::{array, vec::IntoIter};
+
 use itertools::Itertools;
 use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
@@ -77,6 +78,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
 
         let curr_height = self.operations.len();
         let correct_height = curr_height.next_power_of_two();
+
         let width = FieldExtensionArithmeticCols::<WORD_SIZE, F>::get_width(&self.air);
         trace.extend(
             (0..correct_height - curr_height)

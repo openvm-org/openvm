@@ -45,6 +45,7 @@ impl<F> Program<F> {
     }
 }
 
+#[derive(Clone)]
 pub struct ProgramAir<F> {
     pub program: Program<F>,
 }

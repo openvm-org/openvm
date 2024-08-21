@@ -26,6 +26,7 @@ use super::{
 /// - WIDTH is multiple of 4 and >= 8
 ///
 /// Spec is at https://hackmd.io/_I1lx-6GROWbKbDi_Vz-pw?view .
+#[derive(Clone)]
 pub struct Poseidon2Air<const WIDTH: usize, F> {
     pub rounds_f: usize,
     pub external_constants: Vec<[F; WIDTH]>,

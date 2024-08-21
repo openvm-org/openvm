@@ -272,7 +272,7 @@ where
     let mut result: Vec<Box<dyn AnyRap<SC>>> = vec![
         Box::new(segment.cpu_chip.air),
         Box::new(segment.program_chip.air),
-        Box::new(segment.memory_manager.borrow().get_audit_air()),
+        Box::new(segment.memory_manager.borrow().get_audit_air().clone()),
     ];
     if segment.config.cpu_options().field_arithmetic_enabled {
         result.push(Box::new(segment.field_arithmetic_chip.air));
@@ -288,7 +288,7 @@ where
     }
     result.push(Box::new(segment.range_checker.air));
 
-    assert!(result.len() == num_chips);
+    assert_eq!(result.len(), num_chips);
 
     inclusion_mask
         .iter()
@@ -300,6 +300,6 @@ where
             result.remove(index);
         });
 
-    assert!(result.len() == inclusion_mask.iter().filter(|&x| *x).count());
+    assert_eq!(result.len(), inclusion_mask.iter().filter(|&x| *x).count());
     result
 }

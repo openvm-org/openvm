@@ -71,6 +71,7 @@ fn test_fibonacci_program_verify() {
     } = vm.execute_and_generate_traces().unwrap();
 
     let chips = chips.iter().map(|x| x.deref()).collect();
+    let rec_raps = rec_raps.iter().map(|x| x.deref()).collect();
 
     // blowup factor = 3
     let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {

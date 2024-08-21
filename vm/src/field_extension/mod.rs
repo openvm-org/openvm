@@ -43,6 +43,7 @@ pub struct FieldExtensionArithmeticOperation<const WORD_SIZE: usize, F> {
 }
 
 /// Field extension arithmetic chip. The irreducible polynomial is x^4 - 11.
+#[derive(Clone)]
 pub struct FieldExtensionArithmeticAir<const WORD_SIZE: usize> {
     mem_oc: MemoryOfflineChecker,
 }

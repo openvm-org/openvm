@@ -19,7 +19,7 @@ use crate::memory::{
 ///
 /// Carries the subair for subtrace generation. Sticking to the conventions, this struct carries no state.
 /// `direct` determines whether direct interactions are enabled. By default they are on.
-#[derive(new)]
+#[derive(Clone, new)]
 pub struct Poseidon2VmAir<const WIDTH: usize, const WORD_SIZE: usize, F: Clone> {
     pub inner: Poseidon2Air<WIDTH, F>,
     pub mem_oc: MemoryOfflineChecker,

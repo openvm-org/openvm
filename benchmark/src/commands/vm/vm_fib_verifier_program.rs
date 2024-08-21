@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use afs_compiler::{
     asm::AsmBuilder,
     ir::{Felt, Var},
@@ -62,8 +64,9 @@ pub fn benchmark_fib_verifier_program(n: usize) -> Result<()> {
 
     let dummy_vm = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::new(vm_config, fib_program, vec![]);
     let rec_raps = get_rec_raps::<NUM_WORDS, WORD_SIZE, InnerConfig>(&dummy_vm.segments[0]);
+    let rec_raps: Vec<_> = rec_raps.iter().map(|x| x.deref()).collect();
 
-    assert!(chips.len() == rec_raps.len());
+    assert_eq!(chips.len(), rec_raps.len());
 
     let pvs = pis;
     let (chips, rec_raps, traces, pvs) = sort_chips(chips, rec_raps, traces, pvs);
