@@ -17,7 +17,7 @@ use crate::{
         chips::{MachineChip, MachineChipVariant, OpCodeExecutorVariant},
         instructions::{FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS, OpCode},
     },
-    cpu::{CpuChip, CpuOptions, POSEIDON2_BUS, RANGE_CHECKER_BUS, trace::ExecutionError},
+    cpu::{CpuChip, CpuOptions, POSEIDON2_DIRECT_BUS, RANGE_CHECKER_BUS, trace::ExecutionError},
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
     memory::offline_checker::MemoryChip,
@@ -106,7 +106,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         if config.perm_poseidon2_enabled || config.compress_poseidon2_enabled {
             let poseidon2_chip = Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
                 Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
-                POSEIDON2_BUS,
+                POSEIDON2_DIRECT_BUS,
                 execution_bus,
                 memory_chip.clone(),
             )));
@@ -168,14 +168,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     }
 
     // TODO[osama]: revisit this
-    // [danny]: presumably fine now
-    pub fn get_num_chips(&self) -> usize {
-        self.chips.len()
-    }
-
-    // TODO[osama]: revisit this
     /// Returns public values for all chips in this segment
-    pub fn get_pis(&mut self) -> Vec<Vec<F>> {
+    pub fn get_public_values(&mut self) -> Vec<Vec<F>> {
         self.chips
             .iter_mut()
             .map(|chip| chip.get_public_values())

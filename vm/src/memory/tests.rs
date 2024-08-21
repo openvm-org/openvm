@@ -1,17 +1,22 @@
 use std::{collections::HashMap, iter, sync::Arc};
 
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
+use p3_matrix::dense::RowMajorMatrix;
+
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test_no_pis,
     interaction::dummy_interaction_air::DummyInteractionAir,
 };
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrix;
 
-use super::{offline_checker::MemoryChip, MemoryAccess, OpType};
-use crate::cpu::{MEMORY_BUS, RANGE_CHECKER_BUS};
+use crate::{
+    arch::chips::MachineChip,
+    cpu::{MEMORY_BUS, RANGE_CHECKER_BUS},
+};
+
+use super::{MemoryAccess, offline_checker::MemoryChip, OpType};
 
 const WORD_SIZE: usize = 3;
 const ADDR_SPACE_LIMB_BITS: usize = 8;
@@ -31,6 +36,7 @@ fn test_offline_checker() {
         CLK_LIMB_BITS,
         DECOMP,
         HashMap::new(),
+        range_checker.clone(),
     );
     let requester = DummyInteractionAir::new(
         2 + memory_chip.air.offline_checker.idx_data_width(),
@@ -134,7 +140,7 @@ fn test_offline_checker() {
         }
     }
 
-    let trace = memory_chip.generate_trace(range_checker.clone());
+    let trace = memory_chip.generate_trace();
     let range_checker_trace = range_checker.generate_trace();
     let requester_trace = RowMajorMatrix::new(
         ops.iter()
@@ -176,6 +182,7 @@ fn test_offline_checker_valid_first_read() {
         CLK_LIMB_BITS,
         DECOMP,
         HashMap::new(),
+        range_checker.clone(),
     );
     let requester = DummyInteractionAir::new(
         2 + memory_chip.air.offline_checker.idx_data_width(),
@@ -192,7 +199,7 @@ fn test_offline_checker_valid_first_read() {
     // read before writing, but first operation in block so should pass
     memory_chip.accesses[0].op_type = OpType::Read;
 
-    let memory_trace = memory_chip.generate_trace(range_checker.clone());
+    let memory_trace = memory_chip.generate_trace();
     let range_checker_trace = range_checker.generate_trace();
     let requester_trace = RowMajorMatrix::new(
         memory_chip
@@ -233,6 +240,7 @@ fn test_offline_checker_negative_data_mismatch() {
         CLK_LIMB_BITS,
         DECOMP,
         HashMap::new(),
+        range_checker.clone(),
     );
     let requester = DummyInteractionAir::new(
         2 + memory_chip.air.offline_checker.idx_data_width(),
@@ -279,7 +287,7 @@ fn test_offline_checker_negative_data_mismatch() {
 
     memory_chip.accesses.clone_from(&ops);
 
-    let trace = memory_chip.generate_trace(range_checker.clone());
+    let trace = memory_chip.generate_trace();
 
     let range_checker_trace = range_checker.generate_trace();
     let requester_trace = RowMajorMatrix::new(

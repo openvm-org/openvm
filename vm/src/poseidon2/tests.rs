@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField64};
@@ -6,7 +6,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_strict_usize;
 use rand::{Rng, RngCore};
 
-use afs_primitives::sub_chip::LocalTraceInstructions;
+use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::{
     config::{
@@ -23,13 +23,10 @@ use crate::{
     arch::{
         bridge::ExecutionBus,
         chips::MachineChip,
+        instructions::OpCode::*,
         testing::{ExecutionTester, MachineChipTester, MemoryTester},
     },
-    cpu::{
-        OpCode::{COMP_POS2, PERM_POS2},
-        POSEIDON2_BUS,
-        POSEIDON2_DIRECT_BUS, trace::Instruction,
-    },
+    cpu::{POSEIDON2_DIRECT_BUS, trace::Instruction},
     memory::{offline_checker::MemoryChip, tree::Hasher},
 };
 
@@ -87,7 +84,7 @@ fn setup_test(
     let mut memory_tester = MemoryTester::new(memory_bus);
     let mut poseidon2_chip = Poseidon2Chip::from_poseidon2_config(
         Poseidon2Config::<16, _>::new_p3_baby_bear_16(),
-        POSEIDON2_BUS,
+        POSEIDON2_DIRECT_BUS,
         execution_bus,
         memory_tester.get_memory_chip(),
     );
@@ -207,9 +204,16 @@ fn poseidon2_direct_test() {
     });
     let mut chip = Poseidon2Chip::<16, BabyBear>::from_poseidon2_config(
         Poseidon2Config::default(),
-        POSEIDON2_BUS,
+        POSEIDON2_DIRECT_BUS,
         ExecutionBus(0),
-        Rc::new(RefCell::new(MemoryChip::new(0, 0, 0, 1, HashMap::new()))),
+        Rc::new(RefCell::new(MemoryChip::new(
+            0,
+            0,
+            0,
+            1,
+            HashMap::new(),
+            Arc::new(RangeCheckerGateChip::new(0, 1)),
+        ))),
     );
 
     let outs: [[BabyBear; CHUNKS]; NUM_OPS] =

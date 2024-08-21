@@ -14,9 +14,10 @@ use crate::{
     arch::{
         bridge::ExecutionBus,
         chips::MachineChip,
+        instructions::{FIELD_ARITHMETIC_INSTRUCTIONS, OpCode::*},
         testing::{ExecutionTester, MachineChipTester, MemoryTester},
     },
-    cpu::{FIELD_ARITHMETIC_INSTRUCTIONS, OpCode::FDIV, trace::Instruction},
+    cpu::trace::Instruction,
     field_arithmetic::columns::FieldArithmeticCols,
 };
 

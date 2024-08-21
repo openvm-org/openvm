@@ -28,9 +28,9 @@ pub trait OpCodeExecutor<F> {
     ) -> ExecutionState<usize>;
 }
 
-pub trait MachineChip<'a, F> {
+pub trait MachineChip<F> {
     fn generate_trace(&mut self) -> RowMajorMatrix<F>;
-    fn air<SC: StarkGenericConfig>(&self) -> &'a dyn AnyRap<SC>
+    fn air<'a, SC: StarkGenericConfig>(&'a self) -> &'a dyn AnyRap<SC>
     where
         Domain<SC>: PolynomialSpace<Val = F>;
     fn get_public_values(&mut self) -> Vec<F> {
@@ -69,7 +69,7 @@ pub enum MachineChipVariant<F: PrimeField32> {
     RangeChecker(Arc<RangeCheckerGateChip>),
 }
 
-impl<'a, F: PrimeField32> MachineChip<'a, F> for MachineChipVariant<F> {
+impl<F: PrimeField32> MachineChip<F> for MachineChipVariant<F> {
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         match self {
             MachineChipVariant::Cpu(chip) => chip.borrow_mut().generate_trace(),

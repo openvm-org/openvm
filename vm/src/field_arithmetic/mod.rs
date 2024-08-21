@@ -7,8 +7,9 @@ use crate::{
         bridge::ExecutionBus,
         chips::OpCodeExecutor,
         columns::{ExecutionState, InstructionCols},
+        instructions::OpCode,
     },
-    cpu::{OpCode, trace::Instruction},
+    cpu::trace::Instruction,
     memory::offline_checker::MemoryChip,
 };
 

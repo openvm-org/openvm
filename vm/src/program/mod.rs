@@ -1,9 +1,9 @@
 use backtrace::Backtrace;
 use p3_field::PrimeField64;
 
-use crate::cpu::{
-    trace::{ExecutionError, ExecutionError::PcOutOfBounds, Instruction},
-    OpCode::FAIL,
+use crate::{
+    arch::instructions::OpCode::FAIL,
+    cpu::trace::{ExecutionError, ExecutionError::PcOutOfBounds, Instruction},
 };
 
 #[cfg(test)]

@@ -5,7 +5,7 @@ use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use afs_stark_backend::rap::AnyRap;
 
-use crate::{arch::chips::MachineChip, cpu::OpCode};
+use crate::arch::{chips::MachineChip, instructions::OpCode};
 
 use super::{
     ArithmeticOperation,

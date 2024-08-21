@@ -1,12 +1,14 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
+use p3_commit::PolynomialSpace;
 use p3_field::{AbstractField, Field, PrimeField32, PrimeField64};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_uni_stark::StarkGenericConfig;
+use p3_uni_stark::{Domain, StarkGenericConfig};
 use rand::{RngCore, rngs::StdRng};
 
+use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::{
     interaction::InteractionBuilder, rap::AnyRap, verifier::VerificationError,
 };
@@ -44,6 +46,7 @@ impl<F: PrimeField32> MemoryTester<F> {
                 30,
                 16,
                 HashMap::new(),
+                Arc::new(RangeCheckerGateChip::new(0, 1)),
             ))),
             accesses: vec![],
         }
@@ -134,6 +137,10 @@ impl<'a, F: PrimeField32> MachineChip<'a, F> for MemoryTester<F> {
 
     fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC> {
         &self.dummy_interaction_air
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.accesses.len()
     }
 }
 
@@ -232,12 +239,20 @@ impl<AB: InteractionBuilder> Air<AB> for ExecutionTester {
     }
 }
 
-impl<F: Field> MachineChip<F> for ExecutionTester {
+impl<'a, F: Field> MachineChip<'a, F> for ExecutionTester {
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         RowMajorMatrix::new(vec![F::zero()], 1)
     }
-    fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC> {
+
+    fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
         self
+    }
+
+    fn current_trace_height(&self) -> usize {
+        1
     }
 }
 
@@ -249,13 +264,13 @@ pub struct MachineChipTester<'a> {
 }
 
 impl<'a> MachineChipTester<'a> {
-    pub fn add<C: MachineChip<BabyBear>>(&mut self, chip: &'a mut C) -> &mut Self {
+    pub fn add<C: MachineChip<'a, BabyBear>>(&mut self, chip: &'a mut C) -> &mut Self {
         self.traces.push(chip.generate_trace());
         self.public_values.push(chip.get_public_values());
         self.airs.push(chip.air());
         self
     }
-    pub fn add_with_custom_trace<C: MachineChip<BabyBear>>(
+    pub fn add_with_custom_trace<C: MachineChip<'a, BabyBear>>(
         &mut self,
         chip: &'a mut C,
         trace: RowMajorMatrix<BabyBear>,

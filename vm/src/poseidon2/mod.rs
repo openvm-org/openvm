@@ -7,8 +7,13 @@ use columns::*;
 use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
 
 use crate::{
-    arch::{bridge::ExecutionBus, chips::OpCodeExecutor, columns::ExecutionState},
-    cpu::{OpCode, OpCode::*, trace::Instruction},
+    arch::{
+        bridge::ExecutionBus,
+        chips::OpCodeExecutor,
+        columns::ExecutionState,
+        instructions::{OpCode, OpCode::*},
+    },
+    cpu::trace::Instruction,
     memory::{offline_checker::MemoryChip, tree::Hasher},
 };
 

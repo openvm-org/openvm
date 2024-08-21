@@ -111,7 +111,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
 
     /// Executes the VM by calling `ExecutionSegment::execute()` until the CPU hits `TERMINATE`
     /// and `cpu_chip.is_done`. Between every segment, the VM will call `next_segment()`.
-    pub fn execute(mut self) -> Result<(), ExecutionError> {
+    pub fn execute(&mut self) -> Result<(), ExecutionError> {
         loop {
             let last_seg = self.segments.last_mut().unwrap();
             last_seg.cycle_tracker.print();

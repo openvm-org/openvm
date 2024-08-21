@@ -3,8 +3,13 @@ use std::{cell::RefCell, rc::Rc};
 use p3_field::{Field, PrimeField32};
 
 use crate::{
-    arch::{bridge::ExecutionBus, chips::OpCodeExecutor, columns::ExecutionState},
-    cpu::{FIELD_EXTENSION_INSTRUCTIONS, OpCode, trace::Instruction},
+    arch::{
+        bridge::ExecutionBus,
+        chips::OpCodeExecutor,
+        columns::ExecutionState,
+        instructions::{FIELD_EXTENSION_INSTRUCTIONS, OpCode},
+    },
+    cpu::trace::Instruction,
     memory::offline_checker::MemoryChip,
 };
 

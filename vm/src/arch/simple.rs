@@ -1,9 +1,9 @@
+use afs_stark_backend::{interaction::InteractionBuilder, rap::AnyRap};
 use p3_air::{Air, AirBuilderWithPublicValues, BaseAir};
+use p3_commit::PolynomialSpace;
 use p3_field::{Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_uni_stark::StarkGenericConfig;
-
-use afs_stark_backend::{interaction::InteractionBuilder, rap::AnyRap};
+use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use crate::{
     arch::{
@@ -108,7 +108,7 @@ impl<A: SimpleMachineFeature, F: PrimeField32> OpCodeExecutor<F> for SimpleMachi
     }
 }
 
-impl<A: SimpleMachineFeature, F: PrimeField32> MachineChip<F> for SimpleMachineChip<A, F> {
+impl<'a, A: SimpleMachineFeature, F: PrimeField32> MachineChip<'a, F> for SimpleMachineChip<A, F> {
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         let mut rows = vec![];
         let mut num_rows: usize = 0;
@@ -138,7 +138,14 @@ impl<A: SimpleMachineFeature, F: PrimeField32> MachineChip<F> for SimpleMachineC
         RowMajorMatrix::new(rows, A::Cols::<F>::get_width(&self.simple_machine_air.air))
     }
 
-    fn air<SC: StarkGenericConfig>(&self) -> &dyn AnyRap<SC> {
+    fn air<SC: StarkGenericConfig>(&self) -> &'a dyn AnyRap<SC>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
         &self.simple_machine_air
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.raw_rows.len()
     }
 }
