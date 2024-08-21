@@ -89,7 +89,7 @@ pub enum OpCode {
 
     ADD256 = 80,
     SUB256 = 81,
-    // save 82 for MUL
+    MUL256 = 82,
     LT256 = 83,
     EQ256 = 84,
 

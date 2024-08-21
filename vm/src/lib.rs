@@ -3,6 +3,7 @@ pub mod field_arithmetic;
 pub mod field_extension;
 pub mod is_less_than;
 pub mod long_arithmetic;
+pub mod long_multiplication;
 pub mod memory;
 pub mod modular_multiplication;
 pub mod poseidon2;
