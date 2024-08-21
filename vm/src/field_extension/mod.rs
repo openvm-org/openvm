@@ -30,7 +30,7 @@ pub const EXTENSION_DEGREE: usize = 4;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FieldExtensionArithmeticOperation<const WORD_SIZE: usize, F> {
-    pub start_timestamp: usize,
+    pub clk: usize,
     pub opcode: OpCode,
     pub op_a: F,
     pub op_b: F,
@@ -161,7 +161,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
 
     pub fn calculate(
         &mut self,
-        start_timestamp: usize,
+        clk: usize,
         instruction: Instruction<F>,
     ) -> [F; EXTENSION_DEGREE] {
         let Instruction {
@@ -193,7 +193,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         self.write_extension_element(d, op_a, result);
 
         self.operations.push(FieldExtensionArithmeticOperation {
-            start_timestamp,
+            clk,
             opcode,
             op_a,
             op_b,
@@ -253,6 +253,8 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             self.air.mem_oc,
         );
 
+        let clk = self.memory_manager.borrow().get_clk();
+
         for _ in 0..8 {
             trace_builder.disabled_op(F::one(), OpType::Read);
         }
@@ -264,6 +266,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         FieldExtensionArithmeticCols {
             io: FieldExtensionArithmeticIoCols {
                 opcode: F::from_canonical_u32(OpCode::FE4ADD as u32),
+                clk: clk,
                 x: [F::zero(); EXTENSION_DEGREE],
                 y: [F::zero(); EXTENSION_DEGREE],
                 z: [F::zero(); EXTENSION_DEGREE],
@@ -271,7 +274,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             aux: FieldExtensionArithmeticAuxCols {
                 is_valid: F::zero(),
                 valid_y_read: F::zero(),
-                start_timestamp: F::zero(),
                 op_a: F::zero(),
                 op_b: F::zero(),
                 op_c: F::zero(),

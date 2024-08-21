@@ -22,6 +22,7 @@ pub struct FieldExtensionArithmeticCols<const WORD_SIZE: usize, T> {
 #[repr(C)]
 pub struct FieldExtensionArithmeticIoCols<T> {
     pub opcode: T,
+    pub clk: T,
     pub x: [T; EXTENSION_DEGREE],
     pub y: [T; EXTENSION_DEGREE],
     pub z: [T; EXTENSION_DEGREE],
@@ -32,7 +33,6 @@ pub struct FieldExtensionArithmeticAuxCols<const WORD_SIZE: usize, T> {
     pub is_valid: T,
     // whether the y read occurs: is_valid * (1 - is_inv)
     pub valid_y_read: T,
-    pub start_timestamp: T,
     pub op_a: T,
     pub op_b: T,
     pub op_c: T,
@@ -72,6 +72,7 @@ impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T
         Self {
             io: FieldExtensionArithmeticIoCols {
                 opcode: next(),
+                clk: next(),
                 x: array::from_fn(|_| next()),
                 y: array::from_fn(|_| next()),
                 z: array::from_fn(|_| next()),
@@ -79,7 +80,6 @@ impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T
             aux: FieldExtensionArithmeticAuxCols {
                 is_valid: next(),
                 valid_y_read: next(),
-                start_timestamp: next(),
                 op_a: next(),
                 op_b: next(),
                 op_c: next(),
@@ -102,12 +102,13 @@ impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T
 
 impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
     pub fn get_width() -> usize {
-        3 * EXTENSION_DEGREE + 1
+        3 * EXTENSION_DEGREE + 2
     }
 
     pub fn flatten(&self) -> Vec<T> {
         let mut result = vec![self.opcode.clone()];
 
+        result.push(self.clk.clone());
         result.extend_from_slice(&self.x);
         result.extend_from_slice(&self.y);
         result.extend_from_slice(&self.z);
@@ -117,14 +118,13 @@ impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
 
 impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticAuxCols<WORD_SIZE, T> {
     pub fn get_width(oc: &MemoryOfflineChecker) -> usize {
-        EXTENSION_DEGREE + 12 + 12 * MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(oc)
+        EXTENSION_DEGREE + 11 + 12 * MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(oc)
     }
 
     pub fn flatten(&self) -> Vec<T> {
         let mut result = vec![
             self.is_valid.clone(),
             self.valid_y_read.clone(),
-            self.start_timestamp.clone(),
             self.op_a.clone(),
             self.op_b.clone(),
             self.op_c.clone(),

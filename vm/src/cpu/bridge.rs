@@ -51,7 +51,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
 
         // Interaction with field extension arithmetic (bus 3)
         if self.options.field_extension_enabled {
-            let fields = [io.opcode, io.op_a, io.op_b, io.op_c, io.d, io.e];
+            let fields = [io.opcode, io.timestamp, io.op_a, io.op_b, io.op_c, io.d, io.e];
             let count = FIELD_EXTENSION_INSTRUCTIONS
                 .iter()
                 .fold(AB::Expr::zero(), |acc, opcode| {

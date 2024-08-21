@@ -34,6 +34,7 @@ fn generate_cols<const WORD_SIZE: usize, T: Field>(
     FieldExtensionArithmeticCols {
         io: FieldExtensionArithmeticIoCols {
             opcode: T::from_canonical_usize(op.opcode as usize),
+            clk: T::from_canonical_usize(op.clk),
             x,
             y,
             z: op.result,
@@ -41,7 +42,6 @@ fn generate_cols<const WORD_SIZE: usize, T: Field>(
         aux: FieldExtensionArithmeticAuxCols {
             is_valid: T::one(),
             valid_y_read: T::one() - is_inv,
-            start_timestamp: T::from_canonical_usize(op.start_timestamp),
             op_a: op.op_a,
             op_b: op.op_b,
             op_c: op.op_c,

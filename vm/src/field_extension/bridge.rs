@@ -1,5 +1,4 @@
 use std::array;
-
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
@@ -67,7 +66,6 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
             op_c,
             d,
             e,
-            start_timestamp,
             mem_oc_aux_cols,
             is_valid,
             ..
@@ -81,7 +79,7 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
             &mut memory_bridge,
             &mut clk_offset,
             false,
-            start_timestamp,
+            io.clk,
             d,
             op_b,
             io.x,
@@ -93,7 +91,7 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
             &mut memory_bridge,
             &mut clk_offset,
             false,
-            start_timestamp,
+            io.clk,
             e,
             op_c,
             io.y,
@@ -105,7 +103,7 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
             &mut memory_bridge,
             &mut clk_offset,
             true,
-            start_timestamp,
+            io.clk,
             d,
             op_a,
             io.z,
@@ -114,7 +112,7 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
         // Receives all IO columns from another chip on bus 3 (FIELD_EXTENSION_BUS)
         builder.push_receive(
             FIELD_EXTENSION_BUS,
-            [io.opcode, op_a, op_b, op_c, d, e],
+            [io.opcode, io.clk, op_a, op_b, op_c, d, e],
             is_valid,
         );
     }
