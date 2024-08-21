@@ -1,9 +1,11 @@
-use afs_compiler::ir::{
-    Array, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, RVar, SymbolicVar, Usize, Var,
-    DIGEST_SIZE,
+use afs_compiler::{
+    ir::{
+        Array, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, RVar, SymbolicVar, Usize, Var,
+        DIGEST_SIZE,
+    },
+    prelude::MemVariable,
 };
 pub use domain::*;
-use itertools::Itertools;
 use p3_field::{AbstractField, Field, TwoAdicField};
 pub use two_adic_pcs::*;
 
@@ -12,8 +14,10 @@ use self::types::{
     FriQueryProofVariable,
 };
 use crate::{
-    challenger::ChallengerVariable, digest::DigestVariable,
-    outer_poseidon2::Poseidon2CircuitBuilder, types::OuterDigestVariable,
+    challenger::ChallengerVariable,
+    digest::{CanPoseidon2Digest, DigestVariable},
+    outer_poseidon2::Poseidon2CircuitBuilder,
+    types::OuterDigestVariable,
 };
 
 pub mod domain;
@@ -385,13 +389,16 @@ pub fn verify_batch_static<C: Config>(
 }
 
 #[allow(clippy::type_complexity)]
-pub fn reduce_fast<C: Config>(
+pub fn reduce_fast<C: Config, V: MemVariable<C>>(
     builder: &mut Builder<C>,
     dim_idx: Usize<C::N>,
     dims: &Array<C, DimensionsVariable<C>>,
     curr_height_padded: Usize<C::N>,
-    opened_values: &Array<C, Array<C, Felt<C::F>>>,
-) -> DigestVariable<C> {
+    opened_values: &Array<C, Array<C, V>>,
+) -> DigestVariable<C>
+where
+    Array<C, Array<C, V>>: CanPoseidon2Digest<C>,
+{
     builder.cycle_tracker_start("verify-batch-reduce-fast");
     let nb_opened_values: Usize<_> = builder.eval(C::N::zero());
     let mut nested_opened_values = builder.array(8192);
@@ -417,72 +424,8 @@ pub fn reduce_fast<C: Config>(
     builder.cycle_tracker_end("verify-batch-reduce-fast-setup");
 
     nested_opened_values.truncate(builder, nb_opened_values);
-    let h = if builder.flags.static_only {
-        let flat_felts: Vec<_> = nested_opened_values
-            .vec()
-            .into_iter()
-            .flat_map(|felt_arr| felt_arr.vec())
-            .collect();
-        let raw_hash = builder.p2_hash(&flat_felts);
-        DigestVariable::Var(builder.vec(raw_hash.to_vec()))
-    } else {
-        DigestVariable::Felt(builder.poseidon2_hash_x(&nested_opened_values))
-    };
+    let h = nested_opened_values.p2_digest(builder);
     builder.cycle_tracker_end("verify-batch-reduce-fast");
-    h
-}
-
-#[allow(clippy::type_complexity)]
-pub fn reduce_fast_ext<C: Config>(
-    builder: &mut Builder<C>,
-    dim_idx: Usize<C::N>,
-    dims: &Array<C, DimensionsVariable<C>>,
-    curr_height_padded: Usize<C::N>,
-    opened_values: &Array<C, Array<C, Ext<C::F, C::EF>>>,
-) -> DigestVariable<C> {
-    builder.cycle_tracker_start("verify-batch-reduce-fast-ext");
-    let nb_opened_values: Usize<_> = builder.eval(C::N::zero());
-    let mut nested_opened_values = builder.array(8192);
-    let start_dim_idx: Usize<_> = builder.eval(dim_idx.clone());
-    builder.cycle_tracker_start("verify-batch-reduce-fast-setup-ext");
-    builder
-        .range(start_dim_idx, dims.len())
-        .for_each(|i, builder| {
-            let height = builder.get(dims, i).height;
-            builder
-                .if_eq(height, curr_height_padded.clone())
-                .then(|builder| {
-                    let opened_values = builder.get(opened_values, i);
-                    builder.set_value(
-                        &mut nested_opened_values,
-                        nb_opened_values.clone(),
-                        opened_values.clone(),
-                    );
-                    builder.assign(&nb_opened_values, nb_opened_values.clone() + C::N::one());
-                    builder.assign(&dim_idx, dim_idx.clone() + C::N::one());
-                });
-        });
-    builder.cycle_tracker_end("verify-batch-reduce-fast-setup-ext");
-
-    nested_opened_values.truncate(builder, nb_opened_values.clone());
-    let h = if builder.flags.static_only {
-        let flat_felts: Vec<_> = nested_opened_values
-            .vec()
-            .into_iter()
-            .flat_map(|ext_arr| {
-                ext_arr
-                    .vec()
-                    .into_iter()
-                    .flat_map(|ext| builder.ext2felt_circuit(ext).to_vec())
-                    .collect_vec()
-            })
-            .collect();
-        let raw_hash = builder.p2_hash(&flat_felts);
-        DigestVariable::Var(builder.vec(raw_hash.to_vec()))
-    } else {
-        DigestVariable::Felt(builder.poseidon2_hash_ext(&nested_opened_values))
-    };
-    builder.cycle_tracker_end("verify-batch-reduce-fast-ext");
     h
 }
 
@@ -522,10 +465,10 @@ impl<C: Config> NestedOpenedValues<C> {
     ) -> DigestVariable<C> {
         match self {
             NestedOpenedValues::Felt(opened_values) => {
-                reduce_fast::<C>(builder, dim_idx, dims, curr_height, opened_values)
+                reduce_fast(builder, dim_idx, dims, curr_height, opened_values)
             }
             NestedOpenedValues::Ext(opened_values) => {
-                reduce_fast_ext::<C>(builder, dim_idx, dims, curr_height, opened_values)
+                reduce_fast(builder, dim_idx, dims, curr_height, opened_values)
             }
         }
     }
