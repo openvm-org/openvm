@@ -1,4 +1,4 @@
-mod outer;
+pub mod outer;
 
 use std::{
     any::{type_name, Any},
@@ -93,7 +93,13 @@ impl VerifierProgram<InnerConfig> {
         let pcs = TwoAdicFriPcsVariable {
             config: const_fri_config(&mut builder, fri_params),
         };
-        StarkVerifier::verify(&mut builder, &pcs, raps, constants, &input);
+        StarkVerifier::verify::<DuplexChallengerVariable<_>>(
+            &mut builder,
+            &pcs,
+            raps,
+            constants,
+            &input,
+        );
 
         builder.cycle_tracker_end("VerifierProgram");
         builder.halt();
@@ -116,7 +122,7 @@ where
     C::F: TwoAdicField,
 {
     /// Reference: [afs_stark_backend::verifier::MultiTraceStarkVerifier::verify].
-    pub fn verify(
+    pub fn verify<CH: ChallengerVariable<C>>(
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
         raps: Vec<&dyn DynRapForRecursion<C>>,
@@ -150,7 +156,7 @@ where
         }
         builder.assert_ext_eq(cumulative_sum, C::EF::zero().cons());
 
-        let mut challenger = DuplexChallengerVariable::new(builder);
+        let mut challenger = CH::new(builder);
 
         Self::verify_raps(builder, pcs, raps, constants, &mut challenger, input);
     }
@@ -245,15 +251,12 @@ where
         }
 
         let alpha = challenger.sample_ext(builder);
-        // builder.print_e(alpha);
 
         challenger.observe_digest(builder, quotient_commit.clone());
 
         let zeta = challenger.sample_ext(builder);
-        // builder.print_e(zeta);
 
-        let mut trace_domains =
-            builder.array::<TwoAdicMultiplicativeCosetVariable<_>>(r_num_airs);
+        let mut trace_domains = builder.array::<TwoAdicMultiplicativeCosetVariable<_>>(r_num_airs);
 
         let mut num_prep_rounds = 0;
 
@@ -420,7 +423,7 @@ where
 
         let mut quotient_mats: Array<_, TwoAdicPcsMatsVariable<_>> =
             builder.array(num_quotient_mats);
-        let qc_index: Var<_> = builder.eval(C::N::zero());
+        let qc_index: Usize<_> = builder.eval(C::N::zero());
 
         let mut qc_points = builder.array::<Ext<_, _>>(1);
         builder.set_value(&mut qc_points, 0, zeta);
@@ -439,8 +442,8 @@ where
                     values: qc_values,
                     points: qc_points.clone(),
                 };
-                builder.set_value(&mut quotient_mats, qc_index, qc_mat);
-                builder.assign(&qc_index, qc_index + C::N::one());
+                builder.set_value(&mut quotient_mats, qc_index.clone(), qc_mat);
+                builder.assign(&qc_index, qc_index.clone() + C::N::one());
             });
         }
         let quotient_round = TwoAdicPcsRoundVariable {
@@ -463,7 +466,7 @@ where
         builder.cycle_tracker_start("stage-e-verify-constraints");
 
         // TODO[zach]: make per phase; for now just 1 phase so OK
-        let after_challenge_idx: Var<C::N> = builder.constant(C::N::zero());
+        let after_challenge_idx: Usize<C::N> = builder.eval(C::N::zero());
 
         let mut preprocessed_idx = 0;
 
@@ -497,8 +500,11 @@ where
                 // One phase for now
                 let after_challenge_values = builder.get(&proof.opening.values.after_challenge, 0);
                 let after_challenge_values =
-                    builder.get(&after_challenge_values, after_challenge_idx);
-                builder.assign(&after_challenge_idx, after_challenge_idx + C::N::one());
+                    builder.get(&after_challenge_values, after_challenge_idx.clone());
+                builder.assign(
+                    &after_challenge_idx,
+                    after_challenge_idx.clone() + C::N::one(),
+                );
                 after_challenge_values
             };
 
@@ -702,7 +708,12 @@ where
         };
 
         let mut folder_pv = Vec::new();
-        for i in 0..PROOF_MAX_NUM_PVS {
+        let num_pvs = if builder.flags.static_only {
+            public_values.len().value()
+        } else {
+            PROOF_MAX_NUM_PVS
+        };
+        for i in 0..num_pvs {
             folder_pv.push(builder.get(&public_values, i));
         }
 

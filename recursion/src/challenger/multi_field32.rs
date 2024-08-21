@@ -21,7 +21,6 @@ pub struct MultiField32ChallengerVariable<C: Config> {
 }
 
 impl<C: Config> MultiField32ChallengerVariable<C> {
-    #[allow(dead_code)]
     pub fn new(builder: &mut Builder<C>) -> Self {
         assert!(builder.flags.static_only);
         MultiField32ChallengerVariable::<C> {
@@ -160,11 +159,16 @@ impl<C: Config> CanCheckWitness<C> for MultiField32ChallengerVariable<C> {
     }
 }
 
-impl<C: Config> ChallengerVariable<C> for MultiField32ChallengerVariable<C> {}
+impl<C: Config> ChallengerVariable<C> for MultiField32ChallengerVariable<C> {
+    fn new(builder: &mut Builder<C>) -> Self {
+        MultiField32ChallengerVariable::new(builder)
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use afs_compiler::ir::{Builder, SymbolicExt, Witness};
+    use afs_test_utils::config::baby_bear_poseidon2_outer::outer_perm;
     use p3_baby_bear::BabyBear;
     use p3_bn254_fr::Bn254Fr;
     use p3_challenger::{CanObserve, CanSample, FieldChallenger};
@@ -173,7 +177,7 @@ mod tests {
 
     use crate::{
         challenger::multi_field32::MultiField32ChallengerVariable,
-        config::outer::{outer_perm, OuterChallenger, OuterConfig},
+        config::outer::{OuterChallenger, OuterConfig},
         halo2::Halo2Prover,
         OUTER_DIGEST_SIZE,
     };

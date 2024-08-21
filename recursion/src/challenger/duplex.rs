@@ -24,7 +24,6 @@ pub struct DuplexChallengerVariable<C: Config> {
 
 impl<C: Config> DuplexChallengerVariable<C> {
     /// Creates a new duplex challenger with the default state.
-    #[allow(dead_code)]
     pub fn new(builder: &mut Builder<C>) -> Self {
         let mut sponge_state = builder.dyn_array(PERMUTATION_WIDTH);
         let mut input_buffer = builder.dyn_array(PERMUTATION_WIDTH);
@@ -44,7 +43,6 @@ impl<C: Config> DuplexChallengerVariable<C> {
             output_buffer,
         }
     }
-
     /// Creates a new challenger with the same state as an existing challenger.
     #[allow(dead_code)]
     pub fn copy(&self, builder: &mut Builder<C>) -> Self {
@@ -256,7 +254,11 @@ impl<C: Config> CanCheckWitness<C> for DuplexChallengerVariable<C> {
     }
 }
 
-impl<C: Config> ChallengerVariable<C> for DuplexChallengerVariable<C> {}
+impl<C: Config> ChallengerVariable<C> for DuplexChallengerVariable<C> {
+    fn new(builder: &mut Builder<C>) -> Self {
+        DuplexChallengerVariable::new(builder)
+    }
+}
 
 #[cfg(test)]
 mod tests {

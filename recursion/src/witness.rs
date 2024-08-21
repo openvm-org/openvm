@@ -1,21 +1,20 @@
 use core::borrow::Borrow;
 
 use afs_compiler::ir::{Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, Witness};
-use afs_stark_backend::{
-    prover::{
-        opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
-        types::{Commitments, Proof},
-    },
+use afs_stark_backend::prover::{
+    opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
+    types::{Commitments, Proof},
 };
+use afs_test_utils::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::Bn254Fr;
 use p3_symmetric::Hash;
 
 use crate::{
-    config::outer::{BabyBearPoseidon2Outer, OuterChallenge, OuterConfig, OuterVal},
+    config::outer::{OuterChallenge, OuterConfig, OuterVal},
     digest::{DigestVal, DigestVariable},
     types::{
-        AdjacentOpenedValuesVariable, CommitmentsVariable, InnerConfig, OpenedValuesVariable,
+        AdjacentOpenedValuesVariable, CommitmentsVariable, OpenedValuesVariable,
         OpeningProofVariable, StarkProofVariable, VerifierInput, VerifierInputVariable,
     },
 };
@@ -29,7 +28,6 @@ pub trait Witnessable<C: Config> {
 }
 
 type C = OuterConfig;
-// type OuterCom = Com<BabyBearPoseidon2Outer>;
 type OuterCom = Hash<BabyBear, Bn254Fr, 1>;
 
 impl Witnessable<C> for Bn254Fr {
@@ -139,7 +137,7 @@ impl Witnessable<C> for DigestVal<C> {
 }
 impl VectorWitnessable<C> for DigestVal<C> {}
 
-impl Witnessable<OuterConfig> for VerifierInput<BabyBearPoseidon2Outer> {
+impl Witnessable<OuterConfig> for VerifierInput<BabyBearPoseidon2OuterConfig> {
     type WitnessVariable = VerifierInputVariable<OuterConfig>;
 
     fn read(&self, builder: &mut Builder<OuterConfig>) -> Self::WitnessVariable {
@@ -159,11 +157,11 @@ impl Witnessable<OuterConfig> for VerifierInput<BabyBearPoseidon2Outer> {
         self.proof.write(witness);
         // This writes nothing because it's a constant in static mode.
         <Vec<_> as Witnessable<C>>::write(&self.log_degree_per_air, witness);
-        <Vec<Vec<_>> as Witnessable<C>>::write(&self.public_values, witness);
+        <Vec<_> as Witnessable<C>>::write(&self.public_values, witness);
     }
 }
 
-impl Witnessable<OuterConfig> for Proof<BabyBearPoseidon2Outer> {
+impl Witnessable<OuterConfig> for Proof<BabyBearPoseidon2OuterConfig> {
     type WitnessVariable = StarkProofVariable<OuterConfig>;
 
     fn read(&self, builder: &mut Builder<OuterConfig>) -> Self::WitnessVariable {
@@ -184,7 +182,7 @@ impl Witnessable<OuterConfig> for Proof<BabyBearPoseidon2Outer> {
     }
 }
 
-impl Witnessable<OuterConfig> for Commitments<BabyBearPoseidon2Outer> {
+impl Witnessable<OuterConfig> for Commitments<BabyBearPoseidon2OuterConfig> {
     type WitnessVariable = CommitmentsVariable<OuterConfig>;
 
     fn read(&self, builder: &mut Builder<OuterConfig>) -> Self::WitnessVariable {
@@ -205,7 +203,7 @@ impl Witnessable<OuterConfig> for Commitments<BabyBearPoseidon2Outer> {
     }
 }
 
-impl Witnessable<C> for OpeningProof<BabyBearPoseidon2Outer> {
+impl Witnessable<C> for OpeningProof<BabyBearPoseidon2OuterConfig> {
     type WitnessVariable = OpeningProofVariable<C>;
 
     fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
