@@ -12,10 +12,12 @@ use datafusion::{error::Result, execution::context::SessionContext, logical_expr
 use p3_field::PrimeField64;
 use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
+use tracing::info;
 
-use super::AxiomDbNodeExecutable;
+use super::AxdbNodeExecutable;
 use crate::{
     committed_page::CommittedPage,
+    expr::AxdbExpr,
     utils::table::{convert_to_ops, get_record_batches},
     BITS_PER_FE, MAX_ROWS, NUM_IDX_COLS, OPS_BUS_IDX, PAGE_BUS_IDX, RANGE_BUS_IDX,
     RANGE_CHECK_BITS,
@@ -25,18 +27,28 @@ pub struct PageScan<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
     pub input: Arc<dyn TableSource>,
     pub output: Option<CommittedPage<SC>>,
     pub table_name: String,
+    pub filters: Vec<AxdbExpr>,
+    // TODO: support projection
+    pub projection: Option<Vec<usize>>,
     pub pk: Option<MultiStarkProvingKey<SC>>,
     pub proof: Option<Proof<SC>>,
     _marker: PhantomData<E>,
 }
 
 impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> PageScan<SC, E> {
-    pub fn new(table_name: String, input: Arc<dyn TableSource>) -> Self {
+    pub fn new(
+        table_name: String,
+        input: Arc<dyn TableSource>,
+        filters: Vec<AxdbExpr>,
+        projection: Option<Vec<usize>>,
+    ) -> Self {
         Self {
             table_name,
             pk: None,
             input,
+            filters,
             output: None,
+            projection,
             proof: None,
             _marker: PhantomData::<E>,
         }
@@ -74,7 +86,7 @@ where
 }
 
 #[async_trait]
-impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> AxiomDbNodeExecutable<SC, E>
+impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> AxdbNodeExecutable<SC, E>
     for PageScan<SC, E>
 where
     Val<SC>: PrimeField64,
@@ -86,7 +98,7 @@ where
     SC::Challenge: Send + Sync,
 {
     async fn execute(&mut self, ctx: &SessionContext, _engine: &E) -> Result<()> {
-        println!("execute PageScan");
+        info!("execute PageScan");
         let record_batches = get_record_batches(ctx, &self.table_name).await.unwrap();
         if record_batches.len() != 1 {
             panic!(
@@ -102,7 +114,7 @@ where
     }
 
     async fn keygen(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
-        println!("keygen PageScan");
+        info!("keygen PageScan");
         let (idx_len, data_len) = self.page_stats();
 
         let page_controller = self.page_controller(idx_len, data_len);
@@ -117,7 +129,7 @@ where
     }
 
     async fn prove(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
-        println!("prove PageScan");
+        info!("prove PageScan");
         let (idx_len, data_len) = self.page_stats();
 
         let record_batches = get_record_batches(ctx, &self.table_name).await.unwrap();
@@ -166,7 +178,7 @@ where
     }
 
     async fn verify(&self, _ctx: &SessionContext, engine: &E) -> Result<()> {
-        println!("verify PageScan");
+        info!("verify PageScan");
         let (idx_len, data_len) = self.page_stats();
 
         let page_controller = self.page_controller(idx_len, data_len);
@@ -190,5 +202,9 @@ where
 
     fn proof(&self) -> &Option<Proof<SC>> {
         &self.proof
+    }
+
+    fn name(&self) -> &str {
+        "PageScan"
     }
 }

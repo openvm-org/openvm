@@ -15,17 +15,18 @@ use futures::lock::Mutex;
 use p3_field::PrimeField64;
 use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
+use tracing::info;
 
-use super::{AxiomDbNode, AxiomDbNodeExecutable};
+use super::{AxdbNode, AxdbNodeExecutable};
 use crate::{
-    committed_page::CommittedPage, expr::AxiomDbExpr, BITS_PER_FE, PAGE_BUS_IDX, RANGE_BUS_IDX,
+    committed_page::CommittedPage, expr::AxdbExpr, BITS_PER_FE, PAGE_BUS_IDX, RANGE_BUS_IDX,
     RANGE_CHECK_BITS,
 };
 
 pub struct Filter<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
-    pub input: Arc<Mutex<AxiomDbNode<SC, E>>>,
+    pub input: Arc<Mutex<AxdbNode<SC, E>>>,
     pub output: Option<CommittedPage<SC>>,
-    pub predicate: AxiomDbExpr,
+    pub predicate: AxdbExpr,
     pub pk: Option<MultiStarkProvingKey<SC>>,
     pub proof: Option<Proof<SC>>,
 }
@@ -54,11 +55,12 @@ where
     }
 
     fn decompose_predicate(&self) -> (Comp, u32) {
+        // NOTE: we currently only support a predicate and a right-side value (left side value is the index column)
         match &self.predicate {
-            AxiomDbExpr::BinaryExpr(expr) => {
+            AxdbExpr::BinaryExpr(expr) => {
                 let op = &expr.op;
                 let right = match *expr.right {
-                    AxiomDbExpr::Literal(x) => x,
+                    AxdbExpr::Literal(x) => x,
                     _ => panic!("Unsupported right side expression type"),
                 };
                 (op.clone(), right)
@@ -82,7 +84,7 @@ where
 }
 
 #[async_trait]
-impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> AxiomDbNodeExecutable<SC, E>
+impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> AxdbNodeExecutable<SC, E>
     for Filter<SC, E>
 where
     Val<SC>: PrimeField64,
@@ -94,7 +96,7 @@ where
     SC::Challenge: Send + Sync,
 {
     async fn execute(&mut self, _ctx: &SessionContext, _engine: &E) -> Result<()> {
-        println!("execute Filter");
+        info!("execute Filter");
 
         let (comp, right_value) = self.decompose_predicate();
         let input = self.input_clone().await;
@@ -117,7 +119,7 @@ where
     }
 
     async fn keygen(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
-        println!("keygen Filter");
+        info!("keygen Filter");
 
         let (comp, _right_value) = self.decompose_predicate();
         let input = self.input_clone().await;
@@ -134,7 +136,7 @@ where
     }
 
     async fn prove(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
-        println!("prove Filter");
+        info!("prove Filter");
 
         let (comp, right_value) = self.decompose_predicate();
         let input = self.input_clone().await;
@@ -180,7 +182,7 @@ where
     }
 
     async fn verify(&self, _ctx: &SessionContext, engine: &E) -> Result<()> {
-        println!("verify Filter");
+        info!("verify Filter");
 
         let (comp, right_value) = self.decompose_predicate();
         let input = self.input_clone().await;
@@ -203,5 +205,9 @@ where
 
     fn proof(&self) -> &Option<Proof<SC>> {
         &self.proof
+    }
+
+    fn name(&self) -> &str {
+        "Filter"
     }
 }

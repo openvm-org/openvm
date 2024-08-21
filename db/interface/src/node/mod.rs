@@ -16,7 +16,7 @@ use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
 
 use self::{filter::Filter, page_scan::PageScan, projection::Projection};
-use crate::{committed_page::CommittedPage, expr::AxiomDbExpr};
+use crate::{committed_page::CommittedPage, expr::AxdbExpr};
 
 pub mod filter;
 pub mod page_scan;
@@ -25,22 +25,22 @@ pub mod projection;
 macro_rules! delegate_to_node {
     ($self:ident, $method:ident, $ctx:expr, $engine:expr) => {
         match $self {
-            AxiomDbNode::PageScan(ref mut page_scan) => page_scan.$method($ctx, $engine).await,
-            AxiomDbNode::Projection(ref mut projection) => projection.$method($ctx, $engine).await,
-            AxiomDbNode::Filter(ref mut filter) => filter.$method($ctx, $engine).await,
+            AxdbNode::PageScan(ref mut page_scan) => page_scan.$method($ctx, $engine).await,
+            AxdbNode::Projection(ref mut projection) => projection.$method($ctx, $engine).await,
+            AxdbNode::Filter(ref mut filter) => filter.$method($ctx, $engine).await,
         }
     };
     ($self:ident, $method:ident) => {
         match $self {
-            AxiomDbNode::PageScan(page_scan) => page_scan.$method(),
-            AxiomDbNode::Projection(projection) => projection.$method(),
-            AxiomDbNode::Filter(filter) => filter.$method(),
+            AxdbNode::PageScan(page_scan) => page_scan.$method(),
+            AxdbNode::Projection(projection) => projection.$method(),
+            AxdbNode::Filter(filter) => filter.$method(),
         }
     };
 }
 
 #[async_trait]
-pub trait AxiomDbNodeExecutable<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
+pub trait AxdbNodeExecutable<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
     /// Runs the node's execution logic without any cryptographic operations
     async fn execute(&mut self, ctx: &SessionContext, engine: &E) -> Result<()>;
     /// Generate the proving key for the node
@@ -53,19 +53,21 @@ pub trait AxiomDbNodeExecutable<SC: StarkGenericConfig, E: StarkEngine<SC> + Sen
     fn output(&self) -> &Option<CommittedPage<SC>>;
     /// Get the proof of the node
     fn proof(&self) -> &Option<Proof<SC>>;
+    /// Get the string name of the node
+    fn name(&self) -> &str;
 }
 
-/// AxiomDbNode is a wrapper around the node types that conform to the AxiomDbNodeExecutable trait.
-/// It provides conversion from DataFusion's LogicalPlan to the AxiomDbNode type. AxiomDbNodes are
-/// meant to be executed by the AxiomDbExec engine. They store the necessary information to handle
-/// the cryptographic operations for each type of AxiomDbNode operation.
-pub enum AxiomDbNode<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
+/// AxdbNode is a wrapper around the node types that conform to the AxdbNodeExecutable trait.
+/// It provides conversion from DataFusion's LogicalPlan to the AxdbNode type. AxdbNodes are
+/// meant to be executed by the AxdbExec engine. They store the necessary information to handle
+/// the cryptographic operations for each type of AxdbNode operation.
+pub enum AxdbNode<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
     PageScan(PageScan<SC, E>),
     Projection(Projection<SC, E>),
     Filter(Filter<SC, E>),
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> AxiomDbNode<SC, E>
+impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> AxdbNode<SC, E>
 where
     Val<SC>: PrimeField64,
     PcsProverData<SC>: Serialize + DeserializeOwned + Send + Sync,
@@ -75,22 +77,24 @@ where
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
-    /// Converts a LogicalPlan tree to a flat AxiomDbNode vec. Some LogicalPlan nodes may convert to
-    /// multiple AxiomDbNodes.
-    pub fn from(logical_plan: &LogicalPlan, inputs: Vec<Arc<Mutex<AxiomDbNode<SC, E>>>>) -> Self {
+    /// Converts a LogicalPlan tree to a flat AxdbNode vec. Some LogicalPlan nodes may convert to
+    /// multiple AxdbNodes.
+    pub fn from(logical_plan: &LogicalPlan, inputs: Vec<Arc<Mutex<AxdbNode<SC, E>>>>) -> Self {
         match logical_plan {
             LogicalPlan::TableScan(table_scan) => {
                 let table_name = table_scan.table_name.to_string();
                 let source = table_scan.source.clone();
-                AxiomDbNode::PageScan(PageScan::new(table_name, source))
+                let filters = table_scan.filters.iter().map(AxdbExpr::from).collect();
+                let projection = table_scan.projection.clone();
+                AxdbNode::PageScan(PageScan::new(table_name, source, filters, projection))
             }
             LogicalPlan::Filter(filter) => {
                 if inputs.len() != 1 {
                     panic!("Filter node expects exactly one input");
                 }
-                let afs_expr = AxiomDbExpr::from(&filter.predicate);
+                let afs_expr = AxdbExpr::from(&filter.predicate);
                 let input = inputs[0].clone();
-                AxiomDbNode::Filter(Filter {
+                AxdbNode::Filter(Filter {
                     input,
                     output: None,
                     predicate: afs_expr,
@@ -103,11 +107,11 @@ where
     }
 
     /// Get the inputs to the node as a vector from left to right.
-    pub fn inputs(&self) -> Vec<&Arc<Mutex<AxiomDbNode<SC, E>>>> {
+    pub fn inputs(&self) -> Vec<&Arc<Mutex<AxdbNode<SC, E>>>> {
         match self {
-            AxiomDbNode::PageScan(_) => vec![],
-            AxiomDbNode::Projection(projection) => vec![&projection.input],
-            AxiomDbNode::Filter(filter) => vec![&filter.input],
+            AxdbNode::PageScan(_) => vec![],
+            AxdbNode::Projection(projection) => vec![&projection.input],
+            AxdbNode::Filter(filter) => vec![&filter.input],
         }
     }
 
@@ -130,26 +134,30 @@ where
     pub fn output(&self) -> &Option<CommittedPage<SC>> {
         delegate_to_node!(self, output)
     }
+
+    pub fn name(&self) -> &str {
+        delegate_to_node!(self, name)
+    }
 }
 
-impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> Debug for AxiomDbNode<SC, E> {
+impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> Debug for AxdbNode<SC, E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AxiomDbNode::PageScan(page_scan) => {
+            AxdbNode::PageScan(page_scan) => {
                 write!(
                     f,
                     "PageScan {:?} {:?}",
                     page_scan.table_name, page_scan.output
                 )
             }
-            AxiomDbNode::Projection(projection) => {
+            AxdbNode::Projection(projection) => {
                 write!(
                     f,
                     "Projection {:?} {:?}",
                     projection.schema, projection.output
                 )
             }
-            AxiomDbNode::Filter(filter) => {
+            AxdbNode::Filter(filter) => {
                 write!(f, "Filter {:?} {:?}", filter.predicate, filter.output)
             }
         }

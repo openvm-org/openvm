@@ -854,7 +854,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c4b4d0bd25bd0b74681c0ad21497610ce1b7c91b1022cd21c80c6fbdd9476b0"
 
 [[package]]
-name = "axiomdb-interface"
+name = "axdb-interface"
 version = "0.1.0"
 dependencies = [
  "afs-page",
@@ -862,7 +862,6 @@ dependencies = [
  "afs-test-utils",
  "async-trait",
  "bincode",
- "color-eyre",
  "datafusion",
  "derivative",
  "futures",
@@ -870,10 +869,9 @@ dependencies = [
  "p3-field",
  "p3-matrix",
  "p3-uni-stark",
- "protobuf",
  "serde",
- "serde_json",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -3928,26 +3926,6 @@ dependencies = [
  "rusty-fork",
  "tempfile",
  "unarray",
-]
-
-[[package]]
-name = "protobuf"
-version = "3.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df67496db1a89596beaced1579212e9b7c53c22dca1d9745de00ead76573d514"
-dependencies = [
- "once_cell",
- "protobuf-support",
- "thiserror",
-]
-
-[[package]]
-name = "protobuf-support"
-version = "3.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70e2d30ab1878b2e72d1e2fc23ff5517799c9929e2cf81a8516f9f4dcf2b9cf3"
-dependencies = [
- "thiserror",
 ]
 
 [[package]]

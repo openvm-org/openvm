@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use afs_page::common::page::Page;
 use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
-use axiomdb_interface::{committed_page, exec::AxiomDbExec, PCS_LOG_DEGREE};
+use axdb_interface::{committed_page, exec::AxdbExec, PCS_LOG_DEGREE};
 use datafusion::{arrow::datatypes::Schema, execution::context::SessionContext};
 
 // #[test]
@@ -69,29 +69,31 @@ pub async fn test_basic_e2e() {
         BabyBearPoseidon2Config
     );
     let page_id = cp.page_id.clone();
-    ctx.register_table(page_id.clone(), Arc::new(cp)).unwrap();
+    ctx.register_table(page_id.clone(), Arc::new(cp.clone()))
+        .unwrap();
 
     // let sql = format!("SELECT a FROM {} WHERE a <= b GROUP BY a", page_id);
-    let sql = format!("SELECT a FROM {} WHERE a <= 10", page_id);
+    // let sql = format!("SELECT a FROM {} WHERE a <= 10", page_id);
     // let sql = format!("SELECT a FROM {}", page_id);
-    let logical = ctx.state().create_logical_plan(sql.as_str()).await.unwrap();
+    // let logical = ctx.state().create_logical_plan(sql.as_str()).await.unwrap();
 
-    // let schema = cp.schema.clone();
-    // let logical = table_scan(Some(page_id), &schema, None)
-    //     .unwrap()
-    //     .filter(col("a").lt(lit(10)))
-    //     .unwrap()
-    //     .filter(col("b").lt(lit(20)))
-    //     .unwrap()
-    //     .build()
-    //     .unwrap();
+    use datafusion::logical_expr::{col, lit, table_scan};
+    let schema = cp.schema.clone();
+    let logical = table_scan(Some(page_id), &schema, None)
+        .unwrap()
+        .filter(col("a").lt(lit(10)))
+        .unwrap()
+        .filter(col("a").lt(lit(11)))
+        .unwrap()
+        .build()
+        .unwrap();
     println!("{:#?}", logical.clone());
 
     let engine = default_engine(PCS_LOG_DEGREE);
-    let mut afs = AxiomDbExec::new(ctx, logical, engine).await;
+    let mut afs = AxdbExec::new(ctx, logical, engine).await;
     println!(
-        "Flattened AxiomDB execution plan: {:?}",
-        afs.afs_execution_plan
+        "Flattened Axdb execution plan: {:?}",
+        afs.axdb_execution_plan
     );
 
     afs.execute().await.unwrap();

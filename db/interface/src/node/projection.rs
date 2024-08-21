@@ -13,11 +13,11 @@ use p3_field::PrimeField64;
 use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
 
-use super::{AxiomDbNode, AxiomDbNodeExecutable};
+use super::{AxdbNode, AxdbNodeExecutable};
 use crate::committed_page::CommittedPage;
 
 pub struct Projection<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
-    pub input: Arc<Mutex<AxiomDbNode<SC, E>>>,
+    pub input: Arc<Mutex<AxdbNode<SC, E>>>,
     pub output: Option<CommittedPage<SC>>,
     pub schema: Schema,
     pub pk: Option<MultiStarkProvingKey<SC>>,
@@ -25,7 +25,7 @@ pub struct Projection<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> 
 }
 
 #[async_trait]
-impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> AxiomDbNodeExecutable<SC, E>
+impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> AxdbNodeExecutable<SC, E>
     for Projection<SC, E>
 where
     Val<SC>: PrimeField64,
@@ -58,5 +58,9 @@ where
 
     fn proof(&self) -> &Option<Proof<SC>> {
         &self.proof
+    }
+
+    fn name(&self) -> &str {
+        "Projection"
     }
 }
