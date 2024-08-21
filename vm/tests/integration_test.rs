@@ -1,10 +1,7 @@
 use std::ops::Deref;
 
-use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_util::log2_strict_usize;
 
 use afs_test_utils::{
     config::{
@@ -14,7 +11,7 @@ use afs_test_utils::{
     engine::StarkEngine,
 };
 use stark_vm::{
-    arch::{chips::MachineChip, instructions::OpCode::*},
+    arch::instructions::OpCode::*,
     cpu::trace::Instruction,
     program::Program,
     vm::{
@@ -34,7 +31,7 @@ fn air_test(
     witness_stream: Vec<Vec<BabyBear>>,
     fast_segmentation: bool,
 ) {
-    let mut vm = VirtualMachine::new(
+    let vm = VirtualMachine::new(
         VmConfig {
             field_arithmetic_enabled,
             field_extension_enabled,
@@ -54,14 +51,12 @@ fn air_test(
         witness_stream,
     );
 
-    vm.execute().unwrap();
+    let result = vm.execute_and_generate().unwrap();
 
-    for segment in vm.segments.iter_mut() {
-        let boxed_airs = segment.chips.iter().map(MachineChip::air).collect_vec();
-        let airs = boxed_airs.iter().map(Box::deref).collect();
-        let traces = segment.generate_traces();
-        let public_values = segment.get_public_values();
-        run_simple_test(airs, traces, public_values).expect("Verification failed");
+    for segment_result in result.segment_results {
+        let airs = segment_result.airs.iter().map(Box::deref).collect();
+        run_simple_test(airs, segment_result.traces, segment_result.public_values)
+            .expect("Verification failed");
     }
 }
 
@@ -72,7 +67,7 @@ fn air_test_with_poseidon2(
     compress_poseidon2_enabled: bool,
     program: Program<BabyBear>,
 ) {
-    let mut vm = VirtualMachine::new(
+    let vm = VirtualMachine::new(
         VmConfig {
             field_arithmetic_enabled,
             field_extension_enabled,
@@ -88,7 +83,7 @@ fn air_test_with_poseidon2(
         vec![],
     );
 
-    vm.execute().unwrap();
+    let result = vm.execute_and_generate().unwrap();
 
     let perm = random_perm();
     let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
@@ -97,17 +92,11 @@ fn air_test_with_poseidon2(
         fri_params_with_80_bits_of_security()[1]
     };
 
-    for segment in vm.segments.iter_mut() {
-        let boxed_airs = segment.chips.iter().map(MachineChip::air).collect_vec();
-        let airs = boxed_airs.iter().map(Box::deref).collect();
-        let traces = segment.generate_traces();
-        let public_values = segment.get_public_values();
-
-        let max_log_degree =
-            log2_strict_usize(traces.iter().map(RowMajorMatrix::height).max().unwrap());
-        let engine = engine_from_perm(perm.clone(), max_log_degree, fri_params);
+    for segment_result in result.segment_results {
+        let airs = segment_result.airs.iter().map(Box::deref).collect();
+        let engine = engine_from_perm(perm.clone(), segment_result.max_log_degree(), fri_params);
         engine
-            .run_simple_test(airs, traces, public_values)
+            .run_simple_test(airs, segment_result.traces, segment_result.public_values)
             .expect("Verification failed");
     }
 }
@@ -120,7 +109,7 @@ fn execution_test(
     witness_stream: Vec<Vec<BabyBear>>,
     fast_segmentation: bool,
 ) {
-    let mut vm = VirtualMachine::new(
+    let vm = VirtualMachine::new(
         VmConfig {
             field_arithmetic_enabled,
             field_extension_enabled,

@@ -5,10 +5,16 @@ use std::{
     sync::Arc,
 };
 
+use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
-use p3_matrix::dense::DenseMatrix;
+use p3_matrix::{
+    dense::{DenseMatrix, RowMajorMatrix},
+    Matrix,
+};
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_stark_backend::rap::AnyRap;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
 use crate::{
@@ -44,6 +50,24 @@ pub struct ExecutionSegment<F: PrimeField32> {
     /// Collected metrics for this segment alone.
     /// Only collected when `config.collect_metrics` is true.
     pub(crate) collected_metrics: VmMetrics,
+}
+
+pub struct SegmentResult<SC: StarkGenericConfig> {
+    pub airs: Vec<Box<dyn AnyRap<SC>>>,
+    pub traces: Vec<RowMajorMatrix<Val<SC>>>,
+    pub public_values: Vec<Vec<Val<SC>>>,
+
+    pub metrics: VmMetrics,
+}
+
+impl<SC: StarkGenericConfig> SegmentResult<SC> {
+    pub fn max_log_degree(&self) -> usize {
+        self.traces
+            .iter()
+            .map(RowMajorMatrix::height)
+            .max()
+            .unwrap()
+    }
 }
 
 impl<F: PrimeField32> ExecutionSegment<F> {
@@ -180,5 +204,17 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             .iter()
             .map(|chip| chip.current_trace_cells())
             .sum()
+    }
+
+    pub fn produce_result<SC: StarkGenericConfig>(mut self) -> SegmentResult<SC>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        SegmentResult {
+            airs: self.chips.iter().map(MachineChip::air).collect(),
+            traces: self.generate_traces(),
+            public_values: self.get_public_values(),
+            metrics: self.collected_metrics,
+        }
     }
 }

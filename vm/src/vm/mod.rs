@@ -3,22 +3,25 @@ use std::{
     mem::take,
 };
 
+use p3_commit::PolynomialSpace;
+use p3_field::PrimeField32;
+use p3_uni_stark::{Domain, StarkGenericConfig};
+
 use cycle_tracker::CycleTracker;
 use metrics::VmMetrics;
-use p3_field::PrimeField32;
 pub use segment::ExecutionSegment;
 
 use crate::{
-    cpu::{trace::ExecutionError, CpuOptions, CpuState},
+    cpu::{CpuOptions, CpuState, trace::ExecutionError},
     program::Program,
-    vm::config::VmConfig,
+    vm::{config::VmConfig, segment::SegmentResult},
 };
 
 pub mod config;
 pub mod cycle_tracker;
 /// Instrumentation metrics for performance analysis and debugging
 pub mod metrics;
-mod segment;
+pub mod segment;
 
 /// Parent struct that holds all execution segments, program, config.
 pub struct VirtualMachine<F: PrimeField32> {
@@ -38,6 +41,11 @@ pub struct VirtualMachineState<F: PrimeField32> {
     pub input_stream: VecDeque<Vec<F>>,
     /// Hint stream of the CPU
     pub hint_stream: VecDeque<F>,
+}
+
+pub struct VirtualMachineResult<SC: StarkGenericConfig> {
+    pub segment_results: Vec<SegmentResult<SC>>,
+    pub cycle_tracker: CycleTracker,
 }
 
 impl<F: PrimeField32> VirtualMachine<F> {
@@ -110,7 +118,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
 
     /// Executes the VM by calling `ExecutionSegment::execute()` until the CPU hits `TERMINATE`
     /// and `cpu_chip.is_done`. Between every segment, the VM will call `next_segment()`.
-    pub fn execute(&mut self) -> Result<(), ExecutionError> {
+    pub fn execute(mut self) -> Result<(), ExecutionError> {
         loop {
             let last_seg = self.segments.last_mut().unwrap();
             last_seg.cycle_tracker.print();
@@ -126,5 +134,35 @@ impl<F: PrimeField32> VirtualMachine<F> {
         cycle_tracker.print();
 
         Ok(())
+    }
+
+    pub fn execute_and_generate<SC: StarkGenericConfig>(
+        mut self,
+    ) -> Result<VirtualMachineResult<SC>, ExecutionError>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        loop {
+            let last_seg = self.segments.last_mut().unwrap();
+            last_seg.cycle_tracker.print();
+            last_seg.execute()?;
+            if last_seg.cpu_chip.borrow().state.is_done {
+                break;
+            }
+            let cycle_tracker = take(&mut last_seg.cycle_tracker);
+            self.segment(self.current_state(), cycle_tracker);
+        }
+        tracing::debug!("Number of continuation segments: {}", self.segments.len());
+        let cycle_tracker = take(&mut self.segments.last_mut().unwrap().cycle_tracker);
+        cycle_tracker.print();
+
+        Ok(VirtualMachineResult {
+            segment_results: self
+                .segments
+                .into_iter()
+                .map(ExecutionSegment::produce_result)
+                .collect(),
+            cycle_tracker,
+        })
     }
 }
