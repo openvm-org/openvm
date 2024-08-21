@@ -284,6 +284,20 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 }};
             }
 
+            macro_rules! generate_disabled_ops {
+                () => {{
+                    while num_reads < CPU_MAX_READS_PER_CYCLE {
+                        disabled_read!();
+                    }
+
+                    while num_writes < CPU_MAX_WRITES_PER_CYCLE {
+                        num_writes += 1;
+                        mem_ops[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
+                            mem_write_trace_builder.disabled_op(F::zero(), OpType::Write);
+                    }
+                }};
+            }
+
             if opcode == FAIL {
                 return Err(ExecutionError::Fail(pc_usize));
             }
@@ -391,16 +405,16 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     println!("{}", value);
                 }
                 FE4ADD | FE4SUB | BBE4MUL | BBE4INV => {
+                    generate_disabled_ops!();
                     let clk = vm.memory_manager.borrow().get_clk().as_canonical_u32();
-                    vm.field_extension_chip.calculate(
-                        clk as usize,
-                        instruction,
-                    );
+                    vm.field_extension_chip.calculate(clk as usize, instruction);
                 }
                 MOD_SECP256K1_ADD | MOD_SECP256K1_SUB | MOD_SECP256K1_MUL | MOD_SECP256K1_DIV => {
+                    generate_disabled_ops!();
                     ModularMultiplicationChip::calculate(vm, instruction);
                 }
                 PERM_POS2 | COMP_POS2 => {
+                    generate_disabled_ops!();
                     vm.poseidon2_chip.calculate(instruction, false);
                 }
                 HINT_INPUT => {

@@ -73,7 +73,7 @@ fn air_test_with_poseidon2(
             perm_poseidon2_enabled: false,
             memory_config: MemoryConfig::new(LIMB_BITS, LIMB_BITS, LIMB_BITS, DECOMP),
             num_public_values: 4,
-            max_segment_len: 6,
+            max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             ..Default::default()
         },
         program,
