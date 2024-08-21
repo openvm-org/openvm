@@ -34,8 +34,10 @@ pub enum DslIr<C: Config> {
     AddEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
     /// Add a field element and an ext field immediate (ext = felt + ext field imm).
     AddEFFI(Ext<C::F, C::EF>, Felt<C::F>, C::EF),
-    /// Add two modular BigInts.
-    AddM(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>),
+    /// Add two modular BigInts over coordinate field.
+    AddSecp256k1Coord(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>),
+    /// Add two modular BigInts over scalar field.
+    AddSecp256k1Scalar(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>),
 
     // Subtractions.
     /// Subtracts two variables (var = var - var).
@@ -60,8 +62,10 @@ pub enum DslIr<C: Config> {
     SubEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
     /// Subtracts an extension field element and a field element (ext = ext - felt).
     SubEF(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Felt<C::F>),
-    /// Subtracts two modular BigInts.
-    SubM(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>),
+    /// Subtracts two modular BigInts over coordinate field.
+    SubSecp256k1Coord(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>),
+    /// Subtracts two modular BigInts over scalar field.
+    SubSecp256k1Scalar(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>),
 
     // Multiplications.
     /// Multiplies two variables (var = var * var).
@@ -80,8 +84,10 @@ pub enum DslIr<C: Config> {
     MulEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
     /// Multiplies an extension field element and a field element (ext = ext * felt).
     MulEF(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Felt<C::F>),
-    /// Multiplies two modular BigInts.
-    MulM(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>),
+    /// Multiplies two modular BigInts over coordinate field.
+    MulSecp256k1Coord(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>),
+    /// Multiplies two modular BigInts over scalar field.
+    MulSecp256k1Scalar(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>),
 
     // Divisions.
     /// Divides two variables (var = var / var).
@@ -100,9 +106,10 @@ pub enum DslIr<C: Config> {
     DivEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
     /// Divides an extension field element and a field element (ext = ext / felt).
     DivEF(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Felt<C::F>),
-
-    /// Subtracts two modular BigInts.
-    DivM(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>),
+    /// Subtracts two modular BigInts over coordinate field.
+    DivSecp256k1Coord(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>),
+    /// Multiplies two modular BigInts over scalar field.
+    DivSecp256k1Scalar(BigIntVar<C>, BigIntVar<C>, BigIntVar<C>),
 
     // Negations.
     /// Negates a variable (var = -var).

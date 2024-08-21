@@ -6,7 +6,7 @@ use std::{
 };
 
 use afs_primitives::{
-    modular_multiplication::bigint::air::ModularMultiplicationBigIntAir,
+    modular_multiplication::bigint::air::ModularArithmeticBigIntAir,
     range_gate::RangeCheckerGateChip,
 };
 use afs_stark_backend::{
@@ -27,7 +27,7 @@ use crate::{
     field_extension::FieldExtensionArithmeticChip,
     is_less_than::IsLessThanChip,
     memory::manager::MemoryManager,
-    modular_multiplication::ModularMultiplicationChip,
+    modular_multiplication::{air::ModularArithmeticVmAir, ModularArithmeticChip},
     poseidon2::Poseidon2Chip,
     program::{Program, ProgramChip},
     vm::{cycle_tracker::CycleTracker, metrics::VmMetrics},
@@ -43,7 +43,7 @@ pub struct ExecutionSegment<const NUM_WORDS: usize, const WORD_SIZE: usize, F: P
     pub range_checker: Arc<RangeCheckerGateChip>,
     pub poseidon2_chip: Poseidon2Chip<16, NUM_WORDS, WORD_SIZE, F>,
     pub is_less_than_chip: IsLessThanChip<F>,
-    pub modular_multiplication_chip: ModularMultiplicationChip<F>,
+    pub modular_arithmetic_chip: ModularArithmeticChip<F>,
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
     pub has_execution_happened: bool,
@@ -83,8 +83,15 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             range_checker.clone(),
             POSEIDON2_BUS,
         );
-        let modular_multiplication_chip =
-            ModularMultiplicationChip::new(ModularMultiplicationBigIntAir::default_for_30_bit());
+        let airs = vec![
+            ModularArithmeticVmAir {
+                air: ModularArithmeticBigIntAir::default_for_secp256k1_coord(),
+            },
+            ModularArithmeticVmAir {
+                air: ModularArithmeticBigIntAir::default_for_secp256k1_scalar(),
+            },
+        ];
+        let modular_arithmetic_chip = ModularArithmeticChip::new(airs);
         let is_less_than_chip = IsLessThanChip::new(
             IS_LESS_THAN_BUS,
             30,
@@ -103,7 +110,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             field_extension_chip,
             range_checker,
             poseidon2_chip,
-            modular_multiplication_chip,
+            modular_arithmetic_chip,
             is_less_than_chip,
             input_stream: state.input_stream,
             hint_stream: state.hint_stream,

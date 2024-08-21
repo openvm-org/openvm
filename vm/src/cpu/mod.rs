@@ -9,7 +9,7 @@ use OpCode::*;
 
 use crate::{
     field_extension::FieldExtensionArithmetic, memory::offline_checker::bus::MemoryBus,
-    modular_multiplication::air::ModularMultiplicationVmAir, poseidon2::Poseidon2Chip,
+    modular_multiplication::air::ModularArithmeticVmAir, poseidon2::Poseidon2Chip,
     vm::config::MemoryConfig,
 };
 
@@ -86,10 +86,15 @@ pub enum OpCode {
     /// Phantom instruction to end tracing
     CT_END = 61,
 
-    MOD_SECP256K1_ADD = 70,
-    MOD_SECP256K1_SUB = 71,
-    MOD_SECP256K1_MUL = 72,
-    MOD_SECP256K1_DIV = 73,
+    MOD_SECP256K1_COORD_ADD = 70,
+    MOD_SECP256K1_COORD_SUB = 71,
+    MOD_SECP256K1_COORD_MUL = 72,
+    MOD_SECP256K1_COORD_DIV = 73,
+
+    MOD_SECP256K1_SCALAR_ADD = 74,
+    MOD_SECP256K1_SCALAR_SUB = 75,
+    MOD_SECP256K1_SCALAR_MUL = 76,
+    MOD_SECP256K1_SCALAR_DIV = 77,
 
     ADD256 = 80,
     SUB256 = 81,
@@ -112,11 +117,15 @@ pub const CORE_INSTRUCTIONS: [OpCode; 15] = [
 ];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
-pub const MODULAR_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [
-    MOD_SECP256K1_ADD,
-    MOD_SECP256K1_SUB,
-    MOD_SECP256K1_MUL,
-    MOD_SECP256K1_DIV,
+pub const MODULAR_ARITHMETIC_INSTRUCTIONS: [OpCode; 8] = [
+    MOD_SECP256K1_COORD_ADD,
+    MOD_SECP256K1_COORD_SUB,
+    MOD_SECP256K1_COORD_MUL,
+    MOD_SECP256K1_COORD_DIV,
+    MOD_SECP256K1_SCALAR_ADD,
+    MOD_SECP256K1_SCALAR_SUB,
+    MOD_SECP256K1_SCALAR_MUL,
+    MOD_SECP256K1_SCALAR_DIV,
 ];
 
 impl OpCode {
@@ -153,7 +162,7 @@ fn timestamp_delta(opcode: OpCode) -> usize {
             // TODO: note that in this chip's trace generation, we need to make sure
             // that the timestamp in MemoryManager increases by exactly what this function
             // returns.
-            ModularMultiplicationVmAir::max_accesses_per_instruction(opcode)
+            ModularArithmeticVmAir::max_accesses_per_instruction(opcode)
         }
         F_LESS_THAN => 3,
         FAIL => 0,

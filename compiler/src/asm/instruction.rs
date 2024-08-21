@@ -74,16 +74,28 @@ pub enum AsmInstruction<F, EF> {
     InvE(i32, i32),
 
     /// Modular add, dst = lhs + rhs.
-    AddMSecp256k1(i32, i32, i32),
+    AddMSecp256k1Coord(i32, i32, i32),
 
     /// Modular subtract, dst = lhs - rhs.
-    SubMSecp256k1(i32, i32, i32),
+    SubMSecp256k1Coord(i32, i32, i32),
 
     /// Modular multiply, dst = lhs * rhs.
-    MulMSecp256k1(i32, i32, i32),
+    MulMSecp256k1Coord(i32, i32, i32),
 
     /// Modular divide, dst = lhs / rhs.
-    DivMSecp256k1(i32, i32, i32),
+    DivMSecp256k1Coord(i32, i32, i32),
+
+    /// Modular add, dst = lhs + rhs.
+    AddMSecp256k1Scalar(i32, i32, i32),
+
+    /// Modular subtract, dst = lhs - rhs.
+    SubMSecp256k1Scalar(i32, i32, i32),
+
+    /// Modular multiply, dst = lhs * rhs.
+    MulMSecp256k1Scalar(i32, i32, i32),
+
+    /// Modular divide, dst = lhs / rhs.
+    DivMSecp256k1Scalar(i32, i32, i32),
 
     /// Jump.
     Jump(i32, F),
@@ -361,17 +373,57 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::CycleTrackerEnd(name) => {
                 write!(f, "cycle_tracker_end {}", name)
             }
-            AsmInstruction::AddMSecp256k1(dst, src1, src2) => {
-                write!(f, "modular_add ({})fp ({})fp ({})fp", dst, src1, src2)
+            AsmInstruction::AddMSecp256k1Coord(dst, src1, src2) => {
+                write!(f, "modular_add_coord ({})fp ({})fp ({})fp", dst, src1, src2)
             }
-            AsmInstruction::SubMSecp256k1(dst, src1, src2) => {
-                write!(f, "modular_subtract ({})fp ({})fp ({})fp", dst, src1, src2)
+            AsmInstruction::SubMSecp256k1Coord(dst, src1, src2) => {
+                write!(
+                    f,
+                    "modular_subtract_coord ({})fp ({})fp ({})fp",
+                    dst, src1, src2
+                )
             }
-            AsmInstruction::MulMSecp256k1(dst, src1, src2) => {
-                write!(f, "modular_multiply ({})fp ({})fp ({})fp", dst, src1, src2)
+            AsmInstruction::MulMSecp256k1Coord(dst, src1, src2) => {
+                write!(
+                    f,
+                    "modular_multiply_coord ({})fp ({})fp ({})fp",
+                    dst, src1, src2
+                )
             }
-            AsmInstruction::DivMSecp256k1(dst, src1, src2) => {
-                write!(f, "modular_divide ({})fp ({})fp ({})fp", dst, src1, src2)
+            AsmInstruction::DivMSecp256k1Coord(dst, src1, src2) => {
+                write!(
+                    f,
+                    "modular_divide_coord ({})fp ({})fp ({})fp",
+                    dst, src1, src2
+                )
+            }
+            AsmInstruction::AddMSecp256k1Scalar(dst, src1, src2) => {
+                write!(
+                    f,
+                    "modular_add_scalar ({})fp ({})fp ({})fp",
+                    dst, src1, src2
+                )
+            }
+            AsmInstruction::SubMSecp256k1Scalar(dst, src1, src2) => {
+                write!(
+                    f,
+                    "modular_subtract_scalar ({})fp ({})fp ({})fp",
+                    dst, src1, src2
+                )
+            }
+            AsmInstruction::MulMSecp256k1Scalar(dst, src1, src2) => {
+                write!(
+                    f,
+                    "modular_multiply_scalar ({})fp ({})fp ({})fp",
+                    dst, src1, src2
+                )
+            }
+            AsmInstruction::DivMSecp256k1Scalar(dst, src1, src2) => {
+                write!(
+                    f,
+                    "modular_divide_scalar ({})fp ({})fp ({})fp",
+                    dst, src1, src2
+                )
             }
         }
     }

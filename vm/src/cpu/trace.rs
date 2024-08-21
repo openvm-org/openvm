@@ -23,7 +23,7 @@ use crate::{
         manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
         OpType,
     },
-    modular_multiplication::ModularMultiplicationChip,
+    modular_multiplication::ModularArithmeticChip,
     poseidon2::columns::Poseidon2VmCols,
     program::columns::ProgramPreprocessedCols,
     vm::ExecutionSegment,
@@ -409,9 +409,16 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     let clk = vm.memory_manager.borrow().get_clk().as_canonical_u32();
                     vm.field_extension_chip.calculate(clk as usize, instruction);
                 }
-                MOD_SECP256K1_ADD | MOD_SECP256K1_SUB | MOD_SECP256K1_MUL | MOD_SECP256K1_DIV => {
+                MOD_SECP256K1_COORD_ADD
+                | MOD_SECP256K1_COORD_SUB
+                | MOD_SECP256K1_COORD_MUL
+                | MOD_SECP256K1_COORD_DIV
+                | MOD_SECP256K1_SCALAR_ADD
+                | MOD_SECP256K1_SCALAR_SUB
+                | MOD_SECP256K1_SCALAR_MUL
+                | MOD_SECP256K1_SCALAR_DIV => {
                     generate_disabled_ops!();
-                    ModularMultiplicationChip::calculate(vm, instruction);
+                    ModularArithmeticChip::calculate(vm, instruction);
                 }
                 PERM_POS2 | COMP_POS2 => {
                     generate_disabled_ops!();

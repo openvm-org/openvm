@@ -9,7 +9,7 @@ use rand::RngCore;
 
 use crate::{
     modular_multiplication::bigint::{
-        air::ModularMultiplicationBigIntAir, columns::ModularMultiplicationBigIntCols,
+        air::ModularArithmeticBigIntAir, columns::ModularArithmeticBigIntCols,
     },
     range_gate::RangeCheckerGateChip,
 };
@@ -22,18 +22,18 @@ fn secp256k1_prime() -> BigUint {
     result
 }
 
-fn default_air() -> ModularMultiplicationBigIntAir {
-    ModularMultiplicationBigIntAir::new(secp256k1_prime(), 256, 16, 0, 30, 30, 10, 16, 1 << 15)
+fn default_air() -> ModularArithmeticBigIntAir {
+    ModularArithmeticBigIntAir::new(secp256k1_prime(), 256, 16, 0, 30, 30, 10, 16, 1 << 15)
 }
 
 #[test]
 fn test_flatten_fromslice_roundtrip() {
     let air = default_air();
 
-    let num_cols = ModularMultiplicationBigIntCols::<usize>::get_width(&air);
+    let num_cols = ModularArithmeticBigIntCols::<usize>::get_width(&air);
     let all_cols = (0..num_cols).collect::<Vec<usize>>();
 
-    let cols_numbered = ModularMultiplicationBigIntCols::<usize>::from_slice(&all_cols, &air);
+    let cols_numbered = ModularArithmeticBigIntCols::<usize>::from_slice(&all_cols, &air);
     let flattened = cols_numbered.flatten();
 
     for (i, col) in flattened.iter().enumerate() {
