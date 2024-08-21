@@ -1,10 +1,9 @@
 use std::{marker::PhantomData, sync::Arc};
 
-use afs_page::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
 use afs_stark_backend::{
     config::{Com, PcsProof, PcsProverData, StarkGenericConfig, Val},
     keygen::types::MultiStarkProvingKey,
-    prover::{trace::TraceCommitmentBuilder, types::Proof},
+    prover::types::Proof,
 };
 use afs_test_utils::engine::StarkEngine;
 use async_trait::async_trait;
@@ -16,22 +15,21 @@ use tracing::info;
 
 use super::{functionality::filter::FilterFn, AxdbNodeExecutable};
 use crate::{
-    committed_page::CommittedPage,
-    expr::AxdbExpr,
-    utils::table::{convert_to_ops, get_record_batches},
-    BITS_PER_FE, MAX_ROWS, NUM_IDX_COLS, OPS_BUS_IDX, PAGE_BUS_IDX, RANGE_BUS_IDX,
-    RANGE_CHECK_BITS,
+    committed_page::CommittedPage, expr::AxdbExpr, utils::table::get_record_batches, MAX_ROWS,
+    NUM_IDX_COLS,
 };
 
 pub struct PageScan<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
     pub input: Arc<dyn TableSource>,
     pub output: Option<CommittedPage<SC>>,
     pub table_name: String,
-    pub filters: Vec<AxdbExpr>,
-    // TODO: support projection
-    pub projection: Option<Vec<usize>>,
     pub pk: Option<MultiStarkProvingKey<SC>>,
     pub proof: Option<Proof<SC>>,
+    pub filters: Vec<AxdbExpr>,
+    pub filter_io: Vec<CommittedPage<SC>>,
+    pub filter_proofs: Vec<Proof<SC>>,
+    // TODO: support projection
+    pub projection: Option<Vec<usize>>,
     _marker: PhantomData<E>,
 }
 
@@ -46,10 +44,12 @@ impl<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> PageScan<SC, E> {
             table_name,
             pk: None,
             input,
-            filters,
             output: None,
-            projection,
             proof: None,
+            filters,
+            filter_io: vec![],
+            filter_proofs: vec![],
+            projection,
             _marker: PhantomData::<E>,
         }
     }
@@ -65,23 +65,16 @@ where
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
-    fn page_stats(&self) -> (usize, usize) {
+    // TODO: this will eventualy need to support Schemas with different data types
+    pub fn page_stats(&self) -> (usize, usize) {
         let schema = self.input.schema();
         let idx_len = NUM_IDX_COLS;
         let data_len = schema.fields().len() - NUM_IDX_COLS;
         (idx_len, data_len)
     }
 
-    fn page_controller(&self, idx_len: usize, data_len: usize) -> PageController<SC> {
-        PageController::new(
-            PAGE_BUS_IDX,
-            RANGE_BUS_IDX,
-            OPS_BUS_IDX,
-            idx_len,
-            data_len,
-            BITS_PER_FE,
-            RANGE_CHECK_BITS,
-        )
+    fn filter_name(&self) -> String {
+        format!("{}.{}", self.name(), "Filter")
     }
 }
 
@@ -99,6 +92,9 @@ where
 {
     async fn execute(&mut self, ctx: &SessionContext, _engine: &E) -> Result<()> {
         info!("execute PageScan");
+
+        // Convert RecordBatches to a CommittedPage
+        // NOTE: only one RecordBatch is supported for now
         let record_batches = get_record_batches(ctx, &self.table_name).await.unwrap();
         if record_batches.len() != 1 {
             panic!(
@@ -108,10 +104,12 @@ where
         }
         let rb = &record_batches[0];
         let mut committed_page = CommittedPage::from_record_batch(rb.clone(), MAX_ROWS);
+        self.filter_io.push(committed_page.clone());
 
-        if self.filters.len() > 0 {
+        if !self.filters.is_empty() {
             for filter in &self.filters {
                 committed_page = FilterFn::<SC, E>::execute(filter, committed_page).await?;
+                self.filter_io.push(committed_page.clone());
             }
         }
 
@@ -121,91 +119,57 @@ where
 
     async fn keygen(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
         info!("keygen PageScan");
-        if self.filters.len() > 0 {}
-        // let (idx_len, data_len) = self.page_stats();
-
-        // let page_controller = self.page_controller(idx_len, data_len);
-        // let ops_sender = ExecutionAir::new(OPS_BUS_IDX, idx_len, data_len);
-
-        // let mut keygen_builder = engine.keygen_builder();
-        // page_controller.set_up_keygen_builder(&mut keygen_builder, &ops_sender);
-        // let pk = keygen_builder.generate_pk();
-        // self.pk = Some(pk);
-
+        if !self.filters.is_empty() {
+            // Since filtering does not change the Schema, we can use the same proving key for all filters on this PageScan node
+            let filter = &self.filters[0];
+            let (idx_len, data_len) = self.page_stats();
+            FilterFn::<SC, E>::keygen(
+                engine,
+                filter,
+                self.filter_name().as_str(),
+                idx_len,
+                data_len,
+            )
+            .await?;
+        }
         Ok(())
     }
 
-    async fn prove(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
+    async fn prove(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
         info!("prove PageScan");
-        if self.filters.len() > 0 {
-            for filter in &self.filters {
-                // FilterFn::prove(filter, committed_page).await?;
+        if !self.filters.is_empty() {
+            for (i, filter) in self.filters.iter().enumerate() {
+                let proof = FilterFn::<SC, E>::prove(
+                    engine,
+                    &self.filter_io[i],
+                    &self.filter_io[i + 1],
+                    filter,
+                    self.filter_name().as_str(),
+                    self.filter_io[i].page.idx_len(),
+                    self.filter_io[i].page.data_len(),
+                )
+                .await?;
+                self.filter_proofs.push(proof);
             }
         }
-
-        // let (idx_len, data_len) = self.page_stats();
-
-        // let record_batches = get_record_batches(ctx, &self.table_name).await.unwrap();
-        // if record_batches.len() != 1 {
-        //     panic!(
-        //         "Unexpected number of record batches in PageScan: {}",
-        //         record_batches.len()
-        //     );
-        // }
-        // let rb = &record_batches[0];
-        // let committed_page: CommittedPage<SC> =
-        //     CommittedPage::from_record_batch(rb.clone(), MAX_ROWS);
-        // let zk_ops = convert_to_ops::<SC>(rb.clone());
-
-        // let mut page_controller = self.page_controller(idx_len, data_len);
-
-        // let ops_sender = ExecutionAir::new(OPS_BUS_IDX, idx_len, data_len);
-        // let prover = engine.prover();
-        // let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
-        // let page_init = committed_page.page;
-
-        // let (init_page_pdata, final_page_pdata) = page_controller.load_page_and_ops(
-        //     &page_init,
-        //     None, //Some(Arc::new(init_prover_data)),
-        //     None,
-        //     &zk_ops,
-        //     MAX_ROWS * 2,
-        //     &mut trace_builder.committer,
-        // );
-
-        // let ops_sender_trace = ops_sender.generate_trace(&zk_ops, MAX_ROWS);
-        // let pk = self.pk.as_ref().unwrap();
-
-        // let proof = page_controller.prove(
-        //     engine,
-        //     pk,
-        //     &mut trace_builder,
-        //     init_page_pdata,
-        //     final_page_pdata,
-        //     &ops_sender,
-        //     ops_sender_trace,
-        // );
-        // self.proof = Some(proof);
-
         Ok(())
     }
 
     async fn verify(&self, _ctx: &SessionContext, engine: &E) -> Result<()> {
         info!("verify PageScan");
-        // let (idx_len, data_len) = self.page_stats();
-
-        // let page_controller = self.page_controller(idx_len, data_len);
-
-        // let pk = self.pk.as_ref().unwrap();
-        // let vk = pk.vk();
-
-        // let ops_sender = ExecutionAir::new(OPS_BUS_IDX, idx_len, data_len);
-
-        // let proof = self.proof.as_ref().unwrap();
-        // page_controller
-        //     .verify(engine, vk, proof, &ops_sender)
-        //     .unwrap();
-
+        if !self.filters.is_empty() {
+            for (i, filter) in self.filters.iter().enumerate() {
+                FilterFn::<SC, E>::verify(
+                    engine,
+                    &self.filter_proofs[i],
+                    filter,
+                    self.filter_name().as_str(),
+                    self.filter_io[i].page.idx_len(),
+                    self.filter_io[i].page.data_len(),
+                )
+                .await?;
+            }
+        }
         Ok(())
     }
 

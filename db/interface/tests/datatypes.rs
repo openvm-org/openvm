@@ -61,9 +61,6 @@ pub async fn test_wide_types() {
     );
 
     afs.execute().await.unwrap();
-    let last_node = afs.last_node().await.unwrap();
-    let output = last_node.lock().await.output().clone().unwrap();
-    println!("Output page: {:?}", output.page);
 
     afs.keygen().await.unwrap();
     println!("Keygen completed");
@@ -73,4 +70,7 @@ pub async fn test_wide_types() {
 
     afs.verify().await.unwrap();
     println!("STARK proof verified");
+
+    let output = afs.output().await.unwrap();
+    println!("Output RecordBatch: {:?}", output);
 }

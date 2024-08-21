@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use afs_stark_backend::config::{Com, PcsProof, PcsProverData, StarkGenericConfig, Val};
 use afs_test_utils::engine::StarkEngine;
-use datafusion::{error::Result, execution::context::SessionContext, logical_expr::LogicalPlan};
+use datafusion::{
+    arrow::array::RecordBatch, error::Result, execution::context::SessionContext,
+    logical_expr::LogicalPlan,
+};
 use futures::lock::Mutex;
 use p3_field::PrimeField64;
 use p3_uni_stark::Domain;
@@ -49,9 +52,15 @@ where
         }
     }
 
-    pub async fn last_node(&self) -> Result<Arc<Mutex<AxdbNode<SC, E>>>> {
+    pub fn last_node(&self) -> Arc<Mutex<AxdbNode<SC, E>>> {
+        self.axdb_execution_plan.last().unwrap().to_owned()
+    }
+
+    pub async fn output(&self) -> Result<RecordBatch> {
         let last_node = self.axdb_execution_plan.last().unwrap().to_owned();
-        Ok(last_node)
+        let last_node = last_node.lock().await;
+        let output = last_node.output().as_ref().unwrap();
+        Ok(output.to_record_batch())
     }
 
     pub async fn execute(&mut self) -> Result<()> {
