@@ -66,7 +66,7 @@ impl IsLessThanTupleAir {
             let x_val = x[i].clone();
             let y_val = y[i].clone();
 
-            let lt_io_cols = IsLessThanIoCols::from(x_val, y_val, aux.less_than[i]);
+            let lt_io_cols = IsLessThanIoCols::new(x_val, y_val, aux.less_than[i]);
             let lt_aux_cols = IsLessThanAuxCols::new(
                 aux.less_than_aux[i].lower,
                 aux.less_than_aux[i].lower_decomp.clone(),

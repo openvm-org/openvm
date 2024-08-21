@@ -124,7 +124,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for IsLessThanAir {
         // Note: every AIR that uses this sub-AIR must include the interactions for soundness
         self.subair_eval(
             builder,
-            IsLessThanIoCols::<AB::Expr>::from(io.x, io.y, io.less_than),
+            IsLessThanIoCols::<AB::Expr>::new(io.x, io.y, io.less_than),
             aux,
         );
     }
@@ -137,7 +137,7 @@ impl IsLessThanAir {
         io: IsLessThanIoCols<AB::Expr>,
         aux: IsLessThanAuxCols<AB::Var>,
     ) {
-        let io_exprs = IsLessThanIoCols::<AB::Expr>::from(io.x, io.y, io.less_than);
+        let io_exprs = IsLessThanIoCols::<AB::Expr>::new(io.x, io.y, io.less_than);
 
         self.eval_interactions(builder, aux.lower_decomp.clone());
         self.eval_without_interactions(builder, io_exprs, aux);
@@ -157,7 +157,7 @@ impl IsLessThanAir {
         io: IsLessThanIoCols<impl Into<AB::Expr>>,
         aux: IsLessThanAuxCols<AB::Var>,
     ) {
-        let io_exprs = IsLessThanIoCols::<AB::Expr>::from(io.x, io.y, io.less_than);
+        let io_exprs = IsLessThanIoCols::<AB::Expr>::new(io.x, io.y, io.less_than);
 
         self.eval_interactions(builder, aux.lower_decomp.clone());
         self.eval_without_interactions(&mut builder.when_transition(), io_exprs, aux);

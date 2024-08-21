@@ -4,7 +4,7 @@ use p3_air::AirBuilder;
 
 use super::IsLessThanAir;
 
-#[derive(Default, AlignedBorrow, Clone, new)]
+#[derive(Default, AlignedBorrow, Clone)]
 pub struct IsLessThanIoCols<T> {
     pub x: T,
     pub y: T,
@@ -116,7 +116,7 @@ impl<T> IsLessThanCols<T> {
 }
 
 impl<T> IsLessThanIoCols<T> {
-    pub fn from(x: impl Into<T>, y: impl Into<T>, less_than: impl Into<T>) -> Self {
+    pub fn new(x: impl Into<T>, y: impl Into<T>, less_than: impl Into<T>) -> Self {
         Self {
             x: x.into(),
             y: y.into(),
