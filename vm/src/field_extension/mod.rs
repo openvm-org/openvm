@@ -269,19 +269,19 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         FieldExtensionArithmeticCols {
             io: FieldExtensionArithmeticIoCols {
                 opcode: F::from_canonical_u32(OpCode::FE4ADD as u32),
-                clk: clk,
+                clk,
                 x: [F::zero(); EXTENSION_DEGREE],
                 y: [F::zero(); EXTENSION_DEGREE],
                 z: [F::zero(); EXTENSION_DEGREE],
             },
             aux: FieldExtensionArithmeticAuxCols {
                 is_valid: F::zero(),
-                valid_y_read: F::zero(),
+                valid_y_read: F::one(),
                 op_a: F::zero(),
                 op_b: F::zero(),
                 op_c: F::zero(),
-                d: F::zero(),
-                e: F::zero(),
+                d: F::one(),
+                e: F::one(),
                 is_add: F::one(),
                 is_sub: F::zero(),
                 is_mul: F::zero(),

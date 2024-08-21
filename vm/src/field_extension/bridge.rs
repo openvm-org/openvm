@@ -13,9 +13,10 @@ use crate::{
 fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
     builder: &mut AB,
     memory_bridge: &mut MemoryBridge<AB::Var, WORD_SIZE>,
-    clk_offset: &mut usize,
+    clk_offset: &mut AB::Expr,
+    is_enabled: AB::Expr,
     is_write: bool,
-    start_timestamp: AB::Var,
+    clk: AB::Var,
     addr_space: AB::Var,
     address: AB::Var,
     ext: [AB::Var; EXTENSION_DEGREE],
@@ -23,8 +24,8 @@ fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
     for (i, element) in ext.into_iter().enumerate() {
         let pointer = address + AB::F::from_canonical_usize(i * WORD_SIZE);
 
-        let clk = start_timestamp + AB::Expr::from_canonical_usize(*clk_offset);
-        *clk_offset += 1;
+        let clk = clk + clk_offset.clone();
+        *clk_offset += is_enabled.clone();
 
         if is_write {
             memory_bridge
@@ -41,7 +42,7 @@ fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
                     emb(element.into()),
                     clk,
                 )
-                .eval(builder, AB::F::one());
+                .eval(builder, is_enabled.clone());
         }
     }
 }
@@ -56,7 +57,7 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
         builder: &mut AB,
         local: FieldExtensionArithmeticCols<WORD_SIZE, AB::Var>,
     ) {
-        let mut clk_offset = 0;
+        let mut clk_offset = AB::Expr::zero();
 
         let FieldExtensionArithmeticCols { io, aux } = local;
 
@@ -78,6 +79,7 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
             builder,
             &mut memory_bridge,
             &mut clk_offset,
+            AB::Expr::one(),
             false,
             io.clk,
             d,
@@ -90,6 +92,7 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
             builder,
             &mut memory_bridge,
             &mut clk_offset,
+            aux.valid_y_read.into(),
             false,
             io.clk,
             e,
@@ -102,6 +105,7 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
             builder,
             &mut memory_bridge,
             &mut clk_offset,
+            AB::Expr::one(),
             true,
             io.clk,
             d,
