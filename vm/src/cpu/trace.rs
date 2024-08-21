@@ -10,7 +10,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    timestamp_delta, CpuChip, ExecutionState,
+    CpuChip, ExecutionState,
     OpCode::{self, *},
     CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
 };
@@ -391,8 +391,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     println!("{}", value);
                 }
                 FE4ADD | FE4SUB | BBE4MUL | BBE4INV => {
+                    let clk = vm.memory_manager.borrow().get_clk().as_canonical_u32();
                     vm.field_extension_chip.calculate(
-                        vm.memory_manager.borrow().get_clk().as_canonical_u32() as usize,
+                        clk as usize,
                         instruction,
                     );
                 }

@@ -182,6 +182,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             // 4 disabled reads
             for _ in 0..4 {
                 self.memory.disabled_op(e, OpType::Read);
+                self.memory.increment_clk();
             }
             [F::zero(); EXTENSION_DEGREE]
         } else {
@@ -257,9 +258,11 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
 
         for _ in 0..8 {
             trace_builder.disabled_op(F::one(), OpType::Read);
+            trace_builder.increment_clk();
         }
         for _ in 0..4 {
             trace_builder.disabled_op(F::one(), OpType::Write);
+            trace_builder.increment_clk();
         }
         let mut mem_oc_aux_iter = trace_builder.take_accesses_buffer().into_iter();
 
