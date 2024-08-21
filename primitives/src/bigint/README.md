@@ -61,3 +61,13 @@ fn main() {
     assert_eq!(val2 / 4, -15);   // / round toward 0
 }
 ```
+
+### Different AIRs for each operation v.s. single AIR for all operations
+
+Assuming the modulus prime is of N limbs.
+For multiplication, the columns are: `x, y, q, r` of size N, and `carries` of size 2N-1 (as `x*y` can be of length 2N-1). 
+Division is just a different equation: `yr - x - pq = 0`, so the same columns work.
+For addition and subtractions: `x [+/-] y - r - pq = 0` , the main difference here is that we know `q` is either 1 or 0 (as x and y in `[0, p)` ),
+so the equation should have limb size N, and thus `carries` just be of size N.
+If we combine the operations into one chip, we will also need extra columns: `opcode_add_flag, opcode_sub_flag. opcode_mul_flag , opcode_div_flag`.
+Therefore we will just have separate chips for different operations.

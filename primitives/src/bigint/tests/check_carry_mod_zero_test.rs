@@ -13,7 +13,7 @@ use rand::RngCore;
 use super::super::{
     check_carry_mod_to_zero::{CheckCarryModToZeroCols, CheckCarryModToZeroSubAir},
     utils::{big_uint_to_limbs, secp256k1_prime},
-    OverflowInt,
+    CanonicalUint, DefaultLimbConfig, OverflowInt,
 };
 use crate::{
     sub_chip::{AirConfig, LocalTraceInstructions},
@@ -121,12 +121,18 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
             range_checker.add_count(q as u32, self.limb_bits);
         }
         let quotient_f: Vec<F> = q_limb.iter().map(|&x| F::from_canonical_usize(x)).collect();
-        let x_overflow = OverflowInt::<isize>::from_big_uint(x, self.limb_bits, Some(N));
-        let y_overflow = OverflowInt::<isize>::from_big_uint(y, self.limb_bits, Some(2 * N));
-        let q_overflow = OverflowInt::<isize>::from_big_uint(quotient, self.limb_bits, None);
+        let x_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(x, Some(N));
+        let x_overflow: OverflowInt<isize> = x_canonical.into();
+        let y_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(y, Some(2 * N));
+        let y_overflow: OverflowInt<isize> = y_canonical.into();
+        let q_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(quotient, None);
+        let q_overflow: OverflowInt<isize> = q_canonical.into();
         assert_eq!(q_overflow.limbs.len(), 1);
-        let p_overflow =
-            OverflowInt::<isize>::from_big_uint(self.modulus.clone(), self.limb_bits, Some(N * 2));
+        let p_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(
+            self.modulus.clone(),
+            Some(N * 2),
+        );
+        let p_overflow: OverflowInt<isize> = p_canonical.into();
         let expr =
             x_overflow.clone() * x_overflow.clone() + y_overflow.clone() - p_overflow * q_overflow;
         let carries = expr.calculate_carries(self.limb_bits);

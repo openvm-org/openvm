@@ -13,7 +13,7 @@ use rand::RngCore;
 
 use super::super::{
     check_carry_to_zero::{CheckCarryToZeroCols, CheckCarryToZeroSubAir},
-    OverflowInt,
+    CanonicalUint, DefaultLimbConfig, OverflowInt,
 };
 use crate::{
     sub_chip::{AirConfig, LocalTraceInstructions},
@@ -99,8 +99,19 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
 
     fn generate_trace_row(&self, input: Self::LocalInput) -> Self::Cols<F> {
         let (x, y, range_checker) = input;
-        let x_overflow = OverflowInt::<isize>::from_big_uint(x, self.limb_bits, Some(N));
-        let y_overflow = OverflowInt::<isize>::from_big_uint(y, self.limb_bits, Some(2 * N));
+        let range_check = |bits: usize, value: usize| {
+            let value = value as u32;
+            if bits == self.decomp {
+                range_checker.add_count(value);
+            } else {
+                range_checker.add_count(value);
+                range_checker.add_count(value + (1 << self.decomp) - (1 << bits));
+            }
+        };
+        let x_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(x, Some(N));
+        let x_overflow: OverflowInt<isize> = x_canonical.into();
+        let y_canonical = CanonicalUint::<isize, DefaultLimbConfig>::from_big_uint(y, Some(2 * N));
+        let y_overflow: OverflowInt<isize> = y_canonical.into();
         assert_eq!(x_overflow.limbs.len(), N);
         assert_eq!(y_overflow.limbs.len(), 2 * N);
         let expr = x_overflow.clone() * x_overflow.clone() - y_overflow.clone();
