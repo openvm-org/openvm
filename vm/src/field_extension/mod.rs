@@ -159,11 +159,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         }
     }
 
-    pub fn calculate(
-        &mut self,
-        clk: usize,
-        instruction: Instruction<F>,
-    ) -> [F; EXTENSION_DEGREE] {
+    pub fn calculate(&mut self, clk: usize, instruction: Instruction<F>) -> [F; EXTENSION_DEGREE] {
         let Instruction {
             opcode,
             op_a,

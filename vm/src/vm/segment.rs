@@ -209,11 +209,8 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     }
 
     pub fn get_types(&self) -> Vec<ChipType> {
-        let mut result: Vec<ChipType> = vec![
-            ChipType::Cpu,
-            ChipType::Program,
-            ChipType::MemoryInterface,
-        ];
+        let mut result: Vec<ChipType> =
+            vec![ChipType::Cpu, ChipType::Program, ChipType::MemoryInterface];
         if self.config.cpu_options().field_arithmetic_enabled {
             result.push(ChipType::FieldArithmetic);
         }

@@ -1,4 +1,5 @@
 use std::array;
+
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
