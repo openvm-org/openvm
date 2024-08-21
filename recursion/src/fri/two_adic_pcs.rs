@@ -50,13 +50,20 @@ pub fn verify_two_adic_pcs<C: Config>(
 
             let mut ro: Array<C, Ext<C::F, C::EF>> = builder.array(32);
             let mut alpha_pow: Array<C, Ext<C::F, C::EF>> = builder.array(32);
-            for j in 0..32 {
-                // ATTENTION: don't use set_value here, Fixed will share the same variable.
-                builder.set(&mut ro, j, C::EF::zero().cons());
-            }
-            for j in 0..32 {
-                // ATTENTION: don't use set_value here, Fixed will share the same variable.
-                builder.set(&mut alpha_pow, j, C::EF::one().cons());
+            if builder.flags.static_only {
+                for j in 0..32 {
+                    // ATTENTION: don't use set_value here, Fixed will share the same variable.
+                    builder.set(&mut ro, j, C::EF::zero().cons());
+                    builder.set(&mut alpha_pow, j, C::EF::one().cons());
+                }
+            } else {
+                let zero_ef = builder.eval(C::EF::zero().cons());
+                let one_ef = builder.eval(C::EF::one().cons());
+                for j in 0..32 {
+                    // Use set_value here to save a copy.
+                    builder.set_value(&mut ro, j, zero_ef);
+                    builder.set_value(&mut alpha_pow, j, one_ef);
+                }
             }
 
             builder.range(0, rounds.len()).for_each(|j, builder| {
