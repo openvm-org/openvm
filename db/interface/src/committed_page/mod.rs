@@ -13,7 +13,7 @@ use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use self::utils::convert_to_record_batch;
-use crate::NUM_IDX_COLS;
+use crate::{utils::generate_random_bytes, NUM_IDX_COLS};
 
 pub mod column;
 pub mod execution_plan;
@@ -43,17 +43,22 @@ where
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
-    pub fn new(
-        page_id: String,
-        schema: Schema,
-        page: Page,
-        cached_trace: Option<ProverTraceData<SC>>,
-    ) -> Self {
+    pub fn new(schema: Schema, page: Page) -> Self {
+        let page_id = generate_random_bytes(32);
         Self {
             page_id,
             schema,
             page,
-            cached_trace,
+            cached_trace: None,
+        }
+    }
+
+    pub fn new_with_page_id(page_id: &str, schema: Schema, page: Page) -> Self {
+        Self {
+            page_id: page_id.to_string(),
+            schema,
+            page,
+            cached_trace: None,
         }
     }
 
@@ -132,6 +137,13 @@ macro_rules! committed_page {
         let page: Page = bincode::deserialize(&page_path).unwrap();
         let schema_path = std::fs::read($schema_path).unwrap();
         let schema: Schema = bincode::deserialize(&schema_path).unwrap();
-        $crate::committed_page::CommittedPage::<$config>::new($name.to_string(), schema, page, None)
+        $crate::committed_page::CommittedPage::<$config>::new_with_page_id($name, schema, page)
+    }};
+    ($page_path:expr, $schema_path:expr, $config:tt) => {{
+        let page_path = std::fs::read($page_path).unwrap();
+        let page: Page = bincode::deserialize(&page_path).unwrap();
+        let schema_path = std::fs::read($schema_path).unwrap();
+        let schema: Schema = bincode::deserialize(&schema_path).unwrap();
+        $crate::committed_page::CommittedPage::<$config>::new(schema, page)
     }};
 }

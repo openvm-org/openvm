@@ -73,17 +73,58 @@ pub async fn test_basic_e2e() {
         .unwrap();
 
     // let sql = format!("SELECT a FROM {} WHERE a <= b GROUP BY a", page_id);
-    // let sql = format!("SELECT a FROM {} WHERE a <= 10", page_id);
+    let sql = format!("SELECT a FROM {} WHERE a <= 10", page_id);
     // let sql = format!("SELECT a FROM {}", page_id);
-    // let logical = ctx.state().create_logical_plan(sql.as_str()).await.unwrap();
+    let logical = ctx.state().create_logical_plan(sql.as_str()).await.unwrap();
+
+    // use datafusion::logical_expr::{col, lit, table_scan};
+    // let schema = cp.schema.clone();
+    // let logical = table_scan(Some(page_id), &schema, None)
+    //     .unwrap()
+    //     .filter(col("a").lt(lit(10)))
+    //     .unwrap()
+    //     .filter(col("a").lt(lit(11)))
+    //     .unwrap()
+    //     .build()
+    //     .unwrap();
+    // println!("{:#?}", logical.clone());
+
+    let engine = default_engine(PCS_LOG_DEGREE);
+    let mut afs = AxdbExec::new(ctx, logical, engine).await;
+    println!(
+        "Flattened Axdb execution plan: {:?}",
+        afs.axdb_execution_plan
+    );
+
+    afs.execute().await.unwrap();
+    let last_node = afs.last_node().await.unwrap();
+    let output = last_node.lock().await.output().clone().unwrap();
+    println!("Output page: {:?}", output.page);
+
+    afs.keygen().await.unwrap();
+    afs.prove().await.unwrap();
+    afs.verify().await.unwrap();
+}
+
+#[tokio::test]
+pub async fn test_page_scan_with_filter() {
+    let ctx = SessionContext::new();
+
+    let cp = committed_page!(
+        "example",
+        "tests/data/example.page.bin",
+        "tests/data/example.schema.bin",
+        BabyBearPoseidon2Config
+    );
+    let page_id = cp.page_id.clone();
+    ctx.register_table(page_id.clone(), Arc::new(cp.clone()))
+        .unwrap();
 
     use datafusion::logical_expr::{col, lit, table_scan};
     let schema = cp.schema.clone();
     let logical = table_scan(Some(page_id), &schema, None)
         .unwrap()
         .filter(col("a").lt(lit(10)))
-        .unwrap()
-        .filter(col("a").lt(lit(11)))
         .unwrap()
         .build()
         .unwrap();

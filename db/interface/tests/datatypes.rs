@@ -38,7 +38,7 @@ where
         Field::new("d1", DataType::UInt64, false),
         Field::new("d2", DataType::UInt16, false),
     ]);
-    CommittedPage::<SC>::new("test".to_string(), schema, page, None)
+    CommittedPage::<SC>::new(schema, page)
 }
 
 #[tokio::test]

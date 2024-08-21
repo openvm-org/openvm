@@ -20,3 +20,6 @@ rustc-*
 
 # Directory used by VSCode for debugging
 .vscode/
+
+# Axiom intermediate files
+.axiom/

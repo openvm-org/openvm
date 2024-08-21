@@ -5,6 +5,7 @@ use std::{
 };
 
 use datafusion::arrow::error::Result;
+use rand::{rngs::OsRng, RngCore};
 
 pub mod pk;
 pub mod table;
@@ -22,4 +23,11 @@ pub fn read_bytes(path: &Path) -> Option<Vec<u8>> {
     let mut buf = vec![];
     reader.read_to_end(&mut buf).unwrap();
     Some(buf)
+}
+
+pub fn generate_random_bytes(num_bytes: usize) -> String {
+    let mut bytes = vec![0u8; num_bytes];
+    OsRng.fill_bytes(&mut bytes);
+    let h = hex::encode(bytes);
+    format!("0x{}", h)
 }

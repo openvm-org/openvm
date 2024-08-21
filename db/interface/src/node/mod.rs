@@ -19,6 +19,7 @@ use self::{filter::Filter, page_scan::PageScan, projection::Projection};
 use crate::{committed_page::CommittedPage, expr::AxdbExpr};
 
 pub mod filter;
+pub mod functionality;
 pub mod page_scan;
 pub mod projection;
 

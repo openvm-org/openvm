@@ -14,7 +14,7 @@ use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
 use tracing::info;
 
-use super::AxdbNodeExecutable;
+use super::{functionality::filter::FilterFn, AxdbNodeExecutable};
 use crate::{
     committed_page::CommittedPage,
     expr::AxdbExpr,
@@ -107,91 +107,104 @@ where
             );
         }
         let rb = &record_batches[0];
-        let page = CommittedPage::from_record_batch(rb.clone(), MAX_ROWS);
-        self.output = Some(page);
+        let mut committed_page = CommittedPage::from_record_batch(rb.clone(), MAX_ROWS);
 
+        if self.filters.len() > 0 {
+            for filter in &self.filters {
+                committed_page = FilterFn::<SC, E>::execute(filter, committed_page).await?;
+            }
+        }
+
+        self.output = Some(committed_page);
         Ok(())
     }
 
     async fn keygen(&mut self, _ctx: &SessionContext, engine: &E) -> Result<()> {
         info!("keygen PageScan");
-        let (idx_len, data_len) = self.page_stats();
+        if self.filters.len() > 0 {}
+        // let (idx_len, data_len) = self.page_stats();
 
-        let page_controller = self.page_controller(idx_len, data_len);
-        let ops_sender = ExecutionAir::new(OPS_BUS_IDX, idx_len, data_len);
+        // let page_controller = self.page_controller(idx_len, data_len);
+        // let ops_sender = ExecutionAir::new(OPS_BUS_IDX, idx_len, data_len);
 
-        let mut keygen_builder = engine.keygen_builder();
-        page_controller.set_up_keygen_builder(&mut keygen_builder, &ops_sender);
-        let pk = keygen_builder.generate_pk();
-        self.pk = Some(pk);
+        // let mut keygen_builder = engine.keygen_builder();
+        // page_controller.set_up_keygen_builder(&mut keygen_builder, &ops_sender);
+        // let pk = keygen_builder.generate_pk();
+        // self.pk = Some(pk);
 
         Ok(())
     }
 
     async fn prove(&mut self, ctx: &SessionContext, engine: &E) -> Result<()> {
         info!("prove PageScan");
-        let (idx_len, data_len) = self.page_stats();
-
-        let record_batches = get_record_batches(ctx, &self.table_name).await.unwrap();
-        if record_batches.len() != 1 {
-            panic!(
-                "Unexpected number of record batches in PageScan: {}",
-                record_batches.len()
-            );
+        if self.filters.len() > 0 {
+            for filter in &self.filters {
+                // FilterFn::prove(filter, committed_page).await?;
+            }
         }
-        let rb = &record_batches[0];
-        let committed_page: CommittedPage<SC> =
-            CommittedPage::from_record_batch(rb.clone(), MAX_ROWS);
-        let zk_ops = convert_to_ops::<SC>(rb.clone());
 
-        let mut page_controller = self.page_controller(idx_len, data_len);
+        // let (idx_len, data_len) = self.page_stats();
 
-        let ops_sender = ExecutionAir::new(OPS_BUS_IDX, idx_len, data_len);
-        let prover = engine.prover();
-        let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
-        let page_init = committed_page.page;
+        // let record_batches = get_record_batches(ctx, &self.table_name).await.unwrap();
+        // if record_batches.len() != 1 {
+        //     panic!(
+        //         "Unexpected number of record batches in PageScan: {}",
+        //         record_batches.len()
+        //     );
+        // }
+        // let rb = &record_batches[0];
+        // let committed_page: CommittedPage<SC> =
+        //     CommittedPage::from_record_batch(rb.clone(), MAX_ROWS);
+        // let zk_ops = convert_to_ops::<SC>(rb.clone());
 
-        let (init_page_pdata, final_page_pdata) = page_controller.load_page_and_ops(
-            &page_init,
-            None, //Some(Arc::new(init_prover_data)),
-            None,
-            &zk_ops,
-            MAX_ROWS * 2,
-            &mut trace_builder.committer,
-        );
+        // let mut page_controller = self.page_controller(idx_len, data_len);
 
-        let ops_sender_trace = ops_sender.generate_trace(&zk_ops, MAX_ROWS);
-        let pk = self.pk.as_ref().unwrap();
+        // let ops_sender = ExecutionAir::new(OPS_BUS_IDX, idx_len, data_len);
+        // let prover = engine.prover();
+        // let mut trace_builder = TraceCommitmentBuilder::new(prover.pcs());
+        // let page_init = committed_page.page;
 
-        let proof = page_controller.prove(
-            engine,
-            pk,
-            &mut trace_builder,
-            init_page_pdata,
-            final_page_pdata,
-            &ops_sender,
-            ops_sender_trace,
-        );
-        self.proof = Some(proof);
+        // let (init_page_pdata, final_page_pdata) = page_controller.load_page_and_ops(
+        //     &page_init,
+        //     None, //Some(Arc::new(init_prover_data)),
+        //     None,
+        //     &zk_ops,
+        //     MAX_ROWS * 2,
+        //     &mut trace_builder.committer,
+        // );
+
+        // let ops_sender_trace = ops_sender.generate_trace(&zk_ops, MAX_ROWS);
+        // let pk = self.pk.as_ref().unwrap();
+
+        // let proof = page_controller.prove(
+        //     engine,
+        //     pk,
+        //     &mut trace_builder,
+        //     init_page_pdata,
+        //     final_page_pdata,
+        //     &ops_sender,
+        //     ops_sender_trace,
+        // );
+        // self.proof = Some(proof);
 
         Ok(())
     }
 
     async fn verify(&self, _ctx: &SessionContext, engine: &E) -> Result<()> {
         info!("verify PageScan");
-        let (idx_len, data_len) = self.page_stats();
+        // let (idx_len, data_len) = self.page_stats();
 
-        let page_controller = self.page_controller(idx_len, data_len);
+        // let page_controller = self.page_controller(idx_len, data_len);
 
-        let pk = self.pk.as_ref().unwrap();
-        let vk = pk.vk();
+        // let pk = self.pk.as_ref().unwrap();
+        // let vk = pk.vk();
 
-        let ops_sender = ExecutionAir::new(OPS_BUS_IDX, idx_len, data_len);
+        // let ops_sender = ExecutionAir::new(OPS_BUS_IDX, idx_len, data_len);
 
-        let proof = self.proof.as_ref().unwrap();
-        page_controller
-            .verify(engine, vk, proof, &ops_sender)
-            .unwrap();
+        // let proof = self.proof.as_ref().unwrap();
+        // page_controller
+        //     .verify(engine, vk, proof, &ops_sender)
+        //     .unwrap();
 
         Ok(())
     }

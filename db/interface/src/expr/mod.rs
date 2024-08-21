@@ -1,3 +1,4 @@
+use afs_page::single_page_index_scan::page_index_scan_input::Comp;
 use datafusion::{logical_expr::Expr, scalar::ScalarValue};
 
 use self::expressions::BinaryExpr;
@@ -39,6 +40,18 @@ impl AxdbExpr {
                 })
             }
             _ => panic!("Unsupported expression: {:?}", expr),
+        }
+    }
+
+    /// Decomposes a binary expression into the left side, the operator, and the right side
+    pub fn decompose_binary_expr(&self) -> (AxdbExpr, Comp, AxdbExpr) {
+        // NOTE: we currently only support a predicate and a right-side value (left side value is the index column)
+        match self {
+            AxdbExpr::BinaryExpr(expr) => {
+                let op = &expr.op;
+                (*expr.left.clone(), op.clone(), *expr.right.clone())
+            }
+            _ => panic!("Unsupported expression type"),
         }
     }
 }
