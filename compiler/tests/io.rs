@@ -5,7 +5,6 @@ use afs_compiler::{
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use stark_vm::cpu::WORD_SIZE;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
@@ -54,11 +53,11 @@ fn test_io() {
         ],
     ];
 
-    let mut compiler = AsmCompiler::new(WORD_SIZE);
+    let mut compiler = AsmCompiler::new(1);
     compiler.build(builder.operations);
     let asm_code = compiler.code();
     println!("{}", asm_code);
 
-    let program = convert_program::<WORD_SIZE, F, EF>(asm_code, CompilerOptions::default());
-    execute_program_and_generate_traces::<WORD_SIZE>(program, witness_stream);
+    let program = convert_program::<1, F, EF>(asm_code, CompilerOptions::default());
+    execute_program_and_generate_traces(program, witness_stream);
 }

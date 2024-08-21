@@ -1,12 +1,10 @@
-use afs_compiler::{asm::AsmBuilder, prelude::RVar, util::end_to_end_test};
+use afs_compiler::{asm::AsmBuilder, prelude::RVar, util::execute_program_and_generate_traces};
 use p3_baby_bear::BabyBear;
 use p3_field::extension::BinomialExtensionField;
 use rand::{thread_rng, Rng};
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
-
-const WORD_SIZE: usize = 1;
 
 // #[test]
 // fn test_compiler_poseidon2_permute() {
@@ -87,5 +85,6 @@ fn test_compiler_poseidon2_hash_1() {
 
     builder.halt();
 
-    end_to_end_test::<WORD_SIZE, _>(builder, vec![]);
+    //end_to_end_test(builder, vec![]);
+    execute_program_and_generate_traces(builder.compile_isa(), vec![]);
 }

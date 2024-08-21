@@ -39,7 +39,7 @@ pub fn benchmark_fib_verifier_program(n: usize) -> Result<()> {
 
     builder.halt();
 
-    let fib_program = builder.compile_isa::<1>();
+    let fib_program = builder.compile_isa();
 
     let vm_config = VmConfig {
         max_segment_len: 2000000,

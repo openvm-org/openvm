@@ -38,7 +38,7 @@ fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
 
     builder.halt();
 
-    builder.compile_isa::<1>()
+    builder.compile_isa()
 }
 
 #[test]

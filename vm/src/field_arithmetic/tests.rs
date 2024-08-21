@@ -1,28 +1,26 @@
 use core::borrow::Borrow;
 use std::ops::Deref;
 
+use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use afs_test_utils::{
+    config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng,
+};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::Rng;
 
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use afs_test_utils::{
-    config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng,
-};
-
+use super::{FieldArithmeticAir, FieldArithmeticChip};
 use crate::{
     arch::{
         bridge::ExecutionBus,
         chips::MachineChip,
-        instructions::{FIELD_ARITHMETIC_INSTRUCTIONS, OpCode::*},
+        instructions::{OpCode::*, FIELD_ARITHMETIC_INSTRUCTIONS},
         testing::{ExecutionTester, MachineChipTester, MemoryTester},
     },
     cpu::trace::Instruction,
     field_arithmetic::columns::{FieldArithmeticCols, FieldArithmeticIoCols},
 };
-
-use super::{FieldArithmeticAir, FieldArithmeticChip};
 
 #[test]
 fn field_arithmetic_air_test() {

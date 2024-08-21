@@ -4,17 +4,22 @@ use std::{
     fmt::Display,
 };
 
+use afs_primitives::{
+    is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
+};
+use afs_stark_backend::rap::AnyRap;
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::{Field, PrimeField32, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use afs_primitives::{
-    is_equal_vec::IsEqualVecAir, is_zero::IsZeroAir, sub_chip::LocalTraceInstructions,
+use super::{
+    columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
+    timestamp_delta, CpuChip, CpuState,
+    OpCode::{self, *},
+    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
 };
-use afs_stark_backend::rap::AnyRap;
-
 use crate::{
     arch::{
         chips::{MachineChip, OpCodeExecutor},
@@ -24,13 +29,6 @@ use crate::{
     cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
     memory::{compose, decompose},
     vm::ExecutionSegment,
-};
-
-use super::{
-    columns::{CpuAuxCols, CpuCols, CpuIoCols, MemoryAccessCols},
-    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE,
-    CpuChip,
-    CpuState, INST_WIDTH, OpCode::{self, *}, timestamp_delta,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -222,6 +220,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
         let mut is_done = false;
         let mut collect_metrics = vm.config.collect_metrics;
 
+        let cpu_options = vm.cpu_chip.borrow().air.options;
+        let num_public_values = cpu_options.num_public_values;
+
         loop {
             let pc_usize = pc.as_canonical_u64() as usize;
 
@@ -299,7 +300,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 return Err(ExecutionError::Fail(pc_usize));
             }
 
-            let mut public_value_flags = vec![F::zero(); vm.options().num_public_values];
+            let mut public_value_flags = vec![F::zero(); num_public_values];
 
             if vm.executors.contains_key(&opcode) {
                 let thing = vm.executors.get_mut(&opcode).unwrap();
@@ -311,9 +312,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 next_pc = F::from_canonical_usize(next_state.pc);
                 timestamp = next_state.timestamp;
             } else {
-                if !CORE_INSTRUCTIONS.contains(&opcode) {
-                    return Err(ExecutionError::DisabledOperation(pc_usize, opcode));
-                }
                 match opcode {
                     // d[a] <- e[d[c] + b]
                     LOADW => {
@@ -368,19 +366,18 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     PUBLISH => {
                         let public_value_index = read!(d, a).as_canonical_u64() as usize;
                         let value = read!(e, b);
-                        if public_value_index >= vm.options().num_public_values {
+                        if public_value_index >= num_public_values {
                             return Err(PublicValueIndexOutOfBounds(
                                 pc_usize,
-                                vm.options().num_public_values,
+                                num_public_values,
                                 public_value_index,
                             ));
                         }
                         public_value_flags[public_value_index] = F::one();
-                        match vm.cpu_chip.borrow().public_values[public_value_index] {
-                            None => {
-                                vm.cpu_chip.borrow_mut().public_values[public_value_index] =
-                                    Some(value)
-                            }
+
+                        let public_values = &mut vm.cpu_chip.borrow_mut().public_values;
+                        match public_values[public_value_index] {
+                            None => public_values[public_value_index] = Some(value),
                             Some(exising_value) => {
                                 if value != exising_value {
                                     return Err(PublicValueNotEqual(
@@ -433,7 +430,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     }
                     CT_START => cycle_tracker.start(debug, vm.collected_metrics.clone()),
                     CT_END => cycle_tracker.end(debug, vm.collected_metrics.clone()),
-                    _ => panic!("Unhandled CPU instruction"),
+                    _ => return Err(ExecutionError::DisabledOperation(pc_usize, opcode)),
                 };
                 timestamp += timestamp_delta(opcode);
             }
@@ -489,7 +486,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             vm.cpu_chip
                 .borrow_mut()
                 .rows
-                .push(cols.flatten(vm.options()));
+                .push(cols.flatten(cpu_options));
 
             pc = next_pc;
 

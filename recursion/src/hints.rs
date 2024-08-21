@@ -437,7 +437,7 @@ mod test {
 
         builder.halt();
 
-        let program = builder.compile_isa::<1>();
+        let program = builder.compile_isa();
         execute_program_and_generate_traces::<1>(program, stream);
     }
 
@@ -484,7 +484,7 @@ mod test {
 
         builder.halt();
 
-        let program = builder.compile_isa::<1>();
+        let program = builder.compile_isa();
         execute_program_and_generate_traces::<1>(program, stream);
     }
 }

@@ -1,5 +1,7 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
+use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_stark_backend::rap::AnyRap;
 use enum_dispatch::enum_dispatch;
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
@@ -7,12 +9,9 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
-use afs_stark_backend::rap::AnyRap;
-
 use crate::{
     arch::columns::ExecutionState,
-    cpu::{CpuChip, trace::Instruction},
+    cpu::{trace::Instruction, CpuChip},
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
     memory::offline_checker::MemoryChip,

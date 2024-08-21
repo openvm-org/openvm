@@ -7,7 +7,7 @@ use crate::{
         bridge::ExecutionBus,
         chips::OpCodeExecutor,
         columns::ExecutionState,
-        instructions::{FIELD_EXTENSION_INSTRUCTIONS, OpCode},
+        instructions::{OpCode, FIELD_EXTENSION_INSTRUCTIONS},
     },
     cpu::trace::Instruction,
     memory::offline_checker::MemoryChip,

@@ -1,5 +1,4 @@
 use p3_field::Field;
-
 use poseidon2_air::poseidon2::{
     columns::{Poseidon2Cols, Poseidon2ColsIndexMap},
     Poseidon2Air,

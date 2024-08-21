@@ -1,24 +1,22 @@
 use std::{array::from_fn, borrow::Borrow};
 
-use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use p3_field::{AbstractField, Field};
-use p3_matrix::Matrix;
-
 use afs_primitives::{
     is_equal_vec::{columns::IsEqualVecIoCols, IsEqualVecAir},
     is_zero::{columns::IsZeroIoCols, IsZeroAir},
     sub_chip::SubAir,
 };
 use afs_stark_backend::interaction::InteractionBuilder;
-
-use crate::arch::bridge::ExecutionBus;
+use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
+use p3_field::{AbstractField, Field};
+use p3_matrix::Matrix;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    CPU_MAX_READS_PER_CYCLE, CpuOptions,
-    INST_WIDTH,
-    OpCode::*, timestamp_delta,
+    timestamp_delta, CpuOptions,
+    OpCode::*,
+    CPU_MAX_READS_PER_CYCLE, INST_WIDTH,
 };
+use crate::arch::bridge::ExecutionBus;
 
 #[derive(Clone, Debug)]
 /// Air for the CPU. Carries no state and does not own execution.

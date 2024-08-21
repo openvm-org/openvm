@@ -97,7 +97,7 @@ impl VerifierProgram<InnerConfig> {
         builder.halt();
 
         const WORD_SIZE: usize = 1;
-        builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+        builder.compile_isa_with_options(CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()
         })

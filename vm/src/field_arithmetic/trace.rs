@@ -1,21 +1,16 @@
+use afs_primitives::{is_zero::IsZeroAir, sub_chip::LocalTraceInstructions};
+use afs_stark_backend::rap::AnyRap;
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use afs_primitives::{
-    is_zero::IsZeroAir,
-    sub_chip::LocalTraceInstructions,
-};
-use afs_stark_backend::rap::AnyRap;
-
-use crate::arch::{chips::MachineChip, instructions::OpCode};
-
 use super::{
-    ArithmeticOperation,
-    columns::{FieldArithmeticAuxCols, FieldArithmeticCols, FieldArithmeticIoCols}, FieldArithmeticAir, FieldArithmeticChip,
+    columns::{FieldArithmeticAuxCols, FieldArithmeticCols, FieldArithmeticIoCols},
+    ArithmeticOperation, FieldArithmeticAir, FieldArithmeticChip,
 };
+use crate::arch::{chips::MachineChip, instructions::OpCode};
 
 /// Constructs a new set of columns (including auxiliary columns) given inputs.
 fn generate_cols<T: PrimeField32>(operation: &ArithmeticOperation<T>) -> FieldArithmeticCols<T> {

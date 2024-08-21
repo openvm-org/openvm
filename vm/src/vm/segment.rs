@@ -5,25 +5,22 @@ use std::{
     sync::Arc,
 };
 
-use p3_commit::PolynomialSpace;
-use p3_field::PrimeField32;
-use p3_matrix::{
-    dense::{DenseMatrix, RowMajorMatrix},
-    Matrix,
-};
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
-
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::rap::AnyRap;
+use p3_commit::PolynomialSpace;
+use p3_field::PrimeField32;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use poseidon2_air::poseidon2::Poseidon2Config;
 
+use super::{VirtualMachineState, VmConfig, VmMetrics};
 use crate::{
     arch::{
         bridge::ExecutionBus,
         chips::{MachineChip, MachineChipVariant, OpCodeExecutorVariant},
-        instructions::{FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS, OpCode},
+        instructions::{OpCode, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS},
     },
-    cpu::{CpuChip, CpuOptions, POSEIDON2_DIRECT_BUS, RANGE_CHECKER_BUS, trace::ExecutionError},
+    cpu::{trace::ExecutionError, CpuChip, POSEIDON2_DIRECT_BUS, RANGE_CHECKER_BUS},
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
     memory::offline_checker::MemoryChip,
@@ -31,8 +28,6 @@ use crate::{
     program::{Program, ProgramChip},
     vm::cycle_tracker::CycleTracker,
 };
-
-use super::{VirtualMachineState, VmConfig, VmMetrics};
 
 pub struct ExecutionSegment<F: PrimeField32> {
     pub config: VmConfig,
@@ -157,64 +152,51 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         }
     }
 
-    pub fn options(&self) -> CpuOptions {
-        self.config.cpu_options()
-    }
-
-    /// Returns bool of whether to switch to next segment or not. This is called every clock cycle inside of CPU trace generation.
-    ///
-    /// Default config: switch if any runtime chip height exceeds 1<<20 - 100
-    pub fn should_segment(&mut self) -> bool {
-        false
-    }
-
     /// Stopping is triggered by should_segment()
     pub fn execute(&mut self) -> Result<(), ExecutionError> {
         CpuChip::<1, _>::execute(self)
     }
 
-    /// Called by VM to generate traces for current segment. Includes empty traces.
-    /// Should only be called after Self::execute
-    pub fn generate_traces(&mut self) -> Vec<DenseMatrix<F>> {
-        self.chips
-            .iter_mut()
-            .map(|chip| chip.generate_trace())
-            .collect()
+    /// Compile the AIRs and trace generation outputs for the chips used in this segment
+    /// Should be called after ::execute
+    pub fn produce_result<SC: StarkGenericConfig>(self) -> SegmentResult<SC>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        let mut result = SegmentResult {
+            airs: vec![],
+            traces: vec![],
+            public_values: vec![],
+            metrics: self.collected_metrics,
+        };
+
+        for mut chip in self.chips {
+            if chip.current_trace_height() != 0 {
+                result.airs.push(chip.air());
+                result.traces.push(chip.generate_trace());
+                result.public_values.push(chip.get_public_values());
+            }
+        }
+
+        result
     }
 
-    /// Generate Merkle proof/memory diff traces, and publish public values
+    /// Returns bool of whether to switch to next segment or not. This is called every clock cycle inside of CPU trace generation.
     ///
-    /// For now, only publishes program counter public values
-    pub fn generate_commitments(&mut self) -> Vec<DenseMatrix<F>> {
-        // self.cpu_chip.generate_pvs();
-        vec![]
-    }
-
-    // TODO[osama]: revisit this
-    /// Returns public values for all chips in this segment
-    pub fn get_public_values(&mut self) -> Vec<Vec<F>> {
+    /// Default config: switch if any runtime chip height exceeds 1<<20 - 100
+    ///
+    /// Used by CpuChip::execute, should be private in the future
+    pub fn should_segment(&mut self) -> bool {
         self.chips
-            .iter_mut()
-            .map(|chip| chip.get_public_values())
-            .collect()
+            .iter()
+            .any(|chip| chip.current_trace_height() > self.config.max_segment_len)
     }
 
+    /// Used by CpuChip::execute, should be private in the future
     pub fn current_trace_cells(&self) -> usize {
         self.chips
             .iter()
             .map(|chip| chip.current_trace_cells())
             .sum()
-    }
-
-    pub fn produce_result<SC: StarkGenericConfig>(mut self) -> SegmentResult<SC>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        SegmentResult {
-            airs: self.chips.iter().map(MachineChip::air).collect(),
-            traces: self.generate_traces(),
-            public_values: self.get_public_values(),
-            metrics: self.collected_metrics,
-        }
     }
 }

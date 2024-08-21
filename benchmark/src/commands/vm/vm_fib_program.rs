@@ -31,7 +31,7 @@ pub fn benchmark_fib_program(n: usize) -> Result<()> {
 
     builder.halt();
 
-    let fib_program = builder.compile_isa::<1>();
+    let fib_program = builder.compile_isa();
 
     vm_benchmark_execute_and_prove::<1>(fib_program, vec![], "VM Fibonacci Program")
 }

@@ -1,9 +1,8 @@
 use std::{array, cell::RefCell, rc::Rc};
 
-use p3_field::PrimeField32;
-
 use afs_primitives::sub_chip::LocalTraceInstructions;
 use columns::*;
+use p3_field::PrimeField32;
 use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
 
 use crate::{
@@ -166,7 +165,7 @@ impl<const WIDTH: usize, F: PrimeField32> OpCodeExecutor<F> for Poseidon2Chip<WI
         debug_assert_eq!(crate::poseidon2::WIDTH, CHUNK * 2);
 
         let mut timestamp = prev_state.timestamp;
-        let mut read = |address_space, addr, ts: &mut usize| {
+        let read = |address_space, addr, ts: &mut usize| {
             *ts += 1;
             self.memory_chip
                 .borrow_mut()

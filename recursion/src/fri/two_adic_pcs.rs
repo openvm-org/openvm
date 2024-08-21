@@ -381,7 +381,7 @@ pub mod tests {
         pcs_var.verify(&mut builder, rounds, proofvar, &mut challenger);
         builder.halt();
 
-        let program = builder.compile_isa::<WORD_SIZE>();
+        let program = builder.compile_isa();
         let mut witness_stream = Vec::new();
         witness_stream.extend(proof.write());
         (program, witness_stream)
@@ -393,6 +393,6 @@ pub mod tests {
         use afs_compiler::util::execute_program_and_generate_traces;
 
         let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 16);
-        execute_program_and_generate_traces::<WORD_SIZE>(program, witness);
+        execute_program_and_generate_traces(program, witness);
     }
 }

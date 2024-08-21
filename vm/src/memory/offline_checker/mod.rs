@@ -1,15 +1,13 @@
 use std::{array::from_fn, collections::HashMap, sync::Arc};
 
+use afs_primitives::{offline_checker::OfflineChecker, range_gate::RangeCheckerGateChip};
 use p3_field::PrimeField32;
 
-use afs_primitives::{offline_checker::OfflineChecker, range_gate::RangeCheckerGateChip};
-
+use super::MemoryAccess;
 use crate::{
     cpu::{MEMORY_BUS, RANGE_CHECKER_BUS},
     memory::{compose, decompose, OpType},
 };
-
-use super::MemoryAccess;
 
 mod air;
 mod trace;

@@ -35,11 +35,11 @@ impl ExecutionBus {
         fields.extend(instruction.flatten());
         builder.push_receive(self.0, fields, multiplicity);
     }
-    pub fn initial_final<AB: InteractionBuilder>(
+    /*pub fn initial_final<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         prev_state: ExecutionState<AB::Expr>,
         next_state: ExecutionState<AB::Expr>,
     ) {
-    }
+    }*/
 }

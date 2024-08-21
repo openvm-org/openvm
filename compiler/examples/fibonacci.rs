@@ -5,7 +5,6 @@ use afs_compiler::{
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use stark_vm::cpu::WORD_SIZE;
 
 fn fibonacci(n: u32) -> u32 {
     if n == 0 {
@@ -48,9 +47,9 @@ fn main() {
     //builder.print_f(a);
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
+    let program = builder.compile_isa();
     display_program(&program.instructions);
-    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
+    execute_program_and_generate_traces(program, vec![]);
 
     // let program = code.machine_code();
     // println!("Program size = {}", program.instructions.len());

@@ -1,13 +1,11 @@
+use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use afs_stark_backend::interaction::InteractionBuilder;
-
+use super::{columns::FieldArithmeticIoCols, FieldArithmeticAir};
 use crate::{
     arch::columns::InstructionCols, cpu::MEMORY_BUS,
     field_arithmetic::columns::FieldArithmeticAuxCols,
 };
-
-use super::{columns::FieldArithmeticIoCols, FieldArithmeticAir};
 
 impl FieldArithmeticAir {
     pub fn eval_interactions<AB: InteractionBuilder>(

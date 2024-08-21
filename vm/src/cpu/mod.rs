@@ -1,8 +1,7 @@
 use core::panic;
 
-use p3_baby_bear::BabyBear;
-
 pub use air::CpuAir;
+use p3_baby_bear::BabyBear;
 
 use crate::{
     arch::{

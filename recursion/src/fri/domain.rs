@@ -281,8 +281,8 @@ pub(crate) mod tests {
         builder.halt();
 
         const WORD_SIZE: usize = 1;
-        let program = builder.compile_isa::<WORD_SIZE>();
-        execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
+        let program = builder.compile_isa();
+        execute_program_and_generate_traces(program, vec![]);
     }
     #[test]
     fn test_domain_static() {
