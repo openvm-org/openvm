@@ -1,4 +1,6 @@
-use p3_field::PrimeField64;
+use std::array;
+
+use p3_field::{AbstractField, Field};
 
 pub mod audit;
 // pub mod expand;
@@ -44,13 +46,15 @@ impl<S, T> MemoryAddress<S, T> {
 }
 
 // panics if the word is not equal to decompose(elem) for some elem: F
-pub fn compose<const WORD_SIZE: usize, F: PrimeField64>(word: [F; WORD_SIZE]) -> F {
+pub fn compose<const WORD_SIZE: usize, F: Field>(word: [F; WORD_SIZE]) -> F {
     for &cell in word.iter().skip(1) {
         assert_eq!(cell, F::zero());
     }
     word[0]
 }
 
-pub fn decompose<const WORD_SIZE: usize, F: PrimeField64>(field_elem: F) -> [F; WORD_SIZE] {
-    std::array::from_fn(|i| if i == 0 { field_elem } else { F::zero() })
+pub fn decompose<const WORD_SIZE: usize, F: AbstractField>(field_elem: F) -> [F; WORD_SIZE] {
+    let mut array = array::from_fn(|_| F::zero());
+    array[0] = field_elem;
+    array
 }

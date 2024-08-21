@@ -19,7 +19,7 @@ use super::columns::FieldExtensionArithmeticIoCols;
 use crate::{
     cpu::{OpCode, FIELD_EXTENSION_INSTRUCTIONS, RANGE_CHECKER_BUS, WORD_SIZE},
     field_extension::chip::{
-        FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticOperation,
+        FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticRecord,
     },
     memory::manager::MemoryManager,
     vm::config::MemoryConfig,
@@ -28,7 +28,7 @@ use crate::{
 /// Function for testing that generates a random program consisting only of field arithmetic operations.
 fn generate_field_extension_operations(
     len_ops: usize,
-) -> Vec<FieldExtensionArithmeticOperation<1, BabyBear>> {
+) -> Vec<FieldExtensionArithmeticRecord<1, BabyBear>> {
     let mut rng = create_seeded_rng();
 
     let mut requests = vec![];
@@ -59,7 +59,7 @@ fn generate_field_extension_operations(
 
         let result = FieldExtensionArithmetic::solve(op, operand1, operand2).unwrap();
 
-        requests.push(FieldExtensionArithmeticOperation {
+        requests.push(FieldExtensionArithmeticRecord {
             clk: timestamp,
             opcode: op,
             op_a,
@@ -67,9 +67,9 @@ fn generate_field_extension_operations(
             op_c,
             d,
             e,
-            operand1,
-            operand2,
-            result,
+            x: operand1,
+            y: operand2,
+            z: result,
         });
     }
     requests
@@ -99,7 +99,7 @@ fn field_extension_air_test() {
         range_checker,
     );
     let operations = generate_field_extension_operations(len_ops);
-    chip.operations = operations;
+    chip.records = operations;
 
     let mut extension_trace = chip.generate_trace();
 

@@ -259,7 +259,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         );
         metrics.insert(
             "field_extension_ops".to_string(),
-            self.field_extension_chip.operations.len(),
+            self.field_extension_chip.records.len(),
         );
         metrics.insert(
             "range_checker_count".to_string(),

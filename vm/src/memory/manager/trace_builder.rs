@@ -43,7 +43,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             .borrow_mut()
             .read_word(addr_space, pointer);
         self.accesses_buffer
-            .push(self.memory_access_to_checker_aux_cols(&mem_access));
+            .push(self.aux_col_from_access(&mem_access));
 
         mem_access.op
     }
@@ -59,7 +59,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             .borrow_mut()
             .write_word(addr_space, pointer, data);
         self.accesses_buffer
-            .push(self.memory_access_to_checker_aux_cols(&mem_access));
+            .push(self.aux_col_from_access(&mem_access));
 
         mem_access.op
     }
@@ -82,7 +82,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             .borrow_mut()
             .disabled_op(addr_space, op_type);
         self.accesses_buffer
-            .push(self.memory_access_to_checker_aux_cols(&mem_access));
+            .push(self.aux_col_from_access(&mem_access));
 
         mem_access.op
     }
@@ -95,8 +95,20 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         std::mem::take(&mut self.accesses_buffer)
     }
 
-    fn memory_access_to_checker_aux_cols(
+    pub fn aux_col_from_access(
         &self,
+        access: &MemoryAccess<WORD_SIZE, F>,
+    ) -> MemoryOfflineCheckerAuxCols<WORD_SIZE, F> {
+        Self::memory_access_to_checker_aux_cols(
+            &self.offline_checker,
+            self.range_checker.clone(),
+            access,
+        )
+    }
+
+    pub fn memory_access_to_checker_aux_cols(
+        offline_checker: &MemoryOfflineChecker,
+        range_checker: Arc<RangeCheckerGateChip>,
         memory_access: &MemoryAccess<WORD_SIZE, F>,
     ) -> MemoryOfflineCheckerAuxCols<WORD_SIZE, F> {
         let timestamp_prev = memory_access.old_cell.clk.as_canonical_u32();
@@ -104,12 +116,12 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
 
         debug_assert!(timestamp_prev < timestamp);
         let clk_lt_cols = LocalTraceInstructions::generate_trace_row(
-            &self.offline_checker.timestamp_lt_air,
-            (timestamp_prev, timestamp, self.range_checker.clone()),
+            &offline_checker.timestamp_lt_air,
+            (timestamp_prev, timestamp, range_checker),
         );
 
         let addr_space_is_zero_cols = LocalTraceInstructions::generate_trace_row(
-            &self.offline_checker.is_zero_air,
+            &offline_checker.is_zero_air,
             memory_access.op.addr_space,
         );
 

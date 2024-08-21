@@ -11,16 +11,13 @@ use p3_field::{AbstractField, Field, PrimeField32};
 
 use crate::{
     cpu::{trace::Instruction, OpCode, FIELD_EXTENSION_INSTRUCTIONS},
-    field_extension::{
-        air::FieldExtensionArithmeticAir,
-        columns::{
-            FieldExtensionArithmeticAuxCols, FieldExtensionArithmeticCols,
-            FieldExtensionArithmeticIoCols,
-        },
-    },
+    field_extension::air::FieldExtensionArithmeticAir,
     memory::{
-        manager::{trace_builder::MemoryTraceBuilder, MemoryManager},
-        offline_checker::bridge::MemoryOfflineChecker,
+        manager::MemoryManager,
+        offline_checker::{
+            bridge::{emb, proj, MemoryOfflineChecker},
+            columns::MemoryAccess,
+        },
         OpType,
     },
     vm::config::MemoryConfig,
@@ -29,31 +26,39 @@ use crate::{
 pub const BETA: usize = 11;
 pub const EXTENSION_DEGREE: usize = 4;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct FieldExtensionArithmeticOperation<const WORD_SIZE: usize, F> {
+/// Records an arithmetic operation that happened at run-time.
+#[derive(Debug)]
+pub struct FieldExtensionArithmeticRecord<const WORD_SIZE: usize, F> {
     pub clk: usize,
     pub opcode: OpCode,
+    // TODO[zach]: these entries are redundant with the memory accesses below.
     pub op_a: F,
     pub op_b: F,
     pub op_c: F,
     pub d: F,
     pub e: F,
-    pub operand1: [F; EXTENSION_DEGREE],
-    pub operand2: [F; EXTENSION_DEGREE],
-    pub result: [F; EXTENSION_DEGREE],
+    pub x: [F; EXTENSION_DEGREE],
+    pub y: [F; EXTENSION_DEGREE],
+    pub z: [F; EXTENSION_DEGREE],
+    /// Memory accesses for reading `x`.
+    pub x_reads: [MemoryAccess<WORD_SIZE, F>; 4],
+    /// Memory accesses for reading `y`.
+    pub y_reads: [MemoryAccess<WORD_SIZE, F>; 4],
+    /// Memory accesses for writing `z`.
+    pub z_writes: [MemoryAccess<WORD_SIZE, F>; 4],
 }
 
+/// A chip for performing arithmetic operations over the field extension
+/// defined by the irreducible polynomial x^4 - 11.
 pub struct FieldExtensionArithmeticChip<
     const NUM_WORDS: usize,
     const WORD_SIZE: usize,
     F: PrimeField32,
 > {
     pub air: FieldExtensionArithmeticAir<WORD_SIZE>,
-    pub operations: Vec<FieldExtensionArithmeticOperation<WORD_SIZE, F>>,
-
-    pub memory_manager: Rc<RefCell<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
-    pub memory: MemoryTraceBuilder<NUM_WORDS, WORD_SIZE, F>,
-    pub range_checker: Arc<RangeCheckerGateChip>,
+    pub(crate) memory: Rc<RefCell<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
+    pub(crate) range_checker: Arc<RangeCheckerGateChip>,
+    pub(crate) records: Vec<FieldExtensionArithmeticRecord<WORD_SIZE, F>>,
 }
 
 impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
@@ -62,21 +67,15 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     #[allow(clippy::new_without_default)]
     pub fn new(
         mem_config: MemoryConfig,
-        memory_manager: Rc<RefCell<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
+        memory: Rc<RefCell<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
         let air = FieldExtensionArithmeticAir {
             mem_oc: MemoryOfflineChecker::new(mem_config.clk_max_bits, mem_config.decomp),
         };
-        let memory = MemoryTraceBuilder::<NUM_WORDS, WORD_SIZE, F>::new(
-            memory_manager.clone(),
-            range_checker.clone(),
-            air.mem_oc,
-        );
         Self {
             air,
-            operations: vec![],
-            memory_manager,
+            records: vec![],
             memory,
             range_checker,
         }
@@ -90,7 +89,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         }
     }
 
-    pub fn calculate(&mut self, clk: usize, instruction: Instruction<F>) -> [F; EXTENSION_DEGREE] {
+    pub fn process(&mut self, clk: usize, instruction: Instruction<F>) -> [F; EXTENSION_DEGREE] {
         let Instruction {
             opcode,
             op_a,
@@ -102,24 +101,24 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             op_g: _g,
             debug: _debug,
         } = instruction;
+
         assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
 
-        let operand1 = self.read_extension_element(d, op_b);
-        let operand2 = if opcode == OpCode::BBE4INV {
-            // 4 disabled reads
-            for _ in 0..4 {
-                self.memory.disabled_op(e, OpType::Read);
-            }
-            [F::zero(); EXTENSION_DEGREE]
+        let x_reads = self.read_extension_element(d, op_b);
+        let x: [F; EXTENSION_DEGREE] = array::from_fn(|i| proj(x_reads[i].op.cell.data));
+
+        let y_reads = if opcode == OpCode::BBE4INV {
+            array::from_fn(|_| self.memory.borrow_mut().disabled_op(e, OpType::Read))
         } else {
             self.read_extension_element(e, op_c)
         };
+        let y: [F; EXTENSION_DEGREE] = array::from_fn(|i| proj(y_reads[i].op.cell.data));
 
-        let result = FieldExtensionArithmetic::solve(opcode, operand1, operand2).unwrap();
+        let z = FieldExtensionArithmetic::solve(opcode, x, y).unwrap();
 
-        self.write_extension_element(d, op_a, result);
+        let z_writes = self.write_extension_element(d, op_a, z);
 
-        self.operations.push(FieldExtensionArithmeticOperation {
+        self.records.push(FieldExtensionArithmeticRecord {
             clk,
             opcode,
             op_a,
@@ -127,29 +126,30 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             op_c,
             d,
             e,
-            operand1,
-            operand2,
-            result,
+            x,
+            y,
+            z,
+            x_reads,
+            y_reads,
+            z_writes,
         });
 
-        result
+        z
     }
 
-    fn read_extension_element(&mut self, address_space: F, address: F) -> [F; EXTENSION_DEGREE] {
+    fn read_extension_element(
+        &mut self,
+        address_space: F,
+        address: F,
+    ) -> [MemoryAccess<WORD_SIZE, F>; 4] {
         assert_ne!(address_space, F::zero());
 
-        let mut result = [F::zero(); EXTENSION_DEGREE];
-
-        for (i, result_elem) in result.iter_mut().enumerate() {
-            let data = self.memory.read_elem(
+        array::from_fn(|i| {
+            self.memory.borrow_mut().read_word(
                 address_space,
                 address + F::from_canonical_usize(i * WORD_SIZE),
-            );
-
-            *result_elem = data;
-        }
-
-        result
+            )
+        })
     }
 
     fn write_extension_element(
@@ -157,63 +157,20 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         address_space: F,
         address: F,
         result: [F; EXTENSION_DEGREE],
-    ) {
+    ) -> [MemoryAccess<WORD_SIZE, F>; 4] {
         assert_ne!(address_space, F::zero());
 
-        for (i, row) in result.iter().enumerate() {
-            self.memory.write_elem(
+        array::from_fn(|i| {
+            self.memory.borrow_mut().write_word(
                 address_space,
-                address + F::from_canonical_usize(i * WORD_SIZE),
-                *row,
-            );
-        }
+                address + F::from_canonical_usize(i),
+                emb(result[i]),
+            )
+        })
     }
 
     pub fn current_height(&self) -> usize {
-        self.operations.len()
-    }
-
-    pub fn make_blank_row(&self) -> FieldExtensionArithmeticCols<WORD_SIZE, F> {
-        let mut trace_builder = MemoryTraceBuilder::<NUM_WORDS, WORD_SIZE, F>::new(
-            self.memory_manager.clone(),
-            self.range_checker.clone(),
-            self.air.mem_oc,
-        );
-
-        let clk = self.memory_manager.borrow().get_clk();
-
-        for _ in 0..8 {
-            trace_builder.disabled_op(F::zero(), OpType::Read);
-        }
-        for _ in 0..4 {
-            trace_builder.disabled_op(F::zero(), OpType::Write);
-        }
-        let mut mem_oc_aux_iter = trace_builder.take_accesses_buffer().into_iter();
-
-        FieldExtensionArithmeticCols {
-            io: FieldExtensionArithmeticIoCols {
-                opcode: F::from_canonical_u32(OpCode::FE4ADD as u32),
-                clk,
-                x: [F::zero(); EXTENSION_DEGREE],
-                y: [F::zero(); EXTENSION_DEGREE],
-                z: [F::zero(); EXTENSION_DEGREE],
-            },
-            aux: FieldExtensionArithmeticAuxCols {
-                is_valid: F::zero(),
-                valid_y_read: F::zero(),
-                op_a: F::zero(),
-                op_b: F::zero(),
-                op_c: F::zero(),
-                d: F::zero(),
-                e: F::zero(),
-                is_add: F::one(),
-                is_sub: F::zero(),
-                is_mul: F::zero(),
-                is_inv: F::zero(),
-                inv: [F::zero(); EXTENSION_DEGREE],
-                mem_oc_aux_cols: array::from_fn(|_| mem_oc_aux_iter.next().unwrap()),
-            },
-        }
+        self.records.len()
     }
 }
 

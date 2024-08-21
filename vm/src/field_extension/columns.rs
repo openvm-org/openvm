@@ -2,7 +2,6 @@ use std::array;
 
 use afs_derive::AlignedBorrow;
 use afs_primitives::is_less_than::IsLessThanAir;
-use p3_field::Field;
 
 use crate::{
     field_extension::{air::FieldExtensionArithmeticAir, chip::EXTENSION_DEGREE},
@@ -30,8 +29,9 @@ pub struct FieldExtensionArithmeticIoCols<T> {
 
 #[repr(C)]
 pub struct FieldExtensionArithmeticAuxCols<const WORD_SIZE: usize, T> {
+    /// Whether the row corresponds an actual event (vs a dummy row for padding).
     pub is_valid: T,
-    // whether the y read occurs: is_valid * (1 - is_inv)
+    // Whether the y read occurs: is_valid * (1 - is_inv)
     pub valid_y_read: T,
     pub op_a: T,
     pub op_b: T,
@@ -48,8 +48,12 @@ pub struct FieldExtensionArithmeticAuxCols<const WORD_SIZE: usize, T> {
     pub is_inv: T,
     // the field extension inverse of x
     pub inv: [T; EXTENSION_DEGREE],
-    // There should be 3 * EXTENSION_DEGREE memory accesses (WORD_SIZE=1)
-    pub mem_oc_aux_cols: [MemoryOfflineCheckerAuxCols<WORD_SIZE, T>; 12],
+    /// The aux columns for the x reads.
+    pub read_x_aux_cols: [MemoryOfflineCheckerAuxCols<WORD_SIZE, T>; EXTENSION_DEGREE],
+    /// The aux columns for the y reads.
+    pub read_y_aux_cols: [MemoryOfflineCheckerAuxCols<WORD_SIZE, T>; EXTENSION_DEGREE],
+    /// The aux columns for the z writes.
+    pub write_aux_cols: [MemoryOfflineCheckerAuxCols<WORD_SIZE, T>; EXTENSION_DEGREE],
 }
 
 impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T> {
@@ -90,15 +94,19 @@ impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T
                 is_mul: next(),
                 is_inv: next(),
                 inv: array::from_fn(|_| next()),
-                mem_oc_aux_cols: array::from_fn(|_| {
+                read_x_aux_cols: array::from_fn(|_| {
+                    MemoryOfflineCheckerAuxCols::try_from_iter(iter, lt_air)
+                }),
+                read_y_aux_cols: array::from_fn(|_| {
+                    MemoryOfflineCheckerAuxCols::try_from_iter(iter, lt_air)
+                }),
+                write_aux_cols: array::from_fn(|_| {
                     MemoryOfflineCheckerAuxCols::try_from_iter(iter, lt_air)
                 }),
             },
         }
     }
 }
-
-impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T> where T: Field {}
 
 impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
     pub fn get_width() -> usize {
@@ -118,7 +126,7 @@ impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
 
 impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticAuxCols<WORD_SIZE, T> {
     pub fn get_width(oc: &MemoryOfflineChecker) -> usize {
-        EXTENSION_DEGREE + 11 + 12 * MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(oc)
+        EXTENSION_DEGREE + 11 + 12 * MemoryOfflineCheckerAuxCols::<1, T>::width(oc)
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -136,7 +144,13 @@ impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticAuxCols<WORD_SIZE
             self.is_inv.clone(),
         ];
         result.extend_from_slice(&self.inv);
-        for mem_oc_aux_cols in self.mem_oc_aux_cols.iter().cloned() {
+        for mem_oc_aux_cols in self.read_x_aux_cols.iter().cloned() {
+            result.extend(mem_oc_aux_cols.flatten());
+        }
+        for mem_oc_aux_cols in self.read_y_aux_cols.iter().cloned() {
+            result.extend(mem_oc_aux_cols.flatten());
+        }
+        for mem_oc_aux_cols in self.write_aux_cols.iter().cloned() {
             result.extend(mem_oc_aux_cols.flatten());
         }
         result

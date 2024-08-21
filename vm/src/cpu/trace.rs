@@ -244,7 +244,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let mut num_writes = 0;
 
             let initial_field_base_ops = vm.field_arithmetic_chip.operations.len();
-            let initial_field_extension_ops = vm.field_extension_chip.operations.len();
+            let initial_field_extension_ops = vm.field_extension_chip.current_height();
             let initial_poseidon2_rows = vm.poseidon2_chip.rows.len();
 
             macro_rules! read {
@@ -407,7 +407,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 FE4ADD | FE4SUB | BBE4MUL | BBE4INV => {
                     generate_disabled_ops!();
                     let clk = vm.memory_manager.borrow().get_clk().as_canonical_u32();
-                    vm.field_extension_chip.calculate(clk as usize, instruction);
+                    vm.field_extension_chip.process(clk as usize, instruction);
                 }
                 SECP256K1_COORD_ADD | SECP256K1_COORD_SUB | SECP256K1_COORD_MUL
                 | SECP256K1_COORD_DIV | SECP256K1_SCALAR_ADD | SECP256K1_SCALAR_SUB
@@ -474,7 +474,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let final_field_base_ops = vm.field_arithmetic_chip.operations.len();
             let num_field_base_ops = final_field_base_ops - initial_field_base_ops;
 
-            let final_field_extension_ops = vm.field_extension_chip.operations.len();
+            let final_field_extension_ops = vm.field_extension_chip.current_height();
             let num_field_extension_ops = final_field_extension_ops - initial_field_extension_ops;
 
             let final_poseidon2_rows = vm.poseidon2_chip.rows.len();

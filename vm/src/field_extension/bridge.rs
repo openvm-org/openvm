@@ -1,5 +1,3 @@
-use std::array;
-
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
@@ -10,7 +8,7 @@ use crate::{
         air::FieldExtensionArithmeticAir, chip::EXTENSION_DEGREE,
         columns::FieldExtensionArithmeticAuxCols,
     },
-    memory::{offline_checker::bridge::MemoryBridge, MemoryAddress},
+    memory::{decompose, offline_checker::bridge::MemoryBridge, MemoryAddress},
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -26,7 +24,7 @@ fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
     ext: [AB::Var; EXTENSION_DEGREE],
 ) {
     for (i, element) in ext.into_iter().enumerate() {
-        let pointer = address + AB::F::from_canonical_usize(i * WORD_SIZE);
+        let pointer = address + AB::F::from_canonical_usize(i);
 
         let clk = clk + clk_offset.clone();
         *clk_offset += is_enabled.clone();
@@ -35,7 +33,7 @@ fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
             memory_bridge
                 .write(
                     MemoryAddress::new(addr_space, pointer),
-                    emb(element.into()),
+                    decompose(element.into()),
                     clk,
                 )
                 .eval(builder, is_enabled.clone());
@@ -43,16 +41,12 @@ fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
             memory_bridge
                 .read(
                     MemoryAddress::new(addr_space, pointer),
-                    emb(element.into()),
+                    decompose(element.into()),
                     clk,
                 )
                 .eval(builder, is_enabled.clone());
         }
     }
-}
-
-fn emb<F: AbstractField, const WORD_SIZE: usize>(element: F) -> [F; WORD_SIZE] {
-    array::from_fn(|j| if j == 0 { element.clone() } else { F::zero() })
 }
 
 impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
@@ -71,12 +65,14 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
             op_c,
             d,
             e,
-            mem_oc_aux_cols,
+            read_x_aux_cols: read_1_aux_cols,
+            read_y_aux_cols: read_2_aux_cols,
+            write_aux_cols,
             is_valid,
             ..
         } = aux;
 
-        let mut memory_bridge = MemoryBridge::new(self.mem_oc, mem_oc_aux_cols);
+        let mut memory_bridge = MemoryBridge::new(self.mem_oc, read_1_aux_cols);
 
         // Reads for x
         eval_rw_interactions::<AB, WORD_SIZE>(
@@ -91,6 +87,8 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
             io.x,
         );
 
+        let mut memory_bridge = MemoryBridge::new(self.mem_oc, read_2_aux_cols);
+
         // Reads for y
         eval_rw_interactions::<AB, WORD_SIZE>(
             builder,
@@ -103,6 +101,8 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
             op_c,
             io.y,
         );
+
+        let mut memory_bridge = MemoryBridge::new(self.mem_oc, write_aux_cols);
 
         // Writes for z
         eval_rw_interactions::<AB, WORD_SIZE>(

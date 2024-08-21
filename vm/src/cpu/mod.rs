@@ -9,7 +9,7 @@ use OpCode::*;
 
 use crate::{
     field_extension::chip::FieldExtensionArithmeticChip, memory::offline_checker::bus::MemoryBus,
-    modular_multiplication::air::ModularMultiplicationVmAir, poseidon2::Poseidon2Chip,
+    modular_multiplication::air::ModularArithmeticVmAir, poseidon2::Poseidon2Chip,
     vm::config::MemoryConfig,
 };
 
@@ -156,7 +156,7 @@ fn timestamp_delta(opcode: OpCode) -> usize {
         PUBLISH => 2,
         opcode if FIELD_ARITHMETIC_INSTRUCTIONS.contains(&opcode) => 3,
         opcode if FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode) => {
-            FieldExtensionArithmeticChip::<8, 1, BabyBear>::accesses_per_instruction(opcode)
+            FieldExtensionArithmeticChip::<8, WORD_SIZE, BabyBear>::accesses_per_instruction(opcode)
         }
         opcode if MODULAR_ARITHMETIC_INSTRUCTIONS.contains(&opcode) => {
             // TODO: note that in this chip's trace generation, we need to make sure
