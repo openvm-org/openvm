@@ -146,7 +146,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             self.memory_manager
                 .borrow()
                 .generate_memory_interface_trace(),
-            self.range_checker.generate_trace(),
         ];
         if self.config.cpu_options().field_arithmetic_enabled {
             result.push(self.field_arithmetic_chip.generate_trace());
@@ -160,6 +159,9 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         if self.config.cpu_options().is_less_than_enabled {
             result.push(self.is_less_than_chip.generate_trace());
         }
+        // Note: range checker should be last because the chip.generate_trace() calls above
+        // may influence the range checker.
+        result.push(self.range_checker.generate_trace());
 
         result
     }
@@ -211,7 +213,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             ChipType::Cpu,
             ChipType::Program,
             ChipType::MemoryInterface,
-            ChipType::RangeChecker,
         ];
         if self.config.cpu_options().field_arithmetic_enabled {
             result.push(ChipType::FieldArithmetic);
@@ -225,6 +226,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         if self.config.cpu_options().is_less_than_enabled {
             result.push(ChipType::IsLessThan);
         }
+        result.push(ChipType::RangeChecker);
         assert!(result.len() == self.get_num_chips());
         result
     }
@@ -274,7 +276,6 @@ where
         Box::new(segment.cpu_chip.air),
         Box::new(segment.program_chip.air),
         Box::new(segment.memory_manager.borrow().get_audit_air()),
-        Box::new(segment.range_checker.air),
     ];
     if segment.config.cpu_options().field_arithmetic_enabled {
         result.push(Box::new(segment.field_arithmetic_chip.air));
@@ -288,6 +289,7 @@ where
     if segment.config.cpu_options().is_less_than_enabled {
         result.push(Box::new(segment.is_less_than_chip.air));
     }
+    result.push(Box::new(segment.range_checker.air));
 
     assert!(result.len() == num_chips);
 

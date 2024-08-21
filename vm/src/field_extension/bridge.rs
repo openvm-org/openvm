@@ -34,7 +34,7 @@ fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
                     emb(element.into()),
                     clk,
                 )
-                .eval(builder, AB::F::one());
+                .eval(builder, is_enabled.clone());
         } else {
             memory_bridge
                 .read(
@@ -79,7 +79,7 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
             builder,
             &mut memory_bridge,
             &mut clk_offset,
-            AB::Expr::one(),
+            aux.is_valid.into(),
             false,
             io.clk,
             d,
@@ -105,7 +105,7 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
             builder,
             &mut memory_bridge,
             &mut clk_offset,
-            AB::Expr::one(),
+            aux.is_valid.into(),
             true,
             io.clk,
             d,

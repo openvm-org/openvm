@@ -256,12 +256,10 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         let clk = self.memory_manager.borrow().get_clk();
 
         for _ in 0..8 {
-            trace_builder.disabled_op(F::one(), OpType::Read);
-            trace_builder.increment_clk();
+            trace_builder.disabled_op(F::zero(), OpType::Read);
         }
         for _ in 0..4 {
-            trace_builder.disabled_op(F::one(), OpType::Write);
-            trace_builder.increment_clk();
+            trace_builder.disabled_op(F::zero(), OpType::Write);
         }
         let mut mem_oc_aux_iter = trace_builder.take_accesses_buffer().into_iter();
 
@@ -274,13 +272,13 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
                 z: [F::zero(); EXTENSION_DEGREE],
             },
             aux: FieldExtensionArithmeticAuxCols {
-                is_valid: F::one(),
-                valid_y_read: F::one(),
+                is_valid: F::zero(),
+                valid_y_read: F::zero(),
                 op_a: F::zero(),
                 op_b: F::zero(),
                 op_c: F::zero(),
-                d: F::one(),
-                e: F::one(),
+                d: F::zero(),
+                e: F::zero(),
                 is_add: F::one(),
                 is_sub: F::zero(),
                 is_mul: F::zero(),
