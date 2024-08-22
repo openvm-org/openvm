@@ -32,7 +32,7 @@ impl CheckCarryToZeroSubAir {
         max_overflow_bits: usize,
     ) -> Self {
         let carry_bits = max_overflow_bits - limb_bits;
-        let carry_min_value_abs = (1 << carry_bits) - 1;
+        let carry_min_value_abs = 1 << carry_bits;
         let carry_abs_bits = carry_bits + 1;
         Self {
             limb_bits,

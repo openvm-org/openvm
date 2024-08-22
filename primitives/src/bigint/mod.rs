@@ -24,7 +24,7 @@ pub struct OverflowInt<T> {
     // Track the max abs of limbs, so we can do arithmetic on them.
     pub limb_max_abs: usize,
 
-    // All limbs should be within (-2^max_overflow_bits, 2^max_overflow_bits)
+    // All limbs should be within [-2^max_overflow_bits, 2^max_overflow_bits)
     // This should be ceiling of log2(limb_max_abs)
     pub max_overflow_bits: usize,
 }
