@@ -9,7 +9,7 @@ use p3_field::{Field, PrimeField64};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::RngCore;
 
-use super::{
+use super::super::{
     check_carry_to_zero::{CheckCarryToZeroCols, CheckCarryToZeroSubAir},
     OverflowInt,
 };
