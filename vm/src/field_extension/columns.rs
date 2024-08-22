@@ -62,7 +62,7 @@ impl<const WORD_SIZE: usize, T> FieldExtensionArithmeticCols<WORD_SIZE, T> {
             + FieldExtensionArithmeticAuxCols::<WORD_SIZE, T>::get_width(&air.mem_oc)
     }
 
-    pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
+    pub(crate) fn from_iter<I: Iterator<Item = T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
         let mut next = || iter.next().unwrap();
 
         Self {
@@ -101,7 +101,7 @@ impl<const WORD_SIZE: usize, T> FieldExtensionArithmeticCols<WORD_SIZE, T> {
 }
 
 impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T> {
-    pub fn flatten(&self) -> Vec<T> {
+    pub(crate) fn flatten(&self) -> Vec<T> {
         self.io
             .flatten()
             .into_iter()
@@ -117,7 +117,7 @@ impl<T> FieldExtensionArithmeticIoCols<T> {
 }
 
 impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
-    pub fn flatten(&self) -> Vec<T> {
+    fn flatten(&self) -> Vec<T> {
         let mut result = vec![
             self.clk.clone(),
             self.opcode.clone(),
@@ -141,7 +141,7 @@ impl<const WORD_SIZE: usize, T> FieldExtensionArithmeticAuxCols<WORD_SIZE, T> {
 }
 
 impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticAuxCols<WORD_SIZE, T> {
-    pub fn flatten(&self) -> Vec<T> {
+    fn flatten(&self) -> Vec<T> {
         let mut result = vec![
             self.is_valid.clone(),
             self.valid_y_read.clone(),

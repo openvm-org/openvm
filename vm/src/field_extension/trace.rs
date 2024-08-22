@@ -103,7 +103,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         }
     }
 
-    pub fn make_blank_row(&self) -> FieldExtensionArithmeticCols<WORD_SIZE, F> {
+    fn make_blank_row(&self) -> FieldExtensionArithmeticCols<WORD_SIZE, F> {
         let clk = self.memory.borrow().get_clk();
 
         let make_aux_col = |op_type| {

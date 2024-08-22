@@ -179,7 +179,7 @@ impl FieldExtensionArithmetic {
     /// Evaluates given opcode using given operands.
     ///
     /// Returns None for opcodes not in cpu::FIELD_EXTENSION_INSTRUCTIONS.
-    pub fn solve<T: Field>(
+    pub(crate) fn solve<T: Field>(
         op: OpCode,
         x: [T; EXTENSION_DEGREE],
         y: [T; EXTENSION_DEGREE],
