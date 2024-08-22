@@ -3,16 +3,14 @@ use std::{borrow::Borrow, sync::Arc};
 use afs_stark_backend::interaction::InteractionBuilder;
 use afs_test_utils::{config::baby_bear_blake3::run_simple_test_no_pis, utils::create_seeded_rng};
 use num_bigint_dig::BigUint;
-use num_traits::FromPrimitive;
 use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
 use p3_field::{Field, PrimeField64};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_util::log2_ceil_usize;
 use rand::RngCore;
 
 use super::super::{
-    check_carry_to_zero::{CheckCarryToZeroCols, CheckCarryToZeroSubAir},
+    check_carry_mod_to_zero::{CheckCarryModToZeroCols, CheckCarryModToZeroSubAir},
     OverflowInt,
 };
 use crate::{
@@ -21,13 +19,15 @@ use crate::{
 };
 
 // Testing AIR:
-// Constrain: x^2 - y = 0
+// Constrain: x^2 + y = 0 (mod p)
 #[derive(Clone)]
 pub struct TestCarryCols<const N: usize, T> {
     // limbs of x, length N.
     pub x: Vec<T>,
     // limbs of y, length 2N.
     pub y: Vec<T>,
+    // quotient limbs, length 2N
+    pub quotient: Vec<T>,
     // 2N
     pub carries: Vec<T>,
 }
@@ -40,9 +40,15 @@ impl<const N: usize, T: Clone> TestCarryCols<N, T> {
     pub fn from_slice(slc: &[T]) -> Self {
         let x = slc[0..N].to_vec();
         let y = slc[N..3 * N].to_vec();
-        let carries = slc[3 * N..5 * N].to_vec();
+        let quotient = slc[3 * N..5 * N].to_vec();
+        let carries = slc[5 * N..7 * N].to_vec();
 
-        Self { x, y, carries }
+        Self {
+            x,
+            y,
+            quotient,
+            carries,
+        }
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -50,6 +56,7 @@ impl<const N: usize, T: Clone> TestCarryCols<N, T> {
 
         flattened.extend_from_slice(&self.x);
         flattened.extend_from_slice(&self.y);
+        flattened.extend_from_slice(&self.quotient);
         flattened.extend_from_slice(&self.carries);
 
         flattened
@@ -57,7 +64,7 @@ impl<const N: usize, T: Clone> TestCarryCols<N, T> {
 }
 
 pub struct TestCarryAir<const N: usize> {
-    pub test_carry_sub_air: CheckCarryToZeroSubAir,
+    pub test_carry_sub_air: CheckCarryModToZeroSubAir,
     pub max_overflow_bits: usize,
     pub decomp: usize,
     pub num_limbs: usize,
@@ -80,16 +87,21 @@ impl<AB: InteractionBuilder, const N: usize> Air<AB> for TestCarryAir<N> {
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
         let cols = TestCarryCols::<N, AB::Var>::from_slice(local);
-        let TestCarryCols { x, y, carries } = cols;
+        let TestCarryCols {
+            x,
+            y,
+            carries,
+            quotient,
+        } = cols;
 
         let x_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(x, self.limb_bits);
         let y_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(y, self.limb_bits);
         let expr = (x_overflow.clone() * x_overflow.clone()) - y_overflow.clone();
 
-        self.test_carry_sub_air.constrain_carry_to_zero(
+        self.test_carry_sub_air.constrain_carry_mod_to_zero(
             builder,
             expr,
-            CheckCarryToZeroCols { carries },
+            CheckCarryModToZeroCols { carries, quotient },
         );
     }
 }
@@ -108,10 +120,8 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
                 range_checker.add_count(value + (1 << self.decomp) - (1 << bits));
             }
         };
-        let x_overflow = OverflowInt::<isize>::from_big_uint(x, self.limb_bits, Some(N));
-        let y_overflow = OverflowInt::<isize>::from_big_uint(y, self.limb_bits, Some(2 * N));
-        assert_eq!(x_overflow.limbs.len(), N);
-        assert_eq!(y_overflow.limbs.len(), 2 * N);
+        let x_overflow = OverflowInt::<isize>::from_big_uint(x, self.limb_bits);
+        let y_overflow = OverflowInt::<isize>::from_big_uint(y, self.limb_bits);
         let expr = x_overflow.clone() * x_overflow.clone() - y_overflow.clone();
         let carries = expr.calculate_carries(self.limb_bits);
         let mut carries_f = vec![F::zero(); carries.len()];
@@ -136,25 +146,34 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
                 .map(|x| F::from_canonical_usize(*x as usize))
                 .collect(),
             carries: carries_f,
+            quotient: quotient_f,
         }
     }
 }
 
-// number of limbs of X, assuming it's 128 bits and limb bits is 10.
+// number of limbs of X.
 const N: usize = 13;
 
-fn test_x_square_minus_y(x: BigUint, y: BigUint) {
+#[test]
+fn test_check_carry_mod_zero() {
     let limb_bits = 10;
     let num_limbs = N;
     // The equation: x^2 - y
     // Abs of each limb of the equation can be as much as 2^10 * 2^10 * N + 2^10
     // overflow bits: limb_bits * 2 + log2(N) => 24
-    let max_overflow_bits = limb_bits * 2 + log2_ceil_usize(N);
+    let max_overflow_bits = 24;
+
     let range_bus = 1;
     let range_decomp = 16;
+
+    let mut rng = create_seeded_rng();
+    let x_len = 4; // in bytes -> 128 bits.
+    let x_bytes = (0..x_len).map(|_| rng.next_u32()).collect();
+    let x = BigUint::new(x_bytes);
+    let y = x.clone() * x.clone();
     let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus, 1 << range_decomp));
     let check_carry_sub_air =
-        CheckCarryToZeroSubAir::new(limb_bits, range_bus, range_decomp, max_overflow_bits);
+        CheckCarryModToZeroSubAir::new(limb_bits, range_bus, range_decomp, max_overflow_bits);
     let test_air = TestCarryAir::<N> {
         test_carry_sub_air: check_carry_sub_air,
         max_overflow_bits,
@@ -173,25 +192,4 @@ fn test_x_square_minus_y(x: BigUint, y: BigUint) {
         vec![trace, range_trace],
     )
     .expect("Verification failed");
-}
-
-#[test]
-fn test_check_carry_to_zero() {
-    let mut rng = create_seeded_rng();
-    let x_len = 4; // in bytes -> 128 bits.
-    let x_bytes = (0..x_len).map(|_| rng.next_u32()).collect();
-    let x = BigUint::new(x_bytes);
-    let y = x.clone() * x.clone();
-    test_x_square_minus_y(x, y);
-}
-
-#[should_panic]
-#[test]
-fn test_check_carry_to_zero_fail() {
-    let mut rng = create_seeded_rng();
-    let x_len = 4; // in bytes -> 128 bits.
-    let x_bytes = (0..x_len).map(|_| rng.next_u32()).collect();
-    let x = BigUint::new(x_bytes);
-    let y = x.clone() * x.clone() + BigUint::from_u32(1).unwrap();
-    test_x_square_minus_y(x, y);
 }
