@@ -56,18 +56,10 @@ pub struct FieldExtensionArithmeticAuxCols<const WORD_SIZE: usize, T> {
     pub write_aux_cols: [MemoryOfflineCheckerAuxCols<WORD_SIZE, T>; EXTENSION_DEGREE],
 }
 
-impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T> {
+impl<const WORD_SIZE: usize, T> FieldExtensionArithmeticCols<WORD_SIZE, T> {
     pub fn get_width(air: &FieldExtensionArithmeticAir<WORD_SIZE>) -> usize {
         FieldExtensionArithmeticIoCols::<T>::get_width()
             + FieldExtensionArithmeticAuxCols::<WORD_SIZE, T>::get_width(&air.mem_oc)
-    }
-
-    pub fn flatten(&self) -> Vec<T> {
-        self.io
-            .flatten()
-            .into_iter()
-            .chain(self.aux.flatten())
-            .collect()
     }
 
     pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
@@ -108,11 +100,23 @@ impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T
     }
 }
 
-impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
+impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticCols<WORD_SIZE, T> {
+    pub fn flatten(&self) -> Vec<T> {
+        self.io
+            .flatten()
+            .into_iter()
+            .chain(self.aux.flatten())
+            .collect()
+    }
+}
+
+impl<T> FieldExtensionArithmeticIoCols<T> {
     pub fn get_width() -> usize {
         3 * EXTENSION_DEGREE + 2
     }
+}
 
+impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
     pub fn flatten(&self) -> Vec<T> {
         let mut result = vec![self.opcode.clone()];
 
@@ -124,11 +128,13 @@ impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
     }
 }
 
-impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticAuxCols<WORD_SIZE, T> {
+impl<const WORD_SIZE: usize, T> FieldExtensionArithmeticAuxCols<WORD_SIZE, T> {
     pub fn get_width(oc: &MemoryOfflineChecker) -> usize {
         EXTENSION_DEGREE + 11 + 12 * MemoryOfflineCheckerAuxCols::<1, T>::width(oc)
     }
+}
 
+impl<const WORD_SIZE: usize, T: Clone> FieldExtensionArithmeticAuxCols<WORD_SIZE, T> {
     pub fn flatten(&self) -> Vec<T> {
         let mut result = vec![
             self.is_valid.clone(),

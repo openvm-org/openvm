@@ -18,7 +18,6 @@ use crate::{
             bridge::{emb, proj, MemoryOfflineChecker},
             columns::MemoryAccess,
         },
-        OpType,
     },
     vm::config::MemoryConfig,
 };
@@ -31,6 +30,7 @@ pub const EXTENSION_DEGREE: usize = 4;
 pub struct FieldExtensionArithmeticRecord<const WORD_SIZE: usize, F> {
     pub clk: usize,
     pub opcode: OpCode,
+    pub is_valid: bool,
     // TODO[zach]: these entries are redundant with the memory accesses below.
     pub op_a: F,
     pub op_b: F,
@@ -97,9 +97,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             op_c,
             d,
             e,
-            op_f: _f,
-            op_g: _g,
-            debug: _debug,
+            ..
         } = instruction;
 
         assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
@@ -108,7 +106,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         let x: [F; EXTENSION_DEGREE] = array::from_fn(|i| proj(x_reads[i].op.cell.data));
 
         let y_reads = if opcode == OpCode::BBE4INV {
-            array::from_fn(|_| self.memory.borrow_mut().disabled_op(e, OpType::Read))
+            array::from_fn(|_| self.memory.borrow_mut().disabled_read(e))
         } else {
             self.read_extension_element(e, op_c)
         };
@@ -121,6 +119,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         self.records.push(FieldExtensionArithmeticRecord {
             clk,
             opcode,
+            is_valid: true,
             op_a,
             op_b,
             op_c,
@@ -182,14 +181,14 @@ impl FieldExtensionArithmetic {
     /// Returns None for opcodes not in cpu::FIELD_EXTENSION_INSTRUCTIONS.
     pub fn solve<T: Field>(
         op: OpCode,
-        operand1: [T; EXTENSION_DEGREE],
-        operand2: [T; EXTENSION_DEGREE],
+        x: [T; EXTENSION_DEGREE],
+        y: [T; EXTENSION_DEGREE],
     ) -> Option<[T; EXTENSION_DEGREE]> {
         match op {
-            OpCode::FE4ADD => Some(Self::add(operand1, operand2)),
-            OpCode::FE4SUB => Some(Self::subtract(operand1, operand2)),
-            OpCode::BBE4MUL => Some(Self::multiply(operand1, operand2)),
-            OpCode::BBE4INV => Some(Self::invert(operand1)),
+            OpCode::FE4ADD => Some(Self::add(x, y)),
+            OpCode::FE4SUB => Some(Self::subtract(x, y)),
+            OpCode::BBE4MUL => Some(Self::multiply(x, y)),
+            OpCode::BBE4INV => Some(Self::invert(x)),
             _ => None,
         }
     }

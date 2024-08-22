@@ -2,14 +2,41 @@ use std::iter;
 
 use afs_primitives::is_less_than::{columns::IsLessThanAuxCols, IsLessThanAir};
 use derive_new::new;
+use p3_field::Field;
 
 use super::bridge::MemoryOfflineChecker;
-use crate::memory::manager::{access_cell::AccessCell, operation::MemoryOperation};
+use crate::memory::{
+    manager::{access_cell::AccessCell, operation::MemoryOperation},
+    OpType,
+};
 
 #[derive(new, Debug, Default)]
 pub struct MemoryAccess<const WORD_SIZE: usize, T> {
     pub op: MemoryOperation<WORD_SIZE, T>,
     pub old_cell: AccessCell<WORD_SIZE, T>,
+}
+
+impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
+    pub fn disabled_read(timestamp: T, addr_space: T) -> MemoryAccess<WORD_SIZE, T> {
+        Self::disabled_op(timestamp, addr_space, OpType::Read)
+    }
+
+    pub fn disabled_write(timestamp: T, addr_space: T) -> MemoryAccess<WORD_SIZE, T> {
+        Self::disabled_op(timestamp, addr_space, OpType::Write)
+    }
+
+    pub fn disabled_op(timestamp: T, addr_space: T, op_type: OpType) -> MemoryAccess<WORD_SIZE, T> {
+        MemoryAccess::<WORD_SIZE, T>::new(
+            MemoryOperation {
+                addr_space,
+                pointer: T::zero(),
+                op_type: T::from_canonical_u8(op_type as u8),
+                cell: AccessCell::new([T::zero(); WORD_SIZE], timestamp),
+                enabled: T::zero(),
+            },
+            AccessCell::new([T::zero(); WORD_SIZE], T::zero()),
+        )
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -178,18 +178,21 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     ///
     /// Warning: `self.clk` must be > 0 for less than constraints to pass.
     pub fn disabled_op(&mut self, addr_space: F, op_type: OpType) -> MemoryAccess<WORD_SIZE, F> {
-        let timestamp = self.clk;
-        // Below, we set timestamp_prev = 0
-        MemoryAccess::<WORD_SIZE, F>::new(
-            MemoryOperation::new(
-                addr_space,
-                F::zero(),
-                F::from_canonical_u8(op_type as u8),
-                AccessCell::new([F::zero(); WORD_SIZE], timestamp),
-                F::zero(),
-            ),
-            AccessCell::new([F::zero(); WORD_SIZE], F::zero()),
-        )
+        MemoryAccess::disabled_op(self.clk, addr_space, op_type)
+    }
+
+    /// Trace generation for dummy values when a memory operation should be selectively disabled.
+    ///
+    /// Warning: `self.clk` must be > 0 for less than constraints to pass.
+    pub fn disabled_read(&mut self, addr_space: F) -> MemoryAccess<WORD_SIZE, F> {
+        MemoryAccess::disabled_read(self.clk, addr_space)
+    }
+
+    /// Trace generation for dummy values when a memory operation should be selectively disabled.
+    ///
+    /// Warning: `self.clk` must be > 0 for less than constraints to pass.
+    pub fn disabled_write(&mut self, addr_space: F) -> MemoryAccess<WORD_SIZE, F> {
+        MemoryAccess::disabled_read(self.clk, addr_space)
     }
 
     pub fn increment_clk(&mut self) {

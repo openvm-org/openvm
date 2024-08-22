@@ -1,4 +1,5 @@
 use std::{
+    array,
     cell::RefCell,
     ops::{Add, Div, Mul, Sub},
     rc::Rc,
@@ -21,67 +22,67 @@ use crate::{
     field_extension::chip::{
         FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticRecord,
     },
-    memory::manager::MemoryManager,
+    memory::{manager::MemoryManager, offline_checker::columns::MemoryAccess},
     vm::config::MemoryConfig,
 };
 
 /// Function for testing that generates a random program consisting only of field arithmetic operations.
-fn generate_field_extension_operations(
-    len_ops: usize,
-) -> Vec<FieldExtensionArithmeticRecord<1, BabyBear>> {
+fn generate_records(n: usize) -> Vec<FieldExtensionArithmeticRecord<1, BabyBear>> {
     let mut rng = create_seeded_rng();
 
-    let mut requests = vec![];
+    let mut records = vec![];
 
-    for _ in 0..len_ops {
-        let op = FIELD_EXTENSION_INSTRUCTIONS[rng.gen_range(0..4)];
+    for _ in 0..n {
+        let opcode = FIELD_EXTENSION_INSTRUCTIONS[rng.gen_range(0..4)];
 
         // dummy values for clock cycle and addr_space and pointers
-        let timestamp: usize = 0;
-        let op_a = BabyBear::zero();
-        let op_b = BabyBear::zero();
-        let op_c = BabyBear::zero();
-        let d = BabyBear::zero();
-        let e = BabyBear::zero();
+        let clk: usize = 1;
 
-        let operand1 = [
+        let x = [
             BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
             BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
             BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
             BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
         ];
-        let operand2 = [
+        let y = [
             BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
             BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
             BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
             BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
         ];
 
-        let result = FieldExtensionArithmetic::solve(op, operand1, operand2).unwrap();
+        let z = FieldExtensionArithmetic::solve(opcode, x, y).unwrap();
 
-        requests.push(FieldExtensionArithmeticRecord {
-            clk: timestamp,
-            opcode: op,
-            op_a,
-            op_b,
-            op_c,
-            d,
-            e,
-            x: operand1,
-            y: operand2,
-            z: result,
+        records.push(FieldExtensionArithmeticRecord {
+            clk,
+            opcode,
+            is_valid: false,
+            op_a: BabyBear::zero(),
+            op_b: BabyBear::zero(),
+            op_c: BabyBear::zero(),
+            d: BabyBear::zero(),
+            e: BabyBear::zero(),
+            x,
+            y,
+            z,
+            x_reads: array::from_fn(|_| {
+                MemoryAccess::disabled_read(BabyBear::from_canonical_usize(clk), BabyBear::zero())
+            }),
+            y_reads: array::from_fn(|_| {
+                MemoryAccess::disabled_read(BabyBear::from_canonical_usize(clk), BabyBear::zero())
+            }),
+            z_writes: array::from_fn(|_| {
+                MemoryAccess::disabled_read(BabyBear::from_canonical_usize(clk), BabyBear::zero())
+            }),
         });
     }
-    requests
+    records
 }
 
-// isolated air test
 #[test]
-#[ignore]
-// TODO: rewrite this test
 fn field_extension_air_test() {
     let mut rng = create_seeded_rng();
-    let len_ops: usize = 1 << 5;
+    let num_ops: usize = 1 << 5;
 
     let mem_config = MemoryConfig::new(16, 16, 16, 16);
     let range_checker = Arc::new(RangeCheckerGateChip::new(
@@ -98,8 +99,7 @@ fn field_extension_air_test() {
         memory_manager,
         range_checker,
     );
-    let operations = generate_field_extension_operations(len_ops);
-    chip.records = operations;
+    chip.records = generate_records(num_ops);
 
     let mut extension_trace = chip.generate_trace();
 

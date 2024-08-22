@@ -1,6 +1,5 @@
-use std::{array, sync::Arc};
+use std::array;
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
 use itertools::{all, Itertools};
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
@@ -15,8 +14,7 @@ use crate::{
         EXTENSION_DEGREE,
     },
     memory::{
-        manager::trace_builder::MemoryTraceBuilder, offline_checker::bridge::MemoryOfflineChecker,
-        OpType,
+        manager::trace_builder::MemoryTraceBuilder, offline_checker::columns::MemoryAccess, OpType,
     },
 };
 
@@ -35,13 +33,11 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             .flat_map(|_| self.make_blank_row().flatten())
             .collect_vec();
 
-        let operations = std::mem::take(&mut self.records);
+        let records = std::mem::take(&mut self.records);
 
-        let mut flattened_trace: Vec<F> = operations
+        let mut flattened_trace: Vec<F> = records
             .into_iter()
-            .flat_map(|op| {
-                Self::cols_from_operation(self.air.mem_oc, self.range_checker.clone(), op).flatten()
-            })
+            .flat_map(|record| self.cols_from_record(record).flatten())
             .collect();
 
         flattened_trace.extend(dummy_rows_flattened);
@@ -50,18 +46,17 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     }
 
     /// Constructs a new set of columns (including auxiliary columns) given inputs.
-    fn cols_from_operation(
-        mem_oc: MemoryOfflineChecker,
-        range_checker: Arc<RangeCheckerGateChip>,
-        op: FieldExtensionArithmeticRecord<WORD_SIZE, F>,
+    fn cols_from_record(
+        &self,
+        record: FieldExtensionArithmeticRecord<WORD_SIZE, F>,
     ) -> FieldExtensionArithmeticCols<WORD_SIZE, F> {
-        let is_add = F::from_bool(op.opcode == OpCode::FE4ADD);
-        let is_sub = F::from_bool(op.opcode == OpCode::FE4SUB);
-        let is_mul = F::from_bool(op.opcode == OpCode::BBE4MUL);
-        let is_inv = F::from_bool(op.opcode == OpCode::BBE4INV);
+        let is_add = F::from_bool(record.opcode == OpCode::FE4ADD);
+        let is_sub = F::from_bool(record.opcode == OpCode::FE4SUB);
+        let is_mul = F::from_bool(record.opcode == OpCode::BBE4MUL);
+        let is_inv = F::from_bool(record.opcode == OpCode::BBE4INV);
 
-        let x = op.x;
-        let y = op.y;
+        let x = record.x;
+        let y = record.y;
 
         let inv = if all(x, |xi| xi == F::zero()) {
             x
@@ -71,36 +66,40 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
 
         let access_to_aux = |access| {
             MemoryTraceBuilder::<NUM_WORDS, WORD_SIZE, F>::memory_access_to_checker_aux_cols(
-                &mem_oc,
-                range_checker.clone(),
+                &self.air.mem_oc,
+                self.range_checker.clone(),
                 &access,
             )
         };
 
         FieldExtensionArithmeticCols {
             io: FieldExtensionArithmeticIoCols {
-                opcode: F::from_canonical_usize(op.opcode as usize),
-                clk: F::from_canonical_usize(op.clk),
+                opcode: F::from_canonical_usize(record.opcode as usize),
+                clk: F::from_canonical_usize(record.clk),
                 x,
                 y,
-                z: op.z,
+                z: record.z,
             },
             aux: FieldExtensionArithmeticAuxCols {
-                is_valid: F::one(),
-                valid_y_read: F::one() - is_inv,
-                op_a: op.op_a,
-                op_b: op.op_b,
-                op_c: op.op_c,
-                d: op.d,
-                e: op.e,
+                is_valid: F::from_bool(record.is_valid),
+                valid_y_read: if record.is_valid {
+                    F::one() - is_inv
+                } else {
+                    F::zero()
+                },
+                op_a: record.op_a,
+                op_b: record.op_b,
+                op_c: record.op_c,
+                d: record.d,
+                e: record.e,
                 is_add,
                 is_sub,
                 is_mul,
                 is_inv,
                 inv,
-                read_x_aux_cols: op.x_reads.map(access_to_aux),
-                read_y_aux_cols: op.y_reads.map(access_to_aux),
-                write_aux_cols: op.z_writes.map(access_to_aux),
+                read_x_aux_cols: record.x_reads.map(access_to_aux),
+                read_y_aux_cols: record.y_reads.map(access_to_aux),
+                write_aux_cols: record.z_writes.map(access_to_aux),
             },
         }
     }
@@ -109,7 +108,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         let clk = self.memory.borrow().get_clk();
 
         let make_aux_col = |op_type| {
-            let access = self.memory.borrow_mut().disabled_op(F::zero(), op_type);
+            let access = MemoryAccess::disabled_op(clk, F::zero(), op_type);
             MemoryTraceBuilder::<NUM_WORDS, WORD_SIZE, F>::memory_access_to_checker_aux_cols(
                 &self.air.mem_oc,
                 self.range_checker.clone(),
