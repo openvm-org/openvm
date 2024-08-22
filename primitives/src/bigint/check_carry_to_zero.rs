@@ -18,6 +18,7 @@ pub struct CheckCarryToZeroSubAir {
     pub carry_min_value_abs: usize,
     // The max number of bits for carry + carry_min_value_abs.
     pub carry_bits: usize,
+
     pub range_checker_bus: usize,
     // The range checker decomp bits.
     pub decomp: usize,
@@ -31,10 +32,7 @@ impl CheckCarryToZeroSubAir {
         max_overflow_bits: usize,
     ) -> Self {
         let carry_bits = max_overflow_bits - limb_bits;
-        // Carry can be negative, so this is the max abs of negative carry.
-        // We will add this to carries to make them positive so we can range check them.
         let carry_min_value_abs = (1 << carry_bits) - 1;
-        // The max number of bits for carry + carry_min_value_abs.
         let carry_abs_bits = carry_bits + 1;
         Self {
             limb_bits,

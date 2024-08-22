@@ -5,13 +5,12 @@ use afs_test_utils::{config::baby_bear_blake3::run_simple_test_no_pis, utils::cr
 use num_bigint_dig::BigUint;
 use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, Field, PrimeField64};
+use p3_field::{Field, PrimeField64};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::RngCore;
 
 use super::{
     check_carry_to_zero::{CheckCarryToZeroCols, CheckCarryToZeroSubAir},
-    utils::{big_uint_to_bits, take_limb},
     OverflowInt,
 };
 use crate::{
@@ -20,26 +19,26 @@ use crate::{
 };
 
 // Testing AIR:
-// Two bigint variables, x and y, each with N limbs.
-// Constrain: x^2 - y^2 = 0
+// Constrain: x^2 - y = 0
 #[derive(Clone)]
 pub struct TestCarryCols<const N: usize, T> {
-    // limbs of x and y, length N.
+    // limbs of x, length N.
     pub x: Vec<T>,
+    // limbs of y, length 2N.
     pub y: Vec<T>,
-    // 2N-1
+    // 2N
     pub carries: Vec<T>,
 }
 
 impl<const N: usize, T: Clone> TestCarryCols<N, T> {
     pub fn get_width() -> usize {
-        4 * N - 1
+        5 * N
     }
 
     pub fn from_slice(slc: &[T]) -> Self {
         let x = slc[0..N].to_vec();
-        let y = slc[N..2 * N].to_vec();
-        let carries = slc[2 * N..4 * N - 1].to_vec();
+        let y = slc[N..3 * N].to_vec();
+        let carries = slc[3 * N..5 * N].to_vec();
 
         Self { x, y, carries }
     }
@@ -83,8 +82,7 @@ impl<AB: InteractionBuilder, const N: usize> Air<AB> for TestCarryAir<N> {
 
         let x_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB>(x, self.limb_bits);
         let y_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB>(y, self.limb_bits);
-        let expr =
-            (x_overflow.clone() * x_overflow.clone()) - (y_overflow.clone() * y_overflow.clone());
+        let expr = (x_overflow.clone() * x_overflow.clone()) - y_overflow.clone();
 
         self.test_carry_sub_air.constrain_carry_to_zero(
             builder,
@@ -110,8 +108,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
         };
         let x_overflow = OverflowInt::<isize>::from_big_uint(x, self.limb_bits);
         let y_overflow = OverflowInt::<isize>::from_big_uint(y, self.limb_bits);
-        let expr =
-            x_overflow.clone() * x_overflow.clone() - y_overflow.clone() * y_overflow.clone();
+        let expr = x_overflow.clone() * x_overflow.clone() - y_overflow.clone();
         let carries = expr.calculate_carries(self.limb_bits);
         let mut carries_f = vec![F::zero(); carries.len()];
         for (i, &carry) in carries.iter().enumerate() {
@@ -122,37 +119,6 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
             carries_f[i] = F::from_canonical_usize(carry.unsigned_abs())
                 * if carry >= 0 { F::one() } else { F::neg_one() };
         }
-        // let mut x_bits = big_uint_to_bits(x);
-        // let x_limbs: Vec<usize> = (0..self.num_limbs)
-        //     .map(|_| take_limb(&mut x_bits, self.limb_bits))
-        //     .collect();
-        // let mut y_bits = big_uint_to_bits(y);
-        // let y_limbs: Vec<usize> = (0..self.num_limbs)
-        //     .map(|_| take_limb(&mut y_bits, self.limb_bits))
-        //     .collect();
-
-        // // Longer than carries by 1 for the highest carry.
-        // let mut sums = vec![0isize; self.num_limbs * 2];
-        // for i in 0..self.num_limbs {
-        //     for j in 0..self.num_limbs {
-        //         sums[i + j] += (x_limbs[i] * x_limbs[j]) as isize;
-        //         sums[i + j] -= (y_limbs[i] * y_limbs[j]) as isize;
-        //     }
-        // }
-        // let mut carries = vec![F::zero(); 2 * self.num_limbs - 1];
-        // for i in 0..(2 * self.num_limbs - 1) {
-        //     assert_eq!(sums[i] % (1 << self.limb_bits), 0);
-        //     let carry = sums[i] >> self.limb_bits;
-        //     sums[i + 1] += carry;
-        //     range_check(
-        //         self.test_carry_sub_air.carry_bits,
-        //         (carry + (self.test_carry_sub_air.carry_min_value_abs as isize)) as usize,
-        //     );
-        //     carries[i] = F::from_canonical_usize(carry.unsigned_abs())
-        //         * if carry >= 0 { F::one() } else { F::neg_one() };
-        // }
-        // // Highest carry should be 0.
-        // assert_eq!(sums[2 * self.num_limbs - 1], 0);
 
         TestCarryCols {
             x: x_overflow
@@ -170,18 +136,17 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
     }
 }
 
-// number of limbs of X and Y (128bits).
+// number of limbs of X. Y will be X^2 and thus 2N limbs.
 const N: usize = 13;
 
 #[test]
 fn test_check_carry_to_zero() {
     let limb_bits = 10;
     let num_limbs = N;
-    // Computing overflow bits and carry bits:
-    // The equation: x^2 - y^2
-    // Abs of each limb of the equation can be as much as 2^10 * 2^10 * N * 2
-    // overflow bits: limb_bits * 2 + log2(2N) => 25
-    let max_overflow_bits = 25;
+    // The equation: x^2 - y
+    // Abs of each limb of the equation can be as much as 2^10 * 2^10 * N + 2^10
+    // overflow bits: limb_bits * 2 + log2(N) => 24
+    let max_overflow_bits = 24;
 
     let range_bus = 1;
     let range_decomp = 16;
@@ -190,8 +155,7 @@ fn test_check_carry_to_zero() {
     let x_len = 4; // in bytes -> 128 bits.
     let x_bytes = (0..x_len).map(|_| rng.next_u32()).collect();
     let x = BigUint::new(x_bytes);
-    // y := x so that x^2 - y^2 = 0
-    let y = x.clone();
+    let y = x.clone() * x.clone();
     let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus, 1 << range_decomp));
     let check_carry_sub_air =
         CheckCarryToZeroSubAir::new(limb_bits, range_bus, range_decomp, max_overflow_bits);
