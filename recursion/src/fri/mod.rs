@@ -18,6 +18,7 @@ use crate::{
     digest::{CanPoseidon2Digest, DigestVariable},
     outer_poseidon2::Poseidon2CircuitBuilder,
     types::OuterDigestVariable,
+    utils::cond_eval,
 };
 
 pub mod domain;
@@ -153,11 +154,15 @@ where
             let i_plus_one = builder.eval_expr(i + RVar::one());
             let index_pair = index_bits.shift(builder, i_plus_one);
 
+            let [eval_0, eval_1] = cond_eval(
+                builder,
+                index_sibling_mod_2,
+                step.sibling_value,
+                folded_eval,
+            );
             let mut evals: Array<C, Ext<C::F, C::EF>> = builder.array(2);
-            let eval0 = builder.select_ef(index_sibling_mod_2, folded_eval, step.sibling_value);
-            let eval1 = builder.select_ef(index_sibling_mod_2, step.sibling_value, folded_eval);
-            builder.set_value(&mut evals, RVar::zero(), eval0);
-            builder.set_value(&mut evals, RVar::one(), eval1);
+            builder.set_value(&mut evals, 0, eval_0);
+            builder.set_value(&mut evals, 1, eval_1);
 
             let dims = DimensionsVariable::<C> {
                 height: builder.sll(C::N::one(), log_folded_height),
@@ -166,7 +171,7 @@ where
             builder.set_value(&mut dims_slice, 0, dims);
 
             let mut opened_values = builder.array(1);
-            builder.set_value(&mut opened_values, 0, evals.clone());
+            builder.set_value(&mut opened_values, 0, evals);
             builder.cycle_tracker_start("verify-batch-ext");
             verify_batch::<C>(
                 builder,
@@ -180,12 +185,9 @@ where
 
             let two_adic_generator_one = config.get_two_adic_generator(builder, Usize::from(1));
 
-            let x_next: Ext<_, _> = builder.eval(x * two_adic_generator_one);
-            let xs_0: Ext<_, _> = builder.select_ef(index_sibling_mod_2, x, x_next);
-            let xs_1: Ext<_, _> = builder.select_ef(index_sibling_mod_2, x_next, x);
+            let [xs_0, xs_1]: [Ext<_, _>; 2] =
+                cond_eval(builder, index_sibling_mod_2, x * two_adic_generator_one, x);
 
-            let eval_0 = builder.get(&evals, 0);
-            let eval_1 = builder.get(&evals, 1);
             builder.assign(
                 &folded_eval,
                 eval_0 + (beta - xs_0) * (eval_1 - eval_0) / (xs_1 - xs_0),
@@ -358,10 +360,8 @@ pub fn verify_batch_static<C: Config>(
         };
         let bit = builder.get(&index_bits, i);
 
-        let left = [builder.select_v(bit, sibling[0], root[0])];
-        let right = [builder.select_v(bit, root[0], sibling[0])];
-
-        root = builder.p2_compress([left, right]);
+        let [left, right]: [Var<_>; 2] = cond_eval(builder, bit, root[0], sibling[0]);
+        root = builder.p2_compress([[left], [right]]);
         builder.assign(
             &current_height,
             current_height.clone() * (C::N::two().inverse()),
@@ -389,7 +389,7 @@ pub fn verify_batch_static<C: Config>(
 }
 
 #[allow(clippy::type_complexity)]
-pub fn reduce_fast<C: Config, V: MemVariable<C>>(
+fn reduce_fast<C: Config, V: MemVariable<C>>(
     builder: &mut Builder<C>,
     dim_idx: Usize<C::N>,
     dims: &Array<C, DimensionsVariable<C>>,
