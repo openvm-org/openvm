@@ -99,9 +99,9 @@ fn setup_bad_long_arithmetic_test(
         chip.generate_trace::<F>();
     } else {
         for z in z.iter() {
-            // TODO: replace with a safer range check once we have one
+            // TODO: replace with a more optimal range check once we have one
             chip.range_checker_chip.add_count(*z);
-            chip.range_checker_chip.add_count(*z * 32u32);
+            chip.range_checker_chip.add_count(*z + ((32 - 1) << 8));
         }
         for c in carry.iter() {
             chip.range_checker_chip.add_count(*c);

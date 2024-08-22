@@ -40,11 +40,12 @@ impl LongMultiplicationChip {
                     &operation.multiplier,
                 );
                 let CalculationResult { op, z_limbs, carry } = self.calculate(opcode, x, y);
+                let num_limbs = num_limbs(self.arg_size, self.limb_size);
                 for z in z_limbs.iter() {
-                    // TODO: replace with a safer range check once we have one
+                    // TODO: replace with a more optimal range check once we have one
                     self.range_checker_chip.add_count(*z);
                     self.range_checker_chip
-                        .add_count(*z * num_limbs(self.arg_size, self.limb_size) as u32);
+                        .add_count(*z + ((num_limbs - 1) << self.limb_size) as u32);
                 }
                 for c in carry.iter() {
                     self.range_checker_chip.add_count(*c);

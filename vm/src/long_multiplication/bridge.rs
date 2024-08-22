@@ -12,11 +12,11 @@ impl LongMultiplicationAir {
     ) {
         let num_limbs = num_limbs(self.arg_size, self.limb_size);
         for z in local.z_limbs {
-            // TODO: replace with a safer range check once our range checker supports it
+            // TODO: replace with a more optimal range check once our range checker supports it
             builder.push_send(self.bus_index, vec![z], local.rcv_count);
             builder.push_send(
                 self.bus_index,
-                vec![z * AB::Expr::from_canonical_usize(num_limbs)],
+                vec![z + AB::Expr::from_canonical_usize((num_limbs - 1) << self.limb_size)],
                 local.rcv_count,
             );
         }
