@@ -61,8 +61,6 @@ pub struct TestCarryAir<const N: usize> {
     pub decomp: usize,
     pub num_limbs: usize,
     pub limb_bits: usize,
-    pub carry_min_value_abs: usize,
-    pub carry_bits: usize,
 }
 
 impl AirConfig for TestCarryAir<N> {
@@ -142,8 +140,8 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
             let carry = sums[i] >> self.limb_bits;
             sums[i + 1] += carry;
             range_check(
-                self.carry_bits,
-                (carry + (self.carry_min_value_abs as isize)) as usize,
+                self.test_carry_sub_air.carry_bits,
+                (carry + (self.test_carry_sub_air.carry_min_value_abs as isize)) as usize,
             );
             carries[i] = F::from_canonical_usize(carry.unsigned_abs())
                 * if carry >= 0 { F::one() } else { F::neg_one() };
@@ -176,10 +174,7 @@ fn test_check_carry_to_zero() {
     // The equation: x^2 - y^2
     // Abs of each limb of the equation can be as much as 2^10 * 2^10 * N * 2
     // overflow bits: limb_bits * 2 + log2(2N) => 25
-    // carry (pos or neg) is thus at most 15 bits.
-    let carry_min_value_abs = (1 << 15) - 1;
-    // carry bits is the max bits of carry + max_carry_min_abs
-    let carry_bits = 16;
+    let max_overflow_bits = 25;
 
     let range_bus = 1;
     let range_decomp = 16;
@@ -191,22 +186,14 @@ fn test_check_carry_to_zero() {
     // y := x so that x^2 - y^2 = 0
     let y = x.clone();
     let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus, 1 << range_decomp));
-    let check_carry_sub_air = CheckCarryToZeroSubAir::new(
-        limb_bits,
-        // num_limbs * 2 - 1,
-        range_bus,
-        range_decomp,
-        carry_min_value_abs,
-        carry_bits,
-    );
+    let check_carry_sub_air =
+        CheckCarryToZeroSubAir::new(limb_bits, range_bus, range_decomp, max_overflow_bits);
     let test_air = TestCarryAir::<N> {
         test_carry_sub_air: check_carry_sub_air,
-        max_overflow_bits: 28,
+        max_overflow_bits,
         decomp: range_decomp,
         num_limbs,
         limb_bits,
-        carry_min_value_abs,
-        carry_bits,
     };
     let row = test_air
         .generate_trace_row((x, y, range_checker.clone()))
