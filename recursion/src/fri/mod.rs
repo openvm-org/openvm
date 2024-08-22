@@ -154,15 +154,26 @@ where
             let i_plus_one = builder.eval_expr(i + RVar::one());
             let index_pair = index_bits.shift(builder, i_plus_one);
 
-            let [eval_0, eval_1] = cond_eval(
-                builder,
-                index_sibling_mod_2,
-                step.sibling_value,
-                folded_eval,
-            );
             let mut evals: Array<C, Ext<C::F, C::EF>> = builder.array(2);
-            builder.set_value(&mut evals, 0, eval_0);
-            builder.set_value(&mut evals, 1, eval_1);
+            let eval_0: Ext<C::F, C::EF>;
+            let eval_1: Ext<C::F, C::EF>;
+            if builder.flags.static_only {
+                [eval_0, eval_1] = cond_eval(
+                    builder,
+                    index_sibling_mod_2,
+                    step.sibling_value,
+                    folded_eval,
+                );
+                builder.set_value(&mut evals, 0, eval_0);
+                builder.set_value(&mut evals, 1, eval_1);
+            } else {
+                builder.set_value(&mut evals, 0, folded_eval);
+                builder.set_value(&mut evals, 1, folded_eval);
+                // This is faster than branching.
+                builder.set_value(&mut evals, index_sibling_mod_2, step.sibling_value);
+                eval_0 = builder.get(&evals, 0);
+                eval_1 = builder.get(&evals, 1);
+            }
 
             let dims = DimensionsVariable::<C> {
                 height: builder.sll(C::N::one(), log_folded_height),
@@ -349,8 +360,6 @@ pub fn verify_batch_static<C: Config>(
     );
 
     // For each sibling in the proof, reconstruct the root.
-    let left: Ptr<C::N> = builder.uninit();
-    let right: Ptr<C::N> = builder.uninit();
     builder.range(0, proof.len()).for_each(|i, builder| {
         let sibling: OuterDigestVariable<C> = if let DigestVariable::Var(d) = builder.get(proof, i)
         {
