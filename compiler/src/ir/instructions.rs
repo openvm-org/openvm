@@ -231,9 +231,9 @@ pub enum DslIr<C: Config> {
     /// Prepare bit decomposition for hinting.
     HintBitsU(RVar<C::N>),
     /// Prepare bit decomposition for hinting.
-    HintBitsV(Var<C::N>),
+    HintBitsV(Var<C::N>, u32),
     /// Prepare bit decomposition for hinting.
-    HintBitsF(Felt<C::F>),
+    HintBitsF(Felt<C::F>, u32),
 
     StoreHintWord(Ptr<C::N>, MemIndex<C::N>),
 

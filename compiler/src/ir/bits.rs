@@ -6,8 +6,8 @@ pub const NUM_BITS: usize = 31;
 
 impl<C: Config> Builder<C> {
     /// Converts a variable to bits.
-    pub fn num2bits_v(&mut self, num: Var<C::N>) -> Array<C, Var<C::N>> {
-        self.push(DslIr::HintBitsV(num));
+    pub fn num2bits_v(&mut self, num: Var<C::N>, num_bits: u32) -> Array<C, Var<C::N>> {
+        self.push(DslIr::HintBitsV(num, num_bits));
 
         let output = self.dyn_array::<Var<_>>(NUM_BITS);
 
@@ -45,8 +45,8 @@ impl<C: Config> Builder<C> {
     }
 
     /// Converts a felt to bits.
-    pub fn num2bits_f(&mut self, num: Felt<C::F>) -> Array<C, Var<C::N>> {
-        self.push(DslIr::HintBitsF(num));
+    pub fn num2bits_f(&mut self, num: Felt<C::F>, num_bits: u32) -> Array<C, Var<C::N>> {
+        self.push(DslIr::HintBitsF(num, num_bits));
 
         let output = self.dyn_array::<Var<_>>(NUM_BITS);
 

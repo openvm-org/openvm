@@ -542,11 +542,11 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     ),
                 },
                 DslIr::StoreE(var, ptr, index) => self.store_ext(var, ptr.fp(), index, debug_info),
-                DslIr::HintBitsF(var) => {
-                    self.push(AsmInstruction::HintBits(var.fp()), debug_info);
+                DslIr::HintBitsF(var, len) => {
+                    self.push(AsmInstruction::HintBits(var.fp(), len), debug_info);
                 }
-                DslIr::HintBitsV(var) => {
-                    self.push(AsmInstruction::HintBits(var.fp()), debug_info);
+                DslIr::HintBitsV(var, len) => {
+                    self.push(AsmInstruction::HintBits(var.fp(), len), debug_info);
                 }
                 DslIr::HintBitsU(_) => {
                     todo!()

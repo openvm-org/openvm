@@ -607,11 +607,11 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::HintBits(src) => vec![inst(
+        AsmInstruction::HintBits(src, len) => vec![inst(
             HINT_BITS,
             i32_f(src),
             F::zero(),
-            F::zero(),
+            F::from_canonical_u32(len),
             AS::Memory,
             AS::Memory,
         )],

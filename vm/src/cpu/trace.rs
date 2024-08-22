@@ -433,8 +433,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     let val = compose(word);
                     let mut val = val.as_canonical_u32();
 
+                    let len = c.as_canonical_u32();
                     hint_stream = VecDeque::new();
-                    for _ in 0..32 {
+                    for _ in 0..len {
                         hint_stream.push_back(F::from_canonical_u32(val & 1));
                         val >>= 1;
                     }
