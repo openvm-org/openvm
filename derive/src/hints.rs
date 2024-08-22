@@ -80,7 +80,7 @@ pub fn create_new_struct_and_impl_hintable(ast: &ItemStruct) -> Result<TokenStre
                 }
             }
 
-            fn write(&self) -> Vec<Vec<<C as Config>::F>> {
+            fn write(&self) -> Vec<Vec<<C as Config>::N>> {
                 let mut stream = Vec::new();
 
                 #(#write_tokens)*
