@@ -56,15 +56,15 @@ pub trait Hintable<C: Config> {
     }
 }
 
-impl Hintable<InnerConfig> for usize {
-    type HintVariable = Var<InnerVal>;
+impl<C: Config> Hintable<C> for usize {
+    type HintVariable = Var<C::N>;
 
-    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
+    fn read(builder: &mut Builder<C>) -> Self::HintVariable {
         builder.hint_var()
     }
 
-    fn write(&self) -> Vec<Vec<InnerVal>> {
-        vec![vec![InnerVal::from_canonical_usize(*self)]]
+    fn write(&self) -> Vec<Vec<C::F>> {
+        vec![vec![AbstractField::from_canonical_usize(*self)]]
     }
 }
 
@@ -181,17 +181,17 @@ impl Hintable<InnerConfig> for Vec<usize> {
     }
 }
 
-impl Hintable<InnerConfig> for Vec<u8> {
-    type HintVariable = Array<InnerConfig, Var<InnerVal>>;
+impl<C: Config> Hintable<C> for Vec<u8> {
+    type HintVariable = Array<C, Var<C::N>>;
 
-    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
+    fn read(builder: &mut Builder<C>) -> Self::HintVariable {
         builder.hint_vars()
     }
 
-    fn write(&self) -> Vec<Vec<InnerVal>> {
+    fn write(&self) -> Vec<Vec<C::F>> {
         vec![self
             .iter()
-            .map(|x| InnerVal::from_canonical_u8(*x))
+            .map(|x| AbstractField::from_canonical_u8(*x))
             .collect()]
     }
 }
@@ -407,11 +407,16 @@ mod test {
     use afs_compiler::{
         asm::AsmBuilder,
         ir::{Ext, Felt, Var},
+        prelude::*,
         util::execute_program_and_generate_traces,
     };
+    use afs_derive::{DslVariable, Hintable};
     use p3_field::AbstractField;
 
-    use crate::hints::{Hintable, InnerChallenge, InnerVal};
+    use crate::{
+        hints::{Hintable, InnerChallenge, InnerVal},
+        types::InnerConfig,
+    };
 
     #[test]
     fn test_var_array() {
@@ -486,5 +491,24 @@ mod test {
 
         let program = builder.compile_isa::<1>();
         execute_program_and_generate_traces::<1>(program, stream);
+    }
+
+    #[derive(Hintable)]
+    struct TestStruct {
+        a: usize,
+        b: usize,
+        c: usize,
+    }
+
+    #[test]
+    fn test_macro() {
+        let x = TestStruct { a: 1, b: 2, c: 3 };
+        let stream = Hintable::<InnerConfig>::write(&x);
+        assert_eq!(
+            stream,
+            [1, 2, 3]
+                .map(|x| vec![InnerVal::from_canonical_usize(x)])
+                .to_vec()
+        );
     }
 }
