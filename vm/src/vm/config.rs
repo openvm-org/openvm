@@ -13,6 +13,12 @@ pub struct MemoryConfig {
     pub decomp: usize,
 }
 
+impl Default for MemoryConfig {
+    fn default() -> Self {
+        Self::new(29, 29, 29, 16)
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct VmConfig {
     pub field_arithmetic_enabled: bool,
@@ -38,7 +44,7 @@ impl Default for VmConfig {
             perm_poseidon2_enabled: true,
             modular_multiplication_enabled: false,
             is_less_than_enabled: false,
-            memory_config: MemoryConfig::new(29, 29, 29, 16),
+            memory_config: Default::default(),
             num_public_values: 0,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             collect_metrics: false,
@@ -49,13 +55,7 @@ impl Default for VmConfig {
 impl VmConfig {
     pub fn cpu_options(&self) -> CpuOptions {
         CpuOptions {
-            field_arithmetic_enabled: self.field_arithmetic_enabled,
-            field_extension_enabled: self.field_extension_enabled,
-            compress_poseidon2_enabled: self.compress_poseidon2_enabled,
-            perm_poseidon2_enabled: self.perm_poseidon2_enabled,
             num_public_values: self.num_public_values,
-            is_less_than_enabled: self.is_less_than_enabled,
-            modular_arithmetic_enabled: self.modular_multiplication_enabled,
         }
     }
 }

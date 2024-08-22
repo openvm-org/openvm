@@ -4,16 +4,11 @@ use std::{
     fmt::Display,
 };
 
-use afs_primitives::{is_equal_vec::IsEqualVecAir, sub_chip::LocalTraceInstructions};
 use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::{
-    columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    CpuChip, ExecutionState,
-    OpCode::{self, *},
-    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
-};
+use afs_primitives::{is_equal_vec::IsEqualVecAir, sub_chip::LocalTraceInstructions};
+
 use crate::{
     cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
     field_arithmetic::columns::FieldArithmeticCols,
@@ -27,6 +22,13 @@ use crate::{
     poseidon2::columns::Poseidon2VmCols,
     program::columns::ProgramPreprocessedCols,
     vm::ExecutionSegment,
+};
+
+use super::{
+    columns::{CpuAuxCols, CpuCols, CpuIoCols},
+    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE,
+    CPU_MAX_WRITES_PER_CYCLE,
+    CpuChip, CpuState, INST_WIDTH, OpCode::{self, *},
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -83,6 +85,27 @@ impl<F: Field> Instruction<F> {
             op_c: isize_to_field::<F>(op_c),
             d: isize_to_field::<F>(d),
             e: isize_to_field::<F>(e),
+            op_f: isize_to_field::<F>(0),
+            op_g: isize_to_field::<F>(0),
+            debug: String::new(),
+        }
+    }
+
+    pub fn from_usize(
+        opcode: OpCode,
+        op_a: usize,
+        op_b: usize,
+        op_c: usize,
+        d: usize,
+        e: usize,
+    ) -> Self {
+        Self {
+            opcode,
+            op_a: F::from_canonical_usize(op_a),
+            op_b: F::from_canonical_usize(op_b),
+            op_c: F::from_canonical_usize(op_c),
+            d: F::from_canonical_usize(d),
+            e: F::from_canonical_usize(e),
             op_f: isize_to_field::<F>(0),
             op_g: isize_to_field::<F>(0),
             debug: String::new(),
@@ -213,7 +236,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
 
             // TODO[osama]: here, make sure that timestamp actually relates to memory clks
             let io = CpuIoCols {
-                timestamp: vm.memory_manager.borrow().get_clk(),
+                timestamp: vm.memory_manager.borrow().timestamp(),
                 pc,
                 opcode: F::from_canonical_usize(opcode as usize),
                 op_a: a,
@@ -406,7 +429,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 }
                 FE4ADD | FE4SUB | BBE4MUL | BBE4INV => {
                     generate_disabled_ops!();
-                    let clk = vm.memory_manager.borrow().get_clk().as_canonical_u32();
+                    let clk = vm.memory_manager.borrow().timestamp().as_canonical_u32();
                     vm.field_extension_chip.calculate(clk as usize, instruction);
                 }
                 MOD_SECP256K1_ADD | MOD_SECP256K1_SUB | MOD_SECP256K1_MUL | MOD_SECP256K1_DIV => {
@@ -552,9 +575,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
         }
 
         // Update CPU chip state with all changes from this segment.
-        vm.cpu_chip.set_state(ExecutionState {
+        vm.cpu_chip.set_state(CpuState {
             clock_cycle,
-            timestamp: vm.memory_manager.borrow().get_clk().as_canonical_u32() as usize,
+            timestamp: vm.memory_manager.borrow().timestamp().as_canonical_u32() as usize,
             pc: pc.as_canonical_u64() as usize,
             is_done,
         });

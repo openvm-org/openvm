@@ -1,9 +1,9 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 use p3_field::PrimeField32;
 
-use super::{operation::MemoryOperation, MemoryManager};
+use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
+
 use crate::memory::{
     compose, decompose,
     offline_checker::{
@@ -13,19 +13,22 @@ use crate::memory::{
     OpType,
 };
 
-pub struct MemoryTraceBuilder<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
-    memory_manager: Rc<RefCell<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
+use super::{MemoryManager, operation::MemoryOperation};
+
+const WORD_SIZE: usize = 1;
+const NUM_WORDS: usize = 16;
+
+pub struct MemoryTraceBuilder<F: PrimeField32> {
+    memory_manager: Rc<RefCell<MemoryManager<F>>>,
     range_checker: Arc<RangeCheckerGateChip>,
     offline_checker: MemoryOfflineChecker,
 
     accesses_buffer: Vec<MemoryOfflineCheckerAuxCols<WORD_SIZE, F>>,
 }
 
-impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
-    MemoryTraceBuilder<NUM_WORDS, WORD_SIZE, F>
-{
+impl<F: PrimeField32> MemoryTraceBuilder<F> {
     pub fn new(
-        memory_manager: Rc<RefCell<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
+        memory_manager: Rc<RefCell<MemoryManager<F>>>,
         range_checker: Arc<RangeCheckerGateChip>,
         offline_checker: MemoryOfflineChecker,
     ) -> Self {
@@ -88,7 +91,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     }
 
     pub fn increment_clk(&mut self) {
-        self.memory_manager.borrow_mut().increment_clk();
+        self.memory_manager.borrow_mut().increment_timestamp();
     }
 
     pub fn take_accesses_buffer(&mut self) -> Vec<MemoryOfflineCheckerAuxCols<WORD_SIZE, F>> {

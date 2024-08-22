@@ -1,39 +1,39 @@
 use std::array;
 
-use afs_primitives::{
-    sub_chip::AirConfig,
-    utils::{and, not},
-};
-use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::izip;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
+use afs_primitives::{
+    sub_chip::AirConfig,
+    utils::{and, not},
+};
+use afs_stark_backend::interaction::InteractionBuilder;
+
 use crate::{
-    cpu::OpCode::{BBE4INV, BBE4MUL, FE4ADD, FE4SUB},
+    arch::instructions::OpCode::{BBE4INV, BBE4MUL, FE4ADD, FE4SUB},
     field_extension::BETA,
 };
 
-impl<const WORD_SIZE: usize> AirConfig for FieldExtensionArithmeticAir<WORD_SIZE> {
-    type Cols<T> = FieldExtensionArithmeticCols<WORD_SIZE, T>;
+use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
+
+impl AirConfig for FieldExtensionArithmeticAir {
+    type Cols<T> = FieldExtensionArithmeticCols<T>;
 }
 
-impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for FieldExtensionArithmeticAir<WORD_SIZE> {
+impl<F: Field> BaseAir<F> for FieldExtensionArithmeticAir {
     fn width(&self) -> usize {
-        FieldExtensionArithmeticCols::<WORD_SIZE, F>::get_width(self)
+        FieldExtensionArithmeticCols::<F>::get_width(self)
     }
 }
 
-impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB>
-    for FieldExtensionArithmeticAir<WORD_SIZE>
-{
+impl<AB: InteractionBuilder> Air<AB> for FieldExtensionArithmeticAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
         let local = main.row_slice(0);
-        let local_cols = FieldExtensionArithmeticCols::<WORD_SIZE, AB::Var>::from_iter(
+        let local_cols = FieldExtensionArithmeticCols::from_iter(
             &mut local.iter().copied(),
             &self.mem_oc.timestamp_lt_air,
         );

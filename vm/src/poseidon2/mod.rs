@@ -1,24 +1,23 @@
-use std::{array, cell::RefCell, rc::Rc, sync::Arc};
+use std::{array, cell::RefCell, rc::Rc};
 
-use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
+use p3_field::{Field, PrimeField32};
+
+use afs_primitives::sub_chip::LocalTraceInstructions;
 use columns::*;
-use p3_field::PrimeField32;
 use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
 
-use self::air::Poseidon2VmAir;
 use crate::{
-    cpu::{
-        trace::Instruction,
-        OpCode::{self, *},
+    arch::{
+        bridge::ExecutionBus, chips::OpCodeExecutor, columns::ExecutionState,
+        instructions::OpCode::*,
     },
+    cpu::trace::Instruction,
     memory::{
-        manager::{trace_builder::MemoryTraceBuilder, MemoryManager},
-        offline_checker::bridge::MemoryOfflineChecker,
-        tree::Hasher,
-        OpType,
+        manager::MemoryManager, offline_checker::bridge::MemoryOfflineChecker, OpType, tree::Hasher,
     },
-    vm::config::MemoryConfig,
 };
+
+use self::air::Poseidon2VmAir;
 
 #[cfg(test)]
 pub mod tests;
@@ -31,33 +30,30 @@ pub mod trace;
 /// Poseidon2 Chip.
 ///
 /// Carries the Poseidon2VmAir for constraints, and cached state for trace generation.
-pub struct Poseidon2Chip<
-    const WIDTH: usize,
-    const NUM_WORDS: usize,
-    const WORD_SIZE: usize,
-    F: PrimeField32,
-> {
-    pub air: Poseidon2VmAir<WIDTH, WORD_SIZE, F>,
-    pub rows: Vec<Poseidon2VmCols<WIDTH, WORD_SIZE, F>>,
-    pub memory_manager: Rc<RefCell<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
-    pub range_checker: Arc<RangeCheckerGateChip>,
+pub struct Poseidon2Chip<const WIDTH: usize, F: PrimeField32> {
+    pub air: Poseidon2VmAir<WIDTH, F>,
+    pub rows: Vec<Poseidon2VmCols<WIDTH, F>>,
+    pub memory_manager: Rc<RefCell<MemoryManager<F>>>,
 }
 
-impl<const WIDTH: usize, const WORD_SIZE: usize, F: PrimeField32>
-    Poseidon2VmAir<WIDTH, WORD_SIZE, F>
-{
+impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
     /// Construct from Poseidon2 config and bus index.
     pub fn from_poseidon2_config(
         config: Poseidon2Config<WIDTH, F>,
-        mem_config: MemoryConfig,
-        bus_index: usize,
+        execution_bus: ExecutionBus,
+        mem_oc: MemoryOfflineChecker,
     ) -> Self {
-        let inner = Poseidon2Air::<WIDTH, F>::from_config(config, bus_index);
+        let inner = Poseidon2Air::<WIDTH, F>::from_config(config, 0);
         Self {
             inner,
-            mem_oc: MemoryOfflineChecker::new(mem_config.clk_max_bits, mem_config.decomp),
+            execution_bus,
+            mem_oc,
             direct: true,
         }
+    }
+
+    pub fn timestamp_delta(&self) -> usize {
+        3 + (2 * crate::poseidon2::WIDTH)
     }
 
     /// By default direct bus is on. If `continuations = OFF`, this should be called.
@@ -81,7 +77,10 @@ impl<const WIDTH: usize, const WORD_SIZE: usize, F: PrimeField32>
     }
 
     /// Map VM instructions to Poseidon2IO columns, for opcodes.
-    fn make_io_cols(start_clk: F, instruction: Instruction<F>) -> Poseidon2VmIoCols<F> {
+    fn make_io_cols(
+        ExecutionState { pc, timestamp }: ExecutionState<F>,
+        instruction: Instruction<F>,
+    ) -> Poseidon2VmIoCols<F> {
         let Instruction {
             opcode,
             op_a,
@@ -93,10 +92,11 @@ impl<const WIDTH: usize, const WORD_SIZE: usize, F: PrimeField32>
             op_g: _g,
             debug: _debug,
         } = instruction;
-        Poseidon2VmIoCols::<F> {
+        Poseidon2VmIoCols {
             is_opcode: F::one(),
             is_direct: F::zero(),
-            clk: start_clk,
+            pc,
+            timestamp,
             a: op_a,
             b: op_b,
             c: op_c,
@@ -108,47 +108,33 @@ impl<const WIDTH: usize, const WORD_SIZE: usize, F: PrimeField32>
 }
 
 const WIDTH: usize = 16;
-impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
-    Poseidon2Chip<WIDTH, NUM_WORDS, WORD_SIZE, F>
-{
+impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     /// Construct from Poseidon2 config and bus index.
     pub fn from_poseidon2_config(
         p2_config: Poseidon2Config<WIDTH, F>,
-        mem_config: MemoryConfig,
-        memory_manager: Rc<RefCell<MemoryManager<NUM_WORDS, WORD_SIZE, F>>>,
-        range_checker: Arc<RangeCheckerGateChip>,
-        bus_index: usize,
+        execution_bus: ExecutionBus,
+        memory_manager: Rc<RefCell<MemoryManager<F>>>,
     ) -> Self {
-        let air = Poseidon2VmAir::<WIDTH, WORD_SIZE, F>::from_poseidon2_config(
-            p2_config, mem_config, bus_index,
+        let air = Poseidon2VmAir::<WIDTH, F>::from_poseidon2_config(
+            p2_config,
+            execution_bus,
+            MemoryManager::make_offline_checker(memory_manager.clone()),
         );
         Self {
             air,
             rows: vec![],
             memory_manager,
-            range_checker,
         }
     }
+}
 
-    /// Key method of Poseidon2Chip.
-    ///
-    /// Called using `vm` and not `&self`. Reads two chunks from memory and generates a trace row for
-    /// the given instruction using the subair, storing it in `rows`. Then, writes output to memory,
-    /// truncating if the instruction is a compression.
-    ///
-    /// Used for both compression and permutation.
-    ///
-    /// TODO[osama]: finish this comment
-    /// When is_direct is true, this function does not do any
-    pub fn calculate(&mut self, instruction: Instruction<F>, is_direct: bool) {
-        assert!(!is_direct);
-
-        let start_clk = self.memory_manager.borrow().get_clk();
-        let mut mem_trace_builder = MemoryTraceBuilder::<NUM_WORDS, WORD_SIZE, F>::new(
-            self.memory_manager.clone(),
-            self.range_checker.clone(),
-            self.air.mem_oc,
-        );
+impl<F: PrimeField32> OpCodeExecutor<F> for Poseidon2Chip<WIDTH, F> {
+    fn execute(
+        &mut self,
+        instruction: &Instruction<F>,
+        prev_state: ExecutionState<usize>,
+    ) -> ExecutionState<usize> {
+        let mut mem_trace_builder = MemoryManager::make_trace_builder(self.memory_manager.clone());
 
         let Instruction {
             opcode,
@@ -196,15 +182,14 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
             mem_trace_builder.increment_clk();
         }
 
-        let io = if is_direct {
-            Poseidon2VmIoCols::direct_io_cols(start_clk)
-        } else {
-            Poseidon2VmAir::<WIDTH, WORD_SIZE, F>::make_io_cols(start_clk, instruction)
-        };
+        let io = Poseidon2VmAir::<WIDTH, F>::make_io_cols(
+            prev_state.map(F::from_canonical_usize),
+            instruction.clone(),
+        );
 
         let row = Poseidon2VmCols {
             io,
-            aux: Poseidon2VmAuxCols::<WIDTH, WORD_SIZE, F> {
+            aux: Poseidon2VmAuxCols::<WIDTH, F> {
                 dst,
                 lhs,
                 rhs,
@@ -214,22 +199,16 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
         };
 
         self.rows.push(row);
-    }
 
-    pub fn max_accesses_per_instruction(opcode: OpCode) -> usize {
-        assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
-        3 + 2 * WIDTH
-    }
-
-    pub fn current_height(&self) -> usize {
-        self.rows.len()
+        ExecutionState {
+            pc: prev_state.pc + 1,
+            timestamp: prev_state.timestamp + self.air.timestamp_delta(),
+        }
     }
 }
 
 const CHUNK: usize = 8;
-impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> Hasher<CHUNK, F>
-    for Poseidon2Chip<WIDTH, NUM_WORDS, WORD_SIZE, F>
-{
+impl<F: PrimeField32> Hasher<CHUNK, F> for Poseidon2Chip<WIDTH, F> {
     /// Key method for Hasher trait.
     ///
     /// Takes two chunks, hashes them, and returns the result. Total width 3 * CHUNK, exposed in `direct_interaction_width()`.

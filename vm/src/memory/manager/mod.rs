@@ -1,18 +1,26 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
-use self::{access_cell::AccessCell, interface::MemoryInterface};
+use afs_primitives::range_gate::RangeCheckerGateChip;
+
+use crate::{
+    memory::{
+        decompose,
+        manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
+        offline_checker::bridge::MemoryOfflineChecker,
+        OpType,
+    },
+    vm::config::MemoryConfig,
+};
+
 use super::{
     audit::{air::MemoryAuditAir, MemoryAuditChip},
     offline_checker::columns::MemoryAccess,
 };
-use crate::{
-    memory::{decompose, manager::operation::MemoryOperation, OpType},
-    vm::config::MemoryConfig,
-};
+
+use self::{access_cell::AccessCell, interface::MemoryInterface};
 
 pub mod access_cell;
 pub mod dimensions;
@@ -20,16 +28,19 @@ pub mod interface;
 pub mod operation;
 pub mod trace_builder;
 
-pub struct MemoryManager<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
+const WORD_SIZE: usize = 1;
+const NUM_WORDS: usize = 16;
+
+pub struct MemoryManager<F: PrimeField32> {
     pub interface_chip: MemoryInterface<NUM_WORDS, WORD_SIZE, F>,
-    clk: F,
+    mem_config: MemoryConfig,
+    range_checker: Arc<RangeCheckerGateChip>,
+    timestamp: F,
     /// Maps (addr_space, pointer) to (data, timestamp)
-    memory: HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
+    pub memory: HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
 }
 
-impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
-    MemoryManager<NUM_WORDS, WORD_SIZE, F>
-{
+impl<F: PrimeField32> MemoryManager<F> {
     // pub fn with_persistent_memory(
     //     memory_dimensions: MemoryDimensions,
     //     memory: HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
@@ -48,20 +59,37 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
         Self {
+            mem_config,
             interface_chip: MemoryInterface::Volatile(MemoryAuditChip::new(
                 mem_config.addr_space_max_bits,
                 mem_config.pointer_max_bits,
                 mem_config.decomp,
-                range_checker,
+                range_checker.clone(),
             )),
-            clk: F::one(),
+            timestamp: F::one(),
             memory: HashMap::new(),
+            range_checker,
         }
     }
 
+    pub fn make_offline_checker(manager: Rc<RefCell<Self>>) -> MemoryOfflineChecker {
+        MemoryOfflineChecker::new(
+            manager.borrow().mem_config.clk_max_bits,
+            manager.borrow().mem_config.decomp,
+        )
+    }
+
+    pub fn make_trace_builder(manager: Rc<RefCell<Self>>) -> MemoryTraceBuilder<F> {
+        MemoryTraceBuilder::new(
+            manager.clone(),
+            manager.borrow().range_checker.clone(),
+            Self::make_offline_checker(manager.clone()),
+        )
+    }
+
     pub fn read_word(&mut self, addr_space: F, pointer: F) -> MemoryAccess<WORD_SIZE, F> {
-        let cur_clk = self.clk;
-        self.clk += F::one();
+        let cur_clk = self.timestamp;
+        self.timestamp += F::one();
 
         if addr_space == F::zero() {
             let data = decompose(pointer);
@@ -116,8 +144,8 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         assert!(addr_space != F::zero());
         debug_assert!((pointer.as_canonical_u32() as usize) % WORD_SIZE == 0);
 
-        let cur_clk = self.clk;
-        self.clk += F::one();
+        let cur_clk = self.timestamp;
+        self.timestamp += F::one();
 
         let cell = self
             .memory
@@ -178,7 +206,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     ///
     /// Warning: `self.clk` must be > 0 for less than constraints to pass.
     pub fn disabled_op(&mut self, addr_space: F, op_type: OpType) -> MemoryAccess<WORD_SIZE, F> {
-        let timestamp = self.clk;
+        let timestamp = self.timestamp;
         // Below, we set timestamp_prev = 0
         MemoryAccess::<WORD_SIZE, F>::new(
             MemoryOperation::new(
@@ -192,12 +220,12 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         )
     }
 
-    pub fn increment_clk(&mut self) {
-        self.clk += F::one();
+    pub fn increment_timestamp(&mut self) {
+        self.timestamp += F::one();
     }
 
-    pub fn get_clk(&self) -> F {
-        self.clk
+    pub fn timestamp(&self) -> F {
+        self.timestamp
     }
 
     pub fn get_audit_air(&self) -> MemoryAuditAir<WORD_SIZE> {

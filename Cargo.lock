@@ -1306,6 +1306,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "enum_dispatch"
+version = "0.3.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa18ce2bc66555b3218614519ac839ddb759a7d6720732f979ef8d13be147ecd"
+dependencies = [
+ "once_cell",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.74",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3289,6 +3301,7 @@ dependencies = [
  "backtrace",
  "derive-new 0.5.9",
  "enum-utils",
+ "enum_dispatch",
  "getset",
  "itertools 0.13.0",
  "num-bigint-dig",
@@ -3296,6 +3309,7 @@ dependencies = [
  "p3-air",
  "p3-baby-bear",
  "p3-challenger",
+ "p3-commit",
  "p3-dft",
  "p3-field",
  "p3-fri",
