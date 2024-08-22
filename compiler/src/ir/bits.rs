@@ -9,10 +9,10 @@ impl<C: Config> Builder<C> {
     pub fn num2bits_v(&mut self, num: Var<C::N>, num_bits: u32) -> Array<C, Var<C::N>> {
         self.push(DslIr::HintBitsV(num, num_bits));
 
-        let output = self.dyn_array::<Var<_>>(NUM_BITS);
+        let output = self.dyn_array::<Var<_>>(num_bits as usize);
 
         let sum: Var<_> = self.eval(C::N::zero());
-        for i in 0..NUM_BITS {
+        for i in 0..num_bits as usize {
             let index = MemIndex {
                 index: i.into(),
                 offset: 0,
@@ -48,10 +48,10 @@ impl<C: Config> Builder<C> {
     pub fn num2bits_f(&mut self, num: Felt<C::F>, num_bits: u32) -> Array<C, Var<C::N>> {
         self.push(DslIr::HintBitsF(num, num_bits));
 
-        let output = self.dyn_array::<Var<_>>(NUM_BITS);
+        let output = self.dyn_array::<Var<_>>(num_bits as usize);
 
         let sum: Felt<_> = self.eval(C::F::zero());
-        for i in 0..NUM_BITS {
+        for i in 0..num_bits as usize {
             let index = MemIndex {
                 index: i.into(),
                 offset: 0,
@@ -107,9 +107,9 @@ impl<C: Config> Builder<C> {
     }
 
     /// Convert bits to a felt.
-    pub fn bits2num_f(&mut self, bits: &Array<C, Var<C::N>>) -> Felt<C::F> {
+    pub fn bits2num_f(&mut self, bits: &Array<C, Var<C::N>>, num_bits: u32) -> Felt<C::F> {
         let num: Felt<_> = self.eval(C::F::zero());
-        for i in 0..NUM_BITS {
+        for i in 0..num_bits as usize {
             let bit = self.get(bits, i);
             // Add `bit * 2^i` to the sum.
             self.if_eq(bit, C::N::one()).then(|builder| {
