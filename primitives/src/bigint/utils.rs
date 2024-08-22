@@ -37,10 +37,9 @@ pub fn big_uint_to_bits(x: BigUint) -> VecDeque<usize> {
 }
 
 pub fn take_limb(deque: &mut VecDeque<usize>, limb_size: usize) -> usize {
-    if limb_size == 0 {
-        0
-    } else {
-        let bit = deque.pop_front().unwrap_or(0);
-        bit + (2 * take_limb(deque, limb_size - 1))
-    }
+    deque
+        .drain(..limb_size.min(deque.len()))
+        .enumerate()
+        .map(|(i, bit)| bit << i)
+        .sum()
 }
