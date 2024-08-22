@@ -80,24 +80,15 @@ impl<AB: InteractionBuilder, const N: usize> Air<AB> for TestCarryAir<N> {
         let local: &[AB::Var] = (*local).borrow();
         let cols = TestCarryCols::<N, AB::Var>::from_slice(local);
         let TestCarryCols { x, y, carries } = cols;
-        // make the expr OverflowInt:
-        let mut expr_limbs = vec![AB::Expr::zero(); 2 * N - 1];
 
-        // Expr = x^2 - y^2
-        for i in 0..N {
-            for j in 0..N {
-                expr_limbs[i + j] += x[i] * x[j];
-                expr_limbs[i + j] -= y[i] * y[j];
-            }
-        }
-        let overflowed = OverflowInt {
-            limbs: expr_limbs,
-            max_overflow_bits: self.max_overflow_bits,
-        };
+        let x_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB>(x, self.limb_bits);
+        let y_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB>(y, self.limb_bits);
+        let expr =
+            (x_overflow.clone() * x_overflow.clone()) - (y_overflow.clone() * y_overflow.clone());
 
         self.test_carry_sub_air.constrain_carry_to_zero(
             builder,
-            overflowed,
+            expr,
             CheckCarryToZeroCols { carries },
         );
     }
@@ -117,48 +108,64 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
                 range_checker.add_count(value + (1 << self.decomp) - (1 << bits));
             }
         };
-        let mut x_bits = big_uint_to_bits(x);
-        let x_limbs: Vec<usize> = (0..self.num_limbs)
-            .map(|_| take_limb(&mut x_bits, self.limb_bits))
-            .collect();
-        let mut y_bits = big_uint_to_bits(y);
-        let y_limbs: Vec<usize> = (0..self.num_limbs)
-            .map(|_| take_limb(&mut y_bits, self.limb_bits))
-            .collect();
-
-        // Longer than carries by 1 for the highest carry.
-        let mut sums = vec![0isize; self.num_limbs * 2];
-        for i in 0..self.num_limbs {
-            for j in 0..self.num_limbs {
-                sums[i + j] += (x_limbs[i] * x_limbs[j]) as isize;
-                sums[i + j] -= (y_limbs[i] * y_limbs[j]) as isize;
-            }
-        }
-        let mut carries = vec![F::zero(); 2 * self.num_limbs - 1];
-        for i in 0..(2 * self.num_limbs - 1) {
-            assert_eq!(sums[i] % (1 << self.limb_bits), 0);
-            let carry = sums[i] >> self.limb_bits;
-            sums[i + 1] += carry;
+        let x_overflow = OverflowInt::<isize>::from_big_uint(x, self.limb_bits);
+        let y_overflow = OverflowInt::<isize>::from_big_uint(y, self.limb_bits);
+        let expr =
+            x_overflow.clone() * x_overflow.clone() - y_overflow.clone() * y_overflow.clone();
+        let carries = expr.calculate_carries(self.limb_bits);
+        let mut carries_f = vec![F::zero(); carries.len()];
+        for (i, &carry) in carries.iter().enumerate() {
             range_check(
                 self.test_carry_sub_air.carry_bits,
                 (carry + (self.test_carry_sub_air.carry_min_value_abs as isize)) as usize,
             );
-            carries[i] = F::from_canonical_usize(carry.unsigned_abs())
+            carries_f[i] = F::from_canonical_usize(carry.unsigned_abs())
                 * if carry >= 0 { F::one() } else { F::neg_one() };
         }
-        // Highest carry should be 0.
-        assert_eq!(sums[2 * self.num_limbs - 1], 0);
+        // let mut x_bits = big_uint_to_bits(x);
+        // let x_limbs: Vec<usize> = (0..self.num_limbs)
+        //     .map(|_| take_limb(&mut x_bits, self.limb_bits))
+        //     .collect();
+        // let mut y_bits = big_uint_to_bits(y);
+        // let y_limbs: Vec<usize> = (0..self.num_limbs)
+        //     .map(|_| take_limb(&mut y_bits, self.limb_bits))
+        //     .collect();
+
+        // // Longer than carries by 1 for the highest carry.
+        // let mut sums = vec![0isize; self.num_limbs * 2];
+        // for i in 0..self.num_limbs {
+        //     for j in 0..self.num_limbs {
+        //         sums[i + j] += (x_limbs[i] * x_limbs[j]) as isize;
+        //         sums[i + j] -= (y_limbs[i] * y_limbs[j]) as isize;
+        //     }
+        // }
+        // let mut carries = vec![F::zero(); 2 * self.num_limbs - 1];
+        // for i in 0..(2 * self.num_limbs - 1) {
+        //     assert_eq!(sums[i] % (1 << self.limb_bits), 0);
+        //     let carry = sums[i] >> self.limb_bits;
+        //     sums[i + 1] += carry;
+        //     range_check(
+        //         self.test_carry_sub_air.carry_bits,
+        //         (carry + (self.test_carry_sub_air.carry_min_value_abs as isize)) as usize,
+        //     );
+        //     carries[i] = F::from_canonical_usize(carry.unsigned_abs())
+        //         * if carry >= 0 { F::one() } else { F::neg_one() };
+        // }
+        // // Highest carry should be 0.
+        // assert_eq!(sums[2 * self.num_limbs - 1], 0);
 
         TestCarryCols {
-            x: x_limbs
+            x: x_overflow
+                .limbs
                 .iter()
-                .map(|x| F::from_canonical_usize(*x))
+                .map(|x| F::from_canonical_usize(*x as usize))
                 .collect(),
-            y: y_limbs
+            y: y_overflow
+                .limbs
                 .iter()
-                .map(|x| F::from_canonical_usize(*x))
+                .map(|x| F::from_canonical_usize(*x as usize))
                 .collect(),
-            carries,
+            carries: carries_f,
         }
     }
 }
