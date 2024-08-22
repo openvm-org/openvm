@@ -184,7 +184,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
         nb_bits: RVar<C::N>,
     ) -> Array<C, Var<C::N>> {
         let rand_f = self.sample(builder);
-        let mut bits = builder.num2bits_f(rand_f);
+        let mut bits = builder.num2bits_f(rand_f, 32);
 
         builder.range(nb_bits, bits.len()).for_each(|i, builder| {
             builder.set(&mut bits, i, C::N::zero());
