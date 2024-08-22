@@ -98,9 +98,9 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
                 ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
             ),
         ];
-        let mut map = BTreeMap::new();
+        let mut modular_arithmetic_chips = BTreeMap::new();
         for (air, modulus) in airs {
-            map.insert(modulus.clone(), air);
+            modular_arithmetic_chips.insert(modulus.clone(), air);
         }
         let is_less_than_chip = IsLessThanChip::new(
             IS_LESS_THAN_BUS,
@@ -120,7 +120,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             field_extension_chip,
             range_checker,
             poseidon2_chip,
-            modular_arithmetic_chips: map,
+            modular_arithmetic_chips,
             is_less_than_chip,
             input_stream: state.input_stream,
             hint_stream: state.hint_stream,
