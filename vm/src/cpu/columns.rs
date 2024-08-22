@@ -7,10 +7,12 @@ use afs_primitives::{
 use itertools::Itertools;
 use p3_field::{Field, PrimeField32};
 
-use super::{CpuAir, CpuOptions, OpCode, CPU_MAX_ACCESSES_PER_CYCLE};
+use super::{CpuAir, CpuOptions, OpCode, CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE};
 use crate::{
     memory::{
-        manager::operation::MemoryOperation, offline_checker::columns::MemoryOfflineCheckerAuxCols,
+        manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
+        offline_checker::columns::MemoryOfflineCheckerAuxCols,
+        OpType,
     },
     vm::ExecutionSegment,
 };
@@ -185,27 +187,34 @@ impl<const WORD_SIZE: usize, T: PrimeField32> CpuAuxCols<WORD_SIZE, T> {
         for opcode in vm.options().enabled_instructions() {
             operation_flags.insert(opcode, T::from_bool(opcode == OpCode::NOP));
         }
-        // TODO[osama]: consider using MemoryTraceBuilder here
-        let oc_cols: [_; CPU_MAX_ACCESSES_PER_CYCLE] = from_fn(|_| {
-            vm.cpu_chip
-                .air
-                .memory_offline_checker
-                .disabled_memory_checker_cols(vm.range_checker.clone())
+
+        let mut mem_trace_builder = MemoryTraceBuilder::new(
+            vm.memory_manager.clone(),
+            vm.range_checker.clone(),
+            vm.cpu_chip.air.memory_offline_checker,
+        );
+        let mem_ops: [_; CPU_MAX_ACCESSES_PER_CYCLE] = core::array::from_fn(|i| {
+            mem_trace_builder.disabled_op(
+                T::one(),
+                if i < CPU_MAX_READS_PER_CYCLE {
+                    OpType::Read
+                } else {
+                    OpType::Write
+                },
+            )
         });
+
         let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
             &IsEqualVecAir::new(WORD_SIZE),
-            (
-                oc_cols[0].io.cell.data.to_vec(),
-                oc_cols[1].io.cell.data.to_vec(),
-            ),
+            (mem_ops[0].cell.data.to_vec(), mem_ops[1].cell.data.to_vec()),
         );
         Self {
             operation_flags,
             public_value_flags: vec![T::zero(); vm.options().num_public_values],
-            mem_ops: from_fn(|i| oc_cols[i].io.clone()),
+            mem_ops,
             read0_equals_read1: T::one(),
             is_equal_vec_aux: is_equal_vec_cols.aux,
-            mem_oc_aux_cols: from_fn(|i| oc_cols[i].aux.clone()),
+            mem_oc_aux_cols: mem_trace_builder.take_accesses_buffer().try_into().unwrap(),
         }
     }
 }
