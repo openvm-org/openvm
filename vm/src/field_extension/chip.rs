@@ -232,8 +232,8 @@ impl FieldExtensionArithmetic {
         // Let a = (a0, a1, a2, a3) represent the element we want to invert.
         // Define a' = (a0, -a1, a2, -a3).  By construction, the product b = a * a' will have zero
         // degree-1 and degree-3 coefficients.
-        // Let b = (b0, 0, b2, 0) and define b' = (x, 0, -y, 0).
-        // Note that c = b * b' = x^2 - BETA * y^2, which is an element of the base field.
+        // Let b = (b0, 0, b2, 0) and define b' = (b0, 0, -b2, 0).
+        // Note that c = b * b' = b0^2 - BETA * b2^2, which is an element of the base field.
         // Therefore, the inverse of a is 1 / a = a' / (a * a') = a' * b' / (b * b') = a' * b' / c.
 
         let [a0, a1, a2, a3] = a;
