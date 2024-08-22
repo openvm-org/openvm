@@ -1,7 +1,7 @@
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use super::columns::FieldExtensionArithmeticCols;
+use super::columns::{FieldExtensionArithmeticCols, FieldExtensionArithmeticIoCols};
 use crate::{
     cpu::FIELD_EXTENSION_BUS,
     field_extension::{
@@ -68,16 +68,25 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
 
         let FieldExtensionArithmeticCols { io, aux } = local;
 
-        let FieldExtensionArithmeticAuxCols {
+        let FieldExtensionArithmeticIoCols {
+            clk,
             op_a,
             op_b,
             op_c,
             d,
             e,
+            x,
+            y,
+            z,
+            ..
+        } = io;
+
+        let FieldExtensionArithmeticAuxCols {
             read_x_aux_cols,
             read_y_aux_cols,
             write_aux_cols,
             is_valid,
+            valid_y_read,
             ..
         } = aux;
 
@@ -86,12 +95,12 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
             builder,
             self.mem_oc,
             &mut clk_offset,
-            aux.is_valid.into(),
+            is_valid.into(),
             false,
-            io.clk,
+            clk,
             d,
             op_b,
-            io.x,
+            x,
             read_x_aux_cols,
         );
 
@@ -100,12 +109,12 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
             builder,
             self.mem_oc,
             &mut clk_offset,
-            aux.valid_y_read.into(),
+            valid_y_read.into(),
             false,
-            io.clk,
+            clk,
             e,
             op_c,
-            io.y,
+            y,
             read_y_aux_cols,
         );
 
@@ -114,12 +123,12 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
             builder,
             self.mem_oc,
             &mut clk_offset,
-            aux.is_valid.into(),
+            is_valid.into(),
             true,
-            io.clk,
+            clk,
             d,
             op_a,
-            io.z,
+            z,
             write_aux_cols,
         );
 

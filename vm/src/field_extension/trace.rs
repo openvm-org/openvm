@@ -55,8 +55,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         let is_mul = F::from_bool(record.opcode == OpCode::BBE4MUL);
         let is_inv = F::from_bool(record.opcode == OpCode::BBE4INV);
 
-        let x = record.x;
-        let y = record.y;
+        let FieldExtensionArithmeticRecord { x, y, z, .. } = record;
 
         let inv = if all(x, |xi| xi == F::zero()) {
             x
@@ -74,11 +73,16 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
 
         FieldExtensionArithmeticCols {
             io: FieldExtensionArithmeticIoCols {
-                opcode: F::from_canonical_usize(record.opcode as usize),
                 clk: F::from_canonical_usize(record.clk),
+                opcode: F::from_canonical_usize(record.opcode as usize),
+                op_a: record.op_a,
+                op_b: record.op_b,
+                op_c: record.op_c,
+                d: record.d,
+                e: record.e,
                 x,
                 y,
-                z: record.z,
+                z,
             },
             aux: FieldExtensionArithmeticAuxCols {
                 is_valid: F::from_bool(record.is_valid),
@@ -87,11 +91,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
                 } else {
                     F::zero()
                 },
-                op_a: record.op_a,
-                op_b: record.op_b,
-                op_c: record.op_c,
-                d: record.d,
-                e: record.e,
                 is_add,
                 is_sub,
                 is_mul,
@@ -118,8 +117,13 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
 
         FieldExtensionArithmeticCols {
             io: FieldExtensionArithmeticIoCols {
-                opcode: F::from_canonical_u32(OpCode::FE4ADD as u32),
                 clk,
+                opcode: F::from_canonical_u32(OpCode::FE4ADD as u32),
+                op_a: F::zero(),
+                op_b: F::zero(),
+                op_c: F::zero(),
+                d: F::zero(),
+                e: F::zero(),
                 x: [F::zero(); EXTENSION_DEGREE],
                 y: [F::zero(); EXTENSION_DEGREE],
                 z: [F::zero(); EXTENSION_DEGREE],
@@ -127,11 +131,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             aux: FieldExtensionArithmeticAuxCols {
                 is_valid: F::zero(),
                 valid_y_read: F::zero(),
-                op_a: F::zero(),
-                op_b: F::zero(),
-                op_c: F::zero(),
-                d: F::zero(),
-                e: F::zero(),
                 is_add: F::one(),
                 is_sub: F::zero(),
                 is_mul: F::zero(),
