@@ -154,8 +154,12 @@ where
         config: Option<FriConfigVariable<C>>,
     ) -> Self {
         let domain = config.unwrap().get_subgroup(builder, log_degree);
-        builder.assign(&domain.shift, self.shift * C::F::generator());
-        domain
+        TwoAdicMultiplicativeCosetVariable {
+            log_n: domain.log_n,
+            size: domain.size,
+            shift: builder.eval(self.shift * C::F::generator()),
+            g: domain.g,
+        }
     }
 }
 

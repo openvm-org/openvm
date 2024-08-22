@@ -12,6 +12,7 @@ pub mod stark;
 mod tests;
 pub mod types;
 mod utils;
+mod witness;
 
 /// Digest size in the outer config.
 const OUTER_DIGEST_SIZE: usize = 1;

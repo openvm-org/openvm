@@ -90,8 +90,9 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
     /// Truncates the array to `len` elements.
     pub fn truncate(&self, builder: &mut Builder<C>, len: Usize<C::N>) {
         match self {
-            Self::Fixed(_) => {
-                todo!()
+            Self::Fixed(v) => {
+                let len = len.value();
+                v.borrow_mut().truncate(len);
             }
             Self::Dyn(_, old_len) => {
                 builder.assign(old_len, len);

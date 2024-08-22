@@ -258,10 +258,12 @@ version = "0.1.0"
 dependencies = [
  "afs-stark-backend",
  "derive_more",
+ "ff 0.13.0",
  "itertools 0.13.0",
  "p3-air",
  "p3-baby-bear",
  "p3-blake3",
+ "p3-bn254-fr",
  "p3-challenger",
  "p3-commit",
  "p3-dft",
