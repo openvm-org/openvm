@@ -1,3 +1,12 @@
+use std::{
+    cmp::{max, min},
+    ops::{Add, Mul, Sub},
+};
+
+use num_bigint_dig::BigUint;
+use p3_air::AirBuilder;
+use p3_util::log2_ceil_usize;
+
 pub mod check_carry_to_zero;
 pub mod utils;
 
@@ -7,12 +16,133 @@ pub mod tests;
 #[derive(Debug, Clone)]
 pub struct OverflowInt<T> {
     // The limbs, e.g. [a_0, a_1, a_2, ...] , represents a_0 + a_1 x + a_2 x^2
-    // T will be AB::Expr in practice, for example when the OverflowInt represents x * y
+    // T can be AB::Expr, for example when the OverflowInt represents x * y
     // a0 = x0 * y0
     // a1 = x0 * y1 + x1 * y0
     pub limbs: Vec<T>,
 
-    // All limbs should be within [-2^max_overflow_bits, 2^max_overflow_bits)
-    // Tthis can be larger than the limb bits of x , y in the above example.
+    // All limbs should be within (-2^max_overflow_bits, 2^max_overflow_bits)
+    // This can be larger than the limb bits of x , y in the above example.
     pub max_overflow_bits: usize,
+
+    pub limb_max_abs: usize,
+}
+
+impl<T> OverflowInt<T> {
+    pub fn from_big_uint(x: BigUint, limb_bits: usize) -> OverflowInt<isize> {
+        let mut x_bits = utils::big_uint_to_bits(x);
+        let mut x_limbs: Vec<isize> = vec![];
+        while !x_bits.is_empty() {
+            let limb = utils::take_limb(&mut x_bits, limb_bits);
+            x_limbs.push(limb as isize);
+        }
+        OverflowInt {
+            limbs: x_limbs,
+            max_overflow_bits: limb_bits,
+            limb_max_abs: (1 << limb_bits) - 1,
+        }
+    }
+
+    pub fn from_var_vec<AB: AirBuilder>(
+        x: Vec<AB::Var>,
+        limb_bits: usize,
+    ) -> OverflowInt<AB::Expr> {
+        let limbs = x.iter().map(|&x| x.into()).collect();
+        OverflowInt {
+            limbs,
+            max_overflow_bits: limb_bits,
+            limb_max_abs: (1 << limb_bits) - 1,
+        }
+    }
+}
+
+impl OverflowInt<isize> {
+    pub fn calculate_carries(&self, limb_bits: usize) -> Vec<isize> {
+        let mut carries = Vec::with_capacity(self.limbs.len());
+
+        let mut carry = 0;
+        for i in 0..self.limbs.len() {
+            carry = (carry + self.limbs[i]) >> limb_bits;
+            carries.push(carry);
+        }
+        carries
+    }
+}
+
+// TODO: this doesn't work for references automatically?
+impl<T> Add for OverflowInt<T>
+where
+    T: Add<Output = T> + Clone + Default,
+{
+    type Output = OverflowInt<T>;
+
+    fn add(self, other: OverflowInt<T>) -> OverflowInt<T> {
+        let len = max(self.limbs.len(), other.limbs.len());
+        let mut limbs = Vec::with_capacity(len);
+        for i in 0..len {
+            let zero = T::default();
+            let a = self.limbs.get(i).unwrap_or(&zero);
+            let b = other.limbs.get(i).unwrap_or(&zero);
+            limbs.push(a.clone() + b.clone());
+        }
+        let new_max = self.limb_max_abs + other.limb_max_abs;
+        let max_bits = log2_ceil_usize(new_max);
+        OverflowInt {
+            limbs,
+            max_overflow_bits: max_bits,
+            limb_max_abs: new_max,
+        }
+    }
+}
+
+impl<T> Sub for OverflowInt<T>
+where
+    T: Sub<Output = T> + Clone + Default,
+{
+    type Output = OverflowInt<T>;
+
+    fn sub(self, other: OverflowInt<T>) -> OverflowInt<T> {
+        let len = max(self.limbs.len(), other.limbs.len());
+        let mut limbs = Vec::with_capacity(len);
+        for i in 0..len {
+            let zero = T::default();
+            let a = self.limbs.get(i).unwrap_or(&zero);
+            let b = other.limbs.get(i).unwrap_or(&zero);
+            limbs.push(a.clone() - b.clone());
+        }
+        let new_max = self.limb_max_abs + other.limb_max_abs;
+        let max_bits = log2_ceil_usize(new_max);
+        OverflowInt {
+            limbs,
+            max_overflow_bits: max_bits,
+            limb_max_abs: new_max,
+        }
+    }
+}
+
+impl<T> Mul for OverflowInt<T>
+where
+    T: Add<Output = T> + Mul<Output = T> + Clone + Default,
+{
+    type Output = OverflowInt<T>;
+
+    fn mul(self, other: OverflowInt<T>) -> OverflowInt<T> {
+        let len = self.limbs.len() + other.limbs.len() - 1;
+        let mut limbs = vec![T::default(); len];
+        for i in 0..self.limbs.len() {
+            for j in 0..other.limbs.len() {
+                // += doesn't work for T.
+                limbs[i + j] =
+                    limbs[i + j].clone() + self.limbs[i].clone() * other.limbs[j].clone();
+            }
+        }
+        let new_max =
+            self.limb_max_abs * other.limb_max_abs * min(self.limbs.len(), other.limbs.len());
+        let max_bits = log2_ceil_usize(new_max);
+        OverflowInt {
+            limbs,
+            max_overflow_bits: max_bits,
+            limb_max_abs: new_max,
+        }
+    }
 }
