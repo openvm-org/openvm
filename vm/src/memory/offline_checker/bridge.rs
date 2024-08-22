@@ -60,10 +60,7 @@ impl<V, const WORD_SIZE: usize> MemoryBridge<V, WORD_SIZE> {
         data: [impl Into<T>; WORD_SIZE],
         timestamp: impl Into<T>,
     ) -> MemoryReadOperation<T, V, WORD_SIZE> {
-        let aux = self
-            .aux
-            .pop_front()
-            .expect("Overflowed memory accesses");
+        let aux = self.aux.pop_front().expect("Overflowed memory accesses");
 
         MemoryReadOperation {
             offline_checker: self.offline_checker,
@@ -83,10 +80,7 @@ impl<V, const WORD_SIZE: usize> MemoryBridge<V, WORD_SIZE> {
         data: [impl Into<T>; WORD_SIZE],
         timestamp: impl Into<T>,
     ) -> MemoryWriteOperation<T, V, WORD_SIZE> {
-        let aux = self
-            .aux
-            .pop_front()
-            .expect("Overflowed memory accesses");
+        let aux = self.aux.pop_front().expect("Overflowed memory accesses");
 
         MemoryWriteOperation {
             offline_checker: self.offline_checker,
