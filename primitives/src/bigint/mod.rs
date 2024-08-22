@@ -18,14 +18,15 @@ pub struct OverflowInt<T> {
     // The limbs, e.g. [a_0, a_1, a_2, ...] , represents a_0 + a_1 x + a_2 x^2
     // T can be AB::Expr, for example when the OverflowInt represents x * y
     // a0 = x0 * y0
-    // a1 = x0 * y1 + x1 * y0
+    // a1 = x0 * y1 + x1 * y0 ...
     pub limbs: Vec<T>,
 
-    // All limbs should be within (-2^max_overflow_bits, 2^max_overflow_bits)
-    // This can be larger than the limb bits of x , y in the above example.
-    pub max_overflow_bits: usize,
-
+    // Track the max abs of limbs, so we can do arithmetic on them.
     pub limb_max_abs: usize,
+
+    // All limbs should be within (-2^max_overflow_bits, 2^max_overflow_bits)
+    // This should be ceiling of log2(limb_max_abs)
+    pub max_overflow_bits: usize,
 }
 
 impl<T> OverflowInt<T> {
