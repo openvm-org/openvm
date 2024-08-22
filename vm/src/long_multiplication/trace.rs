@@ -13,7 +13,8 @@ struct CalculationResult {
 impl LongMultiplicationChip {
     fn calculate(&self, op: OpCode, x: &[u32], y: &[u32]) -> CalculationResult {
         let num_limbs = num_limbs(self.arg_size, self.limb_size);
-        assert!(x.len() == num_limbs && y.len() == num_limbs);
+        assert_eq!(x.len(), num_limbs);
+        assert_eq!(y.len(), num_limbs);
 
         let mut z_limbs = vec![0; num_limbs];
         let mut carry = vec![0; num_limbs];

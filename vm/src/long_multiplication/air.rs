@@ -1,9 +1,8 @@
 use std::borrow::Borrow;
 
 use afs_stark_backend::interaction::InteractionBuilder;
-use num_traits::cast::ToPrimitive;
 use p3_air::{Air, BaseAir};
-use p3_field::{AbstractField, Field};
+use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::Matrix;
 
 use super::columns::LongMultiplicationCols;
@@ -22,7 +21,10 @@ impl<F: Field> BaseAir<F> for LongMultiplicationAir {
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for LongMultiplicationAir {
+impl<AB: InteractionBuilder> Air<AB> for LongMultiplicationAir
+where
+    AB::F: PrimeField32,
+{
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -41,7 +43,7 @@ impl<AB: InteractionBuilder> Air<AB> for LongMultiplicationAir {
 
         assert!(
             num_limbs * ((1 << self.limb_size) - 1) * ((1 << self.limb_size) - 1)
-                < AB::F::order().to_usize().unwrap()
+                < AB::F::ORDER_U32 as usize
         );
 
         builder.assert_eq(opcode, AB::Expr::from_canonical_u8(self.mul_op as u8));
