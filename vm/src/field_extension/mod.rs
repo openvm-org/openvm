@@ -253,10 +253,10 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         let clk = self.memory_manager.borrow().get_clk();
 
         for _ in 0..8 {
-            trace_builder.disabled_op(F::zero(), OpType::Read);
+            trace_builder.disabled_op(F::one(), OpType::Read);
         }
         for _ in 0..4 {
-            trace_builder.disabled_op(F::zero(), OpType::Write);
+            trace_builder.disabled_op(F::one(), OpType::Write);
         }
         let mut mem_oc_aux_iter = trace_builder.take_accesses_buffer().into_iter();
 
@@ -274,8 +274,8 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
                 op_a: F::zero(),
                 op_b: F::zero(),
                 op_c: F::zero(),
-                d: F::zero(),
-                e: F::zero(),
+                d: F::one(),
+                e: F::one(),
                 is_add: F::one(),
                 is_sub: F::zero(),
                 is_mul: F::zero(),

@@ -138,9 +138,9 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
     ///
     /// Used for both compression and permutation.
     ///
-    /// TODO[osama]: finish this comment
-    /// When is_direct is true, this function does not do any
+    /// When is_direct is true, this function does not access memory
     pub fn calculate(&mut self, instruction: Instruction<F>, is_direct: bool) {
+        // TODO: direct accesses are not currently supported
         assert!(!is_direct);
 
         let start_clk = self.memory_manager.borrow().get_clk();
