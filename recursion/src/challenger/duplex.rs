@@ -2,7 +2,7 @@ use afs_compiler::{
     ir::{RVar, DIGEST_SIZE, PERMUTATION_WIDTH},
     prelude::{Array, Builder, Config, Ext, Felt, Var},
 };
-use p3_field::AbstractField;
+use p3_field::{AbstractField, Field};
 
 use crate::{
     challenger::{
@@ -178,13 +178,12 @@ impl<C: Config> DuplexChallengerVariable<C> {
         builder.ext_from_base_slice(&[a, b, c, d])
     }
 
-    fn sample_bits(
-        &mut self,
-        builder: &mut Builder<C>,
-        nb_bits: RVar<C::N>,
-    ) -> Array<C, Var<C::N>> {
+    fn sample_bits(&mut self, builder: &mut Builder<C>, nb_bits: RVar<C::N>) -> Array<C, Var<C::N>>
+    where
+        C::N: Field,
+    {
         let rand_f = self.sample(builder);
-        let mut bits = builder.num2bits_f(rand_f, 32);
+        let mut bits = builder.num2bits_f(rand_f, C::N::bits() as u32);
 
         builder.range(nb_bits, bits.len()).for_each(|i, builder| {
             builder.set(&mut bits, i, C::N::zero());
