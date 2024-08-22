@@ -2,7 +2,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
 use super::{air::MemoryAuditAir, columns::AuditCols};
-use crate::{cpu::NEW_MEMORY_BUS, memory::MemoryAddress};
+use crate::{cpu::MEMORY_BUS, memory::MemoryAddress};
 
 impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
     pub fn eval_interactions<AB: InteractionBuilder>(
@@ -12,7 +12,7 @@ impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
     ) {
         let mult = AB::Expr::one() - local.is_extra;
         // Write the initial memory values at initial timestamps
-        NEW_MEMORY_BUS
+        MEMORY_BUS
             .write(
                 MemoryAddress::new(local.addr_space, local.pointer),
                 local.initial_cell.data,
@@ -21,7 +21,7 @@ impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
             .eval(builder, mult.clone());
 
         // Read the final memory values at last timestamps when written to
-        NEW_MEMORY_BUS
+        MEMORY_BUS
             .read(
                 MemoryAddress::new(local.addr_space, local.pointer),
                 local.final_cell.data,
