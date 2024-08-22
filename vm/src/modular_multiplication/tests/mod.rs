@@ -6,7 +6,7 @@ use p3_field::AbstractField;
 use rand::RngCore;
 
 use crate::{
-    cpu::{trace::Instruction, OpCode::MOD_SECP256K1_COORD_MUL},
+    cpu::{trace::Instruction, OpCode::SECP256K1_COORD_MUL},
     modular_multiplication::{bigint_to_elems, ModularArithmeticChip},
     program::Program,
     vm::{
@@ -73,7 +73,7 @@ fn test_modular_multiplication_runtime() {
     let address1 = 0;
     let address2 = 100;
     let address3 = 4000;
-    let air = segment.modular_arithmetic_chip.airs.get(&modulus).unwrap();
+    let air = &segment.modular_arithmetic_chips.get(&modulus).unwrap().air;
     let repr_bits = air.air.repr_bits;
     let num_elems = air.air.limb_dimensions.io_limb_sizes.len();
 
@@ -96,7 +96,7 @@ fn test_modular_multiplication_runtime() {
     ModularArithmeticChip::calculate(
         segment,
         Instruction::from_isize(
-            MOD_SECP256K1_COORD_MUL,
+            SECP256K1_COORD_MUL,
             address1 as isize,
             address2 as isize,
             address3 as isize,

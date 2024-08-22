@@ -287,47 +287,31 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 }
                 DslIr::AddSecp256k1Coord(dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::AddMSecp256k1Coord(
-                            dst.ptr_fp(),
-                            lhs.ptr_fp(),
-                            rhs.ptr_fp(),
-                        ),
+                        AsmInstruction::AddSecp256k1Coord(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
                         debug_info,
                     );
                 }
                 DslIr::SubSecp256k1Coord(dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::SubMSecp256k1Coord(
-                            dst.ptr_fp(),
-                            lhs.ptr_fp(),
-                            rhs.ptr_fp(),
-                        ),
+                        AsmInstruction::SubSecp256k1Coord(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
                         debug_info,
                     );
                 }
                 DslIr::MulSecp256k1Coord(dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::MulMSecp256k1Coord(
-                            dst.ptr_fp(),
-                            lhs.ptr_fp(),
-                            rhs.ptr_fp(),
-                        ),
+                        AsmInstruction::MulSecp256k1Coord(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
                         debug_info,
                     );
                 }
                 DslIr::DivSecp256k1Coord(dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::DivMSecp256k1Coord(
-                            dst.ptr_fp(),
-                            lhs.ptr_fp(),
-                            rhs.ptr_fp(),
-                        ),
+                        AsmInstruction::DivSecp256k1Coord(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
                         debug_info,
                     );
                 }
                 DslIr::AddSecp256k1Scalar(dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::AddMSecp256k1Scalar(
+                        AsmInstruction::AddSecp256k1Scalar(
                             dst.ptr_fp(),
                             lhs.ptr_fp(),
                             rhs.ptr_fp(),
@@ -337,7 +321,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 }
                 DslIr::SubSecp256k1Scalar(dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::SubMSecp256k1Scalar(
+                        AsmInstruction::SubSecp256k1Scalar(
                             dst.ptr_fp(),
                             lhs.ptr_fp(),
                             rhs.ptr_fp(),
@@ -347,7 +331,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 }
                 DslIr::MulSecp256k1Scalar(dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::MulMSecp256k1Scalar(
+                        AsmInstruction::MulSecp256k1Scalar(
                             dst.ptr_fp(),
                             lhs.ptr_fp(),
                             rhs.ptr_fp(),
@@ -357,7 +341,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 }
                 DslIr::DivSecp256k1Scalar(dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::DivMSecp256k1Scalar(
+                        AsmInstruction::DivSecp256k1Scalar(
                             dst.ptr_fp(),
                             lhs.ptr_fp(),
                             rhs.ptr_fp(),

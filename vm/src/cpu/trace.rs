@@ -409,14 +409,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     let clk = vm.memory_manager.borrow().get_clk().as_canonical_u32();
                     vm.field_extension_chip.calculate(clk as usize, instruction);
                 }
-                MOD_SECP256K1_COORD_ADD
-                | MOD_SECP256K1_COORD_SUB
-                | MOD_SECP256K1_COORD_MUL
-                | MOD_SECP256K1_COORD_DIV
-                | MOD_SECP256K1_SCALAR_ADD
-                | MOD_SECP256K1_SCALAR_SUB
-                | MOD_SECP256K1_SCALAR_MUL
-                | MOD_SECP256K1_SCALAR_DIV => {
+                SECP256K1_COORD_ADD | SECP256K1_COORD_SUB | SECP256K1_COORD_MUL
+                | SECP256K1_COORD_DIV | SECP256K1_SCALAR_ADD | SECP256K1_SCALAR_SUB
+                | SECP256K1_SCALAR_MUL | SECP256K1_SCALAR_DIV => {
                     generate_disabled_ops!();
                     ModularArithmeticChip::calculate(vm, instruction);
                 }

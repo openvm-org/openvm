@@ -704,64 +704,64 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::AddMSecp256k1Coord(dst, src1, src2) => vec![inst(
-            MOD_SECP256K1_COORD_ADD,
+        AsmInstruction::AddSecp256k1Coord(dst, src1, src2) => vec![inst(
+            SECP256K1_COORD_ADD,
             i32_f(src1),
             i32_f(src2),
             i32_f(dst),
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::SubMSecp256k1Coord(dst, src1, src2) => vec![inst(
-            MOD_SECP256K1_COORD_SUB,
+        AsmInstruction::SubSecp256k1Coord(dst, src1, src2) => vec![inst(
+            SECP256K1_COORD_SUB,
             i32_f(src1),
             i32_f(dst),
             i32_f(src2),
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::MulMSecp256k1Coord(dst, src1, src2) => vec![inst(
-            MOD_SECP256K1_COORD_MUL,
+        AsmInstruction::MulSecp256k1Coord(dst, src1, src2) => vec![inst(
+            SECP256K1_COORD_MUL,
             i32_f(src1),
             i32_f(src2),
             i32_f(dst),
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::DivMSecp256k1Coord(dst, src1, src2) => vec![inst(
-            MOD_SECP256K1_COORD_DIV,
+        AsmInstruction::DivSecp256k1Coord(dst, src1, src2) => vec![inst(
+            SECP256K1_COORD_DIV,
             i32_f(src1),
             i32_f(dst),
             i32_f(src2),
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::AddMSecp256k1Scalar(dst, src1, src2) => vec![inst(
-            MOD_SECP256K1_SCALAR_ADD,
+        AsmInstruction::AddSecp256k1Scalar(dst, src1, src2) => vec![inst(
+            SECP256K1_SCALAR_ADD,
             i32_f(src1),
             i32_f(src2),
             i32_f(dst),
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::SubMSecp256k1Scalar(dst, src1, src2) => vec![inst(
-            MOD_SECP256K1_SCALAR_SUB,
+        AsmInstruction::SubSecp256k1Scalar(dst, src1, src2) => vec![inst(
+            SECP256K1_SCALAR_SUB,
             i32_f(src1),
             i32_f(dst),
             i32_f(src2),
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::MulMSecp256k1Scalar(dst, src1, src2) => vec![inst(
-            MOD_SECP256K1_SCALAR_MUL,
+        AsmInstruction::MulSecp256k1Scalar(dst, src1, src2) => vec![inst(
+            SECP256K1_SCALAR_MUL,
             i32_f(src1),
             i32_f(src2),
             i32_f(dst),
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::DivMSecp256k1Scalar(dst, src1, src2) => vec![inst(
-            MOD_SECP256K1_SCALAR_DIV,
+        AsmInstruction::DivSecp256k1Scalar(dst, src1, src2) => vec![inst(
+            SECP256K1_SCALAR_DIV,
             i32_f(src1),
             i32_f(dst),
             i32_f(src2),

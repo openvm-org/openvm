@@ -13,6 +13,7 @@ use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
     rap::AnyRap,
 };
+use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 use p3_matrix::dense::DenseMatrix;
 use poseidon2_air::poseidon2::Poseidon2Config;
@@ -43,7 +44,7 @@ pub struct ExecutionSegment<const NUM_WORDS: usize, const WORD_SIZE: usize, F: P
     pub range_checker: Arc<RangeCheckerGateChip>,
     pub poseidon2_chip: Poseidon2Chip<16, NUM_WORDS, WORD_SIZE, F>,
     pub is_less_than_chip: IsLessThanChip<F>,
-    pub modular_arithmetic_chip: ModularArithmeticChip<F>,
+    pub modular_arithmetic_chips: BTreeMap<BigUint, ModularArithmeticChip<F>>,
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
     pub has_execution_happened: bool,
@@ -84,14 +85,23 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             POSEIDON2_BUS,
         );
         let airs = vec![
-            ModularArithmeticVmAir {
-                air: ModularArithmeticBigIntAir::default_for_secp256k1_coord(),
-            },
-            ModularArithmeticVmAir {
-                air: ModularArithmeticBigIntAir::default_for_secp256k1_scalar(),
-            },
+            (
+                ModularArithmeticChip::new(ModularArithmeticVmAir {
+                    air: ModularArithmeticBigIntAir::default_for_secp256k1_coord(),
+                }),
+                ModularArithmeticBigIntAir::secp256k1_coord_prime(),
+            ),
+            (
+                ModularArithmeticChip::new(ModularArithmeticVmAir {
+                    air: ModularArithmeticBigIntAir::default_for_secp256k1_scalar(),
+                }),
+                ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
+            ),
         ];
-        let modular_arithmetic_chip = ModularArithmeticChip::new(airs);
+        let mut map = BTreeMap::new();
+        for (air, modulus) in airs {
+            map.insert(modulus.clone(), air);
+        }
         let is_less_than_chip = IsLessThanChip::new(
             IS_LESS_THAN_BUS,
             30,
@@ -110,7 +120,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             field_extension_chip,
             range_checker,
             poseidon2_chip,
-            modular_arithmetic_chip,
+            modular_arithmetic_chips: map,
             is_less_than_chip,
             input_stream: state.input_stream,
             hint_stream: state.hint_stream,
