@@ -1,14 +1,12 @@
 use std::{collections::HashMap, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
-use p3_field::PrimeField32;
+use derive_new::new;
+use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use self::{access_cell::AccessCell, interface::MemoryInterface};
-use super::{
-    audit::{air::MemoryAuditAir, MemoryAuditChip},
-    offline_checker::columns::MemoryAccess,
-};
+use super::audit::{air::MemoryAuditAir, MemoryAuditChip};
 use crate::{
     memory::{decompose, manager::operation::MemoryOperation, OpType},
     vm::config::MemoryConfig,
@@ -219,4 +217,33 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     // pub fn write_elem(&mut self, timestamp: usize, address_space: F, address: F, data: F) {
     //     self.write_word(timestamp, address_space, address, decompose(data));
     // }
+}
+
+#[derive(new, Debug, Default)]
+pub struct MemoryAccess<const WORD_SIZE: usize, T> {
+    pub op: MemoryOperation<WORD_SIZE, T>,
+    pub old_cell: AccessCell<WORD_SIZE, T>,
+}
+
+impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
+    pub fn disabled_read(timestamp: T, addr_space: T) -> MemoryAccess<WORD_SIZE, T> {
+        Self::disabled_op(timestamp, addr_space, OpType::Read)
+    }
+
+    pub fn disabled_write(timestamp: T, addr_space: T) -> MemoryAccess<WORD_SIZE, T> {
+        Self::disabled_op(timestamp, addr_space, OpType::Write)
+    }
+
+    pub fn disabled_op(timestamp: T, addr_space: T, op_type: OpType) -> MemoryAccess<WORD_SIZE, T> {
+        MemoryAccess::<WORD_SIZE, T>::new(
+            MemoryOperation {
+                addr_space,
+                pointer: T::zero(),
+                op_type: T::from_canonical_u8(op_type as u8),
+                cell: AccessCell::new([T::zero(); WORD_SIZE], timestamp),
+                enabled: T::zero(),
+            },
+            AccessCell::new([T::zero(); WORD_SIZE], T::zero()),
+        )
+    }
 }

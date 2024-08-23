@@ -14,7 +14,8 @@ use crate::{
         EXTENSION_DEGREE,
     },
     memory::{
-        manager::trace_builder::MemoryTraceBuilder, offline_checker::columns::MemoryAccess, OpType,
+        manager::{trace_builder::MemoryTraceBuilder, MemoryAccess},
+        OpType,
     },
 };
 

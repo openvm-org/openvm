@@ -22,7 +22,7 @@ use crate::{
     field_extension::chip::{
         FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticRecord,
     },
-    memory::{manager::MemoryManager, offline_checker::columns::MemoryAccess},
+    memory::manager::{MemoryAccess, MemoryManager},
     vm::config::MemoryConfig,
 };
 

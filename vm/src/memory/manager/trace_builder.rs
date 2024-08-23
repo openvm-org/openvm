@@ -3,13 +3,10 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 use p3_field::PrimeField32;
 
-use super::{operation::MemoryOperation, MemoryManager};
+use super::{operation::MemoryOperation, MemoryAccess, MemoryManager};
 use crate::memory::{
     compose, decompose,
-    offline_checker::{
-        bridge::MemoryOfflineChecker,
-        columns::{MemoryAccess, MemoryOfflineCheckerAuxCols},
-    },
+    offline_checker::{bridge::MemoryOfflineChecker, columns::MemoryOfflineCheckerAuxCols},
     OpType,
 };
 

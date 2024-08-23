@@ -13,11 +13,8 @@ use crate::{
     cpu::{trace::Instruction, OpCode, FIELD_EXTENSION_INSTRUCTIONS},
     field_extension::air::FieldExtensionArithmeticAir,
     memory::{
-        manager::MemoryManager,
-        offline_checker::{
-            bridge::{emb, proj, MemoryOfflineChecker},
-            columns::MemoryAccess,
-        },
+        manager::{MemoryAccess, MemoryManager},
+        offline_checker::bridge::{emb, proj, MemoryOfflineChecker},
     },
     vm::config::MemoryConfig,
 };
