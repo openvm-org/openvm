@@ -4,32 +4,35 @@ use std::{
     fmt::Display,
 };
 
-use afs_primitives::{is_equal_vec::IsEqualVecAir, sub_chip::LocalTraceInstructions};
-use afs_stark_backend::rap::AnyRap;
+use itertools::Itertools;
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use super::{
-    columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    timestamp_delta, CpuChip, CpuState, CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE,
-    CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
-};
+use afs_primitives::{is_equal_vec::IsEqualVecAir, sub_chip::LocalTraceInstructions};
+use afs_stark_backend::rap::AnyRap;
+
 use crate::{
     arch::{
         chips::{InstructionExecutor, MachineChip},
-        columns::ExecutionState,
-        instructions::{Opcode, Opcode::*, CORE_INSTRUCTIONS},
+        columns::{ExecutionState, NUM_OPERANDS},
+        instructions::{CORE_INSTRUCTIONS, Opcode, Opcode::*},
     },
     cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
     memory::{
         compose, decompose,
-        manager::{operation::MemoryOperation, MemoryManager},
+        manager::{MemoryManager, operation::MemoryOperation},
         OpType,
     },
     vm::ExecutionSegment,
+};
+
+use super::{
+    columns::{CpuAuxCols, CpuCols, CpuIoCols},
+    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, CpuChip, CpuState,
+    INST_WIDTH, timestamp_delta,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -76,23 +79,24 @@ impl<F: Field> Instruction<F> {
         }
     }
 
-    pub fn from_usize(
-        opcode: Opcode,
-        op_a: usize,
-        op_b: usize,
-        op_c: usize,
-        d: usize,
-        e: usize,
-    ) -> Self {
+    pub fn from_usize<const N: usize>(opcode: Opcode, operands: [usize; N]) -> Self {
+        let mut operands = operands.to_vec();
+        while operands.len() < NUM_OPERANDS {
+            operands.push(0);
+        }
+        let operands = operands
+            .into_iter()
+            .map(F::from_canonical_usize)
+            .collect_vec();
         Self {
             opcode,
-            op_a: F::from_canonical_usize(op_a),
-            op_b: F::from_canonical_usize(op_b),
-            op_c: F::from_canonical_usize(op_c),
-            d: F::from_canonical_usize(d),
-            e: F::from_canonical_usize(e),
-            op_f: isize_to_field::<F>(0),
-            op_g: isize_to_field::<F>(0),
+            op_a: operands[0],
+            op_b: operands[1],
+            op_c: operands[2],
+            d: operands[3],
+            e: operands[4],
+            op_f: operands[5],
+            op_g: operands[6],
             debug: String::new(),
         }
     }

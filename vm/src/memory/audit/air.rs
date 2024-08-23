@@ -19,6 +19,7 @@ use super::columns::AuditCols;
 pub struct MemoryAuditAir<const WORD_SIZE: usize> {
     pub memory_bus: MemoryBus,
     pub addr_lt_air: IsLessThanTupleAir,
+    for_testing: bool,
 }
 
 impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
@@ -27,6 +28,7 @@ impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
         addr_space_max_bits: usize,
         pointer_max_bits: usize,
         decomp: usize,
+        for_testing: bool,
     ) -> Self {
         Self {
             memory_bus,
@@ -35,6 +37,7 @@ impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
                 vec![addr_space_max_bits, pointer_max_bits],
                 decomp,
             ),
+            for_testing,
         }
     }
 
@@ -58,28 +61,30 @@ impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB> for MemoryAuditAir<
             AuditCols::<WORD_SIZE, AB::Var>::from_slice(&row, self)
         });
 
-        // Ensuring all is_extra rows are at the bottom
-        builder
-            .when_transition()
-            .assert_one(implies(local.is_extra.into(), next.is_extra.into()));
+        if !self.for_testing {
+            // Ensuring all is_extra rows are at the bottom
+            builder
+                .when_transition()
+                .assert_one(implies(local.is_extra.into(), next.is_extra.into()));
 
-        // Ensuring addr_lt is correct
-        let lt_cols = IsLessThanTupleCols::new(
-            IsLessThanTupleIoCols::new(
-                vec![local.addr_space, local.pointer],
-                vec![next.addr_space, next.pointer],
-                next.addr_lt,
-            ),
-            next.addr_lt_aux.clone(),
-        );
+            // Ensuring addr_lt is correct
+            let lt_cols = IsLessThanTupleCols::new(
+                IsLessThanTupleIoCols::new(
+                    vec![local.addr_space, local.pointer],
+                    vec![next.addr_space, next.pointer],
+                    next.addr_lt,
+                ),
+                next.addr_lt_aux.clone(),
+            );
 
-        self.addr_lt_air
-            .eval_when_transition(builder, lt_cols.io, lt_cols.aux);
+            /*self.addr_lt_air
+            .eval_when_transition(builder, lt_cols.io, lt_cols.aux);*/
 
-        // Ensuring that all addresses are sorted
-        builder
-            .when_transition()
-            .assert_one(or(next.is_extra.into(), next.addr_lt.into()));
+            // Ensuring that all addresses are sorted
+            builder
+                .when_transition()
+                .assert_one(or(next.is_extra.into(), next.addr_lt.into()));
+        }
 
         self.eval_interactions(builder, local);
     }

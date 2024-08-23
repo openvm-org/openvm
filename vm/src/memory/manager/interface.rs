@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
-use super::AccessCell;
 use crate::memory::audit::MemoryAuditChip;
+
+use super::AccessCell;
 
 #[derive(Debug)]
 pub enum MemoryInterface<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
@@ -40,6 +41,21 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             MemoryInterface::Volatile(ref audit_chip) => {
                 let final_memory_btree = final_memory.into_iter().collect();
                 audit_chip.generate_trace(&final_memory_btree)
+            } // MemoryInterface::Persistent(ref expand_chip) => {
+              //     expand_chip.generate_trace(&final_memory, trace_height)
+              // }
+        }
+    }
+
+    pub fn generate_trace_with_height(
+        &self,
+        final_memory: HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
+        trace_height: usize,
+    ) -> RowMajorMatrix<F> {
+        match self {
+            MemoryInterface::Volatile(ref audit_chip) => {
+                let final_memory_btree = final_memory.into_iter().collect();
+                audit_chip.generate_trace_with_height(&final_memory_btree, trace_height)
             } // MemoryInterface::Persistent(ref expand_chip) => {
               //     expand_chip.generate_trace(&final_memory, trace_height)
               // }

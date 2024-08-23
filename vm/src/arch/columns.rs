@@ -26,6 +26,14 @@ impl<T: Clone> ExecutionState<T> {
             timestamp: timestamp.into(),
         }
     }
+
+    pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> Self {
+        let mut next = || iter.next().unwrap();
+        Self {
+            pc: next(),
+            timestamp: next(),
+        }
+    }
     pub fn from_slice(slice: &[T]) -> Self {
         Self {
             pc: slice[0].clone(),

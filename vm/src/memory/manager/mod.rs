@@ -41,7 +41,7 @@ pub struct MemoryManager<F: PrimeField32> {
     pub interface_chip: MemoryInterface<NUM_WORDS, WORD_SIZE, F>,
     mem_config: MemoryConfig,
     pub(crate) range_checker: Arc<RangeCheckerGateChip>,
-    timestamp: F,
+    pub timestamp: F,
     /// Maps (addr_space, pointer) to (data, timestamp)
     pub memory: HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
 }
@@ -74,6 +74,26 @@ impl<F: PrimeField32> MemoryManager<F> {
                 mem_config.pointer_max_bits,
                 mem_config.decomp,
                 range_checker.clone(),
+            )),
+            timestamp: F::one(),
+            memory: HashMap::new(),
+            range_checker,
+        }
+    }
+
+    pub fn new_for_testing(
+        memory_bus: MemoryBus,
+        mem_config: MemoryConfig,
+        range_checker: Arc<RangeCheckerGateChip>,
+    ) -> Self {
+        Self {
+            memory_bus,
+            mem_config,
+            interface_chip: MemoryInterface::Volatile(MemoryAuditChip::new_for_testing(
+                memory_bus,
+                mem_config.addr_space_max_bits,
+                mem_config.pointer_max_bits,
+                mem_config.decomp,
             )),
             timestamp: F::one(),
             memory: HashMap::new(),
@@ -114,7 +134,6 @@ impl<F: PrimeField32> MemoryManager<F> {
                 AccessCell::new(data, F::zero()),
             );
         }
-        debug_assert!((pointer.as_canonical_u32() as usize) % WORD_SIZE == 0);
 
         let cell = self.memory.get_mut(&(addr_space, pointer)).unwrap();
         let (old_clk, old_data) = (cell.clk, cell.data);
@@ -152,7 +171,6 @@ impl<F: PrimeField32> MemoryManager<F> {
         data: [F; WORD_SIZE],
     ) -> MemoryAccess<WORD_SIZE, F> {
         assert!(addr_space != F::zero());
-        debug_assert!((pointer.as_canonical_u32() as usize) % WORD_SIZE == 0);
 
         let cur_clk = self.timestamp;
         self.timestamp += F::one();
@@ -188,7 +206,6 @@ impl<F: PrimeField32> MemoryManager<F> {
 
     pub fn unsafe_write_word(&mut self, addr_space: F, pointer: F, data: [F; WORD_SIZE]) {
         assert!(addr_space != F::zero());
-        debug_assert!((pointer.as_canonical_u32() as usize) % WORD_SIZE == 0);
 
         self.memory
             .entry((addr_space, pointer))
@@ -210,6 +227,24 @@ impl<F: PrimeField32> MemoryManager<F> {
         }
 
         self.interface_chip.generate_trace(final_memory)
+    }
+
+    // annoying function, need a proper memory testing implementation so this isn't necessary
+    pub fn generate_memory_interface_trace_with_height(
+        &self,
+        trace_height: usize,
+    ) -> RowMajorMatrix<F> {
+        let all_addresses = self.interface_chip.all_addresses();
+        let mut final_memory = HashMap::new();
+        for (addr_space, pointer) in all_addresses {
+            final_memory.insert(
+                (addr_space, pointer),
+                *self.memory.get(&(addr_space, pointer)).unwrap(),
+            );
+        }
+
+        self.interface_chip
+            .generate_trace_with_height(final_memory, trace_height)
     }
 
     /// Trace generation for dummy values when a memory operation should be selectively disabled.

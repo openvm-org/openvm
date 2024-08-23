@@ -61,8 +61,9 @@ fn field_extension_air_test() {
         memory_tester.install(as_d, address1, operand1);
         memory_tester.install(as_e, address2, operand2);
         execution_tester.execute(
+            &mut memory_tester,
             &mut field_extension_chip,
-            Instruction::from_usize(opcode, result_address, address1, address2, as_d, as_e),
+            Instruction::from_usize(opcode, [result_address, address1, address2, as_d, as_e]),
         );
         memory_tester.expect(as_d, result_address, result);
         memory_tester.check();

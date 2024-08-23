@@ -1,15 +1,11 @@
 use derive_new::new;
-use p3_field::Field;
 
 use afs_derive::AlignedBorrow;
 
 use crate::{
     arch::columns::ExecutionState,
     field_arithmetic::FieldArithmeticAir,
-    memory::{
-        MemoryAddress,
-        offline_checker::columns::{MemoryOfflineCheckerAuxCols, MemoryOfflineCheckerCols},
-    },
+    memory::{MemoryAddress, offline_checker::columns::MemoryOfflineCheckerAuxCols},
 };
 
 /// Columns for field arithmetic chip.
@@ -48,28 +44,42 @@ pub struct FieldArithmeticAuxCols<T> {
     pub mem_oc_aux_cols: [MemoryOfflineCheckerAuxCols<1, T>; FieldArithmeticAir::TIMESTAMP_DELTA],
 }
 
-impl<F> FieldArithmeticCols<F>
-where
-    F: Field,
-{
+impl<T: Clone> FieldArithmeticCols<T> {
     pub fn get_width(air: &FieldArithmeticAir) -> usize {
-        FieldArithmeticIoCols::<F>::get_width() + FieldArithmeticAuxCols::<F>::get_width(air)
+        FieldArithmeticIoCols::<T>::get_width() + FieldArithmeticAuxCols::<T>::get_width(air)
     }
 
-    pub fn flatten(&self) -> Vec<F> {
+    pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I, air: &FieldArithmeticAir) -> Self {
+        Self {
+            io: FieldArithmeticIoCols::from_iter(iter),
+            aux: FieldArithmeticAuxCols::from_iter(iter, air),
+        }
+    }
+
+    pub fn flatten(&self) -> Vec<T> {
         let mut result = self.io.flatten();
         result.extend(self.aux.flatten());
         result
     }
 }
 
-impl<F: Field> FieldArithmeticIoCols<F> {
+impl<T: Clone> FieldArithmeticIoCols<T> {
     pub fn get_width() -> usize {
-        1 + ExecutionState::<F>::get_width() + (3 * Operand::<F>::get_width())
+        1 + ExecutionState::<T>::get_width() + (3 * Operand::<T>::get_width())
     }
 
-    pub fn flatten(&self) -> Vec<F> {
-        let mut result = vec![self.opcode];
+    pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> Self {
+        Self {
+            opcode: iter.next().unwrap(),
+            from_state: ExecutionState::from_iter(iter),
+            operand1: Operand::from_iter(iter),
+            operand2: Operand::from_iter(iter),
+            result: Operand::from_iter(iter),
+        }
+    }
+
+    pub fn flatten(&self) -> Vec<T> {
+        let mut result = vec![self.opcode.clone()];
         result.extend(self.from_state.flatten());
         result.extend(self.operand1.flatten());
         result.extend(self.operand2.flatten());
@@ -80,7 +90,23 @@ impl<F: Field> FieldArithmeticIoCols<F> {
 
 impl<T: Clone> FieldArithmeticAuxCols<T> {
     pub fn get_width(air: &FieldArithmeticAir) -> usize {
-        6 + (3 * MemoryOfflineCheckerCols::<1, T>::width(&air.mem_oc))
+        6 + (FieldArithmeticAir::TIMESTAMP_DELTA
+            * MemoryOfflineCheckerAuxCols::<1, T>::width(&air.mem_oc))
+    }
+
+    pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I, air: &FieldArithmeticAir) -> Self {
+        let mut next = || iter.next().unwrap();
+        Self {
+            is_valid: next(),
+            is_add: next(),
+            is_sub: next(),
+            is_mul: next(),
+            is_div: next(),
+            divisor_inv: next(),
+            mem_oc_aux_cols: std::array::from_fn(|_| {
+                MemoryOfflineCheckerAuxCols::try_from_iter(iter, &air.mem_oc.timestamp_lt_air)
+            }),
+        }
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -109,6 +135,15 @@ pub struct Operand<F> {
 impl<T: Clone> Operand<T> {
     pub fn get_width() -> usize {
         3
+    }
+
+    pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> Self {
+        let mut next = || iter.next().unwrap();
+        Self {
+            address_space: next(),
+            address: next(),
+            value: next(),
+        }
     }
 
     pub fn flatten(&self) -> Vec<T> {

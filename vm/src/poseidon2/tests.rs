@@ -128,7 +128,7 @@ fn setup_test(
             _ => panic!(),
         }
 
-        execution_tester.execute(&mut poseidon2_chip, instruction);
+        execution_tester.execute(&mut memory_tester, &mut poseidon2_chip, instruction);
 
         match opcode {
             COMP_POS2 => {

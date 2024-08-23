@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, VecDeque},
-    mem::take,
-};
+use std::{collections::VecDeque, mem::take};
 
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;

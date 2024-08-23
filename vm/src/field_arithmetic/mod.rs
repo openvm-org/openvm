@@ -7,12 +7,12 @@ use crate::{
         bridge::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
-        instructions::{Opcode, FIELD_EXTENSION_INSTRUCTIONS},
+        instructions::{FIELD_ARITHMETIC_INSTRUCTIONS, Opcode},
     },
     cpu::trace::Instruction,
     field_arithmetic::columns::Operand,
     memory::{
-        manager::{trace_builder::MemoryTraceBuilder, MemoryManager},
+        manager::{MemoryManager, trace_builder::MemoryTraceBuilder},
         offline_checker::bridge::MemoryOfflineChecker,
     },
 };
@@ -106,7 +106,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
             op_f: y_as,
             ..
         } = instruction.clone();
-        assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
+        assert!(FIELD_ARITHMETIC_INSTRUCTIONS.contains(&opcode));
 
         let x = self.memory.read_elem(x_as, x_address);
         let y = self.memory.read_elem(y_as, y_address);
@@ -121,6 +121,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
             operand2: Operand::new(y_as, y_address, y),
             result: Operand::new(z_as, z_address, z),
         });
+        println!("op = {:?}", self.operations.last().unwrap());
 
         ExecutionState {
             pc: from_state.pc + 1,

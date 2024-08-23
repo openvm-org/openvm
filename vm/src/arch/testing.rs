@@ -37,10 +37,16 @@ pub struct MemoryTester<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> MemoryTester<F> {
+    fn memory_config() -> MemoryConfig {
+        MemoryConfig {
+            decomp: 8, // speed
+            ..Default::default()
+        }
+    }
     pub fn new(memory_bus: MemoryBus) -> Self {
         let range_checker = Arc::new(RangeCheckerGateChip::new(
             RANGE_CHECKER_BUS,
-            MemoryConfig::default().decomp as u32,
+            1 << Self::memory_config().decomp,
         ));
         Self {
             memory_bus,
@@ -55,7 +61,7 @@ impl<F: PrimeField32> MemoryTester<F> {
         memory_bus: MemoryBus,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> MemoryManager<F> {
-        MemoryManager::with_volatile_memory(memory_bus, Default::default(), range_checker)
+        MemoryManager::new_for_testing(memory_bus, Self::memory_config(), range_checker)
     }
 
     pub fn install<const N: usize>(
@@ -66,12 +72,10 @@ impl<F: PrimeField32> MemoryTester<F> {
     ) {
         self.expect(address_space, start_address, cells);
         for (i, &cell) in cells.iter().enumerate() {
-            self.memory.insert(
-                (
-                    F::from_canonical_usize(address_space),
-                    F::from_canonical_usize(start_address + i),
-                ),
-                cell,
+            self.manager.borrow_mut().unsafe_write_word(
+                F::from_canonical_usize(address_space),
+                F::from_canonical_usize(start_address + i),
+                [cell],
             );
         }
     }
@@ -83,10 +87,12 @@ impl<F: PrimeField32> MemoryTester<F> {
         cells: [F; N],
     ) {
         for (i, &cell) in cells.iter().enumerate() {
-            self.manager.borrow_mut().unsafe_write_word(
-                F::from_canonical_usize(address_space),
-                F::from_canonical_usize(start_address + i),
-                [cell],
+            self.memory.insert(
+                (
+                    F::from_canonical_usize(address_space),
+                    F::from_canonical_usize(start_address + i),
+                ),
+                cell,
             );
         }
     }
@@ -105,10 +111,11 @@ impl<F: PrimeField32> MemoryTester<F> {
             .collect();
 
         assert_eq!(map_memory, self.memory);
+        let height = self.manager.borrow().interface_chip.current_height();
         self.trace_rows.extend(
             self.manager
                 .borrow_mut()
-                .generate_memory_interface_trace()
+                .generate_memory_interface_trace_with_height(height)
                 .values,
         );
         *self.manager.borrow_mut() =
@@ -119,6 +126,14 @@ impl<F: PrimeField32> MemoryTester<F> {
 
 impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+        let curr_height = self.trace_rows.len() / self.trace_width();
+        let desired_height = curr_height.next_power_of_two();
+        self.trace_rows.extend(
+            self.manager
+                .borrow_mut()
+                .generate_memory_interface_trace_with_height(desired_height - curr_height)
+                .values,
+        );
         RowMajorMatrix::new(self.trace_rows.clone(), self.trace_width())
     }
 
@@ -167,15 +182,23 @@ impl ExecutionTester {
     fn next_elem_size_usize<F: Field>(&mut self) -> usize {
         (self.rng.next_u32() % (1 << (F::bits() - 1))) as usize
     }
-    pub fn execute<F: PrimeField64, E: InstructionExecutor<F>>(
+
+    fn next_timestamp(&mut self) -> usize {
+        (self.rng.next_u32() % (1 << MemoryConfig::default().clk_max_bits)) as usize
+    }
+    pub fn execute<F: PrimeField32, E: InstructionExecutor<F>>(
         &mut self,
+        memory_tester: &mut MemoryTester<F>, // should merge MemoryTester and ExecutionTester into one struct (MachineChipTestBuilder?)
         executor: &mut E,
         instruction: Instruction<F>,
     ) {
         let initial_state = ExecutionState {
             pc: self.next_elem_size_usize::<F>(),
-            timestamp: self.next_elem_size_usize::<F>(),
+            timestamp: self.next_timestamp(),
         };
+        println!("timestamp = {}", initial_state.timestamp);
+        memory_tester.manager.borrow_mut().timestamp =
+            F::from_canonical_usize(initial_state.timestamp);
         let final_state = executor.execute(&instruction, initial_state);
         self.executions.push(Execution {
             initial_state,
@@ -184,7 +207,8 @@ impl ExecutionTester {
                 .map(|elem| elem.as_canonical_u64() as usize),
         })
     }
-    fn test_execution_with_expected_changes<F: PrimeField64, E: InstructionExecutor<F>>(
+    // for use by CoreChip, needs to be modified to setup memorytester (or just merge them before writing CoreChip)
+    /*fn test_execution_with_expected_changes<F: PrimeField64, E: InstructionExecutor<F>>(
         &mut self,
         executor: &mut E,
         instruction: Instruction<F>,
@@ -206,7 +230,7 @@ impl ExecutionTester {
             instruction: InstructionCols::from_instruction(&instruction)
                 .map(|elem| elem.as_canonical_u64() as usize),
         });
-    }
+    }*/
 }
 
 impl<F: Field> BaseAir<F> for ExecutionTester {
@@ -272,6 +296,15 @@ impl MachineChipTester {
         self.traces.push(chip.generate_trace());
         self.public_values.push(chip.generate_public_values());
         self.airs.push(chip.air());
+
+        let trace_cells = self.traces.last().unwrap().values.len();
+        let width = self.airs.last().unwrap().width();
+        println!(
+            "trace cells = {}, width = {}, height = {}",
+            trace_cells,
+            width,
+            trace_cells / width
+        );
         self
     }
     pub fn add_memory(&mut self, memory_tester: &mut MemoryTester<BabyBear>) -> &mut Self {

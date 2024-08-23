@@ -1,14 +1,16 @@
 use std::borrow::Borrow;
 
-use afs_primitives::sub_chip::AirConfig;
-use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::izip;
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::{columns::FieldArithmeticCols, FieldArithmeticAir};
+use afs_primitives::sub_chip::AirConfig;
+use afs_stark_backend::interaction::InteractionBuilder;
+
 use crate::arch::instructions::Opcode::{FADD, FDIV, FMUL, FSUB};
+
+use super::{columns::FieldArithmeticCols, FieldArithmeticAir};
 
 impl AirConfig for FieldArithmeticAir {
     type Cols<T> = FieldArithmeticCols<T>;
@@ -24,7 +26,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let local: &FieldArithmeticCols<_> = (*local).borrow();
+        let local = FieldArithmeticCols::from_iter(&mut local.iter().copied(), &self);
 
         let FieldArithmeticCols { io, aux } = local;
 
@@ -59,6 +61,6 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
 
         builder.assert_eq(aux.is_div, y * aux.divisor_inv);
 
-        self.eval_interactions(builder, *io, aux.clone());
+        self.eval_interactions(builder, io, aux);
     }
 }
