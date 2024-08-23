@@ -70,6 +70,8 @@ impl<T: Clone> FilterInputTableLocalCols<T> {
 pub struct FilterInputCols<T> {
     pub page_cols: PageCols<T>,
     pub local_cols: FilterInputTableLocalCols<T>,
+    pub start_col: usize,
+    pub end_col: usize,
 }
 
 impl<T: Clone> FilterInputCols<T> {
@@ -98,6 +100,8 @@ impl<T: Clone> FilterInputCols<T> {
         Self {
             page_cols,
             local_cols,
+            start_col,
+            end_col,
         }
     }
 

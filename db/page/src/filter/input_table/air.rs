@@ -1,20 +1,24 @@
 use afs_primitives::{
-    is_equal_vec::{columns::IsEqualVecAuxCols, IsEqualVecAir},
-    is_less_than_tuple::{columns::IsLessThanTupleAuxCols, IsLessThanTupleAir},
+    is_equal_vec::{
+        columns::{IsEqualVecAuxCols, IsEqualVecCols, IsEqualVecIoCols},
+        IsEqualVecAir,
+    },
+    is_less_than_tuple::{
+        columns::{IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupleIoCols},
+        IsLessThanTupleAir,
+    },
+    sub_chip::SubAir,
 };
-use p3_air::BaseAir;
+use afs_stark_backend::{air_builders::PartitionedAirBuilder, interaction::InteractionBuilder};
+use p3_air::{Air, AirBuilderWithPublicValues, BaseAir};
 use p3_field::Field;
+use p3_matrix::Matrix;
 
+use super::columns::{FilterInputCols, FilterInputTableAuxCols};
 use crate::common::comp::{
     air::{EqCompAir, StrictCompAir},
     Comp,
 };
-
-impl<F: Field> BaseAir<F> for FilterInputTableAir {
-    fn width(&self) -> usize {
-        self.air_width()
-    }
-}
 
 #[derive(derive_new::new)]
 pub enum FilterAirVariants {
@@ -47,9 +51,10 @@ impl FilterInputTableAir {
         decomp: usize,
         cmp: Comp,
     ) -> Self {
+        let select_len = end_col - start_col;
         let is_less_than_tuple_air =
-            IsLessThanTupleAir::new(range_bus_index, vec![idx_limb_bits; idx_len], decomp);
-        let is_equal_vec_air = IsEqualVecAir::new(idx_len);
+            IsLessThanTupleAir::new(range_bus_index, vec![idx_limb_bits; select_len], decomp);
+        let is_equal_vec_air = IsEqualVecAir::new(select_len);
         let variant_air = match cmp {
             Comp::Lt => FilterAirVariants::Lt(StrictCompAir {
                 is_less_than_tuple_air,
@@ -121,5 +126,186 @@ impl FilterInputTableAir {
 
     pub fn air_width(&self) -> usize {
         self.table_width() + self.aux_width()
+    }
+}
+
+impl<F: Field> BaseAir<F> for FilterInputTableAir {
+    fn width(&self) -> usize {
+        match &self.variant_air {
+            FilterAirVariants::Lt(strict_comp_air)
+            | FilterAirVariants::Lte(strict_comp_air)
+            | FilterAirVariants::Gt(strict_comp_air)
+            | FilterAirVariants::Gte(strict_comp_air) => FilterInputCols::<F>::get_width(
+                self.idx_len,
+                self.data_len,
+                self.start_col,
+                self.end_col,
+                &strict_comp_air.is_less_than_tuple_air.limb_bits,
+                strict_comp_air.is_less_than_tuple_air.decomp,
+                Comp::Lt,
+            ),
+            FilterAirVariants::Eq(_) => FilterInputCols::<F>::get_width(
+                self.idx_len,
+                self.data_len,
+                self.start_col,
+                self.end_col,
+                &[],
+                0,
+                Comp::Eq,
+            ),
+        }
+    }
+}
+
+impl<AB> Air<AB> for FilterInputTableAir
+where
+    AB: PartitionedAirBuilder + AirBuilderWithPublicValues + InteractionBuilder,
+{
+    fn eval(&self, builder: &mut AB) {
+        let page_main = &builder.partitioned_main()[0];
+        let aux_main = &builder.partitioned_main()[1];
+
+        // get the public value x
+        let pis = builder.public_values();
+        let select_len = self.end_col - self.start_col;
+        let public_x = pis[..select_len].to_vec();
+
+        let local_page = page_main.row_slice(0);
+        let local_aux = aux_main.row_slice(0);
+
+        // Get limb bits and decomp to generate local cols later
+        let (limb_bits, decomp) = match &self.variant_air {
+            FilterAirVariants::Lt(strict_comp_air)
+            | FilterAirVariants::Lte(strict_comp_air)
+            | FilterAirVariants::Gt(strict_comp_air)
+            | FilterAirVariants::Gte(strict_comp_air) => (
+                &strict_comp_air.is_less_than_tuple_air.limb_bits,
+                strict_comp_air.is_less_than_tuple_air.decomp,
+            ),
+            FilterAirVariants::Eq(_) => (&vec![], 0),
+        };
+
+        // Get the comparator
+        let cmp = match &self.variant_air {
+            FilterAirVariants::Lt(..) => Comp::Lt,
+            FilterAirVariants::Lte(..) => Comp::Lte,
+            FilterAirVariants::Eq(..) => Comp::Eq,
+            FilterAirVariants::Gte(..) => Comp::Gte,
+            FilterAirVariants::Gt(..) => Comp::Gt,
+        };
+
+        let FilterInputCols {
+            page_cols,
+            local_cols,
+            start_col,
+            end_col,
+        } = FilterInputCols::from_partitioned_slice(
+            &local_page,
+            &local_aux,
+            self.idx_len,
+            self.data_len,
+            self.start_col,
+            self.end_col,
+            limb_bits,
+            decomp,
+            cmp,
+        );
+        drop(local_page);
+        drop(local_aux);
+
+        // Get the selected columns
+        let select_cols = page_cols.to_vec();
+        let select_cols = select_cols[start_col + 1..end_col + 1].to_vec();
+
+        // Constrain that the public value x is the same as the column x
+        for (&local_x, &pub_x) in local_cols.x.iter().zip(public_x.iter()) {
+            builder.assert_eq(local_x, pub_x);
+        }
+
+        // Constrain that we send the row iff the row is allocated and satisfies the predicate
+        builder.assert_eq(
+            page_cols.is_alloc * local_cols.satisfies_pred,
+            local_cols.send_row,
+        );
+
+        // Constrain that satisfies_pred and send_row are boolean indicators
+        builder.assert_bool(local_cols.satisfies_pred);
+        builder.assert_bool(local_cols.send_row);
+
+        // Get indicators for strict & equal comparisons
+        let (strict_comp_ind, equal_comp_ind): (Option<AB::Var>, Option<AB::Var>) =
+            match &local_cols.aux_cols {
+                FilterInputTableAuxCols::Lt(_)
+                | FilterInputTableAuxCols::Lte(_)
+                | FilterInputTableAuxCols::Gt(_)
+                | FilterInputTableAuxCols::Gte(_) => (Some(local_cols.satisfies_pred), None),
+                FilterInputTableAuxCols::Eq(_) => (None, Some(local_cols.satisfies_pred)),
+            };
+
+        // Generate aux columns for IsLessThanTuple
+        let is_less_than_tuple_cols: Option<IsLessThanTupleCols<AB::Var>> =
+            match &local_cols.aux_cols {
+                FilterInputTableAuxCols::Lt(strict_aux_cols)
+                | FilterInputTableAuxCols::Gte(strict_aux_cols) => Some(IsLessThanTupleCols {
+                    io: IsLessThanTupleIoCols {
+                        x: select_cols.clone(),
+                        y: local_cols.x.clone(),
+                        tuple_less_than: strict_comp_ind.unwrap(),
+                    },
+                    aux: strict_aux_cols.is_less_than_tuple_aux.clone(),
+                }),
+
+                FilterInputTableAuxCols::Gt(strict_aux_cols)
+                | FilterInputTableAuxCols::Lte(strict_aux_cols) => Some(IsLessThanTupleCols {
+                    io: IsLessThanTupleIoCols {
+                        x: local_cols.x.clone(),
+                        y: select_cols.clone(),
+                        tuple_less_than: strict_comp_ind.unwrap(),
+                    },
+                    aux: strict_aux_cols.is_less_than_tuple_aux.clone(),
+                }),
+                FilterInputTableAuxCols::Eq(_) => None,
+            };
+
+        // Generate aux columns for IsEqualVec
+        let is_equal_vec_cols: Option<IsEqualVecCols<AB::Var>> = match &local_cols.aux_cols {
+            FilterInputTableAuxCols::Eq(eq_aux_cols) => Some(IsEqualVecCols {
+                io: IsEqualVecIoCols {
+                    x: select_cols.clone(),
+                    y: local_cols.x.clone(),
+                    is_equal: equal_comp_ind.unwrap(),
+                },
+                aux: eq_aux_cols.is_equal_vec_aux.clone(),
+            }),
+            _ => None,
+        };
+
+        // Constrain that satisfies pred is correct
+        match &self.variant_air {
+            FilterAirVariants::Lt(strict_comp_air)
+            | FilterAirVariants::Lte(strict_comp_air)
+            | FilterAirVariants::Gt(strict_comp_air)
+            | FilterAirVariants::Gte(strict_comp_air) => {
+                let is_less_than_tuple_cols = is_less_than_tuple_cols.unwrap();
+
+                SubAir::eval(
+                    &strict_comp_air.is_less_than_tuple_air,
+                    builder,
+                    is_less_than_tuple_cols.io,
+                    is_less_than_tuple_cols.aux,
+                );
+            }
+            FilterAirVariants::Eq(eq_comp_air) => {
+                let is_equal_vec_cols = is_equal_vec_cols.unwrap();
+
+                SubAir::eval(
+                    &eq_comp_air.is_equal_vec_air,
+                    builder,
+                    is_equal_vec_cols.io,
+                    is_equal_vec_cols.aux,
+                );
+            }
+        }
+        self.eval_interactions(builder, page_cols.idx, page_cols.data, local_cols.send_row);
     }
 }
