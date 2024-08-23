@@ -11,18 +11,25 @@ use afs_primitives::{
 };
 use afs_stark_backend::interaction::InteractionBuilder;
 
-use crate::cpu::RANGE_CHECKER_BUS;
+use crate::{cpu::RANGE_CHECKER_BUS, memory::offline_checker::bus::MemoryBus};
 
 use super::columns::AuditCols;
 
 #[derive(Clone, Debug)]
 pub struct MemoryAuditAir<const WORD_SIZE: usize> {
+    pub memory_bus: MemoryBus,
     pub addr_lt_air: IsLessThanTupleAir,
 }
 
 impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
-    pub fn new(addr_space_max_bits: usize, pointer_max_bits: usize, decomp: usize) -> Self {
+    pub fn new(
+        memory_bus: MemoryBus,
+        addr_space_max_bits: usize,
+        pointer_max_bits: usize,
+        decomp: usize,
+    ) -> Self {
         Self {
+            memory_bus,
             addr_lt_air: IsLessThanTupleAir::new(
                 RANGE_CHECKER_BUS,
                 vec![addr_space_max_bits, pointer_max_bits],

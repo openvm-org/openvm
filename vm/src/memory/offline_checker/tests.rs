@@ -1,26 +1,28 @@
 use std::{array::from_fn, sync::Arc};
 
+use p3_air::{Air, BaseAir};
+use p3_baby_bear::BabyBear;
+use p3_field::{AbstractField, Field};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use rand::{Rng, RngCore, seq::SliceRandom};
+
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::interaction::InteractionBuilder;
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng,
 };
-use p3_air::{Air, BaseAir};
-use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, Field};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use rand::{seq::SliceRandom, Rng, RngCore};
 
 use crate::{
     cpu::RANGE_CHECKER_BUS,
     memory::{
         manager::{dimensions::MemoryDimensions, interface::MemoryInterface, MemoryManager},
-        offline_checker::{bridge::MemoryOfflineChecker, columns::MemoryOfflineCheckerCols},
+        offline_checker::{
+            bridge::MemoryOfflineChecker, bus::MemoryBus, columns::MemoryOfflineCheckerCols,
+        },
     },
     vm::config::MemoryConfig,
 };
 
-const TEST_NUM_WORDS: usize = 1;
 const TEST_WORD_SIZE: usize = 4;
 
 type Val = BabyBear;
@@ -51,6 +53,8 @@ impl<AB: InteractionBuilder> Air<AB> for OfflineCheckerDummyAir {
 fn volatile_memory_offline_checker_test() {
     let mut rng = create_seeded_rng();
 
+    let memory_bus = MemoryBus(1);
+
     const MAX_VAL: u32 = 1 << 20;
 
     let memory_dimensions = MemoryDimensions::new(1, 20, 1);
@@ -61,11 +65,9 @@ fn volatile_memory_offline_checker_test() {
         (1 << mem_config.decomp) as u32,
     ));
     let mut memory_manager =
-        MemoryManager::<TEST_NUM_WORDS, TEST_WORD_SIZE, Val>::with_volatile_memory(
-            mem_config,
-            range_checker.clone(),
-        );
-    let offline_checker = MemoryOfflineChecker::new(mem_config.clk_max_bits, mem_config.decomp);
+        MemoryManager::with_volatile_memory(memory_bus, mem_config, range_checker.clone());
+    let offline_checker =
+        MemoryOfflineChecker::new(memory_bus, mem_config.clk_max_bits, mem_config.decomp);
 
     let num_addresses = rng.gen_range(1..=10);
     let mut all_addresses = vec![];

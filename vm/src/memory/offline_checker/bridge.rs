@@ -13,7 +13,7 @@ use afs_primitives::{
 use afs_stark_backend::interaction::InteractionBuilder;
 
 use crate::{
-    cpu::{NEW_MEMORY_BUS, RANGE_CHECKER_BUS},
+    cpu::RANGE_CHECKER_BUS,
     memory::{
         manager::{access_cell::AccessCell, operation::MemoryOperation},
         MemoryAddress,
@@ -176,9 +176,9 @@ pub struct MemoryOfflineChecker {
 }
 
 impl MemoryOfflineChecker {
-    pub fn new(clk_max_bits: usize, decomp: usize) -> Self {
+    pub fn new(memory_bus: MemoryBus, decomp: usize, clk_max_bits: usize) -> Self {
         Self {
-            memory_bus: NEW_MEMORY_BUS,
+            memory_bus,
             timestamp_lt_air: IsLessThanAir::new(RANGE_CHECKER_BUS, clk_max_bits, decomp),
             is_zero_air: IsZeroAir,
         }

@@ -15,7 +15,7 @@ use crate::{
     cpu::{CpuChip, trace::Instruction},
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
-    memory::{manager::MemoryManager, offline_checker::MemoryChip},
+    memory::manager::MemoryManager,
     poseidon2::Poseidon2Chip,
     program::ProgramChip,
 };
@@ -35,7 +35,7 @@ pub trait MachineChip<F> {
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
     where
         Domain<SC>: PolynomialSpace<Val = F>;
-    fn get_public_values(&mut self) -> Vec<F> {
+    fn generate_public_values(&mut self) -> Vec<F> {
         vec![]
     }
     fn current_trace_height(&self) -> usize;
@@ -67,8 +67,8 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
         self.borrow().air()
     }
 
-    fn get_public_values(&mut self) -> Vec<F> {
-        self.borrow_mut().get_public_values()
+    fn generate_public_values(&mut self) -> Vec<F> {
+        self.borrow_mut().generate_public_values()
     }
 
     fn current_trace_height(&self) -> usize {

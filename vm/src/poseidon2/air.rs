@@ -1,24 +1,22 @@
 use std::{array::from_fn, borrow::Borrow};
 
+use afs_primitives::sub_chip::AirConfig;
+use afs_stark_backend::interaction::InteractionBuilder;
 use derive_new::new;
 use itertools::izip;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
-
-use afs_primitives::sub_chip::AirConfig;
-use afs_stark_backend::interaction::InteractionBuilder;
 use poseidon2_air::poseidon2::Poseidon2Air;
 
+use super::{columns::Poseidon2VmCols, CHUNK};
 use crate::{
     arch::bridge::ExecutionBus,
     memory::{
-        MemoryAddress,
         offline_checker::bridge::{MemoryBridge, MemoryOfflineChecker},
+        MemoryAddress,
     },
 };
-
-use super::{CHUNK, columns::Poseidon2VmCols};
 
 /// Poseidon2 Air, VM version.
 ///

@@ -20,6 +20,7 @@ use crate::{
     },
     cpu::trace::Instruction,
     field_arithmetic::columns::{FieldArithmeticCols, FieldArithmeticIoCols},
+    memory::offline_checker::bus::MemoryBus,
 };
 
 use super::{FieldArithmetic, FieldArithmeticChip};
@@ -33,8 +34,9 @@ fn field_arithmetic_air_test() {
     let address_range = || 0usize..1 << 29;
 
     let execution_bus = ExecutionBus(0);
+    let memory_bus = MemoryBus(1);
     let mut execution_tester = ExecutionTester::new(execution_bus, create_seeded_rng());
-    let mut memory_tester = MemoryTester::new();
+    let mut memory_tester = MemoryTester::new(memory_bus);
     let mut field_arithmetic_chip =
         FieldArithmeticChip::new(execution_bus, memory_tester.get_memory_manager());
 
@@ -117,8 +119,9 @@ fn field_arithmetic_air_test() {
 #[test]
 fn au_air_zero_div_zero() {
     let execution_bus = ExecutionBus(0);
+    let memory_bus = MemoryBus(1);
     let mut execution_tester = ExecutionTester::new(execution_bus, create_seeded_rng());
-    let mut memory_tester = MemoryTester::new();
+    let mut memory_tester = MemoryTester::new(memory_bus);
     let mut field_arithmetic_chip =
         FieldArithmeticChip::new(execution_bus, memory_tester.get_memory_manager());
     memory_tester.install(1, 0, [BabyBear::zero()]);
@@ -153,8 +156,9 @@ fn au_air_zero_div_zero() {
 #[test]
 fn au_air_test_panic() {
     let execution_bus = ExecutionBus(0);
+    let memory_bus = MemoryBus(1);
     let mut execution_tester = ExecutionTester::new(execution_bus, create_seeded_rng());
-    let mut memory_tester = MemoryTester::new();
+    let mut memory_tester = MemoryTester::new(memory_bus);
     let mut field_arithmetic_chip =
         FieldArithmeticChip::new(execution_bus, memory_tester.get_memory_manager());
     memory_tester.install(1, 0, [BabyBear::zero()]);

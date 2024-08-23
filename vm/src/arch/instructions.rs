@@ -1,7 +1,6 @@
 use std::fmt;
 
 use enum_utils::FromStr;
-
 use Opcode::*;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, FromStr, PartialOrd, Ord)]

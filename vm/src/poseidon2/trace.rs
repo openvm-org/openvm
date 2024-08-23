@@ -1,17 +1,15 @@
+use afs_stark_backend::rap::AnyRap;
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use afs_stark_backend::rap::AnyRap;
-
+use super::{columns::*, Poseidon2Chip};
 use crate::{
     arch::chips::MachineChip,
     memory::{manager::MemoryManager, OpType},
 };
-
-use super::{columns::*, Poseidon2Chip};
 
 impl<const WIDTH: usize, F: PrimeField32> MachineChip<F> for Poseidon2Chip<WIDTH, F> {
     /// Generates final Poseidon2VmAir trace from cached rows.

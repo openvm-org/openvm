@@ -17,11 +17,13 @@ use poseidon2_air::poseidon2::Poseidon2Config;
 use crate::{
     arch::{
         bridge::ExecutionBus,
-        chips::{MachineChip, MachineChipVariant, InstructionExecutorVariant},
+        chips::{InstructionExecutorVariant, MachineChip, MachineChipVariant},
         instructions::{FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS, Opcode},
     },
+    cpu::{CpuChip, RANGE_CHECKER_BUS, trace::ExecutionError},
+    field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
-    memory::{manager::MemoryManager},
+    memory::{manager::MemoryManager, offline_checker::bus::MemoryBus},
     poseidon2::Poseidon2Chip,
     program::{Program, ProgramChip},
     vm::cycle_tracker::CycleTracker,
@@ -69,19 +71,25 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(config: VmConfig, program: Program<F>, state: VirtualMachineState<F>) -> Self {
         let execution_bus = ExecutionBus(0);
+        let memory_bus = MemoryBus(1);
 
-        let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, 1 << config.memory_config.));
+        let range_checker = Arc::new(RangeCheckerGateChip::new(
+            RANGE_CHECKER_BUS,
+            1 << config.memory_config.decomp,
+        ));
 
-        let cpu_chip = Rc::new(RefCell::new(CpuChip::from_state(
-            config.cpu_options(),
-            execution_bus,
-            state.state,
-        )));
-        let program_chip = Rc::new(RefCell::new(ProgramChip::new(program)));
         let memory_manager = Rc::new(RefCell::new(MemoryManager::with_volatile_memory(
+            memory_bus,
             config.memory_config,
             range_checker.clone(),
         )));
+        let cpu_chip = Rc::new(RefCell::new(CpuChip::from_state(
+            config.cpu_options(),
+            execution_bus,
+            memory_manager.clone(),
+            state.state,
+        )));
+        let program_chip = Rc::new(RefCell::new(ProgramChip::new(program)));
 
         let mut executors = BTreeMap::new();
         macro_rules! assign {
@@ -119,7 +127,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         if config.perm_poseidon2_enabled || config.compress_poseidon2_enabled {
             let poseidon2_chip = Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
                 Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
-                POSEIDON2_DIRECT_BUS,
                 execution_bus,
                 memory_manager.clone(),
             )));
@@ -138,7 +145,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             chips,
             cpu_chip,
             program_chip,
-            memory_chip: memory_manager,
+            memory_manager,
             input_stream: state.input_stream,
             hint_stream: state.hint_stream,
             collected_metrics: Default::default(),
@@ -168,7 +175,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             if chip.current_trace_height() != 0 {
                 result.airs.push(chip.air());
                 result.traces.push(chip.generate_trace());
-                result.public_values.push(chip.get_public_values());
+                result.public_values.push(chip.generate_public_values());
             }
         }
 

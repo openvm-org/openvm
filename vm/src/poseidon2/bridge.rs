@@ -1,18 +1,16 @@
+use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::{AbstractField, Field};
 
-use afs_stark_backend::interaction::InteractionBuilder;
-
+use super::{
+    air::Poseidon2VmAir,
+    columns::{Poseidon2VmAuxCols, Poseidon2VmIoCols},
+};
 use crate::{
     arch::{
         columns::{ExecutionState, InstructionCols},
         instructions::Opcode::PERM_POS2,
     },
     cpu::POSEIDON2_DIRECT_BUS,
-};
-
-use super::{
-    air::Poseidon2VmAir,
-    columns::{Poseidon2VmAuxCols, Poseidon2VmIoCols},
 };
 
 impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
@@ -33,7 +31,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
             io.is_opcode,
             ExecutionState::new(io.pc, io.timestamp),
             AB::Expr::from_canonical_usize(3 + (2 * WIDTH)),
-            InstructionCols::new(opcode, io.a, io.b, io.c, io.d, io.e),
+            InstructionCols::new(opcode, [io.a, io.b, io.c, io.d, io.e]),
         );
 
         // DIRECT

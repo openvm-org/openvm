@@ -1,14 +1,12 @@
+use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use afs_stark_backend::interaction::InteractionBuilder;
-
+use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir, EXTENSION_DEGREE};
 use crate::{
     arch::columns::{ExecutionState, InstructionCols},
     field_extension::columns::FieldExtensionArithmeticAuxCols,
-    memory::{MemoryAddress, offline_checker::bridge::MemoryBridge},
+    memory::{offline_checker::bridge::MemoryBridge, MemoryAddress},
 };
-
-use super::{columns::FieldExtensionArithmeticCols, EXTENSION_DEGREE, FieldExtensionArithmeticAir};
 
 #[allow(clippy::too_many_arguments)]
 fn eval_rw_interactions<AB: InteractionBuilder>(

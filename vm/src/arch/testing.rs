@@ -24,11 +24,12 @@ use crate::{
         columns::{ExecutionState, InstructionCols},
     },
     cpu::{RANGE_CHECKER_BUS, trace::Instruction},
-    memory::manager::MemoryManager,
+    memory::{manager::MemoryManager, offline_checker::bus::MemoryBus},
     vm::config::MemoryConfig,
 };
 
 pub struct MemoryTester<F: PrimeField32> {
+    memory_bus: MemoryBus,
     memory: HashMap<(F, F), F>,
     range_checker: Arc<RangeCheckerGateChip>,
     manager: Rc<RefCell<MemoryManager<F>>>,
@@ -36,21 +37,25 @@ pub struct MemoryTester<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> MemoryTester<F> {
-    pub fn new() -> Self {
+    pub fn new(memory_bus: MemoryBus) -> Self {
         let range_checker = Arc::new(RangeCheckerGateChip::new(
             RANGE_CHECKER_BUS,
             MemoryConfig::default().decomp as u32,
         ));
         Self {
+            memory_bus,
             memory: HashMap::new(),
             range_checker: range_checker.clone(),
-            manager: Rc::new(RefCell::new(Self::make_manager(range_checker))),
+            manager: Rc::new(RefCell::new(Self::make_manager(memory_bus, range_checker))),
             trace_rows: vec![],
         }
     }
 
-    fn make_manager(range_checker: Arc<RangeCheckerGateChip>) -> MemoryManager<F> {
-        MemoryManager::with_volatile_memory(Default::default(), range_checker)
+    fn make_manager(
+        memory_bus: MemoryBus,
+        range_checker: Arc<RangeCheckerGateChip>,
+    ) -> MemoryManager<F> {
+        MemoryManager::with_volatile_memory(memory_bus, Default::default(), range_checker)
     }
 
     pub fn install<const N: usize>(
@@ -106,7 +111,8 @@ impl<F: PrimeField32> MemoryTester<F> {
                 .generate_memory_interface_trace()
                 .values,
         );
-        *self.manager.borrow_mut() = Self::make_manager(self.range_checker.clone());
+        *self.manager.borrow_mut() =
+            Self::make_manager(self.memory_bus, self.range_checker.clone());
         self.memory.clear();
     }
 }
@@ -264,7 +270,7 @@ pub struct MachineChipTester {
 impl MachineChipTester {
     pub fn add<C: MachineChip<BabyBear>>(&mut self, chip: &mut C) -> &mut Self {
         self.traces.push(chip.generate_trace());
-        self.public_values.push(chip.get_public_values());
+        self.public_values.push(chip.generate_public_values());
         self.airs.push(chip.air());
         self
     }
@@ -279,7 +285,7 @@ impl MachineChipTester {
         trace: RowMajorMatrix<BabyBear>,
     ) -> &mut Self {
         self.traces.push(trace);
-        self.public_values.push(chip.get_public_values());
+        self.public_values.push(chip.generate_public_values());
         self.airs.push(chip.air());
         self
     }

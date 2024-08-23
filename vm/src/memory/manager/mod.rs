@@ -1,15 +1,19 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
+use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
+use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_stark_backend::rap::AnyRap;
 
 use crate::{
+    arch::chips::MachineChip,
     memory::{
         decompose,
         manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
-        offline_checker::bridge::MemoryOfflineChecker,
+        offline_checker::{bridge::MemoryOfflineChecker, bus::MemoryBus},
         OpType,
     },
     vm::config::MemoryConfig,
@@ -33,9 +37,10 @@ const NUM_WORDS: usize = 16;
 
 #[derive(Debug)]
 pub struct MemoryManager<F: PrimeField32> {
+    pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<NUM_WORDS, WORD_SIZE, F>,
     mem_config: MemoryConfig,
-    range_checker: Arc<RangeCheckerGateChip>,
+    pub(crate) range_checker: Arc<RangeCheckerGateChip>,
     timestamp: F,
     /// Maps (addr_space, pointer) to (data, timestamp)
     pub memory: HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
@@ -56,12 +61,15 @@ impl<F: PrimeField32> MemoryManager<F> {
     // }
 
     pub fn with_volatile_memory(
+        memory_bus: MemoryBus,
         mem_config: MemoryConfig,
         range_checker: Arc<RangeCheckerGateChip>,
     ) -> Self {
         Self {
+            memory_bus,
             mem_config,
             interface_chip: MemoryInterface::Volatile(MemoryAuditChip::new(
+                memory_bus,
                 mem_config.addr_space_max_bits,
                 mem_config.pointer_max_bits,
                 mem_config.decomp,
@@ -75,8 +83,9 @@ impl<F: PrimeField32> MemoryManager<F> {
 
     pub fn make_offline_checker(manager: Rc<RefCell<Self>>) -> MemoryOfflineChecker {
         MemoryOfflineChecker::new(
-            manager.borrow().mem_config.clk_max_bits,
+            manager.borrow().memory_bus,
             manager.borrow().mem_config.decomp,
+            manager.borrow().mem_config.clk_max_bits,
         )
     }
 
@@ -245,4 +254,25 @@ impl<F: PrimeField32> MemoryManager<F> {
     // pub fn write_elem(&mut self, timestamp: usize, address_space: F, address: F, data: F) {
     //     self.write_word(timestamp, address_space, address, decompose(data));
     // }
+}
+
+impl<F: PrimeField32> MachineChip<F> for MemoryManager<F> {
+    fn generate_trace(&mut self) -> RowMajorMatrix<F> {
+        self.generate_memory_interface_trace()
+    }
+
+    fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        Box::new(self.get_audit_air())
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.interface_chip.current_height()
+    }
+
+    fn trace_width(&self) -> usize {
+        self.get_audit_air().air_width()
+    }
 }

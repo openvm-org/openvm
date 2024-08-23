@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-
 use derive_new::new;
 use p3_field::Field;
 
@@ -13,8 +11,6 @@ use crate::{
         offline_checker::columns::{MemoryOfflineCheckerAuxCols, MemoryOfflineCheckerCols},
     },
 };
-
-// Danny -- probably makes sense to refactor so that the IO cols are the ones used in the ExecutionBus interaction
 
 /// Columns for field arithmetic chip.
 ///

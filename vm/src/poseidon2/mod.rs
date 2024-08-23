@@ -1,6 +1,6 @@
 use std::{array, cell::RefCell, rc::Rc};
 
-use p3_field::{Field, PrimeField32};
+use p3_field::PrimeField32;
 
 use afs_primitives::sub_chip::LocalTraceInstructions;
 use columns::*;

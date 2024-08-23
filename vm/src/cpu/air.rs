@@ -1,42 +1,32 @@
 use std::{array::from_fn, borrow::Borrow};
 
-use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use p3_field::{AbstractField, Field};
-use p3_matrix::Matrix;
-
 use afs_primitives::{
     is_equal_vec::{columns::IsEqualVecIoCols, IsEqualVecAir},
     sub_chip::SubAir,
 };
 use afs_stark_backend::interaction::InteractionBuilder;
-
-use crate::memory::{
-    MemoryAddress,
-    offline_checker::bridge::{MemoryBridge, MemoryOfflineChecker},
-};
+use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
+use p3_field::{AbstractField, Field};
+use p3_matrix::Matrix;
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE,
-    CpuOptions,
-    FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH, Opcode::*, timestamp_delta,
+    timestamp_delta, CpuOptions, CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, INST_WIDTH,
+};
+use crate::{
+    arch::{bridge::ExecutionBus, instructions::Opcode::*},
+    memory::{
+        offline_checker::bridge::{MemoryBridge, MemoryOfflineChecker},
+        MemoryAddress,
+    },
 };
 
-#[derive(Clone)]
-// #[derive(Clone)]
 /// Air for the CPU. Carries no state and does not own execution.
+#[derive(Clone, Debug)]
 pub struct CpuAir<const WORD_SIZE: usize> {
     pub options: CpuOptions,
+    pub execution_bus: ExecutionBus,
     pub memory_offline_checker: MemoryOfflineChecker,
-}
-
-impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
-    pub fn new(options: CpuOptions, clk_max_bits: usize, decomp: usize) -> Self {
-        Self {
-            options,
-            memory_offline_checker: MemoryOfflineChecker::new(clk_max_bits, decomp),
-        }
-    }
 }
 
 impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for CpuAir<WORD_SIZE> {
@@ -126,14 +116,16 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
             builder.assert_bool(flag);
         }
 
-        let mut sum_flags = AB::Expr::zero();
+        let mut is_cpu_opcode = AB::Expr::zero();
         let mut match_opcode = AB::Expr::zero();
         for (&opcode, &flag) in operation_flags.iter() {
-            sum_flags = sum_flags + flag;
+            is_cpu_opcode = is_cpu_opcode + flag;
             match_opcode += flag * AB::F::from_canonical_usize(opcode as usize);
         }
-        builder.assert_one(sum_flags);
-        builder.assert_eq(opcode, match_opcode);
+        builder.assert_bool(is_cpu_opcode.clone());
+        builder
+            .when(is_cpu_opcode.clone())
+            .assert_eq(opcode, match_opcode);
 
         // keep track of when memory accesses should be enabled
         let mut read1_enabled_check = AB::Expr::zero();
@@ -362,33 +354,6 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         when_publish.assert_eq(read2.addr_space, e);
         when_publish.assert_eq(read2.pointer, b);
 
-        // arithmetic operations
-        if self.options.field_arithmetic_enabled {
-            let mut arithmetic_flags = AB::Expr::zero();
-            for opcode in FIELD_ARITHMETIC_INSTRUCTIONS {
-                arithmetic_flags += operation_flags[&opcode].into();
-            }
-            read1_enabled_check += arithmetic_flags.clone();
-            read2_enabled_check += arithmetic_flags.clone();
-            write_enabled_check += arithmetic_flags.clone();
-            let mut when_arithmetic = builder.when(arithmetic_flags);
-
-            // read from e[b] and f[c]
-            when_arithmetic.assert_eq(read1.addr_space, e);
-            when_arithmetic.assert_eq(read1.pointer, b);
-
-            when_arithmetic.assert_eq(read2.addr_space, f);
-            when_arithmetic.assert_eq(read2.pointer, c);
-
-            // write to d[a]
-            when_arithmetic.assert_eq(write.addr_space, d);
-            when_arithmetic.assert_eq(write.pointer, a);
-
-            when_arithmetic
-                .when_transition()
-                .assert_eq(next_pc, pc + inst_width);
-        }
-
         let mut op_timestamp: AB::Expr = io.timestamp.into();
         let mut memory_bridge = MemoryBridge::new(self.memory_offline_checker, mem_oc_aux_cols);
         for op in &mem_ops[0..CPU_MAX_READS_PER_CYCLE] {
@@ -449,6 +414,12 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
         builder.assert_eq(write.enabled, write_enabled_check);
 
         // Turn on all interactions
-        self.eval_interactions(builder, io, mem_ops, &operation_flags);
+        self.eval_interactions(
+            builder,
+            io,
+            next_io,
+            &operation_flags,
+            AB::Expr::one() - is_cpu_opcode,
+        );
     }
 }

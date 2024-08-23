@@ -16,6 +16,7 @@ use crate::{
     },
     cpu::trace::Instruction,
     field_extension::columns::FieldExtensionArithmeticIoCols,
+    memory::offline_checker::bus::MemoryBus,
 };
 
 use super::{FieldExtensionArithmetic, FieldExtensionArithmeticChip};
@@ -28,8 +29,9 @@ fn field_extension_air_test() {
     let address_range = || 0usize..1 << 29;
 
     let execution_bus = ExecutionBus(0);
+    let memory_bus = MemoryBus(1);
     let mut execution_tester = ExecutionTester::new(execution_bus, create_seeded_rng());
-    let mut memory_tester = MemoryTester::new();
+    let mut memory_tester = MemoryTester::new(memory_bus);
     let mut field_extension_chip =
         FieldExtensionArithmeticChip::new(execution_bus, memory_tester.get_memory_manager());
 

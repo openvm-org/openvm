@@ -1,21 +1,19 @@
 use std::{array::from_fn, collections::BTreeMap};
 
-use itertools::Itertools;
-use p3_field::{Field, PrimeField32};
-
 use afs_primitives::{
     is_equal_vec::{columns::IsEqualVecAuxCols, IsEqualVecAir},
     sub_chip::LocalTraceInstructions,
 };
+use itertools::Itertools;
+use p3_field::{Field, PrimeField32};
 
+use super::{CpuAir, CpuChip, Opcode, CPU_MAX_ACCESSES_PER_CYCLE};
 use crate::{
+    arch::instructions::CORE_INSTRUCTIONS,
     memory::{
         manager::operation::MemoryOperation, offline_checker::columns::MemoryOfflineCheckerAuxCols,
     },
-    vm::ExecutionSegment,
 };
-
-use super::{CPU_MAX_ACCESSES_PER_CYCLE, CpuAir, CpuOptions, Opcode};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuIoCols<T> {
@@ -98,15 +96,10 @@ pub struct CpuAuxCols<const WORD_SIZE: usize, T> {
 impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
     pub fn from_slice(slc: &[T], cpu_air: &CpuAir<WORD_SIZE>) -> Self {
         let mut start = 0;
-        let mut end = cpu_air.options.num_enabled_instructions();
+        let mut end = CORE_INSTRUCTIONS.len();
         let operation_flags_vec = slc[start..end].to_vec();
         let mut operation_flags = BTreeMap::new();
-        for (opcode, operation_flag) in cpu_air
-            .options
-            .enabled_instructions()
-            .iter()
-            .zip_eq(operation_flags_vec)
-        {
+        for (opcode, operation_flag) in CORE_INSTRUCTIONS.iter().zip_eq(operation_flags_vec) {
             operation_flags.insert(*opcode, operation_flag);
         }
 
@@ -145,9 +138,9 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
         }
     }
 
-    pub fn flatten(&self, options: CpuOptions) -> Vec<T> {
+    pub fn flatten(&self) -> Vec<T> {
         let mut flattened = vec![];
-        for opcode in options.enabled_instructions() {
+        for opcode in CORE_INSTRUCTIONS {
             flattened.push(self.operation_flags.get(&opcode).unwrap().clone());
         }
         flattened.extend(self.public_value_flags.clone());
@@ -169,7 +162,7 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
     }
 
     pub fn get_width(cpu_air: &CpuAir<WORD_SIZE>) -> usize {
-        cpu_air.options.num_enabled_instructions()
+        CORE_INSTRUCTIONS.len()
             + cpu_air.options.num_public_values
             + CPU_MAX_ACCESSES_PER_CYCLE
                 * (MemoryOperation::<WORD_SIZE, T>::width()
@@ -181,18 +174,17 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
     }
 }
 
-impl<const WORD_SIZE: usize, T: PrimeField32> CpuAuxCols<WORD_SIZE, T> {
-    pub fn nop_row<const NUM_WORDS: usize>(vm: &ExecutionSegment<NUM_WORDS, WORD_SIZE, T>) -> Self {
+impl<const WORD_SIZE: usize, F: PrimeField32> CpuAuxCols<WORD_SIZE, F> {
+    pub fn nop_row(chip: &CpuChip<WORD_SIZE, F>) -> Self {
         let mut operation_flags = BTreeMap::new();
-        for opcode in vm.options().enabled_instructions() {
-            operation_flags.insert(opcode, T::from_bool(opcode == Opcode::NOP));
+        for opcode in CORE_INSTRUCTIONS {
+            operation_flags.insert(opcode, F::from_bool(opcode == Opcode::NOP));
         }
         // TODO[osama]: consider using MemoryTraceBuilder here
         let oc_cols: [_; CPU_MAX_ACCESSES_PER_CYCLE] = from_fn(|_| {
-            vm.cpu_chip
-                .air
+            chip.air
                 .memory_offline_checker
-                .disabled_memory_checker_cols(vm.range_checker.clone())
+                .disabled_memory_checker_cols(chip.memory_manager.borrow().range_checker.clone())
         });
         let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(
             &IsEqualVecAir::new(WORD_SIZE),
@@ -203,9 +195,9 @@ impl<const WORD_SIZE: usize, T: PrimeField32> CpuAuxCols<WORD_SIZE, T> {
         );
         Self {
             operation_flags,
-            public_value_flags: vec![T::zero(); vm.options().num_public_values],
+            public_value_flags: vec![F::zero(); chip.air.options.num_public_values],
             mem_ops: from_fn(|i| oc_cols[i].io.clone()),
-            read0_equals_read1: T::one(),
+            read0_equals_read1: F::one(),
             is_equal_vec_aux: is_equal_vec_cols.aux,
             mem_oc_aux_cols: from_fn(|i| oc_cols[i].aux.clone()),
         }
@@ -227,9 +219,9 @@ impl<const WORD_SIZE: usize, T: Clone> CpuCols<WORD_SIZE, T> {
         Self { io, aux }
     }
 
-    pub fn flatten(&self, options: CpuOptions) -> Vec<T> {
+    pub fn flatten(&self) -> Vec<T> {
         let mut flattened = self.io.flatten();
-        flattened.extend(self.aux.flatten(options));
+        flattened.extend(self.aux.flatten());
         flattened
     }
 
@@ -238,15 +230,11 @@ impl<const WORD_SIZE: usize, T: Clone> CpuCols<WORD_SIZE, T> {
     }
 }
 
-impl<const WORD_SIZE: usize, T: PrimeField32> CpuCols<WORD_SIZE, T> {
-    pub fn nop_row<const NUM_WORDS: usize>(
-        vm: &ExecutionSegment<NUM_WORDS, WORD_SIZE, T>,
-        pc: T,
-        timestamp: T,
-    ) -> Self {
+impl<const WORD_SIZE: usize, F: PrimeField32> CpuCols<WORD_SIZE, F> {
+    pub fn nop_row(chip: &CpuChip<WORD_SIZE, F>, pc: F, timestamp: F) -> Self {
         Self {
-            io: CpuIoCols::<T>::nop_row(pc, timestamp),
-            aux: CpuAuxCols::<WORD_SIZE, T>::nop_row(vm),
+            io: CpuIoCols::<F>::nop_row(pc, timestamp),
+            aux: CpuAuxCols::<WORD_SIZE, F>::nop_row(chip),
         }
     }
 }

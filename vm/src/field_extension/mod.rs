@@ -7,11 +7,11 @@ use crate::{
         bridge::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
-        instructions::{FIELD_EXTENSION_INSTRUCTIONS, Opcode},
+        instructions::{Opcode, FIELD_EXTENSION_INSTRUCTIONS},
     },
     cpu::trace::Instruction,
     memory::{
-        manager::{MemoryManager, trace_builder::MemoryTraceBuilder},
+        manager::{trace_builder::MemoryTraceBuilder, MemoryManager},
         offline_checker::bridge::MemoryOfflineChecker,
         OpType,
     },

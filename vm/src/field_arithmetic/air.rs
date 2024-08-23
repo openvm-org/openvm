@@ -1,16 +1,14 @@
 use std::borrow::Borrow;
 
+use afs_primitives::sub_chip::AirConfig;
+use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::izip;
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use afs_primitives::sub_chip::AirConfig;
-use afs_stark_backend::interaction::InteractionBuilder;
-
-use crate::arch::instructions::Opcode::{FADD, FDIV, FMUL, FSUB};
-
 use super::{columns::FieldArithmeticCols, FieldArithmeticAir};
+use crate::arch::instructions::Opcode::{FADD, FDIV, FMUL, FSUB};
 
 impl AirConfig for FieldArithmeticAir {
     type Cols<T> = FieldArithmeticCols<T>;
@@ -30,14 +28,13 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
 
         let FieldArithmeticCols { io, aux } = local;
 
+        let x = io.operand1.value;
+        let y = io.operand2.value;
+        let z = io.result.value;
+
         let flags = [aux.is_add, aux.is_sub, aux.is_mul, aux.is_div];
         let opcodes = [FADD, FSUB, FMUL, FDIV];
-        let results = [
-            io.operand1 + io.operand2,
-            io.operand1 - io.operand2,
-            io.operand1 * io.operand2,
-            io.operand1 * aux.divisor_inv,
-        ];
+        let results = [x + y, x - y, x * y, x * aux.divisor_inv];
 
         // Imposing the following constraints:
         // - Each flag in `flags` is a boolean.
@@ -58,10 +55,10 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
         }
         builder.assert_one(flag_sum);
         builder.assert_eq(io.opcode, expected_opcode);
-        builder.assert_eq(io.result, expected_result);
+        builder.assert_eq(z, expected_result);
 
-        builder.assert_eq(aux.is_div, io.operand2 * aux.divisor_inv);
+        builder.assert_eq(aux.is_div, y * aux.divisor_inv);
 
-        self.eval_interactions(builder, *io);
+        self.eval_interactions(builder, *io, aux.clone());
     }
 }

@@ -25,7 +25,7 @@ use crate::{
         testing::{ExecutionTester, MachineChipTester, MemoryTester},
     },
     cpu::{POSEIDON2_DIRECT_BUS, trace::Instruction},
-    memory::tree::Hasher,
+    memory::{offline_checker::bus::MemoryBus, tree::Hasher},
 };
 
 use super::{CHUNK, Poseidon2Chip, Poseidon2VmAir, WIDTH};
@@ -77,8 +77,9 @@ fn setup_test(
     let address_range = || 0usize..1 << ADDRESS_BITS;
 
     let execution_bus = ExecutionBus(0);
+    let memory_bus = MemoryBus(1);
     let mut execution_tester = ExecutionTester::new(execution_bus, create_seeded_rng());
-    let mut memory_tester = MemoryTester::new();
+    let mut memory_tester = MemoryTester::new(memory_bus);
     let mut poseidon2_chip = Poseidon2Chip::from_poseidon2_config(
         Poseidon2Config::<16, _>::new_p3_baby_bear_16(),
         execution_bus,
@@ -202,7 +203,7 @@ fn poseidon2_direct_test() {
     let mut chip = Poseidon2Chip::<16, BabyBear>::from_poseidon2_config(
         Poseidon2Config::default(),
         ExecutionBus(0),
-        MemoryTester::new().get_memory_manager(),
+        MemoryTester::new(MemoryBus(1)).get_memory_manager(),
     );
 
     let outs: [[BabyBear; CHUNKS]; NUM_OPS] =

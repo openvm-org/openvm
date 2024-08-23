@@ -1,10 +1,8 @@
 use p3_field::Field;
-
 use poseidon2_air::poseidon2::{columns::Poseidon2Cols, Poseidon2Air};
 
-use crate::memory::offline_checker::columns::MemoryOfflineCheckerAuxCols;
-
 use super::air::Poseidon2VmAir;
+use crate::memory::offline_checker::columns::MemoryOfflineCheckerAuxCols;
 
 /// Columns for Poseidon2Vm AIR.
 #[derive(Clone, Debug)]

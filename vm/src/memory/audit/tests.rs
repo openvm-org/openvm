@@ -3,17 +3,20 @@ use std::{
     sync::Arc,
 };
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
-use afs_test_utils::{
-    config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng,
-};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::Rng;
 
+use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_test_utils::{
+    config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng,
+};
+
 use crate::{
     cpu::RANGE_CHECKER_BUS,
-    memory::{audit::MemoryAuditChip, manager::access_cell::AccessCell},
+    memory::{
+        audit::MemoryAuditChip, manager::access_cell::AccessCell, offline_checker::bus::MemoryBus,
+    },
 };
 
 type Val = BabyBear;
@@ -27,6 +30,7 @@ fn audit_air_test() {
     const MAX_VAL: usize = 1 << LIMB_BITS;
     const WORD_SIZE: usize = 2;
     const DECOMP: usize = 8;
+    let memory_bus = MemoryBus(1);
 
     let mut random_f = |range: usize| Val::from_canonical_usize(rng.gen_range(0..range));
 
@@ -41,7 +45,13 @@ fn audit_air_test() {
     let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, 1 << DECOMP));
     let mut audit_chips: Vec<MemoryAuditChip<WORD_SIZE, Val>> = (0..2)
         .map(|_| {
-            MemoryAuditChip::<WORD_SIZE, Val>::new(2, LIMB_BITS, DECOMP, range_checker.clone())
+            MemoryAuditChip::<WORD_SIZE, Val>::new(
+                memory_bus,
+                2,
+                LIMB_BITS,
+                DECOMP,
+                range_checker.clone(),
+            )
         })
         .collect();
 

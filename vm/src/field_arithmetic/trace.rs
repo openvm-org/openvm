@@ -1,22 +1,20 @@
 use std::{array, vec::IntoIter};
 
+use afs_stark_backend::rap::AnyRap;
 use p3_commit::PolynomialSpace;
 use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use afs_stark_backend::rap::AnyRap;
-
+use super::{
+    columns::{FieldArithmeticAuxCols, FieldArithmeticCols, FieldArithmeticIoCols},
+    FieldArithmeticChip, FieldArithmeticOperation, Operand,
+};
 use crate::{
     arch::{chips::MachineChip, instructions::Opcode},
     memory::{
         manager::MemoryManager, offline_checker::columns::MemoryOfflineCheckerAuxCols, OpType,
     },
-};
-
-use super::{
-    columns::{FieldArithmeticAuxCols, FieldArithmeticCols, FieldArithmeticIoCols},
-    FieldArithmeticChip, FieldArithmeticOperation, Operand,
 };
 
 fn generate_cols<F: Field>(

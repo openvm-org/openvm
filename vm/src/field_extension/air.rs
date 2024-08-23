@@ -1,22 +1,20 @@
 use std::array;
 
-use itertools::izip;
-use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{AbstractField, Field};
-use p3_matrix::Matrix;
-
 use afs_primitives::{
     sub_chip::AirConfig,
     utils::{and, not},
 };
 use afs_stark_backend::interaction::InteractionBuilder;
+use itertools::izip;
+use p3_air::{Air, AirBuilder, BaseAir};
+use p3_field::{AbstractField, Field};
+use p3_matrix::Matrix;
 
+use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
 use crate::{
     arch::instructions::Opcode::{BBE4INV, BBE4MUL, FE4ADD, FE4SUB},
     field_extension::BETA,
 };
-
-use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
 
 impl AirConfig for FieldExtensionArithmeticAir {
     type Cols<T> = FieldExtensionArithmeticCols<T>;

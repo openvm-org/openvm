@@ -5,7 +5,7 @@ use std::{
 
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use cycle_tracker::CycleTracker;
 use metrics::VmMetrics;
@@ -35,8 +35,6 @@ pub struct VirtualMachine<F: PrimeField32> {
 pub struct VirtualMachineState<F: PrimeField32> {
     /// Current state of the CPU
     pub state: CpuState,
-    /// Current memory of the CPU
-    pub memory: HashMap<(F, F), F>,
     /// Input stream of the CPU
     pub input_stream: VecDeque<Vec<F>>,
     /// Hint stream of the CPU
@@ -61,7 +59,6 @@ impl<F: PrimeField32> VirtualMachine<F> {
         vm.segment(
             VirtualMachineState {
                 state: CpuState::default(),
-                memory: HashMap::new(),
                 input_stream: VecDeque::from(input_stream),
                 hint_stream: VecDeque::new(),
             },
@@ -89,7 +86,6 @@ impl<F: PrimeField32> VirtualMachine<F> {
         let last_seg = self.segments.last().unwrap();
         VirtualMachineState {
             state: last_seg.cpu_chip.borrow().state,
-            memory: last_seg.memory_chip.borrow().memory_clone(),
             input_stream: last_seg.input_stream.clone(),
             hint_stream: last_seg.hint_stream.clone(),
         }

@@ -1,22 +1,20 @@
 use std::iter;
 
+use afs_test_utils::{
+    config::baby_bear_poseidon2::run_simple_test_no_pis,
+    interaction::dummy_interaction_air::DummyInteractionAir,
+};
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
-use afs_test_utils::{
-    config::baby_bear_poseidon2::run_simple_test_no_pis,
-    interaction::dummy_interaction_air::DummyInteractionAir,
-};
-
+use super::Program;
 use crate::{
     arch::{chips::MachineChip, instructions::Opcode::*},
-    cpu::{READ_INSTRUCTION_BUS, trace::Instruction},
+    cpu::{trace::Instruction, READ_INSTRUCTION_BUS},
     program::{columns::ProgramPreprocessedCols, ProgramChip},
 };
-
-use super::Program;
 
 #[test]
 fn test_flatten_fromslice_roundtrip() {

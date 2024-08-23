@@ -1,13 +1,11 @@
+use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use afs_stark_backend::interaction::InteractionBuilder;
-
+use super::{columns::FieldArithmeticIoCols, FieldArithmeticAir};
 use crate::{
     arch::columns::InstructionCols, field_arithmetic::columns::FieldArithmeticAuxCols,
     memory::offline_checker::bridge::MemoryBridge,
 };
-
-use super::{columns::FieldArithmeticIoCols, FieldArithmeticAir};
 
 /// Receives all IO columns from another chip.
 impl FieldArithmeticAir {
