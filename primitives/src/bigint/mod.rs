@@ -30,12 +30,23 @@ pub struct OverflowInt<T> {
 }
 
 impl<T> OverflowInt<T> {
-    pub fn from_big_uint(x: BigUint, limb_bits: usize) -> OverflowInt<isize> {
+    pub fn from_big_uint(
+        x: BigUint,
+        limb_bits: usize,
+        min_limbs: Option<usize>,
+    ) -> OverflowInt<isize> {
         let mut x_bits = utils::big_uint_to_bits(x);
         let mut x_limbs: Vec<isize> = vec![];
+        let mut limbs_len = 0;
         while !x_bits.is_empty() {
             let limb = utils::take_limb(&mut x_bits, limb_bits);
             x_limbs.push(limb as isize);
+            limbs_len += 1;
+        }
+        if let Some(min_limbs) = min_limbs {
+            if limbs_len < min_limbs {
+                x_limbs.extend(vec![0; min_limbs - limbs_len]);
+            }
         }
         OverflowInt {
             limbs: x_limbs,
@@ -80,8 +91,8 @@ where
     fn add(self, other: OverflowInt<T>) -> OverflowInt<T> {
         let len = max(self.limbs.len(), other.limbs.len());
         let mut limbs = Vec::with_capacity(len);
+        let zero = T::default();
         for i in 0..len {
-            let zero = T::default();
             let a = self.limbs.get(i).unwrap_or(&zero);
             let b = other.limbs.get(i).unwrap_or(&zero);
             limbs.push(a.clone() + b.clone());
