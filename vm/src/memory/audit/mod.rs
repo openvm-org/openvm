@@ -4,7 +4,6 @@ use afs_primitives::range_gate::RangeCheckerGateChip;
 use p3_field::PrimeField32;
 
 use self::air::MemoryAuditAir;
-use super::manager::access_cell::AccessCell;
 
 pub mod air;
 pub mod bridge;
@@ -17,7 +16,7 @@ mod tests;
 #[derive(Clone)]
 pub struct MemoryAuditChip<const WORD_SIZE: usize, F: PrimeField32> {
     pub air: MemoryAuditAir<WORD_SIZE>,
-    initial_memory: BTreeMap<(F, F), AccessCell<WORD_SIZE, F>>,
+    initial_memory: BTreeMap<(F, F), [F; WORD_SIZE]>,
     range_checker: Arc<RangeCheckerGateChip>,
 }
 
@@ -35,13 +34,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
         }
     }
 
-    pub fn touch_address(&mut self, addr_space: F, pointer: F, old_data: [F; WORD_SIZE], clk: F) {
+    pub fn touch_address(&mut self, addr_space: F, pointer: F, old_data: [F; WORD_SIZE]) {
         self.initial_memory
             .entry((addr_space, pointer))
-            .or_insert_with(|| AccessCell {
-                data: old_data,
-                clk,
-            });
+            .or_insert(old_data);
     }
 
     pub fn all_addresses(&self) -> Vec<(F, F)> {

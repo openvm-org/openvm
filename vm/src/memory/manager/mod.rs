@@ -86,7 +86,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         cell.clk = cur_clk;
 
         self.interface_chip
-            .touch_address(addr_space, pointer, old_data, cur_clk);
+            .touch_address(addr_space, pointer, old_data);
 
         MemoryAccess::<WORD_SIZE, F>::new(
             MemoryOperation::new(
@@ -134,7 +134,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         cell.data = data;
 
         self.interface_chip
-            .touch_address(addr_space, pointer, old_data, old_clk);
+            .touch_address(addr_space, pointer, old_data);
 
         MemoryAccess::<WORD_SIZE, F>::new(
             MemoryOperation::new(
