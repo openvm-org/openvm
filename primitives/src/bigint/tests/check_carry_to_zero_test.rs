@@ -3,10 +3,12 @@ use std::{borrow::Borrow, sync::Arc};
 use afs_stark_backend::interaction::InteractionBuilder;
 use afs_test_utils::{config::baby_bear_blake3::run_simple_test_no_pis, utils::create_seeded_rng};
 use num_bigint_dig::BigUint;
+use num_traits::FromPrimitive;
 use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
 use p3_field::{Field, PrimeField64};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_util::log2_ceil_usize;
 use rand::RngCore;
 
 use super::super::{
@@ -106,8 +108,10 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
                 range_checker.add_count(value + (1 << self.decomp) - (1 << bits));
             }
         };
-        let x_overflow = OverflowInt::<isize>::from_big_uint(x, self.limb_bits);
-        let y_overflow = OverflowInt::<isize>::from_big_uint(y, self.limb_bits);
+        let x_overflow = OverflowInt::<isize>::from_big_uint(x, self.limb_bits, Some(N));
+        let y_overflow = OverflowInt::<isize>::from_big_uint(y, self.limb_bits, Some(2 * N));
+        assert_eq!(x_overflow.limbs.len(), N);
+        assert_eq!(y_overflow.limbs.len(), 2 * N);
         let expr = x_overflow.clone() * x_overflow.clone() - y_overflow.clone();
         let carries = expr.calculate_carries(self.limb_bits);
         let mut carries_f = vec![F::zero(); carries.len()];
@@ -136,26 +140,18 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
     }
 }
 
-// number of limbs of X. Y will be X^2 and thus 2N limbs.
+// number of limbs of X, assuming it's 128 bits and limb bits is 10.
 const N: usize = 13;
 
-#[test]
-fn test_check_carry_to_zero() {
+fn test_x_square_minus_y(x: BigUint, y: BigUint) {
     let limb_bits = 10;
     let num_limbs = N;
     // The equation: x^2 - y
     // Abs of each limb of the equation can be as much as 2^10 * 2^10 * N + 2^10
     // overflow bits: limb_bits * 2 + log2(N) => 24
-    let max_overflow_bits = 24;
-
+    let max_overflow_bits = limb_bits * 2 + log2_ceil_usize(N);
     let range_bus = 1;
     let range_decomp = 16;
-
-    let mut rng = create_seeded_rng();
-    let x_len = 4; // in bytes -> 128 bits.
-    let x_bytes = (0..x_len).map(|_| rng.next_u32()).collect();
-    let x = BigUint::new(x_bytes);
-    let y = x.clone() * x.clone();
     let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus, 1 << range_decomp));
     let check_carry_sub_air =
         CheckCarryToZeroSubAir::new(limb_bits, range_bus, range_decomp, max_overflow_bits);
@@ -177,4 +173,25 @@ fn test_check_carry_to_zero() {
         vec![trace, range_trace],
     )
     .expect("Verification failed");
+}
+
+#[test]
+fn test_check_carry_to_zero() {
+    let mut rng = create_seeded_rng();
+    let x_len = 4; // in bytes -> 128 bits.
+    let x_bytes = (0..x_len).map(|_| rng.next_u32()).collect();
+    let x = BigUint::new(x_bytes);
+    let y = x.clone() * x.clone();
+    test_x_square_minus_y(x, y);
+}
+
+#[should_panic]
+#[test]
+fn test_check_carry_to_zero_fail() {
+    let mut rng = create_seeded_rng();
+    let x_len = 4; // in bytes -> 128 bits.
+    let x_bytes = (0..x_len).map(|_| rng.next_u32()).collect();
+    let x = BigUint::new(x_bytes);
+    let y = x.clone() * x.clone() + BigUint::from_u32(1).unwrap();
+    test_x_square_minus_y(x, y);
 }
