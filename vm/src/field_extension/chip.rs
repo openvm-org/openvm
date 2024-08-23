@@ -41,11 +41,11 @@ pub struct FieldExtensionArithmeticRecord<const WORD_SIZE: usize, F> {
     pub y: [F; EXTENSION_DEGREE],
     pub z: [F; EXTENSION_DEGREE],
     /// Memory accesses for reading `x`.
-    pub x_reads: [MemoryAccess<WORD_SIZE, F>; 4],
+    pub x_reads: [MemoryAccess<WORD_SIZE, F>; EXTENSION_DEGREE],
     /// Memory accesses for reading `y`.
-    pub y_reads: [MemoryAccess<WORD_SIZE, F>; 4],
+    pub y_reads: [MemoryAccess<WORD_SIZE, F>; EXTENSION_DEGREE],
     /// Memory accesses for writing `z`.
-    pub z_writes: [MemoryAccess<WORD_SIZE, F>; 4],
+    pub z_writes: [MemoryAccess<WORD_SIZE, F>; EXTENSION_DEGREE],
 }
 
 /// A chip for performing arithmetic operations over the field extension
@@ -140,7 +140,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         &mut self,
         address_space: F,
         address: F,
-    ) -> [MemoryAccess<WORD_SIZE, F>; 4] {
+    ) -> [MemoryAccess<WORD_SIZE, F>; EXTENSION_DEGREE] {
         assert_ne!(address_space, F::zero());
 
         array::from_fn(|i| {
@@ -156,7 +156,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         address_space: F,
         address: F,
         result: [F; EXTENSION_DEGREE],
-    ) -> [MemoryAccess<WORD_SIZE, F>; 4] {
+    ) -> [MemoryAccess<WORD_SIZE, F>; EXTENSION_DEGREE] {
         assert_ne!(address_space, F::zero());
 
         array::from_fn(|i| {
@@ -193,7 +193,10 @@ impl FieldExtensionArithmetic {
         }
     }
 
-    pub(crate) fn add<V, E>(x: [V; 4], y: [V; 4]) -> [E; 4]
+    pub(crate) fn add<V, E>(
+        x: [V; EXTENSION_DEGREE],
+        y: [V; EXTENSION_DEGREE],
+    ) -> [E; EXTENSION_DEGREE]
     where
         V: Copy,
         V: Add<V, Output = E>,
@@ -201,7 +204,10 @@ impl FieldExtensionArithmetic {
         array::from_fn(|i| x[i] + y[i])
     }
 
-    pub(crate) fn subtract<V, E>(x: [V; 4], y: [V; 4]) -> [E; 4]
+    pub(crate) fn subtract<V, E>(
+        x: [V; EXTENSION_DEGREE],
+        y: [V; EXTENSION_DEGREE],
+    ) -> [E; EXTENSION_DEGREE]
     where
         V: Copy,
         V: Sub<V, Output = E>,
@@ -209,7 +215,10 @@ impl FieldExtensionArithmetic {
         array::from_fn(|i| x[i] - y[i])
     }
 
-    pub(crate) fn multiply<V, E>(x: [V; 4], y: [V; 4]) -> [E; 4]
+    pub(crate) fn multiply<V, E>(
+        x: [V; EXTENSION_DEGREE],
+        y: [V; EXTENSION_DEGREE],
+    ) -> [E; EXTENSION_DEGREE]
     where
         E: AbstractField,
         V: Copy,
@@ -228,7 +237,7 @@ impl FieldExtensionArithmetic {
         ]
     }
 
-    fn invert<T: Field>(a: [T; 4]) -> [T; 4] {
+    fn invert<T: Field>(a: [T; EXTENSION_DEGREE]) -> [T; EXTENSION_DEGREE] {
         // Let a = (a0, a1, a2, a3) represent the element we want to invert.
         // Define a' = (a0, -a1, a2, -a3).  By construction, the product b = a * a' will have zero
         // degree-1 and degree-3 coefficients.
