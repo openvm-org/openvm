@@ -42,7 +42,7 @@ impl<const WIDTH: usize, F: PrimeField32> MachineChip<F> for Poseidon2Chip<WIDTH
         self.rows.len()
     }
 
-    fn width(&self) -> usize {
+    fn trace_width(&self) -> usize {
         self.air.width()
     }
 }

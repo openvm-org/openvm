@@ -11,7 +11,7 @@ use crate::{
     arch::{
         bridge::ExecutionBus,
         chips::MachineChip,
-        instructions::{FIELD_EXTENSION_INSTRUCTIONS, OpCode},
+        instructions::{FIELD_EXTENSION_INSTRUCTIONS, Opcode},
         testing::{ExecutionTester, MachineChipTester, MemoryTester},
     },
     cpu::trace::Instruction,
@@ -137,12 +137,12 @@ fn field_extension_consistency_test() {
         let plonky_mul = a_ext.mul(b_ext);
         let plonky_div = a_ext.div(b_ext);
 
-        let my_add = FieldExtensionArithmetic::solve(OpCode::FE4ADD, a, b);
-        let my_sub = FieldExtensionArithmetic::solve(OpCode::FE4SUB, a, b);
-        let my_mul = FieldExtensionArithmetic::solve(OpCode::BBE4MUL, a, b);
+        let my_add = FieldExtensionArithmetic::solve(Opcode::FE4ADD, a, b);
+        let my_sub = FieldExtensionArithmetic::solve(Opcode::FE4SUB, a, b);
+        let my_mul = FieldExtensionArithmetic::solve(Opcode::BBE4MUL, a, b);
 
-        let b_inv = FieldExtensionArithmetic::solve(OpCode::BBE4INV, b, [F::zero(); 4]).unwrap();
-        let my_div = FieldExtensionArithmetic::solve(OpCode::BBE4MUL, a, b_inv);
+        let b_inv = FieldExtensionArithmetic::solve(Opcode::BBE4INV, b, [F::zero(); 4]).unwrap();
+        let my_div = FieldExtensionArithmetic::solve(Opcode::BBE4MUL, a, b_inv);
 
         assert_eq!(my_add.unwrap(), plonky_add.as_base_slice());
         assert_eq!(my_sub.unwrap(), plonky_sub.as_base_slice());

@@ -2,7 +2,7 @@ use backtrace::Backtrace;
 use p3_field::PrimeField64;
 
 use crate::{
-    arch::instructions::OpCode::FAIL,
+    arch::instructions::Opcode::FAIL,
     cpu::trace::{ExecutionError, ExecutionError::PcOutOfBounds, Instruction},
 };
 

@@ -12,7 +12,7 @@ use afs_primitives::{
 use afs_stark_backend::interaction::InteractionBuilder;
 
 use crate::{
-    arch::instructions::OpCode::{BBE4INV, BBE4MUL, FE4ADD, FE4SUB},
+    arch::instructions::Opcode::{BBE4INV, BBE4MUL, FE4ADD, FE4SUB},
     field_extension::BETA,
 };
 

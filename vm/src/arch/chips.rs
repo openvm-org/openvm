@@ -21,7 +21,7 @@ use crate::{
 };
 
 #[enum_dispatch]
-pub trait OpCodeExecutor<F> {
+pub trait InstructionExecutor<F> {
     fn execute(
         &mut self,
         instruction: &Instruction<F>,
@@ -39,13 +39,13 @@ pub trait MachineChip<F> {
         vec![]
     }
     fn current_trace_height(&self) -> usize;
-    fn width(&self) -> usize;
+    fn trace_width(&self) -> usize;
     fn current_trace_cells(&self) -> usize {
-        self.current_trace_height() * self.width()
+        self.current_trace_height() * self.trace_width()
     }
 }
 
-impl<F, C: OpCodeExecutor<F>> OpCodeExecutor<F> for Rc<RefCell<C>> {
+impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
     fn execute(
         &mut self,
         instruction: &Instruction<F>,
@@ -75,13 +75,14 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
         self.borrow().current_trace_height()
     }
 
-    fn width(&self) -> usize {
-        self.borrow().width()
+    fn trace_width(&self) -> usize {
+        self.borrow().trace_width()
     }
 }
 
-#[enum_dispatch(OpCodeExecutor<F>)]
-pub enum OpCodeExecutorVariant<F: PrimeField32> {
+#[derive(Debug)]
+#[enum_dispatch(InstructionExecutor<F>)]
+pub enum InstructionExecutorVariant<F: PrimeField32> {
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
@@ -115,7 +116,7 @@ impl<F: PrimeField32> MachineChip<F> for Arc<RangeCheckerGateChip> {
         self.air.range_max as usize
     }
 
-    fn width(&self) -> usize {
+    fn trace_width(&self) -> usize {
         BaseAir::<F>::width(&self.air)
     }
 }

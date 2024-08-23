@@ -24,7 +24,7 @@ use super::{CHUNK, columns::Poseidon2VmCols};
 ///
 /// Carries the subair for subtrace generation. Sticking to the conventions, this struct carries no state.
 /// `direct` determines whether direct interactions are enabled. By default they are on.
-#[derive(Clone, new)]
+#[derive(Clone, new, Debug)]
 pub struct Poseidon2VmAir<const WIDTH: usize, F: Clone> {
     pub inner: Poseidon2Air<WIDTH, F>,
     pub execution_bus: ExecutionBus,

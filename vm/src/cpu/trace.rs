@@ -28,13 +28,13 @@ use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
     CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE,
     CPU_MAX_WRITES_PER_CYCLE,
-    CpuChip, CpuState, INST_WIDTH, OpCode::{self, *},
+    CpuChip, CpuState, INST_WIDTH, Opcode::{self, *},
 };
 
 #[allow(clippy::too_many_arguments)]
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
 pub struct Instruction<F> {
-    pub opcode: OpCode,
+    pub opcode: Opcode,
     pub op_a: F,
     pub op_b: F,
     pub op_c: F,
@@ -71,7 +71,7 @@ pub fn isize_to_field<F: Field>(value: isize) -> F {
 impl<F: Field> Instruction<F> {
     #[allow(clippy::too_many_arguments)]
     pub fn from_isize(
-        opcode: OpCode,
+        opcode: Opcode,
         op_a: isize,
         op_b: isize,
         op_c: isize,
@@ -92,7 +92,7 @@ impl<F: Field> Instruction<F> {
     }
 
     pub fn from_usize(
-        opcode: OpCode,
+        opcode: Opcode,
         op_a: usize,
         op_b: usize,
         op_c: usize,
@@ -114,7 +114,7 @@ impl<F: Field> Instruction<F> {
 
     #[allow(clippy::too_many_arguments)]
     pub fn large_from_isize(
-        opcode: OpCode,
+        opcode: Opcode,
         op_a: isize,
         op_b: isize,
         op_c: isize,
@@ -136,7 +136,7 @@ impl<F: Field> Instruction<F> {
         }
     }
 
-    pub fn debug(opcode: OpCode, debug: &str) -> Self {
+    pub fn debug(opcode: Opcode, debug: &str) -> Self {
         Self {
             opcode,
             op_a: F::zero(),
@@ -155,7 +155,7 @@ impl<F: Field> Instruction<F> {
 pub enum ExecutionError {
     Fail(usize),
     PcOutOfBounds(usize, usize),
-    DisabledOperation(usize, OpCode),
+    DisabledOperation(usize, Opcode),
     HintOutOfBounds(usize),
     EndOfInputStream(usize),
     PublicValueIndexOutOfBounds(usize, usize, usize),

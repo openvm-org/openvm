@@ -1,12 +1,13 @@
 use std::fmt;
 
 use enum_utils::FromStr;
-use OpCode::*;
+
+use Opcode::*;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, FromStr, PartialOrd, Ord)]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
-pub enum OpCode {
+pub enum Opcode {
     LOADW = 0,
     STOREW = 1,
     LOADW2 = 2,
@@ -62,27 +63,27 @@ pub enum OpCode {
     NOP = 100,
 }
 
-impl fmt::Display for OpCode {
+impl fmt::Display for Opcode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
-pub const CORE_INSTRUCTIONS: [OpCode; 15] = [
+pub const CORE_INSTRUCTIONS: [Opcode; 15] = [
     LOADW, STOREW, JAL, BEQ, BNE, TERMINATE, SHINTW, HINT_INPUT, HINT_BITS, PUBLISH, CT_START,
     CT_END, NOP, LOADW2, STOREW2,
 ];
-pub const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
-pub const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
-pub const MODULAR_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [
+pub const FIELD_ARITHMETIC_INSTRUCTIONS: [Opcode; 4] = [FADD, FSUB, FMUL, FDIV];
+pub const FIELD_EXTENSION_INSTRUCTIONS: [Opcode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
+pub const MODULAR_ARITHMETIC_INSTRUCTIONS: [Opcode; 4] = [
     MOD_SECP256K1_ADD,
     MOD_SECP256K1_SUB,
     MOD_SECP256K1_MUL,
     MOD_SECP256K1_DIV,
 ];
 
-impl OpCode {
-    pub fn all_opcodes() -> Vec<OpCode> {
+impl Opcode {
+    pub fn all_opcodes() -> Vec<Opcode> {
         let mut all_opcodes = vec![];
         all_opcodes.extend(CORE_INSTRUCTIONS);
         all_opcodes.extend(FIELD_ARITHMETIC_INSTRUCTIONS);

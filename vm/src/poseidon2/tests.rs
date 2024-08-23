@@ -21,7 +21,7 @@ use crate::{
     arch::{
         bridge::ExecutionBus,
         chips::MachineChip,
-        instructions::OpCode::*,
+        instructions::Opcode::*,
         testing::{ExecutionTester, MachineChipTester, MemoryTester},
     },
     cpu::{POSEIDON2_DIRECT_BUS, trace::Instruction},

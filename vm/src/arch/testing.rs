@@ -20,7 +20,7 @@ use afs_test_utils::{
 use crate::{
     arch::{
         bridge::ExecutionBus,
-        chips::{MachineChip, OpCodeExecutor},
+        chips::{InstructionExecutor, MachineChip},
         columns::{ExecutionState, InstructionCols},
     },
     cpu::{RANGE_CHECKER_BUS, trace::Instruction},
@@ -113,7 +113,7 @@ impl<F: PrimeField32> MemoryTester<F> {
 
 impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
-        RowMajorMatrix::new(self.trace_rows.clone(), self.width())
+        RowMajorMatrix::new(self.trace_rows.clone(), self.trace_width())
     }
 
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>
@@ -124,10 +124,10 @@ impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
     }
 
     fn current_trace_height(&self) -> usize {
-        self.current_trace_cells() / self.width()
+        self.current_trace_cells() / self.trace_width()
     }
 
-    fn width(&self) -> usize {
+    fn trace_width(&self) -> usize {
         BaseAir::<F>::width(&self.manager.borrow().get_audit_air())
     }
 
@@ -161,7 +161,7 @@ impl ExecutionTester {
     fn next_elem_size_usize<F: Field>(&mut self) -> usize {
         (self.rng.next_u32() % (1 << (F::bits() - 1))) as usize
     }
-    pub fn execute<F: PrimeField64, E: OpCodeExecutor<F>>(
+    pub fn execute<F: PrimeField64, E: InstructionExecutor<F>>(
         &mut self,
         executor: &mut E,
         instruction: Instruction<F>,
@@ -178,7 +178,7 @@ impl ExecutionTester {
                 .map(|elem| elem.as_canonical_u64() as usize),
         })
     }
-    fn test_execution_with_expected_changes<F: PrimeField64, E: OpCodeExecutor<F>>(
+    fn test_execution_with_expected_changes<F: PrimeField64, E: InstructionExecutor<F>>(
         &mut self,
         executor: &mut E,
         instruction: Instruction<F>,
@@ -249,7 +249,7 @@ impl<F: Field> MachineChip<F> for ExecutionTester {
         1
     }
 
-    fn width(&self) -> usize {
+    fn trace_width(&self) -> usize {
         1
     }
 }

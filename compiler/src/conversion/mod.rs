@@ -1,8 +1,9 @@
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
+
 use stark_vm::{
     cpu::{
+        Opcode::{self, *},
         trace::Instruction,
-        OpCode::{self, *},
     },
     program::{DebugInfo, Program},
 };
@@ -31,7 +32,7 @@ impl Default for CompilerOptions {
 }
 
 fn inst<F: PrimeField64>(
-    opcode: OpCode,
+    opcode: Opcode,
     op_a: F,
     op_b: F,
     op_c: F,
@@ -53,7 +54,7 @@ fn inst<F: PrimeField64>(
 
 #[allow(clippy::too_many_arguments)]
 fn inst_med<F: PrimeField64>(
-    opcode: OpCode,
+    opcode: Opcode,
     op_a: F,
     op_b: F,
     op_c: F,
@@ -76,7 +77,7 @@ fn inst_med<F: PrimeField64>(
 
 #[allow(clippy::too_many_arguments)]
 fn inst_large<F: PrimeField64>(
-    opcode: OpCode,
+    opcode: Opcode,
     op_a: F,
     op_b: F,
     op_c: F,
@@ -98,7 +99,7 @@ fn inst_large<F: PrimeField64>(
     }
 }
 
-fn dbg<F: PrimeField64>(opcode: OpCode, debug: String) -> Instruction<F> {
+fn dbg<F: PrimeField64>(opcode: Opcode, debug: String) -> Instruction<F> {
     Instruction {
         opcode,
         op_a: F::zero(),

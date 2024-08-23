@@ -1,7 +1,5 @@
 use std::borrow::Borrow;
 
-use afs_primitives::sub_chip::{AirConfig, SubAir};
-use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field};
@@ -11,6 +9,9 @@ use zkhash::{
     fields::babybear::FpBabyBear as HorizenBabyBear,
     poseidon2::poseidon2_instance_babybear::{MAT_DIAG16_M_1, RC16},
 };
+
+use afs_primitives::sub_chip::{AirConfig, SubAir};
+use afs_stark_backend::interaction::InteractionBuilder;
 
 use super::{
     columns::{Poseidon2AuxCols, Poseidon2Cols, Poseidon2IoCols},
@@ -26,7 +27,7 @@ use super::{
 /// - WIDTH is multiple of 4 and >= 8
 ///
 /// Spec is at https://hackmd.io/_I1lx-6GROWbKbDi_Vz-pw?view .
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Poseidon2Air<const WIDTH: usize, F> {
     pub rounds_f: usize,
     pub external_constants: Vec<[F; WIDTH]>,

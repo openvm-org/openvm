@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use itertools::Itertools;
 use p3_field::{AbstractField, Field};
 
@@ -9,16 +11,12 @@ pub struct ExecutionState<T> {
     pub timestamp: T,
 }
 
+pub const NUM_OPERANDS: usize = 7;
+
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct InstructionCols<T> {
     pub opcode: T,
-    pub a: T,
-    pub b: T,
-    pub c: T,
-    pub d: T,
-    pub e: T,
-    pub f: T,
-    pub g: T,
+    pub operands: [T; NUM_OPERANDS],
 }
 
 impl<T: Clone> ExecutionState<T> {
@@ -47,78 +45,34 @@ impl<T: Clone> ExecutionState<T> {
 }
 
 impl<F: AbstractField> InstructionCols<F> {
-    pub fn new(
-        opcode: impl Into<F>,
-        a: impl Into<F>,
-        b: impl Into<F>,
-        c: impl Into<F>,
-        d: impl Into<F>,
-        e: impl Into<F>,
-    ) -> Self {
-        Self {
-            opcode: opcode.into(),
-            a: a.into(),
-            b: b.into(),
-            c: c.into(),
-            d: d.into(),
-            e: e.into(),
-            f: F::zero(),
-            g: F::zero(),
+    pub fn new<const N: usize>(opcode: impl Into<F>, operands: [impl Into<F>; N]) -> Self {
+        let mut operands = operands.into_iter().map(Into::into).collect_vec();
+        while operands.len() != NUM_OPERANDS {
+            operands.push(F::zero());
         }
-    }
-    pub fn new_large(
-        opcode: impl Into<F>,
-        a: impl Into<F>,
-        b: impl Into<F>,
-        c: impl Into<F>,
-        d: impl Into<F>,
-        e: impl Into<F>,
-        f: impl Into<F>,
-        g: impl Into<F>,
-    ) -> Self {
         Self {
             opcode: opcode.into(),
-            a: a.into(),
-            b: b.into(),
-            c: c.into(),
-            d: d.into(),
-            e: e.into(),
-            f: f.into(),
-            g: g.into(),
+            operands: operands.try_into().unwrap(),
         }
     }
 }
 
-impl<T: Clone> InstructionCols<T> {
+impl<T: Clone + Debug> InstructionCols<T> {
     pub fn from_slice(slice: &[T]) -> Self {
         Self {
             opcode: slice[0].clone(),
-            a: slice[1].clone(),
-            b: slice[2].clone(),
-            c: slice[3].clone(),
-            d: slice[4].clone(),
-            e: slice[5].clone(),
-            f: slice[6].clone(),
-            g: slice[7].clone(),
+            operands: slice[1..].to_vec().try_into().unwrap(),
         }
     }
     pub fn flatten(&self) -> Vec<T> {
-        vec![
-            self.opcode.clone(),
-            self.a.clone(),
-            self.b.clone(),
-            self.c.clone(),
-            self.d.clone(),
-            self.e.clone(),
-            self.f.clone(),
-            self.g.clone(),
-        ]
+        let mut result = vec![self.opcode.clone()];
+        result.extend(self.operands.clone());
+        result
     }
     pub fn get_width() -> usize {
-        8
+        1 + NUM_OPERANDS
     }
-
-    pub fn map<U: Clone, F: Fn(T) -> U>(&self, function: F) -> InstructionCols<U> {
+    pub fn map<U: Clone + Debug, F: Fn(T) -> U>(&self, function: F) -> InstructionCols<U> {
         InstructionCols::from_slice(&self.flatten().into_iter().map(function).collect_vec())
     }
 }
@@ -138,13 +92,7 @@ impl<F: Field> InstructionCols<F> {
         } = instruction;
         Self {
             opcode: F::from_canonical_usize(*opcode as usize),
-            a: *op_a,
-            b: *op_b,
-            c: *op_c,
-            d: *d,
-            e: *e,
-            f: *op_f,
-            g: *op_g,
+            operands: [op_a, op_b, op_c, d, e, op_f, op_g].map(|&f| f),
         }
     }
 }

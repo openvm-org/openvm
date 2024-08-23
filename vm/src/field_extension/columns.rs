@@ -52,7 +52,8 @@ pub struct FieldExtensionArithmeticAuxCols<T> {
     // the field extension inverse of x
     pub inv: [T; EXTENSION_DEGREE],
     // There should be 3 * EXTENSION_DEGREE memory accesses (WORD_SIZE=1)
-    pub mem_oc_aux_cols: [MemoryOfflineCheckerAuxCols<1, T>; 12],
+    pub mem_oc_aux_cols:
+        [MemoryOfflineCheckerAuxCols<1, T>; FieldExtensionArithmeticAir::TIMESTAMP_DELTA],
 }
 
 impl<T: Clone> FieldExtensionArithmeticCols<T> {

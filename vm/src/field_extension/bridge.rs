@@ -1,5 +1,3 @@
-use std::array;
-
 use p3_field::AbstractField;
 
 use afs_stark_backend::interaction::InteractionBuilder;
@@ -13,9 +11,9 @@ use crate::{
 use super::{columns::FieldExtensionArithmeticCols, EXTENSION_DEGREE, FieldExtensionArithmeticAir};
 
 #[allow(clippy::too_many_arguments)]
-fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
+fn eval_rw_interactions<AB: InteractionBuilder>(
     builder: &mut AB,
-    memory_bridge: &mut MemoryBridge<AB::Var, WORD_SIZE>,
+    memory_bridge: &mut MemoryBridge<AB::Var, 1>,
     clk_offset: &mut AB::Expr,
     is_enabled: AB::Expr,
     is_write: bool,
@@ -25,7 +23,7 @@ fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
     ext: [AB::Var; EXTENSION_DEGREE],
 ) {
     for (i, element) in ext.into_iter().enumerate() {
-        let pointer = address + AB::F::from_canonical_usize(i * WORD_SIZE);
+        let pointer = address + AB::F::from_canonical_usize(i);
 
         let clk = clk + clk_offset.clone();
         *clk_offset += is_enabled.clone();
@@ -34,7 +32,7 @@ fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
             memory_bridge
                 .write(
                     MemoryAddress::new(addr_space, pointer),
-                    emb(element.into()),
+                    [element.into()],
                     clk,
                 )
                 .eval(builder, is_enabled.clone());
@@ -42,16 +40,12 @@ fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
             memory_bridge
                 .read(
                     MemoryAddress::new(addr_space, pointer),
-                    emb(element.into()),
+                    [element.into()],
                     clk,
                 )
                 .eval(builder, is_enabled.clone());
         }
     }
-}
-
-fn emb<F: AbstractField, const WORD_SIZE: usize>(element: F) -> [F; WORD_SIZE] {
-    array::from_fn(|j| if j == 0 { element.clone() } else { F::zero() })
 }
 
 impl FieldExtensionArithmeticAir {
@@ -120,8 +114,8 @@ impl FieldExtensionArithmeticAir {
             builder,
             aux.is_valid,
             ExecutionState::new(io.pc, io.timestamp),
-            AB::F::from_canonical_usize(Self::timestamp_delta()),
-            InstructionCols::new(io.opcode, aux.op_a, aux.op_b, aux.op_c, aux.d, aux.e),
+            AB::F::from_canonical_usize(Self::TIMESTAMP_DELTA),
+            InstructionCols::new(io.opcode, [aux.op_a, aux.op_b, aux.op_c, aux.d, aux.e]),
         );
     }
 }

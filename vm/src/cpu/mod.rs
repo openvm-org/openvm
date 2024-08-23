@@ -3,10 +3,10 @@ use core::panic;
 use p3_field::PrimeField32;
 
 pub use air::CpuAir;
-use OpCode::*;
+use Opcode::*;
 
 use crate::{
-    arch::instructions::{OpCode, OpCode::*},
+    arch::instructions::{Opcode, Opcode::*},
     memory::offline_checker::bus::MemoryBus,
     vm::config::MemoryConfig,
 };
@@ -33,7 +33,7 @@ pub const CPU_MAX_READS_PER_CYCLE: usize = 3;
 pub const CPU_MAX_WRITES_PER_CYCLE: usize = 1;
 pub const CPU_MAX_ACCESSES_PER_CYCLE: usize = CPU_MAX_READS_PER_CYCLE + CPU_MAX_WRITES_PER_CYCLE;
 
-fn timestamp_delta(opcode: OpCode) -> usize {
+fn timestamp_delta(opcode: Opcode) -> usize {
     match opcode {
         LOADW | STOREW => 3,
         LOADW2 | STOREW2 => 4,
@@ -70,7 +70,7 @@ impl CpuOptions {
         self.compress_poseidon2_enabled || self.perm_poseidon2_enabled
     }
 
-    pub fn enabled_instructions(&self) -> Vec<OpCode> {
+    pub fn enabled_instructions(&self) -> Vec<Opcode> {
         let mut result = CORE_INSTRUCTIONS.to_vec();
         if self.field_extension_enabled {
             result.extend(FIELD_EXTENSION_INSTRUCTIONS);

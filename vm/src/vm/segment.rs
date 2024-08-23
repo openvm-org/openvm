@@ -17,8 +17,8 @@ use poseidon2_air::poseidon2::Poseidon2Config;
 use crate::{
     arch::{
         bridge::ExecutionBus,
-        chips::{MachineChip, MachineChipVariant, OpCodeExecutorVariant},
-        instructions::{FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS, OpCode},
+        chips::{MachineChip, MachineChipVariant, InstructionExecutorVariant},
+        instructions::{FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS, Opcode},
     },
     field_extension::FieldExtensionArithmeticChip,
     memory::{manager::MemoryManager},
@@ -32,7 +32,7 @@ use super::{VirtualMachineState, VmConfig, VmMetrics};
 pub struct ExecutionSegment<F: PrimeField32> {
     pub config: VmConfig,
 
-    pub executors: BTreeMap<OpCode, OpCodeExecutorVariant<F>>,
+    pub executors: BTreeMap<Opcode, InstructionExecutorVariant<F>>,
     pub chips: Vec<MachineChipVariant<F>>,
     pub cpu_chip: Rc<RefCell<CpuChip<1, F>>>,
     pub program_chip: Rc<RefCell<ProgramChip<F>>>,
@@ -124,10 +124,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 memory_manager.clone(),
             )));
             if config.perm_poseidon2_enabled {
-                assign!([OpCode::PERM_POS2], poseidon2_chip);
+                assign!([Opcode::PERM_POS2], poseidon2_chip);
             }
             if config.compress_poseidon2_enabled {
-                assign!([OpCode::COMP_POS2], poseidon2_chip);
+                assign!([Opcode::COMP_POS2], poseidon2_chip);
             }
             chips.push(MachineChipVariant::Poseidon2(poseidon2_chip.clone()));
         }

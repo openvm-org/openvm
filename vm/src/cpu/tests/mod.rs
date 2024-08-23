@@ -1,10 +1,5 @@
 use std::iter;
 
-use afs_stark_backend::verifier::VerificationError;
-use afs_test_utils::{
-    config::baby_bear_poseidon2::run_simple_test,
-    interaction::dummy_interaction_air::DummyInteractionAir,
-};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::{
@@ -12,21 +7,28 @@ use p3_matrix::{
     Matrix,
 };
 
-use super::{CpuAir, OpCode::*};
+use afs_stark_backend::verifier::VerificationError;
+use afs_test_utils::{
+    config::baby_bear_poseidon2::run_simple_test,
+    interaction::dummy_interaction_air::DummyInteractionAir,
+};
+
 use crate::{
     cpu::{
+        ARITHMETIC_BUS,
         columns::{CpuCols, CpuIoCols},
-        trace::Instruction,
-        CpuChip, CpuOptions, ARITHMETIC_BUS, READ_INSTRUCTION_BUS,
+        CpuChip, CpuOptions, READ_INSTRUCTION_BUS, trace::Instruction,
     },
-    field_arithmetic::ArithmeticOperation,
+    field_arithmetic::FieldArithmeticOperation,
     memory::manager::interface::MemoryInterface,
     program::Program,
     vm::{
-        config::{MemoryConfig, VmConfig, DEFAULT_MAX_SEGMENT_LEN},
+        config::{DEFAULT_MAX_SEGMENT_LEN, MemoryConfig, VmConfig},
         ExecutionSegment, VirtualMachine,
     },
 };
+
+use super::{CpuAir, Opcode::*};
 
 const TEST_NUM_WORDS: usize = 1;
 const TEST_WORD_SIZE: usize = 1;
@@ -111,7 +113,7 @@ fn execution_test<const NUM_WORDS: usize, const WORD_SIZE: usize>(
     field_extension_enabled: bool,
     program: Program<BabyBear>,
     mut expected_execution: Vec<usize>,
-    expected_arithmetic_operations: Vec<ArithmeticOperation<BabyBear>>,
+    expected_arithmetic_operations: Vec<FieldArithmeticOperation<BabyBear>>,
 ) {
     let mut vm = make_vm::<NUM_WORDS, WORD_SIZE>(
         program.clone(),
@@ -379,7 +381,7 @@ fn test_cpu_1() {
 
     let mut expected_arithmetic_operations = vec![];
     for t in 0..n {
-        expected_arithmetic_operations.push(ArithmeticOperation::<BabyBear>::from_isize(
+        expected_arithmetic_operations.push(FieldArithmeticOperation::<BabyBear>::from_isize(
             FSUB,
             n - t,
             1,

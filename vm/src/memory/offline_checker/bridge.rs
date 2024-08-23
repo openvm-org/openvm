@@ -1,5 +1,7 @@
 use std::collections::VecDeque;
 
+use p3_field::AbstractField;
+
 use afs_primitives::{
     is_less_than::{columns::IsLessThanIoCols, IsLessThanAir},
     is_zero::{
@@ -9,9 +11,7 @@ use afs_primitives::{
     utils::{and, implies},
 };
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_field::AbstractField;
 
-use super::{bus::MemoryBus, columns::MemoryOfflineCheckerAuxCols};
 use crate::{
     cpu::{NEW_MEMORY_BUS, RANGE_CHECKER_BUS},
     memory::{
@@ -19,6 +19,8 @@ use crate::{
         MemoryAddress,
     },
 };
+
+use super::{bus::MemoryBus, columns::MemoryOfflineCheckerAuxCols};
 
 /// The [MemoryBridge] can be created within any AIR evaluation function to be used as the
 /// interface for constraining logical memory read or write operations. The bridge will add

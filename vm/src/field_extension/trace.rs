@@ -10,8 +10,10 @@ use p3_uni_stark::{Domain, StarkGenericConfig};
 use afs_stark_backend::rap::AnyRap;
 
 use crate::{
-    arch::{chips::MachineChip, instructions::OpCode},
-    memory::offline_checker::columns::MemoryOfflineCheckerAuxCols,
+    arch::{chips::MachineChip, instructions::Opcode},
+    memory::{
+        manager::MemoryManager, offline_checker::columns::MemoryOfflineCheckerAuxCols, OpType,
+    },
 };
 
 use super::{
@@ -28,10 +30,10 @@ fn generate_cols<F: Field>(
     op: FieldExtensionArithmeticOperation<F>,
     oc_aux_iter: &mut IntoIter<MemoryOfflineCheckerAuxCols<1, F>>,
 ) -> FieldExtensionArithmeticCols<F> {
-    let is_add = F::from_bool(op.opcode == OpCode::FE4ADD);
-    let is_sub = F::from_bool(op.opcode == OpCode::FE4SUB);
-    let is_mul = F::from_bool(op.opcode == OpCode::BBE4MUL);
-    let is_inv = F::from_bool(op.opcode == OpCode::BBE4INV);
+    let is_add = F::from_bool(op.opcode == Opcode::FE4ADD);
+    let is_sub = F::from_bool(op.opcode == Opcode::FE4SUB);
+    let is_mul = F::from_bool(op.opcode == Opcode::BBE4MUL);
+    let is_inv = F::from_bool(op.opcode == Opcode::BBE4INV);
 
     let x = op.operand1;
     let y = op.operand2;
@@ -39,7 +41,7 @@ fn generate_cols<F: Field>(
     let inv = if x == [F::zero(); EXTENSION_DEGREE] {
         [F::zero(); EXTENSION_DEGREE]
     } else {
-        FieldExtensionArithmetic::solve(OpCode::BBE4INV, x, y).unwrap()
+        FieldExtensionArithmetic::solve(Opcode::BBE4INV, x, y).unwrap()
     };
 
     FieldExtensionArithmeticCols {
@@ -69,6 +71,48 @@ fn generate_cols<F: Field>(
     }
 }
 
+impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
+    fn make_blank_cols(&self) -> FieldExtensionArithmeticCols<F> {
+        let mut trace_builder = MemoryManager::make_trace_builder(self.memory_manager.clone());
+
+        let timestamp = self.memory_manager.borrow().timestamp();
+
+        for _ in 0..8 {
+            trace_builder.disabled_op(F::zero(), OpType::Read);
+        }
+        for _ in 0..4 {
+            trace_builder.disabled_op(F::zero(), OpType::Write);
+        }
+        let mut mem_oc_aux_iter = trace_builder.take_accesses_buffer().into_iter();
+
+        FieldExtensionArithmeticCols {
+            io: FieldExtensionArithmeticIoCols {
+                pc: F::zero(),
+                opcode: F::from_canonical_u32(Opcode::FE4ADD as u32),
+                timestamp: timestamp,
+                x: [F::zero(); EXTENSION_DEGREE],
+                y: [F::zero(); EXTENSION_DEGREE],
+                z: [F::zero(); EXTENSION_DEGREE],
+            },
+            aux: FieldExtensionArithmeticAuxCols {
+                is_valid: F::zero(),
+                valid_y_read: F::zero(),
+                op_a: F::zero(),
+                op_b: F::zero(),
+                op_c: F::zero(),
+                d: F::zero(),
+                e: F::zero(),
+                is_add: F::one(),
+                is_sub: F::zero(),
+                is_mul: F::zero(),
+                is_inv: F::zero(),
+                inv: [F::zero(); EXTENSION_DEGREE],
+                mem_oc_aux_cols: array::from_fn(|_| mem_oc_aux_iter.next().unwrap()),
+            },
+        }
+    }
+}
+
 impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
     /// Generates trace for field arithmetic chip.
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
@@ -91,7 +135,7 @@ impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
         let width = FieldExtensionArithmeticCols::<F>::get_width(&self.air);
         trace.extend(
             (0..correct_height - curr_height)
-                .flat_map(|_| self.make_blank_row().flatten())
+                .flat_map(|_| self.make_blank_cols().flatten())
                 .collect_vec(),
         );
 
@@ -109,7 +153,7 @@ impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
         self.operations.len()
     }
 
-    fn width(&self) -> usize {
+    fn trace_width(&self) -> usize {
         BaseAir::<F>::width(&self.air)
     }
 }

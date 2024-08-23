@@ -1,12 +1,14 @@
-use afs_stark_backend::rap::AnyRap;
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use super::ProgramChip;
+use afs_stark_backend::rap::AnyRap;
+
 use crate::arch::chips::MachineChip;
+
+use super::ProgramChip;
 
 impl<F: PrimeField64> MachineChip<F> for ProgramChip<F> {
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
@@ -29,7 +31,7 @@ impl<F: PrimeField64> MachineChip<F> for ProgramChip<F> {
         self.true_program_length
     }
 
-    fn width(&self) -> usize {
+    fn trace_width(&self) -> usize {
         self.air.width()
     }
 }

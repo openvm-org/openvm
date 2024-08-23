@@ -5,7 +5,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use crate::{
     arch::{
         columns::{ExecutionState, InstructionCols},
-        instructions::OpCode::PERM_POS2,
+        instructions::Opcode::PERM_POS2,
     },
     cpu::POSEIDON2_DIRECT_BUS,
 };

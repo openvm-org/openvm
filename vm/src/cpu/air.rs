@@ -1,23 +1,25 @@
 use std::{array::from_fn, borrow::Borrow};
 
+use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
+use p3_field::{AbstractField, Field};
+use p3_matrix::Matrix;
+
 use afs_primitives::{
     is_equal_vec::{columns::IsEqualVecIoCols, IsEqualVecAir},
     sub_chip::SubAir,
 };
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use p3_field::{AbstractField, Field};
-use p3_matrix::Matrix;
+
+use crate::memory::{
+    MemoryAddress,
+    offline_checker::bridge::{MemoryBridge, MemoryOfflineChecker},
+};
 
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    timestamp_delta, CpuOptions,
-    OpCode::*,
-    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH,
-};
-use crate::memory::{
-    offline_checker::bridge::{MemoryBridge, MemoryOfflineChecker},
-    MemoryAddress,
+    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE,
+    CpuOptions,
+    FIELD_ARITHMETIC_INSTRUCTIONS, INST_WIDTH, Opcode::*, timestamp_delta,
 };
 
 #[derive(Clone)]

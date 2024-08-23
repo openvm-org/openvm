@@ -1,19 +1,21 @@
 use std::{array::from_fn, collections::BTreeMap};
 
+use itertools::Itertools;
+use p3_field::{Field, PrimeField32};
+
 use afs_primitives::{
     is_equal_vec::{columns::IsEqualVecAuxCols, IsEqualVecAir},
     sub_chip::LocalTraceInstructions,
 };
-use itertools::Itertools;
-use p3_field::{Field, PrimeField32};
 
-use super::{CpuAir, CpuOptions, OpCode, CPU_MAX_ACCESSES_PER_CYCLE};
 use crate::{
     memory::{
         manager::operation::MemoryOperation, offline_checker::columns::MemoryOfflineCheckerAuxCols,
     },
     vm::ExecutionSegment,
 };
+
+use super::{CPU_MAX_ACCESSES_PER_CYCLE, CpuAir, CpuOptions, Opcode};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuIoCols<T> {
@@ -71,7 +73,7 @@ impl<T: Field> CpuIoCols<T> {
         Self {
             timestamp,
             pc,
-            opcode: T::from_canonical_usize(OpCode::NOP as usize),
+            opcode: T::from_canonical_usize(Opcode::NOP as usize),
             op_a: T::default(),
             op_b: T::default(),
             op_c: T::default(),
@@ -85,7 +87,7 @@ impl<T: Field> CpuIoCols<T> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuAuxCols<const WORD_SIZE: usize, T> {
-    pub operation_flags: BTreeMap<OpCode, T>,
+    pub operation_flags: BTreeMap<Opcode, T>,
     pub public_value_flags: Vec<T>,
     pub mem_ops: [MemoryOperation<WORD_SIZE, T>; CPU_MAX_ACCESSES_PER_CYCLE],
     pub read0_equals_read1: T,
@@ -183,7 +185,7 @@ impl<const WORD_SIZE: usize, T: PrimeField32> CpuAuxCols<WORD_SIZE, T> {
     pub fn nop_row<const NUM_WORDS: usize>(vm: &ExecutionSegment<NUM_WORDS, WORD_SIZE, T>) -> Self {
         let mut operation_flags = BTreeMap::new();
         for opcode in vm.options().enabled_instructions() {
-            operation_flags.insert(opcode, T::from_bool(opcode == OpCode::NOP));
+            operation_flags.insert(opcode, T::from_bool(opcode == Opcode::NOP));
         }
         // TODO[osama]: consider using MemoryTraceBuilder here
         let oc_cols: [_; CPU_MAX_ACCESSES_PER_CYCLE] = from_fn(|_| {

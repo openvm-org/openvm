@@ -1,19 +1,21 @@
 use std::collections::BTreeMap;
 
-use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use super::{
-    columns::CpuIoCols, CpuAir, OpCode, ARITHMETIC_BUS, CPU_MAX_ACCESSES_PER_CYCLE,
-    CPU_MAX_READS_PER_CYCLE, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_BUS,
-    FIELD_EXTENSION_INSTRUCTIONS, POSEIDON2_BUS, READ_INSTRUCTION_BUS,
-};
+use afs_stark_backend::interaction::InteractionBuilder;
+
 use crate::{
     cpu::{
-        OpCode::{COMP_POS2, F_LESS_THAN, PERM_POS2},
         IS_LESS_THAN_BUS,
+        Opcode::{COMP_POS2, F_LESS_THAN, PERM_POS2},
     },
     memory::manager::operation::MemoryOperation,
+};
+
+use super::{
+    ARITHMETIC_BUS, columns::CpuIoCols, CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CpuAir,
+    FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_BUS, FIELD_EXTENSION_INSTRUCTIONS,
+    Opcode, POSEIDON2_BUS, READ_INSTRUCTION_BUS,
 };
 
 impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
@@ -22,7 +24,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
         builder: &mut AB,
         io: CpuIoCols<AB::Var>,
         ops: [MemoryOperation<WORD_SIZE, AB::Var>; CPU_MAX_ACCESSES_PER_CYCLE],
-        operation_flags: &BTreeMap<OpCode, AB::Var>,
+        operation_flags: &BTreeMap<Opcode, AB::Var>,
     ) {
         // Interaction with program (bus 0)
         builder.push_send(
@@ -30,7 +32,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
             [
                 io.pc, io.opcode, io.op_a, io.op_b, io.op_c, io.d, io.e, io.op_f, io.op_g,
             ],
-            AB::Expr::one() - operation_flags[&OpCode::NOP],
+            AB::Expr::one() - operation_flags[&Opcode::NOP],
         );
 
         // Interaction with arithmetic (bus 2)

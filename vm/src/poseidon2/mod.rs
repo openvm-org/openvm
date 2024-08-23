@@ -8,8 +8,8 @@ use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
 
 use crate::{
     arch::{
-        bridge::ExecutionBus, chips::OpCodeExecutor, columns::ExecutionState,
-        instructions::OpCode::*,
+        bridge::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
+        instructions::Opcode::*,
     },
     cpu::trace::Instruction,
     memory::{
@@ -30,6 +30,7 @@ pub mod trace;
 /// Poseidon2 Chip.
 ///
 /// Carries the Poseidon2VmAir for constraints, and cached state for trace generation.
+#[derive(Debug)]
 pub struct Poseidon2Chip<const WIDTH: usize, F: PrimeField32> {
     pub air: Poseidon2VmAir<WIDTH, F>,
     pub rows: Vec<Poseidon2VmCols<WIDTH, F>>,
@@ -53,7 +54,7 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
     }
 
     pub fn timestamp_delta(&self) -> usize {
-        3 + (2 * crate::poseidon2::WIDTH)
+        3 + (2 * WIDTH)
     }
 
     /// By default direct bus is on. If `continuations = OFF`, this should be called.
@@ -128,7 +129,7 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     }
 }
 
-impl<F: PrimeField32> OpCodeExecutor<F> for Poseidon2Chip<WIDTH, F> {
+impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
     fn execute(
         &mut self,
         instruction: &Instruction<F>,

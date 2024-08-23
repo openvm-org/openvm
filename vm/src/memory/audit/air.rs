@@ -1,3 +1,7 @@
+use p3_air::{Air, AirBuilder, BaseAir};
+use p3_field::Field;
+use p3_matrix::Matrix;
+
 use afs_primitives::{
     is_less_than_tuple::{
         columns::{IsLessThanTupleCols, IsLessThanTupleIoCols},
@@ -6,14 +10,12 @@ use afs_primitives::{
     utils::{implies, or},
 };
 use afs_stark_backend::interaction::InteractionBuilder;
-use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::Field;
-use p3_matrix::Matrix;
 
-use super::columns::AuditCols;
 use crate::cpu::RANGE_CHECKER_BUS;
 
-#[derive(Clone)]
+use super::columns::AuditCols;
+
+#[derive(Clone, Debug)]
 pub struct MemoryAuditAir<const WORD_SIZE: usize> {
     pub addr_lt_air: IsLessThanTupleAir,
 }

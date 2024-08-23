@@ -1,10 +1,12 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
 use p3_field::PrimeField32;
 
-use self::air::MemoryAuditAir;
+use afs_primitives::range_gate::RangeCheckerGateChip;
+
 use super::manager::access_cell::AccessCell;
+
+use self::air::MemoryAuditAir;
 
 pub mod air;
 pub mod bridge;
@@ -14,7 +16,7 @@ pub mod trace;
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MemoryAuditChip<const WORD_SIZE: usize, F: PrimeField32> {
     pub air: MemoryAuditAir<WORD_SIZE>,
     initial_memory: BTreeMap<(F, F), AccessCell<WORD_SIZE, F>>,

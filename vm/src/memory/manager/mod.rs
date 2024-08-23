@@ -31,6 +31,7 @@ pub mod trace_builder;
 const WORD_SIZE: usize = 1;
 const NUM_WORDS: usize = 16;
 
+#[derive(Debug)]
 pub struct MemoryManager<F: PrimeField32> {
     pub interface_chip: MemoryInterface<NUM_WORDS, WORD_SIZE, F>,
     mem_config: MemoryConfig,

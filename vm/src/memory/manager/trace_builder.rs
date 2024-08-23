@@ -18,6 +18,7 @@ use super::{MemoryManager, operation::MemoryOperation};
 const WORD_SIZE: usize = 1;
 const NUM_WORDS: usize = 16;
 
+#[derive(Debug)]
 pub struct MemoryTraceBuilder<F: PrimeField32> {
     memory_manager: Rc<RefCell<MemoryManager<F>>>,
     range_checker: Arc<RangeCheckerGateChip>,

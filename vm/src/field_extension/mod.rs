@@ -1,25 +1,20 @@
-use std::{array, cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use p3_field::{Field, PrimeField32};
 
 use crate::{
     arch::{
         bridge::ExecutionBus,
-        chips::OpCodeExecutor,
+        chips::InstructionExecutor,
         columns::ExecutionState,
-        instructions::{FIELD_EXTENSION_INSTRUCTIONS, OpCode},
+        instructions::{FIELD_EXTENSION_INSTRUCTIONS, Opcode},
     },
     cpu::trace::Instruction,
-    field_extension::columns::{
-        FieldExtensionArithmeticAuxCols, FieldExtensionArithmeticCols,
-        FieldExtensionArithmeticIoCols,
-    },
     memory::{
         manager::{MemoryManager, trace_builder::MemoryTraceBuilder},
         offline_checker::bridge::MemoryOfflineChecker,
         OpType,
-    }
-    ,
+    },
 };
 
 pub mod air;
@@ -37,7 +32,7 @@ pub const EXTENSION_DEGREE: usize = 4;
 pub struct FieldExtensionArithmeticOperation<F> {
     pub pc: usize,
     pub start_timestamp: usize,
-    pub opcode: OpCode,
+    pub opcode: Opcode,
     pub op_a: F,
     pub op_b: F,
     pub op_c: F,
@@ -49,28 +44,26 @@ pub struct FieldExtensionArithmeticOperation<F> {
 }
 
 /// Field extension arithmetic chip. The irreducible polynomial is x^4 - 11.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct FieldExtensionArithmeticAir {
     execution_bus: ExecutionBus,
     mem_oc: MemoryOfflineChecker,
 }
 
 impl FieldExtensionArithmeticAir {
-    pub fn timestamp_delta() -> usize {
-        3 * EXTENSION_DEGREE
-    }
+    pub const TIMESTAMP_DELTA: usize = 3 * EXTENSION_DEGREE;
 }
 
 pub struct FieldExtensionArithmetic;
 
 impl FieldExtensionArithmetic {
-    pub const BASE_OP: u8 = OpCode::FE4ADD as u8;
+    pub const BASE_OP: u8 = Opcode::FE4ADD as u8;
 
     /// Evaluates given opcode using given operands.
     ///
     /// Returns None for opcodes not in cpu::FIELD_EXTENSION_INSTRUCTIONS.
     pub fn solve<T: Field>(
-        op: OpCode,
+        op: Opcode,
         operand1: [T; EXTENSION_DEGREE],
         operand2: [T; EXTENSION_DEGREE],
     ) -> Option<[T; EXTENSION_DEGREE]> {
@@ -87,9 +80,9 @@ impl FieldExtensionArithmetic {
         let beta_f = T::from_canonical_usize(BETA);
 
         match op {
-            OpCode::FE4ADD => Some([a0 + b0, a1 + b1, a2 + b2, a3 + b3]),
-            OpCode::FE4SUB => Some([a0 - b0, a1 - b1, a2 - b2, a3 - b3]),
-            OpCode::BBE4MUL => Some([
+            Opcode::FE4ADD => Some([a0 + b0, a1 + b1, a2 + b2, a3 + b3]),
+            Opcode::FE4SUB => Some([a0 - b0, a1 - b1, a2 - b2, a3 - b3]),
+            Opcode::BBE4MUL => Some([
                 a0 * b0 + beta_f * (a1 * b3 + a2 * b2 + a3 * b1),
                 a0 * b1 + a1 * b0 + beta_f * (a2 * b3 + a3 * b2),
                 a0 * b2 + a1 * b1 + a2 * b0 + beta_f * a3 * b3,
@@ -103,7 +96,7 @@ impl FieldExtensionArithmetic {
             // element of the original field, which we can call c. We can invert c as usual and find that
             // 1 / x = x' / (x * x') = x' * y' / c = x' * y' * c^(-1). We multiply out as usual to obtain
             // the answer.
-            OpCode::BBE4INV => {
+            Opcode::BBE4INV => {
                 let mut n = a0 * a0 - beta_f * (T::two() * a1 * a3 - a2 * a2);
                 let mut m = T::two() * a0 * a2 - a1 * a1 - beta_f * a3 * a3;
 
@@ -126,6 +119,7 @@ impl FieldExtensionArithmetic {
     }
 }
 
+#[derive(Debug)]
 pub struct FieldExtensionArithmeticChip<F: PrimeField32> {
     pub air: FieldExtensionArithmeticAir,
     pub operations: Vec<FieldExtensionArithmeticOperation<F>>,
@@ -179,49 +173,9 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
                 .write_elem(address_space, address + F::from_canonical_usize(i), *row);
         }
     }
-
-    pub fn make_blank_row(&self) -> FieldExtensionArithmeticCols<F> {
-        let mut trace_builder = MemoryManager::make_trace_builder(self.memory_manager.clone());
-
-        let timestamp = self.memory_manager.borrow().timestamp();
-
-        for _ in 0..8 {
-            trace_builder.disabled_op(F::zero(), OpType::Read);
-        }
-        for _ in 0..4 {
-            trace_builder.disabled_op(F::zero(), OpType::Write);
-        }
-        let mut mem_oc_aux_iter = trace_builder.take_accesses_buffer().into_iter();
-
-        FieldExtensionArithmeticCols {
-            io: FieldExtensionArithmeticIoCols {
-                pc: F::zero(),
-                opcode: F::from_canonical_u32(OpCode::FE4ADD as u32),
-                timestamp: timestamp,
-                x: [F::zero(); EXTENSION_DEGREE],
-                y: [F::zero(); EXTENSION_DEGREE],
-                z: [F::zero(); EXTENSION_DEGREE],
-            },
-            aux: FieldExtensionArithmeticAuxCols {
-                is_valid: F::zero(),
-                valid_y_read: F::zero(),
-                op_a: F::zero(),
-                op_b: F::zero(),
-                op_c: F::zero(),
-                d: F::zero(),
-                e: F::zero(),
-                is_add: F::one(),
-                is_sub: F::zero(),
-                is_mul: F::zero(),
-                is_inv: F::zero(),
-                inv: [F::zero(); EXTENSION_DEGREE],
-                mem_oc_aux_cols: array::from_fn(|_| mem_oc_aux_iter.next().unwrap()),
-            },
-        }
-    }
 }
 
-impl<F: PrimeField32> OpCodeExecutor<F> for FieldExtensionArithmeticChip<F> {
+impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F> {
     fn execute(
         &mut self,
         instruction: &Instruction<F>,
@@ -241,7 +195,7 @@ impl<F: PrimeField32> OpCodeExecutor<F> for FieldExtensionArithmeticChip<F> {
         assert!(FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode));
 
         let operand1 = self.read_extension_element(d, op_b);
-        let operand2 = if opcode == OpCode::BBE4INV {
+        let operand2 = if opcode == Opcode::BBE4INV {
             // 4 disabled reads
             for _ in 0..4 {
                 self.memory.disabled_op(e, OpType::Read);
@@ -271,7 +225,7 @@ impl<F: PrimeField32> OpCodeExecutor<F> for FieldExtensionArithmeticChip<F> {
 
         ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: from_state.timestamp + FieldExtensionArithmeticAir::timestamp_delta(),
+            timestamp: from_state.timestamp + FieldExtensionArithmeticAir::TIMESTAMP_DELTA,
         }
     }
 }
