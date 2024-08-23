@@ -4,22 +4,10 @@ use afs_primitives::{
 };
 
 use super::Comp;
-use crate::common::page_cols::PageCols;
-
-pub struct StrictCompAuxCols<T> {
-    pub is_less_than_tuple_aux: IsLessThanTupleAuxCols<T>,
-}
-
-pub struct NonStrictCompAuxCols<T> {
-    pub satisfies_strict_comp: T,
-    pub satisfies_eq_comp: T,
-    pub is_less_than_tuple_aux: IsLessThanTupleAuxCols<T>,
-    pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
-}
-
-pub struct EqCompAuxCols<T> {
-    pub is_equal_vec_aux: IsEqualVecAuxCols<T>,
-}
+use crate::common::{
+    comp::columns::{EqCompAuxCols, NonStrictCompAuxCols, StrictCompAuxCols},
+    page_cols::PageCols,
+};
 
 pub enum PageIndexScanInputAuxCols<T> {
     Lt(StrictCompAuxCols<T>),

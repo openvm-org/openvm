@@ -2,42 +2,39 @@ use std::sync::Arc;
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
 
+use self::air::FilterInputTableAir;
+use crate::common::comp::Comp;
+
 pub mod air;
 pub mod bridge;
 pub mod columns;
-pub mod trace;
 
-pub use air::PageIndexScanInputAir;
-
-use crate::common::comp::Comp;
-
-/// Given a fixed predicate of the form index OP x, where OP is one of {<, <=, =, >=, >}
-/// and x is a private input, the PageIndexScanInputChip implements a chip such that the chip:
-///
-/// 1. Has public value x and OP given by cmp (Lt, Lte, Eq, Gte, or Gt)
-/// 2. Sends all rows of the page that match the predicate index OP x where x is the public value
-pub struct PageIndexScanInputChip {
-    pub air: PageIndexScanInputAir,
+pub struct FilterInputTableChip {
+    pub air: FilterInputTableAir,
     pub range_checker: Arc<RangeCheckerGateChip>,
     pub cmp: Comp,
 }
 
-impl PageIndexScanInputChip {
+impl FilterInputTableChip {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         page_bus_index: usize,
         idx_len: usize,
         data_len: usize,
+        start_col: usize,
+        end_col: usize,
         idx_limb_bits: usize,
         decomp: usize,
         range_checker: Arc<RangeCheckerGateChip>,
         cmp: Comp,
     ) -> Self {
-        let air = PageIndexScanInputAir::new(
+        let air = FilterInputTableAir::new(
             page_bus_index,
             range_checker.bus_index(),
             idx_len,
             data_len,
+            start_col,
+            end_col,
             idx_limb_bits,
             decomp,
             cmp.clone(),

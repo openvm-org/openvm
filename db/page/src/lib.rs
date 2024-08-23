@@ -1,5 +1,6 @@
 pub mod common;
 pub mod execution_air;
+pub mod filter;
 pub mod group_by;
 pub mod indexed_output_page_air;
 pub mod inner_join;

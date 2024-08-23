@@ -20,10 +20,9 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::info_span;
 
 use super::{
-    page_index_scan_input::{Comp, PageIndexScanInputChip},
-    page_index_scan_output::PageIndexScanOutputChip,
+    page_index_scan_input::PageIndexScanInputChip, page_index_scan_output::PageIndexScanOutputChip,
 };
-use crate::common::page::Page;
+use crate::common::{comp::Comp, page::Page};
 
 pub struct PageController<SC: StarkGenericConfig>
 where

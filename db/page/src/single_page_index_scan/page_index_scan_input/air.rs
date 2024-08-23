@@ -15,26 +15,13 @@ use p3_field::Field;
 use p3_matrix::Matrix;
 
 use super::{
-    columns::{
-        EqCompAuxCols, NonStrictCompAuxCols, PageIndexScanInputAuxCols, PageIndexScanInputCols,
-        StrictCompAuxCols,
-    },
+    columns::{PageIndexScanInputAuxCols, PageIndexScanInputCols},
     Comp,
 };
-
-pub struct StrictCompAir {
-    pub is_less_than_tuple_air: IsLessThanTupleAir,
-}
-
-// TODO[optimization]: <= is same as not >
-pub struct NonStrictCompAir {
-    pub is_less_than_tuple_air: IsLessThanTupleAir,
-    pub is_equal_vec_air: IsEqualVecAir,
-}
-
-pub struct EqCompAir {
-    pub is_equal_vec_air: IsEqualVecAir,
-}
+use crate::common::comp::{
+    air::{EqCompAir, NonStrictCompAir, StrictCompAir},
+    columns::{EqCompAuxCols, NonStrictCompAuxCols, StrictCompAuxCols},
+};
 
 pub enum PageIndexScanInputAirVariants {
     Lt(StrictCompAir),
