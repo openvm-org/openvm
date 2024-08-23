@@ -108,7 +108,10 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         let clk = self.memory.borrow().get_clk();
 
         let make_aux_col = |op_type| {
-            let access = MemoryAccess::disabled_op(clk, F::zero(), op_type);
+            let access = match op_type {
+                OpType::Read => MemoryAccess::disabled_read(clk, F::zero()),
+                OpType::Write => MemoryAccess::disabled_write(clk, F::zero()),
+            };
             MemoryTraceBuilder::<NUM_WORDS, WORD_SIZE, F>::memory_access_to_checker_aux_cols(
                 &self.air.mem_oc,
                 self.range_checker.clone(),

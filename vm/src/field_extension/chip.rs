@@ -103,7 +103,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         let x: [F; EXTENSION_DEGREE] = array::from_fn(|i| proj(x_reads[i].op.cell.data));
 
         let y_reads = if opcode == OpCode::BBE4INV {
-            array::from_fn(|_| self.memory.borrow_mut().disabled_read(e))
+            array::from_fn(|_| MemoryAccess::disabled_read(self.memory.borrow().get_clk(), e))
         } else {
             self.read_extension_element(e, op_c)
         };

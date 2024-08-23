@@ -7,7 +7,6 @@ use super::{operation::MemoryOperation, MemoryAccess, MemoryManager};
 use crate::memory::{
     compose, decompose,
     offline_checker::{bridge::MemoryOfflineChecker, columns::MemoryOfflineCheckerAuxCols},
-    OpType,
 };
 
 pub struct MemoryTraceBuilder<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
@@ -69,15 +68,20 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         self.write_word(addr_space, pointer, decompose(data));
     }
 
-    // pub fn write_elem(&mut self, addr_space: F, pointer: F, data: F) {
-    //     self.write_word()
-    // }
+    pub fn disabled_read(&mut self, addr_space: F) -> MemoryOperation<WORD_SIZE, F> {
+        let clk = self.memory_manager.borrow().get_clk();
+        let mem_access = MemoryAccess::disabled_read(clk, addr_space);
 
-    pub fn disabled_op(&mut self, addr_space: F, op_type: OpType) -> MemoryOperation<WORD_SIZE, F> {
-        let mem_access = self
-            .memory_manager
-            .borrow_mut()
-            .disabled_op(addr_space, op_type);
+        self.accesses_buffer
+            .push(self.aux_col_from_access(&mem_access));
+
+        mem_access.op
+    }
+
+    pub fn disabled_write(&mut self, addr_space: F) -> MemoryOperation<WORD_SIZE, F> {
+        let clk = self.memory_manager.borrow().get_clk();
+        let mem_access = MemoryAccess::disabled_read(clk, addr_space);
+
         self.accesses_buffer
             .push(self.aux_col_from_access(&mem_access));
 

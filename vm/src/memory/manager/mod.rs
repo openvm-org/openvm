@@ -172,27 +172,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         self.interface_chip.generate_trace(final_memory)
     }
 
-    /// Trace generation for dummy values when a memory operation should be selectively disabled.
-    ///
-    /// Warning: `self.clk` must be > 0 for less than constraints to pass.
-    pub fn disabled_op(&mut self, addr_space: F, op_type: OpType) -> MemoryAccess<WORD_SIZE, F> {
-        MemoryAccess::disabled_op(self.clk, addr_space, op_type)
-    }
-
-    /// Trace generation for dummy values when a memory operation should be selectively disabled.
-    ///
-    /// Warning: `self.clk` must be > 0 for less than constraints to pass.
-    pub fn disabled_read(&mut self, addr_space: F) -> MemoryAccess<WORD_SIZE, F> {
-        MemoryAccess::disabled_read(self.clk, addr_space)
-    }
-
-    /// Trace generation for dummy values when a memory operation should be selectively disabled.
-    ///
-    /// Warning: `self.clk` must be > 0 for less than constraints to pass.
-    pub fn disabled_write(&mut self, addr_space: F) -> MemoryAccess<WORD_SIZE, F> {
-        MemoryAccess::disabled_read(self.clk, addr_space)
-    }
-
     pub fn increment_clk(&mut self) {
         self.clk += F::one();
     }
@@ -234,7 +213,7 @@ impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
         Self::disabled_op(timestamp, addr_space, OpType::Write)
     }
 
-    pub fn disabled_op(timestamp: T, addr_space: T, op_type: OpType) -> MemoryAccess<WORD_SIZE, T> {
+    fn disabled_op(timestamp: T, addr_space: T, op_type: OpType) -> MemoryAccess<WORD_SIZE, T> {
         MemoryAccess::<WORD_SIZE, T>::new(
             MemoryOperation {
                 addr_space,

@@ -17,7 +17,6 @@ use crate::{
     memory::{
         manager::{dimensions::MemoryDimensions, trace_builder::MemoryTraceBuilder, MemoryManager},
         offline_checker::{bridge::MemoryOfflineChecker, columns::MemoryOfflineCheckerCols},
-        OpType,
     },
     vm::config::MemoryConfig,
 };
@@ -115,7 +114,7 @@ fn volatile_memory_offline_checker_test() {
 
     let diff = mem_ops.len().next_power_of_two() - mem_ops.len();
     for _ in 0..diff {
-        mem_ops.push(mem_trace_builder.disabled_op(BabyBear::one(), OpType::Read));
+        mem_ops.push(mem_trace_builder.disabled_read(BabyBear::one()));
     }
 
     let mut checker_trace = vec![];

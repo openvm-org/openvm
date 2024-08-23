@@ -3,7 +3,7 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{columns::*, Poseidon2Chip};
-use crate::memory::{manager::trace_builder::MemoryTraceBuilder, OpType};
+use crate::memory::manager::trace_builder::MemoryTraceBuilder;
 
 impl<const WIDTH: usize, const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     Poseidon2Chip<WIDTH, NUM_WORDS, WORD_SIZE, F>
@@ -35,15 +35,15 @@ impl<const WIDTH: usize, const NUM_WORDS: usize, const WORD_SIZE: usize, F: Prim
             self.air.mem_oc,
         );
         for _ in 0..3 {
-            mem_trace_builder.disabled_op(blank.io.d, OpType::Read);
+            mem_trace_builder.disabled_read(blank.io.d);
             mem_trace_builder.increment_clk();
         }
         for _ in 0..WIDTH {
-            mem_trace_builder.disabled_op(blank.io.e, OpType::Read);
+            mem_trace_builder.disabled_read(blank.io.e);
             mem_trace_builder.increment_clk();
         }
         for _ in 0..WIDTH {
-            mem_trace_builder.disabled_op(blank.io.e, OpType::Write);
+            mem_trace_builder.disabled_write(blank.io.e);
             mem_trace_builder.increment_clk();
         }
         blank
