@@ -13,7 +13,7 @@ pub struct CheckCarryModToZeroCols<T> {
     pub carries: Vec<T>,
 
     // We will check that expr - quotient * modulus = 0, which imples expr is 0 mod modulus.
-    pub quotient: Vec<T>,
+    pub quotient: T,
 }
 
 pub struct CheckCarryModToZeroSubAir {
@@ -50,7 +50,7 @@ impl CheckCarryModToZeroSubAir {
         let CheckCarryModToZeroCols { quotient, carries } = cols;
         // todo: need to range check quotient?
         let overflow_q = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(
-            quotient,
+            vec![quotient],
             self.check_carry_to_zero.limb_bits,
         );
         let p_limbs = self
