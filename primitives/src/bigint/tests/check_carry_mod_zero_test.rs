@@ -3,6 +3,7 @@ use std::{borrow::Borrow, sync::Arc};
 use afs_stark_backend::interaction::InteractionBuilder;
 use afs_test_utils::{config::baby_bear_blake3::run_simple_test_no_pis, utils::create_seeded_rng};
 use num_bigint_dig::BigUint;
+use num_traits::FromPrimitive;
 use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
 use p3_field::{Field, PrimeField64};
@@ -30,7 +31,7 @@ pub struct TestCarryCols<const N: usize, T> {
     // 2N
     pub carries: Vec<T>,
     // quotient limbs, length is going to be 1 as x^2 , y and p are all 256 bits.
-    pub quotient: T,
+    pub quotient: Vec<T>,
 }
 
 impl<const N: usize, T: Clone> TestCarryCols<N, T> {
@@ -42,7 +43,7 @@ impl<const N: usize, T: Clone> TestCarryCols<N, T> {
         let x = slc[0..N].to_vec();
         let y = slc[N..3 * N].to_vec();
         let carries = slc[3 * N..5 * N].to_vec();
-        let quotient = slc[5 * N].clone();
+        let quotient = slc[5 * N..5 * N + 1].to_vec();
 
         Self {
             x,
@@ -58,7 +59,7 @@ impl<const N: usize, T: Clone> TestCarryCols<N, T> {
         flattened.extend_from_slice(&self.x);
         flattened.extend_from_slice(&self.y);
         flattened.extend_from_slice(&self.carries);
-        flattened.push(self.quotient.clone());
+        flattened.extend_from_slice(&self.quotient);
 
         flattened
     }
@@ -156,7 +157,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
                 .iter()
                 .map(|x| F::from_canonical_usize(*x as usize))
                 .collect(),
-            quotient: quotient_f[0],
+            quotient: quotient_f,
             carries: carries_f,
         }
     }
@@ -165,9 +166,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
 // number of limbs of X.
 const N: usize = 13;
 
-#[test]
-fn test_check_carry_mod_zero() {
-    let prime = secp256k1_prime();
+fn test_x_square_plus_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
     let limb_bits = 10;
     let num_limbs = N;
     // The equation: x^2 + y = 0 (mod p)
@@ -177,17 +176,6 @@ fn test_check_carry_mod_zero() {
 
     let range_bus = 1;
     let range_decomp = 16;
-
-    let mut rng = create_seeded_rng();
-    let x_len = 4; // in bytes -> 128 bits.
-    let x_bytes = (0..x_len).map(|_| rng.next_u32()).collect();
-    let x = BigUint::new(x_bytes);
-    let x_square = x.clone() * x.clone();
-    let mut next_p = prime.clone();
-    while next_p < x_square {
-        next_p += prime.clone();
-    }
-    let y = next_p - x_square;
     let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus, 1 << range_decomp));
     let check_carry_sub_air = CheckCarryModToZeroSubAir::new(
         prime,
@@ -214,4 +202,37 @@ fn test_check_carry_mod_zero() {
         vec![trace, range_trace],
     )
     .expect("Verification failed");
+}
+
+#[test]
+fn test_check_carry_mod_zero() {
+    let prime = secp256k1_prime();
+    let mut rng = create_seeded_rng();
+    let x_len = 4; // in bytes -> 128 bits.
+    let x_bytes = (0..x_len).map(|_| rng.next_u32()).collect();
+    let x = BigUint::new(x_bytes);
+    let x_square = x.clone() * x.clone();
+    let mut next_p = prime.clone();
+    while next_p < x_square {
+        next_p += prime.clone();
+    }
+    let y = next_p - x_square;
+    test_x_square_plus_y_mod(x, y, prime);
+}
+
+#[should_panic]
+#[test]
+fn test_check_carry_mod_zero_fail() {
+    let prime = secp256k1_prime();
+    let mut rng = create_seeded_rng();
+    let x_len = 4; // in bytes -> 128 bits.
+    let x_bytes = (0..x_len).map(|_| rng.next_u32()).collect();
+    let x = BigUint::new(x_bytes);
+    let x_square = x.clone() * x.clone();
+    let mut next_p = prime.clone();
+    while next_p < x_square {
+        next_p += prime.clone();
+    }
+    let y = next_p - x_square + BigUint::from_u32(1).unwrap();
+    test_x_square_plus_y_mod(x, y, prime);
 }
