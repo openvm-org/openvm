@@ -1,13 +1,11 @@
 use std::collections::BTreeMap;
 
+use afs_primitives::sub_chip::LocalTraceInstructions;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
-use afs_primitives::sub_chip::LocalTraceInstructions;
-
-use crate::memory::{audit::columns::AuditCols, manager::access_cell::AccessCell};
-
 use super::MemoryAuditChip;
+use crate::memory::{audit::columns::AuditCols, manager::access_cell::AccessCell};
 
 impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
     pub fn generate_trace(

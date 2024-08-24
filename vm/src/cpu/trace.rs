@@ -4,6 +4,8 @@ use std::{
     fmt::Display,
 };
 
+use afs_primitives::{is_equal_vec::IsEqualVecAir, sub_chip::LocalTraceInstructions};
+use afs_stark_backend::rap::AnyRap;
 use itertools::Itertools;
 use p3_air::BaseAir;
 use p3_commit::PolynomialSpace;
@@ -11,28 +13,24 @@ use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use afs_primitives::{is_equal_vec::IsEqualVecAir, sub_chip::LocalTraceInstructions};
-use afs_stark_backend::rap::AnyRap;
-
+use super::{
+    columns::{CpuAuxCols, CpuCols, CpuIoCols},
+    timestamp_delta, CpuChip, CpuState, CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE,
+    CPU_MAX_WRITES_PER_CYCLE, INST_WIDTH,
+};
 use crate::{
     arch::{
         chips::{InstructionExecutor, MachineChip},
         columns::{ExecutionState, NUM_OPERANDS},
-        instructions::{CORE_INSTRUCTIONS, Opcode, Opcode::*},
+        instructions::{Opcode, Opcode::*, CORE_INSTRUCTIONS},
     },
     cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
     memory::{
         compose, decompose,
-        manager::{MemoryManager, operation::MemoryOperation},
+        manager::{operation::MemoryOperation, MemoryManager},
         OpType,
     },
     vm::ExecutionSegment,
-};
-
-use super::{
-    columns::{CpuAuxCols, CpuCols, CpuIoCols},
-    CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, CPU_MAX_WRITES_PER_CYCLE, CpuChip, CpuState,
-    INST_WIDTH, timestamp_delta,
 };
 
 #[allow(clippy::too_many_arguments)]

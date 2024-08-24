@@ -3,9 +3,8 @@ use std::collections::HashMap;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::memory::audit::MemoryAuditChip;
-
 use super::AccessCell;
+use crate::memory::audit::MemoryAuditChip;
 
 #[derive(Debug)]
 pub enum MemoryInterface<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {

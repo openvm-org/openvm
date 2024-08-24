@@ -437,8 +437,8 @@ fn test_ext_equality_negative() {
 fn assert_failed_assertion(
     builder: Builder<AsmConfig<BabyBear, BinomialExtensionField<BabyBear, 4>>>,
 ) {
-    let program = builder.compile_isa::<WORD_SIZE>();
-    let vm = VirtualMachine::<1, WORD_SIZE, _>::new(VmConfig::default(), program, vec![]);
-    let result = vm.execute_and_generate_traces();
+    let program = builder.compile_isa();
+    let vm = VirtualMachine::new(VmConfig::default(), program, vec![]);
+    let result = vm.execute();
     assert!(matches!(result, Err(Fail(_))));
 }

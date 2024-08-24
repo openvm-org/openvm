@@ -1,14 +1,11 @@
 use std::{collections::BTreeMap, sync::Arc};
 
+use afs_primitives::range_gate::RangeCheckerGateChip;
 use p3_field::PrimeField32;
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
-
-use crate::memory::offline_checker::bus::MemoryBus;
-
-use super::manager::access_cell::AccessCell;
-
 use self::air::MemoryAuditAir;
+use super::manager::access_cell::AccessCell;
+use crate::memory::offline_checker::bus::MemoryBus;
 
 pub mod air;
 pub mod bridge;

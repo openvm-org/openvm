@@ -3,14 +3,13 @@ use std::{
     sync::Arc,
 };
 
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use rand::Rng;
-
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng,
 };
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
+use rand::Rng;
 
 use crate::{
     cpu::RANGE_CHECKER_BUS,

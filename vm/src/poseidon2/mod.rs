@@ -1,11 +1,11 @@
 use std::{array, cell::RefCell, rc::Rc};
 
-use p3_field::PrimeField32;
-
 use afs_primitives::sub_chip::LocalTraceInstructions;
 use columns::*;
+use p3_field::PrimeField32;
 use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
 
+use self::air::Poseidon2VmAir;
 use crate::{
     arch::{
         bridge::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
@@ -13,11 +13,9 @@ use crate::{
     },
     cpu::trace::Instruction,
     memory::{
-        manager::MemoryManager, offline_checker::bridge::MemoryOfflineChecker, OpType, tree::Hasher,
+        manager::MemoryManager, offline_checker::bridge::MemoryOfflineChecker, tree::Hasher, OpType,
     },
 };
-
-use self::air::Poseidon2VmAir;
 
 #[cfg(test)]
 pub mod tests;

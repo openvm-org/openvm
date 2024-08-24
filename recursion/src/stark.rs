@@ -18,13 +18,13 @@ use itertools::{izip, Itertools};
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
-use p3_field::{AbstractExtensionField, AbstractField, PrimeField32, TwoAdicField};
+use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
 use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
     stack::VerticalPair,
     Matrix,
 };
-use stark_vm::{program::Program, vm::ExecutionSegment};
+use stark_vm::program::Program;
 
 use crate::{
     challenger::{duplex::DuplexChallengerVariable, ChallengerVariable},
@@ -96,8 +96,7 @@ impl VerifierProgram<InnerConfig> {
         builder.cycle_tracker_end("VerifierProgram");
         builder.halt();
 
-        const WORD_SIZE: usize = 1;
-        builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+        builder.compile_isa_with_options(CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()
         })
@@ -897,28 +896,4 @@ pub fn sort_chips<'a>(
     let traces = groups.into_iter().map(|(_, _, x, _)| x).collect_vec();
 
     (chips, rec_raps, traces, pvs)
-}
-
-pub fn get_rec_raps<const NUM_WORDS: usize, const WORD_SIZE: usize, C: Config>(
-    vm: &ExecutionSegment<NUM_WORDS, WORD_SIZE, C::F>,
-) -> Vec<Box<dyn DynRapForRecursion<C>>>
-where
-    C::F: PrimeField32,
-{
-    let mut result: Vec<Box<dyn DynRapForRecursion<C>>> = vec![
-        Box::new(vm.cpu_chip.air.clone()),
-        Box::new(vm.program_chip.air.clone()),
-        Box::new(vm.memory_manager.borrow().get_audit_air()),
-    ];
-    if vm.options().field_arithmetic_enabled {
-        result.push(Box::new(vm.field_arithmetic_chip.air));
-    }
-    if vm.options().field_extension_enabled {
-        result.push(Box::new(vm.field_extension_chip.air.clone()));
-    }
-    if vm.options().poseidon2_enabled() {
-        result.push(Box::new(vm.poseidon2_chip.air.clone()));
-    }
-    result.push(Box::new(vm.range_checker.air));
-    result
 }

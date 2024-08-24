@@ -1,10 +1,8 @@
+use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use afs_stark_backend::interaction::InteractionBuilder;
-
-use crate::memory::MemoryAddress;
-
 use super::{air::MemoryAuditAir, columns::AuditCols};
+use crate::memory::MemoryAddress;
 
 impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
     pub fn eval_interactions<AB: InteractionBuilder>(

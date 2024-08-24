@@ -5,22 +5,22 @@ use std::{
     sync::Arc,
 };
 
+use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_stark_backend::rap::AnyRap;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
-
-use afs_primitives::range_gate::RangeCheckerGateChip;
-use afs_stark_backend::rap::AnyRap;
 use poseidon2_air::poseidon2::Poseidon2Config;
 
+use super::{VirtualMachineState, VmConfig, VmMetrics};
 use crate::{
     arch::{
         bridge::ExecutionBus,
         chips::{InstructionExecutorVariant, MachineChip, MachineChipVariant},
-        instructions::{FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS, Opcode},
+        instructions::{Opcode, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS},
     },
-    cpu::{CpuChip, RANGE_CHECKER_BUS, trace::ExecutionError},
+    cpu::{trace::ExecutionError, CpuChip, RANGE_CHECKER_BUS},
     field_arithmetic::FieldArithmeticChip,
     field_extension::FieldExtensionArithmeticChip,
     memory::{manager::MemoryManager, offline_checker::bus::MemoryBus},
@@ -28,8 +28,6 @@ use crate::{
     program::{Program, ProgramChip},
     vm::cycle_tracker::CycleTracker,
 };
-
-use super::{VirtualMachineState, VmConfig, VmMetrics};
 
 pub struct ExecutionSegment<F: PrimeField32> {
     pub config: VmConfig,

@@ -263,7 +263,7 @@ mod tests {
     use afs_compiler::{
         asm::{AsmBuilder, AsmConfig},
         ir::Felt,
-        util::execute_program_and_generate_traces,
+        util::execute_program,
     };
     use afs_test_utils::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
@@ -307,8 +307,7 @@ mod tests {
 
         builder.halt();
 
-        const WORD_SIZE: usize = 1;
-        let program = builder.compile_isa::<WORD_SIZE>();
-        execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
+        let program = builder.compile_isa();
+        execute_program(program, vec![]);
     }
 }

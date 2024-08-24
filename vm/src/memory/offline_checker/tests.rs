@@ -1,16 +1,15 @@
 use std::{array::from_fn, sync::Arc};
 
-use p3_air::{Air, BaseAir};
-use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, Field};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use rand::{Rng, RngCore, seq::SliceRandom};
-
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::interaction::InteractionBuilder;
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng,
 };
+use p3_air::{Air, BaseAir};
+use p3_baby_bear::BabyBear;
+use p3_field::{AbstractField, Field};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use rand::{seq::SliceRandom, Rng, RngCore};
 
 use crate::{
     cpu::RANGE_CHECKER_BUS,

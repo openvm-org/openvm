@@ -1,8 +1,5 @@
 use std::ops::Deref;
 
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-
 use afs_test_utils::{
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm, run_simple_test},
@@ -10,12 +7,14 @@ use afs_test_utils::{
     },
     engine::StarkEngine,
 };
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
 use stark_vm::{
     arch::instructions::Opcode::*,
     cpu::trace::Instruction,
     program::Program,
     vm::{
-        config::{DEFAULT_MAX_SEGMENT_LEN, MemoryConfig, VmConfig},
+        config::{MemoryConfig, VmConfig, DEFAULT_MAX_SEGMENT_LEN},
         VirtualMachine,
     },
 };

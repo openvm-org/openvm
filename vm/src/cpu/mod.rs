@@ -1,9 +1,8 @@
 use core::panic;
 use std::{cell::RefCell, rc::Rc};
 
-use p3_field::PrimeField32;
-
 pub use air::CpuAir;
+use p3_field::PrimeField32;
 
 use crate::{
     arch::{

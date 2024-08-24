@@ -1,16 +1,12 @@
-use std::borrow::Borrow;
-
+use afs_primitives::sub_chip::AirConfig;
+use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::izip;
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use afs_primitives::sub_chip::AirConfig;
-use afs_stark_backend::interaction::InteractionBuilder;
-
-use crate::arch::instructions::Opcode::{FADD, FDIV, FMUL, FSUB};
-
 use super::{columns::FieldArithmeticCols, FieldArithmeticAir};
+use crate::arch::instructions::Opcode::{FADD, FDIV, FMUL, FSUB};
 
 impl AirConfig for FieldArithmeticAir {
     type Cols<T> = FieldArithmeticCols<T>;

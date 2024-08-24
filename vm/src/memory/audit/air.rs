@@ -1,7 +1,3 @@
-use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::Field;
-use p3_matrix::Matrix;
-
 use afs_primitives::{
     is_less_than_tuple::{
         columns::{IsLessThanTupleCols, IsLessThanTupleIoCols},
@@ -10,10 +6,12 @@ use afs_primitives::{
     utils::{implies, or},
 };
 use afs_stark_backend::interaction::InteractionBuilder;
-
-use crate::{cpu::RANGE_CHECKER_BUS, memory::offline_checker::bus::MemoryBus};
+use p3_air::{Air, AirBuilder, BaseAir};
+use p3_field::Field;
+use p3_matrix::Matrix;
 
 use super::columns::AuditCols;
+use crate::{cpu::RANGE_CHECKER_BUS, memory::offline_checker::bus::MemoryBus};
 
 #[derive(Clone, Debug)]
 pub struct MemoryAuditAir<const WORD_SIZE: usize> {
@@ -77,8 +75,8 @@ impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB> for MemoryAuditAir<
                 next.addr_lt_aux.clone(),
             );
 
-            /*self.addr_lt_air
-            .eval_when_transition(builder, lt_cols.io, lt_cols.aux);*/
+            self.addr_lt_air
+                .eval_when_transition(builder, lt_cols.io, lt_cols.aux);
 
             // Ensuring that all addresses are sorted
             builder

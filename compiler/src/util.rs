@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use afs_test_utils::{
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},
@@ -11,7 +13,7 @@ use p3_field::{ExtensionField, PrimeField, PrimeField32, TwoAdicField};
 use stark_vm::{
     cpu::trace::Instruction,
     program::Program,
-    vm::{config::VmConfig, ExecutionAndTraceGenerationResult, VirtualMachine},
+    vm::{config::VmConfig, VirtualMachine},
 };
 
 use crate::{asm::AsmBuilder, conversion::CompilerOptions};
@@ -21,7 +23,7 @@ pub fn execute_program_with_config<const WORD_SIZE: usize>(
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
 ) {
-    let vm = VirtualMachine::<1, WORD_SIZE, _>::new(config, program, input_stream);
+    let vm = VirtualMachine::new(config, program, input_stream);
     vm.execute().unwrap();
 }
 
@@ -39,11 +41,8 @@ pub fn prime_field_to_usize<F: PrimeField>(x: F) -> usize {
     ret
 }
 
-pub fn execute_program<const WORD_SIZE: usize>(
-    program: Program<BabyBear>,
-    input_stream: Vec<Vec<BabyBear>>,
-) {
-    let vm = VirtualMachine::<1, WORD_SIZE, _>::new(
+pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBear>>) {
+    let vm = VirtualMachine::new(
         VmConfig {
             num_public_values: 4,
             max_segment_len: (1 << 25) - 100,
@@ -56,28 +55,12 @@ pub fn execute_program<const WORD_SIZE: usize>(
     vm.execute().unwrap();
 }
 
-pub fn execute_program_and_generate_traces<const WORD_SIZE: usize>(
-    program: Program<BabyBear>,
-    input_stream: Vec<Vec<BabyBear>>,
-) {
-    let vm = VirtualMachine::<1, WORD_SIZE, _>::new(
-        VmConfig {
-            num_public_values: 4,
-            max_segment_len: (1 << 25) - 100,
-            ..Default::default()
-        },
-        program,
-        input_stream,
-    );
-    vm.execute_and_generate_traces().unwrap();
-}
-
 pub fn execute_program_with_public_values<const WORD_SIZE: usize>(
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
     public_values: &[(usize, BabyBear)],
 ) {
-    let mut vm = VirtualMachine::<1, WORD_SIZE, _>::new(
+    let mut vm = VirtualMachine::new(
         VmConfig {
             num_public_values: 4,
             ..Default::default()
@@ -86,9 +69,10 @@ pub fn execute_program_with_public_values<const WORD_SIZE: usize>(
         input_stream,
     );
     for &(index, value) in public_values {
-        vm.segments[0].public_values[index] = Some(value);
+        todo!();
+        // vm.segments[0].public_values[index] = Some(value);
     }
-    vm.execute_and_generate_traces().unwrap();
+    vm.execute().unwrap()
 }
 
 pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
@@ -134,21 +118,18 @@ pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + Tw
     builder: AsmBuilder<BabyBear, EF>,
     input_stream: Vec<Vec<BabyBear>>,
 ) {
-    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+    let program = builder.compile_isa_with_options(CompilerOptions {
         compile_prints: false,
         enable_cycle_tracker: false,
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
         field_less_than_enabled: false,
     });
-    execute_and_prove_program::<WORD_SIZE>(program, input_stream)
+    execute_and_prove_program(program, input_stream)
 }
 
-pub fn execute_and_prove_program<const WORD_SIZE: usize>(
-    program: Program<BabyBear>,
-    input_stream: Vec<Vec<BabyBear>>,
-) {
-    let vm = VirtualMachine::<1, WORD_SIZE, _>::new(
+pub fn execute_and_prove_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBear>>) {
+    let vm = VirtualMachine::new(
         VmConfig {
             num_public_values: 4,
             ..Default::default()
@@ -157,14 +138,14 @@ pub fn execute_and_prove_program<const WORD_SIZE: usize>(
         input_stream,
     );
 
-    let ExecutionAndTraceGenerationResult {
-        max_log_degree,
-        nonempty_chips: chips,
-        nonempty_traces: traces,
-        nonempty_pis: pis,
-        ..
-    } = vm.execute_and_generate_traces().unwrap();
-    let chips = VirtualMachine::<1, WORD_SIZE, _>::get_chips(&chips);
+    let result = vm.execute_and_generate().unwrap();
+    assert_eq!(
+        result.segment_results.len(),
+        1,
+        "only proving one segment for now"
+    );
+
+    let result = &result.segment_results[0];
 
     let perm = random_perm();
     // blowup factor 8 for poseidon2 chip
@@ -173,10 +154,12 @@ pub fn execute_and_prove_program<const WORD_SIZE: usize>(
     } else {
         fri_params_with_80_bits_of_security()[1]
     };
-    let engine = engine_from_perm(perm, max_log_degree, fri_params);
+    let engine = engine_from_perm(perm, result.max_log_degree(), fri_params);
+
+    let airs = result.airs.iter().map(|air| air.deref()).collect();
 
     setup_tracing();
     engine
-        .run_simple_test(chips, traces, pis)
+        .run_simple_test(airs, result.traces.clone(), result.public_values.clone())
         .expect("Verification failed");
 }

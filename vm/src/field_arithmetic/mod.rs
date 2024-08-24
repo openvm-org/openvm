@@ -7,12 +7,12 @@ use crate::{
         bridge::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
-        instructions::{FIELD_ARITHMETIC_INSTRUCTIONS, Opcode},
+        instructions::{Opcode, FIELD_ARITHMETIC_INSTRUCTIONS},
     },
     cpu::trace::Instruction,
     field_arithmetic::columns::Operand,
     memory::{
-        manager::{MemoryManager, trace_builder::MemoryTraceBuilder},
+        manager::{trace_builder::MemoryTraceBuilder, MemoryManager},
         offline_checker::bridge::MemoryOfflineChecker,
     },
 };

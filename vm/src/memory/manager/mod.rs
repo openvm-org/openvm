@@ -1,13 +1,17 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
+use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_stark_backend::rap::AnyRap;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
-use afs_stark_backend::rap::AnyRap;
-
+use self::{access_cell::AccessCell, interface::MemoryInterface};
+use super::{
+    audit::{air::MemoryAuditAir, MemoryAuditChip},
+    offline_checker::columns::MemoryAccess,
+};
 use crate::{
     arch::chips::MachineChip,
     memory::{
@@ -18,13 +22,6 @@ use crate::{
     },
     vm::config::MemoryConfig,
 };
-
-use super::{
-    audit::{air::MemoryAuditAir, MemoryAuditChip},
-    offline_checker::columns::MemoryAccess,
-};
-
-use self::{access_cell::AccessCell, interface::MemoryInterface};
 
 pub mod access_cell;
 pub mod dimensions;

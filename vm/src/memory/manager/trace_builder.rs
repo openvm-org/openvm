@@ -1,9 +1,9 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
+use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 use p3_field::PrimeField32;
 
-use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
-
+use super::{operation::MemoryOperation, MemoryManager};
 use crate::memory::{
     compose, decompose,
     offline_checker::{
@@ -12,8 +12,6 @@ use crate::memory::{
     },
     OpType,
 };
-
-use super::{MemoryManager, operation::MemoryOperation};
 
 const WORD_SIZE: usize = 1;
 

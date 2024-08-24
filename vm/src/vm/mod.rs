@@ -1,15 +1,14 @@
 use std::{collections::VecDeque, mem::take};
 
+use cycle_tracker::CycleTracker;
+use metrics::VmMetrics;
 use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_uni_stark::{Domain, StarkGenericConfig};
-
-use cycle_tracker::CycleTracker;
-use metrics::VmMetrics;
 pub use segment::ExecutionSegment;
 
 use crate::{
-    cpu::{CpuOptions, CpuState, trace::ExecutionError},
+    cpu::{trace::ExecutionError, CpuOptions, CpuState},
     program::Program,
     vm::{config::VmConfig, segment::SegmentResult},
 };

@@ -1,11 +1,10 @@
-use derive_new::new;
-
 use afs_derive::AlignedBorrow;
+use derive_new::new;
 
 use crate::{
     arch::columns::ExecutionState,
     field_arithmetic::FieldArithmeticAir,
-    memory::{MemoryAddress, offline_checker::columns::MemoryOfflineCheckerAuxCols},
+    memory::{offline_checker::columns::MemoryOfflineCheckerAuxCols, MemoryAddress},
 };
 
 /// Columns for field arithmetic chip.

@@ -1,21 +1,20 @@
 use std::{cell::RefCell, collections::HashMap, ops::Deref, rc::Rc, sync::Arc};
 
+use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_stark_backend::{
+    interaction::InteractionBuilder, rap::AnyRap, verifier::VerificationError,
+};
+use afs_test_utils::{
+    config::baby_bear_poseidon2::{run_simple_test, BabyBearPoseidon2Config},
+    engine::StarkEngine,
+};
 use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
 use p3_field::{AbstractField, Field, PrimeField32, PrimeField64};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{Domain, StarkGenericConfig};
-use rand::{RngCore, rngs::StdRng};
-
-use afs_primitives::range_gate::RangeCheckerGateChip;
-use afs_stark_backend::{
-    interaction::InteractionBuilder, rap::AnyRap, verifier::VerificationError,
-};
-use afs_test_utils::{
-    config::baby_bear_poseidon2::{BabyBearPoseidon2Config, run_simple_test},
-    engine::StarkEngine,
-};
+use rand::{rngs::StdRng, RngCore};
 
 use crate::{
     arch::{
@@ -23,7 +22,7 @@ use crate::{
         chips::{InstructionExecutor, MachineChip},
         columns::{ExecutionState, InstructionCols},
     },
-    cpu::{RANGE_CHECKER_BUS, trace::Instruction},
+    cpu::{trace::Instruction, RANGE_CHECKER_BUS},
     memory::{manager::MemoryManager, offline_checker::bus::MemoryBus},
     vm::config::MemoryConfig,
 };
