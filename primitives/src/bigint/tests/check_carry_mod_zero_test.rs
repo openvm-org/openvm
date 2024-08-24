@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, sync::Arc};
 
-use afs_stark_backend::{interaction::InteractionBuilder, prover::quotient};
+use afs_stark_backend::interaction::InteractionBuilder;
 use afs_test_utils::{config::baby_bear_blake3::run_simple_test_no_pis, utils::create_seeded_rng};
 use num_bigint_dig::BigUint;
 use p3_air::{Air, BaseAir};
@@ -20,7 +20,7 @@ use crate::{
 };
 
 // Testing AIR:
-// Constrain: x^2 + y = 0 (mod p)
+// Constrain: x^2 + y = p * quotient, that is x^2 + y = 0 (mod p)
 #[derive(Clone)]
 pub struct TestCarryCols<const N: usize, T> {
     // limbs of x, length N.
@@ -29,13 +29,13 @@ pub struct TestCarryCols<const N: usize, T> {
     pub y: Vec<T>,
     // 2N
     pub carries: Vec<T>,
-    // quotient limbs, length 1
+    // quotient limbs, length is going to be 1 as x^2 , y and p are all 256 bits.
     pub quotient: T,
 }
 
 impl<const N: usize, T: Clone> TestCarryCols<N, T> {
     pub fn get_width() -> usize {
-        7 * N
+        5 * N + 1
     }
 
     pub fn from_slice(slc: &[T]) -> Self {
@@ -97,7 +97,7 @@ impl<AB: InteractionBuilder, const N: usize> Air<AB> for TestCarryAir<N> {
 
         let x_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(x, self.limb_bits);
         let y_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(y, self.limb_bits);
-        let expr = (x_overflow.clone() * x_overflow.clone()) - y_overflow.clone();
+        let expr = (x_overflow.clone() * x_overflow.clone()) + y_overflow.clone();
 
         self.test_carry_sub_air.constrain_carry_mod_to_zero(
             builder,
@@ -114,7 +114,6 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
         let (x, y, range_checker) = input;
         let quotient =
             (x.clone() * x.clone() + y.clone()) / self.test_carry_sub_air.modulus.clone();
-        println!("quotient: {:?}", quotient);
         let quotient_f: Vec<F> = big_uint_to_limbs(quotient, self.limb_bits)
             .iter()
             .map(|&x| F::from_canonical_usize(x))
@@ -128,9 +127,9 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
                 range_checker.add_count(value + (1 << self.decomp) - (1 << bits));
             }
         };
-        let x_overflow = OverflowInt::<isize>::from_big_uint(x, self.limb_bits);
-        let y_overflow = OverflowInt::<isize>::from_big_uint(y, self.limb_bits);
-        let expr = x_overflow.clone() * x_overflow.clone() - y_overflow.clone();
+        let x_overflow = OverflowInt::<isize>::from_big_uint(x, self.limb_bits, Some(N));
+        let y_overflow = OverflowInt::<isize>::from_big_uint(y, self.limb_bits, Some(2 * N));
+        let expr = x_overflow.clone() * x_overflow.clone() + y_overflow.clone();
         let carries = expr.calculate_carries(self.limb_bits);
         let mut carries_f = vec![F::zero(); carries.len()];
         let carry_min_abs = self
@@ -145,10 +144,6 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
             carries_f[i] = F::from_canonical_usize(carry.unsigned_abs())
                 * if carry >= 0 { F::one() } else { F::neg_one() };
         }
-        println!("x_overflow: {:?}", x_overflow.limbs.len());
-        println!("y_overflow: {:?}", y_overflow.limbs.len());
-        println!("carries_f: {:?}", carries_f.len());
-        println!("quotient_f: {:?}", quotient_f.len());
 
         TestCarryCols {
             x: x_overflow
@@ -161,8 +156,8 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
                 .iter()
                 .map(|x| F::from_canonical_usize(*x as usize))
                 .collect(),
-            carries: carries_f,
             quotient: quotient_f[0],
+            carries: carries_f,
         }
     }
 }
@@ -193,8 +188,6 @@ fn test_check_carry_mod_zero() {
         next_p += prime.clone();
     }
     let y = next_p - x_square;
-    println!("x^2+y: {:?}", x.clone() * x.clone() + y.clone());
-    println!("prime: {:?}", prime);
     let range_checker = Arc::new(RangeCheckerGateChip::new(range_bus, 1 << range_decomp));
     let check_carry_sub_air = CheckCarryModToZeroSubAir::new(
         prime,
@@ -213,8 +206,6 @@ fn test_check_carry_mod_zero() {
     let row = test_air
         .generate_trace_row((x, y, range_checker.clone()))
         .flatten();
-    println!("row: {:?}", row.len());
-    println!("width: {:?}", BaseAir::<BabyBear>::width(&test_air));
     let trace = RowMajorMatrix::new(row, BaseAir::<BabyBear>::width(&test_air));
     let range_trace = range_checker.generate_trace();
 

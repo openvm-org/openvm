@@ -46,7 +46,7 @@ pub fn big_uint_to_bits(x: BigUint) -> VecDeque<usize> {
 }
 
 pub fn big_uint_to_limbs(x: BigUint, limb_bits: usize) -> Vec<usize> {
-    let total_limbs = x.bits() / limb_bits;
+    let total_limbs = (x.bits() + limb_bits - 1) / limb_bits;
     let mut modulus_bits = big_uint_to_bits(x);
 
     (0..total_limbs)
