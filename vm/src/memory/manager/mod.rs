@@ -178,7 +178,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     ///
     /// Warning: `self.clk` must be > 0 for less than constraints to pass.
     pub fn disabled_op(&mut self, addr_space: F, op_type: OpType) -> MemoryAccess<WORD_SIZE, F> {
-        assert!(addr_space != F::zero());
+        assert_ne!(addr_space, F::zero());
         let timestamp = self.clk;
         // Below, we set timestamp_prev = 0
         MemoryAccess::<WORD_SIZE, F>::new(
