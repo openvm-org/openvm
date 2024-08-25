@@ -1,17 +1,27 @@
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir, EXTENSION_DEGREE};
+use super::{
+    air::FieldExtensionArithmeticAir,
+    chip::EXTENSION_DEGREE,
+    columns::{FieldExtensionArithmeticCols, FieldExtensionArithmeticIoCols},
+};
 use crate::{
     arch::columns::{ExecutionState, InstructionCols},
     field_extension::columns::FieldExtensionArithmeticAuxCols,
-    memory::{offline_checker::bridge::MemoryBridge, MemoryAddress},
+    memory::{
+        offline_checker::{
+            bridge::{MemoryBridge, MemoryOfflineChecker},
+            columns::MemoryOfflineCheckerAuxCols,
+        },
+        MemoryAddress,
+    },
 };
 
 #[allow(clippy::too_many_arguments)]
 fn eval_rw_interactions<AB: InteractionBuilder>(
     builder: &mut AB,
-    memory_bridge: &mut MemoryBridge<AB::Var, 1>,
+    mem_oc: MemoryOfflineChecker,
     clk_offset: &mut AB::Expr,
     is_enabled: AB::Expr,
     is_write: bool,
@@ -19,7 +29,10 @@ fn eval_rw_interactions<AB: InteractionBuilder>(
     addr_space: AB::Var,
     address: AB::Var,
     ext: [AB::Var; EXTENSION_DEGREE],
+    mem_oc_aux_cols: [MemoryOfflineCheckerAuxCols<1, AB::Var>; EXTENSION_DEGREE],
 ) {
+    let mut memory_bridge = MemoryBridge::new(mem_oc, mem_oc_aux_cols);
+
     for (i, element) in ext.into_iter().enumerate() {
         let pointer = address + AB::F::from_canonical_usize(i);
 
@@ -56,64 +69,78 @@ impl FieldExtensionArithmeticAir {
 
         let FieldExtensionArithmeticCols { io, aux } = local;
 
+        let FieldExtensionArithmeticIoCols {
+            pc,
+            opcode,
+            timestamp,
+            x,
+            y,
+            z,
+            ..
+        } = io;
+
         let FieldExtensionArithmeticAuxCols {
+            read_x_aux_cols,
+            read_y_aux_cols,
+            write_aux_cols,
+            is_valid,
+            valid_y_read,
             op_a,
             op_b,
             op_c,
             d,
             e,
-            mem_oc_aux_cols,
-            is_valid,
             ..
         } = aux;
-
-        let mut memory_bridge = MemoryBridge::new(self.mem_oc, mem_oc_aux_cols);
 
         // Reads for x
         eval_rw_interactions(
             builder,
-            &mut memory_bridge,
+            self.mem_oc,
             &mut clk_offset,
             is_valid.into(),
             false,
-            io.timestamp,
+            timestamp,
             d,
             op_b,
-            io.x,
+            x,
+            read_x_aux_cols,
         );
 
         // Reads for y
         eval_rw_interactions(
             builder,
-            &mut memory_bridge,
+            self.mem_oc,
             &mut clk_offset,
-            aux.valid_y_read.into(),
+            valid_y_read.into(),
             false,
-            io.timestamp,
+            timestamp,
             e,
             op_c,
-            io.y,
+            y,
+            read_y_aux_cols,
         );
 
         // Writes for z
         eval_rw_interactions(
             builder,
-            &mut memory_bridge,
+            self.mem_oc,
             &mut clk_offset,
             is_valid.into(),
             true,
-            io.timestamp,
+            timestamp,
             d,
             op_a,
-            io.z,
+            z,
+            write_aux_cols,
         );
 
         self.execution_bus.execute_increment_pc(
             builder,
             aux.is_valid,
-            ExecutionState::new(io.pc, io.timestamp),
+            ExecutionState::new(pc, timestamp),
             AB::F::from_canonical_usize(Self::TIMESTAMP_DELTA),
-            InstructionCols::new(io.opcode, [aux.op_a, aux.op_b, aux.op_c, aux.d, aux.e]),
+            InstructionCols::new(opcode, [op_a, op_b, op_c, d, e]),
         );
     }
 }

@@ -6,7 +6,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use super::AccessCell;
 use crate::memory::audit::MemoryAuditChip;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum MemoryInterface<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32> {
     Volatile(MemoryAuditChip<WORD_SIZE, F>),
     // Persistent(MemoryExpandInterfaceChip<NUM_WORDS, WORD_SIZE, F>),
@@ -15,10 +15,10 @@ pub enum MemoryInterface<const NUM_WORDS: usize, const WORD_SIZE: usize, F: Prim
 impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     MemoryInterface<NUM_WORDS, WORD_SIZE, F>
 {
-    pub fn touch_address(&mut self, addr_space: F, pointer: F, data: [F; WORD_SIZE], clk: F) {
+    pub fn touch_address(&mut self, addr_space: F, pointer: F, data: [F; WORD_SIZE]) {
         match self {
             MemoryInterface::Volatile(ref mut audit_chip) => {
-                audit_chip.touch_address(addr_space, pointer, data, clk);
+                audit_chip.touch_address(addr_space, pointer, data);
             } // MemoryInterface::Persistent(ref mut expand_chip) => {
               //     expand_chip.touch_address(addr_space, pointer, data, clk);
               // }

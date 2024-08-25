@@ -22,13 +22,18 @@ use crate::{
     arch::{
         chips::{InstructionExecutor, MachineChip},
         columns::{ExecutionState, NUM_OPERANDS},
-        instructions::{Opcode, Opcode::*, CORE_INSTRUCTIONS},
+        instructions::{
+            Opcode::{self, *},
+            CORE_INSTRUCTIONS,
+        },
     },
-    cpu::trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
+    cpu::{
+        trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
+        WORD_SIZE,
+    },
     memory::{
         compose, decompose,
         manager::{operation::MemoryOperation, MemoryManager},
-        OpType,
     },
     vm::ExecutionSegment,
 };
@@ -204,7 +209,7 @@ impl Display for ExecutionError {
 
 impl Error for ExecutionError {}
 
-impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
+impl<F: PrimeField32> CpuChip<F> {
     pub fn execute(vm: &mut ExecutionSegment<F>) -> Result<(), ExecutionError> {
         let mut clock_cycle: usize = vm.cpu_chip.borrow().state.clock_cycle;
         let mut timestamp: usize = vm.cpu_chip.borrow().state.timestamp;
@@ -281,8 +286,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     num_reads += 1;
                     assert!(num_reads <= CPU_MAX_READS_PER_CYCLE);
 
-                    mem_ops[num_reads - 1] =
-                        mem_read_trace_builder.disabled_op(F::zero(), OpType::Read);
+                    mem_ops[num_reads - 1] = mem_read_trace_builder.disabled_read(F::one());
                 }};
             }
 
@@ -311,7 +315,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     while num_writes < CPU_MAX_WRITES_PER_CYCLE {
                         num_writes += 1;
                         mem_ops[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
-                            mem_write_trace_builder.disabled_op(F::zero(), OpType::Write);
+                            mem_write_trace_builder.disabled_write(F::one());
                     }
                 }};
             }
@@ -412,12 +416,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                             }
                         }
                     }
-                    /*F_LESS_THAN => {
-                        let operand1 = read!(d, b);
-                        let operand2 = read!(e, c);
-                        let result = vm.is_less_than_chip.compare((operand1, operand2));
-                        write!(d, a, result);
-                    }*/
                     PRINTF => {
                         let value = read!(d, a);
                         println!("{}", value);
@@ -435,8 +433,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                         let val = vm.memory_manager.borrow_mut().unsafe_read_word(d, a);
                         let mut val = val[0].as_canonical_u32();
 
+                        let len = c.as_canonical_u32();
                         hint_stream = VecDeque::new();
-                        for _ in 0..32 {
+                        for _ in 0..len {
                             hint_stream.push_back(F::from_canonical_u32(val & 1));
                             val >>= 1;
                         }
@@ -485,12 +484,12 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
 
             // Finalizing memory accesses
             for mem_op in &mut mem_ops[num_reads..CPU_MAX_READS_PER_CYCLE] {
-                *mem_op = mem_read_trace_builder.disabled_op(F::zero(), OpType::Read);
+                *mem_op = mem_read_trace_builder.disabled_read(F::one());
             }
             for mem_op in
                 &mut mem_ops[CPU_MAX_READS_PER_CYCLE + num_writes..CPU_MAX_ACCESSES_PER_CYCLE]
             {
-                *mem_op = mem_write_trace_builder.disabled_op(F::zero(), OpType::Write);
+                *mem_op = mem_write_trace_builder.disabled_write(F::one());
             }
 
             let mem_oc_aux_cols: Vec<_> = mem_read_trace_builder
@@ -570,16 +569,13 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
     }
 }
 
-impl<const WORD_SIZE: usize, F: PrimeField32> MachineChip<F> for CpuChip<WORD_SIZE, F> {
+impl<F: PrimeField32> MachineChip<F> for CpuChip<F> {
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         if !self.state.is_done {
             self.pad_rows();
         }
 
-        RowMajorMatrix::new(
-            self.rows.concat(),
-            CpuCols::<WORD_SIZE, F>::get_width(&self.air),
-        )
+        RowMajorMatrix::new(self.rows.concat(), CpuCols::<F>::get_width(&self.air))
     }
 
     fn air<SC: StarkGenericConfig>(&self) -> Box<dyn AnyRap<SC>>

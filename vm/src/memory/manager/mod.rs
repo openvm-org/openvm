@@ -2,16 +2,14 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::rap::AnyRap;
+use derive_new::new;
 use p3_commit::PolynomialSpace;
-use p3_field::PrimeField32;
+use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use self::{access_cell::AccessCell, interface::MemoryInterface};
-use super::{
-    audit::{air::MemoryAuditAir, MemoryAuditChip},
-    offline_checker::columns::MemoryAccess,
-};
+use super::audit::{air::MemoryAuditAir, MemoryAuditChip};
 use crate::{
     arch::chips::MachineChip,
     memory::{
@@ -32,7 +30,7 @@ pub mod trace_builder;
 const WORD_SIZE: usize = 1;
 const NUM_WORDS: usize = 16;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MemoryManager<F: PrimeField32> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<NUM_WORDS, WORD_SIZE, F>,
@@ -98,20 +96,17 @@ impl<F: PrimeField32> MemoryManager<F> {
         }
     }
 
-    pub fn make_offline_checker(manager: Rc<RefCell<Self>>) -> MemoryOfflineChecker {
+    pub fn make_offline_checker(&self) -> MemoryOfflineChecker {
         MemoryOfflineChecker::new(
-            manager.borrow().memory_bus,
-            manager.borrow().mem_config.decomp,
-            manager.borrow().mem_config.clk_max_bits,
+            self.memory_bus,
+            self.mem_config.decomp,
+            self.mem_config.clk_max_bits,
         )
     }
 
     pub fn make_trace_builder(manager: Rc<RefCell<Self>>) -> MemoryTraceBuilder<F> {
-        MemoryTraceBuilder::new(
-            manager.clone(),
-            manager.borrow().range_checker.clone(),
-            Self::make_offline_checker(manager.clone()),
-        )
+        let checker = manager.borrow().make_offline_checker();
+        MemoryTraceBuilder::new(manager, checker)
     }
 
     pub fn read_word(&mut self, addr_space: F, pointer: F) -> MemoryAccess<WORD_SIZE, F> {
@@ -140,7 +135,7 @@ impl<F: PrimeField32> MemoryManager<F> {
         cell.clk = cur_clk;
 
         self.interface_chip
-            .touch_address(addr_space, pointer, old_data, cur_clk);
+            .touch_address(addr_space, pointer, old_data);
 
         MemoryAccess::<WORD_SIZE, F>::new(
             MemoryOperation::new(
@@ -187,7 +182,7 @@ impl<F: PrimeField32> MemoryManager<F> {
         cell.data = data;
 
         self.interface_chip
-            .touch_address(addr_space, pointer, old_data, old_clk);
+            .touch_address(addr_space, pointer, old_data);
 
         MemoryAccess::<WORD_SIZE, F>::new(
             MemoryOperation::new(
@@ -244,24 +239,6 @@ impl<F: PrimeField32> MemoryManager<F> {
             .generate_trace_with_height(final_memory, trace_height)
     }
 
-    /// Trace generation for dummy values when a memory operation should be selectively disabled.
-    ///
-    /// Warning: `self.clk` must be > 0 for less than constraints to pass.
-    pub fn disabled_op(&mut self, addr_space: F, op_type: OpType) -> MemoryAccess<WORD_SIZE, F> {
-        let timestamp = self.timestamp;
-        // Below, we set timestamp_prev = 0
-        MemoryAccess::<WORD_SIZE, F>::new(
-            MemoryOperation::new(
-                addr_space,
-                F::zero(),
-                F::from_canonical_u8(op_type as u8),
-                AccessCell::new([F::zero(); WORD_SIZE], timestamp),
-                F::zero(),
-            ),
-            AccessCell::new([F::zero(); WORD_SIZE], F::zero()),
-        )
-    }
-
     pub fn increment_timestamp(&mut self) {
         self.timestamp += F::one();
     }
@@ -288,6 +265,43 @@ impl<F: PrimeField32> MemoryManager<F> {
     // }
 }
 
+#[derive(new, Clone, Debug, Default)]
+pub struct MemoryAccess<const WORD_SIZE: usize, T> {
+    pub op: MemoryOperation<WORD_SIZE, T>,
+    pub old_cell: AccessCell<WORD_SIZE, T>,
+}
+
+impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
+    // TODO[jpw]: we can default to addr_space = 1 after is_immediate checks are moved out of default memory access
+    pub fn disabled_read(timestamp: T, addr_space: T) -> MemoryAccess<WORD_SIZE, T> {
+        Self::disabled_op(timestamp, addr_space, OpType::Read)
+    }
+
+    // TODO[jpw]: we can default to addr_space = 1 after is_immediate checks are moved out of default memory access
+    pub fn disabled_write(timestamp: T, addr_space: T) -> MemoryAccess<WORD_SIZE, T> {
+        Self::disabled_op(timestamp, addr_space, OpType::Write)
+    }
+
+    fn disabled_op(timestamp: T, addr_space: T, op_type: OpType) -> MemoryAccess<WORD_SIZE, T> {
+        debug_assert_ne!(
+            addr_space,
+            T::zero(),
+            "Disabled memory operation cannot be immediate"
+        );
+        MemoryAccess::<WORD_SIZE, T>::new(
+            MemoryOperation {
+                addr_space,
+                pointer: T::zero(),
+                op_type: T::from_canonical_u8(op_type as u8),
+                cell: AccessCell::new([T::zero(); WORD_SIZE], timestamp),
+                enabled: T::zero(),
+            },
+            AccessCell::new([T::zero(); WORD_SIZE], T::zero()),
+        )
+    }
+}
+
+// TODO[jpw]: this doesn't seem right
 impl<F: PrimeField32> MachineChip<F> for MemoryManager<F> {
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         self.generate_memory_interface_trace()

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::cpu::CpuOptions;
 
-pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 20) - 100;
+pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 25) - 100;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, new)]
 pub struct MemoryConfig {

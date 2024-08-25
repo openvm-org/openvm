@@ -52,8 +52,6 @@ codegen-units = 1
 [profile.fast]
 inherits = "dev"
 opt-level = 3
-# Set this to 1 or 2 to get more useful backtraces
-debug = 1
 debug-assertions = true
 # better recompile times
 incremental = true

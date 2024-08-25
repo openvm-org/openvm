@@ -285,27 +285,67 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::MulEFI(dst, lhs, rhs) => {
                     self.mul_ext_felti(dst, lhs, rhs, debug_info);
                 }
-                DslIr::AddM(dst, lhs, rhs) => {
+                DslIr::AddSecp256k1Coord(dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::AddMSecp256k1(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        AsmInstruction::AddSecp256k1Coord(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
                         debug_info,
                     );
                 }
-                DslIr::SubM(dst, lhs, rhs) => {
+                DslIr::SubSecp256k1Coord(dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::SubMSecp256k1(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        AsmInstruction::SubSecp256k1Coord(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
                         debug_info,
                     );
                 }
-                DslIr::MulM(dst, lhs, rhs) => {
+                DslIr::MulSecp256k1Coord(dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::MulMSecp256k1(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        AsmInstruction::MulSecp256k1Coord(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
                         debug_info,
                     );
                 }
-                DslIr::DivM(dst, lhs, rhs) => {
+                DslIr::DivSecp256k1Coord(dst, lhs, rhs) => {
                     self.push(
-                        AsmInstruction::DivMSecp256k1(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        AsmInstruction::DivSecp256k1Coord(dst.ptr_fp(), lhs.ptr_fp(), rhs.ptr_fp()),
+                        debug_info,
+                    );
+                }
+                DslIr::AddSecp256k1Scalar(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::AddSecp256k1Scalar(
+                            dst.ptr_fp(),
+                            lhs.ptr_fp(),
+                            rhs.ptr_fp(),
+                        ),
+                        debug_info,
+                    );
+                }
+                DslIr::SubSecp256k1Scalar(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::SubSecp256k1Scalar(
+                            dst.ptr_fp(),
+                            lhs.ptr_fp(),
+                            rhs.ptr_fp(),
+                        ),
+                        debug_info,
+                    );
+                }
+                DslIr::MulSecp256k1Scalar(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::MulSecp256k1Scalar(
+                            dst.ptr_fp(),
+                            lhs.ptr_fp(),
+                            rhs.ptr_fp(),
+                        ),
+                        debug_info,
+                    );
+                }
+                DslIr::DivSecp256k1Scalar(dst, lhs, rhs) => {
+                    self.push(
+                        AsmInstruction::DivSecp256k1Scalar(
+                            dst.ptr_fp(),
+                            lhs.ptr_fp(),
+                            rhs.ptr_fp(),
+                        ),
                         debug_info,
                     );
                 }
@@ -502,11 +542,11 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     ),
                 },
                 DslIr::StoreE(var, ptr, index) => self.store_ext(var, ptr.fp(), index, debug_info),
-                DslIr::HintBitsF(var) => {
-                    self.push(AsmInstruction::HintBits(var.fp()), debug_info);
+                DslIr::HintBitsF(var, len) => {
+                    self.push(AsmInstruction::HintBits(var.fp(), len), debug_info);
                 }
-                DslIr::HintBitsV(var) => {
-                    self.push(AsmInstruction::HintBits(var.fp()), debug_info);
+                DslIr::HintBitsV(var, len) => {
+                    self.push(AsmInstruction::HintBits(var.fp(), len), debug_info);
                 }
                 DslIr::HintBitsU(_) => {
                     todo!()

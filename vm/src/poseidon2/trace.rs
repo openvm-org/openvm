@@ -50,15 +50,15 @@ impl<const WIDTH: usize, F: PrimeField32> Poseidon2Chip<WIDTH, F> {
         let mut blank = Poseidon2VmCols::<WIDTH, F>::blank_row(&self.air.inner, timestamp);
         let mut mem_trace_builder = MemoryManager::make_trace_builder(self.memory_manager.clone());
         for _ in 0..3 {
-            mem_trace_builder.disabled_op(blank.io.d, OpType::Read);
+            mem_trace_builder.disabled_read(blank.io.d);
             mem_trace_builder.increment_clk();
         }
         for _ in 0..WIDTH {
-            mem_trace_builder.disabled_op(blank.io.e, OpType::Read);
+            mem_trace_builder.disabled_read(blank.io.e);
             mem_trace_builder.increment_clk();
         }
         for _ in 0..WIDTH {
-            mem_trace_builder.disabled_op(blank.io.e, OpType::Write);
+            mem_trace_builder.disabled_write(blank.io.e);
             mem_trace_builder.increment_clk();
         }
         blank

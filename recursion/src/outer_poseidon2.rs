@@ -56,13 +56,14 @@ impl<C: Config> Poseidon2CircuitBuilder<C> for Builder<C> {
 #[cfg(test)]
 pub mod tests {
     use afs_compiler::ir::{Builder, Felt, Var, Witness};
+    use afs_test_utils::config::baby_bear_poseidon2_outer::outer_perm;
     use p3_baby_bear::BabyBear;
     use p3_bn254_fr::Bn254Fr;
     use p3_field::AbstractField;
     use p3_symmetric::{CryptographicHasher, Permutation, PseudoCompressionFunction};
 
     use crate::{
-        config::outer::{outer_perm, OuterCompress, OuterConfig, OuterHash},
+        config::outer::{OuterCompress, OuterConfig, OuterHash},
         halo2::Halo2Prover,
         outer_poseidon2::Poseidon2CircuitBuilder,
         types::OuterDigestVariable,

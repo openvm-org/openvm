@@ -12,6 +12,7 @@ use p3_matrix::Matrix;
 use super::{
     columns::{CpuAuxCols, CpuCols, CpuIoCols},
     timestamp_delta, CpuOptions, CPU_MAX_ACCESSES_PER_CYCLE, CPU_MAX_READS_PER_CYCLE, INST_WIDTH,
+    WORD_SIZE,
 };
 use crate::{
     arch::{bridge::ExecutionBus, instructions::Opcode::*},
@@ -23,23 +24,23 @@ use crate::{
 
 /// Air for the CPU. Carries no state and does not own execution.
 #[derive(Clone, Debug)]
-pub struct CpuAir<const WORD_SIZE: usize> {
+pub struct CpuAir {
     pub options: CpuOptions,
     pub execution_bus: ExecutionBus,
     pub memory_offline_checker: MemoryOfflineChecker,
 }
 
-impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for CpuAir<WORD_SIZE> {
+impl<F: Field> BaseAir<F> for CpuAir {
     fn width(&self) -> usize {
-        CpuCols::<WORD_SIZE, F>::get_width(self)
+        CpuCols::<F>::get_width(self)
     }
 }
 
-impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
+impl CpuAir {
     fn assert_compose<AB: AirBuilder>(
         &self,
         builder: &mut AB,
-        word: [impl Into<AB::Expr>; WORD_SIZE],
+        word: [impl Into<AB::Expr>; 1],
         field_elem: AB::Expr,
     ) {
         let mut iter = word.into_iter();
@@ -52,9 +53,7 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
 
 // TODO[osama]: here, there should be some relation enforced between the timestamp for the cpu and the memory timestamp
 // TODO[osama]: also, rename to clk
-impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB>
-    for CpuAir<WORD_SIZE>
-{
+impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
     // TODO: continuation verification checks program counters match up [INT-1732]
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -67,11 +66,11 @@ impl<const WORD_SIZE: usize, AB: AirBuilderWithPublicValues + InteractionBuilder
 
         let local = main.row_slice(0);
         let local: &[AB::Var] = (*local).borrow();
-        let local_cols = CpuCols::<WORD_SIZE, AB::Var>::from_slice(local, self);
+        let local_cols = CpuCols::from_slice(local, self);
 
         let next = main.row_slice(1);
         let next: &[AB::Var] = (*next).borrow();
-        let next_cols = CpuCols::<WORD_SIZE, AB::Var>::from_slice(next, self);
+        let next_cols = CpuCols::from_slice(next, self);
         let CpuCols { io, aux } = local_cols;
         let CpuCols { io: next_io, .. } = next_cols;
 

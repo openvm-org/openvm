@@ -1,16 +1,9 @@
 use std::iter;
 
 use afs_primitives::is_less_than::{columns::IsLessThanAuxCols, IsLessThanAir};
-use derive_new::new;
 
 use super::bridge::MemoryOfflineChecker;
 use crate::memory::manager::{access_cell::AccessCell, operation::MemoryOperation};
-
-#[derive(new, Debug, Default)]
-pub struct MemoryAccess<const WORD_SIZE: usize, T> {
-    pub op: MemoryOperation<WORD_SIZE, T>,
-    pub old_cell: AccessCell<WORD_SIZE, T>,
-}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryOfflineCheckerCols<const WORD_SIZE: usize, T> {

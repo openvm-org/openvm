@@ -13,9 +13,9 @@ use crate::{
     arch::columns::ExecutionState,
     cpu::{trace::Instruction, CpuChip},
     field_arithmetic::FieldArithmeticChip,
-    field_extension::FieldExtensionArithmeticChip,
+    // field_extension::chip::FieldExtensionArithmeticChip,
     memory::manager::MemoryManager,
-    poseidon2::Poseidon2Chip,
+    // poseidon2::Poseidon2Chip,
     program::ProgramChip,
 };
 
@@ -83,19 +83,19 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
 #[enum_dispatch(InstructionExecutor<F>)]
 pub enum InstructionExecutorVariant<F: PrimeField32> {
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
-    FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
-    Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
+    // FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
+    // Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
 }
 
 #[derive(Debug)]
 #[enum_dispatch(MachineChip<F>)]
 pub enum MachineChipVariant<F: PrimeField32> {
-    Cpu(Rc<RefCell<CpuChip<1, F>>>),
+    Cpu(Rc<RefCell<CpuChip<F>>>),
     Program(Rc<RefCell<ProgramChip<F>>>),
     Memory(Rc<RefCell<MemoryManager<F>>>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
-    FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
-    Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
+    // FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
+    // Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
     RangeChecker(Arc<RangeCheckerGateChip>),
 }
 

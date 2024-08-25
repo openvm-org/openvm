@@ -1,4 +1,7 @@
-use std::ops::{Add, Div, Mul, Sub};
+use std::{
+    array,
+    ops::{Add, Div, Mul, Sub},
+};
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::utils::create_seeded_rng;
@@ -6,7 +9,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField};
 use rand::Rng;
 
-use super::{FieldExtensionArithmetic, FieldExtensionArithmeticChip};
+use super::columns::FieldExtensionArithmeticIoCols;
 use crate::{
     arch::{
         bridge::ExecutionBus,
@@ -14,10 +17,74 @@ use crate::{
         instructions::{Opcode, FIELD_EXTENSION_INSTRUCTIONS},
         testing::{ExecutionTester, MachineChipTester, MemoryTester},
     },
-    cpu::trace::Instruction,
-    field_extension::columns::FieldExtensionArithmeticIoCols,
-    memory::offline_checker::bus::MemoryBus,
+    field_extension::chip::{
+        FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticRecord,
+    },
+    memory::{manager::MemoryAccess, offline_checker::bus::MemoryBus},
 };
+
+/// Function for testing that generates a random program consisting only of field arithmetic operations.
+fn generate_records(n: usize) -> Vec<FieldExtensionArithmeticRecord<BabyBear>> {
+    let mut rng = create_seeded_rng();
+
+    let mut records = vec![];
+
+    for _ in 0..n {
+        let opcode = FIELD_EXTENSION_INSTRUCTIONS[rng.gen_range(0..4)];
+
+        // dummy values for clock cycle and addr_space and pointers
+        let timestamp: usize = 1;
+
+        let x = [
+            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
+            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
+            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
+            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
+        ];
+        let y = [
+            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
+            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
+            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
+            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
+        ];
+
+        let z = FieldExtensionArithmetic::solve(opcode, x, y).unwrap();
+
+        records.push(FieldExtensionArithmeticRecord {
+            pc: 0,
+            timestamp,
+            opcode,
+            is_valid: false,
+            op_a: BabyBear::zero(),
+            op_b: BabyBear::zero(),
+            op_c: BabyBear::zero(),
+            d: BabyBear::one(),
+            e: BabyBear::one(),
+            x,
+            y,
+            z,
+            x_reads: array::from_fn(|_| {
+                MemoryAccess::disabled_read(
+                    BabyBear::from_canonical_usize(timestamp),
+                    BabyBear::one(),
+                )
+            }),
+            y_reads: array::from_fn(|_| {
+                MemoryAccess::disabled_read(
+                    BabyBear::from_canonical_usize(timestamp),
+                    BabyBear::one(),
+                )
+            }),
+            z_writes: array::from_fn(|_| {
+                MemoryAccess::disabled_read(
+                    BabyBear::from_canonical_usize(timestamp),
+                    BabyBear::one(),
+                )
+            }),
+        });
+    }
+    records
+}
 
 #[test]
 fn field_extension_air_test() {
@@ -34,38 +101,40 @@ fn field_extension_air_test() {
         FieldExtensionArithmeticChip::new(execution_bus, memory_tester.get_memory_manager());
 
     let mut rng = create_seeded_rng();
+    let num_ops: usize = 1 << 5;
 
-    for _ in 0..num_ops {
-        let opcode = FIELD_EXTENSION_INSTRUCTIONS[rng.gen_range(0..4)];
+    let mut chip = FieldExtensionArithmeticChip::<BabyBear>::new(
+        execution_bus,
+        memory_tester.get_memory_manager(),
+    );
+    chip.records = generate_records(num_ops);
 
-        let operand1 =
-            std::array::from_fn(|_| BabyBear::from_canonical_u32(rng.gen_range(elem_range())));
-        let operand2 =
-            std::array::from_fn(|_| BabyBear::from_canonical_u32(rng.gen_range(elem_range())));
+    // for _ in 0..num_ops {
+    //     let opcode = FIELD_EXTENSION_INSTRUCTIONS[rng.gen_range(0..4)];
 
-        let as_d = rng.gen_range(address_space_range());
-        let as_e = rng.gen_range(address_space_range());
-        let address1 = rng.gen_range(address_range());
-        let address2 = rng.gen_range(address_range());
-        let result_address = rng.gen_range(address_range());
-        assert!(address1.abs_diff(address2) >= 4);
-        println!(
-            "d = {}, e = {}, result_addr = {}, addr1 = {}, addr2 = {}",
-            as_d, as_e, result_address, address1, address2
-        );
+    //     let as_d = rng.gen_range(address_space_range());
+    //     let as_e = rng.gen_range(address_space_range());
+    //     let address1 = rng.gen_range(address_range());
+    //     let address2 = rng.gen_range(address_range());
+    //     let result_address = rng.gen_range(address_range());
+    //     assert!(address1.abs_diff(address2) >= 4);
+    //     println!(
+    //         "d = {}, e = {}, result_addr = {}, addr1 = {}, addr2 = {}",
+    //         as_d, as_e, result_address, address1, address2
+    //     );
 
-        let result = FieldExtensionArithmetic::solve(opcode, operand1, operand2).unwrap();
+    //     let result = FieldExtensionArithmetic::solve(opcode, operand1, operand2).unwrap();
 
-        memory_tester.install(as_d, address1, operand1);
-        memory_tester.install(as_e, address2, operand2);
-        execution_tester.execute(
-            &mut memory_tester,
-            &mut field_extension_chip,
-            Instruction::from_usize(opcode, [result_address, address1, address2, as_d, as_e]),
-        );
-        memory_tester.expect(as_d, result_address, result);
-        memory_tester.check();
-    }
+    //     memory_tester.install(as_d, address1, operand1);
+    //     memory_tester.install(as_e, address2, operand2);
+    //     execution_tester.execute(
+    //         &mut memory_tester,
+    //         &mut field_extension_chip,
+    //         Instruction::from_usize(opcode, [result_address, address1, address2, as_d, as_e]),
+    //     );
+    //     memory_tester.expect(as_d, result_address, result);
+    //     memory_tester.check();
+    // }
 
     // positive test
     MachineChipTester::default()

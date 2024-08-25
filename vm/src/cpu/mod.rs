@@ -30,6 +30,9 @@ pub const CPU_MAX_READS_PER_CYCLE: usize = 3;
 pub const CPU_MAX_WRITES_PER_CYCLE: usize = 1;
 pub const CPU_MAX_ACCESSES_PER_CYCLE: usize = CPU_MAX_READS_PER_CYCLE + CPU_MAX_WRITES_PER_CYCLE;
 
+// [jpw] Temporary, we are going to remove cpu anyways
+const WORD_SIZE: usize = 1;
+
 fn timestamp_delta(opcode: Opcode) -> usize {
     // If an instruction performs a writes, it must change timestamp by WRITE_DELTA.
     const WRITE_DELTA: usize = CPU_MAX_READS_PER_CYCLE + 1;
@@ -40,7 +43,6 @@ fn timestamp_delta(opcode: Opcode) -> usize {
         BEQ | BNE => 2,
         TERMINATE => 0,
         PUBLISH => 2,
-        //F_LESS_THAN => WRITE_DELTA,
         FAIL => 0,
         PRINTF => 1,
         SHINTW => WRITE_DELTA,
@@ -66,8 +68,8 @@ pub struct CpuState {
 
 /// Chip for the CPU. Carries all state and owns execution.
 #[derive(Debug)]
-pub struct CpuChip<const WORD_SIZE: usize, F: PrimeField32 + Clone> {
-    pub air: CpuAir<WORD_SIZE>,
+pub struct CpuChip<F: PrimeField32> {
+    pub air: CpuAir,
     pub rows: Vec<Vec<F>>,
     pub state: CpuState,
     /// Program counter at the start of the current segment.
@@ -76,7 +78,7 @@ pub struct CpuChip<const WORD_SIZE: usize, F: PrimeField32 + Clone> {
     pub memory_manager: Rc<RefCell<MemoryManager<F>>>,
 }
 
-impl<const WORD_SIZE: usize, F: PrimeField32 + Clone> CpuChip<WORD_SIZE, F> {
+impl<F: PrimeField32> CpuChip<F> {
     pub fn new(
         options: CpuOptions,
         execution_bus: ExecutionBus,
@@ -97,11 +99,12 @@ impl<const WORD_SIZE: usize, F: PrimeField32 + Clone> CpuChip<WORD_SIZE, F> {
         memory_manager: Rc<RefCell<MemoryManager<F>>>,
         state: CpuState,
     ) -> Self {
+        let memory_offline_checker = memory_manager.borrow().make_offline_checker();
         Self {
             air: CpuAir {
                 options,
                 execution_bus,
-                memory_offline_checker: MemoryManager::make_offline_checker(memory_manager.clone()),
+                memory_offline_checker,
             },
             rows: vec![],
             state,

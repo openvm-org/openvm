@@ -22,9 +22,9 @@ use crate::{
     },
     cpu::{trace::ExecutionError, CpuChip, RANGE_CHECKER_BUS},
     field_arithmetic::FieldArithmeticChip,
-    field_extension::FieldExtensionArithmeticChip,
+    // field_extension::FieldExtensionArithmeticChip,
     memory::{manager::MemoryManager, offline_checker::bus::MemoryBus},
-    poseidon2::Poseidon2Chip,
+    // poseidon2::Poseidon2Chip,
     program::{Program, ProgramChip},
     vm::cycle_tracker::CycleTracker,
 };
@@ -34,7 +34,7 @@ pub struct ExecutionSegment<F: PrimeField32> {
 
     pub executors: BTreeMap<Opcode, InstructionExecutorVariant<F>>,
     pub chips: Vec<MachineChipVariant<F>>,
-    pub cpu_chip: Rc<RefCell<CpuChip<1, F>>>,
+    pub cpu_chip: Rc<RefCell<CpuChip<F>>>,
     pub program_chip: Rc<RefCell<ProgramChip<F>>>,
     pub memory_manager: Rc<RefCell<MemoryManager<F>>>,
 
@@ -114,28 +114,46 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             assign!(FIELD_ARITHMETIC_INSTRUCTIONS, field_arithmetic_chip);
             chips.push(MachineChipVariant::FieldArithmetic(field_arithmetic_chip));
         }
-        if config.field_extension_enabled {
-            let field_extension_chip = Rc::new(RefCell::new(FieldExtensionArithmeticChip::new(
-                execution_bus,
-                memory_manager.clone(),
-            )));
-            assign!(FIELD_EXTENSION_INSTRUCTIONS, field_extension_chip);
-            chips.push(MachineChipVariant::FieldExtension(field_extension_chip))
-        }
-        if config.perm_poseidon2_enabled || config.compress_poseidon2_enabled {
-            let poseidon2_chip = Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
-                Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
-                execution_bus,
-                memory_manager.clone(),
-            )));
-            if config.perm_poseidon2_enabled {
-                assign!([Opcode::PERM_POS2], poseidon2_chip);
-            }
-            if config.compress_poseidon2_enabled {
-                assign!([Opcode::COMP_POS2], poseidon2_chip);
-            }
-            chips.push(MachineChipVariant::Poseidon2(poseidon2_chip.clone()));
-        }
+        // if config.field_extension_enabled {
+        //     let field_extension_chip = Rc::new(RefCell::new(FieldExtensionArithmeticChip::new(
+        //         execution_bus,
+        //         memory_manager.clone(),
+        //     )));
+        //     assign!(FIELD_EXTENSION_INSTRUCTIONS, field_extension_chip);
+        //     chips.push(MachineChipVariant::FieldExtension(field_extension_chip))
+        // }
+        // if config.perm_poseidon2_enabled || config.compress_poseidon2_enabled {
+        //     let poseidon2_chip = Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
+        //         Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
+        //         execution_bus,
+        //         memory_manager.clone(),
+        //     )));
+        //     if config.perm_poseidon2_enabled {
+        //         assign!([Opcode::PERM_POS2], poseidon2_chip);
+        //     }
+        //     if config.compress_poseidon2_enabled {
+        //         assign!([Opcode::COMP_POS2], poseidon2_chip);
+        //     }
+        //     chips.push(MachineChipVariant::Poseidon2(poseidon2_chip.clone()));
+        // }
+        // let airs = vec![
+        //     (
+        //         ModularArithmeticChip::new(ModularArithmeticVmAir {
+        //             air: ModularArithmeticBigIntAir::default_for_secp256k1_coord(),
+        //         }),
+        //         ModularArithmeticBigIntAir::secp256k1_coord_prime(),
+        //     ),
+        //     (
+        //         ModularArithmeticChip::new(ModularArithmeticVmAir {
+        //             air: ModularArithmeticBigIntAir::default_for_secp256k1_scalar(),
+        //         }),
+        //         ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
+        //     ),
+        // ];
+        // let mut modular_arithmetic_chips = BTreeMap::new();
+        // for (air, modulus) in airs {
+        //     modular_arithmetic_chips.insert(modulus.clone(), air);
+        // }
 
         Self {
             config,
@@ -153,7 +171,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
     /// Stopping is triggered by should_segment()
     pub fn execute(&mut self) -> Result<(), ExecutionError> {
-        CpuChip::<1, _>::execute(self)
+        CpuChip::execute(self)
     }
 
     /// Compile the AIRs and trace generation outputs for the chips used in this segment

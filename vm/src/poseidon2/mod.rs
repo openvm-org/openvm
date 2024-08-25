@@ -128,11 +128,19 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
 }
 
 impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
+    /// Called using `vm` and not `&self`. Reads two chunks from memory and generates a trace row for
+    /// the given instruction using the subair, storing it in `rows`. Then, writes output to memory,
+    /// truncating if the instruction is a compression.
+    ///
+    /// Used for both compression and permutation.
     fn execute(
         &mut self,
         instruction: &Instruction<F>,
         prev_state: ExecutionState<usize>,
     ) -> ExecutionState<usize> {
+        // TODO: direct accesses are not currently supported
+        assert!(!is_direct);
+
         let mut mem_trace_builder = MemoryManager::make_trace_builder(self.memory_manager.clone());
 
         let Instruction {
@@ -154,7 +162,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
         let rhs = if opcode == COMP_POS2 {
             mem_trace_builder.read_elem(d, op_c)
         } else {
-            mem_trace_builder.disabled_op(d, OpType::Read);
+            mem_trace_builder.disabled_read(d);
             mem_trace_builder.increment_clk();
             lhs + F::from_canonical_usize(CHUNK)
         };
@@ -177,7 +185,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
 
         // Generate disabled MemoryOfflineCheckerAuxCols in case len != WIDTH
         for _ in len..WIDTH {
-            mem_trace_builder.disabled_op(e, OpType::Write);
+            mem_trace_builder.disabled_write(e);
             mem_trace_builder.increment_clk();
         }
 

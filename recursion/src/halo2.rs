@@ -160,6 +160,7 @@ mod tests {
     #[test]
     fn test_num2bits_v() {
         let mut builder = Builder::<OuterConfig>::default();
+        builder.flags.static_only = true;
         let mut value_u32 = 1345237507;
         let value = builder.eval(Bn254Fr::from_canonical_u32(value_u32));
         let result = builder.num2bits_v_circuit(value, 32);
@@ -178,6 +179,7 @@ mod tests {
         let gt: Bn254Fr = reduce_32_gt(&[value_1, value_2]);
 
         let mut builder = Builder::<OuterConfig>::default();
+        builder.flags.static_only = true;
         let value_1 = builder.eval(value_1);
         let value_2 = builder.eval(value_2);
         let result = reduce_32(&mut builder, &[value_1, value_2]);
@@ -193,6 +195,7 @@ mod tests {
         dbg!(&gt);
 
         let mut builder = Builder::<OuterConfig>::default();
+        builder.flags.static_only = true;
         let value = builder.eval(value);
         let result = split_32(&mut builder, value, 3);
 

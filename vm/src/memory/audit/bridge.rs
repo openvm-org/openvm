@@ -15,8 +15,8 @@ impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
         self.memory_bus
             .write(
                 MemoryAddress::new(local.addr_space, local.pointer),
-                local.initial_cell.data,
-                local.initial_cell.clk,
+                local.initial_data,
+                AB::Expr::zero(),
             )
             .eval(builder, mult.clone());
 

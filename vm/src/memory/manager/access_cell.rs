@@ -41,7 +41,7 @@ impl<const WORD_SIZE: usize, T> AccessCell<WORD_SIZE, T> {
     where
         T: Into<AB::Expr>,
     {
-        AccessCell::new(self.data.map(|x| x.into()), self.clk.into())
+        AccessCell::new(self.data.map(Into::into), self.clk.into())
     }
 }
 

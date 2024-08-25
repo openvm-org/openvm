@@ -78,10 +78,11 @@ pub struct FieldArithmeticChip<F: PrimeField32> {
 impl<F: PrimeField32> FieldArithmeticChip<F> {
     #[allow(clippy::new_without_default)]
     pub fn new(execution_bus: ExecutionBus, memory_manager: Rc<RefCell<MemoryManager<F>>>) -> Self {
+        let mem_oc = memory_manager.borrow().make_offline_checker();
         Self {
             air: FieldArithmeticAir {
                 execution_bus,
-                mem_oc: MemoryManager::make_offline_checker(memory_manager.clone()),
+                mem_oc,
             },
             operations: vec![],
             memory: MemoryManager::make_trace_builder(memory_manager.clone()),

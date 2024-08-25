@@ -9,7 +9,7 @@ use crate::arch::{
     instructions::Opcode,
 };
 
-impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
+impl CpuAir {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
@@ -37,15 +37,5 @@ impl<const WORD_SIZE: usize> CpuAir<WORD_SIZE> {
                 [io.op_a, io.op_b, io.op_c, io.d, io.e, io.op_f, io.op_g],
             ),
         );
-
-        /*if self.options.is_less_than_enabled {
-            let fields = [
-                accesses[0].data[0],
-                accesses[1].data[0],
-                accesses[CPU_MAX_READS_PER_CYCLE].data[0],
-            ];
-            let count = operation_flags[&F_LESS_THAN];
-            builder.push_send(IS_LESS_THAN_BUS, fields, count);
-        }*/
     }
 }

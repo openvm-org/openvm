@@ -2,7 +2,9 @@ use std::ops::{Add, Mul, MulAssign};
 
 use p3_field::{AbstractExtensionField, AbstractField};
 
-use super::{Array, Builder, Config, DslIr, Ext, Felt, MemIndex, RVar, SymbolicExt, Var, Variable};
+use super::{
+    Array, Builder, CanSelect, Config, DslIr, Ext, Felt, MemIndex, RVar, SymbolicExt, Var, Variable,
+};
 
 impl<C: Config> Builder<C> {
     /// The generator for the field.
@@ -15,14 +17,28 @@ impl<C: Config> Builder<C> {
     /// Select a variable based on a condition.
     pub fn select_v(&mut self, cond: Var<C::N>, a: Var<C::N>, b: Var<C::N>) -> Var<C::N> {
         let c = self.uninit();
-        self.operations.push(DslIr::CircuitSelectV(cond, a, b, c));
+        if self.flags.static_only {
+            self.operations.push(DslIr::CircuitSelectV(cond, a, b, c));
+        } else {
+            self.if_eq(cond, C::N::one()).then_or_else(
+                |builder| builder.assign(&c, a),
+                |builder| builder.assign(&c, b),
+            );
+        }
         c
     }
 
     /// Select a felt based on a condition.
     pub fn select_f(&mut self, cond: Var<C::N>, a: Felt<C::F>, b: Felt<C::F>) -> Felt<C::F> {
         let c = self.uninit();
-        self.operations.push(DslIr::CircuitSelectF(cond, a, b, c));
+        if self.flags.static_only {
+            self.operations.push(DslIr::CircuitSelectF(cond, a, b, c));
+        } else {
+            self.if_eq(cond, C::N::one()).then_or_else(
+                |builder| builder.assign(&c, a),
+                |builder| builder.assign(&c, b),
+            );
+        }
         c
     }
 
@@ -34,7 +50,14 @@ impl<C: Config> Builder<C> {
         b: Ext<C::F, C::EF>,
     ) -> Ext<C::F, C::EF> {
         let c = self.uninit();
-        self.operations.push(DslIr::CircuitSelectE(cond, a, b, c));
+        if self.flags.static_only {
+            self.operations.push(DslIr::CircuitSelectE(cond, a, b, c));
+        } else {
+            self.if_eq(cond, C::N::one()).then_or_else(
+                |builder| builder.assign(&c, a),
+                |builder| builder.assign(&c, b),
+            );
+        }
         c
     }
 
@@ -113,20 +136,20 @@ impl<C: Config> Builder<C> {
     ) -> V
     where
         V::Expression: AbstractField,
-        V: Copy + Mul<Output = V::Expression> + Variable<C>,
+        V: Copy + Mul<Output = V::Expression> + Variable<C> + CanSelect<C>,
     {
         let result: V = self.eval(V::Expression::one());
         let power_f: V = self.eval(x);
         let bit_len = bit_len.into();
         let bit_len_plus_one = self.eval_expr(bit_len + C::N::one());
+        let one_var: V = self.eval(V::Expression::one());
 
         self.range(RVar::one(), bit_len_plus_one)
             .for_each(|i, builder| {
                 let index = builder.eval_expr(bit_len - i);
                 let bit = builder.get(power_bits, index);
-                builder
-                    .if_eq(bit, C::N::one())
-                    .then(|builder| builder.assign(&result, result * power_f));
+                let mul = V::select(builder, bit, power_f, one_var);
+                builder.assign(&result, result * mul);
                 builder.assign(&power_f, power_f * power_f);
             });
         result
@@ -194,19 +217,23 @@ impl<C: Config> Builder<C> {
 
     /// Converts an ext to a slice of felts.
     pub fn ext2felt(&mut self, value: Ext<C::F, C::EF>) -> Array<C, Felt<C::F>> {
-        let result = self.dyn_array(C::EF::D);
-        match result {
-            Array::Dyn(ptr, _) => {
-                let index = MemIndex {
-                    index: RVar::zero(),
-                    offset: 0,
-                    size: C::EF::D,
-                };
-                self.store(ptr, index, value);
+        if self.flags.static_only {
+            let felts = self.ext2felt_circuit(value);
+            self.vec(felts.to_vec())
+        } else {
+            let result = self.array(C::EF::D);
+            let index = MemIndex {
+                index: RVar::zero(),
+                offset: 0,
+                size: C::EF::D,
+            };
+            if let Array::Dyn(ptr, _) = &result {
+                self.store(*ptr, index, value);
+            } else {
+                unreachable!()
             }
-            Array::Fixed(_) => unreachable!(),
+            result
         }
-        result
     }
 
     /// Converts an ext to a slice of felts inside a circuit.
