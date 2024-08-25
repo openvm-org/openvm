@@ -12,9 +12,14 @@ use crate::memory::{
 
 const WORD_SIZE: usize = 1;
 
+// TODO[jpw]: use &'a mut [MemoryOfflineCheckerAuxCols<WORD_SIZE, F>] and allow loading mutable buffers
+/// The [MemoryTraceBuilder] uses a buffer to help fill in the auxiliary trace values for memory accesses.
+/// Since it uses a buffer, it must be created within a trace generation function and is not intended to be
+/// owned by a chip.
 #[derive(Debug)]
 pub struct MemoryTraceBuilder<F: PrimeField32> {
     memory_manager: Rc<RefCell<MemoryManager<F>>>,
+    // Derived from memory_manager:
     offline_checker: MemoryOfflineChecker,
     range_checker: Arc<RangeCheckerGateChip>,
 
@@ -22,10 +27,8 @@ pub struct MemoryTraceBuilder<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> MemoryTraceBuilder<F> {
-    pub fn new(
-        memory_manager: Rc<RefCell<MemoryManager<F>>>,
-        offline_checker: MemoryOfflineChecker,
-    ) -> Self {
+    pub fn new(memory_manager: Rc<RefCell<MemoryManager<F>>>) -> Self {
+        let offline_checker = memory_manager.borrow().make_offline_checker();
         let range_checker = memory_manager.borrow().range_checker.clone();
         Self {
             memory_manager,

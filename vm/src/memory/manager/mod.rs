@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::rap::AnyRap;
@@ -14,7 +14,7 @@ use crate::{
     arch::chips::MachineChip,
     memory::{
         decompose,
-        manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
+        manager::operation::MemoryOperation,
         offline_checker::{bridge::MemoryOfflineChecker, bus::MemoryBus},
         OpType,
     },
@@ -102,11 +102,6 @@ impl<F: PrimeField32> MemoryManager<F> {
             self.mem_config.decomp,
             self.mem_config.clk_max_bits,
         )
-    }
-
-    pub fn make_trace_builder(manager: Rc<RefCell<Self>>) -> MemoryTraceBuilder<F> {
-        let checker = manager.borrow().make_offline_checker();
-        MemoryTraceBuilder::new(manager, checker)
     }
 
     pub fn read_word(&mut self, addr_space: F, pointer: F) -> MemoryAccess<WORD_SIZE, F> {

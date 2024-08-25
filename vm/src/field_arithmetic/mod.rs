@@ -85,7 +85,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
                 mem_oc,
             },
             operations: vec![],
-            memory: MemoryManager::make_trace_builder(memory_manager.clone()),
+            memory: MemoryTraceBuilder::new(memory_manager.clone()),
             memory_manager,
         }
     }

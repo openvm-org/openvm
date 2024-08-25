@@ -33,7 +33,7 @@ use crate::{
     },
     memory::{
         compose, decompose,
-        manager::{operation::MemoryOperation, MemoryManager},
+        manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
     },
     vm::ExecutionSegment,
 };
@@ -261,10 +261,8 @@ impl<F: PrimeField32> CpuChip<F> {
 
             let mut mem_ops: [_; CPU_MAX_ACCESSES_PER_CYCLE] =
                 core::array::from_fn(|_| MemoryOperation::<1, F>::default());
-            let mut mem_read_trace_builder =
-                MemoryManager::make_trace_builder(vm.memory_manager.clone());
-            let mut mem_write_trace_builder =
-                MemoryManager::make_trace_builder(vm.memory_manager.clone());
+            let mut mem_read_trace_builder = MemoryTraceBuilder::new(vm.memory_manager.clone());
+            let mut mem_write_trace_builder = MemoryTraceBuilder::new(vm.memory_manager.clone());
             let mut num_reads = 0;
             let mut num_writes = 0;
 

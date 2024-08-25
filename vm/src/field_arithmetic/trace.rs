@@ -13,7 +13,8 @@ use super::{
 use crate::{
     arch::{chips::MachineChip, instructions::Opcode},
     memory::{
-        manager::MemoryManager, offline_checker::columns::MemoryOfflineCheckerAuxCols, OpType,
+        manager::trace_builder::MemoryTraceBuilder,
+        offline_checker::columns::MemoryOfflineCheckerAuxCols, OpType,
     },
 };
 
@@ -62,7 +63,7 @@ fn generate_cols<F: Field>(
 
 impl<F: PrimeField32> FieldArithmeticChip<F> {
     fn make_blank_cols(&self) -> FieldArithmeticCols<F> {
-        let mut trace_builder = MemoryManager::make_trace_builder(self.memory_manager.clone());
+        let mut trace_builder = MemoryTraceBuilder::new(self.memory_manager.clone());
 
         trace_builder.disabled_op(F::zero(), OpType::Read);
         trace_builder.disabled_op(F::zero(), OpType::Read);

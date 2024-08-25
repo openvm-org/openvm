@@ -88,7 +88,7 @@ fn volatile_memory_offline_checker_test() {
     }
 
     let mut mem_ops = vec![];
-    let mut mem_trace_builder = MemoryTraceBuilder::new(memory_manager.clone(), offline_checker);
+    let mut mem_trace_builder = MemoryTraceBuilder::new(memory_manager.clone());
     // First, write to all addresses
     for (addr_space, pointer) in all_addresses.iter() {
         let word = from_fn(|_| Val::from_canonical_u32(rng.next_u32() % MAX_VAL));
