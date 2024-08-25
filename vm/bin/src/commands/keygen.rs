@@ -16,7 +16,7 @@ use stark_vm::{
     vm::{config::VmConfig, VirtualMachine},
 };
 
-use super::{write_bytes, NUM_WORDS, WORD_SIZE};
+use super::write_bytes;
 use crate::asm::parse_asm_file;
 
 /// `afs keygen` command

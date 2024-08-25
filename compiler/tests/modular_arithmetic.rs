@@ -37,8 +37,8 @@ fn test_compiler_modular_arithmetic_1() {
     builder.assert_mod_secp256k1_eq(&r_var, &r_check_var);
     builder.halt();
 
-    let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    let program = builder.clone().compile_isa();
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -67,8 +67,8 @@ fn test_compiler_modular_arithmetic_2() {
     builder.assert_mod_secp256k1_eq(&r_var, &r_check_var);
     builder.halt();
 
-    let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    let program = builder.clone().compile_isa();
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -110,8 +110,8 @@ fn test_compiler_modular_arithmetic_conditional() {
 
     builder.halt();
 
-    let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    let program = builder.clone().compile_isa();
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -127,8 +127,8 @@ fn test_compiler_modular_arithmetic_negative() {
     builder.assert_mod_secp256k1_eq(&one_times_one, &zero);
     builder.halt();
 
-    let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    let program = builder.clone().compile_isa();
+    execute_program(program, vec![]);
 }
 
 struct Fraction {
@@ -196,8 +196,8 @@ fn test_ec_add(point_1: Point, point_2: Point, point_3: Point) {
 
     builder.halt();
 
-    let program = builder.clone().compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    let program = builder.clone().compile_isa();
+    execute_program(program, vec![]);
 }
 
 // tests for x^3 = y^2 + 7

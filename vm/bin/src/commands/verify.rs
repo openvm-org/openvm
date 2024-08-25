@@ -12,10 +12,7 @@ use stark_vm::{
     vm::{config::VmConfig, VirtualMachine},
 };
 
-use crate::{
-    asm::parse_asm_file,
-    commands::{read_from_path, NUM_WORDS, WORD_SIZE},
-};
+use crate::{asm::parse_asm_file, commands::read_from_path};
 
 /// `afs verify` command
 /// Uses information from config.toml to verify a proof using the verifying key in `output-folder`

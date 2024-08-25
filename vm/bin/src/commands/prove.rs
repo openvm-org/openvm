@@ -16,7 +16,7 @@ use stark_vm::{
 
 use crate::{
     asm::parse_asm_file,
-    commands::{read_from_path, write_bytes, NUM_WORDS, WORD_SIZE},
+    commands::{read_from_path, write_bytes},
 };
 
 /// `afs prove` command

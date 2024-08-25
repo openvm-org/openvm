@@ -27,6 +27,7 @@ impl<T: Clone> ExecutionState<T> {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> Self {
         let mut next = || iter.next().unwrap();
         Self {

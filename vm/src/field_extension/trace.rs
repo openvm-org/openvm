@@ -87,7 +87,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
             io: FieldExtensionArithmeticIoCols {
                 pc: F::zero(),
                 opcode: F::from_canonical_u32(Opcode::FE4ADD as u32),
-                timestamp: timestamp,
+                timestamp,
                 x: [F::zero(); EXTENSION_DEGREE],
                 y: [F::zero(); EXTENSION_DEGREE],
                 z: [F::zero(); EXTENSION_DEGREE],

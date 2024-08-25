@@ -22,7 +22,7 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let local = FieldArithmeticCols::from_iter(&mut local.iter().copied(), &self);
+        let local = FieldArithmeticCols::from_iter(&mut local.iter().copied(), self);
 
         let FieldArithmeticCols { io, aux } = local;
 

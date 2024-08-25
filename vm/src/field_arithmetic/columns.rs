@@ -67,6 +67,7 @@ impl<T: Clone> FieldArithmeticIoCols<T> {
         1 + ExecutionState::<T>::get_width() + (3 * Operand::<T>::get_width())
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> Self {
         Self {
             opcode: iter.next().unwrap(),
@@ -136,6 +137,7 @@ impl<T: Clone> Operand<T> {
         3
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> Self {
         let mut next = || iter.next().unwrap();
         Self {

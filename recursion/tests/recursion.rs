@@ -56,7 +56,7 @@ fn test_fibonacci_program_verify() {
     let dummy_vm = VirtualMachine::<1, 1, _>::new(vm_config, fib_program.clone(), vec![]);
     let rec_raps = get_rec_raps(&dummy_vm.segments[0]);
 
-    let mut vm = VirtualMachine::<1, 1, _>::new(vm_config, fib_program, vec![]);
+    let mut vm = VirtualMachine::new(vm_config, fib_program, vec![]);
     vm.segments[0].public_values = vec![
         Some(BabyBear::zero()),
         Some(BabyBear::one()),

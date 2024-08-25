@@ -11,7 +11,7 @@ use afs_test_utils::{
 use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
-use p3_field::{AbstractField, Field, PrimeField32, PrimeField64};
+use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{Domain, StarkGenericConfig};
 use rand::{rngs::StdRng, RngCore};

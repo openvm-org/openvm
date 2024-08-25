@@ -78,7 +78,7 @@ fn test_compiler_nested_array_loop() {
 
     let program = builder.compile_isa();
     execute_program(program, vec![]);
-    //execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
+    //execute_program(program, vec![]);
 }
 
 #[test]
