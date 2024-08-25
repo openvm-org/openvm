@@ -17,10 +17,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
 
         let gen_row = |prev_idx: Vec<u32>,
                        cur_idx: Vec<u32>,
-                       data_read: [F; WORD_SIZE],
-                       clk_read: F,
-                       data_write: [F; WORD_SIZE],
-                       clk_write: F,
+                       final_data: [F; WORD_SIZE],
+                       final_clk: F,
+                       initial_data: [F; WORD_SIZE],
                        is_extra: F| {
             let lt_cols = LocalTraceInstructions::generate_trace_row(
                 &self.air.addr_lt_air,
@@ -30,8 +29,8 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
             AuditCols::<WORD_SIZE, F>::new(
                 F::from_canonical_u32(cur_idx[0]),
                 F::from_canonical_u32(cur_idx[1]),
-                AccessCell::<WORD_SIZE, F>::new(data_write, clk_write),
-                AccessCell::<WORD_SIZE, F>::new(data_read, clk_read),
+                initial_data,
+                AccessCell::<WORD_SIZE, F>::new(final_data, final_clk),
                 is_extra,
                 lt_cols.io.tuple_less_than,
                 lt_cols.aux,
@@ -40,17 +39,10 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
 
         let mut rows_concat = Vec::with_capacity(trace_height * self.air.air_width());
         let mut prev_idx = vec![0, 0];
-        for (
-            addr,
-            AccessCell {
-                clk: clk_write,
-                data: data_write,
-            },
-        ) in self.initial_memory.iter()
-        {
+        for (addr, initial_data) in self.initial_memory.iter() {
             let AccessCell {
-                clk: clk_read,
-                data: data_read,
+                clk: final_clk,
+                data: final_data,
             } = final_memory.get(addr).unwrap();
 
             let cur_idx = vec![addr.0.as_canonical_u32(), addr.1.as_canonical_u32()];
@@ -59,10 +51,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
                 gen_row(
                     prev_idx,
                     cur_idx.clone(),
-                    *data_read,
-                    *clk_read,
-                    *data_write,
-                    *clk_write,
+                    *final_data,
+                    *final_clk,
+                    *initial_data,
                     F::zero(),
                 )
                 .flatten(),
@@ -83,7 +74,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
                     dummy_data,
                     dummy_clk,
                     dummy_data,
-                    dummy_clk,
                     F::one(),
                 )
                 .flatten(),

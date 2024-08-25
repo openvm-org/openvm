@@ -3,13 +3,10 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 use p3_field::PrimeField32;
 
-use super::{operation::MemoryOperation, MemoryManager};
+use super::{operation::MemoryOperation, MemoryAccess, MemoryManager};
 use crate::memory::{
     compose, decompose,
-    offline_checker::{
-        bridge::MemoryOfflineChecker,
-        columns::{MemoryAccess, MemoryOfflineCheckerAuxCols},
-    },
+    offline_checker::{bridge::MemoryOfflineChecker, columns::MemoryOfflineCheckerAuxCols},
     OpType,
 };
 
@@ -43,7 +40,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             .borrow_mut()
             .read_word(addr_space, pointer);
         self.accesses_buffer
-            .push(self.memory_access_to_checker_aux_cols(&mem_access));
+            .push(self.aux_col_from_access(&mem_access));
 
         mem_access.op
     }
@@ -59,7 +56,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             .borrow_mut()
             .write_word(addr_space, pointer, data);
         self.accesses_buffer
-            .push(self.memory_access_to_checker_aux_cols(&mem_access));
+            .push(self.aux_col_from_access(&mem_access));
 
         mem_access.op
     }
@@ -72,17 +69,27 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         self.write_word(addr_space, pointer, decompose(data));
     }
 
-    // pub fn write_elem(&mut self, addr_space: F, pointer: F, data: F) {
-    //     self.write_word()
-    // }
+    // TODO[jpw]: we can default to addr_space = 1 after is_immediate checks are moved out of default memory access
+    pub fn disabled_read(&mut self, addr_space: F) -> MemoryOperation<WORD_SIZE, F> {
+        self.disabled_op(addr_space, OpType::Read)
+    }
+
+    // TODO[jpw]: we can default to addr_space = 1 after is_immediate checks are moved out of default memory access
+    pub fn disabled_write(&mut self, addr_space: F) -> MemoryOperation<WORD_SIZE, F> {
+        self.disabled_op(addr_space, OpType::Write)
+    }
 
     pub fn disabled_op(&mut self, addr_space: F, op_type: OpType) -> MemoryOperation<WORD_SIZE, F> {
-        let mem_access = self
-            .memory_manager
-            .borrow_mut()
-            .disabled_op(addr_space, op_type);
+        debug_assert_ne!(
+            addr_space,
+            F::zero(),
+            "Disabled memory operation cannot be immediate"
+        );
+        let clk = self.memory_manager.borrow().get_clk();
+        let mem_access = MemoryAccess::disabled_op(clk, addr_space, op_type);
+
         self.accesses_buffer
-            .push(self.memory_access_to_checker_aux_cols(&mem_access));
+            .push(self.aux_col_from_access(&mem_access));
 
         mem_access.op
     }
@@ -95,8 +102,20 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         std::mem::take(&mut self.accesses_buffer)
     }
 
-    fn memory_access_to_checker_aux_cols(
+    pub fn aux_col_from_access(
         &self,
+        access: &MemoryAccess<WORD_SIZE, F>,
+    ) -> MemoryOfflineCheckerAuxCols<WORD_SIZE, F> {
+        Self::memory_access_to_checker_aux_cols(
+            &self.offline_checker,
+            self.range_checker.clone(),
+            access,
+        )
+    }
+
+    pub fn memory_access_to_checker_aux_cols(
+        offline_checker: &MemoryOfflineChecker,
+        range_checker: Arc<RangeCheckerGateChip>,
         memory_access: &MemoryAccess<WORD_SIZE, F>,
     ) -> MemoryOfflineCheckerAuxCols<WORD_SIZE, F> {
         let timestamp_prev = memory_access.old_cell.clk.as_canonical_u32();
@@ -104,12 +123,12 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
 
         debug_assert!(timestamp_prev < timestamp);
         let clk_lt_cols = LocalTraceInstructions::generate_trace_row(
-            &self.offline_checker.timestamp_lt_air,
-            (timestamp_prev, timestamp, self.range_checker.clone()),
+            &offline_checker.timestamp_lt_air,
+            (timestamp_prev, timestamp, range_checker),
         );
 
         let addr_space_is_zero_cols = LocalTraceInstructions::generate_trace_row(
-            &self.offline_checker.is_zero_air,
+            &offline_checker.is_zero_air,
             memory_access.op.addr_space,
         );
 

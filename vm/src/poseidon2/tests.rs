@@ -197,7 +197,7 @@ fn run_perm_ops(
             .memory_manager
             .borrow_mut()
             .interface_chip
-            .touch_address(addr_space, pointer, data, BabyBear::zero());
+            .touch_address(addr_space, pointer, data);
     }
 
     let time_per =
@@ -306,7 +306,6 @@ fn poseidon2_chip_random_50_test() {
         .run_simple_test(
             vec![
                 &vm.segments[0].range_checker.air,
-                // TODO[osama]: consider making a dummy interface air
                 &vm.segments[0].memory_manager.borrow().get_audit_air(),
                 &vm.segments[0].poseidon2_chip.air,
                 &dummy_cpu_poseidon2,
@@ -343,7 +342,6 @@ fn poseidon2_negative_test() {
             engine.run_simple_test(
                 vec![
                     &vm.segments[0].range_checker.air,
-                    // TODO[osama]: consider making a dummy interface air
                     &vm.segments[0].memory_manager.borrow().get_audit_air(),
                     &vm.segments[0].poseidon2_chip.air,
                     &dummy_cpu_poseidon2,

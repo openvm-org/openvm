@@ -48,7 +48,7 @@ pub trait Hintable<C: Config> {
 
     fn read(builder: &mut Builder<C>) -> Self::HintVariable;
 
-    fn write(&self) -> Vec<Vec<C::F>>;
+    fn write(&self) -> Vec<Vec<C::N>>;
 
     fn witness(variable: &Self::HintVariable, builder: &mut Builder<C>) {
         let target = Self::read(builder);
@@ -56,18 +56,19 @@ pub trait Hintable<C: Config> {
     }
 }
 
-impl Hintable<InnerConfig> for usize {
-    type HintVariable = Var<InnerVal>;
+impl<C: Config> Hintable<C> for usize {
+    type HintVariable = Var<C::N>;
 
-    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
+    fn read(builder: &mut Builder<C>) -> Self::HintVariable {
         builder.hint_var()
     }
 
-    fn write(&self) -> Vec<Vec<InnerVal>> {
-        vec![vec![InnerVal::from_canonical_usize(*self)]]
+    fn write(&self) -> Vec<Vec<C::N>> {
+        vec![vec![AbstractField::from_canonical_usize(*self)]]
     }
 }
 
+// Assumes F = N
 impl Hintable<InnerConfig> for InnerVal {
     type HintVariable = Felt<InnerVal>;
 
@@ -75,11 +76,12 @@ impl Hintable<InnerConfig> for InnerVal {
         builder.hint_felt()
     }
 
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::F>> {
+    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
         vec![vec![*self]]
     }
 }
 
+// Assumes F = N
 impl Hintable<InnerConfig> for InnerChallenge {
     type HintVariable = Ext<InnerVal, InnerChallenge>;
 
@@ -87,7 +89,7 @@ impl Hintable<InnerConfig> for InnerChallenge {
         builder.hint_ext()
     }
 
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::F>> {
+    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
         vec![self.as_base_slice().to_vec()]
     }
 }
@@ -119,7 +121,7 @@ impl<I: VecAutoHintable<InnerConfig>> Hintable<InnerConfig> for Vec<I> {
         arr
     }
 
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::F>> {
+    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
         let mut stream = Vec::new();
 
         let len = InnerVal::from_canonical_usize(self.len());
@@ -181,17 +183,17 @@ impl Hintable<InnerConfig> for Vec<usize> {
     }
 }
 
-impl Hintable<InnerConfig> for Vec<u8> {
-    type HintVariable = Array<InnerConfig, Var<InnerVal>>;
+impl<C: Config> Hintable<C> for Vec<u8> {
+    type HintVariable = Array<C, Var<C::N>>;
 
-    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
+    fn read(builder: &mut Builder<C>) -> Self::HintVariable {
         builder.hint_vars()
     }
 
-    fn write(&self) -> Vec<Vec<InnerVal>> {
+    fn write(&self) -> Vec<Vec<C::N>> {
         vec![self
             .iter()
-            .map(|x| InnerVal::from_canonical_u8(*x))
+            .map(|x| AbstractField::from_canonical_u8(*x))
             .collect()]
     }
 }
@@ -203,7 +205,7 @@ impl Hintable<InnerConfig> for Vec<InnerVal> {
         builder.hint_felts()
     }
 
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::F>> {
+    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
         vec![self.clone()]
     }
 }
@@ -215,7 +217,7 @@ impl Hintable<InnerConfig> for Vec<InnerChallenge> {
         builder.hint_exts()
     }
 
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::F>> {
+    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
         vec![
             vec![InnerVal::from_canonical_usize(self.len())],
             self.iter()
@@ -238,7 +240,7 @@ impl Hintable<InnerConfig> for Vec<Vec<InnerChallenge>> {
         arr
     }
 
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::F>> {
+    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
         let mut stream = Vec::new();
 
         let len = InnerVal::from_canonical_usize(self.len());
@@ -268,7 +270,7 @@ impl Hintable<InnerConfig> for TraceWidth {
         }
     }
 
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::F>> {
+    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
         let mut stream = Vec::new();
 
         stream.extend(self.preprocessed.into_iter().collect::<Vec<_>>().write());
@@ -294,7 +296,7 @@ impl Hintable<InnerConfig> for Proof<BabyBearPoseidon2Config> {
         }
     }
 
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::F>> {
+    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
         let mut stream = Vec::new();
 
         stream.extend(self.commitments.write());
@@ -315,7 +317,7 @@ impl Hintable<InnerConfig> for OpeningProof<BabyBearPoseidon2Config> {
         OpeningProofVariable { proof, values }
     }
 
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::F>> {
+    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
         let mut stream = Vec::new();
 
         stream.extend(self.proof.write());
@@ -342,7 +344,7 @@ impl Hintable<InnerConfig> for OpenedValues<InnerChallenge> {
         }
     }
 
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::F>> {
+    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
         let mut stream = Vec::new();
 
         stream.extend(self.preprocessed.write());
@@ -363,7 +365,7 @@ impl Hintable<InnerConfig> for AdjacentOpenedValues<InnerChallenge> {
         AdjacentOpenedValuesVariable { local, next }
     }
 
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::F>> {
+    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
         let mut stream = Vec::new();
         stream.extend(self.local.write());
         stream.extend(self.next.write());
@@ -386,7 +388,7 @@ impl Hintable<InnerConfig> for Commitments<BabyBearPoseidon2Config> {
         }
     }
 
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::F>> {
+    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
         let mut stream = Vec::new();
 
         stream.extend(Vec::<InnerDigest>::write(
@@ -407,11 +409,16 @@ mod test {
     use afs_compiler::{
         asm::AsmBuilder,
         ir::{Ext, Felt, Var},
+        prelude::*,
         util::execute_program_and_generate_traces,
     };
+    use afs_derive::{DslVariable, Hintable};
     use p3_field::AbstractField;
 
-    use crate::hints::{Hintable, InnerChallenge, InnerVal};
+    use crate::{
+        hints::{Hintable, InnerChallenge, InnerVal},
+        types::InnerConfig,
+    };
 
     #[test]
     fn test_var_array() {
@@ -486,5 +493,24 @@ mod test {
 
         let program = builder.compile_isa::<1>();
         execute_program_and_generate_traces::<1>(program, stream);
+    }
+
+    #[derive(Hintable)]
+    struct TestStruct {
+        a: usize,
+        b: usize,
+        c: usize,
+    }
+
+    #[test]
+    fn test_macro() {
+        let x = TestStruct { a: 1, b: 2, c: 3 };
+        let stream = Hintable::<InnerConfig>::write(&x);
+        assert_eq!(
+            stream,
+            [1, 2, 3]
+                .map(|x| vec![InnerVal::from_canonical_usize(x)])
+                .to_vec()
+        );
     }
 }

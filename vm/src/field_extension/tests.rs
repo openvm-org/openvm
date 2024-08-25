@@ -1,4 +1,5 @@
 use std::{
+    array,
     cell::RefCell,
     ops::{Add, Div, Mul, Sub},
     rc::Rc,
@@ -15,73 +16,73 @@ use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, Abstra
 use p3_matrix::Matrix;
 use rand::Rng;
 
-use super::{
-    columns::FieldExtensionArithmeticIoCols, FieldExtensionArithmetic,
-    FieldExtensionArithmeticChip, FieldExtensionArithmeticOperation,
-};
+use super::columns::FieldExtensionArithmeticIoCols;
 use crate::{
     cpu::{OpCode, FIELD_EXTENSION_INSTRUCTIONS, RANGE_CHECKER_BUS, WORD_SIZE},
-    memory::manager::MemoryManager,
+    field_extension::chip::{
+        FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticRecord,
+    },
+    memory::manager::{MemoryAccess, MemoryManager},
     vm::config::MemoryConfig,
 };
 
 /// Function for testing that generates a random program consisting only of field arithmetic operations.
-fn generate_field_extension_operations(
-    len_ops: usize,
-) -> Vec<FieldExtensionArithmeticOperation<1, BabyBear>> {
+fn generate_records(n: usize) -> Vec<FieldExtensionArithmeticRecord<1, BabyBear>> {
     let mut rng = create_seeded_rng();
 
-    let mut requests = vec![];
+    let mut records = vec![];
 
-    for _ in 0..len_ops {
-        let op = FIELD_EXTENSION_INSTRUCTIONS[rng.gen_range(0..4)];
+    for _ in 0..n {
+        let opcode = FIELD_EXTENSION_INSTRUCTIONS[rng.gen_range(0..4)];
 
         // dummy values for clock cycle and addr_space and pointers
-        let timestamp: usize = 0;
-        let op_a = BabyBear::zero();
-        let op_b = BabyBear::zero();
-        let op_c = BabyBear::zero();
-        let d = BabyBear::zero();
-        let e = BabyBear::zero();
+        let clk: usize = 1;
 
-        let operand1 = [
+        let x = [
             BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
             BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
             BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
             BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
         ];
-        let operand2 = [
+        let y = [
             BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
             BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
             BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
             BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
         ];
 
-        let result = FieldExtensionArithmetic::solve(op, operand1, operand2).unwrap();
+        let z = FieldExtensionArithmetic::solve(opcode, x, y).unwrap();
 
-        requests.push(FieldExtensionArithmeticOperation {
-            clk: timestamp,
-            opcode: op,
-            op_a,
-            op_b,
-            op_c,
-            d,
-            e,
-            operand1,
-            operand2,
-            result,
+        records.push(FieldExtensionArithmeticRecord {
+            clk,
+            opcode,
+            is_valid: false,
+            op_a: BabyBear::zero(),
+            op_b: BabyBear::zero(),
+            op_c: BabyBear::zero(),
+            d: BabyBear::one(),
+            e: BabyBear::one(),
+            x,
+            y,
+            z,
+            x_reads: array::from_fn(|_| {
+                MemoryAccess::disabled_read(BabyBear::from_canonical_usize(clk), BabyBear::one())
+            }),
+            y_reads: array::from_fn(|_| {
+                MemoryAccess::disabled_read(BabyBear::from_canonical_usize(clk), BabyBear::one())
+            }),
+            z_writes: array::from_fn(|_| {
+                MemoryAccess::disabled_read(BabyBear::from_canonical_usize(clk), BabyBear::one())
+            }),
         });
     }
-    requests
+    records
 }
 
-// isolated air test
 #[test]
-#[ignore]
-// TODO: rewrite this test
 fn field_extension_air_test() {
     let mut rng = create_seeded_rng();
-    let len_ops: usize = 1 << 5;
+    let num_ops: usize = 1 << 5;
 
     let mem_config = MemoryConfig::new(16, 16, 16, 16);
     let range_checker = Arc::new(RangeCheckerGateChip::new(
@@ -98,8 +99,7 @@ fn field_extension_air_test() {
         memory_manager,
         range_checker,
     );
-    let operations = generate_field_extension_operations(len_ops);
-    chip.operations = operations;
+    chip.records = generate_records(num_ops);
 
     let mut extension_trace = chip.generate_trace();
 

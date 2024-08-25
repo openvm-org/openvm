@@ -15,7 +15,6 @@ use crate::{
         manager::{trace_builder::MemoryTraceBuilder, MemoryManager},
         offline_checker::bridge::MemoryOfflineChecker,
         tree::Hasher,
-        OpType,
     },
     vm::config::MemoryConfig,
 };
@@ -169,7 +168,7 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
         let rhs = if opcode == COMP_POS2 {
             mem_trace_builder.read_elem(d, op_c)
         } else {
-            mem_trace_builder.disabled_op(d, OpType::Read);
+            mem_trace_builder.disabled_read(d);
             mem_trace_builder.increment_clk();
             lhs + F::from_canonical_usize(CHUNK)
         };
@@ -192,7 +191,7 @@ impl<const WORD_SIZE: usize, const NUM_WORDS: usize, F: PrimeField32>
 
         // Generate disabled MemoryOfflineCheckerAuxCols in case len != WIDTH
         for _ in len..WIDTH {
-            mem_trace_builder.disabled_op(e, OpType::Write);
+            mem_trace_builder.disabled_write(e);
             mem_trace_builder.increment_clk();
         }
 

@@ -140,7 +140,7 @@ impl<T: Field> Poseidon2VmIoCols<T> {
             b: T::zero(),
             c: T::zero(),
             d: T::one(),
-            e: T::zero(),
+            e: T::one(),
             cmp: T::zero(),
         }
     }

@@ -1,19 +1,26 @@
-use std::array;
-
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir, EXTENSION_DEGREE};
+use super::columns::{FieldExtensionArithmeticCols, FieldExtensionArithmeticIoCols};
 use crate::{
     cpu::FIELD_EXTENSION_BUS,
-    field_extension::columns::FieldExtensionArithmeticAuxCols,
-    memory::{offline_checker::bridge::MemoryBridge, MemoryAddress},
+    field_extension::{
+        air::FieldExtensionArithmeticAir, chip::EXTENSION_DEGREE,
+        columns::FieldExtensionArithmeticAuxCols,
+    },
+    memory::{
+        offline_checker::{
+            bridge::{emb, MemoryBridge, MemoryOfflineChecker},
+            columns::MemoryOfflineCheckerAuxCols,
+        },
+        MemoryAddress,
+    },
 };
 
 #[allow(clippy::too_many_arguments)]
 fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
     builder: &mut AB,
-    memory_bridge: &mut MemoryBridge<AB::Var, WORD_SIZE>,
+    mem_oc: MemoryOfflineChecker,
     clk_offset: &mut AB::Expr,
     is_enabled: AB::Expr,
     is_write: bool,
@@ -21,9 +28,12 @@ fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
     addr_space: AB::Var,
     address: AB::Var,
     ext: [AB::Var; EXTENSION_DEGREE],
+    mem_oc_aux_cols: [MemoryOfflineCheckerAuxCols<WORD_SIZE, AB::Var>; EXTENSION_DEGREE],
 ) {
+    let mut memory_bridge = MemoryBridge::new(mem_oc, mem_oc_aux_cols);
+
     for (i, element) in ext.into_iter().enumerate() {
-        let pointer = address + AB::F::from_canonical_usize(i * WORD_SIZE);
+        let pointer = address + AB::F::from_canonical_usize(i);
 
         let clk = clk + clk_offset.clone();
         *clk_offset += is_enabled.clone();
@@ -48,10 +58,6 @@ fn eval_rw_interactions<AB: InteractionBuilder, const WORD_SIZE: usize>(
     }
 }
 
-fn emb<F: AbstractField, const WORD_SIZE: usize>(element: F) -> [F; WORD_SIZE] {
-    array::from_fn(|j| if j == 0 { element.clone() } else { F::zero() })
-}
-
 impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
@@ -62,56 +68,68 @@ impl<const WORD_SIZE: usize> FieldExtensionArithmeticAir<WORD_SIZE> {
 
         let FieldExtensionArithmeticCols { io, aux } = local;
 
-        let FieldExtensionArithmeticAuxCols {
+        let FieldExtensionArithmeticIoCols {
+            clk,
             op_a,
             op_b,
             op_c,
             d,
             e,
-            mem_oc_aux_cols,
+            x,
+            y,
+            z,
+            ..
+        } = io;
+
+        let FieldExtensionArithmeticAuxCols {
+            read_x_aux_cols,
+            read_y_aux_cols,
+            write_aux_cols,
             is_valid,
+            valid_y_read,
             ..
         } = aux;
-
-        let mut memory_bridge = MemoryBridge::new(self.mem_oc, mem_oc_aux_cols);
 
         // Reads for x
         eval_rw_interactions::<AB, WORD_SIZE>(
             builder,
-            &mut memory_bridge,
+            self.mem_oc,
             &mut clk_offset,
-            aux.is_valid.into(),
+            is_valid.into(),
             false,
-            io.clk,
+            clk,
             d,
             op_b,
-            io.x,
+            x,
+            read_x_aux_cols,
         );
 
         // Reads for y
         eval_rw_interactions::<AB, WORD_SIZE>(
             builder,
-            &mut memory_bridge,
+            self.mem_oc,
             &mut clk_offset,
-            aux.valid_y_read.into(),
+            valid_y_read.into(),
             false,
-            io.clk,
+            clk,
             e,
             op_c,
-            io.y,
+            y,
+            read_y_aux_cols,
         );
 
         // Writes for z
         eval_rw_interactions::<AB, WORD_SIZE>(
             builder,
-            &mut memory_bridge,
+            self.mem_oc,
             &mut clk_offset,
-            aux.is_valid.into(),
+            is_valid.into(),
             true,
-            io.clk,
+            clk,
             d,
             op_a,
-            io.z,
+            z,
+            write_aux_cols,
         );
 
         // Receives all IO columns from another chip on bus 3 (FIELD_EXTENSION_BUS)

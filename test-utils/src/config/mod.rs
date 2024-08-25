@@ -7,6 +7,7 @@ pub mod baby_bear_blake3;
 pub mod baby_bear_bytehash;
 pub mod baby_bear_keccak;
 pub mod baby_bear_poseidon2;
+pub mod baby_bear_poseidon2_outer;
 pub mod fri_params;
 pub mod goldilocks_poseidon;
 pub mod instrument;

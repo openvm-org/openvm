@@ -52,8 +52,6 @@ codegen-units = 1
 [profile.fast]
 inherits = "dev"
 opt-level = 3
-# Set this to 1 or 2 to get more useful backtraces
-debug = 1
 debug-assertions = true
 # better recompile times
 incremental = true
@@ -84,7 +82,11 @@ p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa"
 p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" } # the "parallel" feature is NOT on by default to allow single-threaded benchmarking
 p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 
-snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier", branch = "chore/ruint-pin", default-features = false, features = ["loader_halo2", "halo2-axiom", "display"] }
+snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier", branch = "chore/ruint-pin", default-features = false, features = [
+    "loader_halo2",
+    "halo2-axiom",
+    "display",
+] }
 zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
 
 itertools = "0.13.0"

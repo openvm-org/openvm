@@ -150,7 +150,7 @@ This instruction set is always enabled.
 
 #### Notes about hints
 
-The `hint_stream` is a stream of words that is processed by calling `SHINTW`. Each call pops the next hint off the stream and writes it to the given place in memory. The `hint_stream` is populated by phantom instructions such as `HINT_INPUT` (resets `hint_stream` to be the next input) and `HINT_BITS` (resets `hint_stream` to be the bit decomposition of a given variable).
+The `hint_stream` is a stream of words that is processed by calling `SHINTW`. Each call pops the next hint off the stream and writes it to the given place in memory. The `hint_stream` is populated by phantom instructions such as `HINT_INPUT` (resets `hint_stream` to be the next input) and `HINT_BITS` (resets `hint_stream` to be the bit decomposition of a given variable, with a length known at compile time).
 
 :::info
 Core instructions were chosen so a subset of RISC-V instructions can be directly transpiled to the core instructions, where x0-31 registers are mapped to `word[0-31]_1` register address space.

@@ -6,13 +6,14 @@ use std::{
 };
 
 use afs_primitives::{
-    modular_multiplication::bigint::air::ModularMultiplicationBigIntAir,
+    modular_multiplication::bigint::air::ModularArithmeticBigIntAir,
     range_gate::RangeCheckerGateChip,
 };
 use afs_stark_backend::{
     config::{StarkGenericConfig, Val},
     rap::AnyRap,
 };
+use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 use p3_matrix::dense::DenseMatrix;
 use poseidon2_air::poseidon2::Poseidon2Config;
@@ -24,10 +25,10 @@ use crate::{
         RANGE_CHECKER_BUS,
     },
     field_arithmetic::FieldArithmeticChip,
-    field_extension::FieldExtensionArithmeticChip,
+    field_extension::chip::FieldExtensionArithmeticChip,
     is_less_than::IsLessThanChip,
     memory::manager::MemoryManager,
-    modular_multiplication::ModularMultiplicationChip,
+    modular_multiplication::{air::ModularArithmeticVmAir, ModularArithmeticChip},
     poseidon2::Poseidon2Chip,
     program::{Program, ProgramChip},
     vm::{cycle_tracker::CycleTracker, metrics::VmMetrics},
@@ -43,7 +44,7 @@ pub struct ExecutionSegment<const NUM_WORDS: usize, const WORD_SIZE: usize, F: P
     pub range_checker: Arc<RangeCheckerGateChip>,
     pub poseidon2_chip: Poseidon2Chip<16, NUM_WORDS, WORD_SIZE, F>,
     pub is_less_than_chip: IsLessThanChip<F>,
-    pub modular_multiplication_chip: ModularMultiplicationChip<F>,
+    pub modular_arithmetic_chips: BTreeMap<BigUint, ModularArithmeticChip<F>>,
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
     pub has_execution_happened: bool,
@@ -83,8 +84,24 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             range_checker.clone(),
             POSEIDON2_BUS,
         );
-        let modular_multiplication_chip =
-            ModularMultiplicationChip::new(ModularMultiplicationBigIntAir::default_for_30_bit());
+        let airs = vec![
+            (
+                ModularArithmeticChip::new(ModularArithmeticVmAir {
+                    air: ModularArithmeticBigIntAir::default_for_secp256k1_coord(),
+                }),
+                ModularArithmeticBigIntAir::secp256k1_coord_prime(),
+            ),
+            (
+                ModularArithmeticChip::new(ModularArithmeticVmAir {
+                    air: ModularArithmeticBigIntAir::default_for_secp256k1_scalar(),
+                }),
+                ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
+            ),
+        ];
+        let mut modular_arithmetic_chips = BTreeMap::new();
+        for (air, modulus) in airs {
+            modular_arithmetic_chips.insert(modulus.clone(), air);
+        }
         let is_less_than_chip = IsLessThanChip::new(
             IS_LESS_THAN_BUS,
             30,
@@ -103,7 +120,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
             field_extension_chip,
             range_checker,
             poseidon2_chip,
-            modular_multiplication_chip,
+            modular_arithmetic_chips,
             is_less_than_chip,
             input_stream: state.input_stream,
             hint_stream: state.hint_stream,
@@ -242,7 +259,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         );
         metrics.insert(
             "field_extension_ops".to_string(),
-            self.field_extension_chip.operations.len(),
+            self.field_extension_chip.records.len(),
         );
         metrics.insert(
             "range_checker_count".to_string(),

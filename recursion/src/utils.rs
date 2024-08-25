@@ -1,33 +1,24 @@
-use afs_compiler::{
-    asm::AsmConfig,
-    ir::{Builder, Config, Felt, Var},
-};
+use afs_compiler::ir::{Builder, CanSelect, Config, Felt, MemVariable, Var};
 use afs_test_utils::config::FriParameters;
-use p3_baby_bear::BabyBear;
 use p3_commit::TwoAdicMultiplicativeCoset;
-use p3_field::{extension::BinomialExtensionField, AbstractField, TwoAdicField};
+use p3_field::{AbstractField, TwoAdicField};
 
 use crate::fri::{types::FriConfigVariable, TwoAdicMultiplicativeCosetVariable};
 
-type Val = BabyBear;
-type Challenge = BinomialExtensionField<Val, 4>;
-type RecursionConfig = AsmConfig<Val, Challenge>;
-type RecursionBuilder = Builder<RecursionConfig>;
-
-pub fn const_fri_config(
-    builder: &mut RecursionBuilder,
+pub fn const_fri_config<C: Config>(
+    builder: &mut Builder<C>,
     params: &FriParameters,
-) -> FriConfigVariable<RecursionConfig> {
-    let two_adicity = Val::TWO_ADICITY;
+) -> FriConfigVariable<C> {
+    let two_adicity = C::F::TWO_ADICITY;
     let mut generators = builder.array(two_adicity);
     let mut subgroups = builder.array(two_adicity);
-    for i in 0..Val::TWO_ADICITY {
-        let constant_generator = Val::two_adic_generator(i);
+    for i in 0..C::F::TWO_ADICITY {
+        let constant_generator = C::F::two_adic_generator(i);
         builder.set(&mut generators, i, constant_generator);
 
         let constant_domain = TwoAdicMultiplicativeCoset {
             log_n: i,
-            shift: Val::one(),
+            shift: C::F::one(),
         };
         let domain_value: TwoAdicMultiplicativeCosetVariable<_> = builder.constant(constant_domain);
         // FIXME: here must use `builder.set_value`. `builder.set` will convert `Usize::Const`
@@ -72,4 +63,38 @@ pub fn split_32<C: Config>(builder: &mut Builder<C>, val: Var<C::N>, n: usize) -
         results.push(result);
     }
     results
+}
+
+/// Eval two expressions, return in the reversed order if cond == 1. Otherwise, return in the original order.
+/// This is a helper function for optimal performance.
+pub fn cond_eval<C: Config, V: MemVariable<C, Expression: Clone> + CanSelect<C>>(
+    builder: &mut Builder<C>,
+    cond: Var<C::N>,
+    v1: impl Into<V::Expression>,
+    v2: impl Into<V::Expression>,
+) -> [V; 2] {
+    let a: V;
+    let b: V;
+    if builder.flags.static_only {
+        let v1: V = builder.eval(v1.into());
+        let v2: V = builder.eval(v2.into());
+        a = V::select(builder, cond, v2.clone(), v1.clone());
+        b = V::select(builder, cond, v1, v2);
+    } else {
+        let v1 = v1.into();
+        let v2 = v2.into();
+        a = builder.uninit();
+        b = builder.uninit();
+        builder.if_eq(cond, C::N::one()).then_or_else(
+            |builder| {
+                builder.assign(&a, v2.clone());
+                builder.assign(&b, v1.clone());
+            },
+            |builder| {
+                builder.assign(&a, v1.clone());
+                builder.assign(&b, v2.clone());
+            },
+        );
+    }
+    [a, b]
 }

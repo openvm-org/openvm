@@ -1,6 +1,8 @@
+mod outer;
+
 use std::sync::Arc;
 
-use afs_compiler::util::{execute_and_prove_program, execute_program_and_generate_traces};
+use afs_compiler::util::execute_and_prove_program;
 use afs_primitives::{range_gate::RangeCheckerGateChip, sum::SumChip};
 use afs_stark_backend::{
     prover::trace::TraceCommitmentBuilder, rap::AnyRap, verifier::MultiTraceStarkVerifier,

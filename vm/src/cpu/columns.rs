@@ -1,4 +1,4 @@
-use std::{array::from_fn, collections::BTreeMap};
+use std::{array, collections::BTreeMap};
 
 use afs_primitives::{
     is_equal_vec::{columns::IsEqualVecAuxCols, IsEqualVecAir},
@@ -12,7 +12,6 @@ use crate::{
     memory::{
         manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
         offline_checker::columns::MemoryOfflineCheckerAuxCols,
-        OpType,
     },
     vm::ExecutionSegment,
 };
@@ -114,7 +113,7 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
         end += cpu_air.options.num_public_values;
         let public_value_flags = slc[start..end].to_vec();
 
-        let mem_ops = from_fn(|_| {
+        let mem_ops = array::from_fn(|_| {
             start = end;
             end += MemoryOperation::<WORD_SIZE, T>::width();
             MemoryOperation::<WORD_SIZE, T>::from_slice(&slc[start..end])
@@ -128,7 +127,7 @@ impl<const WORD_SIZE: usize, T: Clone> CpuAuxCols<WORD_SIZE, T> {
         end += IsEqualVecAuxCols::<T>::width(WORD_SIZE);
         let is_equal_vec_aux = IsEqualVecAuxCols::from_slice(&slc[start..end], WORD_SIZE);
 
-        let mem_oc_aux_cols = from_fn(|_| {
+        let mem_oc_aux_cols = array::from_fn(|_| {
             start = end;
             end +=
                 MemoryOfflineCheckerAuxCols::<WORD_SIZE, T>::width(&cpu_air.memory_offline_checker);
@@ -193,15 +192,12 @@ impl<const WORD_SIZE: usize, T: PrimeField32> CpuAuxCols<WORD_SIZE, T> {
             vm.range_checker.clone(),
             vm.cpu_chip.air.memory_offline_checker,
         );
-        let mem_ops: [_; CPU_MAX_ACCESSES_PER_CYCLE] = core::array::from_fn(|i| {
-            mem_trace_builder.disabled_op(
-                T::one(),
-                if i < CPU_MAX_READS_PER_CYCLE {
-                    OpType::Read
-                } else {
-                    OpType::Write
-                },
-            )
+        let mem_ops: [_; CPU_MAX_ACCESSES_PER_CYCLE] = array::from_fn(|i| {
+            if i < CPU_MAX_READS_PER_CYCLE {
+                mem_trace_builder.disabled_read(T::one())
+            } else {
+                mem_trace_builder.disabled_write(T::one())
+            }
         });
 
         let is_equal_vec_cols = LocalTraceInstructions::generate_trace_row(

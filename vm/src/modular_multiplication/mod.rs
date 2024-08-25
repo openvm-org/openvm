@@ -1,12 +1,12 @@
 use std::{borrow::Cow, collections::VecDeque};
 
-use afs_primitives::modular_multiplication::bigint::air::ModularMultiplicationBigIntAir;
+use afs_primitives::modular_multiplication::bigint::air::ModularArithmeticBigIntAir;
 use num_bigint_dig::{algorithms::mod_inverse, BigUint};
 use p3_field::{PrimeField32, PrimeField64};
 
+use self::air::ModularArithmeticVmAir;
 use crate::{
     cpu::{trace::Instruction, OpCode::*},
-    modular_multiplication::air::ModularMultiplicationVmAir,
     vm::ExecutionSegment,
 };
 
@@ -67,23 +67,20 @@ pub fn bigint_to_elems<F: PrimeField64>(
         .collect()
 }
 
-pub struct VmModularMultiplication<F: PrimeField64> {
+pub struct VmModularArithmetic<F: PrimeField64> {
     pub instruction: Instruction<F>,
     pub argument_1: BigUint,
     pub argument_2: BigUint,
 }
 
-pub struct ModularMultiplicationChip<F: PrimeField64> {
-    air: ModularMultiplicationVmAir,
-    multiplications: Vec<VmModularMultiplication<F>>,
+pub struct ModularArithmeticChip<F: PrimeField64> {
+    air: ModularArithmeticVmAir,
+    ops: Vec<VmModularArithmetic<F>>,
 }
 
-impl<F: PrimeField32> ModularMultiplicationChip<F> {
-    pub fn new(air: ModularMultiplicationBigIntAir) -> Self {
-        Self {
-            air: ModularMultiplicationVmAir { air },
-            multiplications: vec![],
-        }
+impl<F: PrimeField32> ModularArithmeticChip<F> {
+    pub fn new(air: ModularArithmeticVmAir) -> Self {
+        Self { air, ops: vec![] }
     }
 
     pub fn calculate<const NUM_WORDS: usize, const WORD_SIZE: usize>(
@@ -91,8 +88,17 @@ impl<F: PrimeField32> ModularMultiplicationChip<F> {
         instruction: Instruction<F>,
     ) {
         let (op_input_2, op_result) = match instruction.opcode {
-            MOD_SECP256K1_ADD | MOD_SECP256K1_MUL => (instruction.op_b, instruction.op_c),
-            MOD_SECP256K1_SUB | MOD_SECP256K1_DIV => (instruction.op_c, instruction.op_b),
+            SECP256K1_COORD_ADD | SECP256K1_COORD_MUL | SECP256K1_SCALAR_ADD
+            | SECP256K1_SCALAR_MUL => (instruction.op_b, instruction.op_c),
+            SECP256K1_COORD_SUB | SECP256K1_COORD_DIV | SECP256K1_SCALAR_SUB
+            | SECP256K1_SCALAR_DIV => (instruction.op_c, instruction.op_b),
+            _ => panic!(),
+        };
+        let modulus = match instruction.opcode {
+            SECP256K1_COORD_ADD | SECP256K1_COORD_SUB | SECP256K1_COORD_MUL
+            | SECP256K1_COORD_DIV => ModularArithmeticBigIntAir::secp256k1_coord_prime(),
+            SECP256K1_SCALAR_ADD | SECP256K1_SCALAR_SUB | SECP256K1_SCALAR_MUL
+            | SECP256K1_SCALAR_DIV => ModularArithmeticBigIntAir::secp256k1_scalar_prime(),
             _ => panic!(),
         };
         // TODO[zach]: update for word size
@@ -118,10 +124,10 @@ impl<F: PrimeField32> ModularMultiplicationChip<F> {
             .cell
             .data[0];
 
-        let air = &vm.modular_multiplication_chip.air.air;
-        let modulus = air.modulus.clone();
-        let num_elems = air.limb_dimensions.io_limb_sizes.len();
-        let repr_bits = air.repr_bits;
+        let chip = vm.modular_arithmetic_chips.get_mut(&modulus).unwrap();
+        let air = &chip.air;
+        let num_elems = air.air.limb_dimensions.io_limb_sizes.len();
+        let repr_bits = air.air.repr_bits;
         let argument_1_elems = (0..num_elems)
             .map(|i| {
                 vm.memory_manager
@@ -145,16 +151,19 @@ impl<F: PrimeField32> ModularMultiplicationChip<F> {
         let argument_1 = elems_to_bigint(argument_1_elems, repr_bits);
         let argument_2 = elems_to_bigint(argument_2_elems, repr_bits);
         let result = match instruction.opcode {
-            MOD_SECP256K1_ADD => argument_1.clone() + argument_2.clone(),
-            MOD_SECP256K1_SUB => argument_1.clone() + modulus.clone() - argument_2.clone(),
-            MOD_SECP256K1_MUL => argument_1.clone() * argument_2.clone(),
-            MOD_SECP256K1_DIV => {
+            SECP256K1_COORD_ADD | SECP256K1_SCALAR_ADD => argument_1.clone() + argument_2.clone(),
+            SECP256K1_COORD_SUB | SECP256K1_SCALAR_SUB => {
+                argument_1.clone() + modulus.clone() - argument_2.clone()
+            }
+            SECP256K1_COORD_MUL | SECP256K1_SCALAR_MUL => argument_1.clone() * argument_2.clone(),
+            SECP256K1_COORD_DIV | SECP256K1_SCALAR_DIV => {
                 argument_1.clone()
                     * mod_inverse(Cow::Borrowed(&argument_2), Cow::Borrowed(&modulus))
                         .unwrap()
                         .to_biguint()
                         .unwrap()
             }
+
             _ => panic!(),
         } % modulus;
         let result_elems = bigint_to_elems(result, repr_bits, num_elems);
@@ -168,12 +177,10 @@ impl<F: PrimeField32> ModularMultiplicationChip<F> {
                 word,
             );
         }
-        vm.modular_multiplication_chip
-            .multiplications
-            .push(VmModularMultiplication {
-                instruction,
-                argument_1,
-                argument_2,
-            });
+        chip.ops.push(VmModularArithmetic {
+            instruction,
+            argument_1,
+            argument_2,
+        });
     }
 }

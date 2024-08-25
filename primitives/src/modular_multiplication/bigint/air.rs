@@ -1,4 +1,4 @@
-use std::cmp::min;
+use std::{cmp::min, str::FromStr};
 
 use afs_stark_backend::interaction::InteractionBuilder;
 use itertools::Itertools;
@@ -11,14 +11,14 @@ use p3_matrix::Matrix;
 use crate::{
     modular_multiplication::{
         air::{constrain_limbs, range_check},
-        bigint::columns::ModularMultiplicationBigIntCols,
+        bigint::columns::ModularArithmeticBigIntCols,
         trace::{big_uint_to_bits, take_limb},
         FullLimbs, LimbDimensions,
     },
     sub_chip::AirConfig,
 };
 
-pub struct ModularMultiplicationBigIntAir {
+pub struct ModularArithmeticBigIntAir {
     pub modulus: BigUint,
     pub total_bits: usize,
     pub decomp: usize,
@@ -33,7 +33,7 @@ pub struct ModularMultiplicationBigIntAir {
     pub modulus_limbs: Vec<usize>,
 }
 
-impl ModularMultiplicationBigIntAir {
+impl ModularArithmeticBigIntAir {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         modulus: BigUint,
@@ -98,7 +98,7 @@ impl ModularMultiplicationBigIntAir {
         }
     }
 
-    pub fn secp256k1_prime() -> BigUint {
+    pub fn secp256k1_coord_prime() -> BigUint {
         let mut result = BigUint::one() << 256;
         for power in [32, 9, 8, 7, 6, 4, 0] {
             result -= BigUint::one() << power;
@@ -106,37 +106,70 @@ impl ModularMultiplicationBigIntAir {
         result
     }
 
-    pub fn default_for_30_bit() -> Self {
-        Self::new(Self::secp256k1_prime(), 256, 16, 0, 30, 30, 10, 16, 1 << 15)
+    pub fn secp256k1_scalar_prime() -> BigUint {
+        let lol = BigUint::from_str(
+            "115792089237316195423570985008687907852837564279074904382605163141518161494337",
+        )
+        .unwrap();
+        print!("{:?}", lol);
+        lol
+    }
+
+    pub fn default_for_secp256k1_coord() -> Self {
+        Self::new(
+            Self::secp256k1_coord_prime(),
+            256,
+            16,
+            0,
+            30,
+            30,
+            10,
+            16,
+            1 << 15,
+        )
+    }
+
+    pub fn default_for_secp256k1_scalar() -> Self {
+        Self::new(
+            Self::secp256k1_scalar_prime(),
+            256,
+            16,
+            0,
+            30,
+            30,
+            10,
+            16,
+            1 << 15,
+        )
     }
 }
 
-impl AirConfig for ModularMultiplicationBigIntAir {
-    type Cols<T> = ModularMultiplicationBigIntCols<T>;
+impl AirConfig for ModularArithmeticBigIntAir {
+    type Cols<T> = ModularArithmeticBigIntCols<T>;
 }
 
-impl<F: Field> BaseAir<F> for ModularMultiplicationBigIntAir {
+impl<F: Field> BaseAir<F> for ModularArithmeticBigIntAir {
     fn width(&self) -> usize {
-        ModularMultiplicationBigIntCols::<F>::get_width(self)
+        ModularArithmeticBigIntCols::<F>::get_width(self)
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for ModularMultiplicationBigIntAir {
+impl<AB: InteractionBuilder> Air<AB> for ModularArithmeticBigIntAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let local = ModularMultiplicationBigIntCols::<AB::Var>::from_slice(&local, self);
+        let local = ModularArithmeticBigIntCols::<AB::Var>::from_slice(&local, self);
         self.eval(builder, local);
     }
 }
 
-impl ModularMultiplicationBigIntAir {
+impl ModularArithmeticBigIntAir {
     pub fn eval<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        cols: ModularMultiplicationBigIntCols<AB::Var>,
+        cols: ModularArithmeticBigIntCols<AB::Var>,
     ) {
-        let ModularMultiplicationBigIntCols { general, carries } = cols;
+        let ModularArithmeticBigIntCols { general, carries } = cols;
 
         let FullLimbs {
             a_limbs,

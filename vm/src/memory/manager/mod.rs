@@ -1,14 +1,12 @@
 use std::{collections::HashMap, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
-use p3_field::PrimeField32;
+use derive_new::new;
+use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use self::{access_cell::AccessCell, interface::MemoryInterface};
-use super::{
-    audit::{air::MemoryAuditAir, MemoryAuditChip},
-    offline_checker::columns::MemoryAccess,
-};
+use super::audit::{air::MemoryAuditAir, MemoryAuditChip};
 use crate::{
     memory::{decompose, manager::operation::MemoryOperation, OpType},
     vm::config::MemoryConfig,
@@ -86,7 +84,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         cell.clk = cur_clk;
 
         self.interface_chip
-            .touch_address(addr_space, pointer, old_data, cur_clk);
+            .touch_address(addr_space, pointer, old_data);
 
         MemoryAccess::<WORD_SIZE, F>::new(
             MemoryOperation::new(
@@ -134,7 +132,7 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         cell.data = data;
 
         self.interface_chip
-            .touch_address(addr_space, pointer, old_data, old_clk);
+            .touch_address(addr_space, pointer, old_data);
 
         MemoryAccess::<WORD_SIZE, F>::new(
             MemoryOperation::new(
@@ -174,25 +172,6 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
         self.interface_chip.generate_trace(final_memory)
     }
 
-    /// Trace generation for dummy values when a memory operation should be selectively disabled.
-    ///
-    /// Warning: `self.clk` must be > 0 for less than constraints to pass.
-    pub fn disabled_op(&mut self, addr_space: F, op_type: OpType) -> MemoryAccess<WORD_SIZE, F> {
-        assert_ne!(addr_space, F::zero());
-        let timestamp = self.clk;
-        // Below, we set timestamp_prev = 0
-        MemoryAccess::<WORD_SIZE, F>::new(
-            MemoryOperation::new(
-                addr_space,
-                F::zero(),
-                F::from_canonical_u8(op_type as u8),
-                AccessCell::new([F::zero(); WORD_SIZE], timestamp),
-                F::zero(),
-            ),
-            AccessCell::new([F::zero(); WORD_SIZE], F::zero()),
-        )
-    }
-
     pub fn increment_clk(&mut self) {
         self.clk += F::one();
     }
@@ -217,4 +196,40 @@ impl<const NUM_WORDS: usize, const WORD_SIZE: usize, F: PrimeField32>
     // pub fn write_elem(&mut self, timestamp: usize, address_space: F, address: F, data: F) {
     //     self.write_word(timestamp, address_space, address, decompose(data));
     // }
+}
+
+#[derive(new, Debug, Default)]
+pub struct MemoryAccess<const WORD_SIZE: usize, T> {
+    pub op: MemoryOperation<WORD_SIZE, T>,
+    pub old_cell: AccessCell<WORD_SIZE, T>,
+}
+
+impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
+    // TODO[jpw]: we can default to addr_space = 1 after is_immediate checks are moved out of default memory access
+    pub fn disabled_read(timestamp: T, addr_space: T) -> MemoryAccess<WORD_SIZE, T> {
+        Self::disabled_op(timestamp, addr_space, OpType::Read)
+    }
+
+    // TODO[jpw]: we can default to addr_space = 1 after is_immediate checks are moved out of default memory access
+    pub fn disabled_write(timestamp: T, addr_space: T) -> MemoryAccess<WORD_SIZE, T> {
+        Self::disabled_op(timestamp, addr_space, OpType::Write)
+    }
+
+    fn disabled_op(timestamp: T, addr_space: T, op_type: OpType) -> MemoryAccess<WORD_SIZE, T> {
+        debug_assert_ne!(
+            addr_space,
+            T::zero(),
+            "Disabled memory operation cannot be immediate"
+        );
+        MemoryAccess::<WORD_SIZE, T>::new(
+            MemoryOperation {
+                addr_space,
+                pointer: T::zero(),
+                op_type: T::from_canonical_u8(op_type as u8),
+                cell: AccessCell::new([T::zero(); WORD_SIZE], timestamp),
+                enabled: T::zero(),
+            },
+            AccessCell::new([T::zero(); WORD_SIZE], T::zero()),
+        )
+    }
 }

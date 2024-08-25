@@ -16,14 +16,14 @@ where
         let (x1, y1) = point_1;
         let (x2, y2) = point_2;
 
-        let x1_zero = self.mod_secp256k1_is_zero(x1);
-        let y1_zero = self.mod_secp256k1_is_zero(y1);
-        let x2_zero = self.mod_secp256k1_is_zero(x2);
-        let y2_zero = self.mod_secp256k1_is_zero(y2);
-        let xs_equal = self.mod_secp256k1_eq(x1, x2);
-        let ys_equal = self.mod_secp256k1_eq(y1, y2);
-        let y_sum = self.mod_secp256k1_add(y1, y2);
-        let ys_opposite = self.mod_secp256k1_is_zero(&y_sum);
+        let x1_zero = self.secp256k1_coord_is_zero(x1);
+        let y1_zero = self.secp256k1_coord_is_zero(y1);
+        let x2_zero = self.secp256k1_coord_is_zero(x2);
+        let y2_zero = self.secp256k1_coord_is_zero(y2);
+        let xs_equal = self.secp256k1_coord_eq(x1, x2);
+        let ys_equal = self.secp256k1_coord_eq(y1, y2);
+        let y_sum = self.secp256k1_coord_add(y1, y2);
+        let ys_opposite = self.secp256k1_coord_is_zero(&y_sum);
         let result_x = self.uninit();
         let result_y = self.uninit();
 
@@ -61,32 +61,32 @@ where
                                                     .eval_bigint(BigUint::from_u8(2).unwrap());
                                                 let three = builder
                                                     .eval_bigint(BigUint::from_u8(3).unwrap());
-                                                let two_y = builder.mod_secp256k1_mul(&two, y1);
-                                                let x_squared = builder.mod_secp256k1_mul(x1, x1);
+                                                let two_y = builder.secp256k1_coord_mul(&two, y1);
+                                                let x_squared = builder.secp256k1_coord_mul(x1, x1);
                                                 let three_x_squared =
-                                                    builder.mod_secp256k1_mul(&three, &x_squared);
+                                                    builder.secp256k1_coord_mul(&three, &x_squared);
                                                 let lambda_value = builder
-                                                    .mod_secp256k1_div(&three_x_squared, &two_y);
+                                                    .secp256k1_coord_div(&three_x_squared, &two_y);
                                                 builder.assign(&lambda, lambda_value);
                                             },
                                             |builder| {
                                                 // else (general case)
-                                                let dy = builder.mod_secp256k1_sub(y2, y1);
-                                                let dx = builder.mod_secp256k1_sub(x2, x1);
+                                                let dy = builder.secp256k1_coord_sub(y2, y1);
+                                                let dx = builder.secp256k1_coord_sub(x2, x1);
                                                 let lambda_value =
-                                                    builder.mod_secp256k1_div(&dy, &dx);
+                                                    builder.secp256k1_coord_div(&dy, &dx);
                                                 builder.assign(&lambda, lambda_value);
                                             },
                                         );
                                     let lambda_squared =
-                                        builder.mod_secp256k1_mul(&lambda, &lambda);
-                                    let x_sum = builder.mod_secp256k1_add(x1, x2);
-                                    let x3 = builder.mod_secp256k1_sub(&lambda_squared, &x_sum);
-                                    let x1_minus_x3 = builder.mod_secp256k1_sub(x1, &x3);
+                                        builder.secp256k1_coord_mul(&lambda, &lambda);
+                                    let x_sum = builder.secp256k1_coord_add(x1, x2);
+                                    let x3 = builder.secp256k1_coord_sub(&lambda_squared, &x_sum);
+                                    let x1_minus_x3 = builder.secp256k1_coord_sub(x1, &x3);
                                     let lambda_times_x1_minus_x3 =
-                                        builder.mod_secp256k1_mul(&lambda, &x1_minus_x3);
+                                        builder.secp256k1_coord_mul(&lambda, &x1_minus_x3);
                                     let y3 =
-                                        builder.mod_secp256k1_sub(&lambda_times_x1_minus_x3, y1);
+                                        builder.secp256k1_coord_sub(&lambda_times_x1_minus_x3, y1);
                                     builder.assign(&result_x, x3);
                                     builder.assign(&result_y, y3);
                                 },

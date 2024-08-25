@@ -5,8 +5,8 @@ use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use p3_baby_bear::BabyBear;
 use p3_field::{
-    extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field, PrimeField32,
-    PrimeField64,
+    extension::{BinomialExtensionField, BinomiallyExtendable},
+    AbstractExtensionField, AbstractField, Field, PrimeField32, PrimeField64,
 };
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::{
@@ -86,15 +86,18 @@ impl BabyBearChip {
         if c.max_bits >= Fr::CAPACITY as usize - 1 {
             c = self.reduce(ctx, c);
         }
+        debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() + b.to_baby_bear());
         c
     }
 
     pub fn neg(&self, ctx: &mut Context<Fr>, a: AssignedBabyBear) -> AssignedBabyBear {
         let value = self.gate().neg(ctx, a.value);
-        AssignedBabyBear {
+        let b = AssignedBabyBear {
             value,
             max_bits: a.max_bits,
-        }
+        };
+        debug_assert_eq!(b.to_baby_bear(), -a.to_baby_bear());
+        b
     }
 
     pub fn sub(
@@ -107,6 +110,7 @@ impl BabyBearChip {
         let max_bits = a.max_bits.max(b.max_bits) + 1;
 
         let mut c = AssignedBabyBear { value, max_bits };
+        debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() - b.to_baby_bear());
         if c.max_bits >= Fr::CAPACITY as usize - 1 {
             c = self.reduce(ctx, c);
         }
@@ -148,13 +152,16 @@ impl BabyBearChip {
         let b_val = b.to_baby_bear();
         let b_inv = b_val.try_inverse().unwrap();
 
-        let c = self.load_witness(ctx, a.to_baby_bear() * b_inv);
+        let mut c = self.load_witness(ctx, a.to_baby_bear() * b_inv);
         // constraint a = b * c (mod p)
         if a.max_bits >= Fr::CAPACITY as usize - 1 {
             a = self.reduce(ctx, a);
         }
         if b.max_bits + c.max_bits >= Fr::CAPACITY as usize - 1 {
             b = self.reduce(ctx, b);
+        }
+        if b.max_bits + c.max_bits >= Fr::CAPACITY as usize - 1 {
+            c = self.reduce(ctx, c);
         }
         let diff = self.gate().sub_mul(ctx, a.value, b.value, c.value);
         let max_bits = a.max_bits.max(b.max_bits + c.max_bits) + 1;
@@ -213,6 +220,7 @@ where
     let a = a.into();
     let b = b.into();
     let a_val = fe_to_bigint(a.value());
+    assert!(a_val.bits() <= a_num_bits as u64);
     let (div, rem) = a_val.div_mod_floor(&b.clone().into());
     let [div, rem] = [div, rem].map(|v| bigint_to_fe(&v));
     ctx.assign_region(
@@ -231,8 +239,10 @@ where
     let shifted_div = range
         .gate()
         .add(ctx, div, QuantumCell::Constant(biguint_to_fe(&bound)));
+    debug_assert!(*shifted_div.value() < biguint_to_fe(&(&bound * 2u32 + 1u32)));
     range.check_big_less_than_safe(ctx, shifted_div, bound * 2u32 + 1u32);
     // Constrain that remainder is less than divisor (i.e. `r < b`).
+    debug_assert!(*rem.value() < biguint_to_fe(&b));
     range.check_big_less_than_safe(ctx, rem, b);
     (div, rem)
 }
@@ -391,11 +401,11 @@ impl BabyBearExt4Chip {
                 }
             }
         }
-        let eleven = self
+        let w = self
             .base
-            .load_constant(ctx, BabyBear::from_canonical_u32(11));
+            .load_constant(ctx, <BabyBear as BinomiallyExtendable<4>>::w());
         for i in 4..7 {
-            let tmp = self.base.mul(ctx, coeffs[i], eleven);
+            let tmp = self.base.mul(ctx, coeffs[i], w);
             coeffs[i - 4] = self.base.add(ctx, coeffs[i - 4], tmp);
         }
         coeffs.truncate(4);

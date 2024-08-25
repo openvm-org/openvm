@@ -21,9 +21,8 @@ use crate::{
     memory::{
         compose, decompose,
         manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
-        OpType,
     },
-    modular_multiplication::ModularMultiplicationChip,
+    modular_multiplication::ModularArithmeticChip,
     poseidon2::columns::Poseidon2VmCols,
     program::columns::ProgramPreprocessedCols,
     vm::ExecutionSegment,
@@ -244,7 +243,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let mut num_writes = 0;
 
             let initial_field_base_ops = vm.field_arithmetic_chip.operations.len();
-            let initial_field_extension_ops = vm.field_extension_chip.operations.len();
+            let initial_field_extension_ops = vm.field_extension_chip.current_height();
             let initial_poseidon2_rows = vm.poseidon2_chip.rows.len();
 
             macro_rules! read {
@@ -263,8 +262,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     num_reads += 1;
                     assert!(num_reads <= CPU_MAX_READS_PER_CYCLE);
 
-                    mem_ops[num_reads - 1] =
-                        mem_read_trace_builder.disabled_op(F::one(), OpType::Read);
+                    mem_ops[num_reads - 1] = mem_read_trace_builder.disabled_read(F::one());
                 }};
             }
 
@@ -293,7 +291,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     while num_writes < CPU_MAX_WRITES_PER_CYCLE {
                         num_writes += 1;
                         mem_ops[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
-                            mem_write_trace_builder.disabled_op(F::one(), OpType::Write);
+                            mem_write_trace_builder.disabled_write(F::one());
                     }
                 }};
             }
@@ -407,11 +405,13 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                 FE4ADD | FE4SUB | BBE4MUL | BBE4INV => {
                     generate_disabled_ops!();
                     let clk = vm.memory_manager.borrow().get_clk().as_canonical_u32();
-                    vm.field_extension_chip.calculate(clk as usize, instruction);
+                    vm.field_extension_chip.process(clk as usize, instruction);
                 }
-                MOD_SECP256K1_ADD | MOD_SECP256K1_SUB | MOD_SECP256K1_MUL | MOD_SECP256K1_DIV => {
+                SECP256K1_COORD_ADD | SECP256K1_COORD_SUB | SECP256K1_COORD_MUL
+                | SECP256K1_COORD_DIV | SECP256K1_SCALAR_ADD | SECP256K1_SCALAR_SUB
+                | SECP256K1_SCALAR_MUL | SECP256K1_SCALAR_DIV => {
                     generate_disabled_ops!();
-                    ModularMultiplicationChip::calculate(vm, instruction);
+                    ModularArithmeticChip::calculate(vm, instruction);
                 }
                 PERM_POS2 | COMP_POS2 => {
                     generate_disabled_ops!();
@@ -431,8 +431,9 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
                     let val = compose(word);
                     let mut val = val.as_canonical_u32();
 
+                    let len = c.as_canonical_u32();
                     hint_stream = VecDeque::new();
-                    for _ in 0..32 {
+                    for _ in 0..len {
                         hint_stream.push_back(F::from_canonical_u32(val & 1));
                         val >>= 1;
                     }
@@ -453,12 +454,12 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
 
             // Finalizing memory accesses
             for mem_op in &mut mem_ops[num_reads..CPU_MAX_READS_PER_CYCLE] {
-                *mem_op = mem_read_trace_builder.disabled_op(F::one(), OpType::Read);
+                *mem_op = mem_read_trace_builder.disabled_read(F::one());
             }
             for mem_op in
                 &mut mem_ops[CPU_MAX_READS_PER_CYCLE + num_writes..CPU_MAX_ACCESSES_PER_CYCLE]
             {
-                *mem_op = mem_write_trace_builder.disabled_op(F::one(), OpType::Write);
+                *mem_op = mem_write_trace_builder.disabled_write(F::one());
             }
 
             let mem_oc_aux_cols: Vec<_> = mem_read_trace_builder
@@ -471,7 +472,7 @@ impl<const WORD_SIZE: usize, F: PrimeField32> CpuChip<WORD_SIZE, F> {
             let final_field_base_ops = vm.field_arithmetic_chip.operations.len();
             let num_field_base_ops = final_field_base_ops - initial_field_base_ops;
 
-            let final_field_extension_ops = vm.field_extension_chip.operations.len();
+            let final_field_extension_ops = vm.field_extension_chip.current_height();
             let num_field_extension_ops = final_field_extension_ops - initial_field_extension_ops;
 
             let final_poseidon2_rows = vm.poseidon2_chip.rows.len();

@@ -8,8 +8,8 @@ use p3_field::PrimeField32;
 use OpCode::*;
 
 use crate::{
-    field_extension::FieldExtensionArithmetic, memory::offline_checker::bus::MemoryBus,
-    modular_multiplication::air::ModularMultiplicationVmAir, poseidon2::Poseidon2Chip,
+    field_extension::chip::FieldExtensionArithmeticChip, memory::offline_checker::bus::MemoryBus,
+    modular_multiplication::air::ModularArithmeticVmAir, poseidon2::Poseidon2Chip,
     vm::config::MemoryConfig,
 };
 
@@ -24,7 +24,7 @@ pub mod trace;
 pub const INST_WIDTH: usize = 1;
 
 pub const READ_INSTRUCTION_BUS: usize = 0;
-pub const NEW_MEMORY_BUS: MemoryBus = MemoryBus(1);
+pub const MEMORY_BUS: MemoryBus = MemoryBus(1);
 pub const ARITHMETIC_BUS: usize = 2;
 pub const FIELD_EXTENSION_BUS: usize = 3;
 pub const RANGE_CHECKER_BUS: usize = 4;
@@ -86,10 +86,15 @@ pub enum OpCode {
     /// Phantom instruction to end tracing
     CT_END = 61,
 
-    MOD_SECP256K1_ADD = 70,
-    MOD_SECP256K1_SUB = 71,
-    MOD_SECP256K1_MUL = 72,
-    MOD_SECP256K1_DIV = 73,
+    SECP256K1_COORD_ADD = 70,
+    SECP256K1_COORD_SUB = 71,
+    SECP256K1_COORD_MUL = 72,
+    SECP256K1_COORD_DIV = 73,
+
+    SECP256K1_SCALAR_ADD = 74,
+    SECP256K1_SCALAR_SUB = 75,
+    SECP256K1_SCALAR_MUL = 76,
+    SECP256K1_SCALAR_DIV = 77,
 
     ADD256 = 80,
     SUB256 = 81,
@@ -112,11 +117,15 @@ pub const CORE_INSTRUCTIONS: [OpCode; 15] = [
 ];
 pub const FIELD_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [FADD, FSUB, FMUL, FDIV];
 pub const FIELD_EXTENSION_INSTRUCTIONS: [OpCode; 4] = [FE4ADD, FE4SUB, BBE4MUL, BBE4INV];
-pub const MODULAR_ARITHMETIC_INSTRUCTIONS: [OpCode; 4] = [
-    MOD_SECP256K1_ADD,
-    MOD_SECP256K1_SUB,
-    MOD_SECP256K1_MUL,
-    MOD_SECP256K1_DIV,
+pub const MODULAR_ARITHMETIC_INSTRUCTIONS: [OpCode; 8] = [
+    SECP256K1_COORD_ADD,
+    SECP256K1_COORD_SUB,
+    SECP256K1_COORD_MUL,
+    SECP256K1_COORD_DIV,
+    SECP256K1_SCALAR_ADD,
+    SECP256K1_SCALAR_SUB,
+    SECP256K1_SCALAR_MUL,
+    SECP256K1_SCALAR_DIV,
 ];
 
 impl OpCode {
@@ -147,13 +156,13 @@ fn timestamp_delta(opcode: OpCode) -> usize {
         PUBLISH => 2,
         opcode if FIELD_ARITHMETIC_INSTRUCTIONS.contains(&opcode) => 3,
         opcode if FIELD_EXTENSION_INSTRUCTIONS.contains(&opcode) => {
-            FieldExtensionArithmetic::accesses_per_instruction(opcode)
+            FieldExtensionArithmeticChip::<8, WORD_SIZE, BabyBear>::accesses_per_instruction(opcode)
         }
         opcode if MODULAR_ARITHMETIC_INSTRUCTIONS.contains(&opcode) => {
             // TODO: note that in this chip's trace generation, we need to make sure
             // that the timestamp in MemoryManager increases by exactly what this function
             // returns.
-            ModularMultiplicationVmAir::max_accesses_per_instruction(opcode)
+            ModularArithmeticVmAir::max_accesses_per_instruction(opcode)
         }
         F_LESS_THAN => 3,
         FAIL => 0,
