@@ -15,7 +15,7 @@ use super::{
     WORD_SIZE,
 };
 use crate::{
-    arch::{bridge::ExecutionBus, instructions::Opcode::*},
+    arch::{bus::ExecutionBus, instructions::Opcode::*},
     memory::{
         offline_checker::bridge::{MemoryBridge, MemoryOfflineChecker},
         MemoryAddress,

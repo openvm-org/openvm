@@ -8,7 +8,7 @@ use p3_matrix::Matrix;
 use super::columns::FieldArithmeticCols;
 use crate::{
     arch::{
-        bridge::ExecutionBus,
+        bus::ExecutionBus,
         instructions::Opcode::{FADD, FDIV, FMUL, FSUB},
     },
     memory::offline_checker::bridge::MemoryOfflineChecker,

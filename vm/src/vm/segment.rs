@@ -16,7 +16,7 @@ use poseidon2_air::poseidon2::Poseidon2Config;
 use super::{VirtualMachineState, VmConfig, VmMetrics};
 use crate::{
     arch::{
-        bridge::ExecutionBus,
+        bus::ExecutionBus,
         chips::{InstructionExecutorVariant, MachineChip, MachineChipVariant},
         instructions::{Opcode, FIELD_ARITHMETIC_INSTRUCTIONS, FIELD_EXTENSION_INSTRUCTIONS},
     },

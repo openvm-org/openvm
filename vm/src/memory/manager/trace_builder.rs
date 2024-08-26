@@ -16,7 +16,7 @@ const WORD_SIZE: usize = 1;
 /// The [MemoryTraceBuilder] uses a buffer to help fill in the auxiliary trace values for memory accesses.
 /// Since it uses a buffer, it must be created within a trace generation function and is not intended to be
 /// owned by a chip.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MemoryTraceBuilder<F: PrimeField32> {
     memory_manager: Rc<RefCell<MemoryManager<F>>>,
     // Derived from memory_manager:

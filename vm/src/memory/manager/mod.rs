@@ -76,26 +76,6 @@ impl<F: PrimeField32> MemoryManager<F> {
         }
     }
 
-    pub fn new_for_testing(
-        memory_bus: MemoryBus,
-        mem_config: MemoryConfig,
-        range_checker: Arc<RangeCheckerGateChip>,
-    ) -> Self {
-        Self {
-            memory_bus,
-            mem_config,
-            interface_chip: MemoryInterface::Volatile(MemoryAuditChip::new_for_testing(
-                memory_bus,
-                mem_config.addr_space_max_bits,
-                mem_config.pointer_max_bits,
-                mem_config.decomp,
-            )),
-            timestamp: F::one(),
-            memory: HashMap::new(),
-            range_checker,
-        }
-    }
-
     pub fn make_offline_checker(&self) -> MemoryOfflineChecker {
         MemoryOfflineChecker::new(
             self.memory_bus,
@@ -296,7 +276,8 @@ impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
     }
 }
 
-// TODO[jpw]: this doesn't seem right
+// TODO[jpw]: MemoryManager is taking the role of MemoryInterface here, which is weird.
+// Necessary right now because MemoryInterface doesn't own the final memory state.
 impl<F: PrimeField32> MachineChip<F> for MemoryManager<F> {
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         self.generate_memory_interface_trace()

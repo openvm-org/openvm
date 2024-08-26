@@ -118,11 +118,8 @@ fn volatile_memory_offline_checker_test() {
         checker_trace.extend(op.flatten());
         checker_trace.extend(aux_cols.flatten());
     }
-    dbg!(checker_trace.len());
 
     let checker_width = MemoryOfflineCheckerCols::<TEST_WORD_SIZE, Val>::width(&offline_checker);
-
-    dbg!(checker_width);
     let checker_trace = RowMajorMatrix::new(checker_trace, checker_width);
     let memory_interface_trace = memory_manager.borrow().generate_memory_interface_trace();
     let range_checker_trace = range_checker.generate_trace();

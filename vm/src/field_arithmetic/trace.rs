@@ -18,7 +18,7 @@ use crate::{
     },
 };
 
-fn generate_cols<F: Field>(
+fn generate_row<F: Field>(
     operation: FieldArithmeticOperation<F>,
     is_valid: bool,
     oc_aux_iter: &mut IntoIter<MemoryOfflineCheckerAuxCols<1, F>>,
@@ -62,17 +62,17 @@ fn generate_cols<F: Field>(
 }
 
 impl<F: PrimeField32> FieldArithmeticChip<F> {
-    fn make_blank_cols(&self) -> FieldArithmeticCols<F> {
+    fn make_blank_row(&self) -> FieldArithmeticCols<F> {
         let mut trace_builder = MemoryTraceBuilder::new(self.memory_manager.clone());
 
-        trace_builder.disabled_op(F::zero(), OpType::Read);
-        trace_builder.disabled_op(F::zero(), OpType::Read);
-        trace_builder.disabled_op(F::zero(), OpType::Write);
+        trace_builder.disabled_op(F::one(), OpType::Read);
+        trace_builder.disabled_op(F::one(), OpType::Read);
+        trace_builder.disabled_op(F::one(), OpType::Write);
         let mut mem_oc_aux_iter = trace_builder.take_accesses_buffer().into_iter();
 
-        let blank_cell = Operand::new(F::zero(), F::zero(), F::zero());
+        let blank_cell = Operand::new(F::one(), F::zero(), F::zero());
 
-        generate_cols(
+        generate_row(
             FieldArithmeticOperation {
                 opcode: Opcode::FADD,
                 from_state: Default::default(),
@@ -95,19 +95,15 @@ impl<F: PrimeField32> MachineChip<F> for FieldArithmeticChip<F> {
         let mut trace: Vec<F> = self
             .operations
             .iter()
-            .flat_map(|&op| generate_cols(op, true, &mut accesses_iter).flatten())
+            .flat_map(|&op| generate_row(op, true, &mut accesses_iter).flatten())
             .collect();
 
-        let empty_row: Vec<F> = self.make_blank_cols().flatten();
         let curr_height = self.operations.len();
         let correct_height = curr_height.next_power_of_two();
-        trace.extend(
-            empty_row
-                .iter()
-                .cloned()
-                .cycle()
-                .take((correct_height - curr_height) * self.trace_width()),
-        );
+        // WARNING: do not clone below because timestamps are different per row
+        let dummy_rows_flattened =
+            (0..correct_height - curr_height).flat_map(|_| self.make_blank_row().flatten());
+        trace.extend(dummy_rows_flattened);
 
         RowMajorMatrix::new(trace, self.trace_width())
     }

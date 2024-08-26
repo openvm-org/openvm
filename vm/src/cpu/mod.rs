@@ -6,7 +6,7 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        bridge::ExecutionBus,
+        bus::ExecutionBus,
         instructions::{Opcode, Opcode::*},
     },
     memory::manager::MemoryManager,

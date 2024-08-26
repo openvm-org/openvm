@@ -17,7 +17,7 @@ use crate::{cpu::RANGE_CHECKER_BUS, memory::offline_checker::bus::MemoryBus};
 pub struct MemoryAuditAir<const WORD_SIZE: usize> {
     pub memory_bus: MemoryBus,
     pub addr_lt_air: IsLessThanTupleAir,
-    for_testing: bool,
+    pub for_testing: bool,
 }
 
 impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
@@ -59,6 +59,7 @@ impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB> for MemoryAuditAir<
             AuditCols::<WORD_SIZE, AB::Var>::from_slice(&row, self)
         });
 
+        // TODO[jpw]: ideally make this work for testing too
         if !self.for_testing {
             // Ensuring all is_extra rows are at the bottom
             builder

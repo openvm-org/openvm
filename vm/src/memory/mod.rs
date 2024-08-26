@@ -1,5 +1,6 @@
 use std::array;
 
+use afs_derive::AlignedBorrow;
 use p3_field::{AbstractField, Field};
 
 pub mod audit;
@@ -19,7 +20,8 @@ pub enum OpType {
 
 /// The full pointer to a location in memory consists of an address space and a pointer within
 /// the address space.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, AlignedBorrow)]
+#[repr(C)]
 pub struct MemoryAddress<S, T> {
     pub address_space: S,
     pub pointer: T,

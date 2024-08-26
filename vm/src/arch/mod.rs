@@ -1,4 +1,4 @@
-pub mod bridge;
+pub mod bus;
 pub mod chips;
 pub mod columns;
 pub mod instructions;

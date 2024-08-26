@@ -42,25 +42,6 @@ impl<const WORD_SIZE: usize, F: PrimeField32> MemoryAuditChip<WORD_SIZE, F> {
         }
     }
 
-    pub fn new_for_testing(
-        memory_bus: MemoryBus,
-        addr_space_max_bits: usize,
-        pointer_max_bits: usize,
-        decomp: usize,
-    ) -> Self {
-        Self {
-            air: MemoryAuditAir::new(
-                memory_bus,
-                addr_space_max_bits,
-                pointer_max_bits,
-                decomp,
-                true,
-            ),
-            initial_memory: BTreeMap::new(),
-            range_checker: Arc::new(RangeCheckerGateChip::new(0, 1 << decomp)),
-        }
-    }
-
     pub fn touch_address(&mut self, addr_space: F, pointer: F, old_data: [F; WORD_SIZE]) {
         self.initial_memory
             .entry((addr_space, pointer))

@@ -4,7 +4,7 @@ use p3_field::{Field, PrimeField32};
 
 use crate::{
     arch::{
-        bridge::ExecutionBus,
+        bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
         instructions::{Opcode, FIELD_ARITHMETIC_INSTRUCTIONS},
@@ -33,7 +33,7 @@ pub struct FieldArithmeticOperation<F> {
     pub result: Operand<F>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct FieldArithmeticChip<F: PrimeField32> {
     pub air: FieldArithmeticAir,
     pub operations: Vec<FieldArithmeticOperation<F>>,

@@ -50,11 +50,11 @@ impl MemoryBus {
 
 #[derive(Clone, Copy, Debug)]
 pub struct MemoryBusInteraction<T, const BLOCK_SIZE: usize> {
-    bus_index: usize,
-    op_type: OpType,
-    address: MemoryAddress<T, T>,
-    data: [T; BLOCK_SIZE],
-    timestamp: T,
+    pub bus_index: usize,
+    pub op_type: OpType,
+    pub address: MemoryAddress<T, T>,
+    pub data: [T; BLOCK_SIZE],
+    pub timestamp: T,
 }
 
 impl<const BLOCK_SIZE: usize, T: AbstractField> MemoryBusInteraction<T, BLOCK_SIZE> {

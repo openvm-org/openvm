@@ -1,3 +1,5 @@
+use std::iter;
+
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
@@ -25,14 +27,14 @@ impl ExecutionBus {
         &self,
         builder: &mut AB,
         multiplicity: impl Into<AB::Expr>,
-        prev_state: ExecutionState<AB::Expr>,
-        next_state: ExecutionState<AB::Expr>,
+        prev_state: ExecutionState<impl Into<AB::Expr>>,
+        next_state: ExecutionState<impl Into<AB::Expr>>,
         instruction: InstructionCols<AB::Expr>,
     ) {
-        let mut fields = vec![];
-        fields.extend(prev_state.flatten());
-        fields.extend(next_state.flatten());
-        fields.extend(instruction.flatten());
+        let fields = iter::empty()
+            .chain(prev_state.flatten().map(Into::into))
+            .chain(next_state.flatten().map(Into::into))
+            .chain(instruction.flatten());
         builder.push_receive(self.0, fields, multiplicity);
     }
     /*pub fn initial_final<AB: InteractionBuilder>(

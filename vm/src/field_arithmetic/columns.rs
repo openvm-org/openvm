@@ -1,3 +1,5 @@
+use std::mem::size_of;
+
 use afs_derive::AlignedBorrow;
 use derive_new::new;
 
@@ -11,7 +13,7 @@ use crate::{
 ///
 /// Five IO columns for rcv_count, opcode, x, y, result.
 /// Eight aux columns for interpreting opcode, evaluating indicators, inverse, and explicit computations.
-#[derive(Clone, Debug, AlignedBorrow)]
+#[derive(Clone, Debug)]
 #[repr(C)]
 pub struct FieldArithmeticCols<T> {
     pub io: FieldArithmeticIoCols<T>,
@@ -28,7 +30,7 @@ pub struct FieldArithmeticIoCols<T> {
     pub result: Operand<T>,
 }
 
-#[derive(Clone, Debug, AlignedBorrow)]
+#[derive(Clone, Debug)]
 #[repr(C)]
 pub struct FieldArithmeticAuxCols<T> {
     pub is_valid: T,
@@ -64,7 +66,7 @@ impl<T: Clone> FieldArithmeticCols<T> {
 
 impl<T: Clone> FieldArithmeticIoCols<T> {
     pub fn get_width() -> usize {
-        1 + ExecutionState::<T>::get_width() + (3 * Operand::<T>::get_width())
+        size_of::<FieldArithmeticIoCols<u8>>()
     }
 
     #[allow(clippy::should_implement_trait)]
@@ -80,7 +82,7 @@ impl<T: Clone> FieldArithmeticIoCols<T> {
 
     pub fn flatten(&self) -> Vec<T> {
         let mut result = vec![self.opcode.clone()];
-        result.extend(self.from_state.flatten());
+        result.extend(self.from_state.clone().flatten());
         result.extend(self.operand1.flatten());
         result.extend(self.operand2.flatten());
         result.extend(self.result.flatten());
