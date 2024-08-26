@@ -68,9 +68,15 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
     ) -> ExecutionState<usize> {
         self.process(instruction.clone(), from_state);
 
+        let timestamp_delta = if instruction.opcode == Opcode::BBE4INV {
+            2 * EXTENSION_DEGREE
+        } else {
+            3 * EXTENSION_DEGREE
+        };
+
         ExecutionState {
             pc: from_state.pc + 1,
-            timestamp: from_state.timestamp + FieldExtensionArithmeticAir::TIMESTAMP_DELTA,
+            timestamp: from_state.timestamp + timestamp_delta,
         }
     }
 }

@@ -75,7 +75,6 @@ impl<V, const WORD_SIZE: usize> MemoryBridge<V, WORD_SIZE> {
     /// Prepare a logical memory write operation.
     #[must_use]
     pub fn write<T>(
-        // , const WORD_SIZE: usize>(
         &mut self,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
         data: [impl Into<T>; WORD_SIZE],

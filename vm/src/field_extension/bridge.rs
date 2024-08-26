@@ -135,11 +135,13 @@ impl FieldExtensionArithmeticAir {
             write_aux_cols,
         );
 
+        let timestamp_delta = (AB::Expr::two() + valid_y_read) * AB::Expr::from_canonical_usize(EXTENSION_DEGREE);
+
         self.execution_bus.execute_increment_pc(
             builder,
             aux.is_valid,
             ExecutionState::new(pc, timestamp),
-            AB::F::from_canonical_usize(Self::TIMESTAMP_DELTA),
+            timestamp_delta,
             InstructionCols::new(opcode, [op_a, op_b, op_c, d, e]),
         );
     }
