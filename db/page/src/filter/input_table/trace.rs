@@ -105,11 +105,11 @@ impl FilterInputTableChip {
         Val<SC>: AbstractField + PrimeField64,
     {
         // satisfies_pred, send_row, is_less_than_tuple_aux_cols
-        row.push(is_less_than_tuple_trace[2 * self.air.idx_len]);
-        let send_row = is_less_than_tuple_trace[2 * self.air.idx_len] * is_alloc;
+        row.push(is_less_than_tuple_trace[2 * self.air.num_filter_cols()]);
+        let send_row = is_less_than_tuple_trace[2 * self.air.num_filter_cols()] * is_alloc;
         row.push(send_row);
 
-        row.extend_from_slice(&is_less_than_tuple_trace[2 * self.air.idx_len + 1..]);
+        row.extend_from_slice(&is_less_than_tuple_trace[2 * self.air.num_filter_cols() + 1..]);
     }
 
     /// Helper function to handle trace generation with an IsEqualVecAir
@@ -122,10 +122,10 @@ impl FilterInputTableChip {
         Val<SC>: AbstractField + PrimeField64,
     {
         // satisfies_pred, send_row, is_equal_vec_aux_cols
-        row.push(is_equal_vec_trace[2 * self.air.idx_len]);
-        let send_row = is_equal_vec_trace[2 * self.air.idx_len] * is_alloc;
+        row.push(is_equal_vec_trace[2 * self.air.num_filter_cols()]);
+        let send_row = is_equal_vec_trace[2 * self.air.num_filter_cols()] * is_alloc;
         row.push(send_row);
 
-        row.extend_from_slice(&is_equal_vec_trace[2 * self.air.idx_len + 1..]);
+        row.extend_from_slice(&is_equal_vec_trace[2 * self.air.num_filter_cols() + 1..]);
     }
 }

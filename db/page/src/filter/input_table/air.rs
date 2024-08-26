@@ -92,7 +92,7 @@ impl FilterInputTableAir {
             | FilterAirVariants::Gt(strict_comp_air)
             | FilterAirVariants::Gte(strict_comp_air) => {
                 // x, satisfies_pred, send_row, is_less_than_tuple_aux_cols
-                self.idx_len
+                self.num_filter_cols()
                     + 1
                     + 1
                     + IsLessThanTupleAuxCols::<usize>::width(
@@ -101,7 +101,10 @@ impl FilterInputTableAir {
             }
             FilterAirVariants::Eq(_) => {
                 // x, satisfies_pred, send_row, is_equal_vec_aux_cols
-                self.idx_len + 1 + 1 + IsEqualVecAuxCols::<usize>::width(self.idx_len)
+                self.num_filter_cols()
+                    + 1
+                    + 1
+                    + IsEqualVecAuxCols::<usize>::width(self.num_filter_cols())
             }
         }
     }
