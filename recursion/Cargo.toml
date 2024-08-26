@@ -27,10 +27,12 @@ itertools.workspace = true
 
 rand = "0.8.5"
 serde = { workspace = true }
-snark-verifier-sdk = { workspace = true }
+snark-verifier-sdk = { workspace = true, features = ["loader_evm", "revm"] }
 zkhash = { workspace = true }
 ff = { version = "0.13", features = ["derive", "derive_bits"] }
 serde_json = "1.0.121"
+tracing = { workspace = true }
+lazy_static = { workspace = true }
 
 [dev-dependencies]
 afs-primitives = { path = "../primitives" }

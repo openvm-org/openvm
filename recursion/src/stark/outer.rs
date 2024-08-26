@@ -16,7 +16,7 @@ use crate::{
 pub fn build_circuit_verify_operations(
     advice: MultiStarkVerificationAdvice<OuterConfig>,
     fri_params: &FriParameters,
-    input: VerifierInput<BabyBearPoseidon2OuterConfig>,
+    input: &VerifierInput<BabyBearPoseidon2OuterConfig>,
 ) -> TracedVec<DslIr<OuterConfig>> {
     let mut builder = Builder::<OuterConfig>::default();
     builder.flags.static_only = true;

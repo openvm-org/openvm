@@ -1,4 +1,3 @@
-use afs_compiler::ir::Witness;
 use afs_stark_backend::{prover::trace::TraceCommitmentBuilder, verifier::MultiTraceStarkVerifier};
 use afs_test_utils::{
     config::{
@@ -9,30 +8,30 @@ use afs_test_utils::{
 };
 use p3_matrix::Matrix;
 use p3_util::log2_strict_usize;
+use snark_verifier_sdk::evm::evm_verify;
 
 use crate::{
     config::outer::new_from_outer_multi_vk,
-    halo2::Halo2Prover,
-    stark::outer::build_circuit_verify_operations,
-    tests::{fibonacci_stark_for_test, interaction_stark_for_test, StarkForTest},
+    halo2::verifier::{
+        gen_wrapper_circuit_evm_proof, gen_wrapper_circuit_evm_verifier,
+        generate_halo2_verifier_circuit,
+    },
+    tests::{fibonacci_stark_for_test, StarkForTest},
     types::VerifierInput,
-    witness::Witnessable,
 };
 
 #[test]
-fn test_fibonacci() {
+fn fibonacci_evm_verifier_e2e() {
     setup_tracing();
     run_recursive_test(&fibonacci_stark_for_test::<BabyBearPoseidon2OuterConfig>())
 }
 
-#[test]
-fn test_interactions() {
-    // Please make sure kzg trusted params are downloaded before running the test.
-    setup_tracing();
-    run_recursive_test(&interaction_stark_for_test::<BabyBearPoseidon2OuterConfig>())
-}
-
 fn run_recursive_test(stark_for_test: &StarkForTest<BabyBearPoseidon2OuterConfig>) {
+    #[cfg(debug_assertions)]
+    {
+        panic!("This test is only for release mode");
+    }
+
     let StarkForTest {
         any_raps,
         traces,
@@ -85,8 +84,28 @@ fn run_recursive_test(stark_for_test: &StarkForTest<BabyBearPoseidon2OuterConfig
         public_values: pvs.clone(),
     };
 
-    let mut witness = Witness::default();
-    input.write(&mut witness);
-    let operations = build_circuit_verify_operations(advice, &engine.fri_params, &input);
-    Halo2Prover::mock(20, operations, witness);
+    let info_span = tracing::info_span!("keygen halo2 verifier circuit").entered();
+    let stark_verifier_circuit =
+        generate_halo2_verifier_circuit(21, advice, &engine.fri_params, &input);
+    info_span.exit();
+
+    let info_span = tracing::info_span!("prove halo2 verifier circuit").entered();
+    let static_verifier_snark = stark_verifier_circuit.prove(input);
+    info_span.exit();
+
+    let info_span = tracing::info_span!("keygen halo2 wrapper circuit").entered();
+    let keygen_circuit =
+        stark_verifier_circuit.keygen_wrapper_circuit(23, static_verifier_snark.clone());
+    info_span.exit();
+
+    let info_span = tracing::info_span!("prove halo2 wrapper circuit").entered();
+    let (wrapper_evm_proof, pvs) =
+        gen_wrapper_circuit_evm_proof(&keygen_circuit, static_verifier_snark);
+    info_span.exit();
+
+    let info_span = tracing::info_span!("generate halo2 wrapper circuit evm verifier").entered();
+    let evm_verifier = gen_wrapper_circuit_evm_verifier(&keygen_circuit);
+    info_span.exit();
+
+    evm_verify(evm_verifier, pvs, wrapper_evm_proof);
 }
