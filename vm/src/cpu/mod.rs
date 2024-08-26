@@ -35,7 +35,6 @@ pub const CPU_MAX_ACCESSES_PER_CYCLE: usize = CPU_MAX_READS_PER_CYCLE + CPU_MAX_
 const WORD_SIZE: usize = 1;
 
 fn timestamp_delta(opcode: Opcode) -> usize {
-    // If an instruction performs a writes, it must change timestamp by WRITE_DELTA.
     match opcode {
         LOADW | STOREW => 3,
         LOADW2 | STOREW2 => 4,

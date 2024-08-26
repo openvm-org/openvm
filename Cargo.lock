@@ -102,6 +102,7 @@ dependencies = [
  "p3-dft",
  "p3-field",
  "p3-merkle-tree",
+ "p3-symmetric",
  "rand",
  "serde",
  "serde_json",

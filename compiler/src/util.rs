@@ -9,14 +9,12 @@ use afs_test_utils::{
     engine::StarkEngine,
 };
 use p3_baby_bear::BabyBear;
-use p3_field::{ExtensionField, PrimeField, PrimeField32, TwoAdicField};
+use p3_field::{PrimeField, PrimeField32};
 use stark_vm::{
     cpu::trace::Instruction,
     program::Program,
     vm::{config::VmConfig, VirtualMachine},
 };
-
-use crate::{asm::AsmBuilder, conversion::CompilerOptions};
 
 pub fn execute_program_with_config<const WORD_SIZE: usize>(
     config: VmConfig,
@@ -112,19 +110,6 @@ pub fn display_program_with_pc<F: PrimeField32>(program: &[Instruction<F>]) {
             pc, opcode, op_a, op_b, op_c, d, e, op_f, op_g, debug
         );
     }
-}
-pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + TwoAdicField>(
-    builder: AsmBuilder<BabyBear, EF>,
-    input_stream: Vec<Vec<BabyBear>>,
-) {
-    let program = builder.compile_isa_with_options(CompilerOptions {
-        compile_prints: false,
-        enable_cycle_tracker: false,
-        field_arithmetic_enabled: true,
-        field_extension_enabled: true,
-        field_less_than_enabled: false,
-    });
-    execute_and_prove_program(program, input_stream)
 }
 
 pub fn execute_and_prove_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBear>>) {
