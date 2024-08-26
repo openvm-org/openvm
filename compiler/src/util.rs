@@ -55,12 +55,12 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
     vm.execute().unwrap();
 }
 
-pub fn execute_program_with_public_values<const WORD_SIZE: usize>(
+pub fn execute_program_with_public_values(
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
     public_values: &[(usize, BabyBear)],
 ) {
-    let mut vm = VirtualMachine::new(
+    let vm = VirtualMachine::new(
         VmConfig {
             num_public_values: 4,
             ..Default::default()
@@ -69,8 +69,7 @@ pub fn execute_program_with_public_values<const WORD_SIZE: usize>(
         input_stream,
     );
     for &(index, value) in public_values {
-        todo!();
-        // vm.segments[0].public_values[index] = Some(value);
+        vm.segments[0].cpu_chip.borrow_mut().public_values[index] = Some(value);
     }
     vm.execute().unwrap()
 }
