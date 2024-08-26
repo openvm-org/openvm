@@ -26,7 +26,7 @@ where
     pub fn eval_bigint(&mut self, bigint: BigUint) -> BigIntVar<C> {
         let mut array = self.dyn_array(NUM_ELEMS);
 
-        // FIXME: bigint_to_elems needs to be imported but should not depend on afs-primitives
+        // FIXME: bigint_to_elems needs modular_multiplication module in vm.
         // let elems: Vec<C::N> = bigint_to_elems(bigint, REPR_BITS, NUM_ELEMS);
         // for (i, &elem) in elems.iter().enumerate() {
         //     self.set(&mut array, i, elem);
