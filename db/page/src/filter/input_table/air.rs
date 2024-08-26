@@ -87,29 +87,19 @@ impl FilterInputTableAir {
 
     pub fn aux_width(&self) -> usize {
         match &self.variant_air {
-            FilterAirVariants::Lt(StrictCompAir {
-                is_less_than_tuple_air,
-                ..
-            })
-            | FilterAirVariants::Lte(StrictCompAir {
-                is_less_than_tuple_air,
-                ..
-            })
-            | FilterAirVariants::Gt(StrictCompAir {
-                is_less_than_tuple_air,
-                ..
-            })
-            | FilterAirVariants::Gte(StrictCompAir {
-                is_less_than_tuple_air,
-                ..
-            }) => {
+            FilterAirVariants::Lt(strict_comp_air)
+            | FilterAirVariants::Lte(strict_comp_air)
+            | FilterAirVariants::Gt(strict_comp_air)
+            | FilterAirVariants::Gte(strict_comp_air) => {
                 // x, satisfies_pred, send_row, is_less_than_tuple_aux_cols
                 self.idx_len
                     + 1
                     + 1
-                    + IsLessThanTupleAuxCols::<usize>::width(is_less_than_tuple_air)
+                    + IsLessThanTupleAuxCols::<usize>::width(
+                        &strict_comp_air.is_less_than_tuple_air,
+                    )
             }
-            FilterAirVariants::Eq(EqCompAir { .. }) => {
+            FilterAirVariants::Eq(_) => {
                 // x, satisfies_pred, send_row, is_equal_vec_aux_cols
                 self.idx_len + 1 + 1 + IsEqualVecAuxCols::<usize>::width(self.idx_len)
             }
@@ -287,7 +277,6 @@ where
             | FilterAirVariants::Gt(strict_comp_air)
             | FilterAirVariants::Gte(strict_comp_air) => {
                 let is_less_than_tuple_cols = is_less_than_tuple_cols.unwrap();
-
                 SubAir::eval(
                     &strict_comp_air.is_less_than_tuple_air,
                     builder,
@@ -297,7 +286,6 @@ where
             }
             FilterAirVariants::Eq(eq_comp_air) => {
                 let is_equal_vec_cols = is_equal_vec_cols.unwrap();
-
                 SubAir::eval(
                     &eq_comp_air.is_equal_vec_air,
                     builder,

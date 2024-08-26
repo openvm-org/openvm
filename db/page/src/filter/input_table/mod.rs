@@ -8,6 +8,7 @@ use crate::common::comp::Comp;
 pub mod air;
 pub mod bridge;
 pub mod columns;
+pub mod trace;
 
 pub struct FilterInputTableChip {
     pub air: FilterInputTableAir,
