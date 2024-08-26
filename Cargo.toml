@@ -11,7 +11,7 @@ members = [
     "derive",
     "logical-interface",
     "poseidon2-air",
-    # "recursion",
+    "recursion",
     "stark-backend",
     "test-utils",
     "vm",

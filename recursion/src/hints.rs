@@ -409,6 +409,7 @@ mod test {
     use afs_compiler::{
         asm::AsmBuilder,
         ir::{Ext, Felt, Var},
+        prelude::*,
         util::execute_program,
     };
     use afs_derive::{DslVariable, Hintable};

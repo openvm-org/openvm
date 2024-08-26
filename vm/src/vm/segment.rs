@@ -12,8 +12,8 @@ use p3_field::PrimeField32;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use poseidon2_air::poseidon2::Poseidon2Config;
+
 use super::{VirtualMachineState, VmConfig, VmMetrics};
-use crate::field_extension::chip::FieldExtensionArithmeticChip;
 use crate::{
     arch::{
         bus::ExecutionBus,
@@ -22,11 +22,12 @@ use crate::{
     },
     cpu::{trace::ExecutionError, CpuChip, RANGE_CHECKER_BUS},
     field_arithmetic::FieldArithmeticChip,
+    field_extension::chip::FieldExtensionArithmeticChip,
     memory::{manager::MemoryManager, offline_checker::bus::MemoryBus},
+    poseidon2::Poseidon2Chip,
     program::{Program, ProgramChip},
     vm::cycle_tracker::CycleTracker,
 };
-use crate::poseidon2::Poseidon2Chip;
 
 pub struct ExecutionSegment<F: PrimeField32> {
     pub config: VmConfig,

@@ -9,7 +9,6 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
-use crate::field_extension::chip::FieldExtensionArithmeticChip;
 use crate::{
     arch::columns::ExecutionState,
     cpu::{trace::Instruction, CpuChip},
@@ -19,7 +18,7 @@ use crate::{
     // poseidon2::Poseidon2Chip,
     program::ProgramChip,
 };
-use crate::poseidon2::Poseidon2Chip;
+use crate::{field_extension::chip::FieldExtensionArithmeticChip, poseidon2::Poseidon2Chip};
 
 #[enum_dispatch]
 pub trait InstructionExecutor<F> {

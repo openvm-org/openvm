@@ -16,10 +16,12 @@ use rand::{Rng, RngCore};
 
 use super::{Poseidon2Chip, CHUNK, WIDTH};
 use crate::{
-    arch::{instructions::Opcode::*, testing::MachineChipTestBuilder},
+    arch::{
+        instructions::Opcode::*,
+        testing::{MachineChipTestBuilder, MachineChipTester},
+    },
     cpu::trace::Instruction,
 };
-use crate::arch::testing::MachineChipTester;
 
 const ADDRESS_BITS: usize = 29;
 
@@ -57,9 +59,7 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
         .collect()
 }
 
-fn tester_with_random_poseidon2_ops(
-    num_ops: usize,
-) -> MachineChipTester {
+fn tester_with_random_poseidon2_ops(num_ops: usize) -> MachineChipTester {
     let elem_range = || 1..=100;
     let address_range = || 0usize..1 << ADDRESS_BITS;
 
@@ -137,9 +137,7 @@ fn poseidon2_chip_random_50_test_new() {
     let fri_params = fri_params_with_80_bits_of_security()[1];
 
     let tester = tester_with_random_poseidon2_ops(50);
-    tester
-        .test(|d| engine_from_perm(random_perm(), d, fri_params))
-        .expect("Verification failed");
+    tester.test(get_engine).expect("Verification failed");
 }
 
 /// Negative test, pranking internal poseidon2 trace values.
@@ -167,7 +165,7 @@ fn poseidon2_negative_test() {
         let rand = BabyBear::from_canonical_u32(rng.gen_range(1..=1 << 27));
         trace.row_mut(height)[width] += rand;
 
-        let test_result = tester.test(|d| engine_from_perm(random_perm(), d, fri_params));
+        let test_result = tester.test(get_engine);
 
         assert_eq!(
             test_result,

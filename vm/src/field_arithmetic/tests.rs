@@ -15,7 +15,7 @@ use crate::{
     arch::{
         chips::MachineChip,
         instructions::{Opcode::*, FIELD_ARITHMETIC_INSTRUCTIONS},
-        testing::{MachineChipTestBuilder, MachineChipTester, MemoryTester},
+        testing::MachineChipTestBuilder,
     },
     cpu::trace::Instruction,
     field_arithmetic::columns::{FieldArithmeticCols, FieldArithmeticIoCols},
