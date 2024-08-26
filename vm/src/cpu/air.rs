@@ -118,7 +118,7 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
         let mut is_cpu_opcode = AB::Expr::zero();
         let mut match_opcode = AB::Expr::zero();
         for (&opcode, &flag) in operation_flags.iter() {
-            is_cpu_opcode = is_cpu_opcode + flag;
+            is_cpu_opcode += flag.into();
             match_opcode += flag * AB::F::from_canonical_usize(opcode as usize);
         }
         builder.assert_bool(is_cpu_opcode.clone());
@@ -352,6 +352,8 @@ impl<AB: AirBuilderWithPublicValues + InteractionBuilder> Air<AB> for CpuAir {
 
         when_publish.assert_eq(read2.addr_space, e);
         when_publish.assert_eq(read2.pointer, b);
+
+        // FIXME[zach]: Properly constrain op.enabled based on opcode.
 
         let mut op_timestamp: AB::Expr = io.timestamp.into();
         let mut memory_bridge = MemoryBridge::new(self.memory_offline_checker, mem_oc_aux_cols);
