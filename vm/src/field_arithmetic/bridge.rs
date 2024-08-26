@@ -51,7 +51,7 @@ impl FieldArithmeticAir {
                 timestamp.clone(),
             )
             .eval(builder, is_valid);
-        timestamp += AB::Expr::one();
+        timestamp += is_valid.into();
         memory_bridge
             .read(
                 operand2.memory_address(),
@@ -59,7 +59,7 @@ impl FieldArithmeticAir {
                 timestamp.clone(),
             )
             .eval(builder, is_valid);
-        timestamp += AB::Expr::one();
+        timestamp += is_valid.into();
         memory_bridge
             .write(result.memory_address(), [result.value], timestamp)
             .eval(builder, is_valid);

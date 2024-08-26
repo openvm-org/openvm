@@ -27,7 +27,7 @@ use crate::{
 #[test]
 fn field_arithmetic_air_test() {
     setup_tracing();
-    let num_ops = 1;
+    let num_ops = 3; // non-power-of-2 to also test padding
     let elem_range = || 1..=100;
     let z_address_space_range = || 1usize..=2;
     let xy_address_space_range = || 0usize..=2;

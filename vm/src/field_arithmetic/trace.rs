@@ -11,7 +11,7 @@ use super::{
     FieldArithmeticChip, FieldArithmeticOperation, Operand,
 };
 use crate::{
-    arch::{chips::MachineChip, instructions::Opcode},
+    arch::{chips::MachineChip, columns::ExecutionState, instructions::Opcode},
     memory::{
         manager::trace_builder::MemoryTraceBuilder,
         offline_checker::columns::MemoryOfflineCheckerAuxCols, OpType,
@@ -65,6 +65,12 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
     fn make_blank_row(&self) -> FieldArithmeticCols<F> {
         let mut trace_builder = MemoryTraceBuilder::new(self.memory_manager.clone());
 
+        let timestamp = self
+            .memory_manager
+            .borrow_mut()
+            .timestamp()
+            .as_canonical_u32() as usize;
+
         trace_builder.disabled_op(F::one(), OpType::Read);
         trace_builder.disabled_op(F::one(), OpType::Read);
         trace_builder.disabled_op(F::one(), OpType::Write);
@@ -75,7 +81,7 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
         generate_row(
             FieldArithmeticOperation {
                 opcode: Opcode::FADD,
-                from_state: Default::default(),
+                from_state: ExecutionState { pc: 0, timestamp },
                 operand1: blank_cell,
                 operand2: blank_cell,
                 result: blank_cell,
