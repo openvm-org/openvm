@@ -234,6 +234,9 @@ impl<T: Clone> CpuCols<T> {
 }
 
 impl<F: PrimeField32> CpuCols<F> {
+    /// This function mutates internal state of some chips. It should be called once for every
+    /// NOP row---results should not be cloned.
+    /// TODO[zach]: Make this less surprising, probably by not doing less-than checks on dummy rows.
     pub fn nop_row(chip: &CpuChip<F>, pc: F, timestamp: F) -> Self {
         Self {
             io: CpuIoCols::<F>::nop_row(pc, timestamp),

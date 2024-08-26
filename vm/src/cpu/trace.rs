@@ -28,7 +28,6 @@ use crate::{
         },
     },
     cpu::{
-        trace::ExecutionError::{PublicValueIndexOutOfBounds, PublicValueNotEqual},
         WORD_SIZE,
     },
     memory::{
@@ -391,7 +390,7 @@ impl<F: PrimeField32> CpuChip<F> {
                         let public_value_index = read!(d, a).as_canonical_u64() as usize;
                         let value = read!(e, b);
                         if public_value_index >= num_public_values {
-                            return Err(PublicValueIndexOutOfBounds(
+                            return Err(ExecutionError::PublicValueIndexOutOfBounds(
                                 pc_usize,
                                 num_public_values,
                                 public_value_index,
@@ -404,7 +403,7 @@ impl<F: PrimeField32> CpuChip<F> {
                             None => public_values[public_value_index] = Some(value),
                             Some(exising_value) => {
                                 if value != exising_value {
-                                    return Err(PublicValueNotEqual(
+                                    return Err(ExecutionError::PublicValueNotEqual(
                                         pc_usize,
                                         public_value_index,
                                         exising_value.as_canonical_u64() as usize,
@@ -559,11 +558,18 @@ impl<F: PrimeField32> CpuChip<F> {
 
     /// Pad with NOP rows.
     pub fn pad_rows(&mut self) {
+        let curr_height = self.rows.len();
+        let correct_height = self.rows.len().next_power_of_two();
+        for _ in 0..correct_height - curr_height {
+            self.rows.push(self.make_blank_row().flatten());
+        }
+    }
+
+    /// This must be called for each blank row and results should never be cloned; see [CpuCols::nop_row].
+    fn make_blank_row(&self) -> CpuCols<F> {
         let pc = F::from_canonical_usize(self.state.pc);
         let timestamp = F::from_canonical_usize(self.state.timestamp);
-        let nop_row = CpuCols::nop_row(self, pc, timestamp).flatten();
-        let correct_len = (self.rows.len() + 1).next_power_of_two();
-        self.rows.resize(correct_len, nop_row);
+        CpuCols::nop_row(self, pc, timestamp)
     }
 }
 
