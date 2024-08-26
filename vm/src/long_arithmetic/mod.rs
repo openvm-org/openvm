@@ -1,6 +1,7 @@
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use air::LongArithmeticAir;
 use itertools::Itertools;
+
 use crate::arch::instructions::Opcode;
 
 #[cfg(test)]

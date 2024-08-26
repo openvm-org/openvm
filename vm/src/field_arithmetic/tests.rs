@@ -19,7 +19,6 @@ use crate::{
     },
     cpu::trace::Instruction,
     field_arithmetic::columns::{FieldArithmeticCols, FieldArithmeticIoCols},
-    memory::offline_checker::bus::MemoryBus,
 };
 
 #[test]

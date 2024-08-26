@@ -6,8 +6,9 @@ use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use rand::{rngs::StdRng, Rng};
-use crate::arch::instructions::Opcode;
+
 use super::{trace::create_row_from_values, LongArithmeticChip};
+use crate::arch::instructions::Opcode;
 
 type F = BabyBear;
 

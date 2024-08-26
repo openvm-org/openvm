@@ -5,8 +5,9 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
-use crate::arch::instructions::Opcode;
+
 use super::{columns::LongArithmeticCols, num_limbs};
+use crate::arch::instructions::Opcode;
 
 /// AIR for the long addition circuit. ARG_SIZE is the size of the arguments in bits, and LIMB_SIZE is the size of the limbs in bits.
 #[derive(Copy, Clone, Debug)]

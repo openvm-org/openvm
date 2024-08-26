@@ -1,10 +1,11 @@
 use p3_field::{Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
-use crate::arch::instructions::Opcode;
+
 use super::{
     columns::{LongArithmeticAuxCols, LongArithmeticCols, LongArithmeticIoCols},
     num_limbs, LongArithmeticChip, LongArithmeticOperation,
 };
+use crate::arch::instructions::Opcode;
 
 pub fn create_row_from_values<const ARG_SIZE: usize, const LIMB_SIZE: usize, T: Field>(
     opcode: Opcode,

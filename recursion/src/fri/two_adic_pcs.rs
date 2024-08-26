@@ -278,6 +278,7 @@ pub mod tests {
     use afs_compiler::{
         asm::AsmBuilder,
         ir::{Array, RVar, DIGEST_SIZE},
+        util::execute_program,
     };
     use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
     use itertools::Itertools;
@@ -300,9 +301,6 @@ pub mod tests {
         hints::{Hintable, InnerPcsProof, InnerVal},
         utils::const_fri_config,
     };
-
-    #[allow(dead_code)]
-    const WORD_SIZE: usize = 1;
 
     #[allow(dead_code)]
     pub fn build_test_fri_with_cols_and_log2_rows(
@@ -392,9 +390,8 @@ pub mod tests {
     }
 
     #[test]
-    #[ignore = "test takes too long"]
     fn test_two_adic_fri_pcs_single_batch() {
-        let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 16);
+        let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 10);
         execute_program(program, witness);
     }
 }
