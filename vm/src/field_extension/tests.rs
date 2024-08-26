@@ -47,11 +47,9 @@ fn field_extension_air_test() {
 
         assert!(address1.abs_diff(address2) >= 4);
 
-        for i in 0..4 {
-            tester.write_cell(as_d, address1 + i, operand1[i]);
-            if opcode != Opcode::BBE4INV {
-                tester.write_cell(as_e, address2 + i, operand2[i]);
-            }
+        tester.write(as_d, address1, operand1);
+        if opcode != Opcode::BBE4INV {
+            tester.write(as_e, address2, operand2);
         }
 
         let result = FieldExtensionArithmetic::solve(opcode, operand1, operand2).unwrap();
@@ -60,9 +58,7 @@ fn field_extension_air_test() {
             &mut chip,
             Instruction::from_usize(opcode, [result_address, address1, address2, as_d, as_e]),
         );
-        for i in 0..4 {
-            assert_eq!(result[i], tester.read_cell(as_d, result_address + i));
-        }
+        assert_eq!(result, tester.read(as_d, result_address));
     }
 
     // positive test
