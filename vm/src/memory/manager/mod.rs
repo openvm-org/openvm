@@ -99,8 +99,8 @@ impl<F: PrimeField32> MemoryManager<F> {
     pub fn make_offline_checker(&self) -> MemoryOfflineChecker {
         MemoryOfflineChecker::new(
             self.memory_bus,
-            self.mem_config.decomp,
             self.mem_config.clk_max_bits,
+            self.mem_config.decomp,
         )
     }
 

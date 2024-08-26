@@ -183,7 +183,7 @@ pub struct MemoryOfflineChecker {
 }
 
 impl MemoryOfflineChecker {
-    pub fn new(memory_bus: MemoryBus, decomp: usize, clk_max_bits: usize) -> Self {
+    pub fn new(memory_bus: MemoryBus, clk_max_bits: usize, decomp: usize) -> Self {
         Self {
             memory_bus,
             timestamp_lt_air: IsLessThanAir::new(RANGE_CHECKER_BUS, clk_max_bits, decomp),
