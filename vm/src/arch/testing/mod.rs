@@ -78,6 +78,7 @@ impl<F: PrimeField32> MachineChipTestBuilder<F> {
         self.memory.bus
     }
 
+    // TODO[zach]: rename to memory_manager
     pub fn get_memory_manager(&self) -> Rc<RefCell<MemoryManager<F>>> {
         self.memory.manager.clone()
     }

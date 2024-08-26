@@ -9,7 +9,7 @@ use p3_field::{AbstractField, Field, PrimeField32};
 
 use crate::{
     arch::{
-        bridge::ExecutionBus,
+        bus::ExecutionBus,
         chips::InstructionExecutor,
         columns::ExecutionState,
         instructions::{Opcode, FIELD_EXTENSION_INSTRUCTIONS},

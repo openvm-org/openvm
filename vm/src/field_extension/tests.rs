@@ -12,11 +12,12 @@ use rand::Rng;
 use super::columns::FieldExtensionArithmeticIoCols;
 use crate::{
     arch::{
-        bridge::ExecutionBus,
+        bus::ExecutionBus,
         chips::MachineChip,
         instructions::{Opcode, FIELD_EXTENSION_INSTRUCTIONS},
-        testing::{ExecutionTester, MachineChipTester, MemoryTester},
+        testing::{ExecutionTester, MachineChipTestBuilder, MachineChipTester, MemoryTester},
     },
+    cpu::trace::Instruction,
     field_extension::chip::{
         FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticRecord,
     },
@@ -88,61 +89,54 @@ fn generate_records(n: usize) -> Vec<FieldExtensionArithmeticRecord<BabyBear>> {
 
 #[test]
 fn field_extension_air_test() {
-    let num_ops = 13;
+    type F = BabyBear;
+
     let elem_range = || 1..=100;
     let address_space_range = || 1usize..=2;
     let address_range = || 0usize..1 << 29;
 
-    let execution_bus = ExecutionBus(0);
-    let memory_bus = MemoryBus(1);
-    let mut execution_tester = ExecutionTester::new(execution_bus, create_seeded_rng());
-    let mut memory_tester = MemoryTester::new(memory_bus);
-    let mut field_extension_chip =
-        FieldExtensionArithmeticChip::new(execution_bus, memory_tester.get_memory_manager());
+    let mut tester = MachineChipTestBuilder::default();
+    let mut chip =
+        FieldExtensionArithmeticChip::new(tester.execution_bus(), tester.get_memory_manager());
 
     let mut rng = create_seeded_rng();
-    let num_ops: usize = 1 << 5;
+    let num_ops: usize = 1 << 3;
 
-    let mut chip = FieldExtensionArithmeticChip::<BabyBear>::new(
-        execution_bus,
-        memory_tester.get_memory_manager(),
-    );
-    chip.records = generate_records(num_ops);
+    for _ in 0..num_ops {
+        let opcode = FIELD_EXTENSION_INSTRUCTIONS[rng.gen_range(0..4)];
 
-    // for _ in 0..num_ops {
-    //     let opcode = FIELD_EXTENSION_INSTRUCTIONS[rng.gen_range(0..4)];
+        let as_d = rng.gen_range(address_space_range());
+        let as_e = rng.gen_range(address_space_range());
+        let address1 = rng.gen_range(address_range());
+        let address2 = rng.gen_range(address_range());
+        let result_address = rng.gen_range(address_range());
 
-    //     let as_d = rng.gen_range(address_space_range());
-    //     let as_e = rng.gen_range(address_space_range());
-    //     let address1 = rng.gen_range(address_range());
-    //     let address2 = rng.gen_range(address_range());
-    //     let result_address = rng.gen_range(address_range());
-    //     assert!(address1.abs_diff(address2) >= 4);
-    //     println!(
-    //         "d = {}, e = {}, result_addr = {}, addr1 = {}, addr2 = {}",
-    //         as_d, as_e, result_address, address1, address2
-    //     );
+        let operand1 = array::from_fn(|_| rng.gen::<F>());
+        let operand2 = array::from_fn(|_| rng.gen::<F>());
 
-    //     let result = FieldExtensionArithmetic::solve(opcode, operand1, operand2).unwrap();
+        assert!(address1.abs_diff(address2) >= 4);
 
-    //     memory_tester.install(as_d, address1, operand1);
-    //     memory_tester.install(as_e, address2, operand2);
-    //     execution_tester.execute(
-    //         &mut memory_tester,
-    //         &mut field_extension_chip,
-    //         Instruction::from_usize(opcode, [result_address, address1, address2, as_d, as_e]),
-    //     );
-    //     memory_tester.expect(as_d, result_address, result);
-    //     memory_tester.check();
-    // }
+        for i in 0..4 {
+            tester.write_cell(as_d, address1 + i, operand1[i]);
+            if opcode != Opcode::BBE4INV {
+                tester.write_cell(as_e, address2 + i, operand2[i]);
+            }
+        }
+
+        let result = FieldExtensionArithmetic::solve(opcode, operand1, operand2).unwrap();
+
+        tester.execute(
+            &mut chip,
+            Instruction::from_usize(opcode, [result_address, address1, address2, as_d, as_e]),
+        );
+        for i in 0..4 {
+            assert_eq!(result[i], tester.read_cell(as_d, result_address + i));
+        }
+    }
 
     // positive test
-    MachineChipTester::default()
-        .add(&mut execution_tester)
-        .add(&mut memory_tester)
-        .add(&mut field_extension_chip)
-        .simple_test()
-        .expect("Verification failed");
+    let mut tester = tester.build().load(chip).finalize();
+    tester.simple_test().expect("Verification failed");
 
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
@@ -150,24 +144,20 @@ fn field_extension_air_test() {
 
     // negative test pranking each IO value
     for height in 0..num_ops {
-        let mut extension_trace = field_extension_chip.generate_trace();
+        // TODO: better way to modify existing traces in tester
+        let mut extension_trace = &mut tester.traces[1];
+        let original_trace = extension_trace.clone();
         for width in 0..FieldExtensionArithmeticIoCols::<BabyBear>::get_width() {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
             extension_trace.row_mut(height)[width] = prank_value;
         }
 
-        let test_result = MachineChipTester::default()
-            .add(&mut execution_tester)
-            .add(&mut memory_tester)
-            .add_with_custom_trace(&mut field_extension_chip, extension_trace)
-            .simple_test();
-
-        // Run a test after pranking each row
         assert_eq!(
-            test_result,
+            tester.simple_test(),
             Err(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
-        )
+        );
+        tester.traces[1] = original_trace;
     }
 }
 

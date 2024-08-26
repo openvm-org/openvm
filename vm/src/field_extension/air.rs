@@ -11,7 +11,7 @@ use p3_matrix::Matrix;
 use super::{chip::EXTENSION_DEGREE, columns::FieldExtensionArithmeticCols};
 use crate::{
     arch::{
-        bridge::ExecutionBus,
+        bus::ExecutionBus,
         instructions::Opcode::{BBE4INV, BBE4MUL, FE4ADD, FE4SUB},
     },
     field_extension::chip::FieldExtensionArithmetic,
