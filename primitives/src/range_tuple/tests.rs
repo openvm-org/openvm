@@ -22,8 +22,7 @@ fn test_range_tuple_chip() {
         .map(|_| 1 << rng.gen_range(1..5))
         .collect::<Vec<u32>>();
 
-    // const LIST_LEN: usize = 64;
-    const LIST_LEN: usize = 1;
+    const LIST_LEN: usize = 64;
 
     let range_checker = RangeTupleCheckerChip::new(bus_index, sizes.clone());
     let mut gen_list = || {
@@ -33,8 +32,7 @@ fn test_range_tuple_chip() {
             .collect::<Vec<_>>()
     };
     // Generating random lists
-    // let num_lists = 10;
-    let num_lists = 1;
+    let num_lists = 10;
     let lists_vals = (0..num_lists)
         .map(|_| (0..LIST_LEN).map(|_| gen_list()).collect::<Vec<_>>())
         .collect::<Vec<_>>();
