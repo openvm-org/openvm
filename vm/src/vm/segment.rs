@@ -11,7 +11,7 @@ use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
-
+use poseidon2_air::poseidon2::Poseidon2Config;
 use super::{VirtualMachineState, VmConfig, VmMetrics};
 use crate::field_extension::chip::FieldExtensionArithmeticChip;
 use crate::{
@@ -22,12 +22,11 @@ use crate::{
     },
     cpu::{trace::ExecutionError, CpuChip, RANGE_CHECKER_BUS},
     field_arithmetic::FieldArithmeticChip,
-    // field_extension::FieldExtensionArithmeticChip,
     memory::{manager::MemoryManager, offline_checker::bus::MemoryBus},
-    // poseidon2::Poseidon2Chip,
     program::{Program, ProgramChip},
     vm::cycle_tracker::CycleTracker,
 };
+use crate::poseidon2::Poseidon2Chip;
 
 pub struct ExecutionSegment<F: PrimeField32> {
     pub config: VmConfig,
@@ -120,20 +119,20 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             assign!(FIELD_EXTENSION_INSTRUCTIONS, field_extension_chip);
             chips.push(MachineChipVariant::FieldExtension(field_extension_chip))
         }
-        // if config.perm_poseidon2_enabled || config.compress_poseidon2_enabled {
-        //     let poseidon2_chip = Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
-        //         Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
-        //         execution_bus,
-        //         memory_manager.clone(),
-        //     )));
-        //     if config.perm_poseidon2_enabled {
-        //         assign!([Opcode::PERM_POS2], poseidon2_chip);
-        //     }
-        //     if config.compress_poseidon2_enabled {
-        //         assign!([Opcode::COMP_POS2], poseidon2_chip);
-        //     }
-        //     chips.push(MachineChipVariant::Poseidon2(poseidon2_chip.clone()));
-        // }
+        if config.perm_poseidon2_enabled || config.compress_poseidon2_enabled {
+            let poseidon2_chip = Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
+                Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
+                execution_bus,
+                memory_manager.clone(),
+            )));
+            if config.perm_poseidon2_enabled {
+                assign!([Opcode::PERM_POS2], poseidon2_chip);
+            }
+            if config.compress_poseidon2_enabled {
+                assign!([Opcode::COMP_POS2], poseidon2_chip);
+            }
+            chips.push(MachineChipVariant::Poseidon2(poseidon2_chip.clone()));
+        }
         // let airs = vec![
         //     (
         //         ModularArithmeticChip::new(ModularArithmeticVmAir {

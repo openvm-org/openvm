@@ -19,6 +19,7 @@ use crate::{
     // poseidon2::Poseidon2Chip,
     program::ProgramChip,
 };
+use crate::poseidon2::Poseidon2Chip;
 
 #[enum_dispatch]
 pub trait InstructionExecutor<F> {
@@ -85,7 +86,7 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
 pub enum InstructionExecutorVariant<F: PrimeField32> {
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
-    // Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
+    Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
 }
 
 #[derive(Debug)]
@@ -96,7 +97,7 @@ pub enum MachineChipVariant<F: PrimeField32> {
     Memory(Rc<RefCell<MemoryManager<F>>>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
-    // Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
+    Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
     RangeChecker(Arc<RangeCheckerGateChip>),
 }
 
