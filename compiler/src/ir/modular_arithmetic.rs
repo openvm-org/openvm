@@ -1,6 +1,7 @@
 use num_bigint_dig::BigUint;
 use p3_field::{AbstractField, PrimeField64};
 use stark_vm::modular_multiplication::bigint_to_elems;
+
 use crate::ir::{Array, Builder, Config, DslIr, IfBuilder, Var};
 
 pub type BigIntVar<C> = Array<C, Var<<C as Config>::N>>;

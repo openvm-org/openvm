@@ -401,7 +401,6 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         engine: &impl StarkEngine<SC>,
         vk: MultiStarkVerifyingKey<SC>,
         proof: Proof<SC>,
-        ops_sender: &dyn AnyRap<SC>,
     ) -> Result<(), VerificationError>
     where
         Val<SC>: PrimeField,
@@ -411,19 +410,7 @@ impl<SC: StarkGenericConfig> PageController<SC> {
         let pis = vec![vec![]; vk.per_air.len()];
 
         let mut challenger = engine.new_challenger();
-        verifier.verify(
-            &mut challenger,
-            &vk,
-            vec![
-                &self.init_chip,
-                &self.final_chip,
-                &self.offline_checker,
-                &self.range_checker.air,
-                ops_sender,
-            ],
-            &proof,
-            &pis,
-        )
+        verifier.verify(&mut challenger, &vk, &proof, &pis)
     }
 
     fn gen_page_trace(&self, page: &Page) -> DenseMatrix<Val<SC>>

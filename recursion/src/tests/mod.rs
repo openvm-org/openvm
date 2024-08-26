@@ -24,8 +24,8 @@ use p3_util::log2_strict_usize;
 
 use crate::{
     hints::Hintable,
-    stark::{DynRapForRecursion, VerifierProgram},
-    types::{new_from_inner_multi_vk, InnerConfig, VerifierInput},
+    stark::VerifierProgram,
+    types::{new_from_inner_multi_vk, VerifierInput},
 };
 
 #[test]
@@ -44,7 +44,7 @@ fn test_fibonacci() {
         trace.get(n - 1, 1),
     ]];
 
-    run_recursive_test(vec![&fib_air], vec![&fib_air], vec![trace], pvs)
+    run_recursive_test(vec![&fib_air], vec![trace], pvs)
 }
 
 #[test]
@@ -100,22 +100,15 @@ fn test_interactions() {
         &receiver_air,
         &sum_chip.range_checker.air,
     ];
-    let rec_raps: Vec<&dyn DynRapForRecursion<InnerConfig>> = vec![
-        &sum_chip.air,
-        &sender_air,
-        &receiver_air,
-        &sum_chip.range_checker.air,
-    ];
     let traces = vec![sum_trace, sender_trace, receiver_trace, range_checker_trace];
     let pvs = vec![vec![], vec![], vec![], vec![]];
 
-    run_recursive_test(any_raps, rec_raps, traces, pvs)
+    run_recursive_test(any_raps, traces, pvs)
 }
 
 fn run_recursive_test(
     // TODO: find way to not duplicate parameters
     any_raps: Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
-    rec_raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
     traces: Vec<RowMajorMatrix<BabyBear>>,
     pvs: Vec<Vec<BabyBear>>,
 ) {
@@ -153,13 +146,13 @@ fn run_recursive_test(
     // Make sure proof verifies outside eDSL...
     let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier
-        .verify(&mut engine.new_challenger(), &vk, any_raps, &proof, &pvs)
+        .verify(&mut engine.new_challenger(), &vk, &proof, &pvs)
         .expect("afs proof should verify");
 
     // Build verification program in eDSL.
     let advice = new_from_inner_multi_vk(&vk);
 
-    let program = VerifierProgram::build(rec_raps, advice, &engine.fri_params);
+    let program = VerifierProgram::build(advice, &engine.fri_params);
 
     let input = VerifierInput {
         proof,

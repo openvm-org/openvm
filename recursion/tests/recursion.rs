@@ -1,11 +1,20 @@
+use std::ops::Deref;
+
 use afs_compiler::{asm::AsmBuilder, ir::Felt};
+use afs_test_utils::config::{
+    fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},
+    setup_tracing,
+};
+use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use stark_vm::program::Program;
+use stark_vm::{
+    program::Program,
+    vm::{config::VmConfig, segment::SegmentResult, VirtualMachine},
+};
 
 mod common;
 
-#[allow(dead_code)]
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, 4>;
@@ -32,44 +41,40 @@ fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
     builder.compile_isa()
 }
 
-// FIXME: waiting on removal of RecursiveVerifierConstraint
-// #[test]
-// fn test_fibonacci_program_verify() {
-//     setup_tracing();
-//
-//     let fib_program = fibonacci_program(0, 1, 32);
-//
-//     let vm_config = VmConfig {
-//         max_segment_len: (1 << 25) - 100,
-//         num_public_values: 3,
-//         ..Default::default()
-//     };
-//
-//     let dummy_vm = VirtualMachine::<1, 1, _>::new(vm_config, fib_program.clone(), vec![]);
-//     let rec_raps = get_rec_raps(&dummy_vm.segments[0]);
-//
-//     let mut vm = VirtualMachine::new(vm_config, fib_program, vec![]);
-//     vm.segments[0].public_values = vec![
-//         Some(BabyBear::zero()),
-//         Some(BabyBear::one()),
-//         Some(BabyBear::from_canonical_u32(1346269)),
-//     ];
-//
-//     let ExecutionAndTraceGenerationResult {
-//         nonempty_traces: traces,
-//         nonempty_chips: chips,
-//         nonempty_pis: pvs,
-//         ..
-//     } = vm.execute_and_generate_traces().unwrap();
-//
-//     let chips = chips.iter().map(|x| x.deref()).collect();
-//     let rec_raps = rec_raps.iter().map(|x| x.deref()).collect();
-//
-//     // blowup factor = 3
-//     let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
-//         fri_params_fast_testing()[1]
-//     } else {
-//         fri_params_with_80_bits_of_security()[1]
-//     };
-//     common::run_recursive_test(chips, rec_raps, traces, pvs, fri_params);
-// }
+#[test]
+fn test_fibonacci_program_verify() {
+    setup_tracing();
+
+    let fib_program = fibonacci_program(0, 1, 32);
+
+    let vm_config = VmConfig {
+        num_public_values: 3,
+        ..Default::default()
+    };
+
+    let vm = VirtualMachine::new(vm_config, fib_program, vec![]);
+    vm.segments[0].cpu_chip.borrow_mut().public_values = vec![
+        Some(BabyBear::zero()),
+        Some(BabyBear::one()),
+        Some(BabyBear::from_canonical_u32(1346269)),
+    ];
+
+    let result = vm.execute_and_generate().unwrap();
+    assert_eq!(result.segment_results.len(), 1, "unexpected continuation");
+    let SegmentResult {
+        airs,
+        traces,
+        public_values,
+        ..
+    } = result.segment_results.into_iter().next().unwrap();
+
+    let airs = airs.iter().map(Box::deref).collect_vec();
+
+    // blowup factor = 3
+    let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
+        fri_params_fast_testing()[1]
+    } else {
+        fri_params_with_80_bits_of_security()[1]
+    };
+    common::run_recursive_test(airs, traces, public_values, fri_params);
+}

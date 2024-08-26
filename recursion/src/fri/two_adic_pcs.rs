@@ -278,7 +278,6 @@ pub mod tests {
     use afs_compiler::{
         asm::AsmBuilder,
         ir::{Array, RVar, DIGEST_SIZE},
-        util::execute_program,
     };
     use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
     use itertools::Itertools;
@@ -392,6 +391,6 @@ pub mod tests {
     #[test]
     fn test_two_adic_fri_pcs_single_batch() {
         let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 10);
-        execute_program(program, witness);
+        afs_compiler::util::execute_program(program, witness);
     }
 }

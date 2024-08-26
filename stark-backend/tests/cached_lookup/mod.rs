@@ -100,13 +100,7 @@ pub fn prove_and_verify_indexless_lookups(
     // Start from clean challenger
     let mut challenger = config::baby_bear_poseidon2::Challenger::new(perm.clone());
     let verifier = MultiTraceStarkVerifier::new(prover.config);
-    verifier.verify(
-        &mut challenger,
-        &vk,
-        vec![&receiver_air, &sender_air],
-        &proof,
-        &pis,
-    )
+    verifier.verify(&mut challenger, &vk, &proof, &pis)
 }
 
 /// tests for cached_lookup

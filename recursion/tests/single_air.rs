@@ -26,11 +26,5 @@ fn test_fibonacci() {
         trace.get(n - 1, 1),
     ]];
 
-    common::run_recursive_test(
-        vec![&fib_air],
-        vec![&fib_air],
-        vec![trace],
-        pvs,
-        default_fri_params(),
-    )
+    common::run_recursive_test(vec![&fib_air], vec![trace], pvs, default_fri_params())
 }
