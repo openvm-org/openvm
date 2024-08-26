@@ -1,19 +1,12 @@
-use std::ops::Deref;
-
 use afs_compiler::{
     asm::AsmBuilder,
     ir::{Felt, Var},
 };
-use afs_recursion::{
-    stark::sort_chips,
-    types::InnerConfig,
-};
 use color_eyre::eyre::Result;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use stark_vm::vm::{config::VmConfig, VirtualMachine};
-
-use super::benchmark_helpers::run_recursive_test_benchmark;
+use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use stark_vm::vm::{config::VmConfig, VirtualMachine, VirtualMachineResult};
 
 pub fn benchmark_fib_verifier_program(n: usize) -> Result<()> {
     println!(
@@ -50,17 +43,20 @@ pub fn benchmark_fib_verifier_program(n: usize) -> Result<()> {
 
     let vm = VirtualMachine::new(vm_config, fib_program.clone(), vec![]);
 
-    let result = vm.execute_and_generate()?;
+    let result: VirtualMachineResult<BabyBearPoseidon2Config> = vm.execute_and_generate()?;
 
     assert_eq!(result.segment_results.len(), 1, "continuations not yet supported");
 
-    let (chips, rec_raps, traces, pvs) = sort_chips(chips, rec_raps, traces, pvs);
+    // FIXME[zach]: restore after removal of RecursiveVerifierConstraintFolder
+    panic!("fib_verifier_program disabled");
 
-    run_recursive_test_benchmark(
-        chips,
-        rec_raps,
-        traces,
-        pvs,
-        "VM Verifier of VM Fibonacci Program",
-    )
+    // let (chips, rec_raps, traces, pvs) = sort_chips(chips, rec_raps, traces, pvs);
+    //
+    // run_recursive_test_benchmark(
+    //     chips,
+    //     rec_raps,
+    //     traces,
+    //     pvs,
+    //     "VM Verifier of VM Fibonacci Program",
+    // )
 }

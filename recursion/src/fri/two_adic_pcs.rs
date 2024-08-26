@@ -278,7 +278,6 @@ pub mod tests {
     use afs_compiler::{
         asm::AsmBuilder,
         ir::{Array, RVar, DIGEST_SIZE},
-        util::execute_program,
     };
     use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
     use itertools::Itertools;

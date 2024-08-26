@@ -4,7 +4,7 @@ members = [
     "bin/afs",
     "bin/afs-1b",
     "bin/olap",
-    # "benchmark",
+    "benchmark",
     "db/page",
     "primitives",
     "compiler",
