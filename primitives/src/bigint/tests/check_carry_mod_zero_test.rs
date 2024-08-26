@@ -115,7 +115,7 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
         let (x, y, range_checker) = input;
         let quotient =
             (x.clone() * x.clone() + y.clone()) / self.test_carry_sub_air.modulus.clone();
-        let quotient_f: Vec<F> = big_uint_to_limbs(quotient, self.limb_bits)
+        let quotient_f: Vec<F> = big_uint_to_limbs(quotient.clone(), self.limb_bits)
             .iter()
             .map(|&x| F::from_canonical_usize(x))
             .collect();
@@ -130,7 +130,15 @@ impl<F: PrimeField64> LocalTraceInstructions<F> for TestCarryAir<N> {
         };
         let x_overflow = OverflowInt::<isize>::from_big_uint(x, self.limb_bits, Some(N));
         let y_overflow = OverflowInt::<isize>::from_big_uint(y, self.limb_bits, Some(2 * N));
-        let expr = x_overflow.clone() * x_overflow.clone() + y_overflow.clone();
+        let q_overflow = OverflowInt::<isize>::from_big_uint(quotient, self.limb_bits, None);
+        assert_eq!(q_overflow.limbs.len(), 1);
+        let p_overflow = OverflowInt::<isize>::from_big_uint(
+            self.test_carry_sub_air.modulus.clone(),
+            self.limb_bits,
+            Some(N * 2),
+        );
+        let expr =
+            x_overflow.clone() * x_overflow.clone() + y_overflow.clone() - p_overflow * q_overflow;
         let carries = expr.calculate_carries(self.limb_bits);
         let mut carries_f = vec![F::zero(); carries.len()];
         let carry_min_abs = self
