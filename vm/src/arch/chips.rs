@@ -9,6 +9,7 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
 
+use crate::field_extension::chip::FieldExtensionArithmeticChip;
 use crate::{
     arch::columns::ExecutionState,
     cpu::{trace::Instruction, CpuChip},
@@ -83,7 +84,7 @@ impl<F, C: MachineChip<F>> MachineChip<F> for Rc<RefCell<C>> {
 #[enum_dispatch(InstructionExecutor<F>)]
 pub enum InstructionExecutorVariant<F: PrimeField32> {
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
-    // FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
+    FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
     // Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
 }
 
@@ -94,7 +95,7 @@ pub enum MachineChipVariant<F: PrimeField32> {
     Program(Rc<RefCell<ProgramChip<F>>>),
     Memory(Rc<RefCell<MemoryManager<F>>>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
-    // FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
+    FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
     // Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),
     RangeChecker(Arc<RangeCheckerGateChip>),
 }

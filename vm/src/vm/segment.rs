@@ -13,6 +13,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 use super::{VirtualMachineState, VmConfig, VmMetrics};
+use crate::field_extension::chip::FieldExtensionArithmeticChip;
 use crate::{
     arch::{
         bus::ExecutionBus,
@@ -100,9 +101,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let mut chips = vec![
             MachineChipVariant::Cpu(cpu_chip.clone()),
             MachineChipVariant::Program(program_chip.clone()),
-            // TODO: Memory needs to appear before RangeChecker because Memory trace generation affects RangeChecker's trace. Should change so that RangeChecker is called only during execute.
             MachineChipVariant::Memory(memory_manager.clone()),
-            MachineChipVariant::RangeChecker(range_checker.clone()),
         ];
 
         if config.field_arithmetic_enabled {
@@ -113,14 +112,14 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             assign!(FIELD_ARITHMETIC_INSTRUCTIONS, field_arithmetic_chip);
             chips.push(MachineChipVariant::FieldArithmetic(field_arithmetic_chip));
         }
-        // if config.field_extension_enabled {
-        //     let field_extension_chip = Rc::new(RefCell::new(FieldExtensionArithmeticChip::new(
-        //         execution_bus,
-        //         memory_manager.clone(),
-        //     )));
-        //     assign!(FIELD_EXTENSION_INSTRUCTIONS, field_extension_chip);
-        //     chips.push(MachineChipVariant::FieldExtension(field_extension_chip))
-        // }
+        if config.field_extension_enabled {
+            let field_extension_chip = Rc::new(RefCell::new(FieldExtensionArithmeticChip::new(
+                execution_bus,
+                memory_manager.clone(),
+            )));
+            assign!(FIELD_EXTENSION_INSTRUCTIONS, field_extension_chip);
+            chips.push(MachineChipVariant::FieldExtension(field_extension_chip))
+        }
         // if config.perm_poseidon2_enabled || config.compress_poseidon2_enabled {
         //     let poseidon2_chip = Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
         //         Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
@@ -153,6 +152,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         // for (air, modulus) in airs {
         //     modular_arithmetic_chips.insert(modulus.clone(), air);
         // }
+
+        // TODO: Range checker should be last since other chips' trace generation (including dummy rows)
+        // affect RangeChecker's trace.
+        chips.push(MachineChipVariant::RangeChecker(range_checker.clone()));
 
         Self {
             config,

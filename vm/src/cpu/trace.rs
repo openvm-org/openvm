@@ -27,9 +27,7 @@ use crate::{
             CORE_INSTRUCTIONS,
         },
     },
-    cpu::{
-        WORD_SIZE,
-    },
+    cpu::WORD_SIZE,
     memory::{
         compose, decompose,
         manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
@@ -214,7 +212,10 @@ impl<F: PrimeField32> CpuChip<F> {
         let mut timestamp: usize = vm.cpu_chip.borrow().state.timestamp;
         let mut pc = F::from_canonical_usize(vm.cpu_chip.borrow().state.pc);
 
-        debug_assert_eq!(timestamp, vm.memory_manager.borrow().timestamp().as_canonical_u32() as usize);
+        debug_assert_eq!(
+            timestamp,
+            vm.memory_manager.borrow().timestamp().as_canonical_u32() as usize
+        );
 
         let mut hint_stream = vm.hint_stream.clone();
         let mut cycle_tracker = std::mem::take(&mut vm.cycle_tracker);
