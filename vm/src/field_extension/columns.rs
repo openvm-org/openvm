@@ -25,6 +25,11 @@ pub struct FieldExtensionArithmeticIoCols<T> {
     pub opcode: T,
     pub pc: T,
     pub timestamp: T,
+    pub op_a: T,
+    pub op_b: T,
+    pub op_c: T,
+    pub d: T,
+    pub e: T,
     pub x: [T; EXTENSION_DEGREE],
     pub y: [T; EXTENSION_DEGREE],
     pub z: [T; EXTENSION_DEGREE],
@@ -36,11 +41,6 @@ pub struct FieldExtensionArithmeticAuxCols<T> {
     pub is_valid: T,
     // Whether the y read occurs: is_valid * (1 - is_inv)
     pub valid_y_read: T,
-    pub op_a: T,
-    pub op_b: T,
-    pub op_c: T,
-    pub d: T,
-    pub e: T,
     // whether the opcode is FE4ADD
     pub is_add: T,
     // whether the opcode is FE4SUB
@@ -73,6 +73,11 @@ impl<T> FieldExtensionArithmeticCols<T> {
                 opcode: next(),
                 pc: next(),
                 timestamp: next(),
+                op_a: next(),
+                op_b: next(),
+                op_c: next(),
+                d: next(),
+                e: next(),
                 x: array::from_fn(|_| next()),
                 y: array::from_fn(|_| next()),
                 z: array::from_fn(|_| next()),
@@ -80,11 +85,6 @@ impl<T> FieldExtensionArithmeticCols<T> {
             aux: FieldExtensionArithmeticAuxCols {
                 is_valid: next(),
                 valid_y_read: next(),
-                op_a: next(),
-                op_b: next(),
-                op_c: next(),
-                d: next(),
-                e: next(),
                 is_add: next(),
                 is_sub: next(),
                 is_mul: next(),
@@ -116,13 +116,22 @@ impl<T: Clone> FieldExtensionArithmeticCols<T> {
 
 impl<T> FieldExtensionArithmeticIoCols<T> {
     pub fn get_width() -> usize {
-        (3 * EXTENSION_DEGREE) + 3
+        (3 * EXTENSION_DEGREE) + 8
     }
 }
 
 impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
     fn flatten(&self) -> Vec<T> {
-        let mut result = vec![self.opcode.clone(), self.pc.clone(), self.timestamp.clone()];
+        let mut result = vec![
+            self.opcode.clone(),
+            self.pc.clone(),
+            self.timestamp.clone(),
+            self.op_a.clone(),
+            self.op_b.clone(),
+            self.op_c.clone(),
+            self.d.clone(),
+            self.e.clone(),
+        ];
         result.extend_from_slice(&self.x);
         result.extend_from_slice(&self.y);
         result.extend_from_slice(&self.z);
@@ -132,7 +141,7 @@ impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
 
 impl<T> FieldExtensionArithmeticAuxCols<T> {
     pub fn get_width(oc: &MemoryOfflineChecker) -> usize {
-        EXTENSION_DEGREE + 11 + 12 * MemoryOfflineCheckerAuxCols::<1, T>::width(oc)
+        EXTENSION_DEGREE + 6 + 12 * MemoryOfflineCheckerAuxCols::<1, T>::width(oc)
     }
 }
 
@@ -141,11 +150,6 @@ impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
         let mut result = vec![
             self.is_valid.clone(),
             self.valid_y_read.clone(),
-            self.op_a.clone(),
-            self.op_b.clone(),
-            self.op_c.clone(),
-            self.d.clone(),
-            self.e.clone(),
             self.is_add.clone(),
             self.is_sub.clone(),
             self.is_mul.clone(),

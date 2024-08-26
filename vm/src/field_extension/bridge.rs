@@ -73,6 +73,11 @@ impl FieldExtensionArithmeticAir {
             pc,
             opcode,
             timestamp,
+            op_a,
+            op_b,
+            op_c,
+            d,
+            e,
             x,
             y,
             z,
@@ -85,11 +90,6 @@ impl FieldExtensionArithmeticAir {
             write_aux_cols,
             is_valid,
             valid_y_read,
-            op_a,
-            op_b,
-            op_c,
-            d,
-            e,
             ..
         } = aux;
 

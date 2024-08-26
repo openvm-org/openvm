@@ -2,10 +2,10 @@ use afs_compiler::{
     asm::AsmBuilder,
     ir::{Felt, Var},
 };
+use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use color_eyre::eyre::Result;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use afs_test_utils::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use stark_vm::vm::{config::VmConfig, VirtualMachine, VirtualMachineResult};
 
 pub fn benchmark_fib_verifier_program(n: usize) -> Result<()> {
@@ -45,7 +45,11 @@ pub fn benchmark_fib_verifier_program(n: usize) -> Result<()> {
 
     let result: VirtualMachineResult<BabyBearPoseidon2Config> = vm.execute_and_generate()?;
 
-    assert_eq!(result.segment_results.len(), 1, "continuations not yet supported");
+    assert_eq!(
+        result.segment_results.len(),
+        1,
+        "continuations not yet supported"
+    );
 
     // FIXME[zach]: restore after removal of RecursiveVerifierConstraintFolder
     panic!("fib_verifier_program disabled");

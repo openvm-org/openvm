@@ -1,5 +1,5 @@
-use std::{collections::HashMap, fs::File, io::Write as _};
-use std::ops::Deref;
+use std::{collections::HashMap, fs::File, io::Write as _, ops::Deref};
+
 use afs_recursion::{
     hints::Hintable,
     stark::{DynRapForRecursion, VerifierProgram},
@@ -23,10 +23,10 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_strict_usize;
 use stark_vm::{
     program::Program,
-    vm::{config::VmConfig, VirtualMachine},
+    vm::{config::VmConfig, segment::SegmentResult, VirtualMachine},
 };
 use tracing::info_span;
-use stark_vm::vm::segment::SegmentResult;
+
 use crate::{
     config::benchmark_data::{BenchmarkSetup, BACKEND_TIMING_FILTERS, BACKEND_TIMING_HEADERS},
     utils::tracing::{clear_tracing_log, extract_timing_data_from_log, setup_benchmark_tracing},
@@ -168,7 +168,8 @@ pub fn vm_benchmark_execute_and_prove(
     };
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
 
-    let airs: Vec<&dyn AnyRap<BabyBearPoseidon2Config>> = airs.iter().map(|air| air.deref()).collect();
+    let airs: Vec<&dyn AnyRap<BabyBearPoseidon2Config>> =
+        airs.iter().map(|air| air.deref()).collect();
 
     let keygen_span = info_span!("Benchmark keygen").entered();
     let mut keygen_builder = engine.keygen_builder();
