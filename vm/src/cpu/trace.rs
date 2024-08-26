@@ -214,6 +214,8 @@ impl<F: PrimeField32> CpuChip<F> {
         let mut timestamp: usize = vm.cpu_chip.borrow().state.timestamp;
         let mut pc = F::from_canonical_usize(vm.cpu_chip.borrow().state.pc);
 
+        debug_assert_eq!(timestamp, vm.memory_manager.borrow().timestamp().as_canonical_u32() as usize);
+
         let mut hint_stream = vm.hint_stream.clone();
         let mut cycle_tracker = std::mem::take(&mut vm.cycle_tracker);
         let mut is_done = false;

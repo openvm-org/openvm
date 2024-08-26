@@ -35,17 +35,16 @@ const WORD_SIZE: usize = 1;
 
 fn timestamp_delta(opcode: Opcode) -> usize {
     // If an instruction performs a writes, it must change timestamp by WRITE_DELTA.
-    const WRITE_DELTA: usize = CPU_MAX_READS_PER_CYCLE + 1;
     match opcode {
-        LOADW | STOREW | LOADW2 | STOREW2 => WRITE_DELTA,
-        // JAL only does WRITE, but it is done as timestamp + 2
-        JAL => WRITE_DELTA,
+        LOADW | STOREW => 3,
+        LOADW2 | STOREW2 => 4,
+        JAL => 1,
         BEQ | BNE => 2,
         TERMINATE => 0,
         PUBLISH => 2,
         FAIL => 0,
         PRINTF => 1,
-        SHINTW => WRITE_DELTA,
+        SHINTW => 3,
         HINT_INPUT | HINT_BITS => 0,
         CT_START | CT_END => 0,
         NOP => 0,
@@ -58,12 +57,23 @@ pub struct CpuOptions {
     pub num_public_values: usize,
 }
 
-#[derive(Default, Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct CpuState {
     pub clock_cycle: usize,
     pub timestamp: usize,
     pub pc: usize,
     pub is_done: bool,
+}
+
+impl Default for CpuState {
+    fn default() -> Self {
+        CpuState {
+            clock_cycle: 0,
+            timestamp: 1,
+            pc: 0,
+            is_done: false,
+        }
+    }
 }
 
 /// Chip for the CPU. Carries all state and owns execution.
