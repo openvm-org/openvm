@@ -44,7 +44,7 @@ fn timestamp_delta(opcode: Opcode) -> usize {
         PUBLISH => 2,
         FAIL => 0,
         PRINTF => 1,
-        SHINTW => 3,
+        SHINTW => 2,
         HINT_INPUT | HINT_BITS => 0,
         CT_START | CT_END => 0,
         NOP => 0,

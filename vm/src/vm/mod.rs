@@ -28,6 +28,7 @@ pub struct VirtualMachine<F: PrimeField32> {
 
 /// Struct that holds the current state of the VM. For now, includes memory, input stream, and hint stream.
 /// Hint stream cannot be added to during execution, but must be copied because it is popped from.
+#[derive(Clone, Debug)]
 pub struct VirtualMachineState<F: PrimeField32> {
     /// Current state of the CPU
     pub state: CpuState,
