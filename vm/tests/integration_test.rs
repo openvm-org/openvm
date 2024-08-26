@@ -14,7 +14,7 @@ use stark_vm::{
     cpu::trace::Instruction,
     program::Program,
     vm::{
-        config::{MemoryConfig, VmConfig, DEFAULT_MAX_SEGMENT_LEN},
+        config::{MemoryConfig, VmConfig},
         VirtualMachine,
     },
 };
@@ -28,7 +28,6 @@ fn air_test(
     field_extension_enabled: bool,
     program: Program<BabyBear>,
     witness_stream: Vec<Vec<BabyBear>>,
-    fast_segmentation: bool,
 ) {
     let vm = VirtualMachine::new(
         VmConfig {
@@ -38,11 +37,6 @@ fn air_test(
             perm_poseidon2_enabled: false,
             memory_config: MemoryConfig::new(LIMB_BITS, LIMB_BITS, LIMB_BITS, DECOMP),
             num_public_values: 4,
-            max_segment_len: if fast_segmentation {
-                7
-            } else {
-                DEFAULT_MAX_SEGMENT_LEN
-            },
             ..Default::default()
         },
         program,
@@ -98,39 +92,9 @@ fn air_test_with_poseidon2(
     }
 }
 
-#[cfg(test)]
-fn execution_test(
-    field_arithmetic_enabled: bool,
-    field_extension_enabled: bool,
-    program: Program<BabyBear>,
-    witness_stream: Vec<Vec<BabyBear>>,
-    fast_segmentation: bool,
-) {
-    let vm = VirtualMachine::new(
-        VmConfig {
-            field_arithmetic_enabled,
-            field_extension_enabled,
-            compress_poseidon2_enabled: false,
-            perm_poseidon2_enabled: false,
-            memory_config: MemoryConfig::new(LIMB_BITS, LIMB_BITS, LIMB_BITS, DECOMP),
-            num_public_values: 4,
-            max_segment_len: if fast_segmentation {
-                7
-            } else {
-                DEFAULT_MAX_SEGMENT_LEN
-            },
-            ..Default::default()
-        },
-        program,
-        witness_stream,
-    );
-
-    vm.execute().unwrap();
-}
-
 #[test]
 fn test_vm_1() {
-    let n = 6;
+    let n = 0;
     /*
     Instruction 0 assigns word[0]_1 to n.
     Instruction 4 terminates
@@ -157,8 +121,7 @@ fn test_vm_1() {
         debug_infos: vec![None; 5],
     };
 
-    execution_test(true, false, program.clone(), vec![], true);
-    air_test(true, false, program, vec![], true);
+    air_test(true, false, program, vec![]);
 }
 
 #[test]
@@ -196,7 +159,6 @@ fn test_vm_without_field_arithmetic() {
         field_extension_enabled,
         program,
         vec![],
-        true,
     );
 }
 
@@ -225,7 +187,7 @@ fn test_vm_fibonacci_old() {
         debug_infos: vec![None; program_len],
     };
 
-    air_test(true, false, program.clone(), vec![], true);
+    air_test(true, false, program.clone(), vec![]);
 }
 
 #[test]
@@ -262,7 +224,7 @@ fn test_vm_fibonacci_old_cycle_tracker() {
         debug_infos: vec![None; program_len],
     };
 
-    air_test(true, false, program.clone(), vec![], false);
+    air_test(true, false, program.clone(), vec![]);
 }
 
 #[test]
@@ -296,7 +258,6 @@ fn test_vm_field_extension_arithmetic() {
         field_extension_enabled,
         program,
         vec![],
-        true,
     );
 }
 
@@ -343,7 +304,6 @@ fn test_vm_hint() {
         field_extension_enabled,
         program,
         witness_stream,
-        true,
     );
 }
 

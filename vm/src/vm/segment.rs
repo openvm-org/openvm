@@ -11,7 +11,6 @@ use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
-use poseidon2_air::poseidon2::Poseidon2Config;
 
 use super::{VirtualMachineState, VmConfig, VmMetrics};
 use crate::{
