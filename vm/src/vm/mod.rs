@@ -54,7 +54,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
         };
         vm.segment(
             VirtualMachineState {
-                state: CpuState::default(),
+                state: CpuState::initial(),
                 input_stream: VecDeque::from(input_stream),
                 hint_stream: VecDeque::new(),
             },

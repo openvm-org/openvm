@@ -65,8 +65,8 @@ pub struct CpuState {
     pub is_done: bool,
 }
 
-impl Default for CpuState {
-    fn default() -> Self {
+impl CpuState {
+    pub fn initial() -> Self {
         CpuState {
             clock_cycle: 0,
             timestamp: 1,
@@ -94,7 +94,7 @@ impl<F: PrimeField32> CpuChip<F> {
         execution_bus: ExecutionBus,
         memory_manager: Rc<RefCell<MemoryManager<F>>>,
     ) -> Self {
-        Self::from_state(options, execution_bus, memory_manager, CpuState::default())
+        Self::from_state(options, execution_bus, memory_manager, CpuState::initial())
     }
 
     /// Sets the current state of the CPU.
