@@ -93,7 +93,7 @@ fn air_test_with_poseidon2(
 
 #[test]
 fn test_vm_1() {
-    let n = 0;
+    let n = 2;
     /*
     Instruction 0 assigns word[0]_1 to n.
     Instruction 4 terminates
@@ -108,7 +108,7 @@ fn test_vm_1() {
         // if word[0]_1 == 0 then pc += 3
         Instruction::from_isize(BEQ, 0, 0, 3, 1, 0),
         // word[0]_1 <- word[0]_1 - word[1]_0
-        Instruction::from_isize(FSUB, 0, 0, 1, 1, 0),
+        Instruction::large_from_isize(FSUB, 0, 0, 1, 1, 1, 0, 0),
         // word[2]_1 <- pc + 1, pc -= 2
         Instruction::from_isize(JAL, 2, -2, 0, 1, 0),
         // terminate
@@ -208,7 +208,6 @@ fn test_vm_fibonacci_old_cycle_tracker() {
         Instruction::from_isize(LOADW, 4, -2, 2, 1, 2),
         Instruction::from_isize(LOADW, 5, -1, 2, 1, 2),
         Instruction::large_from_isize(FADD, 6, 4, 5, 1, 1, 1, 0),
-        Instruction::from_isize(FADD, 6, 4, 5, 1, 1),
         Instruction::from_isize(STOREW, 6, 0, 2, 1, 2),
         Instruction::debug(CT_END, "inner loop"),
         Instruction::from_isize(JAL, 7, -8, 0, 1, 0), // Instruction::from_isize(JAL, 7, -6, 0, 1, 0),
