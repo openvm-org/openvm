@@ -40,7 +40,7 @@ jobs:
     uses: ./.github/workflows/benchmark-call.yml
     if: |
       github.event.pull_request.draft == false &&
-      github.event.pull_request.labels.*.name != 'no-benchmark'
+      !contains(github.event.pull_request.labels.*.name, 'no-benchmark')
     with:
       benchmark_name: vm_verify_fibair
     secrets: inherit
