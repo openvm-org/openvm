@@ -134,8 +134,6 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> MachineChipTester {
 /// Checking that 50 random instructions pass.
 #[test]
 fn poseidon2_chip_random_50_test_new() {
-    let fri_params = fri_params_with_80_bits_of_security()[1];
-
     let tester = tester_with_random_poseidon2_ops(50);
     tester.test(get_engine).expect("Verification failed");
 }
@@ -143,14 +141,10 @@ fn poseidon2_chip_random_50_test_new() {
 /// Negative test, pranking internal poseidon2 trace values.
 #[test]
 fn poseidon2_negative_test() {
-    let fri_params = fri_params_with_80_bits_of_security()[1];
-
     let mut rng = create_seeded_rng();
     let mut tester = tester_with_random_poseidon2_ops(1);
 
-    tester
-        .test(|d| engine_from_perm(random_perm(), d, fri_params))
-        .expect("Verification failed");
+    tester.test(get_engine).expect("Verification failed");
 
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;

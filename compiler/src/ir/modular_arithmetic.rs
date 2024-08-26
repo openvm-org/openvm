@@ -1,6 +1,6 @@
 use num_bigint_dig::BigUint;
 use p3_field::{AbstractField, PrimeField64};
-
+use stark_vm::modular_multiplication::bigint_to_elems;
 use crate::ir::{Array, Builder, Config, DslIr, IfBuilder, Var};
 
 pub type BigIntVar<C> = Array<C, Var<<C as Config>::N>>;
@@ -26,11 +26,10 @@ where
     pub fn eval_bigint(&mut self, bigint: BigUint) -> BigIntVar<C> {
         let mut array = self.dyn_array(NUM_ELEMS);
 
-        // FIXME: bigint_to_elems needs modular_multiplication module in vm.
-        // let elems: Vec<C::N> = bigint_to_elems(bigint, REPR_BITS, NUM_ELEMS);
-        // for (i, &elem) in elems.iter().enumerate() {
-        //     self.set(&mut array, i, elem);
-        // }
+        let elems: Vec<C::N> = bigint_to_elems(bigint, REPR_BITS, NUM_ELEMS);
+        for (i, &elem) in elems.iter().enumerate() {
+            self.set(&mut array, i, elem);
+        }
 
         array
     }

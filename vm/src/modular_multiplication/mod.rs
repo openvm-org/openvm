@@ -1,30 +1,16 @@
 use std::{borrow::Cow, collections::VecDeque};
 
-<<<<<<< HEAD
-use num_bigint_dig::{algorithms::mod_inverse, BigUint};
-use p3_field::{PrimeField32, PrimeField64};
-
-use afs_primitives::modular_multiplication::bigint::air::ModularMultiplicationBigIntAir;
-
-use crate::{
-    cpu::{Opcode::*, trace::Instruction},
-    modular_multiplication::air::ModularMultiplicationVmAir,
-=======
 use afs_primitives::modular_multiplication::bigint::air::ModularArithmeticBigIntAir;
 use num_bigint_dig::{algorithms::mod_inverse, BigUint};
 use p3_field::{PrimeField32, PrimeField64};
 
 use self::air::ModularArithmeticVmAir;
-use crate::{
-    cpu::{trace::Instruction, OpCode::*},
->>>>>>> main
-    vm::ExecutionSegment,
-};
+use crate::{arch::instructions::Opcode::*, cpu::trace::Instruction, vm::ExecutionSegment};
 
 pub mod air;
-//mod columns;
-#[cfg(test)]
-mod tests;
+// mod columns;
+// #[cfg(test)]
+// mod tests;
 
 pub fn elems_to_bigint<F: PrimeField64>(elems: Vec<F>, repr_bits: usize) -> BigUint {
     let mut bits = vec![];
@@ -94,10 +80,11 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
         Self { air, ops: vec![] }
     }
 
-    pub fn calculate<const NUM_WORDS: usize, const WORD_SIZE: usize>(
-        vm: &mut ExecutionSegment<NUM_WORDS, WORD_SIZE, F>,
-        instruction: Instruction<F>,
-    ) {
+    // FIXME: remove these
+    #[allow(unreachable_code)]
+    #[allow(unused_variables)]
+    #[allow(clippy::diverging_sub_expression)]
+    pub fn calculate(vm: &mut ExecutionSegment<F>, instruction: Instruction<F>) {
         let (op_input_2, op_result) = match instruction.opcode {
             SECP256K1_COORD_ADD | SECP256K1_COORD_MUL | SECP256K1_SCALAR_ADD
             | SECP256K1_SCALAR_MUL => (instruction.op_b, instruction.op_c),
@@ -135,7 +122,7 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
             .cell
             .data[0];
 
-        let chip = vm.modular_arithmetic_chips.get_mut(&modulus).unwrap();
+        let chip: ModularArithmeticChip<F> = todo!();
         let air = &chip.air;
         let num_elems = air.air.limb_dimensions.io_limb_sizes.len();
         let repr_bits = air.air.repr_bits;
@@ -179,13 +166,10 @@ impl<F: PrimeField32> ModularArithmeticChip<F> {
         } % modulus;
         let result_elems = bigint_to_elems(result, repr_bits, num_elems);
         for (i, &elem) in result_elems.iter().enumerate() {
-            let mut word = [F::zero(); WORD_SIZE];
-            word[0] = elem;
-
             vm.memory_manager.borrow_mut().write_word(
                 instruction.e,
                 output_address + F::from_canonical_usize(i),
-                word,
+                [elem],
             );
         }
         chip.ops.push(VmModularArithmetic {

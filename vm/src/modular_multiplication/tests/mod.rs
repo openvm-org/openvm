@@ -1,37 +1,27 @@
-<<<<<<< HEAD
-=======
 use afs_primitives::modular_multiplication::bigint::air::ModularArithmeticBigIntAir;
 use afs_test_utils::utils::create_seeded_rng;
->>>>>>> main
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::RngCore;
 
-use afs_primitives::modular_multiplication::bigint::air::ModularMultiplicationBigIntAir;
-use afs_test_utils::utils::create_seeded_rng;
-
 use crate::{
-<<<<<<< HEAD
-    cpu::{Opcode::MOD_SECP256K1_MUL, trace::Instruction},
-    modular_multiplication::{bigint_to_elems, ModularMultiplicationChip},
-=======
-    cpu::{trace::Instruction, OpCode::SECP256K1_COORD_MUL},
-    modular_multiplication::{bigint_to_elems, ModularArithmeticChip},
->>>>>>> main
     program::Program,
     vm::{
         config::{DEFAULT_MAX_SEGMENT_LEN, MemoryConfig, VmConfig},
         VirtualMachine,
     },
 };
+use crate::arch::instructions::Opcode::SECP256K1_COORD_MUL;
+use crate::cpu::trace::Instruction;
+use crate::modular_multiplication::{bigint_to_elems, ModularArithmeticChip};
 
-fn make_vm<const NUM_WORDS: usize, const WORD_SIZE: usize>(
+fn make_vm(
     program: Program<BabyBear>,
     field_arithmetic_enabled: bool,
     field_extension_enabled: bool,
-) -> VirtualMachine<NUM_WORDS, WORD_SIZE, BabyBear> {
-    VirtualMachine::<NUM_WORDS, WORD_SIZE, BabyBear>::new(
+) -> VirtualMachine<BabyBear> {
+    VirtualMachine::<BabyBear>::new(
         VmConfig {
             field_arithmetic_enabled,
             field_extension_enabled,
@@ -56,7 +46,7 @@ fn make_vm<const NUM_WORDS: usize, const WORD_SIZE: usize>(
 
 #[test]
 fn test_modular_multiplication_runtime() {
-    let mut vm = make_vm::<1, 1>(
+    let mut vm = make_vm(
         Program {
             instructions: vec![],
             debug_infos: vec![],
