@@ -6,18 +6,18 @@ use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use rand::{rngs::StdRng, Rng};
-
+use crate::arch::instructions::Opcode;
 use super::{trace::create_row_from_values, LongArithmeticChip};
-use crate::cpu::OpCode;
 
 type F = BabyBear;
 
-const OPCODES: [OpCode; 2] = [OpCode::ADD256, OpCode::SUB256];
+const OPCODES: [Opcode; 2] = [Opcode::ADD256, Opcode::SUB256];
 
 fn generate_long_number<const ARG_SIZE: usize, const LIMB_SIZE: usize>(
     rng: &mut StdRng,
 ) -> Vec<u32> {
-    assert!(ARG_SIZE % LIMB_SIZE == 0);
+    assert_eq!(ARG_SIZE % LIMB_SIZE, 0);
+
     (0..ARG_SIZE / LIMB_SIZE)
         .map(|_| rng.gen_range(0..1 << LIMB_SIZE))
         .collect()
@@ -65,7 +65,7 @@ fn long_add_rand_air_test() {
 // The chip will do what it would normally do for this addition query,
 // except the generated trace will be what we provide.
 fn setup_bad_long_arithmetic_test(
-    op: OpCode,
+    op: Opcode,
     x1: u32,
     y1: u32,
     result1: u32,
@@ -123,21 +123,21 @@ fn run_bad_long_arithmetic_test(
 
 #[test]
 fn long_add_wrong_carry_air_test() {
-    let (chip, trace) = setup_bad_long_arithmetic_test(OpCode::ADD256, 1, 1, 3, 1, 1, false);
+    let (chip, trace) = setup_bad_long_arithmetic_test(Opcode::ADD256, 1, 1, 3, 1, 1, false);
     run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
 }
 
 #[test]
 fn long_add_out_of_range_air_test() {
     let (chip, trace) =
-        setup_bad_long_arithmetic_test(OpCode::ADD256, 65_000, 65_000, 130_000, 0, 1, false);
+        setup_bad_long_arithmetic_test(Opcode::ADD256, 65_000, 65_000, 130_000, 0, 1, false);
     run_bad_long_arithmetic_test(&chip, trace, VerificationError::NonZeroCumulativeSum);
 }
 
 #[test]
 fn long_add_wrong_addition_air_test() {
     let (chip, trace) = setup_bad_long_arithmetic_test(
-        OpCode::ADD256,
+        Opcode::ADD256,
         65_000,
         65_000,
         130_000 - (1 << 16),
@@ -169,7 +169,7 @@ fn long_add_invalid_carry_air_test() {
         chip.range_checker_chip.add_count(*z);
     }
 
-    let op = OpCode::ADD256;
+    let op = Opcode::ADD256;
     let trace = create_row_from_values::<256, 16, F>(op, &x, &y, &sum, &carry, false);
     let width = trace.len();
     let trace = RowMajorMatrix::new(trace, width);
@@ -180,7 +180,7 @@ fn long_add_invalid_carry_air_test() {
 #[test]
 fn long_sub_out_of_range_air_test() {
     let (chip, trace) = setup_bad_long_arithmetic_test(
-        OpCode::SUB256,
+        Opcode::SUB256,
         1,
         2,
         (-F::one()).as_canonical_u32(),
@@ -194,7 +194,7 @@ fn long_sub_out_of_range_air_test() {
 #[test]
 fn long_sub_wrong_subtraction_air_test() {
     let (chip, trace) =
-        setup_bad_long_arithmetic_test(OpCode::SUB256, 1, 2, (1 << 16) - 1, 0, 1, false);
+        setup_bad_long_arithmetic_test(Opcode::SUB256, 1, 2, (1 << 16) - 1, 0, 1, false);
     run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
 }
 
@@ -218,7 +218,7 @@ fn long_sub_invalid_carry_air_test() {
         chip.range_checker_chip.add_count(*z);
     }
 
-    let op = OpCode::SUB256;
+    let op = Opcode::SUB256;
     let trace = create_row_from_values::<256, 16, F>(op, &x, &y, &sum, &carry, false);
     let width = trace.len();
     let trace = RowMajorMatrix::new(trace, width);
@@ -241,7 +241,7 @@ fn long_lt_rand_air_test() {
             )
         })
         .collect();
-    chip.request(vec![OpCode::LT256; len_ops], operands);
+    chip.request(vec![Opcode::LT256; len_ops], operands);
 
     let trace = chip.generate_trace::<F>();
     let range_trace = chip.range_checker_chip.generate_trace::<F>();
@@ -256,14 +256,14 @@ fn long_lt_rand_air_test() {
 #[test]
 fn long_lt_wrong_subtraction_test() {
     let (chip, trace) =
-        setup_bad_long_arithmetic_test(OpCode::LT256, 65_000, 65_000, 1, 0, 1, false);
+        setup_bad_long_arithmetic_test(Opcode::LT256, 65_000, 65_000, 1, 0, 1, false);
     run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
 }
 
 #[test]
 fn long_lt_wrong_carry_test() {
     let (chip, trace) =
-        setup_bad_long_arithmetic_test(OpCode::LT256, 65_000, 65_000, 0, 1, 15, false);
+        setup_bad_long_arithmetic_test(Opcode::LT256, 65_000, 65_000, 0, 1, 15, false);
     run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
 }
 
@@ -285,7 +285,7 @@ fn long_eq_rand_air_test() {
             (x, y)
         })
         .collect();
-    chip.request(vec![OpCode::EQ256; len_ops], operands);
+    chip.request(vec![Opcode::EQ256; len_ops], operands);
 
     let trace = chip.generate_trace::<F>();
     let range_trace = chip.range_checker_chip.generate_trace::<F>();
@@ -299,6 +299,6 @@ fn long_eq_rand_air_test() {
 
 #[test]
 fn long_eq_wrong_positive_test() {
-    let (chip, trace) = setup_bad_long_arithmetic_test(OpCode::EQ256, 123, 456, 0, 0, 15, true);
+    let (chip, trace) = setup_bad_long_arithmetic_test(Opcode::EQ256, 123, 456, 0, 0, 15, true);
     run_bad_long_arithmetic_test(&chip, trace, VerificationError::OodEvaluationMismatch);
 }
