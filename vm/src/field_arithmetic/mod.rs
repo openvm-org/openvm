@@ -11,10 +11,7 @@ use crate::{
     },
     cpu::trace::Instruction,
     field_arithmetic::columns::Operand,
-    memory::{
-        manager::{trace_builder::MemoryTraceBuilder, MemoryManager},
-        offline_checker::bridge::MemoryOfflineChecker,
-    },
+    memory::manager::{trace_builder::MemoryTraceBuilder, MemoryManager},
 };
 
 #[cfg(test)]
@@ -25,6 +22,8 @@ pub mod bridge;
 pub mod columns;
 pub mod trace;
 
+pub use air::FieldArithmeticAir;
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct FieldArithmeticOperation<F> {
     pub opcode: Opcode,
@@ -32,38 +31,6 @@ pub struct FieldArithmeticOperation<F> {
     pub operand1: Operand<F>,
     pub operand2: Operand<F>,
     pub result: Operand<F>,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct FieldArithmeticAir {
-    execution_bus: ExecutionBus,
-    mem_oc: MemoryOfflineChecker,
-}
-
-impl FieldArithmeticAir {
-    pub const TIMESTAMP_DELTA: usize = 3;
-}
-
-pub struct FieldArithmetic;
-impl FieldArithmetic {
-    /// Evaluates given opcode using given operands.
-    ///
-    /// Returns None for non-arithmetic operations.
-    fn solve<T: Field>(op: Opcode, operands: (T, T)) -> Option<T> {
-        match op {
-            Opcode::FADD => Some(operands.0 + operands.1),
-            Opcode::FSUB => Some(operands.0 - operands.1),
-            Opcode::FMUL => Some(operands.0 * operands.1),
-            Opcode::FDIV => {
-                if operands.1 == T::zero() {
-                    None
-                } else {
-                    Some(operands.0 / operands.1)
-                }
-            }
-            _ => unreachable!(),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -122,11 +89,33 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldArithmeticChip<F> {
             operand2: Operand::new(y_as, y_address, y),
             result: Operand::new(z_as, z_address, z),
         });
-        println!("op = {:?}", self.operations.last().unwrap());
+        tracing::trace!("op = {:?}", self.operations.last().unwrap());
 
         ExecutionState {
             pc: from_state.pc + 1,
             timestamp: from_state.timestamp + FieldArithmeticAir::TIMESTAMP_DELTA,
+        }
+    }
+}
+
+pub struct FieldArithmetic;
+impl FieldArithmetic {
+    /// Evaluates given opcode using given operands.
+    ///
+    /// Returns None for non-arithmetic operations.
+    fn solve<T: Field>(op: Opcode, operands: (T, T)) -> Option<T> {
+        match op {
+            Opcode::FADD => Some(operands.0 + operands.1),
+            Opcode::FSUB => Some(operands.0 - operands.1),
+            Opcode::FMUL => Some(operands.0 * operands.1),
+            Opcode::FDIV => {
+                if operands.1 == T::zero() {
+                    None
+                } else {
+                    Some(operands.0 / operands.1)
+                }
+            }
+            _ => unreachable!(),
         }
     }
 }

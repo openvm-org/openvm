@@ -5,8 +5,24 @@ use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::{columns::FieldArithmeticCols, FieldArithmeticAir};
-use crate::arch::instructions::Opcode::{FADD, FDIV, FMUL, FSUB};
+use super::columns::FieldArithmeticCols;
+use crate::{
+    arch::{
+        bridge::ExecutionBus,
+        instructions::Opcode::{FADD, FDIV, FMUL, FSUB},
+    },
+    memory::offline_checker::bridge::MemoryOfflineChecker,
+};
+
+#[derive(Clone, Copy, Debug)]
+pub struct FieldArithmeticAir {
+    pub(super) execution_bus: ExecutionBus,
+    pub(super) mem_oc: MemoryOfflineChecker,
+}
+
+impl FieldArithmeticAir {
+    pub const TIMESTAMP_DELTA: usize = 3;
+}
 
 impl AirConfig for FieldArithmeticAir {
     type Cols<T> = FieldArithmeticCols<T>;
