@@ -6,6 +6,7 @@ use p3_commit::PolynomialSpace;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{Domain, StarkGenericConfig};
+use rand::{seq::SliceRandom, Rng};
 
 use crate::{
     arch::chips::MachineChip,
@@ -121,4 +122,19 @@ impl<F: PrimeField32> MachineChip<F> for MemoryTester<F> {
     fn current_trace_cells(&self) -> usize {
         self.records.len()
     }
+}
+
+pub fn gen_address_space<R>(rng: &mut R) -> usize
+where
+    R: Rng + ?Sized,
+{
+    *[1, 2].choose(rng).unwrap()
+}
+
+pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
+where
+    R: Rng + ?Sized,
+{
+    const MAX_MEMORY: usize = 1 << 29;
+    rng.gen_range(0..MAX_MEMORY - len)
 }

@@ -6,94 +6,31 @@ use std::{
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField};
-use rand::Rng;
+use p3_field::{
+    extension::BinomialExtensionField, AbstractExtensionField, AbstractField, PrimeField32,
+};
+use rand::{
+    distributions::{Distribution, Standard},
+    seq::SliceRandom,
+    Rng,
+};
 
 use super::columns::FieldExtensionArithmeticIoCols;
 use crate::{
     arch::{
-        bus::ExecutionBus,
-        chips::MachineChip,
         instructions::{Opcode, FIELD_EXTENSION_INSTRUCTIONS},
-        testing::{ExecutionTester, MachineChipTestBuilder, MachineChipTester, MemoryTester},
+        testing::{
+            memory::{gen_address_space, gen_pointer},
+            MachineChipTestBuilder,
+        },
     },
     cpu::trace::Instruction,
-    field_extension::chip::{
-        FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticRecord,
-    },
-    memory::{manager::MemoryAccess, offline_checker::bus::MemoryBus},
+    field_extension::chip::{FieldExtensionArithmetic, FieldExtensionArithmeticChip},
 };
-
-/// Function for testing that generates a random program consisting only of field arithmetic operations.
-fn generate_records(n: usize) -> Vec<FieldExtensionArithmeticRecord<BabyBear>> {
-    let mut rng = create_seeded_rng();
-
-    let mut records = vec![];
-
-    for _ in 0..n {
-        let opcode = FIELD_EXTENSION_INSTRUCTIONS[rng.gen_range(0..4)];
-
-        // dummy values for clock cycle and addr_space and pointers
-        let timestamp: usize = 1;
-
-        let x = [
-            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
-            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
-            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
-            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
-        ];
-        let y = [
-            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
-            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
-            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
-            BabyBear::from_canonical_u32(rng.gen_range(1..=100)),
-        ];
-
-        let z = FieldExtensionArithmetic::solve(opcode, x, y).unwrap();
-
-        records.push(FieldExtensionArithmeticRecord {
-            pc: 0,
-            timestamp,
-            opcode,
-            is_valid: false,
-            op_a: BabyBear::zero(),
-            op_b: BabyBear::zero(),
-            op_c: BabyBear::zero(),
-            d: BabyBear::one(),
-            e: BabyBear::one(),
-            x,
-            y,
-            z,
-            x_reads: array::from_fn(|_| {
-                MemoryAccess::disabled_read(
-                    BabyBear::from_canonical_usize(timestamp),
-                    BabyBear::one(),
-                )
-            }),
-            y_reads: array::from_fn(|_| {
-                MemoryAccess::disabled_read(
-                    BabyBear::from_canonical_usize(timestamp),
-                    BabyBear::one(),
-                )
-            }),
-            z_writes: array::from_fn(|_| {
-                MemoryAccess::disabled_read(
-                    BabyBear::from_canonical_usize(timestamp),
-                    BabyBear::one(),
-                )
-            }),
-        });
-    }
-    records
-}
 
 #[test]
 fn field_extension_air_test() {
     type F = BabyBear;
-
-    let elem_range = || 1..=100;
-    let address_space_range = || 1usize..=2;
-    let address_range = || 0usize..1 << 29;
 
     let mut tester = MachineChipTestBuilder::default();
     let mut chip =
@@ -103,13 +40,13 @@ fn field_extension_air_test() {
     let num_ops: usize = 1 << 3;
 
     for _ in 0..num_ops {
-        let opcode = FIELD_EXTENSION_INSTRUCTIONS[rng.gen_range(0..4)];
+        let opcode = *FIELD_EXTENSION_INSTRUCTIONS.choose(&mut rng).unwrap();
 
-        let as_d = rng.gen_range(address_space_range());
-        let as_e = rng.gen_range(address_space_range());
-        let address1 = rng.gen_range(address_range());
-        let address2 = rng.gen_range(address_range());
-        let result_address = rng.gen_range(address_range());
+        let as_d = gen_address_space(&mut rng);
+        let as_e = gen_address_space(&mut rng);
+        let address1 = gen_pointer(&mut rng, 4);
+        let address2 = gen_pointer(&mut rng, 4);
+        let result_address = gen_pointer(&mut rng, 4);
 
         let operand1 = array::from_fn(|_| rng.gen::<F>());
         let operand2 = array::from_fn(|_| rng.gen::<F>());
