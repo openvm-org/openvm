@@ -1,9 +1,6 @@
 pub mod outer;
 
-use std::{
-    any::{type_name, Any},
-    cmp::Reverse,
-};
+use std::{cmp::Reverse, marker::PhantomData};
 
 use afs_compiler::{
     conversion::CompilerOptions,
@@ -11,22 +8,24 @@ use afs_compiler::{
     prelude::RVar,
 };
 use afs_stark_backend::{
-    air_builders::symbolic::{SymbolicConstraints, SymbolicRapBuilder},
+    air_builders::{
+        symbolic::symbolic_expression::SymbolicExpression,
+        verifier::GenericVerifierConstraintFolder,
+    },
     prover::opener::AdjacentOpenedValues,
-    rap::{AnyRap, Rap},
+    rap::AnyRap,
 };
 use afs_test_utils::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
 use itertools::{izip, Itertools};
-use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
-use p3_field::{AbstractExtensionField, AbstractField, PrimeField32, TwoAdicField};
+use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
 use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
     stack::VerticalPair,
     Matrix,
 };
-use stark_vm::{program::Program, vm::ExecutionSegment};
+use stark_vm::program::Program;
 
 use crate::{
     challenger::{duplex::DuplexChallengerVariable, ChallengerVariable},
@@ -45,33 +44,6 @@ use crate::{
     utils::const_fri_config,
 };
 
-pub trait DynRapForRecursion<C: Config>:
-    Rap<SymbolicRapBuilder<C::F>>
-    + for<'a> Rap<RecursiveVerifierConstraintFolder<'a, C>>
-    + BaseAir<C::F>
-{
-    fn as_any(&self) -> &dyn Any;
-
-    fn name(&self) -> String;
-}
-
-impl<C, T> DynRapForRecursion<C> for T
-where
-    C: Config,
-    T: Rap<SymbolicRapBuilder<C::F>>
-        + for<'a> Rap<RecursiveVerifierConstraintFolder<'a, C>>
-        + BaseAir<C::F>
-        + 'static,
-{
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn name(&self) -> String {
-        type_name::<Self>().to_string()
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct VerifierProgram<C: Config> {
     _phantom: std::marker::PhantomData<C>,
@@ -80,7 +52,6 @@ pub struct VerifierProgram<C: Config> {
 impl VerifierProgram<InnerConfig> {
     /// Create a new instance of the program for the [BabyBearPoseidon2] config.
     pub fn build(
-        raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
         constants: MultiStarkVerificationAdvice<InnerConfig>,
         fri_params: &FriParameters,
     ) -> Program<BabyBear> {
@@ -93,13 +64,7 @@ impl VerifierProgram<InnerConfig> {
         let pcs = TwoAdicFriPcsVariable {
             config: const_fri_config(&mut builder, fri_params),
         };
-        StarkVerifier::verify::<DuplexChallengerVariable<_>>(
-            &mut builder,
-            &pcs,
-            raps,
-            constants,
-            &input,
-        );
+        StarkVerifier::verify::<DuplexChallengerVariable<_>>(&mut builder, &pcs, constants, &input);
 
         builder.cycle_tracker_end("VerifierProgram");
         builder.halt();
@@ -125,7 +90,6 @@ where
     pub fn verify<CH: ChallengerVariable<C>>(
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
-        raps: Vec<&dyn DynRapForRecursion<C>>,
         constants: MultiStarkVerificationAdvice<C>,
         input: &VerifierInputVariable<C>,
     ) {
@@ -158,14 +122,13 @@ where
 
         let mut challenger = CH::new(builder);
 
-        Self::verify_raps(builder, pcs, raps, constants, &mut challenger, input);
+        Self::verify_raps(builder, pcs, constants, &mut challenger, input);
     }
 
     /// Reference: [afs_stark_backend::verifier::MultiTraceStarkVerifier::verify_raps].
     pub fn verify_raps(
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
-        raps: Vec<&dyn DynRapForRecursion<C>>,
         vk: MultiStarkVerificationAdvice<C>,
         challenger: &mut impl ChallengerVariable<C>,
         input: &VerifierInputVariable<C>,
@@ -173,7 +136,7 @@ where
         C::F: TwoAdicField,
         C::EF: TwoAdicField,
     {
-        Self::validate_inputs(builder, &raps, &vk, input);
+        Self::validate_inputs(builder, &vk, input);
 
         let VerifierInputVariable::<C> {
             proof,
@@ -181,7 +144,7 @@ where
             public_values,
         } = input;
 
-        let num_airs = raps.len();
+        let num_airs = vk.per_air.len();
         let r_num_airs = num_airs;
         let num_phases = vk.num_challenges_to_sample.len();
         // Currently only support 0 or 1 phase is supported.
@@ -470,16 +433,14 @@ where
 
         let mut preprocessed_idx = 0;
 
-        for (index, (&rap, air_const)) in raps.iter().zip_eq(vk.per_air.iter()).enumerate() {
-            let preprocessed_values =
-                if <dyn DynRapForRecursion<C> as BaseAir<C::F>>::preprocessed_trace(rap).is_some() {
-                    let ret =
-                        Some(builder.get(&proof.opening.values.preprocessed, preprocessed_idx));
-                    preprocessed_idx += 1;
-                    ret
-                } else {
-                    None
-                };
+        for (index, air_const) in vk.per_air.iter().enumerate() {
+            let preprocessed_values = if air_const.preprocessed_data.is_some() {
+                let ret = Some(builder.get(&proof.opening.values.preprocessed, preprocessed_idx));
+                preprocessed_idx += 1;
+                ret
+            } else {
+                None
+            };
 
             let partitioned_main_values = air_const
                 .main_graph
@@ -522,7 +483,6 @@ where
             let pvs = builder.get(public_values, index);
             Self::verify_single_rap_constraints(
                 builder,
-                rap,
                 air_const,
                 preprocessed_values,
                 &partitioned_main_values,
@@ -535,20 +495,17 @@ where
                 after_challenge_values,
                 &challenges,
                 &exposed_values_by_air[index],
-                air_const.interaction_chunk_size,
             );
         }
 
         builder.cycle_tracker_end("stage-e-verify-constraints");
-        // TODO[jpw] cumulative sum check
     }
 
     /// Reference: [afs_stark_backend::verifier::constraints::verify_single_rap_constraints]
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::type_complexity)]
-    pub fn verify_single_rap_constraints<R>(
+    pub fn verify_single_rap_constraints(
         builder: &mut Builder<C>,
-        rap: &R,
         constants: &StarkVerificationAdvice<C>,
         preprocessed_values: Option<AdjacentOpenedValuesVariable<C>>,
         partitioned_main_values: &[AdjacentOpenedValuesVariable<C>],
@@ -561,10 +518,7 @@ where
         after_challenge_values: AdjacentOpenedValuesVariable<C>,
         challenges: &[Vec<Ext<C::F, C::EF>>],
         exposed_values_after_challenge: &[Vec<Ext<C::F, C::EF>>],
-        interaction_chunk_size: usize,
-    ) where
-        R: for<'b> Rap<RecursiveVerifierConstraintFolder<'b, C>> + Sync + ?Sized,
-    {
+    ) {
         let sels = trace_domain.selectors_at_point(builder, zeta);
 
         let mut preprocessed = AdjacentOpenedValues {
@@ -633,7 +587,6 @@ where
 
         let folded_constraints = Self::eval_constraints(
             builder,
-            rap,
             &constants.symbolic_constraints,
             preprocessed,
             &partitioned_main_values,
@@ -643,7 +596,6 @@ where
             after_challenge,
             challenges,
             exposed_values_after_challenge,
-            interaction_chunk_size,
         );
 
         let num_quotient_chunks = 1 << constants.log_quotient_degree();
@@ -671,10 +623,9 @@ where
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn eval_constraints<R>(
+    fn eval_constraints(
         builder: &mut Builder<C>,
-        rap: &R,
-        symbolic_constraints: &SymbolicConstraints<C::F>,
+        constraints: &[SymbolicExpression<C::F>],
         preprocessed_values: AdjacentOpenedValues<Ext<C::F, C::EF>>,
         partitioned_main_values: &[AdjacentOpenedValues<Ext<C::F, C::EF>>],
         public_values: Array<C, Felt<C::F>>,
@@ -683,11 +634,7 @@ where
         after_challenge: AdjacentOpenedValues<Ext<C::F, C::EF>>,
         challenges: &[Vec<Ext<C::F, C::EF>>],
         exposed_values_after_challenge: &[Vec<Ext<C::F, C::EF>>],
-        interaction_chunk_size: usize,
-    ) -> Ext<C::F, C::EF>
-    where
-        R: for<'b> Rap<RecursiveVerifierConstraintFolder<'b, C>> + Sync + ?Sized,
-    {
+    ) -> Ext<C::F, C::EF> {
         let mut unflatten = |v: &[Ext<C::F, C::EF>]| {
             v.chunks_exact(C::EF::D)
                 .map(|chunk| {
@@ -717,7 +664,7 @@ where
             folder_pv.push(builder.get(&public_values, i));
         }
 
-        let mut folder = RecursiveVerifierConstraintFolder::<C> {
+        let mut folder: RecursiveVerifierConstraintFolder<C> = GenericVerifierConstraintFolder {
             preprocessed: VerticalPair::new(
                 RowMajorMatrixView::new_row(&preprocessed_values.local),
                 RowMajorMatrixView::new_row(&preprocessed_values.next),
@@ -743,13 +690,10 @@ where
             accumulator: SymbolicExt::zero(),
             public_values: &folder_pv,
             exposed_values_after_challenge, // FIXME
-
-            symbolic_interactions: &symbolic_constraints.interactions,
-            interaction_chunk_size,
-            interactions: vec![],
+            _marker: PhantomData,
         };
+        folder.eval_constraints(constraints);
 
-        rap.eval(&mut folder);
         builder.eval(folder.accumulator)
     }
 
@@ -796,12 +740,10 @@ where
 
     fn validate_inputs(
         builder: &mut Builder<C>,
-        raps: &[&dyn DynRapForRecursion<C>],
         vk: &MultiStarkVerificationAdvice<C>,
         input: &VerifierInputVariable<C>,
     ) {
-        assert_eq!(raps.len(), vk.per_air.len());
-        let num_airs = raps.len();
+        let num_airs = vk.per_air.len();
         let num_phases = vk.num_challenges_to_sample.len();
         // Currently only support 0 or 1 phase is supported.
         assert!(num_phases <= 1);
@@ -889,48 +831,21 @@ where
 }
 
 #[allow(clippy::type_complexity)]
-pub fn sort_chips<'a>(
-    chips: Vec<&'a dyn AnyRap<BabyBearPoseidon2Config>>,
-    rec_raps: Vec<&'a dyn DynRapForRecursion<InnerConfig>>,
+pub fn sort_chips(
+    chips: Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
     traces: Vec<RowMajorMatrix<BabyBear>>,
     pvs: Vec<Vec<BabyBear>>,
 ) -> (
-    Vec<&'a dyn AnyRap<BabyBearPoseidon2Config>>,
-    Vec<&'a dyn DynRapForRecursion<InnerConfig>>,
+    Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
     Vec<RowMajorMatrix<BabyBear>>,
     Vec<Vec<BabyBear>>,
 ) {
-    let mut groups = izip!(chips, rec_raps, traces, pvs).collect_vec();
-    groups.sort_by_key(|(_, _, trace, _)| Reverse(trace.height()));
+    let mut groups = izip!(chips, traces, pvs).collect_vec();
+    groups.sort_by_key(|(_, trace, _)| Reverse(trace.height()));
 
-    let chips = groups.iter().map(|(x, _, _, _)| *x).collect_vec();
-    let rec_raps = groups.iter().map(|(_, x, _, _)| *x).collect_vec();
-    let pvs = groups.iter().map(|(_, _, _, x)| x.clone()).collect_vec();
-    let traces = groups.into_iter().map(|(_, _, x, _)| x).collect_vec();
+    let chips = groups.iter().map(|(x, _, _)| *x).collect_vec();
+    let pvs = groups.iter().map(|(_, _, x)| x.clone()).collect_vec();
+    let traces = groups.into_iter().map(|(_, x, _)| x).collect_vec();
 
-    (chips, rec_raps, traces, pvs)
-}
-
-pub fn get_rec_raps<const NUM_WORDS: usize, const WORD_SIZE: usize, C: Config>(
-    vm: &ExecutionSegment<NUM_WORDS, WORD_SIZE, C::F>,
-) -> Vec<Box<dyn DynRapForRecursion<C>>>
-where
-    C::F: PrimeField32,
-{
-    let mut result: Vec<Box<dyn DynRapForRecursion<C>>> = vec![
-        Box::new(vm.cpu_chip.air.clone()),
-        Box::new(vm.program_chip.air.clone()),
-        Box::new(vm.memory_manager.borrow().get_audit_air()),
-    ];
-    if vm.options().field_arithmetic_enabled {
-        result.push(Box::new(vm.field_arithmetic_chip.air));
-    }
-    if vm.options().field_extension_enabled {
-        result.push(Box::new(vm.field_extension_chip.air.clone()));
-    }
-    if vm.options().poseidon2_enabled() {
-        result.push(Box::new(vm.poseidon2_chip.air.clone()));
-    }
-    result.push(Box::new(vm.range_checker.air));
-    result
+    (chips, traces, pvs)
 }

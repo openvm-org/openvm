@@ -1,8 +1,8 @@
 use afs_compiler::util::execute_and_prove_program;
 use afs_recursion::{
     hints::{Hintable, InnerVal},
-    stark::{sort_chips, DynRapForRecursion, VerifierProgram},
-    types::{new_from_inner_multi_vk, InnerConfig, VerifierInput},
+    stark::{sort_chips, VerifierProgram},
+    types::{new_from_inner_multi_vk, VerifierInput},
 };
 use afs_stark_backend::{
     keygen::types::MultiStarkVerifyingKey,
@@ -64,13 +64,7 @@ pub fn make_verification_params(
 
     let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier
-        .verify(
-            &mut engine.new_challenger(),
-            &vk,
-            raps.to_vec(),
-            &proof,
-            pvs,
-        )
+        .verify(&mut engine.new_challenger(), &vk, &proof, pvs)
         .expect("proof should verify");
 
     VerificationParams {
@@ -81,7 +75,6 @@ pub fn make_verification_params(
 }
 
 pub fn build_verification_program(
-    rec_raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
     pvs: Vec<Vec<InnerVal>>,
     vparams: VerificationParams<BabyBearPoseidon2Config>,
 ) -> (Program<BabyBear>, Vec<Vec<InnerVal>>) {
@@ -92,7 +85,7 @@ pub fn build_verification_program(
     } = vparams;
 
     let advice = new_from_inner_multi_vk(&vk);
-    let program = VerifierProgram::build(rec_raps, advice, &fri_params);
+    let program = VerifierProgram::build(advice, &fri_params);
 
     let log_degree_per_air = proof
         .degrees
@@ -114,18 +107,16 @@ pub fn build_verification_program(
 
 #[allow(dead_code)]
 pub fn run_recursive_test(
-    // TODO: find way to de-duplicate parameters
     any_raps: Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
-    rec_raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
     traces: Vec<RowMajorMatrix<BabyBear>>,
     pvs: Vec<Vec<BabyBear>>,
     fri_params: FriParameters,
 ) {
-    let (any_raps, rec_raps, traces, pvs) = sort_chips(any_raps, rec_raps, traces, pvs);
+    let (any_raps, traces, pvs) = sort_chips(any_raps, traces, pvs);
 
     let vparams = make_verification_params(&any_raps, traces, &pvs, fri_params);
 
-    let (program, witness_stream) = build_verification_program(rec_raps, pvs, vparams);
+    let (program, witness_stream) = build_verification_program(pvs, vparams);
     // execute_program::<1>(program, witness_stream);
     execute_and_prove_program::<1>(program, witness_stream);
 }

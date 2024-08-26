@@ -80,16 +80,13 @@ impl VerifyCommand {
         let ExecutionAndTraceGenerationResult {
             max_log_degree,
             nonempty_pis: pis,
-            nonempty_chips: chips,
             ..
         } = vm.execute_and_generate_traces()?;
         let engine = config::baby_bear_poseidon2::default_engine(max_log_degree);
 
-        let chips = VirtualMachine::<NUM_WORDS, WORD_SIZE, _>::get_chips(&chips);
-
         let mut challenger = engine.new_challenger();
         let verifier = engine.verifier();
-        let result = verifier.verify(&mut challenger, &vk, chips, &proof, &pis);
+        let result = verifier.verify(&mut challenger, &vk, &proof, &pis);
 
         if result.is_err() {
             println!("Verification Unsuccessful");

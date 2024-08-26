@@ -2,8 +2,8 @@ use std::{collections::HashMap, fs::File, io::Write as _};
 
 use afs_recursion::{
     hints::Hintable,
-    stark::{DynRapForRecursion, VerifierProgram},
-    types::{new_from_inner_multi_vk, InnerConfig, VerifierInput},
+    stark::VerifierProgram,
+    types::{new_from_inner_multi_vk, VerifierInput},
 };
 use afs_stark_backend::{
     prover::{metrics::trace_metrics, trace::TraceCommitmentBuilder},
@@ -35,9 +35,7 @@ use crate::{
 };
 
 pub fn run_recursive_test_benchmark(
-    // TODO: find way to not duplicate parameters
     any_raps: Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
-    rec_raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
     traces: Vec<RowMajorMatrix<BabyBear>>,
     pvs: Vec<Vec<BabyBear>>,
     benchmark_name: &str,
@@ -93,14 +91,8 @@ pub fn run_recursive_test_benchmark(
     // Make sure proof verifies outside eDSL...
     let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier
-        .verify(
-            &mut engine.new_challenger(),
-            &vk,
-            any_raps.clone(),
-            &proof,
-            &pvs,
-        )
-        .expect("afs proof should verify");
+        .verify(&mut engine.new_challenger(), &vk, &proof, &pvs)
+        .expect("proof should verify");
     trace_and_prove_span.exit();
 
     let log_degree_per_air = proof
@@ -112,7 +104,7 @@ pub fn run_recursive_test_benchmark(
     // Build verification program in eDSL.
     let advice = new_from_inner_multi_vk(&vk);
 
-    let program = VerifierProgram::build(rec_raps, advice, &engine.fri_params);
+    let program = VerifierProgram::build(advice, &engine.fri_params);
 
     let input = VerifierInput {
         proof,
@@ -198,7 +190,7 @@ pub fn vm_benchmark_execute_and_prove<const NUM_WORDS: usize, const WORD_SIZE: u
     let verify_span = info_span!("Benchmark verify").entered();
     let verifier = engine.verifier();
     verifier
-        .verify(&mut challenger, &vk, chips, &proof, &public_values)
+        .verify(&mut challenger, &vk, &proof, &public_values)
         .expect("Verification failed");
     verify_span.exit();
 

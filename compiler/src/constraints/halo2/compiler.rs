@@ -163,6 +163,12 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                     let x = ext_chip.sub(ctx, tmp, exts[&c.0]);
                     exts.insert(a.0, x);
                 }
+                DslIr::SubEFI(a, b, c) => {
+                    let tmp = f_chip.load_constant(ctx, c);
+                    let mut x = exts[&b.0];
+                    x.0[0] = f_chip.sub(ctx, x.0[0], tmp);
+                    exts.insert(a.0, x);
+                }
                 DslIr::MulV(a, b, c) => {
                     let x = gate.mul(ctx, vars[&b.0], vars[&c.0]);
                     vars.insert(a.0, x);
@@ -192,6 +198,11 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                 }
                 DslIr::MulEF(a, b, c) => {
                     let x = ext_chip.scalar_mul(ctx, exts[&b.0], felts[&c.0]);
+                    exts.insert(a.0, x);
+                }
+                DslIr::MulEFI(a, b, c) => {
+                    let tmp = f_chip.load_constant(ctx, c);
+                    let x = ext_chip.scalar_mul(ctx, exts[&b.0], tmp);
                     exts.insert(a.0, x);
                 }
                 DslIr::DivFIN(a, b, c) => {

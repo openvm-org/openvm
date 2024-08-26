@@ -1,7 +1,6 @@
 use std::ops::Deref;
 
 use afs_compiler::{asm::AsmBuilder, ir::Felt};
-use afs_recursion::stark::get_rec_raps;
 use afs_test_utils::config::{
     fri_params::{fri_params_fast_testing, fri_params_with_80_bits_of_security},
     setup_tracing,
@@ -53,9 +52,6 @@ fn test_fibonacci_program_verify() {
         ..Default::default()
     };
 
-    let dummy_vm = VirtualMachine::<1, 1, _>::new(vm_config, fib_program.clone(), vec![]);
-    let rec_raps = get_rec_raps(&dummy_vm.segments[0]);
-
     let mut vm = VirtualMachine::<1, 1, _>::new(vm_config, fib_program, vec![]);
     vm.segments[0].public_values = vec![
         Some(BabyBear::zero()),
@@ -71,7 +67,6 @@ fn test_fibonacci_program_verify() {
     } = vm.execute_and_generate_traces().unwrap();
 
     let chips = chips.iter().map(|x| x.deref()).collect();
-    let rec_raps = rec_raps.iter().map(|x| x.deref()).collect();
 
     // blowup factor = 3
     let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
@@ -79,5 +74,5 @@ fn test_fibonacci_program_verify() {
     } else {
         fri_params_with_80_bits_of_security()[1]
     };
-    common::run_recursive_test(chips, rec_raps, traces, pvs, fri_params);
+    common::run_recursive_test(chips, traces, pvs, fri_params);
 }

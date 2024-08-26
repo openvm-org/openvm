@@ -82,7 +82,7 @@ fn load_page_test(
         ops_sender_trace,
     );
 
-    page_controller.verify(engine, pk.vk(), proof, ops_sender)
+    page_controller.verify(engine, pk.vk(), proof)
 }
 
 #[test]

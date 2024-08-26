@@ -7,14 +7,13 @@ use crate::{
     challenger::multi_field32::MultiField32ChallengerVariable,
     config::outer::OuterConfig,
     fri::TwoAdicFriPcsVariable,
-    stark::{DynRapForRecursion, StarkVerifier},
+    stark::StarkVerifier,
     types::{MultiStarkVerificationAdvice, VerifierInput},
     utils::const_fri_config,
     witness::Witnessable,
 };
 
 pub fn build_circuit_verify_operations(
-    raps: Vec<&dyn DynRapForRecursion<OuterConfig>>,
     advice: MultiStarkVerificationAdvice<OuterConfig>,
     fri_params: &FriParameters,
     input: VerifierInput<BabyBearPoseidon2OuterConfig>,
@@ -28,13 +27,7 @@ pub fn build_circuit_verify_operations(
     let pcs = TwoAdicFriPcsVariable {
         config: const_fri_config(&mut builder, fri_params),
     };
-    StarkVerifier::verify::<MultiField32ChallengerVariable<_>>(
-        &mut builder,
-        &pcs,
-        raps,
-        advice,
-        &input,
-    );
+    StarkVerifier::verify::<MultiField32ChallengerVariable<_>>(&mut builder, &pcs, advice, &input);
 
     builder.cycle_tracker_end("VerifierProgram");
     builder.operations

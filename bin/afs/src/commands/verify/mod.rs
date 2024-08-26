@@ -5,7 +5,7 @@ use std::{
     time::Instant,
 };
 
-use afs_page::{execution_air::ExecutionAir, page_rw_checker::page_controller::PageController};
+use afs_page::page_rw_checker::page_controller::PageController;
 use afs_stark_backend::{keygen::types::MultiStarkVerifyingKey, prover::types::Proof};
 use afs_test_utils::{
     engine::StarkEngine,
@@ -120,8 +120,7 @@ where
             idx_limb_bits,
             idx_decomp,
         );
-        let ops_sender = ExecutionAir::new(ops_bus_index, idx_len, data_len);
-        let result = page_controller.verify(engine, vk, proof, &ops_sender);
+        let result = page_controller.verify(engine, vk, proof);
         if result.is_err() {
             println!("Verification Unsuccessful");
         } else {

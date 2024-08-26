@@ -20,11 +20,8 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_strict_usize;
 
 use crate::{
-    config::outer::{new_from_outer_multi_vk, OuterConfig},
-    halo2::Halo2Prover,
-    stark::{outer::build_circuit_verify_operations, DynRapForRecursion},
-    types::VerifierInput,
-    witness::Witnessable,
+    config::outer::new_from_outer_multi_vk, halo2::Halo2Prover,
+    stark::outer::build_circuit_verify_operations, types::VerifierInput, witness::Witnessable,
 };
 
 #[test]
@@ -42,7 +39,7 @@ fn test_fibonacci() {
         trace.get(n - 1, 1),
     ]];
 
-    run_recursive_test(vec![&fib_air], vec![&fib_air], vec![trace], pvs)
+    run_recursive_test(vec![&fib_air], vec![trace], pvs)
 }
 
 #[test]
@@ -98,22 +95,14 @@ fn test_interactions() {
         &receiver_air,
         &sum_chip.range_checker.air,
     ];
-    let rec_raps: Vec<&dyn DynRapForRecursion<OuterConfig>> = vec![
-        &sum_chip.air,
-        &sender_air,
-        &receiver_air,
-        &sum_chip.range_checker.air,
-    ];
     let traces = vec![sum_trace, sender_trace, receiver_trace, range_checker_trace];
     let pvs = vec![vec![], vec![], vec![], vec![]];
 
-    run_recursive_test(any_raps, rec_raps, traces, pvs)
+    run_recursive_test(any_raps, traces, pvs)
 }
 
 fn run_recursive_test(
-    // TODO: find way to not duplicate parameters
     any_raps: Vec<&dyn AnyRap<BabyBearPoseidon2OuterConfig>>,
-    rec_raps: Vec<&dyn DynRapForRecursion<OuterConfig>>,
     traces: Vec<RowMajorMatrix<BabyBear>>,
     pvs: Vec<Vec<BabyBear>>,
 ) {
@@ -151,7 +140,7 @@ fn run_recursive_test(
     // Make sure proof verifies outside eDSL...
     let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier
-        .verify(&mut engine.new_challenger(), &vk, any_raps, &proof, &pvs)
+        .verify(&mut engine.new_challenger(), &vk, &proof, &pvs)
         .expect("afs proof should verify");
 
     // Build verification program in eDSL.
@@ -164,6 +153,6 @@ fn run_recursive_test(
 
     let mut witness = Witness::default();
     input.write(&mut witness);
-    let operations = build_circuit_verify_operations(rec_raps, advice, &engine.fri_params, input);
+    let operations = build_circuit_verify_operations(advice, &engine.fri_params, input);
     Halo2Prover::mock(20, operations, witness);
 }

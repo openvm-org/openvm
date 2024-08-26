@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use itertools::Itertools;
 use p3_commit::PolynomialSpace;
 use p3_field::{AbstractExtensionField, AbstractField, Field};
@@ -7,7 +9,8 @@ use tracing::instrument;
 
 use super::error::VerificationError;
 use crate::{
-    air_builders::verifier::VerifierConstraintFolder, keygen::types::StarkVerifyingKey,
+    air_builders::verifier::{GenericVerifierConstraintFolder, VerifierConstraintFolder},
+    keygen::types::StarkVerifyingKey,
     prover::opener::AdjacentOpenedValues,
 };
 
@@ -108,7 +111,7 @@ where
         })
         .collect();
 
-    let mut folder: VerifierConstraintFolder<'_, SC> = VerifierConstraintFolder {
+    let mut folder: VerifierConstraintFolder<'_, SC> = GenericVerifierConstraintFolder {
         preprocessed,
         partitioned_main,
         after_challenge,
@@ -120,6 +123,7 @@ where
         challenges,
         public_values,
         exposed_values_after_challenge,
+        _marker: PhantomData,
     };
     folder.eval_constraints(&vk.symbolic_constraints.constraints);
 

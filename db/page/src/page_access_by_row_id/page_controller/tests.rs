@@ -85,13 +85,7 @@ fn load_page_test(
     let proof = prover.prove(&mut challenger, pk, main_trace_data, &pis);
 
     let mut challenger = engine.new_challenger();
-    verifier.verify(
-        &mut challenger,
-        &vk,
-        vec![&page_controller.page_access_air, page_requester],
-        &proof,
-        &pis,
-    )
+    verifier.verify(&mut challenger, &vk, &proof, &pis)
 }
 
 #[test]
