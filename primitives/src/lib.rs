@@ -14,6 +14,7 @@ pub mod modular_multiplication;
 pub mod offline_checker;
 pub mod range;
 pub mod range_gate;
+pub mod range_tuple;
 pub mod sub_chip;
 pub mod sum;
 pub mod utils;
