@@ -6,14 +6,8 @@ use std::{
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
 use afs_test_utils::utils::create_seeded_rng;
 use p3_baby_bear::BabyBear;
-use p3_field::{
-    extension::BinomialExtensionField, AbstractExtensionField, AbstractField, PrimeField32,
-};
-use rand::{
-    distributions::{Distribution, Standard},
-    seq::SliceRandom,
-    Rng,
-};
+use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField};
+use rand::{seq::SliceRandom, Rng};
 
 use super::columns::FieldExtensionArithmeticIoCols;
 use crate::{
@@ -82,7 +76,7 @@ fn field_extension_air_test() {
     // negative test pranking each IO value
     for height in 0..num_ops {
         // TODO: better way to modify existing traces in tester
-        let mut extension_trace = &mut tester.traces[1];
+        let extension_trace = &mut tester.traces[1];
         let original_trace = extension_trace.clone();
         for width in 0..FieldExtensionArithmeticIoCols::<BabyBear>::get_width() {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
@@ -109,18 +103,8 @@ fn field_extension_consistency_test() {
     let operands: Vec<([F; 4], [F; 4])> = (0..len_tests)
         .map(|_| {
             (
-                [
-                    F::from_canonical_u32(rng.gen_range(1..=100)),
-                    F::from_canonical_u32(rng.gen_range(1..=100)),
-                    F::from_canonical_u32(rng.gen_range(1..=100)),
-                    F::from_canonical_u32(rng.gen_range(1..=100)),
-                ],
-                [
-                    F::from_canonical_u32(rng.gen_range(1..=100)),
-                    F::from_canonical_u32(rng.gen_range(1..=100)),
-                    F::from_canonical_u32(rng.gen_range(1..=100)),
-                    F::from_canonical_u32(rng.gen_range(1..=100)),
-                ],
+                array::from_fn(|_| rng.gen::<F>()),
+                array::from_fn(|_| rng.gen::<F>()),
             )
         })
         .collect();

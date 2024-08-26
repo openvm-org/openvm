@@ -1,4 +1,3 @@
-use core::borrow::Borrow;
 use std::ops::Deref;
 
 use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
@@ -14,10 +13,9 @@ use rand::Rng;
 use super::{FieldArithmetic, FieldArithmeticChip};
 use crate::{
     arch::{
-        bus::ExecutionBus,
         chips::MachineChip,
         instructions::{Opcode::*, FIELD_ARITHMETIC_INSTRUCTIONS},
-        testing::{ExecutionTester, MachineChipTestBuilder, MachineChipTester, MemoryTester},
+        testing::{MachineChipTestBuilder, MachineChipTester, MemoryTester},
     },
     cpu::trace::Instruction,
     field_arithmetic::columns::{FieldArithmeticCols, FieldArithmeticIoCols},

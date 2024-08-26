@@ -12,6 +12,7 @@ use crate::{
     memory::manager::MemoryManager,
 };
 
+// TODO[zach]: Restore tests once we have control flow chip.
 //#[cfg(test)]
 //pub mod tests;
 

@@ -8,12 +8,14 @@ use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
 use self::air::Poseidon2VmAir;
 use crate::{
     arch::{
-        bridge::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
+        bus::ExecutionBus, chips::InstructionExecutor, columns::ExecutionState,
         instructions::Opcode::*,
     },
     cpu::trace::Instruction,
     memory::{
-        manager::MemoryManager, offline_checker::bridge::MemoryOfflineChecker, tree::Hasher, OpType,
+        manager::{trace_builder::MemoryTraceBuilder, MemoryManager},
+        offline_checker::bridge::MemoryOfflineChecker,
+        tree::Hasher,
     },
 };
 
@@ -117,7 +119,7 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
         let air = Poseidon2VmAir::<WIDTH, F>::from_poseidon2_config(
             p2_config,
             execution_bus,
-            MemoryManager::make_offline_checker(memory_manager.clone()),
+            memory_manager.borrow().make_offline_checker(),
         );
         Self {
             air,
@@ -138,10 +140,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
         instruction: &Instruction<F>,
         prev_state: ExecutionState<usize>,
     ) -> ExecutionState<usize> {
-        // TODO: direct accesses are not currently supported
-        assert!(!is_direct);
-
-        let mut mem_trace_builder = MemoryManager::make_trace_builder(self.memory_manager.clone());
+        let mut mem_trace_builder = MemoryTraceBuilder::new(self.memory_manager.clone());
 
         let Instruction {
             opcode,
@@ -154,6 +153,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
             op_g: _g,
             debug: _debug,
         } = instruction.clone();
+
         assert!(opcode == COMP_POS2 || opcode == PERM_POS2);
         debug_assert_eq!(WIDTH, CHUNK * 2);
 

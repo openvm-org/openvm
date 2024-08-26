@@ -8,7 +8,7 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use super::{columns::FieldExtensionArithmeticCols};
+use super::columns::FieldExtensionArithmeticCols;
 use crate::{
     arch::{
         bus::ExecutionBus,

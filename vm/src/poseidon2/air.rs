@@ -11,7 +11,7 @@ use poseidon2_air::poseidon2::Poseidon2Air;
 
 use super::{columns::Poseidon2VmCols, CHUNK};
 use crate::{
-    arch::bridge::ExecutionBus,
+    arch::bus::ExecutionBus,
     memory::{
         offline_checker::bridge::{MemoryBridge, MemoryOfflineChecker},
         MemoryAddress,

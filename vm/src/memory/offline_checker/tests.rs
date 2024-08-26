@@ -5,7 +5,7 @@ use afs_stark_backend::interaction::InteractionBuilder;
 use afs_test_utils::{
     config::baby_bear_poseidon2::run_simple_test_no_pis, utils::create_seeded_rng,
 };
-use itertools::{izip, zip_eq};
+use itertools::zip_eq;
 use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field};
