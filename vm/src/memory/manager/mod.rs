@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 use afs_primitives::range_gate::RangeCheckerGateChip;
 use afs_stark_backend::rap::AnyRap;
@@ -13,7 +13,6 @@ use super::audit::{air::MemoryAuditAir, MemoryAuditChip};
 use crate::{
     arch::chips::MachineChip,
     memory::{
-        decompose,
         manager::operation::MemoryOperation,
         offline_checker::{bridge::MemoryOfflineChecker, bus::MemoryBus},
         OpType,
@@ -27,21 +26,28 @@ pub mod interface;
 pub mod operation;
 pub mod trace_builder;
 
-const WORD_SIZE: usize = 1;
 const NUM_WORDS: usize = 16;
 
-#[derive(Clone, Debug)]
-pub struct MemoryManager<F: PrimeField32> {
-    pub memory_bus: MemoryBus,
-    pub interface_chip: MemoryInterface<NUM_WORDS, WORD_SIZE, F>,
-    mem_config: MemoryConfig,
-    pub(crate) range_checker: Arc<RangeCheckerGateChip>,
-    pub timestamp: F,
-    /// Maps (addr_space, pointer) to (data, timestamp)
-    pub memory: HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
+#[derive(Clone, Copy, Debug)]
+pub struct TimestampedValue<T> {
+    pub timestamp: T,
+    pub value: T,
 }
 
-impl<F: PrimeField32> MemoryManager<F> {
+pub type MemoryChipRef<F> = Rc<RefCell<MemoryChip<F>>>;
+
+#[derive(Clone, Debug)]
+pub struct MemoryChip<F: PrimeField32> {
+    pub memory_bus: MemoryBus,
+    pub interface_chip: MemoryInterface<NUM_WORDS, F>,
+    mem_config: MemoryConfig,
+    pub(crate) range_checker: Arc<RangeCheckerGateChip>,
+    timestamp: F,
+    /// Maps (addr_space, pointer) to (data, timestamp)
+    memory: HashMap<(F, F), TimestampedValue<F>>,
+}
+
+impl<F: PrimeField32> MemoryChip<F> {
     // pub fn with_persistent_memory(
     //     memory_dimensions: MemoryDimensions,
     //     memory: HashMap<(F, F), AccessCell<WORD_SIZE, F>>,
@@ -84,60 +90,56 @@ impl<F: PrimeField32> MemoryManager<F> {
         )
     }
 
-    pub fn read_word(&mut self, addr_space: F, pointer: F) -> MemoryAccess<WORD_SIZE, F> {
-        let cur_clk = self.timestamp;
+    pub fn read(&mut self, addr_space: F, pointer: F) -> MemoryAccess<1, F> {
+        let timestamp = self.timestamp;
         self.timestamp += F::one();
 
         if addr_space == F::zero() {
-            let data = decompose(pointer);
-            return MemoryAccess::<WORD_SIZE, F>::new(
+            return MemoryAccess::<1, F>::new(
                 MemoryOperation::new(
                     addr_space,
                     pointer,
                     F::from_canonical_u8(OpType::Read as u8),
-                    AccessCell::new(data, cur_clk),
+                    AccessCell::new([pointer], timestamp),
                     F::one(),
                 ),
-                AccessCell::new(data, F::zero()),
+                AccessCell::new([pointer], F::zero()),
             );
         }
 
-        let cell = self.memory.get_mut(&(addr_space, pointer)).unwrap();
-        let (old_clk, old_data) = (cell.clk, cell.data);
-        debug_assert!(old_clk < cur_clk);
+        let timestamped_value = self.memory.get_mut(&(addr_space, pointer)).unwrap();
+        debug_assert!(timestamped_value.timestamp < timestamp);
 
-        // Updating AccessCell
-        cell.clk = cur_clk;
+        let prev_timestamp = timestamped_value.timestamp;
+        timestamped_value.timestamp = timestamp;
 
         self.interface_chip
-            .touch_address(addr_space, pointer, old_data);
+            .touch_address(addr_space, pointer, timestamped_value.value);
 
-        MemoryAccess::<WORD_SIZE, F>::new(
+        MemoryAccess::<1, F>::new(
             MemoryOperation::new(
                 addr_space,
                 pointer,
                 F::from_canonical_u8(OpType::Read as u8),
-                *cell,
+                AccessCell {
+                    data: [timestamped_value.value],
+                    clk: timestamped_value.timestamp,
+                },
                 F::one(),
             ),
-            AccessCell::new(old_data, old_clk),
+            AccessCell::new([timestamped_value.value], prev_timestamp),
         )
     }
 
     /// Reads a word directly from memory without updating internal state.
     ///
     /// Any value returned is unconstrained.
-    pub fn unsafe_read_word(&self, addr_space: F, pointer: F) -> [F; WORD_SIZE] {
-        self.memory.get(&(addr_space, pointer)).unwrap().data
+    pub fn unsafe_read_cell(&self, addr_space: F, pointer: F) -> F {
+        self.memory.get(&(addr_space, pointer)).unwrap().value
     }
 
-    pub fn write_word(
-        &mut self,
-        addr_space: F,
-        pointer: F,
-        data: [F; WORD_SIZE],
-    ) -> MemoryAccess<WORD_SIZE, F> {
-        assert!(addr_space != F::zero());
+    pub fn write(&mut self, addr_space: F, pointer: F, data: F) -> MemoryAccess<1, F> {
+        assert_ne!(addr_space, F::zero());
 
         let cur_clk = self.timestamp;
         self.timestamp += F::one();
@@ -145,41 +147,41 @@ impl<F: PrimeField32> MemoryManager<F> {
         let cell = self
             .memory
             .entry((addr_space, pointer))
-            .or_insert(AccessCell {
-                data: [F::zero(); WORD_SIZE],
-                clk: F::zero(),
+            .or_insert(TimestampedValue {
+                value: F::zero(),
+                timestamp: F::zero(),
             });
-        let (old_clk, old_data) = (cell.clk, cell.data);
+        let (old_clk, old_data) = (cell.timestamp, cell.value);
         assert!(old_clk < cur_clk);
 
         // Updating AccessCell
-        cell.clk = cur_clk;
-        cell.data = data;
+        cell.timestamp = cur_clk;
+        cell.value = data;
 
         self.interface_chip
             .touch_address(addr_space, pointer, old_data);
 
-        MemoryAccess::<WORD_SIZE, F>::new(
+        MemoryAccess::<1, F>::new(
             MemoryOperation::new(
                 addr_space,
                 pointer,
                 F::from_canonical_u8(OpType::Write as u8),
-                *cell,
+                AccessCell::new([data], cur_clk),
                 F::one(),
             ),
-            AccessCell::new(old_data, old_clk),
+            AccessCell::new([old_data], old_clk),
         )
     }
 
-    pub fn unsafe_write_word(&mut self, addr_space: F, pointer: F, data: [F; WORD_SIZE]) {
-        assert!(addr_space != F::zero());
+    pub fn unsafe_write_cell(&mut self, addr_space: F, pointer: F, data: F) {
+        assert_ne!(addr_space, F::zero());
 
         self.memory
             .entry((addr_space, pointer))
-            .and_modify(|cell| cell.data = data)
-            .or_insert(AccessCell {
-                data,
-                clk: F::zero(),
+            .and_modify(|cell| cell.value = data)
+            .or_insert(TimestampedValue {
+                value: data,
+                timestamp: F::zero(),
             });
     }
 
@@ -222,7 +224,7 @@ impl<F: PrimeField32> MemoryManager<F> {
         self.timestamp
     }
 
-    pub fn get_audit_air(&self) -> MemoryAuditAir<WORD_SIZE> {
+    pub fn get_audit_air(&self) -> MemoryAuditAir {
         match &self.interface_chip {
             MemoryInterface::Volatile(chip) => chip.air.clone(),
         }
@@ -278,7 +280,7 @@ impl<const WORD_SIZE: usize, T: Field> MemoryAccess<WORD_SIZE, T> {
 
 // TODO[jpw]: MemoryManager is taking the role of MemoryInterface here, which is weird.
 // Necessary right now because MemoryInterface doesn't own the final memory state.
-impl<F: PrimeField32> MachineChip<F> for MemoryManager<F> {
+impl<F: PrimeField32> MachineChip<F> for MemoryChip<F> {
     fn generate_trace(&mut self) -> RowMajorMatrix<F> {
         self.generate_memory_interface_trace()
     }

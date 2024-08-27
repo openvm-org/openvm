@@ -8,8 +8,6 @@ use crate::{
     memory::offline_checker::{bridge::MemoryOfflineChecker, columns::MemoryOfflineCheckerAuxCols},
 };
 
-const WORD_SIZE: usize = 1;
-
 /// Columns for field extension chip.
 ///
 /// IO columns for opcode, x, y, result.
@@ -52,11 +50,11 @@ pub struct FieldExtensionArithmeticAuxCols<T> {
     // the field extension inverse of x
     pub inv: [T; EXTENSION_DEGREE],
     /// The aux columns for the x reads.
-    pub read_x_aux_cols: [MemoryOfflineCheckerAuxCols<WORD_SIZE, T>; EXTENSION_DEGREE],
+    pub read_x_aux_cols: [MemoryOfflineCheckerAuxCols<1, T>; EXTENSION_DEGREE],
     /// The aux columns for the y reads.
-    pub read_y_aux_cols: [MemoryOfflineCheckerAuxCols<WORD_SIZE, T>; EXTENSION_DEGREE],
+    pub read_y_aux_cols: [MemoryOfflineCheckerAuxCols<1, T>; EXTENSION_DEGREE],
     /// The aux columns for the z writes.
-    pub write_aux_cols: [MemoryOfflineCheckerAuxCols<WORD_SIZE, T>; EXTENSION_DEGREE],
+    pub write_aux_cols: [MemoryOfflineCheckerAuxCols<1, T>; EXTENSION_DEGREE],
 }
 
 impl<T> FieldExtensionArithmeticCols<T> {

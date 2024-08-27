@@ -32,7 +32,7 @@ fn field_arithmetic_air_test() {
 
     let mut tester = MachineChipTestBuilder::default();
     let mut field_arithmetic_chip =
-        FieldArithmeticChip::new(tester.execution_bus(), tester.get_memory_manager());
+        FieldArithmeticChip::new(tester.execution_bus(), tester.memory_chip());
 
     let mut rng = create_seeded_rng();
 
@@ -118,7 +118,7 @@ fn field_arithmetic_air_test() {
 fn field_arithmetic_air_zero_div_zero() {
     let mut tester = MachineChipTestBuilder::default();
     let mut field_arithmetic_chip =
-        FieldArithmeticChip::new(tester.execution_bus(), tester.get_memory_manager());
+        FieldArithmeticChip::new(tester.execution_bus(), tester.memory_chip());
     tester.write_cell(1, 0, BabyBear::zero());
     tester.write_cell(1, 1, BabyBear::one());
 
@@ -151,7 +151,7 @@ fn field_arithmetic_air_zero_div_zero() {
 fn field_arithmetic_air_test_panic() {
     let mut tester = MachineChipTestBuilder::default();
     let mut field_arithmetic_chip =
-        FieldArithmeticChip::new(tester.execution_bus(), tester.get_memory_manager());
+        FieldArithmeticChip::new(tester.execution_bus(), tester.memory_chip());
     tester.write_cell(1, 0, BabyBear::zero());
     // should panic
     tester.execute(
