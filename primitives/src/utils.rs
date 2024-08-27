@@ -1,4 +1,4 @@
-use p3_air::{AirBuilder, VirtualPairCol};
+use p3_air::VirtualPairCol;
 #[cfg(any(feature = "test-traits", test))]
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field};
@@ -39,22 +39,22 @@ pub fn to_field_vec<F: Field>(src: &[u32]) -> Vec<F> {
     src.iter().map(|s| F::from_canonical_u32(*s)).collect()
 }
 
-pub fn not<AB: AirBuilder>(a: impl Into<AB::Expr>) -> AB::Expr {
-    AB::Expr::one() - a.into()
+pub fn not<F: AbstractField>(a: impl Into<F>) -> F {
+    F::one() - a.into()
 }
 
-pub fn and<AB: AirBuilder>(a: impl Into<AB::Expr>, b: impl Into<AB::Expr>) -> AB::Expr {
+pub fn and<F: AbstractField>(a: impl Into<F>, b: impl Into<F>) -> F {
     a.into() * b.into()
 }
 
 /// Assumes that a and b are boolean
-pub fn or<AB: AirBuilder>(a: impl Into<AB::Expr>, b: impl Into<AB::Expr>) -> AB::Expr {
+pub fn or<F: AbstractField>(a: impl Into<F>, b: impl Into<F>) -> F {
     let a = a.into();
     let b = b.into();
-    a.clone() + b.clone() - and::<AB>(a, b)
+    a.clone() + b.clone() - and(a, b)
 }
 
 /// Assumes that a and b are boolean
-pub fn implies<AB: AirBuilder>(a: impl Into<AB::Expr>, b: impl Into<AB::Expr>) -> AB::Expr {
-    or::<AB>(AB::Expr::one() - a.into(), b.into())
+pub fn implies<F: AbstractField>(a: impl Into<F>, b: impl Into<F>) -> F {
+    or(F::one() - a.into(), b.into())
 }

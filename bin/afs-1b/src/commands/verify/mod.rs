@@ -21,9 +21,7 @@ use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{de::DeserializeOwned, Serialize};
 
 use super::create_prefix;
-use crate::commands::{
-    get_ops_sender, get_page_controller, read_from_path, BABYBEAR_COMMITMENT_LEN,
-};
+use crate::commands::{get_page_controller, read_from_path, BABYBEAR_COMMITMENT_LEN};
 
 /// `afs verify` command
 /// Uses information from config.toml to verify a proof using the verifying key in `output-folder`
@@ -124,8 +122,7 @@ impl VerifyCommand {
 
         let page_controller: PageController<SC, BABYBEAR_COMMITMENT_LEN> =
             get_page_controller(config, idx_len, data_len);
-        let ops_sender = get_ops_sender(idx_len, data_len);
-        let result = page_controller.verify(engine, &vk, &proof, &pis, &ops_sender);
+        let result = page_controller.verify(engine, &vk, &proof, &pis);
         if result.is_err() {
             println!("Verification Unsuccessful");
         } else {

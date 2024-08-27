@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use p3_field::{AbstractField, PrimeField32};
+use p3_field::{AbstractField, PrimeField};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
@@ -35,7 +35,7 @@ impl<AB: AirBuilderWithPublicValues> Air<AB> for FibonacciAir {
     }
 }
 
-pub fn generate_fib_trace_rows<F: PrimeField32>(n: usize) -> RowMajorMatrix<F> {
+pub fn generate_fib_trace_rows<F: PrimeField>(n: usize) -> RowMajorMatrix<F> {
     assert!(n.is_power_of_two());
 
     let mut rows = vec![vec![F::zero(), F::one()]];

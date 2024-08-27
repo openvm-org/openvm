@@ -1,3 +1,6 @@
+use derive_new::new;
+use p3_air::AirBuilder;
+
 use super::IsEqualVecAir;
 
 #[derive(Default)]
@@ -28,7 +31,7 @@ impl<T> IsEqualVecIoCols<T> {
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, new)]
 pub struct IsEqualVecAuxCols<T> {
     /// prods[i] indicates whether x[i] == y[i] up to the i-th index
     pub prods: Vec<T>,
@@ -49,6 +52,18 @@ impl<T: Clone> IsEqualVecAuxCols<T> {
 
     pub fn width(vec_len: usize) -> usize {
         vec_len + vec_len - 1
+    }
+}
+
+impl<T> IsEqualVecAuxCols<T> {
+    pub fn into_expr<AB: AirBuilder>(self) -> IsEqualVecAuxCols<AB::Expr>
+    where
+        T: Into<AB::Expr>,
+    {
+        IsEqualVecAuxCols::new(
+            self.prods.into_iter().map(|x| x.into()).collect(),
+            self.invs.into_iter().map(|x| x.into()).collect(),
+        )
     }
 }
 

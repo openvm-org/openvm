@@ -1,12 +1,18 @@
-use afs_derive::AlignedBorrow;
-use p3_field::Field;
+use std::array;
 
-use super::{FieldExtensionArithmeticAir, EXTENSION_DEGREE};
+use afs_derive::AlignedBorrow;
+use afs_primitives::is_less_than::IsLessThanAir;
+
+use crate::{
+    field_extension::{air::FieldExtensionArithmeticAir, chip::EXTENSION_DEGREE},
+    memory::offline_checker::{bridge::MemoryOfflineChecker, columns::MemoryOfflineCheckerAuxCols},
+};
+
+const WORD_SIZE: usize = 1;
 
 /// Columns for field extension chip.
 ///
 /// IO columns for opcode, x, y, result.
-#[derive(AlignedBorrow)]
 #[repr(C)]
 pub struct FieldExtensionArithmeticCols<T> {
     pub io: FieldExtensionArithmeticIoCols<T>,
@@ -17,46 +23,89 @@ pub struct FieldExtensionArithmeticCols<T> {
 #[repr(C)]
 pub struct FieldExtensionArithmeticIoCols<T> {
     pub opcode: T,
-    pub x: [T; EXTENSION_DEGREE],
-    pub y: [T; EXTENSION_DEGREE],
-    pub z: [T; EXTENSION_DEGREE],
-}
-
-#[derive(AlignedBorrow)]
-#[repr(C)]
-pub struct FieldExtensionArithmeticAuxCols<T> {
-    pub is_valid: T,
-    // whether the y read occurs: is_valid * (1 - is_inv)
-    pub valid_y_read: T,
-    pub start_timestamp: T,
+    pub pc: T,
+    pub timestamp: T,
     pub op_a: T,
     pub op_b: T,
     pub op_c: T,
     pub d: T,
     pub e: T,
-    // the lower bit of the opcode - BASE_OP
-    pub opcode_lo: T,
-    // the upper bit of the opcode - BASE_OP
-    pub opcode_hi: T,
+    pub x: [T; EXTENSION_DEGREE],
+    pub y: [T; EXTENSION_DEGREE],
+    pub z: [T; EXTENSION_DEGREE],
+}
+
+#[repr(C)]
+pub struct FieldExtensionArithmeticAuxCols<T> {
+    /// Whether the row corresponds an actual event (vs a dummy row for padding).
+    pub is_valid: T,
+    // Whether the y read occurs: is_valid * (1 - is_inv)
+    pub valid_y_read: T,
+    // whether the opcode is FE4ADD
+    pub is_add: T,
+    // whether the opcode is FE4SUB
+    pub is_sub: T,
     // whether the opcode is BBE4MUL
     pub is_mul: T,
     // whether the opcode is BBE4INV
     pub is_inv: T,
-    // the sum x + y if opcode_lo is 0, or the difference x - y if opcode_lo is 1
-    pub sum_or_diff: [T; EXTENSION_DEGREE],
-    // the product of x and y
-    pub product: [T; EXTENSION_DEGREE],
     // the field extension inverse of x
     pub inv: [T; EXTENSION_DEGREE],
+    /// The aux columns for the x reads.
+    pub read_x_aux_cols: [MemoryOfflineCheckerAuxCols<WORD_SIZE, T>; EXTENSION_DEGREE],
+    /// The aux columns for the y reads.
+    pub read_y_aux_cols: [MemoryOfflineCheckerAuxCols<WORD_SIZE, T>; EXTENSION_DEGREE],
+    /// The aux columns for the z writes.
+    pub write_aux_cols: [MemoryOfflineCheckerAuxCols<WORD_SIZE, T>; EXTENSION_DEGREE],
+}
+
+impl<T> FieldExtensionArithmeticCols<T> {
+    pub fn get_width(air: &FieldExtensionArithmeticAir) -> usize {
+        FieldExtensionArithmeticIoCols::<T>::get_width()
+            + FieldExtensionArithmeticAuxCols::<T>::get_width(&air.mem_oc)
+    }
+
+    pub(crate) fn from_iter<I: Iterator<Item = T>>(iter: &mut I, lt_air: &IsLessThanAir) -> Self {
+        let mut next = || iter.next().unwrap();
+
+        Self {
+            io: FieldExtensionArithmeticIoCols {
+                opcode: next(),
+                pc: next(),
+                timestamp: next(),
+                op_a: next(),
+                op_b: next(),
+                op_c: next(),
+                d: next(),
+                e: next(),
+                x: array::from_fn(|_| next()),
+                y: array::from_fn(|_| next()),
+                z: array::from_fn(|_| next()),
+            },
+            aux: FieldExtensionArithmeticAuxCols {
+                is_valid: next(),
+                valid_y_read: next(),
+                is_add: next(),
+                is_sub: next(),
+                is_mul: next(),
+                is_inv: next(),
+                inv: array::from_fn(|_| next()),
+                read_x_aux_cols: array::from_fn(|_| {
+                    MemoryOfflineCheckerAuxCols::try_from_iter(iter, lt_air)
+                }),
+                read_y_aux_cols: array::from_fn(|_| {
+                    MemoryOfflineCheckerAuxCols::try_from_iter(iter, lt_air)
+                }),
+                write_aux_cols: array::from_fn(|_| {
+                    MemoryOfflineCheckerAuxCols::try_from_iter(iter, lt_air)
+                }),
+            },
+        }
+    }
 }
 
 impl<T: Clone> FieldExtensionArithmeticCols<T> {
-    pub fn get_width() -> usize {
-        FieldExtensionArithmeticIoCols::<T>::get_width()
-            + FieldExtensionArithmeticAuxCols::<T>::get_width()
-    }
-
-    pub fn flatten(&self) -> Vec<T> {
+    pub(crate) fn flatten(&self) -> Vec<T> {
         self.io
             .flatten()
             .into_iter()
@@ -65,48 +114,24 @@ impl<T: Clone> FieldExtensionArithmeticCols<T> {
     }
 }
 
-impl<T: Clone> FieldExtensionArithmeticCols<T>
-where
-    T: Field,
-{
-    pub fn blank_row() -> Self {
-        Self {
-            io: FieldExtensionArithmeticIoCols {
-                opcode: T::from_canonical_u8(FieldExtensionArithmeticAir::BASE_OP),
-                x: [T::zero(); EXTENSION_DEGREE],
-                y: [T::zero(); EXTENSION_DEGREE],
-                z: [T::zero(); EXTENSION_DEGREE],
-            },
-            aux: FieldExtensionArithmeticAuxCols {
-                is_valid: T::zero(),
-                valid_y_read: T::zero(),
-                start_timestamp: T::zero(),
-                op_a: T::zero(),
-                op_b: T::zero(),
-                op_c: T::zero(),
-                d: T::zero(),
-                e: T::zero(),
-
-                opcode_lo: T::zero(),
-                opcode_hi: T::zero(),
-                is_mul: T::zero(),
-                is_inv: T::zero(),
-                sum_or_diff: [T::zero(); EXTENSION_DEGREE],
-                product: [T::zero(); EXTENSION_DEGREE],
-                inv: [T::zero(); EXTENSION_DEGREE],
-            },
-        }
+impl<T> FieldExtensionArithmeticIoCols<T> {
+    pub fn get_width() -> usize {
+        (3 * EXTENSION_DEGREE) + 8
     }
 }
 
 impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
-    pub fn get_width() -> usize {
-        3 * EXTENSION_DEGREE + 1
-    }
-
-    pub fn flatten(&self) -> Vec<T> {
-        let mut result = vec![self.opcode.clone()];
-
+    fn flatten(&self) -> Vec<T> {
+        let mut result = vec![
+            self.opcode.clone(),
+            self.pc.clone(),
+            self.timestamp.clone(),
+            self.op_a.clone(),
+            self.op_b.clone(),
+            self.op_c.clone(),
+            self.d.clone(),
+            self.e.clone(),
+        ];
         result.extend_from_slice(&self.x);
         result.extend_from_slice(&self.y);
         result.extend_from_slice(&self.z);
@@ -114,29 +139,32 @@ impl<T: Clone> FieldExtensionArithmeticIoCols<T> {
     }
 }
 
-impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
-    pub fn get_width() -> usize {
-        3 * EXTENSION_DEGREE + 12
+impl<T> FieldExtensionArithmeticAuxCols<T> {
+    pub fn get_width(oc: &MemoryOfflineChecker) -> usize {
+        EXTENSION_DEGREE + 6 + 12 * MemoryOfflineCheckerAuxCols::<1, T>::width(oc)
     }
+}
 
-    pub fn flatten(&self) -> Vec<T> {
+impl<T: Clone> FieldExtensionArithmeticAuxCols<T> {
+    fn flatten(&self) -> Vec<T> {
         let mut result = vec![
             self.is_valid.clone(),
             self.valid_y_read.clone(),
-            self.start_timestamp.clone(),
-            self.op_a.clone(),
-            self.op_b.clone(),
-            self.op_c.clone(),
-            self.d.clone(),
-            self.e.clone(),
-            self.opcode_lo.clone(),
-            self.opcode_hi.clone(),
+            self.is_add.clone(),
+            self.is_sub.clone(),
             self.is_mul.clone(),
             self.is_inv.clone(),
         ];
-        result.extend_from_slice(&self.sum_or_diff);
-        result.extend_from_slice(&self.product);
         result.extend_from_slice(&self.inv);
+        for mem_oc_aux_cols in self.read_x_aux_cols.iter().cloned() {
+            result.extend(mem_oc_aux_cols.flatten());
+        }
+        for mem_oc_aux_cols in self.read_y_aux_cols.iter().cloned() {
+            result.extend(mem_oc_aux_cols.flatten());
+        }
+        for mem_oc_aux_cols in self.write_aux_cols.iter().cloned() {
+            result.extend(mem_oc_aux_cols.flatten());
+        }
         result
     }
 }

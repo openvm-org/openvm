@@ -5,23 +5,20 @@ use p3_symmetric::Hash;
 
 use super::{
     types::{
-        DigestVariable, DimensionsVariable, FriConfigVariable, TwoAdicPcsMatsVariable,
-        TwoAdicPcsProofVariable, TwoAdicPcsRoundVariable,
+        DimensionsVariable, FriConfigVariable, TwoAdicPcsMatsVariable, TwoAdicPcsProofVariable,
+        TwoAdicPcsRoundVariable,
     },
     verify_batch, verify_challenges, verify_shape_and_sample_challenges, NestedOpenedValues,
     TwoAdicMultiplicativeCosetVariable,
 };
-use crate::{
-    challenger::{DuplexChallengerVariable, FeltChallenger},
-    commit::PcsVariable,
-};
+use crate::{challenger::ChallengerVariable, commit::PcsVariable, digest::DigestVariable};
 
 pub fn verify_two_adic_pcs<C: Config>(
     builder: &mut Builder<C>,
     config: &FriConfigVariable<C>,
     rounds: Array<C, TwoAdicPcsRoundVariable<C>>,
     proof: TwoAdicPcsProofVariable<C>,
-    challenger: &mut DuplexChallengerVariable<C>,
+    challenger: &mut impl ChallengerVariable<C>,
 ) where
     C::F: TwoAdicField,
     C::EF: TwoAdicField,
@@ -31,18 +28,15 @@ pub fn verify_two_adic_pcs<C: Config>(
     let log_blowup = config.log_blowup;
     let blowup = config.blowup;
     let alpha = challenger.sample_ext(builder);
+    let fri_proof = proof.fri_proof;
 
     builder.cycle_tracker_start("stage-d-1-verify-shape-and-sample-challenges");
     let fri_challenges =
-        verify_shape_and_sample_challenges(builder, config, &proof.fri_proof, challenger);
+        verify_shape_and_sample_challenges(builder, config, &fri_proof, challenger);
     builder.cycle_tracker_end("stage-d-1-verify-shape-and-sample-challenges");
 
-    let commit_phase_commits_len = proof
-        .fri_proof
-        .commit_phase_commits
-        .len()
-        .materialize(builder);
-    let log_global_max_height: Var<_> = builder.eval(commit_phase_commits_len + log_blowup);
+    let log_global_max_height =
+        builder.eval_expr(fri_proof.commit_phase_commits.len() + RVar::from(log_blowup));
 
     let mut reduced_openings: Array<_, Array<_, Ext<_, _>>> =
         builder.array(proof.query_openings.len());
@@ -56,13 +50,20 @@ pub fn verify_two_adic_pcs<C: Config>(
 
             let mut ro: Array<C, Ext<C::F, C::EF>> = builder.array(32);
             let mut alpha_pow: Array<C, Ext<C::F, C::EF>> = builder.array(32);
-            let zero_ef = builder.eval(C::EF::zero().cons());
-            for j in 0..32 {
-                builder.set_value(&mut ro, j, zero_ef);
-            }
-            let one_ef = builder.eval(C::EF::one().cons());
-            for j in 0..32 {
-                builder.set_value(&mut alpha_pow, j, one_ef);
+            if builder.flags.static_only {
+                for j in 0..32 {
+                    // ATTENTION: don't use set_value here, Fixed will share the same variable.
+                    builder.set(&mut ro, j, C::EF::zero().cons());
+                    builder.set(&mut alpha_pow, j, C::EF::one().cons());
+                }
+            } else {
+                let zero_ef = builder.eval(C::EF::zero().cons());
+                let one_ef = builder.eval(C::EF::one().cons());
+                for j in 0..32 {
+                    // Use set_value here to save a copy.
+                    builder.set_value(&mut ro, j, zero_ef);
+                    builder.set_value(&mut alpha_pow, j, one_ef);
+                }
             }
 
             builder.range(0, rounds.len()).for_each(|j, builder| {
@@ -71,17 +72,19 @@ pub fn verify_two_adic_pcs<C: Config>(
                 let batch_commit = round.batch_commit;
                 let mats = round.mats;
 
-                let mut batch_heights_log2: Array<C, Var<C::N>> = builder.array(mats.len());
+                let mut batch_heights_log2: Array<C, Usize<C::N>> = builder.array(mats.len());
                 builder.range(0, mats.len()).for_each(|k, builder| {
                     let mat = builder.get(&mats, k);
-                    let height_log2: Var<_> = builder.eval(mat.domain.log_n + log_blowup);
+                    let domain = mat.domain;
+                    let height_log2: Usize<_> = builder.eval(domain.log_n + RVar::from(log_blowup));
                     builder.set_value(&mut batch_heights_log2, k, height_log2);
                 });
                 let mut batch_dims: Array<C, DimensionsVariable<C>> = builder.array(mats.len());
                 builder.range(0, mats.len()).for_each(|k, builder| {
                     let mat = builder.get(&mats, k);
+                    let domain = mat.domain;
                     let dim = DimensionsVariable::<C> {
-                        height: builder.eval(mat.domain.size() * blowup),
+                        height: builder.eval(domain.size() * RVar::from(blowup)),
                     };
                     builder.set_value(&mut batch_dims, k, dim);
                 });
@@ -118,9 +121,10 @@ pub fn verify_two_adic_pcs<C: Config>(
                         let mat = builder.get(&mats, k);
                         let mat_points = mat.points;
                         let mat_values = mat.values;
-
-                        let log2_domain_size = mat.domain.log_n;
-                        let log_height: Var<C::N> = builder.eval(log2_domain_size + log_blowup);
+                        let domain = mat.domain;
+                        let log2_domain_size = domain.log_n;
+                        let log_height =
+                            builder.eval_expr(log2_domain_size + RVar::from(log_blowup));
 
                         let cur_ro = builder.get(&ro, log_height);
                         let cur_alpha_pow = builder.get(&alpha_pow, log_height);
@@ -149,8 +153,8 @@ pub fn verify_two_adic_pcs<C: Config>(
                                 let p_at_z = builder.get(&ps_at_z, t);
                                 let quotient = (p_at_z - p_at_x) / (z - x);
 
-                                builder.assign(cur_ro, cur_ro + cur_alpha_pow * quotient);
-                                builder.assign(cur_alpha_pow, cur_alpha_pow * alpha);
+                                builder.assign(&cur_ro, cur_ro + cur_alpha_pow * quotient);
+                                builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha);
                             });
                             builder.cycle_tracker_end("sp1-fri-fold");
                         });
@@ -169,7 +173,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     verify_challenges(
         builder,
         config,
-        &proof.fri_proof,
+        &fri_proof,
         &fri_challenges,
         &reduced_openings,
     );
@@ -195,8 +199,8 @@ where
             builder.set(&mut commit, i, f);
         }
 
-        let mut mats =
-            builder.dyn_array::<TwoAdicPcsMatsVariable<C>>(domains_and_openings_val.len());
+        let mut mats = builder
+            .dyn_array::<TwoAdicPcsMatsVariable<C>>(RVar::from(domains_and_openings_val.len()));
 
         for (i, (domain, openning)) in domains_and_openings_val.into_iter().enumerate() {
             let domain = builder.constant::<TwoAdicMultiplicativeCosetVariable<_>>(domain);
@@ -217,7 +221,6 @@ where
                 }
                 builder.set_value(&mut values, j, tmp);
             }
-
             let mat = TwoAdicPcsMatsVariable {
                 domain,
                 points,
@@ -227,18 +230,18 @@ where
         }
 
         Self {
-            batch_commit: commit,
+            batch_commit: DigestVariable::Felt(commit),
             mats,
         }
     }
 }
 
-#[derive(DslVariable, Clone)]
+#[derive(Clone)]
 pub struct TwoAdicFriPcsVariable<C: Config> {
     pub config: FriConfigVariable<C>,
 }
 
-impl<C: Config> PcsVariable<C, DuplexChallengerVariable<C>> for TwoAdicFriPcsVariable<C>
+impl<C: Config> PcsVariable<C> for TwoAdicFriPcsVariable<C>
 where
     C::F: TwoAdicField,
     C::EF: TwoAdicField,
@@ -252,7 +255,7 @@ where
     fn natural_domain_for_log_degree(
         &self,
         builder: &mut Builder<C>,
-        log_degree: Usize<C::N>,
+        log_degree: RVar<C::N>,
     ) -> Self::Domain {
         self.config.get_subgroup(builder, log_degree)
     }
@@ -263,7 +266,7 @@ where
         builder: &mut Builder<C>,
         rounds: Array<C, TwoAdicPcsRoundVariable<C>>,
         proof: Self::Proof,
-        challenger: &mut DuplexChallengerVariable<C>,
+        challenger: &mut impl ChallengerVariable<C>,
     ) {
         verify_two_adic_pcs(builder, &self.config, rounds, proof, challenger)
     }
@@ -274,22 +277,22 @@ pub mod tests {
 
     use afs_compiler::{
         asm::AsmBuilder,
-        ir::{Array, Usize, Var, DIGEST_SIZE},
+        ir::{Array, RVar, DIGEST_SIZE},
     };
     use afs_test_utils::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
     use itertools::Itertools;
     use p3_baby_bear::BabyBear;
     use p3_challenger::{CanObserve, FieldChallenger};
     use p3_commit::{Pcs, TwoAdicMultiplicativeCoset};
-    use p3_field::AbstractField;
     use p3_matrix::dense::RowMajorMatrix;
     use p3_uni_stark::{StarkGenericConfig, Val};
     use rand::rngs::OsRng;
     use stark_vm::program::Program;
 
     use crate::{
-        challenger::{CanObserveVariable, DuplexChallengerVariable, FeltChallenger},
+        challenger::{duplex::DuplexChallengerVariable, CanObserveDigest, FeltChallenger},
         commit::PcsVariable,
+        digest::DigestVariable,
         fri::{
             types::TwoAdicPcsRoundVariable, TwoAdicFriPcsVariable,
             TwoAdicMultiplicativeCosetVariable,
@@ -297,9 +300,6 @@ pub mod tests {
         hints::{Hintable, InnerPcsProof, InnerVal},
         utils::const_fri_config,
     };
-
-    #[allow(dead_code)]
-    const WORD_SIZE: usize = 1;
 
     #[allow(dead_code)]
     pub fn build_test_fri_with_cols_and_log2_rows(
@@ -360,8 +360,8 @@ pub mod tests {
 
         // Test natural domain for degree.
         for log_d_val in log_degrees.iter() {
-            let log_d: Var<_> = builder.eval(F::from_canonical_usize(*log_d_val));
-            let domain = pcs_var.natural_domain_for_log_degree(&mut builder, Usize::Var(log_d));
+            let log_d = *log_d_val;
+            let domain = pcs_var.natural_domain_for_log_degree(&mut builder, RVar::from(log_d));
 
             let domain_val =
                 <ScPcs as Pcs<EF, Challenger>>::natural_domain_for_degree(pcs, 1 << log_d_val);
@@ -376,24 +376,21 @@ pub mod tests {
         let proofvar = InnerPcsProof::read(&mut builder);
         let mut challenger = DuplexChallengerVariable::new(&mut builder);
         let commit = <[InnerVal; DIGEST_SIZE]>::from(commit).to_vec();
-        let commit = builder.constant::<Array<_, _>>(commit);
-        challenger.observe(&mut builder, commit);
+        let commit = DigestVariable::Felt(builder.constant::<Array<_, _>>(commit));
+        challenger.observe_digest(&mut builder, commit);
         challenger.sample_ext(&mut builder);
         pcs_var.verify(&mut builder, rounds, proofvar, &mut challenger);
         builder.halt();
 
-        let program = builder.compile_isa::<WORD_SIZE>();
+        let program = builder.compile_isa();
         let mut witness_stream = Vec::new();
         witness_stream.extend(proof.write());
         (program, witness_stream)
     }
 
     #[test]
-    #[ignore = "test takes too long"]
     fn test_two_adic_fri_pcs_single_batch() {
-        use afs_compiler::util::execute_program;
-
-        let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 16);
-        execute_program::<WORD_SIZE>(program, witness);
+        let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 10);
+        afs_compiler::util::execute_program(program, witness);
     }
 }

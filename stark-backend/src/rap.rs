@@ -8,7 +8,6 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::air_builders::{
     debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicRapBuilder,
-    verifier::VerifierConstraintFolder,
 };
 
 /// An AIR that works with a particular `AirBuilder` which allows preprocessing
@@ -44,7 +43,6 @@ pub trait PermutationAirBuilderWithExposedValues: PermutationAirBuilder {
 pub trait AnyRap<SC: StarkGenericConfig>:
     Rap<SymbolicRapBuilder<Val<SC>>> // for keygen to extract fixed data about the RAP
     + for<'a> Rap<ProverConstraintFolder<'a, SC>> // for prover quotient polynomial calculation
-    + for<'a> Rap<VerifierConstraintFolder<'a, SC>> // for verifier quotient polynomial calculation
     + for<'a> Rap<DebugConstraintBuilder<'a, SC>> // for debugging
     + BaseAir<Val<SC>>
 {
@@ -58,7 +56,6 @@ where
     SC: StarkGenericConfig,
     T: Rap<SymbolicRapBuilder<Val<SC>>>
         + for<'a> Rap<ProverConstraintFolder<'a, SC>>
-        + for<'a> Rap<VerifierConstraintFolder<'a, SC>>
         + for<'a> Rap<DebugConstraintBuilder<'a, SC>>
         + BaseAir<Val<SC>>
         + 'static,
@@ -69,10 +66,15 @@ where
 
     fn name(&self) -> String {
         let full_name = type_name::<Self>().to_string();
-        full_name
-            .split("::")
-            .last()
-            .map(String::from)
-            .unwrap_or(full_name)
+        let base_name = full_name
+            .split('<')
+            .next()
+            .unwrap_or(&full_name)
+            .rsplit("::")
+            .next()
+            .unwrap_or(&full_name)
+            .to_string();
+
+        base_name
     }
 }

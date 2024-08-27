@@ -87,8 +87,8 @@ fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), Verifi
         proof,
         fri_params: engine.fri_params,
     };
-    let (program, input_stream) = common::build_verification_program(vec![&air], pvs, vparams);
-    execute_program::<1>(program, input_stream);
+    let (program, input_stream) = common::build_verification_program(pvs, vparams);
+    execute_program(program, input_stream);
 
     Ok(())
 }

@@ -1,70 +1,100 @@
-use afs_compiler::{asm::AsmConfig, ir::Builder};
+use afs_compiler::ir::{Builder, CanSelect, Config, Felt, MemVariable, Var};
 use afs_test_utils::config::FriParameters;
-use itertools::Itertools;
-use p3_baby_bear::BabyBear;
 use p3_commit::TwoAdicMultiplicativeCoset;
-use p3_field::{extension::BinomialExtensionField, AbstractField, TwoAdicField};
+use p3_field::{AbstractField, TwoAdicField};
 
 use crate::fri::{types::FriConfigVariable, TwoAdicMultiplicativeCosetVariable};
 
-type Val = BabyBear;
-type Challenge = BinomialExtensionField<Val, 4>;
-type RecursionConfig = AsmConfig<Val, Challenge>;
-type RecursionBuilder = Builder<RecursionConfig>;
-
-pub fn const_fri_config(
-    builder: &mut RecursionBuilder,
+pub fn const_fri_config<C: Config>(
+    builder: &mut Builder<C>,
     params: &FriParameters,
-) -> FriConfigVariable<RecursionConfig> {
-    let two_adicity = Val::TWO_ADICITY;
-    let mut generators = builder.dyn_array(two_adicity);
-    let mut subgroups = builder.dyn_array(two_adicity);
-    for i in 0..two_adicity {
-        let constant_generator = Val::two_adic_generator(i);
+) -> FriConfigVariable<C> {
+    let two_adicity = C::F::TWO_ADICITY;
+    let mut generators = builder.array(two_adicity);
+    let mut subgroups = builder.array(two_adicity);
+    for i in 0..C::F::TWO_ADICITY {
+        let constant_generator = C::F::two_adic_generator(i);
         builder.set(&mut generators, i, constant_generator);
 
         let constant_domain = TwoAdicMultiplicativeCoset {
             log_n: i,
-            shift: Val::one(),
+            shift: C::F::one(),
         };
         let domain_value: TwoAdicMultiplicativeCosetVariable<_> = builder.constant(constant_domain);
-        builder.set(&mut subgroups, i, domain_value);
+        // FIXME: here must use `builder.set_value`. `builder.set` will convert `Usize::Const`
+        // to `Usize::Var` because it calls `builder.eval`.
+        builder.set_value(&mut subgroups, i, domain_value);
     }
     FriConfigVariable {
-        log_blowup: builder.eval(BabyBear::from_canonical_usize(params.log_blowup)),
-        blowup: builder.eval(BabyBear::from_canonical_usize(1 << params.log_blowup)),
-        num_queries: builder.eval(BabyBear::from_canonical_usize(params.num_queries)),
-        proof_of_work_bits: builder.eval(BabyBear::from_canonical_usize(params.proof_of_work_bits)),
+        log_blowup: params.log_blowup,
+        blowup: 1 << params.log_blowup,
+        num_queries: params.num_queries,
+        proof_of_work_bits: params.proof_of_work_bits,
         subgroups,
         generators,
     }
 }
 
-#[allow(dead_code)]
-pub fn static_const_fri_config(
-    builder: &mut RecursionBuilder,
-    params: &FriParameters,
-) -> FriConfigVariable<RecursionConfig> {
-    let two_addicity = Val::TWO_ADICITY;
-    let generators = (0..two_addicity)
-        .map(|i| builder.constant(Val::two_adic_generator(i)))
-        .collect_vec();
-    let subgroups = (0..two_addicity)
-        .map(|i| {
-            let constant_domain = TwoAdicMultiplicativeCoset {
-                log_n: i,
-                shift: Val::one(),
-            };
-            builder.constant(constant_domain)
-        })
-        .collect_vec();
-
-    FriConfigVariable {
-        log_blowup: builder.eval(BabyBear::from_canonical_usize(params.log_blowup)),
-        blowup: builder.eval(BabyBear::from_canonical_usize(1 << params.log_blowup)),
-        num_queries: builder.eval(BabyBear::from_canonical_usize(params.num_queries)),
-        proof_of_work_bits: builder.eval(BabyBear::from_canonical_usize(params.proof_of_work_bits)),
-        subgroups: builder.vec(subgroups),
-        generators: builder.vec(generators),
+/// Reference: https://github.com/Plonky3/Plonky3/blob/622375885320ac6bf3c338001760ed8f2230e3cb/field/src/helpers.rs#L136
+pub fn reduce_32<C: Config>(builder: &mut Builder<C>, vals: &[Felt<C::F>]) -> Var<C::N> {
+    let mut power = C::N::one();
+    let result: Var<C::N> = builder.eval(C::N::zero());
+    for val in vals.iter() {
+        let bits = builder.num2bits_f_circuit(*val);
+        let val = builder.bits2num_v_circuit(&bits);
+        builder.assign(&result, result + val * power);
+        power *= C::N::from_canonical_usize(1usize << 32);
     }
+    result
+}
+
+/// Reference: https://github.com/Plonky3/Plonky3/blob/622375885320ac6bf3c338001760ed8f2230e3cb/field/src/helpers.rs#L149
+pub fn split_32<C: Config>(builder: &mut Builder<C>, val: Var<C::N>, n: usize) -> Vec<Felt<C::F>> {
+    let bits = builder.num2bits_v_circuit(val, 256);
+    let mut results = Vec::new();
+    for i in 0..n {
+        let result: Felt<C::F> = builder.eval(C::F::zero());
+        for j in 0..64 {
+            let bit = bits[i * 64 + j];
+            let t = builder.eval(result + C::F::from_wrapped_u64(1 << j));
+            let z = builder.select_f(bit, t, result);
+            builder.assign(&result, z);
+        }
+        results.push(result);
+    }
+    results
+}
+
+/// Eval two expressions, return in the reversed order if cond == 1. Otherwise, return in the original order.
+/// This is a helper function for optimal performance.
+pub fn cond_eval<C: Config, V: MemVariable<C, Expression: Clone> + CanSelect<C>>(
+    builder: &mut Builder<C>,
+    cond: Var<C::N>,
+    v1: impl Into<V::Expression>,
+    v2: impl Into<V::Expression>,
+) -> [V; 2] {
+    let a: V;
+    let b: V;
+    if builder.flags.static_only {
+        let v1: V = builder.eval(v1.into());
+        let v2: V = builder.eval(v2.into());
+        a = V::select(builder, cond, v2.clone(), v1.clone());
+        b = V::select(builder, cond, v1, v2);
+    } else {
+        let v1 = v1.into();
+        let v2 = v2.into();
+        a = builder.uninit();
+        b = builder.uninit();
+        builder.if_eq(cond, C::N::one()).then_or_else(
+            |builder| {
+                builder.assign(&a, v2.clone());
+                builder.assign(&b, v1.clone());
+            },
+            |builder| {
+                builder.assign(&a, v1.clone());
+                builder.assign(&b, v2.clone());
+            },
+        );
+    }
+    [a, b]
 }

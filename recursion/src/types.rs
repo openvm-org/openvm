@@ -4,7 +4,7 @@ use afs_compiler::{
     prelude::*,
 };
 use afs_stark_backend::{
-    air_builders::symbolic::SymbolicConstraints,
+    air_builders::symbolic::symbolic_expression::SymbolicExpression,
     commit::MatrixCommitmentPointers,
     config::Com,
     keygen::types::{CommitmentToAirGraph, MultiStarkVerifyingKey, StarkVerifyingKey, TraceWidth},
@@ -14,9 +14,13 @@ use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 
 use crate::{
-    fri::types::{DigestVariable, TwoAdicPcsProofVariable},
+    digest::{DigestVal, DigestVariable},
+    fri::types::TwoAdicPcsProofVariable,
     hints::{InnerChallenge, InnerVal},
+    OUTER_DIGEST_SIZE,
 };
+
+pub type OuterDigestVariable<C> = [Var<<C as Config>::N>; OUTER_DIGEST_SIZE];
 
 pub type InnerConfig = AsmConfig<InnerVal, InnerChallenge>;
 
@@ -82,7 +86,7 @@ pub struct AdjacentOpenedValuesVariable<C: Config> {
 }
 
 pub struct VerifierSinglePreprocessedDataInProgram<C: Config> {
-    pub commit: Vec<C::F>,
+    pub commit: DigestVal<C>,
 }
 
 /// Constants determined by AIRs.
@@ -93,7 +97,7 @@ pub struct StarkVerificationAdvice<C: Config> {
     pub width: TraceWidth,
     /// [MatrixCommitmentPointers] for partitioned main trace matrix
     pub main_graph: MatrixCommitmentPointers,
-    /// The factor to multiple the trace degree by to get the degree of the quotient polynomial. Determined from the max constraint degree of the AIR constraints.
+    /// The factor to multiply the trace degree by to get the degree of the quotient polynomial. Determined from the max constraint degree of the AIR constraints.
     /// This is equivalently the number of chunks the quotient polynomial is split into.
     pub quotient_degree: usize,
     /// Number of public values for this STARK only
@@ -103,17 +107,12 @@ pub struct StarkVerificationAdvice<C: Config> {
     /// Number of values to expose to verifier in each trace challenge phase
     pub num_exposed_values_after_challenge: Vec<usize>,
     /// Symbolic representation of all AIR constraints, including logup constraints
-    pub symbolic_constraints: SymbolicConstraints<C::F>,
-    /// TODO: remove this once dyn Rap is no longer necessary
-    pub(crate) interaction_chunk_size: usize,
+    pub symbolic_constraints: Vec<SymbolicExpression<C::F>>,
 }
 
+/// Create StarkVerificationAdvice for an inner config.
 // TODO: the bound C::F = Val<SC> is very awkward
-pub(crate) fn new_from_vk<
-    SC: StarkGenericConfig,
-    C: Config<F = Val<SC>>,
-    const DIGEST_SIZE: usize,
->(
+pub(crate) fn new_from_inner_vk<SC: StarkGenericConfig, C: Config<F = Val<SC>>>(
     vk: StarkVerifyingKey<SC>,
 ) -> StarkVerificationAdvice<C>
 where
@@ -125,12 +124,11 @@ where
         main_graph,
         quotient_degree,
         symbolic_constraints,
-        interaction_chunk_size,
         ..
     } = vk;
     StarkVerificationAdvice {
         preprocessed_data: preprocessed_data.map(|data| VerifierSinglePreprocessedDataInProgram {
-            commit: data.commit.clone().into().to_vec(),
+            commit: DigestVal::F(data.commit.clone().into().to_vec()),
         }),
         width: params.width,
         main_graph,
@@ -138,8 +136,7 @@ where
         num_public_values: params.num_public_values,
         num_challenges_to_sample: params.num_challenges_to_sample,
         num_exposed_values_after_challenge: params.num_exposed_values_after_challenge,
-        symbolic_constraints,
-        interaction_chunk_size,
+        symbolic_constraints: symbolic_constraints.constraints,
     }
 }
 
@@ -161,8 +158,9 @@ pub struct MultiStarkVerificationAdvice<C: Config> {
     pub num_challenges_to_sample: Vec<usize>,
 }
 
+/// Create MultiStarkVerificationAdvice for an inner config.
 // TODO: the bound C::F = Val<SC> is very awkward
-pub fn new_from_multi_vk<SC: StarkGenericConfig, C: Config<F = Val<SC>>, const DIGEST_SIZE: usize>(
+pub fn new_from_inner_multi_vk<SC: StarkGenericConfig, C: Config<F = Val<SC>>>(
     vk: &MultiStarkVerifyingKey<SC>,
 ) -> MultiStarkVerificationAdvice<C>
 where
@@ -173,11 +171,10 @@ where
         num_main_trace_commitments,
         main_commit_to_air_graph,
         num_challenges_to_sample,
-        // TODO: add support for interaction_chunk_size
         ..
     } = vk;
     MultiStarkVerificationAdvice {
-        per_air: per_air.clone().into_iter().map(new_from_vk).collect(),
+        per_air: per_air.clone().into_iter().map(new_from_inner_vk).collect(),
         num_main_trace_commitments: *num_main_trace_commitments,
         main_commit_to_air_graph: main_commit_to_air_graph.clone(),
         num_challenges_to_sample: num_challenges_to_sample.clone(),

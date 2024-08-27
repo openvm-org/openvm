@@ -444,19 +444,7 @@ impl<SC: StarkGenericConfig> FKInnerJoinController<SC> {
         let pis = vec![vec![]; vk.per_air.len()];
 
         let mut challenger = engine.new_challenger();
-        verifier.verify(
-            &mut challenger,
-            &vk,
-            vec![
-                &self.t1_chip,
-                &self.t2_chip,
-                &self.output_chip,
-                &self.intersector_chip,
-                &self.range_checker.air,
-            ],
-            &proof,
-            &pis,
-        )
+        verifier.verify(&mut challenger, &vk, &proof, &pis)
     }
 
     pub fn traces(&self) -> Option<&IJTraces<Val<SC>>> {

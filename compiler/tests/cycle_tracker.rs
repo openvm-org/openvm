@@ -6,7 +6,6 @@ use afs_compiler::{
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use stark_vm::cpu::WORD_SIZE;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
@@ -31,7 +30,7 @@ fn test_cycle_tracker() {
 
     for _ in 0..3 {
         let n_plus_m: Var<_> = builder.eval(n + m);
-        builder.assign(total, total + n_plus_m);
+        builder.assign(&total, total + n_plus_m);
     }
 
     builder.cycle_tracker_end("loop");
@@ -43,11 +42,12 @@ fn test_cycle_tracker() {
     // after TERMINATE, so this CT_END opcode will not be executed
     builder.cycle_tracker_end("test_unclosed");
 
-    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+    let program = builder.compile_isa_with_options(CompilerOptions {
         compile_prints: false,
         enable_cycle_tracker: true,
         field_arithmetic_enabled: true,
         field_extension_enabled: true,
+        field_less_than_enabled: false,
     });
 
     for (i, debug_info) in program.debug_infos.iter().enumerate() {
@@ -55,5 +55,5 @@ fn test_cycle_tracker() {
     }
 
     display_program(&program.instructions);
-    execute_program::<WORD_SIZE>(program, vec![]);
+    execute_program(program, vec![]);
 }

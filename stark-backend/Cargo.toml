@@ -15,14 +15,13 @@ p3-maybe-rayon = { workspace = true }
 p3-uni-stark = { workspace = true }
 p3-util = { workspace = true }
 rayon = { workspace = true, optional = true }
-
-itertools = "0.13.0"
-serde = { version = "1.0", default-features = false, features = [
+itertools.workspace = true
+tracing.workspace = true
+serde = { workspace = true, default-features = false, features = [
     "derive",
     "alloc",
     "rc",
 ] }
-tracing.workspace = true
 derivative = "2.2.0"
 
 [target.'cfg(unix)'.dependencies]

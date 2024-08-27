@@ -1,0 +1,40 @@
+name: Primitives Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "stark-backend/**"
+      - "primitives/**"
+      - "poseidon2-air/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  AXIOM_FAST_TEST: "1"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Run tests for primitives
+        working-directory: primitives
+        run: |
+          cargo test --features parallel
+
+      - name: Run tests for poseidon2-air
+        working-directory: poseidon2-air
+        run: |
+          cargo test --features parallel

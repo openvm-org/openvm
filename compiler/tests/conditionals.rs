@@ -1,11 +1,6 @@
-use afs_compiler::{
-    asm::AsmBuilder,
-    ir::{Usize, Var},
-    util::execute_program,
-};
+use afs_compiler::{asm::AsmBuilder, ir::Var, util::execute_program};
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use stark_vm::cpu::WORD_SIZE;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
@@ -27,7 +22,7 @@ fn test_compiler_conditionals() {
                 builder.if_eq(three, three).then(|builder| {
                     builder
                         .if_eq(four, four)
-                        .then(|builder| builder.assign(c, F::one()))
+                        .then(|builder| builder.assign(&c, F::one()))
                 })
             })
         })
@@ -40,21 +35,21 @@ fn test_compiler_conditionals() {
             builder.if_eq(one, one).then(|builder| {
                 builder
                     .if_eq(two, two)
-                    .then(|builder| builder.assign(c, F::one()))
+                    .then(|builder| builder.assign(&c, F::one()))
             })
         },
         |builder| {
             builder
                 .if_ne(three, four)
-                .then_or_else(|_| {}, |builder| builder.assign(c, F::zero()))
+                .then_or_else(|_| {}, |builder| builder.assign(&c, F::zero()))
         },
     );
     builder.assert_var_eq(c, F::zero());
 
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    let program = builder.compile_isa();
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -74,7 +69,7 @@ fn test_compiler_conditionals_v2() {
                 builder.if_eq(three, three).then(|builder| {
                     builder
                         .if_eq(four, four)
-                        .then(|builder| builder.assign(c, F::one()))
+                        .then(|builder| builder.assign(&c, F::one()))
                 })
             })
         })
@@ -82,19 +77,19 @@ fn test_compiler_conditionals_v2() {
 
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    let program = builder.compile_isa();
+    execute_program(program, vec![]);
 }
 
 #[test]
 fn test_compiler_conditionals_const() {
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let zero: Usize<_> = builder.eval(0);
-    let one: Usize<_> = builder.eval(1);
-    let two: Usize<_> = builder.eval(2);
-    let three: Usize<_> = builder.eval(3);
-    let four: Usize<_> = builder.eval(4);
+    let zero = builder.eval_expr(F::zero());
+    let one = builder.eval_expr(F::one());
+    let two = builder.eval_expr(F::from_canonical_u32(2));
+    let three = builder.eval_expr(F::from_canonical_u32(3));
+    let four = builder.eval_expr(F::from_canonical_u32(4));
 
     // 1 instruction to evaluate the variable.
     let c: Var<_> = builder.eval(F::zero());
@@ -106,7 +101,7 @@ fn test_compiler_conditionals_const() {
                         builder
                             .if_eq(four, four)
                             // 1 instruction to assign the variable.
-                            .then(|builder| builder.assign(c, F::one()))
+                            .then(|builder| builder.assign(&c, F::one()))
                     })
                 })
             })

@@ -58,18 +58,13 @@ impl<AB: InteractionBuilder> SubAir<AB> for IndexedOutputPageAir {
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux_next: Self::AuxView) {
         let (page_local, page_next) = (&io[0], &io[1]);
 
-        // Helpers
-        let or = or::<AB>;
-        let implies = implies::<AB>;
-
         // Ensuring that is_alloc is always bool
         builder.assert_bool(page_local.is_alloc);
 
         // Ensuring that all unallocated rows are at the bottom
-        builder.when_transition().assert_one(implies(
-            page_next.is_alloc.into(),
-            page_local.is_alloc.into(),
-        ));
+        builder
+            .when_transition()
+            .assert_one(implies(page_next.is_alloc, page_local.is_alloc));
 
         // Ensuring that rows are sorted by idx
         let lt_cols = IsLessThanTupleCols {
@@ -87,7 +82,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for IndexedOutputPageAir {
             .eval_when_transition(builder, lt_cols.io, lt_cols.aux);
 
         // Ensuring the keys are strictly sorted for allocated rows
-        builder.when_transition().assert_one(or(
+        builder.when_transition().assert_one(or::<AB::Expr>(
             AB::Expr::one() - page_next.is_alloc,
             aux_next.lt_out.into(),
         ));

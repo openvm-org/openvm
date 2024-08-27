@@ -3,7 +3,7 @@ use std::ops::{Add, Mul, MulAssign};
 use p3_field::{AbstractExtensionField, AbstractField};
 
 use super::{
-    Array, Builder, Config, DslIr, Ext, Felt, MemIndex, SymbolicExt, Usize, Var, Variable,
+    Array, Builder, CanSelect, Config, DslIr, Ext, Felt, MemIndex, RVar, SymbolicExt, Var, Variable,
 };
 
 impl<C: Config> Builder<C> {
@@ -17,14 +17,28 @@ impl<C: Config> Builder<C> {
     /// Select a variable based on a condition.
     pub fn select_v(&mut self, cond: Var<C::N>, a: Var<C::N>, b: Var<C::N>) -> Var<C::N> {
         let c = self.uninit();
-        self.operations.push(DslIr::CircuitSelectV(cond, a, b, c));
+        if self.flags.static_only {
+            self.operations.push(DslIr::CircuitSelectV(cond, a, b, c));
+        } else {
+            self.if_eq(cond, C::N::one()).then_or_else(
+                |builder| builder.assign(&c, a),
+                |builder| builder.assign(&c, b),
+            );
+        }
         c
     }
 
     /// Select a felt based on a condition.
     pub fn select_f(&mut self, cond: Var<C::N>, a: Felt<C::F>, b: Felt<C::F>) -> Felt<C::F> {
         let c = self.uninit();
-        self.operations.push(DslIr::CircuitSelectF(cond, a, b, c));
+        if self.flags.static_only {
+            self.operations.push(DslIr::CircuitSelectF(cond, a, b, c));
+        } else {
+            self.if_eq(cond, C::N::one()).then_or_else(
+                |builder| builder.assign(&c, a),
+                |builder| builder.assign(&c, b),
+            );
+        }
         c
     }
 
@@ -36,7 +50,14 @@ impl<C: Config> Builder<C> {
         b: Ext<C::F, C::EF>,
     ) -> Ext<C::F, C::EF> {
         let c = self.uninit();
-        self.operations.push(DslIr::CircuitSelectE(cond, a, b, c));
+        if self.flags.static_only {
+            self.operations.push(DslIr::CircuitSelectE(cond, a, b, c));
+        } else {
+            self.if_eq(cond, C::N::one()).then_or_else(
+                |builder| builder.assign(&c, a),
+                |builder| builder.assign(&c, b),
+            );
+        }
         c
     }
 
@@ -62,14 +83,14 @@ impl<C: Config> Builder<C> {
         V::Expression: AbstractField,
         V: Copy + Mul<Output = V::Expression> + Variable<C>,
     {
-        let result = self.eval(V::Expression::one());
+        let result: V = self.eval(V::Expression::one());
         let power_f: V = self.eval(x);
         self.range(0, power_bits.len()).for_each(|i, builder| {
             let bit = builder.get(power_bits, i);
             builder
                 .if_eq(bit, C::N::one())
-                .then(|builder| builder.assign(result, result * power_f));
-            builder.assign(power_f, power_f * power_f);
+                .then(|builder| builder.assign(&result, result * power_f));
+            builder.assign(&power_f, power_f * power_f);
         });
         result
     }
@@ -111,25 +132,26 @@ impl<C: Config> Builder<C> {
         &mut self,
         x: V,
         power_bits: &Array<C, Var<C::N>>,
-        bit_len: impl Into<Usize<C::N>>,
+        bit_len: impl Into<RVar<C::N>>,
     ) -> V
     where
         V::Expression: AbstractField,
-        V: Copy + Mul<Output = V::Expression> + Variable<C>,
+        V: Copy + Mul<Output = V::Expression> + Variable<C> + CanSelect<C>,
     {
-        let result = self.eval(V::Expression::one());
+        let result: V = self.eval(V::Expression::one());
         let power_f: V = self.eval(x);
-        let bit_len = bit_len.into().materialize(self);
-        let bit_len_plus_one: Var<_> = self.eval(bit_len + C::N::one());
+        let bit_len = bit_len.into();
+        let bit_len_plus_one = self.eval_expr(bit_len + C::N::one());
+        let one_var: V = self.eval(V::Expression::one());
 
-        self.range(1, bit_len_plus_one).for_each(|i, builder| {
-            let index: Var<C::N> = builder.eval(bit_len - i);
-            let bit = builder.get(power_bits, index);
-            builder
-                .if_eq(bit, C::N::one())
-                .then(|builder| builder.assign(result, result * power_f));
-            builder.assign(power_f, power_f * power_f);
-        });
+        self.range(RVar::one(), bit_len_plus_one)
+            .for_each(|i, builder| {
+                let index = builder.eval_expr(bit_len - i);
+                let bit = builder.get(power_bits, index);
+                let mul = V::select(builder, bit, power_f, one_var);
+                builder.assign(&result, result * mul);
+                builder.assign(&power_f, power_f * power_f);
+            });
         result
     }
 
@@ -137,24 +159,15 @@ impl<C: Config> Builder<C> {
     pub fn exp_power_of_2_v<V>(
         &mut self,
         base: impl Into<V::Expression>,
-        power_log: impl Into<Usize<C::N>>,
+        power_log: impl Into<RVar<C::N>>,
     ) -> V
     where
         V: Variable<C> + Copy + Mul<Output = V::Expression>,
     {
-        let mut result: V = self.eval(base);
-        let power_log: Usize<_> = power_log.into();
-        match power_log {
-            Usize::Var(power_log) => {
-                self.range(0, power_log)
-                    .for_each(|_, builder| builder.assign(result, result * result));
-            }
-            Usize::Const(power_log) => {
-                for _ in 0..power_log {
-                    result = self.eval(result * result);
-                }
-            }
-        }
+        let result: V = self.eval(base);
+        let power_log = power_log.into();
+        self.range(0, power_log)
+            .for_each(|_, builder| builder.assign(&result, result * result));
         result
     }
 
@@ -175,19 +188,19 @@ impl<C: Config> Builder<C> {
     }
 
     /// Multiplies `base` by `2^{log_power}`.
-    pub fn sll<V>(&mut self, base: impl Into<V::Expression>, shift: Usize<C::N>) -> V
+    pub fn sll<V>(&mut self, base: impl Into<V::Expression>, shift: RVar<C::N>) -> V
     where
-        V: Variable<C> + Copy + Add<Output = V::Expression>,
+        V: Variable<C> + Clone + Add<Output = V::Expression>,
     {
         let result: V = self.eval(base);
         self.range(0, shift)
-            .for_each(|_, builder| builder.assign(result, result + result));
+            .for_each(|_, builder| builder.assign(&result, result.clone() + result.clone()));
         result
     }
 
     /// Creates an ext from a slice of felts.
     pub fn ext_from_base_slice(&mut self, arr: &[Felt<C::F>]) -> Ext<C::F, C::EF> {
-        assert!(arr.len() <= <C::EF as AbstractExtensionField::<C::F>>::D);
+        assert!(arr.len() <= <C::EF as AbstractExtensionField<C::F>>::D);
         let mut res = SymbolicExt::from_f(C::EF::zero());
         for i in 0..arr.len() {
             res += arr[i] * SymbolicExt::from_f(C::EF::monomial(i));
@@ -204,19 +217,23 @@ impl<C: Config> Builder<C> {
 
     /// Converts an ext to a slice of felts.
     pub fn ext2felt(&mut self, value: Ext<C::F, C::EF>) -> Array<C, Felt<C::F>> {
-        let result = self.dyn_array(C::EF::D);
-        match result {
-            Array::Dyn(ptr, _) => {
-                let index = MemIndex {
-                    index: Usize::Const(0),
-                    offset: 0,
-                    size: C::EF::D,
-                };
-                self.store(ptr, index, value);
+        if self.flags.static_only {
+            let felts = self.ext2felt_circuit(value);
+            self.vec(felts.to_vec())
+        } else {
+            let result = self.array(C::EF::D);
+            let index = MemIndex {
+                index: RVar::zero(),
+                offset: 0,
+                size: C::EF::D,
+            };
+            if let Array::Dyn(ptr, _) = &result {
+                self.store(*ptr, index, value);
+            } else {
+                unreachable!()
             }
-            Array::Fixed(_) => unreachable!(),
+            result
         }
-        result
     }
 
     /// Converts an ext to a slice of felts inside a circuit.

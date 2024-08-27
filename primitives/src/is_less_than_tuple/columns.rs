@@ -1,4 +1,6 @@
 use afs_derive::AlignedBorrow;
+use derive_new::new;
+use p3_air::AirBuilder;
 
 use super::IsLessThanTupleAir;
 use crate::{
@@ -6,11 +8,21 @@ use crate::{
     is_less_than::columns::{IsLessThanAuxCols, IsLessThanAuxColsMut},
 };
 
-#[derive(Default, Debug, AlignedBorrow)]
+#[derive(Default, Debug, AlignedBorrow, new)]
 pub struct IsLessThanTupleIoCols<T> {
     pub x: Vec<T>,
     pub y: Vec<T>,
     pub tuple_less_than: T,
+}
+
+impl<T> IsLessThanTupleIoCols<T> {
+    pub fn from(lt_cols: IsLessThanTupleIoCols<impl Into<T>>) -> Self {
+        Self {
+            x: lt_cols.x.into_iter().map(|x| x.into()).collect(),
+            y: lt_cols.y.into_iter().map(|y| y.into()).collect(),
+            tuple_less_than: lt_cols.tuple_less_than.into(),
+        }
+    }
 }
 
 impl<T: Clone> IsLessThanTupleIoCols<T> {
@@ -35,7 +47,7 @@ impl<T: Clone> IsLessThanTupleIoCols<T> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, new)]
 pub struct IsLessThanTupleAuxCols<T> {
     pub less_than: Vec<T>,
     pub less_than_aux: Vec<IsLessThanAuxCols<T>>,
@@ -85,7 +97,7 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
         flattened.extend_from_slice(&self.less_than);
 
         for i in 0..self.less_than_aux.len() {
-            flattened.extend_from_slice(&self.less_than_aux[i].flatten());
+            flattened.extend_from_slice(self.less_than_aux[i].clone().flatten().as_slice());
         }
 
         flattened.extend_from_slice(&self.is_equal_vec_aux.prods);
@@ -108,7 +120,28 @@ impl<T: Clone> IsLessThanTupleAuxCols<T> {
     }
 }
 
-#[derive(Debug)]
+impl<T> IsLessThanTupleAuxCols<T> {
+    pub fn into_expr<AB: AirBuilder>(self) -> IsLessThanTupleAuxCols<AB::Expr>
+    where
+        T: Into<AB::Expr>,
+    {
+        IsLessThanTupleAuxCols::new(
+            self.less_than.into_iter().map(|x| x.into()).collect(),
+            self.less_than_aux
+                .into_iter()
+                .map(|x| x.into_expr::<AB>())
+                .collect(),
+            self.is_equal_vec_aux.into_expr::<AB>(),
+            self.is_equal_out.into(),
+            self.less_than_cumulative
+                .into_iter()
+                .map(|x| x.into())
+                .collect(),
+        )
+    }
+}
+
+#[derive(Debug, new)]
 pub struct IsLessThanTupleCols<T> {
     pub io: IsLessThanTupleIoCols<T>,
     pub aux: IsLessThanTupleAuxCols<T>,

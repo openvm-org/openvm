@@ -19,7 +19,7 @@ impl IsLessThanChip {
                 IsLessThanColsMut::<F>::from_slice(&mut rows_concat[i * width..(i + 1) * width]);
 
             self.air
-                .generate_trace_row(*x, *y, self.range_checker.clone(), &mut lt_cols);
+                .generate_trace_row(*x, *y, &self.range_checker, &mut lt_cols);
         }
 
         RowMajorMatrix::new(rows_concat, width)
@@ -31,7 +31,7 @@ impl IsLessThanAir {
         &self,
         x: u32,
         y: u32,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: &RangeCheckerGateChip,
         lt_cols: &mut IsLessThanColsMut<F>,
     ) {
         let less_than = if x < y { 1 } else { 0 };
@@ -47,7 +47,7 @@ impl IsLessThanAir {
         &self,
         x: u32,
         y: u32,
-        range_checker: Arc<RangeCheckerGateChip>,
+        range_checker: &RangeCheckerGateChip,
         lt_aux_cols: &mut IsLessThanAuxColsMut<F>,
     ) {
         // obtain the lower_bits
@@ -79,6 +79,7 @@ impl IsLessThanAir {
     }
 }
 
+// TODO[jpw] stop using Arc<RangeCheckerGateChip> and use &RangeCheckerGateChip (requires not using this trait)
 impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanAir {
     type LocalInput = (u32, u32, Arc<RangeCheckerGateChip>);
 
@@ -88,7 +89,7 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsLessThanAir {
         let mut row = vec![F::zero(); width];
         let mut lt_cols = IsLessThanColsMut::<F>::from_slice(&mut row);
 
-        self.generate_trace_row(input.0, input.1, input.2, &mut lt_cols);
+        self.generate_trace_row(input.0, input.1, &input.2, &mut lt_cols);
 
         IsLessThanCols::<F>::from_slice(&row)
     }

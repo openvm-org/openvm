@@ -1,46 +1,60 @@
 use afs_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
-use super::{columns::FieldExtensionArithmeticCols, FieldExtensionArithmeticAir};
-use crate::cpu::{FIELD_EXTENSION_BUS, MEMORY_BUS, WORD_SIZE};
+use super::{
+    air::FieldExtensionArithmeticAir,
+    chip::EXTENSION_DEGREE,
+    columns::{FieldExtensionArithmeticCols, FieldExtensionArithmeticIoCols},
+};
+use crate::{
+    arch::columns::{ExecutionState, InstructionCols},
+    field_extension::columns::FieldExtensionArithmeticAuxCols,
+    memory::{
+        offline_checker::{
+            bridge::{MemoryBridge, MemoryOfflineChecker},
+            columns::MemoryOfflineCheckerAuxCols,
+        },
+        MemoryAddress,
+    },
+};
 
+#[allow(clippy::too_many_arguments)]
 fn eval_rw_interactions<AB: InteractionBuilder>(
     builder: &mut AB,
+    mem_oc: MemoryOfflineChecker,
+    clk_offset: &mut AB::Expr,
+    is_enabled: AB::Expr,
     is_write: bool,
-    local: &FieldExtensionArithmeticCols<AB::Var>,
+    clk: AB::Var,
     addr_space: AB::Var,
     address: AB::Var,
-    ext_element_ind: usize,
+    ext: [AB::Var; EXTENSION_DEGREE],
+    mem_oc_aux_cols: [MemoryOfflineCheckerAuxCols<1, AB::Var>; EXTENSION_DEGREE],
 ) {
-    let io = &local.io;
-    let aux = &local.aux;
+    let mut memory_bridge = MemoryBridge::new(mem_oc, mem_oc_aux_cols);
 
-    let ext_element = if ext_element_ind == 0 {
-        io.x
-    } else if ext_element_ind == 1 {
-        io.y
-    } else {
-        io.z
-    };
+    for (i, element) in ext.into_iter().enumerate() {
+        let pointer = address + AB::F::from_canonical_usize(i);
 
-    for (i, element) in ext_element.into_iter().enumerate() {
-        let timestamp = aux.start_timestamp + AB::F::from_canonical_usize(ext_element_ind * 4 + i);
+        let clk = clk + clk_offset.clone();
+        *clk_offset += is_enabled.clone();
 
-        let pointer = address + AB::F::from_canonical_usize(i * WORD_SIZE);
-
-        let fields = [
-            timestamp,
-            AB::Expr::from_bool(is_write),
-            addr_space.into(),
-            pointer,
-        ]
-        .into_iter() // TODO: Handle WORD_SIZE > 1 later
-        .chain([element.into()]);
-
-        if ext_element_ind == 1 {
-            builder.push_send(MEMORY_BUS, fields, aux.valid_y_read);
+        if is_write {
+            memory_bridge
+                .write(
+                    MemoryAddress::new(addr_space, pointer),
+                    [element.into()],
+                    clk,
+                )
+                .eval(builder, is_enabled.clone());
         } else {
-            builder.push_send(MEMORY_BUS, fields, aux.is_valid);
+            memory_bridge
+                .read(
+                    MemoryAddress::new(addr_space, pointer),
+                    [element.into()],
+                    clk,
+                )
+                .eval(builder, is_enabled.clone());
         }
     }
 }
@@ -49,24 +63,87 @@ impl FieldExtensionArithmeticAir {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: &FieldExtensionArithmeticCols<AB::Var>,
+        local: FieldExtensionArithmeticCols<AB::Var>,
     ) {
-        // reads for x
-        eval_rw_interactions(builder, false, local, local.aux.d, local.aux.op_b, 0);
-        // reads for y
-        eval_rw_interactions(builder, false, local, local.aux.e, local.aux.op_c, 1);
-        // writes for z
-        eval_rw_interactions(builder, true, local, local.aux.d, local.aux.op_a, 2);
+        let mut clk_offset = AB::Expr::zero();
 
-        // Receives all IO columns from another chip on bus 3 (FIELD_EXTENSION_BUS)
-        let fields = [
-            local.io.opcode,
-            local.aux.op_a,
-            local.aux.op_b,
-            local.aux.op_c,
-            local.aux.d,
-            local.aux.e,
-        ];
-        builder.push_receive(FIELD_EXTENSION_BUS, fields, local.aux.is_valid);
+        let FieldExtensionArithmeticCols { io, aux } = local;
+
+        let FieldExtensionArithmeticIoCols {
+            pc,
+            opcode,
+            timestamp,
+            op_a,
+            op_b,
+            op_c,
+            d,
+            e,
+            x,
+            y,
+            z,
+            ..
+        } = io;
+
+        let FieldExtensionArithmeticAuxCols {
+            read_x_aux_cols,
+            read_y_aux_cols,
+            write_aux_cols,
+            is_valid,
+            valid_y_read,
+            ..
+        } = aux;
+
+        // Reads for x
+        eval_rw_interactions(
+            builder,
+            self.mem_oc,
+            &mut clk_offset,
+            is_valid.into(),
+            false,
+            timestamp,
+            d,
+            op_b,
+            x,
+            read_x_aux_cols,
+        );
+
+        // Reads for y
+        eval_rw_interactions(
+            builder,
+            self.mem_oc,
+            &mut clk_offset,
+            valid_y_read.into(),
+            false,
+            timestamp,
+            e,
+            op_c,
+            y,
+            read_y_aux_cols,
+        );
+
+        // Writes for z
+        eval_rw_interactions(
+            builder,
+            self.mem_oc,
+            &mut clk_offset,
+            is_valid.into(),
+            true,
+            timestamp,
+            d,
+            op_a,
+            z,
+            write_aux_cols,
+        );
+
+        let timestamp_delta =
+            (AB::Expr::two() + valid_y_read) * AB::Expr::from_canonical_usize(EXTENSION_DEGREE);
+
+        self.execution_bus.execute_increment_pc(
+            builder,
+            aux.is_valid,
+            ExecutionState::new(pc, timestamp),
+            timestamp_delta,
+            InstructionCols::new(opcode, [op_a, op_b, op_c, d, e]),
+        );
     }
 }

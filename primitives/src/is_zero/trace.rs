@@ -1,7 +1,10 @@
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix; // Import the constant from columns.rs
 
-use super::{columns::IsZeroCols, IsZeroAir};
+use super::{
+    columns::{IsZeroCols, IsZeroIoCols},
+    IsZeroAir,
+};
 use crate::sub_chip::LocalTraceInstructions;
 
 impl IsZeroAir {
@@ -28,6 +31,6 @@ impl<F: Field> LocalTraceInstructions<F> for IsZeroAir {
         } else {
             local_input.inverse()
         };
-        IsZeroCols::<F>::new(local_input, F::from_bool(is_zero), inv)
+        IsZeroCols::<F>::new(IsZeroIoCols::new(local_input, F::from_bool(is_zero)), inv)
     }
 }

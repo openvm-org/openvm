@@ -9,8 +9,6 @@ use p3_field::{extension::BinomialExtensionField, AbstractField};
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
 
-const WORD_SIZE: usize = 1;
-
 #[test]
 fn test_compiler_public_values() {
     let mut builder = AsmBuilder::<F, EF>::default();
@@ -23,15 +21,15 @@ fn test_compiler_public_values() {
 
     let dyn_len: Var<_> = builder.eval(F::from_canonical_usize(2));
     let mut var_array = builder.dyn_array::<Felt<_>>(dyn_len);
-    builder.set(&mut var_array, 0, a);
-    builder.set(&mut var_array, 1, b);
+    builder.set(&mut var_array, RVar::zero(), a);
+    builder.set(&mut var_array, RVar::one(), b);
 
     builder.commit_public_values(&var_array);
 
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program_with_public_values::<WORD_SIZE>(
+    let program = builder.compile_isa();
+    execute_program_with_public_values(
         program,
         vec![],
         &[(0, public_value_0), (1, public_value_1)],
@@ -50,15 +48,15 @@ fn test_compiler_public_values_no_initial() {
 
     let dyn_len: Var<_> = builder.eval(F::from_canonical_usize(2));
     let mut var_array = builder.dyn_array::<Felt<_>>(dyn_len);
-    builder.set(&mut var_array, 0, a);
-    builder.set(&mut var_array, 1, b);
+    builder.set(&mut var_array, RVar::zero(), a);
+    builder.set(&mut var_array, RVar::one(), b);
 
     builder.commit_public_values(&var_array);
 
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    let program = builder.compile_isa();
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -75,15 +73,15 @@ fn test_compiler_public_values_negative() {
 
     let dyn_len: Var<_> = builder.eval(F::from_canonical_usize(2));
     let mut var_array = builder.dyn_array::<Felt<_>>(dyn_len);
-    builder.set(&mut var_array, 0, a);
-    builder.set(&mut var_array, 1, b);
+    builder.set(&mut var_array, RVar::zero(), a);
+    builder.set(&mut var_array, RVar::one(), b);
 
     builder.commit_public_values(&var_array);
 
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program_with_public_values::<WORD_SIZE>(
+    let program = builder.compile_isa();
+    execute_program_with_public_values(
         program,
         vec![],
         &[(0, public_value_0), (1, public_value_1)],

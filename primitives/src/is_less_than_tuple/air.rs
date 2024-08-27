@@ -9,7 +9,7 @@ use super::columns::{IsLessThanTupleAuxCols, IsLessThanTupleCols, IsLessThanTupl
 use crate::{
     is_equal_vec::IsEqualVecAir,
     is_less_than::{
-        columns::{IsLessThanAuxCols, IsLessThanCols, IsLessThanIoCols},
+        columns::{IsLessThanAuxCols, IsLessThanIoCols},
         IsLessThanAir,
     },
     sub_chip::{AirConfig, SubAir},
@@ -55,7 +55,7 @@ impl IsLessThanTupleAir {
     pub(crate) fn eval_without_interactions<AB: AirBuilder>(
         &self,
         builder: &mut AB,
-        io: IsLessThanTupleIoCols<AB::Var>,
+        io: IsLessThanTupleIoCols<AB::Expr>,
         aux: IsLessThanTupleAuxCols<AB::Var>,
     ) {
         let x = io.x;
@@ -63,26 +63,16 @@ impl IsLessThanTupleAir {
 
         // here we constrain that less_than[i] indicates whether x[i] < y[i] using the IsLessThan subchip for each i
         for i in 0..x.len() {
-            let x_val = x[i];
-            let y_val = y[i];
+            let x_val = x[i].clone();
+            let y_val = y[i].clone();
 
-            let is_less_than_cols = IsLessThanCols {
-                io: IsLessThanIoCols {
-                    x: x_val,
-                    y: y_val,
-                    less_than: aux.less_than[i],
-                },
-                aux: IsLessThanAuxCols {
-                    lower: aux.less_than_aux[i].lower,
-                    lower_decomp: aux.less_than_aux[i].lower_decomp.clone(),
-                },
-            };
-
-            self.is_less_than_airs[i].eval_without_interactions(
-                builder,
-                is_less_than_cols.io,
-                is_less_than_cols.aux,
+            let lt_io_cols = IsLessThanIoCols::new(x_val, y_val, aux.less_than[i]);
+            let lt_aux_cols = IsLessThanAuxCols::new(
+                aux.less_than_aux[i].lower,
+                aux.less_than_aux[i].lower_decomp.clone(),
             );
+
+            self.is_less_than_airs[i].eval_without_interactions(builder, lt_io_cols, lt_aux_cols);
         }
 
         let mut prods = aux.is_equal_vec_aux.prods.clone();
@@ -90,18 +80,24 @@ impl IsLessThanTupleAir {
         let invs = aux.is_equal_vec_aux.invs.clone();
 
         // initialize prods[0] = is_equal(x[0], y[0])
-        builder.assert_eq(prods[0] + (x[0] - y[0]) * invs[0], AB::Expr::one());
+        builder.assert_eq(
+            prods[0] + (x[0].clone() - y[0].clone()) * invs[0],
+            AB::Expr::one(),
+        );
 
         for i in 0..x.len() {
             // constrain prods[i] = 0 if x[i] != y[i]
-            builder.assert_zero(prods[i] * (x[i] - y[i]));
+            builder.assert_zero(prods[i] * (x[i].clone() - y[i].clone()));
         }
 
         for i in 0..x.len() - 1 {
             // if prod[i] == 0 all after are 0
             builder.assert_eq(prods[i] * prods[i + 1], prods[i + 1]);
             // prods[i] == 1 forces prods[i+1] == is_equal(x[i+1], y[i+1])
-            builder.assert_eq(prods[i + 1] + (x[i + 1] - y[i + 1]) * invs[i + 1], prods[i]);
+            builder.assert_eq(
+                prods[i + 1] + (x[i + 1].clone() - y[i + 1].clone()) * invs[i + 1],
+                prods[i],
+            );
         }
 
         let less_than_cumulative = aux.less_than_cumulative.clone();
@@ -153,8 +149,10 @@ impl<AB: InteractionBuilder> SubAir<AB> for IsLessThanTupleAir {
 
     // constrain that x < y lexicographically
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
+        let io_exprs = IsLessThanTupleIoCols::<AB::Expr>::from(io);
+
         self.eval_interactions(builder, &aux.less_than_aux);
-        self.eval_without_interactions(builder, io, aux);
+        self.eval_without_interactions(builder, io_exprs, aux);
 
         // Note: if we had called the individual IsLessThanAir sub-airs with `eval`, they
         // would have added in the interactions automatically. We didn't do that here because
@@ -179,7 +177,9 @@ impl IsLessThanTupleAir {
         io: IsLessThanTupleIoCols<AB::Var>,
         aux: IsLessThanTupleAuxCols<AB::Var>,
     ) {
+        let io_exprs = IsLessThanTupleIoCols::<AB::Expr>::from(io);
+
         self.eval_interactions(builder, &aux.less_than_aux);
-        self.eval_without_interactions(&mut builder.when_transition(), io, aux);
+        self.eval_without_interactions(&mut builder.when_transition(), io_exprs, aux);
     }
 }

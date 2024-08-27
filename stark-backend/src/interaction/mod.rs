@@ -38,7 +38,6 @@ pub type SymbolicInteraction<F> = Interaction<SymbolicExpression<F>>;
 /// the interactions to define a [RAP](crate::rap::Rap).
 pub trait InteractionBuilder: AirBuilder {
     /// Stores a new send interaction in the builder.
-    /// `count` can only refer to "local" (current row) variables.
     fn push_send<E: Into<Self::Expr>>(
         &mut self,
         bus_index: usize,
@@ -49,7 +48,6 @@ pub trait InteractionBuilder: AirBuilder {
     }
 
     /// Stores a new receive interaction in the builder.
-    /// `count` can only refer to "local" (current row) variables.
     fn push_receive<E: Into<Self::Expr>>(
         &mut self,
         bus_index: usize,
@@ -60,7 +58,6 @@ pub trait InteractionBuilder: AirBuilder {
     }
 
     /// Stores a new interaction in the builder.
-    /// `count` can only refer to "local" (current row) variables.
     fn push_interaction<E: Into<Self::Expr>>(
         &mut self,
         bus_index: usize,

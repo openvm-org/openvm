@@ -11,7 +11,6 @@ use super::{
     columns::KeccakVmCols, KeccakVmAir, KECCAK_DIGEST_BYTES, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
     KECCAK_WIDTH_U16S, NUM_ABSORB_ROUNDS,
 };
-use crate::cpu::{KECCAK256_BUS, MEMORY_BUS};
 
 /// We need three memory accesses to read dst, src, len from memory.
 /// It seems harmless to just shift timestamp by this even in blocks
@@ -76,8 +75,7 @@ impl KeccakVmAir {
         // degree 1 when possible. Currently this makes `fields` degree 2.
         // [jpw] I wanted to keep the property that input bytes are auto-range
         // checked via xor lookup
-        let pre_absorb_state_bytes =
-            updated_state_bytes.map(|b| not::<AB>(next.is_new_start()) * b);
+        let pre_absorb_state_bytes = updated_state_bytes.map(|b| not(next.is_new_start()) * b);
 
         let post_absorb_state_bytes = (0..NUM_ABSORB_ROUNDS).flat_map(|i| {
             let y = i / 5;
@@ -109,8 +107,7 @@ impl KeccakVmAir {
             let limb = i % U64_LIMBS;
             reset_builder.assert_zero(local.inner.preimage[y][x][limb]);
         }
-        let mut absorb_builder =
-            builder.when(local.is_last_round() * not::<AB>(next.is_new_start()));
+        let mut absorb_builder = builder.when(local.is_last_round() * not(next.is_new_start()));
         for i in KECCAK_RATE_U16S..KECCAK_WIDTH_U16S {
             let y = i / U64_LIMBS / 5;
             let x = (i / U64_LIMBS) % 5;
@@ -193,7 +190,7 @@ impl KeccakVmAir {
             // Only read byte i if it is not padding byte
             // This is constraint degree 3, which leads to quotient degree 2
             // if used as `count` in interaction
-            let count = is_input.clone() * not::<AB>(is_padding);
+            let count = is_input.clone() * not(is_padding);
 
             Self::constrain_memory_read(builder, timestamp, local.opcode.e, ptr, input, count);
         }

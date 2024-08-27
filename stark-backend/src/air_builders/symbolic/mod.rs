@@ -32,6 +32,7 @@ pub mod symbolic_variable;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
 pub struct SymbolicConstraints<F: Field> {
+    /// All constraints of the RAP, including the constraints on the logup partial sums.
     pub constraints: Vec<SymbolicExpression<F>>,
     pub interactions: Vec<Interaction<SymbolicExpression<F>>>,
 }

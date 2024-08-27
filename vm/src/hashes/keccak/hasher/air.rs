@@ -80,7 +80,7 @@ impl KeccakVmAir {
         next: &KeccakVmCols<AB::Var>,
     ) {
         let mut transition_builder = builder.when_transition();
-        let mut round_builder = transition_builder.when(not::<AB>(local.is_last_round()));
+        let mut round_builder = transition_builder.when(not(local.is_last_round()));
         // Opcode columns
         local.opcode.assert_eq(&mut round_builder, next.opcode);
     }
@@ -95,8 +95,7 @@ impl KeccakVmAir {
         // (this means it's not receiving a new opcode or starting a dummy block)
         // then we want _parts_ of opcode instruction to stay the same
         // between blocks.
-        let mut block_transition =
-            builder.when(local.is_last_round() * not::<AB>(next.is_new_start()));
+        let mut block_transition = builder.when(local.is_last_round() * not(next.is_new_start()));
         block_transition.assert_eq(local.opcode.is_enabled, next.opcode.is_enabled);
         // dst is only going to be used for writes in the last input block
         block_transition.assert_eq(local.opcode.dst, next.opcode.dst);
@@ -158,7 +157,7 @@ impl KeccakVmAir {
         }
         // is_padding_byte must stay the same on all rounds in a block
         let is_last_round = *step_flags.last().unwrap();
-        let is_not_last_round = not::<AB>(is_last_round);
+        let is_not_last_round = not(is_last_round);
         for i in 0..KECCAK_RATE_BYTES {
             builder.when(is_not_last_round.clone()).assert_eq(
                 local.sponge.is_padding_byte[i],
@@ -184,7 +183,7 @@ impl KeccakVmAir {
         // must decrease by `KECCAK_RATE_BYTES`.
         builder
             .when(is_last_round)
-            .when(not::<AB>(is_final_block))
+            .when(not(is_final_block))
             .assert_eq(
                 remaining_len - AB::F::from_canonical_usize(KECCAK_RATE_BYTES),
                 next.remaining_len(),
@@ -217,7 +216,7 @@ impl KeccakVmAir {
             AB::F::from_canonical_u8(0b10000001),
         );
 
-        let has_multiple_padding_bytes = not::<AB>(has_single_padding_byte.clone());
+        let has_multiple_padding_bytes: AB::Expr = not(has_single_padding_byte.clone());
         for i in 0..KECCAK_RATE_BYTES - 1 {
             let is_first_padding_byte: AB::Expr = {
                 if i > 0 {
@@ -236,7 +235,7 @@ impl KeccakVmAir {
             // except the last one must be 0
             builder
                 .when(is_padding_byte[i])
-                .when(not::<AB>(is_first_padding_byte)) // hence never when single padding byte
+                .when(not::<AB::Expr>(is_first_padding_byte)) // hence never when single padding byte
                 .assert_zero(block_bytes[i]);
         }
 

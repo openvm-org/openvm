@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use afs_test_utils::{
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},
@@ -7,32 +9,42 @@ use afs_test_utils::{
     engine::StarkEngine,
 };
 use p3_baby_bear::BabyBear;
-use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
+use p3_field::{PrimeField, PrimeField32};
 use stark_vm::{
     cpu::trace::Instruction,
     program::Program,
-    vm::{config::VmConfig, ExecutionResult, VirtualMachine},
+    vm::{config::VmConfig, VirtualMachine},
 };
 
-use crate::{asm::AsmBuilder, conversion::CompilerOptions};
-
-pub fn canonical_i32_to_field<F: PrimeField32>(x: i32) -> F {
-    let modulus = F::ORDER_U32;
-    assert!(x < modulus as i32 && x >= -(modulus as i32));
-    if x < 0 {
-        -F::from_canonical_u32((-x) as u32)
-    } else {
-        F::from_canonical_u32(x as u32)
-    }
-}
-
-pub fn execute_program<const WORD_SIZE: usize>(
+pub fn execute_program_with_config<const WORD_SIZE: usize>(
+    config: VmConfig,
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
 ) {
-    let vm = VirtualMachine::<WORD_SIZE, _>::new(
+    let vm = VirtualMachine::new(config, program, input_stream);
+    vm.execute().unwrap();
+}
+
+/// Converts a prime field element to a usize.
+pub fn prime_field_to_usize<F: PrimeField>(x: F) -> usize {
+    let bu = x.as_canonical_biguint();
+    let digits = bu.to_u64_digits();
+    if digits.is_empty() {
+        return 0;
+    }
+    let ret = digits[0] as usize;
+    for i in 1..digits.len() {
+        assert_eq!(digits[i], 0, "Prime field element too large");
+    }
+    ret
+}
+
+pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBear>>) {
+    let vm = VirtualMachine::new(
         VmConfig {
             num_public_values: 4,
+            max_segment_len: (1 << 25) - 100,
+            modular_multiplication_enabled: true,
             ..Default::default()
         },
         program,
@@ -41,12 +53,12 @@ pub fn execute_program<const WORD_SIZE: usize>(
     vm.execute().unwrap();
 }
 
-pub fn execute_program_with_public_values<const WORD_SIZE: usize>(
+pub fn execute_program_with_public_values(
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
     public_values: &[(usize, BabyBear)],
 ) {
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(
+    let vm = VirtualMachine::new(
         VmConfig {
             num_public_values: 4,
             ..Default::default()
@@ -55,9 +67,9 @@ pub fn execute_program_with_public_values<const WORD_SIZE: usize>(
         input_stream,
     );
     for &(index, value) in public_values {
-        vm.segments[0].public_values[index] = Some(value);
+        vm.segments[0].cpu_chip.borrow_mut().public_values[index] = Some(value);
     }
-    vm.execute().unwrap();
+    vm.execute().unwrap()
 }
 
 pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
@@ -69,11 +81,13 @@ pub fn display_program<F: PrimeField32>(program: &[Instruction<F>]) {
             op_c,
             d,
             e,
+            op_f,
+            op_g,
             debug,
         } = instruction;
         println!(
-            "{:?} {} {} {} {} {} {}",
-            opcode, op_a, op_b, op_c, d, e, debug
+            "{:?} {} {} {} {} {} {} {} {}",
+            opcode, op_a, op_b, op_c, d, e, op_f, op_g, debug
         );
     }
 }
@@ -87,49 +101,32 @@ pub fn display_program_with_pc<F: PrimeField32>(program: &[Instruction<F>]) {
             op_c,
             d,
             e,
+            op_f,
+            op_g,
             debug,
         } = instruction;
         println!(
-            "{} | {:?} {} {} {} {} {} {}",
-            pc, opcode, op_a, op_b, op_c, d, e, debug
+            "{} | {:?} {} {} {} {} {} {} {} {}",
+            pc, opcode, op_a, op_b, op_c, d, e, op_f, op_g, debug
         );
     }
 }
-pub fn end_to_end_test<const WORD_SIZE: usize, EF: ExtensionField<BabyBear> + TwoAdicField>(
-    builder: AsmBuilder<BabyBear, EF>,
-    input_stream: Vec<Vec<BabyBear>>,
-) {
-    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
-        compile_prints: false,
-        enable_cycle_tracker: false,
-        field_arithmetic_enabled: true,
-        field_extension_enabled: true,
-    });
-    execute_and_prove_program::<WORD_SIZE>(
-        program,
-        input_stream,
-        VmConfig {
-            num_public_values: 4,
-            ..Default::default()
-        },
-    )
-}
 
-pub fn execute_and_prove_program<const WORD_SIZE: usize>(
+pub fn execute_and_prove_program(
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
     config: VmConfig,
 ) {
-    let vm = VirtualMachine::<WORD_SIZE, _>::new(config, program, input_stream);
+    let vm = VirtualMachine::new(config, program, input_stream);
 
-    let ExecutionResult {
-        max_log_degree,
-        nonempty_chips: chips,
-        nonempty_traces: traces,
-        nonempty_pis: pis,
-        ..
-    } = vm.execute().unwrap();
-    let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
+    let result = vm.execute_and_generate().unwrap();
+    assert_eq!(
+        result.segment_results.len(),
+        1,
+        "only proving one segment for now"
+    );
+
+    let result = &result.segment_results[0];
 
     let perm = random_perm();
     // blowup factor 8 for poseidon2 chip
@@ -138,10 +135,12 @@ pub fn execute_and_prove_program<const WORD_SIZE: usize>(
     } else {
         fri_params_with_80_bits_of_security()[1]
     };
-    let engine = engine_from_perm(perm, max_log_degree, fri_params);
+    let engine = engine_from_perm(perm, result.max_log_degree(), fri_params);
+
+    let airs = result.airs.iter().map(|air| air.deref()).collect();
 
     setup_tracing();
     engine
-        .run_simple_test(chips, traces, pis)
+        .run_simple_test(airs, result.traces.clone(), result.public_values.clone())
         .expect("Verification failed");
 }

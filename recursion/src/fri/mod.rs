@@ -1,55 +1,64 @@
-use afs_compiler::ir::{
-    Array, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, SymbolicVar, Usize, Var, DIGEST_SIZE,
+use afs_compiler::{
+    ir::{
+        Array, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, RVar, SymbolicVar, Usize, Var,
+        DIGEST_SIZE,
+    },
+    prelude::MemVariable,
 };
 pub use domain::*;
 use p3_field::{AbstractField, Field, TwoAdicField};
 pub use two_adic_pcs::*;
 
 use self::types::{
-    DigestVariable, DimensionsVariable, FriChallengesVariable, FriConfigVariable, FriProofVariable,
+    DimensionsVariable, FriChallengesVariable, FriConfigVariable, FriProofVariable,
     FriQueryProofVariable,
 };
-use crate::challenger::{
-    CanObserveVariable, CanSampleBitsVariable, DuplexChallengerVariable, FeltChallenger,
+use crate::{
+    challenger::ChallengerVariable,
+    digest::{CanPoseidon2Digest, DigestVariable},
+    outer_poseidon2::Poseidon2CircuitBuilder,
+    types::OuterDigestVariable,
+    utils::cond_eval,
 };
 
 pub mod domain;
 pub mod hints;
 pub mod two_adic_pcs;
 pub mod types;
+pub mod witness;
 
 /// Reference: https://github.com/Plonky3/Plonky3/blob/4809fa7bedd9ba8f6f5d3267b1592618e3776c57/fri/src/verifier.rs#L27
 pub fn verify_shape_and_sample_challenges<C: Config>(
     builder: &mut Builder<C>,
     config: &FriConfigVariable<C>,
     proof: &FriProofVariable<C>,
-    challenger: &mut DuplexChallengerVariable<C>,
+    challenger: &mut impl ChallengerVariable<C>,
 ) -> FriChallengesVariable<C> {
-    let mut betas: Array<C, Ext<C::F, C::EF>> = builder.dyn_array(proof.commit_phase_commits.len());
+    let mut betas: Array<C, Ext<C::F, C::EF>> = builder.array(proof.commit_phase_commits.len());
 
     builder
         .range(0, proof.commit_phase_commits.len())
         .for_each(|i, builder| {
             let comm = builder.get(&proof.commit_phase_commits, i);
-            challenger.observe(builder, comm);
+            challenger.observe_digest(builder, comm);
             let sample = challenger.sample_ext(builder);
             builder.set(&mut betas, i, sample);
         });
 
-    let num_query_proofs = proof.query_proofs.len().materialize(builder);
+    let num_query_proofs = proof.query_proofs.len().clone();
     builder
-        .if_ne(num_query_proofs, config.num_queries)
+        .if_ne(num_query_proofs, RVar::from(config.num_queries))
         .then(|builder| {
             builder.error();
         });
 
     challenger.check_witness(builder, config.proof_of_work_bits, proof.pow_witness);
 
-    let num_commit_phase_commits = proof.commit_phase_commits.len().materialize(builder);
-    let log_max_height: Var<_> = builder.eval(num_commit_phase_commits + config.log_blowup);
+    let log_max_height =
+        builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(config.log_blowup));
     let mut query_indices = builder.array(config.num_queries);
     builder.range(0, config.num_queries).for_each(|i, builder| {
-        let index_bits = challenger.sample_bits(builder, Usize::Var(log_max_height));
+        let index_bits = challenger.sample_bits(builder, log_max_height);
         builder.set(&mut query_indices, i, index_bits);
     });
 
@@ -73,8 +82,8 @@ pub fn verify_challenges<C: Config>(
     C::F: TwoAdicField,
     C::EF: TwoAdicField,
 {
-    let nb_commit_phase_commits = proof.commit_phase_commits.len().materialize(builder);
-    let log_max_height = builder.eval(nb_commit_phase_commits + config.log_blowup);
+    let log_max_height =
+        builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(config.log_blowup));
     builder
         .range(0, challenges.query_indices.len())
         .for_each(|i, builder| {
@@ -90,7 +99,7 @@ pub fn verify_challenges<C: Config>(
                 &query_proof,
                 &challenges.betas,
                 &ro,
-                Usize::Var(log_max_height),
+                log_max_height,
             );
 
             builder.assert_ext_eq(folded_eval, proof.final_poly);
@@ -112,7 +121,7 @@ pub fn verify_query<C: Config>(
     proof: &FriQueryProofVariable<C>,
     betas: &Array<C, Ext<C::F, C::EF>>,
     reduced_openings: &Array<C, Ext<C::F, C::EF>>,
-    log_max_height: Usize<C::N>,
+    log_max_height: RVar<C::N>,
 ) -> Ext<C::F, C::EF>
 where
     C::F: TwoAdicField,
@@ -127,38 +136,53 @@ where
 
     let x = builder.exp_reverse_bits_len(two_adic_generator_ef, index_bits, log_max_height);
 
-    let log_max_height = log_max_height.materialize(builder);
     builder
         .range(0, commit_phase_commits.len())
         .for_each(|i, builder| {
-            let log_folded_height: Var<_> = builder.eval(log_max_height - i - C::N::one());
-            let log_folded_height_plus_one: Var<_> = builder.eval(log_folded_height + C::N::one());
+            let log_folded_height = builder.eval_expr(log_max_height - i - C::N::one());
+            let log_folded_height_plus_one = builder.eval_expr(log_folded_height + C::N::one());
             let commit = builder.get(commit_phase_commits, i);
             let step = builder.get(&proof.commit_phase_openings, i);
             let beta = builder.get(betas, i);
 
             let reduced_opening = builder.get(reduced_openings, log_folded_height_plus_one);
-            builder.assign(folded_eval, folded_eval + reduced_opening);
+            builder.assign(&folded_eval, folded_eval + reduced_opening);
 
             let index_bit = builder.get(index_bits, i);
             let index_sibling_mod_2: Var<C::N> =
                 builder.eval(SymbolicVar::from(C::N::one()) - index_bit);
-            let i_plus_one: Usize<_> = builder.eval(i + 1);
+            let i_plus_one = builder.eval_expr(i + RVar::one());
             let index_pair = index_bits.shift(builder, i_plus_one);
 
             let mut evals: Array<C, Ext<C::F, C::EF>> = builder.array(2);
-            builder.set_value(&mut evals, 0, folded_eval);
-            builder.set_value(&mut evals, 1, folded_eval);
-            builder.set_value(&mut evals, index_sibling_mod_2, step.sibling_value);
+            let eval_0: Ext<C::F, C::EF>;
+            let eval_1: Ext<C::F, C::EF>;
+            if builder.flags.static_only {
+                [eval_0, eval_1] = cond_eval(
+                    builder,
+                    index_sibling_mod_2,
+                    step.sibling_value,
+                    folded_eval,
+                );
+                builder.set_value(&mut evals, 0, eval_0);
+                builder.set_value(&mut evals, 1, eval_1);
+            } else {
+                builder.set_value(&mut evals, 0, folded_eval);
+                builder.set_value(&mut evals, 1, folded_eval);
+                // This is faster than branching.
+                builder.set_value(&mut evals, index_sibling_mod_2, step.sibling_value);
+                eval_0 = builder.get(&evals, 0);
+                eval_1 = builder.get(&evals, 1);
+            }
 
             let dims = DimensionsVariable::<C> {
-                height: builder.sll(C::N::one(), Usize::Var(log_folded_height)),
+                height: builder.sll(C::N::one(), log_folded_height),
             };
             let mut dims_slice: Array<C, DimensionsVariable<C>> = builder.array(1);
             builder.set_value(&mut dims_slice, 0, dims);
 
             let mut opened_values = builder.array(1);
-            builder.set_value(&mut opened_values, 0, evals.clone());
+            builder.set_value(&mut opened_values, 0, evals);
             builder.cycle_tracker_start("verify-batch-ext");
             verify_batch::<C>(
                 builder,
@@ -170,28 +194,17 @@ where
             );
             builder.cycle_tracker_end("verify-batch-ext");
 
-            let two_adic_generator_one = config.get_two_adic_generator(builder, Usize::Const(1));
-            let xs_0: Ext<_, _> = builder.eval(x);
-            let xs_1: Ext<_, _> = builder.eval(x);
-            builder
-                .if_eq(index_sibling_mod_2, C::N::zero())
-                .then_or_else(
-                    |builder| {
-                        builder.assign(xs_0, x * two_adic_generator_one);
-                    },
-                    |builder| {
-                        builder.assign(xs_1, x * two_adic_generator_one);
-                    },
-                );
+            let two_adic_generator_one = config.get_two_adic_generator(builder, Usize::from(1));
 
-            let eval_0 = builder.get(&evals, 0);
-            let eval_1 = builder.get(&evals, 1);
+            let [xs_0, xs_1]: [Ext<_, _>; 2] =
+                cond_eval(builder, index_sibling_mod_2, x * two_adic_generator_one, x);
+
             builder.assign(
-                folded_eval,
+                &folded_eval,
                 eval_0 + (beta - xs_0) * (eval_1 - eval_0) / (xs_1 - xs_0),
             );
 
-            builder.assign(x, x * x);
+            builder.assign(&x, x * x);
         });
 
     builder.cycle_tracker_end("verify-query");
@@ -219,74 +232,91 @@ pub fn verify_batch<C: Config>(
     opened_values: &NestedOpenedValues<C>,
     proof: &Array<C, DigestVariable<C>>,
 ) {
+    if builder.flags.static_only {
+        verify_batch_static(
+            builder,
+            commit,
+            dimensions,
+            index_bits,
+            opened_values,
+            proof,
+        );
+        return;
+    }
+
+    let commit = if let DigestVariable::Felt(commit) = commit {
+        commit
+    } else {
+        panic!("Expected a Felt commitment");
+    };
+    // Cast DigestVariable into the concrete type.
+    let proof: Array<C, Array<C, Felt<C::F>>> = if let Array::Dyn(ptr, len) = proof {
+        Array::Dyn(*ptr, len.clone())
+    } else {
+        panic!("Expected a dynamic array of Felt commitments");
+    };
+
     // The index of which table to process next.
-    let index: Var<C::N> = builder.eval(C::N::zero());
-
+    let index: Usize<C::N> = builder.eval(C::N::zero());
     // The height of the current layer (padded).
-    let current_height = builder.get(&dimensions, index).height;
-
+    let current_height = builder.get(&dimensions, index.clone()).height;
     // Reduce all the tables that have the same height to a single root.
-    let root = match opened_values {
-        NestedOpenedValues::Felt(opened_values) => {
-            reduce_fast::<C>(builder, index, &dimensions, current_height, opened_values)
-        }
-        NestedOpenedValues::Ext(opened_values) => {
-            reduce_fast_ext::<C>(builder, index, &dimensions, current_height, opened_values)
-        }
-    };
-    let root_ptr = match root {
-        Array::Fixed(_) => panic!("root is fixed"),
-        Array::Dyn(ptr, _) => ptr,
-    };
+    let root = opened_values.reduce_fast_dynamic(
+        builder,
+        index.clone(),
+        &dimensions,
+        current_height.clone(),
+    );
+    let root_ptr = root.ptr();
 
     // For each sibling in the proof, reconstruct the root.
-    let one: Var<_> = builder.eval(C::N::one());
     let left: Ptr<C::N> = builder.uninit();
     let right: Ptr<C::N> = builder.uninit();
     builder.range(0, proof.len()).for_each(|i, builder| {
-        let sibling = builder.get_ptr(proof, i);
+        let sibling = builder.get_ptr(&proof, i);
         let bit = builder.get(&index_bits, i);
 
         builder.if_eq(bit, C::N::one()).then_or_else(
             |builder| {
-                builder.assign(left, sibling);
-                builder.assign(right, root_ptr);
+                builder.assign(&left, sibling);
+                builder.assign(&right, root_ptr);
             },
             |builder| {
-                builder.assign(left, root_ptr);
-                builder.assign(right, sibling);
+                builder.assign(&left, root_ptr);
+                builder.assign(&right, sibling);
             },
         );
 
         builder.poseidon2_compress_x(
-            &mut Array::Dyn(root_ptr, Usize::Const(0)),
-            &Array::Dyn(left, Usize::Const(0)),
-            &Array::Dyn(right, Usize::Const(0)),
+            &mut Array::Dyn(root_ptr, Usize::from(0)),
+            &Array::Dyn(left, Usize::from(0)),
+            &Array::Dyn(right, Usize::from(0)),
         );
-        builder.assign(current_height, current_height * (C::N::two().inverse()));
+        builder.assign(
+            &current_height,
+            current_height.clone() * (C::N::two().inverse()),
+        );
 
-        builder.if_ne(index, dimensions.len()).then(|builder| {
-            let next_height = builder.get(&dimensions, index).height;
-            builder.if_eq(next_height, current_height).then(|builder| {
-                let next_height_openings_digest = match opened_values {
-                    NestedOpenedValues::Felt(opened_values) => {
-                        reduce_fast::<C>(builder, index, &dimensions, current_height, opened_values)
-                    }
-                    NestedOpenedValues::Ext(opened_values) => reduce_fast_ext::<C>(
-                        builder,
-                        index,
-                        &dimensions,
-                        current_height,
-                        opened_values,
-                    ),
-                };
-                builder.poseidon2_compress_x(
-                    &mut root.clone(),
-                    &root.clone(),
-                    &next_height_openings_digest,
-                );
-            });
-        })
+        builder
+            .if_ne(index.clone(), dimensions.len())
+            .then(|builder| {
+                let next_height = builder.get(&dimensions, index.clone()).height;
+                builder
+                    .if_eq(next_height, current_height.clone())
+                    .then(|builder| {
+                        let next_height_openings_digest = opened_values.reduce_fast_dynamic(
+                            builder,
+                            index.clone(),
+                            &dimensions,
+                            current_height.clone(),
+                        );
+                        builder.poseidon2_compress_x(
+                            &mut root.clone(),
+                            &root.clone(),
+                            &next_height_openings_digest,
+                        );
+                    });
+            })
     });
 
     // Assert that the commitments match.
@@ -297,74 +327,158 @@ pub fn verify_batch<C: Config>(
     }
 }
 
+/// [static version] Verifies a batch opening.
+///
+/// Assumes the dimensions have already been sorted by tallest first.
+///
+/// Reference: https://github.com/Plonky3/Plonky3/blob/4809fa7bedd9ba8f6f5d3267b1592618e3776c57/merkle-tree/src/mmcs.rs#L92
 #[allow(clippy::type_complexity)]
-pub fn reduce_fast<C: Config>(
+#[allow(unused_variables)]
+pub fn verify_batch_static<C: Config>(
     builder: &mut Builder<C>,
-    dim_idx: Var<C::N>,
+    commit: &DigestVariable<C>,
+    dimensions: Array<C, DimensionsVariable<C>>,
+    index_bits: Array<C, Var<C::N>>,
+    opened_values: &NestedOpenedValues<C>,
+    proof: &Array<C, DigestVariable<C>>,
+) {
+    let commit: OuterDigestVariable<C> = if let DigestVariable::Var(commit) = commit {
+        commit.vec().try_into().unwrap()
+    } else {
+        panic!("Expected a Var commitment");
+    };
+    // The index of which table to process next.
+    let index: Usize<C::N> = builder.eval(C::N::zero());
+    // The height of the current layer (padded).
+    let current_height = builder.get(&dimensions, index.clone()).height;
+    // Reduce all the tables that have the same height to a single root.
+    let mut root = opened_values.reduce_fast_static(
+        builder,
+        index.clone(),
+        &dimensions,
+        current_height.clone(),
+    );
+
+    // For each sibling in the proof, reconstruct the root.
+    builder.range(0, proof.len()).for_each(|i, builder| {
+        let sibling: OuterDigestVariable<C> = if let DigestVariable::Var(d) = builder.get(proof, i)
+        {
+            d.vec().try_into().unwrap()
+        } else {
+            panic!("Expected a Var commitment");
+        };
+        let bit = builder.get(&index_bits, i);
+
+        let [left, right]: [Var<_>; 2] = cond_eval(builder, bit, root[0], sibling[0]);
+        root = builder.p2_compress([[left], [right]]);
+        builder.assign(
+            &current_height,
+            current_height.clone() * (C::N::two().inverse()),
+        );
+
+        builder
+            .if_ne(index.clone(), dimensions.len())
+            .then(|builder| {
+                let next_height = builder.get(&dimensions, index.clone()).height;
+                builder
+                    .if_eq(next_height, current_height.clone())
+                    .then(|builder| {
+                        let next_height_openings_digest = opened_values.reduce_fast_static(
+                            builder,
+                            index.clone(),
+                            &dimensions,
+                            current_height.clone(),
+                        );
+                        root = builder.p2_compress([root, next_height_openings_digest]);
+                    });
+            })
+    });
+
+    builder.assert_var_eq(root[0], commit[0]);
+}
+
+#[allow(clippy::type_complexity)]
+fn reduce_fast<C: Config, V: MemVariable<C>>(
+    builder: &mut Builder<C>,
+    dim_idx: Usize<C::N>,
     dims: &Array<C, DimensionsVariable<C>>,
-    curr_height_padded: Var<C::N>,
-    opened_values: &Array<C, Array<C, Felt<C::F>>>,
-) -> Array<C, Felt<C::F>> {
+    curr_height_padded: Usize<C::N>,
+    opened_values: &Array<C, Array<C, V>>,
+) -> DigestVariable<C>
+where
+    Array<C, Array<C, V>>: CanPoseidon2Digest<C>,
+{
     builder.cycle_tracker_start("verify-batch-reduce-fast");
-    let nb_opened_values: Var<_> = builder.eval(C::N::zero());
-    let mut nested_opened_values = builder.dyn_array(8192);
-    let start_dim_idx: Var<_> = builder.eval(dim_idx);
+    let nb_opened_values: Usize<_> = builder.eval(C::N::zero());
+    let mut nested_opened_values = builder.array(8192);
+    let start_dim_idx: Usize<_> = builder.eval(dim_idx.clone());
     builder.cycle_tracker_start("verify-batch-reduce-fast-setup");
     builder
         .range(start_dim_idx, dims.len())
         .for_each(|i, builder| {
             let height = builder.get(dims, i).height;
-            builder.if_eq(height, curr_height_padded).then(|builder| {
-                let opened_values = builder.get(opened_values, i);
-                builder.set_value(
-                    &mut nested_opened_values,
-                    nb_opened_values,
-                    opened_values.clone(),
-                );
-                builder.assign(nb_opened_values, nb_opened_values + C::N::one());
-                builder.assign(dim_idx, dim_idx + C::N::one());
-            });
+            builder
+                .if_eq(height, curr_height_padded.clone())
+                .then(|builder| {
+                    let opened_values = builder.get(opened_values, i);
+                    builder.set_value(
+                        &mut nested_opened_values,
+                        nb_opened_values.clone(),
+                        opened_values.clone(),
+                    );
+                    builder.assign(&nb_opened_values, nb_opened_values.clone() + C::N::one());
+                    builder.assign(&dim_idx, dim_idx.clone() + C::N::one());
+                });
         });
     builder.cycle_tracker_end("verify-batch-reduce-fast-setup");
 
-    nested_opened_values.truncate(builder, Usize::Var(nb_opened_values));
-    let h = builder.poseidon2_hash_x(&nested_opened_values);
+    nested_opened_values.truncate(builder, nb_opened_values);
+    let h = nested_opened_values.p2_digest(builder);
     builder.cycle_tracker_end("verify-batch-reduce-fast");
     h
 }
 
-#[allow(clippy::type_complexity)]
-pub fn reduce_fast_ext<C: Config>(
-    builder: &mut Builder<C>,
-    dim_idx: Var<C::N>,
-    dims: &Array<C, DimensionsVariable<C>>,
-    curr_height_padded: Var<C::N>,
-    opened_values: &Array<C, Array<C, Ext<C::F, C::EF>>>,
-) -> Array<C, Felt<C::F>> {
-    builder.cycle_tracker_start("verify-batch-reduce-fast-ext");
-    let nb_opened_values: Var<_> = builder.eval(C::N::zero());
-    let mut nested_opened_values = builder.dyn_array(8192);
-    let start_dim_idx: Var<_> = builder.eval(dim_idx);
-    builder.cycle_tracker_start("verify-batch-reduce-fast-setup-ext");
-    builder
-        .range(start_dim_idx, dims.len())
-        .for_each(|i, builder| {
-            let height = builder.get(dims, i).height;
-            builder.if_eq(height, curr_height_padded).then(|builder| {
-                let opened_values = builder.get(opened_values, i);
-                builder.set_value(
-                    &mut nested_opened_values,
-                    nb_opened_values,
-                    opened_values.clone(),
-                );
-                builder.assign(nb_opened_values, nb_opened_values + C::N::one());
-                builder.assign(dim_idx, dim_idx + C::N::one());
-            });
-        });
-    builder.cycle_tracker_end("verify-batch-reduce-fast-setup-ext");
-
-    nested_opened_values.truncate(builder, Usize::Var(nb_opened_values));
-    let h = builder.poseidon2_hash_ext(&nested_opened_values);
-    builder.cycle_tracker_end("verify-batch-reduce-fast-ext");
-    h
+impl<C: Config> NestedOpenedValues<C> {
+    fn reduce_fast_dynamic(
+        &self,
+        builder: &mut Builder<C>,
+        dim_idx: Usize<C::N>,
+        dims: &Array<C, DimensionsVariable<C>>,
+        curr_height: Usize<C::N>,
+    ) -> Array<C, Felt<C::F>> {
+        if let DigestVariable::Felt(h) = self.reduce_fast(builder, dim_idx, dims, curr_height) {
+            h
+        } else {
+            panic!("Expected a Felt digest");
+        }
+    }
+    fn reduce_fast_static(
+        &self,
+        builder: &mut Builder<C>,
+        dim_idx: Usize<C::N>,
+        dims: &Array<C, DimensionsVariable<C>>,
+        curr_height: Usize<C::N>,
+    ) -> OuterDigestVariable<C> {
+        if let DigestVariable::Var(h) = self.reduce_fast(builder, dim_idx, dims, curr_height) {
+            h.vec().try_into().unwrap()
+        } else {
+            panic!("Expected a Var digest");
+        }
+    }
+    fn reduce_fast(
+        &self,
+        builder: &mut Builder<C>,
+        dim_idx: Usize<C::N>,
+        dims: &Array<C, DimensionsVariable<C>>,
+        curr_height: Usize<C::N>,
+    ) -> DigestVariable<C> {
+        match self {
+            NestedOpenedValues::Felt(opened_values) => {
+                reduce_fast(builder, dim_idx, dims, curr_height, opened_values)
+            }
+            NestedOpenedValues::Ext(opened_values) => {
+                reduce_fast(builder, dim_idx, dims, curr_height, opened_values)
+            }
+        }
+    }
 }

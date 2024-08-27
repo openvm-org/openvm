@@ -3,9 +3,12 @@
 extern crate alloc;
 extern crate proc_macro;
 
+use hints::create_new_struct_and_impl_hintable;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, GenericParam};
+use syn::{parse_macro_input, Data, DeriveInput, Fields, GenericParam, ItemStruct};
+
+mod hints;
 
 #[proc_macro_derive(AlignedBorrow)]
 pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
@@ -207,4 +210,15 @@ pub fn derive_variable(input: TokenStream) -> TokenStream {
     };
 
     gen.into()
+}
+
+#[proc_macro_derive(Hintable)]
+pub fn hintable_derive(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as ItemStruct);
+
+    let new_struct = create_new_struct_and_impl_hintable(&ast);
+    match new_struct {
+        Ok(new_struct) => new_struct.into(),
+        Err(err) => err.into(),
+    }
 }
