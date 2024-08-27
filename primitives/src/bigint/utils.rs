@@ -26,6 +26,8 @@ pub fn range_check<AB: InteractionBuilder>(
     }
 }
 
+// Convert a big uint bits by first conerting to bytes (little endian).
+// So the number of bits is multiple of 8.
 pub fn big_uint_to_bits(x: BigUint) -> VecDeque<usize> {
     let mut result = VecDeque::new();
     for byte in x.to_bytes_le() {
