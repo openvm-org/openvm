@@ -8,7 +8,6 @@ use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use rand::RngCore;
 
-#[allow(dead_code)]
 const WORD_SIZE: usize = 1;
 
 fn secp256k1_coord_prime() -> BigUint {

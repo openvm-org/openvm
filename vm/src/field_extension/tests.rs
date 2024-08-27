@@ -27,8 +27,7 @@ fn field_extension_air_test() {
     type F = BabyBear;
 
     let mut tester = MachineChipTestBuilder::default();
-    let mut chip =
-        FieldExtensionArithmeticChip::new(tester.execution_bus(), tester.get_memory_manager());
+    let mut chip = FieldExtensionArithmeticChip::new(tester.execution_bus(), tester.memory_chip());
 
     let mut rng = create_seeded_rng();
     let num_ops: usize = 1 << 3;

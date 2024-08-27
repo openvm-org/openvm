@@ -1,4 +1,4 @@
-use std::{array, cell::RefCell, rc::Rc};
+use std::array;
 
 use afs_primitives::sub_chip::LocalTraceInstructions;
 use columns::*;
@@ -13,7 +13,7 @@ use crate::{
     },
     cpu::trace::Instruction,
     memory::{
-        manager::{trace_builder::MemoryTraceBuilder, MemoryManager},
+        manager::{trace_builder::MemoryTraceBuilder, MemoryChipRef},
         offline_checker::bridge::MemoryOfflineChecker,
         tree::Hasher,
     },
@@ -34,7 +34,7 @@ pub mod trace;
 pub struct Poseidon2Chip<const WIDTH: usize, F: PrimeField32> {
     pub air: Poseidon2VmAir<WIDTH, F>,
     pub rows: Vec<Poseidon2VmCols<WIDTH, F>>,
-    pub memory_manager: Rc<RefCell<MemoryManager<F>>>,
+    pub memory_chip: MemoryChipRef<F>,
 }
 
 impl<const WIDTH: usize, F: PrimeField32> Poseidon2VmAir<WIDTH, F> {
@@ -114,17 +114,17 @@ impl<F: PrimeField32> Poseidon2Chip<WIDTH, F> {
     pub fn from_poseidon2_config(
         p2_config: Poseidon2Config<WIDTH, F>,
         execution_bus: ExecutionBus,
-        memory_manager: Rc<RefCell<MemoryManager<F>>>,
+        memory_chip: MemoryChipRef<F>,
     ) -> Self {
         let air = Poseidon2VmAir::<WIDTH, F>::from_poseidon2_config(
             p2_config,
             execution_bus,
-            memory_manager.borrow().make_offline_checker(),
+            memory_chip.borrow().make_offline_checker(),
         );
         Self {
             air,
             rows: vec![],
-            memory_manager,
+            memory_chip,
         }
     }
 }
@@ -140,7 +140,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
         instruction: &Instruction<F>,
         prev_state: ExecutionState<usize>,
     ) -> ExecutionState<usize> {
-        let mut mem_trace_builder = MemoryTraceBuilder::new(self.memory_manager.clone());
+        let mut mem_trace_builder = MemoryTraceBuilder::new(self.memory_chip.clone());
 
         let Instruction {
             opcode,
@@ -180,7 +180,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<WIDTH, F> {
         let len = if opcode == PERM_POS2 { WIDTH } else { CHUNK };
 
         for (i, &output_elem) in output.iter().enumerate().take(len) {
-            mem_trace_builder.write_elem(e, dst + F::from_canonical_usize(i), output_elem);
+            mem_trace_builder.write_cell(e, dst + F::from_canonical_usize(i), output_elem);
         }
 
         // Generate disabled MemoryOfflineCheckerAuxCols in case len != WIDTH

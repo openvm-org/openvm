@@ -1,8 +1,6 @@
 use std::{
     array,
-    cell::RefCell,
     ops::{Add, Mul, Sub},
-    rc::Rc,
 };
 
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -17,8 +15,8 @@ use crate::{
     cpu::trace::Instruction,
     field_extension::air::FieldExtensionArithmeticAir,
     memory::{
-        manager::{MemoryAccess, MemoryManager},
-        offline_checker::bridge::{emb, proj},
+        manager::{MemoryAccess, MemoryChipRef},
+        offline_checker::bridge::proj,
     },
 };
 
@@ -56,7 +54,7 @@ pub struct FieldExtensionArithmeticRecord<F> {
 #[derive(Clone, Debug)]
 pub struct FieldExtensionArithmeticChip<F: PrimeField32> {
     pub air: FieldExtensionArithmeticAir,
-    pub(crate) memory: Rc<RefCell<MemoryManager<F>>>,
+    pub(crate) memory: MemoryChipRef<F>,
     pub(crate) records: Vec<FieldExtensionArithmeticRecord<F>>,
 }
 
@@ -82,7 +80,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FieldExtensionArithmeticChip<F>
 }
 
 impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
-    pub fn new(execution_bus: ExecutionBus, memory: Rc<RefCell<MemoryManager<F>>>) -> Self {
+    pub fn new(execution_bus: ExecutionBus, memory: MemoryChipRef<F>) -> Self {
         let air =
             FieldExtensionArithmeticAir::new(execution_bus, memory.borrow().make_offline_checker());
         Self {
@@ -162,7 +160,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         array::from_fn(|i| {
             self.memory
                 .borrow_mut()
-                .read_word(address_space, address + F::from_canonical_usize(i))
+                .read(address_space, address + F::from_canonical_usize(i))
         })
     }
 
@@ -175,10 +173,10 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         assert_ne!(address_space, F::zero());
 
         array::from_fn(|i| {
-            self.memory.borrow_mut().write_word(
+            self.memory.borrow_mut().write(
                 address_space,
                 address + F::from_canonical_usize(i),
-                emb(result[i]),
+                result[i],
             )
         })
     }

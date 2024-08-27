@@ -11,7 +11,7 @@ use rand::{seq::SliceRandom, Rng};
 use crate::{
     arch::chips::MachineChip,
     memory::{
-        manager::MemoryManager,
+        manager::{MemoryChip, MemoryChipRef},
         offline_checker::bus::{MemoryBus, MemoryBusInteraction},
         MemoryAddress, OpType,
     },
@@ -28,42 +28,50 @@ const WORD_SIZE: usize = 1;
 #[derive(Clone, Debug)]
 pub struct MemoryTester<F: PrimeField32> {
     pub bus: MemoryBus,
-    pub manager: Rc<RefCell<MemoryManager<F>>>,
+    pub chip: MemoryChipRef<F>,
     /// Log of raw bus messages
     pub records: Vec<MemoryBusInteraction<F, 1>>,
 }
 
 impl<F: PrimeField32> MemoryTester<F> {
-    pub fn new(manager: Rc<RefCell<MemoryManager<F>>>) -> Self {
-        let bus = manager.borrow().memory_bus;
+    pub fn new(chip: MemoryChipRef<F>) -> Self {
+        let bus = chip.borrow().memory_bus;
         Self {
             bus,
-            manager,
+            chip,
             records: Vec::new(),
         }
     }
 
-    /// Returns the cell value at the current timestamp according to [MemoryManager].
+    /// Returns the cell value at the current timestamp according to [MemoryChip].
     pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
         // core::BorrowMut confuses compiler
-        let op = RefCell::borrow_mut(&mut self.manager).read_word(addr_space, pointer);
+        let access = RefCell::borrow_mut(&self.chip).read(addr_space, pointer);
         let address = MemoryAddress::new(addr_space, pointer);
-        self.records
-            .push(self.bus.read(address, op.op.cell.data, op.old_cell.clk));
-        self.records
-            .push(self.bus.write(address, op.op.cell.data, op.op.cell.clk));
-        op.op.cell.data[0]
+        self.records.push(
+            self.bus
+                .read(address, access.op.cell.data, access.old_cell.clk),
+        );
+        self.records.push(
+            self.bus
+                .write(address, access.op.cell.data, access.op.cell.clk),
+        );
+        access.op.cell.data[0]
     }
 
     pub fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
-        let op = RefCell::borrow_mut(&mut self.manager).write_word(addr_space, pointer, [value]);
+        let access = RefCell::borrow_mut(&self.chip).write(addr_space, pointer, value);
         let address = MemoryAddress::new(addr_space, pointer);
-        self.records
-            .push(self.bus.read(address, op.old_cell.data, op.old_cell.clk));
-        self.records
-            .push(self.bus.write(address, op.op.cell.data, op.op.cell.clk));
+        self.records.push(
+            self.bus
+                .read(address, access.old_cell.data, access.old_cell.clk),
+        );
+        self.records.push(
+            self.bus
+                .write(address, access.op.cell.data, access.op.cell.clk),
+        );
     }
 
     pub fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {

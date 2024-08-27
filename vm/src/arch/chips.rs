@@ -13,13 +13,10 @@ use crate::{
     arch::columns::ExecutionState,
     cpu::{trace::Instruction, CpuChip},
     field_arithmetic::FieldArithmeticChip,
-    // field_extension::chip::FieldExtensionArithmeticChip,
-    memory::manager::MemoryManager,
-    // poseidon2::Poseidon2Chip,
+    field_extension::chip::FieldExtensionArithmeticChip,
+    hashes::poseidon2::Poseidon2Chip,
+    memory::manager::MemoryChipRef,
     program::ProgramChip,
-};
-use crate::{
-    field_extension::chip::FieldExtensionArithmeticChip, hashes::poseidon2::Poseidon2Chip,
 };
 
 #[enum_dispatch]
@@ -95,7 +92,7 @@ pub enum InstructionExecutorVariant<F: PrimeField32> {
 pub enum MachineChipVariant<F: PrimeField32> {
     Cpu(Rc<RefCell<CpuChip<F>>>),
     Program(Rc<RefCell<ProgramChip<F>>>),
-    Memory(Rc<RefCell<MemoryManager<F>>>),
+    Memory(MemoryChipRef<F>),
     FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
     FieldExtension(Rc<RefCell<FieldExtensionArithmeticChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<16, F>>>),

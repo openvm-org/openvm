@@ -1,5 +1,4 @@
 use core::panic;
-use std::{cell::RefCell, rc::Rc};
 
 pub use air::CpuAir;
 use p3_field::PrimeField32;
@@ -9,9 +8,8 @@ use crate::{
         bus::ExecutionBus,
         instructions::{Opcode, Opcode::*},
     },
-    memory::manager::MemoryManager,
+    memory::manager::MemoryChipRef,
 };
-
 // TODO[zach]: Restore tests once we have control flow chip.
 //#[cfg(test)]
 //pub mod tests;
@@ -85,16 +83,16 @@ pub struct CpuChip<F: PrimeField32> {
     /// Program counter at the start of the current segment.
     pub start_state: CpuState,
     pub public_values: Vec<Option<F>>,
-    pub memory_manager: Rc<RefCell<MemoryManager<F>>>,
+    pub memory_chip: MemoryChipRef<F>,
 }
 
 impl<F: PrimeField32> CpuChip<F> {
     pub fn new(
         options: CpuOptions,
         execution_bus: ExecutionBus,
-        memory_manager: Rc<RefCell<MemoryManager<F>>>,
+        memory_chip: MemoryChipRef<F>,
     ) -> Self {
-        Self::from_state(options, execution_bus, memory_manager, CpuState::initial())
+        Self::from_state(options, execution_bus, memory_chip, CpuState::initial())
     }
 
     /// Sets the current state of the CPU.
@@ -106,10 +104,10 @@ impl<F: PrimeField32> CpuChip<F> {
     pub fn from_state(
         options: CpuOptions,
         execution_bus: ExecutionBus,
-        memory_manager: Rc<RefCell<MemoryManager<F>>>,
+        memory_chip: MemoryChipRef<F>,
         state: CpuState,
     ) -> Self {
-        let memory_offline_checker = memory_manager.borrow().make_offline_checker();
+        let memory_offline_checker = memory_chip.borrow().make_offline_checker();
         Self {
             air: CpuAir {
                 options,
@@ -120,7 +118,7 @@ impl<F: PrimeField32> CpuChip<F> {
             state,
             start_state: state,
             public_values: vec![None; options.num_public_values],
-            memory_manager,
+            memory_chip,
         }
     }
 }

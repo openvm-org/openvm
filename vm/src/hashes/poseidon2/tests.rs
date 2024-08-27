@@ -67,7 +67,7 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> MachineChipTester {
     let mut chip = Poseidon2Chip::from_poseidon2_config(
         Poseidon2Config::<16, _>::new_p3_baby_bear_16(),
         tester.execution_bus(),
-        tester.get_memory_manager(),
+        tester.memory_chip(),
     );
 
     let mut rng = create_seeded_rng();
@@ -187,7 +187,7 @@ fn poseidon2_negative_test() {
 //     let mut chip = Poseidon2Chip::<16, BabyBear>::from_poseidon2_config(
 //         Poseidon2Config::default(),
 //         ExecutionBus(0),
-//         MemoryTester::new(MemoryBus(1)).get_memory_manager(),
+//         MemoryTester::new(MemoryBus(1)).chip(),
 //     );
 //
 //     let outs: [[BabyBear; CHUNKS]; NUM_OPS] =

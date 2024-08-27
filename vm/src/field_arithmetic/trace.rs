@@ -63,13 +63,9 @@ fn generate_row<F: Field>(
 
 impl<F: PrimeField32> FieldArithmeticChip<F> {
     fn make_blank_row(&self) -> FieldArithmeticCols<F> {
-        let mut trace_builder = MemoryTraceBuilder::new(self.memory_manager.clone());
+        let mut trace_builder = MemoryTraceBuilder::new(self.memory_chip.clone());
 
-        let timestamp = self
-            .memory_manager
-            .borrow_mut()
-            .timestamp()
-            .as_canonical_u32() as usize;
+        let timestamp = self.memory_chip.borrow_mut().timestamp().as_canonical_u32() as usize;
 
         trace_builder.disabled_op(F::one(), OpType::Read);
         trace_builder.disabled_op(F::one(), OpType::Read);

@@ -44,7 +44,7 @@ impl<F: PrimeField32> ExecutionTester<F> {
     ) {
         let initial_state = ExecutionState {
             pc: self.next_elem_size_usize(),
-            timestamp: memory_tester.manager.borrow().timestamp(),
+            timestamp: memory_tester.chip.borrow().timestamp(),
         };
         tracing::debug!(?initial_state.timestamp);
 

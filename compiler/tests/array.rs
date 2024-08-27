@@ -112,7 +112,6 @@ pub struct Point<C: Config> {
 //
 //     builder.halt();
 //
-//     const WORD_SIZE: usize = 1;
 //     let program = builder.compile_isa();
 //     execute_program(program, vec![]);
 // }

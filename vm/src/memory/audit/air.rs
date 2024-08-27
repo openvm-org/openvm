@@ -14,13 +14,13 @@ use super::columns::AuditCols;
 use crate::{cpu::RANGE_CHECKER_BUS, memory::offline_checker::bus::MemoryBus};
 
 #[derive(Clone, Debug)]
-pub struct MemoryAuditAir<const WORD_SIZE: usize> {
+pub struct MemoryAuditAir {
     pub memory_bus: MemoryBus,
     pub addr_lt_air: IsLessThanTupleAir,
     pub for_testing: bool,
 }
 
-impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
+impl MemoryAuditAir {
     pub fn new(
         memory_bus: MemoryBus,
         addr_space_max_bits: usize,
@@ -40,23 +40,23 @@ impl<const WORD_SIZE: usize> MemoryAuditAir<WORD_SIZE> {
     }
 
     pub fn air_width(&self) -> usize {
-        AuditCols::<WORD_SIZE, usize>::width(self)
+        AuditCols::<usize>::width(self)
     }
 }
 
-impl<const WORD_SIZE: usize, F: Field> BaseAir<F> for MemoryAuditAir<WORD_SIZE> {
+impl<F: Field> BaseAir<F> for MemoryAuditAir {
     fn width(&self) -> usize {
         self.air_width()
     }
 }
 
-impl<const WORD_SIZE: usize, AB: InteractionBuilder> Air<AB> for MemoryAuditAir<WORD_SIZE> {
+impl<AB: InteractionBuilder> Air<AB> for MemoryAuditAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
         let [local, next] = [0, 1].map(|i| {
             let row = main.row_slice(i);
-            AuditCols::<WORD_SIZE, AB::Var>::from_slice(&row, self)
+            AuditCols::<AB::Var>::from_slice(&row, self)
         });
 
         // TODO[jpw]: ideally make this work for testing too

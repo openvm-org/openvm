@@ -1,11 +1,10 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::sync::Arc;
 
 use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 use p3_field::PrimeField32;
 
-use super::{operation::MemoryOperation, MemoryAccess, MemoryManager};
+use super::{operation::MemoryOperation, MemoryAccess, MemoryChipRef};
 use crate::memory::{
-    compose, decompose,
     offline_checker::{bridge::MemoryOfflineChecker, columns::MemoryOfflineCheckerAuxCols},
     OpType,
 };
@@ -18,8 +17,8 @@ const WORD_SIZE: usize = 1;
 /// owned by a chip.
 #[derive(Clone, Debug)]
 pub struct MemoryTraceBuilder<F: PrimeField32> {
-    memory_manager: Rc<RefCell<MemoryManager<F>>>,
-    // Derived from memory_manager:
+    memory_chip: MemoryChipRef<F>,
+    // Derived from memory_chip:
     offline_checker: MemoryOfflineChecker,
     range_checker: Arc<RangeCheckerGateChip>,
 
@@ -27,38 +26,35 @@ pub struct MemoryTraceBuilder<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> MemoryTraceBuilder<F> {
-    pub fn new(memory_manager: Rc<RefCell<MemoryManager<F>>>) -> Self {
-        let offline_checker = memory_manager.borrow().make_offline_checker();
-        let range_checker = memory_manager.borrow().range_checker.clone();
+    pub fn new(memory_chip: MemoryChipRef<F>) -> Self {
+        let offline_checker = memory_chip.borrow().make_offline_checker();
+        let range_checker = memory_chip.borrow().range_checker.clone();
         Self {
-            memory_manager,
+            memory_chip,
             offline_checker,
             range_checker,
             accesses_buffer: Vec::new(),
         }
     }
 
-    pub fn read_word(&mut self, addr_space: F, pointer: F) -> MemoryOperation<WORD_SIZE, F> {
-        let mem_access = self
-            .memory_manager
-            .borrow_mut()
-            .read_word(addr_space, pointer);
+    pub fn read_cell(&mut self, addr_space: F, pointer: F) -> MemoryOperation<WORD_SIZE, F> {
+        let mem_access = self.memory_chip.borrow_mut().read(addr_space, pointer);
         self.accesses_buffer
             .push(self.aux_col_from_access(&mem_access));
 
         mem_access.op
     }
 
-    pub fn write_word(
+    pub fn write_cell(
         &mut self,
         addr_space: F,
         pointer: F,
-        data: [F; WORD_SIZE],
+        data: F,
     ) -> MemoryOperation<WORD_SIZE, F> {
         let mem_access = self
-            .memory_manager
+            .memory_chip
             .borrow_mut()
-            .write_word(addr_space, pointer, data);
+            .write(addr_space, pointer, data);
         self.accesses_buffer
             .push(self.aux_col_from_access(&mem_access));
 
@@ -66,11 +62,7 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
     }
 
     pub fn read_elem(&mut self, addr_space: F, pointer: F) -> F {
-        compose(self.read_word(addr_space, pointer).cell.data)
-    }
-
-    pub fn write_elem(&mut self, addr_space: F, pointer: F, data: F) {
-        self.write_word(addr_space, pointer, decompose(data));
+        self.read_cell(addr_space, pointer).cell.data[0]
     }
 
     // TODO[jpw]: we can default to addr_space = 1 after is_immediate checks are moved out of default memory access
@@ -89,7 +81,7 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
             F::zero(),
             "Disabled memory operation cannot be immediate"
         );
-        let clk = self.memory_manager.borrow().timestamp();
+        let clk = self.memory_chip.borrow().timestamp();
         let mem_access = MemoryAccess::disabled_op(clk, addr_space, op_type);
 
         self.accesses_buffer
@@ -100,7 +92,7 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
 
     // TODO[jpw]: rename increment_timestamp
     pub fn increment_clk(&mut self) {
-        self.memory_manager.borrow_mut().increment_timestamp();
+        self.memory_chip.borrow_mut().increment_timestamp();
     }
 
     pub fn take_accesses_buffer(&mut self) -> Vec<MemoryOfflineCheckerAuxCols<WORD_SIZE, F>> {
