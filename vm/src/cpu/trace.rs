@@ -456,7 +456,7 @@ impl<F: PrimeField32> CpuChip<F> {
             let added_trace_cells = now_trace_cells - prev_trace_cells;
 
             if collect_metrics {
-                //vm.update_chip_metrics();
+                vm.update_chip_metrics();
                 vm.collected_metrics
                     .opcode_counts
                     .entry(opcode.to_string())

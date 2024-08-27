@@ -221,4 +221,16 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             .map(|chip| chip.current_trace_cells())
             .sum()
     }
+
+    pub(crate) fn update_chip_metrics(&mut self) {
+        self.collected_metrics.chip_metrics = self.chip_metrics();
+    }
+
+    fn chip_metrics(&self) -> BTreeMap<String, usize> {
+        let mut metrics = BTreeMap::new();
+        for chip in self.chips.iter() {
+            metrics.insert(format!("{chip:?} ops"), chip.current_trace_height());
+        }
+        metrics
+    }
 }
