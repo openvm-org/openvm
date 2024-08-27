@@ -5,7 +5,10 @@ use afs_primitives::is_less_than::IsLessThanAir;
 
 use crate::{
     field_extension::{air::FieldExtensionArithmeticAir, chip::EXTENSION_DEGREE},
-    memory::offline_checker::{bridge::MemoryOfflineChecker, columns::MemoryOfflineCheckerAuxCols},
+    memory::offline_checker::{
+        bridge::MemoryOfflineChecker,
+        columns::{MemoryOfflineCheckerAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
+    },
 };
 
 /// Columns for field extension chip.
@@ -88,15 +91,9 @@ impl<T> FieldExtensionArithmeticCols<T> {
                 is_mul: next(),
                 is_inv: next(),
                 inv: array::from_fn(|_| next()),
-                read_x_aux_cols: array::from_fn(|_| {
-                    MemoryOfflineCheckerAuxCols::try_from_iter(iter, lt_air)
-                }),
-                read_y_aux_cols: array::from_fn(|_| {
-                    MemoryOfflineCheckerAuxCols::try_from_iter(iter, lt_air)
-                }),
-                write_aux_cols: array::from_fn(|_| {
-                    MemoryOfflineCheckerAuxCols::try_from_iter(iter, lt_air)
-                }),
+                read_x_aux_cols: array::from_fn(|_| MemoryReadAuxCols::try_from_iter(iter, lt_air)),
+                read_y_aux_cols: array::from_fn(|_| MemoryReadAuxCols::try_from_iter(iter, lt_air)),
+                write_aux_cols: array::from_fn(|_| MemoryWriteAuxCols::try_from_iter(iter, lt_air)),
             },
         }
     }

@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
-use afs_primitives::range_gate::RangeCheckerGateChip;
+use afs_primitives::{range_gate::RangeCheckerGateChip, sub_chip::LocalTraceInstructions};
 use afs_stark_backend::rap::AnyRap;
 use derive_new::new;
 use p3_commit::PolynomialSpace;
@@ -14,7 +14,9 @@ use crate::{
     arch::chips::MachineChip,
     memory::{
         manager::operation::MemoryOperation,
-        offline_checker::{bridge::MemoryOfflineChecker, bus::MemoryBus},
+        offline_checker::{
+            bridge::MemoryOfflineChecker, bus::MemoryBus, columns::MemoryOfflineCheckerAuxCols,
+        },
         OpType,
     },
     vm::config::MemoryConfig,
@@ -183,6 +185,33 @@ impl<F: PrimeField32> MemoryChip<F> {
                 value: data,
                 timestamp: F::zero(),
             });
+    }
+
+    pub fn make_access_cols<const N: usize>(
+        &self,
+        memory_access: MemoryAccess<N, F>,
+    ) -> MemoryOfflineCheckerAuxCols<N, F> {
+        let timestamp_prev = memory_access.old_cell.clk.as_canonical_u32();
+        let timestamp = memory_access.op.cell.clk.as_canonical_u32();
+
+        debug_assert!(timestamp_prev < timestamp);
+        let offline_checker = self.make_offline_checker();
+        let clk_lt_cols = LocalTraceInstructions::generate_trace_row(
+            &offline_checker.timestamp_lt_air,
+            (timestamp_prev, timestamp, self.range_checker.clone()),
+        );
+
+        let addr_space_is_zero_cols = offline_checker
+            .is_zero_air
+            .generate_trace_row(memory_access.op.addr_space);
+
+        MemoryOfflineCheckerAuxCols::new(
+            memory_access.old_cell,
+            addr_space_is_zero_cols.io.is_zero,
+            addr_space_is_zero_cols.inv,
+            clk_lt_cols.io.less_than,
+            clk_lt_cols.aux,
+        )
     }
 
     pub fn generate_memory_interface_trace(&self) -> RowMajorMatrix<F> {

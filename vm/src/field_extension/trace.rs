@@ -17,10 +17,7 @@ use crate::{
         FieldExtensionArithmetic, FieldExtensionArithmeticChip, FieldExtensionArithmeticRecord,
         EXTENSION_DEGREE,
     },
-    memory::{
-        manager::{trace_builder::MemoryTraceBuilder, MemoryAccess},
-        OpType,
-    },
+    memory::{manager::MemoryAccess, OpType},
 };
 
 impl<F: PrimeField32> MachineChip<F> for FieldExtensionArithmeticChip<F> {
@@ -83,15 +80,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
             FieldExtensionArithmetic::solve(Opcode::BBE4INV, x, y).unwrap()
         };
 
-        let range_checker = self.memory.borrow().range_checker.clone();
-
-        let access_to_aux = |access| {
-            MemoryTraceBuilder::<F>::memory_access_to_checker_aux_cols(
-                &self.air.mem_oc,
-                range_checker.clone(),
-                &access,
-            )
-        };
+        let access_to_aux = |access| self.memory.borrow().make_access_cols(access);
 
         FieldExtensionArithmeticCols {
             io: FieldExtensionArithmeticIoCols {
@@ -128,18 +117,13 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
 
     fn make_blank_row(&self) -> FieldExtensionArithmeticCols<F> {
         let timestamp = self.memory.borrow().timestamp();
-        let range_checker = self.memory.borrow().range_checker.clone();
 
         let make_aux_col = |op_type| {
             let access = match op_type {
                 OpType::Read => MemoryAccess::disabled_read(timestamp, F::one()),
                 OpType::Write => MemoryAccess::disabled_write(timestamp, F::one()),
             };
-            MemoryTraceBuilder::<F>::memory_access_to_checker_aux_cols(
-                &self.air.mem_oc,
-                range_checker.clone(),
-                &access,
-            )
+            self.memory.borrow().make_access_cols(access)
         };
 
         FieldExtensionArithmeticCols {

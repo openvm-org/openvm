@@ -42,9 +42,9 @@ impl<AB: InteractionBuilder> Air<AB> for FieldArithmeticAir {
 
         let FieldArithmeticCols { io, aux } = local;
 
-        let x = io.operand1.value;
-        let y = io.operand2.value;
-        let z = io.result.value;
+        let x = io.x.value;
+        let y = io.y.value;
+        let z = io.z.value;
 
         let flags = [aux.is_add, aux.is_sub, aux.is_mul, aux.is_div];
         let opcodes = [FADD, FSUB, FMUL, FDIV];
