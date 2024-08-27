@@ -1,24 +1,46 @@
 use core::mem::size_of;
+use std::borrow::{Borrow, BorrowMut};
 
 use afs_derive::AlignedBorrow;
 use p3_air::AirBuilder;
-use p3_keccak_air::KeccakCols as KeccakPermCols;
+use p3_keccak_air::{KeccakCols as KeccakPermCols, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS};
 
-use super::{KECCAK_RATE_BYTES, KECCAK_RATE_U16S};
+use super::{
+    KECCAK_ABSORB_READS, KECCAK_DIGEST_WRITES, KECCAK_EXECUTION_READS, KECCAK_RATE_BYTES,
+    KECCAK_RATE_U16S,
+};
+use crate::memory::offline_checker::{
+    bridge::MemoryOfflineChecker, columns::MemoryOfflineCheckerAuxCols,
+};
 
-#[repr(C)]
-#[derive(Debug, AlignedBorrow)]
-pub struct KeccakVmCols<T> {
+#[derive(Clone, Copy, Debug)]
+pub struct KeccakVmColsRef<'a, T> {
     /// Columns for keccak-f permutation
-    pub inner: KeccakPermCols<T>,
+    pub inner: &'a KeccakPermCols<T>,
     /// Columns for sponge and padding
-    pub sponge: KeccakSpongeCols<T>,
+    pub sponge: &'a KeccakSpongeCols<T>,
     /// Columns for opcode interface and operand memory access
-    pub opcode: KeccakOpcodeCols<T>,
+    pub opcode: &'a KeccakOpcodeCols<T>,
+    /// Auxiliary columns for offline memory checking
+    /// This should be convertable to [KeccakMemoryCols]
+    pub mem_oc: &'a [T],
+}
+
+#[derive(Debug)]
+pub struct KeccakVmColsMut<'a, T> {
+    /// Columns for keccak-f permutation
+    pub inner: &'a mut KeccakPermCols<T>,
+    /// Columns for sponge and padding
+    pub sponge: &'a mut KeccakSpongeCols<T>,
+    /// Columns for opcode interface and operand memory access
+    pub opcode: &'a mut KeccakOpcodeCols<T>,
+    /// Auxiliary columns for offline memory checking
+    /// This should be convertable to [KeccakMemoryCols]
+    pub mem_oc: &'a mut [T],
 }
 
 /// Columns specific to the KECCAK256 opcode.
-/// The opcode instruction format is (a, b, len, d, e)
+/// The opcode instruction format is (a, b, len, d, e, f)
 #[allow(clippy::too_many_arguments)]
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, AlignedBorrow, derive_new::new)]
@@ -29,23 +51,26 @@ pub struct KeccakOpcodeCols<T> {
     /// The starting timestamp to use for memory access in this row.
     /// A single row will do multiple memory accesses.
     pub start_timestamp: T,
+    // Operands:
     pub a: T,
     pub b: T,
     pub c: T,
     pub d: T,
     pub e: T,
-    /// dst <- proj(word[a]_d)
+    pub f: T,
+    // Memory values
+    /// dst <- [a]_d
     pub dst: T,
-    /// src <- proj(word[b]_d)
+    /// src <- [b]_d
     pub src: T,
     /// The remaining length of the unpadded input, in bytes.
-    /// If this row is receiving from opcode bus, then len <- proj(word[c]_d)
-    // TODO: after operand f is added, use len <- proj(word[c]_f) to allow immediate value
+    /// If this row is receiving from opcode bus, then
+    /// len <- [c]_f
     pub len: T,
 }
 
 #[repr(C)]
-#[derive(Debug, AlignedBorrow)]
+#[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct KeccakSpongeCols<T> {
     /// Only used on first row of a round to determine whether the state
     /// prior to absorb should be reset to all 0s.
@@ -68,7 +93,15 @@ pub struct KeccakSpongeCols<T> {
     pub state_hi: [T; KECCAK_RATE_U16S],
 }
 
-impl<T: Copy> KeccakVmCols<T> {
+// Grouping all memory aux columns together because they can't use AlignedBorrow
+#[derive(Clone, Debug)]
+pub struct KeccakMemoryCols<T> {
+    pub op_reads: [MemoryOfflineCheckerAuxCols<1, T>; KECCAK_EXECUTION_READS],
+    pub absorb_reads: [MemoryOfflineCheckerAuxCols<1, T>; KECCAK_ABSORB_READS],
+    pub digest_writes: [MemoryOfflineCheckerAuxCols<1, T>; KECCAK_DIGEST_WRITES],
+}
+
+impl<'a, T: Copy> KeccakVmColsRef<'a, T> {
     pub const fn remaining_len(&self) -> T {
         self.opcode.len
     }
@@ -91,6 +124,34 @@ impl<T: Copy> KeccakVmCols<T> {
     }
 }
 
+impl<'a, T> KeccakVmColsRef<'a, T> {
+    pub fn from_slice(slc: &'a [T]) -> Self {
+        let (inner, slc) = slc.split_at(NUM_KECCAK_PERM_COLS);
+        let (sponge, slc) = slc.split_at(NUM_KECCAK_SPONGE_COLS);
+        let (opcode, mem_oc) = slc.split_at(NUM_KECCAK_OPCODE_COLS);
+        Self {
+            inner: inner.borrow(),
+            sponge: sponge.borrow(),
+            opcode: opcode.borrow(),
+            mem_oc,
+        }
+    }
+}
+
+impl<'a, T> KeccakVmColsMut<'a, T> {
+    pub fn from_mut_slice(slc: &'a mut [T]) -> Self {
+        let (inner, slc) = slc.split_at_mut(NUM_KECCAK_PERM_COLS);
+        let (sponge, slc) = slc.split_at_mut(NUM_KECCAK_SPONGE_COLS);
+        let (opcode, mem_oc) = slc.split_at_mut(NUM_KECCAK_OPCODE_COLS);
+        Self {
+            inner: inner.borrow_mut(),
+            sponge: sponge.borrow_mut(),
+            opcode: opcode.borrow_mut(),
+            mem_oc,
+        }
+    }
+}
+
 impl<T: Copy> KeccakOpcodeCols<T> {
     pub fn assert_eq<AB: AirBuilder>(&self, builder: &mut AB, other: Self)
     where
@@ -109,5 +170,12 @@ impl<T: Copy> KeccakOpcodeCols<T> {
     }
 }
 
+pub const NUM_KECCAK_OPCODE_COLS: usize = size_of::<KeccakOpcodeCols<u8>>();
 pub const NUM_KECCAK_SPONGE_COLS: usize = size_of::<KeccakSpongeCols<u8>>();
-pub const NUM_KECCAK_VM_COLS: usize = size_of::<KeccakVmCols<u8>>();
+
+impl<T> KeccakMemoryCols<T> {
+    pub fn width(mem_oc: &MemoryOfflineChecker) -> usize {
+        (KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES)
+            * MemoryOfflineCheckerAuxCols::<1, T>::width(mem_oc)
+    }
+}

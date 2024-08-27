@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-
 use afs_primitives::utils::not;
 use afs_stark_backend::{air_builders::sub::SubAirBuilder, interaction::InteractionBuilder};
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -9,12 +7,15 @@ use p3_matrix::Matrix;
 
 use super::{
     bridge::{BLOCK_MEMORY_ACCESSES, TIMESTAMP_OFFSET_FOR_OPCODE},
-    columns::{KeccakVmCols, NUM_KECCAK_VM_COLS},
+    columns::{KeccakMemoryCols, KeccakVmColsRef, NUM_KECCAK_OPCODE_COLS, NUM_KECCAK_SPONGE_COLS},
     KECCAK_RATE_BYTES,
 };
+use crate::{arch::bus::ExecutionBus, memory::offline_checker::bridge::MemoryOfflineChecker};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct KeccakVmAir {
+    pub execution_bus: ExecutionBus,
+    pub mem_oc: MemoryOfflineChecker,
     /// The index for the bus to send 8-bit XOR requests to.
     pub xor_bus_index: usize,
     // TODO: add configuration for enabling direct non-memory interactions
@@ -22,7 +23,10 @@ pub struct KeccakVmAir {
 
 impl<F> BaseAir<F> for KeccakVmAir {
     fn width(&self) -> usize {
-        NUM_KECCAK_VM_COLS
+        NUM_KECCAK_PERM_COLS
+            + NUM_KECCAK_SPONGE_COLS
+            + NUM_KECCAK_OPCODE_COLS
+            + KeccakMemoryCols::<F>::width(&self.mem_oc)
     }
 }
 
@@ -30,8 +34,8 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakVmAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let [local, next] = [0, 1].map(|i| main.row_slice(i));
-        let local: &KeccakVmCols<AB::Var> = (*local).borrow();
-        let next: &KeccakVmCols<AB::Var> = (*next).borrow();
+        let local = KeccakVmColsRef::from_slice(&local);
+        let next = KeccakVmColsRef::from_slice(&next);
 
         builder.assert_bool(local.sponge.is_new_start);
         builder.assert_eq(
@@ -57,10 +61,6 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakVmAir {
 }
 
 impl KeccakVmAir {
-    pub fn new(xor_bus_index: usize) -> Self {
-        Self { xor_bus_index }
-    }
-
     /// Evaluate the keccak-f permutation constraints.
     ///
     /// WARNING: The keccak-f AIR columns **must** be the first columns in the main AIR.
@@ -76,20 +76,20 @@ impl KeccakVmAir {
     pub fn constrain_consistency_across_rounds<AB: AirBuilder>(
         &self,
         builder: &mut AB,
-        local: &KeccakVmCols<AB::Var>,
-        next: &KeccakVmCols<AB::Var>,
+        local: KeccakVmColsRef<AB::Var>,
+        next: KeccakVmColsRef<AB::Var>,
     ) {
         let mut transition_builder = builder.when_transition();
         let mut round_builder = transition_builder.when(not(local.is_last_round()));
         // Opcode columns
-        local.opcode.assert_eq(&mut round_builder, next.opcode);
+        local.opcode.assert_eq(&mut round_builder, *next.opcode);
     }
 
     pub fn constrain_block_transition<AB: AirBuilder>(
         &self,
         builder: &mut AB,
-        local: &KeccakVmCols<AB::Var>,
-        next: &KeccakVmCols<AB::Var>,
+        local: KeccakVmColsRef<AB::Var>,
+        next: KeccakVmColsRef<AB::Var>,
     ) {
         // When we transition between blocks, if the next block isn't a new block
         // (this means it's not receiving a new opcode or starting a dummy block)
@@ -137,8 +137,8 @@ impl KeccakVmAir {
     pub fn constrain_padding<AB: AirBuilder>(
         &self,
         builder: &mut AB,
-        local: &KeccakVmCols<AB::Var>,
-        next: &KeccakVmCols<AB::Var>,
+        local: KeccakVmColsRef<AB::Var>,
+        next: KeccakVmColsRef<AB::Var>,
     ) {
         let is_padding_byte = local.sponge.is_padding_byte;
         let block_bytes = &local.sponge.block_bytes;

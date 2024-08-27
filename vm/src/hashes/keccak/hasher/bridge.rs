@@ -8,8 +8,8 @@ use p3_field::AbstractField;
 use p3_keccak_air::U64_LIMBS;
 
 use super::{
-    columns::KeccakVmCols, KeccakVmAir, KECCAK_DIGEST_BYTES, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
-    KECCAK_WIDTH_U16S, NUM_ABSORB_ROUNDS,
+    columns::KeccakVmColsRef, KeccakVmAir, KECCAK_DIGEST_BYTES, KECCAK_RATE_BYTES,
+    KECCAK_RATE_U16S, KECCAK_WIDTH_U16S, NUM_ABSORB_ROUNDS,
 };
 
 /// We need three memory accesses to read dst, src, len from memory.
@@ -56,8 +56,8 @@ impl KeccakVmAir {
     pub fn constrain_absorb<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: &KeccakVmCols<AB::Var>,
-        next: &KeccakVmCols<AB::Var>,
+        local: KeccakVmColsRef<AB::Var>,
+        next: KeccakVmColsRef<AB::Var>,
     ) {
         let updated_state_bytes = (0..NUM_ABSORB_ROUNDS).flat_map(|i| {
             let y = i / 5;
@@ -121,7 +121,7 @@ impl KeccakVmAir {
     pub fn eval_opcode_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: &KeccakVmCols<AB::Var>,
+        local: KeccakVmColsRef<AB::Var>,
     ) {
         let opcode = &local.opcode;
         // Only receive opcode if:
@@ -172,7 +172,7 @@ impl KeccakVmAir {
     pub fn constrain_input_read<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: &KeccakVmCols<AB::Var>,
+        local: KeccakVmColsRef<AB::Var>,
     ) {
         // Only read input from memory when it is an opcode-related row
         // and only on the first round of block
@@ -199,7 +199,7 @@ impl KeccakVmAir {
     pub fn constrain_output_write<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: &KeccakVmCols<AB::Var>,
+        local: KeccakVmColsRef<AB::Var>,
     ) {
         let opcode = &local.opcode;
 

@@ -15,10 +15,16 @@ pub use air::KeccakVmAir;
 use tiny_keccak::{Hasher, Keccak};
 use utils::num_keccak_f;
 
-use crate::{
-    cpu::{trace::Instruction, OpCode},
-    vm::ExecutionSegment,
-};
+use crate::vm::ExecutionSegment;
+
+/// Memory reads to get dst, src, len
+const KECCAK_EXECUTION_READS: usize = 3;
+// TODO[jpw]: adjust for batch read
+/// Memory reads for absorb per row
+const KECCAK_ABSORB_READS: usize = KECCAK_RATE_BYTES;
+// TODO[jpw]: adjust for batch write
+/// Memory writes for digest per row
+const KECCAK_DIGEST_WRITES: usize = KECCAK_DIGEST_U16S;
 
 /// Total number of sponge bytes: number of rate bytes + number of capacity
 /// bytes.
