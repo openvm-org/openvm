@@ -1,4 +1,5 @@
 #!/bin/bash
+mkdir -p params
 
 for k in {5..23} # 25}
 do
