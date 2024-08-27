@@ -4,6 +4,7 @@ pub mod config;
 mod digest;
 mod folder;
 pub mod fri;
+#[cfg(feature = "static-verifier")]
 pub mod halo2;
 pub mod hints;
 mod outer_poseidon2;

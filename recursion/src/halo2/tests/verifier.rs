@@ -1,3 +1,4 @@
+/// Run with RANDOM_SRS=1 if you don't want to download the SRS.
 use afs_stark_backend::{prover::trace::TraceCommitmentBuilder, verifier::MultiTraceStarkVerifier};
 use afs_test_utils::{
     config::{
@@ -19,6 +20,7 @@ use crate::{
     tests::{fibonacci_stark_for_test, StarkForTest},
     types::VerifierInput,
 };
+
 #[cfg(not(debug_assertions))]
 #[test]
 fn fibonacci_evm_verifier_e2e() {

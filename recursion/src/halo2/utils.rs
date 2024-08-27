@@ -1,19 +1,29 @@
 use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
+use rand::{prelude::StdRng, SeedableRng};
 use snark_verifier_sdk::{
     halo2::{PoseidonTranscript, POSEIDON_SPEC},
     snark_verifier::{
-        halo2_base::halo2_proofs::{
-            halo2curves::bn256::{Bn256, G1Affine},
-            poly::{
-                commitment::CommitmentScheme,
-                kzg::commitment::{KZGCommitmentScheme, ParamsKZG},
+        halo2_base::{
+            halo2_proofs::{
+                halo2curves::bn256::{Bn256, G1Affine},
+                poly::{
+                    commitment::{CommitmentScheme, Params},
+                    kzg::commitment::{KZGCommitmentScheme, ParamsKZG},
+                },
             },
+            utils::fs::read_params as read_params_impl,
         },
         pcs::kzg::KzgDecidingKey,
         verifier::{plonk::PlonkProof, SnarkVerifier},
     },
     NativeLoader, PlonkVerifier, Snark, SHPLONK,
 };
+
+static KZG_PARAMS_23: Lazy<ParamsKZG<Bn256>> = Lazy::new(|| {
+    let mut rng = StdRng::seed_from_u64(42);
+    ParamsKZG::setup(23, &mut rng)
+});
 
 lazy_static! {
     // TODO: this should be dynamic. hard code for now.
@@ -36,8 +46,15 @@ lazy_static! {
        "#).unwrap();
     /// Hacking because of bad interface. This is to construct a fake KZG params to pass Svk(which only requires ParamsKZG.g[0]) to AggregationCircuit.
     static ref FAKE_KZG_PARAMS: ParamsKZG<Bn256> = KZGCommitmentScheme::new_params(1);
-    pub static ref KZG_PARAMS_FOR_SVK: ParamsKZG<Bn256> = build_kzg_params_for_svk(*SVK);
 }
+
+pub static KZG_PARAMS_FOR_SVK: Lazy<ParamsKZG<Bn256>> = Lazy::new(|| {
+    if std::env::var("RANDOM_SRS").is_ok() {
+        read_params(1)
+    } else {
+        build_kzg_params_for_svk(*SVK)
+    }
+});
 
 fn build_kzg_params_for_svk(g: G1Affine) -> ParamsKZG<Bn256> {
     FAKE_KZG_PARAMS.from_parts(
@@ -58,4 +75,14 @@ pub(crate) fn verify_snark(dk: &KzgDecidingKey<Bn256>, snark: &Snark) {
             .expect("Failed to read PlonkProof");
     PlonkVerifier::verify(dk, &snark.protocol, &snark.instances, &proof)
         .expect("PlonkVerifier failed");
+}
+
+pub(crate) fn read_params(k: u32) -> ParamsKZG<Bn256> {
+    if std::env::var("RANDOM_SRS").is_ok() {
+        let mut ret = KZG_PARAMS_23.clone();
+        ret.downsize(k);
+        ret
+    } else {
+        read_params_impl(k)
+    }
 }

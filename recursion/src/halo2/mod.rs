@@ -27,10 +27,11 @@ use snark_verifier_sdk::{
             halo2curves::bn256::{Fr, G1Affine},
             plonk::ProvingKey,
         },
-        utils::fs::read_params,
     },
     CircuitExt, Snark,
 };
+
+use crate::halo2::utils::read_params;
 
 /// A prover that can generate proofs with the Halo2
 #[derive(Debug, Clone)]

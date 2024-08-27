@@ -1,5 +1,3 @@
-mod outer;
-
 use std::{rc::Rc, sync::Arc};
 
 use afs_compiler::util::execute_and_prove_program;

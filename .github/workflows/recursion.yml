@@ -2,9 +2,9 @@ name: STARK Recursion Tests
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
   pull_request:
-    branches: ["main"]
+    branches: [ "main" ]
     paths:
       - "stark-backend/**"
       - "primitives/**"
@@ -39,8 +39,8 @@ jobs:
         working-directory: recursion
         run: |
           cargo test --profile=fast --features parallel
-          bash trusted_setup_s3.sh
-          cargo test --profile=release --features parallel -- halo2::tests::verifier::fibonacci_evm_verifier_e2e
+          cargo test --profile=fast --features parallel,static-verifier -- halo2::tests
+          RANDOM_SRS=1 cargo test --profile=release --features parallel,static-verifier -- halo2::tests::verifier::fibonacci_evm_verifier_e2e
 
   benchmark:
     uses: ./.github/workflows/benchmark-call.yml

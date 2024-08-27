@@ -195,6 +195,7 @@ dependencies = [
  "ff 0.13.0",
  "itertools 0.13.0",
  "lazy_static",
+ "once_cell",
  "p3-air",
  "p3-baby-bear",
  "p3-bn254-fr",

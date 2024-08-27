@@ -18,14 +18,16 @@ use snark_verifier_sdk::{
             halo2curves::bn256::Fr,
             plonk::{keygen_pk, keygen_vk},
         },
-        utils::fs::read_params,
     },
     CircuitExt, Snark, SHPLONK,
 };
 
 use crate::{
     config::outer::OuterConfig,
-    halo2::{utils::KZG_PARAMS_FOR_SVK, Halo2Prover, Halo2ProvingPinning},
+    halo2::{
+        utils::{read_params, KZG_PARAMS_FOR_SVK},
+        Halo2Prover, Halo2ProvingPinning,
+    },
     stark::outer::build_circuit_verify_operations,
     types::{MultiStarkVerificationAdvice, VerifierInput},
     witness::Witnessable,
