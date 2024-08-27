@@ -40,7 +40,6 @@ jobs:
         run: |
           cargo test --profile=fast --features parallel
           cargo test --profile=fast --features parallel,static-verifier -- halo2::tests
-          RANDOM_SRS=1 cargo test --profile=release --features parallel,static-verifier -- halo2::tests::verifier::fibonacci_evm_verifier_e2e
 
   benchmark:
     uses: ./.github/workflows/benchmark-call.yml
