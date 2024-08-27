@@ -9,6 +9,7 @@ description = "Virtual Machine STARK"
 p3-air = { workspace = true }
 p3-baby-bear = { workspace = true }
 p3-field = { workspace = true }
+p3-commit = { workspace = true }
 p3-matrix = { workspace = true }
 p3-maybe-rayon = { workspace = true }
 p3-util = { workspace = true }
@@ -31,6 +32,7 @@ toml = "0.8.14"
 enum-utils = "0.1.1"
 num-bigint-dig = "0.8.4"
 num-traits = "0.2.19"
+enum_dispatch = "0.3.13"
 
 [dev-dependencies]
 p3-uni-stark = { workspace = true }

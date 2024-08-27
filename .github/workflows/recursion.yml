@@ -38,6 +38,9 @@ jobs:
 
   benchmark:
     uses: ./.github/workflows/benchmark-call.yml
+    if: |
+      github.event.pull_request.draft == false &&
+      contains(github.event.pull_request.labels.*.name, 'run-benchmark')
     with:
       benchmark_name: vm_verify_fibair
     secrets: inherit

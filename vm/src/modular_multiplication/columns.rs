@@ -1,4 +1,3 @@
-use afs_primitives::modular_multiplication::modular_multiplication_bigint::columns::ModularMultiplicationBigIntCols;
 
 pub struct VmChipIoCols<T> {
     pub opcode: T,

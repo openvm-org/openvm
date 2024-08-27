@@ -10,11 +10,12 @@ use p3_field::{AbstractField, PrimeField64};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::RngCore;
 
-use crate::memory::{
-    expand::{
-        columns::ExpandCols, tests::util::HashTestChip, ExpandChip, MemoryDimensions, EXPAND_BUS,
+use crate::{
+    cpu::EXPAND_BUS,
+    memory::{
+        expand::{columns::ExpandCols, tests::util::HashTestChip, ExpandChip, MemoryDimensions},
+        tree::MemoryNode,
     },
-    tree::MemoryNode,
 };
 
 mod util;
@@ -47,8 +48,6 @@ fn test<const CHUNK: usize>(
         address_height,
         as_offset,
     } = memory_dimensions;
-    println!("initial_memory = {:?}", initial_memory);
-    println!("final_memory = {:?}", final_memory);
     // checking validity of test data
     for (address, value) in final_memory {
         assert!((address.0.as_canonical_u64() as usize) - as_offset < (1 << as_height));

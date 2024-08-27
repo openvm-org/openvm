@@ -2,7 +2,7 @@ use afs_compiler::{
     ir::{RVar, DIGEST_SIZE, PERMUTATION_WIDTH},
     prelude::{Array, Builder, Config, Ext, Felt, Var},
 };
-use p3_field::AbstractField;
+use p3_field::{AbstractField, Field};
 
 use crate::{
     challenger::{
@@ -24,7 +24,6 @@ pub struct DuplexChallengerVariable<C: Config> {
 
 impl<C: Config> DuplexChallengerVariable<C> {
     /// Creates a new duplex challenger with the default state.
-    #[allow(dead_code)]
     pub fn new(builder: &mut Builder<C>) -> Self {
         let mut sponge_state = builder.dyn_array(PERMUTATION_WIDTH);
         let mut input_buffer = builder.dyn_array(PERMUTATION_WIDTH);
@@ -44,7 +43,6 @@ impl<C: Config> DuplexChallengerVariable<C> {
             output_buffer,
         }
     }
-
     /// Creates a new challenger with the same state as an existing challenger.
     #[allow(dead_code)]
     pub fn copy(&self, builder: &mut Builder<C>) -> Self {
@@ -180,13 +178,12 @@ impl<C: Config> DuplexChallengerVariable<C> {
         builder.ext_from_base_slice(&[a, b, c, d])
     }
 
-    fn sample_bits(
-        &mut self,
-        builder: &mut Builder<C>,
-        nb_bits: RVar<C::N>,
-    ) -> Array<C, Var<C::N>> {
+    fn sample_bits(&mut self, builder: &mut Builder<C>, nb_bits: RVar<C::N>) -> Array<C, Var<C::N>>
+    where
+        C::N: Field,
+    {
         let rand_f = self.sample(builder);
-        let mut bits = builder.num2bits_f(rand_f);
+        let mut bits = builder.num2bits_f(rand_f, C::N::bits() as u32);
 
         builder.range(nb_bits, bits.len()).for_each(|i, builder| {
             builder.set(&mut bits, i, C::N::zero());
@@ -256,14 +253,18 @@ impl<C: Config> CanCheckWitness<C> for DuplexChallengerVariable<C> {
     }
 }
 
-impl<C: Config> ChallengerVariable<C> for DuplexChallengerVariable<C> {}
+impl<C: Config> ChallengerVariable<C> for DuplexChallengerVariable<C> {
+    fn new(builder: &mut Builder<C>) -> Self {
+        DuplexChallengerVariable::new(builder)
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use afs_compiler::{
         asm::{AsmBuilder, AsmConfig},
         ir::Felt,
-        util::execute_program_and_generate_traces,
+        util::execute_program,
     };
     use afs_test_utils::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
@@ -307,8 +308,7 @@ mod tests {
 
         builder.halt();
 
-        const WORD_SIZE: usize = 1;
-        let program = builder.compile_isa::<WORD_SIZE>();
-        execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
+        let program = builder.compile_isa();
+        execute_program(program, vec![]);
     }
 }

@@ -15,8 +15,6 @@ pub struct Point<C: Config> {
     z: Ext<C::F, C::EF>,
 }
 
-const WORD_SIZE: usize = 1;
-
 // #[test]
 // #[ignore = "test too slow"]
 // fn test_compiler_array() {
@@ -115,8 +113,8 @@ const WORD_SIZE: usize = 1;
 //     builder.halt();
 //
 //     const WORD_SIZE: usize = 1;
-//     let program = builder.compile_isa::<WORD_SIZE>();
-//     execute_program::<WORD_SIZE>(program, vec![]);
+//     let program = builder.compile_isa();
+//     execute_program(program, vec![]);
 // }
 
 #[test]
@@ -199,8 +197,8 @@ fn test_array_eq() {
 
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    let program = builder.compile_isa();
+    execute_program(program, vec![]);
 }
 
 #[should_panic]
@@ -220,6 +218,6 @@ fn test_array_eq_neg() {
 
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
+    let program = builder.compile_isa();
+    execute_program(program, vec![]);
 }

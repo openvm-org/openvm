@@ -7,8 +7,12 @@ use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::memory::{
-    expand::{columns::ExpandCols, ExpandChip, MemoryDimensions},
-    tree::{Hasher, MemoryNode, MemoryNode::NonLeaf},
+    expand::{columns::ExpandCols, ExpandChip},
+    manager::dimensions::MemoryDimensions,
+    tree::{
+        Hasher,
+        MemoryNode::{self, NonLeaf},
+    },
 };
 
 impl<const CHUNK: usize, F: PrimeField32> ExpandChip<CHUNK, F> {

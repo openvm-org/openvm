@@ -246,7 +246,7 @@ fn load_page_test(
         ops_sender,
         ops_sender_trace,
     );
-    page_controller.verify(engine, &pk.vk(), &proof, &pis, ops_sender)
+    page_controller.verify(engine, &pk.vk(), &proof, &pis)
 }
 
 fn generate_no_new_keys(

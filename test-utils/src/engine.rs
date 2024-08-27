@@ -102,5 +102,5 @@ where
 
     let mut challenger = engine.new_challenger();
     let verifier = engine.verifier();
-    verifier.verify(&mut challenger, &vk, chips, &proof, &public_values)
+    verifier.verify(&mut challenger, &vk, &proof, &public_values)
 }

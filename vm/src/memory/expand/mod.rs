@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use p3_field::PrimeField32;
 
+use super::manager::dimensions::MemoryDimensions;
 use crate::memory::{expand::air::ExpandAir, tree::MemoryNode};
 
 pub mod air;
@@ -11,24 +12,6 @@ pub mod trace;
 
 #[cfg(test)]
 mod tests;
-
-pub const EXPAND_BUS: usize = 4;
-pub const POSEIDON2_DIRECT_REQUEST_BUS: usize = 6;
-
-// indicates that there are 2^`as_height` address spaces numbered starting from `as_offset`,
-// and that each address space has 2^`address_height` addresses numbered starting from 0
-#[derive(Clone, Copy)]
-pub struct MemoryDimensions {
-    pub as_height: usize,
-    pub address_height: usize,
-    pub as_offset: usize,
-}
-
-impl MemoryDimensions {
-    pub fn overall_height(&self) -> usize {
-        self.as_height + self.address_height
-    }
-}
 
 pub struct ExpandChip<const CHUNK: usize, F: PrimeField32> {
     pub air: ExpandAir<CHUNK>,

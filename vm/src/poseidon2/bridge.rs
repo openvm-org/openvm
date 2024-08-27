@@ -1,12 +1,17 @@
 use afs_stark_backend::interaction::InteractionBuilder;
-use itertools::izip;
 use p3_field::{AbstractField, Field};
 
 use super::{
+    air::Poseidon2VmAir,
     columns::{Poseidon2VmAuxCols, Poseidon2VmIoCols},
-    Poseidon2VmAir,
 };
-use crate::cpu::{MEMORY_BUS, POSEIDON2_BUS, POSEIDON2_DIRECT_BUS};
+use crate::{
+    arch::{
+        columns::{ExecutionState, InstructionCols},
+        instructions::Opcode::PERM_POS2,
+    },
+    cpu::POSEIDON2_DIRECT_BUS,
+};
 
 impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
     /// Receives instructions from the CPU on the designated `POSEIDON2_BUS` (opcodes) or `POSEIDON2_DIRECT_BUS` (direct), and sends both read and write requests to the memory chip.
@@ -20,75 +25,14 @@ impl<const WIDTH: usize, F: Field> Poseidon2VmAir<WIDTH, F> {
         io: Poseidon2VmIoCols<AB::Var>,
         aux: &Poseidon2VmAuxCols<WIDTH, AB::Var>,
     ) {
-        let fields = io.flatten().into_iter().skip(2);
-        builder.push_receive(POSEIDON2_BUS, fields, io.is_opcode);
-
-        let chunks: usize = WIDTH / 2;
-
-        let mut timestamp_offset = 0;
-        // read addresses when is_opcode:
-        // dst <- [a]_d, lhs <- [b]_d
-        // Only when opcode is COMPRESS is rhs <- [c]_d read
-        for (io_addr, aux_addr, count) in izip!(
-            [io.a, io.b, io.c],
-            [aux.dst, aux.lhs, aux.rhs],
-            [io.is_opcode, io.is_opcode, io.cmp]
-        ) {
-            let timestamp = io.clk + AB::F::from_canonical_usize(timestamp_offset);
-            timestamp_offset += 1;
-
-            let fields = [
-                timestamp,
-                AB::Expr::from_bool(false),
-                io.d.into(),
-                io_addr.into(),
-                aux_addr.into(),
-            ];
-            builder.push_send(MEMORY_BUS, fields, count);
-        }
-
-        // READ
-        for i in 0..WIDTH {
-            let timestamp = io.clk + AB::F::from_canonical_usize(timestamp_offset);
-            timestamp_offset += 1;
-
-            let address = if i < chunks { aux.lhs } else { aux.rhs }
-                + F::from_canonical_usize(if i < chunks { i } else { i - chunks });
-
-            let fields = [
-                timestamp,
-                AB::Expr::from_bool(false),
-                io.e.into(),
-                address,
-                aux.internal.io.input[i].into(),
-            ];
-
-            builder.push_send(MEMORY_BUS, fields, io.is_opcode);
-        }
-
-        // WRITE
-        for i in 0..WIDTH {
-            let timestamp = io.clk + AB::F::from_canonical_usize(timestamp_offset);
-            timestamp_offset += 1;
-
-            let address = aux.dst + AB::F::from_canonical_usize(i);
-
-            let fields = [
-                timestamp,
-                AB::Expr::from_bool(true),
-                io.e.into(),
-                address,
-                aux.internal.io.output[i].into(),
-            ];
-
-            let count = if i < chunks {
-                io.is_opcode.into()
-            } else {
-                io.is_opcode - io.cmp
-            };
-
-            builder.push_send(MEMORY_BUS, fields, count);
-        }
+        let opcode = AB::Expr::from_canonical_usize(PERM_POS2 as usize) + io.cmp;
+        self.execution_bus.execute_increment_pc(
+            builder,
+            io.is_opcode,
+            ExecutionState::new(io.pc, io.timestamp),
+            AB::Expr::from_canonical_usize(3 + (2 * WIDTH)),
+            InstructionCols::new(opcode, [io.a, io.b, io.c, io.d, io.e]),
+        );
 
         // DIRECT
         if self.direct {

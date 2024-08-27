@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use afs_page::common::page::Page;
 use datafusion::arrow::{
-    array::{ArrayRef, RecordBatch, UInt32Array},
-    datatypes::Schema,
+    array::{Array, ArrayRef, Int64Array, RecordBatch, UInt32Array},
+    datatypes::{DataType, Schema},
 };
 
 use crate::{BITS_PER_FE, NUM_IDX_COLS};
@@ -47,4 +47,40 @@ pub fn convert_to_record_batch(page: Page, schema: Schema) -> RecordBatch {
     }));
 
     RecordBatch::try_new(Arc::new(schema), array_refs).unwrap()
+}
+
+/// Converts a vector of columns to rows of a Page (including the `is_alloc` column)
+pub fn convert_columns_to_page_rows(
+    columns: Vec<Arc<dyn Array>>,
+    alloc_rows: usize,
+) -> Vec<Vec<u32>> {
+    let height = alloc_rows.next_power_of_two();
+
+    // Initialize a vector to hold each row, with an extra column for `is_alloc`
+    let mut rows: Vec<Vec<u32>> = vec![vec![0; columns.len() + 1]; alloc_rows];
+    let zero_rows: Vec<Vec<u32>> = vec![vec![0; columns.len() + 1]; height - alloc_rows];
+
+    // Iterate over columns and fill the rows
+    for (col_idx, column) in columns.iter().enumerate() {
+        // TODO: handle other data types
+        let array = match column.data_type() {
+            DataType::UInt32 => column.as_any().downcast_ref::<UInt32Array>().unwrap(),
+            DataType::Int64 => {
+                let array = column.as_any().downcast_ref::<Int64Array>().unwrap();
+                let array = array
+                    .values()
+                    .iter()
+                    .map(|&v| v as u32)
+                    .collect::<Vec<u32>>();
+                &UInt32Array::from(array)
+            }
+            _ => panic!("Unsupported data type: {}", column.data_type()),
+        };
+        for (row_idx, row) in rows.iter_mut().enumerate() {
+            row[0] = 1;
+            row[col_idx + 1] = array.value(row_idx);
+        }
+    }
+    rows.extend(zero_rows);
+    rows
 }

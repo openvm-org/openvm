@@ -154,7 +154,7 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> OfflineCheckerChip<
         self.air.lt_tuple_air.generate_trace_row_aux(
             &prev_idx_clk,
             &curr_idx_clk,
-            range_checker,
+            &range_checker,
             &mut oc_cols.lt_aux,
         );
 

@@ -1,10 +1,13 @@
-use afs_primitives::offline_checker::OfflineCheckerOperation;
-use p3_field::PrimeField64;
+use std::array;
 
-pub mod expand;
+use afs_derive::AlignedBorrow;
+use p3_field::{AbstractField, Field};
+
+pub mod audit;
+// pub mod expand;
+// pub mod expand_interface;
+pub mod manager;
 pub mod offline_checker;
-
-pub mod interface;
 #[cfg(test)]
 pub mod tests;
 pub mod tree;
@@ -15,42 +18,45 @@ pub enum OpType {
     Write = 1,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MemoryAccess<const WORD_SIZE: usize, F> {
-    pub timestamp: usize,
-    pub op_type: OpType,
-    pub address_space: F,
-    pub address: F,
-    pub data: [F; WORD_SIZE],
+/// The full pointer to a location in memory consists of an address space and a pointer within
+/// the address space.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, AlignedBorrow)]
+#[repr(C)]
+pub struct MemoryAddress<S, T> {
+    pub address_space: S,
+    pub pointer: T,
 }
 
-impl<const WORD_SIZE: usize, F: PrimeField64> OfflineCheckerOperation<F>
-    for MemoryAccess<WORD_SIZE, F>
-{
-    fn get_timestamp(&self) -> usize {
-        self.timestamp
+impl<S, T> MemoryAddress<S, T> {
+    pub fn new(address_space: S, pointer: T) -> Self {
+        Self {
+            address_space,
+            pointer,
+        }
     }
 
-    fn get_idx(&self) -> Vec<F> {
-        vec![self.address_space, self.address]
-    }
-
-    fn get_data(&self) -> Vec<F> {
-        self.data.to_vec()
-    }
-    fn get_op_type(&self) -> u8 {
-        self.op_type as u8
+    pub fn from<T1, T2>(a: MemoryAddress<T1, T2>) -> Self
+    where
+        T1: Into<S>,
+        T2: Into<T>,
+    {
+        Self {
+            address_space: a.address_space.into(),
+            pointer: a.pointer.into(),
+        }
     }
 }
 
 // panics if the word is not equal to decompose(elem) for some elem: F
-pub fn compose<const WORD_SIZE: usize, F: PrimeField64>(word: [F; WORD_SIZE]) -> F {
+pub fn compose<const WORD_SIZE: usize, F: Field>(word: [F; WORD_SIZE]) -> F {
     for &cell in word.iter().skip(1) {
         assert_eq!(cell, F::zero());
     }
     word[0]
 }
 
-pub fn decompose<const WORD_SIZE: usize, F: PrimeField64>(field_elem: F) -> [F; WORD_SIZE] {
-    std::array::from_fn(|i| if i == 0 { field_elem } else { F::zero() })
+pub fn decompose<const WORD_SIZE: usize, F: AbstractField>(field_elem: F) -> [F; WORD_SIZE] {
+    let mut array = array::from_fn(|_| F::zero());
+    array[0] = field_elem;
+    array
 }

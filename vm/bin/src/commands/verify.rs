@@ -7,15 +7,13 @@ use afs_test_utils::{
 };
 use clap::Parser;
 use color_eyre::eyre::Result;
+use p3_baby_bear::BabyBear;
 use stark_vm::{
     program::Program,
-    vm::{config::VmConfig, ExecutionAndTraceGenerationResult, VirtualMachine},
+    vm::{config::VmConfig, VirtualMachine},
 };
 
-use crate::{
-    asm::parse_asm_file,
-    commands::{read_from_path, WORD_SIZE},
-};
+use crate::{asm::parse_asm_file, commands::read_from_path};
 
 /// `afs verify` command
 /// Uses information from config.toml to verify a proof using the verifying key in `output-folder`
@@ -63,13 +61,13 @@ impl VerifyCommand {
 
     pub fn execute_helper(&self, config: VmConfig) -> Result<()> {
         println!("Verifying proof file: {}", self.proof_file);
-        let instructions = parse_asm_file(Path::new(&self.asm_file_path))?;
+        let instructions = parse_asm_file::<BabyBear>(Path::new(&self.asm_file_path))?;
         let program_len = instructions.len();
         let program = Program {
             instructions,
             debug_infos: vec![None; program_len],
         };
-        let vm = VirtualMachine::<WORD_SIZE, _>::new(config, program, vec![]);
+        let vm = VirtualMachine::new(config, program, vec![]);
         let encoded_vk = read_from_path(&Path::new(&self.keys_folder).join("vk"))?;
         let vk: MultiStarkVerifyingKey<BabyBearPoseidon2Config> =
             bincode::deserialize(&encoded_vk)?;
@@ -77,19 +75,20 @@ impl VerifyCommand {
         let encoded_proof = read_from_path(Path::new(&self.proof_file))?;
         let proof: Proof<BabyBearPoseidon2Config> = bincode::deserialize(&encoded_proof)?;
 
-        let ExecutionAndTraceGenerationResult {
-            max_log_degree,
-            nonempty_pis: pis,
-            nonempty_chips: chips,
-            ..
-        } = vm.execute_and_generate_traces()?;
-        let engine = config::baby_bear_poseidon2::default_engine(max_log_degree);
+        // FIXME: verify should not have to execute
+        let result = vm.execute_and_generate::<BabyBearPoseidon2Config>()?;
+        assert_eq!(
+            result.segment_results.len(),
+            1,
+            "continuations not currently supported"
+        );
+        let result = result.segment_results.into_iter().next().unwrap();
 
-        let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
+        let engine = config::baby_bear_poseidon2::default_engine(result.max_log_degree());
 
         let mut challenger = engine.new_challenger();
         let verifier = engine.verifier();
-        let result = verifier.verify(&mut challenger, &vk, chips, &proof, &pis);
+        let result = verifier.verify(&mut challenger, &vk, &proof, &result.public_values);
 
         if result.is_err() {
             println!("Verification Unsuccessful");

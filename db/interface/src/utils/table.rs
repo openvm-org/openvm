@@ -5,7 +5,7 @@ use p3_field::PrimeField64;
 use p3_uni_stark::Domain;
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::{committed_page::CommittedPage, MAX_ROWS};
+use crate::committed_page::CommittedPage;
 
 pub async fn get_record_batches(ctx: &SessionContext, name: &str) -> Result<Vec<RecordBatch>> {
     let df = ctx.table(name).await.unwrap();
@@ -24,7 +24,7 @@ where
     SC::Pcs: Send + Sync,
     SC::Challenge: Send + Sync,
 {
-    let cp: CommittedPage<SC> = CommittedPage::from_record_batch(rb, MAX_ROWS);
+    let cp: CommittedPage<SC> = CommittedPage::from_record_batch(rb);
     let page = cp.page;
     let ops = page
         .rows

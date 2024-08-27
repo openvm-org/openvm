@@ -26,7 +26,7 @@ fn test_compiler_less_than() {
 
     builder.halt();
 
-    let program = builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+    let program = builder.compile_isa_with_options(CompilerOptions {
         compile_prints: false,
         enable_cycle_tracker: true,
         field_arithmetic_enabled: true,

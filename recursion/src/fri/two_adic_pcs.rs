@@ -35,9 +35,8 @@ pub fn verify_two_adic_pcs<C: Config>(
         verify_shape_and_sample_challenges(builder, config, &fri_proof, challenger);
     builder.cycle_tracker_end("stage-d-1-verify-shape-and-sample-challenges");
 
-    let commit_phase_commits_len = fri_proof.commit_phase_commits.len().materialize(builder);
-    let log_global_max_height: Var<_> =
-        builder.eval(commit_phase_commits_len + RVar::from(log_blowup));
+    let log_global_max_height =
+        builder.eval_expr(fri_proof.commit_phase_commits.len() + RVar::from(log_blowup));
 
     let mut reduced_openings: Array<_, Array<_, Ext<_, _>>> =
         builder.array(proof.query_openings.len());
@@ -51,13 +50,20 @@ pub fn verify_two_adic_pcs<C: Config>(
 
             let mut ro: Array<C, Ext<C::F, C::EF>> = builder.array(32);
             let mut alpha_pow: Array<C, Ext<C::F, C::EF>> = builder.array(32);
-            let zero_ef = builder.eval(C::EF::zero().cons());
-            for j in 0..32 {
-                builder.set_value(&mut ro, j, zero_ef);
-            }
-            let one_ef = builder.eval(C::EF::one().cons());
-            for j in 0..32 {
-                builder.set_value(&mut alpha_pow, j, one_ef);
+            if builder.flags.static_only {
+                for j in 0..32 {
+                    // ATTENTION: don't use set_value here, Fixed will share the same variable.
+                    builder.set(&mut ro, j, C::EF::zero().cons());
+                    builder.set(&mut alpha_pow, j, C::EF::one().cons());
+                }
+            } else {
+                let zero_ef = builder.eval(C::EF::zero().cons());
+                let one_ef = builder.eval(C::EF::one().cons());
+                for j in 0..32 {
+                    // Use set_value here to save a copy.
+                    builder.set_value(&mut ro, j, zero_ef);
+                    builder.set_value(&mut alpha_pow, j, one_ef);
+                }
             }
 
             builder.range(0, rounds.len()).for_each(|j, builder| {
@@ -66,11 +72,11 @@ pub fn verify_two_adic_pcs<C: Config>(
                 let batch_commit = round.batch_commit;
                 let mats = round.mats;
 
-                let mut batch_heights_log2: Array<C, Var<C::N>> = builder.array(mats.len());
+                let mut batch_heights_log2: Array<C, Usize<C::N>> = builder.array(mats.len());
                 builder.range(0, mats.len()).for_each(|k, builder| {
                     let mat = builder.get(&mats, k);
                     let domain = mat.domain;
-                    let height_log2: Var<_> = builder.eval(domain.log_n + RVar::from(log_blowup));
+                    let height_log2: Usize<_> = builder.eval(domain.log_n + RVar::from(log_blowup));
                     builder.set_value(&mut batch_heights_log2, k, height_log2);
                 });
                 let mut batch_dims: Array<C, DimensionsVariable<C>> = builder.array(mats.len());
@@ -117,8 +123,8 @@ pub fn verify_two_adic_pcs<C: Config>(
                         let mat_values = mat.values;
                         let domain = mat.domain;
                         let log2_domain_size = domain.log_n;
-                        let log_height: Var<C::N> =
-                            builder.eval(log2_domain_size + RVar::from(log_blowup));
+                        let log_height =
+                            builder.eval_expr(log2_domain_size + RVar::from(log_blowup));
 
                         let cur_ro = builder.get(&ro, log_height);
                         let cur_alpha_pow = builder.get(&alpha_pow, log_height);
@@ -296,9 +302,6 @@ pub mod tests {
     };
 
     #[allow(dead_code)]
-    const WORD_SIZE: usize = 1;
-
-    #[allow(dead_code)]
     pub fn build_test_fri_with_cols_and_log2_rows(
         nb_cols: usize,
         nb_log2_rows: usize,
@@ -379,18 +382,15 @@ pub mod tests {
         pcs_var.verify(&mut builder, rounds, proofvar, &mut challenger);
         builder.halt();
 
-        let program = builder.compile_isa::<WORD_SIZE>();
+        let program = builder.compile_isa();
         let mut witness_stream = Vec::new();
         witness_stream.extend(proof.write());
         (program, witness_stream)
     }
 
     #[test]
-    #[ignore = "test takes too long"]
     fn test_two_adic_fri_pcs_single_batch() {
-        use afs_compiler::util::execute_program_and_generate_traces;
-
-        let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 16);
-        execute_program_and_generate_traces::<WORD_SIZE>(program, witness);
+        let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 10);
+        afs_compiler::util::execute_program(program, witness);
     }
 }

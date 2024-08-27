@@ -1,11 +1,10 @@
 use afs_compiler::{
     asm::{AsmBuilder, AsmConfig},
     ir::{Array, RVar, SymbolicVar, Var},
-    util::{execute_program, execute_program_and_generate_traces},
+    util::execute_program,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use stark_vm::cpu::WORD_SIZE;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
@@ -44,8 +43,8 @@ fn test_compiler_for_loops() {
 
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
+    let program = builder.compile_isa();
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -77,9 +76,9 @@ fn test_compiler_nested_array_loop() {
 
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program::<WORD_SIZE>(program, vec![]);
-    //execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
+    let program = builder.compile_isa();
+    execute_program(program, vec![]);
+    //execute_program(program, vec![]);
 }
 
 #[test]
@@ -162,8 +161,8 @@ fn test_compiler_break() {
 
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
+    let program = builder.compile_isa();
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -188,8 +187,8 @@ fn test_compiler_constant_break() {
         });
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
+    let program = builder.compile_isa();
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -214,8 +213,8 @@ fn test_compiler_constant_var_break() {
         });
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
+    let program = builder.compile_isa();
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -237,8 +236,8 @@ fn test_compiler_step_by() {
 
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
+    let program = builder.compile_isa();
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -257,6 +256,6 @@ fn test_compiler_bneinc() {
 
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
-    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
+    let program = builder.compile_isa();
+    execute_program(program, vec![]);
 }

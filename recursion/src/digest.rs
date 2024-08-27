@@ -1,7 +1,9 @@
 use afs_compiler::{
-    ir::{Array, Builder, Config, Felt, FromConstant, MemIndex, Ptr, Usize, Var, Variable},
+    ir::{Array, Builder, Config, Ext, Felt, FromConstant, MemIndex, Ptr, Usize, Var, Variable},
     prelude::MemVariable,
 };
+
+use crate::outer_poseidon2::Poseidon2CircuitBuilder;
 
 #[derive(Clone)]
 pub enum DigestVal<C: Config> {
@@ -116,4 +118,53 @@ impl<C: Config> DigestVariable<C> {
             DigestVariable::Var(array) => array.len(),
         }
     }
+}
+
+impl<C: Config> From<Array<C, Felt<C::F>>> for DigestVariable<C> {
+    fn from(value: Array<C, Felt<C::F>>) -> Self {
+        Self::Felt(value)
+    }
+}
+
+impl<C: Config> From<Array<C, Var<C::N>>> for DigestVariable<C> {
+    fn from(value: Array<C, Var<C::N>>) -> Self {
+        Self::Var(value)
+    }
+}
+
+pub trait CanPoseidon2Digest<C: Config> {
+    fn p2_digest(&self, builder: &mut Builder<C>) -> DigestVariable<C>;
+}
+
+impl<C: Config> CanPoseidon2Digest<C> for Array<C, Array<C, Felt<C::F>>> {
+    fn p2_digest(&self, builder: &mut Builder<C>) -> DigestVariable<C> {
+        if builder.flags.static_only {
+            let digest_vec = builder.p2_hash(&flatten_fixed(self));
+            DigestVariable::Var(builder.vec(digest_vec.to_vec()))
+        } else {
+            DigestVariable::Felt(builder.poseidon2_hash_x(self))
+        }
+    }
+}
+
+impl<C: Config> CanPoseidon2Digest<C> for Array<C, Array<C, Ext<C::F, C::EF>>> {
+    fn p2_digest(&self, builder: &mut Builder<C>) -> DigestVariable<C> {
+        if builder.flags.static_only {
+            let flat_felts: Vec<_> = flatten_fixed(self)
+                .into_iter()
+                .flat_map(|ext| builder.ext2felt_circuit(ext).to_vec())
+                .collect();
+            let digest_vec = builder.p2_hash(&flat_felts);
+            DigestVariable::Var(builder.vec(digest_vec.to_vec()))
+        } else {
+            DigestVariable::Felt(builder.poseidon2_hash_ext(self))
+        }
+    }
+}
+
+fn flatten_fixed<C: Config, V: MemVariable<C>>(arr: &Array<C, Array<C, V>>) -> Vec<V> {
+    arr.vec()
+        .into_iter()
+        .flat_map(|felt_arr| felt_arr.vec())
+        .collect()
 }

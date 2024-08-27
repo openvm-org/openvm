@@ -1,56 +1,57 @@
-use afs_compiler::{asm::AsmBuilder, prelude::RVar, util::end_to_end_test};
+use afs_compiler::{
+    asm::AsmBuilder,
+    ir::{Array, Var, PERMUTATION_WIDTH},
+    prelude::RVar,
+    util::execute_program,
+};
+use afs_test_utils::config::baby_bear_poseidon2::default_perm;
 use p3_baby_bear::BabyBear;
-use p3_field::extension::BinomialExtensionField;
+use p3_field::{extension::BinomialExtensionField, AbstractField};
+use p3_symmetric::Permutation;
 use rand::{thread_rng, Rng};
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
 
-const WORD_SIZE: usize = 1;
+#[test]
+fn test_compiler_poseidon2_permute() {
+    let mut rng = thread_rng();
 
-// #[test]
-// fn test_compiler_poseidon2_permute() {
-//     let mut rng = thread_rng();
-//
-//     let mut builder = AsmBuilder::<F, EF>::default();
-//
-//     let random_state_vals: [F; PERMUTATION_WIDTH] = rng.gen();
-//     // Execute the reference permutation
-//     let expected_result = perm.permute(random_state_vals);
-//
-//     // Execture the permutation in the VM
-//     // Initialize an array and populate it with the entries.
-//     let var_width: Var<F> = builder.eval(F::from_canonical_usize(PERMUTATION_WIDTH));
-//     let mut random_state = builder.array(var_width);
-//     for (i, val) in random_state_vals.iter().enumerate() {
-//         builder.set(&mut random_state, i, *val);
-//     }
-//
-//     // Assert that the values are set correctly.
-//     for (i, val) in random_state_vals.iter().enumerate() {
-//         let res = builder.get(&random_state, i);
-//         builder.assert_felt_eq(res, *val);
-//     }
-//
-//     let result = builder.poseidon2_permute(&random_state);
-//
-//     assert!(matches!(result, Array::Dyn(_, _)));
-//
-//     // Assert that the result is equal to the expected result.
-//     for (i, val) in expected_result.iter().enumerate() {
-//         let res = builder.get(&result, i);
-//         builder.assert_felt_eq(res, *val);
-//     }
-//
-//     // let program = builder.compile_program();
-//
-//     // let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
-//     // runtime.run();
-//     // println!(
-//     //     "The program executed successfully, number of cycles: {}",
-//     //     runtime.clk.as_canonical_u32() / 4
-//     // );
-// }
+    let mut builder = AsmBuilder::<F, EF>::default();
+
+    let random_state_vals: [F; PERMUTATION_WIDTH] = rng.gen();
+    // Execute the reference permutation
+    let perm = default_perm();
+    let expected_result = perm.permute(random_state_vals);
+
+    // Execture the permutation in the VM
+    // Initialize an array and populate it with the entries.
+    let var_width: Var<F> = builder.eval(F::from_canonical_usize(PERMUTATION_WIDTH));
+    let mut random_state = builder.array(var_width);
+    for (i, val) in random_state_vals.iter().enumerate() {
+        builder.set(&mut random_state, i, *val);
+    }
+
+    // Assert that the values are set correctly.
+    for (i, val) in random_state_vals.iter().enumerate() {
+        let res = builder.get(&random_state, i);
+        builder.assert_felt_eq(res, *val);
+    }
+
+    let result = builder.poseidon2_permute(&random_state);
+
+    assert!(matches!(result, Array::Dyn(_, _)));
+
+    // Assert that the result is equal to the expected result.
+    for (i, val) in expected_result.iter().enumerate() {
+        let res = builder.get(&result, i);
+        builder.assert_felt_eq(res, *val);
+    }
+    builder.halt();
+
+    let program = builder.compile_isa();
+    execute_program(program, vec![]);
+}
 
 #[test]
 fn test_compiler_poseidon2_hash_1() {
@@ -87,5 +88,6 @@ fn test_compiler_poseidon2_hash_1() {
 
     builder.halt();
 
-    end_to_end_test::<WORD_SIZE, _>(builder, vec![]);
+    let program = builder.compile_isa();
+    execute_program(program, vec![]);
 }

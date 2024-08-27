@@ -44,4 +44,5 @@ pub trait CanCheckWitness<C: Config> {
 pub trait ChallengerVariable<C: Config>:
     FeltChallenger<C> + CanObserveDigest<C> + CanCheckWitness<C>
 {
+    fn new(builder: &mut Builder<C>) -> Self;
 }

@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use afs_compiler::util::execute_program_and_generate_traces;
+use afs_compiler::ir::Witness;
 use afs_primitives::{range_gate::RangeCheckerGateChip, sum::SumChip};
 use afs_stark_backend::{
     prover::trace::TraceCommitmentBuilder, rap::AnyRap, verifier::MultiTraceStarkVerifier,
 };
 use afs_test_utils::{
     config::{
-        baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
+        baby_bear_poseidon2_outer::{default_engine, BabyBearPoseidon2OuterConfig},
         setup_tracing,
     },
     engine::StarkEngine,
@@ -17,19 +17,16 @@ use afs_test_utils::{
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_uni_stark::Val;
 use p3_util::log2_strict_usize;
 
 use crate::{
-    hints::Hintable,
-    stark::{DynRapForRecursion, VerifierProgram},
-    types::{new_from_inner_multi_vk, InnerConfig, VerifierInput},
+    config::outer::new_from_outer_multi_vk, halo2::Halo2Prover,
+    stark::outer::build_circuit_verify_operations, types::VerifierInput, witness::Witnessable,
 };
 
 #[test]
 fn test_fibonacci() {
-    type SC = BabyBearPoseidon2Config;
-    type F = Val<SC>;
+    type F = BabyBear;
 
     setup_tracing();
 
@@ -42,12 +39,12 @@ fn test_fibonacci() {
         trace.get(n - 1, 1),
     ]];
 
-    run_recursive_test(vec![&fib_air], vec![&fib_air], vec![trace], pvs)
+    run_recursive_test(vec![&fib_air], vec![trace], pvs)
 }
 
 #[test]
 fn test_interactions() {
-    type SC = BabyBearPoseidon2Config;
+    type SC = BabyBearPoseidon2OuterConfig;
 
     const INPUT_BUS: usize = 0;
     const OUTPUT_BUS: usize = 1;
@@ -98,22 +95,14 @@ fn test_interactions() {
         &receiver_air,
         &sum_chip.range_checker.air,
     ];
-    let rec_raps: Vec<&dyn DynRapForRecursion<InnerConfig>> = vec![
-        &sum_chip.air,
-        &sender_air,
-        &receiver_air,
-        &sum_chip.range_checker.air,
-    ];
     let traces = vec![sum_trace, sender_trace, receiver_trace, range_checker_trace];
     let pvs = vec![vec![], vec![], vec![], vec![]];
 
-    run_recursive_test(any_raps, rec_raps, traces, pvs)
+    run_recursive_test(any_raps, traces, pvs)
 }
 
 fn run_recursive_test(
-    // TODO: find way to not duplicate parameters
-    any_raps: Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
-    rec_raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
+    any_raps: Vec<&dyn AnyRap<BabyBearPoseidon2OuterConfig>>,
     traces: Vec<RowMajorMatrix<BabyBear>>,
     pvs: Vec<Vec<BabyBear>>,
 ) {
@@ -151,22 +140,19 @@ fn run_recursive_test(
     // Make sure proof verifies outside eDSL...
     let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier
-        .verify(&mut engine.new_challenger(), &vk, any_raps, &proof, &pvs)
+        .verify(&mut engine.new_challenger(), &vk, &proof, &pvs)
         .expect("afs proof should verify");
 
     // Build verification program in eDSL.
-    let advice = new_from_inner_multi_vk(&vk);
-
-    let program = VerifierProgram::build(rec_raps, advice, &engine.fri_params);
-
+    let advice = new_from_outer_multi_vk(&vk);
     let input = VerifierInput {
         proof,
         log_degree_per_air,
         public_values: pvs.clone(),
     };
 
-    let mut witness_stream = Vec::new();
-    witness_stream.extend(input.write());
-
-    execute_program_and_generate_traces::<1>(program, witness_stream);
+    let mut witness = Witness::default();
+    input.write(&mut witness);
+    let operations = build_circuit_verify_operations(advice, &engine.fri_params, input);
+    Halo2Prover::mock(20, operations, witness);
 }

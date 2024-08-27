@@ -1,7 +1,6 @@
-use std::{
-    any::{type_name, Any},
-    cmp::Reverse,
-};
+pub mod outer;
+
+use std::{cmp::Reverse, marker::PhantomData};
 
 use afs_compiler::{
     conversion::CompilerOptions,
@@ -9,22 +8,24 @@ use afs_compiler::{
     prelude::RVar,
 };
 use afs_stark_backend::{
-    air_builders::symbolic::{SymbolicConstraints, SymbolicRapBuilder},
+    air_builders::{
+        symbolic::symbolic_expression::SymbolicExpression,
+        verifier::GenericVerifierConstraintFolder,
+    },
     prover::opener::AdjacentOpenedValues,
-    rap::{AnyRap, Rap},
+    rap::AnyRap,
 };
 use afs_test_utils::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
 use itertools::{izip, Itertools};
-use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
-use p3_field::{AbstractExtensionField, AbstractField, PrimeField32, TwoAdicField};
+use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
 use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
     stack::VerticalPair,
     Matrix,
 };
-use stark_vm::{program::Program, vm::ExecutionSegment};
+use stark_vm::program::Program;
 
 use crate::{
     challenger::{duplex::DuplexChallengerVariable, ChallengerVariable},
@@ -43,33 +44,6 @@ use crate::{
     utils::const_fri_config,
 };
 
-pub trait DynRapForRecursion<C: Config>:
-    Rap<SymbolicRapBuilder<C::F>>
-    + for<'a> Rap<RecursiveVerifierConstraintFolder<'a, C>>
-    + BaseAir<C::F>
-{
-    fn as_any(&self) -> &dyn Any;
-
-    fn name(&self) -> String;
-}
-
-impl<C, T> DynRapForRecursion<C> for T
-where
-    C: Config,
-    T: Rap<SymbolicRapBuilder<C::F>>
-        + for<'a> Rap<RecursiveVerifierConstraintFolder<'a, C>>
-        + BaseAir<C::F>
-        + 'static,
-{
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn name(&self) -> String {
-        type_name::<Self>().to_string()
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct VerifierProgram<C: Config> {
     _phantom: std::marker::PhantomData<C>,
@@ -78,7 +52,6 @@ pub struct VerifierProgram<C: Config> {
 impl VerifierProgram<InnerConfig> {
     /// Create a new instance of the program for the [BabyBearPoseidon2] config.
     pub fn build(
-        raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
         constants: MultiStarkVerificationAdvice<InnerConfig>,
         fri_params: &FriParameters,
     ) -> Program<BabyBear> {
@@ -91,13 +64,12 @@ impl VerifierProgram<InnerConfig> {
         let pcs = TwoAdicFriPcsVariable {
             config: const_fri_config(&mut builder, fri_params),
         };
-        StarkVerifier::verify(&mut builder, &pcs, raps, constants, &input);
+        StarkVerifier::verify::<DuplexChallengerVariable<_>>(&mut builder, &pcs, constants, &input);
 
         builder.cycle_tracker_end("VerifierProgram");
         builder.halt();
 
-        const WORD_SIZE: usize = 1;
-        builder.compile_isa_with_options::<WORD_SIZE>(CompilerOptions {
+        builder.compile_isa_with_options(CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()
         })
@@ -114,10 +86,9 @@ where
     C::F: TwoAdicField,
 {
     /// Reference: [afs_stark_backend::verifier::MultiTraceStarkVerifier::verify].
-    pub fn verify(
+    pub fn verify<CH: ChallengerVariable<C>>(
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
-        raps: Vec<&dyn DynRapForRecursion<C>>,
         constants: MultiStarkVerificationAdvice<C>,
         input: &VerifierInputVariable<C>,
     ) {
@@ -148,16 +119,15 @@ where
         }
         builder.assert_ext_eq(cumulative_sum, C::EF::zero().cons());
 
-        let mut challenger = DuplexChallengerVariable::new(builder);
+        let mut challenger = CH::new(builder);
 
-        Self::verify_raps(builder, pcs, raps, constants, &mut challenger, input);
+        Self::verify_raps(builder, pcs, constants, &mut challenger, input);
     }
 
     /// Reference: [afs_stark_backend::verifier::MultiTraceStarkVerifier::verify_raps].
     pub fn verify_raps(
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
-        raps: Vec<&dyn DynRapForRecursion<C>>,
         vk: MultiStarkVerificationAdvice<C>,
         challenger: &mut impl ChallengerVariable<C>,
         input: &VerifierInputVariable<C>,
@@ -165,7 +135,7 @@ where
         C::F: TwoAdicField,
         C::EF: TwoAdicField,
     {
-        Self::validate_inputs(builder, &raps, &vk, input);
+        Self::validate_inputs(builder, &vk, input);
 
         let VerifierInputVariable::<C> {
             proof,
@@ -173,7 +143,7 @@ where
             public_values,
         } = input;
 
-        let num_airs = raps.len();
+        let num_airs = vk.per_air.len();
         let r_num_airs = num_airs;
         let num_phases = vk.num_challenges_to_sample.len();
         // Currently only support 0 or 1 phase is supported.
@@ -243,30 +213,27 @@ where
         }
 
         let alpha = challenger.sample_ext(builder);
-        // builder.print_e(alpha);
 
         challenger.observe_digest(builder, quotient_commit.clone());
 
         let zeta = challenger.sample_ext(builder);
-        // builder.print_e(zeta);
 
-        let mut trace_domains =
-            builder.dyn_array::<TwoAdicMultiplicativeCosetVariable<_>>(r_num_airs);
+        let mut trace_domains = builder.array::<TwoAdicMultiplicativeCosetVariable<_>>(r_num_airs);
 
         let mut num_prep_rounds = 0;
 
         // Build domains
-        let mut domains = builder.dyn_array(r_num_airs);
-        let mut quotient_domains = builder.dyn_array(r_num_airs);
-        let mut trace_points_per_domain = builder.dyn_array(r_num_airs);
-        let mut quotient_chunk_domains = builder.dyn_array(r_num_airs);
+        let mut domains = builder.array(r_num_airs);
+        let mut quotient_domains = builder.array(r_num_airs);
+        let mut trace_points_per_domain = builder.array(r_num_airs);
+        let mut quotient_chunk_domains = builder.array(r_num_airs);
         for i in 0..num_airs {
             let log_degree: RVar<_> = builder.get(log_degree_per_air, i).into();
 
             let domain = pcs.natural_domain_for_log_degree(builder, log_degree);
             builder.set_value(&mut trace_domains, i, domain.clone());
 
-            let mut trace_points = builder.dyn_array::<Ext<_, _>>(2);
+            let mut trace_points = builder.array::<Ext<_, _>>(2);
             let zeta_next = domain.next_point(builder, zeta);
             builder.set_value(&mut trace_points, RVar::zero(), zeta);
             builder.set_value(&mut trace_points, RVar::one(), zeta_next);
@@ -299,7 +266,7 @@ where
         let total_rounds =
             num_prep_rounds + num_main_rounds + num_challenge_rounds + num_quotient_rounds;
 
-        let mut rounds = builder.dyn_array::<TwoAdicPcsRoundVariable<_>>(total_rounds);
+        let mut rounds = builder.array::<TwoAdicPcsRoundVariable<_>>(total_rounds);
         let mut round_idx = 0;
 
         // 1. First the preprocessed trace openings: one round per AIR with preprocessing.
@@ -314,7 +281,7 @@ where
                 let trace_points = builder.get(&trace_points_per_domain, i);
 
                 // Assumption: each AIR with preprocessed trace has its own commitment and opening values
-                let mut values = builder.dyn_array::<Array<C, _>>(2);
+                let mut values = builder.array::<Array<C, _>>(2);
                 builder.set_value(&mut values, 0, prep.local);
                 builder.set_value(&mut values, 1, prep.next);
                 let prep_mat = TwoAdicPcsMatsVariable::<C> {
@@ -323,7 +290,7 @@ where
                     points: trace_points.clone(),
                 };
 
-                let mut mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.dyn_array(1);
+                let mut mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.array(1);
                 builder.set_value(&mut mats, 0, prep_mat);
 
                 builder.set_value(
@@ -349,7 +316,7 @@ where
                     RVar::from(matrix_to_air_index.len()),
                 );
                 let mut mats: Array<_, TwoAdicPcsMatsVariable<_>> =
-                    builder.dyn_array(matrix_to_air_index.len());
+                    builder.array(matrix_to_air_index.len());
 
                 matrix_to_air_index
                     .iter()
@@ -358,7 +325,7 @@ where
                         let main = builder.get(&values_per_mat, matrix_idx);
                         let domain = builder.get(&domains, air_idx);
                         let trace_points = builder.get(&trace_points_per_domain, air_idx);
-                        let mut values = builder.dyn_array::<Array<C, _>>(2);
+                        let mut values = builder.array::<Array<C, _>>(2);
                         builder.set_value(&mut values, 0, main.local);
                         builder.set_value(&mut values, 1, main.next);
                         let main_mat = TwoAdicPcsMatsVariable::<C> {
@@ -383,14 +350,14 @@ where
 
             builder.assert_eq::<Usize<_>>(values_per_mat.len(), RVar::from(num_airs));
 
-            let mut mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.dyn_array(num_airs);
+            let mut mats: Array<_, TwoAdicPcsMatsVariable<_>> = builder.array(num_airs);
             for i in 0..num_airs {
                 let domain = builder.get(&domains, i);
                 let trace_points = builder.get(&trace_points_per_domain, i);
 
                 let after_challenge = builder.get(&values_per_mat, i);
 
-                let mut values = builder.dyn_array::<Array<C, _>>(2);
+                let mut values = builder.array::<Array<C, _>>(2);
                 builder.set_value(&mut values, 0, after_challenge.local);
                 builder.set_value(&mut values, 1, after_challenge.next);
                 let after_challenge_mat = TwoAdicPcsMatsVariable::<C> {
@@ -417,29 +384,28 @@ where
             .sum::<usize>();
 
         let mut quotient_mats: Array<_, TwoAdicPcsMatsVariable<_>> =
-            builder.dyn_array(num_quotient_mats);
-        let qc_index: Var<_> = builder.eval(C::N::zero());
+            builder.array(num_quotient_mats);
+        let qc_index: Usize<_> = builder.eval(C::N::zero());
 
-        let mut qc_points = builder.dyn_array::<Ext<_, _>>(1);
+        let mut qc_points = builder.array::<Ext<_, _>>(1);
         builder.set_value(&mut qc_points, 0, zeta);
 
         for i in 0..num_airs {
             let opened_quotient = builder.get(&proof.opening.values.quotient, i);
             let qc_domains = builder.get(&quotient_chunk_domains, i);
 
-            // FIXME: We should use constants. I don't fully understnad this part, so skip it for now.
             builder.range(0, qc_domains.len()).for_each(|j, builder| {
                 let qc_dom = builder.get(&qc_domains, j);
                 let qc_vals_array = builder.get(&opened_quotient, j);
-                let mut qc_values = builder.dyn_array::<Array<C, _>>(1);
+                let mut qc_values = builder.array::<Array<C, _>>(1);
                 builder.set_value(&mut qc_values, 0, qc_vals_array);
                 let qc_mat = TwoAdicPcsMatsVariable::<C> {
                     domain: qc_dom,
                     values: qc_values,
                     points: qc_points.clone(),
                 };
-                builder.set_value(&mut quotient_mats, qc_index, qc_mat);
-                builder.assign(&qc_index, qc_index + C::N::one());
+                builder.set_value(&mut quotient_mats, qc_index.clone(), qc_mat);
+                builder.assign(&qc_index, qc_index.clone() + C::N::one());
             });
         }
         let quotient_round = TwoAdicPcsRoundVariable {
@@ -462,20 +428,18 @@ where
         builder.cycle_tracker_start("stage-e-verify-constraints");
 
         // TODO[zach]: make per phase; for now just 1 phase so OK
-        let after_challenge_idx: Var<C::N> = builder.constant(C::N::zero());
+        let after_challenge_idx: Usize<C::N> = builder.eval(C::N::zero());
 
         let mut preprocessed_idx = 0;
 
-        for (index, (&rap, air_const)) in raps.iter().zip_eq(vk.per_air.iter()).enumerate() {
-            let preprocessed_values =
-                if <dyn DynRapForRecursion<C> as BaseAir<C::F>>::preprocessed_trace(rap).is_some() {
-                    let ret =
-                        Some(builder.get(&proof.opening.values.preprocessed, preprocessed_idx));
-                    preprocessed_idx += 1;
-                    ret
-                } else {
-                    None
-                };
+        for (index, air_const) in vk.per_air.iter().enumerate() {
+            let preprocessed_values = if air_const.preprocessed_data.is_some() {
+                let ret = Some(builder.get(&proof.opening.values.preprocessed, preprocessed_idx));
+                preprocessed_idx += 1;
+                ret
+            } else {
+                None
+            };
 
             let partitioned_main_values = air_const
                 .main_graph
@@ -496,8 +460,11 @@ where
                 // One phase for now
                 let after_challenge_values = builder.get(&proof.opening.values.after_challenge, 0);
                 let after_challenge_values =
-                    builder.get(&after_challenge_values, after_challenge_idx);
-                builder.assign(&after_challenge_idx, after_challenge_idx + C::N::one());
+                    builder.get(&after_challenge_values, after_challenge_idx.clone());
+                builder.assign(
+                    &after_challenge_idx,
+                    after_challenge_idx.clone() + C::N::one(),
+                );
                 after_challenge_values
             };
 
@@ -515,7 +482,6 @@ where
             let pvs = builder.get(public_values, index);
             Self::verify_single_rap_constraints(
                 builder,
-                rap,
                 air_const,
                 preprocessed_values,
                 &partitioned_main_values,
@@ -528,20 +494,17 @@ where
                 after_challenge_values,
                 &challenges,
                 &exposed_values_by_air[index],
-                air_const.interaction_chunk_size,
             );
         }
 
         builder.cycle_tracker_end("stage-e-verify-constraints");
-        // TODO[jpw] cumulative sum check
     }
 
     /// Reference: [afs_stark_backend::verifier::constraints::verify_single_rap_constraints]
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::type_complexity)]
-    pub fn verify_single_rap_constraints<R>(
+    pub fn verify_single_rap_constraints(
         builder: &mut Builder<C>,
-        rap: &R,
         constants: &StarkVerificationAdvice<C>,
         preprocessed_values: Option<AdjacentOpenedValuesVariable<C>>,
         partitioned_main_values: &[AdjacentOpenedValuesVariable<C>],
@@ -554,10 +517,7 @@ where
         after_challenge_values: AdjacentOpenedValuesVariable<C>,
         challenges: &[Vec<Ext<C::F, C::EF>>],
         exposed_values_after_challenge: &[Vec<Ext<C::F, C::EF>>],
-        interaction_chunk_size: usize,
-    ) where
-        R: for<'b> Rap<RecursiveVerifierConstraintFolder<'b, C>> + Sync + ?Sized,
-    {
+    ) {
         let sels = trace_domain.selectors_at_point(builder, zeta);
 
         let mut preprocessed = AdjacentOpenedValues {
@@ -626,7 +586,6 @@ where
 
         let folded_constraints = Self::eval_constraints(
             builder,
-            rap,
             &constants.symbolic_constraints,
             preprocessed,
             &partitioned_main_values,
@@ -636,7 +595,6 @@ where
             after_challenge,
             challenges,
             exposed_values_after_challenge,
-            interaction_chunk_size,
         );
 
         let num_quotient_chunks = 1 << constants.log_quotient_degree();
@@ -664,10 +622,9 @@ where
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn eval_constraints<R>(
+    fn eval_constraints(
         builder: &mut Builder<C>,
-        rap: &R,
-        symbolic_constraints: &SymbolicConstraints<C::F>,
+        constraints: &[SymbolicExpression<C::F>],
         preprocessed_values: AdjacentOpenedValues<Ext<C::F, C::EF>>,
         partitioned_main_values: &[AdjacentOpenedValues<Ext<C::F, C::EF>>],
         public_values: Array<C, Felt<C::F>>,
@@ -676,11 +633,7 @@ where
         after_challenge: AdjacentOpenedValues<Ext<C::F, C::EF>>,
         challenges: &[Vec<Ext<C::F, C::EF>>],
         exposed_values_after_challenge: &[Vec<Ext<C::F, C::EF>>],
-        interaction_chunk_size: usize,
-    ) -> Ext<C::F, C::EF>
-    where
-        R: for<'b> Rap<RecursiveVerifierConstraintFolder<'b, C>> + Sync + ?Sized,
-    {
+    ) -> Ext<C::F, C::EF> {
         let mut unflatten = |v: &[Ext<C::F, C::EF>]| {
             v.chunks_exact(C::EF::D)
                 .map(|chunk| {
@@ -701,11 +654,16 @@ where
         };
 
         let mut folder_pv = Vec::new();
-        for i in 0..PROOF_MAX_NUM_PVS {
+        let num_pvs = if builder.flags.static_only {
+            public_values.len().value()
+        } else {
+            PROOF_MAX_NUM_PVS
+        };
+        for i in 0..num_pvs {
             folder_pv.push(builder.get(&public_values, i));
         }
 
-        let mut folder = RecursiveVerifierConstraintFolder::<C> {
+        let mut folder: RecursiveVerifierConstraintFolder<C> = GenericVerifierConstraintFolder {
             preprocessed: VerticalPair::new(
                 RowMajorMatrixView::new_row(&preprocessed_values.local),
                 RowMajorMatrixView::new_row(&preprocessed_values.next),
@@ -731,13 +689,10 @@ where
             accumulator: SymbolicExt::zero(),
             public_values: &folder_pv,
             exposed_values_after_challenge, // FIXME
-
-            symbolic_interactions: &symbolic_constraints.interactions,
-            interaction_chunk_size,
-            interactions: vec![],
+            _marker: PhantomData,
         };
+        folder.eval_constraints(constraints);
 
-        rap.eval(&mut folder);
         builder.eval(folder.accumulator)
     }
 
@@ -784,12 +739,10 @@ where
 
     fn validate_inputs(
         builder: &mut Builder<C>,
-        raps: &[&dyn DynRapForRecursion<C>],
         vk: &MultiStarkVerificationAdvice<C>,
         input: &VerifierInputVariable<C>,
     ) {
-        assert_eq!(raps.len(), vk.per_air.len());
-        let num_airs = raps.len();
+        let num_airs = vk.per_air.len();
         let num_phases = vk.num_challenges_to_sample.len();
         // Currently only support 0 or 1 phase is supported.
         assert!(num_phases <= 1);
@@ -877,48 +830,21 @@ where
 }
 
 #[allow(clippy::type_complexity)]
-pub fn sort_chips<'a>(
-    chips: Vec<&'a dyn AnyRap<BabyBearPoseidon2Config>>,
-    rec_raps: Vec<&'a dyn DynRapForRecursion<InnerConfig>>,
+pub fn sort_chips(
+    chips: Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
     traces: Vec<RowMajorMatrix<BabyBear>>,
     pvs: Vec<Vec<BabyBear>>,
 ) -> (
-    Vec<&'a dyn AnyRap<BabyBearPoseidon2Config>>,
-    Vec<&'a dyn DynRapForRecursion<InnerConfig>>,
+    Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
     Vec<RowMajorMatrix<BabyBear>>,
     Vec<Vec<BabyBear>>,
 ) {
-    let mut groups = izip!(chips, rec_raps, traces, pvs).collect_vec();
-    groups.sort_by_key(|(_, _, trace, _)| Reverse(trace.height()));
+    let mut groups = izip!(chips, traces, pvs).collect_vec();
+    groups.sort_by_key(|(_, trace, _)| Reverse(trace.height()));
 
-    let chips = groups.iter().map(|(x, _, _, _)| *x).collect_vec();
-    let rec_raps = groups.iter().map(|(_, x, _, _)| *x).collect_vec();
-    let pvs = groups.iter().map(|(_, _, _, x)| x.clone()).collect_vec();
-    let traces = groups.into_iter().map(|(_, _, x, _)| x).collect_vec();
+    let chips = groups.iter().map(|(x, _, _)| *x).collect_vec();
+    let pvs = groups.iter().map(|(_, _, x)| x.clone()).collect_vec();
+    let traces = groups.into_iter().map(|(_, x, _)| x).collect_vec();
 
-    (chips, rec_raps, traces, pvs)
-}
-
-pub fn get_rec_raps<const WORD_SIZE: usize, C: Config>(
-    vm: &ExecutionSegment<WORD_SIZE, C::F>,
-) -> Vec<&dyn DynRapForRecursion<C>>
-where
-    C::F: PrimeField32,
-{
-    let mut result: Vec<&dyn DynRapForRecursion<C>> = vec![
-        &vm.cpu_chip.air,
-        &vm.program_chip.air,
-        &vm.memory_chip.air,
-        &vm.range_checker.air,
-    ];
-    if vm.options().field_arithmetic_enabled {
-        result.push(&vm.field_arithmetic_chip.air);
-    }
-    if vm.options().field_extension_enabled {
-        result.push(&vm.field_extension_chip.air);
-    }
-    if vm.options().poseidon2_enabled() {
-        result.push(&vm.poseidon2_chip.air);
-    }
-    result
+    (chips, traces, pvs)
 }

@@ -154,14 +154,18 @@ where
         config: Option<FriConfigVariable<C>>,
     ) -> Self {
         let domain = config.unwrap().get_subgroup(builder, log_degree);
-        builder.assign(&domain.shift, self.shift * C::F::generator());
-        domain
+        TwoAdicMultiplicativeCosetVariable {
+            log_n: domain.log_n,
+            size: domain.size,
+            shift: builder.eval(self.shift * C::F::generator()),
+            g: domain.g,
+        }
     }
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use afs_compiler::{asm::AsmBuilder, util::execute_program_and_generate_traces};
+    use afs_compiler::{asm::AsmBuilder, util::execute_program};
     use afs_test_utils::config::{
         baby_bear_poseidon2::{default_config, default_perm, BabyBearPoseidon2Config},
         fri_params::default_fri_params,
@@ -280,9 +284,8 @@ pub(crate) mod tests {
         }
         builder.halt();
 
-        const WORD_SIZE: usize = 1;
-        let program = builder.compile_isa::<WORD_SIZE>();
-        execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
+        let program = builder.compile_isa();
+        execute_program(program, vec![]);
     }
     #[test]
     fn test_domain_static() {

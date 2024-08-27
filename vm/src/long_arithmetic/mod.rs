@@ -2,7 +2,7 @@ use afs_primitives::range_gate::RangeCheckerGateChip;
 use air::LongArithmeticAir;
 use itertools::Itertools;
 
-use crate::cpu::OpCode;
+use crate::arch::instructions::Opcode;
 
 #[cfg(test)]
 pub mod tests;
@@ -17,7 +17,7 @@ pub const fn num_limbs<const ARG_SIZE: usize, const LIMB_SIZE: usize>() -> usize
 }
 
 pub struct LongArithmeticOperation {
-    pub opcode: OpCode,
+    pub opcode: Opcode,
     pub operand1: Vec<u32>,
     pub operand2: Vec<u32>,
 }
@@ -33,14 +33,14 @@ impl<const ARG_SIZE: usize, const LIMB_SIZE: usize> LongArithmeticChip<ARG_SIZE,
         Self {
             air: LongArithmeticAir {
                 bus_index,
-                base_op: OpCode::ADD256,
+                base_op: Opcode::ADD256,
             },
             range_checker_chip: RangeCheckerGateChip::new(bus_index, 1 << LIMB_SIZE),
             operations: vec![],
         }
     }
 
-    pub fn request(&mut self, ops: Vec<OpCode>, operands: Vec<(Vec<u32>, Vec<u32>)>) {
+    pub fn request(&mut self, ops: Vec<Opcode>, operands: Vec<(Vec<u32>, Vec<u32>)>) {
         for (op, (x, y)) in ops.iter().zip_eq(operands.iter()) {
             // I think that it would be more logical to calculate the result in the
             // trace generation procedure, because, technically, the result is

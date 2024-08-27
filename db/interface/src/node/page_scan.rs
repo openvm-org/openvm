@@ -15,8 +15,7 @@ use tracing::info;
 
 use super::{functionality::filter::FilterFn, AxdbNodeExecutable};
 use crate::{
-    committed_page::CommittedPage, expr::AxdbExpr, utils::table::get_record_batches, MAX_ROWS,
-    NUM_IDX_COLS,
+    committed_page::CommittedPage, expr::AxdbExpr, utils::table::get_record_batches, NUM_IDX_COLS,
 };
 
 pub struct PageScan<SC: StarkGenericConfig, E: StarkEngine<SC> + Send + Sync> {
@@ -103,7 +102,7 @@ where
             );
         }
         let rb = &record_batches[0];
-        let mut committed_page = CommittedPage::from_record_batch(rb.clone(), MAX_ROWS);
+        let mut committed_page = CommittedPage::from_record_batch(rb.clone());
         self.filter_io.push(committed_page.clone());
 
         if !self.filters.is_empty() {

@@ -35,7 +35,7 @@ impl IsLessThanAir {
     pub(crate) fn eval_without_interactions<AB: AirBuilder>(
         &self,
         builder: &mut AB,
-        io: IsLessThanIoCols<AB::Var>,
+        io: IsLessThanIoCols<AB::Expr>,
         aux: IsLessThanAuxCols<AB::Var>,
     ) {
         let x = io.x;
@@ -54,7 +54,8 @@ impl IsLessThanAir {
         // constrain that the lower_bits + less_than * 2^limb_bits is the correct intermediate sum
         // note that the intermediate value will be >= 2^limb_bits if and only if x < y, and check_val will therefore be
         // the correct value if and only if less_than is the indicator for whether x < y
-        let check_val = lower + less_than * AB::Expr::from_canonical_u64(1 << self.max_bits);
+        let check_val =
+            lower + less_than.clone() * AB::Expr::from_canonical_u64(1 << self.max_bits);
 
         builder.assert_eq(intermed_val, check_val);
 
@@ -120,13 +121,28 @@ impl<AB: InteractionBuilder> SubAir<AB> for IsLessThanAir {
     // constrain that the result of x < y is given by less_than
     // warning: send for range check must be included for the constraints to be sound
     fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
-        // Note: every AIR that uses this sub-AIR must include these interactions for soundness
-        self.eval_interactions(builder, aux.lower_decomp.clone());
-        self.eval_without_interactions(builder, io, aux);
+        // Note: every AIR that uses this sub-AIR must include the interactions for soundness
+        self.subair_eval(
+            builder,
+            IsLessThanIoCols::<AB::Expr>::new(io.x, io.y, io.less_than),
+            aux,
+        );
     }
 }
 
 impl IsLessThanAir {
+    pub fn subair_eval<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        io: IsLessThanIoCols<AB::Expr>,
+        aux: IsLessThanAuxCols<AB::Var>,
+    ) {
+        let io_exprs = IsLessThanIoCols::<AB::Expr>::new(io.x, io.y, io.less_than);
+
+        self.eval_interactions(builder, aux.lower_decomp.clone());
+        self.eval_without_interactions(builder, io_exprs, aux);
+    }
+
     /// Imposes the non-interaction constraints on all except the last row. This is
     /// intended for use when the comparators `x, y` are on adjacent rows.
     ///
@@ -138,10 +154,12 @@ impl IsLessThanAir {
     pub fn eval_when_transition<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        io: IsLessThanIoCols<AB::Var>,
+        io: IsLessThanIoCols<impl Into<AB::Expr>>,
         aux: IsLessThanAuxCols<AB::Var>,
     ) {
+        let io_exprs = IsLessThanIoCols::<AB::Expr>::new(io.x, io.y, io.less_than);
+
         self.eval_interactions(builder, aux.lower_decomp.clone());
-        self.eval_without_interactions(&mut builder.when_transition(), io, aux);
+        self.eval_without_interactions(&mut builder.when_transition(), io_exprs, aux);
     }
 }

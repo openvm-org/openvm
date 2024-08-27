@@ -153,9 +153,20 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                     let x = ext_chip.sub(ctx, exts[&b.0], tmp);
                     exts.insert(a.0, x);
                 }
+                DslIr::SubVIN(a, b, c) => {
+                    let tmp = ctx.load_constant(convert_fr(&b));
+                    let x = gate.sub(ctx, tmp, vars[&c.0]);
+                    vars.insert(a.0, x);
+                }
                 DslIr::SubEIN(a, b, c) => {
                     let tmp = ext_chip.load_constant(ctx, b);
                     let x = ext_chip.sub(ctx, tmp, exts[&c.0]);
+                    exts.insert(a.0, x);
+                }
+                DslIr::SubEFI(a, b, c) => {
+                    let tmp = f_chip.load_constant(ctx, c);
+                    let mut x = exts[&b.0];
+                    x.0[0] = f_chip.sub(ctx, x.0[0], tmp);
                     exts.insert(a.0, x);
                 }
                 DslIr::MulV(a, b, c) => {
@@ -171,6 +182,11 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                     let x = f_chip.mul(ctx, felts[&b.0], felts[&c.0]);
                     felts.insert(a.0, x);
                 }
+                DslIr::MulFI(a, b, c) => {
+                    let tmp = f_chip.load_constant(ctx, c);
+                    let x = f_chip.mul(ctx, felts[&b.0], tmp);
+                    felts.insert(a.0, x);
+                }
                 DslIr::MulE(a, b, c) => {
                     let x = ext_chip.mul(ctx, exts[&b.0], exts[&c.0]);
                     exts.insert(a.0, x);
@@ -182,6 +198,11 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                 }
                 DslIr::MulEF(a, b, c) => {
                     let x = ext_chip.scalar_mul(ctx, exts[&b.0], felts[&c.0]);
+                    exts.insert(a.0, x);
+                }
+                DslIr::MulEFI(a, b, c) => {
+                    let tmp = f_chip.load_constant(ctx, c);
+                    let x = ext_chip.scalar_mul(ctx, exts[&b.0], tmp);
                     exts.insert(a.0, x);
                 }
                 DslIr::DivFIN(a, b, c) => {
@@ -313,12 +334,12 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                     println!("PrintV: {:?}", vars[&a.0].value());
                 }
                 DslIr::PrintF(a) => {
-                    println!("PrintF: {:?}", felts[&a.0].value.value());
+                    println!("PrintF: {:?}", felts[&a.0].to_baby_bear());
                 }
                 DslIr::PrintE(a) => {
                     println!("PrintE:");
                     for x in exts[&a.0].0.iter() {
-                        println!("{:?}", x.value.value());
+                        println!("{:?}", x.to_baby_bear());
                     }
                 }
                 DslIr::WitnessVar(a, b) => {
@@ -351,6 +372,8 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                     );
                     exts.insert(b.0, x);
                 }
+                // TODO: implement cell tracker.
+                DslIr::CycleTrackerStart(_) | DslIr::CycleTrackerEnd(_) => {}
                 _ => panic!("unsupported {:?}", instruction),
             };
         }

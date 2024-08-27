@@ -1,11 +1,10 @@
 use afs_compiler::{
     asm::AsmBuilder,
     ir::{Felt, Var},
-    util::{display_program, execute_program_and_generate_traces},
+    util::{display_program, execute_program},
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use stark_vm::cpu::WORD_SIZE;
 
 fn fibonacci(n: u32) -> u32 {
     if n == 0 {
@@ -48,26 +47,7 @@ fn main() {
     //builder.print_f(a);
     builder.halt();
 
-    let program = builder.compile_isa::<WORD_SIZE>();
+    let program = builder.compile_isa();
     display_program(&program.instructions);
-    execute_program_and_generate_traces::<WORD_SIZE>(program, vec![]);
-
-    // let program = code.machine_code();
-    // println!("Program size = {}", program.instructions.len());
-
-    // let config = SC::new();
-    // let mut runtime = Runtime::<F, EF, _>::new(&program, config.perm.clone());
-    // runtime.run();
-
-    // let machine = RecursionAir::machine(config);
-    // let (pk, vk) = machine.setup(&program);
-    // let mut challenger = machine.config().challenger();
-
-    // let start = Instant::now();
-    // let proof = machine.prove::<LocalProver<_, _>>(&pk, runtime.record, &mut challenger);
-    // let duration = start.elapsed().as_secs();
-
-    // let mut challenger = machine.config().challenger();
-    // machine.verify(&vk, &proof, &mut challenger).unwrap();
-    // println!("proving duration = {}", duration);
+    execute_program(program, vec![]);
 }

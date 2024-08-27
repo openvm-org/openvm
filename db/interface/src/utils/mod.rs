@@ -25,9 +25,13 @@ pub fn read_bytes(path: &Path) -> Option<Vec<u8>> {
     Some(buf)
 }
 
-pub fn generate_random_bytes(num_bytes: usize) -> String {
-    let mut bytes = vec![0u8; num_bytes];
-    OsRng.fill_bytes(&mut bytes);
-    let h = hex::encode(bytes);
-    format!("0x{}", h)
+pub fn generate_random_alpha_string(num_chars: usize) -> String {
+    let chars = "abcdefghijklmnopqrstuvwxyz";
+    let mut rng = OsRng;
+    let mut bytes = vec![0u8; num_chars];
+    rng.fill_bytes(&mut bytes);
+    bytes
+        .iter()
+        .map(|b| chars.chars().nth((*b as usize) % chars.len()).unwrap())
+        .collect()
 }

@@ -15,7 +15,7 @@ impl<T: Clone> IsLessThanVmCols<T> {
 
     pub fn flatten(&self) -> Vec<T> {
         let mut result = vec![self.is_enabled.clone()];
-        result.extend(self.internal.flatten());
+        result.extend(self.internal.clone().flatten());
         result
     }
 }

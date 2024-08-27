@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use itertools::Itertools;
 use p3_commit::PolynomialSpace;
 use p3_field::{AbstractExtensionField, AbstractField, Field};
@@ -7,14 +9,14 @@ use tracing::instrument;
 
 use super::error::VerificationError;
 use crate::{
-    air_builders::verifier::VerifierConstraintFolder, keygen::types::StarkVerifyingKey,
-    prover::opener::AdjacentOpenedValues, rap::Rap,
+    air_builders::verifier::{GenericVerifierConstraintFolder, VerifierConstraintFolder},
+    keygen::types::StarkVerifyingKey,
+    prover::opener::AdjacentOpenedValues,
 };
 
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
-pub fn verify_single_rap_constraints<SC, R>(
-    rap: &R,
+pub fn verify_single_rap_constraints<SC>(
     vk: &StarkVerifyingKey<SC>,
     preprocessed_values: Option<&AdjacentOpenedValues<SC::Challenge>>,
     partitioned_main_values: Vec<&AdjacentOpenedValues<SC::Challenge>>,
@@ -30,7 +32,6 @@ pub fn verify_single_rap_constraints<SC, R>(
 ) -> Result<(), VerificationError>
 where
     SC: StarkGenericConfig,
-    R: for<'b> Rap<VerifierConstraintFolder<'b, SC>> + ?Sized,
 {
     let zps = qc_domains
         .iter()
@@ -110,7 +111,7 @@ where
         })
         .collect();
 
-    let mut folder: VerifierConstraintFolder<'_, SC> = VerifierConstraintFolder {
+    let mut folder: VerifierConstraintFolder<'_, SC> = GenericVerifierConstraintFolder {
         preprocessed,
         partitioned_main,
         after_challenge,
@@ -122,12 +123,9 @@ where
         challenges,
         public_values,
         exposed_values_after_challenge,
-
-        symbolic_interactions: &vk.symbolic_constraints.interactions,
-        interactions: vec![],
-        interaction_chunk_size: vk.interaction_chunk_size,
+        _marker: PhantomData,
     };
-    rap.eval(&mut folder);
+    folder.eval_constraints(&vk.symbolic_constraints.constraints);
 
     let folded_constraints = folder.accumulator;
     // Finally, check that

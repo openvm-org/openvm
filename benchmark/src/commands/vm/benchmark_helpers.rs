@@ -1,9 +1,9 @@
-use std::{collections::HashMap, fs::File, io::Write as _};
+use std::{collections::HashMap, fs::File, io::Write as _, ops::Deref};
 
 use afs_recursion::{
     hints::Hintable,
-    stark::{DynRapForRecursion, VerifierProgram},
-    types::{new_from_inner_multi_vk, InnerConfig, VerifierInput},
+    stark::VerifierProgram,
+    types::{new_from_inner_multi_vk, VerifierInput},
 };
 use afs_stark_backend::{
     prover::{metrics::trace_metrics, trace::TraceCommitmentBuilder},
@@ -23,7 +23,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_util::log2_strict_usize;
 use stark_vm::{
     program::Program,
-    vm::{config::VmConfig, ExecutionAndTraceGenerationResult, VirtualMachine},
+    vm::{config::VmConfig, segment::SegmentResult, VirtualMachine},
 };
 use tracing::info_span;
 
@@ -35,9 +35,7 @@ use crate::{
 };
 
 pub fn run_recursive_test_benchmark(
-    // TODO: find way to not duplicate parameters
     any_raps: Vec<&dyn AnyRap<BabyBearPoseidon2Config>>,
-    rec_raps: Vec<&dyn DynRapForRecursion<InnerConfig>>,
     traces: Vec<RowMajorMatrix<BabyBear>>,
     pvs: Vec<Vec<BabyBear>>,
     benchmark_name: &str,
@@ -93,14 +91,8 @@ pub fn run_recursive_test_benchmark(
     // Make sure proof verifies outside eDSL...
     let verifier = MultiTraceStarkVerifier::new(prover.config);
     verifier
-        .verify(
-            &mut engine.new_challenger(),
-            &vk,
-            any_raps.clone(),
-            &proof,
-            &pvs,
-        )
-        .expect("afs proof should verify");
+        .verify(&mut engine.new_challenger(), &vk, &proof, &pvs)
+        .expect("proof should verify");
     trace_and_prove_span.exit();
 
     let log_degree_per_air = proof
@@ -112,7 +104,7 @@ pub fn run_recursive_test_benchmark(
     // Build verification program in eDSL.
     let advice = new_from_inner_multi_vk(&vk);
 
-    let program = VerifierProgram::build(rec_raps, advice, &engine.fri_params);
+    let program = VerifierProgram::build(advice, &engine.fri_params);
 
     let input = VerifierInput {
         proof,
@@ -123,10 +115,10 @@ pub fn run_recursive_test_benchmark(
     let mut witness_stream = Vec::new();
     witness_stream.extend(input.write());
 
-    vm_benchmark_execute_and_prove::<1>(program, witness_stream, benchmark_name)
+    vm_benchmark_execute_and_prove(program, witness_stream, benchmark_name)
 }
 
-pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
+pub fn vm_benchmark_execute_and_prove(
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
     benchmark_name: &str,
@@ -138,21 +130,26 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         ..Default::default()
     };
 
-    let mut vm = VirtualMachine::<WORD_SIZE, _>::new(vm_config, program, input_stream);
+    let mut vm = VirtualMachine::new(vm_config, program, input_stream);
     vm.enable_metrics_collection();
 
     let vm_execute_span = info_span!("Benchmark vm execute").entered();
-    let ExecutionAndTraceGenerationResult {
-        max_log_degree,
-        nonempty_chips: chips,
-        nonempty_traces: traces,
-        nonempty_pis: public_values,
-        metrics: mut vm_metrics,
-        ..
-    } = vm.execute_and_generate_traces().unwrap();
+    let result = vm.execute_and_generate().unwrap();
     vm_execute_span.exit();
 
-    let chips = VirtualMachine::<WORD_SIZE, _>::get_chips(&chips);
+    assert_eq!(
+        result.segment_results.len(),
+        1,
+        "should not use continuations"
+    );
+    let result = result.segment_results.into_iter().next().unwrap();
+    let max_log_degree = result.max_log_degree();
+    let SegmentResult {
+        airs,
+        traces,
+        public_values,
+        metrics,
+    } = result;
 
     let perm = default_perm();
     // blowup factor 8 for poseidon2 chip
@@ -163,13 +160,14 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     };
     let engine = engine_from_perm(perm, max_log_degree, fri_params);
 
-    assert_eq!(chips.len(), traces.len());
+    let airs: Vec<&dyn AnyRap<BabyBearPoseidon2Config>> =
+        airs.iter().map(|air| air.deref()).collect();
 
     let keygen_span = info_span!("Benchmark keygen").entered();
     let mut keygen_builder = engine.keygen_builder();
 
-    for i in 0..chips.len() {
-        keygen_builder.add_air(chips[i], public_values[i].len());
+    for i in 0..airs.len() {
+        keygen_builder.add_air(airs[i], public_values[i].len());
     }
 
     let pk = keygen_builder.generate_pk();
@@ -186,7 +184,7 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     trace_builder.commit_current();
     trace_commitment_span.exit();
 
-    let main_trace_data = trace_builder.view(&vk, chips.to_vec());
+    let main_trace_data = trace_builder.view(&vk, airs.to_vec());
 
     let mut challenger = engine.new_challenger();
 
@@ -198,7 +196,7 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     let verify_span = info_span!("Benchmark verify").entered();
     let verifier = engine.verifier();
     verifier
-        .verify(&mut challenger, &vk, chips, &proof, &public_values)
+        .verify(&mut challenger, &vk, &proof, &public_values)
         .expect("Verification failed");
     verify_span.exit();
 
@@ -214,7 +212,6 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
     let perm_trace_gen_ms = timing_data[BACKEND_TIMING_FILTERS[0]];
     let calc_quotient_values_ms = timing_data[BACKEND_TIMING_FILTERS[2]];
     let total_prove_ms = timing_data["Benchmark prove: benchmark"];
-    let vm_metrics = vm_metrics.pop().unwrap(); // only 1 segment
 
     let metrics = BenchmarkMetrics {
         name: benchmark_name.to_string(),
@@ -223,7 +220,7 @@ pub fn vm_benchmark_execute_and_prove<const WORD_SIZE: usize>(
         perm_trace_gen_ms,
         calc_quotient_values_ms,
         trace: trace_metrics,
-        custom: vm_metrics,
+        custom: metrics,
     };
 
     write!(File::create(TMP_RESULT_MD.as_str())?, "{}", metrics)?;

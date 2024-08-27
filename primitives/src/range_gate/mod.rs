@@ -48,7 +48,12 @@ impl RangeCheckerGateChip {
     }
 
     pub fn add_count(&self, val: u32) {
-        assert!(val < self.range_max());
+        assert!(
+            val < self.range_max(),
+            "range exceeded: {} >= {}",
+            val,
+            self.range_max()
+        );
         let val_atomic = &self.count[val as usize];
         val_atomic.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }

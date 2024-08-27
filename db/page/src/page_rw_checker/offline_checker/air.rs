@@ -36,10 +36,6 @@ impl<AB: InteractionBuilder> Air<AB> for PageOfflineChecker {
         let local_offline_checker_cols = local_cols.offline_checker_cols;
         let next_offline_checker_cols = next_cols.offline_checker_cols;
 
-        let or = or::<AB>;
-        let and = and::<AB>;
-        let implies = implies::<AB>;
-
         // Making sure bits are bools
         builder.assert_bool(local_cols.is_initial);
         builder.assert_bool(local_cols.is_final_write);

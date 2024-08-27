@@ -1,12 +1,19 @@
-use afs_derive::AlignedBorrow;
-use p3_field::Field;
+use std::mem::size_of;
 
-use super::FieldArithmeticAir;
+use afs_derive::AlignedBorrow;
+use derive_new::new;
+
+use crate::{
+    arch::columns::ExecutionState,
+    field_arithmetic::FieldArithmeticAir,
+    memory::{offline_checker::columns::MemoryOfflineCheckerAuxCols, MemoryAddress},
+};
+
 /// Columns for field arithmetic chip.
 ///
 /// Five IO columns for rcv_count, opcode, x, y, result.
 /// Eight aux columns for interpreting opcode, evaluating indicators, inverse, and explicit computations.
-#[derive(Copy, Clone, Debug, AlignedBorrow)]
+#[derive(Clone, Debug)]
 #[repr(C)]
 pub struct FieldArithmeticCols<T> {
     pub io: FieldArithmeticIoCols<T>,
@@ -16,37 +23,38 @@ pub struct FieldArithmeticCols<T> {
 #[derive(Copy, Clone, Debug, AlignedBorrow)]
 #[repr(C)]
 pub struct FieldArithmeticIoCols<T> {
-    /// Number of times to receive
-    pub rcv_count: T,
     pub opcode: T,
-    pub x: T,
-    pub y: T,
-    pub z: T,
+    pub from_state: ExecutionState<T>,
+    pub operand1: Operand<T>,
+    pub operand2: Operand<T>,
+    pub result: Operand<T>,
 }
 
-#[derive(Copy, Clone, Debug, AlignedBorrow)]
+#[derive(Clone, Debug)]
 #[repr(C)]
 pub struct FieldArithmeticAuxCols<T> {
-    pub opcode_lo: T,
-    pub opcode_hi: T,
+    pub is_valid: T,
+
+    pub is_add: T,
+    pub is_sub: T,
     pub is_mul: T,
     pub is_div: T,
-    pub sum_or_diff: T,
-    pub product: T,
-    pub quotient: T,
+    /// `divisor_inv` is y.inverse() when opcode is FDIV and zero otherwise.
     pub divisor_inv: T,
+
+    pub mem_oc_aux_cols: [MemoryOfflineCheckerAuxCols<1, T>; FieldArithmeticAir::TIMESTAMP_DELTA],
 }
 
-impl<T> FieldArithmeticCols<T>
-where
-    T: Field,
-{
-    pub const NUM_COLS: usize = 13;
-    pub const NUM_IO_COLS: usize = 5;
-    pub const NUM_AUX_COLS: usize = 8;
+impl<T: Clone> FieldArithmeticCols<T> {
+    pub fn get_width(air: &FieldArithmeticAir) -> usize {
+        FieldArithmeticIoCols::<T>::get_width() + FieldArithmeticAuxCols::<T>::get_width(air)
+    }
 
-    pub fn get_width() -> usize {
-        FieldArithmeticIoCols::<T>::get_width() + FieldArithmeticAuxCols::<T>::get_width()
+    pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I, air: &FieldArithmeticAir) -> Self {
+        Self {
+            io: FieldArithmeticIoCols::from_iter(iter),
+            aux: FieldArithmeticAuxCols::from_iter(iter, air),
+        }
     }
 
     pub fn flatten(&self) -> Vec<T> {
@@ -54,55 +62,102 @@ where
         result.extend(self.aux.flatten());
         result
     }
-
-    pub fn blank_row() -> Self {
-        Self {
-            io: FieldArithmeticIoCols::<T> {
-                rcv_count: T::zero(),
-                opcode: T::from_canonical_u8(FieldArithmeticAir::BASE_OP),
-                x: T::zero(),
-                y: T::zero(),
-                z: T::zero(),
-            },
-            aux: FieldArithmeticAuxCols::<T> {
-                opcode_lo: T::zero(),
-                opcode_hi: T::zero(),
-                is_mul: T::zero(),
-                is_div: T::zero(),
-                sum_or_diff: T::zero(),
-                product: T::zero(),
-                quotient: T::zero(),
-                divisor_inv: T::zero(),
-            },
-        }
-    }
 }
 
-impl<T: Field> FieldArithmeticIoCols<T> {
+impl<T: Clone> FieldArithmeticIoCols<T> {
     pub fn get_width() -> usize {
-        5
+        size_of::<FieldArithmeticIoCols<u8>>()
+    }
+
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> Self {
+        Self {
+            opcode: iter.next().unwrap(),
+            from_state: ExecutionState::from_iter(iter),
+            operand1: Operand::from_iter(iter),
+            operand2: Operand::from_iter(iter),
+            result: Operand::from_iter(iter),
+        }
     }
 
     pub fn flatten(&self) -> Vec<T> {
-        vec![self.rcv_count, self.opcode, self.x, self.y, self.z]
+        let mut result = vec![self.opcode.clone()];
+        result.extend(self.from_state.clone().flatten());
+        result.extend(self.operand1.flatten());
+        result.extend(self.operand2.flatten());
+        result.extend(self.result.flatten());
+        result
     }
 }
 
-impl<T: Field> FieldArithmeticAuxCols<T> {
+impl<T: Clone> FieldArithmeticAuxCols<T> {
+    pub fn get_width(air: &FieldArithmeticAir) -> usize {
+        6 + (FieldArithmeticAir::TIMESTAMP_DELTA
+            * MemoryOfflineCheckerAuxCols::<1, T>::width(&air.mem_oc))
+    }
+
+    pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I, air: &FieldArithmeticAir) -> Self {
+        let mut next = || iter.next().unwrap();
+        Self {
+            is_valid: next(),
+            is_add: next(),
+            is_sub: next(),
+            is_mul: next(),
+            is_div: next(),
+            divisor_inv: next(),
+            mem_oc_aux_cols: std::array::from_fn(|_| {
+                MemoryOfflineCheckerAuxCols::try_from_iter(iter, &air.mem_oc.timestamp_lt_air)
+            }),
+        }
+    }
+
+    pub fn flatten(&self) -> Vec<T> {
+        let mut result = vec![
+            self.is_valid.clone(),
+            self.is_add.clone(),
+            self.is_sub.clone(),
+            self.is_mul.clone(),
+            self.is_div.clone(),
+            self.divisor_inv.clone(),
+        ];
+        for mem_oc_aux_cols_here in self.mem_oc_aux_cols.clone() {
+            result.extend(mem_oc_aux_cols_here.flatten());
+        }
+        result
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Debug, new)]
+pub struct Operand<F> {
+    pub address_space: F,
+    pub address: F,
+    pub value: F,
+}
+
+impl<T: Clone> Operand<T> {
     pub fn get_width() -> usize {
-        8
+        3
+    }
+
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> Self {
+        let mut next = || iter.next().unwrap();
+        Self {
+            address_space: next(),
+            address: next(),
+            value: next(),
+        }
     }
 
     pub fn flatten(&self) -> Vec<T> {
         vec![
-            self.opcode_lo,
-            self.opcode_hi,
-            self.is_mul,
-            self.is_div,
-            self.sum_or_diff,
-            self.product,
-            self.quotient,
-            self.divisor_inv,
+            self.address_space.clone(),
+            self.address.clone(),
+            self.value.clone(),
         ]
+    }
+
+    pub fn memory_address(&self) -> MemoryAddress<T, T> {
+        MemoryAddress::new(self.address_space.clone(), self.address.clone())
     }
 }

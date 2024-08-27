@@ -1,9 +1,7 @@
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use stark_vm::{
-    cpu::{
-        trace::Instruction,
-        OpCode::{self, *},
-    },
+    arch::instructions::Opcode::{self, *},
+    cpu::trace::Instruction,
     program::{DebugInfo, Program},
 };
 
@@ -31,7 +29,7 @@ impl Default for CompilerOptions {
 }
 
 fn inst<F: PrimeField64>(
-    opcode: OpCode,
+    opcode: Opcode,
     op_a: F,
     op_b: F,
     op_c: F,
@@ -53,7 +51,7 @@ fn inst<F: PrimeField64>(
 
 #[allow(clippy::too_many_arguments)]
 fn inst_med<F: PrimeField64>(
-    opcode: OpCode,
+    opcode: Opcode,
     op_a: F,
     op_b: F,
     op_c: F,
@@ -76,7 +74,7 @@ fn inst_med<F: PrimeField64>(
 
 #[allow(clippy::too_many_arguments)]
 fn inst_large<F: PrimeField64>(
-    opcode: OpCode,
+    opcode: Opcode,
     op_a: F,
     op_b: F,
     op_c: F,
@@ -98,7 +96,7 @@ fn inst_large<F: PrimeField64>(
     }
 }
 
-fn dbg<F: PrimeField64>(opcode: OpCode, debug: String) -> Instruction<F> {
+fn dbg<F: PrimeField64>(opcode: Opcode, debug: String) -> Instruction<F> {
     Instruction {
         opcode,
         op_a: F::zero(),
@@ -299,7 +297,7 @@ fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     }
 }
 
-pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionField<F>>(
+pub fn convert_field_extension<F: PrimeField32, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
 ) -> Vec<Instruction<F>> {
     match instruction {
@@ -342,10 +340,10 @@ pub fn convert_field_extension<const WORD_SIZE: usize, F: PrimeField32, EF: Exte
     }
 }
 
-fn convert_print_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionField<F>>(
+fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
 ) -> Vec<Instruction<F>> {
-    let word_size_i32 = WORD_SIZE as i32;
+    let word_size_i32 = 1;
 
     match instruction {
         AsmInstruction::PrintV(src) => vec![inst(
@@ -405,7 +403,7 @@ fn convert_print_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: Extens
     }
 }
 
-fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionField<F>>(
+fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
     debug_info: Option<DebugInfo>,
     pc: F,
@@ -524,8 +522,8 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
             // if mem[lhs + i] != mem[rhs +i] for i = 0..4, pc <- labels[label]
             inst(
                 BNE,
-                i32_f(lhs + ((i * WORD_SIZE) as i32)),
-                i32_f(rhs + ((i * WORD_SIZE) as i32)),
+                i32_f(lhs + (i as i32)),
+                i32_f(rhs + (i as i32)),
                 labels(label) - (pc + F::from_canonical_usize(i)),
                 AS::Memory,
                 AS::Memory,
@@ -536,7 +534,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
             // if mem[lhs + i] != rhs[i] for i = 0..4, pc <- labels[label]
             inst(
                 BNE,
-                i32_f(lhs + ((i * WORD_SIZE) as i32)),
+                i32_f(lhs + (i as i32)),
                 rhs.as_base_slice()[i],
                 labels(label) - (pc + F::from_canonical_usize(i)),
                 AS::Memory,
@@ -549,8 +547,8 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
             // if mem[lhs + i] == mem[rhs + i] for i = 0..4, pc <- labels[label]
             inst(
                 if i == 0 { BEQ } else { BNE },
-                i32_f(lhs + ((i * WORD_SIZE) as i32)),
-                i32_f(rhs + ((i * WORD_SIZE) as i32)),
+                i32_f(lhs + (i as i32)),
+                i32_f(rhs + (i as i32)),
                 if i == 0 {
                     labels(label) - (pc + F::from_canonical_usize(EF::D - 1))
                 } else {
@@ -566,7 +564,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
             // if mem[lhs + i] == rhs[i] for i = 0..4, pc <- labels[label]
             inst(
                 if i == 0 { BEQ } else { BNE },
-                i32_f(lhs + ((i * WORD_SIZE) as i32)),
+                i32_f(lhs + (i as i32)),
                 rhs.as_base_slice()[i],
                 if i == 0 {
                     labels(label) - (pc + F::from_canonical_usize(EF::D - 1))
@@ -607,11 +605,11 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::HintBits(src) => vec![inst(
+        AsmInstruction::HintBits(src, len) => vec![inst(
             HINT_BITS,
             i32_f(src),
             F::zero(),
-            F::zero(),
+            F::from_canonical_u32(len),
             AS::Memory,
             AS::Memory,
         )],
@@ -625,7 +623,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
         )],
         AsmInstruction::PrintV(..) | AsmInstruction::PrintF(..) | AsmInstruction::PrintE(..) => {
             if options.compile_prints {
-                convert_print_instruction::<WORD_SIZE, F, EF>(instruction)
+                convert_print_instruction(instruction)
             } else {
                 vec![]
             }
@@ -680,7 +678,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
         | AsmInstruction::MulE(..)
         | AsmInstruction::InvE(..) => {
             if options.field_extension_enabled {
-                convert_field_extension::<WORD_SIZE, F, EF>(instruction)
+                convert_field_extension(instruction)
             } else {
                 panic!(
                     "Unsupported instruction {:?}, field extension arithmetic is disabled",
@@ -704,32 +702,64 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::AddMSecp256k1(dst, src1, src2) => vec![inst(
-            MOD_SECP256K1_ADD,
+        AsmInstruction::AddSecp256k1Coord(dst, src1, src2) => vec![inst(
+            SECP256K1_COORD_ADD,
             i32_f(src1),
             i32_f(src2),
             i32_f(dst),
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::SubMSecp256k1(dst, src1, src2) => vec![inst(
-            MOD_SECP256K1_SUB,
+        AsmInstruction::SubSecp256k1Coord(dst, src1, src2) => vec![inst(
+            SECP256K1_COORD_SUB,
             i32_f(src1),
             i32_f(dst),
             i32_f(src2),
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::MulMSecp256k1(dst, src1, src2) => vec![inst(
-            MOD_SECP256K1_MUL,
+        AsmInstruction::MulSecp256k1Coord(dst, src1, src2) => vec![inst(
+            SECP256K1_COORD_MUL,
             i32_f(src1),
             i32_f(src2),
             i32_f(dst),
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::DivMSecp256k1(dst, src1, src2) => vec![inst(
-            MOD_SECP256K1_DIV,
+        AsmInstruction::DivSecp256k1Coord(dst, src1, src2) => vec![inst(
+            SECP256K1_COORD_DIV,
+            i32_f(src1),
+            i32_f(dst),
+            i32_f(src2),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::AddSecp256k1Scalar(dst, src1, src2) => vec![inst(
+            SECP256K1_SCALAR_ADD,
+            i32_f(src1),
+            i32_f(src2),
+            i32_f(dst),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::SubSecp256k1Scalar(dst, src1, src2) => vec![inst(
+            SECP256K1_SCALAR_SUB,
+            i32_f(src1),
+            i32_f(dst),
+            i32_f(src2),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::MulSecp256k1Scalar(dst, src1, src2) => vec![inst(
+            SECP256K1_SCALAR_MUL,
+            i32_f(src1),
+            i32_f(src2),
+            i32_f(dst),
+            AS::Memory,
+            AS::Memory,
+        )],
+        AsmInstruction::DivSecp256k1Scalar(dst, src1, src2) => vec![inst(
+            SECP256K1_SCALAR_DIV,
             i32_f(src1),
             i32_f(dst),
             i32_f(src2),
@@ -767,7 +797,7 @@ fn convert_instruction<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
     }
 }
 
-pub fn convert_program<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionField<F>>(
+pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
     program: AssemblyCode<F, EF>,
     options: CompilerOptions,
 ) -> Program<F> {
@@ -788,7 +818,7 @@ pub fn convert_program<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
         block_start.push(pc);
 
         for (instruction, debug_info) in block.0.iter().zip(block.1.iter()) {
-            let instructions = convert_instruction::<WORD_SIZE, F, EF>(
+            let instructions = convert_instruction::<F, EF>(
                 instruction.clone(),
                 debug_info.clone(),
                 F::from_canonical_usize(pc),
@@ -805,7 +835,7 @@ pub fn convert_program<const WORD_SIZE: usize, F: PrimeField32, EF: ExtensionFie
         for (instruction, debug_info) in block.0.iter().zip(block.1.iter()) {
             let labels =
                 |label: F| F::from_canonical_usize(block_start[label.as_canonical_u64() as usize]);
-            let result = convert_instruction::<WORD_SIZE, F, EF>(
+            let result = convert_instruction(
                 instruction.clone(),
                 debug_info.clone(),
                 F::from_canonical_usize(instructions.len()),
