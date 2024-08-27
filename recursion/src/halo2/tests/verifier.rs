@@ -19,19 +19,16 @@ use crate::{
     tests::{fibonacci_stark_for_test, StarkForTest},
     types::VerifierInput,
 };
-
+#[cfg(not(debug_assertions))]
 #[test]
 fn fibonacci_evm_verifier_e2e() {
     setup_tracing();
     run_recursive_test(&fibonacci_stark_for_test::<BabyBearPoseidon2OuterConfig>())
 }
 
+// REVM is incompatible with our rust version. evm_verify will panic if it's running in debug mode.
+#[cfg(not(debug_assertions))]
 fn run_recursive_test(stark_for_test: &StarkForTest<BabyBearPoseidon2OuterConfig>) {
-    #[cfg(debug_assertions)]
-    {
-        panic!("This test is only for release mode");
-    }
-
     let StarkForTest {
         any_raps,
         traces,
