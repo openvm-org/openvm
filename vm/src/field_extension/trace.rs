@@ -70,14 +70,14 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         &self,
         record: FieldExtensionArithmeticRecord<F>,
     ) -> FieldExtensionArithmeticCols<F> {
-        let is_add = F::from_bool(record.opcode == Opcode::FE4ADD);
-        let is_sub = F::from_bool(record.opcode == Opcode::FE4SUB);
-        let is_mul = F::from_bool(record.opcode == Opcode::BBE4MUL);
-        let is_div = F::from_bool(record.opcode == Opcode::BBE4DIV);
+        let is_add = F::from_bool(record.instruction.opcode == Opcode::FE4ADD);
+        let is_sub = F::from_bool(record.instruction.opcode == Opcode::FE4SUB);
+        let is_mul = F::from_bool(record.instruction.opcode == Opcode::BBE4MUL);
+        let is_div = F::from_bool(record.instruction.opcode == Opcode::BBE4DIV);
 
         let FieldExtensionArithmeticRecord { x, y, z, .. } = record;
 
-        let divisor_inv = if record.opcode == Opcode::BBE4DIV {
+        let divisor_inv = if record.instruction.opcode == Opcode::BBE4DIV {
             FieldExtensionArithmetic::invert(record.y)
         } else {
             [F::zero(); EXTENSION_DEGREE]
@@ -95,14 +95,14 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
 
         FieldExtensionArithmeticCols {
             io: FieldExtensionArithmeticIoCols {
-                opcode: F::from_canonical_usize(record.opcode as usize),
+                opcode: F::from_canonical_usize(record.instruction.opcode as usize),
                 pc: F::from_canonical_usize(record.pc),
                 timestamp: F::from_canonical_usize(record.timestamp),
-                op_a: record.op_a,
-                op_b: record.op_b,
-                op_c: record.op_c,
-                d: record.d,
-                e: record.e,
+                op_a: record.instruction.op_a,
+                op_b: record.instruction.op_b,
+                op_c: record.instruction.op_c,
+                d: record.instruction.d,
+                e: record.instruction.e,
                 x,
                 y,
                 z,

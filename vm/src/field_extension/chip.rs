@@ -27,27 +27,21 @@ pub const EXTENSION_DEGREE: usize = 4;
 
 /// Records an arithmetic operation that happened at run-time.
 #[derive(Clone, Debug)]
-pub struct FieldExtensionArithmeticRecord<F> {
+pub(crate) struct FieldExtensionArithmeticRecord<F> {
     /// Program counter
-    pub pc: usize,
+    pub(crate) pc: usize,
     /// Timestamp at start of instruction
-    pub timestamp: usize,
-    pub opcode: Opcode,
-    // TODO[zach]: these entries are redundant with the memory accesses below.
-    pub op_a: F,
-    pub op_b: F,
-    pub op_c: F,
-    pub d: F,
-    pub e: F,
-    pub x: [F; EXTENSION_DEGREE],
-    pub y: [F; EXTENSION_DEGREE],
-    pub z: [F; EXTENSION_DEGREE],
+    pub(crate) timestamp: usize,
+    pub(crate) instruction: Instruction<F>,
+    pub(crate) x: [F; EXTENSION_DEGREE],
+    pub(crate) y: [F; EXTENSION_DEGREE],
+    pub(crate) z: [F; EXTENSION_DEGREE],
     /// Memory accesses for reading `x`.
-    pub x_reads: [MemoryAccess<1, F>; EXTENSION_DEGREE],
+    pub(crate) x_reads: [MemoryAccess<1, F>; EXTENSION_DEGREE],
     /// Memory accesses for reading `y`.
-    pub y_reads: [MemoryAccess<1, F>; EXTENSION_DEGREE],
+    pub(crate) y_reads: [MemoryAccess<1, F>; EXTENSION_DEGREE],
     /// Memory accesses for writing `z`.
-    pub z_writes: [MemoryAccess<1, F>; EXTENSION_DEGREE],
+    pub(crate) z_writes: [MemoryAccess<1, F>; EXTENSION_DEGREE],
 }
 
 /// A chip for performing arithmetic operations over the field extension
@@ -120,12 +114,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         self.records.push(FieldExtensionArithmeticRecord {
             timestamp: from_state.timestamp,
             pc: from_state.pc,
-            opcode,
-            op_a,
-            op_b,
-            op_c,
-            d,
-            e,
+            instruction,
             x,
             y,
             z,
