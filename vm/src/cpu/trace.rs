@@ -1,4 +1,5 @@
 use std::{
+    array,
     collections::{BTreeMap, VecDeque},
     error::Error,
     fmt::Display,
@@ -28,10 +29,7 @@ use crate::{
         },
     },
     cpu::WORD_SIZE,
-    memory::{
-        compose, decompose,
-        manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
-    },
+    memory::manager::{operation::MemoryOperation, trace_builder::MemoryTraceBuilder},
     vm::ExecutionSegment,
 };
 
@@ -214,7 +212,7 @@ impl<F: PrimeField32> CpuChip<F> {
 
         debug_assert_eq!(
             timestamp,
-            vm.memory_manager.borrow().timestamp().as_canonical_u32() as usize
+            vm.memory_chip.borrow().timestamp().as_canonical_u32() as usize
         );
 
         let mut hint_stream = vm.hint_stream.clone();
@@ -262,9 +260,9 @@ impl<F: PrimeField32> CpuChip<F> {
             let mut next_pc = pc + F::one();
 
             let mut mem_ops: [_; CPU_MAX_ACCESSES_PER_CYCLE] =
-                core::array::from_fn(|_| MemoryOperation::<1, F>::default());
-            let mut mem_read_trace_builder = MemoryTraceBuilder::new(vm.memory_manager.clone());
-            let mut mem_write_trace_builder = MemoryTraceBuilder::new(vm.memory_manager.clone());
+                array::from_fn(|_| MemoryOperation::<1, F>::default());
+            let mut mem_read_trace_builder = MemoryTraceBuilder::new(vm.memory_chip.clone());
+            let mut mem_write_trace_builder = MemoryTraceBuilder::new(vm.memory_chip.clone());
             let mut num_reads = 0;
             let mut num_writes = 0;
 
@@ -276,8 +274,8 @@ impl<F: PrimeField32> CpuChip<F> {
                     assert!(num_reads <= CPU_MAX_READS_PER_CYCLE);
 
                     mem_ops[num_reads - 1] =
-                        mem_read_trace_builder.read_word($addr_space, $pointer);
-                    compose(mem_ops[num_reads - 1].cell.data)
+                        mem_read_trace_builder.read_cell($addr_space, $pointer);
+                    mem_ops[num_reads - 1].cell.data[0]
                 }};
             }
 
@@ -300,9 +298,8 @@ impl<F: PrimeField32> CpuChip<F> {
                     num_writes += 1;
                     assert!(num_writes <= CPU_MAX_WRITES_PER_CYCLE);
 
-                    let word = decompose($data);
                     mem_ops[CPU_MAX_READS_PER_CYCLE + num_writes - 1] =
-                        mem_write_trace_builder.write_word($addr_space, $pointer, word);
+                        mem_write_trace_builder.write_cell($addr_space, $pointer, $data);
                 }};
             }
 
@@ -430,8 +427,8 @@ impl<F: PrimeField32> CpuChip<F> {
                         hint_stream.extend(hint);
                     }
                     HINT_BITS => {
-                        let val = vm.memory_manager.borrow_mut().unsafe_read_word(d, a);
-                        let mut val = val[0].as_canonical_u32();
+                        let val = vm.memory_chip.borrow_mut().unsafe_read_cell(d, a);
+                        let mut val = val.as_canonical_u32();
 
                         let len = c.as_canonical_u32();
                         hint_stream = VecDeque::new();

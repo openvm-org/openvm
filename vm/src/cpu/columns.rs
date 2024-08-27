@@ -184,7 +184,7 @@ impl<F: PrimeField32> CpuAuxCols<F> {
             operation_flags.insert(opcode, F::from_bool(opcode == Opcode::NOP));
         }
 
-        let mut mem_trace_builder = MemoryTraceBuilder::new(chip.memory_manager.clone());
+        let mut mem_trace_builder = MemoryTraceBuilder::new(chip.memory_chip.clone());
         let mem_ops: [_; CPU_MAX_ACCESSES_PER_CYCLE] = array::from_fn(|i| {
             if i < CPU_MAX_READS_PER_CYCLE {
                 mem_trace_builder.disabled_read(F::one())

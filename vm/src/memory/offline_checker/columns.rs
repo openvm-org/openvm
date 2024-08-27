@@ -20,6 +20,10 @@ impl<const WORD_SIZE: usize, T> MemoryOfflineCheckerCols<WORD_SIZE, T> {
     }
 }
 
+// TODO: Remove extraneous old_cell from read cols.
+pub type MemoryReadAuxCols<const WORD_SIZE: usize, T> = MemoryOfflineCheckerAuxCols<WORD_SIZE, T>;
+pub type MemoryWriteAuxCols<const WORD_SIZE: usize, T> = MemoryOfflineCheckerAuxCols<WORD_SIZE, T>;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryOfflineCheckerAuxCols<const WORD_SIZE: usize, T> {
     // TODO[jpw]: Remove this; read does not need old_data

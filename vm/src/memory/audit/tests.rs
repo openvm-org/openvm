@@ -16,9 +16,7 @@ use rand::Rng;
 
 use crate::{
     cpu::RANGE_CHECKER_BUS,
-    memory::{
-        audit::MemoryAuditChip, manager::access_cell::AccessCell, offline_checker::bus::MemoryBus,
-    },
+    memory::{audit::MemoryAuditChip, manager::TimestampedValue, offline_checker::bus::MemoryBus},
 };
 
 type Val = BabyBear;
@@ -31,7 +29,6 @@ fn audit_air_test() {
     const MAX_ADDRESS_SPACE: usize = 4;
     const LIMB_BITS: usize = 29;
     const MAX_VAL: usize = 1 << LIMB_BITS;
-    const WORD_SIZE: usize = 2;
     const DECOMP: usize = 8;
     let memory_bus = MemoryBus(1);
 
@@ -46,34 +43,29 @@ fn audit_air_test() {
     }
 
     let range_checker = Arc::new(RangeCheckerGateChip::new(RANGE_CHECKER_BUS, 1 << DECOMP));
-    let mut audit_chip = MemoryAuditChip::<WORD_SIZE, Val>::new(
-        memory_bus,
-        2,
-        LIMB_BITS,
-        DECOMP,
-        range_checker.clone(),
-    );
+    let mut audit_chip =
+        MemoryAuditChip::<Val>::new(memory_bus, 2, LIMB_BITS, DECOMP, range_checker.clone());
 
     let mut final_memory: BTreeMap<_, _> = BTreeMap::new();
 
     for (addr_space, pointer) in distinct_addresses.iter().cloned() {
-        let final_data = [random_f(MAX_VAL); WORD_SIZE];
+        let final_data = random_f(MAX_VAL);
         let final_clk = random_f(MAX_VAL) + Val::one();
 
-        audit_chip.touch_address(addr_space, pointer, [Val::zero(); WORD_SIZE]);
+        audit_chip.touch_address(addr_space, pointer, Val::zero());
         final_memory.insert(
             (addr_space, pointer),
-            AccessCell {
-                data: final_data,
-                clk: final_clk,
+            TimestampedValue {
+                value: final_data,
+                timestamp: final_clk,
             },
         );
     }
 
     let diff_height = num_addresses.next_power_of_two() - num_addresses;
 
-    let init_memory_dummy_air = DummyInteractionAir::new(3 + WORD_SIZE, false, MEMORY_BUS);
-    let final_memory_dummy_air = DummyInteractionAir::new(3 + WORD_SIZE, true, MEMORY_BUS);
+    let init_memory_dummy_air = DummyInteractionAir::new(4, false, MEMORY_BUS);
+    let final_memory_dummy_air = DummyInteractionAir::new(4, true, MEMORY_BUS);
 
     let init_memory_trace = RowMajorMatrix::new(
         distinct_addresses
@@ -81,30 +73,30 @@ fn audit_air_test() {
             .flat_map(|(addr_space, pointer)| {
                 vec![Val::one(), *addr_space, *pointer]
                     .into_iter()
-                    .chain(vec![Val::zero(); WORD_SIZE])
+                    .chain(iter::once(Val::zero()))
                     .chain(iter::once(Val::zero()))
                     .collect::<Vec<_>>()
             })
-            .chain(iter::repeat(Val::zero()).take((4 + WORD_SIZE) * (diff_height)))
+            .chain(iter::repeat(Val::zero()).take(5 * diff_height))
             .collect(),
-        4 + WORD_SIZE,
+        5,
     );
 
     let final_memory_trace = RowMajorMatrix::new(
         distinct_addresses
             .iter()
             .flat_map(|(addr_space, pointer)| {
-                let final_cell = final_memory.get(&(*addr_space, *pointer)).unwrap();
+                let timestamped_value = final_memory.get(&(*addr_space, *pointer)).unwrap();
 
                 vec![Val::one(), *addr_space, *pointer]
                     .into_iter()
-                    .chain(final_cell.data.iter().copied())
-                    .chain(iter::once(final_cell.clk))
+                    .chain(iter::once(timestamped_value.value))
+                    .chain(iter::once(timestamped_value.timestamp))
                     .collect::<Vec<_>>()
             })
-            .chain(iter::repeat(Val::zero()).take((4 + WORD_SIZE) * (diff_height)))
+            .chain(iter::repeat(Val::zero()).take(5 * diff_height))
             .collect(),
-        4 + WORD_SIZE,
+        5,
     );
 
     let audit_trace = audit_chip.generate_trace(&final_memory);

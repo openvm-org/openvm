@@ -23,7 +23,10 @@ use crate::{
     cpu::{trace::ExecutionError, CpuChip, RANGE_CHECKER_BUS},
     field_arithmetic::FieldArithmeticChip,
     field_extension::chip::FieldExtensionArithmeticChip,
-    memory::{manager::MemoryManager, offline_checker::bus::MemoryBus},
+    memory::{
+        manager::{MemoryChip, MemoryChipRef},
+        offline_checker::bus::MemoryBus,
+    },
     poseidon2::Poseidon2Chip,
     program::{Program, ProgramChip},
     vm::cycle_tracker::CycleTracker,
@@ -36,7 +39,7 @@ pub struct ExecutionSegment<F: PrimeField32> {
     pub chips: Vec<MachineChipVariant<F>>,
     pub cpu_chip: Rc<RefCell<CpuChip<F>>>,
     pub program_chip: Rc<RefCell<ProgramChip<F>>>,
-    pub memory_manager: Rc<RefCell<MemoryManager<F>>>,
+    pub memory_chip: MemoryChipRef<F>,
 
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
@@ -76,7 +79,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             1 << config.memory_config.decomp,
         ));
 
-        let memory_manager = Rc::new(RefCell::new(MemoryManager::with_volatile_memory(
+        let memory_chip = Rc::new(RefCell::new(MemoryChip::with_volatile_memory(
             memory_bus,
             config.memory_config,
             range_checker.clone(),
@@ -84,7 +87,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let cpu_chip = Rc::new(RefCell::new(CpuChip::from_state(
             config.cpu_options(),
             execution_bus,
-            memory_manager.clone(),
+            memory_chip.clone(),
             state.state,
         )));
         let program_chip = Rc::new(RefCell::new(ProgramChip::new(program)));
@@ -101,13 +104,13 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let mut chips = vec![
             MachineChipVariant::Cpu(cpu_chip.clone()),
             MachineChipVariant::Program(program_chip.clone()),
-            MachineChipVariant::Memory(memory_manager.clone()),
+            MachineChipVariant::Memory(memory_chip.clone()),
         ];
 
         if config.field_arithmetic_enabled {
             let field_arithmetic_chip = Rc::new(RefCell::new(FieldArithmeticChip::new(
                 execution_bus,
-                memory_manager.clone(),
+                memory_chip.clone(),
             )));
             assign!(FIELD_ARITHMETIC_INSTRUCTIONS, field_arithmetic_chip);
             chips.push(MachineChipVariant::FieldArithmetic(field_arithmetic_chip));
@@ -115,7 +118,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         if config.field_extension_enabled {
             let field_extension_chip = Rc::new(RefCell::new(FieldExtensionArithmeticChip::new(
                 execution_bus,
-                memory_manager.clone(),
+                memory_chip.clone(),
             )));
             assign!(FIELD_EXTENSION_INSTRUCTIONS, field_extension_chip);
             chips.push(MachineChipVariant::FieldExtension(field_extension_chip))
@@ -124,7 +127,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             let poseidon2_chip = Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
                 Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
                 execution_bus,
-                memory_manager.clone(),
+                memory_chip.clone(),
             )));
             if config.perm_poseidon2_enabled {
                 assign!([Opcode::PERM_POS2], poseidon2_chip);
@@ -163,7 +166,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             chips,
             cpu_chip,
             program_chip,
-            memory_manager,
+            memory_chip,
             input_stream: state.input_stream,
             hint_stream: state.hint_stream,
             collected_metrics: Default::default(),

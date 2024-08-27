@@ -80,7 +80,7 @@ fn test_modular_multiplication_runtime() {
 
     for (i, &elem) in bigint_to_elems(a, repr_bits, num_elems).iter().enumerate() {
         let address = address1 + i;
-        segment.memory_manager.borrow_mut().write_word(
+        segment.memory_chip.borrow_mut().write_word(
             BabyBear::one(),
             BabyBear::from_canonical_usize(address),
             [elem],
@@ -88,7 +88,7 @@ fn test_modular_multiplication_runtime() {
     }
     for (i, &elem) in bigint_to_elems(b, repr_bits, num_elems).iter().enumerate() {
         let address = address2 + i;
-        segment.memory_manager.borrow_mut().write_word(
+        segment.memory_chip.borrow_mut().write_word(
             BabyBear::one(),
             BabyBear::from_canonical_usize(address),
             [elem],
@@ -107,7 +107,7 @@ fn test_modular_multiplication_runtime() {
     );
     for (i, &elem) in bigint_to_elems(r, repr_bits, num_elems).iter().enumerate() {
         let address = address3 + i;
-        segment.memory_manager.borrow_mut().write_word(
+        segment.memory_chip.borrow_mut().write_word(
             BabyBear::one(),
             BabyBear::from_canonical_usize(address),
             [elem],

@@ -14,7 +14,7 @@ use rand::{rngs::StdRng, SeedableRng};
 use crate::{
     arch::chips::MachineChip,
     cpu::{trace::Instruction, RANGE_CHECKER_BUS},
-    memory::{manager::MemoryManager, offline_checker::bus::MemoryBus},
+    memory::{manager::MemoryChip, offline_checker::bus::MemoryBus},
     vm::config::MemoryConfig,
 };
 
@@ -25,6 +25,7 @@ pub use execution::ExecutionTester;
 pub use memory::MemoryTester;
 
 use super::{bus::ExecutionBus, chips::InstructionExecutor};
+use crate::memory::manager::MemoryChipRef;
 
 #[derive(Clone, Debug)]
 pub struct MachineChipTestBuilder<F: PrimeField32> {
@@ -33,13 +34,9 @@ pub struct MachineChipTestBuilder<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> MachineChipTestBuilder<F> {
-    pub fn new(
-        memory_manager: Rc<RefCell<MemoryManager<F>>>,
-        execution_bus: ExecutionBus,
-        rng: StdRng,
-    ) -> Self {
+    pub fn new(memory_chip: MemoryChipRef<F>, execution_bus: ExecutionBus, rng: StdRng) -> Self {
         Self {
-            memory: MemoryTester::new(memory_manager),
+            memory: MemoryTester::new(memory_chip),
             execution: ExecutionTester::new(execution_bus, rng),
         }
     }
@@ -78,9 +75,8 @@ impl<F: PrimeField32> MachineChipTestBuilder<F> {
         self.memory.bus
     }
 
-    // TODO[zach]: rename to memory_manager
-    pub fn get_memory_manager(&self) -> Rc<RefCell<MemoryManager<F>>> {
-        self.memory.manager.clone()
+    pub fn memory_chip(&self) -> MemoryChipRef<F> {
+        self.memory.chip.clone()
     }
 }
 
@@ -101,10 +97,9 @@ impl<F: PrimeField32> Default for MachineChipTestBuilder<F> {
             RANGE_CHECKER_BUS,
             1u32 << mem_config.decomp,
         ));
-        let memory_manager =
-            MemoryManager::with_volatile_memory(MemoryBus(1), mem_config, range_checker);
+        let memory_chip = MemoryChip::with_volatile_memory(MemoryBus(1), mem_config, range_checker);
         Self {
-            memory: MemoryTester::new(Rc::new(RefCell::new(memory_manager))),
+            memory: MemoryTester::new(Rc::new(RefCell::new(memory_chip))),
             execution: ExecutionTester::new(ExecutionBus(0), StdRng::seed_from_u64(0)),
         }
     }
@@ -130,7 +125,7 @@ impl MachineChipTester {
 
     pub fn finalize(mut self) -> Self {
         if let Some(memory_tester) = self.memory.take() {
-            let manager = memory_tester.manager.clone();
+            let manager = memory_tester.chip.clone();
             let range_checker = manager.borrow().range_checker.clone();
             self = self.load(memory_tester); // dummy memory interactions
             self = self.load(manager); // memory initial and final state

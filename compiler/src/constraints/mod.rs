@@ -10,7 +10,9 @@ use crate::{
     prelude::TracedVec,
 };
 
+#[cfg(feature = "halo2-compiler")]
 pub mod halo2;
+
 pub mod opcodes;
 
 /// A constraint is an operation and a list of nested arguments.

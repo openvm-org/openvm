@@ -266,7 +266,7 @@ fn air_test_change<
     let program_trace = RowMajorMatrix::new(program_cells, width);
 
     let memory_interface_trace = segment
-        .memory_manager
+        .memory_chip
         .borrow()
         .generate_memory_interface_trace();
     let range_checker_trace = segment.range_checker.generate_trace();
@@ -291,7 +291,7 @@ fn air_test_change<
     let mut all_public_values = vec![segment.get_cpu_pis(), vec![], vec![], vec![], vec![]];
 
     let MemoryInterface::Volatile(memory_audit_chip) =
-        &segment.memory_manager.borrow().interface_chip;
+        &segment.memory_chip.borrow().interface_chip;
 
     let test_result = if field_arithmetic_enabled {
         run_simple_test(

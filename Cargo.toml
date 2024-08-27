@@ -94,6 +94,8 @@ rayon = "1.10"
 serde = { version = "1.0.201", features = ["derive"] }
 serde_json = "1.0.117"
 tracing = "0.1.37"
+lazy_static = "1.5.0"
+once_cell = "1.19.0"
 
 # For local development. Add to your `.cargo/config.toml`
 # [patch."https://github.com/Plonky3/Plonky3.git"]

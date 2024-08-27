@@ -2,9 +2,9 @@ name: STARK Recursion Tests
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
   pull_request:
-    branches: ["main"]
+    branches: [ "main" ]
     paths:
       - "stark-backend/**"
       - "primitives/**"
@@ -30,11 +30,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+      - name: get solc
+        uses: pontem-network/get-solc@master
+        with:
+          version: v0.8.19
 
       - name: Run recursion crate tests
         working-directory: recursion
         run: |
           cargo test --profile=fast --features parallel
+          cargo test --profile=fast --features parallel,static-verifier -- halo2::tests
 
   benchmark:
     uses: ./.github/workflows/benchmark-call.yml
