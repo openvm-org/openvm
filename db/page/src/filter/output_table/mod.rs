@@ -10,7 +10,6 @@ use crate::{common::page::Page, indexed_output_page_air::IndexedOutputPageAir};
 
 pub mod air;
 pub mod bridge;
-// pub mod trace;
 
 pub struct FilterOutputTableChip {
     pub air: FilterOutputTableAir,
@@ -22,8 +21,6 @@ impl FilterOutputTableChip {
         page_bus_index: usize,
         idx_len: usize,
         data_len: usize,
-        // start_col: usize,
-        // end_col: usize,
         idx_limb_bits: usize,
         idx_decomp: usize,
         range_checker: Arc<RangeCheckerGateChip>,
@@ -31,20 +28,13 @@ impl FilterOutputTableChip {
         Self {
             air: FilterOutputTableAir {
                 page_bus_index,
-                inner: IndexedOutputPageAir::new(
+                final_air: IndexedOutputPageAir::new(
                     range_checker.bus_index(),
                     idx_len,
                     data_len,
                     idx_limb_bits,
                     idx_decomp,
                 ),
-                // range_checker.bus_index(),
-                // idx_len,
-                // data_len,
-                // start_col,
-                // end_col,
-                // idx_limb_bits,
-                // idx_decomp,
             },
             range_checker,
         }
@@ -62,7 +52,7 @@ impl FilterOutputTableChip {
         Val<SC>: AbstractField + PrimeField64,
     {
         self.air
-            .inner
+            .final_air
             .gen_aux_trace::<SC>(page, self.range_checker.clone())
     }
 }

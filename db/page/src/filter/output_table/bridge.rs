@@ -8,7 +8,7 @@ use super::air::FilterOutputTableAir;
 impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for FilterOutputTableAir {
     fn eval(&self, builder: &mut AB) {
         // Making sure the page is in the proper format
-        self.inner.eval(builder);
+        self.final_air.eval(builder);
 
         let page = &builder.partitioned_main()[0];
         let page_local = page.row_slice(0);

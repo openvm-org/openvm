@@ -22,43 +22,6 @@ const RANGE_MAX: u32 = 1 << DECOMP;
 
 const LOG_PAGE_HEIGHT: usize = 2;
 
-#[test]
-pub fn test_gen_output() {
-    let page_controller = PageController::<BabyBearPoseidon2Config>::new(
-        PAGE_BUS_INDEX,
-        RANGE_BUS_INDEX,
-        IDX_LEN,
-        DATA_LEN,
-        2,
-        4,
-        RANGE_MAX,
-        LIMB_BITS,
-        DECOMP,
-        Comp::Lt,
-    );
-
-    let page: Vec<Vec<u32>> = vec![
-        vec![1, 443, 376, 2278, 1399, 58327],
-        vec![1, 2883, 7269, 4171, 3989, 12770],
-        vec![1, 4826, 7969, 51171, 989, 12770],
-        vec![1, 6588, 8069, 82142, 500, 12770],
-    ];
-    let page = Page::from_2d_vec(&page, IDX_LEN, DATA_LEN);
-
-    let expected_output = vec![
-        vec![1, 443, 376, 2278, 1399, 58327],
-        vec![1, 2883, 7269, 4171, 3989, 12770],
-        vec![0, 0, 0, 0, 0, 0],
-        vec![0, 0, 0, 0, 0, 0],
-    ];
-    let expected_output = Page::from_2d_vec(&expected_output, IDX_LEN, DATA_LEN);
-
-    let x: Vec<u32> = vec![32278, 520];
-
-    let page_output = page_controller.gen_output(page.clone(), x.clone(), Comp::Lt);
-    assert_eq!(expected_output, page_output);
-}
-
 #[allow(clippy::too_many_arguments)]
 fn filter_test(
     engine: &BabyBearPoseidon2Engine,
@@ -112,6 +75,117 @@ fn filter_test(
     let vk = pk.vk();
 
     page_controller.verify(engine, vk, proof, x.clone())
+}
+
+#[test]
+fn test_gen_output_lt() {
+    let page_controller = PageController::<BabyBearPoseidon2Config>::new(
+        PAGE_BUS_INDEX,
+        RANGE_BUS_INDEX,
+        IDX_LEN,
+        DATA_LEN,
+        2,
+        4,
+        RANGE_MAX,
+        LIMB_BITS,
+        DECOMP,
+        Comp::Lt,
+    );
+
+    let page: Vec<Vec<u32>> = vec![
+        vec![1, 443, 376, 2278, 1399, 58327],
+        vec![1, 2883, 7269, 4171, 3989, 12770],
+        vec![1, 4826, 7969, 51171, 989, 12770],
+        vec![1, 6588, 8069, 82142, 500, 12770],
+    ];
+    let page = Page::from_2d_vec(&page, IDX_LEN, DATA_LEN);
+
+    let expected_output = vec![
+        vec![1, 443, 376, 2278, 1399, 58327],
+        vec![1, 2883, 7269, 4171, 3989, 12770],
+        vec![0, 0, 0, 0, 0, 0],
+        vec![0, 0, 0, 0, 0, 0],
+    ];
+    let expected_output = Page::from_2d_vec(&expected_output, IDX_LEN, DATA_LEN);
+
+    let x: Vec<u32> = vec![32278, 520];
+
+    let page_output = page_controller.gen_output(page.clone(), x.clone(), Comp::Lt);
+    assert_eq!(expected_output, page_output);
+}
+
+#[test]
+fn test_gen_output_lte() {
+    let page_controller = PageController::<BabyBearPoseidon2Config>::new(
+        PAGE_BUS_INDEX,
+        RANGE_BUS_INDEX,
+        IDX_LEN,
+        DATA_LEN,
+        2,
+        4,
+        RANGE_MAX,
+        LIMB_BITS,
+        DECOMP,
+        Comp::Lte,
+    );
+
+    let page: Vec<Vec<u32>> = vec![
+        vec![1, 443, 376, 2278, 1399, 58327],
+        vec![1, 2883, 7269, 4171, 3989, 12770],
+        vec![1, 4826, 7969, 51171, 989, 12770],
+        vec![1, 6588, 8069, 82142, 500, 12770],
+    ];
+    let page = Page::from_2d_vec(&page, IDX_LEN, DATA_LEN);
+
+    let expected_output = vec![
+        vec![1, 443, 376, 2278, 1399, 58327],
+        vec![1, 2883, 7269, 4171, 3989, 12770],
+        vec![0, 0, 0, 0, 0, 0],
+        vec![0, 0, 0, 0, 0, 0],
+    ];
+    let expected_output = Page::from_2d_vec(&expected_output, IDX_LEN, DATA_LEN);
+
+    let x: Vec<u32> = vec![4171, 3989];
+
+    let page_output = page_controller.gen_output(page.clone(), x.clone(), Comp::Lte);
+    assert_eq!(expected_output, page_output);
+}
+
+#[test]
+fn test_gen_output_gte() {
+    let page_controller = PageController::<BabyBearPoseidon2Config>::new(
+        PAGE_BUS_INDEX,
+        RANGE_BUS_INDEX,
+        IDX_LEN,
+        DATA_LEN,
+        2,
+        4,
+        RANGE_MAX,
+        LIMB_BITS,
+        DECOMP,
+        Comp::Gte,
+    );
+
+    let page: Vec<Vec<u32>> = vec![
+        vec![1, 443, 376, 2278, 1399, 58327],
+        vec![1, 2883, 7269, 4171, 3989, 12770],
+        vec![1, 4826, 7969, 51171, 989, 12770],
+        vec![1, 6588, 8069, 82142, 500, 12770],
+    ];
+    let page = Page::from_2d_vec(&page, IDX_LEN, DATA_LEN);
+
+    let expected_output = vec![
+        vec![1, 2883, 7269, 4171, 3989, 12770],
+        vec![1, 4826, 7969, 51171, 989, 12770],
+        vec![1, 6588, 8069, 82142, 500, 12770],
+        vec![0, 0, 0, 0, 0, 0],
+    ];
+    let expected_output = Page::from_2d_vec(&expected_output, IDX_LEN, DATA_LEN);
+
+    let x: Vec<u32> = vec![4171, 3989];
+
+    let page_output = page_controller.gen_output(page.clone(), x.clone(), Comp::Gte);
+    assert_eq!(expected_output, page_output);
 }
 
 #[test]
