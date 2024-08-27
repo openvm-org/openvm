@@ -13,7 +13,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use poseidon2_air::poseidon2::Poseidon2Config;
 
-use super::{VirtualMachineState, VmConfig, VmMetrics};
+use super::{VirtualMachineState, VmConfig, VmCycleTracker, VmMetrics};
 use crate::{
     arch::{
         bus::ExecutionBus,
@@ -44,7 +44,7 @@ pub struct ExecutionSegment<F: PrimeField32> {
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
 
-    pub cycle_tracker: CycleTracker,
+    pub cycle_tracker: VmCycleTracker,
     /// Collected metrics for this segment alone.
     /// Only collected when `config.collect_metrics` is true.
     pub(crate) collected_metrics: VmMetrics,

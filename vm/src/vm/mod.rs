@@ -10,7 +10,7 @@ pub use segment::ExecutionSegment;
 use crate::{
     cpu::{trace::ExecutionError, CpuOptions, CpuState},
     program::Program,
-    vm::{config::VmConfig, segment::SegmentResult},
+    vm::{config::VmConfig, cycle_tracker::CanPrint, segment::SegmentResult},
 };
 
 pub mod config;
@@ -18,6 +18,8 @@ pub mod cycle_tracker;
 /// Instrumentation metrics for performance analysis and debugging
 pub mod metrics;
 pub mod segment;
+
+pub type VmCycleTracker = CycleTracker<VmMetrics>;
 
 /// Parent struct that holds all execution segments, program, config.
 pub struct VirtualMachine<F: PrimeField32> {
@@ -40,7 +42,7 @@ pub struct VirtualMachineState<F: PrimeField32> {
 
 pub struct VirtualMachineResult<SC: StarkGenericConfig> {
     pub segment_results: Vec<SegmentResult<SC>>,
-    pub cycle_tracker: CycleTracker,
+    pub cycle_tracker: VmCycleTracker,
 }
 
 impl<F: PrimeField32> VirtualMachine<F> {
@@ -59,7 +61,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
                 input_stream: VecDeque::from(input_stream),
                 hint_stream: VecDeque::new(),
             },
-            CycleTracker::new(),
+            VmCycleTracker::new(),
         );
         vm
     }
@@ -67,7 +69,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
     /// Create a new segment with a given state.
     ///
     /// The segment will be created from the given state and the program.
-    fn segment(&mut self, state: VirtualMachineState<F>, cycle_tracker: CycleTracker) {
+    fn segment(&mut self, state: VirtualMachineState<F>, cycle_tracker: VmCycleTracker) {
         tracing::debug!(
             "Creating new continuation segment for {} total segments",
             self.segments.len() + 1

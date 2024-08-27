@@ -4,6 +4,8 @@ use std::{collections::BTreeMap, fmt::Display};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
+use crate::vm::cycle_tracker::span::CanDiff;
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct VmMetrics {
     pub chip_metrics: BTreeMap<String, usize>,
@@ -69,4 +71,27 @@ impl Display for VmMetrics {
         writeln!(f, "</details>")?;
         Ok(())
     }
+}
+
+impl CanDiff for VmMetrics {
+    fn diff(&mut self, start: &Self) {
+        *self = Self {
+            chip_metrics: count_diff(&start.chip_metrics, &self.chip_metrics),
+            opcode_counts: count_diff(&start.opcode_counts, &self.opcode_counts),
+            dsl_counts: count_diff(&start.dsl_counts, &self.dsl_counts),
+            opcode_trace_cells: count_diff(&start.opcode_trace_cells, &self.opcode_trace_cells),
+        };
+    }
+}
+
+fn count_diff(
+    start: &BTreeMap<String, usize>,
+    end: &BTreeMap<String, usize>,
+) -> BTreeMap<String, usize> {
+    let mut ret = BTreeMap::new();
+    for (key, value) in end {
+        let diff = value - start.get(key).unwrap_or(&0);
+        ret.insert(key.clone(), diff);
+    }
+    ret
 }
