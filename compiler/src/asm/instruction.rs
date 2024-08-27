@@ -70,8 +70,8 @@ pub enum AsmInstruction<F, EF> {
     /// Multiply extension, dst = lhs * rhs.
     MulE(i32, i32, i32),
 
-    /// Extension inverse, dst = 1 / src.
-    InvE(i32, i32),
+    /// Divide extension, dst = lhs / rhs.
+    DivE(i32, i32, i32),
 
     /// Modular add, dst = lhs + rhs.
     AddSecp256k1Coord(i32, i32, i32),
@@ -255,8 +255,8 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::MulE(dst, lhs, rhs) => {
                 write!(f, "emul  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
             }
-            AsmInstruction::InvE(dst, src) => {
-                write!(f, "einv ({})fp, ({})fp", dst, src)
+            AsmInstruction::DivE(dst, lhs, rhs) => {
+                write!(f, "ediv  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
             }
             AsmInstruction::Jump(dst, label) => {
                 write!(

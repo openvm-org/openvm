@@ -118,8 +118,6 @@ pub enum DslIr<C: Config> {
     NegF(Felt<C::F>, Felt<C::F>),
     /// Negates an extension field element (ext = -ext).
     NegE(Ext<C::F, C::EF>, Ext<C::F, C::EF>),
-    /// Inverts an extension field element (ext = 1 / ext).
-    InvE(Ext<C::F, C::EF>, Ext<C::F, C::EF>),
 
     // Comparisons.
     /// Compares two variables
