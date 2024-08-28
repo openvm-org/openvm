@@ -14,7 +14,7 @@ use crate::{
     },
     cpu::trace::Instruction,
     field_extension::air::FieldExtensionArithmeticAir,
-    memory::manager::{MemoryChipRef, MemoryRead, MemoryWrite},
+    memory::manager::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord},
 };
 
 pub const BETA: usize = 11;
@@ -32,11 +32,11 @@ pub(crate) struct FieldExtensionArithmeticRecord<F> {
     pub(crate) y: [F; EXTENSION_DEGREE],
     pub(crate) z: [F; EXTENSION_DEGREE],
     /// Memory accesses for reading `x`.
-    pub(crate) x_reads: [MemoryRead<1, F>; EXTENSION_DEGREE],
+    pub(crate) x_reads: [MemoryReadRecord<1, F>; EXTENSION_DEGREE],
     /// Memory accesses for reading `y`.
-    pub(crate) y_reads: [MemoryRead<1, F>; EXTENSION_DEGREE],
+    pub(crate) y_reads: [MemoryReadRecord<1, F>; EXTENSION_DEGREE],
     /// Memory accesses for writing `z`.
-    pub(crate) z_writes: [MemoryWrite<1, F>; EXTENSION_DEGREE],
+    pub(crate) z_writes: [MemoryWriteRecord<1, F>; EXTENSION_DEGREE],
 }
 
 /// A chip for performing arithmetic operations over the field extension
@@ -125,7 +125,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         &mut self,
         address_space: F,
         address: F,
-    ) -> [MemoryRead<1, F>; EXTENSION_DEGREE] {
+    ) -> [MemoryReadRecord<1, F>; EXTENSION_DEGREE] {
         assert_ne!(address_space, F::zero());
 
         array::from_fn(|i| {
@@ -140,7 +140,7 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
         address_space: F,
         address: F,
         result: [F; EXTENSION_DEGREE],
-    ) -> [MemoryWrite<1, F>; EXTENSION_DEGREE] {
+    ) -> [MemoryWriteRecord<1, F>; EXTENSION_DEGREE] {
         assert_ne!(address_space, F::zero());
 
         array::from_fn(|i| {

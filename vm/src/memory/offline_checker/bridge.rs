@@ -15,10 +15,7 @@ use p3_field::AbstractField;
 use super::{bus::MemoryBus, columns::MemoryOfflineCheckerAuxCols};
 use crate::{
     cpu::RANGE_CHECKER_BUS,
-    memory::{
-        manager::operation::MemoryOperation,
-        MemoryAddress,
-    },
+    memory::{offline_checker::operation::MemoryOperation, MemoryAddress},
 };
 
 /// The [MemoryBridge] can be created within any AIR evaluation function to be used as the

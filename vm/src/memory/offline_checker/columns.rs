@@ -3,7 +3,9 @@ use std::iter;
 use afs_primitives::is_less_than::{columns::IsLessThanAuxCols, IsLessThanAir};
 
 use super::bridge::MemoryOfflineChecker;
-use crate::memory::manager::{access_cell::AccessCell, operation::MemoryOperation};
+use crate::memory::{
+    manager::access_cell::AccessCell, offline_checker::operation::MemoryOperation,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryOfflineCheckerCols<const WORD_SIZE: usize, T> {

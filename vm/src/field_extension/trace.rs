@@ -18,7 +18,7 @@ use crate::{
         EXTENSION_DEGREE,
     },
     memory::{
-        manager::{MemoryRead, MemoryWrite},
+        manager::{MemoryReadRecord, MemoryWriteRecord},
         OpType,
     },
 };
@@ -122,11 +122,11 @@ impl<F: PrimeField32> FieldExtensionArithmeticChip<F> {
             OpType::Read => self
                 .memory_chip
                 .borrow()
-                .make_read_aux_cols(MemoryRead::disabled(timestamp, F::one())),
+                .make_read_aux_cols(MemoryReadRecord::disabled(timestamp, F::one())),
             OpType::Write => self
                 .memory_chip
                 .borrow()
-                .make_write_aux_cols(MemoryWrite::disabled(timestamp, F::one())),
+                .make_write_aux_cols(MemoryWriteRecord::disabled(timestamp, F::one())),
         };
 
         FieldExtensionArithmeticCols {

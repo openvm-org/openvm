@@ -21,15 +21,15 @@ pub mod trace;
 
 pub use air::FieldArithmeticAir;
 
-use crate::memory::manager::{MemoryChipRef, MemoryRead, MemoryWrite};
+use crate::memory::manager::{MemoryChipRef, MemoryReadRecord, MemoryWriteRecord};
 
 #[derive(Clone, Debug)]
 pub struct FieldArithmeticRecord<F> {
     pub opcode: Opcode,
     pub from_state: ExecutionState<usize>,
-    pub x_read: MemoryRead<1, F>,
-    pub y_read: MemoryRead<1, F>,
-    pub z_write: MemoryWrite<1, F>,
+    pub x_read: MemoryReadRecord<1, F>,
+    pub y_read: MemoryReadRecord<1, F>,
+    pub z_write: MemoryWriteRecord<1, F>,
 }
 
 #[derive(Clone, Debug)]

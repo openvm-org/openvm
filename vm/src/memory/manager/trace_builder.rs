@@ -1,6 +1,6 @@
 use p3_field::PrimeField32;
 
-use super::{operation::MemoryOperation, MemoryAccess, MemoryChipRef};
+use super::{MemoryAccess, MemoryChipRef, MemoryReadRecord, MemoryWriteRecord};
 use crate::memory::offline_checker::columns::MemoryOfflineCheckerAuxCols;
 
 const WORD_SIZE: usize = 1;
@@ -23,15 +23,15 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
         }
     }
 
-    pub fn read_cell(&mut self, addr_space: F, pointer: F) -> MemoryOperation<WORD_SIZE, F> {
+    pub fn read_cell(&mut self, addr_space: F, pointer: F) -> MemoryReadRecord<WORD_SIZE, F> {
         let read = self.memory_chip.borrow_mut().read(addr_space, pointer);
 
-        let mem_access = MemoryAccess::from_read(read);
+        let mem_access = MemoryAccess::from_read(read.clone());
 
         self.accesses_buffer
             .push(self.aux_col_from_access(&mem_access));
 
-        mem_access.op
+        read
     }
 
     pub fn write_cell(
@@ -39,25 +39,25 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
         addr_space: F,
         pointer: F,
         data: F,
-    ) -> MemoryOperation<WORD_SIZE, F> {
+    ) -> MemoryWriteRecord<WORD_SIZE, F> {
         let write = self
             .memory_chip
             .borrow_mut()
             .write(addr_space, pointer, data);
 
-        let mem_access = MemoryAccess::from_write(write);
+        let mem_access = MemoryAccess::from_write(write.clone());
 
         self.accesses_buffer
             .push(self.aux_col_from_access(&mem_access));
 
-        mem_access.op
+        write
     }
 
     pub fn read_elem(&mut self, addr_space: F, pointer: F) -> F {
         self.read_cell(addr_space, pointer).data[0]
     }
 
-    pub fn disabled_op(&mut self, addr_space: F) -> MemoryOperation<WORD_SIZE, F> {
+    pub fn disabled_op(&mut self, addr_space: F) {
         debug_assert_ne!(
             addr_space,
             F::zero(),
@@ -68,8 +68,6 @@ impl<F: PrimeField32> MemoryTraceBuilder<F> {
 
         self.accesses_buffer
             .push(self.aux_col_from_access(&mem_access));
-
-        mem_access.op
     }
 
     // TODO[jpw]: rename increment_timestamp

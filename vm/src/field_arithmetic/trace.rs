@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     arch::{chips::MachineChip, columns::ExecutionState, instructions::Opcode},
-    memory::manager::{MemoryRead, MemoryWrite},
+    memory::manager::{MemoryReadRecord, MemoryWriteRecord},
 };
 
 impl<F: PrimeField32> FieldArithmeticChip<F> {
@@ -24,9 +24,9 @@ impl<F: PrimeField32> FieldArithmeticChip<F> {
                     pc: 0,
                     timestamp: timestamp.as_canonical_u32() as usize,
                 },
-                x_read: MemoryRead::disabled(timestamp, F::one()),
-                y_read: MemoryRead::disabled(timestamp, F::one()),
-                z_write: MemoryWrite::disabled(timestamp, F::one()),
+                x_read: MemoryReadRecord::disabled(timestamp, F::one()),
+                y_read: MemoryReadRecord::disabled(timestamp, F::one()),
+                z_write: MemoryWriteRecord::disabled(timestamp, F::one()),
             },
             false,
         )
